@@ -62,6 +62,8 @@ def frame_scene(scene, frame, view) -> FrameScene:
     the live scene, as overrides of a facade."""
     from core.saved_views import georef_objects
     over = {"edit_group": None, "_bounds_cache": None}
+    if getattr(scene, "image_planes", ()) or getattr(scene, "photo_mesh", None):
+        over["hidden_reference_tags"] = NATIVE.sheet_frame_hidden_tags(scene._root, view)
     if view is not None and view.style:
         from core.style import Style
         over["display_style"] = Style.from_dict(view.style)
@@ -192,7 +194,7 @@ def _navigator(rows, packed, scene, key) -> None:
                                               np.uint8).view("<u4")[0])
 
 
-def _render(view_widget, frame, **out):
+def _render(view_widget, frame, target, **out):
     """The renderer's pass for a shaded frame, with the frame's camera,
     rows and look; ``out`` says where the picture goes."""
     from core.composition import RENDER_DPI, pen_px
@@ -204,7 +206,7 @@ def _render(view_widget, frame, **out):
     facade = frame_scene(scene, frame, view)
     style = frame_style(source, facade, frame)
     w_px, h_px = frame.render_px(RENDER_DPI)
-    return view_widget.render_image(
+    return target(
         w_px, h_px, sharp_shadows=True, scene=facade, style=style,
         camera=lambda origin: frame_camera(source.camera, frame, view, scene, origin),
         rows=lambda: frame_rows(view_widget, scene, frame, view),
@@ -215,23 +217,19 @@ def _render(view_widget, frame, **out):
 def render(view_widget, frame, key) -> bool:
     """Render ``frame`` into the page texture ``key``; False when it has
     nothing to show (its saved view is gone)."""
-    return _render(view_widget, frame, page_key=key) is not False
+    return _render(view_widget, frame, view_widget.render_image, page_key=key) is not False
 
 
 def picture(view_widget, frame):
     """A shaded frame's render read back for a file: ``(w, h, rgba)``, or
     None when its saved view is gone."""
-    from PySide6.QtGui import QImage
-    image = _render(view_widget, frame)
-    if image is False or image is None or image.isNull():
+    result = _render(view_widget, frame, view_widget.render_pixels)
+    if result is False or result is None:
         return None
-    rgba = image.convertToFormat(QImage.Format_RGBA8888)
-    w, h = rgba.width(), rgba.height()
-    rows = np.frombuffer(rgba.constBits(), np.uint8, count=rgba.bytesPerLine() * h).reshape(h, -1)
-    # The render composed its own background: on paper it is opaque.
-    px = rows[:, :w * 4].reshape(h, w, 4).copy()
-    px[..., 3] = 255
-    return w, h, px.tobytes()
+    w, h, rgba = result
+    # The renderer has already composed the background, including translucent faces.
+    from ingetrazo_render import opaque_frame
+    return w, h, opaque_frame(w, h, rgba)
 
 
 def _frame_pass(source, frame, tags: bool = False):

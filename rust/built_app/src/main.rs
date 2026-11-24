@@ -802,9 +802,15 @@ impl App {
             return None;
         }
         if let Some(c) = cursor {
-            if let Some(key) = c.strip_prefix("custom:") {
+            if c.starts_with("tool:") || c.starts_with("custom:") {
+                let key = c.as_str();
                 if !self.cursors.contains_key(key) {
-                    if let Some((cw, ch, hx, hy, rgba)) = w.host.custom_cursor(key) {
+                    let pixels = if let Some(tool) = key.strip_prefix("tool:") {
+                        ingetrazo_render::tool_cursors::winit_pixels(tool)
+                    } else {
+                        key.strip_prefix("custom:").and_then(|id| w.host.custom_cursor(id))
+                    };
+                    if let Some((cw, ch, hx, hy, rgba)) = pixels {
                         match CustomCursor::from_rgba(rgba, cw, ch, hx, hy) {
                             Ok(src) => {
                                 let made = event_loop.create_custom_cursor(src);

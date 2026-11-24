@@ -201,7 +201,7 @@ def test_annotation_font_options(host, tool):
         view.renderer = None
 
 
-def test_registered_shortcuts_use_rust_and_plugin_actions_still_trigger(host):
+def test_registered_shortcuts_use_rust_and_plugin_actions_still_trigger(host, monkeypatch):
     from PySide6.QtGui import QAction, QKeySequence
     from app_shell.command_action import ShellAction
 
@@ -219,6 +219,152 @@ def test_registered_shortcuts_use_rust_and_plugin_actions_still_trigger(host):
     plugin.setShortcut(QKeySequence("F12"))
     plugin.triggered.connect(lambda: seen.append("plugin"))
     assert host._shortcut(Qt.Key_F12, 0)
-    plugin.setEnabled(False)
+    # Once observed, a raw extension action dispatches without walking the
+    # QObject tree. Observe later shortcut edits, disabling and reparenting.
+    with monkeypatch.context() as m:
+        m.setattr(win, "findChildren", lambda *_: pytest.fail("rescanned stable plugin actions"))
+        assert host._shortcut(Qt.Key_F12, 0)
+    plugin.setShortcut(QKeySequence("F10"))
     assert not host._shortcut(Qt.Key_F12, 0)
-    assert seen == ["registered", "plugin"]
+    assert host._shortcut(Qt.Key_F10, 0)
+    plugin.setEnabled(False)
+    assert not host._shortcut(Qt.Key_F10, 0)
+    from PySide6.QtCore import QObject
+    container = QObject(win)
+    assert not host._shortcut(Qt.Key_F10, 0)
+    plugin.setParent(container)
+    plugin.setEnabled(True)
+    assert host._shortcut(Qt.Key_F10, 0)
+    container.setParent(None)
+    assert not host._shortcut(Qt.Key_F10, 0)
+    assert seen == ["registered"] + ["plugin"] * 4
+
+
+def test_winit_tool_cursors_use_the_same_art_for_tools_and_navigation(host, monkeypatch):
+    from core import general_settings
+    from views import icons
+    from ingetrazo_render import tool_cursor_art
+
+    monkeypatch.setattr(icons, "tool_cursor", lambda *a: pytest.fail("Requested a Qt tool bitmap"))
+    host.window._activate_tool("line")
+    host.view._mirror_cursor()
+    assert host._cursor == "tool:line"
+    art, hotspot = tool_cursor_art("line", 32)
+    assert len(art) == 32 * 32 * 4 and tuple(hotspot) == (6, 42)
+    host.window._activate_tool("tape")
+    assert host._cursor == "tool:tape+"
+    # Both modifier states have distinct images and the same working point.
+    plain, hot = tool_cursor_art("tape", 32)
+    plus, other = tool_cursor_art("tape+", 32)
+    assert plain != plus and hot == other
+    host.viewport.nav_mode = "orbit"
+    host.viewport._apply_nav_cursor()
+    assert host._cursor == "tool:orbit"
+    general_settings.set_value("cursor_style", "crosshair")
+    host.viewport._apply_nav_cursor()
+    assert host._cursor == "crosshair"
+    general_settings.set_value("cursor_style", "arrow")
+    host.window._activate_tool("select")
+    assert host._cursor == "default"
+
+
+def test_model_menu_uses_current_selection_history_and_tool(host):
+    assert host.open(FIXTURE)
+    win, scene = host.window, host.viewport.scene
+    edge = next(iter(scene.mesh.edges))
+    scene.selection.add(edge)
+    win._registry_actions["menu:hide"].trigger()
+    assert edge.hidden
+    host.menu("unhide_last")
+    assert not edge.hidden
+    host.menu("undo")
+    assert edge.hidden
+    host.menu("unhide_all")
+    assert not edge.hidden
+    host.menu("tool:freehand")
+    assert host.viewport.active_tool is win._tools["freehand"]
+    host.menu("tool:select")
+    host.menu("repeat_last_command")
+    assert host.viewport.active_tool is win._tools["freehand"]
+    host.menu("projection_parallel")
+    assert host.viewport.camera.projection_mode() == "parallel"
+    assert host.errors == []
+
+
+@pytest.mark.parametrize("suffix", ["obj", "stl"])
+def test_mesh_import_menu_waits_for_answer_then_imports_once(host, tmp_path, monkeypatch, suffix):
+    from core.settings import settings
+    from tests.test_import_failure_reported import _CUBE_OBJ, _GOOD_STL
+    from views.filedialogs import file_dialogs
+    path = tmp_path / ("triangle." + suffix)
+    path.write_bytes(_CUBE_OBJ if suffix == "obj" else _GOOD_STL)
+    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *a: (str(path), ""))
+    forms = []
+    monkeypatch.setattr("views.chrome_forms.show", lambda _, form: forms.append(form))
+    win = host.window
+    store = settings()
+    store.setValue("import/stl_simplify_mode", "all")
+    command = "import:" + suffix
+    before = win.viewport.scene.content_version
+    host.menu(command)
+    form = forms.pop()
+    form.receive("unit", "3")
+    form.press("cancel")
+    assert win.viewport.scene.content_version == before
+    assert store.value("import/stl_simplify_mode") == "all"
+    win._registry_actions["menu:" + command].trigger()
+    form = forms.pop()
+    assert form.values()["unit"] == ("m" if suffix == "obj" else "mm")
+    form.receive("unit", "1")
+    if suffix == "stl":
+        assert form.values()["simplify"] == "all"
+        form.receive("simplify", "0")
+    form.press("ok")
+    assert win.viewport.history.undo_stack and win._import_name == path.name
+    assert "Imported" in win.statusBar().currentMessage()
+    if suffix == "stl":
+        assert store.value("import/stl_unit") == "cm"
+        assert store.value("import/stl_simplify_mode") == "none"
+    host.menu("undo")
+    assert not win.viewport.scene.groups and not win.viewport.scene.mesh.faces
+    assert host.errors == []
+
+
+@pytest.mark.parametrize("choice", ["cancel", "ok"])
+def test_open_unitless_mesh_preserves_original_tab_on_cancel_or_failure(host, tmp_path, monkeypatch, choice):
+    assert host.open(FIXTURE)
+    win = host.window
+    original = win.active_document()
+    path = tmp_path / "broken.stl"
+    path.write_bytes(b"invalid STL fixture")
+    forms, failures = [], []
+    monkeypatch.setattr("views.chrome_forms.show", lambda _, f: forms.append(f) or "chrome")
+    monkeypatch.setattr("views.chrome_dialogs.critical", lambda _, title, text: failures.append(title))
+    assert host.open(path)
+    assert win.documents() == [original]
+    forms.pop().press(choice)
+    assert win.documents() == [original] and win.active_document() is original
+    assert failures == ([] if choice == "cancel" else ["Import STL failed"])
+    assert host.errors == []
+
+
+def test_scene_menu_acts_on_marked_scene_and_export_uses_chosen_format(host, monkeypatch):
+    from views import wgpu_deliveries
+    assert host.open(FIXTURE)
+    win = host.window
+    scene = host.viewport.scene
+    before = len(scene.saved_views)
+    host.menu("scene_add")
+    original = win._scene_tabs.marked_view()
+    host.menu("scene_duplicate")
+    copy = win._scene_tabs.marked_view()
+    assert copy is not original and len(scene.saved_views) == before + 2
+    host.menu("scene_show")
+    assert win._scene_tabs.marked_view() is copy
+    formats = []
+    monkeypatch.setattr(wgpu_deliveries, "export_form",
+                        lambda _w, key, one_off, fmt: formats.append((key, one_off, fmt)))
+    for fmt in ("ifc", "glb", "dae", "stl", "obj", "dxf"):
+        win._registry_actions["menu:export:" + fmt].trigger()
+        assert formats[-1] == (None, True, fmt)
+    assert host.errors == []

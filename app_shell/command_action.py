@@ -1,5 +1,5 @@
 """Bind a Rust window command to its handler and the shared shortcut editor."""
-from PySide6.QtGui import QKeySequence
+from ingetrazo_render import shortcut_text
 
 
 class ShellAction:
@@ -31,17 +31,18 @@ class ShellAction:
         return False
 
     def shortcut(self):
+        from PySide6.QtGui import QKeySequence
         keys = self.state.portable_keys()
         return QKeySequence(keys[0]) if keys else QKeySequence()
 
     def shortcuts(self):
+        from PySide6.QtGui import QKeySequence
         return [QKeySequence(key) for key in self.state.portable_keys()]
 
     def setShortcuts(self, sequences):
-        # The shared editor and older plugins hand us QKeySequences. Keep
-        # portable text for persistence, and the winit chord for dispatch.
-        keys = [(s.toString(QKeySequence.PortableText), s[0].toCombined() if s.count() == 1 else None)
-                for s in sequences if not s.isEmpty()]
+        from views.shortcuts import portable_keys
+        keys = [(parsed[0], parsed[2]) for text in portable_keys(sequences)
+                if (parsed := shortcut_text(text))]
         if self.state.set_keys(keys) and self.changed is not None:
             self.changed()
 

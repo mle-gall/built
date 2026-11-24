@@ -1,7 +1,6 @@
 """Upload the document's display-only imagery into the shared wgpu scene."""
 import numpy as np
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QImage
+from ingetrazo_render import fit_reference_rgba, reference_texture
 
 
 def _vertices(positions, uvs, origin, triangles=None):
@@ -15,20 +14,20 @@ def _vertices(positions, uvs, origin, triangles=None):
 def _texture(image, fallback, limit):
     if image is None or image.isNull():
         return 1, 1, np.array((*fallback, 255), np.uint8)
-    if max(image.width(), image.height()) > limit:
-        image = image.scaled(limit, limit, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    # Tile, terrain and survey providers still hand over a QImage.
+    from PySide6.QtGui import QImage
     image = image.convertToFormat(QImage.Format_RGBA8888)
-    return image.width(), image.height(), np.frombuffer(bytes(image.constBits()), np.uint8)
+    if max(image.width(), image.height()) <= limit:
+        return image.width(), image.height(), np.frombuffer(bytes(image.constBits()), np.uint8)
+    return fit_reference_rgba(image.width(), image.height(), bytes(image.constBits()), limit)
 
 
-def preview_texture(path, limit):
-    return _texture(QImage(path).mirrored(), (245, 242, 236), limit)
-
-
-def sync(view, style):
+def sync(view, style, *, scene=None):
     """Keep per-layer GPU allocations across frames, including peer/capture cameras."""
     source = view.source_viewport
-    scene = source.scene if source is not None else view.scene
+    frame = scene is not None
+    if scene is None:
+        scene = source.scene if source is not None else view.scene
     terrain = getattr(scene, 'terrain', None)
     tiles = getattr(scene, 'tile_layer', None)
     survey = getattr(scene, 'photo_mesh', None)
@@ -53,6 +52,13 @@ def sync(view, style):
                fade=(0., 0., 0., 0.), depth=True):
         texture = _texture(image, fallback, renderer.max_texture_size())
         updates.append((key, geometry, *texture, opacity, fade, depth))
+
+    def visible(entity):
+        off = getattr(scene, "hidden_reference_tags", None)
+        if off is None:
+            return scene.entity_visible(entity)
+        from core.layers import layer_of
+        return layer_of(entity) not in off and not scene.entity_hidden(entity)
 
     datum = getattr(scene, 'georef', None)
     if terrain is not None and terrain.visible:
@@ -80,7 +86,7 @@ def sync(view, style):
                 positions, uvs = zip(*tiles.quad_local(datum, x, y))
                 geometry = _vertices([p.toTuple() for p in positions], uvs, origin)
                 upload(key, geometry, image, opacity=tiles.opacity, depth=False)
-    if survey is not None and survey.visible and scene.entity_visible(survey):
+    if survey is not None and survey.visible and visible(survey):
         for index, material in enumerate(survey.materials):
             key = f'photo/{index}'
             image = survey.images.get(index)
@@ -89,22 +95,21 @@ def sync(view, style):
                 geometry = _vertices(survey.vertices, survey.uvs, origin, triangles)
                 upload(key, geometry, image, (158, 153, 143))
     if images:
-        amount = source._edit_rest_fade(None) if source is not None else 0.
+        amount = source._edit_rest_fade(None) if source is not None and not frame else 0.
         fade = (*style.get('fade_color', (1., 1., 1.)), amount)
         for i, plane in enumerate(images):
-            if amount is None or not scene.entity_visible(plane):
+            if amount is None or not visible(plane):
                 continue
             corners = tuple(p.toTuple() for p in plane.corners())
             key = f'image/{i}'
             if changed(key, (plane.path, revision, corners, plane.opacity, fade)):
-                image = QImage(plane.path)
-                if image.isNull():
+                texture = reference_texture(plane.path, renderer.max_texture_size())
+                if texture is None:
                     del layers[key]
                     continue
                 geometry = _vertices(corners, [(0, 1), (1, 1), (1, 0), (0, 0)],
                                      origin, [0, 1, 2, 0, 2, 3])
-                upload(key, geometry, image, opacity=plane.opacity, fade=fade,
-                       depth=plane.opacity >= .999)
+                updates.append((key, geometry, *texture, plane.opacity, fade, plane.opacity >= .999))
     if updates or (cached and list(cached[1]) != list(layers)):
         renderer.set_reference_layers(list(layers), updates)
     shared._reference_cache = (scope, layers) if layers else None

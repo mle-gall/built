@@ -2275,50 +2275,7 @@ def solid_cursor(state: str):
     """The Solid Tools pointer: an arrow with a grey «×» badge over anything
     that is not a solid, and a «1» or «2» on an accent disc over a solid,
     for the pick it will be."""
-    from PySide6.QtGui import QCursor, QPainterPath, QPixmap
-    key = ("solid", state)
-    cached = _cursor_cache.get(key)
-    if cached is not None:
-        return cached
-    size = 32
-    pm = QPixmap(size, size)
-    pm.fill(Qt.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.Antialiasing, True)
-    arrow = QPainterPath()
-    arrow.moveTo(1, 1)
-    arrow.lineTo(1, 17)
-    arrow.lineTo(5, 13)
-    arrow.lineTo(8, 20)
-    arrow.lineTo(10.5, 19)
-    arrow.lineTo(7.5, 12)
-    arrow.lineTo(13, 12)
-    arrow.closeSubpath()
-    p.setPen(_Pen(Qt.white, 1.2))
-    p.setBrush(Qt.black)
-    p.drawPath(arrow)
-    c = QPointF(22, 22)
-    if state == "no":
-        p.setPen(_Pen(Qt.white, 1.2))
-        p.setBrush(QColor(90, 94, 102))
-        p.drawRoundedRect(QRectF(15, 15, 14, 14), 3, 3)
-        p.setPen(_Pen(Qt.white, 2.2))
-        p.drawLine(QPointF(18.5, 18.5), QPointF(25.5, 25.5))
-        p.drawLine(QPointF(25.5, 18.5), QPointF(18.5, 25.5))
-    else:
-        p.setPen(_Pen(Qt.white, 1.2))
-        p.setBrush(_accent())
-        p.drawEllipse(c, 7.5, 7.5)
-        p.setPen(Qt.white)
-        font = p.font()
-        font.setPixelSize(11)
-        font.setBold(True)
-        p.setFont(font)
-        p.drawText(QRectF(14.5, 14.5, 15, 15), Qt.AlignCenter, state)
-    p.end()
-    cur = QCursor(pm, 1, 1)
-    _cursor_cache[key] = cur
-    return cur
+    return _cursor_art("solid-" + state)
 
 
 def _first_person(p, ink):
@@ -2645,101 +2602,6 @@ def clear_cursor_cache() -> None:
     """Forget the drawn cursors (the accent colour changed)."""
     _cursor_cache.clear()
 
-# Drawing tools: pencil cursor + a mini badge of the shape at bottom-right
-# (None = bare pencil, for Line). Hotspot = the pencil tip.
-_PENCIL_TOOLS = {
-    "line": None, "freehand": "freehand",
-    "rectangle": "rectangle", "rectangle_center": "rectangle_center",
-    "rotated_rect": "rotated_rect",
-    "circle": "circle", "polygon": "polygon", "arc": "arc", "arc3": "arc3",
-    "center_arc": "center_arc", "pie": "pie", "geopath": "geopath",
-}
-_PENCIL_HOT = (6.0, 42.0)          # the tip, in 48-space
-
-# Other tools: the icon itself is the cursor; hotspot = its action point,
-# in the icon's 48-space (see each draw function's geometry).
-_CURSOR_HOTSPOTS = {
-    "move": (24, 24), "rotate": (24, 24), "scale": (24, 24),
-    "flip": (24, 24),
-    "pushpull": (24, 24), "offset": (3, 3), "followme": (24, 24),
-    "fillet": (24, 24),
-    "dimension": (12, 30),          # left end of the dimension line
-    "text": (24, 24), "text3d": (24, 24),
-    "paint": (13, 35),              # the spout / falling drop
-    "eyedropper": (9.5, 38.5),      # the pipette's tip (drawn at 85 %)
-    "eraser": (15, 31),             # the middle of the rubber's accent end
-    "tape": (10, 28),               # the tape's end hook (now at the left)
-    "protractor": (24, 24),         # the protractor's vertex
-    "north": (24, 28),              # the compass centre
-    "orbit": (24, 24),              # camera navigation (wheel-drag / modes)
-    "pan": (24, 24),
-    "zoom": (21, 21),               # the magnifier's lens centre
-    "zoom_window": (21, 22),
-    "section": (24, 27),            # the plane's centre
-    "position_camera": (23, 44),    # the marker's tip: where the camera goes
-    "walk": (24, 24),
-    "look_around": (24, 26),        # the pupil
-    "first_person": (24, 24),
-}
-
-
-def _pencil(p, ink) -> None:
-    """A pencil pointing up-right, tip at (6, 42) in 48-space."""
-    p.save()
-    p.translate(6.0, 42.0)
-    p.rotate(-45.0)                 # +x runs up-right along the shaft
-    pen = _Pen(ink, 3.0)
-    pen.setJoinStyle(Qt.RoundJoin)
-    pen.setCapStyle(Qt.RoundCap)
-    p.setPen(pen)
-    p.setBrush(Qt.NoBrush)
-    # Sharpened tip.
-    p.drawPolygon(QPolygonF([QPointF(0.0, 0.0), QPointF(10.0, -5.5),
-                             QPointF(10.0, 5.5)]))
-    # Shaft with a flat butt.
-    p.drawLine(QPointF(10.0, -5.5), QPointF(40.0, -5.5))
-    p.drawLine(QPointF(10.0, 5.5), QPointF(40.0, 5.5))
-    p.drawLine(QPointF(40.0, -5.5), QPointF(40.0, 5.5))
-    # Accent lead at the very tip.
-    p.setPen(Qt.NoPen)
-    p.setBrush(QBrush(_accent()))
-    p.drawPolygon(QPolygonF([QPointF(-0.6, 0.0), QPointF(4.2, -2.4),
-                             QPointF(4.2, 2.4)]))
-    p.restore()
-
-
-def _offset_pointer(p, ink) -> None:
-    """Keep the arrow tip clear, with the Offset symbol beside the pointer."""
-    p.save()
-    arrow = QPainterPath()
-    arrow.moveTo(3, 3)
-    for x, y in ((3, 27), (9, 21), (13.5, 31.5), (17.25, 30),
-                 (12.75, 19.5), (21, 19.5)):
-        arrow.lineTo(x, y)
-    arrow.closeSubpath()
-    p.setPen(_Pen(ink, 1.5, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-    p.setBrush(ink)
-    p.drawPath(arrow)
-    p.translate(15, 15)
-    p.scale(0.75, 0.75)
-    p.setPen(_Pen(ink, 3.5, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-    _offset(p, ink)
-    p.restore()
-
-
-def _silhouette(src: QPixmap, color: QColor) -> QPixmap:
-    """The pixmap's alpha shape filled with ``color`` (for the halo)."""
-    s = QPixmap(src.size())
-    s.setDevicePixelRatio(src.devicePixelRatio())
-    s.fill(Qt.transparent)
-    p = QPainter(s)
-    p.drawPixmap(0, 0, src)
-    p.setCompositionMode(QPainter.CompositionMode_SourceIn)
-    p.fillRect(s.rect(), color)
-    p.end()
-    return s
-
-
 def cursor_hotspot(hot48, scale: float, dpr: float,
                    platform: str | None = None) -> tuple[int, int]:
     """The hotspot to hand QCursor for a cursor drawn at ``dpr``.
@@ -2768,87 +2630,31 @@ def tool_cursor(key: str | None, plus: bool = False) -> QCursor | None:
     means this measurement will leave a guide, no plus means it only
     measures. Without it the mode is invisible and you find out after the
     click (issue #29, @pacaeiro)."""
-    if not key or key == "select":
-        return None
-    from core import general_settings as _gs
-    style = str(_gs.value("cursor_style", "tool")).lower()
-    if style == "crosshair":
+    from core import general_settings
+    from ingetrazo_render import tool_cursor_name
+    name = tool_cursor_name(key, plus, str(general_settings.value("cursor_style", "tool")))
+    if name == "crosshair":
         return QCursor(Qt.CrossCursor)
-    if style == "arrow":
-        return None
-    pencil = key in _PENCIL_TOOLS
-    hot48 = _PENCIL_HOT if pencil else _CURSOR_HOTSPOTS.get(key)
-    draw = _DRAW.get(key)
-    if hot48 is None or (draw is None and not pencil):
-        return None
-    ink = _text_ink()
+    return _cursor_art(name[5:]) if name else None
+
+
+def _cursor_art(key):
+    from ingetrazo_render import tool_cursor_art
+    from PySide6.QtGui import QImage
     app = QApplication.instance()
     screen = app.primaryScreen() if app is not None else None
     dpr = screen.devicePixelRatio() if screen is not None else 1.0
-    cache_key = (key, bool(plus), ink.rgb(), round(dpr, 2))
-    cached = _cursor_cache.get(cache_key)
-    if cached is not None:
-        return cached
-
-    scale = _CURSOR_SIZE / float(_PX)
-    art = QPixmap(int(_CURSOR_SIZE * dpr), int(_CURSOR_SIZE * dpr))
-    art.setDevicePixelRatio(dpr)
-    art.fill(Qt.transparent)
-    p = QPainter(art)
-    p.setRenderHint(QPainter.Antialiasing, True)
-    p.scale(scale, scale)
-    ipen = _Pen(ink, 3.0)
-    ipen.setJoinStyle(Qt.RoundJoin)
-    ipen.setCapStyle(Qt.RoundCap)
-    p.setPen(ipen)
-    if pencil:
-        _pencil(p, ink)
-        badge = _DRAW.get(_PENCIL_TOOLS[key] or "")
-        if badge is not None:
-            # Mini badge of the shape at the bottom-right.
-            p.save()
-            p.translate(28.0, 28.0)
-            p.scale(20.0 / _PX, 20.0 / _PX)
-            bpen = _Pen(ink, 4.4)     # thicker: stays readable that small
-            bpen.setJoinStyle(Qt.RoundJoin)
-            bpen.setCapStyle(Qt.RoundCap)
-            p.setPen(bpen)
-            badge(p, ink)
-            p.restore()
-    elif key == "offset":
-        _offset_pointer(p, ink)
-    else:
-        draw(p, ink)
-    if plus:
-        # The guide-mode plus, top-right so it never sits under the
-        # hotspot. Drawn before the halo so it gets one too.
-        ppen = _Pen(ink, 4.0)
-        ppen.setCapStyle(Qt.RoundCap)
-        p.setPen(ppen)
-        p.drawLine(34, 6, 44, 6)
-        p.drawLine(39, 1, 39, 11)
-    p.end()
-
-    # Halo: a 1 px light (or dark, on dark themes) outline all around, so the
-    # cursor stays legible over faces, sky and ground alike.
-    halo_col = (QColor(255, 255, 255, 225) if ink.lightness() < 128
-                else QColor(28, 32, 38, 225))
-    halo = _silhouette(art, halo_col)
-    out = QPixmap(art.size())
-    out.setDevicePixelRatio(dpr)
-    out.fill(Qt.transparent)
-    p = QPainter(out)
-    for dx in (-1, 0, 1):
-        for dy in (-1, 0, 1):
-            if dx or dy:
-                p.drawPixmap(QPointF(float(dx), float(dy)), halo)
-    p.drawPixmap(QPointF(0.0, 0.0), art)
-    p.end()
-
-    hx, hy = cursor_hotspot(hot48, scale, dpr)
-    cursor = QCursor(out, hx, hy)
-    _cursor_cache[cache_key] = cursor
-    return cursor
+    cache_key = (key, dpr)
+    if cache_key not in _cursor_cache:
+        side = max(1, min(256, round(_CURSOR_SIZE * dpr)))
+        art = tool_cursor_art(key, side)
+        if art is None:
+            return None
+        rgba, hotspot = art
+        pm = QPixmap.fromImage(QImage(rgba, side, side, side * 4, QImage.Format_RGBA8888))
+        pm.setDevicePixelRatio(dpr)
+        _cursor_cache[cache_key] = QCursor(pm, *cursor_hotspot(hotspot, _CURSOR_SIZE / _PX, dpr))
+    return _cursor_cache[cache_key]
 
 
 # Fixed size for the remaining Qt toolbars. The native rail has its own metrics.

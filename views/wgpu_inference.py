@@ -210,7 +210,6 @@ class ResidentInference:
         self.epoch = 0
         self.base = base
         self.protos = protos
-        self.initial = packed.instances.copy()
         self.bounds = [bound.copy() for bound in packed.bounds]
         self.rows = {}
         self.changed = set()
@@ -261,26 +260,34 @@ class ResidentInference:
                 merged = tuple(a[order] for a in merged)
             return merged
         row = int(rows[0])
-        value = self.rows.get(row)
-        if value is None:
-            value = self.initial[row]
-        code = int(value['info'][0])
+        code, world = self.committed(row)
         if row not in self.rows and code not in self.changed:
             return getattr(self.base, name)(rows, *args)
         if row not in self.local:
-            matrix = value['world'].astype(np.float64).T
+            matrix = world.T
             bounds = self.bounds[code][:, :3].astype(np.float64)
             center, extent = bounds.mean(axis=0), (bounds[1]-bounds[0])*.5
             wc = matrix[:3, :3] @ center + matrix[:3, 3]
             we = abs(matrix[:3, :3]) @ extent
             index = _native.available().InstanceSet(
                 [self.protos[code]], np.array([0], np.int64),
-                value['world'].astype(np.float64).reshape(1, 16),
+                world.reshape(1, 16),
                 np.ascontiguousarray((wc-we).reshape(1, 3)),
                 np.ascontiguousarray((wc+we).reshape(1, 3)))
             self.local[row] = (code, index)
         result = getattr(self.local[row][1], name)(np.array([0], np.int64), *args)
         return (np.full(len(result[0]), row, np.int64), *result[1:])
+
+    def committed(self, row):
+        """``(code, world)`` of ``row`` as the queries see it: an updated
+        row, else the placement the native index was built with (no copy
+        of the instance table is kept for it). ``world`` is the instance
+        row's 4 × 4 (translation in the last row), f64."""
+        value = self.rows.get(row)
+        if value is not None:
+            return int(value['info'][0]), value['world'].astype(np.float64)
+        code, flat = self.base.placement(row)
+        return int(code), np.asarray(flat, np.float64).reshape(4, 4)
 
     def ray_cands(self, rows, *args):
         return self._query('ray_cands', rows, *args)
@@ -553,15 +560,26 @@ class ResidentEdges(Sequence):
             row=row, edge_id=int(self.ids[i]), distance=float(self.distances[i]), group=group,
             in_group=not loose, context=word)
 
+    def keep(self, mask):
+        """The same edges less the masked-out placement ones (prefix and
+        features stay), still as columns."""
+        mask = np.asarray(mask, bool)
+        out = ResidentEdges(tuple(column[mask] for column in (self.rows, self.ids, self.a, self.b, self.distances)),
+                            self.groups, self.context)
+        out.prefix, out.features = self.prefix, self.features
+        return out
+
+    def in_group(self):
+        """Per edge: whether its placement is not the open context."""
+        if self.groups is None:
+            return np.full(len(self.rows), self.context is not None)
+        rows, inverse = np.unique(self.rows, return_inverse=True)
+        return np.asarray([self.groups[r] is not self.context for r in rows], bool)[inverse]
+
     def snap_columns(self):
         from core.snap_query import edge_columns
         count = len(self.rows)
-        if self.groups is None:
-            grouped = [self.context is not None] * count
-        else:
-            rows, inverse = np.unique(self.rows, return_inverse=True)
-            grouped = np.asarray([self.groups[r] is not self.context for r in rows],
-                                 dtype=bool)[inverse].tolist()
+        grouped = self.in_group().tolist()
         tags = [0] * count
         if not self.prefix and not self.features:
             return self.a, self.b, tags, grouped
@@ -776,16 +794,29 @@ def snap(index, row, view, x, y, *, work_point=..., **options):
     edges = ResidentEdges(columns, groups, context)
     tool = getattr(getattr(view, 'tools', None), 'tool', None)
     moving = getattr(tool, '_verts', ()) if getattr(tool, 'grab', None) is not None else ()
+    # What is in motion leaves the candidates as columns: turning every
+    # edge into Python objects here sent the snap engine down its walk
+    # over edge objects (architecture review 12).
     if moving and not getattr(tool, '_copy', False):
-        from core.topology import _key
+        from core.topology import _KEY_DECIMALS, _key
         excluded = {_key(v.position) for v in moving}
-        edges = [e for e in edges if e.in_group or
-                 (_key(e.a) not in excluded and _key(e.b) not in excluded)]
+
+        def free(i):
+            # Only the open context's own edges can hold what moves.
+            return all(tuple(round(c, _KEY_DECIMALS) for c in p) not in excluded
+                       for p in (edges.a[i].tolist(), edges.b[i].tolist()))
+        keep = edges.in_group()
+        for i in np.flatnonzero(~keep).tolist():
+            keep[i] = free(i)
+        edges = edges.keep(keep)
         point = view.tools.work_point(x, y) or point
         on_face = False
     exclude = getattr(tool, 'snap_excluded', lambda: None)()
-    if exclude is not None and exclude[1]:
-        edges = [e for e in edges if id(e.group) not in exclude[1]]
+    if exclude is not None and exclude[1] and groups is not None:
+        moved = {r for r in np.unique(edges.rows).tolist() if id(groups[r]) in exclude[1]}
+        edges = edges.keep(~np.isin(edges.rows, list(moved)))
+    elif exclude is not None and exclude[1]:
+        edges = edges.keep(np.full(len(edges.rows), id(None) not in exclude[1]))
     if isinstance(edges, ResidentEdges):
         _, first = np.unique(edges.rows, return_index=True)
         edge_rows = edges.rows[np.sort(first)].tolist()
@@ -823,13 +854,7 @@ def snap(index, row, view, x, y, *, work_point=..., **options):
             named_edges.append(SimpleNamespace(a=mid, b=mid, arc_midpoint=True,
                                          context=word))
         if group is not None and group.is_instance():
-            # Not ``rows.get(r, initial[r])``: the default is evaluated
-            # first, and a placement added since the index was built has
-            # no initial row (IndexError on the hover after an insert).
-            value = index.rows.get(r)
-            if value is None:
-                value = index.initial[r]
-            anchor = QVector3D(*value['world'][3, :3])
+            anchor = QVector3D(*index.committed(r)[1][3, :3])
             named_edges.append(SimpleNamespace(a=anchor, b=anchor, component_origin=True,
                                          context=word))
     if isinstance(edges, ResidentEdges):

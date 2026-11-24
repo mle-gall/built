@@ -1046,10 +1046,11 @@ def _tex_icon(view, path) -> str:
     sent = view.__dict__.setdefault("_ui_tex_icons", set())
     if key not in sent:
         sent.add(key)
-        img = QImage(str(path))
-        if not img.isNull():
-            img = img.scaled(48, 48, Qt.IgnoreAspectRatio, Qt.SmoothTransformation).convertToFormat(QImage.Format_RGBA8888)
-            view.renderer.ui_set_icons([(key, 48, 48, bytes(img.constBits())[: 48 * 48 * 4])])
+        from ingetrazo_render import swatch_pixels
+        px = 48
+        rgba = swatch_pixels(path, px, False)
+        if rgba is not None:
+            view.renderer.ui_set_icons([(key, px, px, rgba)])
     return key
 
 

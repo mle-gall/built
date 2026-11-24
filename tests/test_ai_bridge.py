@@ -156,7 +156,7 @@ def test_a_sheet_made_through_the_bridge_is_one_undoable_step(monkeypatch):
         win.close()
 
 
-def test_a_dialog_opened_by_the_agent_is_cancelled_not_waited_for(monkeypatch):
+def test_a_dialog_opened_by_the_agent_is_cancelled_not_waited_for(monkeypatch, private_settings):
     """#694: deleting a sheet asks Yes/No, and the last sheet says it must
     stay — over the bridge nobody answers, so exec() held the UI thread for
     good and the next call ran inside that dialog. Now the dialog is
@@ -165,11 +165,14 @@ def test_a_dialog_opened_by_the_agent_is_cancelled_not_waited_for(monkeypatch):
     from PySide6.QtWidgets import QDialog
     from plugins.ai_bridge import _Bridge
     from views.main_window import MainWindow
+    from core.settings import settings
+    # This checks a real modal round trip. A paper preview needs a GPU
+    # surface and cannot render on the offscreen Qt platform used here.
+    settings().setValue("composer/auto_render", "0")
     monkeypatch.setenv("INGETRAZO_AI_PORT", "0")
     win = MainWindow()
+    bridge = _Bridge(win.viewport)
     try:
-        vp = win.viewport
-        bridge = _Bridge(vp)
         bridge.start()
         two = ("w = viewport.window()\n"
                "w._show_new_sheet()\n"
@@ -209,8 +212,8 @@ def test_a_dialog_opened_by_the_agent_is_cancelled_not_waited_for(monkeypatch):
         assert "cancelled" in result["stderr"]
         # The bridge answers the next call as usual.
         assert _ask(bridge, "query_model")["ok"]
-        bridge.stop()
     finally:
+        bridge.stop()
         win._saved_version = win.viewport.scene.version
         comp = getattr(win, "_composer", None)
         if comp is not None:

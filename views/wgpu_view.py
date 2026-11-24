@@ -932,24 +932,27 @@ class MetalView(ViewNavigation):
         ``camera(origin)`` and ``rows()`` (resident rows with the frame's
         visibility), and ``page_key``, the page texture the picture goes to:
         then nothing is read back and None is returned."""
-        frame = self._render_resident(width_px, height_px, sharp_shadows, transparent,
-                                      page_key, scene, style, camera, rows, edge_px, profile_px)
+        frame = self.render_pixels(width_px, height_px, overlays=overlays, annotations_only=annotations_only,
+                                   sharp_shadows=sharp_shadows, transparent=transparent, page_key=page_key,
+                                   scene=scene, style=style, camera=camera, rows=rows,
+                                   edge_px=edge_px, profile_px=profile_px)
         if frame is None:
             return None
-        width_px, height_px, pixels, frame_camera = frame
+        w, h, pixels = frame
         from PySide6.QtGui import QImage
-        image = QImage(pixels, width_px, height_px, width_px * 4, QImage.Format_RGBA8888).copy()
-        if overlays:
-            from views.wgpu_annotations import composite_annotations
-            image = composite_annotations(image, self.source_viewport.scene, frame_camera,
-                logical_size=(self.width(), self.height()), overlays=True,
-                annotations_only=annotations_only)
-        return image
+        return QImage(pixels, w, h, w * 4, QImage.Format_RGBA8888).copy()
 
-    def render_pixels(self, width_px, height_px=None):
-        """The shaded viewport at this size, as tightly packed RGBA for egui."""
-        width, height, pixels, _ = self._render_resident(width_px, height_px)
-        return width, height, pixels
+    def render_pixels(self, width_px, height_px=None, *, overlays=False, annotations_only=False, **frame_options):
+        """RGBA of the requested frame, including any document marks for that camera."""
+        frame = self._render_resident(width_px, height_px, **frame_options)
+        if frame is None:
+            return None
+        w, h, pixels, camera = frame
+        if overlays:
+            from views.wgpu_annotations import composite_pixels
+            pixels = composite_pixels(pixels, w, h, self.source_viewport.scene, camera,
+                                      logical_size=(self.width(), self.height()), annotations_only=annotations_only)
+        return w, h, pixels
 
     def _render_resident(self, width_px, height_px, sharp_shadows=False, transparent=False,
                          page_key=None, scene=None, style=None, camera=None, rows=None,
@@ -988,7 +991,6 @@ class MetalView(ViewNavigation):
                                 soft_shadows=getattr(source, '_soft_shadows', 0),
                                 camera=camera)
         from views.wgpu_references import sync as sync_references
-        sync_references(self, payload)
         payload['transparent_background'] = transparent
         payload['edge_width'] = float(getattr(source, '_export_edge_px', 1) if edge_px is None else edge_px)
         payload['profile_width'] = float(getattr(source, '_export_profile_px', 1)
@@ -1021,6 +1023,7 @@ class MetalView(ViewNavigation):
         previous = getattr(self, '_section_uploaded', np.empty(0, np.uint8))
         data = geometry(self, shown, look, camera, height_px, rows)
         try:
+            sync_references(self, payload, scene=scene)
             if billboard_ids:
                 self.renderer.set_instance_world(billboard_ids, rows['world'][billboard_ids].reshape(-1))
             self.renderer.set_axes(*axes_state(shown, camera, source, self.packed.origin))
@@ -1040,6 +1043,8 @@ class MetalView(ViewNavigation):
                 self.renderer.set_instance_world(billboard_ids, resident_world.reshape(-1))
             self.renderer.set_axes(*old_axes)
             self.renderer.set_section_geometry(previous)
+            if scene is not None:
+                sync_references(self, getattr(self, "_frame_style", None) or {})
         return width_px, height_px, pixels, camera
 
     def paintEvent(self, event):
@@ -1357,8 +1362,8 @@ class MetalView(ViewNavigation):
             key = None
         else:
             cur = source.cursor()
-            key = (cur.shape(),
-                   cur.pixmap().cacheKey() if cur.shape() == Qt.BitmapCursor else 0)
+            shape = cur.shape() if hasattr(cur, "shape") else cur
+            key = (shape, cur.pixmap().cacheKey()) if shape == Qt.BitmapCursor and hasattr(cur, "pixmap") else shape
         if key == getattr(self, '_cursor_key', object()):
             return
         self._cursor_key = key

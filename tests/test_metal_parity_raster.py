@@ -250,7 +250,6 @@ def test_paste_preview_repeats_the_image_and_clears(native, aa, tmp_path):
     from PySide6.QtGui import QColor, QImage
     from tools.paste import PasteTool
     from tests.controller_surface import ControllerSurface
-    from views.wgpu_references import preview_texture
 
     upload(native, 255)
     native.set_antialias(aa)
@@ -271,7 +270,7 @@ def test_paste_preview_repeats_the_image_and_clears(native, aa, tmp_path):
     assert not plain
     empty = np.empty(0, np.uint8)
     native.set_preview_mesh(empty, empty, [(p, shade, opacity, np.asarray(v))
-                            for p, shade, opacity, v in runs], preview_texture)
+                            for p, shade, opacity, v in runs])
     controller.close()
     frame = capture(native)[32]
     for x in (13, 39):

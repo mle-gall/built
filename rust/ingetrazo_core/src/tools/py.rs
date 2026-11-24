@@ -58,6 +58,13 @@ pub fn py_to_json(v: &Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
     if v.hasattr("toTuple")? {
         return py_to_json(&v.call_method0("toTuple")?);
     }
+    if let Ok(d) = v.cast::<PyDict>() {
+        let mut map = serde_json::Map::new();
+        for (k, item) in d.iter() {
+            map.insert(k.str()?.to_string(), py_to_json(&item)?);
+        }
+        return Ok(J::Object(map));
+    }
     let mut out = Vec::new();
     for item in v.try_iter()? {
         out.push(py_to_json(&item?)?);
@@ -164,6 +171,8 @@ fn event(d: &Bound<'_, PyDict>) -> PyResult<ToolEvent> {
                 plane_normal: opt(d, "plane_normal")?.map(|v| p3(&v)).transpose()?,
             })
         }
+        "radius" => ToolEvent::Radius(
+            d.get_item("value")?.ok_or_else(|| PyValueError::new_err("radius without value"))?.extract()?),
         "segments" => ToolEvent::Segments(
             d.get_item("count")?.ok_or_else(|| PyValueError::new_err("segments without count"))?.extract()?),
         "value" => ToolEvent::Value(value(&d.get_item("value")?.ok_or_else(|| PyValueError::new_err("value without value"))?)?),

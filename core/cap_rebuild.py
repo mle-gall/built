@@ -445,7 +445,9 @@ def _replace_plane_store(mesh, old, rebuilt):
         try:
             keys, _change = mesh._store.replace_plane_faces([f.key for f in old], caps)
         except _fallback():
-            pass  # Replay through remove_face/add_face below.
+            from core.store_mesh import _note_refusal
+            _note_refusal("replace_plane_faces")
+            # Replay through remove_face/add_face below.
         else:
             mesh._dirty()
             return [FaceView(mesh, k) for k in keys]

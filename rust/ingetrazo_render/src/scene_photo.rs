@@ -59,28 +59,65 @@ pub fn render_scene_photo(window: &Obj<'_>, request: &str) -> PyResult<Option<Pi
     {
         return Ok(None);
     }
-    let icon = scene_thumbnail_icon(window, &name)?;
-    if icon.is_none() {
+    let display = py
+        .import("views.chrome_dialogs")?
+        .call_method1("view_of", (window,))?;
+    if display.is_none() {
         return Ok(None);
     }
-    let fmt = py
-        .import("PySide6.QtGui")?
-        .getattr("QImage")?
-        .getattr("Format_RGBA8888")?;
-    let img = icon
-        .call_method1("pixmap", (96, 64))?
-        .call_method0("toImage")?
-        .call_method1("convertToFormat", (fmt,))?;
-    let (w, h): (usize, usize) = (
-        img.call_method0("width")?.extract()?,
-        img.call_method0("height")?.extract()?,
-    );
-    if w == 0 || h == 0 {
+    let opts = pyo3::types::PyDict::new(py);
+    opts.set_item("w_mm", 36.)?;
+    opts.set_item("h_mm", 24.)?;
+    opts.set_item("view_key", format!("scene:{name}"))?;
+    opts.set_item("style", "sombreado")?;
+    opts.set_item("paper_bg", true)?;
+    let frame = py
+        .import("core.composition")?
+        .getattr("MarcoVista")?
+        .call((), Some(&opts))?;
+    let frames = py.import("views.wgpu_sheet_frames")?;
+    let saved = frames.call_method1("saved_view", (&scene, &frame))?;
+    if !saved.is_truthy()? {
         return Ok(None);
     }
-    let pixels: Vec<u8> = img
-        .call_method0("constBits")?
-        .call_method0("tobytes")?
-        .extract()?;
-    Ok(Some((w, h, pixels)))
+    let scale = py
+        .import("core.outliner")?
+        .call_method1("fit_scale", (&scene, saved, 36., 24., 0.95))?;
+    frame.setattr("scale_n", scale)?;
+    let picture = frames.call_method1("picture", (display, frame))?;
+    if picture.is_none() {
+        return Ok(None);
+    }
+    let (w, h, rgba) = picture.extract::<(u32, u32, Vec<u8>)>()?;
+    let image = image::RgbaImage::from_raw(w, h, rgba).ok_or_else(|| {
+        pyo3::exceptions::PyValueError::new_err("invalid scene picture dimensions")
+    })?;
+    let photo = py.detach(|| crate::image_assets::resize(image, 96, 64));
+    Ok(Some((96, 64, photo.into_raw())))
+}
+
+/// Papers and menu thumbnails have already been composited over the frame background.
+#[pyfunction]
+pub fn opaque_frame<'py>(
+    py: Python<'py>,
+    w: u32,
+    h: u32,
+    rgba: &[u8],
+) -> PyResult<Bound<'py, pyo3::types::PyBytes>> {
+    if w == 0
+        || h == 0
+        || u64::from(w) * u64::from(h) != (rgba.len() / 4) as u64
+        || rgba.len() % 4 != 0
+    {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "invalid frame dimensions",
+        ));
+    }
+    pyo3::types::PyBytes::new_with(py, rgba.len(), |dst| {
+        dst.copy_from_slice(rgba);
+        for alpha in dst[3..].iter_mut().step_by(4) {
+            *alpha = 255;
+        }
+        Ok(())
+    })
 }

@@ -30,8 +30,6 @@ import re
 from collections import Counter
 
 from core.settings import settings as QSettings
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QImage
 
 SEP = "\x1f"
 from ingetrazo_render import (library_by_use, library_filtered, library_groups, library_linked,  # noqa: E402
@@ -708,13 +706,11 @@ def _thumb(view, path) -> str:
     sent = view.__dict__.setdefault("_ui_tex_icons", set())
     if key not in sent:
         sent.add(key)
-        img = QImage(str(path))
-        if not img.isNull():
-            px = THUMB_PX * 2
-            img = img.scaled(px, px, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
-            x, y = (img.width() - px) // 2, (img.height() - px) // 2
-            img = img.copy(x, y, px, px).convertToFormat(QImage.Format_RGBA8888)
-            view.renderer.ui_set_icons([(key, px, px, bytes(img.constBits())[: px * px * 4])])
+        from ingetrazo_render import swatch_pixels
+        px = THUMB_PX * 2
+        rgba = swatch_pixels(path, px, True)
+        if rgba is not None:
+            view.renderer.ui_set_icons([(key, px, px, rgba)])
     return key
 
 

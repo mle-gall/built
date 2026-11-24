@@ -1,0 +1,210 @@
+//! Model commands shared by the system menu and the portable command registry.
+use pyo3::prelude::*;
+
+#[derive(Clone, Copy)]
+pub struct MenuEntry {
+    pub id: &'static str,
+    pub path: &'static str,
+    pub label: &'static str,
+    pub shortcut: &'static str,
+    handler: Handler,
+}
+
+#[derive(Clone, Copy)]
+enum Handler {
+    Window(&'static str),
+    Argument(&'static str, &'static str),
+    Tool(&'static str),
+    View(&'static str),
+    Scene(&'static str),
+    Export(&'static str),
+}
+
+pub fn entries() -> &'static [MenuEntry] {
+    static ENTRIES: std::sync::OnceLock<Vec<MenuEntry>> = std::sync::OnceLock::new();
+    ENTRIES.get_or_init(build_entries)
+}
+
+#[rustfmt::skip]
+fn build_entries() -> Vec<MenuEntry> {
+    use Handler::*;
+    let mut entries = Vec::new();
+    let mut add = |id, path, label, shortcut, handler| {
+        entries.push(MenuEntry { id, path, label, shortcut, handler });
+    };
+    add("import:obj", "File ▸ Import", "Wavefront OBJ (.obj)…", "", Window("_on_import_obj"));
+    add("import:stl", "File ▸ Import", "STL mesh (.stl)…", "", Window("_on_import_stl"));
+    for (id, label, method) in [
+        ("import:image", "Image (PNG / JPG)…", "_on_import_image"),
+        ("clear_texture_cache", "Clear imported texture cache…", "_on_clear_texture_cache"),
+    ] {
+        add(id, "File ▸ Import", label, "", Window(method));
+    }
+    for (id, label, fmt) in [
+        ("export:ifc", "IFC (BIM)…", "ifc"),
+        ("export:glb", "glTF / GLB…", "glb"),
+        ("export:dae", "COLLADA (.dae)…", "dae"),
+        ("export:stl", "STL (3D printing)…", "stl"),
+        ("export:obj", "Wavefront OBJ (.obj)…", "obj"),
+        ("export:dxf", "Current view as DXF…", "dxf"),
+    ] {
+        add(id, "File ▸ Export", label, "", Export(fmt));
+    }
+    for (id, label, action) in [
+        ("scene_add", "Add Scene", "add"), ("scene_show", "Show Scene", "show"),
+        ("scene_update", "Update Scene", "update"), ("scene_rename", "Rename Scene…", "rename"),
+        ("scene_duplicate", "Duplicate Scene", "duplicate"), ("scene_delete", "Delete Scene", "delete"),
+    ] {
+        add(id, "Camera ▸ Scenes", label, "", Scene(action));
+    }
+    for (id, label, keys, method) in [
+        ("repeat_last_command", "Repeat last command", "Shift+R", "repeat_last_command"),
+        ("invert_selection", "Invert Selection", "Ctrl+Shift+I", "_on_invert_selection"),
+        ("make_group", "Make Group", "Ctrl+G", "_on_make_group"),
+        ("verb:make_component", "Make Component…", "G", "_on_make_component"),
+        ("explode_group", "Explode Group", "Ctrl+Shift+G", "_on_explode_group"),
+        ("split_pieces", "Split into Pieces", "", "_on_split_into_pieces"),
+        ("verb:simplify_mesh", "Simplify Mesh…", "", "_on_simplify_mesh"),
+        ("convert_path", "Convert Path to Geometry", "", "_on_convert_geopath"),
+        ("delete_guides", "Delete Guides", "", "_on_delete_guides"),
+        ("hide", "Hide", "Ctrl+H", "_on_hide"),
+        ("reverse_faces", "Reverse Faces", "", "_on_reverse_faces"),
+        ("orient_faces", "Orient Faces", "", "_on_orient_faces"),
+        ("heal_overlaps", "Heal Overlapping Faces", "", "_on_heal_overlaps"),
+        ("join_segments", "Join Segments", "", "_on_join_segments"),
+        ("rebuild_planar", "Rebuild Faces (Planar)", "", "_on_rebuild_planar"),
+    ] {
+        add(id, "Edit", label, keys, Window(method));
+    }
+    for (id, label, keys, method) in [
+        ("unhide_selected", "Selected", "", "_on_unhide_selected"),
+        ("unhide_last", "Last", "", "_on_unhide_last"),
+        ("unhide_all", "All", "Ctrl+Shift+H", "_on_unhide_all"),
+    ] {
+        add(id, "Edit ▸ Unhide", label, keys, Window(method));
+    }
+    for (id, label, mode) in [
+        ("intersect_model", "With Model", "model"),
+        ("intersect_selection", "With Selection", "selection"),
+        ("intersect_context", "With Context", "context"),
+    ] {
+        add(id, "Edit ▸ Intersect Faces", label, "", Argument("_on_intersect_faces", mode));
+    }
+    for (id, path, label, tool) in [
+        ("tool:freehand", "Draw", "Freehand", "freehand"),
+        ("tool:geopath", "Draw", "Path", "geopath"),
+        ("tool:arc", "Draw ▸ Arcs", "Arc", "arc"),
+        ("tool:arc3", "Draw ▸ Arcs", "3-Point Arc", "arc3"),
+        ("tool:center_arc", "Draw ▸ Arcs", "Center Arc", "center_arc"),
+        ("tool:pie", "Draw ▸ Arcs", "Pie", "pie"),
+        ("tool:rotated_rect", "Draw ▸ Shapes", "Rotated Rectangle", "rotated_rect"),
+        ("tool:polygon", "Draw ▸ Shapes", "Polygon", "polygon"),
+        ("tool:first_person", "Camera ▸ Walkthrough", "First Person", "first_person"),
+        ("tool:scale", "Tools", "Scale", "scale"),
+        ("tool:flip", "Tools", "Flip", "flip"),
+        ("tool:followme", "Tools", "Follow Me", "followme"),
+        ("tool:fillet", "Tools", "Fillet 3D", "fillet"),
+        ("tool:protractor", "Tools", "Protractor", "protractor"),
+        ("tool:north", "Tools", "North", "north"),
+        ("tool:dimension", "Tools", "Dimension", "dimension"),
+        ("tool:text", "Tools", "Text", "text"),
+        ("tool:section", "Tools", "Section Plane", "section"),
+        ("tool:outer_shell", "Tools", "Outer Shell", "outer_shell"),
+        ("tool:solid_intersect", "Tools ▸ Solid Tools", "Intersect", "solid_intersect"),
+        ("tool:solid_union", "Tools ▸ Solid Tools", "Union", "solid_union"),
+        ("tool:solid_subtract", "Tools ▸ Solid Tools", "Subtract", "solid_subtract"),
+        ("tool:solid_trim", "Tools ▸ Solid Tools", "Trim", "solid_trim"),
+        ("tool:solid_split", "Tools ▸ Solid Tools", "Split", "solid_split"),
+    ] {
+        add(id, path, label, "", Tool(tool));
+    }
+    for (id, path, label, method) in [
+        ("toggle_projection", "Camera", "Toggle Perspective / Parallel", "_toggle_projection"),
+        ("verb:field_of_view", "Camera", "Field of View…", "_ask_field_of_view"),
+        ("bridge", "Tools", "Bridge", "_on_bridge"),
+        ("make_faces", "Tools", "Make Faces", "_on_make_faces"),
+        ("text3d", "Tools", "3D Text…", "_on_insert_3d_text"),
+        ("terrain_profile", "Tools", "Terrain profile of selection", "_on_terrain_profile"),
+        ("recover_discarded", "File", "Recover a discarded auto-save…", "_on_recover_discarded"),
+        ("documentation", "Help", "Documentation", "_on_documentation"),
+        ("get_models", "Help", "Get more models and textures…", "_on_get_models"),
+    ] {
+        add(id, path, label, if id == "toggle_projection" { "Shift+P" } else { "" }, Window(method));
+    }
+    for (group, id, label, _, _) in crate::commands::view_commands() {
+        let path = match group {
+            "Style" => "Camera ▸ Style",
+            "Projection" => "Camera ▸ Projection",
+            "Views" if id.starts_with("view_") => "Camera ▸ Standard Views",
+            "walkthrough" => "Camera ▸ Walkthrough",
+            "Sections" => "Camera ▸ Sections",
+            "Settings" => continue,
+            _ => "Camera",
+        };
+        if !matches!(id, "zoom_extents" | "view_top" | "view_front" | "view_right" | "view_iso") {
+            add(id, path, label, "", View(id));
+        }
+    }
+    entries
+}
+
+#[pyfunction]
+pub fn run_model_menu(win: &Bound<'_, PyAny>, id: &str) -> PyResult<bool> {
+    let Some(entry) = entries().iter().find(|row| row.id == id) else {
+        return Ok(false);
+    };
+    match entry.handler {
+        Handler::Window(method) => win.call_method0(method)?,
+        Handler::Argument(method, arg) => win.call_method1(method, (arg,))?,
+        Handler::Tool(tool) => win.call_method1("_activate_tool", (tool,))?,
+        Handler::Export(fmt) => win
+            .py()
+            .import("views.wgpu_deliveries")?
+            .call_method1("export_form", (win, win.py().None(), true, fmt))?,
+        Handler::Scene(action) => {
+            let marked = win.getattr("_scene_tabs")?.call_method0("marked_view")?;
+            let vp = win.getattr("viewport")?;
+            if action != "add"
+                && !vp
+                    .getattr("scene")?
+                    .getattr("saved_views")?
+                    .contains(&marked)?
+            {
+                win.call_method0("_no_scene_selected")?
+            } else if action == "show" {
+                win.getattr("tray")?
+                    .getattr("scenes")?
+                    .call_method1("show_view", (marked,))?
+            } else {
+                win.py()
+                    .import("views.wgpu_ui")?
+                    .call_method1("_run", (win, [format!("tab:scene:{action}")]))?
+            }
+        }
+        Handler::View(key) => win
+            .py()
+            .import("views.view_commands")?
+            .call_method1("run", (win, key))?,
+    };
+    Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn every_leaf_has_one_id_and_one_menu_location() {
+        let mut ids = HashSet::new();
+        let mut locations = HashSet::new();
+        for row in entries() {
+            assert!(ids.insert(row.id), "duplicate command {}", row.id);
+            assert!(
+                locations.insert((row.path, row.label)),
+                "duplicate menu label {}",
+                row.label
+            );
+        }
+    }
+}

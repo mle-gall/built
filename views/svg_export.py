@@ -391,23 +391,8 @@ class SvgBuilder:
 
 def preview_pixels(text):
     """Rasterize the exporter's SVG at preview resolution, keeping the page aspect."""
-    from PySide6.QtCore import QByteArray, QRectF, Qt
-    from PySide6.QtGui import QImage, QPainter
-    from PySide6.QtSvg import QSvgRenderer
-    renderer = QSvgRenderer(QByteArray(text.encode("utf-8")))
-    if not renderer.isValid() or renderer.viewBoxF().isEmpty():
-        raise ValueError("The exporter returned an empty SVG preview.")
-    size = renderer.viewBoxF().size()
-    factor = 800 / max(size.width(), size.height())
-    image = QImage(max(1, round(factor * size.width())), max(1, round(factor * size.height())),
-                   QImage.Format_RGBA8888)
-    image.fill(Qt.white)
-    painter = QPainter(image)
-    try:
-        renderer.render(painter, QRectF(image.rect()))
-    finally:
-        painter.end()
-    return image.width(), image.height(), bytes(image.constBits())
+    from ingetrazo_render import svg_preview
+    return svg_preview(text)
 
 
 def open_view_export(win, frame_builder=None):

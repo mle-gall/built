@@ -81,3 +81,16 @@ def test_rotated_rectangle_matches_the_recorded_python_tool(name):
     for i, (g, w) in enumerate(zip(got, want)):
         g = json.loads(json.dumps(g))
         assert g == w, f"step {i}: {tp.ROT_SCENARIOS[name][i]}"
+
+
+ARC = tp.load("arc")
+
+
+@pytest.mark.parametrize("name", sorted(tp.ARC_SCENARIOS))
+def test_the_arcs_match_the_recorded_python_tools(name):
+    got = tp.run_arc(name, tp.ARC_SCENARIOS[name])
+    want = ARC[name]
+    assert len(got) == len(want)
+    for i, (g, w) in enumerate(zip(got, want)):
+        g = json.loads(json.dumps(g))
+        assert g == w, f"step {i}: {tp.ARC_SCENARIOS[name][i]}"

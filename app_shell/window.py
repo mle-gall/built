@@ -30,8 +30,7 @@ from __future__ import annotations
 
 import types
 
-from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtGui import QKeySequence
+from PySide6.QtCore import QEvent, QObject, Qt, Signal
 
 from app_shell.command_action import ShellAction
 from views.view_host import MISSING
@@ -415,10 +414,6 @@ class ShellWindow(QObject):
         self._tools = build_tools()
         self._act_eyedropper = ShellAction(self, "Sample material", checkable=True,
                                            toggled=self._on_toggle_eyedropper)
-        self._act_bridge = ShellAction(self, "Bridge", run=self._on_bridge, listed=False)
-        self._act_make_faces = ShellAction(self, "Make Faces", run=self._on_make_faces, listed=False)
-        self._act_3dtext = ShellAction(self, "3D Text", run=self._on_insert_3d_text)
-
         self._tool_actions = {}
         self._style_before_xray = (None, None)
         self._status = ShellStatusBar(host)
@@ -453,12 +448,21 @@ class ShellWindow(QObject):
                 shortcut = "Space"          # bound by MainWindow, not the tool
             action = ShellAction(self, tr(getattr(tool, "name", key)), checkable=True)
             alternate = getattr(tool, "shortcut_alt", None)
-            action.setShortcuts([QKeySequence(s) for s in (shortcut, alternate) if s])
+            action.setShortcuts([s for s in (shortcut, alternate) if s])
             self._tool_actions[key] = action
         self._tool_defaults = [(k, a.text(), a.state.portable_keys())
                               for k, a in self._tool_actions.items()]
         self._registry_actions = {}
         self.refresh_commands()
+        self._act_bridge = self._registry_actions["menu:bridge"]
+        self._act_make_faces = self._registry_actions["menu:make_faces"]
+        self._act_3dtext = self._registry_actions["menu:text3d"]
+
+    def childEvent(self, event):
+        # A plugin may attach an action or an entire submenu to this QObject.
+        if event.type() in (QEvent.ChildAdded, QEvent.ChildRemoved):
+            self._action_tree_changed = True
+        super().childEvent(event)
 
     def refresh_commands(self):
         from app_shell.command_bindings import refresh
@@ -818,7 +822,14 @@ class ShellWindow(QObject):
 
     def _parse_skp_threaded(self, skp, cb):
         from app_shell import files
-        return files.parse_skp_threaded(self, skp, cb)
+        from formats.skp import parse_skp
+        return files.parse_threaded(parse_skp, skp, cb)
+
+    def _parse_stl_threaded(self, path, scale, simplify_mode, cb, report=None):
+        from app_shell import files
+        from formats.stl import parse_stl
+        return files.parse_threaded(parse_stl, path, cb, scale=scale,
+                                    simplify_mode=simplify_mode, report=report)
 
     def _dxf_options(self, path, header_scale=None):
         from app_shell import files

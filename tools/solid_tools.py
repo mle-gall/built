@@ -131,6 +131,10 @@ class SolidTool(Tool):
 
     # ---- Pointer ----------------------------------------------------------------
     @property
+    def solid_cursor_key(self):
+        return "solid-" + self._badge
+
+    @property
     def qt_cursor(self):
         from views.icons import solid_cursor
         return solid_cursor(self._badge)

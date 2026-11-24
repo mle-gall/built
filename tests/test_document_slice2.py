@@ -40,7 +40,8 @@ def test_an_attribute_edited_in_place_is_journalled():
     view = g.ext
     assert isinstance(view, dict) and isinstance(view["link"], dict)
     t = txn(lambda: g.ext["link"].update(rel="a.igz"))
-    assert [op[0] for op in t.ops()] == ["set"]
+    # One keyed patch: the entry, not the whole attribute (review 11).
+    assert [op[0] for op in t.ops()] == ["patch"]
     assert g.ext == {"link": {"path": "a.igz", "rel": "a.igz"}}
     t.undo()
     assert g.ext == {"link": {"path": "a.igz"}}

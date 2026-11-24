@@ -1,14 +1,11 @@
 //! Resident material textures and their complete, budgeted mip chains.
-use image::{imageops, ImageError, ImageReader, RgbaImage};
+use image::{imageops, RgbaImage};
 use pyo3::{
     exceptions::PyValueError,
     prelude::*,
     types::{PyBytes, PyTuple},
 };
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashMap, path::PathBuf};
 
 struct Layer {
     pixels: RgbaImage,
@@ -20,12 +17,7 @@ impl Layer {
         imageops::flip_vertical_in_place(&mut pixels);
         let premultiplied = pixels.pixels().any(|p| p[3] != 255).then(|| {
             let mut copy = pixels.clone();
-            for pixel in copy.pixels_mut() {
-                let alpha = u32::from(pixel[3]);
-                for c in &mut pixel.0[..3] {
-                    *c = ((u32::from(*c) * alpha + 127) / 255) as u8;
-                }
-            }
+            crate::image_assets::premultiply(&mut copy);
             copy
         });
         Self {
@@ -42,40 +34,9 @@ impl Layer {
         let src = self.premultiplied.as_ref().unwrap_or(&self.pixels);
         let mut mip = imageops::resize(src, width, height, imageops::FilterType::Triangle);
         if self.premultiplied.is_some() {
-            for p in mip.pixels_mut() {
-                let alpha = u32::from(p[3]);
-                if alpha > 0 {
-                    for c in &mut p.0[..3] {
-                        *c = ((u32::from(*c) * 255 + alpha / 2) / alpha).min(255) as u8;
-                    }
-                }
-            }
+            crate::image_assets::unpremultiply(&mut mip);
         }
         dst.extend_from_slice(mip.as_raw());
-    }
-}
-
-fn load(py: Python<'_>, path: &Path) -> PyResult<Option<Layer>> {
-    let decoded = py.detach(|| -> image::ImageResult<Layer> {
-        let reader = ImageReader::open(path)?.with_guessed_format()?;
-        Ok(Layer::new(reader.decode()?.into_rgba8()))
-    });
-    match decoded {
-        Ok(layer) => Ok(Some(layer)),
-        Err(ImageError::Unsupported(_)) => {
-            // TIFF and optional system image plugins retain their existing
-            // decoder until platform codec coverage is complete.
-            let data = py
-                .import("views.wgpu_scene")?
-                .getattr("_legacy_texture_pixels")?
-                .call1((path,))?;
-            if data.is_none() {
-                return Ok(None);
-            }
-            let (w, h, bytes): (u32, u32, Vec<u8>) = data.extract()?;
-            Ok(RgbaImage::from_raw(w, h, bytes).map(Layer::new))
-        }
-        Err(_) => Ok(None),
     }
 }
 
@@ -153,7 +114,10 @@ pub fn material_texture_array<'py>(
             "texture budget cannot hold one texel per layer",
         ));
     }
-    let images: Vec<_> = paths.iter().map(|p| load(py, p)).collect::<PyResult<_>>()?;
+    let images: Vec<_> = paths
+        .iter()
+        .map(|p| crate::image_assets::decode(py, p).map(|img| img.map(Layer::new)))
+        .collect::<PyResult<_>>()?;
     for row in &mut descriptors {
         for id in &mut row[..6] {
             if *id != 0 && images[*id as usize - 1].is_none() {

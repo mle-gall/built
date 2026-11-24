@@ -313,7 +313,8 @@ class OperationForm(Form):
 
     def wire(self):
         seq, title, note, width, _, buttons = super().wire()
-        rows = [(fid, kind, tr(label), text, value, lo, hi, options, flags, tr(tip))
+        rows = [(fid, kind, tr(label), text, value, lo, hi,
+                 [tr(o) for o in options] if kind == "choice" else options, flags, tr(tip))
                 for fid, kind, label, text, value, lo, hi, options, flags, tip
                 in self.model.rows()]
         return seq, title, note, width, rows, buttons
