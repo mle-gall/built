@@ -419,7 +419,7 @@ impl Ui {
                 g.into_iter()
                     .map(|(id, label, key, w, h, rgba)| {
                         let icon = (w > 0 && rgba.len() == w * h * 4).then(|| {
-                            let image = egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba);
+                            let image = if key.starts_with("component:") { egui::ColorImage::from_rgba_premultiplied([w,h],&rgba) } else { egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba) };
                             self.ctx.load_texture(&id, image, egui::TextureOptions::LINEAR)
                         });
                         Tool { enabled: !disabled.contains(&id), id, label, key, icon }
@@ -430,6 +430,9 @@ impl Ui {
     }
 
     pub fn set_icons(&mut self, icons: Vec<(String, usize, usize, Vec<u8>)>) {
+        if let Some(prefix) = icons.iter().filter(|(k,..)|k.starts_with("component:")).find_map(|(k,..)|k.rsplit_once(':').map(|(p,_)|p)) {
+            self.icons.retain(|k,_| !k.starts_with("component:") || k.rsplit_once(':').is_some_and(|(p,_)|p==prefix));
+        }
         for (key, w, h, rgba) in icons {
             if w > 0 && rgba.len() == w * h * 4 {
                 let image = egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba);
@@ -2320,7 +2323,7 @@ impl Ui {
                 ("-", ""), ("rename", "Rename"), ("newchild", "New child node"), ("kind", "Kind  ›"),
                 ("-", ""), ("delete", "Delete node")];
             let item_menu: &[(&str, &str)] = &[("item", "Select"), ("open", "Open for editing"), ("rename", "Rename"),
-                ("-", ""), ("hideitem", "Hide"), ("lockitem", "Lock / unlock"), ("zoom", "Zoom to"), ("-", ""), ("fileto", "File to…")];
+                ("-", ""), ("hideitem", "Hide"), ("lockitem", "Lock / unlock"), ("zoom", "Zoom to"), ("groupplan", "Plan of this group…"), ("-", ""), ("fileto", "File to…")];
             let comp_menu: &[(&str, &str)] = &[("cplace", "Place a copy"), ("cselect", "Select instances"),
                 ("creplace", "Replace selection with this"), ("-", ""), ("ckeep", "Keep in file"), ("crename", "Rename…")];
             // A linked file's rows are read-only here: no filing, kind or rename.
@@ -2328,7 +2331,7 @@ impl Ui {
                 ("isolate", "Isolate"), ("zoom", "Zoom to"), ("-", ""), ("eye", "Show / hide"), ("lock", "Lock / unlock"),
                 ("-", ""), ("linkopen", "Edit source"), ("linkfinder", "Show in Finder"),
                 ("linkreload", "Reload"), ("linkrelink", "Locate…"), ("linkunlink", "Unlink")];
-            let section_menu: &[(&str, &str)] = &[("sectioncut", "Toggle cut"), ("eye", "Show / hide"), ("deleterows", "Delete")];
+            let section_menu: &[(&str, &str)] = &[("cutview", "View of the cut…"), ("sectioncut", "Toggle cut"), ("eye", "Show / hide"), ("deleterows", "Delete")];
             let tag_menu: &[(&str, &str)] = &[("newtag", "New tag"), ("rename", "Rename"), ("tagactive", "Make active"), ("tagassign", "Move selection here"), ("tagselect", "Select items"), ("tagisolate", "Toggle tag isolation"), ("mergetag", "Merge into…"), ("scenetaghide", "Hide in all saved scenes"), ("scenetagshow", "Show in all saved scenes"), ("deletetag", "Delete"), ("purgetags", "Purge unused tags…")];
             let menu = if key.starts_with("preview-tag:") { tag_menu } else if key.starts_with("preview-folder:") { &[("newtag", "New tag in folder"), ("tagisolate", "Toggle tag isolation")] } else if key.starts_with("section:") { section_menu } else if row == 0 && key.starts_with("n:link") { link_menu } else if row == 0 { node_menu }
                 else if row == 5 { comp_menu } else { item_menu };
@@ -2347,6 +2350,7 @@ impl Ui {
                                 matches!(*id, "contents" | "isolate" | "zoom" | "linkopen" | "linkfinder" | "linkreload") { continue; }
                             if matches!(*id, "linkreload" | "linkrelink" | "linkunlink") &&
                                 !editable_file { continue; }
+                            if *id == "groupplan" && !row.is_some_and(|r| r.local_placement) { continue; }
                             if *id == "hideitem" {
                                 for (verb, label, why) in &col.group_rows {
                                     let item = (verb.clone(), label.clone(), String::new(), String::new(), -1, why.is_empty());

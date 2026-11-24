@@ -719,6 +719,17 @@ impl App {
             .with_title("Built (Rust shell)")
             .with_inner_size(LogicalSize::new(w, h))
             .with_min_inner_size(LogicalSize::new(640.0, 480.0));
+        #[cfg(target_os = "linux")]
+        {
+            use winit::platform::wayland::{ActiveEventLoopExtWayland, WindowAttributesExtWayland};
+            use winit::platform::x11::WindowAttributesExtX11;
+            attrs = if event_loop.is_wayland() {
+                let app_id = std::env::var("FLATPAK_ID").unwrap_or_else(|_| "ingetrazo".into());
+                WindowAttributesExtWayland::with_name(attrs, app_id, "ingetrazo")
+            } else {
+                WindowAttributesExtX11::with_name(attrs, "ingetrazo", "ingetrazo")
+            };
+        }
         #[cfg(target_os = "macos")]
         {
             use winit::platform::macos::WindowAttributesExtMacOS;

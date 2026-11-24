@@ -5,6 +5,8 @@ plant of 1 815 components drew every one at each refresh, a quarter of
 opening it (#158). Scrolled to, a row gets its picture; the picture is
 the one drawn before."""
 from __future__ import annotations
+from tests.test_library_sheet import win  # noqa: F401
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 import pytest
 
@@ -28,50 +30,21 @@ def _component(i):
     return g
 
 
-def _settle():
-    for _ in range(5):
-        QApplication.processEvents()
-
-
-@pytest.mark.classic_pending
-def test_only_rows_on_screen_are_drawn(monkeypatch):
-    from views.main_window import MainWindow
+def test_only_rows_on_screen_are_drawn(win, monkeypatch):
+    from tests.test_replace_component import _component_sheet
+    from tests.test_library_sheet import act
     drawn = []
-    real = component_thumbs._draw
-
-    def spy(definition, size):
-        drawn.append(definition.name)
-        return real(definition, size)
-    monkeypatch.setattr(component_thumbs, "_draw", spy)
-    component_thumbs._cache.clear()
-    win = MainWindow()
-    try:
-        win.show()
-        scene = win.viewport.scene
-        scene.groups.extend(_component(i) for i in range(120))
-        panel = win.tray.components
-        panel.refresh_in_model()
-        _settle()
-        lst = panel._in_model
-        assert lst.count() == 120
-        # The Components section sits below the fold of the Properties
-        # tray at the default window size: a list the user cannot see
-        # draws no pictures at all (the hidden Parts panel's cut list cost
-        # 48 s per click on the ride model). Scroll it into view first.
-        assert not drawn, "a section scrolled out of view draws nothing"
-        win.tray.widget().ensureWidgetVisible(lst, 0, 0)
-        _settle()
-        assert drawn, "the rows on screen get their picture"
-        assert len(drawn) < 60, "rows off screen wait to be scrolled to"
-        first = set(drawn)
-        lst.scrollToItem(lst.item(119))
-        _settle()
-        last = lst.item(119).data(Qt.UserRole)[0].name
-        assert last in drawn and last not in first
-        assert lst.item(119).data(Qt.UserRole + 2)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    real = component_thumbs._polygons
+    monkeypatch.setattr(component_thumbs, "_polygons", lambda g: (drawn.append(g.name), real(g))[1])
+    scene = win.viewport.scene
+    scene.groups.extend(_component(i) for i in range(120))
+    scene.version += 1
+    tiles = _component_sheet(win)
+    assert len(tiles) == 120 and drawn == []
+    for visible in (tiles[:8], tiles[-4:]):
+        act(win, "component-previews", *(t["icon"] for t in visible))
+        assert drawn[-len(visible):] == [t["label"] for t in visible]
+    assert len(drawn) == 12
 
 
 def test_nested_lazy_thumbnail_matches_eager_without_materialization(monkeypatch, tmp_path):

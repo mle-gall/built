@@ -53,6 +53,7 @@ mod model_visibility;
 mod model_clipboard;
 mod group_edit;
 mod tree_grouping;
+mod model_panels;
 mod document_starter;
 mod scene_navigation;
 mod window_services;
@@ -3296,6 +3297,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     context_tools::register(m)?;
     image_edits::register(m)?;
     component_files::register(m)?;
+    model_panels::register_qt_host(m)?;
     m.add_class::<dwg_process::DwgConverter>()?;
     edge_commands::register(m)?;
     face_commands::register(m)?;

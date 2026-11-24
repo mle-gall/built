@@ -387,6 +387,7 @@ fn block(kind: &str, mut fields: Value) -> Value {
 
 fn icon(e: &Item, thumbs: &mut Vec<String>) -> String {
     match e.thumb.as_deref().filter(|t| !t.is_empty()) {
+        Some(t) if t.starts_with("component:") && e.key.starts_with("cm:") => t.into(),
         Some(t) => {
             if !thumbs.iter().any(|x| x == t) {
                 thumbs.push(t.to_owned());

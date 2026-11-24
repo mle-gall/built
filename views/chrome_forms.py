@@ -282,10 +282,12 @@ class Form:
                              flags, f.tip))
             elif k == "button":
                 rows.append((f.id, k, f.label, f.note, 0.0, 0.0, 0.0, [], flags, f.tip))
+        from ingetrazo_render import multiline_submit_hint
+        submit = multiline_submit_hint() if any(f.multiline for f in self.fields) else "↩"
         buttons = []
         for bid, label in self.buttons:
             role = 1 if bid == self.default else 2 if bid == self.discard else 3 if bid == self.cancel else 0
-            hint = {1: "↩", 3: "esc"}.get(role, "")
+            hint = {1: submit, 3: "esc"}.get(role, "")
             buttons.append((bid, label, hint, role))
         note = self.note
         if self.error:

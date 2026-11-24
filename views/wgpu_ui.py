@@ -788,7 +788,7 @@ def _tree(view, win, *, discover=False):
     # Watertight checks in Export must follow mesh edits.
     geometric = lens == 2
     cv = scene.content_version if geometric else _tree_version(win, scene)
-    sig = (id(scene), id(scene.edit_group), scene.mesh.revision, cv, tuple(sorted(exp)), tuple(sorted(pages.items())), flt, scene.content_version if flt else None, _sel_key(scene.selection), lens, getattr(view, "_ui_layer_rev", 0), scene.show_section_planes, sheet_revision)
+    sig = (id(scene), id(scene.edit_group), scene.mesh.revision, cv, tuple(sorted(exp)), tuple(sorted(pages.items())), flt, scene.content_version if flt else None, _sel_key(scene.selection), lens, getattr(view, "_ui_layer_rev", 0), scene.show_section_planes, sheet_revision, tuple(map(id, getattr(win, "_outliner_kinds", ()))))
     if not discover and sig == getattr(view, "_ui_tree_sig", None):
         return
     first = not hasattr(view, "_ui_tree")
@@ -799,7 +799,8 @@ def _tree(view, win, *, discover=False):
     mode = "" if discover else view.__dict__.get("_ui_mode", "")
     from core import structure
     from core import layers as L
-    from ingetrazo_core import filing_rows, mark_filing_selection, project_sidebar
+    from ingetrazo_core import filing_rows, mark_filing_selection
+    from plugins._browser import project_sidebar
     hist = getattr(win.viewport, "history", None)
     readers = getattr(getattr(hist, "feed", None), "readers", None)
     model = _tree_model(view, scene, cv, None if getattr(win, "_outliner_kinds", ()) else readers)
@@ -820,7 +821,7 @@ def _tree(view, win, *, discover=False):
             k = nodes[k]["parent"]
             exp.add(f"n:{k}")
     rows = filing_rows(scene, model, exp, pages, flt, discover, ROW_CAP, lens, sel_ids,
-                       active, KINDS, TIPS, FILE_STATES)
+                       active, KINDS, TIPS, FILE_STATES, getattr(win, "_outliner_kinds", None))
     rows, path_bar = project_sidebar(scene, tree, rows, flt, exp, str(getattr(win, "_current_path", "") or ""), lens == 1, sel_ids)
     rows.extend(catalog.rows(flt, exp))
     if "_project" in getattr(win, "__dict__", {}):
@@ -1341,6 +1342,10 @@ def _tree_action(win, view, action) -> None:
         if verb == "grouprows":
             from ingetrazo_render import tree_group_rows
             view.renderer.ui_set_tree_group_rows(rk, tree_group_rows(scene, copies() if kind == "d" else item()))
+        elif verb in ("groupplan", "cutview"):
+            from ingetrazo_render import plan_options
+            target = item() if verb == "groupplan" else next((p for p in scene.section_planes if str(p.uid) == ident), None)
+            plan_options(win, target, verb == "groupplan")
         elif verb == "paintrows":
             from ingetrazo_render import TreePaint
             from ingetrazo_render.wgpu_library import open_library
@@ -2594,7 +2599,7 @@ def _run(win, actions, source_view=None) -> None:
             from views import wgpu_tabs
             wgpu_tabs.action(win, getattr(getattr(win, "_doc", None), "stand_in", None), arg)
         elif kind == "ctx":
-            from ingetrazo_render import context_menu_action
+            from plugins._context_menu import context_menu_action
             context_menu_action(win, getattr(getattr(win, "_doc", None), "stand_in", None), arg)
         elif kind == "tab":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)

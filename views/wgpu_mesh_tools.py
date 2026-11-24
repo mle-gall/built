@@ -540,8 +540,8 @@ class MeshToolAccess:
             self.measurementChanged.emit(label[0])
 
     def draw_annotations(self, painter):
-        from views.wgpu_annotations import (draw_annotations, draw_tool_feedback,
-                                            draw_tool_overlays)
+        from views.wgpu_annotations import draw_annotations, draw_tool_overlays
+        from core.plugin_panels import draw_tool_feedback
         from views.wgpu_overlay import draw_snap_indicator
         self._hover_entity = getattr(self, '_mesh_hover', None)
         marks = getattr(self.view, '_draw_selection_marks', None)
