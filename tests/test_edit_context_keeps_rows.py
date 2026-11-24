@@ -369,14 +369,14 @@ def test_the_browser_reads_only_the_rows_a_group_opened_or_closed_changes():
 
 def test_plain_group_retention_counts_open_edits_as_one_step(vp):
     from core.group import Group
-    from core.history import RenameGroupCommand
+    from core.history import NativeCommand
 
     group = Group(name="before")
     vp.scene.groups.append(group)
     vp.history.max_steps = 1
     vp.begin_group_edit(group)
     for name in ("middle", "after"):
-        vp.history.execute(RenameGroupCommand(group, name))
+        vp.history.execute(NativeCommand.rename(group, name))
     vp._leave_group_edit(todos=True)
     assert len(vp.history.undo_stack) == 1
     assert vp.history.undo() and group.name == "before"

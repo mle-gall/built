@@ -12,7 +12,7 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from views import context_menu
 from core.group import Group  # noqa: E402
-from core.history import LockCommand  # noqa: E402
+from core.history import NativeCommand  # noqa: E402
 from core.layers import Layer  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
 
@@ -79,7 +79,7 @@ def test_the_locked_group_under_the_cursor_is_found_and_unlocked(win):
     g = _group(scene, "muro")
     px = vp._world_to_pixel(V(1, 1, 0))
     assert vp.pick_group(*px) is g                # the block is built
-    vp.history.execute(LockCommand([g], True))
+    vp.history.execute(NativeCommand.lock([g], True))
     assert vp.pick_group(*px) is None             # still not pickable
     assert vp.pick_locked_group(*px) is g         # but the menu finds it
     empty = vp._world_to_pixel(V(3, 1, 0))

@@ -305,7 +305,7 @@ def test_a_geometry_edit_leaves_the_browser_rows_as_they_are(win, monkeypatch):
     vp.history.undo()
     outliner.refresh(rows_if_changed=True)
     assert rows == []
-    from core.history import RenameGroupCommand
-    vp.history.execute(RenameGroupCommand(g, "renamed"))
+    from core.history import NativeCommand
+    vp.history.execute(NativeCommand.rename(g, "renamed"))
     outliner.refresh(rows_if_changed=True)
     assert len(rows) == 1

@@ -18,7 +18,7 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 
 from core.group import Group  # noqa: E402
-from core.history import SetFaceColorCommand, SetGroupMaterialCommand  # noqa: E402
+from core.history import SetFaceColorCommand, NativeCommand  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
 
 BLUE = {"color": [0.0, 0.0, 1.0]}
@@ -72,7 +72,7 @@ def test_a_face_painted_inside_shows_on_every_copy(win, first):
     vp = win.viewport
     scene = vp.scene
     part1, part2 = _copies(scene)
-    vp.history.execute(SetGroupMaterialCommand(part2, BLUE))
+    vp.history.execute(NativeCommand.paint([part2], BLUE))
     assert not _shows_yellow(vp, part1) and not _shows_yellow(vp, part2)
 
     vp.begin_group_edit(part2)
@@ -91,14 +91,14 @@ def test_each_later_coat_keeps_the_yellow_face(win):
     vp = win.viewport
     scene = vp.scene
     part1, part2 = _copies(scene)
-    vp.history.execute(SetGroupMaterialCommand(part2, BLUE))
+    vp.history.execute(NativeCommand.paint([part2], BLUE))
     _shows_yellow(vp, part1), _shows_yellow(vp, part2)
     vp.begin_group_edit(part2)
     vp.history.execute(SetFaceColorCommand([scene.mesh.faces[2]], YELLOW))
     vp.end_one_group_edit()
     assert _shows_yellow(vp, part1)
     for coat in (GREEN, BLUE, GREEN):
-        vp.history.execute(SetGroupMaterialCommand(part2, coat))
+        vp.history.execute(NativeCommand.paint([part2], coat))
         assert _shows_yellow(vp, part2), coat
 
 

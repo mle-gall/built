@@ -177,16 +177,16 @@ pub(super) fn act(win: &Bound<'_, PyAny>, clicked: &Bound<'_, PyAny>, verb: &str
         if close && editing_target {
             vp.call_method0("end_group_edit")?;
         }
-        let cmd = if lock { "LockCommand" } else { "HideCommand" };
         let groups = PyList::new(py, &targets)?;
-        nav.call_method1(
-            "execute",
-            (
-                &vp,
-                py.import("core.history")?
-                    .call_method1(cmd, (groups, close))?,
-            ),
-        )?;
+        let cmd = if lock {
+            py.import("ingetrazo_core")?
+                .getattr("NativeCommand")?
+                .call_method1("lock", (groups, close))?
+        } else {
+            py.import("core.history")?
+                .call_method1("HideCommand", (groups, close))?
+        };
+        nav.call_method1("execute", (&vp, cmd))?;
         if !picked.is_empty() {
             let mut adopt = vec![];
             kept_rows.clear();
