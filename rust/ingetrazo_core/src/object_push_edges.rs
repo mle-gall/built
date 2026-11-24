@@ -85,7 +85,7 @@ pub(crate) fn loop_edges<'py>(ring: &Obj<'py>) -> PyResult<Vec<Bound<'py, PyFroz
 }
 #[pyfunction]
 pub(crate) fn face_edges<'py>(face: &Obj<'py>) -> PyResult<Bound<'py, PySet>> {
-    let out = PySet::empty(face.py());
+    let out = PySet::empty(face.py())?;
     for pair in Boundary::read(face)?.exact {
         out.add(frozen(face.py(), pair)?)?;
     }
