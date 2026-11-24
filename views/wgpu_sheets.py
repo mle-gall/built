@@ -216,6 +216,17 @@ def to_model(win) -> None:
         comp.hide()
 
 
+def _cajetin_template():
+    """Where the title block templates live and the one a new title block
+    starts from (the composer's ``cajetin_templates_dir`` and
+    ``default_cajetin_template_name``): ``(folder, name or None)``."""
+    from PySide6.QtCore import QSettings, QStandardPaths
+    base = (QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
+            or str(Path.home() / ".ingetrazo"))
+    name = str(QSettings().value("composer/default_cajetin", "") or "") or None
+    return str(Path(base) / "cajetines"), name
+
+
 def _int(v) -> int:
     """A Qt enum or flag (or the shell's plain int) as an int."""
     return int(getattr(v, "value", v))
@@ -508,7 +519,8 @@ class Workspace:
                 self.view.renderer.page_select([target._doc_key])
                 self._tool("select")
                 return
-        item = NATIVE.sheet_new_item(comp, tool, x0, y0, x1, y1, scene)
+        template = _cajetin_template() if tool == "cajetin" else (None, None)
+        item = NATIVE.sheet_new_item(comp, tool, x0, y0, x1, y1, scene, *template)
         if item is None:
             return
         if tool == "nivel":

@@ -36,11 +36,14 @@ fn host<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, x: f64, y: f64) -> PyRes
 /// The item tool ``tool`` makes for a press at (x0, y0) released at
 /// (x1, y1) on sheet ``comp`` (paper mm), in ``scene``; None when it makes
 /// none (a title block where there is one). Its z puts it on top.
+/// ``template``: the title block template a new title block starts from
+/// (its file in ``template_dir``, `load_cajetin_template`).
 #[pyfunction]
-#[pyo3(signature = (comp, tool, x0, y0, x1, y1, scene=None))]
+#[pyo3(signature = (comp, tool, x0, y0, x1, y1, scene=None, template_dir=None, template=None))]
 #[allow(clippy::too_many_arguments)]
 pub fn sheet_new_item<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, tool: &str, x0: f64, y0: f64, x1: f64, y1: f64,
-                           scene: Option<Bound<'py, PyAny>>) -> PyResult<Option<Bound<'py, PyAny>>> {
+                           scene: Option<Bound<'py, PyAny>>, template_dir: Option<std::path::PathBuf>,
+                           template: Option<String>) -> PyResult<Option<Bound<'py, PyAny>>> {
     let c = py.import("core.composition")?;
     let tr = |s: &str| -> PyResult<String> { py.import("core.i18n")?.getattr("tr")?.call1((s,))?.extract() };
     let (w, h, x, y) = ((x1 - x0).abs(), (y1 - y0).abs(), x0.min(x1), y0.min(y1));
@@ -88,6 +91,16 @@ pub fn sheet_new_item<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, tool: &str
                 return Ok(None);
             }
             let item = comp.call_method0("default_cajetin")?;
+            if let (Some(dir), Some(name)) = (&template_dir, template.as_deref().filter(|n| !n.is_empty())) {
+                if apply_template(py, &item, &dir.join(format!("{name}.json")))? {
+                    // Kept docked in the page's corner, whatever its size.
+                    let (pw, ph): (f64, f64) = comp.call_method0("page_size_mm")?.extract()?;
+                    let m: f64 = comp.getattr("margin_mm")?.extract()?;
+                    let (w, h): (f64, f64) = (item.getattr("w_mm")?.extract()?, item.getattr("h_mm")?.extract()?);
+                    item.setattr("x_mm", pw - m - w)?;
+                    item.setattr("y_mm", ph - m - h)?;
+                }
+            }
             let today = py.import("datetime")?.getattr("date")?.call_method0("today")?.call_method1("strftime", ("%d/%m/%Y",))?;
             item.call_method1("set_field", ("FECHA", today))?;
             if comp.getattr("frames")?.len()? > 0 {
@@ -362,4 +375,37 @@ pub fn sheet_new_image<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, path: Str
     let item = py.import("core.composition")?.getattr("ImagenItem")?.call((), Some(&kw))?;
     item.setattr("z", super::display::sheet_next_z(comp)?)?;
     Ok(Some(item))
+}
+
+/// A title block template's fields on ``item`` (`load_cajetin_template`):
+/// only what a title block has, never its place, z, lock or group; the
+/// rows as text pairs. False when there is no such template.
+fn apply_template(py: Python<'_>, item: &Bound<'_, PyAny>, path: &std::path::Path) -> PyResult<bool> {
+    let Ok(text) = std::fs::read_to_string(path) else { return Ok(false) };
+    let json = py.import("json")?;
+    let Ok(raw) = json.call_method1("loads", (text,)) else { return Ok(false) };
+    let Ok(raw) = raw.cast_into::<PyDict>() else { return Ok(false) };
+    let fields: Vec<String> = item.getattr("_record_fields")?.extract()?;
+    let mut any = false;
+    for (k, v) in raw.iter() {
+        let k: String = k.extract()?;
+        if !fields.contains(&k) || matches!(k.as_str(), "x_mm" | "y_mm" | "z" | "locked" | "group_id") {
+            continue;
+        }
+        let v = if k == "campos" {
+            let rows = pyo3::types::PyList::empty(py);
+            for r in v.try_iter()? {
+                let r = r?;
+                if (r.is_instance_of::<pyo3::types::PyList>() || r.is_instance_of::<pyo3::types::PyTuple>()) && r.len()? >= 2 {
+                    rows.append(vec![r.get_item(0)?.str()?, r.get_item(1)?.str()?])?;
+                }
+            }
+            rows.into_any()
+        } else {
+            v
+        };
+        item.setattr(k.as_str(), v)?;
+        any = true;
+    }
+    Ok(any)
 }
