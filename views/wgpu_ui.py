@@ -623,18 +623,24 @@ def _cursor_value(view, win) -> None:
     caption = getattr(tool, "vcb_caption", None)
     caption = caption() if callable(caption) else getattr(tool, "vcb_label", None)
     label = DocumentInteraction._length_label_at(tools) if caption is not None else None
-    at = view._world_to_pixel(label[1]) if label is not None else None
+    display = getattr(tools, "view", view)
+    at = display._world_to_pixel(label[1]) if label is not None else None
     history = getattr(getattr(win, "viewport", None), "history", None)
     revision = int(getattr(history, "revision", 0) or 0)
-    if tool is None and getattr(view.source_viewport, "nav_mode", None) == "zoom":
+    if tool is None and getattr(display.source_viewport, "nav_mode", None) == "zoom":
         _lens_value(view, tools, revision)
         return
     if at is None:
         view.renderer.ui_set_cursor_value("", "", False, 0.0, 0.0, None, revision)
         return
     start = getattr(tool, "start_point", None)
-    start = view._world_to_pixel(start) if start is not None else None
-    xy = lambda p: (float(p.x()), float(p.y())) if hasattr(p, "x") else (float(p[0]), float(p[1]))  # noqa: E731
+    start = display._world_to_pixel(start) if start is not None else None
+    offset_x, offset_y = getattr(display, "chrome_offset", (0, 0))
+
+    def xy(p):
+        x, y = (p.x(), p.y()) if hasattr(p, "x") else p
+        return float(x) + offset_x, float(y) + offset_y
+
     x, y = xy(at)
     view.renderer.ui_set_cursor_value(tr(caption), label[0], label[2], x, y - 22.0,
                                       xy(start) if start is not None else None, revision)
@@ -646,8 +652,10 @@ def _lens_value(view, tools, revision) -> None:
     focal length the view has now. The lens is what the value acts on, so it
     is part of the revision Rust reads a commit from."""
     from core.i18n import tr
-    pos = getattr(view, "_cursor_pos", None)
-    cam = view.source_viewport.camera
+    display = getattr(tools, "view", view)
+    pos = getattr(display, "_cursor_pos", None)
+    cam = display.source_viewport.camera
+    dx, dy = getattr(display, "chrome_offset", (0, 0))
     if pos is None:
         view.renderer.ui_set_cursor_value("", "", False, 0.0, 0.0, None, revision)
         return
@@ -655,7 +663,7 @@ def _lens_value(view, tools, revision) -> None:
     text = buffer or (f"{cam.focal_mm:.0f} mm" if cam.perspective else "—")
     lens = (revision << 20) ^ int(round(cam.fov_deg * 1000))
     view.renderer.ui_set_cursor_value(tr("Field of view"), text, bool(buffer),
-                                      float(pos.x()), float(pos.y()) - 40.0, None, lens)
+                                      float(pos.x()) + dx, float(pos.y()) + dy - 40.0, None, lens)
 
 
 def _summary(sel) -> str:

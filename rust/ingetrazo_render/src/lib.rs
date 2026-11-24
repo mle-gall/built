@@ -7,6 +7,8 @@ mod panic_log;
 mod overlay;
 mod commands;
 pub mod model_menu;
+mod model_views;
+mod pane_dividers;
 /// The one verb source: kinds, menu rows, inspector verbs, dispatch.
 mod verbs;
 pub mod ui;
@@ -102,7 +104,7 @@ struct Scene {
 /// sun's depth map) stays single in the Renderer; ``bind_target`` swaps one
 /// of these into the live fields, so every existing pass keeps working.
 struct Target {
-    surface: wgpu::Surface<'static>,
+    surface: Option<wgpu::Surface<'static>>,
     config: wgpu::SurfaceConfiguration,
     depth: wgpu::Texture,
     offscreen: wgpu::Texture,
@@ -134,10 +136,10 @@ struct Target {
 #[pyclass(unsendable)]
 struct Renderer {
     instance: wgpu::Instance,
-    /// Views of the same scene; ``None`` at the live one's index.
-    targets: Vec<Option<Target>>,
+    /// Inactive views of the same scene, addressed by a never-recycled id.
+    targets: std::collections::HashMap<usize, Target>,
     active: usize,
-    alive: Vec<bool>,
+    next_target: usize,
     /// Bumped by every change that invalidates pick IDs for all views.
     scene_epoch: u64,
     textures: textures::Textures,
@@ -169,7 +171,7 @@ struct Renderer {
     host_context: preview::Preview,
     ghost_geometry: preview::Preview,
     ghost_objects: preview::Preview,
-    surface: wgpu::Surface<'static>,
+    surface: Option<wgpu::Surface<'static>>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
@@ -678,7 +680,7 @@ impl Renderer {
         let mut transparency = xray::Xray::new(&device, format, w, h);
         transparency.bind_textures(&device, &textures);
         Ok(Self {
-            instance, targets: vec![None], active: 0, alive: vec![true], scene_epoch: 0,
+            instance, targets: Default::default(), active: 0, next_target: 1, scene_epoch: 0,
             textures, texture_groups, textures_enabled: true, material_transparency: true,
             ao: ao::AmbientOcclusion::new(samples.clone(), &device, format),
             samples: samples.clone(), antialias: true,
@@ -724,7 +726,7 @@ impl Renderer {
             last_cpu: 0.,
             last_acquire: 0.,
             frame_stages: [0.; 5],
-            surface,
+            surface: Some(surface),
             device,
             queue,
             config,
@@ -765,51 +767,26 @@ impl Renderer {
     #[pyo3(signature = (window, width, height, scale, *, display=0, platform=""))]
     fn add_target(&mut self, window: usize, width: u32, height: u32, scale: f64, display: usize, platform: &str) -> PyResult<usize> {
         let surface = backend::surface(&self.instance, window, display, platform)?;
-        let w = ((width as f64 * scale) as u32).max(1);
-        let h = ((height as f64 * scale) as u32).max(1);
-        let mut config = self.config.clone();
-        config.width = w;
-        config.height = h;
-        surface.configure(&self.device, &config);
-        let format = config.format.remove_srgb_suffix();
-        let d = &self.device;
-        let mut aa = antialias::Antialias::new(self.samples.count(), d, format, &self.look.buffer, w, h);
-        aa.bind_textures(d, &self.textures);
-        let mut transparency = xray::Xray::new(d, format, w, h);
-        transparency.bind_textures(d, &self.textures);
-        if let Some(s) = &self.scene {
-            aa.bind_scene(d, &self.camera, &s.inst, &s.survivors, &self.look.buffer, &s.edge_records, &s.viewpoints);
-            transparency.bind_scene(d, &self.camera, &s.inst, &s.survivors, &self.look.buffer);
+        self.push_target(Some(surface), width, height, scale)
+    }
+    /// A camera and pick buffer for a pane composed into the winit window.
+    fn add_tile_target(&mut self, width: u32, height: u32, scale: f64) -> PyResult<usize> {
+        self.push_target(None, width, height, scale)
+    }
+    /// Present the pane images under a single copy of the window chrome.
+    fn present_model_views(&mut self, panes: Vec<(usize, [f32; 4], bool, String)>, guides: Vec<[f32; 4]>) -> PyResult<(f64, Option<f64>)> {
+        self.bind_target(0)?;
+        for (id, _, _, _) in &panes {
+            if !self.targets.get(id).is_some_and(|t| t.surface.is_none()) {
+                return Err(PyValueError::new_err("expected a model pane target"));
+            }
         }
-        let target = Target {
-            surface, config,
-            depth: texture(d, w, h, wgpu::TextureFormat::Depth32Float),
-            offscreen: texture(d, w, h, self.config.format),
-            ids: texture(d, w, h, wgpu::TextureFormat::R32Uint),
-            aa, transparency,
-            ao: ao::AmbientOcclusion::new(self.samples.clone(), d, format),
-            overlay: overlay::Overlay::new(d, self.config.format),
-            axes: axes::Axes::new(self.samples.clone(), d, format, &self.camera),
-            lines: lines::Lines::new(self.samples.clone(), d, format, &self.camera),
-            preview: preview::Preview::new(self.samples.clone(), d, format, &self.camera, &self.look.buffer, 0),
-            face_marks: preview::Preview::new(self.samples.clone(), d, format, &self.camera, &self.look.buffer, 1),
-            sections: sections::Sections::new(self.samples.clone(), d, format, &self.camera),
-            camera_data: Vec::new(),
-            look_data: self.look.data,
-            sun: self.sun.settings(),
-            style: self.style,
-            edges: self.edges,
-            textures_enabled: self.textures_enabled,
-            ids_dirty: true,
-            stable_frames: 0,
-            pick_pending: false,
-            capture_next: false,
-            captured: None,
-            seen_epoch: self.scene_epoch,
-        };
-        self.targets.push(Some(target));
-        self.alive.push(true);
-        Ok(self.targets.len() - 1)
+        let ui = self.ui.as_mut().ok_or_else(|| PyValueError::new_err("attach the window chrome first"))?;
+        ui.model_guides = guides;
+        for (id, bounds, active, label) in panes {
+            ui.add_model_pane(&self.device, id, &self.targets[&id].offscreen, bounds, active, label);
+        }
+        self.render_page(true)
     }
     /// Make view ``id`` the live one: later calls (camera, style, overlay,
     /// lines, preview, resize, render, pick) are its own.
@@ -817,12 +794,12 @@ impl Renderer {
         if id == self.active {
             return Ok(());
         }
-        let mut t = self.targets.get_mut(id).and_then(Option::take)
+        let mut t = self.targets.remove(&id)
             .ok_or_else(|| PyValueError::new_err("no such view target"))?;
         let seen = t.seen_epoch;
         self.swap_live(&mut t);
         t.seen_epoch = self.scene_epoch;
-        self.targets[self.active] = Some(t);
+        self.targets.insert(self.active, t);
         self.active = id;
         if seen != self.scene_epoch {
             self.sun.invalidate();
@@ -844,20 +821,20 @@ impl Renderer {
     }
     /// Let view ``id`` go (its widget is going away); the first view stays.
     fn remove_target(&mut self, id: usize) -> PyResult<()> {
-        if id == 0 || !self.alive.get(id).copied().unwrap_or(false) {
+        if id == 0 || (id != self.active && !self.targets.contains_key(&id)) {
             return Err(PyValueError::new_err("no such removable view target"));
         }
         if self.active == id {
             self.bind_target(0)?;
         }
-        self.targets[id] = None;
-        self.alive[id] = false;
+        if let Some(ui) = &mut self.ui { ui.release_model_texture(id); }
+        self.targets.remove(&id);
         Ok(())
     }
     #[getter]
     fn active_target(&self) -> usize { self.active }
     #[getter]
-    fn target_count(&self) -> usize { self.alive.iter().filter(|a| **a).count() }
+    fn target_count(&self) -> usize { 1 + self.targets.len() }
     /// Bytes of every view's own attachments (surface not included): depth,
     /// colour and ID targets, multisampled colour and depth, X-ray
     /// accumulation — what one more view costs, apart from the scene.
@@ -865,7 +842,7 @@ impl Renderer {
     fn target_memory(&self) -> u64 {
         let per_pixel = 4 + 4 + 4 + 16 + 16 + 8 + 2;
         let live = self.config.width as u64 * self.config.height as u64;
-        self.targets.iter().flatten()
+        self.targets.values()
             .map(|t| t.config.width as u64 * t.config.height as u64)
             .sum::<u64>().saturating_add(live) * per_pixel
     }
@@ -1016,7 +993,7 @@ impl Renderer {
         self.preview.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
         self.face_marks.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
         self.ghost_geometry.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
-        for t in self.targets.iter_mut().flatten() {
+        for t in self.targets.values_mut() {
             t.preview.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
             t.face_marks.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
             t.ids_dirty = true;
@@ -1691,7 +1668,8 @@ impl Renderer {
         self.ui_scale = scale as f32;
         self.config.width = ((w as f64 * scale) as u32).max(1);
         self.config.height = ((h as f64 * scale) as u32).max(1);
-        self.surface.configure(&self.device, &self.config);
+        if let Some(ui) = &mut self.ui { ui.release_model_texture(self.active); }
+        if let Some(surface) = &self.surface { surface.configure(&self.device, &self.config); }
         self.transparency.resize(&self.device, self.config.width, self.config.height);
         self.aa.resize(&self.device, self.config.width, self.config.height);
         self.offscreen = texture(&self.device, self.config.width, self.config.height, self.config.format);
@@ -1755,8 +1733,7 @@ impl Renderer {
         let polled = Instant::now();
         // Metal can wait for the compositor here. The document adapter can
         // continue populating the private scene during that wait.
-        let surface = &self.surface;
-        let frame = if present { Some(Python::attach(|py| py.detach(|| surface.get_current_texture()))
+        let frame = if let Some(surface) = self.surface.as_ref().filter(|_| present) { Some(Python::attach(|py| py.detach(|| surface.get_current_texture()))
             .map_err(|e| PyValueError::new_err(e.to_string()))?) } else { None };
         let target = frame.as_ref().map(|f| &f.texture).unwrap_or(&self.offscreen);
         let acquired = Instant::now();
@@ -2208,7 +2185,7 @@ impl Renderer {
         let start = Instant::now();
         self.device.poll(wgpu::Maintain::Poll);
         let polled = Instant::now();
-        let frame = if present { Some(self.surface.get_current_texture()
+        let frame = if let Some(surface) = self.surface.as_ref().filter(|_| present) { Some(surface.get_current_texture()
             .map_err(|e| PyValueError::new_err(e.to_string()))?) } else { None };
         let target = frame.as_ref().map(|f| &f.texture).unwrap_or(&self.offscreen);
         let acquired = Instant::now();
@@ -2826,6 +2803,55 @@ impl Renderer {
     }
 }
 impl Renderer {
+    fn push_target(&mut self, surface: Option<wgpu::Surface<'static>>, width: u32, height: u32, scale: f64) -> PyResult<usize> {
+        let w = ((width as f64 * scale) as u32).max(1);
+        let h = ((height as f64 * scale) as u32).max(1);
+        let mut config = self.config.clone();
+        config.width = w;
+        config.height = h;
+        if let Some(surface) = &surface { surface.configure(&self.device, &config); }
+        let format = config.format.remove_srgb_suffix();
+        let d = &self.device;
+        let mut aa = antialias::Antialias::new(self.samples.count(), d, format, &self.look.buffer, w, h);
+        aa.bind_textures(d, &self.textures);
+        let mut transparency = xray::Xray::new(d, format, w, h);
+        transparency.bind_textures(d, &self.textures);
+        if let Some(s) = &self.scene {
+            aa.bind_scene(d, &self.camera, &s.inst, &s.survivors, &self.look.buffer, &s.edge_records, &s.viewpoints);
+            transparency.bind_scene(d, &self.camera, &s.inst, &s.survivors, &self.look.buffer);
+        }
+        let target = Target {
+            surface, config,
+            depth: texture(d, w, h, wgpu::TextureFormat::Depth32Float),
+            offscreen: texture(d, w, h, self.config.format),
+            ids: texture(d, w, h, wgpu::TextureFormat::R32Uint),
+            aa, transparency,
+            ao: ao::AmbientOcclusion::new(self.samples.clone(), d, format),
+            overlay: overlay::Overlay::new(d, self.config.format),
+            axes: axes::Axes::new(self.samples.clone(), d, format, &self.camera),
+            lines: lines::Lines::new(self.samples.clone(), d, format, &self.camera),
+            preview: preview::Preview::new(self.samples.clone(), d, format, &self.camera, &self.look.buffer, 0),
+            face_marks: preview::Preview::new(self.samples.clone(), d, format, &self.camera, &self.look.buffer, 1),
+            sections: sections::Sections::new(self.samples.clone(), d, format, &self.camera),
+            camera_data: Vec::new(),
+            look_data: self.look.data,
+            sun: self.sun.settings(),
+            style: self.style,
+            edges: self.edges,
+            textures_enabled: self.textures_enabled,
+            ids_dirty: true,
+            stable_frames: 0,
+            pick_pending: false,
+            capture_next: false,
+            captured: None,
+            seen_epoch: self.scene_epoch,
+        };
+        let id = self.next_target;
+        self.targets.insert(id, target);
+        self.next_target += 1;
+        Ok(id)
+    }
+
     fn refresh_msaa(&mut self) {
         let count = self.samples.count();
         if self.aa.samples == count {
@@ -2978,6 +3004,8 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(captured_frame::blank_picture,m)?)?;
     m.add_function(wrap_pyfunction!(captured_frame::archive_thumbnail,m)?)?;
     m.add_function(wrap_pyfunction!(captured_frame::archive_picture_png,m)?)?;
+    m.add_class::<model_views::ModelViews>()?;
+    m.add_function(wrap_pyfunction!(model_views::view_layouts, m)?)?;
     m.add_class::<annotation_canvas::AnnotationCanvas>()?;
     m.add_function(wrap_pyfunction!(image_assets::reference_texture, m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::fit_reference_rgba, m)?)?;

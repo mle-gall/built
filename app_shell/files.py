@@ -326,8 +326,8 @@ def open_document(win, path: Path) -> bool:
     from formats import igz as igz_format
     from views import chrome_dialogs as cd
     host = win._host
-    vp = win.viewport
     doc = win._doc
+    vp = doc.viewport
     view = doc.stand_in
     recovered = False
     slot = autosave.pending(path)
@@ -382,9 +382,12 @@ def open_document(win, path: Path) -> bool:
 def _install_open(win, path, bar, result, *, initial_frame=None):
     from core import autosave
     scene, packed, tracker, tree = result
-    history = win.viewport.history
+    doc = win._doc
+    if grid := getattr(doc, "model_views", None):
+        grid.suspend()
+    history = doc.viewport.history
     history.scene = scene
-    win.viewport.set_document(scene, history)
+    doc.viewport.set_document(scene, history)
     initial_aspect = initial_frame[0] if initial_frame and initial_frame[1:] == (win.view.width(), win.view.height()) else None
     return _finish_open(win, path, False, autosave.pending(path), bar, bar.job.update,
                         (packed, tracker, tree), initial_aspect)
@@ -392,7 +395,10 @@ def _install_open(win, path, bar, result, *, initial_frame=None):
 
 def _finish_open(win, path, recovered, slot, bar, cb, prepared=None, initial_aspect=None):
     from views import chrome_dialogs as cd
-    host, vp, view = win._host, win.viewport, win.view
+    if grid := getattr(win._doc, "model_views", None):
+        grid.suspend()
+        grid.poses.clear()
+    host, vp, view = win._host, win._doc.viewport, win.view
     import gc
     gc.set_threshold(win.GC_THRESHOLD0, 10, 10)
     vp.history.clear()
@@ -417,6 +423,11 @@ def _finish_open(win, path, recovered, slot, bar, cb, prepared=None, initial_asp
                     camera.fit_box(*bounds, free=(-1., area[1], 1., area[3]) if area else None)
                 finally:
                     camera.aspect = aspect
+    if vp.scene.views_home:
+        from app_shell.model_views import for_document
+        layout = for_document(win._doc).layout
+        layout.restore(vp.scene.views_home)
+        win._doc.view_layout = layout.layout
     win._current_path = path
     if prepared is None:
         win._remember_recent(path)
@@ -734,7 +745,7 @@ def do_save(win, path: Path, copy: bool = False) -> bool:
         if not copy:
             project.before_save(win, doc, path)
         scene.camera_home = win._camera_dict(vp)
-        scene.views_home = None
+        scene.views_home = win._views_dict(doc)
         _links.refresh_paths(scene, path)
         png = _picture_png(win, doc)
         if png is not None:
@@ -809,7 +820,7 @@ def export_igz(win, path=None) -> bool:
     try:
         scene = _copy.copy(doc.viewport.scene)
         scene.camera_home = win._camera_dict(doc.viewport)
-        scene.views_home = None
+        scene.views_home = win._views_dict(doc)
         png = _picture_png(win, doc)
         if png is not None:
             scene._home_thumbnail_png = png
