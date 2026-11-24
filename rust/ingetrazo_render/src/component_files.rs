@@ -307,7 +307,8 @@ fn place_catalogue(
 fn import_kept_components(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<usize> {
     let py = win.py();
     let src = py.import("core.scene")?.call_method0("Scene")?;
-    py.import("formats.igz")?.call_method1("load_into", (&src, path))?;
+    let file = py.import("pathlib")?.call_method1("Path", (path,))?;
+    py.import("formats.igz")?.call_method1("load_into", (&src, file))?;
     let templates = py.import("core.kept_components")?.call_method1("definitions_of", (&src,))?;
     let count = templates.len()?;
     if count == 0 { return Ok(0); }

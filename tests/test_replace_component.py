@@ -659,6 +659,8 @@ def test_components_from_another_file_arrive_kept_and_placeable(tmp_path, native
     scene = win.viewport.scene
     from views import wgpu_library as library
     from views.filedialogs import file_dialogs
+    from views import chrome_dialogs
+    monkeypatch.setattr(chrome_dialogs, "warning", lambda _, title, msg: pytest.fail(f"{title}: {msg}"))
     monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *_: (str(path), ""))
     p = library.ComponentsProvider()
     ctx = library.Ctx(win, win.view)
