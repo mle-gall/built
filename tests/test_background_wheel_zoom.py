@@ -67,3 +67,21 @@ def test_zero_delta_does_not_pick_or_change_camera():
     vp._world_under_cursor = unexpected
     Viewport.wheelEvent(vp, wheel(0))
     assert vp.camera.distance == .02
+
+
+def test_a_slide_gesture_picks_the_point_under_the_cursor_once():
+    """Per-event cost, as an operation count: 200 slide events with the
+    hand resting near one spot zoom toward ONE pick, the first event's.
+    A pick per event is a GPU readback each (the zoom-lag suspect)."""
+    vp = viewport()
+    vp.camera.distance = 50.0
+    picks = []
+    vp._world_under_cursor = lambda x, y: picks.append((x, y)) or V(1, 2, 0)
+    for i in range(200):
+        x = 100 + i % 7
+        event = QWheelEvent(QPointF(x, 100), QPointF(x, 100), QPoint(0, 1),
+                            QPoint(0, -2 if i < 100 else 2), Qt.NoButton,
+                            Qt.NoModifier, Qt.ScrollUpdate, False)
+        Viewport.wheelEvent(vp, event)
+    assert len(picks) == 1
+    assert vp.camera.distance != 50.0

@@ -71,7 +71,7 @@ static REFILL: Mutex<Option<Py<PyAny>>> = Mutex::new(None);
 
 /// After a replay: refill the tracked containers it wrote (see
 /// `Doc::refills`); one that cannot take the value stops being the view.
-fn run_refills(py: Python<'_>) -> PyResult<()> {
+pub(super) fn run_refills(py: Python<'_>) -> PyResult<()> {
     let todo = std::mem::take(&mut lock().refills);
     if todo.is_empty() {
         return Ok(());
@@ -2225,6 +2225,13 @@ pub struct PyTransaction {
     pins: Vec<Py<PyAny>>,
 }
 
+impl PyTransaction {
+    /// A record of document ops only (a nested step's own slice).
+    pub(super) fn from_parts(ops: Vec<Op>, pins: Vec<Py<PyAny>>) -> Self {
+        Self { geometry: Vec::new(), ops, pins }
+    }
+}
+
 /// The record names of `keys` as Python strings: the nodes' cached `str`
 /// where they have one (an incref), new strings for the rest.
 fn record_names<'py>(py: Python<'py>, d: &super::Doc, keys: &[Key], into: &mut Vec<Result<Py<PyAny>, String>>) {
@@ -3043,6 +3050,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<super::anchor::ElementAnchor>()?;
     m.add_class::<super::history::DocumentHistory>()?;
     super::commands::register(m)?;
+    super::steps::register(m)?;
+    super::group_steps::register(m)?;
     m.add_class::<super::feed::FeedReaders>()?;
     m.add_class::<DocRecord>()?;
     m.add_class::<DocAttr>()?;
