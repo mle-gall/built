@@ -447,3 +447,18 @@ def test_a_bad_untitled_slot_preserves_the_open_drawing(host, tmp_path, answers,
     assert errors and bad.is_file()
     assert win.documents() == [original] and win.active_document() is original
     assert win.viewport.history.revision == revision
+
+
+def test_a_read_only_project_rejects_an_import_before_reading_the_file(host, tmp_path, monkeypatch):
+    from views import chrome_dialogs
+    from formats import dae
+    win = host.window
+    vp = win.viewport
+    vp.scene.worksession_read_only = True
+    before = vp.history.revision
+    errors = []
+    monkeypatch.setattr(chrome_dialogs, "critical", lambda win, title, msg: errors.append(msg))
+    monkeypatch.setattr(dae, "load_dae", lambda *a, **kw: pytest.fail("read-only import ran"))
+    assert not win._import_dae_path(tmp_path / "synthetic.dae")
+    assert errors and "read-only" in errors[0]
+    assert vp.history.revision == before and not win._is_dirty()

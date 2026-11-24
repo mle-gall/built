@@ -462,7 +462,6 @@ class ShellWindow(WindowDocumentCommands, QObject):
         self._coord_label = _Label()
         self._tool_label = _Label()
         self._vcb_live = ""
-        self._shared_components = {}
         self._active_file = None
         self._session_unsaved_doc = None
         from core.i18n import tr
@@ -966,6 +965,11 @@ class ShellWindow(WindowDocumentCommands, QObject):
         layer.capture_bounds(datum, lo.x(), lo.y(), hi.x(), hi.y())
         scene.tile_layer = layer
         self.viewport.reset_tiles()
+
+    @staticmethod
+    def _pump_file_command():
+        from app_shell.modal import tick
+        tick()
 
     def _import_progress(self, title, *, monotonic=False):
         from app_shell import files

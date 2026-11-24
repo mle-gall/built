@@ -48,10 +48,6 @@ from core.units import fmt_pair
 from views.filedialogs import file_dialogs
 from core.version import __version__
 from core.group import Group
-from core.history import (
-    SnapshotImport,
-    SnapshotMutation,
-)
 from core.mesh import Edge, Face
 from formats import built
 from formats import igz as igz_format
@@ -62,7 +58,7 @@ from formats import stl as stl_format
 from formats import gltf as gltf_format
 from tools.texture_position import TexturePositionTool
 from views.document_commands import WindowDocumentCommands, _repeatable
-from ingetrazo_render import build_tools, transient_tool_class
+from ingetrazo_render import build_tools
 from tools.paint import PaintTool
 from tools.flip import FlipTool
 from views.tray import BimTray, GeorefTray, Tray, style_slider
@@ -103,18 +99,6 @@ _RESET_TOOLBARS_TIP = ("Every toolbar back in its factory place and order, "
                        "they are.")
 _TEXT3D_TIP = ("Build a text as an extruded solid, in the font and height "
                "you choose.")
-
-def _obj_parts(temp):
-    """The container a multi-part OBJ imported as, its pieces' facet seams
-    softened like any library model's, or ``None`` for a single-piece file
-    (which the callers keep handling as one mesh)."""
-    if not temp.groups or not temp.groups[0].children:
-        return None
-    from formats.fuse import soften_smooth_edges
-    group = temp.groups[0]
-    for kid in group.children:
-        soften_smooth_edges(kid.mesh, cos_threshold=0.55)
-    return group
 
 #: The shapes of a tab bar that runs top to bottom.
 _VERTICAL_TABS = (QTabBar.RoundedEast, QTabBar.RoundedWest,
@@ -3381,10 +3365,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         """Window ▸ Preferences: the scattered QSettings in one dialog."""
         self.open_preferences()
 
-    def _on_units(self) -> None:
-        """Window ▸ Units… (Ctrl+U): Preferences on its Units page."""
-        self.open_preferences(page="units")
-
     def offer_units_at_start(self) -> None:
         """The units question at startup, while the document is still the
         new, untouched one (a file opened from the command line has its
@@ -3394,11 +3374,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             return
         from views.units_question import offer_at_start
         offer_at_start(self)
-
-    def open_preferences(self, shortcut_of=None, page=None) -> None:
-        """Open Settings, optionally focused on a section or shortcut."""
-        from views import settings_sheet
-        settings_sheet.show(self, page=page, shortcut_of=shortcut_of)
 
     def _on_set_language(self, code: str) -> None:
         """Persist the chosen UI language (applied on next start).
@@ -3786,15 +3761,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
     def _on_command_search(self) -> None:
         from views.command_palette import open_search
         open_search(self)
-
-    def _on_check_updates(self) -> None:
-        from views.release_check import start_check
-        start_check(self, quiet=False)
-
-    def check_updates_quietly(self) -> None:
-        """Once a day at start: see views/release_check.py."""
-        from views.release_check import start_check
-        start_check(self, quiet=True)
 
     def _on_cut_list(self) -> None:
         from views.report_sheets import show
@@ -5439,7 +5405,7 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             panel.refresh()
         self.viewport.update()
 
-    @_repeatable("Join Segments")
+    @_repeatable("Explode Curve")
     def _on_explode_curve(self) -> None:
         """Explode Curve: the selected curves become plain segments, in one
         undo step; the geometry does not move."""
@@ -6851,16 +6817,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             act.setChecked(on and self.scene_player.is_playing())
             act.blockSignals(False)
 
-    def export_video(self) -> None:
-        """The scenes as a video (views/video_export.py)."""
-        from views.video_export import run_export
-        run_export(self)
-
-    def ask_animation(self) -> None:
-        """The document's transition settings, in a small dialog."""
-        from views.scene_playback import edit_animation
-        edit_animation(self)
-
     def _build_scene_bar_menu(self):
         """The scene row's own right-click menu (off the tabs): play the
         scenes, or hide the row. Alt+E, Window ▸ and the project tab's menu
@@ -7775,236 +7731,9 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         self._saved_version = vp.scene.version
         self._update_title()
 
-    def _on_insert_person_2d(self, image: str = "person_billboard.png",
-                             height: float = 1.75,
-                             name: str | None = None) -> None:
-        self.viewport.end_group_edit()
-        group = self._make_billboard_person(image, height, name)
-        if group is None:
-            _dialogs.warning(self, tr("Insert component"),
-                                tr("Component file missing: {p}", p=image))
-            return
-        self._start_place(group)
-
-    def _on_insert_faceme_image(self) -> None:
-        """Insert the user's own transparent PNG as a face-me billboard —
-        a cutout person, a tree photo — scaled to a chosen real height."""
-        from PySide6.QtGui import QImage
-        from PySide6.QtWidgets import QInputDialog
-        from core.group import make_billboard_group
-        self.viewport.end_group_edit()
-        path_str, _ = file_dialogs.getOpenFileName(
-            self, tr("Face-me image"), "",
-            tr("Images (*.png *.webp);;All files (*)"))
-        if not path_str:
-            return
-        img = QImage(path_str)
-        if img.isNull() or img.height() == 0:
-            _dialogs.warning(self, tr("Face-me image"),
-                                tr("Could not read the image."))
-            return
-        if not img.hasAlphaChannel():
-            _dialogs.information(
-                self, tr("Face-me image"),
-                tr("The image has no transparency — it will show as a "
-                   "solid rectangle. A PNG with transparent background "
-                   "works best."))
-
-        def place(height):
-            if height is None:
-                return
-            group = make_billboard_group(
-                path_str, height, Path(path_str).stem,
-                img.width() / img.height())
-            self._start_place(group)
-        _forms.ask_number(self, tr("Face-me image"), tr("Real height (m):"),
-                          1.75, 0.05, 500.0, 2, done=place, suffix="m")
-
-    def _on_insert_component(self, key: str, name: str | None = None) -> None:
-        """Insert a bundled starter component as a Group at the origin,
-        selected and ready to Move into place. Components are ``.igz``
-        (models kept for offline use, textures packed in), ``.glb`` (the
-        Sketchfab CC-BY set) or ``.obj``."""
-        self.viewport.end_group_edit()
-        self._start_place_shared(
-            "bundled:" + key, lambda: self._build_bundled_component(key, name))
-
-    def _build_bundled_component(self, key: str, name: str | None):
-        """The bundled starter ``key`` read from its file, as a group ready
-        to place — ``None`` (the user told why) when it cannot be read."""
-        from core.group import Group
-        from core.scene import Scene as _Scene
-        from core.paths import app_root
-        base = app_root() / "resources" / "components"
-        temp = _Scene()
-        igz_path = base / f"{key}.igz"
-        glb_path = base / f"{key}.glb"
-        obj_path = base / f"{key}.obj"
-        if igz_path.exists():
-            # Our own format: one group, its images inside the file — so a
-            # bundled component needs no network and no sidecar textures.
-            from formats import igz as _igz
-            _igz.load_into(temp, igz_path)
-            if not temp.groups:
-                _dialogs.warning(
-                    self, tr("Insert component"),
-                    tr("Component file missing: {p}", p=str(igz_path)))
-                return None
-            mesh = temp.groups[0].mesh
-        elif glb_path.exists():
-            from formats.glb import load_glb
-            load_glb(temp, glb_path)
-            mesh = temp.groups[0].mesh
-            name = name or temp.groups[0].name
-        elif obj_path.exists():
-            from formats import obj as _obj
-            _obj.load_obj(temp, obj_path)
-            parts = _obj_parts(temp)
-            if parts is not None:
-                parts.name = name or tr(key.capitalize())
-                return parts
-            mesh = temp.mesh
-            if not mesh.faces and temp.groups:
-                # Big OBJs land as a reference group (formats/obj.py), not
-                # in the loose mesh — take that mesh or we'd insert nothing.
-                mesh = temp.groups[0].mesh
-            # Low-poly components read as REAL models when facet seams are
-            # soft (the usual import smoothing).
-            from formats.fuse import soften_smooth_edges
-            soften_smooth_edges(mesh, cos_threshold=0.55)
-        else:
-            _dialogs.warning(
-                self, tr("Insert component"),
-                tr("Component file missing: {p}", p=str(glb_path)))
-            return None
-        return Group(mesh, name=name or tr(key.capitalize()))
-
-    def _start_place_shared(self, source: str, build) -> None:
-        """Place a library or bundled component, sharing its definition with
-        the copies of it already in the model.
-
-        Each pick read the file again and added a new, independent piece:
-        four of the same 12 600-face cabinet were 50 400 faces in the model,
-        and its 2 s read came back every time (Marco, 18-10). A copy now
-        shares the definition, as in .skp — an edit inside one reaches
-        them all, Make Unique parts one off — so the next pick is instant
-        and the model does not swell. ``build`` reads the file; it is called
-        only when no copy of ``source`` is left in the model."""
-        from ingetrazo_core import Matrix4 as QMatrix4x4
-        from core.group import copy_group
-        shared = self.__dict__.setdefault("_shared_components", {})
-        known = shared.get(source)
-        if known is not None:
-            mesh, base = known
-            live = next((g for g in self.viewport.scene.groups
-                         if g.mesh is mesh and g.is_component()), None)
-            if live is not None:
-                group = copy_group(live)
-                # A fresh pick, not a copy of how that one was left: back
-                # to the definition's own pose, unpainted, on no tag.
-                group.xform = QMatrix4x4(base)
-                group.hidden = group.locked = False
-                group.material = group.layer = group.ifc = None
-                group.exploded = group.explode_offset = None
-                group.axes = None
-                self._start_place(group)
-                return
-            del shared[source]
-        group = build()
-        if group is None:
-            return
-        if group.xform is None:
-            group.xform = QMatrix4x4()       # its mesh becomes the definition
-        group.component = True
-        shared[source] = (group.mesh, QMatrix4x4(group.xform))
-        self._start_place(group)
-
-    def insert_library_component(self, entry: dict, obj=None) -> None:
-        """Download a model from the online library and hand it to the
-        placement tool, at its real size.
-
-        Nothing is guessed — not the unit, not the vertical, not even the
-        model's own turn: the catalogue declares all three, and
-        :func:`core.library.model_matrix` reproduces them. That is the
-        difference with the generic importer, which has only the file and
-        so has to ask (see ``_mesh_import_options``). The facet seams are softened
-        like the bundled starters, so a low-poly piece reads as a real one.
-        """
-        from ingetrazo_render import ComponentCatalogue
-
-        def build():
-            group = self._build_library_component(entry, obj)
-            if group is not None:
-                group.ext = {**(group.ext or {}), "catalogue": ComponentCatalogue.attribution(entry)}
-            return group
-
-        self.viewport.end_group_edit()
-        self._start_place_shared(
-            "library:" + str(entry.get("id", "")),
-            build)
-
-    def _build_library_component(self, entry: dict, obj=None):
-        """The online-library model ``entry``, downloaded the first time and
-        read from its OBJ, as a group ready to place — ``None`` (the user
-        told why) when it cannot be had."""
-        from core import library
-        from core.group import Group
-        from core.scene import Scene as _Scene
-        from formats import obj as _obj
-        from formats.fuse import soften_smooth_edges
-
-        obj = obj or library.model_file(entry)
-        if obj is None:
-            _dialogs.warning(
-                self, tr("Component library"),
-                tr("Could not download “{name}”. Check your connection.",
-                   name=entry.get("nombre", "")))
-            return None
-        temp = _Scene()
-        try:
-            _obj.load_obj(temp, obj,
-                           matrix=library.model_matrix(entry, obj))
-        except Exception as exc:  # noqa: BLE001
-            _dialogs.critical(self, tr("Component library"), str(exc))
-            return None
-        parts = _obj_parts(temp)
-        if parts is not None:
-            # A model written as parts keeps them: one component to place,
-            # its pieces inside (see formats.obj._pieces_group).
-            parts.name = entry.get("nombre", "") or parts.name
-            return parts
-        mesh = temp.mesh
-        if not mesh.faces and temp.groups:
-            mesh = temp.groups[0].mesh       # a big OBJ lands as a group
-        if not mesh.faces:
-            _dialogs.warning(
-                self, tr("Component library"),
-                tr("“{name}” has no geometry.", name=entry.get("nombre", "")))
-            return None
-        soften_smooth_edges(mesh, cos_threshold=0.55)
-        return Group(mesh, name=entry.get("nombre", ""))
-
     def _on_open_library(self) -> None:
         from views.wgpu_library import open_library
         open_library(self, "components", scope="s:online")
-
-    def _on_insert_3d_text(self) -> None:
-        """3D Text: the dialog generates REAL extruded geometry —
-        a container group with ONE GROUP PER LETTER, editable later from
-        the right-click menu — handed to the placement tool so it settles
-        on the ground (or onto a wall) like any component."""
-        from views.font_picker import text3d
-        text3d(self, None, self._place_text3d)
-
-    def _place_text3d(self, params):
-        from core.text3d import make_text_group
-        self.viewport.end_group_edit()
-        group = make_text_group(params)
-        if group is None:
-            _dialogs.warning(self, tr("3D Text"),
-                                tr("Could not build geometry for that text."))
-            return
-        self._start_place(group, align_to_face=True)
 
     def _selected_text3d(self):
         """The one selected 3D-text container (a letter picked inside the
@@ -8056,24 +7785,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         self.viewport.scene.select([group])
         self.viewport.update()
 
-    def _start_place(self, group, align_to_face: bool = False,
-                     anchor=None) -> None:
-        """Hand a freshly built component to the placement tool: it follows
-        the cursor (settling on the ground plane by default) and a click
-        drops it — instead of dumping it at the origin. ``align_to_face``
-        (3D text) re-orients the group onto the face under the cursor;
-        ``anchor`` is the point the cursor holds (default: base centre)."""
-        self.viewport.set_active_tool(transient_tool_class("place_group")(
-            group, align_to_face=align_to_face, anchor=anchor))
-        for action in self._tool_actions.values():
-            action.setChecked(False)
-        self._tool_label.setText(
-            tr("Tool: {name}", name=tr("Place component")))
-        self._refresh_vcb()
-        self.viewport.flash_status(
-            tr("Click to place the component (Esc cancels)"), 4000)
-        self.viewport.update()
-
     DOCUMENTATION_URL = "https://ingetrazo-docs.pages.dev/"
 
     def _on_documentation(self) -> None:
@@ -8092,6 +7803,8 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             + "<br><b>Sketchfab</b> — <a href='https://sketchfab.com'>"
             "sketchfab.com</a> " + tr("(filter by CC licence, download OBJ)"))
 
+
+    _pump_file_command = staticmethod(QApplication.processEvents)
 
     def _import_progress(self, title, *, monotonic=False):
         """Publish an import job and return its loader progress callback."""
@@ -8163,79 +7876,12 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         relay.deleteLater()
         return result.get("mesh"), result.get("exc")
 
-    def _prepare_import_display(self, cmd, cb) -> None:
-        """Pre-build the render/pick caches of freshly imported groups while
-        the progress dialog is still up — otherwise the first orbit after a
-        big import freezes ~5 s building them."""
-        for g in getattr(cmd, "added_groups", []):
-            cb(0.97, "Preparing display…")
-            try:
-                self.viewport._group_chunk(g)
-            except Exception:  # noqa: BLE001 — display cache only; never fatal
-                pass
-        cb(1.0, "Done")
-
-    def _run_import(self, load, dlg, title: str, describe=str, command_type=SnapshotImport):
-        """``load(scene)`` as one undo step. Returns the command, or ``None``
-        when it failed: the failure has been shown (``describe`` makes its
-        text) and the project is as it was.
-
-        ``history.execute`` rolls a failed command back and does not raise,
-        so the failure is caught where it happens. The rollback moves the
-        version on, and nothing changed: an untouched project stays so, and
-        a tab opened for this goes."""
-        failure: list = []
-
-        def guarded(scene):
-            try:
-                load(scene)
-            except Exception as exc:  # noqa: BLE001 — surface parse errors
-                failure.append(exc)
-                raise               # history.execute rolls back and keeps it
-
-        cmd = command_type(guarded)
-        was_clean = not self._is_dirty()
-        try:
-            self.viewport.history.execute(cmd)
-        except Exception as exc:  # noqa: BLE001
-            failure.append(exc)
-        if not failure:
-            return cmd
-        _dialogs.close_failed(dlg, describe(failure[0]))
-        if was_clean:
-            self._saved_version = self.viewport.scene.version
-        self._update_title()
-        _dialogs.critical(self, title, describe(failure[0]))
-        return None
-
     def _on_import_rfa(self) -> None:
         path, _ = file_dialogs.getOpenFileName(
             self, tr("Import Revit family"), "",
             tr("Revit family (*.rfa);;All files (*)"))
         if path:
             self._import_rfa_path(Path(path))
-
-    def _import_rfa_path(self, path: Path) -> bool:
-        from formats.rfa import RfaImport, apply_payload, read_rfa
-        dlg, cb = self._import_progress(tr("Importing {name}…", name=path.name))
-        report = []
-
-        def load(scene):
-            report.extend(apply_payload(scene, read_rfa(path)))
-
-        cmd = self._run_import(load, dlg, tr("Import Revit family failed"),
-                               command_type=RfaImport)
-        if cmd is None:
-            return False
-        self._prepare_import_display(cmd, cb)
-        dlg.close()
-        self.viewport.update()
-        self._import_name = path.name
-        self._update_title()
-        self._report_import(path.name)
-        if report:
-            _dialogs.information(self, tr("Revit family import report"), "\n".join(report))
-        return True
 
     def _on_import_dae(self) -> None:
         path_str, _ = file_dialogs.getOpenFileName(
@@ -8253,107 +7899,7 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             return
         self._import_glb_path(Path(path_str))
 
-    def _import_glb_path(self, path: Path) -> bool:
-        from formats import glb as glb_format
-        dlg, cb = self._import_progress(tr("Importing {name}…", name=path.name))
-        moved: dict = {}
-
-        def load(scene):
-            moved["offset"] = glb_format.load_glb(scene, path, progress=cb)
-
-        cmd = self._run_import(load, dlg, tr("Import glTF/GLB failed"))
-        if cmd is None:
-            return False
-        self._prepare_import_display(cmd, cb)
-        dlg.close()
-        self.viewport.update()
-        self._import_name = path.name
-        self._update_title()
-        self._report_import(path.name, moved.get("offset"))
-        return True
-
-    def _import_dae_path(self, path: Path) -> bool:
-        dlg, cb = self._import_progress(tr("Importing {name}…", name=path.name))
-        moved: dict = {}
-
-        def load(scene):
-            moved["offset"] = dae_format.load_dae(scene, path, progress=cb)
-
-        cmd = self._run_import(load, dlg, tr("Import DAE failed"))
-        if cmd is None:
-            return False
-        self._prepare_import_display(cmd, cb)
-        dlg.close()
-        self.viewport.update()
-        self._import_name = path.name
-        self._update_title()
-        self._report_import(path.name, moved.get("offset"))
-        return True
-
     # ---- SKP import: IngeTrazo's own reader (formats/skp.py) -----------------
-    def import_skp_path(self, skp: Path) -> bool:
-        """Insert the file into the drawing in front as one undoable edit."""
-        host = self.__dict__.get("_host")
-        if (host.ns_view if host is not None else self.isVisible()):
-            from views.document_open import install_insertion, start
-            return start(self, skp, install_insertion, target=self._doc)
-        from formats import skp as skp_format
-        if skp_format.can_handle(skp):
-            # Heavy parse OUTSIDE the undo history, so a failed/empty parse
-            # never leaves a half-applied edit.
-            dlg, cb = self._import_progress(
-                tr("Importing {name}…", name=skp.name))
-            payload, exc = self._parse_skp_threaded(skp, cb)
-            from ingetrazo_core import SkpInsertion
-            if isinstance(payload, SkpInsertion):
-                from views.document_open import install_insertion
-                try:
-                    return install_insertion(self, skp, dlg, payload)
-                finally:
-                    dlg.close()
-            if isinstance(exc, skp_format.NeedsConverter):
-                payload = None             # unreadable: said below
-            elif exc is not None:
-                _dialogs.close_failed(dlg, exc)
-                _dialogs.critical(self, tr("Import SKP failed"), str(exc))
-                return False
-            if payload is not None:
-                cmd = self._run_import(
-                    lambda scene: skp_format.apply_payload(scene, payload,
-                                                           progress=cb),
-                    dlg, tr("Import SKP failed"))
-                if cmd is None:
-                    return False
-                self._prepare_import_display(cmd, cb)
-                dlg.close()
-                self.viewport.update()
-                self._import_name = skp.name
-                self._update_title()
-                if payload.get("empty"):
-                    # A template or blank file (#103): say so, or an empty
-                    # viewport reads as a failed import.
-                    self.statusBar().showMessage(tr(
-                        "{name} has no geometry — nothing to import.",
-                        name=skp.name), 8000)
-                else:
-                    # Keep the viewing direction, but frame the scene after
-                    # import: the old camera may be far from the new geometry.
-                    self._on_zoom_extents()
-                    self.statusBar().showMessage(
-                        tr("Imported {name}", name=skp.name), 3000)
-                return True
-            _dialogs.close_failed(dlg, exc or tr("Unreadable .skp file"))
-
-        # No converter behind this: IngeTrazo reads .skp with its own
-        # reader only.
-        _dialogs.warning(
-            self, tr("Import SKP"),
-            tr("Built could not read {name} with its built-in .skp "
-               "reader.\n\nOpen it in the program it came from and export "
-               "it as COLLADA (.dae) or OBJ, then import that file here.",
-               name=skp.name))
-        return False
-
     def _on_import_skp(self) -> None:
         path_str, _ = file_dialogs.getOpenFileName(
             self, tr("Import SKP"), "",
@@ -8361,36 +7907,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         if not path_str:
             return
         self.import_skp_path(Path(path_str))
-
-    def _on_clear_texture_cache(self) -> None:
-        """Empty the app's texture cache (images extracted from .skp imports
-        and unpacked from .igz containers). Saved .igz documents carry their
-        own copy and re-extract on open; .skp-imported faces lose their texture
-        until the file is imported again — hence the confirmation."""
-        from core.texture import (clear_texture_cache, texture_cache_root,
-                                  texture_cache_stats)
-        count, size = texture_cache_stats()
-        if not count:
-            _dialogs.information(
-                self, tr("Texture cache"),
-                tr("The texture cache is already empty.\n\n{path}",
-                   path=str(texture_cache_root())))
-            return
-        answer = _dialogs.question(
-            self, tr("Clear the texture cache?"),
-            tr("Delete {count} image(s) ({mb:.1f} MB) from:\n{path}\n\n"
-               "Saved .igz documents carry their own copy and rebuild it when "
-               "opened. Faces textured by a .skp import that was never saved "
-               "lose their texture until you import the .skp again.",
-               count=count, mb=size / (1024 * 1024),
-               path=str(texture_cache_root())),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No)
-        if answer != QMessageBox.StandardButton.Yes:
-            return
-        removed = clear_texture_cache()
-        self.statusBar().showMessage(
-            tr("Texture cache cleared ({count} files).", count=removed), 4000)
 
     # ---- linked documents (core/links.py) ------------------------------------
     def _on_link_igz(self) -> None:
@@ -8424,51 +7940,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         except links.LinkError as exc:
             _dialogs.warning(self, tr("Link IngeTrazo document"),
                                 str(exc))
-
-    def _choose_link_contents(self, path, select=None):
-        from views.chrome_forms import ask_choice
-        scene = self.viewport.scene
-        options = [tr("Include nested linked files"), tr("Source geometry only")]
-
-        def accept(value):
-            if value in options and self.viewport.scene is scene:
-                self.link_igz_path(path, select=select, include_nested=value == options[0])
-
-        ask_choice(self, tr("Link IngeTrazo document"), tr("Contents of {name}", name=Path(path).name),
-                   options, done=accept)
-
-    def link_igz_path(self, path, at=None, select=None, *, include_nested=True):
-        """Place the document at ``path`` as a linked copy — following the
-        cursor (``at=None``) or at once at ``at``. Raises LinkError."""
-        from PySide6.QtCore import Qt as _Qt
-        from ingetrazo_core import Vec3 as QVector3D
-        from PySide6.QtWidgets import QApplication
-        from core import links
-        self.viewport.end_group_edit()
-        # A big document takes seconds to read: say so, or the window looks
-        # frozen (Maxence, 2026-11-07: «didn't work»).
-        self.statusBar().showMessage(
-            tr("Linking {name}…", name=Path(path).name))
-        QApplication.setOverrideCursor(_Qt.WaitCursor)
-        QApplication.processEvents()
-        try:
-            comp = links.make_link(self.viewport.scene, Path(path),
-                                   host_path=self._current_path, select=select,
-                                   include_nested=include_nested)
-        finally:
-            QApplication.restoreOverrideCursor()
-        self.statusBar().showMessage(
-            tr("Click to place {name}", name=Path(path).name), 5000)
-        origin = QVector3D(0.0, 0.0, 0.0)
-        if at is None:
-            self._start_place(comp, anchor=origin)
-        else:
-            from tools.place_group import PlaceGroupTool
-            point = at if isinstance(at, QVector3D) else QVector3D(*at)
-            PlaceGroupTool(comp, anchor=origin).place_at(self.viewport, point)
-        self._link_watcher().refresh()
-        self._refresh_layer_views()
-        return comp
 
     def _refresh_layer_views(self) -> None:
         dock = getattr(self, "layers_dock", None)
@@ -8514,63 +7985,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         menu.addSeparator()
         menu.addAction(tr("Reload all"), self._reload_all_links)
 
-    def _set_link_nested(self, group, enabled):
-        from core import links
-        try:
-            links.set_include_nested(self.viewport.scene, group, enabled)
-        except (links.LinkError, OSError) as exc:
-            _dialogs.warning(self, tr("Linked files"), str(exc))
-            return False
-        self._relink_done("")
-        return True
-
-    def _relink_done(self, note: str) -> None:
-        self.viewport.notify_scene_changed()
-        self.viewport.update()
-        self._refresh_layer_views()
-        self._link_watcher().refresh()
-        if note:
-            self.statusBar().showMessage(note, 4000)
-
-    def _reload_link(self, path) -> None:
-        from core import links
-        try:
-            with _dialogs.busy(self, tr("Reloading {name}…", name=Path(path).name)):
-                links.reload(self.viewport.scene, path, self._current_path)
-        except links.LinkError as exc:
-            _dialogs.warning(self, tr("Linked files"), str(exc))
-            return
-        self._relink_done(tr("Reloaded {names}", names=Path(path).name))
-
-    def _reload_all_links(self) -> None:
-        from core import links
-        with _dialogs.busy(self, tr("Reloading linked documents…")):
-            errors = links.resolve(self.viewport.scene, self._current_path)
-        self._relink_done(tr("Linked documents reloaded"))
-        if errors:
-            _dialogs.warning(self, tr("Linked files"),
-                                "\n".join(errors.values()))
-
-    def _pack_link(self, path, on: bool) -> None:
-        from core import links
-        links.set_packed(self.viewport.scene, path, on)
-        self.viewport.scene.version += 1          # the file changes
-        if not on and Path(path).is_file():
-            self._reload_link(path)
-        else:
-            self._relink_done(tr("{name} will be saved inside this document",
-                                 name=Path(path).name) if on else "")
-
-    def _reset_link_tags(self, path) -> None:
-        from core import links
-        try:
-            links.clear_overrides(self.viewport.scene, path,
-                                  self._current_path)
-        except links.LinkError as exc:
-            _dialogs.warning(self, tr("Linked files"), str(exc))
-            return
-        self._relink_done("")
-
     def _on_import_igz(self) -> None:
         """Bring another IngeTrazo document in as ONE component, placed
         with a click — the classic import of a .skp. Furniture drawn in its
@@ -8599,195 +8013,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             _dialogs.warning(
                 self, tr("Import IngeTrazo document"),
                 tr("“{name}” has no geometry.", name=path.name))
-
-    def import_igz_path(self, path, at=None):
-        """Insert the IngeTrazo document at ``path`` as ONE component,
-        without a file dialog — for extensions and scripts (issue #179,
-        a palette that inserts components as the mouse moves).
-
-        ``at=None`` hands it to the placement tool: it follows the cursor
-        and a click drops it, as File ▸ Import does. ``at`` a point
-        (``QVector3D`` or ``(x, y, z)`` in metres) inserts it with its
-        origin there at once, in one undo step. Returns the component, or
-        ``None`` when the file has no geometry; a file that cannot be read
-        raises (``OSError``, ``ValueError``…), and nothing is changed."""
-        from ingetrazo_core import Vec3 as QVector3D
-        from core.insert import import_document_as_component
-        from core.scene import Scene as _Scene
-        from formats import igz as _igz
-        path = Path(path)
-        temp = _Scene()
-        _igz.load_into(temp, path)            # raises before anything moves
-        self.viewport.end_group_edit()
-        comp = import_document_as_component(self.viewport.scene, temp,
-                                            path.stem)
-        if comp is None:
-            return None
-        # The file's origin is the handle (the component axes): the
-        # arch's footings, drawn below z=0, go below grade in the plaza too.
-        origin = QVector3D(0.0, 0.0, 0.0)
-        if at is None:
-            self._start_place(comp, anchor=origin)
-        else:
-            from tools.place_group import PlaceGroupTool
-            point = at if isinstance(at, QVector3D) else QVector3D(*at)
-            PlaceGroupTool(comp, anchor=origin).place_at(self.viewport, point)
-        return comp
-
-    @staticmethod
-    def _survey_note(offset) -> str:
-        """The status-bar note for a file moved near the origin on import
-        (formats/recenter.py), or ``""`` when it was read where it is."""
-        if not offset:
-            return ""
-        return "  ·  " + tr(
-            "moved near the origin (survey coordinates); offset "
-            "{x:,.0f}, {y:,.0f} m", x=offset[0], y=offset[1])
-
-    def _report_import(self, name: str, offset=None) -> None:
-        """«Imported name», plus the offset when the file was moved near the
-        origin — then the model is framed, since it now sits elsewhere than
-        its coordinates say."""
-        if offset:
-            self._on_zoom_extents()
-        self.statusBar().showMessage(
-            tr("Imported {name}", name=name) + self._survey_note(offset),
-            8000 if offset else 3000)
-
-    def _on_import_obj(self) -> None:
-        path_str, _ = file_dialogs.getOpenFileName(
-            self, tr("Import OBJ"), "", tr("Wavefront OBJ (*.obj);;All files (*)"))
-        if not path_str:
-            return
-        self._mesh_import_options(Path(path_str))
-
-    def _mesh_import_options(self, path, *, open_tab=None):
-        from ingetrazo_render import OperationForm
-        from views import chrome_forms
-        doc = self.active_document()
-        stl = path.suffix.lower() == ".stl"
-        if stl:
-            store = QSettings()
-            model = OperationForm.mesh_import(
-                str(store.value("import/stl_unit", "mm")),
-                str(store.value("import/stl_simplify_mode", "principal")))
-        else:
-            model = OperationForm.mesh_import(obj_format.suggest_unit(path))
-
-        def accepted(values):
-            if self.active_document() is not doc:
-                return
-            unit = values["unit"]
-            if stl:
-                mode = values["simplify"]
-                store.setValue("import/stl_unit", unit)
-                store.setValue("import/stl_simplify_mode", mode)
-                def load():
-                    return self._apply_stl_import(path, stl_format.STL_UNITS[unit], mode)
-            else:
-                def load():
-                    return self._apply_obj_import(path, obj_format.OBJ_UNITS[unit])
-            if open_tab is None:
-                load()
-            else:
-                open_tab(load)
-
-        return chrome_forms.show(self, chrome_forms.OperationForm(
-            tr("Import STL") if stl else tr("Import OBJ"), model, accepted))
-
-    def _apply_obj_import(self, path, scale):
-        dlg, cb = self._import_progress(tr("Importing {name}…", name=path.name))
-        moved: dict = {}
-
-        def load(scene):
-            moved["offset"] = obj_format.load_obj(scene, path, progress=cb,
-                                                  scale=scale,
-                                                  require_geometry=True)
-
-        cmd = self._run_import(load, dlg, tr("Import OBJ failed"))
-        if cmd is None:
-            return False
-        self._prepare_import_display(cmd, cb)
-        dlg.close()
-        self.viewport.update()
-        self._import_name = path.name
-        self._update_title()
-        self._report_import(path.name, moved.get("offset"))
-        return True
-
-    def _on_import_stl(self) -> None:
-        path_str, _ = file_dialogs.getOpenFileName(
-            self, tr("Import STL"), "",
-            tr("STL mesh (*.stl);;All files (*)"))
-        if not path_str:
-            return
-        self._mesh_import_options(Path(path_str))
-
-    def _apply_stl_import(self, path, scale, simplify_mode):
-        dlg, cb = self._import_progress(
-            tr("Importing {name}…", name=path.name))
-        moved: dict = {}
-        target, exc = self._parse_stl_threaded(
-            path, scale, simplify_mode, cb, report=moved)
-        if exc is not None:
-            _dialogs.close_failed(dlg, exc)
-            _dialogs.critical(self, tr("Import STL failed"), str(exc))
-            return False
-        cmd = self._run_import(
-            lambda scene: stl_format.add_stl_mesh(scene, path, target),
-            dlg, tr("Import STL failed"))
-        if cmd is None:
-            return False
-        self._prepare_import_display(cmd, cb)
-        dlg.close()
-        self.viewport.update()
-        self._import_name = path.name
-        self._update_title()
-        self._report_import(path.name, moved.get("offset"))
-        return True
-
-    def _on_import_image(self) -> None:
-        """Import a picture to trace over (``Import ▸ image``).
-
-        The file is copied into the texture cache straight away, so the model
-        never depends on where the user happened to leave the original — the
-        same content-addressed store the .skp importer fills, which also means
-        importing the same scan twice costs one copy.
-        """
-        path_str, _ = file_dialogs.getOpenFileName(
-            self, tr("Import image"), "",
-            tr("Images (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.webp);;"
-               "All files (*)"))
-        if not path_str:
-            return
-        path = Path(path_str)
-        from core.image_plane import image_aspect
-        aspect, pw, ph = image_aspect(path)
-        if pw <= 0 or ph <= 0:
-            _dialogs.critical(
-                self, tr("Import image failed"),
-                tr("{name} is not an image this build can read.",
-                   name=path.name))
-            return
-        from core.texture import cache_image
-        try:
-            cached = cache_image(path.read_bytes(), path.name, "imported")
-        except OSError as exc:
-            _dialogs.critical(self, tr("Import image failed"), str(exc))
-            return
-
-        from tools.image import ImageTool
-        tool = ImageTool()
-        tool.load(str(cached), aspect, label=path.stem)
-        self.viewport.set_active_tool(tool)
-        for action in self._tool_actions.values():
-            action.setChecked(False)
-        self._tool_label.setText(tr("Tool: {name}", name=tr("Image")))
-        self._refresh_vcb()
-        self.viewport.flash_status(
-            tr("Click a corner and drag to size the image, or type a width "
-               "and press Enter (Esc cancels)"), 6000)
-        self.viewport.update()
 
     def _on_image_size(self) -> None:
         """Resize a placed reference image to a real-world width.
@@ -8934,142 +8159,12 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         if path_str:
             self._import_dwg_path(Path(path_str))
 
-    def _import_dwg_path(self, path: Path) -> bool:
-        """Import a DWG through the LibreDWG satellite (D3): convert to a
-        temporary DXF, feed the DXF pipeline, discard the temp. The user
-        never sees the intermediate — IngeCAD's dwg_bridge pattern."""
-        from formats.dwg_bridge import (DwgBridgeError, DwgConverter,
-                                        discard_temp_dxf, have_dwg_support)
-
-        if not have_dwg_support():
-            _dialogs.critical(
-                self, tr("Import DWG failed"),
-                tr("The LibreDWG converter (dwg2dxf) is not available in "
-                   "this installation.") + "\n\n" +
-                tr("To work on the drawing anyway: save it as DXF from your "
-                   "CAD program (or convert it with a free DWG → DXF "
-                   "converter such as ODA File Converter), then File ▸ "
-                   "Import ▸ AutoCAD DXF."))
-            return False
-        dlg, _cb = self._import_progress(tr("Importing {name}…",
-                                            name=path.name))
-        # The converter runs in a QProcess under a local event loop: the
-        # window stays alive and Cancel kills the process (#401).
-        dlg.setRange(0, 0)
-        dlg.setLabelText(tr("Converting DWG…"))
-        dlg.setCancelButtonText(tr("Cancel"))
-        converter = DwgConverter(self)
-        dlg.canceled.connect(converter.cancel)
-        try:
-            dxf = converter.convert(path)
-        except DwgBridgeError as exc:
-            _dialogs.close_failed(dlg, exc)
-            if exc.kind == "cancelled":
-                self.statusBar().showMessage(tr("DWG import cancelled."), 5000)
-            else:
-                _dialogs.critical(self, tr("Import DWG failed"),
-                                     self._dwg_failure_text(exc))
-            return False
-        finally:
-            converter.deleteLater()
-        dlg.close()
-        try:
-            ok = self._import_dxf_path(dxf, label=path)
-        finally:
-            discard_temp_dxf(dxf)
-        return ok
-
-    @staticmethod
-    def _dwg_failure_text(exc) -> str:
-        """The translated message for a failed or timed-out conversion."""
-        if exc.kind == "timeout":
-            head = tr("The DWG conversion took too long and was stopped.")
-        else:
-            head = (tr("The DWG converter could not convert this drawing.")
-                    + "\n" + tr("Details: {details}", details=str(exc)))
-        return head + "\n\n" + tr(
-            "To work on the drawing anyway: save it as DXF from your "
-            "CAD program (or convert it with a free DWG → DXF "
-            "converter such as ODA File Converter), then File ▸ "
-            "Import ▸ AutoCAD DXF.")
-
     def _on_import_dxf(self) -> None:
         path_str, _ = file_dialogs.getOpenFileName(
             self, tr("Import DXF"), "",
             tr("AutoCAD DXF (*.dxf);;All files (*)"))
         if path_str:
             self._import_dxf_path(Path(path_str))
-
-    def _import_dxf_path(self, path: Path, label: "Path | None" = None) -> bool:
-        """Import a DXF: 2D CAD linework as tagged layer groups (D1). The
-        unit comes from the header; a unitless file is asked about, the OBJ
-        importer's rule — never guess in silence. ``label`` is the file the
-        USER opened when ``path`` is an intermediate (the DWG bridge)."""
-        shown = label or path
-        from formats.dxf_in import (load_dxf, open_document,
-                                    suggest_unit_scale)
-
-        # ALWAYS confirmed, suggestion preselected (the OBJ importer's
-        # doctrine: asked, but with the answer already filled in). The
-        # suggestion measures the drawing itself, because CAD headers lie —
-        # this session's test plan declares millimetres while drawn in
-        # metres. Parsed once; the same document feeds the load.
-        try:
-            doc = open_document(path)
-        except Exception as exc:  # noqa: BLE001 — unreadable file
-            _dialogs.critical(self, tr("Import DXF failed"), str(exc))
-            return False
-        suggested, _code = suggest_unit_scale(doc)
-        options = self._dxf_options(shown, suggested)
-        if options is None:
-            return False
-        scale, make_faces = options
-        dlg, cb = self._import_progress(tr("Importing {name}…",
-                                           name=shown.name))
-        stats: dict = {}
-
-        def load(scene):
-            stats.update(load_dxf(scene, path, progress=cb, scale=scale,
-                                  doc=doc, name=shown.stem,
-                                  make_faces=make_faces))
-
-        cmd = self._run_import(
-            load, dlg, (tr("Import DWG failed") if label is not None
-                        else tr("Import DXF failed")),
-            describe=lambda exc: self._dxf_failure_text(exc, shown))
-        if cmd is None:
-            return False
-        self._prepare_import_display(cmd, cb)
-        dlg.close()
-        # A plan drawn kilometres from the origin (or huge next to the 20 m
-        # default camera) reads as "nothing imported" without this.
-        self._on_zoom_extents()
-        self.viewport.update()
-        self._import_name = shown.name
-        self._update_title()
-        msg = tr("Imported {name}: {edges} edges in {groups} tagged groups",
-                 name=shown.name, edges=stats.get("edges", 0),
-                 groups=stats.get("groups", 0))
-        if make_faces:
-            msg += "  ·  " + tr("{n} faces made from closed outlines",
-                                n=stats.get("outline_faces", 0))
-        msg += self._survey_note(stats.get("offset"))
-        self.statusBar().showMessage(msg, 8000)
-        return True
-
-    @staticmethod
-    def _dxf_failure_text(exc, shown) -> str:
-        from formats.dxf_in import NothingToImport
-        if not isinstance(exc, NothingToImport):
-            return str(exc)
-        text = tr("“{name}” was read, but it has nothing that can be imported: "
-                  "no lines, polylines, arcs, circles, ellipses, splines or "
-                  "faces in the model space.", name=shown.name)
-        if exc.skipped:
-            kinds = ", ".join(f"{kind} ×{n}"
-                              for kind, n in sorted(exc.skipped.items()))
-            text += "\n\n" + tr("Left out: {kinds}", kinds=kinds)
-        return text
 
     def _dxf_options(self, path, header_scale=None
                      ) -> "tuple[float, bool] | None":
@@ -9311,38 +8406,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         texture images beside the .dae (send both, or use GLB)."""
         self._export("COLLADA", "dae", tr("COLLADA (*.dae)"), dae_format.save_dae)
 
-    def _view_line_groups(self, fast: bool = True) -> list:
-        """The view on screen as the line groups the DXF and SVG exports
-        write (see formats.dxf_out.save_dxf_layers), hidden lines removed.
-        Parallel: true size in metres, edges / profiles / section cut on
-        their own layers — or one layer per model layer, with its colour
-        and line type. Perspective (two-point included): what the window
-        shows, true size at the depth of the orbit target. ``fast`` off
-        walks the model instead of the viewport's caches — what sees a
-        visibility of the moment, as the export of the selection alone."""
-        from core.hlr import (KIND_CUT, KIND_PROFILE, hlr_drawing,
-                              hlr_perspective)
-        vp = self._active_view()        # with several views, the active one
-        geometry = vp.hlr_geometry() if fast else None
-        if vp.camera.perspective:
-            return [("VISTA", hlr_perspective(vp.scene, vp.camera,
-                                              geometry=geometry))]
-        if len(vp.scene.layers) > 1:
-            # With layers, each one as a layer of its own, with its
-            # colour and line type — as the composer's export.
-            from core.layers import line_styles
-            from formats.dxf_views import dxf_groups_by_layer
-            d = hlr_drawing(vp.scene, vp.camera, layers=True,
-                            geometry=vp.hlr_geometry(tags=True) if fast
-                            else None)
-            d.styles = line_styles(vp.scene, True)
-            return dxf_groups_by_layer(d, "VISTA", hidden_lines=False)
-        d = hlr_drawing(vp.scene, vp.camera, geometry=geometry)
-        k = d.kinds
-        return [("VISTA", d.segs[(k != KIND_CUT) & (k != KIND_PROFILE)]),
-                ("VISTA-PERFIL", d.segs[k == KIND_PROFILE]),
-                ("VISTA-CORTE", d.segs[k == KIND_CUT])]
-
     def _on_export_view_dxf(self) -> None:
         """The view on screen as a 2D line drawing for CAD, hidden lines
         removed (José Castro Basso, FADU–UDELAR) — see _view_line_groups."""
@@ -9353,64 +8416,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             return
         from formats.dxf_out import save_dxf_layers
         self._export_view_lines(path, save_dxf_layers, tr("Export DXF failed"))
-
-    def _on_export_view_svg(self):
-        from views.svg_export import open_view_export
-        return open_view_export(self)
-
-    def view_svg_builder(self):
-        """The SVG builder (views.svg_export) of the view on screen: its
-        lines, its faces and its picture — of the selection alone, and in
-        a window of another shape, when the sheet asks."""
-        from core.vista_caras import view_faces, view_rect
-        from contextlib import contextmanager
-
-        from views.svg_export import (SvgBuilder, fitted, framed,
-                                      pictured_alone, selection_only,
-                                      widened)
-        vp = self._active_view()        # with several views, the active one
-
-        def image(width_px, axes=True, aspect=None):
-            # «Hide the axes»: the picture without them, the view as it was.
-            shown = getattr(vp.scene, "show_axes", True)
-            vp.scene.show_axes = shown and axes
-            try:
-                if aspect is None:
-                    picture = vp.render_image(width_px, overlays=False,
-                                              sharp_shadows=True)
-                else:
-                    # A window of the sheet's shape (the camera is already
-                    # widened to it): the picture has that shape too.
-                    picture = vp.render_image(
-                        width_px, max(64, round(width_px / aspect)),
-                        overlays=False, sharp_shadows=True)
-            finally:
-                vp.scene.show_axes = shown
-            return picture, view_rect(vp.camera)
-
-        @contextmanager
-        def picture_alone():
-            try:
-                with pictured_alone(vp.scene):
-                    yield
-            finally:
-                vp.update()
-
-        # «On screen»: the window as it is, a pixel being 1/96 inch.
-        mm = 25.4 / 96.0
-        return SvgBuilder(self._view_line_groups,
-                          lambda **o: view_faces(vp.scene, vp.camera, **o),
-                          image, window=lambda: view_rect(vp.camera),
-                          screen_mm=(max(vp.width(), 1) * mm,
-                                     max(vp.height(), 1) * mm),
-                          isolate=lambda: selection_only(vp.scene),
-                          widen=lambda aspect: widened(vp.camera, aspect),
-                          frame=lambda frame: framed(vp.camera, frame),
-                          fit=lambda selection: fitted(
-                              vp.camera, vp.scene.selection_bounds()
-                              if selection else
-                              (self._extents_bounds() or (None, None))),
-                          isolate_picture=picture_alone)
 
     def _export_view_lines(self, path: str, save, failed: str) -> None:
         QApplication.setOverrideCursor(Qt.WaitCursor)
@@ -9460,44 +8465,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         QApplication.restoreOverrideCursor()
         self.statusBar().showMessage(
             tr("Exported {n} lines to {name}", n=n, name=path), 5000)
-
-    def _on_export_image(self) -> None:
-        """Hi-res 2D export of the current view ('Export 2D
-        Graphic'): pick a file and a pixel width; height follows the
-        viewport's aspect so the image matches exactly what you framed."""
-        base = (self._current_path.stem if self._current_path is not None
-                else "untitled")
-        path_str, _ = file_dialogs.getSaveFileName(
-            self, tr("Export Image"), f"{base}.png",
-            tr("PNG image (*.png);;JPEG image (*.jpg)"))
-        if not path_str:
-            return
-        self._export_image_to(Path(path_str))
-
-    def _export_image_to(self, path):
-        from ingetrazo_render import OperationForm
-        from views import chrome_forms
-        if path.suffix.lower() not in (".png", ".jpg", ".jpeg"):
-            path = path.with_suffix(".png")
-        view = self._active_view()
-        chrome_forms.show(self, chrome_forms.OperationForm(
-            tr("Export Image"), OperationForm.image(path.suffix),
-            lambda options: self._save_export_image(view, path, **options)))
-
-    def _save_export_image(self, view, path, width, transparent):
-        # With a camera frame (Camera Settings ▸ Frame) the picture is
-        # the framed shot, ``width`` wide, not the whole view.
-        # With several views, the one worked in, as Styles and Shift+P.
-        image = view.render_image(
-            width, sharp_shadows=True, transparent=transparent,
-            crop_to_frame=True)
-        if image is None or image.isNull() or not image.save(str(path)):
-            _dialogs.critical(self, tr("Export Image failed"),
-                                 tr("Could not render or save the image."))
-            return
-        self.statusBar().showMessage(
-            tr("Exported image {w}×{h} → {name}",
-               w=image.width(), h=image.height(), name=path.name), 4000)
 
     def _export(self, label: str, suffix: str, file_filter, writer) -> None:
         base = (self._current_path.stem if self._current_path is not None

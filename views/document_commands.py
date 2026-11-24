@@ -316,6 +316,138 @@ class WindowDocumentCommands:
         self.viewport.end_group_edit()
         self._doc.viewport.end_group_edit()
 
+    def export_video(self):
+        from views.video_export import run_export
+        run_export(self)
+
+    def ask_animation(self):
+        from views.scene_playback import edit_animation
+        edit_animation(self)
+
+    def _on_export_view_svg(self):
+        from views.svg_export import open_view_export
+        return open_view_export(self)
+
+    def _run_import(self, load, dlg, title, describe=None, command_type=None):
+        return native.run_import(self, load, dlg, title, describe, command_type)
+
+    def _prepare_import_display(self, cmd, cb):
+        native.prepare_import(self.viewport, cmd, cb)
+
+    def _report_import(self, name, offset=None):
+        native.report_import(self, name, offset)
+
+    _survey_note = staticmethod(native.survey_note)
+    _dxf_failure_text = staticmethod(native.dxf_failure)
+
+    def _import_rfa_path(self, path):
+        return native.import_file(self, path, "rfa")
+
+    def _import_glb_path(self, path):
+        return native.import_file(self, path, "glb")
+
+    def _import_dae_path(self, path):
+        return native.import_file(self, path, "dae")
+
+    def _import_dxf_path(self, path, label=None):
+        return native.import_file(self, path, "dxf", label=label)
+
+    def _apply_obj_import(self, path, scale):
+        return native.import_file(self, path, "obj", scale)
+
+    def _apply_stl_import(self, path, scale, simplify_mode):
+        return native.import_file(self, path, "stl", scale, simplify_mode)
+
+    def _start_place(self, group, align_to_face=False, anchor=None):
+        native.start_placement(self, group, align_to_face, anchor)
+
+    def import_igz_path(self, path, at=None):
+        return native.insert_document(self, path, at)
+
+    def _on_insert_3d_text(self):
+        from views.font_picker import text3d
+        text3d(self, None, self._place_text3d)
+
+    def _place_text3d(self, params):
+        native.place_text(self, params)
+
+    def _on_import_image(self):
+        native.import_picture(self)
+
+    def _on_import_obj(self):
+        native.pick_mesh_file(self, False)
+
+    def _on_import_stl(self):
+        native.pick_mesh_file(self, True)
+
+    def _mesh_import_options(self, path, *, open_tab=None):
+        return native.ask_mesh_units(self, path, open_tab)
+
+    def _on_export_image(self):
+        native.choose_image_export(self)
+
+    def _export_image_to(self, path):
+        native.image_export_form(self, path)
+
+    def _save_export_image(self, view, path, width, transparent):
+        native.save_export_image(self, view, path, width, transparent)
+
+    def import_skp_path(self, path):
+        return native.import_skp(self, path)
+
+    def _import_dwg_path(self, path):
+        return native.import_dwg(self, path)
+
+    def _on_clear_texture_cache(self):
+        native.clear_texture_cache(self)
+
+    def link_igz_path(self, path, at=None, select=None, *, include_nested=True):
+        return native.link_document(self, path, at, select, include_nested)
+
+    def _relink_done(self, note):
+        native.link_changed(self, note)
+
+    def _reload_link(self, path):
+        native.reload_links(self, path)
+
+    def _reload_all_links(self):
+        native.reload_links(self)
+
+    def _set_link_nested(self, group, enabled):
+        return native.set_link_nested(self, group, enabled)
+
+    def _reset_link_tags(self, path):
+        native.reset_link_tags(self, path)
+
+    def _pack_link(self, path, on):
+        native.pack_link(self, path, on)
+
+    def _view_line_groups(self, fast=True):
+        from views.svg_export import view_line_groups
+        return view_line_groups(self._active_view(), fast)
+
+    def view_svg_builder(self):
+        from views.svg_export import active_view_builder
+        return active_view_builder(self)
+
+    def open_preferences(self, shortcut_of=None, page=None):
+        from views import settings_sheet
+        settings_sheet.show(self, page=page, shortcut_of=shortcut_of)
+
+    def _on_units(self):
+        self.open_preferences(page="units")
+
+    def _on_check_updates(self):
+        from views.release_check import start_check
+        start_check(self, quiet=False)
+
+    def check_updates_quietly(self):
+        from views.release_check import start_check
+        start_check(self, quiet=True)
+
+    def _choose_link_contents(self, path, select=None):
+        native.choose_link_contents(self, path, select)
+
     def _confirm_discard(self, prompt):
         return native.confirm_discard(self, prompt)
 
@@ -324,3 +456,21 @@ class WindowDocumentCommands:
 
     def _save_all_or_stay(self, dirty, answer):
         return native.save_selected(self, dirty, answer)
+
+    def _on_insert_component(self, key, name=None):
+        native.place_bundled(self, key, name)
+
+    def _build_bundled_component(self, key, name):
+        return native.bundled_component(self, key, name)
+
+    def insert_library_component(self, entry, obj=None):
+        native.place_catalogue(self, entry, obj)
+
+    def _build_library_component(self, entry, obj=None):
+        return native.catalogue_component(self, entry, obj)
+
+    def _on_insert_person_2d(self, image="person_billboard.png", height=1.75, name=None):
+        native.place_figure(self, image, height, name)
+
+    def _on_insert_faceme_image(self):
+        native.choose_billboard(self)

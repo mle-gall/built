@@ -395,6 +395,89 @@ def preview_pixels(text):
     return svg_preview(text)
 
 
+def view_line_groups(vp, fast: bool = True) -> list:
+    """The view on screen as the line groups the DXF and SVG exports
+    write (see formats.dxf_out.save_dxf_layers), hidden lines removed.
+    Parallel: true size in metres, edges / profiles / section cut on
+    their own layers — or one layer per model layer, with its colour
+    and line type. Perspective (two-point included): what the window
+    shows, true size at the depth of the orbit target. ``fast`` off
+    walks the model instead of the viewport's caches — what sees a
+    visibility of the moment, as the export of the selection alone."""
+    from core.hlr import (KIND_CUT, KIND_PROFILE, hlr_drawing,
+                          hlr_perspective)
+    geometry = vp.hlr_geometry() if fast else None
+    if vp.camera.perspective:
+        return [("VISTA", hlr_perspective(vp.scene, vp.camera,
+                                          geometry=geometry))]
+    if len(vp.scene.layers) > 1:
+        # With layers, each one as a layer of its own, with its
+        # colour and line type — as the composer's export.
+        from core.layers import line_styles
+        from formats.dxf_views import dxf_groups_by_layer
+        d = hlr_drawing(vp.scene, vp.camera, layers=True,
+                        geometry=vp.hlr_geometry(tags=True) if fast
+                        else None)
+        d.styles = line_styles(vp.scene, True)
+        return dxf_groups_by_layer(d, "VISTA", hidden_lines=False)
+    d = hlr_drawing(vp.scene, vp.camera, geometry=geometry)
+    k = d.kinds
+    return [("VISTA", d.segs[(k != KIND_CUT) & (k != KIND_PROFILE)]),
+            ("VISTA-PERFIL", d.segs[k == KIND_PROFILE]),
+            ("VISTA-CORTE", d.segs[k == KIND_CUT])]
+
+
+def active_view_builder(win):
+    """The SVG builder (views.svg_export) of the view on screen: its
+    lines, its faces and its picture — of the selection alone, and in
+    a window of another shape, when the sheet asks."""
+    from core.vista_caras import view_faces, view_rect
+
+    vp = win._active_view()        # with several views, the active one
+
+    def image(width_px, axes=True, aspect=None):
+        # «Hide the axes»: the picture without them, the view as it was.
+        shown = getattr(vp.scene, "show_axes", True)
+        vp.scene.show_axes = shown and axes
+        try:
+            if aspect is None:
+                picture = vp.render_image(width_px, overlays=False,
+                                          sharp_shadows=True)
+            else:
+                # A window of the sheet's shape (the camera is already
+                # widened to it): the picture has that shape too.
+                picture = vp.render_image(
+                    width_px, max(64, round(width_px / aspect)),
+                    overlays=False, sharp_shadows=True)
+        finally:
+            vp.scene.show_axes = shown
+        return picture, view_rect(vp.camera)
+
+    @contextmanager
+    def picture_alone():
+        try:
+            with pictured_alone(vp.scene):
+                yield
+        finally:
+            vp.update()
+
+    # «On screen»: the window as it is, a pixel being 1/96 inch.
+    mm = 25.4 / 96.0
+    return SvgBuilder(lambda fast=True: view_line_groups(vp, fast),
+                      lambda **o: view_faces(vp.scene, vp.camera, **o),
+                      image, window=lambda: view_rect(vp.camera),
+                      screen_mm=(max(vp.width(), 1) * mm,
+                                 max(vp.height(), 1) * mm),
+                      isolate=lambda: selection_only(vp.scene),
+                      widen=lambda aspect: widened(vp.camera, aspect),
+                      frame=lambda frame: framed(vp.camera, frame),
+                      fit=lambda selection: fitted(
+                          vp.camera, vp.scene.selection_bounds()
+                          if selection else
+                          (win._extents_bounds() or (None, None))),
+                      isolate_picture=picture_alone)
+
+
 def open_view_export(win, frame_builder=None):
     """Open the one-off Export sheet. Sheets can supply a frame's SvgBuilder."""
     import json

@@ -469,6 +469,8 @@ class NullBar:
         def connect(self, *_):
             pass
 
+        disconnect = connect
+
         def emit(self, *_):
             pass
 
@@ -584,17 +586,15 @@ def import_dialog(win, kind) -> bool:
 
 
 def import_path(win, path: Path) -> bool:
-    """Into the project in front, through MainWindow's own pipelines (one
-    undo step, the capsule, the import report)."""
-    suffix = path.suffix.lower()
-    fn = {".rfa": win._import_rfa_path, ".dae": win._import_dae_path,
-          ".skp": win.import_skp_path, ".dxf": win._import_dxf_path,
-          ".dwg": win._import_dwg_path, ".glb": win._import_glb_path,
-          ".gltf": win._import_glb_path}.get(suffix)
-    if fn is None:
-        win._host.not_here(f"{suffix} import")
+    """Run the selected importer against the active document."""
+    method = {".rfa": "_import_rfa_path", ".dae": "_import_dae_path",
+              ".skp": "import_skp_path", ".dxf": "_import_dxf_path",
+              ".dwg": "_import_dwg_path", ".glb": "_import_glb_path",
+              ".gltf": "_import_glb_path"}.get(path.suffix.lower())
+    if method is None:
+        win._host.not_here(f"{path.suffix} import")
         return False
-    ok = bool(fn(path))
+    ok = bool(getattr(win, method)(path))
     win._host.request_frame()
     return ok
 
