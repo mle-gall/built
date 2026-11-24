@@ -61,7 +61,7 @@ def win(native_host):
 @pytest.fixture
 def errors(win, monkeypatch):
     shown = []
-    monkeypatch.setattr("views.chrome_dialogs.critical",
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.critical",
                         lambda _parent, title, text: shown.append((title, text)))
     # The unit dialog answered: metres, no faces from the outlines.
     monkeypatch.setattr(win, "_dxf_options",

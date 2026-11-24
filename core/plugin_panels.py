@@ -38,7 +38,7 @@ def on_document_close(app, close):
 
 
 def open_panel(win, key):
-    from views.chrome_dialogs import view_of
+    from ingetrazo_render.chrome_dialogs import view_of
     view = view_of(win)
     if not getattr(view, "_ui_attached", False) or not hasattr(view.renderer, "ui_plugin_open"):
         return False
@@ -58,7 +58,7 @@ def open_panel(win, key):
 
 def show_utility(win, key, model):
     """Publish or replace one utility for this document, keeping its zoom and position."""
-    from views.chrome_dialogs import view_of
+    from ingetrazo_render.chrome_dialogs import view_of
     view = view_of(win)
     if not getattr(view, "_ui_attached", False):
         return None
@@ -166,7 +166,7 @@ def sync(view, win):
 
 
 def dispatch(win, raw):
-    from views.chrome_dialogs import view_of
+    from ingetrazo_render.chrome_dialogs import view_of
     view = view_of(win)
     event = json.loads(raw)
     binding = getattr(view, "_plugin_bindings", {}).get(event.get("instance"))

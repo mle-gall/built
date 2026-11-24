@@ -99,7 +99,7 @@ def test_the_plane_can_be_renamed_after_it_is_placed(native_host):
     from core.history import PlaceSectionPlaneCommand
     from core.section import SectionPlane
     from ingetrazo_render import context_menu_build, context_menu_run
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
 
     win = native_host.window
     vp = native_host.viewport

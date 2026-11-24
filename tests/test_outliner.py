@@ -157,7 +157,8 @@ def test_a_failing_kind_provider_is_skipped():
 
 
 def _plan(win, target, *, height=None, sheet=True, scale=100):
-    from views import chrome_forms, wgpu_ui
+    from views import wgpu_ui
+    from ingetrazo_render import chrome_forms
     verb, prefix = ("groupplan", "i:") if height is not None else ("cutview", "section:")
     wgpu_ui._tree_action(win, win.view, wgpu_ui.SEP.join((verb, prefix + str(target.uid))))
     form = chrome_forms.current(win)

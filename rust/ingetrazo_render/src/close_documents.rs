@@ -34,7 +34,7 @@ fn ask<'py>(
     if let Some(list) = checklist {
         kw.set_item("checklist", list)?;
     }
-    py.import("views.chrome_dialogs")?
+    py.import("ingetrazo_render.chrome_dialogs")?
         .getattr("ask")?
         .call((win, title, text, buttons), Some(&kw))
 }
@@ -156,7 +156,7 @@ fn confirm_quit(win: &Bound<'_, PyAny>) -> PyResult<bool> {
 /// window can cancel, leaving every earlier document open and recoverable.
 #[pyfunction]
 fn confirm_window_close(win: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let dialogs = win.py().import("views.chrome_dialogs")?;
+    let dialogs = win.py().import("ingetrazo_render.chrome_dialogs")?;
     if !dialogs.call_method1("current_sheet", (win,))?.is_none() {
         return Ok(false);
     }

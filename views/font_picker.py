@@ -2,7 +2,7 @@
 import json
 
 from core.settings import settings as QSettings
-from views import chrome_dialogs
+from ingetrazo_render import chrome_dialogs
 
 
 def show(win, title, text, family, bold, italic, size, unit, done, *, depth=None, editable=False, bounds=(4, 96), lengths=None):

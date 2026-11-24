@@ -69,7 +69,7 @@ fn request_recovery(win: &Bound<'_, PyAny>) -> PyResult<()> {
                 .getattr("BackgroundAutosave")?
                 .call1((win,))?;
             let result = py
-                .import("views.chrome_dialogs")?
+                .import("ingetrazo_render.chrome_dialogs")?
                 .getattr("autosave_result")?;
             let callback = py
                 .import("functools")?
@@ -134,7 +134,7 @@ fn link_watcher<'py>(win: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 fn links_loaded(win: &Bound<'_, PyAny>) -> PyResult<()> {
     win.call_method0("_link_watcher")?.call_method0("refresh")?;
     let py = win.py();
-    let dialogs = py.import("views.chrome_dialogs")?;
+    let dialogs = py.import("ingetrazo_render.chrome_dialogs")?;
     if !dialogs.call_method1("live", (win,))?.is_none()
         && dialogs
             .call_method1("update_link_banner", (win,))?

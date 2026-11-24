@@ -68,7 +68,7 @@ class AssistantPanel:
         elif self.busy:
             return
         elif control == "key":
-            from views.chrome_forms import Field, Form, show
+            from ingetrazo_render.chrome_forms import Field, Form, show
             def save(answer, values):
                 if answer == "ok":
                     self.key = values["credential"].strip()

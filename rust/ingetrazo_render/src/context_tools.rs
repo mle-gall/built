@@ -204,7 +204,7 @@ fn apply_text(
         .call_method1("make_text_group", (params,))?
         .is_none()
     {
-        py.import("views.chrome_dialogs")?.call_method1(
+        py.import("ingetrazo_render.chrome_dialogs")?.call_method1(
             "warning",
             (
                 win,

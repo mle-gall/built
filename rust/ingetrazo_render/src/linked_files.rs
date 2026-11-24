@@ -72,7 +72,7 @@ fn link_changed(win: &Bound<'_, PyAny>, note: &str) -> PyResult<()> {
 
 fn warn(win: &Bound<'_, PyAny>, detail: &Bound<'_, pyo3::types::PyString>) -> PyResult<()> {
     let py = win.py();
-    py.import("views.chrome_dialogs")?.call_method1(
+    py.import("ingetrazo_render.chrome_dialogs")?.call_method1(
         "warning",
         (win, translated(py, "Linked files", None)?, detail),
     )?;
@@ -213,7 +213,7 @@ fn choose_link_contents(
             ),
         )?,
     )?;
-    py.import("views.chrome_forms")?
+    py.import("ingetrazo_render.chrome_forms")?
         .getattr("ask_choice")?
         .call(
             (

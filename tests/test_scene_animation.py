@@ -483,7 +483,7 @@ def test_page_up_and_down_are_no_other_commands_shortcut(win):
 
 def test_the_settings_change_the_document(win, monkeypatch):
     forms = []
-    monkeypatch.setattr("views.chrome_forms.show", lambda _, form: forms.append(form))
+    monkeypatch.setattr("ingetrazo_render.chrome_forms.show", lambda _, form: forms.append(form))
     before = win.viewport.scene.version
     win.ask_animation()
     form = forms.pop()
@@ -499,7 +499,7 @@ def test_the_settings_change_the_document(win, monkeypatch):
 
 def test_the_settings_dialog_reads_and_returns_the_times(win, monkeypatch):
     forms = []
-    monkeypatch.setattr("views.chrome_forms.show", lambda _, form: forms.append(form))
+    monkeypatch.setattr("ingetrazo_render.chrome_forms.show", lambda _, form: forms.append(form))
     win.ask_animation()
     form = forms.pop()
     form.receive("transition", "3")
@@ -791,7 +791,7 @@ def test_mp4_discard_preserves_existing_destination(tmp_path):
                                           (".mkv", "Motion JPEG / Matroska (*.mkv)")])
 def test_video_picker_and_sheet_agree_on_encoder_format(win, monkeypatch, tmp_path, suffix, label):
     import views.video_export as ve
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     from views.filedialogs import file_dialogs
     _scenes(win, ("A", "iso", set()))
     monkeypatch.setattr(ve, "video_format", lambda: (suffix, label))
@@ -807,7 +807,8 @@ def test_video_picker_and_sheet_agree_on_encoder_format(win, monkeypatch, tmp_pa
 
 def test_normalizing_the_movie_suffix_preserves_an_unconfirmed_file(win, monkeypatch, tmp_path):
     import views.video_export as ve
-    from views import chrome_dialogs, chrome_forms
+    from ingetrazo_render import chrome_dialogs
+    from ingetrazo_render import chrome_forms
     from views.filedialogs import file_dialogs
     _scenes(win, ("A", "iso", set()))
     existing = tmp_path / "site.mp4"

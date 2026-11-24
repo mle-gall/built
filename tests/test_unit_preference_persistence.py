@@ -86,7 +86,7 @@ def test_changed_units_remain_the_default_when_the_open_model_differs(chosen):
     # new-document choice; it cannot be inferred from the old units matching.
     assert window.viewport.scene.units == chosen
     assert units.new_document_units() == chosen
-    from views.document_commands import WindowDocumentCommands
+    from ingetrazo_render.document_commands import WindowDocumentCommands
     fresh_scene = Scene()
     fresh_window = SimpleNamespace(viewport=SimpleNamespace(scene=fresh_scene))
     WindowDocumentCommands._apply_new_document_units(fresh_window)
@@ -145,7 +145,7 @@ def test_cancel_does_not_change_units_or_the_document_only_choice():
     window = _window(CM)
     edit_unit(window, "for_new", 0)
 
-    from views import chrome_forms, units_question
+    from ingetrazo_render import chrome_forms, units_question
     other_window = _window(CM)
     other_window._documents, other_window._tool_actions = [], {}
     units_question.offer_at_start(other_window)

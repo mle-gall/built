@@ -164,7 +164,7 @@ fn confirm_tag_removal(
         ("cancel", translated(py, "Cancel", None)?),
         ("delete", translated(py, "Delete", None)?),
     ];
-    py.import("views.chrome_dialogs")?
+    py.import("ingetrazo_render.chrome_dialogs")?
         .getattr("ask_later")?
         .call(
             (

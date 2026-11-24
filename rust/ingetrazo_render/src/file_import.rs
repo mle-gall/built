@@ -32,7 +32,7 @@ fn dxf_options(win: &Bound<'_, PyAny>, header_scale: Option<f64>) -> PyResult<Op
     kwargs.set_item("default", default.0)?;
     kwargs.set_item("cancel", "cancel")?;
     kwargs.set_item("checklist", &checklist)?;
-    let answer = py.import("views.chrome_dialogs")?.call_method("ask", (
+    let answer = py.import("ingetrazo_render.chrome_dialogs")?.call_method("ask", (
         win, translated(py, "What unit is this drawing in?", None)?,
         translated(py, "What unit is this drawing in? (CAD headers often lie)", None)?, buttons,
     ), Some(&kwargs))?;
@@ -104,7 +104,7 @@ fn run_import<'py>(
         Some(f) => f.call1((&error,))?,
         None => error.str()?.into_any(),
     };
-    let dialogs = py.import("views.chrome_dialogs")?;
+    let dialogs = py.import("ingetrazo_render.chrome_dialogs")?;
     dialogs.call_method1("close_failed", (bar, &msg))?;
     if clean {
         win.setattr("_saved_version", vp.getattr("scene")?.getattr("version")?)?;
@@ -278,7 +278,7 @@ fn import_file(
         }
     };
     let title = translated(py, error_title, None)?.extract::<String>()?;
-    let dialogs = py.import("views.chrome_dialogs")?;
+    let dialogs = py.import("ingetrazo_render.chrome_dialogs")?;
     let params = PyDict::new(py);
     let mut make_faces = false;
     if kind == "dxf" {

@@ -93,7 +93,7 @@ def test_grouping_only_loose_geometry_still_works(native_host):
 def test_component_from_loose_geometry_plus_a_group_holds_both(native_host, monkeypatch):
     """It used to refuse; since issue #90 it makes ONE component holding the
     loose geometry and the group, still a group inside."""
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     win, scene = _win_with_a_group_and_loose_geometry(native_host)
     # the scale figure (a face-me billboard) never goes inside
     inner = [g for g in scene.groups

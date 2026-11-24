@@ -281,7 +281,7 @@ class LevelsPanel:
             self.selected = None
             self.app.set_document_data(state)
         elif control in ("add", "edit"):
-            from views.chrome_forms import Field, Form, show
+            from ingetrazo_render.chrome_forms import Field, Form, show
             index = int(self.selected) if control == "edit" else None
             level = levels[index] if index is not None else dict(
                 name=_t("Level {n}", n=len(levels) + 1), z=_next_height(levels))

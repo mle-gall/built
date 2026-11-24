@@ -13,7 +13,7 @@ fn notice(
     let py = win.py();
     let vars = PyDict::new(py);
     vars.set_item(field, value)?;
-    py.import("views.chrome_dialogs")?.call_method1(
+    py.import("ingetrazo_render.chrome_dialogs")?.call_method1(
         "warning",
         (
             win,
@@ -182,7 +182,7 @@ fn catalogue_component<'py>(
         Ok(())
     };
     if let Err(err) = read() {
-        py.import("views.chrome_dialogs")?.call_method1(
+        py.import("ingetrazo_render.chrome_dialogs")?.call_method1(
             "critical",
             (
                 win,
@@ -365,7 +365,7 @@ pub(super) fn choose_kept_components(win: &Bound<'_, PyAny>) -> PyResult<()> {
             vars.set_item("p", file)?;
             vars.set_item("e", e.value(py).str()?)?;
             let msg = translated(py, "Could not read {p}: {e}", Some(&vars))?;
-            py.import("views.chrome_dialogs")?.call_method1("warning", (win, title, msg))?;
+            py.import("ingetrazo_render.chrome_dialogs")?.call_method1("warning", (win, title, msg))?;
             return Ok(());
         }
     };

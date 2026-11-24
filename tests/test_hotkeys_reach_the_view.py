@@ -38,7 +38,7 @@ def test_tool_shortcuts_and_tab_reach_the_initial_model(native_host):
 
 
 def test_dismissing_a_chrome_question_returns_arrow_and_letter_keys_to_the_live_tool(native_question_host):
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     host = native_question_host
     line = begin(host, "L")
     line.on_click(ctx(host, V()))

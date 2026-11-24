@@ -10,7 +10,8 @@ from PySide6.QtWidgets import QApplication, QMainWindow
 
 from core import update_check as uc
 from ingetrazo_render import chrome_sheet
-from views import chrome_dialogs, release_check as ud
+from views import release_check as ud
+from ingetrazo_render import chrome_dialogs
 
 
 class Store:

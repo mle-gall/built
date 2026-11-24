@@ -17,7 +17,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from core import units
 from core.scene import Scene
 from formats import igz
-from views import chrome_forms
+from ingetrazo_render import chrome_forms
 from ingetrazo_render import chrome_sheet as cs
 from ingetrazo_render import settings_sheet as ss
 
@@ -444,7 +444,7 @@ def test_place_search_approximate_location_and_capture_use_the_open_draft(win, m
 
 def test_move_origin_confirmation_and_undo_restore_survey_datum(win, monkeypatch):
     from georef.datum import SceneDatum
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     scene = win.viewport.scene
     old = SceneDatum(45, 7, alt=1250, north=30)
     scene.georef = old

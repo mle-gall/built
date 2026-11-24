@@ -8,7 +8,7 @@ from ingetrazo_core import Vec3 as QVector3D, Vec4 as QVector4D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from formats import skp as skp_format
-from views import chrome_dialogs
+from ingetrazo_render import chrome_dialogs
 
 
 @pytest.fixture

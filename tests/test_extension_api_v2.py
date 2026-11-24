@@ -173,7 +173,7 @@ def test_a_suffix_already_claimed_is_refused_not_overwritten(native_window, capl
 def test_the_launcher_hands_an_extension_file_to_the_window(native_host, tmp_path, monkeypatch):
     opened = []
     _app_for(native_host.window).add_file_opener(".xyz", lambda path: opened.append(path) or True)
-    monkeypatch.setattr("views.chrome_dialogs.warning", lambda *args, **kwargs: None)
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.warning", lambda *args, **kwargs: None)
     assert native_host.open_path(tmp_path / "a.xyz")
     assert not native_host.open_path(tmp_path / "b.unknown")
     assert opened == [tmp_path / "a.xyz"]
