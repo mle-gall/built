@@ -82,7 +82,7 @@ cp -a "$WORK/pyi/ingetrazo/." "$APPDIR/usr/bin/"
 cp resources/icons/ingetrazo_256.png \
    "$APPDIR/usr/share/icons/hicolor/256x256/apps/ingetrazo.png"
 cp resources/icons/ingetrazo_256.png "$APPDIR/ingetrazo.png"
-sed 's|^Exec=.*|Exec=built %f|; s|^Icon=.*|Icon=ingetrazo|' \
+sed 's|^Icon=.*|Icon=ingetrazo|' \
     packaging/ingetrazo.desktop > "$APPDIR/usr/share/applications/ingetrazo.desktop"
 cp "$APPDIR/usr/share/applications/ingetrazo.desktop" "$APPDIR/ingetrazo.desktop"
 
