@@ -261,6 +261,26 @@ impl<'a> Tags<'a> {
     }
 }
 
+pub(super) fn from_object(
+    kind: &str,
+    header: &[(i32, String)],
+    vertices: &[Vec<(i32, String)>],
+    tol: f64,
+) -> Option<Bucket> {
+    fn tags(src: &[(i32, String)]) -> Tags<'_> {
+        Tags(src.iter().map(|(k, s)| (*k, s.as_str())).collect())
+    }
+    let head = tags(header);
+    let e = if kind == "POLYLINE" {
+        let vertices = vertices.iter().map(|s| tags(s)).collect::<Vec<_>>();
+        polyface::classic(&head, &vertices)?
+    } else {
+        head.entity(kind)?
+    };
+    let mut b = Bucket::default();
+    e.shape.add(&mut b, tol)?;
+    Some(b)
+}
 pub(super) fn decode(text: &str) -> Option<Document> {
     decode_mode(text, false, false)
 }
@@ -425,7 +445,7 @@ pub(super) fn decode_mode(text: &str, recover: bool, inspect: bool) -> Option<Do
 
 // Model-space circular curves use cubic spans of at most 90 degrees.
 // Subdivide each eighth span to the distance tolerance at its midpoint.
-fn arc(center: DVec3, r: f64, start: f64, span: f64, tol: f64) -> Option<Ring> {
+pub(super) fn arc(center: DVec3, r: f64, start: f64, span: f64, tol: f64) -> Option<Ring> {
     let sections = (span.abs() / FRAC_PI_2).ceil() as usize;
     let step = span / sections as f64;
     let arm = (step * 0.25).tan() * 4. / 3.;

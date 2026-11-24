@@ -18,6 +18,8 @@ use std::{
 mod ascii;
 #[path = "dwg_bridge.rs"]
 mod dwg;
+#[path = "dxf_live.rs"]
+mod live;
 #[path = "dxf_wire.rs"]
 mod wire;
 
@@ -253,62 +255,28 @@ fn prune(points: impl IntoIterator<Item = DVec3>, close: bool) -> Ring {
     }
     out
 }
-fn mesh_entity(e: &Obj<'_>, k: &str) -> PyResult<Vec<Ring>> {
-    let builder = e.py().import("ezdxf.render")?.getattr("MeshBuilder")?;
-    let model = builder.call_method1(
-        if k == "MESH" {
-            "from_mesh"
-        } else {
-            "from_polyface"
-        },
-        (e,),
-    )?;
-    let pts = model
-        .getattr("vertices")?
-        .try_iter()?
-        .map(|p| v(&p?))
-        .collect::<PyResult<Vec<_>>>()?;
-    let mut loops = vec![];
-    for f in model.getattr("faces")?.try_iter()? {
-        let ids = f?.extract::<Vec<usize>>()?;
-        if let Some(p) = ids
-            .iter()
-            .map(|&i| pts.get(i).copied())
-            .collect::<Option<Vec<_>>>()
-        {
-            let ring = prune(p, true);
-            if ring.len() >= 3 {
-                loops.push(ring);
-            }
+fn segments(e: &Obj<'_>, kind: &str, tolerance: f64) -> PyResult<Option<(Ring, bool)>> {
+    if kind == "CIRCLE" || kind == "ARC" {
+        let d = e.getattr("dxf")?;
+        if v(&d.getattr("extrusion")?)? == DVec3::Z {
+            let (start, span) = if kind == "CIRCLE" {
+                (0., -std::f64::consts::TAU)
+            } else {
+                let a = d.getattr("start_angle")?.extract::<f64>()?;
+                let b = d.getattr("end_angle")?.extract::<f64>()?;
+                (a.to_radians(), (b - a).rem_euclid(360.).to_radians())
+            };
+            return Ok(ascii::arc(
+                v(&d.getattr("center")?)?,
+                d.getattr("radius")?.extract()?,
+                start,
+                span,
+                tolerance,
+            )
+            .map(|r| (r, true)));
         }
     }
-    Ok(loops)
-}
-fn segments(e: &Obj<'_>, k: &str, sagitta: f64) -> PyResult<Option<(Ring, bool)>> {
-    let path = e
-        .py()
-        .import("ezdxf.path")?
-        .call_method1("make_path", (e,))?;
-    let pts = path
-        .call_method1("flattening", (sagitta, 8))?
-        .try_iter()?
-        .map(|p| v(&p?))
-        .collect::<PyResult<Vec<_>>>()?;
-    if pts.len() < 2 {
-        return Ok(None);
-    }
-    let curved = match k {
-        "POLYLINE" => e.getattr("vertices")?.try_iter()?.any(|v| {
-            v.and_then(|v| v.getattr("dxf")?.getattr("bulge")?.extract::<f64>())
-                .is_ok_and(|b| b.abs() > 1e-12)
-        }),
-        "LWPOLYLINE" => e
-            .getattr("has_arc")
-            .and_then(|v| v.is_truthy())
-            .unwrap_or(false),
-        _ => true,
-    };
-    Ok(Some((pts, curved)))
+    Ok(live::geometry(e, kind, tolerance)?.runs.pop())
 }
 fn entity(
     b: &mut Bucket,
@@ -323,7 +291,10 @@ fn entity(
             && (e.getattr("is_poly_face_mesh")?.is_truthy()?
                 || e.getattr("is_polygon_mesh")?.is_truthy()?))
     {
-        let part = mesh_entity(e, k).unwrap_or_default();
+        let part = live::geometry(e, k, sagitta)?
+            .parts
+            .pop()
+            .unwrap_or_default();
         if part.is_empty() {
             return Ok(false);
         }
