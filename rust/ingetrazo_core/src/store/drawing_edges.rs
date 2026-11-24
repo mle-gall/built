@@ -151,30 +151,7 @@ impl Store {
 
     fn join_geometry(&self, v: u32, a: u32, b: u32, h: Hypot, compensated: bool) -> (bool, f64) {
         let [p, a, b] = [v, a, b].map(|v| *self.state.vpos.get(v as usize));
-        let ab: [f64; 3] = std::array::from_fn(|i| b[i] - a[i]);
-        let ap: [f64; 3] = std::array::from_fn(|i| p[i] - a[i]);
-        let cross: [f64; 3] = std::array::from_fn(|i| {
-            ap[(i + 1) % 3] * ab[(i + 2) % 3] - ap[(i + 2) % 3] * ab[(i + 1) % 3]
-        });
-        let norm = |x: [f64; 3]| py_sum(x.into_iter().map(|c| c * c), compensated).sqrt();
-        let off = norm(cross) / norm(ab);
-        let size = p
-            .into_iter()
-            .chain(a)
-            .chain(b)
-            .map(f64::abs)
-            .fold(0., f64::max);
-        let d1 = vector(p).sub(vector(a));
-        let d2 = vector(b).sub(vector(p));
-        let angle = if length(d1, h) == 0. || length(d2, h) == 0. {
-            180.
-        } else {
-            normalized(d1, h).dot(normalized(d2, h), h)
-                .clamp(-1., 1.)
-                .acos()
-                .to_degrees()
-        };
-        (off <= (1e-6 + 1e-6 * size).min(1e-4), angle)
+        join_geometry([p,a,b],h,compensated)
     }
     pub fn join_drawing_edges(
         &mut self,
@@ -254,4 +231,31 @@ impl Store {
             joins,
         ))
     }
+}
+
+pub(crate) fn join_geometry([p,a,b]:[[f64;3];3], h:Hypot, compensated:bool)->(bool,f64) {
+        let ab: [f64; 3] = std::array::from_fn(|i| b[i] - a[i]);
+        let ap: [f64; 3] = std::array::from_fn(|i| p[i] - a[i]);
+        let cross: [f64; 3] = std::array::from_fn(|i| {
+            ap[(i + 1) % 3] * ab[(i + 2) % 3] - ap[(i + 2) % 3] * ab[(i + 1) % 3]
+        });
+        let norm = |x: [f64; 3]| py_sum(x.into_iter().map(|c| c * c), compensated).sqrt();
+        let off = norm(cross) / norm(ab);
+        let size = p
+            .into_iter()
+            .chain(a)
+            .chain(b)
+            .map(f64::abs)
+            .fold(0., f64::max);
+        let d1 = vector(p).sub(vector(a));
+        let d2 = vector(b).sub(vector(p));
+        let angle = if length(d1, h) == 0. || length(d2, h) == 0. {
+            180.
+        } else {
+            normalized(d1, h).dot(normalized(d2, h), h)
+                .clamp(-1., 1.)
+                .acos()
+                .to_degrees()
+        };
+        (off <= (1e-6 + 1e-6 * size).min(1e-4), angle)
 }

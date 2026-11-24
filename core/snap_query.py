@@ -2,7 +2,7 @@
 from ingetrazo_core import Vec3 as QVector3D
 import numpy as np
 
-from core import _native
+from ingetrazo_core import SnapQuery
 
 
 def edge_tag(edge):
@@ -16,18 +16,22 @@ def edge_tag(edge):
 
 
 def edge_columns(edges):
-    return (np.array([e.a.toTuple() for e in edges], dtype=float).reshape(-1, 3),
-            np.array([e.b.toTuple() for e in edges], dtype=float).reshape(-1, 3),
-            [edge_tag(e) for e in edges],
-            [getattr(e, 'context', None) is not None for e in edges])
+    starts, ends, tags, grouped = [], [], [], []
+    for edge in edges:
+        starts.append(edge.a.toTuple())
+        ends.append(edge.b.toTuple())
+        tags.append(edge_tag(edge))
+        grouped.append(getattr(edge, 'context', None) is not None)
+    return (np.asarray(starts, dtype=float).reshape(-1, 3),
+            np.asarray(ends, dtype=float).reshape(-1, 3), tags, grouped)
 
 
 def make_query(edges, projector, cursor):
     projection = getattr(projector, 'snap_projection', None)
-    if projection is None or not hasattr(_native.native, 'SnapQuery'):
-        return None
     columns = edges.snap_columns() if hasattr(edges, 'snap_columns') else edge_columns(edges)
-    return _native.native.SnapQuery(*columns, *projection, cursor)
+    if projection is None:
+        return SnapQuery(*columns, None, None, cursor, projector)
+    return SnapQuery(*columns, *projection, cursor)
 
 
 def point_result(query, edges, radius, hidden, *, midpoints=False, quadrants=(),
