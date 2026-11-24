@@ -63,6 +63,7 @@ mod gltf_mesh;
 mod gltf_write;
 mod file_precision;
 mod file_textures;
+mod file_clip;
 mod file_save;
 mod rfa_scene;
 mod file_snapshot;
@@ -183,6 +184,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     view_dxf::register(m)?;
     m.add_function(wrap_pyfunction!(file_model::dae_add_fused, m)?)?;
     file_save::register(m)?;
+    file_clip::register(m)?;
     rfa_scene::register(m)?;
     file_snapshot::register(m)?;
     file_deferred::register(m)?;
