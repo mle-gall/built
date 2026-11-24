@@ -262,3 +262,21 @@ def reference_guide_rows():
 
 def test_locked_reference_guide_callbacks():
     assert digest(reference_guide_rows()) == 'b884c8b739411d3707b1811ddac0a372b2fe4f8bc5154cfffebda56e639f6738'
+
+
+def test_materialised_compound_captures_each_state_once(monkeypatch):
+    from core.history import AddEdgeCommand, History, SnapshotCompound
+    monkeypatch.setenv('INGETRAZO_STORE', '0')
+    scene = Scene()
+    history = History(scene)
+    capture = scene.mesh.capture_state
+    snapshots = []
+    def record():
+        state = capture()
+        snapshots.append(state)
+        return state
+    monkeypatch.setattr(scene.mesh, 'capture_state', record)
+    cmd = SnapshotCompound([AddEdgeCommand(V(0, 0, 0), V(1, 1, 0))], heal=False)
+    history.execute(cmd)
+    assert len(snapshots) == 2
+    assert cmd.before is snapshots[0] and cmd.after is snapshots[1]
