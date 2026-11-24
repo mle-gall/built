@@ -22,12 +22,12 @@ import pytest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 import ingetrazo_core as NATIVE  # noqa: E402
-from tests.sheet_paint_cases import cases, profile_of  # noqa: E402
+from tests.sheet_paint_cases import cases, frame_content, profile_of  # noqa: E402
 
 _app = QApplication.instance() or QApplication([])
 FIXTURES = Path(__file__).parent / "fixtures" / "sheet_paint"
 GROUPS = {g: json.loads(gzip.decompress((FIXTURES / f"goldens_{g}.json.gz").read_bytes()))
-          for g in ("a", "b", "c") if (FIXTURES / f"goldens_{g}.json.gz").exists()}
+          for g in ("a", "b", "c", "d") if (FIXTURES / f"goldens_{g}.json.gz").exists()}
 CASES = [(g, name, make) for g in GROUPS for name, make in cases(g)]
 
 
@@ -57,6 +57,9 @@ def _close(a, b, tol, where):
 
 
 def assert_same_ops(got, want, name):
+    # Where a restore ends a clip: the Rust painter says so, QPainter's
+    # recording cannot.
+    got = [o for o in got if o["op"] != "unclip"]
     assert [o["op"] for o in got] == [o["op"] for o in want], name
     for i, (g, w) in enumerate(zip(got, want)):
         where = f"{name}#{i}:{w['op']}"
@@ -78,6 +81,10 @@ def test_every_case_has_a_golden():
 
 @pytest.mark.parametrize("group,name,make", CASES, ids=[c[1] for c in CASES])
 def test_the_rust_painter_draws_what_python_drew(group, name, make):
+    if name.startswith("frame-"):
+        got = json.loads(NATIVE.sheet_frame_display(make(), frame_content(name)))
+        assert_same_ops(got, GROUPS[group][name], name)
+        return
     profile = profile_of(name, native=True) if name.startswith("profile-") else None
     got = json.loads(NATIVE.sheet_item_display(make(), profile))
     assert_same_ops(got, GROUPS[group][name], name)

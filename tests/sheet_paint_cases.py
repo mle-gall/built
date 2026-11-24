@@ -18,6 +18,8 @@ def cases(group: str = "a"):
         return cases_b()
     if group == "c":
         return cases_c()
+    if group == "d":
+        return cases_d()
     out = []
     for n, segs in ((100.0, 4), (50.0, 5), (250.0, 3), (1000.0, 4), (20.0, 6)):
         out.append((f"scalebar-{n:g}-{segs}", lambda n=n, s=segs: BarraEscala(scale_n=n, segments=s)))
@@ -92,6 +94,83 @@ def cases_c():
                     paper="A3", landscape=False, margin_mm=15.0)]
     for i, kw in enumerate(borders):
         out.append((f"sheet-border-{i}", lambda kw=kw: Composicion(**kw)))
+    return out
+
+
+def _frame_drawing(seed: int):
+    """A vector drawing in frame mm: segments with every line class, and
+    two cut rings (one with a hole)."""
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    segs = rng.uniform(-5.0, 95.0, (40, 4))
+    kinds = np.array([k % 4 for k in range(40)], np.int8)
+    fills = [np.array([[10, 10], [40, 10], [40, 30], [10, 30]], float),
+             np.array([[18, 15], [30, 15], [30, 24], [18, 24]], float),
+             np.array([[60, 40], [80, 45], [70, 70]], float)]
+    return segs, kinds, fills
+
+
+#: What fills each frame case: ``(missing, (segs, kinds, fills) or None,
+#: (w_px, h_px) or None)``.
+FRAME_CONTENT = {}
+
+
+def cases_d():
+    """View frames (paint_frame_mm without layer styles or annotations)."""
+    from core.composition import MarcoVista
+    out = []
+
+    def add(name, content, **kw):
+        FRAME_CONTENT[name] = content
+        base = dict(x_mm=10.0, y_mm=10.0, w_mm=90.0, h_mm=70.0, scale_n=100.0, view_key="std:top",
+                    style="vectorial", show_title=False)
+        base.update(kw)
+        out.append((name, lambda kw=base: MarcoVista(**kw)))
+    add("frame-missing", ("Iso", None, None), view_key="scene:Iso")
+    add("frame-vector", (None, _frame_drawing(1), None))
+    add("frame-vector-hatch", (None, _frame_drawing(2), None), cut_fill="hatch", cut_hatch_mm=1.2,
+        cut_fill_color="#a03020", pen_hatch_mm=0.1)
+    add("frame-vector-nofill", (None, _frame_drawing(3), None), cut_fill="none", pen_cut_mm=0.7,
+        pen_profile_mm=0.4, pen_edge_mm=0.13)
+    add("frame-vector-empty", (None, None, None))
+    seg, _k, fills = _frame_drawing(4)
+    add("frame-vector-nokinds", (None, (seg, None, fills), None))
+    add("frame-image-fit", (None, None, (1063, 827)), style="sombreado")
+    add("frame-image-crop", (None, None, (900, 500)), style="style:Architectural", border=True,
+        border_mm=0.5, border_color="#3a6ea5")
+    add("frame-image-none", (None, None, None), style="sombreado", grid_m=2.0)
+    add("frame-grid", (None, _frame_drawing(5), None), grid_m=5.0, scale_n=200.0)
+    titles = [
+        dict(show_title=True),
+        dict(show_title=True, title_number="3", title_sheet="A-102", title_subtitle="Planta alta",
+             title_align="right", title_mm=5.0),
+        dict(show_title=True, title_number="12", title_align="center", title_pos="above",
+             title_text="Sección {escala}"),
+        dict(show_title=True, title_style="simple", title_subtitle="Cotas en m", title_align="center"),
+        dict(show_title=True, title_style="simple", title_align="left", title_scale=False,
+             view_key="scene:Iso", title_pos="above"),
+        dict(show_title=True, title_style="bar", title_number="5", title_sheet="L-03",
+             title_subtitle="Alzado", title_mm=3.5),
+        dict(show_title=True, title_style="bar", perspective=True, view_key="std:iso"),
+        dict(show_title=True, perspective=True, view_key="std:front", title_text="Fachada {escala}"),
+    ]
+    for i, kw in enumerate(titles):
+        add(f"frame-title-{i}", (None, _frame_drawing(10 + i), None), **kw)
+    for pos in ("under-right", "under-left", "inside-bl", "inside-br"):
+        add(f"frame-scale-{pos}", (None, _frame_drawing(20), None), show_scale=True, scale_pos=pos,
+            scale_mm=3.5, scale_n=50.0)
+    add("frame-scale-text", (None, _frame_drawing(21), None), show_scale=True, scale_text="Escala {n}",
+        scale_n=25.0)
+    return out
+
+
+def frame_content(name: str):
+    """The content of a frame case as sheet_frame_display takes it."""
+    missing, drawing, image = FRAME_CONTENT[name]
+    out = {"missing": missing, "image": image}
+    if drawing is not None:
+        segs, kinds, fills = drawing
+        out.update(segs=segs, kinds=kinds, fills=fills)
     return out
 
 
@@ -219,6 +298,14 @@ def python_ops(item, name: str = ""):
         c.paint_cajetin_mm(p, item)
     elif kind == "Composicion":
         c.paint_sheet_border_mm(p, item)
+    elif kind == "MarcoVista":
+        from PySide6.QtGui import QImage
+        missing, drawing, image = FRAME_CONTENT[name]
+        segs = kinds = fills = None
+        if drawing is not None:
+            segs, kinds, fills = drawing
+        img = QImage(image[0], image[1], QImage.Format_RGB32) if image is not None else None
+        c.paint_frame_mm(p, item, img, hlr=segs, kinds=kinds, fills=fills, missing=missing)
     elif kind == "PerfilTerreno":
         profile, path_name, message = profile_of(name)
         c.paint_perfil_mm(p, item, profile, path_name, message)

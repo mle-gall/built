@@ -231,7 +231,19 @@ pub fn paint(painter: &egui::Painter, ctx: &egui::Context, pictures: &mut Pictur
             "clip" => {
                 if let Some(ring) = op["rings"].as_array().and_then(|r| r.first()) {
                     clip = Some(place.pts(ring));
+                } else if op["rect"].is_array() {
+                    clip = Some(place.pts(&op["rect"]));
                 }
+            }
+            "unclip" => {
+                // The end of a clip's scope: the outer one again, or none.
+                clip = if let Some(ring) = op["rings"].as_array().and_then(|r| r.first()) {
+                    Some(place.pts(ring))
+                } else if op["rect"].is_array() {
+                    Some(place.pts(&op["rect"]))
+                } else {
+                    None
+                };
             }
             "text" => {
                 let r = place.pts(&op["rect"]);

@@ -180,6 +180,8 @@ struct State {
     pen: Pen,
     brush: Option<Rgba>,
     font: Font,
+    /// The clip in force (a `Prim::Clip`), for `restore` to end it.
+    clip: Option<Prim>,
 }
 
 /// One primitive, in the painter's base frame.
@@ -193,6 +195,10 @@ pub enum Prim {
     Text { rect: [[f64; 2]; 4], flags: i64, text: String, size: f64, bold: bool, italic: bool, underline: bool, color: Rgba },
     Image { rect: [[f64; 2]; 4], source: String },
     Clip { rect: Option<[[f64; 2]; 4]>, rings: Vec<Vec<[f64; 2]>> },
+    /// A `restore` that ends the clips since its `save`: none in force
+    /// (`clip` None) or the outer one again. QPainter records no such
+    /// thing; the page and the PDF writer need the clip's scope.
+    Unclip { clip: Option<Box<Prim>> },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -212,7 +218,7 @@ pub struct Painter {
 impl Default for Painter {
     fn default() -> Self {
         Painter {
-            st: State { xf: Xf::default(), pen: Pen::new(Rgba(0, 0, 0, 255), 1.0), brush: None, font: Font::default() },
+            st: State { xf: Xf::default(), pen: Pen::new(Rgba(0, 0, 0, 255), 1.0), brush: None, font: Font::default(), clip: None },
             stack: Vec::new(),
             ops: Vec::new(),
         }
@@ -237,6 +243,10 @@ impl Painter {
     }
     pub fn restore(&mut self) {
         if let Some(s) = self.stack.pop() {
+            if s.clip != self.st.clip {
+                let clip = s.clip.clone().map(Box::new);
+                self.ops.push(Op { prim: Prim::Unclip { clip }, pen: None, brush: None });
+            }
             self.st = s;
         }
     }
@@ -326,11 +336,15 @@ impl Painter {
     }
     pub fn clip_rect(&mut self, r: [f64; 4]) {
         let rect = self.rect_pts(r);
-        self.ops.push(Op { prim: Prim::Clip { rect: Some(rect), rings: Vec::new() }, pen: None, brush: None });
+        let prim = Prim::Clip { rect: Some(rect), rings: Vec::new() };
+        self.st.clip = Some(prim.clone());
+        self.ops.push(Op { prim, pen: None, brush: None });
     }
     pub fn clip_path(&mut self, rings: &[Vec<[f64; 2]>]) {
         let rings = self.rings(rings);
-        self.ops.push(Op { prim: Prim::Clip { rect: None, rings }, pen: None, brush: None });
+        let prim = Prim::Clip { rect: None, rings };
+        self.st.clip = Some(prim.clone());
+        self.ops.push(Op { prim, pen: None, brush: None });
     }
     pub fn text(&mut self, r: [f64; 4], flags: i64, text: &str) {
         let f = &self.st.font;
@@ -402,6 +416,11 @@ impl Op {
                 Some(r) => json!({"op": "clip", "rect": r}),
                 None => json!({"op": "clip", "rings": rings}),
             },
+            Prim::Unclip { clip } => match clip.as_deref() {
+                Some(Prim::Clip { rect: Some(r), .. }) => json!({"op": "unclip", "rect": r}),
+                Some(Prim::Clip { rings, .. }) => json!({"op": "unclip", "rings": rings}),
+                _ => json!({"op": "unclip"}),
+            },
         };
         v["pen"] = pen_json(&self.pen);
         v["brush"] = self.brush.map(|b| Value::String(b.hex())).unwrap_or(Value::Null);
@@ -431,7 +450,7 @@ pub fn bounds(ops: &[Op]) -> Option<[f64; 4]> {
                 pts.iter().for_each(|p| take(*p))
             }
             Prim::Path { rings } => rings.iter().flatten().for_each(|p| take(*p)),
-            Prim::Clip { .. } => {}
+            Prim::Clip { .. } | Prim::Unclip { .. } => {}
         }
     }
     b[0].is_finite().then_some(b)

@@ -341,7 +341,7 @@ class Workspace:
     def _choices(self) -> dict:
         """The lists the inspector offers (ingetrazo_render sheet_inspector.rs)."""
         from core.style import BUILTIN_STYLES, user_styles
-        from views.composer import _STD_VIEWS
+        from core.composition import STD_VIEWS as _STD_VIEWS
         from core.i18n import tr
         scene = self.composer._scene()
         views = [["__current__", tr("Current view")]]
