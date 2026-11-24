@@ -43,6 +43,8 @@ struct Block {
 #[derive(Debug, Default)]
 pub(super) struct Document {
     pub(super) units: i64,
+    pub(super) kinds: Vec<String>,
+    pub(super) layouts: Vec<String>,
     entities: Vec<Entity>,
     blocks: BTreeMap<String, Block>,
 }
@@ -260,6 +262,10 @@ impl<'a> Tags<'a> {
 }
 
 pub(super) fn decode(text: &str) -> Option<Document> {
+    decode_mode(text, false, false)
+}
+
+pub(super) fn decode_mode(text: &str, recover: bool, inspect: bool) -> Option<Document> {
     let mut doc = Document::default();
     let mut lines = text.lines();
     let mut kind = None;
@@ -278,7 +284,18 @@ pub(super) fn decode(text: &str) -> Option<Document> {
             return None;
         }
         let pair = match lines.next() {
-            Some(c) => Some((c.trim().parse::<i32>().ok()?, lines.next()?)),
+            Some(c) => {
+                let c = c.trim_start_matches('\u{feff}').trim();
+                if recover && c.is_empty() {
+                    continue;
+                }
+                let code = c.parse::<i32>().ok()?;
+                let value = lines.next()?;
+                if code == 999 {
+                    continue;
+                }
+                Some((code, value))
+            }
             None => None,
         };
         if let Some((code, value)) = pair {
@@ -313,6 +330,11 @@ pub(super) fn decode(text: &str) -> Option<Document> {
             }
             Some("ENDSEC") if !section.is_empty() && block.is_none() => section = "",
             Some("EOF") if section.is_empty() && !eof => eof = true,
+            Some("LAYOUT") if section == "OBJECTS" && inspect => {
+                if let Some(name) = tags.name(1) {
+                    doc.layouts.push(name);
+                }
+            }
             Some("BLOCK_RECORD")
                 if section == "TABLES"
                     && tags
@@ -368,8 +390,12 @@ pub(super) fn decode(text: &str) -> Option<Document> {
                     if section == "BLOCKS" {
                         doc.blocks.get_mut(block.as_ref()?)?.entities.push(entity);
                     } else if paper == 0 {
-                        if modern_owners && owner != model_owner {
+                        if !recover && modern_owners && owner != model_owner {
                             return None;
+                        }
+                        if inspect {
+                            doc.kinds
+                                .push(if k == "SEQEND" { "POLYLINE" } else { k }.to_owned());
                         }
                         doc.entities.push(entity);
                     }
@@ -387,7 +413,11 @@ pub(super) fn decode(text: &str) -> Option<Document> {
             _ => return None,
         }
     }
-    if !eof || !seen.contains("ENTITIES") || (modern_owners && model_owner.is_none()) {
+    let completed = eof || (recover && section.is_empty() && block.is_none() && poly.is_none());
+    if !completed
+        || !seen.contains("ENTITIES")
+        || (!recover && modern_owners && model_owner.is_none())
+    {
         return None;
     }
     Some(doc)
@@ -803,6 +833,17 @@ mod tests {
             }
         }
         assert!(bytes.is_empty());
+    }
+    #[test]
+    fn missing_eof_matches_the_recovered_reference_line() {
+        let input = include_str!("../../../tests/fixtures/dxf/recovery.dxf");
+        assert!(decode(input).is_none());
+        let doc = decode_mode(input, true, true).unwrap();
+        assert_eq!(doc.kinds, ["LINE"]);
+        assert_eq!(
+            doc.drawing(0.01).unwrap().layers["Survey"].runs[0].0,
+            [DVec3::new(1.25, 2., 0.), DVec3::new(3.5, 4., 0.)]
+        );
     }
     #[test]
     fn unsupported_curves_leave_the_complete_drawing_to_the_compatibility_reader() {
