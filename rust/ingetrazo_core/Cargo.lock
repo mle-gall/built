@@ -67,6 +67,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "built_python_bindings"
+version = "0.1.0"
+dependencies = [
+ "pyo3",
+]
+
+[[package]]
 name = "bytemuck"
 version = "1.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -266,6 +273,7 @@ version = "0.1.0"
 dependencies = [
  "ab_glyph",
  "block2",
+ "built_python_bindings",
  "core-foundation",
  "core-foundation-sys",
  "crc32fast",
