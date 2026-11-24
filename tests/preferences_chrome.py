@@ -6,7 +6,7 @@ import pytest
 from PySide6.QtCore import QSettings
 
 from ingetrazo_render.chrome_sheet import Ctx
-from views.settings_sheet import Env, SettingsSheet
+from ingetrazo_render.settings_sheet import Env, SettingsSheet
 
 
 @pytest.fixture

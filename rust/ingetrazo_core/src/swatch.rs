@@ -126,6 +126,20 @@ pub fn edit_swatch(
     if !pending && live.is_none() {
         return Err(PyValueError::new_err("This material no longer exists"));
     }
+    if field == "finish" {
+        let finish = if raw == "auto" {
+            None
+        } else if py.import("core.finish")?.getattr("FINISHES")?.contains(raw)? {
+            Some(raw)
+        } else {
+            return Err(PyValueError::new_err("Unknown render finish"));
+        };
+        if live.getattr("finish")?.extract::<Option<String>>()?.as_deref() != finish {
+            let step = py.import("ingetrazo_core")?.call_method1("SetMaterialFinishCommand", (name, finish))?;
+            history.call_method1("execute", (step,))?;
+        }
+        return Ok(name.to_owned());
+    }
     let base = if !live.is_none() {
         live.clone()
     } else if !active.is_none() {

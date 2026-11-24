@@ -2383,7 +2383,7 @@
  "Remove the faces left lying over their own subdivisions after drawing or erasing.": "ລຶບໜ້າພື້ນຜິວທີ່ທັບຊ້ອນເທິງສ່ວນແບ່ງຍ່ອຍຂອງຕົວມັນເອງຫຼັງຈາກການແຕ້ມ ຫຼື ລຶບ.",
  "Resize the selection by dragging the grips of its box; the corners keep its proportions.": "ປັບຂະໜາດສ່ວນທີ່ເລືອກໂດຍການລາກຈຸດຈັບຂອງກອບ; ຈຸດມຸມຈະຮັກສາສັດສ່ວນໄວ້.",
  "Save the document under another name or in another folder.": "ບັນທຶກເອກະສານດ້ວຍຊື່ອື່ນ ຫຼື ບັນທຶກລົງໃນໂຟນເດີອື່ນ.",
- "Save the document — the model and every sheet — to its .igz file.": "ບັນທຶກເອກະສານ — ທັງໂມເດວ ແລະ ທຸກໜ້າແບບ — ລົງໃນໄຟລ໌ .igz ຂອງມັນ.",
+ "Save the document — the model and every sheet — to its file.": "ບັນທຶກເອກະສານ — ທັງໂມເດວ ແລະ ທຸກໜ້າແບບ — ລົງໃນໄຟລ໌ ຂອງມັນ.",
  "Save the model as IFC for BIM software, with what the BIM panel tagged.": "ບັນທຶກໂມເດວເປັນໄຟລ໌ IFC ສຳລັບຊອບແວ BIM, ພ້ອມຂໍ້ມູນທີ່ລະບຸໃນແຜງ BIM.",
  "Save the model as Wavefront OBJ with its materials.": "ບັນທຶກໂມເດວເປັນ Wavefront OBJ ພ້ອມທັງວັດສະດຸ.",
  "Save the model as an STL mesh for 3D printing.": "ບັນທຶກໂມເດວເປັນຕາໜ່າງ STL ສຳລັບການພິມ 3 ມິຕິ.",

@@ -91,7 +91,7 @@ def test_hide_rest_toggles_back_to_the_previous_mode(native_host):
 
 
 def test_fade_slider_applies_immediately_and_follows_the_viewport(native_host):
-    from views.settings_sheet import Env, SettingsSheet
+    from ingetrazo_render.settings_sheet import Env, SettingsSheet
     win = native_host.window
     env = Env(win)
     def slider():

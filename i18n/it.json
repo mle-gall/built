@@ -2398,7 +2398,7 @@
  "Resize the selection by dragging the grips of its box; the corners keep its proportions.": "Ridimensiona la selezione trascinando le maniglie del suo riquadro; gli angoli mantengono le proporzioni.",
  "Run the last command again, on what is selected now.": "Esegue di nuovo l'ultimo comando, su ciò che è selezionato ora.",
  "Save the document under another name or in another folder.": "Salva il documento con un altro nome o in un'altra cartella.",
- "Save the document — the model and every sheet — to its .igz file.": "Salva il documento — il modello e ogni tavola — nel suo file .igz.",
+ "Save the document — the model and every sheet — to its file.": "Salva il documento — il modello e ogni tavola — nel suo file.",
  "Save the model as COLLADA, which most 3D programs open; the texture images go beside the file.": "Salva il modello come COLLADA, che la maggior parte dei programmi 3D apre; le immagini delle texture vanno accanto al file.",
  "Save the model as IFC for BIM software, with what the BIM panel tagged.": "Salva il modello come IFC per i programmi BIM, con ciò che è stato etichettato nel pannello BIM.",
  "Save the model as Wavefront OBJ with its materials.": "Salva il modello come Wavefront OBJ con i suoi materiali.",

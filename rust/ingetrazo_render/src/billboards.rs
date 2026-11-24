@@ -2,10 +2,26 @@
 //! stands and which way it faces, measured once per scene edit, and its
 //! world matrix turned about the vertical toward the eye on each camera
 //! move. The sprite mapping that fits a figure's image to its outline.
-use numpy::{IntoPyArray, PyArray3, PyReadonlyArray2, PyReadonlyArray3};
+use numpy::{
+    ndarray::Dimension, Element, IntoPyArray, PyArray, PyArray3, PyArrayMethods,
+    PyReadonlyArray, PyReadonlyArray2, PyReadonlyArray3, PyUntypedArrayMethods,
+};
 use pyo3::{exceptions::PyValueError, prelude::*};
 
 type V3 = [f64; 3];
+
+/// ndarray requires an aligned pointer even for an empty view. NumPy marks
+/// empty structured-array fields aligned irrespective of their data pointer.
+fn aligned<'py, T: Element, D: Dimension>(
+    array: PyReadonlyArray<'py, T, D>,
+) -> PyResult<PyReadonlyArray<'py, T, D>> {
+    if array.is_aligned() && array.data().is_aligned() {
+        return Ok(array);
+    }
+    let copy = PyArray::<T, D>::zeros(array.py(), array.dims(), false);
+    array.copy_to(&copy)?;
+    Ok(copy.readonly())
+}
 
 fn sub(a: V3, b: V3) -> V3 {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
@@ -59,7 +75,13 @@ pub fn billboard_stances(
     ranges: Vec<(usize, usize)>,
     worlds: PyReadonlyArray3<'_, f32>,
 ) -> PyResult<Vec<Option<(V3, [f64; 2])>>> {
+    // No figures: an empty scene's arrays are never viewed.
+    if ranges.is_empty() {
+        return Ok(Vec::new());
+    }
+    let positions = aligned(positions)?;
     let pos = positions.as_array();
+    let worlds = aligned(worlds)?;
     let worlds = worlds.as_array();
     if pos.ncols() != 3 || worlds.shape()[1..] != [4, 4] || worlds.shape()[0] != ranges.len() {
         return Err(PyValueError::new_err("expected (N, 3) positions and one 4 x 4 world per range"));
@@ -97,6 +119,10 @@ pub fn billboard_worlds<'py>(
     target: V3,
     perspective: bool,
 ) -> PyResult<Bound<'py, PyArray3<f32>>> {
+    if stances.is_empty() {
+        return Ok(PyArray3::zeros(py, [0, 4, 4], false));
+    }
+    let base = aligned(base)?;
     let base = base.as_array();
     if base.shape()[1..] != [4, 4] || base.shape()[0] != stances.len() || mesh.len() != stances.len() {
         return Err(PyValueError::new_err("expected one 4 x 4 base matrix and mesh flag per stance"));
@@ -136,6 +162,10 @@ pub fn billboard_worlds<'py>(
 /// `u = p · (ux, uy, uz) + u0`; None for a flat or empty outline.
 #[pyfunction]
 pub fn sprite_mapping(positions: PyReadonlyArray2<'_, f64>, corners: Vec<usize>, first_ring: usize) -> PyResult<Option<[f64; 8]>> {
+    if corners.is_empty() {
+        return Ok(None);
+    }
+    let positions = aligned(positions)?;
     let pos = positions.as_array();
     if pos.ncols() != 3 || corners.iter().any(|&c| c >= pos.nrows()) {
         return Err(PyValueError::new_err("expected (N, 3) positions and corners inside them"));

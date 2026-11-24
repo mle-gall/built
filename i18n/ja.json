@@ -2369,7 +2369,7 @@
  "Remove the faces left lying over their own subdivisions after drawing or erasing.": "作図や消去後に、分割した面の上に残った重複面を削除します。",
  "Resize the selection by dragging the grips of its box; the corners keep its proportions.": "枠のハンドルをドラッグして選択範囲を拡大縮小します。角のハンドルは縦横比を保ちます。",
  "Save the document under another name or in another folder.": "別の名前またはフォルダーにドキュメントを保存します。",
- "Save the document — the model and every sheet — to its .igz file.": "モデルとすべてのシートを .igz ファイルに保存します。",
+ "Save the document — the model and every sheet — to its file.": "モデルとすべてのシートをファイルに保存します。",
  "Save the model as IFC for BIM software, with what the BIM panel tagged.": "BIM パネルでタグを付けたモデルを、BIM ソフト用の IFC として保存します。",
  "Save the model as Wavefront OBJ with its materials.": "モデルをマテリアルとともに Wavefront OBJ として保存します。",
  "Save the model as an STL mesh for 3D printing.": "モデルを 3D プリント用の STL メッシュとして保存します。",

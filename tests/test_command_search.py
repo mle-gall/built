@@ -295,7 +295,7 @@ def test_sheet_binding_shares_the_keyboard_table_and_follows_the_active_document
     from ingetrazo_render import KeyEvent
     from tests.scene_controls import chrome
     from views import wgpu_sheets
-    from views.settings_sheet import SettingsSheet
+    from ingetrazo_render.settings_sheet import SettingsSheet
 
     sheet = SettingsSheet("keyboard")
     sheet._win = win

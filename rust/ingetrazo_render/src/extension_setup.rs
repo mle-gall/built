@@ -62,9 +62,17 @@ pub fn setup_extension_menus(win: &Bound<'_, PyAny>, plugins: &Bound<'_, PyList>
             details.set_item("path", plug.getattr("path")?.str()?)?;
             details.set_item("error", error.to_string())?;
             win.getattr("_extension_load_errors")?
-                .set_item(owner, details)?;
-            error.print(py);
+                .set_item(&owner, details)?;
+            log_failure(py, &format!("failed to set up plugin {owner}"), &error);
         }
     }
     Ok(())
+}
+
+pub(crate) fn log_failure(py: Python<'_>, message: &str, error: &PyErr) {
+    // PyErr_PrintEx interprets SystemExit as a request to exit the process.
+    error.display(py);
+    let info = (error.get_type(py), error.value(py), error.traceback(py));
+    let _ = py.import("core.extensions")
+        .and_then(|backend| backend.call_method1("note_failure", (message, info)));
 }

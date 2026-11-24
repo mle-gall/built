@@ -688,7 +688,7 @@ class WindowDocumentCommands:
         return active_view_builder(self)
 
     def open_preferences(self, shortcut_of=None, page=None):
-        from views import settings_sheet
+        from ingetrazo_render import settings_sheet
         settings_sheet.show(self, page=page, shortcut_of=shortcut_of)
 
     def _on_units(self):
