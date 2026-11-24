@@ -28,6 +28,8 @@ pub struct FollowMe {
 #[derive(Default)]
 struct Drag {
     face: String,
+    profile: Vec<Vec<P3>>,
+    surfaces: Vec<Vec<Vec<P3>>>,
     press: [f64; 2],
     last: [f64; 2],
     // Mesh vertex keys, followed by their world coordinates.
@@ -104,7 +106,6 @@ impl FollowMe {
             return Reply::ignored();
         };
         let (pts, closed) = d.path();
-        host.call("sweep_clear_preview", Json::Null);
         if pts.len() < 2 {
             host.call("sweep_message", json!("touch"));
             return Reply::redraw();
@@ -144,7 +145,6 @@ impl Tool for FollowMe {
                     self.hovered = None;
                 }
                 host.call("sweep_highlight", Json::Null);
-                host.call("sweep_clear_preview", Json::Null);
             }
             ToolEvent::Hover(p) => {
                 let Some(d) = &mut self.drag else {
@@ -187,7 +187,7 @@ impl Tool for FollowMe {
                     }
                 }
                 let (pts, closed) = d.path();
-                host.call("sweep_preview", json!([d.face, pts, closed]));
+                d.surfaces = crate::store::sweep::preview_surfaces(&d.profile, &pts, closed);
             }
             ToolEvent::Click(p) => {
                 if self.drag.is_some() {
@@ -201,7 +201,10 @@ impl Tool for FollowMe {
                         .unwrap_or_default();
                     return self.commit(host, face, orient(pts.clone(), *closed, c, n), *closed);
                 }
+                let profile = serde_json::from_value(host.call("sweep_profile", json!(face)))
+                    .unwrap_or_default();
                 self.drag = Some(Drag {
+                    profile,
                     face,
                     press: p.px,
                     last: p.px,
@@ -223,6 +226,13 @@ impl Tool for FollowMe {
             _ => return Reply::ignored(),
         }
         Reply::redraw()
+    }
+    fn preview_surfaces(&self) -> std::borrow::Cow<'_, [Vec<Vec<P3>>]> {
+        std::borrow::Cow::Borrowed(
+            self.drag
+                .as_ref()
+                .map_or(&[][..], |d| d.surfaces.as_slice()),
+        )
     }
     fn preview(&self) -> Preview {
         let mut p = Preview::default();

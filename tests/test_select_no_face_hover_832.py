@@ -39,9 +39,9 @@ def _hover_over(entity, monkeypatch):
     _draw_rect(scene, vp.history, [V(0, 0), V(4, 0), V(4, 4), V(0, 4)], [])
     target = entity(scene)
     tool = SelectTool()
-    from tools import select_host as select
-    kind = "face" if select.pick_kind(target) == "face" else "visible_edge"
-    monkeypatch.setattr(select, "QUERIES", {kind: lambda _vp, _x, _y: [(target, 0.0)]})
+    from core.mesh import Face
+    method = "pick_face" if isinstance(target, Face) else "pick_visible_edge"
+    monkeypatch.setattr(vp, method, lambda _x, _y: target, raising=False)
     tool.on_hover(ToolContext(viewport=vp, world=QVector3D(),
                               screen=QPointF(10, 10),
                               modifiers=Qt.NoModifier, snap=None))

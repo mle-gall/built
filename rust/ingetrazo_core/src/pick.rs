@@ -139,32 +139,42 @@ pub fn box_mesh(pos: &[P], edges: &[[i64; 2]], corners: &[i64], ring_sizes: &[i6
         let total: i64 = rings.iter().sum();
         let span = &corners[corner..corner + total as usize];
         corner += total as usize;
-        if span.is_empty() || !span.iter().all(|&c| at(c).2) {
-            continue;
-        }
-        let hit = if !crossing {
-            span.iter().all(|&c| { let q = at(c); inside(rect, q.0, q.1) })
-        } else {
-            let mut start = 0usize;
-            let mut any = false;
-            'rings: for &size in rings {
-                let size = size as usize;
-                for i in 0..size {
-                    let (a, b) = (at(span[start + i]), at(span[start + (i + 1) % size]));
-                    if seg_rect((a.0, a.1), (b.0, b.1), true, rect, true) {
-                        any = true;
-                        break 'rings;
-                    }
-                }
-                start += size;
-            }
-            any
-        };
-        if hit {
+        let mut start = 0;
+        let points = rings.iter().map(|&size| {
+            let ring = &span[start..start + size as usize];
+            start += size as usize;
+            ring.iter().map(|&i| at(i))
+        });
+        if face_in_box(points, rect, crossing) {
             out_f.push(f as i64);
         }
     }
     (out_e, out_f)
+}
+
+/// A hidden corner invalidates a face even if an earlier ring crossed the box.
+pub(crate) fn face_in_box(
+    rings: impl IntoIterator<Item = impl Iterator<Item = (f64, f64, bool)>>,
+    rect: &Rect,
+    crossing: bool,
+) -> bool {
+    let mut hit = false;
+    for mut ring in rings {
+        let Some(first) = ring.next() else {continue};
+        let mut prev = first;
+        for p in ring.chain(std::iter::once(first)) {
+            if !p.2 {return false}
+            if crossing {
+                hit |= seg_rect((prev.0, prev.1), (p.0, p.1), true, rect, true);
+            } else if inside(rect, p.0, p.1) {
+                hit = true;
+            } else {
+                return false;
+            }
+            prev = p;
+        }
+    }
+    hit
 }
 
 /// A point placed by a packed row matrix (row vector times the stored 4×4,
@@ -278,9 +288,14 @@ pub fn box_rows(world: &[[f64; 16]], code: &[i64], owner: &[i64], drawn: &[bool]
 /// The segments within `radius` pixels of `(x, y)`, nearest first:
 /// `(index, pixels, t along the segment)`; ends behind the eye skip it.
 pub fn nearest_segments(a: &[P], b: &[P], proj: &Projector, x: f64, y: f64, radius: f64) -> Vec<(usize, f64, f64)> {
+    nearest_projected(a.iter().zip(b).map(|(&a,&b)| (proj.px(a),proj.px(b))), x, y, radius)
+}
+
+pub(crate) fn nearest_projected(
+    segments: impl Iterator<Item=((f64,f64,bool),(f64,f64,bool))>, x:f64, y:f64, radius:f64
+) -> Vec<(usize, f64, f64)> {
     let mut out = Vec::new();
-    for i in 0..a.len() {
-        let (pa, pb) = (proj.px(a[i]), proj.px(b[i]));
+    for (i,(pa,pb)) in segments.enumerate() {
         if !pa.2 || !pb.2 {
             continue;
         }
@@ -494,5 +509,67 @@ mod tests {
         let b = [[1.0, 0.0, 0.0], [1.0, 0.5, 0.0]];
         let found = nearest_segments(&a, &b, &ortho(), 50.0, 30.0, 30.0);
         assert_eq!(found.iter().map(|f| f.0).collect::<Vec<_>>(), vec![1, 0]);
+    }
+}
+
+/// Cached triangles of the visible faces, in document order. A ray returns
+/// only the winning ordinal across the bridge, including while faces move.
+#[pyclass(module = "ingetrazo_core")]
+pub struct FacePicker {
+    triangles: Vec<[P; 3]>,
+    faces: Vec<(i128, usize, std::ops::Range<usize>)>,
+}
+
+impl FacePicker {
+    fn empty() -> Self { Self { triangles: Vec::new(), faces: Vec::new() } }
+    fn append(&mut self, key:i128, ordinal:usize, triangles: impl IntoIterator<Item=[P;3]>) {
+        let start = self.triangles.len();
+        self.triangles.extend(triangles.into_iter().map(|[a,b,c]| [a,sub(b,a),sub(c,a)]));
+        self.faces.push((key,ordinal,start..self.triangles.len()));
+    }
+    pub(crate) fn from_store(store:&crate::store::Store, hypot:crate::store::geometry::Hypot) -> Self {
+        use crate::store::keys::Kind;
+        let mut picker = Self::empty();
+        for (i,slot) in store.live_slots(Kind::Face).into_iter().enumerate() {
+            picker.append(store.key(Kind::Face,slot) as i128, i, store.face_triangles(slot,None,hypot));
+        }
+        picker
+    }
+}
+
+#[pymethods]
+impl FacePicker {
+    #[new]
+    fn new(faces:&Bound<'_,PyAny>) -> PyResult<Self> {
+        let mut picker = Self::empty();
+        for (i, face) in faces.try_iter()?.enumerate() {
+            let face = face?;
+            if face.getattr_opt("hidden")?.map(|v|v.is_truthy()).transpose()?.unwrap_or(false) {
+                continue;
+            }
+            let mut triangles = Vec::new();
+            for tri in face.call_method0("triangulate")?.try_iter()? {
+                let tri = tri?;
+                let [a,b,c] = [0,1,2].map(|i| crate::math::xyz(&tri.get_item(i)?).map(|v|v.to_array()));
+                triangles.push([a?, b?, c?]);
+            }
+            picker.append(face.getattr("key")?.extract()?,i,triangles);
+        }
+        Ok(picker)
+    }
+    fn first(&self, py:Python<'_>, origin:P, direction:P, excluded:std::collections::HashSet<i128>) -> Option<usize> {
+        py.detach(|| {
+            let mut best = None;
+            let mut distance = f64::INFINITY;
+            for (key,ordinal,range) in &self.faces {
+                if excluded.contains(key) {continue;}
+                for &[a,e1,e2] in &self.triangles[range.clone()] {
+                    if let Some(t) = ray_triangle(origin,direction,a,e1,e2) {
+                        if t<distance {distance=t; best=Some(*ordinal);}
+                    }
+                }
+            }
+            best
+        })
     }
 }

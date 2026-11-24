@@ -218,32 +218,14 @@ class ProtractorBase(Tool):
 
     # ---- Screen metrics / snapping ------------------------------------------
     def _update_screen_metrics(self, ctx: ToolContext) -> None:
-        """Fixed screen-size disc + the distance rule: near the disc
-        the cursor snaps to the 15° ticks, farther out it measures free at
-        0.1° precision."""
-        w2p = getattr(ctx.viewport, "_world_to_pixel", None)
-        # NOT ``start or hover``: a zero QVector3D (the origin!) is falsy.
-        centre = (self.start_point if self.start_point is not None
-                  else self.hover_point)
-        if w2p is None or centre is None:
+        from ingetrazo_core import protractor_metrics
+        centre = self.start_point if self.start_point is not None else self.hover_point
+        if centre is None or not hasattr(ctx.viewport, "_world_to_pixel"):
             return
-        u, v = plane_axes(self._axis())
-        p0 = w2p(centre)
-        p1 = w2p(centre + u)
-        p2 = w2p(centre + v)
-        if p0 is None or p1 is None or p2 is None:
-            return
-        # The larger of the two in-plane scales: along an axis that points
-        # into the screen, one unit is a few pixels and the radius exploded.
-        px_per_unit = max(math.hypot(p1[0] - p0[0], p1[1] - p0[1]),
-                          math.hypot(p2[0] - p0[0], p2[1] - p0[1]))
-        if px_per_unit > 1e-6:
-            self._disc_r = DISC_PX / px_per_unit
-        if self.start_point is not None:
-            dist = math.hypot(ctx.screen.x() - p0[0], ctx.screen.y() - p0[1])
-            self._snap_ticks = dist <= DISC_PX * 1.25
-        else:
-            self._snap_ticks = False
+        metrics = protractor_metrics(ctx.viewport, centre, self._basis(),
+                                     (ctx.screen.x(), ctx.screen.y()), self.start_point is not None, self._disc_r)
+        if metrics is not None:
+            self._disc_r, self._snap_ticks = metrics
 
     # ---- Angles -------------------------------------------------------------
     def _basis(self):
@@ -286,29 +268,14 @@ class ProtractorBase(Tool):
         return QVector3D(*ToolMachine.protractor_direction(self._basis(), arm, deg))
 
     # ---- Disc rendering -----------------------------------------------------
-    def _protractor_disc(self, centre: QVector3D, axis=None):
-        """The fixed-screen-size disc with tick marks every 15° (long at 90°),
-        rotated so its zero sits on the base arm once that is set. ``axis``
-        borrows a different one — what the live tilt preview draws."""
-        u, v = plane_axes(self._axis() if axis is None else axis)
-        r = self._disc_r
-        base = 0.0
-        if self.start_point is not None and self.ref_point is not None:
-            a = self.ref_point - self.start_point
-            base = math.atan2(QVector3D.dotProduct(a, v),
-                              QVector3D.dotProduct(a, u))
-
-        def rim(t: float, k: float = 1.0):
-            return centre + (u * math.cos(t) + v * math.sin(t)) * (r * k)
-
-        n = 48
-        pts = [rim(base + 2 * math.pi * k / n) for k in range(n)]
-        segments = [(pts[k], pts[(k + 1) % n]) for k in range(n)]
-        for k in range(int(360 / TICK_DEG)):
-            t = base + math.radians(k * TICK_DEG)
-            inner = 0.75 if k * TICK_DEG % 90 == 0 else 0.86
-            segments.append((rim(t, inner), rim(t)))
-        return segments
+    def _disc_lines(self, sweep=None):
+        centre = self.start_point if self.start_point is not None else self.hover_point
+        if centre is None:
+            return []
+        tilt = self._axis_drag_live if self._axis_drag_armed else None
+        basis = plane_axes(tilt if tilt is not None else self._axis())
+        return self._machine.cursor_lines(centre, [p.toTuple() for p in basis], self._disc_r,
+                                          self.hover_point.toTuple() if self.hover_point is not None else None, sweep)
 
     def _reset_protractor(self) -> None:
         self.start_point = None
@@ -435,22 +402,7 @@ class ProtractorHost(ProtractorBase):
         viewport.flash_status(tr("Angle: {a}").format(a=fmt_angle_deg(degrees, signed=True)), 4000)
 
     def rubber_band_lines(self):
-        centre = (self.start_point if self.start_point is not None
-                  else self.hover_point)
-        if centre is None:
-            return []
-        # Dragging from the vertex to tilt the instrument: draw the disc it
-        # WOULD land on, so the hand sees the gesture take (issue #25). The
-        # committed axis is untouched — the release decides, from the very
-        # same ``_axis_drag_live`` this draws.
-        tilt = self._axis_drag_live if self._axis_drag_armed else None
-        segments = list(self._protractor_disc(centre, tilt))
-        if self.start_point is None or self.hover_point is None:
-            return segments
-        segments.append((self.start_point, self.hover_point))
-        if self.ref_point is not None:
-            segments.append((self.start_point, self.ref_point))
-        return segments
+        return self._disc_lines()
 
     def guide_preview_lines(self):
         """The angled guide the next click leaves, through the vertex."""

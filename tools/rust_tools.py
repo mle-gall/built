@@ -128,46 +128,52 @@ class SelectTool(RustTool):
         return self._send(viewport, {"type": "key", "key": name, "mods": _mods(modifiers)})["consumed"]
 
 
-class _MachinePlaneLock:
-    """``tools.base.PlaneLock``'s state on a planar machine: the machine
-    owns it (``Tool::plane_lock``), the mixin's glue reads it here."""
-
-    def __init__(self, machine):
-        self._m = machine
-
-    def __getattr__(self, name):
-        if name in ("plane_lock", "plane_ref", "hover_plane"):
-            return self._m.lock_get(name)
-        raise AttributeError(name)
-
-    def __setattr__(self, name, value):
-        if name in ("plane_lock", "plane_ref", "hover_plane"):
-            self._m.lock_set(name, value)
-        else:
-            object.__setattr__(self, name, value)
-
-    def toggle(self, axis):
-        self._m.lock_toggle(axis)
-
-    def clear(self):
-        self._m.lock_clear()
-
-    def locked(self, point, axes=None):
-        return self._m.lock_locked(point, axes)
-
-    def own_plane(self, work_plane, axes=None):
-        return self._m.lock_own_plane(work_plane, axes)
-
-    def snapped(self, plane, points, names_point, axes=None):
-        return self._m.lock_snapped(plane, points, names_point, axes)
+from tools.base import AxisMagnet, PlaneLock
 
 
-def _planar_tool():
-    from tools.base import PlaneLock
-    return PlaneLock
+class _PlanarMachine(PlaneLock, RustTool):
+    """Common event, projection and lock bindings of the planar drawing tools."""
+    def __init__(self):
+        RustTool.__init__(self)
+        self._viewport = None
+
+    @property
+    def _plane_state(self):
+        return self._machine
+
+    start_point = _point_property("start_point")
+    hover_point = _point_property("hover_point")
+
+    work_plane = LineTool.work_plane
+
+    def _frame(self, viewport):
+        from core import axes
+        from core.snap import POINT_SNAP_KINDS
+        kind = getattr(self, "snap_kind", None)
+        self._send(viewport, {"type": "frame", "axes": axes.frame(),
+                              "names_point": None if kind is None else kind in POINT_SNAP_KINDS})
+
+    def _send_framed(self, viewport, event):
+        self._frame(viewport)
+        return self._send(viewport, event)
+
+    def _cursor_preview(self):
+        vp, point = self._viewport, self.hover_point
+        if vp is None or point is None:
+            return []
+        from core.axes import plane_axes
+        _, normal = self.preview_plane(vp, point)
+        u, v = plane_axes(normal)
+        scale = self.plane_preview_scale(vp, point, u, v)
+        if scale is None:
+            return []
+        return self._machine.cursor_lines(point, (u.toTuple(), v.toTuple()), self.PREVIEW_PX * scale)
+
+    def rubber_band_lines(self):
+        return self._cursor_preview() if self.start_point is None else super().rubber_band_lines()
 
 
-class RectangleTool(_planar_tool(), RustTool):
+class RectangleTool(_PlanarMachine):
     """Rectangle (``rust/ingetrazo_core/src/tools/rectangle.rs``). The
     plane lock is the machine's; ``PlaneLock`` keeps the viewport glue
     (status, redraws, what is under the cursor, the cursor preview)."""
@@ -182,19 +188,6 @@ class RectangleTool(_planar_tool(), RustTool):
 
     _KEYS = None
 
-    def __init__(self):
-        RustTool.__init__(self)
-        self._viewport = None
-
-    @property
-    def _plane_state(self):
-        state = self.__dict__.get("_plane_proxy")
-        if state is None:
-            state = self.__dict__["_plane_proxy"] = _MachinePlaneLock(self._machine)
-        return state
-
-    start_point = _point_property("start_point")
-    hover_point = _point_property("hover_point")
 
     @property
     def chain_first_point(self):
@@ -203,15 +196,6 @@ class RectangleTool(_planar_tool(), RustTool):
     @chain_first_point.setter
     def chain_first_point(self, _value):
         pass
-
-    @property
-    def work_plane(self):
-        plane = self._state("work_plane")
-        return None if plane is None else (Vec3(*plane[0]), Vec3(*plane[1]))
-
-    @work_plane.setter
-    def work_plane(self, plane):
-        self._machine.set("work_plane", None if plane is None else (_tuple(plane[0]), _tuple(plane[1])))
 
     @property
     def _from_center(self):
@@ -243,17 +227,6 @@ class RectangleTool(_planar_tool(), RustTool):
         if self.start_point is None:
             return []
         return [self.start_point, self.hover_point]
-
-    def _frame(self, viewport):
-        from core import axes
-        from core.snap import POINT_SNAP_KINDS
-        kind = getattr(self, "snap_kind", None)
-        self._send(viewport, {"type": "frame", "axes": axes.frame(),
-                              "names_point": None if kind is None else kind in POINT_SNAP_KINDS})
-
-    def _send_framed(self, viewport, event):
-        self._frame(viewport)
-        return self._send(viewport, event)
 
     def on_activate(self, viewport) -> None:
         self._send_framed(viewport, {"type": "activate"})
@@ -316,13 +289,6 @@ class RectangleTool(_planar_tool(), RustTool):
             self._set_from_center(viewport, self._from_center)
         return reply["consumed"]
 
-    def rubber_band_lines(self):
-        if self.hover_point is None:
-            return []
-        if self.start_point is None:
-            return self._cursor_preview()
-        return RustTool.rubber_band_lines(self)
-
     def value_label(self):
         """``(text, point)``: the floating ``width × height`` readout, with
         "(Cuadrado)" when the sides are equal."""
@@ -333,26 +299,6 @@ class RectangleTool(_planar_tool(), RustTool):
         du, dv, square, mid = label
         text = fmt_pair(du, dv) + ("  (Cuadrado)" if square else "")
         return text, Vec3(*mid)
-
-    def _cursor_preview(self):
-        """The little square on the cursor before the first corner, on the
-        plane the rectangle would take (view glue: it needs the pixel scale)."""
-        vp = self._viewport
-        if vp is None:
-            return []
-        from core.axes import plane_axes
-        point, normal = self.preview_plane(vp, self.hover_point)
-        u, v = plane_axes(normal)
-        scale = self.plane_preview_scale(vp, self.hover_point, u, v)
-        if scale is None:
-            return []
-        h = 0.5 * self.PREVIEW_PX * scale
-        c = self.hover_point
-        if self._from_center:
-            pts = [c + u * h + v * h, c - u * h + v * h, c - u * h - v * h, c + u * h - v * h]
-        else:
-            pts = [c, c + u * (2 * h), c + (u + v) * (2 * h), c + v * (2 * h)]
-        return [(pts[i], pts[(i + 1) % 4]) for i in range(4)]
 
     def _flag(name):
         def get(self):
@@ -399,12 +345,7 @@ class RectangleTool(_planar_tool(), RustTool):
         return tr(template, **args) if args else tr(template)
 
 
-def _radial_bases():
-    from tools.base import AxisMagnet, PlaneLock
-    return AxisMagnet, PlaneLock
-
-
-class _RadialTool(*_radial_bases(), RustTool):
+class _RadialTool(AxisMagnet, _PlanarMachine):
     """Circle and Polygon (``rust/ingetrazo_core/src/tools/circle.rs``): a
     centre, then a radius. The machine owns the plane lock, the side count,
     the guide mode and the retype window; this keeps the viewport glue (the
@@ -415,28 +356,6 @@ class _RadialTool(*_radial_bases(), RustTool):
     _guide_capable = False
     wireframe_color = None
 
-    def __init__(self):
-        RustTool.__init__(self)
-        self._viewport = None
-
-    @property
-    def _plane_state(self):
-        state = self.__dict__.get("_plane_proxy")
-        if state is None:
-            state = self.__dict__["_plane_proxy"] = _MachinePlaneLock(self._machine)
-        return state
-
-    start_point = _point_property("start_point")
-    hover_point = _point_property("hover_point")
-
-    @property
-    def work_plane(self):
-        plane = self._state("work_plane")
-        return None if plane is None else (Vec3(*plane[0]), Vec3(*plane[1]))
-
-    @work_plane.setter
-    def work_plane(self, plane):
-        self._machine.set("work_plane", None if plane is None else (_tuple(plane[0]), _tuple(plane[1])))
 
     @property
     def sides(self):
@@ -458,17 +377,6 @@ class _RadialTool(*_radial_bases(), RustTool):
     def _last(self):
         """The retype token of the shape just drawn, or None."""
         return self._state("last_token")
-
-    def _frame(self, viewport):
-        from core import axes
-        from core.snap import POINT_SNAP_KINDS
-        kind = getattr(self, "snap_kind", None)
-        self._send(viewport, {"type": "frame", "axes": axes.frame(),
-                              "names_point": None if kind is None else kind in POINT_SNAP_KINDS})
-
-    def _send_framed(self, viewport, event):
-        self._frame(viewport)
-        return self._send(viewport, event)
 
     # ---- the value box ------------------------------------------------------
     def vcb_caption(self) -> str:
@@ -576,13 +484,6 @@ class _RadialTool(*_radial_bases(), RustTool):
         return tr("Ctrl = guide")   # short: it rides the line of a long hint
 
     # ---- preview ------------------------------------------------------------
-    def rubber_band_lines(self):
-        if self.hover_point is None:
-            return []
-        if self.start_point is None:
-            return self._cursor_preview()
-        return RustTool.rubber_band_lines(self)
-
     def guide_preview_lines(self):
         """The dashed rim of the guide circle the next click leaves."""
         return [(Vec3(*a), Vec3(*b)) for a, b in self._state("guide_ring") or ()]
@@ -597,25 +498,6 @@ class _RadialTool(*_radial_bases(), RustTool):
         from core.units import fmt_len
         return ("R " + fmt_len(r) + "  (" + tr("{n} sides", n=self.sides) + ")",
                 self.hover_point)
-
-    def _cursor_preview(self):
-        """The ring on the cursor before the centre, at a fixed screen size
-        on the plane it would take (view glue: it needs the pixel scale)."""
-        import math
-        vp = self._viewport
-        if vp is None:
-            return []
-        from core.axes import plane_axes
-        point, normal = self.preview_plane(vp, self.hover_point)
-        u, v = plane_axes(normal)
-        scale = self.plane_preview_scale(vp, self.hover_point, u, v)
-        if scale is None:
-            return []
-        r = self.PREVIEW_PX * scale
-        n = max(int(self.sides), 3)
-        pts = [self.hover_point + u * (r * math.cos(2 * math.pi * i / n))
-               + v * (r * math.sin(2 * math.pi * i / n)) for i in range(n)]
-        return [(pts[i], pts[(i + 1) % n]) for i in range(n)]
 
     # ---- what the snap engine and the tests read ------------------------------
     def plane_points(self):
@@ -657,7 +539,7 @@ class PolygonTool(_RadialTool):
     shortcut = None  # Polygon has no default; G = Make Component
 
 
-class RotatedRectangleTool(*_radial_bases(), RustTool):
+class RotatedRectangleTool(AxisMagnet, _PlanarMachine):
     """Rotated Rectangle (``rust/ingetrazo_core/src/tools/rotated_rectangle.rs``).
     The machine owns the three clicks, the protractors' rules and the plane
     lock; this sends what only the view knows (the face under the first
@@ -671,29 +553,7 @@ class RotatedRectangleTool(*_radial_bases(), RustTool):
     plane_lock_after_the_first_point = False
     wireframe_color = None
 
-    def __init__(self):
-        RustTool.__init__(self)
-        self._viewport = None
-
-    @property
-    def _plane_state(self):
-        state = self.__dict__.get("_plane_proxy")
-        if state is None:
-            state = self.__dict__["_plane_proxy"] = _MachinePlaneLock(self._machine)
-        return state
-
-    start_point = _point_property("start_point")
     base_point = _point_property("base_point")
-    hover_point = _point_property("hover_point")
-
-    @property
-    def work_plane(self):
-        plane = self._state("work_plane")
-        return None if plane is None else (Vec3(*plane[0]), Vec3(*plane[1]))
-
-    @work_plane.setter
-    def work_plane(self, plane):
-        self._machine.set("work_plane", None if plane is None else (_tuple(plane[0]), _tuple(plane[1])))
 
     @property
     def angle(self):
@@ -875,35 +735,13 @@ def _degrees(value) -> float:
 COLOR_FILLET = (0.85, 0.30, 0.80)
 
 
-class _ArcBase(*_radial_bases(), RustTool):
+class _ArcBase(AxisMagnet, _PlanarMachine):
     """The arcs (``rust/ingetrazo_core/src/tools/arc.rs``): the machine owns
     the clicks, the plane lock, the segment count and the commit; this keeps
     the viewport glue (status, colours, readouts)."""
 
     wireframe_color = None
 
-    def __init__(self):
-        RustTool.__init__(self)
-        self._viewport = None
-
-    @property
-    def _plane_state(self):
-        state = self.__dict__.get("_plane_proxy")
-        if state is None:
-            state = self.__dict__["_plane_proxy"] = _MachinePlaneLock(self._machine)
-        return state
-
-    start_point = _point_property("start_point")
-    hover_point = _point_property("hover_point")
-
-    @property
-    def work_plane(self):
-        plane = self._state("work_plane")
-        return None if plane is None else (Vec3(*plane[0]), Vec3(*plane[1]))
-
-    @work_plane.setter
-    def work_plane(self, plane):
-        self._machine.set("work_plane", None if plane is None else (_tuple(plane[0]), _tuple(plane[1])))
 
     @property
     def segments(self):
@@ -912,17 +750,6 @@ class _ArcBase(*_radial_bases(), RustTool):
     @segments.setter
     def segments(self, n):
         self._machine.set("segments", None if n is None else int(n))
-
-    def _frame(self, viewport):
-        from core import axes
-        from core.snap import POINT_SNAP_KINDS
-        kind = getattr(self, "snap_kind", None)
-        self._send(viewport, {"type": "frame", "axes": axes.frame(),
-                              "names_point": None if kind is None else kind in POINT_SNAP_KINDS})
-
-    def _send_framed(self, viewport, event):
-        self._frame(viewport)
-        return self._send(viewport, event)
 
     def _after(self, viewport):
         if self.start_point is None:

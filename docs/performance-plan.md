@@ -2925,18 +2925,18 @@ Native denotes routed, not exhaustive parity acceptance.
 | line | LineTool | native | Rust state machine |
 | freehand | FreehandTool | native | Rust state machine |
 | rectangle | RectangleTool | native | Rust state machine, rubber_band_lines |
-| rotated_rect | RotatedRectangleTool | native | Rust state machine |
+| rotated_rect | RotatedRectangleTool | native | Rust state machine, rubber_band_lines |
 | circle | CircleTool | native | Rust state machine, rubber_band_lines |
 | polygon | PolygonTool | native | Rust state machine, rubber_band_lines |
 | arc | ArcTool | native | Rust state machine, rubber_band_lines |
-| arc3 | ThreePointArcTool | native | Rust state machine |
-| center_arc | CenterArcTool | native | Rust state machine |
-| pie | PieTool | native | Rust state machine |
+| arc3 | ThreePointArcTool | native | Rust state machine, rubber_band_lines |
+| center_arc | CenterArcTool | native | Rust state machine, rubber_band_lines |
+| pie | PieTool | native | Rust state machine, rubber_band_lines |
 | pushpull | PushPullTool | native | Rust state machine, _pixel_to_ray, _world_to_pixel, pick_face_any, rubber_band_lines |
 | offset | OffsetTool | native | Rust state machine, _pixel_to_ray, _world_to_pixel, pick_face |
-| move | MoveTool | native | Rust state machine, _world_to_pixel, pick_edge, pick_face, rubber_band_lines, set_groups_preview_offset |
-| rotate | RotateTool | native | Rust state machine, pick_edge, pick_face, rubber_band_lines, set_groups_preview_matrix |
-| scale | ScaleTool | native | Rust state machine, _pixel_to_ray, _world_to_pixel, pick_edge, pick_face, scale_box_state (screen handles) |
+| move | MoveTool | native | Rust state machine, _world_to_pixel, rubber_band_lines, set_groups_preview_offset |
+| rotate | RotateTool | native | Rust state machine, rubber_band_lines, set_groups_preview_matrix |
+| scale | ScaleTool | native | Rust state machine, _pixel_to_ray, begin_groups_preview, end_groups_preview, pick_edge, pick_face, scale_box_state (screen handles), set_groups_preview_matrix |
 | flip | FlipTool | native | Rust state machine, _world_to_pixel |
 | followme | FollowMeTool | native | Rust state machine, pick_edge, pick_face |
 | fillet | FilletTool | native | Rust state machine, rubber_band_lines |

@@ -73,11 +73,7 @@ pub fn py_to_json(v: &Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
 }
 
 fn p3(v: &Bound<'_, PyAny>) -> PyResult<P3> {
-    if let Ok(t) = v.extract::<(f64, f64, f64)>() {
-        return Ok([t.0, t.1, t.2]);
-    }
-    let t: (f64, f64, f64) = v.call_method0("toTuple")?.extract()?;
-    Ok([t.0, t.1, t.2])
+    crate::math::xyz(v).map(|point| point.to_array())
 }
 
 fn opt<'py>(d: &Bound<'py, PyDict>, key: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
@@ -389,6 +385,10 @@ impl ToolHost for PyHost<'_, '_> {
     }
 }
 
+fn preview_vectors(preview: super::Preview) -> Vec<(crate::math::Vec3, crate::math::Vec3)> {
+    preview.lines.into_iter().map(|line| (super::plane::vec(line.a.into()), super::plane::vec(line.b.into()))).collect()
+}
+
 fn reply<'py>(py: Python<'py>, r: &Reply) -> PyResult<Bound<'py, PyDict>> {
     let d = PyDict::new(py);
     d.set_item("consumed", r.consumed)?;
@@ -400,6 +400,7 @@ fn reply<'py>(py: Python<'py>, r: &Reply) -> PyResult<Bound<'py, PyDict>> {
 #[pyclass(unsendable, module = "ingetrazo_core")]
 pub struct ToolMachine {
     tool: Box<dyn Tool>,
+    fields: std::cell::OnceCell<serde_json::Value>,
     /// Moves on every event and set: what the adapter caches state by.
     #[pyo3(get)]
     serial: u64,
@@ -416,7 +417,7 @@ impl ToolMachine {
     #[new]
     fn new(kind: &str) -> PyResult<Self> {
         new_tool(kind)
-            .map(|tool| ToolMachine { tool, serial: 0 })
+            .map(|tool| ToolMachine { tool, serial: 0, fields: Default::default() })
             .ok_or_else(|| PyValueError::new_err(format!("no Rust tool {kind:?}")))
     }
 
@@ -477,6 +478,7 @@ impl ToolMachine {
     fn event<'py>(&mut self, py: Python<'py>, ev: &Bound<'py, PyDict>, host: &Bound<'py, PyAny>)
         -> PyResult<Bound<'py, PyDict>> {
         let ev = event(ev)?;
+        self.fields.take();
         self.serial += 1;
         let mut h = PyHost { obj: host, err: None };
         let r = self.tool.event(&ev, &mut h);
@@ -490,6 +492,31 @@ impl ToolMachine {
 
     // ---- The plane lock of a planar machine (tools.base.PlaneLock's
     // state, one owner): the same calls as `ingetrazo_core.PlaneLock`.
+
+    #[getter]
+    fn plane_lock<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.lock_get(py, "plane_lock")
+    }
+    #[setter]
+    fn set_plane_lock(&mut self, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        self.lock_set("plane_lock", value)
+    }
+    #[getter]
+    fn plane_ref<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.lock_get(py, "plane_ref")
+    }
+    #[setter]
+    fn set_plane_ref(&mut self, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        self.lock_set("plane_ref", value)
+    }
+    #[getter]
+    fn hover_plane<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.lock_get(py, "hover_plane")
+    }
+    #[setter]
+    fn set_hover_plane(&mut self, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        self.lock_set("hover_plane", value)
+    }
 
     fn lock_get<'py>(&mut self, py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
         use super::plane::{vec, AXIS};
@@ -511,6 +538,7 @@ impl ToolMachine {
     fn lock_set(&mut self, name: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
         use super::plane::{plane_of, AXIS};
         use crate::math::xyz;
+        self.fields.take();
         self.serial += 1;
         let l = self.lock()?;
         match name {
@@ -532,21 +560,23 @@ impl ToolMachine {
         Ok(())
     }
 
-    fn lock_toggle(&mut self, axis: &str) -> PyResult<()> {
+    fn toggle(&mut self, axis: &str) -> PyResult<()> {
+        self.fields.take();
         self.serial += 1;
         let k = super::plane::AXIS.iter().position(|x| *x == axis).ok_or_else(|| PyValueError::new_err("x, y or z"))?;
         self.lock()?.toggle(k);
         Ok(())
     }
 
-    fn lock_clear(&mut self) -> PyResult<()> {
+    fn clear(&mut self) -> PyResult<()> {
+        self.fields.take();
         self.serial += 1;
         self.lock()?.clear();
         Ok(())
     }
 
     #[pyo3(signature = (point, axes=None))]
-    fn lock_locked(&mut self, point: &Bound<'_, PyAny>, axes: Option<&Bound<'_, PyAny>>)
+    fn locked(&mut self, point: &Bound<'_, PyAny>, axes: Option<&Bound<'_, PyAny>>)
         -> PyResult<Option<(crate::math::Vec3, crate::math::Vec3)>> {
         use super::plane::{axes_of, vec};
         let (p, a) = (crate::math::xyz(point)?, axes_of(axes)?);
@@ -554,7 +584,7 @@ impl ToolMachine {
     }
 
     #[pyo3(signature = (work_plane, axes=None))]
-    fn lock_own_plane(&mut self, work_plane: &Bound<'_, PyAny>, axes: Option<&Bound<'_, PyAny>>)
+    fn own_plane(&mut self, work_plane: &Bound<'_, PyAny>, axes: Option<&Bound<'_, PyAny>>)
         -> PyResult<(crate::math::Vec3, crate::math::Vec3)> {
         use super::plane::{axes_of, plane_of, vec};
         let (w, a) = (plane_of(work_plane)?, axes_of(axes)?);
@@ -563,7 +593,7 @@ impl ToolMachine {
     }
 
     #[pyo3(signature = (plane, points, names_point, axes=None))]
-    fn lock_snapped(&mut self, plane: &Bound<'_, PyAny>, points: Vec<Bound<'_, PyAny>>, names_point: Option<bool>,
+    fn snapped(&mut self, plane: &Bound<'_, PyAny>, points: Vec<Bound<'_, PyAny>>, names_point: Option<bool>,
                     axes: Option<&Bound<'_, PyAny>>) -> PyResult<Option<(crate::math::Vec3, crate::math::Vec3)>> {
         use super::plane::{axes_of, plane_of, vec};
         let Some(plane) = plane_of(plane)? else { return Ok(None) };
@@ -579,6 +609,7 @@ impl ToolMachine {
 
     /// Set a `state()` field; False when the tool has no such field.
     fn set(&mut self, key: &str, value: &Bound<'_, PyAny>) -> PyResult<bool> {
+        self.fields.take();
         self.serial += 1;
         Ok(self.tool.set(key, &py_to_json(value)?))
     }
@@ -588,7 +619,23 @@ impl ToolMachine {
     /// One `state()` field (None when absent): what the inference reads
     /// on every pointer move, without building the rest.
     fn get<'py>(&self, py: Python<'py>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-        json_to_py(py, self.tool.state().get(key).unwrap_or(&serde_json::Value::Null))
+        json_to_py(py, self.fields.get_or_init(|| self.tool.state()).get(key).unwrap_or(&serde_json::Value::Null))
+    }
+
+    fn preview_surfaces(&self) -> Vec<Vec<Vec<crate::math::Vec3>>> {
+        self.tool.preview_surfaces().iter().map(|face| face.iter().map(|ring|
+            ring.iter().map(|point| super::plane::vec((*point).into())).collect()).collect()).collect()
+    }
+
+    fn preview_lines(&self) -> Vec<(crate::math::Vec3,crate::math::Vec3)> {
+        preview_vectors(self.tool.preview())
+    }
+
+    #[pyo3(signature=(centre, axes, radius, hover=None, sweep=None))]
+    fn cursor_lines(&self, centre: &Bound<'_, PyAny>, axes: [P3;2], radius: f64,
+                    hover: Option<P3>, sweep: Option<f64>) -> PyResult<Vec<(crate::math::Vec3,crate::math::Vec3)>> {
+        let plane = super::preview::CursorPlane { at: crate::math::xyz(centre)?, axes: axes.map(Into::into), radius, sweep };
+        Ok(preview_vectors(self.tool.cursor_preview(&plane, hover)))
     }
 
     /// `{lines: [(a, b, style)], faces: [[p]], box: ((x0, y0, x1, y1), crossing) | None,

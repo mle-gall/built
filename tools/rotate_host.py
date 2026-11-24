@@ -3,7 +3,6 @@
 """Host picking, protractor inference and resident-row preview for Rotate."""
 from __future__ import annotations
 
-import math
 
 from PySide6.QtCore import Qt
 from ingetrazo_core import Vec3 as QVector3D
@@ -12,15 +11,13 @@ from core.group import Group
 from core.history import RotateGuidesCommand, rotation_matrix
 
 from core.i18n import tr
-from core.mesh import Edge, Face
-from core.axes import plane_axes  # drawing axes (#44)
+from tools.move_host import CopyPreview
 from core.guide import is_guide
-from tools.base import ToolContext
 
 from tools.protractor_host import ProtractorBase
 
 
-class RotateHost(ProtractorBase):
+class RotateHost(CopyPreview, ProtractorBase):
     accepts_angle_ratio = True  # VCB "3:12" (rise:run) arrives as degrees
     accepts_array = True  # VCB "3x" / "/3" after a copy: a POLAR array
 
@@ -230,47 +227,14 @@ class RotateHost(ProtractorBase):
 
     # ---- Visual preview -----------------------------------------------------
     def rubber_band_lines(self):
-        centre = (self.start_point if self.start_point is not None
-                  else self.hover_point)
-        if centre is None:
-            return []
-        # The disc the drag from the vertex WOULD land on, drawn as the hand
-        # moves instead of only at the release (issue #25).
-        tilt = self._axis_drag_live if self._axis_drag_armed else None
-        segments = list(self._protractor_disc(centre, tilt))
-        if self.start_point is None or self.hover_point is None:
-            return segments
-        segments.append((self.start_point, self.hover_point))
-        if self.ref_point is not None:
-            segments.append((self.start_point, self.ref_point))
-            deg = self._commit_deg(self.hover_point)
-            if deg is not None:
-                segments.extend(self._arc_segments(deg))
-                if self._copy and self._groups_ghost_due:
-                    from tools.move_host import groups_ghost_segments
-                    self._groups_ghost_due = False
-                    self._base_segments[:0] = groups_ghost_segments(
-                        self._groups)
-                if self._copy and self._base_segments:
-                    # Copy mode: the original stays put — preview the rotated
-                    # COPY as a wireframe at the cursor angle.
-                    m = rotation_matrix(self.start_point, self._axis(), deg)
-                    segments.extend(
-                        (m.map(a), m.map(b)) for a, b in self._base_segments)
+        angle = (self._commit_deg(self.hover_point) if self.start_point is not None
+                 and self.ref_point is not None and self.hover_point is not None else None)
+        segments = self._disc_lines(angle)
+        if self._copy and angle is not None:
+            self._fill_groups_ghost()
+            matrix = rotation_matrix(self.start_point, self._axis(), angle)
+            segments.extend(self._base_segments.lines(matrix=matrix.data()))
         return segments
-
-    def _arc_segments(self, deg: float):
-        """Protractor arc between the two arms, at the reference radius."""
-        u, v = plane_axes(self._axis())
-        a = self.ref_point - self.start_point
-        r = a.length() * 0.75
-        a0 = math.atan2(QVector3D.dotProduct(a, v), QVector3D.dotProduct(a, u))
-        steps = max(2, int(abs(deg) // 10) + 1)
-        pts = []
-        for k in range(steps + 1):
-            t = a0 + math.radians(deg) * k / steps
-            pts.append(self.start_point + (u * math.cos(t) + v * math.sin(t)) * r)
-        return list(zip(pts, pts[1:]))
 
     def value_label(self):
         if self.ref_point is None or self.hover_point is None:
@@ -285,38 +249,6 @@ class RotateHost(ProtractorBase):
         return "Angle"
 
     # ---- Internals ----------------------------------------------------------
-    def _gather_copy_entities(self, ctx: ToolContext) -> None:
-        """The faces/edges copy mode duplicates, and the wireframe segments
-        the copy preview swings (group wireframe, or the loose selection)."""
-        viewport = ctx.viewport
-        self._sel_faces, self._sel_edges, self._base_segments = [], [], []
-        self._groups_ghost_due = True     # asked of only when copying (#1092)
-        cam = getattr(viewport, "camera", None)
-        reach = max(float(getattr(cam, "distance", 10.0)), 1e-3)
-        from tools.move_host import guide_ghost_segments
-        self._base_segments.extend(guide_ghost_segments(self._moved_guides, reach))
-        sel = list(viewport.scene.selection)
-        if not sel and not self._groups:
-            # Nothing selected and no group hover-picked: the click grabbed
-            # the loose entity under the cursor (mirror of gather_targets).
-            edge = viewport.pick_edge(ctx.screen.x(), ctx.screen.y())
-            if edge is not None:
-                sel = [edge]
-            else:
-                face = viewport.pick_face(ctx.screen.x(), ctx.screen.y())
-                if face is not None:
-                    sel = [face]
-        self._sel_faces = [f for f in sel if isinstance(f, Face)]
-        self._sel_edges = [e for e in sel if isinstance(e, Edge)]
-        for f in self._sel_faces:
-            for lp in (list(f.vertices), *[list(h) for h in f.holes]):
-                n = len(lp)
-                for i in range(n):
-                    self._base_segments.append(
-                        (QVector3D(lp[i]), QVector3D(lp[(i + 1) % n])))
-        for e in self._sel_edges:
-            self._base_segments.append((QVector3D(e.a), QVector3D(e.b)))
-
     def _snapshot(self) -> dict:
         """The rotating set exactly as it was before the preview touched it.
 

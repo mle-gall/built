@@ -2,7 +2,7 @@
 """Offset viewport bindings. The machine owns the source geometry and gesture."""
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
-from ingetrazo_core import Vec3 as QVector3D
+from ingetrazo_core import Vec3 as QVector3D, ordered_edge_path as _run_from_edges, outline_normal as _newell
 
 from core.i18n import tr
 from core.mesh import Edge
@@ -236,62 +236,15 @@ class OffsetHost:
         finally:
             painter.restore()
 
-def _newell(points: list):
-    """The plane normal of a polyline by Newell's method (open runs
-    included: the closing edge only adds a term), or ``None`` when the
-    points are in line."""
-    n = len(points)
-    if n < 3:
-        return None
-    nx = ny = nz = 0.0
-    for i in range(n):
-        p, q = points[i], points[(i + 1) % n]
-        nx += (p.y() - q.y()) * (p.z() + q.z())
-        ny += (p.z() - q.z()) * (p.x() + q.x())
-        nz += (p.x() - q.x()) * (p.y() + q.y())
-    normal = QVector3D(nx, ny, nz)
-    span = max((p - points[0]).length() for p in points) or 1.0
-    if normal.length() < 1e-6 * span * span:
-        return None
-    return normal.normalized()
-
-
-def _run_from_edges(edges: list):
-    """Order a set of edges into one run: ``(points, closed)``. ``None``
-    unless every vertex joins at most two of them and they form a single
-    path or cycle."""
-    nbrs: dict = {}
-    for e in edges:
-        for v in (e.v0, e.v1):
-            nbrs.setdefault(v.key, (v, []))[1].append(e)
-    if any(len(es) > 2 for _v, es in nbrs.values()):
-        return None
-    ends = [v for v, es in nbrs.values() if len(es) == 1]
-    if len(ends) not in (0, 2):
-        return None
-    closed = not ends
-    start = ends[0] if ends else edges[0].v0
-    points = [QVector3D(start.position)]
-    seen: set = set()
-    v = start
-    while True:
-        nxt = next((e for e in nbrs[v.key][1] if e.key not in seen), None)
-        if nxt is None:
-            break
-        seen.add(nxt.key)
-        v = nxt.other(v)
-        if closed and v == start:
-            break
-        points.append(QVector3D(v.position))
-    if len(seen) != len(edges):
-        return None                           # two separate runs
-    return points, closed
-
-
 def _run_from_edge(edge: Edge):
     """The run ``edge`` belongs to, walked both ways through vertices
     where exactly two edges meet (a corner of a polyline); a junction or a
     free end stops the walk. ``(points, closed)``."""
+    mesh = getattr(edge, "_m", None)
+    store = mesh.__dict__.get("_store") if mesh is not None else None
+    if store is not None:
+        return store.edge_run(edge.key)
+
     def walk(v, e):
         out = []
         while len(v.edges) == 2:

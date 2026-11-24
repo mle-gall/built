@@ -10,7 +10,6 @@ The clipboard is kept — paste again for another copy.
 from __future__ import annotations
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.geometry import Face as PreviewFace
 from core.group import translated_attrs
 from core.texture import face_uv_axes
 
@@ -50,7 +49,7 @@ class PasteHost(Tool):
     def _clip(self, clip):
         self._clipboard = clip
         self._machine.set("clipboard", None if not clip else {
-            "ref": clip.get("ref", (0., 0., 0.)), "rings": [ring for loop, holes, *_ in clip["faces"] for ring in (loop, *holes)],
+            "ref": clip.get("ref", (0., 0., 0.)), "faces": [(loop, *holes) for loop, holes, *_ in clip["faces"]],
             "edges": [(a, b) for a, b, *_ in clip["edges"]]})
 
     def on_activate(self, vp):
@@ -117,13 +116,8 @@ class PasteHost(Tool):
     def preview_faces(self):
         if self._clip is None:
             return []
-        off = self._offset
-        faces = []
-        entries = [(loop, holes, rest[0] if rest else None)
-                   for loop, holes, *rest in self._clip["faces"]]
-        for loop, holes, attrs in entries:
-            face = PreviewFace([p + off for p in loop],
-                               [[p + off for p in h] for h in holes])
-            face.attrs = _preview_attrs(attrs, off, face)
-            faces.append(face)
+        faces = super().preview_faces()
+        for face, (_, _, *attrs) in zip(faces, self._clip["faces"]):
+            if attrs:
+                face.attrs = _preview_attrs(attrs[0], self._offset, face)
         return faces

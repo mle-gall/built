@@ -12,6 +12,7 @@ click does. The queries here move to native picking next
 from __future__ import annotations
 
 
+from ingetrazo_core import box_records, box_placements, segment_overlaps_box as _seg_rect_overlap
 from views import prompts as _prompts
 
 from core.dimension import Dimension
@@ -116,19 +117,11 @@ def _box_loose_arrays(viewport, rect, crossing):
     from core.store_mesh import StoreMesh
     if mesh.__class__ is not StoreMesh:
         return None
-    import numpy as np
-    from ingetrazo_core import box_mesh_arrays
     try:
-        a = mesh.__dict__["_store"].arrays()
         mvp, w, h = camera_px()
-    except Exception:  # noqa: BLE001 — a stub viewport: the walk answers
+    except (AttributeError, TypeError):
         return None
-    rows = lambda key, n, t: np.ascontiguousarray(a[key], dtype=t).reshape(-1, n) if n else \
-        np.ascontiguousarray(a[key], dtype=t).reshape(-1)
-    emask, fmask = box_mesh_arrays(rows("pos", 3, np.float64), rows("edges", 2, np.int64),
-                                   rows("corners", 0, np.int64), rows("ring_sizes", 0, np.int64),
-                                   rows("ring_counts", 0, np.int64), mvp, w, h,
-                                   tuple(map(float, rect)), bool(crossing))
+    emask, fmask = mesh.__dict__["_store"].box_pick(mvp, w, h, rect, crossing)
     sel = scene.entity_selectable
     seq = mesh.edges
     edges = [e for e in (seq[int(i)] for i in emask) if sel(e)]
@@ -385,49 +378,6 @@ def _box_group_fast(viewport, group, rect, crossing):
     return (not crossing) if seen else None
 
 
-def _frame_projector(viewport):
-    """``viewport._world_to_pixel`` with this frame's projection*view built
-    once: the box walks every vertex of the groups it cannot test from
-    their chunks (face-me figures), and rebuilding the camera matrices for
-    each point cost ~1.6 s of a 3 s box on the villa of issue #1006. Same
-    math, same pixels."""
-    w2p = viewport._world_to_pixel
-    cam = getattr(viewport, "camera", None)
-    try:
-        import inspect
-        if "mvp" not in inspect.signature(w2p).parameters:
-            return w2p
-        mvp = cam.projection_matrix() * cam.view_matrix()
-    except (AttributeError, TypeError, ValueError):
-        return w2p                      # a stand-in viewport (tests)
-    return lambda point: w2p(point, mvp)
-
-
-def _pt_in_rect(p, rect) -> bool:
-    return rect[0] <= p[0] <= rect[2] and rect[1] <= p[1] <= rect[3]
-
-
-def _seg_seg_2d(p1, p2, p3, p4) -> bool:
-    """Whether 2D segments ``p1-p2`` and ``p3-p4`` properly cross."""
-    def ccw(a, b, c):
-        return (c[1] - a[1]) * (b[0] - a[0]) - (b[1] - a[1]) * (c[0] - a[0])
-    d1 = ccw(p3, p4, p1)
-    d2 = ccw(p3, p4, p2)
-    d3 = ccw(p1, p2, p3)
-    d4 = ccw(p1, p2, p4)
-    return (d1 > 0) != (d2 > 0) and (d3 > 0) != (d4 > 0)
-
-
-def _seg_rect_overlap(a, b, rect) -> bool:
-    """Whether segment ``a-b`` touches the rectangle (endpoint inside or an
-    edge crossing) — the crossing-selection test."""
-    if _pt_in_rect(a, rect) or _pt_in_rect(b, rect):
-        return True
-    x0, y0, x1, y1 = rect
-    corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
-    return any(_seg_seg_2d(a, b, corners[i], corners[(i + 1) % 4]) for i in range(4))
-
-
 def describe_pick(entity) -> str:
     """A few words for the status bar naming what a click picked."""
     from core.i18n import tr
@@ -452,86 +402,6 @@ def describe_pick(entity) -> str:
 #: A repeated plain click within this many pixels takes the next candidate
 #: (the machine's ``CYCLE_PX``).
 CYCLE_PX = 4.0
-
-
-def _one(name, **kw):
-    """A query answered by one viewport pick (``None`` or the entity)."""
-    def query(viewport, x, y):
-        fn = getattr(viewport, name, None)
-        hit = fn(x, y, **kw) if fn is not None else None
-        return [] if hit is None else [(hit, 0.0)]
-    return query
-
-
-def _linework_edge(viewport, x, y):
-    fn = getattr(viewport, "pick_linework_edge", None)
-    edge, d = fn(x, y) if fn is not None else (None, 0.0)
-    return [] if edge is None else [(edge, d)]
-
-
-def _visible_edge(viewport, x, y):
-    # Only an edge the user can SEE takes the click (issue #71).
-    fn = getattr(viewport, "pick_visible_edge", None) or getattr(viewport, "pick_edge", None)
-    hit = fn(x, y) if fn is not None else None
-    return [] if hit is None else [(hit, 0.0)]
-
-
-def _many(name):
-    def query(viewport, x, y):
-        fn = getattr(viewport, name, None)
-        found = fn(x, y) if fn is not None else ()
-        return [h if isinstance(h, tuple) else (h, 0.0) for h in found]
-    return query
-
-
-#: What lies under a pixel, one kind at a time, for the Select machine's
-#: cascade (``rust/ingetrazo_core/src/tools/select.rs``, ``pick``): the
-#: viewport's picks, until each moves to native picking.
-QUERIES = {
-    "label_block": _one("pick_text_label", rect_only=True),
-    "linework_edge": _linework_edge,
-    "linework_groups": _many("pick_linework_groups"),
-    "group": _one("pick_group"),
-    "visible_edge": _visible_edge,
-    "dimension": _one("pick_dimension"),
-    "text_label": _one("pick_text_label"),
-    "geopath": _one("pick_geopath"),
-    "section_plane": _one("pick_section_plane"),
-    "guide": _one("pick_guide"),
-    "face": _one("pick_face"),
-    "image_plane": _one("pick_image_plane"),
-    "groups_around": _many("linework_groups_around"),
-}
-
-
-def has(viewport, what) -> bool:
-    return what == "linework" and hasattr(viewport, "pick_linework_edge")
-
-
-def edge_clear(viewport, edge, x, y) -> bool:
-    """The edge's point under the cursor is in plain sight."""
-    point = getattr(viewport, "edge_point_under_cursor", None)
-    occluded = getattr(viewport, "_is_occluded", None)
-    if point is None or occluded is None:
-        return False
-    p = point(edge, x, y)
-    return p is not None and not occluded(p)
-
-
-def image_in_front(viewport, face, x, y):
-    """A picture lying in front of ``face`` at the pixel (#426)."""
-    in_front = getattr(viewport, "image_in_front_of", None)
-    return in_front(face, x, y) if in_front is not None else None
-
-
-def pick_kind(entity) -> str:
-    """The kind the machine decides a double click by."""
-    for cls, kind in ((Face, "face"), (Edge, "edge"), (Group, "group"),
-                      (SectionPlane, "section_plane"), (TextLabel, "text_label"),
-                      (Dimension, "dimension")):
-        if isinstance(entity, cls):
-            return kind
-    return "other"
 
 
 def cycle_status(viewport, index: int, count: int, entity) -> None:
@@ -637,7 +507,6 @@ HOST_VERBS = {"toggle_section": _toggle_section, "edit_text": _edit_text,
 def box_select(viewport, rect, crossing: bool, mode: str) -> None:
     """What a released box catches (``rect`` normalised, ``crossing`` when
     dragged right to left), selected the way ``mode`` says."""
-    w2p = _frame_projector(viewport)
     picked = []
     fast = _box_loose_fast(viewport, rect, crossing)
     if fast is None:
@@ -645,44 +514,8 @@ def box_select(viewport, rect, crossing: bool, mode: str) -> None:
     if fast is not None:
         picked.extend(fast[0])
         picked.extend(fast[1])
-    loose_iter = ((), ()) if fast is not None else (
-        viewport.scene.edges, viewport.scene.faces)
-    for edge in loose_iter[0]:
-        if not viewport.scene.entity_selectable(edge):
-            continue                        # hidden or locked layer
-        pa = w2p(edge.a)
-        pb = w2p(edge.b)
-        if pa is None or pb is None:
-            continue
-        if crossing:
-            if _seg_rect_overlap(pa, pb, rect):
-                picked.append(edge)
-        elif _pt_in_rect(pa, rect) and _pt_in_rect(pb, rect):
-            picked.append(edge)
-    for face in loose_iter[1]:
-        if not viewport.scene.entity_selectable(face):
-            continue                        # hidden or locked layer
-        pts = [w2p(v) for v in face.vertices]
-        if any(p is None for p in pts):
-            continue
-        if crossing:
-            n = len(pts)
-            touches = any(_pt_in_rect(p, rect) for p in pts) or any(
-                _seg_rect_overlap(pts[i], pts[(i + 1) % n], rect) for i in range(n)
-            )
-            if touches:
-                picked.append(face)
-        elif all(_pt_in_rect(p, rect) for p in pts):
-            picked.append(face)
-    # Groups and component instances (the "box select skips groups"
-    # report). Window mode: every vertex inside. Crossing mode: any vertex
-    # inside, else any wireframe edge touching the box. Early exits keep
-    # the common reject cheap. Inside a group the box works on what the
-    # open group holds: its loose geometry above, and its
-    # CHILDREN here — the parts of an imported fountain are groups, and
-    # a box that skipped them could never take the whole fountain
-    # («quiero seleccionar toda esa pileta, no selecciona», Marco,
-    # 2026-09-11).
+    else:
+        picked.extend(box_records(viewport, rect, crossing, loose=True))
     ctx = viewport.scene.edit_group
     candidates = (getattr(viewport.scene, "groups", []) if ctx is None
                   else (getattr(ctx, "children", None) or []))
@@ -700,113 +533,10 @@ def box_select(viewport, rect, crossing: bool, mode: str) -> None:
                 if verdict:
                     picked.append(group)
                 continue
-            # A component's geometry lives in the placements it holds,
-            # so the box has to test the whole subtree — the top-level
-            # mesh of an imported component is often empty, and reading
-            # only that made it unselectable by rubber band.
             from core.group import iter_placements
-            places = [(pg, xf) for pg, xf in iter_placements(group)
-                      if pg.mesh.vertices]
-            if not places:
-                continue
-
-            def gw2p(point, xf):
-                return w2p(xf.map(point) if xf is not None else point)
-
-            if crossing:
-                hit = False
-                for pg, xf in places:
-                    for v in pg.mesh.vertices:
-                        p = gw2p(v.position, xf)
-                        if p is not None and _pt_in_rect(p, rect):
-                            hit = True
-                            break
-                    if hit:
-                        break
-                if not hit:
-                    for pg, xf in places:
-                        for e in pg.mesh.edges:
-                            pa, pb = gw2p(e.a, xf), gw2p(e.b, xf)
-                            if (pa is not None and pb is not None
-                                    and _seg_rect_overlap(pa, pb, rect)):
-                                hit = True
-                                break
-                        if hit:
-                            break
-                if hit:
-                    picked.append(group)
-            else:
-                inside = True
-                for pg, xf in places:
-                    for v in pg.mesh.vertices:
-                        p = gw2p(v.position, xf)
-                        if p is None or not _pt_in_rect(p, rect):
-                            inside = False
-                            break
-                    if not inside:
-                        break
-                if inside:
-                    picked.append(group)
-    # Guides: an infinite line can never be fully enclosed, so a window
-    # box skips it and only a crossing box takes it. Guide
-    # points behave like any point. The line is clipped to the part in
-    # front of the camera before projecting (as render/snap do).
-    for g in getattr(viewport.scene, "guides", []):
-        if not viewport.scene.entity_selectable(g):
-            continue
-        if g.is_line:
-            if not crossing:
-                continue
-            clip = getattr(viewport, "_clip_segment_front", None)
-            seg = clip(*g.segment()) if clip else g.segment()
-            if seg is None:
-                continue
-            pa, pb = w2p(seg[0]), w2p(seg[1])
-            if (pa is not None and pb is not None
-                    and _seg_rect_overlap(pa, pb, rect)):
-                picked.append(g)
-        elif getattr(g, "is_circle", False):
-            # A finite circle: a window box takes it whole, a crossing
-            # box takes it when its rim passes through.
-            rim = [w2p(p) for p in g.sample_points(24)]
-            if any(p is None for p in rim):
-                continue
-            if crossing:
-                if any(_pt_in_rect(p, rect) for p in rim):
-                    picked.append(g)
-            elif all(_pt_in_rect(p, rect) for p in rim):
-                picked.append(g)
-        else:
-            p = w2p(g.point)
-            if p is not None and _pt_in_rect(p, rect):
-                picked.append(g)
-    selectable = getattr(viewport.scene, "entity_selectable",
-                         lambda _e: True)
-    for dim in getattr(viewport.scene, "dimensions", []):
-        if not selectable(dim):
-            continue
-        ap, bp = dim.line_points()
-        pa, pb = w2p(ap), w2p(bp)
-        if pa is None or pb is None:
-            continue
-        if crossing:
-            if _seg_rect_overlap(pa, pb, rect):
-                picked.append(dim)
-        elif _pt_in_rect(pa, rect) and _pt_in_rect(pb, rect):
-            picked.append(dim)
-    for lab in getattr(viewport.scene, "text_labels", []):
-        if not selectable(lab):
-            continue
-        pa, pp = w2p(lab.anchor), w2p(lab.position())
-        if pp is None:
-            continue
-        if crossing:
-            if _pt_in_rect(pp, rect) or (
-                    pa is not None and _seg_rect_overlap(pa, pp, rect)):
-                picked.append(lab)
-        elif _pt_in_rect(pp, rect) and (
-                pa is None or _pt_in_rect(pa, rect)):
-            picked.append(lab)
+            if box_placements(viewport, rect, crossing, iter_placements(group)):
+                picked.append(group)
+    picked.extend(box_records(viewport, rect, crossing, loose=False))
     if mode == "replace" and getattr(viewport, "extension_pick",
                                      None) is not None:
         viewport.clear_extension_pick()

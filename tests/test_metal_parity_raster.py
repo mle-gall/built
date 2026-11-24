@@ -163,6 +163,30 @@ def test_preview_and_face_marks_are_depth_tested(native,aa):
     np.testing.assert_array_equal(original,capture(native))
 
 
+def test_tool_wire_draws_over_faces_and_clears(native):
+    upload(native, 255)
+    native.set_style(dict(sky=False, edges=False))
+    original = capture(native)
+    band = ([((-.7, 0., -.5), (.7, 0., -.5))], (0., 1., 0., 1.), 3.)
+    native.set_tool_wire(band, (), 1.)
+    marked = capture(native)
+    assert (marked[31:33, 15:49, 1] > 200).all()
+    native.set_tool_wire(None, (), 1.)
+    np.testing.assert_array_equal(original, capture(native))
+
+
+def test_tool_pick_same_pixel_tracks_instance_changes(native):
+    _, _, _, _, rows = upload(native, 255)
+    assert native.pick(32, 32) == 0
+    assert native.pick(32, 32) == 0
+    rows["world"][0, 3, 0] = 4.
+    native.update_instances([0], rows.view(np.uint8).ravel())
+    assert native.pick(32, 32) == -1
+    rows["world"][0, 3, 0] = 0.
+    native.update_instances([0], rows.view(np.uint8).ravel())
+    assert native.pick(32, 32) == 0
+
+
 @pytest.mark.parametrize('aa',[False,True])
 def test_scaffold_lines_are_depth_tested_and_dashed(native,aa):
     """The edit box and guides (``lines.rs``): hidden behind a face, drawn

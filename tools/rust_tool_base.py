@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from ingetrazo_core import ToolMachine, Vec3
+from ingetrazo_core import ToolMachine, Vec3, ViewportToolHost
 
 from tools.base import Tool
 
@@ -26,18 +26,37 @@ def _tuple(p):
     return None if p is None else (p.toTuple() if hasattr(p, "toTuple") else tuple(p))
 
 
-class _Host:
+def selection_bounds(scene, frame=None, *, images=False):
+    """Feed the tool's native bounds query the selected records and placement buffers."""
+    from ingetrazo_core import ToolBounds
+    from core.group import Group, _local_points, model_placements
+    from core.mesh import Edge, Face
+    from core.image_plane import ImagePlane
+    box = ToolBounds(frame)
+    for item in scene.selection:
+        if isinstance(item, Group):
+            for placement, transform in model_placements(item):
+                mesh = placement.mesh
+                store = mesh.__dict__.get("_store")
+                matrix = None if transform is None else transform.ravel()
+                if store is not None:
+                    box.add_store(store, matrix)
+                else:
+                    points = _local_points(mesh)
+                    if points is not None:
+                        box.add_mesh(points, matrix)
+        elif isinstance(item, Edge):
+            box.add_points((item.a, item.b))
+        elif isinstance(item, Face):
+            box.add_points(item.vertices)
+        elif images and isinstance(item, ImagePlane):
+            box.add_points(item.corners())
+    return box
+
+
+class _Host(ViewportToolHost):
     """The machine's ``ToolHost`` over a viewport (the Metal view's
     ``NativeTools``, the controller, or a stand-in with scene and history)."""
-
-    def __init__(self, viewport, handles=None, tool=None):
-        self.vp = viewport
-        self.handles = handles
-        self.tool = tool
-
-    def call(self, verb, args):
-        """A verb the host still owns for a tool: ``tool.host_<verb>``."""
-        return getattr(self.tool, "host_" + verb)(self.vp, args)
 
     # ---- commits: the protocol only ---------------------------------------
     def _frame_origin(self):
@@ -113,44 +132,6 @@ class _Host:
         stack = getattr(self.vp.history, "undo_stack", None) or ()
         return hash((len(stack), id(stack[-1]) if stack else 0)) & _MASK
 
-    def eye(self):
-        cam = getattr(self.vp, "camera", None)
-        return _tuple(cam.eye()) if cam is not None and hasattr(cam, "eye") else None
-
-    # ---- picking and selection: tools.select's host queries ---------------
-    def _id(self, entity):
-        return self.handles.id(entity)
-
-    def _pick(self, entity):
-        if entity is None:
-            return None
-        from tools import select_host as select
-        return self._id(entity), select.pick_kind(entity)
-
-    def query(self, what, x, y):
-        from tools import select_host as select
-        fn = select.QUERIES.get(what)
-        if fn is None:
-            return []
-        return [(self._id(e), select.pick_kind(e), float(d)) for e, d in fn(self.vp, x, y)]
-
-    def has(self, what):
-        from tools import select_host as select
-        return select.has(self.vp, what)
-
-    def edge_clear(self, ident, x, y):
-        from tools import select_host as select
-        return select.edge_clear(self.vp, self.handles.get(ident), x, y)
-
-    def image_in_front(self, ident, x, y):
-        from tools import select_host as select
-        return self._pick(select.image_in_front(self.vp, self.handles.get(ident), x, y))
-
-    def extension_at(self, x, y):
-        pick_item = getattr(self.vp, "pick_extension_item", None)
-        hit = pick_item(x, y) if pick_item is not None else None
-        return None if hit is None else self._id(hit)
-
     def cycle_status(self, index, count, ident):
         from tools import select_host as select
         select.cycle_status(self.vp, index, count, self.handles.get(ident))
@@ -159,49 +140,15 @@ class _Host:
         from tools import select_host as select
         select.apply(self.vp, [self.handles.get(i) for i in ids], mode, grow)
 
-    def clear_selection(self):
-        self.vp.scene.clear_selection()
-
-    def selection_signature(self):
-        return hash(frozenset(self.vp.scene.selection)) & _MASK
-
-    def selection_empty(self):
-        return not self.vp.scene.selection
-
     def box_select(self, rect, crossing, mode):
         from tools import select_host as select
         select.box_select(self.vp, rect, crossing, mode)
-
-    def set_hover(self, ident):
-        self.vp.set_hover(None if ident is None else self.handles.get(ident))
-
-    def set_extension_pick(self, ident):
-        if ident is None:
-            self.vp.clear_extension_pick()
-        else:
-            self.vp.set_extension_pick(self.handles.get(ident))
-
-    def has_extension_pick(self):
-        return getattr(self.vp, "extension_pick", None) is not None
 
     def erase(self, selection_only):
         from tools import select_host as select
         if selection_only:
             return select.erase_entities(self.vp, list(self.vp.scene.selection))
         return select.delete_selection_or_hover(self.vp)
-
-    def editing(self):
-        return self.vp.scene.edit_group is not None
-
-    def edit_box_contains(self, x, y):
-        contains = getattr(self.vp, "edit_group_box_contains_pixel", None)
-        return bool(callable(contains) and contains(x, y))
-
-    def open_placement(self, ident):
-        self.vp.begin_group_edit(self.handles.get(ident))
-
-    def close_placement(self):
-        self.vp.end_one_group_edit()
 
     def message(self, template, args):
         flash = getattr(self.vp, "flash_status", None)
@@ -360,7 +307,11 @@ class RustTool(Tool):
         return held[1]
 
     def rubber_band_lines(self):
-        return [(Vec3(*a), Vec3(*b)) for a, b, _style in self._machine.preview()["lines"]]
+        return self._machine.preview_lines()
+
+    def preview_faces(self):
+        from core.geometry import Face
+        return [Face(outer, holes or None) for outer, *holes in self._machine.preview_surfaces()]
 
     def preview(self):
         return self._machine.preview()

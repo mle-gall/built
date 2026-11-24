@@ -52,6 +52,7 @@ class ScaleHost:
         self._lo: QVector3D | None = None
         self._hi: QVector3D | None = None
         self._axes = None                  # (red, green, blue) or None = world
+        self._resident_preview = False
         self._orig = None
         self._grips: list[_Grip] = []
         self._box_version = -1
@@ -82,45 +83,11 @@ class ScaleHost:
 
     # ---- Box + grips --------------------------------------------------------
     def _selection_bounds(self, viewport):
-        """World AABB of the selection: loose vertices, whole groups (their
-        nested placements included) and reference images."""
-        from core.group import iter_placements
-        from core.image_plane import ImagePlane
-        from core.mesh import Edge, Face
-
+        from tools.rust_tool_base import selection_bounds
         self._pick_frame(viewport)
-        lo = [float("inf")] * 3
-        hi = [float("-inf")] * 3
-        seen = False
-
-        def absorb(p: QVector3D) -> None:
-            nonlocal seen
-            seen = True
-            p = self._to_local(p)
-            for i, c in enumerate((p.x(), p.y(), p.z())):
-                if c < lo[i]:
-                    lo[i] = c
-                if c > hi[i]:
-                    hi[i] = c
-
-        for ent in viewport.scene.selection:
-            if isinstance(ent, Edge):
-                absorb(ent.a)
-                absorb(ent.b)
-            elif isinstance(ent, Face):
-                for v in ent.vertices:
-                    absorb(v)
-            elif isinstance(ent, ImagePlane):
-                for c in ent.corners():
-                    absorb(c)
-            elif hasattr(ent, "mesh"):     # Group / component instance
-                for pg, m in iter_placements(ent):
-                    for v in pg.mesh.vertices:
-                        p = m.map(v.position) if m is not None else v.position
-                        absorb(p)
-        if not seen:
-            return None, None
-        return QVector3D(*lo), QVector3D(*hi)
+        frame = [p.toTuple() for p in (self._orig, *self._axes)] if self._axes else None
+        self._box = selection_bounds(viewport.scene, frame, images=True)
+        return self._box.limits()
 
     def _refresh_box(self, viewport) -> None:
         """(Re)build the grip box from the selection — cheap to call: keyed on
@@ -135,8 +102,7 @@ class ScaleHost:
         self._hover_grip = None
         if self._lo is None:
             return
-        from ingetrazo_core import scale_box_geometry
-        grips, self._box_edges = scale_box_geometry(self._extents())
+        grips = self._box.scale_grips()
         self._grips = [_Grip(tuple(p), tuple(mask)) for p, mask in grips]
         if not grips:
             self._lo = self._hi = None
@@ -174,32 +140,14 @@ class ScaleHost:
             return
         self._axes, self._orig = (x, y, z), o
 
-    def _to_local(self, p: QVector3D) -> QVector3D:
-        if self._axes is None:
-            return QVector3D(p)
-        d = p - self._orig
-        x, y, z = self._axes
-        return QVector3D(QVector3D.dotProduct(d, x), QVector3D.dotProduct(d, y),
-                         QVector3D.dotProduct(d, z))
-
-    def _to_world(self, p: QVector3D) -> QVector3D:
-        if self._axes is None:
-            return QVector3D(p)
-        x, y, z = self._axes
-        return self._orig + x * p.x() + y * p.y() + z * p.z()
-
     def _grip_pos(self, grip: _Grip) -> QVector3D:
-        lo, hi = self._lo, self._hi
-        t = grip.params
-        return self._to_world(QVector3D(lo.x() + (hi.x() - lo.x()) * t[0],
-                                        lo.y() + (hi.y() - lo.y()) * t[1],
-                                        lo.z() + (hi.z() - lo.z()) * t[2]))
+        return self._box.grip(grip.params)
 
     def _anchor_for(self, grip: _Grip) -> QVector3D:
         """The point straight opposite the grip — or the box centre
         while About Center is toggled on."""
         if self.about_center:
-            return self._to_world((self._lo + self._hi) * 0.5)
+            return self._box.grip((0.5, 0.5, 0.5))
         params = tuple(1.0 - t if i in grip.mask else 0.5
                        for i, t in enumerate(grip.params))
         return self._grip_pos(_Grip(params, grip.mask))
@@ -215,21 +163,8 @@ class ScaleHost:
         cam = getattr(viewport, "camera", None)
         eye = cam.eye() if cam is not None else QVector3D()
         fwd = cam.target - eye if cam is not None else QVector3D()
-        best, best_key = None, None
-        for g in self._grips:
-            pos = self._grip_pos(g)
-            px = viewport._world_to_pixel(pos)
-            if px is None:
-                continue
-            d = ((px[0] - sx) ** 2 + (px[1] - sy) ** 2) ** 0.5
-            if d >= threshold:
-                continue
-            inside = d <= self._GRIP_HALF_PX
-            depth = QVector3D.dotProduct(pos - eye, fwd)
-            key = (0, depth) if inside else (1, d)
-            if best_key is None or key < best_key:
-                best, best_key = g, key
-        return best
+        i = self._box.pick_scale(viewport, (sx, sy), threshold, eye, fwd)
+        return self._grips[i] if i is not None else None
 
     # ---- Cursor → factors ---------------------------------------------------
     def _ray(self, viewport, sx: float, sy: float):
@@ -271,7 +206,7 @@ class ScaleHost:
     def _relative(self, point):
         if self._axes is None or self._line_grip():
             return (point - self._anchor).toTuple()
-        return (self._to_local(point) - self._to_local(self._anchor)).toTuple()
+        return (self._box.local(point) - self._box.local(self._anchor)).toTuple()
 
     def _factors_from_point(self, p):
         return self._grip_spec().point(self._relative(self._grip_pos(self._grip)),
@@ -466,6 +401,11 @@ class ScaleHost:
         faces (a user's video, 25-09: a rounded box shredded on release).
         Measured: 300 moves of that kind, 194 of 1600 vertices lost."""
         from ingetrazo_core import Matrix4 as QMatrix4x4
+        self._resident_preview = bool(self._groups and hasattr(viewport, "begin_groups_preview")
+                                      and not self._verts and not self._images)
+        if self._resident_preview:
+            viewport.begin_groups_preview(self._groups)
+            return
         orig_v: list = []
         orig_x: list = []
         for group in self._groups:
@@ -486,6 +426,9 @@ class ScaleHost:
         """Put everything at *factors* about the anchor, from the originals.
         At (1, 1, 1) it is an exact restore: the starting positions go back
         as they were stored, not through a matrix."""
+        if self._resident_preview:
+            viewport.set_groups_preview_matrix(scale_matrix(self._anchor, factors, self._axes))
+            return
         if getattr(self, "_orig_v", None) is None:
             return
         identity = all(abs(f - 1.0) < 1e-12 for f in factors)
@@ -512,7 +455,11 @@ class ScaleHost:
         self._factors = target
 
     def _revert_preview(self, viewport) -> None:
-        if any(abs(f - 1.0) > 1e-12 for f in self._factors):
+        if self._resident_preview:
+            viewport.end_groups_preview()
+            self._resident_preview = False
+            self._factors = (1.0, 1.0, 1.0)
+        elif any(abs(f - 1.0) > 1e-12 for f in self._factors):
             self._set_preview(viewport, (1.0, 1.0, 1.0))
             self._factors = (1.0, 1.0, 1.0)
 
@@ -591,28 +538,7 @@ class ScaleHost:
         ``anchor`` red, as the official doc describes them."""
         if self._lo is None:
             return None
-        lo, hi = self._lo, self._hi
-        m = (scale_matrix(self._anchor, self._factors, self._axes)
-             if self._grip is not None else None)
-
-        def corner(tx, ty, tz):
-            p = self._to_world(QVector3D(lo.x() + (hi.x() - lo.x()) * tx,
-                                         lo.y() + (hi.y() - lo.y()) * ty,
-                                         lo.z() + (hi.z() - lo.z()) * tz))
-            return m.map(p) if m is not None else p
-
-        segments = [(corner(*a), corner(*b)) for a, b in self._box_edges]
-        grips = []
-        for g in self._grips:
-            p = self._grip_pos(g)
-            if m is not None:
-                p = m.map(p)
-            role = "idle"
-            if g is self._grip:
-                role = "active"
-            elif g is self._hover_grip and self._grip is None:
-                role = "hover"
-            grips.append((p, role))
-        if self._grip is not None and self._anchor is not None:
-            grips.append((QVector3D(self._anchor), "anchor"))
-        return {"segments": segments, "grips": grips}
+        return self._box.scale_preview(
+            self._factors, self._anchor if self._grip else None,
+            self._grip.params if self._grip else None,
+            self._hover_grip.params if self._hover_grip else None)

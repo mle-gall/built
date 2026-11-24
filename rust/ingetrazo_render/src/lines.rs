@@ -18,6 +18,22 @@
 //! drawn either under the edges (between the face and the edge passes) or
 //! above them (after the edges); depth against the faces is the same.
 use std::collections::BTreeMap;
+use pyo3::prelude::*;
+
+pub fn tool_segments(out: &mut Vec<u8>, lines: &Bound<'_, PyAny>, rgba: [u8;4], style: [f32;3]) -> PyResult<()> {
+    for line in lines.try_iter()? {
+        let line = line?;
+        for i in 0..2 {
+            let p = line.get_item(i)?;
+            let coords: [f32;3] = if p.hasattr("toTuple")? { p.call_method0("toTuple")?.extract()? } else { p.extract()? };
+            out.extend_from_slice(bytemuck::bytes_of(&coords));
+        }
+        out.extend_from_slice(&rgba);
+        out.extend_from_slice(bytemuck::bytes_of(&style));
+    }
+    Ok(())
+}
+
 
 /// a (3 f32), b (3 f32), RGBA8 colour, width, dash, gap (f32 pixels).
 pub const SEGMENT_BYTES: usize = 40;
@@ -33,6 +49,9 @@ struct Slot {
 pub struct Lines {
     samples: crate::antialias::SampleModes,
     pipelines: Vec<wgpu::RenderPipeline>,
+    floating_pipeline: wgpu::RenderPipeline,
+    floating: Option<Slot>,
+    floating_bytes: Vec<u8>,
     group: wgpu::BindGroup,
     slots: BTreeMap<String, Slot>,
     /// Off for sheet captures (`render_image`): scaffolding is never printed.
@@ -80,7 +99,7 @@ impl Lines {
             bind_group_layouts: &[&bindings],
             push_constant_ranges: &[],
         });
-        let pipelines = samples.levels.iter().copied().map(|samples| {
+        let pipeline = |samples, floating: bool| {
             d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("depth-tested scaffold lines"),
                 layout: Some(&layout),
@@ -110,7 +129,7 @@ impl Lines {
                 // glPolygonOffset(1, 1), so a line lying on a face wins
                 // LEQUAL; a line behind one loses. No depth writes:
                 // scaffolding must not hide anything.
-                depth_stencil: Some(wgpu::DepthStencilState {
+                depth_stencil: (!floating).then(|| wgpu::DepthStencilState {
                     format: wgpu::TextureFormat::Depth32Float,
                     depth_write_enabled: false,
                     depth_compare: crate::depth::compare(wgpu::CompareFunction::LessEqual),
@@ -121,9 +140,11 @@ impl Lines {
                 multiview: None,
                 cache: None,
             })
-        }).collect();
+        };
+        let pipelines = samples.levels.iter().map(|&n| pipeline(n, false)).collect();
+        let floating_pipeline = pipeline(1, true);
         let group = crate::bind(d, &bindings, &[camera]);
-        Self { samples, pipelines, group, slots: BTreeMap::new(), enabled: true }
+        Self { samples, pipelines, group, floating_pipeline, floating: None, floating_bytes: Vec::new(), slots: BTreeMap::new(), enabled: true }
     }
 
     /// Replace one slot's segments. The buffer is reused while it is large
@@ -161,6 +182,47 @@ impl Lines {
             }
         }
         Ok(())
+    }
+
+    /// Tool ink sits above transparency and below the annotation labels.
+    pub fn tool_wire(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, data: Vec<u8>)
+        -> Result<(), &'static str> {
+        if data == self.floating_bytes { return Ok(()); }
+        let count = validate(&data)?;
+        if count == 0 {
+            if let Some(slot) = &mut self.floating { slot.count = 0; }
+        } else {
+            let slot = &mut self.floating;
+            if slot.as_ref().is_none_or(|s| s.buffer.size() < data.len() as u64) {
+                let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("tool wire"), size: (data.len() as u64).next_power_of_two(),
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+                *slot = Some(Slot { buffer, count, above_edges: true });
+            }
+            let slot = slot.as_mut().unwrap();
+            slot.count = count;
+            queue.write_buffer(&slot.buffer, 0, &data);
+        }
+        self.floating_bytes = data;
+        Ok(())
+    }
+
+    pub fn draw_tool(&self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView) {
+        let Some(slot) = self.floating.as_ref().filter(|s| self.enabled && s.count > 0) else { return };
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("tool wire"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target, resolve_target: None,
+                ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
+            })],
+            depth_stencil_attachment: None, timestamp_writes: None, occlusion_query_set: None,
+        });
+        pass.set_pipeline(&self.floating_pipeline);
+        pass.set_bind_group(0, &self.group, &[]);
+        pass.set_vertex_buffer(0, slot.buffer.slice(..));
+        pass.draw(0..6, 0..slot.count);
     }
 
     pub fn counts(&self) -> Vec<(String, u32)> {

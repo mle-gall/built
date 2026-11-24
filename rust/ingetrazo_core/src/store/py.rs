@@ -691,6 +691,57 @@ impl PyMeshStore {
         dense_dict(py, d)
     }
 
+    fn tool_face_picker(&self, py: Python<'_>, hypot: &str) -> PyResult<crate::pick::FacePicker> {
+        let hypot = crate::hypot_of(hypot)?;
+        Ok(py.detach(|| crate::pick::FacePicker::from_store(&self.inner, hypot)))
+    }
+
+    fn nearest_edges(&self, py: Python<'_>, matrix: [f64;16], width: f64, height: f64,
+                     x: f64, y: f64, radius: f64) -> Vec<(usize,f64,f64)> {
+        let camera = crate::pick::Projector::new(&matrix, width, height);
+        let st = &self.inner;
+        let edges = self.order_of(Kind::Edge).0;
+        py.detach(|| {
+            let projected = edges.iter().map(|&edge| {
+                let [a,b] = st.state.ends.get(edge as usize).map(|v|
+                    camera.px(*st.state.vpos.get(v as usize)));
+                (a,b)
+            });
+            crate::pick::nearest_projected(projected, x, y, radius)
+        })
+    }
+
+    /// The maximal degree-two path through an Offset pick.
+    fn edge_run(&self, key: u128) -> PyResult<(Vec<crate::math::Vec3>, bool)> {
+        let edge = any_of(&self.inner, Kind::Edge, key)?;
+        Ok(crate::tools::edge_runs::store_run(&self.inner, edge))
+    }
+
+    /// Box selection reads live topology in document order without exporting
+    /// topology, attributes or adjacency arrays to the viewport.
+    fn box_pick(&self, py: Python<'_>, matrix: [f64; 16], width: f64, height: f64,
+                rect: [f64; 4], crossing: bool) -> (Vec<usize>, Vec<usize>) {
+        use crate::pick::{face_in_box, seg_rect, Projector};
+        let proj = Projector::new(&matrix, width, height);
+        let store = &self.inner;
+        py.detach(|| {
+            let vertex_slots = &store.state.slots[Kind::Vertex as usize];
+            let mut px = vec![(0., 0., false); vertex_slots.len()];
+            for v in store.live_slots(Kind::Vertex) {
+                px[v as usize] = proj.px(*store.state.vpos.get(v as usize));
+            }
+            let edges = store.live_slots(Kind::Edge).into_iter().enumerate().filter_map(|(i,e)| {
+                let [a,b] = store.state.ends.get(e as usize).map(|v| px[v as usize]);
+                seg_rect((a.0,a.1), (b.0,b.1), a.2 && b.2, &rect, crossing).then_some(i)
+            }).collect();
+            let faces = store.live_slots(Kind::Face).into_iter().enumerate().filter_map(|(i,f)| {
+                let rings = store.face_rings(f);
+                face_in_box(rings.iter().map(|ring| ring.iter().map(|&v| px[v as usize])), &rect, crossing).then_some(i)
+            }).collect();
+            (edges, faces)
+        })
+    }
+
     /// Which snapshots are this store's own (`restore` keeps their keys).
     #[getter]
     fn lineage(&self) -> u64 {

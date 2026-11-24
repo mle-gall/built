@@ -31,6 +31,7 @@ mod axes;
 mod sections;
 mod preview;
 mod preview_texture;
+mod tool_instances;
 mod lines;
 mod references;
 mod sun;
@@ -115,6 +116,18 @@ struct Scene {
 /// the document (geometry, instances, prototypes, materials, textures, the
 /// sun's depth map) stays single in the Renderer; ``bind_target`` swaps one
 /// of these into the live fields, so every existing pass keeps working.
+/// The last CPU read of a pick pixel remains valid across hit queries until
+/// a render or a view / geometry change. A scissored ID pass alone cannot
+/// mark the rest of the ID texture clean.
+#[derive(Clone, Copy)]
+struct PickRead {
+    dirty: bool,
+    pixel: Option<(u32, u32, i64)>,
+}
+impl PickRead {
+    const DIRTY: Self = Self { dirty: true, pixel: None };
+}
+
 struct Target {
     surface: Option<wgpu::Surface<'static>>,
     config: wgpu::SurfaceConfiguration,
@@ -136,7 +149,7 @@ struct Target {
     style: u32,
     edges: bool,
     textures_enabled: bool,
-    ids_dirty: bool,
+    pick_read: PickRead,
     stable_frames: u32,
     pick_pending: bool,
     capture_next: bool,
@@ -161,7 +174,7 @@ struct Renderer {
     ao: ao::AmbientOcclusion,
     samples: antialias::SampleModes,
     antialias: bool,
-    ids_dirty: bool,
+    pick_read: PickRead,
     camera_data: Vec<f32>,
     stable_frames: u32,
     pick_pending: bool,
@@ -376,7 +389,7 @@ impl Renderer {
         let old_size = (self.config.width, self.config.height);
         let old_camera = self.camera_data.clone();
         let old_style = self.look.data;
-        let old_flags = (self.style, self.edges, self.textures_enabled, self.ids_dirty,
+        let old_flags = (self.style, self.edges, self.textures_enabled, self.pick_read,
                          self.stable_frames, self.pick_pending, self.capture_next);
         let old_capture = self.captured.take();
         // Keep the original resources alive until the transaction has completed.
@@ -439,7 +452,7 @@ impl Renderer {
             self.queue.write_buffer(&self.camera, 0, bytemuck::cast_slice(&old_camera));
         }
         self.camera_data = old_camera;
-        (self.style, self.edges, self.textures_enabled, self.ids_dirty,
+        (self.style, self.edges, self.textures_enabled, self.pick_read,
          self.stable_frames, self.pick_pending, self.capture_next) = old_flags;
         self.captured = old_capture;
         result.map(|pixels| (pixels, keep.then_some(rendered)))
@@ -696,7 +709,7 @@ impl Renderer {
             textures, texture_groups, textures_enabled: true, material_transparency: true,
             ao: ao::AmbientOcclusion::new(samples.clone(), &device, format),
             samples: samples.clone(), antialias: true,
-            ids_dirty: true,
+            pick_read: PickRead::DIRTY,
             camera_data: Vec::new(),
             stable_frames: 0,
             pick_pending: false,
@@ -815,7 +828,7 @@ impl Renderer {
         self.active = id;
         if seen != self.scene_epoch {
             self.sun.invalidate();
-            self.ids_dirty = true;
+            self.pick_read = PickRead::DIRTY;
         }
         self.queue.write_buffer(&self.look.buffer, 0, bytemuck::cast_slice(&self.look.data));
         if !self.camera_data.is_empty() {
@@ -963,7 +976,7 @@ impl Renderer {
         self.gpu_memory =
             (v.len() + expanded_v.len() + ix.len() + p.len() + cmd.len() * 3 + instances.len() + n * 20 + 112 + 416)
                 as u64 + self.textures.bytes + self.textures.materials.size();
-        self.ids_dirty = true; self.scene_epoch += 1;
+        self.pick_read = PickRead::DIRTY; self.scene_epoch += 1;
         self.material_transparency = true; // unclassified raw scenes use conservative OIT
         self.scene = Some(Scene {
             edge_data: expanded_v,
@@ -1008,7 +1021,7 @@ impl Renderer {
         for t in self.targets.values_mut() {
             t.preview.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
             t.face_marks.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
-            t.ids_dirty = true;
+            t.pick_read = PickRead::DIRTY;
         }
         self.ghost_objects.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
         // Queue submission orders the first draw after initialization.
@@ -1101,7 +1114,7 @@ impl Renderer {
         s.xray_edge_draw = bind(&self.device, &self.xray_edge.get_bind_group_layout(0), &[&self.camera, &s.inst, &s.survivors, &s.edge_records, &s.viewpoints]);
         s.profile_draw = bind(&self.device, &self.profile_top.get_bind_group_layout(0), &[&self.camera, &s.inst, &s.survivors, &s.edge_records, &s.viewpoints]);
         self.aa.bind_scene(&self.device, &self.camera, &s.inst, &s.survivors, &self.look.buffer, &s.edge_records, &s.viewpoints);
-        self.ids_dirty = true; self.scene_epoch += 1;
+        self.pick_read = PickRead::DIRTY; self.scene_epoch += 1;
         Ok(())
     }
 
@@ -1127,7 +1140,7 @@ impl Renderer {
             s.part_preview.push(row);
         }
         self.sun.invalidate();
-        self.ids_dirty = true;
+        self.pick_read = PickRead::DIRTY;
         self.stable_frames = 0;
         Ok(())
     }
@@ -1146,7 +1159,7 @@ impl Renderer {
             s.rows[id*80..id*80+64].copy_from_slice(data);
             self.queue.write_buffer(&s.inst, (id*80) as u64, data);
         }
-        if !ids.is_empty() { self.ids_dirty = true; self.scene_epoch += 1; self.stable_frames = 0; }
+        if !ids.is_empty() { self.pick_read = PickRead::DIRTY; self.scene_epoch += 1; self.stable_frames = 0; }
         Ok(())
     }
 
@@ -1161,7 +1174,7 @@ impl Renderer {
     /// Update existing resident rows without replacing geometry or pick IDs.
     fn update_instances(&mut self, ids: Vec<usize>, rows: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
         self.sun.invalidate();
-        self.ids_dirty = true; self.scene_epoch += 1;
+        self.pick_read = PickRead::DIRTY; self.scene_epoch += 1;
         self.stable_frames = 0;
         let rows = rows.as_slice()?;
         let s = self.scene.as_mut().ok_or_else(|| PyValueError::new_err("set_scene first"))?;
@@ -1245,7 +1258,7 @@ impl Renderer {
     /// Tombstones retain row identities so stale picks cannot select a neighbour.
     fn remove_instances(&mut self, ids: Vec<usize>) -> PyResult<()> {
         self.sun.invalidate();
-        self.ids_dirty = true; self.scene_epoch += 1;
+        self.pick_read = PickRead::DIRTY; self.scene_epoch += 1;
         let s = self.scene.as_mut().ok_or_else(|| PyValueError::new_err("set_scene first"))?;
         if ids.iter().any(|&id| id >= s.n as usize) {
             return Err(PyValueError::new_err("instance id out of range"));
@@ -1313,13 +1326,13 @@ impl Renderer {
             // One queue write per context change, rather than N tiny writes.
             if changed {
                 self.queue.write_buffer(&s.inst, 0, &s.rows);
-                self.ids_dirty = true; self.scene_epoch += 1;
+                self.pick_read = PickRead::DIRTY; self.scene_epoch += 1;
             }
         }
         Ok(())
     }
     fn set_overrides(&mut self, colors: Vec<u32>) -> PyResult<()> {
-        self.ids_dirty = true; self.scene_epoch += 1;
+        self.pick_read = PickRead::DIRTY; self.scene_epoch += 1;
         if let Some(s) = &mut self.scene {
             if colors.len() != s.n as usize {
                 return Err(PyValueError::new_err("one override per instance required"));
@@ -1337,7 +1350,7 @@ impl Renderer {
     }
     // R-look: retain string compatibility for existing diagnostic scripts.
     fn set_style(&mut self, style: &Bound<'_, PyAny>) -> PyResult<()> {
-        self.ids_dirty = true;
+        self.pick_read = PickRead::DIRTY;
         let old_section = self.look.data[7];
         let old_opacity = self.look.data[9][0];
         let (mode, edges) = self.look.update(style, &self.queue)?;
@@ -1385,6 +1398,18 @@ impl Renderer {
     fn set_lines(&mut self, slot: &str, segments: PyReadonlyArray1<'_, u8>, above_edges: bool) -> PyResult<()> {
         self.lines.upload(&self.device, &self.queue, slot, segments.as_slice()?, above_edges).map_err(PyValueError::new_err)
     }
+    #[pyo3(signature=(band, guides, scale))]
+    fn set_tool_wire(&mut self, band: Option<&Bound<'_, PyAny>>, guides: &Bound<'_, PyAny>, scale: f32) -> PyResult<()> {
+        let mut bytes = Vec::new();
+        if let Some(band) = band {
+            let color: Vec<f64> = band.get_item(1)?.extract()?;
+            let rgba = std::array::from_fn(|i| (color.get(i).copied().unwrap_or(1.).clamp(0.,1.) * 255.).round() as u8);
+            let width = band.get_item(2)?.extract::<f32>()?;
+            lines::tool_segments(&mut bytes, &band.get_item(0)?, rgba, [scale*width,0.,0.])?;
+        }
+        lines::tool_segments(&mut bytes, guides, [70,90,120,255], [scale*1.5,scale*15.,scale*10.5])?;
+        self.lines.tool_wire(&self.device, &self.queue, bytes).map_err(PyValueError::new_err)
+    }
     fn line_counts(&self) -> Vec<(String, u32)> { self.lines.counts() }
     /// Loose-face marks only; groups use group_selection_edges.
     fn set_face_marks(&mut self, triangles: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
@@ -1398,7 +1423,7 @@ impl Renderer {
         let data = suppressed_indices(&s.index_data, &s.template_data, s.p as usize, &ranges)
             .map_err(PyValueError::new_err)?;
         self.queue.write_buffer(&s.index, 0, &data);
-        self.ids_dirty = true; self.scene_epoch += 1;
+        self.pick_read = PickRead::DIRTY; self.scene_epoch += 1;
         Ok(())
     }
     /// Soft/hidden endpoint pairs in prototype coordinates.
@@ -1516,7 +1541,7 @@ impl Renderer {
         Ok(())
     }
     fn set_edges(&mut self, enabled: bool) {
-        self.ids_dirty |= self.edges != enabled;
+        if self.edges != enabled { self.pick_read = PickRead::DIRTY; }
         self.edges = enabled;
     }
     /// ``far_clip``: keep the projection's far plane (a far clip set by
@@ -1547,7 +1572,7 @@ impl Renderer {
         if self.camera_data != data {
             self.sun.camera_changed();
             self.stable_frames = 0;
-            self.ids_dirty = true;
+            self.pick_read = PickRead::DIRTY;
             self.queue.write_buffer(&self.camera, 0, bytemuck::cast_slice(&data));
             self.camera_data = data;
         }
@@ -1606,7 +1631,7 @@ impl Renderer {
     }
     fn set_materials(&mut self, data: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
         self.sun.invalidate();
-        self.ids_dirty = true; self.scene_epoch += 1;
+        self.pick_read = PickRead::DIRTY; self.scene_epoch += 1;
         let data = data.as_slice()?;
         let scene = self.scene.as_mut().ok_or_else(|| PyValueError::new_err("no scene"))?;
         if data.len() % 16 != 0 || data.len() < scene.p as usize * 16
@@ -1633,7 +1658,7 @@ impl Renderer {
     #[pyo3(signature = (width, height, layers, levels, recipes=None))]
     fn set_textures(&mut self, width: u32, height: u32, layers: u32, levels: Vec<Vec<u8>>, recipes: Option<&[u8]>) -> PyResult<()> {
         self.sun.invalidate();
-        self.ids_dirty = true; self.scene_epoch += 1;
+        self.pick_read = PickRead::DIRTY; self.scene_epoch += 1;
         let limits = self.device.limits();
         if width == 0 || height == 0 || layers == 0 || width > limits.max_texture_dimension_2d
             || height > limits.max_texture_dimension_2d || layers > limits.max_texture_array_layers
@@ -1675,7 +1700,7 @@ impl Renderer {
         self.antialias = enabled;
     }
     fn resize(&mut self, w: u32, h: u32, scale: f64) {
-        self.ids_dirty = true;
+        self.pick_read = PickRead::DIRTY;
         self.sun.camera_changed();
         self.ui_scale = scale as f32;
         self.config.width = ((w as f64 * scale) as u32).max(1);
@@ -1700,6 +1725,7 @@ impl Renderer {
     }
     #[pyo3(signature = (present=true))]
     fn render(&mut self, present: bool) -> PyResult<(f64, Option<f64>)> {
+        self.pick_read.pixel = None;
         let start = Instant::now();
         // Poll completion only; never wait for a timestamp in the render path.
         self.device.poll(wgpu::Maintain::Poll);
@@ -1780,8 +1806,8 @@ impl Renderer {
         let msaa = plan.msaa && !self.pick_pending;
         self.stable_frames = self.stable_frames.saturating_add(1);
         let color_only = !msaa && !self.edges && self.style != 4 && !plan.ao && !plan.xray;
-        let draw_ids = if color_only { needs_settled_ids(self.pick_pending, self.ids_dirty, self.stable_frames) }
-            else { needs_id_pass(msaa, self.pick_pending, self.ids_dirty, self.stable_frames) };
+        let draw_ids = if color_only { needs_settled_ids(self.pick_pending, self.pick_read.dirty, self.stable_frames) }
+            else { needs_id_pass(msaa, self.pick_pending, self.pick_read.dirty, self.stable_frames) };
         if !msaa { self.references.draw(&mut e, &color, &depth, None); }
         if plan.xray { self.transparency.draw(&mut e, &color, None, s, self.multi, tq); }
 
@@ -1920,7 +1946,7 @@ impl Renderer {
                 self.ao.draw(&self.device, &self.queue, &mut e, target, &depth, &output, msaa && !self.pick_pending, tq);
             }
         }
-        if (!msaa || self.pick_pending) && (draw_ids || ao_active) { self.ids_dirty = false; }
+        if (!msaa || self.pick_pending) && (draw_ids || ao_active) { self.pick_read.dirty = false; }
         if self.sections.count > 0 && !ao_active {
             if msaa && !self.pick_pending {
                 self.sections.draw(&mut e, &self.aa.color_view(), &self.aa.depth_view(), Some(&color), tq, &self.camera_data);
@@ -1950,6 +1976,7 @@ impl Renderer {
             if msaa { self.aa.resolve_depth(&self.device, &mut e, &depth, None); }
             self.transparency.draw(&mut e, &color, Some(&depth), s, self.multi, tq);
         }
+        self.lines.draw_tool(&mut e, &color);
         let color = target.create_view(&Default::default());
         self.overlay
             .draw(&mut e, &color, self.config.width, self.config.height, tq);
@@ -2052,7 +2079,7 @@ impl Renderer {
             if ao_active { active.extend(["ao_kernel", "ao_blur_x", "ao_blur_y", "ao_upsample_composite"]); }
             self.timings[k].active = active;
         }
-        if msaa && needs_settled_ids(false, self.ids_dirty, self.stable_frames) { self.ensure_ids()?; }
+        if msaa && needs_settled_ids(false, self.pick_read.dirty, self.stable_frames) { self.ensure_ids()?; }
         self.last_cpu = cpu;
         Ok((cpu, self.last_gpu))
     }
@@ -2622,7 +2649,8 @@ impl Renderer {
     }
     fn ensure_ids(&mut self) -> PyResult<()> { self.ensure_ids_region(None) }
     fn ensure_ids_region(&mut self, cursor: Option<(u32, u32)>) -> PyResult<()> {
-        if !self.ids_dirty { return Ok(()); }
+        if !self.pick_read.dirty { return Ok(()); }
+        self.pick_read.pixel = None;
         // Wireframe IDs include edge-only geometry; retain its existing semantics.
         if self.style == 4 {
             self.pick_pending = true;
@@ -2690,7 +2718,7 @@ impl Renderer {
                 }
             }
             self.queue.submit(Some(encoder.finish()));
-            self.ids_dirty = !ids_complete(cursor);
+            self.pick_read.dirty = !ids_complete(cursor);
         }
         Ok(())
     }
@@ -2772,13 +2800,16 @@ impl Renderer {
     }
 
     #[getter]
-    fn pick_cache_valid(&self) -> bool { !self.ids_dirty }
+    fn pick_cache_valid(&self) -> bool { !self.pick_read.dirty }
 
     fn pick(&mut self, x: u32, y: u32) -> PyResult<i64> {
         if x >= self.config.width || y >= self.config.height {
             return Ok(-1);
         }
-        let measure_id = self.ids_dirty && self.style != 4 && self.queries.is_some();
+        if let Some((px,py,row)) = self.pick_read.pixel {
+            if (px,py) == (x,y) { return Ok(row); }
+        }
+        let measure_id = self.pick_read.dirty && self.style != 4 && self.queries.is_some();
         self.ensure_ids_region(Some((x, y)))?;
         let mut e = self.device.create_command_encoder(&Default::default());
         e.copy_texture_to_buffer(
@@ -2814,7 +2845,9 @@ impl Renderer {
             let last = u64::from_le_bytes(b[16..24].try_into().unwrap());
             last.saturating_sub(first) as f64 * self.queue.get_timestamp_period() as f64 / 1e6
         });
-        Ok(u32::from_le_bytes(b[..4].try_into().unwrap()) as i64 - 1)
+        let row = u32::from_le_bytes(b[..4].try_into().unwrap()) as i64 - 1;
+        self.pick_read.pixel = Some((x,y,row));
+        Ok(row)
     }
 }
 impl Renderer {
@@ -2854,7 +2887,7 @@ impl Renderer {
             style: self.style,
             edges: self.edges,
             textures_enabled: self.textures_enabled,
-            ids_dirty: true,
+            pick_read: PickRead::DIRTY,
             stable_frames: 0,
             pick_pending: false,
             capture_next: false,
@@ -2915,7 +2948,7 @@ impl Renderer {
         swap(&mut self.style, &mut t.style);
         swap(&mut self.edges, &mut t.edges);
         swap(&mut self.textures_enabled, &mut t.textures_enabled);
-        swap(&mut self.ids_dirty, &mut t.ids_dirty);
+        swap(&mut self.pick_read, &mut t.pick_read);
         swap(&mut self.stable_frames, &mut t.stable_frames);
         swap(&mut self.pick_pending, &mut t.pick_pending);
         swap(&mut self.capture_next, &mut t.capture_next);
@@ -3007,6 +3040,7 @@ fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<P
 
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<tool_instances::InstancePreview>()?;
     window_document::register(m)?;
     face_commands::register(m)?;
     model_edit::register(m)?;
