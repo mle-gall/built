@@ -46,6 +46,7 @@ def test_missing_tiles_leave_paint_before_starting_network(monkeypatch):
     sync(display, {})
     assert fetcher.requests == []
     sync(display, {})
+    assert viewport._tile_requests_scheduled
     assert deliveries == []
     viewport._host.timers.run_due()
     assert len(deliveries) == 1
@@ -54,7 +55,7 @@ def test_missing_tiles_leave_paint_before_starting_network(monkeypatch):
     viewport.close()
 
 
-def test_tile_download_submits_the_tile_url_to_the_worker(tmp_path, monkeypatch):
+def test_tile_download_submits_the_tile_url_to_the_worker(native_host, tmp_path, monkeypatch):
     from georef import transport
 
     received = Future()
@@ -64,7 +65,7 @@ def test_tile_download_submits_the_tile_url_to_the_worker(tmp_path, monkeypatch)
         return b""
 
     monkeypatch.setattr(transport, "_download", download)
-    fetcher = TileFetcher(TileCache(tmp_path))
+    fetcher = TileFetcher(TileCache(tmp_path), parent=native_host.viewport)
     try:
         fetcher._start_download(PRESETS["osm"], 1, 2, 3)
         assert received.result(timeout=5) == "https://tile.openstreetmap.org/3/1/2.png"

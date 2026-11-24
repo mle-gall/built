@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from weakref import proxy
 
 from core.input_codes import Type
-from ingetrazo_core import WindowInput, capture_document_frame as live_image
+from ingetrazo_core import WindowInput, capture_document_frame
 from ingetrazo_render import WindowTimers
 from views.document_interaction import DocumentInteraction
 from views.view_host import WidgetShim
@@ -56,3 +56,22 @@ class ControllerSurface(DocumentInteraction, _InputSurface):
 
     def reset_texture_cache(self):
         self.reset_document_caches()
+
+class _PixelCount(int):
+    # Existing frame callers use width(), while raster callers read width.
+    __call__ = int.__int__
+
+
+class _DocumentImage:
+    """Expose the renderer-owned capture to both frame and raster assertions."""
+
+    def __init__(self, controller):
+        self._frame = capture_document_frame(controller)
+        self.width = _PixelCount(self._frame.width())
+        self.height = _PixelCount(self._frame.height())
+
+    def __getattr__(self, name):
+        return getattr(self._frame, name)
+
+
+live_image = _DocumentImage
