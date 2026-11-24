@@ -94,17 +94,6 @@ def collect_actions(window) -> list:
     return sorted(seen.values(), key=lambda a: _plain(a.text()).lower())
 
 
-def trigger_plugin_shortcut(window, key, modifiers):
-    actions = window.findChildren(QAction)
-    if actions:
-        chord = QKeySequence(int(key) | int(modifiers))
-        for action in actions:
-            if action.isEnabled() and any(s.matches(chord) == QKeySequence.ExactMatch for s in action.shortcuts()):
-                action.trigger()
-                return True
-    return False
-
-
 def portable_keys(seqs):
     """Adapt keys supplied by classic actions or older plugin callers."""
     return [s if isinstance(s, str) else s.toString(QKeySequence.PortableText) for s in seqs]

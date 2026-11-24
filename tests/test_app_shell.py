@@ -201,7 +201,7 @@ def test_annotation_font_options(host, tool):
         view.renderer = None
 
 
-def test_registered_shortcuts_use_rust_and_plugin_actions_still_trigger(host):
+def test_registered_shortcuts_use_rust_and_plugin_actions_still_trigger(host, monkeypatch):
     from PySide6.QtGui import QAction, QKeySequence
     from app_shell.command_action import ShellAction
 
@@ -219,9 +219,25 @@ def test_registered_shortcuts_use_rust_and_plugin_actions_still_trigger(host):
     plugin.setShortcut(QKeySequence("F12"))
     plugin.triggered.connect(lambda: seen.append("plugin"))
     assert host._shortcut(Qt.Key_F12, 0)
-    plugin.setEnabled(False)
+    # Once observed, a raw extension action dispatches without walking the
+    # QObject tree. Observe later shortcut edits, disabling and reparenting.
+    with monkeypatch.context() as m:
+        m.setattr(win, "findChildren", lambda *_: pytest.fail("rescanned stable plugin actions"))
+        assert host._shortcut(Qt.Key_F12, 0)
+    plugin.setShortcut(QKeySequence("F10"))
     assert not host._shortcut(Qt.Key_F12, 0)
-    assert seen == ["registered", "plugin"]
+    assert host._shortcut(Qt.Key_F10, 0)
+    plugin.setEnabled(False)
+    assert not host._shortcut(Qt.Key_F10, 0)
+    from PySide6.QtCore import QObject
+    container = QObject(win)
+    assert not host._shortcut(Qt.Key_F10, 0)
+    plugin.setParent(container)
+    plugin.setEnabled(True)
+    assert host._shortcut(Qt.Key_F10, 0)
+    container.setParent(None)
+    assert not host._shortcut(Qt.Key_F10, 0)
+    assert seen == ["registered"] + ["plugin"] * 4
 
 
 def test_winit_tool_cursors_use_the_same_art_for_tools_and_navigation(host, monkeypatch):

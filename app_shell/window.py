@@ -459,6 +459,12 @@ class ShellWindow(QObject):
         self._registry_actions = {}
         self.refresh_commands()
 
+    def childEvent(self, event):
+        # A plugin may attach an action or an entire submenu to this QObject.
+        if event.added() or event.removed():
+            self._action_tree_changed = True
+        super().childEvent(event)
+
     def refresh_commands(self):
         from app_shell.command_bindings import refresh
         refresh(self)
