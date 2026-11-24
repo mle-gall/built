@@ -2430,6 +2430,26 @@ impl PyMeshStore {
         self.op_all(|s, ch| s.weld_coincident(ch))
     }
 
+    /// `run_stitch`'s phases 0–2 as one op (weld, dedupe, the scoped
+    /// T-junction rounds, the collinear collapse):
+    /// `(((dropped, kept)…), bumps), change)`. All or nothing: a step the
+    /// store refuses puts the state back (StoreFallback).
+    #[allow(clippy::type_complexity)]
+    #[pyo3(signature = (seeds, dedupe, tolerance, hypot))]
+    fn stitch_connect(
+        &mut self,
+        seeds: Vec<[f64; 3]>,
+        dedupe: bool,
+        tolerance: f64,
+        hypot: &str,
+    ) -> PyResult<((Vec<(u128, u128)>, usize), PyChange)> {
+        let h = crate::hypot_of(hypot)?;
+        let (r, ch) = self.op_all(|s, ch| s.stitch_connect(&seeds, dedupe, tolerance, h, ch))?;
+        let s = &self.inner;
+        let pairs = r.deduped.iter().map(|&(d, k)| (s.key(Kind::Face, d), s.key(Kind::Face, k))).collect();
+        Ok(((pairs, r.bumps), ch))
+    }
+
     /// `Mesh.dedupe_faces()`: `(([(dropped, kept)], bumps), change)`.
     #[allow(clippy::type_complexity)]
     fn dedupe_faces(&mut self) -> PyResult<((Vec<(u128, u128)>, usize), PyChange)> {
