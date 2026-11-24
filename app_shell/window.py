@@ -34,6 +34,7 @@ from PySide6.QtCore import QEvent, QObject, Qt, Signal
 
 from app_shell.command_action import ShellAction
 from views.view_host import MISSING
+from views.document_commands import WindowDocumentCommands
 
 
 class _Label:
@@ -407,12 +408,10 @@ def _doc_attr(name):
     return property(get, put)
 
 
-class ShellWindow(QObject):
+class ShellWindow(WindowDocumentCommands, QObject):
 
     def __init__(self, host):
         super().__init__()
-        if "_saved_version" not in vars(ShellWindow):
-            borrow_main_window()
         self._host = host
         from core.extensions import discover_plugins
         from core.plugin_panels import install
@@ -428,7 +427,7 @@ class ShellWindow(QObject):
         from ingetrazo_core import WindowCommands
         self._command_store = WindowCommands()
         self._command_actions = {}
-        from views.main_window import build_tools
+        from ingetrazo_render import build_tools
         self._tools = build_tools()
         self._act_eyedropper = ShellAction(self, "Sample material", checkable=True,
                                            toggled=self._on_toggle_eyedropper)
@@ -952,10 +951,6 @@ class ShellWindow(QObject):
         from app_shell import files
         return files.import_progress(self, title, monotonic=monotonic)
 
-    def _parse_skp_threaded(self, skp, cb):
-        from views.main_window import MainWindow
-        return MainWindow._parse_skp_threaded(self, skp, cb)
-
     def _parse_stl_threaded(self, path, scale, simplify_mode, cb, report=None):
         from app_shell import files
         from formats.stl import parse_stl
@@ -973,16 +968,3 @@ class ShellWindow(QObject):
     def _open_recent(self, path):
         from app_shell import files
         return files.open_path(self, path)
-
-
-#: MainWindow methods that only reach ``self.viewport`` and ``self._doc``:
-#: borrowed eagerly (the rest come on demand, see ``ShellWindow.__getattr__``).
-_FROM_MAIN_WINDOW = ("_CAMERA_FIELDS", "_apply_camera_dict", "_apply_camera_home",
-                     "_on_undo", "_on_redo", "_extents_bounds",
-                     "_figure_bounds", "_image_bounds",
-                     "_saved_version", "_is_dirty", "_doc_is_blank", "_free_untitled_no")
-
-
-def borrow_main_window():
-    for name in _FROM_MAIN_WINDOW:
-        _lazy(name)

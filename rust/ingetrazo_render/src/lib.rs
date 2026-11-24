@@ -3,6 +3,7 @@ mod timing;
 mod captured_frame;
 use captured_frame::CapturedFrame;
 mod window_timers;
+mod window_document;
 mod panic_log;
 mod overlay;
 mod commands;
@@ -2997,6 +2998,7 @@ fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<P
 
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    window_document::register(m)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_name, m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_art, m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::texture_cutout,m)?)?;

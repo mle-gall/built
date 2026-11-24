@@ -64,35 +64,12 @@ from formats import obj as obj_format
 from formats import ifc as ifc_format
 from formats import stl as stl_format
 from formats import gltf as gltf_format
-from tools.arc import CenterArcTool, ArcTool, ThreePointArcTool
-from tools.circle import CircleTool, PolygonTool
-from tools.dimension import DimensionTool
-from tools.eraser import EraserTool
-from tools.geopath import GeoPathTool
-from tools.rust_tools import LineTool
-from tools.protractor import ProtractorTool
-from tools.north import NorthTool
-from tools.tape import TapeMeasureTool
-from tools.text import TextTool
-from tools.move import MoveTool
-from tools.rotate import RotateTool
-from tools.scale import ScaleTool
-from tools.fillet import FilletTool
-from tools.followme import FollowMeTool
-from tools.rotated_rectangle import RotatedRectangleTool
-from tools.offset import OffsetTool
 from tools.texture_position import TexturePositionTool
-from tools.walkthrough import (FirstPersonTool, LookAroundTool,
-                               PositionCameraTool, WalkTool)
+from views.document_commands import WindowDocumentCommands
+from ingetrazo_render import build_tools
 from tools.paint import PaintTool
 from tools.paste import PasteTool
-from tools.arc import PieTool
 from tools.flip import FlipTool
-from tools.freehand import FreehandTool
-from tools.section import SectionPlaneTool
-from tools.pushpull import PushPullTool
-from tools.rust_tools import RectangleTool
-from tools.rust_tools import SelectTool
 from views.tray import BimTray, GeorefTray, Tray, style_slider
 from views.icons import tool_icon
 
@@ -444,85 +421,7 @@ from views.worksession import WorksessionMixin
 
 
 
-def _after_unlink_step(window, stack) -> None:
-    """Undo or redo just moved ``stack[-1]``: a broken link brought back
-    (or broken again) changes what is watched and the tags. A function, not
-    a method: undo and redo run for stand-in windows too (tests, tools)."""
-    from core.history import CompoundCommand, UnlinkCommand
-
-    def unlinks(cmd):
-        if isinstance(cmd, CompoundCommand):
-            return any(unlinks(c) for c in cmd.commands)
-        return isinstance(cmd, UnlinkCommand)
-    if stack and unlinks(stack[-1]):
-        window._unlinked()
-
-
-def build_tools() -> dict:
-    """Create a fresh tool registry for a classic or native window."""
-    tools = {
-        "select": SelectTool(),
-        "line": LineTool(),
-        "freehand": FreehandTool(),
-        "rectangle": RectangleTool(),
-        "rotated_rect": RotatedRectangleTool(),
-        "circle": CircleTool(),
-        "polygon": PolygonTool(),
-        "arc": ArcTool(),
-        "arc3": ThreePointArcTool(),
-        "center_arc": CenterArcTool(),
-        "pie": PieTool(),
-        "pushpull": PushPullTool(),
-        "offset": OffsetTool(),
-        "move": MoveTool(),
-        "rotate": RotateTool(),
-        "scale": ScaleTool(),
-        "flip": FlipTool(),
-        "followme": FollowMeTool(),
-        "fillet": FilletTool(),
-        # Entered from a textured face's right-click menu, never from
-        # the toolbar (Texture ▸ Position).
-        "texture_position": TexturePositionTool(),
-        "paint": PaintTool(),
-        "dimension": DimensionTool(),
-        "eraser": EraserTool(),
-        "tape": TapeMeasureTool(),
-        "protractor": ProtractorTool(),
-        # Tools ▸ North: aim true north on screen, the sun turns with it.
-        "north": NorthTool(),
-        "text": TextTool(),
-        # Georef trace (Track G) — draws a GeoPath, never mesh geometry.
-        "geopath": GeoPathTool(),
-        # Tools ▸ Section Plane (core/section.py).
-        "section": SectionPlaneTool(),
-        # Camera ▸ Position Camera / Walk / Look Around
-        # (tools/walkthrough.py) — Rafael's «pasitos» for interiors.
-        "position_camera": PositionCameraTool(),
-        "walk": WalkTool(),
-        "look_around": LookAroundTool(),
-        # Walking as a game plays it (W/A/S/D + mouse look), beside
-        # the classic Walk rather than instead of it.
-        "first_person": FirstPersonTool(),
-    }
-    # The Solid Tools (tools/solid_tools.py, core/solids.py).
-    from tools.solid_tools import SOLID_TOOLS
-    for key, cls in SOLID_TOOLS:
-        tools[key] = cls()
-    # Right-click ▸ Change Axes (issue #44) — no toolbar button, the
-    # usual convention.
-    from tools.change_axes import ChangeAxesTool
-    tools["change_axes"] = ChangeAxesTool()
-    from tools.scale_manager import ScaleManagerTool
-    tools["scale_manager"] = ScaleManagerTool()
-    # Tag each tool with its icon key so the viewport can turn the mouse
-    # pointer into the tool's icon (tool-shaped cursors).
-    for key, tool in tools.items():
-        if not getattr(tool, "icon", None):
-            tool.icon = key
-    return tools
-
-
-class MainWindow(WorksessionMixin, QMainWindow):
+class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
     """Top-level IngeTrazo window."""
 
     def __init__(self, defer_extensions: bool = False) -> None:
@@ -6672,40 +6571,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if grid is not None:                 # every view shown frames it
             grid.fit_box(bounds[0], bounds[1])
 
-    def _extents_bounds(self):
-        """The box Zoom Extents frames: the model, its face-me figures, its
-        visible reference images — or the survey alone — as ``(lo, hi)``;
-        ``None`` when there is nothing to frame."""
-        from core.camera_point import CameraPoint
-        bounds = self.viewport.scene.bounds()
-        # Face-me figures count too, as a Zoom Extents should:
-        # ``Scene.bounds()`` leaves them out (they draw per frame), so a new
-        # document — the scale figure alone — framed nothing, and Zoom
-        # Extents did nothing after zooming far away (Marco, 23-09).
-        # Visible reference images too: a plan imported to trace on stayed
-        # off screen while Zoom Selection over it did frame it.
-        for extra in (self._figure_bounds(), self._image_bounds()):
-            if extra is None:
-                continue
-            lo, hi = extra
-            if bounds[0] is not None:
-                lo = CameraPoint(min(lo.x(), bounds[0].x()), min(lo.y(), bounds[0].y()),
-                               min(lo.z(), bounds[0].z()))
-                hi = CameraPoint(max(hi.x(), bounds[1].x()), max(hi.y(), bounds[1].y()),
-                               max(hi.z(), bounds[1].z()))
-            bounds = (lo, hi)
-        if bounds[0] is None:
-            # ``Scene.bounds()`` covers editable geometry only. A document
-            # holding just a survey (the normal state right after importing
-            # one) would otherwise make Zoom Extents do nothing at all.
-            survey = getattr(self.viewport.scene, "photo_mesh", None)
-            if survey is None or not getattr(survey, "visible", False):
-                return None
-            bounds = survey.bounds()
-            if bounds[0] is None:
-                return None
-        return bounds
-
     def _camera_pose(self) -> tuple:
         cam = self.viewport.camera
         t = cam.target
@@ -6740,47 +6605,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
         grid = self._doc.view_grid
         if grid is not None:                 # every view shown frames it,
             grid.fit_box(lo, hi)             # as Zoom Extents does
-
-    def _figure_bounds(self):
-        """Visible figure bounds for framing. Omit a distant starter figure
-        when there is authored geometry to frame."""
-        from core.camera_point import CameraPoint
-        from core.scale_figure import is_marked
-        from core.coordinate_frame import REBASE_DISTANCE
-        from core.group import placement_points
-        scene = self.viewport.scene
-        lo = hi = None
-        for g in scene.groups:
-            if not getattr(g, "billboard", False) or not scene.entity_visible(g):
-                continue
-            pts = placement_points(g)
-            if not len(pts):
-                continue
-            a, b = pts.min(axis=0), pts.max(axis=0)
-            if is_marked(g):
-                model_lo, model_hi = scene.bounds()
-                if model_lo is not None and any(
-                        x - q > REBASE_DISTANCE or p - y > REBASE_DISTANCE
-                        for x, y, p, q in zip(model_lo.toTuple(), model_hi.toTuple(), a, b)):
-                    continue
-            lo = a if lo is None else [min(x, y) for x, y in zip(lo, a)]
-            hi = b if hi is None else [max(x, y) for x, y in zip(hi, b)]
-        if lo is None:
-            return None
-        return CameraPoint(lo), CameraPoint(hi)
-
-    def _image_bounds(self):
-        """World box of the visible reference images, or None."""
-        from ingetrazo_core import Vec3 as QVector3D
-        scene = self.viewport.scene
-        pts = [c for im in getattr(scene, "image_planes", None) or []
-               if scene.entity_visible(im) for c in im.corners()]
-        if not pts:
-            return None
-        return (QVector3D(min(p.x() for p in pts), min(p.y() for p in pts),
-                          min(p.z() for p in pts)),
-                QVector3D(max(p.x() for p in pts), max(p.y() for p in pts),
-                          max(p.z() for p in pts)))
 
     def _ensure_composer(self):
         """The composer window, created but not shown — the sheet strip's
@@ -7175,98 +6999,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
             tr("Selection cleared ({n} entities)", n=n), 2500)
 
     # ---- Undo / redo --------------------------------------------------------
-    def _on_undo(self) -> None:
-        # A tool in the middle of something answers Ctrl+Z first: the Line
-        # steps its chain back one vertex instead of staying anchored to
-        # the end of the segment just undone (#175).
-        tool = self.viewport.active_tool
-        handler = getattr(tool, "on_undo", None)
-        if callable(handler) and handler(self.viewport):
-            inference = getattr(self.viewport, "inference", None)
-            if inference is not None:
-                inference.clear_references()
-            self.viewport.notify_scene_changed()
-            return
-        if self.viewport.history.undo():
-            inference = getattr(self.viewport, "inference", None)
-            if inference is not None:
-                inference.clear_references()
-            self.viewport.notify_scene_changed()
-            _after_unlink_step(self, self.viewport.history.redo_stack)
-
-    def _on_redo(self) -> None:
-        # The same first refusal as undo: Push/Pull ends a drag whose staged
-        # preview sits in the model, so the redo lands on the clean one.
-        tool = self.viewport.active_tool
-        handler = getattr(tool, "on_redo", None)
-        if callable(handler) and handler(self.viewport):
-            inference = getattr(self.viewport, "inference", None)
-            if inference is not None:
-                inference.clear_references()
-            self.viewport.notify_scene_changed()
-            return
-        if self.viewport.history.redo():
-            inference = getattr(self.viewport, "inference", None)
-            if inference is not None:
-                inference.clear_references()
-            self.viewport.notify_scene_changed()
-            _after_unlink_step(self, self.viewport.history.undo_stack)
-
     # ---- File handling ------------------------------------------------------
     # ---- The document's camera (issue #60) ---------------------------------
-    _CAMERA_FIELDS = ("distance", "yaw", "pitch", "fov_deg", "perspective",
-                      "two_point")
-
-    def _camera_dict(self, vp=None) -> dict:
-        """The live camera as the document keeps it (the .skp format
-        saves the camera in the file too; @pacaeiro, issue #60).
-
-        A camera that is not a real pose (NaN or inf) is not written: the
-        save refused the whole document over it and the user's work could
-        not be saved (#383). The document keeps the view it had."""
-        vp = vp or self.viewport
-        cam = vp.camera
-        if not cam.is_finite():
-            return getattr(vp.scene, "camera_home", None)
-        t = cam.target
-        out = {"target": [float(t.x()), float(t.y()), float(t.z())]}
-        if cam.up.toTuple() != (0., 0., 1.):
-            out["up"] = list(cam.up.toTuple())
-        for k in self._CAMERA_FIELDS:
-            out[k] = getattr(cam, k)
-        lens = cam.lens_dict()
-        if lens:
-            out["lens"] = lens
-        return out
-
-    def _apply_camera_home(self) -> None:
-        """Look at what the document's author was looking at; a document
-        from before the camera was saved keeps the view as it is."""
-        self._apply_camera_dict(getattr(self.viewport.scene, "camera_home", None))
-
-    def _apply_camera_dict(self, home) -> None:
-        """Put the camera where :meth:`_camera_dict` found it."""
-        if not isinstance(home, dict):
-            return
-        cam = self.viewport.camera
-        t = home.get("target")
-        if isinstance(t, (list, tuple)) and len(t) == 3:
-            cam.target = tuple(map(float, t))
-        up = home.get("up")
-        cam.up = (0., 0., 1.)
-        if isinstance(up, (list, tuple)) and len(up) == 3:
-            from math import isfinite
-            if all(isinstance(v, (float, int)) and isfinite(v) for v in up) and any(up):
-                cam.up = up
-        for k in self._CAMERA_FIELDS:
-            if k in home:
-                try:
-                    setattr(cam, k, type(getattr(cam, k))(home[k]))
-                except (TypeError, ValueError):
-                    pass
-        cam.apply_lens(home.get("lens"))
-        self.viewport.update()
-
     #: The angles the field of view may take — the camera's own range
     #: (``core.camera.FOV_RANGE``), down to 1° for a long lens.
     from core.camera import FOV_RANGE
@@ -7600,33 +7334,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # on it.
         vp.installEventFilter(self)
         vp.setAcceptDrops(True)
-
-    def _doc_is_blank(self, doc=None) -> bool:
-        """An untitled project nobody has touched — no file, no import, no
-        change, nothing to undo or redo. Opening a file there takes its
-        place instead of a new tab, so with one tab everything goes as it
-        did before tabs."""
-        doc = doc or self._doc
-        vp = doc.viewport
-        if doc.path is not None or doc.import_name or vp is None:
-            return False
-        if doc.front_view is not None:
-            return False    # what would replace it would land on that view
-        hist = vp.history
-        if hist.undo_stack or hist.redo_stack:
-            return False
-        scene = vp.scene
-        return scene.content_version == doc.saved_content
-
-    def _free_untitled_no(self) -> int:
-        """The lowest untitled auto-save slot no open project writes and
-        no earlier session left behind."""
-        from core import autosave
-        used = {d.untitled_no for d in self._documents}
-        n = 1
-        while n in used or (n > 1 and autosave.pending(None, untitled=n)):
-            n += 1
-        return n
 
     def _new_document(self, activate: bool = True):
         """A new, empty project in a tab of its own, right of the active
@@ -9749,13 +9456,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
         return dlg, cb
 
-    def _parse_skp_threaded(self, skp, cb):
-        from ingetrazo_core import DocumentOpen
-        try:
-            return DocumentOpen(skp, insert=True).wait(), None
-        except Exception as exc:
-            return None, exc
-
     def _parse_stl_threaded(self, path, scale, simplify_mode, cb,
                             report=None):
         """Parse an STL on a worker while delivering progress on the UI thread.
@@ -11218,27 +10918,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
             self._on_save()
             return not self._is_dirty()
         return answer == "discard"
-
-    # "Saved" is recorded as the scene version at that moment (as every
-    # caller and test has always written it) and kept as the CONTENT version:
-    # a later selection bumps ``scene.version`` for the GL caches but not
-    # ``content_version``, so a click after Ctrl+S no longer asks to save
-    # again (issue #159). -1 stays "never saved".
-    @property
-    def _saved_version(self) -> int:
-        return self._saved_content
-
-    @_saved_version.setter
-    def _saved_version(self, version: int) -> None:
-        doc = self.__dict__.get("_doc")
-        scene = getattr(getattr(doc, "viewport", None), "scene", None)
-        view = getattr(scene, "view_version", 0) if version >= 0 else 0
-        self._saved_content = version - view
-
-    def _is_dirty(self) -> bool:
-        if self._workspace is not None:
-            return bool(self._workspace.is_dirty())
-        return self._doc.viewport.scene.content_version != self._saved_content
 
     def _on_scene_version_changed(self, _version: int) -> None:
         # Something came into the blank project behind the empty area (an
