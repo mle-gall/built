@@ -69,8 +69,10 @@ def start(win, path, install, *, target=None):
             logging.exception("Opening %s", path)
         if timer is not None:
             timer.stop()
-        win._open_callbacks.pop(path, None)
-        failures = win.__dict__.setdefault("_open_failures", {}).pop(path, [])
+        failures = []
+        if target is None:
+            win._open_callbacks.pop(path, None)
+            failures = win.__dict__.setdefault("_open_failures", {}).pop(path, [])
         if outcome[0] is not False:
             why = outcome[0] or (tr("cancelled") if bar.wasCanceled() or win._open_aborted
                                  else tr("could not be opened"))
@@ -82,8 +84,8 @@ def start(win, path, install, *, target=None):
         win._pending_open = None
         win._open_in_progress = win._opening_document = False
         if win._open_aborted:
-            win._open_callbacks.clear()
-            win._open_failures.clear()
+            win.__dict__.get("_open_callbacks", {}).clear()
+            win.__dict__.get("_open_failures", {}).clear()
             if hasattr(type(win), "closeEvent"):
                 QTimer.singleShot(0, win, win.close)
         else:
@@ -93,7 +95,8 @@ def start(win, path, install, *, target=None):
                 elif destination in win._documents:
                     start(win, queued, install_insertion, target=destination)
 
-    callbacks = win.__dict__.setdefault("_open_callbacks", {}).setdefault(path, [])
+    callbacks = (win.__dict__.setdefault("_open_callbacks", {}).setdefault(path, [])
+                 if target is None else [])
     timer = None
     if hasattr(win, "_host") and getattr(win._host, "ns_view", 0):
         bar.poll = poll
@@ -110,7 +113,8 @@ def after_open(win, path, callback, failed=None):
     """Apply tab metadata once the matching request actually succeeds;
     ``failed(reason)`` runs instead when it does not (an error, Cancel)."""
     pending = win.__dict__.get("_pending_open")
-    if pending and (path == pending.path or path in pending.queue):
+    if pending and ((path == pending.path and getattr(pending, "target", None) is None)
+                    or path in pending.queue):
         win._open_callbacks.setdefault(path, []).append(callback)
         if failed is not None:
             win.__dict__.setdefault("_open_failures", {}).setdefault(path, []).append(failed)
@@ -121,7 +125,8 @@ def after_open(win, path, callback, failed=None):
 def pending(win, path) -> bool:
     """Whether ``path`` is opening or queued to open in ``win``."""
     bar = win.__dict__.get("_pending_open")
-    return bool(bar) and (path == bar.path or path in bar.queue)
+    return bool(bar) and ((path == bar.path and getattr(bar, "target", None) is None)
+                          or path in bar.queue)
 
 
 def install_skp(win, path, bar, staged):
@@ -131,6 +136,7 @@ def install_skp(win, path, bar, staged):
     if getattr(doc, "_renderer_wgpu", False) and not hasattr(win, "_host"):
         doc._awaiting_picture = True
         doc._after_picture = []
+    history.max_steps = vp.history.max_steps
     vp.set_document(scene, history)
     win._import_name = path.name
     win._autosaved_version = None

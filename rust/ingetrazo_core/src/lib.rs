@@ -129,6 +129,12 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<skp::SkpArchiveCursor>()?;
     m.add_function(wrap_pyfunction!(skp::skp_mfc_object, m)?)?;
     m.add_function(wrap_pyfunction!(skp::skp_mfc_readers, m)?)?;
+    m.add_function(wrap_pyfunction!(skp::skp_face_entry, m)?)?;
+    m.add_function(wrap_pyfunction!(skp::skp_ring, m)?)?;
+    m.add_function(wrap_pyfunction!(skp::skp_positioned_uvs, m)?)?;
+    m.add_function(wrap_pyfunction!(skp::skp_instance_matrix, m)?)?;
+    m.add_function(wrap_pyfunction!(skp::skp_model_annotations, m)?)?;
+    m.add_function(wrap_pyfunction!(skp::skp_resolve_annotations, m)?)?;
     m.add_function(wrap_pyfunction!(skp::skp_annotations, m)?)?;
     m.add_function(wrap_pyfunction!(skp::skp_definition_spans, m)?)?;
     m.add_function(wrap_pyfunction!(skp::skp_definition, m)?)?;

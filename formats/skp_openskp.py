@@ -33,7 +33,6 @@ later refinement). Both joins are guarded, so PyPI 0.2.0 still imports (uncolour
 """
 from __future__ import annotations
 
-import copy
 import gc
 from collections import OrderedDict
 from contextlib import contextmanager
@@ -58,163 +57,11 @@ EXACT_TREE = True
 _GEOMETRY_CACHE_BYTES = 64 * 1024 * 1024
 
 
-def _ring_raw(defn, loop):
-    """Resolve one ``[(edge_id, sense), …]`` loop to raw local ``(x, y, z)``
-    tuples in INCHES. Returns ``None`` on any dangling reference.
-
-    The ring is read from the loop's CONNECTIVITY — each coedge contributes
-    the vertex it shares with the next one — and NOT from ``sense``, because
-    OpenSKP changed what that flag carries. It used to be the .skp format's
-    own storage bit (0 = forward, 1 = reversed); upstream 0cd14d7 normalized it
-    to the documented +1 / -1, and under ±1 BOTH values are truthy, so a
-    boolean test silently took the same endpoint for every coedge. Every
-    polygon with a reversed coedge then came out as a self-intersecting star:
-    plaza Yanque lost 68% of its surface (43008 → 13590 m², same faces, same
-    bounding box) and drew as spikes across the whole terrain.
-
-    Consecutive coedges connect head-to-tail under either encoding, so each
-    coedge ENDS at the vertex it shares with the next one — which is the very
-    vertex the flag used to select, so a parser on either contract now yields
-    the identical ring (verified corner-for-corner over a 116k-face file).
-    ``sense`` only breaks the tie for a degenerate loop whose neighbours share
-    both endpoints."""
-    n = len(loop)
-    edges = []
-    for eid, _sense in loop:
-        edge = defn.edges.get(eid)
-        if edge is None:
-            return None
-        edges.append(edge)
-    pts = []
-    vertices = defn.vertices
-    for i, edge in enumerate(edges):
-        a = edge.v1_id
-        b = edge.v2_id
-        nxt = edges[i + 1] if i + 1 < n else edges[0]
-        vid = None
-        if nxt is not edge:
-            na = nxt.v1_id
-            nb = nxt.v2_id
-            a_shared = a == na or a == nb
-            b_shared = b == na or b == nb
-            if a_shared != b_shared:
-                vid = b if b_shared else a
-        if vid is None:         # degenerate loop: fall back to the flag
-            vid = a if loop[i][1] else b
-        v = vertices.get(vid)
-        if v is None:
-            return None
-        pts.append((v.x, v.y, v.z))
-    return pts
-
-
-def _matrix(m) -> QMatrix4x4:
-    """An OpenSKP instance ``matrix`` (row-major 3×3 + translation, in inches)
-    as a ``QMatrix4x4`` whose translation is already in metres.
-
-    Element 12 is a uniform scale the reader has already worked out: a
-    placement stored with w = 100 reaches us as 0.01, with the 3×3 and the
-    translation as stored, so both are multiplied by it. Ignoring it brought
-    such a component in 100x large (#865); dividing by it, 10000x (#1196)."""
-    s = float(m[12]) if len(m) > 12 and m[12] else 1.0
-    return QMatrix4x4(
-        m[0] * s, m[1] * s, m[2] * s, m[9] * s * _INCH,
-        m[3] * s, m[4] * s, m[5] * s, m[10] * s * _INCH,
-        m[6] * s, m[7] * s, m[8] * s, m[11] * s * _INCH,
-        0.0, 0.0, 0.0, 1.0)
-
-
-def _placements_by_definition(model):
-    """{definition id: [world matrix, ...]} — every placement of every
-    definition, composed over the model's instance tree. The matrices
-    map definition-local metres to world metres (see :func:`_matrix`)."""
-    out = {}
-
-    def walk(defn, parent, depth):
-        if defn is None or depth > _MAX_DEPTH:
-            return
-        for inst in getattr(defn, "instances", None) or []:
-            local = getattr(inst, "matrix", None)
-            if not local:
-                continue
-            world = parent * _matrix(local)
-            ref = getattr(inst, "ref_idx", None)
-            out.setdefault(ref, []).append(world)
-            walk((getattr(model, "definitions", None) or {}).get(ref),
-                 world, depth + 1)
-
-    walk(getattr(model, "root", None), QMatrix4x4(), 0)
-    return out
-
-
-def _cross3(a, b):
-    return (a[1] * b[2] - a[2] * b[1],
-            a[2] * b[0] - a[0] * b[2],
-            a[0] * b[1] - a[1] * b[0])
-
-
-def _dimension_entry(dm, world=None):
-    """One payload dimension (metres, world space) for an OpenSKP
-    dimension; ``world`` lifts a definition-local one by one placement
-    of its definition.
-
-    The offset leaves as a VECTOR when the dimension's constraint axis
-    is known (VFF files, via openskp_compat): with N the plane normal
-    (``plane_x``, stored in 5BCF) and X the plane's x axis (``normal``,
-    stored in 5BD0), the grammar upstream resolved (openskp#481) is
-    ``(N × X) · offset`` for axis 1 and ``−X · offset`` for axis 2.
-    Without an axis the scalar + stored axis go out as before and the
-    consumer keeps its historical reading of them."""
-    a = [c * _INCH for c in dm.a]
-    b = [c * _INCH for c in dm.b]
-    offset = float(getattr(dm, "offset", 0.0) or 0.0) * _INCH
-    frame_x = getattr(dm, "normal", None)      # 5BD0 — the plane's X axis
-    plane_n = getattr(dm, "plane_x", None)     # 5BCF — the plane's normal
-    axis = getattr(dm, "vff_axis", None)
-    ov = None
-    if axis in (1, 2) and plane_n and frame_x:
-        d = _cross3(plane_n, frame_x) if axis == 1 \
-            else tuple(-c for c in frame_x)
-        ov = [c * offset for c in d]
-    if world is not None:
-        a = list(world.map(QVector3D(*a)).toTuple())
-        b = list(world.map(QVector3D(*b)).toTuple())
-        if ov is not None:
-            ov = list(world.mapVector(QVector3D(*ov)).toTuple())
-    entry = {"a": a, "b": b, "text": getattr(dm, "text", "") or ""}
-    if ov is not None:
-        entry["offset_vector"] = ov
-    else:
-        entry["offset"] = offset
-        if frame_x:
-            n = [float(c) for c in frame_x]
-            if world is not None:
-                n = list(world.mapVector(QVector3D(*n)).toTuple())
-            entry["normal"] = n
-    return entry
-
-
-def _text_entry(tx, world=None):
-    """One payload leader text (metres, world space) for an OpenSKP text;
-    ``world`` lifts a definition-local one by one placement. A text
-    whose anchor did not resolve still shows at its label position."""
-    pt = getattr(tx, "point", None)
-    lp = getattr(tx, "label_point", None)
-    if pt is None and lp is None:
-        return None
-    anchor = pt if pt is not None else lp
-    entry = {"anchor": [c * _INCH for c in anchor],
-             "text": (getattr(tx, "text", "") or "").strip(),
-             "hidden": bool(getattr(tx, "hidden", False))}
-    if lp is not None and pt is not None:
-        entry["label"] = [c * _INCH for c in lp]
-    if world is not None:
-        entry["anchor"] = list(world.map(QVector3D(*entry["anchor"]))
-                               .toTuple())
-        if "label" in entry:
-            entry["label"] = list(world.map(QVector3D(*entry["label"]))
-                                  .toTuple())
-    return entry
+from ingetrazo_core import (
+    skp_face_entry as _face_entry, skp_positioned_uvs as _positioned_uvs,
+    skp_ring as _ring_raw,
+)
+from ingetrazo_core import skp_instance_matrix as _matrix, skp_model_annotations
 
 
 def _texture_dir(skp_path) -> Path:
@@ -245,10 +92,6 @@ def _texture_dir(skp_path) -> Path:
     except OSError:
         import tempfile
         return Path(tempfile.mkdtemp(prefix="ingetrazo-skp-tex-"))
-
-
-
-
 
 
 # The colourize maths moved to core.texture (the material editor needs it
@@ -322,8 +165,6 @@ def _needs_tint(data, declared_rgb) -> bool:
     return d > 24.0
 
 
-
-
 def _inverted_png(data: bytes) -> Optional[bytes]:
     """``data`` (an image) with every pixel inverted, as PNG bytes — a
     glossiness map read as roughness. ``None`` when it does not decode."""
@@ -360,64 +201,6 @@ def _face_attrs(face, attr_map, inherited=None):
 # one recipe the renderer and every exporter share; this module was where it
 # was first calibrated (the controlled textura.skp) and keeps the short name.
 _plane_basis = projection_basis
-
-
-def _positioned_uvs(face, raw_ring, tex, matrix=None, projected=False):
-    """Per-vertex UVs for a face whose texture was positioned / photo-fitted
-    (``Face.uv_transform``, our upstream PR openskp#6), or ``None``.
-
-    The stored 3×3 row-major matrix maps texture space → face plane; the UV
-    of a local point ``p`` (INCHES) is ``[p·xr, p·yr, 1] @ inv(M)``, then
-    ``/q`` and ``/tile`` — the recipe calibrated against SDK ground truth
-    (exact for rotated and 4-pin distorted mappings alike). ``matrix``
-    overrides the face's front transform (e.g. ``uv_transform_back`` when
-    rendering a back-painted face)."""
-    mat = matrix if matrix is not None else getattr(face, "uv_transform", None)
-    if mat is None or len(mat) != 9:
-        return None
-    tw = (tex.get("sw", 0.0) or 0.0) / _INCH   # tile back to inches
-    th = (tex.get("sh", 0.0) or 0.0) / _INCH
-    if tw <= 0 or th <= 0:
-        return None
-    m = [list(mat[0:3]), list(mat[3:6]), list(mat[6:9])]
-    # Invert the 3×3 (adjugate / determinant).
-    det = (m[0][0]*(m[1][1]*m[2][2]-m[1][2]*m[2][1])
-           - m[0][1]*(m[1][0]*m[2][2]-m[1][2]*m[2][0])
-           + m[0][2]*(m[1][0]*m[2][1]-m[1][1]*m[2][0]))
-    if abs(det) < 1e-15:
-        return None
-    inv = [[(m[1][1]*m[2][2]-m[1][2]*m[2][1])/det,
-            (m[0][2]*m[2][1]-m[0][1]*m[2][2])/det,
-            (m[0][1]*m[1][2]-m[0][2]*m[1][1])/det],
-           [(m[1][2]*m[2][0]-m[1][0]*m[2][2])/det,
-            (m[0][0]*m[2][2]-m[0][2]*m[2][0])/det,
-            (m[0][2]*m[1][0]-m[0][0]*m[1][2])/det],
-           [(m[1][0]*m[2][1]-m[1][1]*m[2][0])/det,
-            (m[0][1]*m[2][0]-m[0][0]*m[2][1])/det,
-            (m[0][0]*m[1][1]-m[0][1]*m[1][0])/det]]
-    if projected:
-        # PROJECTED texture (Add Location terrain drape): the mapping runs
-        # in the projection plane — plan XY for the vertical drape — so
-        # every face of the terrain samples one continuous image regardless
-        # of its tilt. (Non-vertical projection axes are not decoded yet.)
-        xr = yr = None
-    else:
-        xr, yr = _plane_basis(face.normal or (0.0, 0.0, 1.0))
-    uvs = []
-    for x, y, z in raw_ring:                    # local INCHES
-        if projected:
-            x2, y2 = x, y
-        else:
-            x2 = x * xr[0] + y * xr[1] + z * xr[2]
-            y2 = x * yr[0] + y * yr[1] + z * yr[2]
-        # row-vector: uvq = [x2, y2, 1] @ inv
-        u = x2*inv[0][0] + y2*inv[1][0] + inv[2][0]
-        v = x2*inv[0][1] + y2*inv[1][1] + inv[2][1]
-        q = x2*inv[0][2] + y2*inv[1][2] + inv[2][2]
-        if abs(q) < 1e-12:
-            return None
-        uvs.append((u/q/tw, v/q/th))
-    return uvs
 
 
 def _defn_geom(defn):
@@ -473,126 +256,6 @@ def _world_points(pos_m, xform):
         m = np.array(xform.data(), dtype=np.float64).reshape(4, 4, order="F")
         world = pos_m @ m[:3, :3].T + m[:3, 3]
     return _PointRows(world)
-
-
-def _face_entry(face, wl, raw_l, s0, s1, holes_sl, attr_map,
-                inherited=None, layer=None, mirrored=False):
-    """One payload face ``(outer, holes, attrs)`` for ``face``, its corners
-    already transformed in ``wl`` (see :func:`_world_points`; ``raw_l`` keeps
-    the same corners in local inches for the UV math). Bakes a positioned /
-    photo-fitted texture's exact per-face UVs (``Face.uv_transform``,
-    upstream PR openskp#6) into a world→UV affine — the ``"uvw"``
-    IngeTrazo's renderer and exporters already consume. Exact for triangles;
-    a per-face affine fit of the projective map otherwise.
-
-    ``layer`` is the .skp layer (tag) of the nearest enclosing tagged
-    instance — a face with no tag of its own carries it, so hiding the tag's
-    layer in IngeTrazo hides what the file marks as hidden.
-
-    ``mirrored`` says the corners in ``wl`` went through a placement with a
-    negative determinant (a component scaled by -1, #1045): that reverses the
-    winding, so the rings are walked backwards to keep the front where the
-    file has it."""
-    raw = raw_l[s0:s1]
-    outer = wl[s0:s1]
-    if mirrored:
-        raw = raw[::-1]
-        outer = outer[::-1]
-    # Material precedence (the .skp rule): the face's OWN material wins —
-    # front side first, then back side (flipping the face so the painted
-    # side fronts, what "Reverse Faces + paint" produces) — and only a face
-    # with no material of its own inherits the enclosing instance's paint.
-    # (An instance-painted group whose faces carry their own back materials —
-    # e.g. a bullring painted blue as a group but with grey/red faces —
-    # must show the faces' colours, not the blue.)
-    uv_mat = getattr(face, "uv_transform", None)
-    flipped = False
-    mid = getattr(face, "material_id", None)
-    attrs = attr_map.get(mid) if mid is not None else None
-    if attrs is None:
-        battrs = attr_map.get(getattr(face, "back_material_id", None))
-        if battrs is not None:
-            attrs = battrs
-            uv_mat = getattr(face, "uv_transform_back", None)
-            raw = raw[::-1]
-            outer = outer[::-1]
-            flipped = True
-        elif inherited is not None:
-            attrs = attr_map.get(inherited)
-    holes = []
-    for ha, hb in holes_sl:
-        h = wl[ha:hb]
-        if flipped != mirrored:
-            h = h[::-1]
-        holes.append(h)
-    def _bake_uvs(entry, uv_matrix, projected=False):
-        """Return ``entry`` with the texture's per-face ``uvw`` baked in."""
-        if not entry or "texture" not in entry:
-            return entry
-        if uv_matrix is not None:
-            uvs = _positioned_uvs(face, raw, entry["texture"], matrix=uv_matrix,
-                                  projected=projected)
-        else:
-            # The .skp DEFAULT mapping runs in the face's LOCAL frame:
-            # u = (p·xr)/tile, plane basis from the local normal (the recipe
-            # calibrated with the controlled textura.skp). Baking it per face
-            # keeps every slat of a component sampling the same patch — a
-            # world-space projection would give each slat (and each copy) a
-            # different slice of the tile.
-            tex = entry["texture"]
-            tw = (tex.get("sw", 0.0) or 0.0) / _INCH
-            th = (tex.get("sh", 0.0) or 0.0) / _INCH
-            uvs = None
-            if tw > 0 and th > 0:
-                xr, yr = _plane_basis(face.normal or (0.0, 0.0, 1.0))
-                uvs = [((x * xr[0] + y * xr[1] + z * xr[2]) / tw,
-                        (x * yr[0] + y * yr[1] + z * yr[2]) / th)
-                       for x, y, z in raw]
-        if uvs is not None:
-            uvw = fit_uv_affine(outer, uvs)
-            if uvw is not None:
-                tex = {**entry["texture"], "uvw": uvw}
-                if uv_matrix is None:
-                    # The .skp DEFAULT projection: the file carries no
-                    # per-face record for it, the material's applied size IS
-                    # the mapping. Marked so the exporter writes it back the
-                    # same way instead of pinning an explicit one.
-                    tex["planar"] = True
-                return {**entry, "texture": tex}
-        return entry
-
-    front_src = attrs
-    # projected = the format's per-side flag (legacy path) OR the geometric
-    # detection pre-pass (_mark_projected_faces, needed on the VFF path where
-    # the flag is absent).
-    uv_proj = (getattr(face, "uv_projected_back", False) if flipped
-               else getattr(face, "uv_projected", False)) \
-        or getattr(face, "_projected", False)
-    attrs = _bake_uvs(attrs, uv_mat, uv_proj)
-    # A .skp paints each side on its own. A back painted DIFFERENTLY
-    # (front green wall, back roof tiles — possibly via instance
-    # inheritance on the unpainted side) travels as its own material in
-    # attrs["back"]; a back painted the SAME as the front is a two-sided
-    # face (``back = True``); a back left unpainted is absent and shows the
-    # style's default back colour, as the file intends. Flipped
-    # faces already front their painted side, so their back is the default.
-    if not flipped:
-        back_src = attr_map.get(getattr(face, "back_material_id", None))
-        if back_src is None and inherited is not None:
-            back_src = attr_map.get(inherited)
-        if back_src is not None:
-            base = dict(attrs) if attrs else {}
-            if back_src is front_src:
-                base["back"] = True
-            else:
-                base["back"] = _bake_uvs(
-                    back_src, getattr(face, "uv_transform_back", None),
-                    getattr(face, "uv_projected_back", False))
-            attrs = base
-    lay = getattr(face, "layer", "") or layer
-    if lay:
-        attrs = {**(attrs or {}), "layer": lay}
-    return (outer, holes, attrs)
 
 
 def _image_has_cutout(path) -> bool:
@@ -789,7 +452,6 @@ def _rests_on_a_face(roots, by_id, quad) -> bool:
         return False
 
     return any(walk(r, np.eye(4), 0, frozenset()) for r in roots)
-
 
 
 def _soft_edge_segments(defn, xform, out) -> None:
@@ -1750,61 +1412,7 @@ def _adapt_inner(model, name: str, skp_path=None, *, consume=False):
         })
     if scenes:
         payload["scenes"] = scenes
-    # Linear dimensions (.skp dimension entities), inches → metres. Model
-    # dimensions are world space; the ones openskp_compat moved onto a
-    # definition (#1226) are definition-local, so each placement of that
-    # definition contributes a world-space copy.
-    dims = []
-    for dm in getattr(model, "dimensions", []) or []:
-        if getattr(dm, "a", None) is None or getattr(dm, "b", None) is None:
-            continue
-        dims.append(_dimension_entry(dm))
-    placements = None
-    for did, defn in (getattr(model, "definitions", None) or {}).items():
-        owned = [dm for dm in (getattr(defn, "dimensions", None) or [])
-                 if getattr(dm, "vff_owned", False)
-                 and getattr(dm, "a", None) is not None
-                 and getattr(dm, "b", None) is not None]
-        if not owned:
-            continue
-        if placements is None:
-            placements = _placements_by_definition(model)
-        for world in placements.get(did, []):
-            dims.extend(_dimension_entry(dm, world) for dm in owned)
-    if dims:
-        payload["dimensions"] = dims
-    # Leader texts (.skp text entities), inches → metres. Only free
-    # (point-anchored) texts carry a resolved anchor; model-root texts are
-    # world space. The texts openskp_compat recovered from VFF records
-    # (#1226) may sit on a definition — placed per instance like its
-    # dimensions — and one whose anchor did not resolve still shows at
-    # its label position.
-    texts = []
-    root_def = getattr(model, "root", None)
-    for tx in (getattr(root_def, "texts", []) or []) if root_def else []:
-        if getattr(tx, "point", None) is None \
-                and not getattr(tx, "vff_recovered", False):
-            continue
-        if not (getattr(tx, "text", "") or "").strip():
-            continue
-        entry = _text_entry(tx)
-        if entry:
-            texts.append(entry)
-    for did, defn in (getattr(model, "definitions", None) or {}).items():
-        recovered = [tx for tx in (getattr(defn, "texts", None) or [])
-                     if getattr(tx, "vff_recovered", False)
-                     and (getattr(tx, "text", "") or "").strip()]
-        if not recovered:
-            continue
-        if placements is None:
-            placements = _placements_by_definition(model)
-        for world in placements.get(did, []):
-            for tx in recovered:
-                entry = _text_entry(tx, world)
-                if entry:
-                    texts.append(entry)
-    if texts:
-        payload["texts"] = texts
+    skp_model_annotations(model, payload)
     # The file's style back-face colour (our upstream PR openskp#10): adopt it
     # so unpainted faces seen from behind read like they did for the author
     # (instead of IngeTrazo's own blue-grey default).

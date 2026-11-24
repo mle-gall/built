@@ -6,9 +6,7 @@ import pipelines, the links verbs, Select All…: ``ShellWindow.__getattr__``).
 What it does through widgets is redone here: the open (no trays to sync,
 the shell's own progress turn), the save (the Metal view's picture), the
 file dialogs (NSOpenPanel/NSSavePanel through ``app_shell.native``), the
-DXF unit question (on the sheet instead of a QDialog), the .skp parse
-thread (waited for with the modal pump instead of a QEventLoop), the
-pasteboard.
+DXF unit question (on the sheet instead of a QDialog), the pasteboard.
 
 Everything here answers through ``views/chrome_dialogs`` (the egui sheet,
 synchronous thanks to ``app_shell.modal``), so the code paths are the Qt

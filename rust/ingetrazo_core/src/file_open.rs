@@ -8,7 +8,33 @@ use std::sync::{
     Arc, Mutex, Weak,
 };
 
-thread_local! { static STAGING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+thread_local! {
+    static STAGING: std::cell::RefCell<Option<Weak<State>>> = const { std::cell::RefCell::new(None) };
+    static LAST_YIELD: std::cell::Cell<Option<std::time::Instant>> = const { std::cell::Cell::new(None) };
+}
+
+/// Large record lists may build thousands of facade objects in one extension
+/// call. Let either event loop take the interpreter between short batches.
+pub(crate) fn skp_checkpoint(py: Python<'_>) -> PyResult<()> {
+    STAGING.with_borrow(|state| {
+        let Some(state) = state.as_ref().and_then(Weak::upgrade) else {
+            return Ok(());
+        };
+        if state.cancelled.load(Ordering::Acquire) {
+            return Err(PyInterruptedError::new_err("Opening cancelled"));
+        }
+        LAST_YIELD.with(|last| {
+            if last
+                .get()
+                .is_none_or(|t| t.elapsed() >= std::time::Duration::from_millis(6))
+            {
+                py.detach(|| std::thread::sleep(std::time::Duration::from_micros(250)));
+                last.set(Some(std::time::Instant::now()));
+            }
+        });
+        Ok(())
+    })
+}
 
 type OpenResult = PyResult<Py<PyAny>>;
 type Worker = (Weak<State>, std::thread::JoinHandle<()>);
@@ -65,16 +91,6 @@ fn read_skp<'py>(
     let reader = py.import("formats.skp")?;
     let payload = reader.getattr("parse_skp")?.call((path,), Some(args))?;
     let empty = payload.call_method1("get", ("empty", false))?.is_truthy()?;
-    let kwargs = args.copy()?;
-    kwargs.set_item("payload", payload)?;
-    let apply = py.import("functools")?.getattr("partial")?.call(
-        (py.import("ingetrazo_core")?.getattr("skp_apply")?,),
-        Some(&kwargs),
-    )?;
-    let command = py
-        .import("core.history_commands")?
-        .getattr("SnapshotImport")?
-        .call1((apply,))?;
     let history = py
         .import("core.history")?
         .getattr("History")?
@@ -82,13 +98,23 @@ fn read_skp<'py>(
     // A private document has no listeners to notify. Reserving the editor's
     // process-wide transaction writer here would reject edits in other tabs.
     let before = history.call_method0("_objects_before")?;
-    command.call_method1("do", (scene,))?;
+    let original = crate::skp::SkpOpenUndo::capture(scene)?;
+    crate::skp::skp_apply(
+        scene,
+        payload.cast::<PyDict>()?,
+        args.get_item("progress")?.as_ref(),
+        None,
+    )?;
     history.call_method1("_tag_new_objects", (before,))?;
-    command.setattr("mutate", py.None())?;
+    let command = Py::new(
+        py,
+        crate::skp::SkpOpenUndo::new(original, crate::skp::SkpOpenUndo::capture(scene)?),
+    )?
+    .into_bound(py);
     command.setattr("_history_mesh", scene.getattr("mesh")?)?;
     let stack = history.getattr("_native")?;
     stack.call_method1("push", (&command, history.getattr("max_steps")?))?;
-    stack.call_method1("advance", ("execute", "SnapshotImport"))?;
+    stack.call_method1("advance", ("execute", "SkpOpenUndo"))?;
     Ok((history, empty))
 }
 
@@ -179,7 +205,7 @@ pub struct DocumentOpen {
 impl DocumentOpen {
     #[staticmethod]
     fn staging() -> bool {
-        STAGING.with(|active| active.get())
+        STAGING.with_borrow(Option::is_some)
     }
 
     #[new]
@@ -213,7 +239,7 @@ impl DocumentOpen {
                     );
                     (process, activity)
                 };
-                STAGING.with(|active| active.set(true));
+                STAGING.with_borrow_mut(|active| *active = Some(Arc::downgrade(&worker)));
                 let result = Python::attach(|py| {
                     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         // Promote short batches while constructing the private

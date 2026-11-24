@@ -178,7 +178,7 @@ pub fn skp_apply_metadata(scene: &Bound<'_, PyAny>, payload: &Bound<'_, PyDict>)
         let camera = py.import("core.saved_views")?.getattr("from_lookat")?;
         for (i, row) in views.try_iter()?.enumerate() {
             if i % 128 == 0 && i > 0 {
-                py.detach(std::thread::yield_now);
+                crate::file_open::skp_checkpoint(py)?;
             }
             let row = row?;
             let name = row.get_item("name")?;
@@ -458,7 +458,7 @@ fn apply_geometry<'py>(
         };
         for (i, xf) in rows(&row, "instances")?.try_iter()?.enumerate() {
             if i % 128 == 0 && i > 0 {
-                py.detach(std::thread::yield_now);
+                crate::file_open::skp_checkpoint(py)?;
                 report(0)?;
             }
             let group = defs.place(

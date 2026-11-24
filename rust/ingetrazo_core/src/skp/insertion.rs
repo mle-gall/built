@@ -18,6 +18,7 @@ pub struct SkpInsertion {
     layers: Py<PyDict>,
     materials: Py<PyDict>,
     back: Py<PyAny>,
+    old_back: Option<Py<PyAny>>,
     placements: Vec<(String, Py<PyAny>)>,
     meshes: Vec<Py<PyAny>>,
     #[pyo3(get)]
@@ -68,6 +69,7 @@ impl SkpInsertion {
             materials: select(&["materials"])?,
             layers: select(&["layers", "layer_folders"])?,
             back: scene.getattr("back_face_color")?.unbind(),
+            old_back: None,
             placements,
             meshes,
             empty,
@@ -90,17 +92,22 @@ fn remap_row(row: &Bound<'_, PyAny>, names: &HashMap<String, String>) -> PyResul
 #[pymethods]
 impl SkpInsertion {
     #[classattr]
-    const keeps_rows: bool = false;
+    #[pyo3(name = "keeps_rows")]
+    const KEEPS_ROWS: bool = false;
     #[classattr]
-    const keeps_groups: bool = true;
+    #[pyo3(name = "keeps_groups")]
+    const KEEPS_GROUPS: bool = true;
     #[classattr]
-    const keeps_paint: bool = false;
+    #[pyo3(name = "keeps_paint")]
+    const KEEPS_PAINT: bool = false;
     #[classattr]
-    const doc_undo: bool = true;
+    #[pyo3(name = "doc_undo")]
+    const DOC_UNDO: bool = true;
     #[classattr]
-    const _journal_geometry: bool = false;
+    #[pyo3(name = "_journal_geometry")]
+    const _JOURNAL_GEOMETRY: bool = false;
     #[pyo3(name = "do")]
-    fn attach(&self, scene: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn attach(&mut self, scene: &Bound<'_, PyAny>) -> PyResult<()> {
         let py = scene.py();
         let remap = material_names(py, scene, self.materials.bind(py))?;
         if !remap.is_empty() {
@@ -165,6 +172,7 @@ impl SkpInsertion {
             .getattr("text_labels")?
             .call_method1("extend", (self.texts.bind(py),))?;
         if scene.getattr("back_face_color")?.is_none() {
+            self.old_back = Some(scene.getattr("back_face_color")?.unbind());
             scene.setattr("back_face_color", self.back.bind(py))?;
         }
         for dim in scene.getattr("dimensions")?.try_iter()? {
@@ -176,9 +184,21 @@ impl SkpInsertion {
         bump(scene)
     }
     fn bind_transaction(slf: &Bound<'_, Self>, txn: &Bound<'_, PyAny>) -> PyResult<()> {
-        slf.setattr("_doc_txn", txn)
+        slf.setattr("_doc_txn", txn)?;
+        let mut command = slf.borrow_mut();
+        command.meshes.clear();
+        command.placements.clear();
+        command.materials.bind(slf.py()).clear();
+        command.layers.bind(slf.py()).clear();
+        Ok(())
     }
     fn doc_after(&self, scene: &Bound<'_, PyAny>, phase: &str) -> PyResult<()> {
+        if let Some(old) = &self.old_back {
+            scene.setattr(
+                "back_face_color",
+                if phase == "undo" { old } else { &self.back }.bind(scene.py()),
+            )?;
+        }
         if phase == "undo" {
             let selection = scene.getattr("selection")?;
             if selection.is_truthy()? {
@@ -192,4 +212,91 @@ impl SkpInsertion {
 }
 fn bump(scene: &Bound<'_, PyAny>) -> PyResult<()> {
     scene.setattr("version", scene.getattr("version")?.extract::<u64>()? + 1)
+}
+
+/// The first step in a newly opened, untitled drawing. The private worker
+/// cannot reserve the UI thread's document writer. Capture just the root
+/// collections touched by the import and retain their existing store handles.
+#[pyclass(dict, module = "ingetrazo_core")]
+pub(crate) struct SkpOpenUndo {
+    before: Py<PyDict>,
+    after: Py<PyDict>,
+}
+
+impl SkpOpenUndo {
+    pub(crate) fn capture<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+        let py = scene.py();
+        let snapshot = PyDict::new(py);
+        let seq = py.get_type::<PyList>();
+        let map = py.get_type::<PyDict>();
+        for key in [
+            "groups",
+            "layers",
+            "saved_views",
+            "dimensions",
+            "text_labels",
+            "layer_folders",
+        ] {
+            snapshot.set_item(key, seq.call1((scene.getattr(key)?,))?)?;
+        }
+        for key in [
+            "materials",
+            "folder_visibility",
+            "folder_parents",
+            "layer_folder_uids",
+            "layer_folder_names",
+        ] {
+            snapshot.set_item(key, map.call1((scene.getattr(key)?,))?)?;
+        }
+        snapshot.set_item("back_face_color", scene.getattr("back_face_color")?)?;
+        Ok(snapshot)
+    }
+    pub(crate) fn new(before: Bound<'_, PyDict>, after: Bound<'_, PyDict>) -> Self {
+        Self {
+            before: before.unbind(),
+            after: after.unbind(),
+        }
+    }
+    fn restore(&self, scene: &Bound<'_, PyAny>, undo: bool) -> PyResult<()> {
+        let py = scene.py();
+        let snapshot = if undo { &self.before } else { &self.after };
+        if undo {
+            let selection = scene.getattr("selection")?;
+            if selection.is_truthy()? {
+                for g in self
+                    .after
+                    .bind(py)
+                    .as_any()
+                    .get_item("groups")?
+                    .try_iter()?
+                {
+                    selection.call_method1("discard", (g?,))?;
+                }
+            }
+        }
+        for (key, v) in snapshot.bind(py) {
+            scene.setattr(key.cast::<pyo3::types::PyString>()?, v)?;
+        }
+        bump(scene)
+    }
+}
+
+#[pymethods]
+impl SkpOpenUndo {
+    #[classattr]
+    #[pyo3(name = "keeps_rows")]
+    const KEEPS_ROWS: bool = false;
+    #[classattr]
+    #[pyo3(name = "keeps_groups")]
+    const KEEPS_GROUPS: bool = true;
+    #[classattr]
+    #[pyo3(name = "keeps_paint")]
+    const KEEPS_PAINT: bool = false;
+    fn undo(&self, scene: &Bound<'_, PyAny>) -> PyResult<()> {
+        self.restore(scene, true)
+    }
+    #[pyo3(name = "do")]
+    fn redo(&self, scene: &Bound<'_, PyAny>) -> PyResult<()> {
+        self.restore(scene, false)
+    }
 }

@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+//! Record formats adapted from OpenSKP (MIT, Copyright 2024–2026 Ahsan Mehmood).
+//! The accompanying license is in `tests/data/openskp-LICENSE.txt`.
 //! Little-endian MFC CArchive records share one file-wide class/object table.
+mod archive;
+mod builder;
+mod definitions;
+mod pages;
 use pyo3::{
     exceptions::{PyIndexError, PyValueError},
     prelude::*,
@@ -193,6 +199,7 @@ pub fn skp_mfc_object<'py>(
     r: &Bound<'py, SkpArchiveCursor>,
     expect: Option<&Bound<'py, PyAny>>,
 ) -> PyResult<Bound<'py, PyAny>> {
+    crate::file_open::skp_checkpoint(py)?;
     let cursor = || r.borrow().pos;
     let fail = |msg: &str| archive_error(py, format!("{msg} @0x{:x}", cursor()));
     let slots = archive
@@ -382,10 +389,184 @@ impl<'a, 'py> Entity<'a, 'py> {
         }
         Ok(guid)
     }
+    fn texture(&self, out: &Bound<'py, pyo3::types::PyDict>) -> PyResult<()> {
+        let (slot, dib) = if self.ver < 6 {
+            (
+                self.py.None().into_bound(self.py),
+                self.read("CDib")?.into_any(),
+            )
+        } else {
+            self.r.borrow_mut().pos -= 1;
+            self.preamble()?;
+            let rec = self.object(Some("CDib"))?;
+            (rec.get_item(0)?, rec.get_item(2)?)
+        };
+        let window = self.r.borrow().peek(self.py, 28);
+        match window
+            .as_bytes()
+            .windows(3)
+            .position(|w| w == [0xff, 0xfe, 0xff])
+        {
+            Some(16) => (),
+            Some(20) => self.skip(4)?,
+            _ => return Err(self.error("misaligned texture size")),
+        }
+        out.set_item(
+            "tex_data",
+            if slot.is_none() {
+                dib.get_item("data")?
+            } else {
+                self.py.None().into_bound(self.py)
+            },
+        )?;
+        out.set_item("tex_dib", slot)?;
+        for field in ["tex_w", "tex_h"] {
+            out.set_item(field, self.r.borrow_mut().f64(self.py)?)?;
+        }
+        out.set_item("tex_file", self.string()?)?;
+        let colors = self.r.borrow_mut().word::<9>(self.py)?;
+        out.set_item("rgba", (colors[5], colors[6], colors[7], 255))?;
+        self.string()?;
+        let flags = self.r.borrow_mut().word::<8>(self.py)?;
+        out.set_item("colorized", flags[0] == 2)?;
+        out.set_item("colorize_type", u8::from(flags[4] == 1))?;
+        out.set_item("opacity", self.r.borrow_mut().f64(self.py)?)?;
+        out.set_item("use_opacity", self.u8()?)
+    }
+
+    fn entity_ref(&self, allow_inline: bool, member: bool) -> PyResult<Option<u32>> {
+        let tag = self.peek()?;
+        let escaped = tag == 0x7fff;
+        let value = if escaped {
+            u32::from_le_bytes(self.r.borrow().bytes(self.py, 6)?[2..6].try_into().unwrap())
+        } else {
+            u32::from(tag)
+        };
+        if value & (if escaped { 0x80000000 } else { 0x8000 }) != 0 {
+            if !allow_inline {
+                return Err(self.error("expected an entity reference"));
+            }
+            let rec = self.object(None)?;
+            let slot = rec.get_item(0)?;
+            if member {
+                if let Some(stack) = self.ar.getattr_opt("inline_stack")? {
+                    if stack.is_truthy()? {
+                        stack.get_item(-1)?.set_item(&slot, self.py.None())?;
+                    }
+                }
+            }
+            return slot.extract();
+        }
+        self.skip(if escaped { 6 } else { 2 })?;
+        Ok((tag != 0).then_some(value))
+    }
+    fn paths(&self) -> PyResult<(Option<u32>, Vec<Option<u32>>, Vec<Option<u32>>)> {
+        let extra = self.entity_ref(false, false)?;
+        let read_list = || -> PyResult<Vec<Option<u32>>> {
+            let count = self.u32()?;
+            if count > 1000 {
+                return Err(self.error("invalid annotation path length"));
+            }
+            (0..count).map(|i| self.entity_ref(true, i == 0)).collect()
+        };
+        Ok((extra, read_list()?, read_list()?))
+    }
+
+    fn dimension(&self, out: &Bound<'py, pyo3::types::PyDict>) -> PyResult<()> {
+        out.set_item("db", self.draw()?)?;
+        out.set_item("text", self.string()?)?;
+        if self.ver >= 6 {
+            self.object(Some("CSkFont"))?;
+            self.skip(5)?;
+        }
+        let endpoint = |key| -> PyResult<_> {
+            let typ = self.u32()?;
+            self.skip(4)?;
+            let p = self.doubles(3)?;
+            if typ == 1 {
+                out.set_item(key, p)?;
+            }
+            Ok((self.entity_ref(true, false)?, self.paths()?))
+        };
+        let (a, pa) = endpoint("a")?;
+        let (b, pb) = endpoint("b")?;
+        out.set_item("connect", (a, b))?;
+        out.set_item("paths", (pa, pb))?;
+        self.skip(52)?;
+        out.set_item("offset", self.r.borrow_mut().f64(self.py)?)?;
+        self.skip(if self.ver >= 6 { 12 } else { 8 })
+    }
+
+    fn text(&self, out: &Bound<'py, pyo3::types::PyDict>) -> PyResult<()> {
+        out.set_item("db", self.draw()?)?;
+        self.object(Some("CSkFont"))?;
+        let prefix = self.r.borrow().peek(self.py, 24);
+        let anchored = prefix.as_bytes().get(20..24) == Some(&4u32.to_le_bytes())
+            && (2..=15).contains(&u32::from_le_bytes(
+                prefix.as_bytes()[16..20].try_into().unwrap(),
+            ));
+        if anchored {
+            self.skip(48)?;
+            out.set_item("connect", self.entity_ref(false, false)?)?;
+            out.set_item("paths", self.paths()?)?;
+        } else {
+            out.set_item("connect", self.py.None())?;
+            out.set_item("paths", self.py.None())?;
+        }
+        let block = self.r.borrow().peek(self.py, 512);
+        let bytes = block.as_bytes();
+        let str_off = bytes
+            .windows(3)
+            .enumerate()
+            .find_map(|(i, w)| {
+                if w != [0xff, 0xfe, 0xff] || i < 11 {
+                    return None;
+                }
+                let b = &bytes[i - 11..i];
+                (b[..4] == 1u32.to_le_bytes()
+                    && u32::from_le_bytes(b[6..10].try_into().unwrap()) <= 8
+                    && b[10] <= 1)
+                    .then_some(i)
+            })
+            .ok_or_else(|| self.error("missing text delimiter"))?;
+        let mid = &bytes[..str_off];
+        let off = (!anchored)
+            .then(|| mid.windows(8).position(|w| w == [1, 0, 0, 0, 4, 0, 0, 0]))
+            .flatten();
+        let xyz = |at: usize| mid.get(at..at + 24).and_then(super::point);
+        let point = off.and_then(|i| xyz(i + 8));
+        let label = off
+            .and_then(|i| xyz(i + 44))
+            .filter(|(a, b, c)| a.abs() > 1e-12 || b.abs() > 1e-12 || c.abs() > 1e-12);
+        out.set_item("p", point)?;
+        out.set_item("lp", label)?;
+        self.skip(str_off)?;
+        out.set_item("text", self.string()?)?;
+        self.skip(5)?;
+        let mut attachments = Vec::new();
+        loop {
+            let b = self.r.borrow().peek(self.py, 6);
+            let b = b.as_bytes();
+            if b.len() != 6 || b[..2] != [0xff, 0x7f] {
+                break;
+            }
+            let v = u32::from_le_bytes(b[2..].try_into().unwrap());
+            if v & 0x80000000 != 0 {
+                break;
+            }
+            attachments.push(v);
+            self.skip(6)?;
+        }
+        out.set_item("attach", attachments)
+    }
     fn read(&self, cls: &str) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
         use pyo3::types::{PyDict, PyList};
         let out = PyDict::new(self.py);
-        let pre = if (self.ver < 4 && matches!(cls, "CVertex" | "CEdgeUse" | "CLoop" | "CMaterial"))
+        let pre = if (self.ver < 4
+            && matches!(
+                cls,
+                "CVertex" | "CEdgeUse" | "CLoop" | "CMaterial" | "CLayer"
+            ))
             || matches!(cls, "CDib" | "CCamera")
         {
             (
@@ -601,6 +782,110 @@ impl<'a, 'py> Entity<'a, 'py> {
                 out.set_item("children", items)?;
                 "attrs"
             }
+            "CDimensionLinear" => {
+                self.dimension(&out)?;
+                "dimension"
+            }
+            "CAttributeNamed" => {
+                self.skip(4)?;
+                out.set_item("name", self.string()?)?;
+                let entries = PyDict::new(self.py);
+                loop {
+                    let key = self.string()?;
+                    if key.is_empty() {
+                        break;
+                    }
+                    entries.set_item(key, self.typed_attribute(0)?)?;
+                }
+                if self.ver >= 7 {
+                    self.skip(4)?;
+                }
+                out.set_item("entries", entries)?;
+                "dict"
+            }
+            "CComponentDefinition" => {
+                self.definition(&out)?;
+                "definition"
+            }
+            "CConstructionLine" => {
+                self.construction_line(&out)?;
+                "cline"
+            }
+            "CSectionPlane" => {
+                out.set_item("db", self.draw()?)?;
+                let first =
+                    f64::from_le_bytes(self.r.borrow().bytes(self.py, 8)?.try_into().unwrap());
+                if !(first.abs() <= 1.0001) {
+                    self.object(None)?;
+                }
+                out.set_item("plane", PyList::new(self.py, self.doubles(4)?.iter())?)?;
+                let (name, label) =
+                    if self.r.borrow().peek(self.py, 3).as_bytes() == [0xff, 0xfe, 0xff] {
+                        (self.string()?, self.string()?)
+                    } else {
+                        (String::new(), String::new())
+                    };
+                out.set_item("name", name)?;
+                out.set_item("label", label)?;
+                "sectionplane"
+            }
+            "CText" => {
+                self.text(&out)?;
+                "text"
+            }
+            "CRelationship" => {
+                out.set_item(
+                    "refs",
+                    (
+                        self.entity_ref(false, false)?,
+                        self.entity_ref(false, false)?,
+                    ),
+                )?;
+                "relationship"
+            }
+            "CConstructionPoint" => {
+                out.set_item("db", self.draw()?)?;
+                out.set_item("pos", self.doubles(3)?)?;
+                self.skip(25)?;
+                "cpoint"
+            }
+            "CLayer" => {
+                out.set_item("name", self.string()?)?;
+                let mut hidden = 0;
+                for i in 0..8 {
+                    if self.r.borrow().peek(self.py, 3).as_bytes() == [0xff, 0xfe, 0xff] {
+                        break;
+                    }
+                    let b = self.u8()?;
+                    if i == 0 {
+                        hidden = b;
+                    }
+                }
+                out.set_item("hidden", hidden)?;
+                self.string()?;
+                if self.u16()? & 0xff != 0 {
+                    let texture = PyDict::new(self.py);
+                    self.texture(&texture)?;
+                    out.set_item("rgba", texture.get_item("rgba")?)?;
+                    self.skip(4)?;
+                } else {
+                    out.set_item(
+                        "rgba",
+                        PyTuple::new(self.py, self.r.borrow_mut().word::<4>(self.py)?)?,
+                    )?;
+                    self.string()?;
+                    self.skip(if self.ver < 4 { 17 } else { 21 })?;
+                    self.ar.call_method1("_skip_clayer_colour_ext", (self.r,))?;
+                    self.ar.call_method1(
+                        "_skip_clayer_parent_ref",
+                        (self.r, self.ar.getattr("current_obj_slot")?),
+                    )?;
+                }
+                if self.ver == 19 && self.r.borrow().peek(self.py, 2).as_bytes() == [0, 0] {
+                    self.skip(2)?;
+                }
+                "layer"
+            }
             "CMaterial" => {
                 out.set_item("name", self.string()?)?;
                 if self.u16()? == 0 {
@@ -611,11 +896,7 @@ impl<'a, 'py> Entity<'a, 'py> {
                     out.set_item("opacity", self.r.borrow_mut().f64(self.py)?)?;
                     out.set_item("use_opacity", self.u8()?)?;
                 } else {
-                    let tex = self
-                        .py
-                        .import("openskp.legacy")?
-                        .call_method1("_texture_block", (self.ar, self.r))?;
-                    out.call_method1("update", (tex,))?;
+                    self.texture(&out)?;
                 }
                 "material"
             }
@@ -645,7 +926,25 @@ fn skp_mfc_entity<'py>(
 pub fn skp_mfc_readers(legacy: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = legacy.py();
     let partial = py.import("functools")?.getattr("partial")?;
+    legacy.setattr(
+        "full_parse_legacy",
+        pyo3::wrap_pyfunction!(builder::read_legacy, py)?,
+    )?;
+    legacy.setattr("_fill_builder", pyo3::wrap_pyfunction!(builder::fill, py)?)?;
+    legacy.setattr(
+        "_read_page_list",
+        pyo3::wrap_pyfunction!(pages::page_list, py)?,
+    )?;
+    legacy.setattr("_walk", pyo3::wrap_pyfunction!(archive::walk, py)?)?;
+    legacy.setattr(
+        "_read_entity_list",
+        pyo3::wrap_pyfunction!(archive::entities, py)?,
+    )?;
     let readers = legacy.getattr("_READERS")?;
+    legacy.setattr(
+        "_read_entity_list_inner",
+        pyo3::wrap_pyfunction!(definitions::skp_mfc_entities, py)?,
+    )?;
     let dispatch = pyo3::wrap_pyfunction!(skp_mfc_entity, py)?;
     for (class, method) in [
         ("CVertex", "vertex"),
@@ -664,6 +963,15 @@ pub fn skp_mfc_readers(legacy: &Bound<'_, PyAny>) -> PyResult<()> {
         ("CDib", "dib"),
         ("CSkFont", "skfont"),
         ("CAttributeContainer", "attr_container"),
+        ("CDimensionLinear", "dimlinear"),
+        ("CText", "text"),
+        ("CLayer", "layer"),
+        ("CComponentDefinition", "definition"),
+        ("CConstructionLine", "constructionline"),
+        ("CAttributeNamed", "attr_named"),
+        ("CSectionPlane", "sectionplane"),
+        ("CRelationship", "relationship"),
+        ("CConstructionPoint", "constructionpoint"),
         ("CMaterial", "material"),
     ] {
         let handle = partial.call1((&dispatch, class))?;

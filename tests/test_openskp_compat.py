@@ -196,3 +196,48 @@ def test_resolve_moves_owned_annotations_onto_the_definition():
     assert tx.label_point == (45, 50, 50)
     assert tx.vff_recovered is True
     assert root.texts == []
+
+
+def test_legacy_scene_camera_and_hidden_layer_record():
+    from types import SimpleNamespace
+    from formats import openskp_compat
+    from openskp import legacy
+
+    openskp_compat.apply()
+    # Schema 15 has an optional inline camera, then the hidden-layer list.
+    record = struct.pack("<HHH", 0xffff, 15, 9) + b"CViewPage"
+    record += struct.pack("<HB", 0, 0) + _utf16("Balcony") + _utf16("")
+    record += struct.pack("<IH", 0x21, 0x8002)
+    record += struct.pack("<11dB2d", 10, 20, 30, 1, 2, 3, 0, 0, 1, 1, 1000, 0, 42, 500)
+    record += bytes(34) + _utf16("") + bytes(33)
+    record += struct.pack("<IHH", 2, 6, 7) + bytes(21) + struct.pack("<H", 0)
+    data = struct.pack("<I", 1) + record
+    archive = SimpleNamespace(r=legacy._R(data), ver=17, slots={
+        6: ("obj", "CLayer", {}), 7: ("obj", "CVertex", {})})
+    assert legacy._read_page_list(data, archive) == [{
+        "name": "Balcony", "eye": (10., 20., 30.), "target": (1., 2., 3.),
+        "up": (0., 0., 1.), "fov": 42., "parallel": True, "ortho_height": 500.,
+        "hidden_layer_ids": [6],
+    }]
+    assert legacy._read_page_list(data[:-4], archive) is None
+
+
+def test_legacy_file_with_one_layer_and_no_definitions(tmp_path):
+    from formats import openskp_compat
+    from openskp import legacy
+
+    openskp_compat.apply()
+    header = _utf16("SketchUp Model") + _utf16("{17.0.0}") + b"CVersionMap"
+    # No material table. An absolute back-reference to the active layer
+    # establishes the first class slot. A root count follows the definitions.
+    objects = struct.pack("<IBI", 0, 0, 1)
+    objects += struct.pack("<HHH", 0xffff, 10, 6) + b"CLayer"
+    objects += bytes(3) + _layer_record(21)
+    objects += struct.pack("<HII", 41, 0, 0)
+    fixture = tmp_path / "empty.skp"
+    fixture.write_bytes(header + objects)
+    doc = legacy.full_parse_legacy(str(fixture))
+    assert doc["version"] == "{17.0.0}"
+    assert doc["layer_id_to_name"] == {41: "Layer0"}
+    assert list(doc["defs_dict"]) == ["ROOT"]
+    assert not doc["defs_dict"]["ROOT"]["builder"].faces

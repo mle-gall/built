@@ -9,7 +9,7 @@ use crate::store::{
     py::PyMeshStore,
     Store, SOFT,
 };
-use numpy::PyReadonlyArray2;
+use numpy::{PyReadonlyArray2, PyReadonlyArray3};
 use pyo3::{exceptions::PyValueError, prelude::*, types::PyDict};
 use std::collections::HashMap;
 
@@ -63,6 +63,32 @@ fn read_ring(ring: &Bound<'_, PyAny>, single: &mut bool) -> PyResult<Vec<Point>>
 fn segments(source: &Bound<'_, PyAny>) -> PyResult<Vec<Segment>> {
     if source.is_none() {
         return Ok(Vec::new());
+    }
+    if let Some(chunks) = source.getattr_opt("chunks")? {
+        let mut out = Vec::with_capacity(source.len()?);
+        for chunk in chunks.try_iter()? {
+            let chunk = chunk?;
+            macro_rules! append {
+                ($array:expr) => {{
+                    let arr = $array.as_array();
+                    if arr.shape()[1..] != [2, 3] {
+                        return Err(PyValueError::new_err("expected pairs of three coordinates"));
+                    }
+                    for pair in arr.outer_iter() {
+                        out.push(std::array::from_fn(|i| {
+                            std::array::from_fn(|j| pair[[i, j]] as f64)
+                        }));
+                    }
+                }};
+            }
+            if let Ok(arr) = chunk.extract::<PyReadonlyArray3<f32>>() {
+                append!(arr);
+            } else {
+                let arr = chunk.extract::<PyReadonlyArray3<f64>>()?;
+                append!(arr);
+            }
+        }
+        return Ok(out);
     }
     source
         .try_iter()?
@@ -126,9 +152,15 @@ fn build(
     } else {
         for face in faces {
             let mut change = Change::default();
-            let slot = store
-                .add_face(&face.rings, &mut change)
-                .map_err(|e| format!("face: {e:?}"))?;
+            use crate::store::topo::OpError;
+            let slot = match store.add_face(&face.rings, &mut change) {
+                Ok(slot) => slot,
+                Err(OpError::Full) => return Err("definition exceeds the store capacity".into()),
+                Err(_) => {
+                    store.finish(change);
+                    continue;
+                }
+            };
             if face.attribute >= 0 {
                 store.set_face_attr(slot, (face.attribute + 1) as u32);
             }

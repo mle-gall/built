@@ -166,13 +166,19 @@ struct Adapter<'a, 'py> {
 impl<'py> Adapter<'_, 'py> {
     fn nodes(&self, py: Python<'py>, nodes: Vec<Node<'_>>) -> PyResult<Bound<'py, PyList>> {
         let result = PyList::empty(py);
-        for Node {
-            tag,
-            start,
-            len,
-            contents,
-        } in nodes
+        for (
+            index,
+            Node {
+                tag,
+                start,
+                len,
+                contents,
+            },
+        ) in nodes.into_iter().enumerate()
         {
+            if index % 128 == 0 && index != 0 {
+                crate::file_open::skp_checkpoint(py)?;
+            }
             let tag_name = self.tags.get_item(tag as usize)?;
             let node = match contents {
                 Contents::Records(children) => {

@@ -22,7 +22,9 @@ from unittest.mock import patch
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fixture", type=Path)
-    path = parser.parse_args().fixture
+    parser.add_argument("--worker", action="store_true", help="open through DocumentOpen")
+    args = parser.parse_args()
+    path = args.fixture
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
@@ -41,9 +43,13 @@ def main():
         ids = (f"{i:016x}" for i in itertools.count(1))
         with patch.object(group, "new_uid", side_effect=ids), \
                 patch.object(layers, "new_uid", side_effect=ids):
-            scene = Scene()
             start = time.perf_counter()
-            skp.load_skp(scene, path)
+            if args.worker:
+                from ingetrazo_core import DocumentOpen
+                scene, _, _, _ = DocumentOpen(path).wait()
+            else:
+                scene = Scene()
+                skp.load_skp(scene, path)
             elapsed = time.perf_counter() - start
         rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         print(f"{elapsed:.6f} s, {rss / (1024**2 if sys.platform == 'darwin' else 1024):.3f} MiB",
