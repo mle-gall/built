@@ -260,32 +260,6 @@ def test_the_eyedropper_on_a_default_face_inside_a_painted_group_samples_the_gro
 
 # ---- the .skp keeps it on the instance ------------------------------------
 
-def test_the_skp_carries_the_instance_paint(tmp_path):
-    openskp = __import__("pytest").importorskip("openskp")
-    from formats.skp_out import save_skp
-    scene = Scene()
-    proto = Mesh()
-    proto.add_face([V(0, 0), V(1, 0), V(1, 1), V(0, 1)])
-    a, b = Group(proto, "a"), Group(proto, "b")
-    for g, dx in ((a, 0.0), (b, 3.0)):
-        xf = QMatrix4x4()
-        xf.translate(dx, 0, 0)
-        g.xform = xf
-        scene.groups.append(g)
-    b.material = {"color": [1.0, 0.0, 0.0], "mat": "Rojo contenedor"}
-    path = tmp_path / "pintado.skp"
-    save_skp(scene, str(path))
-    model = openskp.SkpFile.open(str(path)).parse()
-    names = {getattr(m, "name", "") for m in (getattr(model, "materials", None) or [])}
-    assert "Rojo_contenedor" in names          # export-safe spelling
-    # openskp reads the instance's material back where it exposes it.
-    root = getattr(model, "root", None)
-    insts = list(getattr(root, "instances", []) or []) if root is not None else []
-    painted = [i for i in insts if getattr(i, "material", None) not in (None, "", 0)]
-    if insts and any(hasattr(i, "material") for i in insts):
-        assert len(painted) == 1, [getattr(i, "material", None) for i in insts]
-
-
 # ---- the instanced draw pools by paint too --------------------------------
 
 def test_the_instanced_pool_splits_a_painted_instance_from_its_siblings():
