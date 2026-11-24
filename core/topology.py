@@ -733,12 +733,7 @@ def orient_coplanar_faces(mesh, footprint=None) -> list:
             become_store(old, store, [])
             footprint = kernel.winding_footprint(old.faces)
         flipped = kernel.object_winding(mesh.faces, footprint)
-    for face in flipped:
-        outer = list(reversed(face.vertices))
-        holes = face.holes
-        attrs = dict(face.attrs)
-        mesh.remove_face(face)
-        mesh.add_face(outer, holes or None).attrs = attrs
+    kernel.object_drawing.flip_faces(mesh, flipped)
     return flipped
 
 
@@ -761,15 +756,8 @@ def sweep_tjunctions(mesh, seedkeys=None) -> None:
     """
     from core import scan_index
     from core.mesh import _STITCH_TOL
-    seeds = list(seedkeys or ())
-    while True:
-        scan = scan_index.scan(mesh) or scan_index.Scan(mesh)
-        hits = scan.native.stitch_hits(seeds, _STITCH_TOL)
-        if not hits:
-            return
-        edges, vertices = zip(*hits)
-        for edge, vertex in zip(scan.edges(edges), scan.vertices(vertices)):
-            mesh.split_edge_at(edge, vertex)
+    kernel.object_drawing.sweep_junctions(mesh, list(seedkeys or ()), _STITCH_TOL,
+                                          scan_index.scan, scan_index.Scan)
 
 
 def resolve_tjunctions(mesh, max_iter: int = 1000) -> None:
@@ -826,22 +814,7 @@ def prune_collinear_orphan_edges(mesh) -> list:
     from core import scan_index
     from core.mesh import edge_flags, stamp_edge_flags
     scan = scan_index.scan(mesh) or scan_index.Scan(mesh)
-    cuts = scan.native.orphan_pieces()
-    removed = scan.edges(i for i, _ in cuts)
-    curved = False
-    for edge, (_, pieces) in zip(removed, cuts):
-        flags = edge_flags(edge)
-        mesh.remove_edge(edge)
-        for start, end in pieces:
-            a, b = QVector3D(*start), QVector3D(*end)
-            va, vb = mesh.vertex_at(a), mesh.vertex_at(b)
-            if va is not None and vb is not None and mesh.find_edge(va, vb) is not None:
-                continue
-            stamp_edge_flags(mesh.add_edge(a, b), flags)
-            curved = curved or edge.curve is not None
-    if curved:
-        mesh.resplit_curves()
-    return removed
+    return kernel.object_drawing.prune_orphans(mesh, scan, edge_flags, stamp_edge_flags)
 
 
 def _mesh_is_flat(mesh) -> bool:
@@ -928,57 +901,12 @@ def heal_overlapping_faces(mesh, coverage: float = 0.5, partial=None,
     # 1. Dedupe nested holes by rebuilding the face with the outermost holes.
     from core.store_mesh import StoreMesh, FaceView, _hypot
     store = mesh._store if type(mesh) is StoreMesh and _hypot() is not None else None
-    holed = (list(mesh.faces) if store is None else
-             (FaceView(mesh, k) for k in store.multiple_hole_faces()))
-    for face in holed:
-        if len(face.holes) < 2:
-            continue
-        keep = _maximal_holes(face.holes)
-        if len(keep) != len(face.holes):
-            outer = [QVector3D(v) for v in face.vertices]
-            mesh.remove_face(face)
-            mesh.add_face(
-                outer, [[QVector3D(v) for v in h] for h in keep] or None
-            ).attrs = dict(face.attrs)
-
-    import sys
-    compensated = sys.version_info >= (3, 12)
-    if store is not None:
-        removed_keys, punches = store.heal_plan(
-            coverage, bool(partial), _BOX_PAD, _hypot(), compensated)
-        def face_at(key):
-            return FaceView(mesh, key)
-        removed = [face_at(k) for k in removed_keys]
-        if removed_keys:
-            store.remove_drawing_faces(removed_keys)
-            mesh._dirty(len(removed_keys))
-    else:
-        faces = list(mesh.faces)
-        removed_rows, punches = kernel.heal_objects(faces, coverage, bool(partial), _BOX_PAD, compensated)
-        face_at = faces.__getitem__
-        removed = [face_at(i) for i in removed_rows]
-        for face in removed:
-            mesh.remove_face(face)
-    for ref, smalls in punches:
-        _punch_overlaps(mesh, face_at(ref), [face_at(i) for i in smalls])
+    removed = kernel.object_drawing.heal_faces(mesh, coverage, bool(partial), _BOX_PAD,
+                                             store, FaceView, _hypot())
     if not flat:
         from core.orient import orient_outward
         orient_outward(mesh)
     return removed
-
-
-def _punch_overlaps(mesh, g, smalls):
-    outer = [QVector3D(v) for v in g.vertices]
-    holes = [[QVector3D(v) for v in h] for h in g.holes]
-    holes += [[QVector3D(v) for v in s.vertices] for s in smalls]
-    mesh.remove_face(g)
-    try:
-        mesh.add_face(outer, holes).attrs = dict(g.attrs)
-    except Exception:
-        # Degenerate hole arrangement — fall back to the face as it was.
-        mesh.add_face(outer, [[QVector3D(v) for v in h]
-                              for h in g.holes] or None
-                      ).attrs = dict(g.attrs)
 
 
 #: The defects :func:`defects_near` counts, worst first — the order a
