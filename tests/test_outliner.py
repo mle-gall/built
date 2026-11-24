@@ -99,39 +99,47 @@ def test_a_selection_in_the_view_is_found_in_the_tree():
     _close(win)
 
 
+def _filing_project(*roots):
+    from tests.test_project_drawing_filters import Project
+    project = Project()
+    project.scene.groups[:] = roots
+    project.scene.version += 1
+    project.view._ui_exp = {"n:"}
+    return project
+
+
 def test_rows_update_in_place_and_rebuild_only_when_groups_change():
     building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    row = _row(panel, tree)
-    _row(panel, building).setExpanded(True)
+    p = _filing_project(building, tree)
+    p.view._ui_exp.add("i:" + building.uid)
+    key = "i:" + tree.uid
+    assert p.rows()[key][0] == "Tree"
     tree.name = "Pine"
     tree.hidden = True
-    panel.refresh()
-    assert _row(panel, tree) is row
-    assert row.text(0) == "Pine" and not _shown(panel, tree)
+    p.scene.version += 1
+    rows = p.rows()
+    assert rows[key][0] == "Pine" and rows[key][1][5] == 0
+    from core.history import InsertGroupCommand
     extra = _group("Fence", (9, 0, 0))
-    scene.groups.append(extra)
-    panel.refresh()
-    assert _row(panel, tree) is not row             # rebuilt…
-    assert _row(panel, building).isExpanded()       # …keeping what was open
-    assert _row(panel, extra).text(0) == "Fence"
-    scene.groups.remove(extra)
-    panel.refresh()
-    assert id(extra) not in panel._items
-    _close(win)
+    p.win.viewport.history.execute(InsertGroupCommand(extra))
+    rows = p.rows()
+    assert rows["i:" + building.uid][1][8] == 1
+    assert rows["i:" + extra.uid][0] == "Fence"
+    assert p.win.viewport.history.undo()
+    assert "i:" + extra.uid not in p.rows()
 
 
 def test_a_folded_section_waits_until_it_shows():
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    assert not panel.isVisible()
-    scene.groups.append(_group("Late"))
-    win.project_browser.on_scene_changed()
-    assert panel._stale
-    assert panel.tree.topLevelItem(0).childCount() == 2
-    panel.refresh()
-    assert panel.tree.topLevelItem(0).childCount() == 3
-    _close(win)
+    from views.wgpu_ui import _sync_project_rows
+    p = _filing_project(*_building())
+    p.rows()
+    before = p.view.renderer.calls["ui_set_tree"]
+    p.view.renderer.ui_project_hidden = lambda: True
+    p.scene.groups.append(_group("Late"))
+    p.scene.version += 1
+    _sync_project_rows(p.view, p.win)
+    assert p.view.renderer.calls["ui_set_tree"] is before
+    assert "Late" in {name for name, _ in p.rows().values()}
 
 
 def test_an_empty_model_says_so():
@@ -143,22 +151,23 @@ def test_an_empty_model_says_so():
 
 def test_ten_thousand_nodes_build_once_and_refresh_quickly():
     roots = _random_tree(10_000)
-    win, scene, panel = _window_with()
-    scene.groups.extend(roots)
-    # This process's CPU time, not wall time: under pytest-xdist the other
-    # workers' load is not the outliner's.
+    p = _filing_project(*roots)
+    p.view._ui_pages = {"": len(roots)}
+    stack = roots.copy()
+    while stack:
+        g = stack.pop()
+        if g.children:
+            p.view._ui_exp.update(("i:" + g.uid, "c:" + g.uid))
+            stack.extend(g.children)
     t0 = time.process_time()
-    panel.refresh()
-    build = time.process_time() - t0
-    assert len(panel._items) == 10_000
+    rows = p.rows()
+    assert len([k for k in rows if k.startswith(("i:", "c:"))]) == 10_000
+    assert time.process_time() - t0 < 5.0
+    previous = p.view.renderer.calls["ui_set_tree"]
     t0 = time.process_time()
-    panel.refresh()
-    again = time.process_time() - t0
-    print(f"\n10 000 nodes: build {build * 1000:.0f} ms, "
-          f"refresh {again * 1000:.0f} ms")
-    assert build < 5.0
-    assert again < 1.0
-    _close(win)
+    p.rows()
+    assert time.process_time() - t0 < 1.0
+    assert p.view.renderer.calls["ui_set_tree"] is previous
 
 
 def test_the_filter_keeps_the_path_to_every_match():
@@ -474,28 +483,19 @@ def test_the_scale_fits_the_model_in_the_frame():
 
 def test_repeated_row_templates_keep_distinct_objects_and_children():
     """Identical presentation is shared, never the represented group/tree."""
-    from views.outliner import COL_NAME
     mesh = Mesh()
-    first = Group(mesh, 'First')
-    second = Group(mesh, 'Second')
-    first.adopt([Group(mesh, 'Child A')])
-    second.adopt([Group(mesh, 'Child B'), Group(mesh, 'Child C')])
-    win, scene, panel = _window_with(first, second)
-    try:
-        a, b = panel._items[id(first)], panel._items[id(second)]
-        assert a.data(COL_NAME, Qt.UserRole) is first
-        assert b.data(COL_NAME, Qt.UserRole) is second
-        assert a.text(COL_NAME) == 'First'
-        assert b.text(COL_NAME) == 'Second'
-        assert a.childCount() == 1
-        assert b.childCount() == 2
-        second.hidden = True
-        scene.version += 1
-        panel.refresh()
-        assert not a.data(COL_EYE, Qt.UserRole)
-        assert b.data(COL_EYE, Qt.UserRole)
-    finally:
-        _close(win)
-        win.close()
-
-
+    first, second = Group(mesh, "First"), Group(mesh, "Second")
+    first.adopt([Group(mesh, "Child A")])
+    second.adopt([Group(mesh, "Child B"), Group(mesh, "Child C")])
+    p = _filing_project(first, second)
+    a, b = ("i:" + g.uid for g in (first, second))
+    p.view._ui_exp.update((a, b))
+    rows = p.rows()
+    names = [name for k, (name, _) in rows.items() if k.startswith(("i:", "c:"))]
+    assert names == ["First", "Child A", "Second", "Child B", "Child C"]
+    assert all(rows["c:" + g.uid][1][0] == rows[a][1][0] + 1
+               for g in (*first.children, *second.children))
+    second.hidden = True
+    p.scene.version += 1
+    rows = p.rows()
+    assert rows[a][1][5] == 1 and rows[b][1][5] == 0

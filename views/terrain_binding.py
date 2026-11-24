@@ -4,7 +4,7 @@ from pathlib import Path
 
 from georef.photomesh import PhotoMeshSampler
 from georef.profile import profile_to_csv, sample_profile, selected_geopath
-from views.inspector_bridge import _send
+from ingetrazo_render import panel_send as _send
 
 
 class ProfileBinding:

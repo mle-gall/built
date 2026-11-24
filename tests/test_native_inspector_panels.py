@@ -5,7 +5,7 @@ import pytest
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from core.group import Group
-from views.inspector_bridge import action
+from ingetrazo_render import inspector_action as action
 
 
 @pytest.fixture
@@ -202,7 +202,8 @@ def test_property_add_and_reset_without_losing_siblings(host):
 
 
 def test_report_sheet_commands_and_parts_inspector(host, monkeypatch):
-    from views import chrome_sheet, wgpu_ui
+    from ingetrazo_render import chrome_sheet
+    from views import wgpu_ui
     from tests.test_parts import _stool
     from core import extension_manager
     monkeypatch.setattr(extension_manager, "load_cached_catalog", lambda: None)

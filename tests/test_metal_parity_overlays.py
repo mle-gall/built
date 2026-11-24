@@ -69,7 +69,9 @@ def test_snap_marker_is_pinned(kind, dpr):
     """The marker moved from Python painting to AnnotationCanvas.draw_snap.
     The digests are of the Python marker on the same canvas with the
     native paint types, before the port (docs/render-glue-port.md); the
-    Python marker in its turn matched GL's within one per channel."""
+    Python marker in its turn matched GL's within one per channel. Labels
+    are laid out once and placed by a transform since, which moves a few
+    edge pixels; the pin is of the marker and its guides."""
     import hashlib
     import json
     from pathlib import Path
@@ -77,11 +79,9 @@ def test_snap_marker_is_pinned(kind, dpr):
                       guide=(V(80, 40, 0), V(325, 40, 0)),
                       guide_color=(.86, .22, .27))
     snap.guides = [(V(80, 65, 0), V(325, 65, 0), (.2, .4, .78))]
-    snap.axis = "z"
-    snap.context = "component"
     project = lambda p: (p.x(), p.y())
     clip = lambda a, b: (a, b)
-    rgba = canvas_rgba(lambda c: draw_snap_indicator(c, snap, project, clip), dpr=dpr)
+    rgba = canvas_rgba(lambda c: draw_snap_indicator(c, snap, project, clip, labels=False), dpr=dpr)
     pins = json.loads((Path(__file__).parent / "data" / "snap_marker_digests.json").read_text())
     assert hashlib.sha256(rgba).hexdigest()[:24] == pins[f"{dpr}|{kind}"]
     assert any(rgba) == (kind not in ("axis", "axis_inference"))

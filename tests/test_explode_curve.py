@@ -65,13 +65,13 @@ def test_the_context_menu_offers_it_only_on_a_curve(native_window):
 
 
 def test_right_click_shows_it_on_a_curve_not_on_a_line(native_window):
-    from views import context_menu
+    from ingetrazo_render import context_menu_build
     win = native_window
     sc = win.viewport.scene
     _circle(sc, V(0, 0, 0))
     line = sc.mesh.add_edge(V(3, 0, 0), V(4, 0, 0))
     arc = next(e for e in sc.mesh.edges if e.curve is not None)
     sc.select(sc.mesh.curve_edges(arc))
-    assert context_menu.build(win, win.view).find("explodecurve")
+    assert context_menu_build(win, win.view).find("explodecurve")
     sc.select([line])
-    assert not context_menu.build(win, win.view).find("explodecurve")
+    assert not context_menu_build(win, win.view).find("explodecurve")

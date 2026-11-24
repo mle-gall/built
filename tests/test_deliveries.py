@@ -10,7 +10,8 @@ from core.protocol.commands import run
 from core.scene import Scene
 from formats import igz
 from tests.test_ifc_export import _tagged_wall_scene
-from views import wgpu_deliveries as dock
+import ingetrazo_render as dock
+from PySide6.QtCore import QTimer
 
 
 def add(h, path, **fields):
@@ -62,15 +63,15 @@ def test_queue_keep_cancel(tmp_path, monkeypatch):
     win = SimpleNamespace(viewport=vp)
     monkeypatch.setattr(chrome_forms, "show", lambda *_: None)
     ticks = []
-    monkeypatch.setattr(dock.QTimer, "singleShot", lambda _, fn: ticks.append(fn))
+    monkeypatch.setattr(QTimer, "singleShot", lambda _, fn: ticks.append(fn))
     path = tmp_path / "client.glb"
-    form = dock.export_form(win, one_off=True)
+    form = dock.delivery_export_form(win, one_off=True)
     form.receive("format", str(form.field("format").keys().index("glb")))
     form.set("destination", str(path))
     form.press("keep")
     key, record = next(iter(deliveries.records(scene).items()))
     cancelled = tmp_path / "cancel.glb"
-    job = dock.enqueue(win, None, {**record, "destination": str(cancelled)})
+    job = dock.enqueue_delivery(win, None, {**record, "destination": str(cancelled)})
     job.cancel()
     ticks.pop(0)()
     assert win._chrome_jobs[0].phase == "Writing"
@@ -177,12 +178,12 @@ def test_running_export_observes_cancellation(tmp_path, monkeypatch):
     vp = SimpleNamespace(history=History(s), scene=s, camera=OrbitCamera())
     win = SimpleNamespace(viewport=vp)
     callbacks = []
-    monkeypatch.setattr(dock.QTimer, "singleShot", lambda _, fn: callbacks.append(fn))
+    monkeypatch.setattr(QTimer, "singleShot", lambda _, fn: callbacks.append(fn))
     monkeypatch.setattr(progress, "REPORT_EVERY", 0)
     target = tmp_path / "plan.dxf"
     target.write_text("previous")
     key = add(vp.history, target)
-    job = dock.enqueue(win, key, deliveries.records(s)[key])
+    job = dock.enqueue_delivery(win, key, deliveries.records(s)[key])
     monkeypatch.setattr(QApplication, "processEvents", job.cancel)
 
     def writer(path, *unused):
@@ -198,7 +199,7 @@ def test_running_export_observes_cancellation(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("one_off", [True, False], ids=["export", "delivery"])
 def test_svg_sheet_previews_the_page_it_writes(one_off, tmp_path, monkeypatch):
-    from views import chrome_sheet as sheet
+    from ingetrazo_render import chrome_sheet as sheet
     from tests.test_chrome_sheet import View
 
     scene = _tagged_wall_scene()
@@ -209,10 +210,10 @@ def test_svg_sheet_previews_the_page_it_writes(one_off, tmp_path, monkeypatch):
     view.width, view.height = lambda: 960, lambda: 640
     win = SimpleNamespace(viewport=viewport, _doc=SimpleNamespace(stand_in=view))
     callbacks = []
-    monkeypatch.setattr(dock.QTimer, "singleShot", lambda delay, fn: callbacks.append(fn))
+    monkeypatch.setattr(QTimer, "singleShot", lambda delay, fn: callbacks.append(fn))
     monkeypatch.setattr(sheet, "_arm_watchdog", lambda *args: None)
 
-    form = dock.export_form(win, one_off=one_off)
+    form = dock.delivery_export_form(win, one_off=one_off)
     sid = "export" if one_off else "delivery"
 
     def act(*parts):

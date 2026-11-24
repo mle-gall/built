@@ -1,7 +1,7 @@
 """Recording GPU targets driven by the native document, input and frame paths."""
 import pytest
 
-from app_shell.events import MouseEvent
+from ingetrazo_render import MouseEvent
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from views.resident_peer import TargetRenderer
 

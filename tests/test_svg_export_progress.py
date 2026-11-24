@@ -24,7 +24,8 @@ from core import progress as P                         # noqa: E402
 from core import vista_caras as VC                      # noqa: E402
 from core.vista_caras import FaceFill                   # noqa: E402
 from tests.vista_caras_reference import _scene        # noqa: E402
-from views import chrome_dialogs, wgpu_deliveries
+import ingetrazo_render as wgpu_deliveries
+from views import chrome_dialogs
 from tests.test_export_view_svg import _export_sheet
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
@@ -114,6 +115,25 @@ def _bars(monkeypatch, cancel_after=None, original=chrome_dialogs.Job):
     return made
 
 
+class _JobDelay:
+    """The Rust delay before a job shows, as an attribute monkeypatch restores."""
+
+    @property
+    def seconds(self):
+        old = wgpu_deliveries.set_preview_job_delay(0.0)
+        wgpu_deliveries.set_preview_job_delay(old)
+        return old
+
+    @seconds.setter
+    def seconds(self, value):
+        wgpu_deliveries.set_preview_job_delay(value)
+
+
+def _no_delay(patch):
+    """Show the job at once."""
+    patch.setattr(_JobDelay(), "seconds", 0.0)
+
+
 def test_a_small_model_never_sees_the_bar(monkeypatch):
     from types import SimpleNamespace
 
@@ -130,7 +150,7 @@ def test_cancel_on_the_bar_raises_and_puts_everything_back(monkeypatch):
     win = SimpleNamespace(viewport=SimpleNamespace(history=object()))
     made = _bars(monkeypatch, cancel_after=3)
     monkeypatch.setattr(P, "REPORT_EVERY", 0.0)
-    monkeypatch.setattr(wgpu_deliveries, "PREVIEW_JOB_DELAY", 0.0)
+    _no_delay(monkeypatch)
     with pytest.raises(InterruptedError):
         with wgpu_deliveries.svg_progress(win, win.viewport.history, "SVG"):
             for n in range(10):
@@ -161,7 +181,7 @@ def test_cancel_stops_the_export_and_writes_nothing(native_host, tmp_path, monke
     with monkeypatch.context() as observe:
         made = _bars(observe, cancel_after=0)
         observe.setattr(P, "REPORT_EVERY", 0.0)
-        observe.setattr(wgpu_deliveries, "PREVIEW_JOB_DELAY", 0.0)
+        _no_delay(observe)
         _export_sheet(win, tmp_path / "vista.svg")
         assert not (tmp_path / "vista.svg").exists()
         assert len(made) == 1 and made[0].cancelled and not win._chrome_jobs
@@ -176,7 +196,7 @@ def test_the_bar_left_alone_writes_the_svg_as_before(native_host, tmp_path, monk
     _export_sheet(win, tmp_path / "antes.svg")
     made = _bars(monkeypatch)
     monkeypatch.setattr(P, "REPORT_EVERY", 0.0)
-    monkeypatch.setattr(wgpu_deliveries, "PREVIEW_JOB_DELAY", 0.0)
+    _no_delay(monkeypatch)
     monkeypatch.setattr(chrome_dialogs, "in_shell", lambda: True)
     _export_sheet(win, tmp_path / "con-barra.svg")
     assert len(made) == 1 and made[0].values
@@ -192,12 +212,13 @@ def test_cancel_on_a_slow_preview_turns_the_preview_off(monkeypatch):
     from core.camera import OrbitCamera
     from core.history import History
     from core.scene import Scene
-    from views import chrome_sheet, wgpu_deliveries
+    from ingetrazo_render import chrome_sheet
+    from PySide6.QtCore import QTimer
 
     scene = Scene()
     win = SimpleNamespace(viewport=SimpleNamespace(scene=scene, history=History(scene), camera=OrbitCamera()))
     ticks = []
-    monkeypatch.setattr(wgpu_deliveries.QTimer, "singleShot", lambda delay, fn: ticks.append(fn))
+    monkeypatch.setattr(QTimer, "singleShot", lambda delay, fn: ticks.append(fn))
     clock, built = [0.], []
 
     def render(*args, **kwargs):
@@ -208,7 +229,7 @@ def test_cancel_on_a_slow_preview_turns_the_preview_off(monkeypatch):
     monkeypatch.setattr(P, "REPORT_EVERY", 0)
     monkeypatch.setattr(deliveries, "preview_svg", render)
     monkeypatch.setattr(QApplication, "processEvents", lambda: win._chrome_jobs[0].cancel())
-    form = wgpu_deliveries.export_form(win, one_off=True)
+    form = wgpu_deliveries.delivery_export_form(win, one_off=True)
     form.set("format", "svg")
     provider = chrome_sheet.current(win)
     ctx = chrome_sheet.Ctx(win, None)

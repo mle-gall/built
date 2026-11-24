@@ -248,7 +248,7 @@ class WindowDocumentCommands:
 
     def _on_terrain_profile(self) -> None:
         """Open the terrain chart in the chrome's bottom bar."""
-        from views.inspector_bridge import action
+        from ingetrazo_render import inspector_action as action
         view = getattr(self._doc, "stand_in", None)
         if getattr(view, "renderer", None) is None:
             self.statusBar().showMessage(tr("The terrain profile needs an active renderer."))
@@ -261,7 +261,7 @@ class WindowDocumentCommands:
         return (t.x(), t.y(), t.z(), cam.distance, cam.yaw, cam.pitch)
 
     def edit_scene_camera(self, view):
-        from views.inspector_bridge import open_camera
+        from ingetrazo_render import open_camera
         if view is not None:
             self.tray.scenes.show_view(view)
             return open_camera(self, view)

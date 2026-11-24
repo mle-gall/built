@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The start page: a large sheet over the model (``views/chrome_sheet.py``,
+"""The start page: a large sheet over the model (``ingetrazo_render.chrome_sheet``,
 option C of the 2026-11-23 review), in the Qt app with the Built chrome and
 in the native ``built`` shell.
 
@@ -134,7 +134,7 @@ class Page:
         for doc in list(getattr(win, "_documents", []) or []):
             if getattr(doc, "path", None) is not None:
                 note(win, doc.path, doc)
-        from views import chrome_sheet
+        from ingetrazo_render import chrome_sheet
         if self.wanted and chrome_sheet.current(win) is self.sheet:
             # Already up (asked again at the end of a cold start): fresh
             # rows, nothing typed lost.
@@ -166,7 +166,7 @@ class Page:
         self.wanted = False
         if self.dog is not None:
             self.dog.stop()
-        from views import chrome_sheet
+        from ingetrazo_render import chrome_sheet
         if chrome_sheet.current(self.win) is self.sheet:
             chrome_sheet.close(self.win)
         self.repaint()
@@ -184,7 +184,7 @@ class Page:
             self.dog.start(500)     # a cold start: the Metal view is still on its way
             return
         self.wanted = False
-        from views import chrome_sheet
+        from ingetrazo_render import chrome_sheet
         if chrome_sheet.current(win) is self.sheet:
             win.__dict__.pop("_chrome_sheet", None)
         win.statusBar().showMessage("Built could not draw the Start sheet.")
@@ -198,7 +198,7 @@ class Page:
                 pass
 
     def changed(self) -> None:
-        from views import chrome_sheet
+        from ingetrazo_render import chrome_sheet
         chrome_sheet.refresh(self.win)
         self.repaint()
 
@@ -236,7 +236,7 @@ class Page:
             self.close()
         if not self.wanted:
             return
-        from views import chrome_sheet
+        from ingetrazo_render import chrome_sheet
         if chrome_sheet.current(win) is not self.sheet:
             # Another sheet took the window (Settings from the footer): the
             # page waits under it and comes back when that one closes.
@@ -258,7 +258,7 @@ class Page:
 
 # ---- The sheet ---------------------------------------------------------------
 def _sheet_class():
-    from views import chrome_sheet
+    from ingetrazo_render import chrome_sheet
     return chrome_sheet.Provider
 
 
@@ -291,7 +291,7 @@ class StartSheet(_sheet_class()):
     def build(self, ctx):
         import json
         from ingetrazo_render import start_sheet
-        from views import chrome_sheet as cs
+        from ingetrazo_render import chrome_sheet as cs
         page = self.page
         page.drawn = True
         spec = json.loads(start_sheet(_state(self, can_return(page.win))))

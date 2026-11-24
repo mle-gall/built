@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from views import context_menu
+from ingetrazo_render import context_menu_build, context_menu_run
 
 
 def _V(x, y, z=0.0):
@@ -26,12 +26,12 @@ def ventana(native_host):
 
 def _entries(win, selection):
     win.viewport.scene.select(selection)
-    return context_menu.build(win, win.view)
+    return context_menu_build(win, win.view)
 
 
 def _choose(win, menu, verb):
     assert verb in menu.ids()
-    assert context_menu.run(win, win.view, menu.kind, verb, menu.sel, facts=menu.facts)
+    assert context_menu_run(win, win.view, menu.kind, verb, menu.sel, facts=menu.facts)
 
 
 def _cara(scene):

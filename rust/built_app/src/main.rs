@@ -723,7 +723,8 @@ impl App {
                 .with_title_hidden(true);
         }
         if self.args.background() {
-            attrs = attrs.with_active(false);
+            // Created hidden; send_window_back shows it transparent.
+            attrs = attrs.with_active(false).with_visible(false);
         }
         let window = event_loop.create_window(attrs).map_err(|e| e.to_string())?;
         window.set_ime_allowed(true);

@@ -26,7 +26,7 @@ import math
 import pytest
 from PySide6.QtCore import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D
-from app_shell.events import MouseEvent
+from ingetrazo_render import MouseEvent
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 

@@ -549,6 +549,112 @@ fn igz_plan_json<'py>(mesh: &Obj<'py>, plan: &Obj<'py>) -> PyResult<Dict<'py>> {
     }
     .payload(true)
 }
+// Read live vertices, ring indices and edge flags in store order. Overlay
+// mutable position vectors and painted face dictionaries held by scripts.
+fn plain_store_records<'py>(mesh: &Obj<'py>) -> PyResult<Option<Dict<'py>>> {
+    use crate::store::{
+        keys::{Kind, LOCAL_BITS},
+        py::PyMeshStore,
+    };
+    let py = mesh.py();
+    let module = py.import("core.store_mesh")?;
+    if !mesh.get_type().is(&module.getattr("StoreMesh")?) {
+        return Ok(None);
+    }
+    let md = mesh.getattr("__dict__")?.cast_into::<PyDict>()?;
+    if md
+        .get_item("_instance_definition")?
+        .is_some_and(|v| !v.is_none())
+    {
+        return Ok(None);
+    }
+    let store = field(&md, "_store")?;
+    if !store.getattr("_model_frame")?.is_truthy()? {
+        return Ok(None);
+    }
+    let native = store.cast::<PyMeshStore>()?.try_borrow()?;
+    let st = &native.inner;
+    let mut d = st.dense();
+    let base = (st.state.ns as u128) << LOCAL_BITS;
+    if let Some(c) = md.get_item("_pos_cache")?.filter(|v| !v.is_none()) {
+        if c.get_item(0)?.eq(st.revision)? && c.get_item(2)?.is(&store) {
+            let cache = c.get_item(1)?.cast_into::<PyDict>()?;
+            if !cache.is_empty() {
+                for (p, k) in d.pos.iter_mut().zip(st.local_keys(Kind::Vertex)) {
+                    if let Some(v) = cache.get_item(base | u128::from(k))? {
+                        *p = crate::math::xyz(&v)?.to_array();
+                    }
+                }
+            }
+        }
+    }
+    let edges = PyList::empty(py);
+    for (i, pair) in d.edges.iter().enumerate() {
+        let e = PyDict::new(py);
+        e.set_item("a", d.pos[pair[0] as usize])?;
+        e.set_item("b", d.pos[pair[1] as usize])?;
+        let flags = d.flags[i];
+        if flags & crate::store::SOFT != 0 {
+            e.set_item("soft", true)?;
+            if flags & crate::store::FLAT != 0 {
+                e.set_item("flat", true)?
+            }
+        }
+        if flags & crate::store::HIDDEN != 0 {
+            e.set_item("hidden", true)?
+        }
+        if d.curve[i] >= 0 {
+            e.set_item("curve", d.curve[i])?
+        }
+        if d.layer[i] >= 0 {
+            e.set_item("layer", &st.state.layers[d.layer[i] as usize])?
+        }
+        edges.append(e)?;
+    }
+    let own = field(&md, "_attr_own")?.cast_into::<PyDict>()?;
+    let table = field(&md, "_attr_table")?;
+    let keys = (!own.is_empty()).then(|| st.local_keys(Kind::Face));
+    let faces = PyList::empty(py);
+    let mut rings = d.ring_sizes.iter();
+    let mut corner = 0;
+    for (i, &count) in d.ring_counts.iter().enumerate() {
+        let f = PyDict::new(py);
+        let holes = PyList::empty(py);
+        for r in 0..count {
+            let n = *rings.next().unwrap() as usize;
+            let pts = PyList::empty(py);
+            for &p in &d.corners[corner..corner + n] {
+                pts.append(d.pos[p as usize])?
+            }
+            corner += n;
+            if r == 0 {
+                f.set_item("vertices", pts)?
+            } else {
+                holes.append(pts)?
+            }
+        }
+        if !holes.is_empty() {
+            f.set_item("holes", holes)?
+        }
+        let style = if let Some(keys) = &keys {
+            own.get_item(base | u128::from(keys[i]))?
+        } else {
+            None
+        };
+        let style = match style {
+            None if d.face_attr[i] >= 0 => Some(table.get_item(d.face_attr[i])?),
+            other => other,
+        };
+        if let Some(v) = style {
+            f.update(attrs(&v, true)?.as_mapping())?
+        }
+        faces.append(f)?;
+    }
+    let result = PyDict::new(py);
+    result.set_item("edges", edges)?;
+    result.set_item("faces", faces)?;
+    Ok(Some(result))
+}
 #[pyfunction]
 #[pyo3(signature=(mesh,geom_sink=None))]
 fn igz_mesh_json<'py>(mesh: &Obj<'py>, geom_sink: Option<&Obj<'py>>) -> PyResult<Dict<'py>> {
@@ -560,6 +666,11 @@ fn igz_mesh_json<'py>(mesh: &Obj<'py>, geom_sink: Option<&Obj<'py>>) -> PyResult
     let out = PyDict::new(py);
     if !plan.is_none() && geom_sink.is_none() {
         return igz_plan_json(mesh, &plan);
+    }
+    if geom_sink.is_none() {
+        if let Some(records) = plain_store_records(mesh)? {
+            return Ok(records);
+        }
     }
     let edges = if plan.is_none() {
         mesh.getattr("edges")?

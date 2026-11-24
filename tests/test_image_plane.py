@@ -425,7 +425,7 @@ def test_right_click_reaches_a_locked_image_for_unlock_and_delete():
 
 
 def test_context_menu_offers_unlock_and_delete_for_a_locked_image_underneath(native_window):
-    from views import context_menu
+    from ingetrazo_render import context_menu_build, context_menu_run
     win = native_window
     scene = win.viewport.scene
     im = _image()
@@ -433,15 +433,15 @@ def test_context_menu_offers_unlock_and_delete_for_a_locked_image_underneath(nat
     scene.image_planes.append(im)
     face = scene.mesh.add_face([V(1, 1), V(3, 1), V(3, 3), V(1, 3)])
     scene.select([face])
-    menu = context_menu.build(win, win.view, locked_image=im)
+    menu = context_menu_build(win, win.view, locked_image=im)
     assert {"unlockimage", "deleteimage"} <= set(menu.ids())
     assert "orto" in menu.find("unlockimage").label
-    assert context_menu.run(win, win.view, menu.kind, "deleteimage", menu.sel, locked_image=im)
+    assert context_menu_run(win, win.view, menu.kind, "deleteimage", menu.sel, locked_image=im)
     assert scene.image_planes == []
     assert win.viewport.history.undo() and scene.image_planes == [im]
-    assert context_menu.run(win, win.view, menu.kind, "unlockimage", menu.sel, locked_image=im)
+    assert context_menu_run(win, win.view, menu.kind, "unlockimage", menu.sel, locked_image=im)
     assert not im.locked and im in scene.selection
-    assert "unlockimage" not in context_menu.build(win, win.view, locked_image=im).ids()
+    assert "unlockimage" not in context_menu_build(win, win.view, locked_image=im).ids()
 
 
 def test_a_locked_image_draws_its_border_only_while_selected():

@@ -251,16 +251,7 @@ impl Color {
             return Ok(Self([r.extract()?, g, b, a]));
         }
         if let Ok(s) = r.extract::<String>() {
-            if let Some(hex) = s.strip_prefix('#').filter(|v| v.len() == 8) {
-                if let Ok(argb) = u32::from_str_radix(hex, 16) {
-                    let [a, r, g, b] = argb.to_be_bytes();
-                    return Ok(Self([r, g, b, a]));
-                }
-            }
-            let c = s
-                .parse::<svgtypes::Color>()
-                .map_err(|_| PyValueError::new_err("invalid paint color"))?;
-            return Ok(Self([c.red, c.green, c.blue, c.alpha]));
+            return parse_color(&s);
         }
         Self::read(r)
     }
@@ -328,6 +319,18 @@ impl NativePen {
         };
     }
 }
+/// A colour as Qt names one: `#rrggbb`, `#aarrggbb` or a CSS name.
+fn parse_color(s: &str) -> PyResult<Color> {
+    if let Some(hex) = s.strip_prefix('#').filter(|v| v.len() == 8) {
+        if let Ok(argb) = u32::from_str_radix(hex, 16) {
+            let [a, r, g, b] = argb.to_be_bytes();
+            return Ok(Color([r, g, b, a]));
+        }
+    }
+    let c = s.parse::<svgtypes::Color>().map_err(|_| PyValueError::new_err("invalid paint color"))?;
+    Ok(Color([c.red, c.green, c.blue, c.alpha]))
+}
+
 impl Color {
     fn read(obj: &Obj<'_>) -> PyResult<Self> {
         if let Ok(color) = obj.cast::<Self>() {
@@ -366,6 +369,33 @@ impl Default for Style {
             font: Default::default(),
         }
     }
+}
+
+/// A line of text laid out at the origin, kept by its font, words, anchor
+/// and ink: a marker's label is the same from frame to frame and only its
+/// place changes, and the layout (font lookup, shaping, outlines) was most
+/// of a label's cost. Bounded; a full cache starts again.
+fn text_run(font: &AnnotationFont, text: &str, anchor: &str, ink: Color) -> Option<std::rc::Rc<resvg::usvg::Tree>> {
+    use std::{cell::RefCell, collections::HashMap, rc::Rc};
+    type Key = (String, String, u64, bool, bool, String, [u8; 4]);
+    thread_local! {
+        static RUNS: RefCell<HashMap<Key, Rc<resvg::usvg::Tree>>> = RefCell::new(HashMap::new());
+    }
+    let key: Key = (text.to_owned(), font.family.clone(), font.size.to_bits(), font.bold, font.italic,
+                    anchor.to_owned(), ink.0);
+    if let Some(tree) = RUNS.with(|runs| runs.borrow().get(&key).cloned()) {
+        return Some(tree);
+    }
+    // The extent only sizes the fragment's viewport; it does not clip the run.
+    let tree = Rc::new(font.text_tree(text, (0., 0.), (1., 1.), anchor, ink)?);
+    RUNS.with(|runs| {
+        let mut runs = runs.borrow_mut();
+        if runs.len() >= 512 {
+            runs.clear();
+        }
+        runs.insert(key, tree.clone());
+    });
+    Some(tree)
 }
 
 fn demultiply(rgba: &mut [u8]) {
@@ -438,14 +468,17 @@ impl AnnotationCanvas {
     }
 
     fn text(&mut self, text: &str, at: (f64, f64), anchor: &str, ink: Color) -> PyResult<()> {
-        let tree = self
-            .state
-            .font
-            .text_tree(text, at, (self.width, self.height), anchor, ink)
+        let tree = text_run(&self.state.font, text, anchor, ink)
             .ok_or_else(|| PyValueError::new_err("invalid annotation text"))?;
-        let transform = self.scale();
-        let bounds = tree.root().abs_stroke_bounding_box();
-        self.mark_logical(bounds, 2.);
+        // Placed in device pixels, after the scale: a whole-pixel move then
+        // draws the same pixels.
+        let scale = self.scale();
+        let transform = scale.post_translate(at.0 as f32 * scale.sx, at.1 as f32 * scale.sy);
+        let b = tree.root().abs_stroke_bounding_box();
+        let (x, y) = (at.0 as f32, at.1 as f32);
+        if let Some(bounds) = Rect::from_ltrb(b.left() + x, b.top() + y, b.right() + x, b.bottom() + y) {
+            self.mark_logical(bounds, 2.);
+        }
         resvg::render(&tree, transform, &mut self.target()?.as_mut());
         Ok(())
     }
@@ -744,6 +777,77 @@ impl AnnotationCanvas {
         };
         self.text(text, (x, y), anchor, ink)
     }
+    /// The tool overlay's logical-pixel primitives (formerly the loop in
+    /// views/wgpu_overlay.paint_layer), in order. Each is ``(kind, points,
+    /// color, width, text, fill, dash, pen_style, snap_kind)``: kind is
+    /// polyline, polygon, rectangle (two corners), point (a disc of radius
+    /// ``width``), text or snap (a marker without its label); ``dash`` is
+    /// a custom pattern in pen widths, drawn with flat caps; ``pen_style``
+    /// the Qt pen style code.
+    #[allow(clippy::type_complexity)]
+    fn draw_primitives(
+        &mut self,
+        items: Vec<(String, Vec<(f64, f64)>, String, f64, String, Option<String>, Vec<f32>, u32, String)>,
+    ) -> PyResult<()> {
+        for (kind, points, color, width, text, fill, dash, style, snap_kind) in items {
+            let ink = parse_color(&color)?;
+            if kind == "snap" {
+                let [r, g, b, _] = ink.0.map(|v| f64::from(v) / 255.);
+                let at = *points.first().ok_or_else(|| PyValueError::new_err("a snap needs a point"))?;
+                self.draw_snap(&snap_kind, at, (r, g, b), Vec::new(), None)?;
+                continue;
+            }
+            let pattern: Vec<f32> = if dash.is_empty() {
+                match style {
+                    2 => vec![4., 2.],
+                    3 => vec![1., 2.],
+                    4 => vec![4., 2., 1., 2.],
+                    5 => vec![4., 2., 1., 2., 1., 2.],
+                    _ => Vec::new(),
+                }
+            } else {
+                dash.clone()
+            };
+            self.state.pen = Some(ink);
+            let pen_width = width as f32;
+            self.state.stroke = Stroke {
+                width: pen_width,
+                line_cap: if dash.is_empty() { LineCap::Square } else { LineCap::Butt },
+                line_join: LineJoin::Bevel,
+                dash: StrokeDash::new(pattern.iter().map(|n| n * pen_width).collect(), 0.),
+                ..Default::default()
+            };
+            self.state.brush = fill.as_deref().map(parse_color).transpose()?;
+            let line = |closed: bool| {
+                let mut path = PathBuilder::new();
+                for (i, &(x, y)) in points.iter().enumerate() {
+                    if i == 0 {
+                        path.move_to(x as f32, y as f32);
+                    } else {
+                        path.line_to(x as f32, y as f32);
+                    }
+                }
+                if closed {
+                    path.close();
+                }
+                path.finish()
+            };
+            match kind.as_str() {
+                "polyline" => self.path(line(false), false)?,
+                "polygon" => self.path(line(true), true)?,
+                "rectangle" => {
+                    let (&(x0, y0), &(x1, y1)) = (points.first().unwrap_or(&(0., 0.)), points.get(1).unwrap_or(&(0., 0.)));
+                    // As QRectF(a, b).normalized(): the corner, then the extent.
+                    let rect = Rect::from_xywh(x0.min(x1) as f32, y0.min(y1) as f32, (x1 - x0).abs() as f32, (y1 - y0).abs() as f32);
+                    self.path(rect.map(PathBuilder::from_rect), true)?
+                }
+                "point" => self.circle(*points.first().unwrap_or(&(0., 0.)), width)?,
+                "text" => self.text(&text, *points.first().unwrap_or(&(0., 0.)), "start", ink)?,
+                other => return Err(PyValueError::new_err(format!("Unknown overlay primitive: {other}"))),
+            }
+        }
+        Ok(())
+    }
     /// A snap's marker (formerly views/wgpu_overlay.draw_snap_indicator):
     /// the dashed guides (projected and clipped, logical pixels, with their
     /// colours), a white halo under the kind's glyph in ``rgb`` at ``at``,
@@ -903,6 +1007,25 @@ mod tests {
         let (x, y) = (60usize, 60usize);
         let at = ((y - r[1] as usize) * w + (x - r[0] as usize)) * 4;
         assert_eq!(&rgba[at..at + 4], &[255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn a_label_laid_out_once_draws_the_same_ink_wherever_it_goes() {
+        let ink = Color([20, 160, 90, 255]);
+        let draw = |at: (f64, f64)| {
+            let mut canvas = AnnotationCanvas::new(400, 200, 200.).unwrap();
+            canvas.text("On Edge 3", at, "start", ink).unwrap();
+            (canvas.drawn_region().unwrap(), canvas.overlay.unwrap())
+        };
+        let (ra, a) = draw((10., 30.));
+        let (rb, b) = draw((40., 50.)); // 60 and 40 physical pixels on
+        assert_eq!((rb[0] - ra[0], rb[1] - ra[1]), (60, 40));
+        assert!(a.data().iter().any(|&v| v > 0));
+        for y in ra[1]..ra[3] {
+            for x in ra[0]..ra[2] {
+                assert_eq!(a.pixel(x, y), b.pixel(x + 60, y + 40), "at {x},{y}");
+            }
+        }
     }
 
     #[test]

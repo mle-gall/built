@@ -379,14 +379,13 @@ class TexturePositionTool(Tool):
         from core.input_types import NATIVE
         rows = self._placement.menu_rows()
         if NATIVE:
-            from views.context_menu import Menu, Row, Verb, send
+            from ingetrazo_render import ViewportMenu, context_menu_send
             view = viewport.view
             pos = view.mapFromGlobal(global_pos)
-            menu = Menu("texture_position", tr("Position Texture"), "",
-                        [Row([Verb(key, tr(label), enabled=on) for key, label, on in items], tr(group) if group else "")
-                         for group, items in rows], at=(pos.x(), pos.y()), facts={"tool": self})
-            view._ctx_menu = menu
-            send(view, menu)
+            context_menu_send(view, ViewportMenu.for_tool(
+                self, tr("Position Texture"),
+                [(tr(group) if group else "", [(key, tr(label), on) for key, label, on in items]) for group, items in rows],
+                (pos.x(), pos.y())))
         else:
             from PySide6.QtWidgets import QMenu
             menu = QMenu(getattr(viewport, "keys_stand_in", None) or viewport)
