@@ -110,6 +110,7 @@ mod draw_overlay;
 mod draw_plan;
 mod drawing_queries;
 mod object_outline;
+mod object_push_edges;
 mod object_edge_edits;
 mod planar_edits;
 mod visibility_sets;
@@ -573,6 +574,10 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(object_outline::containing_object, m)?)?;
     m.add_function(wrap_pyfunction!(object_outline::orphan_objects, m)?)?;
     m.add_function(wrap_pyfunction!(object_outline::bordered_object, m)?)?;
+    m.add_function(wrap_pyfunction!(object_push_edges::classify_object_edge, m)?)?;
+    m.add_function(wrap_pyfunction!(object_push_edges::loop_edges, m)?)?;
+    m.add_function(wrap_pyfunction!(object_push_edges::face_edges, m)?)?;
+    m.add_function(wrap_pyfunction!(object_push_edges::boundary_carries, m)?)?;
     m.add_class::<object_outline::FaceOutline>()?;
     m.add_function(wrap_pyfunction!(object_outline::winding_footprint, m)?)?;
     m.add_function(wrap_pyfunction!(object_outline::object_winding, m)?)?;
