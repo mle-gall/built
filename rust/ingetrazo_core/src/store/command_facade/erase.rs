@@ -129,6 +129,42 @@ pub(crate) fn command_erase_selection(
     }))
 }
 
+fn heal_keys(mesh: &Bound<'_, PyAny>, footprint: &Bound<'_, PyAny>) -> PyResult<Vec<u128>> {
+    let py = mesh.py();
+    let kw = PyDict::new(py);
+    kw.set_item("footprint", footprint)?;
+    let healed = py
+        .import("core.topology")?
+        .getattr("heal_overlapping_faces")?
+        .call((mesh,), Some(&kw))?;
+    healed
+        .try_iter()?
+        .map(|face| face?.getattr("key")?.extract())
+        .collect()
+}
+
+pub(crate) struct Healed {
+    pub(crate) faces: Vec<u128>,
+    pub(crate) dirty: usize,
+}
+
+pub(crate) fn command_heal_overlaps(mesh: &Bound<'_, PyAny>) -> PyResult<Option<Healed>> {
+    if store_hypot(mesh)?.is_none() {
+        return Ok(None);
+    }
+    let before: usize = mesh.getattr("_mut_serial")?.extract()?;
+    let footprint = mesh
+        .py()
+        .import("core.topology")?
+        .call_method1("winding_footprint", (mesh,))?;
+    let faces = heal_keys(mesh, &footprint)?;
+    let after: usize = mesh.getattr("_mut_serial")?.extract()?;
+    Ok(Some(Healed {
+        faces,
+        dirty: after - before,
+    }))
+}
+
 pub(crate) fn command_erase_cleanup(
     mesh: &Bound<'_, PyAny>,
     footprint: &Bound<'_, PyAny>,
@@ -136,7 +172,6 @@ pub(crate) fn command_erase_cleanup(
     if store_hypot(mesh)?.is_none() {
         return Ok(None);
     }
-    let py = mesh.py();
     let serial: u64 = mesh.getattr("_mut_serial")?.extract()?;
     let seams: u32 = mesh
         .getattr("_store")?
@@ -145,16 +180,7 @@ pub(crate) fn command_erase_cleanup(
     if seams != 0 {
         mesh.call_method1("_dirty", (seams,))?;
     }
-    let kw = PyDict::new(py);
-    kw.set_item("footprint", footprint)?;
-    let healed = py
-        .import("core.topology")?
-        .getattr("heal_overlapping_faces")?
-        .call((mesh,), Some(&kw))?;
-    let healed_faces = healed
-        .try_iter()?
-        .map(|face| face?.getattr("key")?.extract())
-        .collect::<PyResult<Vec<_>>>()?;
+    let healed_faces = heal_keys(mesh, footprint)?;
     let orphan_vertices = mesh.call_method0("prune_orphan_vertices")?.extract()?;
     let after: u64 = mesh.getattr("_mut_serial")?.extract()?;
     let dirty = u32::try_from(after - serial)

@@ -1195,6 +1195,12 @@ impl PyMeshStore {
             .map(|r: super::command_facade::RebuiltPlanar| (r.flat,r.rebuilt,r.dirty)))
     }
 
+    #[staticmethod]
+    fn command_heal_overlaps(mesh: &Bound<'_,PyAny>) -> PyResult<Option<(Vec<u128>,usize)>> {
+        Ok(super::command_facade::command_heal_overlaps(mesh)?
+            .map(|r: super::command_facade::Healed| (r.faces,r.dirty)))
+    }
+
     fn drawing_paint_owners(
         &self,
         before: &PyStoreSnapshot,
