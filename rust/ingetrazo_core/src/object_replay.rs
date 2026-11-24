@@ -268,14 +268,14 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(crate::object_registry::drop_orphans, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::object_registry::registers, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::object_registry::purge_debris, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(crate::object_incidence::vertex_faces, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(crate::object_incidence::ring_positions, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(crate::object_incidence::hole_positions, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(crate::object_incidence::reverse_rings, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(crate::object_incidence::insert_between, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(crate::object_incidence::collapse_collinear, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(crate::object_incidence::curve_edges, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(crate::object_incidence::dominant_attrs, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(crate::object_incidence::loop_area, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::vertex_faces, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::ring_positions, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::hole_positions, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::reverse_rings, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::insert_between, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::collapse_collinear, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::curve_edges, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::dominant_attrs, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::loop_area, &sub)?)?;
     m.add_submodule(&sub)
 }

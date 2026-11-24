@@ -515,7 +515,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(crate::draw_plan::graph_insert, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::draw_plan::graph_remove, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::draw_plan::smallest_cycle, &sub)?)?;
-    crate::object_boundary::register(&sub)?;
-    crate::object_repair::register(&sub)?;
+    crate::kernel::object_boundary::register(&sub)?;
+    crate::kernel::object_repair::register(&sub)?;
     m.add_submodule(&sub)
 }
