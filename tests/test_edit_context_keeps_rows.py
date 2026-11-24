@@ -153,7 +153,7 @@ def test_the_library_keeps_its_material_scan_when_entering_and_leaving_a_group(n
     from core import geometry_arrays
     from core.group import Group
     from core.history import SetFaceColorCommand
-    from views import wgpu_library as lib
+    from ingetrazo_render import wgpu_library as lib
 
     win = native_host.window
     vp = win.viewport

@@ -187,7 +187,7 @@ def test_a_sampled_positioned_texture_is_remembered_without_its_map():
 
 def test_palette_follows_paints_and_hides_recent_when_empty(native_host, tmp_path, monkeypatch):
     from tests.test_tree_links import _View
-    from views import wgpu_library as library
+    from ingetrazo_render import wgpu_library as library
     vp, view = native_host.viewport, _View()
     rows = lambda: library.palette_items(view, native_host.window)
     assert not any(key.startswith("stamp:") for key, *_ in rows())
@@ -209,7 +209,7 @@ def test_palette_follows_paints_and_hides_recent_when_empty(native_host, tmp_pat
 
 def test_clicking_a_recent_swatch_restores_it_exactly(native_host, tmp_path):
     from tests.test_tree_links import _View
-    from views import wgpu_library as library
+    from ingetrazo_render import wgpu_library as library
     win = native_host.window
     tex = _png(tmp_path / "vidrio.png", (.6, .8, .9))
     PaintTool.recent = [

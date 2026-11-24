@@ -1,4 +1,4 @@
-//! The start page's view model (views/wgpu_start.py): which rows the list
+//! The start page's view model (start_host.rs): which rows the list
 //! shows after the filter (Continue, Pinned, Recent, Projects, Templates),
 //! each row's words, the preview of the focused one (its linked files and
 //! their state), the header, the footer and the templates.

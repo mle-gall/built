@@ -27,6 +27,7 @@ mod document_annotations;
 mod document_planes;
 mod document_host;
 mod document_bindings;
+mod document_registration;
 mod document_camera;
 mod section_display;
 mod inspection_edits;
@@ -73,6 +74,8 @@ mod deliveries_host;
 mod sheet_runtime;
 mod settings_rows;
 mod settings_host;
+mod library_host;
+mod start_host;
 pub mod ui;
 mod host_context;
 mod inspector;
@@ -3267,6 +3270,7 @@ fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<P
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     document_bindings::register(m)?;
+    document_registration::register(m)?;
     document_camera::register(m)?;
     document_input::register(m)?;
     document_chunks::register(m)?;
@@ -3451,7 +3455,10 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(shortcut_text::shortcut_text, m)?)?;
     m.add_function(wrap_pyfunction!(shortcut_text::shortcut_alternatives, m)?)?;
     m.add_class::<SceneUpload>()?;
-    m.add_class::<Renderer>()
+    m.add_class::<Renderer>()?;
+    // The Library needs library_view's functions and the sheet host above.
+    library_host::register(m)?;
+    start_host::register(m)
 }
 #[cfg(test)]
 mod tests {

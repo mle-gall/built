@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """A cold start without a file opens nothing by itself.
 
-The start page (views/wgpu_start.py) offers the last document in its
+The start page (ingetrazo_render.wgpu_start) offers the last document in its
 Continue card; nothing reopens it, or any other recent file, behind the
 page. Crash recovery is the one thing a cold start brings back unasked,
 and only after asking: the untitled auto-save left by a session that died.
@@ -21,7 +21,7 @@ def cold_start(host, tmp_path, monkeypatch, page=False, recover=False, untitled_
     from core.scene import Scene
     from core.settings import settings
     from formats import igz
-    from views import wgpu_start
+    from ingetrazo_render import wgpu_start
     from app_shell import files
 
     work = tmp_path

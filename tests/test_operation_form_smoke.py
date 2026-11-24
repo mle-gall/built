@@ -790,7 +790,7 @@ def dispatch(self, command):
         self.fixture_photo=bool(pic and len(pic[2])==pic[0]*pic[1]*4 and max(pic[2])>min(pic[2]))
         self.fixture_restored=(cam.shift_y==0.18)
         wgpu_ui._paint_with(self.window,"ral:RAL 1000")
-        from views import wgpu_library
+        from ingetrazo_render import wgpu_library
         from tools.paint import PaintTool
         wgpu_library.edit_field(self.window,self.view,"brush_name:"+PaintTool.current_material.name,"Site paint")
         self.fixture_swatch=(PaintTool.current_material.name=="Site paint" and "Site paint" not in scene.materials)

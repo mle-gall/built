@@ -57,7 +57,7 @@ def test_recent_bounded_pin_and_relocation(tmp_path):
 
 
 def test_home_lists_opens_and_locates(win, tmp_path, monkeypatch):
-    from views import wgpu_start
+    from ingetrazo_render import wgpu_start
     from views.filedialogs import file_dialogs
     a = tmp_path / 'moved.igz'
     igz.save_scene(Scene(), a)
