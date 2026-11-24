@@ -866,6 +866,25 @@ class ShellWindow(QObject):
         from views.survey_import import import_orthophoto
         import_orthophoto(self)
 
+    def _on_import_photomesh(self):
+        from views.survey_import import import_photomesh
+        import_photomesh(self)
+
+    def _load_photomesh_threaded(self, path, datum, cb):
+        from app_shell.files import parse_threaded
+        from ingetrazo_render import read_survey_mesh
+        result, error = parse_threaded(read_survey_mesh, path, cb, datum=datum,
+                                       limit=self.viewport.max_texture_size())
+        return (*result, None) if error is None else (None, None, error)
+
+    def _on_import_georef(self):
+        from views.survey_import import import_alignment
+        import_alignment(self)
+
+    def _on_import_survey_points(self):
+        from views.survey_import import import_points
+        import_points(self)
+
     def _set_survey_capture(self, datum, lo, hi):
         from georef.tiles import DEFAULT_SOURCE_ID, PRESETS, TileLayer
         scene = self.viewport.scene

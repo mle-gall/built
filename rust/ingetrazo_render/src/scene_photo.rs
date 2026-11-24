@@ -5,37 +5,6 @@ use pyo3::prelude::*;
 type Obj<'py> = Bound<'py, PyAny>;
 pub type Pixels = (usize, usize, Vec<u8>);
 
-#[pyfunction]
-pub fn scene_thumbnail_icon<'py>(window: &Obj<'py>, name: &str) -> PyResult<Obj<'py>> {
-    let py = window.py();
-    let Some(vp) = window.getattr_opt("viewport")?.filter(|v| !v.is_none()) else {
-        return Ok(py.None().into_bound(py));
-    };
-    let painter = if let Some(p) = window.getattr_opt("_composer")?.filter(|v| !v.is_none()) {
-        p
-    } else if let Some(p) = window
-        .getattr_opt("_scene_thumbnailer")?
-        .filter(|v| !v.is_none())
-    {
-        p
-    } else {
-        let p = py
-            .import("views.composer")?
-            .getattr("SceneThumbnailer")?
-            .call1((window,))?;
-        window.setattr("_scene_thumbnailer", &p)?;
-        p
-    };
-    if let Some(cache) = painter.getattr_opt("_thumbs")? {
-        cache.call_method1("pop", (name, py.None()))?;
-    }
-    let cam = vp.getattr("camera")?;
-    let lens = cam.call_method0("lens_dict")?;
-    let result = painter.call_method1("scene_thumbnail", (name,));
-    cam.call_method1("apply_lens", (lens,))?;
-    result
-}
-
 pub fn thumbnail_mode(py: Python<'_>) -> PyResult<bool> {
     let raw = crate::navigation::setting(py, "scenes/thumbnails", "true")?;
     Ok(!matches!(raw.trim().to_lowercase().as_str(), "false" | "0"))

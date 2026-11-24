@@ -162,3 +162,31 @@ impl MkvWriter {
         self.output.discard()
     }
 }
+
+/// An explicit destination determines the container, even if encoder availability
+/// changes after the save dialog. Never put fallback bytes in an MP4 file.
+#[pyfunction]
+pub fn video_writer(
+    py: Python<'_>,
+    path: PathBuf,
+    width: u32,
+    height: u32,
+    fps: u32,
+) -> PyResult<Py<PyAny>> {
+    match path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("mp4") => Ok(Py::new(
+            py,
+            crate::mp4::Mp4Writer::new(py, path, width, height, fps)?,
+        )?
+        .into_any()),
+        Some("mkv") => Ok(Py::new(py, MkvWriter::new(path, width, height, fps)?)?.into_any()),
+        _ => Err(PyValueError::new_err(
+            "Expected an .mp4 or .mkv destination",
+        )),
+    }
+}

@@ -121,3 +121,104 @@ def import_orthophoto(window) -> None:
            name=path.name, w=w_m, h=h_m, info=describe(info),
            reduced=(tr(", reduced {k}×", k=factor) if factor > 1 else "")),
         8000)
+
+
+def import_alignment(window):
+    from georef.geoimport import load_features
+    from ingetrazo_render import place_alignment
+
+    name, _ = file_dialogs.getOpenFileName(window, tr("Import georef"), "",
+        tr("Georef (*.kml *.kmz *.geojson *.json);;All files (*)"))
+    if not name:
+        return
+    path = Path(name)
+    try:
+        count = place_alignment(window, load_features(path))
+    except Exception as exc:  # XML, KMZ and JSON readers have distinct parse errors.
+        _dialogs.critical(window, tr("Import failed"), str(exc))
+        return
+    message = (tr("Imported {n} feature(s) from {name}", n=count, name=path.name)
+               if count else tr("No lines or polygons found in the file."))
+    window.statusBar().showMessage(message, 4000)
+
+
+def import_points(window):
+    from georef.points import parse_points_csv
+    from ingetrazo_render import OperationForm, place_survey_points
+    from views import chrome_forms
+
+    path, _ = file_dialogs.getOpenFileName(window, tr("Import survey points CSV"), "",
+                                            tr("CSV (*.csv *.txt);;All files (*)"))
+    if not path:
+        return
+    try:
+        rows = parse_points_csv(Path(path).read_text(encoding="utf-8", errors="replace"))
+    except (OSError, ValueError):
+        window.statusBar().showMessage(tr("Could not read survey points (expected P,N,E,Z,desc in UTM)"), 5000)
+        return
+    vp = window.viewport
+    scene = vp.scene
+
+    def place(options):
+        if window.viewport is not vp or vp.scene is not scene:
+            return
+        try:
+            count = place_survey_points(vp, rows, **options)
+        except (ValueError, ArithmeticError) as exc:
+            _dialogs.critical(window, tr("Import failed"), str(exc))
+            return
+        window.statusBar().showMessage(tr("{n} survey points imported", n=count), 4000)
+        tray = getattr(window, "georef_tray", None)
+        if tray is not None:
+            tray.survey.refresh()
+
+    if scene.georef is None:
+        chrome_forms.show(window, chrome_forms.OperationForm(tr("Import survey points CSV"), OperationForm.survey(), place))
+    else:
+        place({})
+
+
+def import_photomesh(window):
+    from ingetrazo_render import place_survey_mesh, survey_mesh_datum
+
+    name, _ = file_dialogs.getOpenFileName(window, tr("Import photogrammetric mesh"), "",
+                                            tr("ODM textured model (*.obj);;All files (*)"))
+    if not name:
+        return
+    path = Path(name)
+    vp = window.viewport
+    scene = vp.scene
+    datum = survey_mesh_datum(path, scene.georef)
+    if datum is None:
+        _dialogs.warning(window, tr("Import photogrammetric mesh"),
+            tr("Set a location in Settings or choose an ODM export with a georeferencing sidecar."))
+        return
+    bar, progress = window._import_progress(tr("Importing {name}…", name=path.name))
+    mesh, images, error = window._load_photomesh_threaded(path, datum, progress)
+    if bar.wasCanceled() or window.viewport is not vp or vp.scene is not scene:
+        bar.close()
+        return
+    if error is not None:
+        _dialogs.close_failed(bar, error)
+        _dialogs.critical(window, tr("Import failed"), str(error))
+        return
+    if mesh is None or not mesh.triangle_count:
+        bar.close()
+        window.statusBar().showMessage(tr("No triangles found in the model."), 4000)
+        return
+    try:
+        place_survey_mesh(window, mesh, images, datum)
+    except Exception as exc:
+        _dialogs.close_failed(bar, exc)
+        _dialogs.critical(window, tr("Import failed"), str(exc))
+        return
+    bar.close()
+    tray = getattr(window, "georef_tray", None)
+    if tray is not None:
+        tray.base_map.sync_photo_mesh()
+        tray.raise_()
+    if mesh.missing_textures:
+        message = tr("Imported {name} — {n} texture(s) not found", name=path.name, n=len(mesh.missing_textures))
+    else:
+        message = tr("Imported {name} — {t} triangles", name=path.name, t=f"{mesh.triangle_count:,}")
+    window.statusBar().showMessage(message, 6000)

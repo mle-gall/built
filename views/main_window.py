@@ -4202,7 +4202,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
              tr("Save the view on screen as a PNG or JPG picture at the "
                 "width you choose."),
              self._on_export_image),
-            (tr("Scenes as Video (.mkv)…"),
+            (tr("Scenes as Video…"),
              tr("Save the scenes as a video: the camera glides from one to "
                 "the next, with the times of Camera ▸ Animation."),
              self.export_video),
@@ -8201,7 +8201,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             self.addAction(act)
             menu.addAction(act)
         menu.addSeparator()
-        video = QAction(tr("Export Video (.mkv)…"), self)
+        video = QAction(tr("Export Video…"), self)
         video.setStatusTip(tr(
             "Save the scenes as a video: the camera glides from one to "
             "the next, with the times of Camera ▸ Animation."))
@@ -8291,7 +8291,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self.tray.scenes.show_view(views[(at + step) % len(views)])
 
     def export_video(self) -> None:
-        """The scenes as a .mkv video (views/video_export.py)."""
+        """The scenes as a video (views/video_export.py)."""
         from views.video_export import run_export
         run_export(self)
 
@@ -10851,117 +10851,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
         QSettings().setValue("import/dxf_make_faces", faces.isChecked())
         return factors[key], faces.isChecked()
 
-    def _on_import_photomesh(self) -> None:
-        """Import a WebODM/ODM photogrammetric survey as georeferenced reference
-        geometry (Track G, G6) — the drone flight you then trace on top of.
-
-        Display-only: it goes to ``scene.photo_mesh``, never through the
-        topology engine (invariant #4).
-        """
-        from georef.datum import SceneDatum, utm_inverse
-        from georef.photomesh import find_anchor, load_odm_obj
-
-        path_str, _ = file_dialogs.getOpenFileName(
-            self, tr("Import photogrammetric mesh"), "",
-            tr("ODM textured model (*.obj);;All files (*)"))
-        if not path_str:
-            return
-        path = Path(path_str)
-
-        scene = self.viewport.scene
-        anchor = find_anchor(path)
-        datum = getattr(scene, "georef", None)
-        datum_existed = datum is not None
-        if datum is None:
-            # The survey knows where it is — anchor the scene on it rather than
-            # making the user type coordinates they'd have to look up.
-            if anchor is None:
-                _dialogs.warning(
-                    self, tr("Import photogrammetric mesh"),
-                    tr("This model is not georeferenced and the scene has no "
-                       "datum yet. Set a location in the Terrain tray first, or "
-                       "pick an ODM export that includes "
-                       "odm_georeferencing_model_geo.txt."))
-                return
-            lat, lon = utm_inverse(anchor.east, anchor.north,
-                                   anchor.zone, anchor.northern)
-            datum = SceneDatum(lat, lon)
-            scene.georef = datum
-
-        # Load with ODM's own heights untouched (ground_ref=0). The scene's
-        # vertical zero is decided below, from the survey alone — never from the
-        # DEM, which is a different vertical datum and would also make the
-        # result depend on whether tiles had downloaded yet.
-        dlg, cb = self._import_progress(tr("Importing {name}…", name=path.name))
-        mesh, images, exc = self._load_photomesh_threaded(path, datum, 0.0, cb)
-        if exc is not None:
-            _dialogs.close_failed(dlg, exc)
-            _dialogs.critical(self, tr("Import failed"), str(exc))
-            return
-        if mesh is None or mesh.triangle_count == 0:
-            dlg.close()
-            self.statusBar().showMessage(
-                tr("No triangles found in the model."), 4000)
-            return
-
-        # ---- The vertical zero ------------------------------------------
-        # The scene works in local metres, so the survey's ~1750 m of altitude
-        # has to come off. What matters is that the amount taken off is
-        # RECORDED: datum.alt is the absolute elevation of local Z=0, so every
-        # elevation can be reported as a real altitude instead of a number
-        # floating above an unknown reference.
-        from georef.photomesh import vertical_origin
-        if datum_existed and datum.alt:
-            # An established scene already has a vertical zero; a second survey
-            # joins it rather than redefining it, or the two would not line up.
-            origin = float(datum.alt)
-        else:
-            origin = vertical_origin(mesh)
-            if origin is None:
-                origin = 0.0
-            datum.alt = origin
-
-        if origin:
-            mesh.vertices[:, 2] -= origin
-            mesh.invalidate_index()     # the geometry moved under the index
-
-        mesh.visible = True
-        # Its own layer, so switching the survey off to look at what you drew
-        # doesn't take your model with it.
-        from core.layers import SURVEY_LAYER, Layer
-        if scene.layer(SURVEY_LAYER) is None:
-            scene.layers.append(Layer(SURVEY_LAYER))
-        mesh.layer = SURVEY_LAYER
-        # Keep the downscaled atlases on the mesh so saving the document does
-        # not depend on the ODM export still being where it was imported from.
-        mesh.images = images or {}
-        scene.photo_mesh = mesh
-        self.viewport.upload_photo_mesh(mesh, mesh.images)
-        self.georef_tray.base_map.sync_photo_mesh()
-
-        # Point the base map at the flown ground. Survey and imagery already
-        # share the datum, so they line up by construction — but the tile layer
-        # only fetches the area it was told to capture, and by default that's a
-        # square at the origin. Without this the imagery is simply absent under
-        # the survey, which looks exactly like "it doesn't line up".
-        mn, mx = mesh.bounds()
-        if mn is not None:
-            self.georef_tray.base_map.setup_for_bounds(datum, mn, mx)
-        self.georef_tray.raise_()
-        dlg.close()
-        if mn is not None:
-            self.viewport.camera.set_view("iso")
-            self.viewport.camera.fit_to(mn, mx)
-        self.viewport.update()
-        missing = mesh.missing_textures
-        if missing:
-            self.statusBar().showMessage(
-                tr("Imported {name} — {n} texture(s) not found").format(
-                    name=path.name, n=len(missing)), 6000)
-        else:
-            self.statusBar().showMessage(
-                tr("Imported {name} — {t} triangles").format(
-                    name=path.name, t=f"{mesh.triangle_count:,}"), 4000)
+    def _on_import_photomesh(self):
+        from views.survey_import import import_photomesh
+        import_photomesh(self)
 
     def _on_photo_progress(self, fraction: float, text: str) -> None:
         """Progress from the import worker, delivered on the UI thread."""
@@ -10969,7 +10861,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if callback is not None:
             callback(fraction, text)
 
-    def _load_photomesh_threaded(self, path, datum, ground, cb):
+    def _load_photomesh_threaded(self, path, datum, cb):
         """Parse the OBJ and decode its atlases off the UI thread.
 
         Both halves are slow enough to freeze the window — the real survey this
@@ -10979,7 +10871,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         """
         from PySide6.QtCore import QEventLoop, QObject, QThread, Qt, Signal
 
-        from georef.photomesh import load_atlas, load_odm_obj, plan_texture_sizes
+        from ingetrazo_render import read_survey_mesh
 
         gl_max = self.viewport.max_texture_size()
 
@@ -10989,29 +10881,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
             def run(self):
                 try:
-                    self.progressed.emit(0.05, "Reading mesh…")
-                    mesh = load_odm_obj(path, datum, ground_ref=ground)
-
-                    from ingetrazo_render import raster_dimensions
-                    sizes, index_of = [], []
-                    for i, material in enumerate(mesh.materials):
-                        if material.texture is None or not material.texture.is_file():
-                            continue
-                        size = raster_dimensions(material.texture)
-                        if size is None:
-                            continue
-                        sizes.append(size)
-                        index_of.append(i)
-
-                    targets = plan_texture_sizes(sizes, gl_max)
-                    images = {}
-                    for n, (i, target) in enumerate(zip(index_of, targets)):
-                        self.progressed.emit(
-                            0.15 + 0.85 * n / max(1, len(index_of)),
-                            "Loading textures…")
-                        image = load_atlas(mesh.materials[i].texture, target)
-                        if image is not None:
-                            images[i] = image
+                    mesh, images = read_survey_mesh(path, datum, gl_max, self.progressed.emit)
                     self.finished.emit(mesh, images, None)
                 except Exception as exc:  # noqa: BLE001 — reported to caller
                     self.finished.emit(None, None, exc)
@@ -11044,65 +10914,13 @@ class MainWindow(WorksessionMixin, QMainWindow):
         worker.deleteLater()
         return result.get("mesh"), result.get("images"), result.get("exc")
 
-    def _on_import_georef(self) -> None:
-        """Import a KML/KMZ/GeoJSON alignment as georeferenced GeoPath traces —
-        located via the datum, ready to profile / measure (Track G)."""
-        from georef.geoimport import load_features
-        from georef.datum import SceneDatum
-        from georef.geopath import GeoPath
-        from core.history import AddGeoPathCommand, CompoundCommand
+    def _on_import_georef(self):
+        from views.survey_import import import_alignment
+        import_alignment(self)
 
-        path_str, _ = file_dialogs.getOpenFileName(
-            self, tr("Import georef"), "",
-            tr("Georef (*.kml *.kmz *.geojson *.json);;All files (*)"))
-        if not path_str:
-            return
-        try:
-            feats = load_features(Path(path_str))
-        except Exception as exc:  # noqa: BLE001
-            _dialogs.critical(self, tr("Import failed"), str(exc))
-            return
-        feats = [f for f in feats if len(f.points) >= 2]
-        if not feats:
-            self.statusBar().showMessage(
-                tr("No lines or polygons found in the file."), 4000)
-            return
-
-        scene = self.viewport.scene
-        datum = getattr(scene, "georef", None)
-        if datum is None:      # anchor the scene at the imported data's centre
-            pts = [p for f in feats for p in f.points]
-            datum = SceneDatum(sum(p[0] for p in pts) / len(pts),
-                               sum(p[1] for p in pts) / len(pts))
-            scene.georef = datum
-
-        cmds = []
-        for f in feats:
-            local = [datum.geodetic_to_local(la, lo) for la, lo in f.points]
-            cmds.append(AddGeoPathCommand(GeoPath(local, closed=f.closed,
-                                                  name=f.name)))
-        self.viewport.history.execute(
-            cmds[0] if len(cmds) == 1 else CompoundCommand(cmds))
-
-        # Sync the base-map panel + set a reference capture around the import.
-        self.georef_tray.base_map.setup_for_import(datum, scene.geo_paths)
-        self.georef_tray.raise_()
-        # Frame the imported traces (top view).
-        self._frame_geo_paths(scene.geo_paths)
-        self.statusBar().showMessage(
-            tr("Imported {n} feature(s) from {name}").format(
-                n=len(feats), name=Path(path_str).name), 4000)
-
-    def _frame_geo_paths(self, paths) -> None:
-        from ingetrazo_core import Vec3 as QVector3D
-        pts = [p for gp in paths for p in gp.points]
-        if not pts:
-            return
-        mn = QVector3D(min(p.x() for p in pts), min(p.y() for p in pts), 0.0)
-        mx = QVector3D(max(p.x() for p in pts), max(p.y() for p in pts), 0.0)
-        self.viewport.camera.set_view("top")
-        self.viewport.camera.fit_to(mn, mx)
-        self.viewport.update()
+    def _on_import_survey_points(self):
+        from views.survey_import import import_points
+        import_points(self)
 
     def _on_export_ifc(self) -> None:
         self.viewport.end_group_edit()
@@ -11224,12 +11042,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
         """COLLADA export — the 'open it back in the original program' bridge. Copies the
         texture images beside the .dae (send both, or use GLB)."""
         self._export("COLLADA", "dae", tr("COLLADA (*.dae)"), dae_format.save_dae)
-
-    def _on_import_survey_points(self) -> None:
-        """File-menu twin of the Terrain panel's survey-CSV import, so every
-        way into the model lives under File ▸ Import."""
-        self.georef_tray.survey._on_import()
-        self.georef_tray.raise_()
 
     def _view_line_groups(self, fast: bool = True) -> list:
         """The view on screen as the line groups the DXF and SVG exports

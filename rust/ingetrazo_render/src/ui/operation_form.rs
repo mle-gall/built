@@ -37,6 +37,9 @@ const VIDEO_SIZES: [(u32, u32); 4] = [(1280, 720), (1920, 1080), (2560, 1440), (
 const VIDEO_RATES: [u32; 4] = [24, 25, 30, 60];
 
 enum Options {
+    Survey {
+        northern: bool,
+    },
     Animation {
         enabled: bool,
         transition: String,
@@ -128,6 +131,13 @@ fn seconds(value: &str) -> Option<f64> {
 
 #[pymethods]
 impl OperationForm {
+    #[staticmethod]
+    fn survey() -> Self {
+        Self {
+            options: Options::Survey { northern: false },
+            number: "18".into(),
+        }
+    }
     #[staticmethod]
     fn animation(enabled: bool, transition: f64, pause: f64) -> Self {
         Self {
@@ -224,6 +234,15 @@ impl OperationForm {
 
     fn rows(&self) -> Vec<Field> {
         match self.options {
+            Options::Survey { northern } => vec![
+                number_row("zone", "UTM zone", &self.number, (1., 60.), "", 1, 0),
+                choice(
+                    "hemisphere",
+                    "Hemisphere:",
+                    usize::from(northern),
+                    &[("south", "South"), ("north", "North")],
+                ),
+            ],
             Options::Animation {
                 enabled,
                 ref transition,
@@ -418,6 +437,11 @@ impl OperationForm {
     fn receive(&mut self, id: &str, raw: &str) {
         let on = raw == "1";
         match &mut self.options {
+            Options::Survey { northern } => match id {
+                "zone" => self.number = raw.into(),
+                "hemisphere" if raw == "0" || raw == "1" => *northern = raw == "1",
+                _ => (),
+            },
             Options::Animation {
                 enabled,
                 transition,
@@ -497,6 +521,17 @@ impl OperationForm {
 
     fn invalid_range(&self) -> Option<(u32, u32)> {
         match self.options {
+            Options::Survey { .. }
+                if self
+                    .number
+                    .trim()
+                    .parse::<u8>()
+                    .ok()
+                    .filter(|n| (1..=60).contains(n))
+                    .is_none() =>
+            {
+                Some((1, 60))
+            }
             Options::Animation {
                 ref transition,
                 ref pause,
@@ -511,6 +546,10 @@ impl OperationForm {
     fn values(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
         let values = PyDict::new(py);
         match self.options {
+            Options::Survey { northern } => {
+                values.set_item("zone", self.number.trim().parse::<u8>().ok())?;
+                values.set_item("northern", northern)?;
+            }
             Options::Animation {
                 enabled,
                 ref transition,

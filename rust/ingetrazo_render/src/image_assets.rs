@@ -16,6 +16,15 @@ mod bitmap_files;
 #[path = "pdf_image.rs"]
 mod pdf_image;
 
+#[cfg(all(unix, any(not(target_os = "macos"), test)))]
+#[path = "pixbuf_image.rs"]
+mod desktop_pixbuf;
+#[cfg(windows)]
+#[path = "wic_image.rs"]
+mod platform_image;
+#[cfg(all(unix, not(target_os = "macos")))]
+use desktop_pixbuf as platform_image;
+
 const MAX_PIXELS: u64 = 64 * 1024 * 1024;
 const MAX_SVG_BYTES: usize = 64 * 1024 * 1024;
 
@@ -252,25 +261,10 @@ pub fn decode(py: Python<'_>, path: &Path) -> PyResult<Option<RgbaImage>> {
                     .and_then(|p| p.read())
                     .or_else(|| image_io::read(path))
             }));
-            #[cfg(not(target_os = "macos"))]
-            {
-                // Additional codecs installed by a non-macOS Qt distribution.
-                let data = match py
-                    .import("views.wgpu_scene")
-                    .and_then(|m| m.call_method1("_legacy_texture_pixels", (path,)))
-                {
-                    Ok(data) => data,
-                    Err(e) if e.is_instance_of::<pyo3::exceptions::PyModuleNotFoundError>(py) => {
-                        return Ok(None)
-                    }
-                    Err(e) => return Err(e),
-                };
-                if data.is_none() {
-                    return Ok(None);
-                }
-                let (w, h, bytes) = data.extract::<(u32, u32, Vec<u8>)>()?;
-                Ok(RgbaImage::from_raw(w, h, bytes))
-            }
+            #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
+            return Ok(py.detach(|| platform_image::read(path)));
+            #[cfg(not(any(windows, unix)))]
+            return Ok(None);
         }
         Err(_) => Ok(None),
     }
@@ -384,27 +378,10 @@ pub fn raster_dimensions(py: Python<'_>, path: PathBuf) -> PyResult<Option<(u32,
                     .map(|p| p.size)
                     .or_else(|| image_io::header(&path))
             }));
-            #[cfg(not(target_os = "macos"))]
-            {
-                let gui = match py.import("PySide6.QtGui") {
-                    Ok(gui) => gui,
-                    Err(e) if e.is_instance_of::<pyo3::exceptions::PyModuleNotFoundError>(py) => {
-                        return Ok(None)
-                    }
-                    Err(e) => return Err(e),
-                };
-                let size = gui
-                    .getattr("QImageReader")?
-                    .call1((path.to_string_lossy(),))?
-                    .call_method0("size")?;
-                if !size.call_method0("isValid")?.is_truthy()? {
-                    return Ok(None);
-                }
-                Ok(Some((
-                    size.call_method0("width")?.extract()?,
-                    size.call_method0("height")?.extract()?,
-                )))
-            }
+            #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
+            return Ok(py.detach(|| platform_image::header(&path)));
+            #[cfg(not(any(windows, unix)))]
+            return Ok(None);
         }
         Err(_) => Ok(None),
     }
@@ -462,4 +439,33 @@ pub fn readable_tga(path: PathBuf) -> bool {
             .into_dimensions()
             .is_ok()
     })
+}
+
+#[cfg(all(test, any(windows, unix)))]
+mod platform_codec_tests {
+    #[cfg(unix)]
+    use super::desktop_pixbuf as codec;
+    #[cfg(windows)]
+    use super::platform_image as codec;
+    use super::*;
+
+    #[test]
+    fn installed_desktop_codec_reads_a_real_frame_and_its_header() {
+        #[cfg(unix)]
+        if !codec::installed() {
+            return; // Minimal/headless installs can run without GdkPixbuf.
+        }
+        let directory = std::env::temp_dir();
+        let path = directory.join(format!("built-codec-frame-{}.custom", std::process::id()));
+        let expected = RgbaImage::from_raw(1, 2, vec![32, 80, 128, 128, 220, 16, 50, 255]).unwrap();
+        expected
+            .save_with_format(&path, image::ImageFormat::Png)
+            .unwrap();
+        let header = codec::header(&path);
+        let rgba = codec::read(&path);
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(header, Some((1, 2)));
+        assert_eq!(rgba, Some(expected));
+        assert!(codec::read(&path).is_none());
+    }
 }

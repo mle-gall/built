@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Draw a saved-scene tour into the native Matroska writer."""
+"""Draw a saved-scene tour into the selected native video writer."""
 from pathlib import Path
 
-from ingetrazo_core import MkvWriter, VideoTimeline
+from ingetrazo_core import MkvWriter, VideoTimeline, video_format, video_writer  # MkvWriter is also a scripting import.
 from core.i18n import tr
 
 
@@ -41,7 +41,7 @@ def export_video(window, path, width, height, fps, progress=None):
     timeline = VideoTimeline(poses, anim.transition, anim.pause)
     writer = None
     try:
-        writer = MkvWriter(path, width, height, fps)
+        writer = video_writer(path, width, height, fps)
         width, height = writer.width, writer.height
         same_shape = abs(width / height - max(viewport.width(), 1) / max(viewport.height(), 1)) < 0.01
         shown = -1
@@ -90,13 +90,19 @@ def run_export(window):
         return
     current = window._current_path
     name = current.stem if current else "untitled"
-    chosen, _ = file_dialogs.getSaveFileName(window, tr("Export Video"), f"{name}.mkv",
-                                              tr("Matroska video (*.mkv)"))
+    suffix, format_label = video_format()
+    chosen, _ = file_dialogs.getSaveFileName(window, tr("Export Video"), name + suffix, format_label)
     if not chosen:
         return
     path = Path(chosen)
-    if path.suffix.lower() != ".mkv":
-        path = path.with_suffix(".mkv")
+    if path.suffix.lower() != suffix:
+        path = path.with_suffix(suffix)
+        # The picker confirmed the typed name. Its confirmation covers only that path.
+        if path.exists() and chrome_dialogs.ask(window, tr("Export Video"),
+                tr("Replace {name}?", name=path.name),
+                [("cancel", tr("Cancel")), ("replace", tr("Replace"))],
+                default="cancel", cancel="cancel") != "replace":
+            return
     count = len(scene.saved_views)
     seconds = video_seconds(count, scene.animation.transition, scene.animation.pause)
     model = OperationForm.video(vp.width(), vp.height(), count, seconds,
@@ -124,4 +130,4 @@ def run_export(window):
         window.statusBar().showMessage(message, 6000)
 
     chrome_forms.show(window, chrome_forms.OperationForm(tr("Export Video"), model, write,
-        note=tr("The times are those of Camera ▸ Animation ▸ Animation Settings…")))
+        note=format_label + "\n" + tr("The times are those of Camera ▸ Animation ▸ Animation Settings…")))

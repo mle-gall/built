@@ -648,7 +648,7 @@ def test_a_video_shows_the_first_scene_glides_and_ends_on_the_last():
 
 
 def test_the_mkv_writer_writes_a_matroska_file(tmp_path):
-    from views.video_export import MkvWriter
+    from ingetrazo_core import MkvWriter
     path = tmp_path / "prueba.mkv"
     writer = MkvWriter(path, 65, 48, 10)
     assert (writer.width, writer.height) == (64, 48)
@@ -662,7 +662,7 @@ def test_the_mkv_writer_writes_a_matroska_file(tmp_path):
 
 
 def test_a_discarded_video_leaves_no_file(tmp_path):
-    from views.video_export import MkvWriter
+    from ingetrazo_core import MkvWriter
     path = tmp_path / "a-medias.mkv"
     writer = MkvWriter(path, 64, 48, 10)
     writer.write(bytes(64 * 48 * 4))
@@ -671,7 +671,7 @@ def test_a_discarded_video_leaves_no_file(tmp_path):
 
 
 def test_cancel_after_first_frame_keeps_existing_destination(tmp_path):
-    from views.video_export import MkvWriter
+    from ingetrazo_core import MkvWriter
     path = tmp_path / "existing.mkv"
     path.write_bytes(b"previous export")
     writer = MkvWriter(path, 64, 48, 10)
@@ -683,7 +683,7 @@ def test_cancel_after_first_frame_keeps_existing_destination(tmp_path):
 
 
 def test_finishing_a_video_does_not_pump_the_ui_thread(tmp_path, monkeypatch):
-    from views.video_export import MkvWriter
+    from ingetrazo_core import MkvWriter
     from PySide6.QtWidgets import QApplication
     monkeypatch.setattr(QApplication, "processEvents", lambda *a: pytest.fail("reentrant finalization"))
     writer = MkvWriter(tmp_path / "complete.mkv", 2, 2, 24)
@@ -693,7 +693,7 @@ def test_finishing_a_video_does_not_pump_the_ui_thread(tmp_path, monkeypatch):
 
 def test_writer_finalization_needs_no_qt_version_probe(tmp_path, monkeypatch):
     from PySide6.QtCore import QLibraryInfo
-    from views.video_export import MkvWriter
+    from ingetrazo_core import MkvWriter
     monkeypatch.setattr(QLibraryInfo, "version", lambda: pytest.fail("Qt version probe"))
     writer = MkvWriter(tmp_path / "one.mkv", 2, 2, 30)
     writer.write(bytes(16))
@@ -798,7 +798,7 @@ def _without_multimedia(monkeypatch):
 
 
 def test_without_qt_multimedia_the_writer_still_encodes(monkeypatch, tmp_path):
-    from views.video_export import MkvWriter
+    from ingetrazo_core import MkvWriter
     _without_multimedia(monkeypatch)
     path = tmp_path / "video.mkv"
     writer = MkvWriter(path, 64, 48, 10)
@@ -818,23 +818,83 @@ def test_without_qt_multimedia_export_still_offers_a_destination(win, monkeypatc
     assert len(asked) == 1
 
 
-def test_independent_decoder_reads_every_frame_at_requested_rate(tmp_path):
+@pytest.mark.parametrize("suffix,codec", [(".mkv", "mjpeg"), (".mp4", "h264")])
+def test_independent_decoder_reads_every_frame_at_requested_rate(tmp_path, suffix, codec):
     import json
     import shutil
     import subprocess
-    from ingetrazo_core import MkvWriter
+    from ingetrazo_core import MkvWriter, Mp4Writer, video_format
+    if suffix == ".mp4" and video_format()[0] != suffix:
+        pytest.skip("system H.264 encoder unavailable")
     probe = shutil.which("ffprobe")
     if probe is None:
-        pytest.skip("optional independent Matroska decoder")
-    path = tmp_path / "short.mkv"
-    writer = MkvWriter(path, 64, 32, 24)
+        pytest.skip("optional independent video decoder")
+    path = tmp_path / ("short" + suffix)
+    writer = (Mp4Writer if suffix == ".mp4" else MkvWriter)(path, 64, 32, 24)
     for i in range(26):
-        writer.write(bytes((i * 8, 16, 80, 255)) * (64 * 32))
+        writer.write(bytes((i * 8, 16, 80, 255)) * (64 * 16)
+                     + bytes((240, 24, 32, 255)) * (64 * 16))
     writer.close()
     data = subprocess.check_output([probe, "-v", "error", "-count_frames", "-show_streams",
                                     "-show_format", "-of", "json", str(path)])
     info = json.loads(data)
     video, = info["streams"]
-    assert (video["codec_name"], video["width"], video["height"]) == ("mjpeg", 64, 32)
+    assert (video["codec_name"], video["width"], video["height"]) == (codec, 64, 32)
     assert video["nb_read_frames"] == "26" and video["avg_frame_rate"] == "24/1"
     assert float(info["format"]["duration"]) == pytest.approx(26 / 24, abs=.001)
+    decoder = shutil.which("ffmpeg")
+    if decoder:
+        frame = subprocess.check_output([decoder, "-v", "error", "-i", str(path),
+                                         "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
+        top, bottom = frame[:3], frame[-3:]
+        assert top[2] > top[0] + 45 and bottom[0] > bottom[2] + 140
+
+
+def test_mp4_discard_preserves_existing_destination(tmp_path):
+    from ingetrazo_core import Mp4Writer, video_format
+    if video_format()[0] != ".mp4":
+        pytest.skip("system H.264 encoder unavailable")
+    path = tmp_path / "existing.mp4"
+    path.write_bytes(b"previous movie")
+    writer = Mp4Writer(path, 65, 33, 24)
+    assert (writer.width, writer.height) == (64, 32)
+    writer.write(bytes(64 * 32 * 4))
+    with pytest.raises(ValueError):
+        writer.write(b"short")
+    writer.discard()
+    assert path.read_bytes() == b"previous movie" and list(tmp_path.iterdir()) == [path]
+
+
+@pytest.mark.parametrize("suffix,label", [(".mp4", "H.264 / MP4 (*.mp4)"),
+                                          (".mkv", "Motion JPEG / Matroska (*.mkv)")])
+def test_video_picker_and_sheet_agree_on_encoder_format(win, monkeypatch, tmp_path, suffix, label):
+    import views.video_export as ve
+    from views import chrome_forms
+    from views.filedialogs import file_dialogs
+    _scenes(win, ("A", "iso", set()))
+    monkeypatch.setattr(ve, "video_format", lambda: (suffix, label))
+    picker = []
+    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *args: picker.append(args)
+                        or (str(tmp_path / ("tour" + suffix)), ""))
+    forms = []
+    monkeypatch.setattr(chrome_forms, "show", lambda w, form: forms.append(form))
+    ve.run_export(win)
+    assert picker[0][2].endswith(suffix) and picker[0][3] == label
+    assert label in forms[0].wire()[2]
+
+
+def test_normalizing_the_movie_suffix_preserves_an_unconfirmed_file(win, monkeypatch, tmp_path):
+    import views.video_export as ve
+    from views import chrome_dialogs, chrome_forms
+    from views.filedialogs import file_dialogs
+    _scenes(win, ("A", "iso", set()))
+    existing = tmp_path / "site.mp4"
+    existing.write_bytes(b"original movie")
+    monkeypatch.setattr(ve, "video_format", lambda: (".mp4", "H.264 / MP4 (*.mp4)"))
+    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *args: (str(tmp_path / "site"), ""))
+    prompts = []
+    monkeypatch.setattr(chrome_dialogs, "ask", lambda *args, **kwargs: prompts.append(args) or "cancel")
+    monkeypatch.setattr(chrome_forms, "show", lambda *args: pytest.fail("Export advanced after cancellation"))
+    ve.run_export(win)
+    assert prompts and existing.name in prompts[0][2]
+    assert existing.read_bytes() == b"original movie"
