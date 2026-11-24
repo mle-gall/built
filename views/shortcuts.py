@@ -84,13 +84,24 @@ def collect_actions(window) -> list:
     """The window's actions a user can press: with text, not a separator,
     not a submenu, one per key (the first wins)."""
     seen: dict = {}
-    for act in window.findChildren(QAction):
+    for act in (*vars(window).get("_command_actions", {}).values(), *window.findChildren(QAction)):
         if act.isSeparator() or act.menu() is not None:
             continue
         if not _plain(act.text()):
             continue
         seen.setdefault(action_key(act), act)
     return sorted(seen.values(), key=lambda a: _plain(a.text()).lower())
+
+
+def trigger_plugin_shortcut(window, key, modifiers):
+    actions = window.findChildren(QAction)
+    if actions:
+        chord = QKeySequence(int(key) | int(modifiers))
+        for action in actions:
+            if action.isEnabled() and any(s.matches(chord) == QKeySequence.ExactMatch for s in action.shortcuts()):
+                action.trigger()
+                return True
+    return False
 
 
 def _to_text(seqs) -> str:

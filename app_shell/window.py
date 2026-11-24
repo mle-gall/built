@@ -33,56 +33,8 @@ import types
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QKeySequence
 
+from app_shell.command_action import ShellAction
 from views.view_host import MISSING
-
-
-class ShellAction:
-    """The QAction surface the chrome reads."""
-
-    def __init__(self, text, shortcut="", run=None, checkable=True):
-        self._text = text
-        self._shortcut = QKeySequence(shortcut) if shortcut else QKeySequence()
-        self._run = run
-        self._checked = False
-        self._checkable = checkable
-        self._enabled = True
-
-    def text(self):
-        return self._text
-
-    def shortcut(self):
-        return self._shortcut
-
-    def isChecked(self):
-        return self._checked
-
-    def setChecked(self, on):
-        self._checked = bool(on)
-
-    def isCheckable(self):
-        return self._checkable
-
-    def isEnabled(self):
-        return self._enabled
-
-    def setEnabled(self, on):
-        self._enabled = bool(on)
-
-    def isVisible(self):
-        return True
-
-    def trigger(self):
-        if self._run is not None:
-            self._run()
-
-    def toolTip(self):
-        return self._text
-
-    def statusTip(self):
-        return ""
-
-    def menu(self):
-        return None
 
 
 class _Label:
@@ -456,16 +408,16 @@ class ShellWindow(QObject):
         install(self, plugins)
         self._running_extensions = {p.stem for p in plugins}
         self._extension_load_errors = {e.stem: {"error": e.error, "path": str(e.path)} for e in errors}
-        from PySide6.QtGui import QAction
+        from ingetrazo_core import WindowCommands
+        self._command_store = WindowCommands()
+        self._command_actions = {}
         from views.main_window import build_tools
         self._tools = build_tools()
-        self._act_eyedropper = QAction("Sample material", self)
-        self._act_eyedropper.setCheckable(True)
-        self._act_eyedropper.toggled.connect(self._on_toggle_eyedropper)
-        self._act_bridge = ShellAction("Bridge", run=self._on_bridge, checkable=False)
-        self._act_make_faces = ShellAction("Make Faces", run=self._on_make_faces, checkable=False)
-        self._act_3dtext = QAction("3D Text", self)
-        self._act_3dtext.triggered.connect(self._on_insert_3d_text)
+        self._act_eyedropper = ShellAction(self, "Sample material", checkable=True,
+                                           toggled=self._on_toggle_eyedropper)
+        self._act_bridge = ShellAction(self, "Bridge", run=self._on_bridge, listed=False)
+        self._act_make_faces = ShellAction(self, "Make Faces", run=self._on_make_faces, listed=False)
+        self._act_3dtext = ShellAction(self, "3D Text", run=self._on_insert_3d_text)
 
         self._tool_actions = {}
         self._style_before_xray = (None, None)
@@ -499,12 +451,11 @@ class ShellWindow(QObject):
             shortcut = getattr(tool, "shortcut", "") or ""
             if key == "select":
                 shortcut = "Space"          # bound by MainWindow, not the tool
-            action = QAction(tr(getattr(tool, "name", key)), self)
-            action.setCheckable(True)
+            action = ShellAction(self, tr(getattr(tool, "name", key)), checkable=True)
             alternate = getattr(tool, "shortcut_alt", None)
             action.setShortcuts([QKeySequence(s) for s in (shortcut, alternate) if s])
             self._tool_actions[key] = action
-        self._tool_defaults = [(k, a.text(), [s.toString(QKeySequence.PortableText) for s in a.shortcuts()])
+        self._tool_defaults = [(k, a.text(), a.state.portable_keys())
                               for k, a in self._tool_actions.items()]
         self._registry_actions = {}
         self.refresh_commands()

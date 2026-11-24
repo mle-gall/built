@@ -1,5 +1,7 @@
 """Bind the Rust registry to the window's tool actions and the installed menu."""
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QKeySequence
+
+from app_shell.command_action import ShellAction
 
 from core.i18n import tr
 from ingetrazo_render import command_registry
@@ -21,13 +23,13 @@ def refresh(win):
         if key not in actions:
             act = win._tool_actions.get(tool_id) if tool_id else None
             if act is None:
-                act = QAction(tr(label), win)
+                act = ShellAction(win, tr(label))
             else:
                 act.setProperty("legacyShortcutKey", shortcuts.action_key(act))
-            act.triggered.connect(lambda checked=False, k=key: _run(win, k))
+            act.run = lambda k=key: _run(win, k)
             act.setObjectName(key)
             actions[key] = act
-            act.changed.connect(lambda k=key: _reflect(win, k))
+            act.changed = lambda k=key: _reflect(win, k)
         act = actions[key]
         old = act.property(shortcuts._DEFAULTS)
         sequences = [QKeySequence(s) for s in defaults]
@@ -43,8 +45,7 @@ def refresh(win):
         previous.discard(key)
     for key in previous:
         dead = actions.pop(key)
-        dead.setParent(None)
-        dead.deleteLater()
+        dead.remove()
     win._command_paths = paths
     shortcuts.apply_user_shortcuts(win)
     for key in actions:

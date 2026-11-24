@@ -3022,9 +3022,8 @@ def _command_query(view, win, query) -> None:
     view.renderer.ui_set_command_results([(c.name, c.path, c.keys, c.action.isEnabled()) for c in hits])
     detail = getattr(view.renderer, "ui_set_command_details", None)
     if detail:
-        from PySide6.QtGui import QAction
-        detail([(c.tip, isinstance(c.action, QAction) and c.action.isChecked(), isinstance(c.action, QAction))
-                for c in hits])
+        detail([(c.tip, bool(getattr(c.action, "isChecked", lambda: False)()),
+                 hasattr(c.action, "isChecked")) for c in hits])
 
 
 def _problem_key(view, event) -> int:

@@ -498,17 +498,14 @@ class Host:
         self.window.refresh_commands()
 
     def _shortcut(self, key, modifiers):
-        from PySide6.QtGui import QKeySequence
-        try:
-            combo = QKeySequence(int(modifiers) | int(key))
-        except Exception:
-            return False
-        from PySide6.QtGui import QAction
-        for action in self.window.findChildren(QAction):
-            if action.isEnabled() and any(seq.matches(combo) == QKeySequence.ExactMatch for seq in action.shortcuts()):
-                action.trigger()
-                return True
-        return False
+        win = self.window
+        slot = win._command_store.resolve(int(key), int(modifiers))
+        if slot is not None:
+            win._command_actions[slot].trigger()
+            return True
+        # Third-party plugins can still attach a raw Qt action to the host.
+        from views.shortcuts import trigger_plugin_shortcut
+        return trigger_plugin_shortcut(win, key, modifiers)
 
     def text(self, text):
         """Committed IME text: the chrome's focused field, else the tools
