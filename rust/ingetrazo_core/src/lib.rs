@@ -220,6 +220,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<window_commands::WindowCommand>()?;
     m.add_class::<file_open::DocumentOpen>()?;
     m.add_function(wrap_pyfunction!(skp::skp_tag_folders, m)?)?;
+    skp::register_dispatch(m)?;
     m.add_function(wrap_pyfunction!(skp::skp_apply, m)?)?;
     m.add_function(wrap_pyfunction!(skp::skp_apply_folders, m)?)?;
     m.add_function(wrap_pyfunction!(skp::skp_apply_geometry, m)?)?;
