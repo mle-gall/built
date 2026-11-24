@@ -225,9 +225,10 @@ def picture(view_widget, frame):
     return w, h, opaque_frame(w, h, rgba)
 
 
-def drawing(source, frame):
-    """A vector frame's lines in paper mm, frame-local, and their kinds
-    (``core.hlr`` KIND_*), or None when its saved view is gone."""
+def _hlr(source, frame, tags: bool = False, **kw):
+    """The frame's hidden-line pass (Rust camera and geometry, with each
+    triangle's and line's tag when ``tags``) and the map from its camera
+    plane to frame paper mm; None when its view is gone."""
     from core._native import qt_hypot
     from core.composition import model_height_for_frame
     from core.hlr import hlr_drawing
@@ -237,26 +238,127 @@ def drawing(source, frame):
         return None
     facade = frame_scene(scene, frame, view)
     camera = frame_camera(source.camera, frame, view, scene)
-    geometry, _tags = NATIVE.sheet_frame_geometry(scene._root, list(scene.groups), scene.loose_mesh,
-                                                  view or None, qt_hypot() or "libc++-fma")
-    d = hlr_drawing(facade, camera, geometry=geometry, profiles=bool(getattr(frame, "profiles", True)),
-                    fills=(getattr(frame, "cut_fill", "solid") or "solid") != "none",
-                    hidden=bool(getattr(frame, "hidden_lines", False)))
+    geometry, tagged = NATIVE.sheet_frame_geometry(scene._root, list(scene.groups), scene.loose_mesh,
+                                                   view or None, qt_hypot() or "libc++-fma", tags)
+    if tags:
+        geometry = (*geometry, *(np.array(t, dtype=object) for t in tagged))
+    d = hlr_drawing(facade, camera, geometry=geometry, layers=tags, **kw)
     model_h = model_height_for_frame(frame.h_mm, frame.scale_n)
     k = frame.h_mm / model_h                       # paper mm per metre
     half_h = model_h / 2.0
     half_w = half_h * (frame.w_mm / frame.h_mm)
-    segs = np.asarray(d.segs, float).reshape(-1, 4)
-    out = np.empty_like(segs)
-    out[:, 0::2] = (segs[:, 0::2] + half_w) * k
-    out[:, 1::2] = (half_h - segs[:, 1::2]) * k
-    fills = []
-    for ring in d.loops:
-        mm = np.asarray(ring, float).reshape(-1, 2).copy()
-        mm[:, 0] = (mm[:, 0] + half_w) * k
-        mm[:, 1] = (half_h - mm[:, 1]) * k
-        fills.append(mm)
-    return out, np.asarray(d.kinds, np.int8), fills
+
+    def to_mm(xy):
+        out = np.asarray(xy, float).copy()
+        out[..., 0] = (out[..., 0] + half_w) * k
+        out[..., 1] = (half_h - out[..., 1]) * k
+        return out
+    return d, to_mm
+
+
+def drawing(source, frame):
+    """A vector frame's content for the painter (sheets::items_d): its
+    lines in paper mm, frame-local, their kinds (``core.hlr`` KIND_*), its
+    cut rings, and — when the frame inks layer by layer (a layer with a
+    line type, weight or cut weight of its own, colours by layer) — each
+    line's tag and each tag's look (``core.layers.line_styles``, the line
+    type resolved to its dash). None when its view is gone."""
+    from core.layers import LINETYPES, layer_lines_wanted, line_styles
+    scene = source.scene
+    view = saved_view(scene, frame)
+    if view is False:
+        return None
+    facade = frame_scene(scene, frame, view)
+    coloured = bool(getattr(frame, "layer_colours", False))
+    by_layer = layer_lines_wanted(facade) or coloured
+    got = _hlr(source, frame, tags=by_layer, profiles=bool(getattr(frame, "profiles", True)),
+               fills=(getattr(frame, "cut_fill", "solid") or "solid") != "none",
+               hidden=bool(getattr(frame, "hidden_lines", False)))
+    if got is None:
+        return None
+    d, to_mm = got
+    out = {"segs": to_mm(np.asarray(d.segs, float).reshape(-1, 2, 2)).reshape(-1, 4),
+           "kinds": np.asarray(d.kinds, np.int8),
+           "fills": [to_mm(np.asarray(ring, float).reshape(-1, 2)) for ring in d.loops]}
+    if d.layers is not None:
+        style = getattr(facade, "display_style", None)
+        looks = line_styles(facade, coloured or bool(getattr(style, "color_by_layer", False)))
+        out["tags"] = [str(t) for t in d.layers]
+        out["styles"] = {tag: (st[0], st[2], st[3], list(st[4] if st[4] is not None else LINETYPES.get(st[1], ())))
+                         for tag, st in looks.items()}
+    return out
+
+
+def snaps(source, frame):
+    """What the drawing tools catch in ``frame`` (the composer's
+    ``frame_snap_points`` / ``frame_snap_edges``, exact pass): the drawn
+    edges' ends and middles in page mm with their model points, and the
+    edges themselves, clipped to the frame. None when there is nothing to
+    catch (its view is gone, or a perspective frame)."""
+    if getattr(frame, "perspective", False):
+        return None
+    got = _hlr(source, frame, profiles=False, fills=False, hidden=False)
+    if got is None:
+        return None
+    d, to_mm = got
+    segs = to_mm(np.asarray(d.segs, float).reshape(-1, 2, 2)) + (frame.x_mm, frame.y_mm)
+    world = np.asarray(d.world, float).reshape(-1, 2, 3)
+    pts = np.concatenate([segs[:, 0], segs[:, 1], segs.mean(axis=1)]).reshape(-1, 2)
+    wpts = np.concatenate([world[:, 0], world[:, 1], world.mean(axis=1)]).reshape(-1, 3)
+    x0, y0, x1, y1 = frame.x_mm - 0.5, frame.y_mm - 0.5, frame.x_mm + frame.w_mm + 0.5, frame.y_mm + frame.h_mm + 0.5
+    keep = (pts[:, 0] >= x0) & (pts[:, 0] <= x1) & (pts[:, 1] >= y0) & (pts[:, 1] <= y1)
+    flat = segs.reshape(-1, 4)
+    near = ((np.maximum(flat[:, 0], flat[:, 2]) >= x0) & (np.minimum(flat[:, 0], flat[:, 2]) <= x1)
+            & (np.maximum(flat[:, 1], flat[:, 3]) >= y0) & (np.minimum(flat[:, 1], flat[:, 3]) <= y1))
+    return pts[keep], wpts[keep], flat[near], world[near], circles(source, frame)
+
+
+_CIRCLES = {}
+
+
+def circles(source, frame):
+    """The model's circles and arcs ``frame`` sees face on, as page
+    ``(cx, cy, r)`` mm (the composer's ``frame_circles``): what the radius
+    tool takes from one click on the arc. The model's circles are collected
+    once per model version (core.hlr.collect_circles)."""
+    from core.hlr import _to_cam, camera_basis, collect_circles
+    if getattr(frame, "perspective", False):
+        return np.empty((0, 3))
+    scene = source.scene
+    stamp = (id(scene), getattr(scene, "version", None))
+    if _CIRCLES.get("stamp") != stamp:
+        _CIRCLES.update(stamp=stamp, circles=collect_circles(scene))
+    view = saved_view(scene, frame)
+    if view is False:
+        return np.empty((0, 3))
+    camera = frame_camera(source.camera, frame, view, scene)
+    eye, right, up, fwd = camera_basis(camera)
+    got = _hlr_to_mm(frame)
+    out = []
+    for c, r, n in _CIRCLES["circles"]:
+        if abs(n.x() * fwd[0] + n.y() * fwd[1] + n.z() * fwd[2]) < 0.9995:
+            continue                                  # seen at a slant
+        c3 = np.array([c.x(), c.y(), c.z()], float)
+        cam = _to_cam(np.stack([c3, c3 + right * r]), eye, right, up, fwd)[:, :2]
+        (px, py), (qx, qy) = got(cam)
+        out.append((frame.x_mm + px, frame.y_mm + py, float(np.hypot(qx - px, qy - py))))
+    return np.array(out, float).reshape(-1, 3)
+
+
+def _hlr_to_mm(frame):
+    """A frame's camera plane (metres) to frame paper mm."""
+    from core.composition import model_height_for_frame
+    model_h = model_height_for_frame(frame.h_mm, frame.scale_n)
+    k = frame.h_mm / model_h
+    half_h = model_h / 2.0
+    half_w = half_h * (frame.w_mm / frame.h_mm)
+
+    def to_mm(xy):
+        out = np.asarray(xy, float).copy()
+        out[..., 0] = (out[..., 0] + half_w) * k
+        out[..., 1] = (half_h - out[..., 1]) * k
+        return out
+    return to_mm
 
 
 def frame_contents(view_widget, comps, ground=None):
@@ -278,8 +380,7 @@ def frame_contents(view_widget, comps, ground=None):
                 elif frame.style == "vectorial" and not getattr(frame, "perspective", False):
                     got = drawing(source, frame)
                     if got is not None:
-                        segs, kinds, fills = got
-                        contents[key] = {"segs": segs, "kinds": kinds, "fills": fills}
+                        contents[key] = got
                 else:
                     got = picture(view_widget, frame)
                     if got is not None:
@@ -337,3 +438,75 @@ class Ground:
                 self._survey = PhotoMeshSampler(survey, datum)
             sampler = self._survey
         return NATIVE.sheet_terrain_profiles(comp, scene, self._dem, sampler)
+
+
+def capture_hold(scene, item, attr, segment=None) -> bool:
+    """Hold ``item.<attr>`` (a model point a sheet tool caught) by the model
+    element under it, so it follows the model however far that moves: the
+    edge it lies along, else the vertex (the model's own attachments,
+    core.annotation_anchor; the composer's ``_follow_anchor`` capture)."""
+    from ingetrazo_core import Vec3
+    from core.annotation_anchor import Attachment, edge_by_endpoints
+    from core.dimension import resolve_vertex_anchor
+    cur = getattr(item, attr, None)
+    if not cur:
+        return False
+    slot = "hold_" + attr[0]
+    if segment is not None:
+        hit, owner = edge_by_endpoints(scene, *(Vec3(*p) for p in segment))
+        ref = Attachment.capture(scene, hit, owner, Vec3(*cur)) if hit is not None else None
+        if ref is not None:
+            setattr(item, slot, (tuple(cur), ref))
+            return True
+    hold = resolve_vertex_anchor(scene, Vec3(*cur))
+    if hold is not None:
+        owner = hold.chain[-1] if hold.chain else None
+        ref = Attachment.capture(scene, hold.vertex, owner, Vec3(*cur))
+        if ref is not None:
+            setattr(item, slot, (tuple(cur), ref))
+            return True
+    return False
+
+
+def frame_uid(frame) -> str:
+    """The frame's uid, made when it has none (what a bound item names)."""
+    import uuid
+    if not frame.uid:
+        frame.uid = uuid.uuid4().hex
+    return frame.uid
+
+
+def anchor(item, frame, scene, points) -> None:
+    """Bind ``item`` to ``frame``'s model: its uid (made when it has none),
+    each ``(attr, picked point)`` as a world point with its hold."""
+    item.anchor_uid = frame_uid(frame)
+    for attr, pt in points:
+        setattr(item, attr, [float(v) for v in pt["world"]])
+        if attr in ("a_world", "b_world"):
+            capture_hold(scene, item, attr, pt.get("segment"))
+
+
+def level_at(source, frame, x, y):
+    """The model height a page point stands at in ``frame`` (the composer's
+    ``frame_level_at``): in an elevation or a horizontal section the page's
+    vertical is the model's Z; a plan or an axonometric cannot tell (None)."""
+    from core.composition import model_height_for_frame
+    from core.hlr import camera_basis
+    if getattr(frame, "perspective", False) or frame.h_mm <= 0:
+        return None
+    scene = source.scene
+    view = saved_view(scene, frame)
+    if view is False:
+        return None
+    camera = frame_camera(source.camera, frame, view, scene)
+    eye, right, up, fwd = camera_basis(camera)
+    if abs(float(fwd[2])) > 1e-3:              # not a horizontal view
+        return None
+    half_h = model_height_for_frame(frame.h_mm, frame.scale_n) / 2.0
+    if half_h <= 1e-9:
+        return None
+    k = frame.h_mm / (2.0 * half_h)
+    half_w = half_h * (frame.w_mm / frame.h_mm)
+    cx = (x - frame.x_mm) / k - half_w
+    cy = half_h - (y - frame.y_mm) / k
+    return float(eye[2] + right[2] * cx + up[2] * cy)

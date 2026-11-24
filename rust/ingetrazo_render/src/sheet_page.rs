@@ -96,16 +96,14 @@ impl Snapshot {
 
 /// The tools a click or a drag on the page places an item with
 /// (ingetrazo_core sheets::create PLACE_TOOLS).
-pub const PLACE_TOOLS: [&str; 13] = ["vista", "texto", "llamada", "cajetin", "escala", "norte", "leyenda", "perfil",
-                                     "linea", "flecha", "terreno", "rect", "elipse"];
-
-/// What a frame shows: its line drawing, paper mm in the frame, with a
-/// line class each (0 edge, 1 profile, 2 cut, 3 hidden), or a picture.
-#[derive(Default)]
-pub struct Lines {
-    pub segs: Vec<[f32; 4]>,
-    pub kinds: Vec<u8>,
-}
+pub const PLACE_TOOLS: [&str; 16] = ["vista", "texto", "llamada", "cajetin", "escala", "norte", "leyenda", "perfil",
+                                     "linea", "flecha", "terreno", "rect", "elipse", "poligono", "etiqueta", "nivel"];
+/// The placement tools a click (press and release on one spot) does not
+/// finish: the second click does (the composer's `TOOLS` drag flag).
+pub const TWO_POINT_TOOLS: [&str; 10] = ["vista", "etiqueta", "llamada", "perfil", "linea", "flecha", "terreno", "rect",
+                                         "elipse", "poligono"];
+/// The placement tools whose points snap to the drawing.
+pub const SNAP_PLACE_TOOLS: [&str; 8] = ["linea", "flecha", "terreno", "rect", "elipse", "poligono", "etiqueta", "nivel"];
 
 #[derive(Clone, Debug, PartialEq)]
 enum Drag {
@@ -114,7 +112,7 @@ enum Drag {
     /// One item by a handle (0..8 clockwise from top-left).
     Resize { key: u64, handle: u8, grab: [f64; 2], from: [f64; 4] },
     /// The View tool's rectangle.
-    Place { from: [f64; 2], to: [f64; 2] },
+    Place { from: [f64; 2], to: [f64; 2], hit: Option<crate::sheet_tools::Pt>, press: Pos2, waiting: bool },
     /// The hand.
     Pan { last: Pos2 },
     /// A press that has not moved yet (a click selects; moving drags).
@@ -130,7 +128,8 @@ pub struct Page {
     origin: Pos2,
     fit: Option<bool>,
     zoom_to: Option<f32>,
-    lines: HashMap<u64, Lines>,
+    /// A vector frame's drawing as a display list (frame-local mm).
+    ops: HashMap<u64, J>,
     /// Frames rendered on the GPU straight into a texture (no read-back):
     /// the texture kept alive and its id with the UI painter.
     natives: HashMap<u64, (wgpu::Texture, egui::TextureId)>,
@@ -159,6 +158,15 @@ pub struct Page {
     pub editing: Option<(u64, String)>,
     /// The editor wants the keyboard (it just opened).
     pub edit_focus: bool,
+    /// What each frame offers the drawing tools to snap to.
+    pub snaps: HashMap<u64, crate::sheet_tools::FrameSnaps>,
+    /// The clicks a snapping tool has gathered, and the snap under the cursor.
+    pub pick: Option<crate::sheet_tools::Pick>,
+    hot: Option<crate::sheet_tools::Pt>,
+    /// How far apart a baseline run's rows sit (the document's dimension style).
+    pub run_step: f64,
+    /// The format painter takes a style on its next click (else pastes).
+    pub painter_armed: bool,
 }
 
 fn snap(value: f64, targets: &[f64]) -> Option<f64> {
@@ -190,7 +198,8 @@ impl Page {
         self.preview.retain(|k, r| doc.items.iter().any(|i| i.key == *k && i.rect != *r));
         let keys: Vec<u64> = doc.items.iter().map(|i| i.key).collect();
         self.selection.retain(|k| keys.contains(k));
-        self.lines.retain(|k, _| keys.contains(k));
+        self.ops.retain(|k, _| keys.contains(k));
+        self.snaps.retain(|k, _| keys.contains(k));
         let gone: Vec<u64> = self.natives.keys().filter(|k| !keys.contains(k)).copied().collect();
         for k in gone {
             self.drop_native(k);
@@ -198,6 +207,247 @@ impl Page {
         self.raw = text;
         self.doc = Some(doc);
     }
+    /// A snapping tool's pointer: the snap under the cursor, and a click
+    /// taken (snapped when it caught the model). The linear dimension takes
+    /// two points (⇧ on the second puts it on a row or a column), then
+    /// the click that sets its offset makes it.
+    fn pick_pointer(&mut self, kind: &str, p: Pos2, mods: u8, out: &mut Vec<String>) {
+        use crate::sheet_tools::{sep_of, snap_at, Pt};
+        if kind == "release" {
+            return;                       // a click is its press; the release adds nothing
+        }
+        let mm = self.to_mm(p);
+        let thr = 7.0 / f64::from(self.zoom.max(1e-6));
+        let pick = self.pick.get_or_insert_with(|| crate::sheet_tools::Pick { tool: self.tool.clone(), ..Default::default() });
+        if pick.tool != self.tool {
+            *pick = crate::sheet_tools::Pick { tool: self.tool.clone(), ..Default::default() };
+        }
+        let offsetting = match pick.tool.as_str() {
+            "cota_ang" => pick.pts.len() == 3,
+            "cota_radio" => false,
+            _ => pick.sep.is_none() && pick.pts.len() == 2,
+        };
+        self.hot = if offsetting { None } else { snap_at(&self.snaps, mm, thr) };
+        self.cursor = "crosshair";
+        if !matches!(kind, "press" | "double") {
+            return;
+        }
+        let mut pt = self.hot.clone().unwrap_or_else(|| Pt::free(mm));
+        let Some(pick) = self.pick.as_mut() else { return };
+        if pick.tool == "cota_ang" && mods & 4 != 0 && !pick.pts.is_empty() && pick.pts.len() < 3 {
+            pt = Pt::free(crate::sheet_tools::ang_step(pt.p, &pick.pts));
+        }
+        match (pick.tool.as_str(), pick.pts.len()) {
+            ("cota_ang", n) if n < 3 => pick.pts.push(pt),
+            ("cota_ang", _) => {
+                let v = pick.pts[0].p;
+                let r = (mm[0] - v[0]).hypot(mm[1] - v[1]);
+                let body = serde_json::json!({"v": v, "a": pick.pts[1].p, "b": pick.pts[2].p, "r": r});
+                out.push(format!("sheets:angular\u{1f}{body}"));
+                self.pick = None;
+                self.hot = None;
+            }
+            ("cota_radio", n) => {
+                // One click on the arc: the circle lends its centre and its
+                // radius, the click says which way the line leaves. Else the
+                // centre, then a point on the arc. ⌘ makes it a diameter.
+                let kind = if mods & 2 != 0 { "diameter" } else { "radius" };
+                let ring = if n == 0 { crate::sheet_tools::circle_at(&self.snaps, mm, thr) } else { None };
+                let (c, q) = if let Some([cx, cy, r]) = ring {
+                    let a = (mm[1] - cy).atan2(mm[0] - cx);
+                    ([cx, cy], [cx + r * a.cos(), cy + r * a.sin()])
+                } else if n == 0 {
+                    pick.pts.push(pt);
+                    return;
+                } else {
+                    (pick.pts[0].p, pt.p)
+                };
+                let body = serde_json::json!({"c": c, "p": q, "kind": kind});
+                out.push(format!("sheets:radial\u{1f}{body}"));
+                self.pick = None;
+                self.hot = None;
+            }
+            ("cota", 0) => pick.pts.push(pt),
+            ("cota", 1) => {
+                let a = pick.pts[0].p;
+                pick.axis = if mods & 4 != 0 {
+                    if (pt.p[0] - a[0]).abs() >= (pt.p[1] - a[1]).abs() { "h".into() } else { "v".into() }
+                } else {
+                    String::new()
+                };
+                pick.pts.push(pt);
+            }
+            ("cota", _) => {
+                let (a, b) = (&pick.pts[0], &pick.pts[1]);
+                let sep = sep_of(a.p, b.p, &pick.axis, mm);
+                let body = serde_json::json!({"a": a.json(), "b": b.json(), "sep": sep, "axis": pick.axis});
+                out.push(format!("sheets:cota\u{1f}{body}"));
+                self.pick = None;
+                self.hot = None;
+            }
+            (_, n) => {
+                // A chain or a baseline. A click back on the last point ends it.
+                let near = 4.0 / f64::from(self.zoom.max(1e-6));
+                if n > 0 && (pt.p[0] - pick.pts[n - 1].p[0]).abs() + (pt.p[1] - pick.pts[n - 1].p[1]).abs() < near {
+                    self.finish_run(out);
+                    return;
+                }
+                if n < 2 {
+                    if n == 1 && mods & 4 != 0 {
+                        pick.axis = crate::sheet_tools::axis_out(pick.pts[0].p, pt.p, pt.p, "");
+                    }
+                    pick.pts.push(pt);
+                    return;
+                }
+                let one = |a: &Pt, b: &Pt, sep: f64, axis: &str| {
+                    let body = serde_json::json!({"a": a.json(), "b": b.json(), "sep": sep, "axis": axis});
+                    format!("sheets:cota\u{1f}{body}")
+                };
+                let Some(run_sep) = pick.sep else {
+                    let (a, b) = (pick.pts[0].p, pick.pts[1].p);
+                    if mods & 4 != 0 {
+                        pick.axis = crate::sheet_tools::axis_out(a, b, mm, &pick.axis);
+                    }
+                    let sep = sep_of(a, b, &pick.axis, mm);
+                    pick.sep = Some(sep);
+                    pick.placed = 1;
+                    out.push(one(&pick.pts[0], &pick.pts[1], sep, &pick.axis));
+                    return;
+                };
+                let base = pick.tool == "cota_base";
+                let prev = if base { pick.pts[0].clone() } else { pick.pts[n - 1].clone() };
+                let sep = if base {
+                    let step = self.run_step * pick.placed as f64;
+                    run_sep + if run_sep >= 0.0 { step } else { -step }
+                } else {
+                    crate::sheet_tools::chain_sep_for(pick.pts[0].p, pick.pts[1].p, run_sep, &pick.axis, prev.p, pt.p)
+                };
+                out.push(one(&prev, &pt, sep, &pick.axis));
+                pick.pts.push(pt);
+                pick.placed += 1;
+            }
+        }
+    }
+
+    /// End a chain or baseline run: a chain of two or more stacks its total
+    /// (`sheets:cota_total`: first and last point, the run's line).
+    fn finish_run(&mut self, out: &mut Vec<String>) {
+        if let Some(pick) = self.pick.take() {
+            if pick.tool == "cota_cadena" && pick.placed >= 2 {
+                if let (Some(sep), Some(first), Some(last)) = (pick.sep, pick.pts.first(), pick.pts.last()) {
+                    let body = serde_json::json!({"a": first.json(), "b": last.json(), "sep": sep, "axis": pick.axis,
+                                                  "p1": pick.pts[0].p, "p2": pick.pts[1].p});
+                    out.push(format!("sheets:cota_total\u{1f}{body}"));
+                }
+            }
+        }
+        self.hot = None;
+    }
+
+    /// The tool's clicks so far and the snap dot, over the page.
+    fn paint_pick(&self, painter: &egui::Painter) {
+        use crate::sheet_tools::{line_ends, sep_of};
+        let stroke = Stroke::new(1.0_f32, ACCENT);
+        if let (Some(pick), Some(cur)) = (&self.pick, self.pointer_mm) {
+            let scr = |q: [f64; 2]| self.to_screen(q[0], q[1]);
+            let run = pick.tool == "cota_cadena" || pick.tool == "cota_base";
+            match (pick.tool.as_str(), pick.pts.len()) {
+                ("cota_ang", n) if n >= 1 => {
+                    let v = scr(pick.pts[0].p);
+                    for q in pick.pts.iter().skip(1) {
+                        painter.line_segment([v, scr(q.p)], stroke);
+                    }
+                    let to = self.hot.as_ref().map_or(cur, |h| h.p);
+                    if n < 3 {
+                        painter.extend(egui::Shape::dashed_line(&[v, scr(to)], stroke, 4.0, 3.0));
+                    } else {
+                        painter.circle_stroke(v, (scr(cur) - v).length(), Stroke::new(1.0_f32, ACCENT.gamma_multiply(0.6)));
+                    }
+                }
+                ("cota_radio", 1) => {
+                    let c = scr(pick.pts[0].p);
+                    let to = scr(self.hot.as_ref().map_or(cur, |h| h.p));
+                    painter.line_segment([c, to], stroke);
+                    painter.circle_stroke(c, (to - c).length(), Stroke::new(1.0_f32, ACCENT.gamma_multiply(0.6)));
+                }
+                (_, n) if run && n >= 2 && pick.sep.is_some() => {
+                    let base = pick.tool == "cota_base";
+                    let prev = if base { pick.pts[0].p } else { pick.pts[n - 1].p };
+                    let to = self.hot.as_ref().map_or(cur, |h| h.p);
+                    let run_sep = pick.sep.unwrap_or(0.0);
+                    let sep = if base {
+                        let step = self.run_step * pick.placed as f64;
+                        run_sep + if run_sep >= 0.0 { step } else { -step }
+                    } else {
+                        crate::sheet_tools::chain_sep_for(pick.pts[0].p, pick.pts[1].p, run_sep, &pick.axis, prev, to)
+                    };
+                    let (a2, b2) = line_ends(prev, to, sep, &pick.axis);
+                    for (p, q) in [(prev, a2), (to, b2), (a2, b2)] {
+                        painter.extend(egui::Shape::dashed_line(&[scr(p), scr(q)], stroke, 4.0, 3.0));
+                    }
+                }
+                (_, 1) => {
+                    let to = self.hot.as_ref().map_or(cur, |h| h.p);
+                    painter.extend(egui::Shape::dashed_line(&[scr(pick.pts[0].p), scr(to)], stroke, 4.0, 3.0));
+                }
+                (_, 2) => {
+                    let (a, b) = (pick.pts[0].p, pick.pts[1].p);
+                    let (a2, b2) = line_ends(a, b, sep_of(a, b, &pick.axis, cur), &pick.axis);
+                    for (p, q) in [(a, a2), (b, b2), (a2, b2)] {
+                        painter.extend(egui::Shape::dashed_line(&[scr(p), scr(q)], stroke, 4.0, 3.0));
+                    }
+                }
+                _ => {}
+            }
+        }
+        if let Some(h) = &self.hot {
+            let c = self.to_screen(h.p[0], h.p[1]);
+            if h.segment.is_some() {
+                painter.circle_stroke(c, 4.5, Stroke::new(1.5_f32, ACCENT));
+            } else {
+                painter.circle_filled(c, 4.5, ACCENT);
+            }
+        }
+    }
+
+    /// Another tool armed: what the last one gathered is dropped; the
+    /// format painter starts by taking a style.
+    pub fn set_tool(&mut self, tool: String) {
+        self.pick = None;
+        self.hot = None;
+        if matches!(self.drag, Some(Drag::Place { .. })) {
+            self.drag = None;
+        }
+        self.painter_armed = tool == "estilo";
+        self.tool = tool;
+    }
+    /// Where a placement tool's point lands: on the drawing for the tools
+    /// that snap to it (the dot shows), level or plumb from `from` with ⇧
+    /// for the lines.
+    fn place_point(&mut self, mm: [f64; 2], from: Option<[f64; 2]>, mods: u8) -> crate::sheet_tools::Pt {
+        let tool = self.tool.as_str();
+        let thr = 7.0 / f64::from(self.zoom.max(1e-6));
+        self.hot = if SNAP_PLACE_TOOLS.contains(&tool) { crate::sheet_tools::snap_at(&self.snaps, mm, thr) } else { None };
+        let mut pt = self.hot.clone().unwrap_or_else(|| crate::sheet_tools::Pt::free(mm));
+        if let (Some(a), true) = (from, mods & 4 != 0 && matches!(tool, "linea" | "flecha" | "terreno")) {
+            pt = if (pt.p[0] - a[0]).abs() >= (pt.p[1] - a[1]).abs() {
+                crate::sheet_tools::Pt::free([pt.p[0], a[1]])
+            } else {
+                crate::sheet_tools::Pt::free([a[0], pt.p[1]])
+            };
+        }
+        pt
+    }
+    /// `sheets:place␟x0␟y0␟x1␟y1␟tool[␟first point's catch]`.
+    fn place_action(&self, from: [f64; 2], to: [f64; 2], hit: Option<&crate::sheet_tools::Pt>) -> String {
+        let mut a = format!("sheets:place\u{1f}{:.3}\u{1f}{:.3}\u{1f}{:.3}\u{1f}{:.3}\u{1f}{}",
+                            from[0], from[1], to[0], to[1], self.tool);
+        if let Some(h) = hit {
+            a += &format!("\u{1f}{}", h.json());
+        }
+        a
+    }
+
     /// Start typing in text item `key` (its words as the document has them).
     pub fn edit_text(&mut self, key: u64) {
         let text = self.item(key).and_then(|i| i.data["fields"]["text"].as_str().map(str::to_string));
@@ -278,21 +528,22 @@ impl Page {
     /// A frame's picture as a GPU texture already registered with the UI
     /// painter (``id``); the one it replaces is freed after the next frame.
     pub fn set_native(&mut self, key: u64, texture: wgpu::Texture, id: egui::TextureId) {
-        self.lines.remove(&key);
+        self.ops.remove(&key);
         if let Some((_, old)) = self.natives.insert(key, (texture, id)) {
             self.freed.push(old);
         }
     }
-    pub fn set_lines(&mut self, key: u64, segs: Vec<[f32; 4]>, kinds: Vec<u8>) {
+    /// A vector frame's drawing (sheets::items_d `paint_vector_content`).
+    pub fn set_ops(&mut self, key: u64, ops: J) {
         self.drop_native(key);
-        self.lines.insert(key, Lines { segs, kinds });
+        self.ops.insert(key, ops);
     }
     pub fn forget_content(&mut self, key: u64) {
-        self.lines.remove(&key);
+        self.ops.remove(&key);
         self.drop_native(key);
     }
     pub fn has_content(&self, key: u64) -> bool {
-        self.lines.contains_key(&key) || self.natives.contains_key(&key)
+        self.ops.contains_key(&key) || self.natives.contains_key(&key)
     }
     pub fn set_selection(&mut self, keys: Vec<u64>) {
         self.selection = keys;
@@ -313,11 +564,33 @@ impl Page {
         match (&self.drag, self.tool.as_str()) {
             (Some(Drag::Move { .. }), _) => "Edges snap to the margins, guides and other items; ⌥ moves freely.",
             (Some(Drag::Resize { .. }), _) => "Edges snap to the margins, guides and other items; ⌥ resizes freely.",
-            (Some(Drag::Place { .. }), _) => "Release to place the view, at the scale that fits.",
+            (Some(Drag::Place { waiting: true, .. }), _) => "Click the second point.",
+            (Some(Drag::Place { .. }), "vista") => "Release to place the view, at the scale that fits.",
             (_, "pan") => "Drag to move the sheet. Scroll pans, ⌘-scroll zooms.",
             (_, "zoom") | (_, "zoom_ventana") => "Click to zoom in, ⌥-click to zoom out.",
             (_, "vista") => "Drag a rectangle to place a model view.",
             (_, t) if PLACE_TOOLS.contains(&t) => "Click to place it, or drag its box.",
+            (_, "cota_cadena") | (_, "cota_base") => match self.pick.as_ref().map_or(0, |p| p.pts.len()) {
+                0 => "Click the first point of the run: it snaps to the drawing.",
+                1 => "Click the second point; ⇧ keeps the run level or plumb.",
+                2 if self.pick.as_ref().is_some_and(|p| p.sep.is_none()) => "Click where the dimension line goes.",
+                _ => "Click the next point. Click the last one again, or Esc, to end the run.",
+            },
+            (_, "cota_ang") => match self.pick.as_ref().map_or(0, |p| p.pts.len()) {
+                0 => "Click the angle's vertex: it snaps to the drawing.",
+                1 => "Click a point on the first arm; ⇧ steps it by 15°.",
+                2 => "Click a point on the second arm; ⇧ steps the angle by 15°.",
+                _ => "Click where the arc goes.",
+            },
+            (_, "cota_radio") => match self.pick.as_ref().map_or(0, |p| p.pts.len()) {
+                0 => "Click on a circle or an arc, or its centre; ⌘ for a diameter.",
+                _ => "Click a point on the arc; ⌘ for a diameter.",
+            },
+            (_, "cota") => match self.pick.as_ref().map_or(0, |p| p.pts.len()) {
+                0 => "Click the first point: it snaps to the drawing's corners, middles and edges.",
+                1 => "Click the second point; ⇧ keeps the dimension level or plumb.",
+                _ => "Click where the dimension line goes. Esc starts again.",
+            },
             _ if !self.selection.is_empty() => "Drag to move, the handles resize. Arrows nudge 1 mm, ⇧ 10 mm, ⌥ 0.1 mm. Esc clears.",
             _ => "Click an item to select it, ⇧-click to add. Drag to move it.",
         }
@@ -447,6 +720,11 @@ impl Page {
             // A press elsewhere on the page ends the typing.
             self.commit_text(out);
         }
+        if crate::sheet_tools::PICK_TOOLS.contains(&self.tool.as_str()) && kind != "leave"
+            && (kind == "move" || button == 1) && !matches!(self.drag, Some(Drag::Pan { .. })) {
+            self.pick_pointer(kind, p, mods, out);
+            return;
+        }
         let tool = self.tool.as_str();
         match kind {
             "leave" => {
@@ -477,8 +755,29 @@ impl Page {
                     return;
                 }
                 let mm = self.to_mm(p);
+                if tool == "estilo" {
+                    // The format painter: the first click takes an item's
+                    // style, the next ones paste it on items of its kind.
+                    if let Some(k) = self.hit(mm) {
+                        self.selection = vec![k];
+                        let verb = if self.painter_armed { "copy_style" } else { "paste_style" };
+                        if self.command(verb, out) && verb == "copy_style" {
+                            self.painter_armed = false;
+                        }
+                    }
+                    return;
+                }
                 if PLACE_TOOLS.contains(&tool) {
-                    self.drag = Some(Drag::Place { from: mm, to: mm });
+                    let snapped = self.place_point(mm, None, mods);
+                    if let Some(Drag::Place { from, hit, waiting: true, .. }) = self.drag.take() {
+                        // The second click of click-move-click.
+                        let to = self.place_point(mm, Some(from), mods);
+                        out.push(self.place_action(from, to.p, hit.as_ref()));
+                        self.hot = None;
+                        return;
+                    }
+                    self.drag = Some(Drag::Place { from: snapped.p, to: snapped.p, hit: snapped.world.is_some().then_some(snapped),
+                                                   press: p, waiting: false });
                     return;
                 }
                 if let Some((key, handle)) = self.handle_at(p) {
@@ -549,8 +848,13 @@ impl Page {
                     self.preview.insert(key, [x0, y0, x1 - x0, y1 - y0]);
                     self.cursor = Self::cursor_for_handle(handle);
                 }
-                Some(Drag::Place { from, .. }) => {
-                    self.drag = Some(Drag::Place { from, to: self.to_mm(p) });
+                Some(Drag::Place { from, hit, press, waiting, .. }) => {
+                    let to = self.place_point(self.to_mm(p), Some(from), mods).p;
+                    self.drag = Some(Drag::Place { from, to, hit, press, waiting });
+                    self.cursor = "crosshair";
+                }
+                None if SNAP_PLACE_TOOLS.contains(&tool) => {
+                    self.place_point(self.to_mm(p), None, mods);
                     self.cursor = "crosshair";
                 }
                 _ => {
@@ -597,9 +901,14 @@ impl Page {
                             out.push(Self::rects_action(&[(key, r)]));
                         }
                     }
-                    Some(Drag::Place { from, to }) => {
-                        out.push(format!("sheets:place\u{1f}{:.3}\u{1f}{:.3}\u{1f}{:.3}\u{1f}{:.3}\u{1f}{}",
-                                         from[0], from[1], to[0], to[1], self.tool));
+                    Some(Drag::Place { from, to, hit, press, waiting }) => {
+                        if !waiting && TWO_POINT_TOOLS.contains(&self.tool.as_str()) && (p - press).length() < 4.0 {
+                            // A click, not a drag: the second click finishes it.
+                            self.drag = Some(Drag::Place { from, to, hit, press, waiting: true });
+                            return;
+                        }
+                        out.push(self.place_action(from, to, hit.as_ref()));
+                        self.hot = None;
                     }
                     _ => {}
                 }
@@ -618,6 +927,14 @@ impl Page {
             "ArrowUp" => (0.0, -step),
             "ArrowDown" => (0.0, step),
             "Escape" => {
+                if self.pick.as_ref().is_some_and(|p| p.placed > 0) {
+                    self.finish_run(out);
+                    return true;
+                }
+                if self.pick.take().is_some() {
+                    self.hot = None;
+                    return true;
+                }
                 if self.drag.take().is_some() {
                     self.preview.clear();
                     return true;
@@ -797,6 +1114,10 @@ impl Page {
                 "frame" => {
                     self.paint_frame(&painter, item, rect);
                     let place = crate::sheet_display::Place { origin: rect.min, zoom: self.zoom };
+                    if let Some(ops) = self.ops.get(&item.key) {
+                        let inner = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
+                        crate::sheet_display::paint(&inner, ctx, &mut self.pictures, ops, place);
+                    }
                     crate::sheet_display::paint(&painter, ctx, &mut self.pictures, &item.data["display"], place);
                 }
                 _ => {
@@ -829,35 +1150,19 @@ impl Page {
                 }
             }
         }
-        if let Some(Drag::Place { from, to }) = &self.drag {
+        if let Some(Drag::Place { from, to, .. }) = &self.drag {
             let r = Rect::from_two_pos(self.to_screen(from[0], from[1]), self.to_screen(to[0], to[1]));
             painter.rect_filled(r, 0, ACCENT.gamma_multiply(0.08));
             painter.rect_stroke(r, 0, Stroke::new(1.0_f32, ACCENT), egui::StrokeKind::Middle);
         }
+        self.paint_pick(&painter);
     }
 
     fn paint_frame(&self, painter: &egui::Painter, item: &Item, rect: Rect) {
         let f = &item.data["frame"];
-        let z = self.zoom;
         let inner = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
         if let Some(&(_, id)) = self.natives.get(&item.key) {
             inner.image(id, rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
-        } else if let Some(lines) = self.lines.get(&item.key) {
-            let pens: Vec<f32> = f["pens"].as_array().map(|a| a.iter().map(|p| p.as_f64().unwrap_or(0.18) as f32).collect())
-                .unwrap_or_else(|| vec![0.18, 0.35, 0.5, 0.18]);
-            let o = rect.min;
-            for (s, k) in lines.segs.iter().zip(&lines.kinds) {
-                let pen = pens.get(*k as usize).copied().unwrap_or(0.18);
-                let stroke = Stroke::new((pen * z).max(0.6), INK_ON_PAPER);
-                let a = o + vec2(s[0] * z, s[1] * z);
-                let b = o + vec2(s[2] * z, s[3] * z);
-                if *k == 3 {
-                    // Hidden lines: dashed 1.5 / 0.8 mm, as the sheet inks them.
-                    inner.extend(egui::Shape::dashed_line(&[a, b], stroke, 1.5 * z, 0.8 * z));
-                } else {
-                    inner.line_segment([a, b], stroke);
-                }
-            }
         }
         if !f["border"].as_bool().unwrap_or(false) {
             // A borderless frame still reads as a frame on screen (never printed).
@@ -1028,6 +1333,97 @@ mod tests {
         p.pointer("press", at(&p, 300.0, 250.0), 1, 0, &mut out);
         p.pointer("release", at(&p, 300.0, 250.0), 1, 0, &mut out);
         assert_eq!(out, vec!["sheets:place\u{1f}300.000\u{1f}250.000\u{1f}300.000\u{1f}250.000\u{1f}escala".to_string()]);
+    }
+
+    #[test]
+    fn the_dimension_tool_snaps_two_points_and_its_offset_click_makes_it() {
+        let mut p = page();
+        p.tool = "cota".into();
+        p.snaps.insert(1, crate::sheet_tools::FrameSnaps {
+            points: vec![[50.0, 60.0], [90.0, 60.0]],
+            world: vec![[1.0, 2.0, 0.0], [5.0, 2.0, 0.0]],
+            ..Default::default()
+        });
+        let mut out = vec![];
+        p.pointer("move", at(&p, 50.4, 60.3), 0, 0, &mut out);
+        assert!(p.hot.is_some());
+        // Clicks: a press and a release each, as the shell sends them.
+        for (x, y) in [(50.4, 60.3), (89.8, 60.2)] {
+            p.pointer("press", at(&p, x, y), 1, 0, &mut out);
+            p.pointer("release", at(&p, x, y), 1, 0, &mut out);
+        }
+        p.pointer("move", at(&p, 70.0, 52.0), 0, 0, &mut out);
+        assert!(p.hot.is_none(), "the offset does not snap");
+        p.pointer("press", at(&p, 70.0, 52.0), 1, 0, &mut out);
+        p.pointer("release", at(&p, 70.0, 52.0), 1, 0, &mut out);
+        assert_eq!(out.len(), 1);
+        let body: serde_json::Value = serde_json::from_str(out[0].strip_prefix("sheets:cota\u{1f}").unwrap()).unwrap();
+        assert_eq!(body["a"]["p"], serde_json::json!([50.0, 60.0]));
+        assert_eq!(body["b"]["world"], serde_json::json!([5.0, 2.0, 0.0]));
+        assert_eq!(body["a"]["frame"], 1);
+        assert!((body["sep"].as_f64().unwrap() - -8.0).abs() < 1e-9);
+        assert!(p.pick.is_none());
+        p.pointer("press", at(&p, 10.0, 10.0), 1, 0, &mut out);
+        assert!(p.key("Escape", 0, &mut out) && p.pick.is_none());
+    }
+
+    #[test]
+    fn a_chain_places_on_the_offset_click_then_one_per_point_and_ends_with_its_total() {
+        let mut p = page();
+        p.tool = "cota_cadena".into();
+        p.run_step = 8.0;
+        let mut out = vec![];
+        for (x, y) in [(50.0, 260.0), (80.0, 260.0), (65.0, 250.0), (120.0, 260.0)] {
+            p.pointer("press", at(&p, x, y), 1, 0, &mut out);
+        }
+        assert_eq!(out.len(), 2, "{out:?}");
+        let second: serde_json::Value = serde_json::from_str(out[1].strip_prefix("sheets:cota\u{1f}").unwrap()).unwrap();
+        assert_eq!(second["a"]["p"], serde_json::json!([80.0, 260.0]));
+        assert!((second["sep"].as_f64().unwrap() - -10.0).abs() < 1e-9, "on the chain's line");
+        p.pointer("press", at(&p, 120.0, 260.0), 1, 0, &mut out);
+        assert!(out[2].starts_with("sheets:cota_total\u{1f}") && p.pick.is_none());
+    }
+
+    #[test]
+    fn a_click_on_an_arc_dimensions_it_and_an_angle_takes_four_clicks() {
+        let mut p = page();
+        p.snaps.insert(1, crate::sheet_tools::FrameSnaps { circles: vec![[100.0, 100.0, 10.0]], ..Default::default() });
+        p.tool = "cota_radio".into();
+        let mut out = vec![];
+        p.pointer("press", at(&p, 100.0, 110.4), 1, 2, &mut out);
+        let body: serde_json::Value = serde_json::from_str(out[0].strip_prefix("sheets:radial\u{1f}").unwrap()).unwrap();
+        assert_eq!(body["c"], serde_json::json!([100.0, 100.0]));
+        assert_eq!(body["kind"], "diameter");
+        assert!((body["p"][1].as_f64().unwrap() - 110.0).abs() < 1e-9);
+        out.clear();
+        p.tool = "cota_ang".into();
+        for (x, y) in [(50.0, 250.0), (70.0, 251.0), (50.0, 230.0), (58.0, 250.0)] {
+            p.pointer("press", at(&p, x, y), 1, if x == 70.0 { 4 } else { 0 }, &mut out);
+        }
+        let body: serde_json::Value = serde_json::from_str(out[0].strip_prefix("sheets:angular\u{1f}").unwrap()).unwrap();
+        // ⇧ put the arm on 0°, its length kept.
+        assert!((body["a"][1].as_f64().unwrap() - 250.0).abs() < 1e-9);
+        assert!((body["a"][0].as_f64().unwrap() - (50.0 + 20f64.hypot(1.0))).abs() < 1e-9);
+        assert!((body["r"].as_f64().unwrap() - 8.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn two_clicks_place_a_shape_snapped_and_the_painter_copies_then_pastes() {
+        let mut p = page();
+        p.snaps.insert(1, crate::sheet_tools::FrameSnaps { points: vec![[40.0, 40.0]], world: vec![[0.0, 0.0, 0.0]], ..Default::default() });
+        p.set_tool("rect".into());
+        let mut out = vec![];
+        p.pointer("press", at(&p, 40.3, 40.2), 1, 0, &mut out);
+        p.pointer("release", at(&p, 40.3, 40.2), 1, 0, &mut out);
+        assert!(out.is_empty(), "a click waits for the second");
+        p.pointer("move", at(&p, 70.0, 60.0), 0, 0, &mut out);
+        p.pointer("press", at(&p, 70.0, 60.0), 1, 0, &mut out);
+        assert_eq!(out[0], "sheets:place\u{1f}40.000\u{1f}40.000\u{1f}70.000\u{1f}60.000\u{1f}rect\u{1f}{\"frame\":1,\"p\":[40.0,40.0],\"segment\":null,\"world\":[0.0,0.0,0.0]}");
+        out.clear();
+        p.set_tool("estilo".into());
+        assert!(p.painter_armed);
+        p.pointer("press", at(&p, 50.0, 50.0), 1, 0, &mut out);
+        assert!(!p.painter_armed, "the first click took the frame's style");
     }
 
     #[test]

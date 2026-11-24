@@ -55,8 +55,8 @@ class Recorder:
         return 100.0
 
     # What the page holds per frame: lines, a picture or a GPU render.
-    def page_frame_lines(self, key, *a):
-        self.calls.append(("page_frame_lines", (key, *a)))
+    def page_frame_ops(self, key, *a):
+        self.calls.append(("page_frame_ops", (key, *a)))
         self.__dict__.setdefault("held", set()).add(key)
 
     def page_frame_image(self, key, *a):
@@ -248,7 +248,8 @@ def test_frames_show_the_vector_pass_and_the_renders(host, monkeypatch):
 
     def drawing(source, frame):
         assert frame.style == "vectorial"
-        return np.array([[0, 0, 10, 0], [0, 0, 0, 5]], float), np.array([0, 1], np.int8), []
+        return {"segs": np.array([[0, 0, 10, 0], [0, 0, 0, 5]], float), "kinds": np.array([0, 1], np.int8),
+                "fills": []}
     monkeypatch.setattr(wgpu_sheet_frames, "drawing", drawing)
     shaded = []
 
@@ -262,14 +263,15 @@ def test_frames_show_the_vector_pass_and_the_renders(host, monkeypatch):
     for _ in range(3):
         host.view.draw_frame()                                       # one frame rendered per turn
     plan, iso = ws.composer.comp.frames
-    lines = rec.last("page_frame_lines")
-    assert lines[0] == plan._doc_key
-    assert lines[1].tolist() == [[0, 0, 10, 0], [0, 0, 0, 5]] and lines[2].tolist() == [0, 1]
+    key, ops = rec.last("page_frame_ops")
+    assert key == plan._doc_key
+    lines = [o["pts"] for o in json.loads(ops) if o["op"] == "line"]
+    assert lines == [[0, 0, 10, 0], [0, 0, 0, 5]]                     # edge, then profile
     assert shaded == [iso] and rec.last("page_frame_render")[0] == iso._doc_key
     assert "page_frame_image" not in rec.names()                    # no read-back, no upload
     rec.calls.clear()
     host.view.draw_frame()
-    assert "page_frame_lines" not in rec.names() and "page_frame_render" not in rec.names()
+    assert "page_frame_ops" not in rec.names() and "page_frame_render" not in rec.names()
     _run_actions(host, f"sheets:refresh\x1f{iso._doc_key}")         # Update view: rendered again
     host.view.draw_frame()
     assert rec.last("page_frame_forget") == (iso._doc_key,) and shaded == [iso, iso]
@@ -539,15 +541,145 @@ def test_a_new_text_opens_for_typing_and_the_words_are_one_edit(host):
     assert text.text == "Text"
 
 
-def test_tools_not_native_yet_open_the_classic_editor(host, monkeypatch):
+def test_the_snaps_are_the_composer_s(host):
+    """What a frame offers the drawing tools (wgpu_sheet_frames.snaps: Rust
+    camera and geometry) is what the composer's frame_snap_points offered:
+    the same page points with the same model points behind them."""
+    import numpy as np
+    from views import wgpu_sheet_frames
+    ws = _sheets(host)
+    plan = ws.composer.comp.frames[0]
+    pts, wpts, edges, ew, _circles = wgpu_sheet_frames.snaps(host.view.source_viewport, plan)
+    want_pts, want_w = ws.composer.frame_snap_points(plan)
+    assert len(pts) > 10
+    canon = lambda p, w: sorted(tuple(np.round(np.r_[a, b], 6)) for a, b in zip(p, w))  # noqa: E731
+    assert canon(pts, wpts) == canon(want_pts, want_w)
+    want_e = ws.composer.frame_snap_edges(plan)
+    assert len(edges) == len(want_e[0])
+
+
+def test_a_dimension_measured_on_the_page_is_bound_to_the_model(host):
+    """The page's ``sheets:cota``: the record in the document's units,
+    measuring the two points; both on one frame's drawing, it is bound to
+    that frame's model points and holds them; one step of the history; the
+    tool stays armed."""
+    import numpy as np
+    from views import wgpu_sheet_frames
+    ws = _sheets(host)
+    comp = ws.composer
+    plan = comp.comp.frames[0]
+    pts, wpts, _e, _w, _c = wgpu_sheet_frames.snaps(host.view.source_viewport, plan)
+    i = int(np.argmin(pts[:, 0] + pts[:, 1]))
+    j = int(np.argmax(pts[:, 0] - pts[:, 1]))
+    pt = lambda k: {"p": pts[k].tolist(), "world": wpts[k].tolist(), "frame": plan._doc_key, "segment": None}  # noqa: E731
+    _run_actions(host, "sheets:tool\x1fcota")
+    before = len(comp.comp.cotas)
+    _run_actions(host, "sheets:cota\x1f" + json.dumps({"a": pt(i), "b": pt(j), "sep": -6.0, "axis": "h"}))
+    assert len(comp.comp.cotas) == before + 1 and comp.tool_mode == "cota"
+    ct = comp.comp.cotas[-1]
+    assert (ct.x_mm, ct.y_mm) == tuple(pts[i]) and (ct.sep_mm, ct.axis) == (-6.0, "h")
+    assert ct.anchor_uid == plan.uid and ct.a_world == wpts[i].tolist() and ct.b_world == wpts[j].tolist()
+    assert ct.scale_n == plan.scale_n and ct.units == "m"
+    assert getattr(ct, "hold_a", None) is not None                      # held by the model's vertex
+    ws._undo()
+    assert len(comp.comp.cotas) == before
+
+
+def test_a_chain_s_total_stacks_one_row_beyond_its_line(host):
+    ws = _sheets(host)
+    comp = ws.composer
+    _run_actions(host, "sheets:tool\x1fcota_cadena")
+    free = lambda x, y: {"p": [x, y], "world": None, "frame": None, "segment": None}  # noqa: E731
+    for a, b in (((30, 200), (60, 200)), ((60, 200), (90, 200))):
+        _run_actions(host, "sheets:cota\x1f" + json.dumps({"a": free(*a), "b": free(*b), "sep": -5.0, "axis": "h"}))
+    _run_actions(host, "sheets:cota_total\x1f" + json.dumps({"a": free(30, 200), "b": free(90, 200), "sep": -5.0,
+                                                             "axis": "h", "p1": [30, 200], "p2": [60, 200]}))
+    total = comp.comp.cotas[-1]
+    assert (total.x_mm, total.dx_mm, total.axis) == (30, 60, "h")
+    assert total.sep_mm == pytest.approx(-5.0 - (total.text_mm * 2.0 + 2.5))
+    assert comp.tool_mode == "cota_cadena"
+
+
+def test_radius_and_angle_dimensions_from_the_page(host):
+    ws = _sheets(host)
+    comp = ws.composer
+    plan = comp.comp.frames[0]
+    _run_actions(host, "sheets:tool\x1fcota_radio")
+    _run_actions(host, "sheets:radial\x1f" + json.dumps({"c": [60, 60], "p": [70, 60], "kind": "diameter"}))
+    r = comp.comp.cotas_rad[-1]
+    assert (r.x_mm, r.y_mm, r.radius_mm, r.kind, r.angle_deg, r.scale_n) == (60, 60, 10.0, "diameter", 0.0,
+                                                                              plan.scale_n)
+    _run_actions(host, "sheets:tool\x1fcota_ang")
+    _run_actions(host, "sheets:angular\x1f" + json.dumps({"v": [100, 230], "a": [120, 230], "b": [100, 210], "r": 8.0}))
+    a = comp.comp.cotas_ang[-1]
+    assert (a.ax_mm, a.ay_mm, a.bx_mm, a.by_mm, a.radius_mm) == (20, 0, 0, -20, 8.0)
+    assert comp.tool_mode == "cota_ang"
+
+
+def test_the_frame_s_circles_are_the_composer_s(host):
+    from views import wgpu_sheet_frames
+    ws = _sheets(host)
+    plan = ws.composer.comp.frames[0]
+    got = wgpu_sheet_frames.circles(host.view.source_viewport, plan)
+    want = ws.composer.frame_circles(plan)
+    assert sorted(map(tuple, got.round(6).tolist())) == sorted(tuple(round(v, 6) for v in c) for c in want)
+
+
+def test_every_tool_of_the_rail_runs_on_the_page(host, monkeypatch):
+    from views import wgpu_sheets
     ws = _sheets(host)
     opened = []
     monkeypatch.setattr(type(ws), "open_classic", lambda self, tool="": opened.append(tool))
-    _run_actions(host, "sheets:tool\x1fcota")
-    assert opened == ["cota"] and ws.composer.tool_mode != "cota"
+    rail = {t for group in wgpu_sheets.RAIL for t in group}
+    assert rail <= wgpu_sheets.NATIVE_TOOLS
+    for tool in sorted(rail - {"imagen"}):
+        _run_actions(host, f"sheets:tool\x1f{tool}")
+    assert opened == []
     groups = host.view.renderer.last("ui_set_sheet_tools")[0]
-    names = {t[0]: t[1] for g in groups for t in g}
-    assert "classic" in names["cota"] and "classic" not in names["vista"]
+    assert not any("classic" in t[1] for g in groups for t in g)
+
+
+def test_labels_levels_polygons_and_images_from_the_page(host, monkeypatch, tmp_path):
+    import numpy as np
+    from PySide6.QtGui import QImage
+    from views import filedialogs, wgpu_sheet_frames
+    ws = _sheets(host)
+    comp = ws.composer
+    plan = comp.comp.frames[0]
+    pts, wpts, _e, _w, _c = wgpu_sheet_frames.snaps(host.view.source_viewport, plan)
+    hit = {"p": pts[0].tolist(), "world": wpts[0].tolist(), "frame": plan._doc_key, "segment": None}
+    # A label: the spot (bound to the model), then where its text goes.
+    _run_actions(host, "sheets:tool\x1fetiqueta")
+    x0, y0 = pts[0]
+    _run_actions(host, f"sheets:place\x1f{x0}\x1f{y0}\x1f250\x1f240\x1fetiqueta\x1f" + json.dumps(hit))
+    label = comp.comp.etiquetas[-1]
+    assert (label.x_mm, label.y_mm) == (250, 240) and label.anchor_uid == plan.uid
+    assert label.a_world == wpts[0].tolist() and comp.tool_mode == "select"
+    # A second label whose text lands on the first: one more leader to it.
+    n = len(comp.comp.etiquetas)
+    _run_actions(host, "sheets:tool\x1fetiqueta")
+    _run_actions(host, "sheets:place\x1f40\x1f50\x1f251\x1f241\x1fetiqueta")
+    assert len(comp.comp.etiquetas) == n and len(label.leaders) == 1
+    # A level mark on the plan: the plan symbol, bound to the model.
+    _run_actions(host, "sheets:tool\x1fnivel")
+    _run_actions(host, f"sheets:place\x1f{x0}\x1f{y0}\x1f{x0}\x1f{y0}\x1fnivel\x1f" + json.dumps(hit))
+    level = comp.comp.niveles[-1]
+    assert level.symbol == "circle" and level.anchor_uid == plan.uid and (level.x_mm, level.y_mm) == (x0, y0)
+    # A polygon, like the other shapes.
+    _run_actions(host, "sheets:tool\x1fpoligono")
+    _run_actions(host, "sheets:place\x1f30\x1f200\x1f60\x1f230\x1fpoligono")
+    assert comp.comp.shapes[-1].kind == "poligono"
+    # An image: the file, then the item at the margins, in its proportions.
+    pic = tmp_path / "logo.png"
+    img = QImage(200, 100, QImage.Format_RGB32)
+    img.fill(0xff3366aa)
+    img.save(str(pic))
+    monkeypatch.setattr(filedialogs.file_dialogs, "getOpenFileName",
+                        staticmethod(lambda *a, **k: (str(pic), "")))
+    _run_actions(host, "sheets:tool\x1fimagen")
+    image = comp.comp.images[-1]
+    assert (image.path, image.w_mm, image.h_mm) == (str(pic), 60.0, 30.0) and comp.tool_mode == "select"
+    assert np.isfinite(image.z)
 
 
 def test_pan_and_zoom(host):

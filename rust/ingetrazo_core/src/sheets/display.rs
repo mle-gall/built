@@ -293,17 +293,23 @@ pub fn sheet_item_display(py: Python<'_>, item: &Bound<'_, PyAny>, profile: Opti
 /// ``segs`` (N,4) and ``kinds`` (N,) of the vector drawing, ``fills`` (the
 /// cut rings, (M,2) each) and ``image`` (the picture's pixel size; the
 /// writer finds it as ``frame:<key>``).
+/// ``content_only``: the vector drawing alone (what the page draws under
+/// the frame's overlay).
 #[pyfunction]
-#[pyo3(signature = (frame, content=None))]
-pub fn sheet_frame_display(py: Python<'_>, frame: &Bound<'_, PyAny>, content: Option<Bound<'_, pyo3::types::PyDict>>)
-    -> PyResult<String> {
+#[pyo3(signature = (frame, content=None, content_only=false))]
+pub fn sheet_frame_display(py: Python<'_>, frame: &Bound<'_, PyAny>, content: Option<Bound<'_, pyo3::types::PyDict>>,
+                           content_only: bool) -> PyResult<String> {
     py.import("core.doc_model")?.call_method0("flush")?;
     let key = crate::doc::py::handle_key(frame)?;
     let f = super::model::read_fields(key)?;
     let x = extra(py, frame, ItemKind::Frame, &f, None)?;
     let c = frame_content(content.as_ref(), key)?;
     let mut p = super::paint::Painter::default();
-    super::items_d::paint_frame(&mut p, &f, &x, &c);
+    if content_only {
+        super::items_d::paint_vector_content(&mut p, &f, &c);
+    } else {
+        super::items_d::paint_frame(&mut p, &f, &x, &c);
+    }
     Ok(ops_json(&p.ops).to_string())
 }
 
@@ -332,6 +338,29 @@ pub fn frame_content(d: Option<&Bound<'_, pyo3::types::PyDict>>, key: crate::doc
                 Err(_) => ring.extract()?,
             };
             c.fills.push(pts.into_iter().filter(|q| q.len() >= 2).map(|q| [q[0], q[1]]).collect());
+        }
+    }
+    if let Some(t) = d.get_item("tags")?.filter(|v| !v.is_none()) {
+        let tags: Vec<Bound<'_, PyAny>> = match t.call_method0("tolist") {
+            Ok(l) => l.try_iter()?.collect::<PyResult<_>>()?,
+            Err(_) => t.try_iter()?.collect::<PyResult<_>>()?,
+        };
+        c.tags = Some(tags.iter().map(|v| v.str().map(|s| s.to_string())).collect::<PyResult<_>>()?);
+    }
+    if let Some(st) = d.get_item("styles")?.filter(|v| !v.is_none()) {
+        // {tag: (rgb or None, weight or None, cut weight or None, pattern)}
+        for (tag, v) in st.cast::<pyo3::types::PyDict>()?.iter() {
+            let get = |i: usize| -> PyResult<Option<Bound<'_, PyAny>>> {
+                Ok(if i < v.len()? { Some(v.get_item(i)?).filter(|x| !x.is_none()) } else { None })
+            };
+            let rgb = get(0)?.map(|x| x.extract::<Vec<f64>>()).transpose()?.filter(|c| c.len() >= 3).map(|c| [c[0], c[1], c[2]]);
+            let style = super::items_d::LayerStyle {
+                rgb,
+                weight: get(1)?.map(|x| x.extract()).transpose()?,
+                cut_weight: get(2)?.map(|x| x.extract()).transpose()?,
+                pattern: get(3)?.map(|x| x.extract()).transpose()?.unwrap_or_default(),
+            };
+            c.styles.push((tag.str()?.to_string(), style));
         }
     }
     if let Some(im) = d.get_item("image")?.filter(|v| !v.is_none()) {

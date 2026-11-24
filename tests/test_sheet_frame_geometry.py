@@ -185,7 +185,8 @@ def test_a_vector_frame_draws_what_the_composer_drew(view_key, name, hidden):
               style="vectorial", hidden_lines=hidden)
     scene = scene_with_views()
     source = SimpleNamespace(scene=scene, camera=OrbitCamera())
-    segs, kinds, _fills = wgpu_sheet_frames.drawing(source, MarcoVista(**kw))
+    got = wgpu_sheet_frames.drawing(source, MarcoVista(**kw))
+    segs, kinds = got["segs"], got["kinds"]
 
     ref = scene_with_views()
     frame = MarcoVista(**kw)

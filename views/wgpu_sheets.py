@@ -47,7 +47,12 @@ RAIL = [["select", "pan", "zoom", "zoom_ventana", "estilo"],
 #: The tools the native page runs (ui/page.rs); the others open the
 #: classic sheet editor with that tool.
 NATIVE_TOOLS = {"select", "pan", "zoom", "zoom_ventana", "vista", "texto", "llamada", "cajetin", "escala",
-                "norte", "leyenda", "perfil", "linea", "flecha", "terreno", "rect", "elipse"}
+                "norte", "leyenda", "perfil", "linea", "flecha", "terreno", "rect", "elipse", "cota",
+                "cota_cadena", "cota_base", "cota_ang", "cota_radio", "poligono", "etiqueta", "nivel",
+                "imagen", "estilo"}
+#: The tools that snap to the frames' model (ui/sheet_tools.rs PICK_TOOLS).
+SNAP_TOOLS = {"cota", "cota_cadena", "cota_base", "cota_ang", "cota_radio", "linea", "flecha", "terreno",
+              "rect", "elipse", "poligono", "etiqueta", "nivel"}
 #: Qt cursors for the page's cursor names.
 _CURSORS = {"": Qt.ArrowCursor, "move": Qt.SizeAllCursor, "grab": Qt.OpenHandCursor,
             "grabbing": Qt.ClosedHandCursor, "crosshair": Qt.CrossCursor,
@@ -211,6 +216,17 @@ def to_model(win) -> None:
         comp.hide()
 
 
+def _cajetin_template():
+    """Where the title block templates live and the one a new title block
+    starts from (the composer's ``cajetin_templates_dir`` and
+    ``default_cajetin_template_name``): ``(folder, name or None)``."""
+    from PySide6.QtCore import QSettings, QStandardPaths
+    base = (QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
+            or str(Path.home() / ".ingetrazo"))
+    name = str(QSettings().value("composer/default_cajetin", "") or "") or None
+    return str(Path(base) / "cajetines"), name
+
+
 def _int(v) -> int:
     """A Qt enum or flag (or the shell's plain int) as an int."""
     return int(getattr(v, "value", v))
@@ -242,6 +258,7 @@ class Workspace:
         self._content = {}              # frame key → the fields its content was made from
         self._ground = None             # the samplers terrain profiles read
         self._edit_after = None         # a new text block, opened for typing once on the page
+        self._snapped = {}              # frame key → what its snaps were worked out from
         self._tried = {}                # frame key → the page a render was tried on
         self._more = False              # frames still to render after this turn
         self._selection = None          # the keys the page and the composer agree on
@@ -279,6 +296,7 @@ class Workspace:
         self._sent = {}
         self._page = None
         self._content = {}
+        self._snapped = {}
         self._tried = {}
         self._selection = None
         renderer = getattr(view, "renderer", None)
@@ -363,7 +381,7 @@ class Workspace:
         frame rendered straight into its page texture, a vector frame's
         hidden-line drawing as line sets (paper mm in the frame). A frame
         the page holds nothing for is done, one per turn."""
-        import numpy as np
+        import ingetrazo_core as NATIVE
         from views import wgpu_sheet_frames
         comp = self.composer
         serial = self._page                # tried again once the sheet changed
@@ -387,9 +405,8 @@ class Workspace:
                 if frame.style == "vectorial" and not comp.frame_is_perspective(frame):
                     got = wgpu_sheet_frames.drawing(self.view.source_viewport, frame)
                     if got is not None:
-                        segs, kinds, _fills = got
-                        renderer.page_frame_lines(key, np.ascontiguousarray(segs, np.float32),
-                                                  np.ascontiguousarray(kinds, np.uint8))
+                        # Its drawing as the sheet inks it (sheets::items_d).
+                        renderer.page_frame_ops(key, NATIVE.sheet_frame_display(frame, got, True))
                 else:
                     wgpu_sheet_frames.render(self.view, frame, key)
             except Exception:  # noqa: BLE001 — a view that cannot draw stays empty
@@ -478,22 +495,156 @@ class Workspace:
             self._page = None
             self.view.renderer.page_select([m._doc_key for m in copies])
 
-    def _place(self, x0, y0, x1, y1, tool: str = "vista") -> None:
+    def _place(self, x0, y0, x1, y1, tool: str = "vista", hit=None) -> None:
         """A placement tool's click or drag: the item it makes there
         (sheets::create), one step of the history, then back to Select. A
-        new text block opens for typing."""
+        new text block opens for typing. ``hit``: the first point caught the
+        model (label, level): the item is bound to it."""
         import ingetrazo_core as NATIVE
-        from core.composition import AddItemCommand
+        from core.composition import AddItemCommand, EditItemCommand
+        from views import wgpu_sheet_frames
         comp = self.composer.comp
-        item = NATIVE.sheet_new_item(comp, tool, x0, y0, x1, y1, self.composer._scene())
+        scene = self.composer._scene()
+        frame = self._models().get(hit.get("frame")) if hit and hit.get("world") else None
+        if tool == "etiqueta":
+            target = self._label_at(x1, y1)
+            if target is not None:
+                # The text landed on a label: one more leader to it.
+                leader = {"ax_mm": x0 - target.x_mm, "ay_mm": y0 - target.y_mm, "anchor_uid": "", "a_world": None}
+                if frame is not None:
+                    leader.update(anchor_uid=wgpu_sheet_frames.frame_uid(frame), a_world=list(hit["world"]))
+                before = [dict(ld) for ld in (target.leaders or [])]
+                self._run(EditItemCommand(target, {"leaders": before + [leader]}, {"leaders": before}))
+                self._page = None
+                self.view.renderer.page_select([target._doc_key])
+                self._tool("select")
+                return
+        template = _cajetin_template() if tool == "cajetin" else (None, None)
+        item = NATIVE.sheet_new_item(comp, tool, x0, y0, x1, y1, scene, *template)
         if item is None:
             return
+        if tool == "nivel":
+            host = self._frame_at(x0, y0)
+            if host is not None:
+                z = wgpu_sheet_frames.level_at(self.view.source_viewport, host, x0, y0)
+                if z is not None:
+                    item.z_m = z
+        if tool in ("etiqueta", "nivel") and frame is not None:
+            wgpu_sheet_frames.anchor(item, frame, scene, [("a_world", hit)])
+            if tool == "nivel":
+                item.x_mm, item.y_mm = (float(v) for v in hit["p"])
+                if frame.view_key == "std:top":
+                    item.symbol = "circle"
         self._run(AddItemCommand(comp, item))
         self._page = None
         self.view.renderer.page_select([item._doc_key])
         if tool == "texto":
             self._edit_after = item._doc_key
         self._tool("select")
+
+    def _cota(self, body, total: bool = False) -> None:
+        """A linear dimension the page measured (one of a chain's or a
+        baseline's too, or a chain's ``total``): the record (sheets::create),
+        bound to the model when both ends caught the same frame, one step of
+        the history. The tool stays armed for the next."""
+        import ingetrazo_core as NATIVE
+        from core.composition import AddItemCommand
+        from views import wgpu_sheet_frames
+        comp = self.composer.comp
+        scene = self.composer._scene()
+        a, b = body["a"], body["b"]
+        if total:
+            item = NATIVE.sheet_new_chain_total(comp, tuple(a["p"]), tuple(b["p"]), float(body["sep"]),
+                                                body.get("axis", ""), tuple(body["p1"]), tuple(body["p2"]), scene)
+        else:
+            item = NATIVE.sheet_new_cota(comp, tuple(a["p"]), tuple(b["p"]), float(body.get("sep", 0.0)),
+                                         body.get("axis", ""), scene)
+        frame = self._models().get(a.get("frame"))
+        if frame is not None and a.get("frame") == b.get("frame") and a.get("world") and b.get("world"):
+            wgpu_sheet_frames.anchor(item, frame, scene, [("a_world", a), ("b_world", b)])
+            item.scale_n = frame.scale_n
+        self._run(AddItemCommand(comp, item))
+        self._page = None
+
+    def _dimension(self, kind: str, body) -> None:
+        """A radius / diameter or an angle the page measured: the record
+        (sheets::create), one step of the history; the tool stays armed."""
+        import ingetrazo_core as NATIVE
+        from core.composition import AddItemCommand
+        comp = self.composer.comp
+        scene = self.composer._scene()
+        if kind == "radial":
+            item = NATIVE.sheet_new_radial(comp, tuple(body["c"]), tuple(body["p"]), body.get("kind", "radius"), scene)
+        else:
+            item = NATIVE.sheet_new_angular(comp, tuple(body["v"]), tuple(body["a"]), tuple(body["b"]),
+                                            float(body["r"]))
+        if item is None:
+            return
+        self._run(AddItemCommand(comp, item))
+        self._page = None
+
+    def _send_snaps(self, renderer) -> None:
+        """What each frame offers a snapping tool (wgpu_sheet_frames.snaps),
+        one frame per turn, again when the model or the frame changed."""
+        from views import wgpu_sheet_frames
+        comp = self.composer
+        scene = comp._scene()
+        for frame in list(comp.comp.frames):
+            key = frame._doc_key
+            sig = (getattr(scene, "version", None), self._content.get(key), frame.x_mm, frame.y_mm)
+            if self._snapped.get(key) == sig:
+                continue
+            self._snapped[key] = sig
+            try:
+                got = wgpu_sheet_frames.snaps(self.view.source_viewport, frame)
+            except Exception:  # noqa: BLE001 — a frame that cannot draw offers nothing
+                import traceback
+                traceback.print_exc()
+                got = None
+            import numpy as np
+            if got is None:
+                got = (np.empty((0, 2)), np.empty((0, 3)), np.empty((0, 4)), np.empty((0, 2, 3)), np.empty((0, 3)))
+            renderer.page_frame_snaps(key, *(np.ascontiguousarray(a, float).reshape(-1).tolist() for a in got))
+            self._more = True
+            return
+
+    def _label_at(self, x, y):
+        """The label whose text block covers page point (x, y), the topmost."""
+        import ingetrazo_core as NATIVE
+        best = None
+        for et in getattr(self.composer.comp, "etiquetas", None) or []:
+            if getattr(et, "locked", False):
+                continue
+            w, h = NATIVE.sheet_item_size(et)
+            if et.x_mm - 0.5 <= x <= et.x_mm + w + 0.5 and et.y_mm - 0.5 <= y <= et.y_mm + h + 0.5:
+                if best is None or et.z >= best.z:
+                    best = et
+        return best
+
+    def _frame_at(self, x, y):
+        """The topmost frame under page point (x, y)."""
+        return next((f for f in reversed(self.composer.comp.frames)
+                     if f.x_mm <= x <= f.x_mm + f.w_mm and f.y_mm <= y <= f.y_mm + f.h_mm), None)
+
+    def _add_image(self) -> None:
+        """The image tool: a picture file, then the item at the margins
+        (sheets::create), one step of the history; back to Select."""
+        import ingetrazo_core as NATIVE
+        from core.composition import AddItemCommand
+        from core.i18n import tr
+        from views.filedialogs import file_dialogs
+        parent = _qt_window(self.composer._window)
+        path, _ = file_dialogs.getOpenFileName(parent, tr("Choose image…"), "", tr("Images (*.png *.jpg *.jpeg)"))
+        self._tool("select")
+        if not path:
+            return
+        item = NATIVE.sheet_new_image(self.composer.comp, path)
+        if item is None:
+            self.flash("That file is not a picture")
+            return
+        self._run(AddItemCommand(self.composer.comp, item))
+        self._page = None
+        self.view.renderer.page_select([item._doc_key])
 
     def _tool(self, name: str) -> None:
         """Arm a tool of the rail (the composer's tool state, until the
@@ -540,6 +691,14 @@ class Workspace:
         self._keep_a_sheet()
         self._send_page(renderer)
         self._send_contents(renderer)
+        if self.composer.tool_mode in SNAP_TOOLS and not self._more:
+            self._send_snaps(renderer)
+            style = getattr(self.composer._scene(), "dimension_style", None) or {}
+            try:
+                step = float(style.get("base_step_mm", 8.0))
+            except (TypeError, ValueError):
+                step = 8.0
+            self._once("run_step", step if step > 0.1 else 8.0, renderer.page_set_run_step)
         self._send(renderer, view)
 
     def _once(self, key, value, send) -> None:
@@ -657,6 +816,8 @@ class Workspace:
             act = comp._tool_actions.get(rest)
             if rest not in NATIVE_TOOLS:
                 self.open_classic(tool=rest)
+            elif rest == "imagen":
+                self._add_image()
             elif act is not None:
                 act.trigger()
         elif verb == "select":
@@ -664,9 +825,11 @@ class Workspace:
         elif verb == "rects":
             self._move(rest)
         elif verb == "place":
+            import json
             parts = rest.split(SEP)
             tool = parts[4] if len(parts) > 4 else comp.tool_mode
-            self._place(*(float(v) for v in parts[:4]), tool=tool)
+            hit = json.loads(parts[5]) if len(parts) > 5 else None
+            self._place(*(float(v) for v in parts[:4]), tool=tool, hit=hit)
         elif verb in ("set", "sheet", "set_many"):
             import json
             models = self._models()
@@ -678,6 +841,12 @@ class Workspace:
                             if int(k) in models])
         elif verb == "font":
             self._font(self._models().get(int(rest)))
+        elif verb in ("radial", "angular"):
+            import json
+            self._dimension(verb, json.loads(rest))
+        elif verb in ("cota", "cota_total"):
+            import json
+            self._cota(json.loads(rest), total=verb == "cota_total")
         elif verb == "refresh":
             model = self._models().get(int(rest))
             if model is not None:

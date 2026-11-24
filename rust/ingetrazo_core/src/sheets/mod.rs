@@ -20,6 +20,7 @@ pub mod items_d;
 pub mod metrics;
 pub mod paint;
 pub mod pdf;
+pub mod picture;
 pub mod model;
 pub mod page;
 pub mod py;
