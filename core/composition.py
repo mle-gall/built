@@ -147,33 +147,9 @@ def frame_page_projector(frame: "MarcoVista", camera):
     the page instead of to infinity, so a polyline crossing the eye plane
     still leaves the frame in the right direction rather than drawing a
     line to the next galaxy."""
-    import numpy as np
-
-    ar = frame.w_mm / frame.h_mm if frame.h_mm else 1.0
-    if not getattr(frame, "perspective", False):
-        half_h = model_height_for_frame(frame.h_mm, frame.scale_n) / 2.0
-        half_w = half_h * ar
-        k = frame.h_mm / (2.0 * half_h) if half_h else 0.0
-
-        def to_page(cx, cy, cz=None):
-            return ((cx + half_w) * k, (half_h - cy) * k)
-        return to_page
-
-    t = math.tan(math.radians(getattr(camera, "fov_deg", 45.0)) / 2.0)
-    lim_x, lim_y = 10.0 * frame.w_mm, 10.0 * frame.h_mm
-
-    def to_page(cx, cy, cz=None):
-        if cz is None:                       # depth-less call: cannot divide
-            raise ValueError("a perspective frame projects with the depth")
-        hh = t * np.maximum(np.asarray(cz, dtype=float), 1e-4)
-        px = (np.asarray(cx, dtype=float) / (hh * ar) + 1.0) * frame.w_mm / 2.0
-        py = (1.0 - np.asarray(cy, dtype=float) / hh) * frame.h_mm / 2.0
-        px = np.clip(px, -lim_x, lim_x + frame.w_mm)
-        py = np.clip(py, -lim_y, lim_y + frame.h_mm)
-        if np.isscalar(cz) or np.ndim(cz) == 0:
-            return (float(px), float(py))
-        return (px, py)
-    return to_page
+    from ingetrazo_core import PageProjection
+    fov = getattr(camera, "fov_deg", 45.0) if getattr(frame, "perspective", False) else None
+    return PageProjection(frame.w_mm, frame.h_mm, frame.scale_n, fov)
 
 
 #: The style a NEW model view is born with: the Architectural preset —

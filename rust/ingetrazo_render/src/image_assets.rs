@@ -43,8 +43,30 @@ pub fn fonts() -> &'static Arc<usvg::fontdb::Database> {
     FONTS.get_or_init(|| {
         let mut db = usvg::fontdb::Database::new();
         db.load_system_fonts();
+        share_interface_faces(&mut db);
         Arc::new(db)
     })
+}
+
+/// Map the interface families' files once. A face loaded from a file is
+/// otherwise mapped again on every use, several times per drawn label:
+/// that made each annotation `drawText` cost about a millisecond.
+fn share_interface_faces(db: &mut usvg::fontdb::Database) {
+    const FAMILIES: &[&str] = &["Helvetica Neue", "Helvetica", "Segoe UI", "DejaVu Sans", "Arial"];
+    let mut ids: Vec<_> = db
+        .faces()
+        .filter(|f| f.families.iter().any(|(name, _)| FAMILIES.contains(&name.as_str())))
+        .map(|f| f.id)
+        .collect();
+    let generic = db.family_name(&usvg::fontdb::Family::SansSerif).to_owned();
+    ids.extend(db.faces().filter(|f| f.families.iter().any(|(name, _)| *name == generic)).map(|f| f.id));
+    for id in ids {
+        // SAFETY: system font files are not rewritten while the program runs;
+        // fontdb maps them read-only, as it already does for each use.
+        unsafe {
+            db.make_shared_face_data(id);
+        }
+    }
 }
 
 pub fn svg_tree(input: &[u8], dir: Option<&Path>) -> Option<usvg::Tree> {

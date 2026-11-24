@@ -68,26 +68,13 @@ from georef.datum import SceneDatum
 from georef.geopath import GeoPath
 from georef.tiles import DEFAULT_SOURCE_ID, PRESETS, TileLayer, custom_source
 from tools.paint import RECENT_MAX, PaintTool
-from ingetrazo_core import load_recent_materials, save_recent_materials
+from ingetrazo_core import save_recent_materials
 
 from core.paths import app_root
 from core.units import fmt_area, fmt_len, fmt_volume
 
 _TEX_DIR = app_root() / "resources" / "textures"
-#: RAL Classic — the paint standard a drawing can be specified in. Its names
-#: are the standard's own, in the standard's own languages, so they live in
-#: the data file beside the colour instead of in the UI translations, where
-#: "Beige" or "Cream" would collide with strings that mean something else.
-_RAL_FILE = app_root() / "resources" / "colors" / "ral.json"
 _SWATCH = 44  # swatch pixel size
-
-
-def _ral_name(entry: dict) -> str:
-    """The RAL name in the language the app is running in."""
-    from core.i18n import current_language
-    if current_language().startswith("es") and entry.get("name_es"):
-        return entry["name_es"]
-    return entry["name"]
 
 
 class _Section(QWidget):
@@ -1718,16 +1705,6 @@ class MaterialsPanel(QWidget):
         root.addWidget(self._edit_body)
         self._load_texture_fields()
 
-        # The last materials painted with, so texturing a model does not
-        # mean hunting for the same brick in the library every time.
-        self._recent_heading = self._heading(tr("Recent"))
-        root.addWidget(self._recent_heading)
-        self._recent_grid = FlowLayout(spacing=2)
-        root.addLayout(self._recent_grid)
-        if not PaintTool.recent:
-            PaintTool.recent = load_recent_materials()
-        self._refresh_recent()
-
         root.addWidget(self._heading(tr("In model")))
         self._in_model_grid = FlowLayout(spacing=2)
         root.addLayout(self._in_model_grid)
@@ -1773,7 +1750,7 @@ class MaterialsPanel(QWidget):
     def _fill_library_categories(self, root) -> None:
         """Collapsible category sections fed by the bundled library manifest
         (our own procedural set from scripts/gen_textures.py plus the Sweet
-        Home 3D libraries — see SOURCES.md), a Colours section, and any loose
+        Home 3D libraries — see SOURCES.md) and any loose
         PNGs the user dropped in resources/textures.
 
         A section's swatches are built the first time it is OPENED. They all
@@ -1814,36 +1791,6 @@ class MaterialsPanel(QWidget):
             root.addWidget(btn)
             root.addWidget(body)
             return grid
-
-        # ONE Colours section (the usual Colors category): RAL
-        # Classic in code order — which is family order, yellows through
-        # blacks, without carving the tray up into nine more headings to
-        # click through. The eight unnamed swatches that used to sit at the
-        # top are gone at Marco's request: beside 213 colours that each
-        # carry a reference, a nameless square is only confusing.
-        #
-        # RAL is the paint you can actually specify, so a colour picked here
-        # paints as a NAMED material ("RAL 7035 Gris claro"): what the
-        # drawing carries is a reference a painter can buy, not an RGB
-        # triple nobody can match.
-        ral_colors = []
-        if _RAL_FILE.exists():
-            data = _json.loads(_RAL_FILE.read_text(encoding="utf-8"))
-            for fam in data.get("families", []):
-                ral_colors.extend(fam.get("colors", []))
-
-        def fill_colors(grid):
-            row = 0
-            for c in ral_colors:
-                label = "%s · %s" % (c["code"], _ral_name(c))
-                b = _swatch_button(_color_pixmap(c["rgb"]), label)
-                b.clicked.connect(
-                    lambda _=False, col=c: self._apply_color(
-                        col["rgb"], "%s %s" % (col["code"], _ral_name(col))))
-                grid.addWidget(b, row // self.COLS, row % self.COLS)
-                row += 1
-
-        section("%s  (%d)" % (tr("Colors"), len(ral_colors)), fill_colors)
 
         def fill_items(grid, items):
             row = 0
@@ -2120,11 +2067,6 @@ class MaterialsPanel(QWidget):
         scene = self._window.viewport.scene
         mat = scene.materials.get(name)
         menu = QMenu(button)
-        if mat is not None:
-            from PySide6.QtCore import QTimer
-            menu.addAction(tr("Rename…"),
-                           lambda: QTimer.singleShot(
-                               0, lambda: self._ask_rename(name)))
         if color is not None:
             # The dialog opens once the menu has closed: a modal opened
             # inside the menu's own event loop came back without a colour.
@@ -2133,8 +2075,6 @@ class MaterialsPanel(QWidget):
                            lambda: QTimer.singleShot(
                                0, lambda: self._edit_named_color(name, color)))
         if mat is not None:
-            menu.addAction(tr("Edit PBR maps…"),
-                           lambda: QTimer.singleShot(0, lambda: self._edit_pbr(mat)))
             sub = menu.addMenu(tr("Finish for the render"))
             pic = (mat.texture or {}).get("path")
             guessed = fin.guess(name, pic and Path(pic).name, mat.opacity)
@@ -2152,61 +2092,6 @@ class MaterialsPanel(QWidget):
                     lambda _c=False, k=key: self._set_finish(name, k))
         if not menu.isEmpty():
             menu.exec(QCursor.pos())
-
-    def _edit_pbr(self, material):
-        from dataclasses import replace
-        from PySide6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QLineEdit
-        dialog = QDialog(self)
-        dialog.setWindowTitle(tr("PBR material") + " — " + material.name)
-        form = QFormLayout(dialog)
-        enabled = QCheckBox(tr("Use PBR shading"))
-        enabled.setChecked(True)
-        form.addRow(enabled)
-        recipe = dict(material.pbr or {})
-        fields = {}
-        for key, label, default in (("metallic", "Metallic", 0.), ("roughness", "Roughness", 1.),
-                                    ("normal_scale", "Normal scale", 1.), ("ao_strength", "AO strength", 1.)):
-            field = QDoubleSpinBox()
-            field.setRange(-1e6 if key == "normal_scale" else 0., 1e6 if key == "normal_scale" else 1.)
-            field.setDecimals(4)
-            field.setSingleStep(0.05)
-            field.setValue(recipe.get(key, default))
-            fields[key] = field
-            form.addRow(tr(label), field)
-        paths = {}
-        def browse(field):
-            path, _ = QFileDialog.getOpenFileName(dialog, tr("Choose map"))
-            if path:
-                field.setText(path)
-        for key, label in (("normal_map", "Normal map"), ("roughness_map", "Roughness map"),
-                           ("metallic_map", "Metallic map"), ("ao_map", "Occlusion map"),
-                           ("orm_map", "Packed ORM (overrides separate maps)")):
-            row = QHBoxLayout()
-            field = QLineEdit((recipe.get(key) or {}).get("path", ""))
-            field.setClearButtonEnabled(True)
-            button = QPushButton(tr("Browse…"))
-            button.clicked.connect(lambda _, f=field: browse(f))
-            row.addWidget(field)
-            row.addWidget(button)
-            form.addRow(tr(label), row)
-            paths[key] = field
-        flip = QCheckBox(tr("Flip normal map Y (DirectX)"))
-        flip.setChecked((recipe.get("normal_map") or {}).get("flip_y", False))
-        form.addRow(flip)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        form.addRow(buttons)
-        if dialog.exec():
-            recipe.update({key: field.value() for key, field in fields.items()})
-            for key, field in paths.items():
-                if field.text().strip():
-                    recipe[key] = {"path": field.text().strip()}
-                else:
-                    recipe.pop(key, None)
-            if flip.isChecked() and "normal_map" in recipe:
-                recipe["normal_map"]["flip_y"] = True
-            self._restamp(material.name, replace(material, pbr=recipe if enabled.isChecked() else None))
 
     def _set_finish(self, name: str, finish) -> None:
         from core.finish import LABELS
@@ -2286,24 +2171,6 @@ class MaterialsPanel(QWidget):
                      name=old_name)
         self._window.statusBar().showMessage(msg, 3000)
         return True
-
-    def _renamed(self, old_name: str, new_name: str) -> bool:
-        """Rename the model's material *old_name* to *new_name*."""
-        from core.materials import Material
-        old = self._window.viewport.scene.materials.get(old_name)
-        if old is None:
-            return False
-        return self._restamp(old_name, Material(
-            new_name, color=old.color, texture=old.texture,
-            opacity=old.opacity, finish=old.finish, pbr=old.pbr))
-
-    def _ask_rename(self, name: str) -> None:
-        """Right-click ▸ Rename… on a swatch of «In model»."""
-        new, ok = QInputDialog.getText(
-            self, tr("Rename material"), tr("New name:"), text=name)
-        new = new.strip() if ok else ""
-        if new and new != name:
-            self._renamed(name, new)
 
     def _on_name_edited(self) -> None:
         """The name field of «Active:» was confirmed. In the model: rename
@@ -2576,40 +2443,8 @@ class MaterialsPanel(QWidget):
 
     # ---- Recent ----------------------------------------------------------
     def recent_materials_changed(self) -> None:
-        """The Paint tool painted with a material: keep it and show it."""
+        """The Paint tool painted with a material: persist the updated list."""
         save_recent_materials(PaintTool.recent)
-        self._refresh_recent()
-
-    def _refresh_recent(self) -> None:
-        while self._recent_grid.count():
-            w = self._recent_grid.takeAt(0).widget()
-            if w is not None:
-                w.hide()
-                w.setParent(None)
-                w.deleteLater()
-        for entry in PaintTool.recent:
-            tex = entry.get("texture")
-            pm = (_texture_pixmap(tex["path"]) if tex
-                  else _color_pixmap(tuple(entry.get("color") or (1, 1, 1))))
-            if pm is None:
-                continue
-            label = entry.get("mat") or (
-                Path(tex["path"]).stem if tex else tr("Color"))
-            b = _swatch_button(pm, label)
-            b.clicked.connect(lambda _=False, e=entry: self._apply_recent(e))
-            self._recent_grid.addWidget(b)
-        shown = self._recent_grid.count() > 0
-        self._recent_heading.setVisible(shown)
-
-    def _apply_recent(self, entry: dict) -> None:
-        """Make a recent material the active paint, exactly as it was
-        painted: image with its size, turn and tint, or the colour; its
-        translucency and its name."""
-        from ingetrazo_core import pick_recent
-        pick_recent(self._window.viewport.scene, PaintTool, entry)
-        self._window._activate_tool("paint")
-        self._load_texture_fields()
-        self._refresh_preview()
 
     def sync_from_paint(self) -> None:
         """Mirror what the Paint tool holds NOW — called after the

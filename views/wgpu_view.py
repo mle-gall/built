@@ -873,18 +873,12 @@ class MetalView(ViewNavigation):
             before = time.perf_counter()
             w, h, scale = self.width(), self.height(), self.devicePixelRatioF()
             draw = self.tools.draw_annotations if annotations else None
-            if hasattr(self.renderer, "set_annotation_layer"):
-                from ingetrazo_render import AnnotationCanvas
-                layer = AnnotationCanvas(max(1, int(w * scale)), max(1, int(h * scale)), w)
-                wgpu_overlay.paint_layer(layer, primitives, draw)
-                if section_widgets:
-                    self._draw_section_widgets(layer)
-                self.renderer.set_annotation_layer(layer)
-            else:
-                image = wgpu_overlay.rasterize(primitives, w, h, scale, draw)
-                if section_widgets:
-                    self._paint_section_widgets(image)
-                self.renderer.set_overlay(image.width(), image.height(), wgpu_overlay.pixels(image))
+            from ingetrazo_render import AnnotationCanvas
+            layer = AnnotationCanvas(max(1, int(w * scale)), max(1, int(h * scale)), w)
+            wgpu_overlay.paint_layer(layer, primitives, draw)
+            if section_widgets:
+                self._draw_section_widgets(layer)
+            self.renderer.set_annotation_layer(layer)
             self.overlay_ms = (time.perf_counter() - before) * 1000
             self._had_overlay = annotations or bool(primitives) or section_widgets
         # End R3c-2a section widgets.
@@ -931,15 +925,6 @@ class MetalView(ViewNavigation):
         context._clip_segment_front = lambda a, b: DocumentInteraction._clip_segment_front(context, a, b)
         context._world_to_pixel = lambda p: DocumentInteraction._world_to_pixel(context, p)
         DocumentInteraction._draw_section_planes(context, painter)
-
-    def _paint_section_widgets(self, image):
-        from PySide6.QtGui import QPainter
-        painter = QPainter(image)
-        painter.setRenderHint(QPainter.Antialiasing)
-        try:
-            self._draw_section_widgets(painter)
-        finally:
-            painter.end()
 
     def render_image(self, width_px, height_px=None, overlays=False,
                      sharp_shadows=False, *, transparent=False, annotations_only=False,

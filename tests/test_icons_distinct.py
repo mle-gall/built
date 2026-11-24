@@ -24,8 +24,8 @@ def _pixels(icon):
 def test_every_tool_key_returns_a_drawn_icon(app):
     from views import icons
 
-    assert icons._DRAW, "no icons registered"
-    for key in icons._DRAW:
+    assert len(icons.KEYS) >= 144, "icons missing from the atlas"
+    for key in icons.KEYS:
         icon = icons.tool_icon(key)
         assert not icon.isNull(), key
         assert any(_pixels(icon)), f"{key} draws nothing"
@@ -44,8 +44,9 @@ def test_the_standard_views_are_all_different(app):
 def test_the_solid_tools_are_all_different(app):
     from views import icons
 
-    keys = list(icons._SOLID_ICONS)
-    assert len(keys) == 6
+    keys = ["outer_shell", "solid_union", "solid_subtract", "solid_trim",
+            "solid_intersect", "solid_split"]
+    assert set(keys) <= icons.KEYS
     drawn = {key: _pixels(icons.tool_icon(key)) for key in keys}
     assert len(set(drawn.values())) == len(keys)
 

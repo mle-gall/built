@@ -11,8 +11,6 @@ import importlib
 import itertools
 import math
 import os
-import inspect
-import re
 import sys
 import time as _time_mod
 import types
@@ -21,7 +19,6 @@ from pathlib import Path
 from typing import Optional
 from core.units import fmt_len as _fmt_len
 from core.units import typed_value_text as _typed_value_text
-from core.units import is_expression
 
 # Perf telemetry (INGETRAZO_PERF=1): every operation slower than 50 ms and a
 # once-per-second frame summary land in ~/ingetrazo-perf.log — the tool for
@@ -74,7 +71,10 @@ if not NATIVE:
 from views.paint_types import QColor, QFont, QPen, QPolygonF
 if not NATIVE:
     from PySide6.QtGui import QFontMetrics, QImage, QPainter
+import numpy as np
 import ingetrazo_core
+import ingetrazo_render
+from ingetrazo_render import document_value_key as _value_key
 from ingetrazo_core import ray_aabb_span as _ray_aabb_span
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D, Vec4 as QVector4D
 
@@ -1525,177 +1525,6 @@ def _parse_number(tok: str):
     refusing a number too long for a float or too big for a model (#185)."""
     from core.units import _number
     return _number(tok)
-
-
-def _is_chord(modifiers) -> bool:
-    """Ctrl or Alt held — a shortcut, not typing. Both together is AltGr on
-    Windows, which types characters, so that one still types."""
-    ctrl = bool(modifiers & Qt.ControlModifier)
-    alt = bool(modifiers & Qt.AltModifier)
-    return (ctrl or alt or bool(modifiers & Qt.MetaModifier)) \
-        and not (ctrl and alt)
-
-
-def _expression_result_text(value, plain: bool) -> str:
-    """What a calculation drew, for the value box: ``3.725 m``, or the
-    number alone for an angle or a factor (``plain``)."""
-    from core.units import localized
-
-    def one(v):
-        if plain:
-            return localized(f"{v:.6g}")
-        return _fmt_len(v)
-
-    if isinstance(value, tuple) and value and value[0] == "abs_len":
-        return _fmt_len(value[1])
-    if isinstance(value, tuple):
-        return "; ".join(one(v) for v in value)
-    return one(value)
-
-
-_VALUE_KEYS = {Qt.Key_Backspace: "backspace", Qt.Key_Escape: "escape"}
-
-
-def _value_accepts(vp, tool, text: str, buffer: str) -> dict:
-    """What the active ``tool`` takes besides lengths, for the Rust field.
-    Whether a copy waits for «x5» is only asked for a bare ``x``."""
-    arrays = bool(getattr(tool, "accepts_array", False))
-    pending = arrays and not buffer and text.lower() == "x" and vp._array_pending()
-    return dict(arrays=arrays, array_pending=bool(pending),
-                profile=hasattr(tool, "on_profile_value"),
-                comma_lists=bool(getattr(tool, "vcb_comma_lists", False)))
-
-
-def _value_claims(vp, text: str, buffer: str) -> bool:
-    from ingetrazo_core import value_claims
-    tool = vp.active_tool
-    zoom = tool is None and getattr(vp, "nav_mode", None) == "zoom"
-    accepts = _value_accepts(vp, tool, text, buffer)
-    accepts.pop("comma_lists")
-    return value_claims(buffer, text, tool is not None, zoom=zoom, **accepts)
-
-
-def _value_key(vp, ev) -> bool:
-    """One key for the value box of ``vp`` (a document view, or the Metal
-    view's tools): True when the box took it."""
-    from ingetrazo_core import value_key
-    tool = vp.active_tool
-    zoom = tool is None and getattr(vp, "nav_mode", None) == "zoom"
-    if tool is None and not zoom:
-        return False
-    key = ev.key()
-    if key in (Qt.Key_Return, Qt.Key_Enter):
-        return _enter_zoom_value(vp) if zoom else _enter_value(vp, tool)
-    typed = value_key(
-        vp._value_buffer, _VALUE_KEYS.get(key, ""), ev.text(),
-        chord=_is_chord(getattr(ev, "modifiers", lambda: Qt.NoModifier)()),
-        zoom=zoom, **({} if zoom else _value_accepts(vp, tool, ev.text(), vp._value_buffer)))
-    if typed is None:
-        return False
-    vp._set_value_buffer(typed)
-    return True
-
-
-def _flash_parse_error(vp, error: str, word: str) -> None:
-    from core.units import Parsed
-    vp.flash_status(Parsed(error=error, word=word).message(), 4000)
-
-
-def _enter_zoom_value(vp) -> bool:
-    """Enter with Zoom on: the lens first, then the box empties."""
-    if not vp._value_buffer:
-        return False
-    from ingetrazo_core import zoom_value_enter
-    typed, error, word = zoom_value_enter(vp._value_buffer)
-    if typed is None:
-        _flash_parse_error(vp, error, word)
-        return True
-    vp.apply_zoom_value(typed)
-    vp._set_value_buffer("")
-    return True
-
-
-def _hand_tagged_value(vp, tool, value) -> bool:
-    """A slope, a segment count, an array, a profile or a radius goes to
-    the tool that declares it (``on_<kind>_value``); True when ``value``
-    was one of them."""
-    kind = value[0] if isinstance(value, tuple) and value and isinstance(value[0], str) else None
-    if kind is None:
-        return False
-    if kind == "ratio":
-        # A slope typed as rise:run reaches angle tools as plain degrees.
-        if getattr(tool, "accepts_angle_ratio", False):
-            tool.on_value(vp, value[1])
-        return True
-    handler = getattr(tool, f"on_{kind}_value", None)
-    if handler is None:
-        return True
-    if kind != "array":
-        handler(vp, value[1])
-    elif len(value) <= 3:
-        handler(vp, value[1], value[2])
-    elif "step" in inspect.signature(handler).parameters:
-        handler(vp, value[1], value[2], step=value[3])
-    else:                                       # "5x10m" means nothing here
-        vp.flash_status(tr("Type the count alone here, e.g. 3x"))
-    return True
-
-
-def _enter_value(vp, tool) -> bool:
-    """Enter with a tool on: the Rust field reads the box, the tool takes
-    the value, and the box then shows what was drawn."""
-    from ingetrazo_core import value_enter
-    from core.units import typed_context, unitless_numbers
-    buffer = vp._value_buffer
-    unitless = getattr(tool, "value_is_unitless", None)
-    plain = callable(unitless) and unitless()
-    length = typed_context("length")
-    if plain:
-        # An angle, a factor or a count is not a length (#176).
-        with unitless_numbers():
-            bare = typed_context("length")[0]
-    else:
-        bare = length[0]
-    entry = value_enter(buffer, bool(getattr(tool, "vcb_comma_lists", False)),
-                        bare, length[1], length[0],
-                        bool(getattr(tool, "accepts_absolute_length", False)))
-    if entry is None:
-        return False
-    if entry[0] == "error":
-        # A calculation that doesn't add up stays in the box with the
-        # reason, to be fixed with Backspace.
-        _flash_parse_error(vp, entry[1], entry[2])
-        return True
-    if entry[0] == "clear":
-        vp._set_value_buffer("")
-        return True
-    _, value, absolute = entry
-    if _hand_tagged_value(vp, tool, value):
-        vp._set_value_buffer("")
-        return True
-    if absolute:
-        value = ("abs_len", value)              # Scale: "2m" is a size
-    # Did this value commit geometry? A chaining tool like Line stays busy
-    # once the segment exists, so "busy" is not "done": the typed length
-    # drops the arrow lock like the second click. A hot retype (typed right
-    # after a commit) replaces the stack's top: the model changed too (#859).
-    history = getattr(vp, "history", None)
-    before = len(history.undo_stack) if history is not None else 0
-    top = history.undo_stack[-1] if before else None
-    tool.on_value(vp, value)
-    drew = history is not None and len(history.undo_stack) > before
-    redrew = (not drew and before > 0 and len(history.undo_stack) == before
-              and history.undo_stack[-1] is not top)
-    vp._set_value_buffer("")
-    # The box shows what was drawn, read as the canvas showed it, not the
-    # preview from before the Enter (#607).
-    if drew or redrew:
-        if is_expression(buffer):
-            vp.measurementChanged.emit(_expression_result_text(value, plain))
-        else:
-            vp.measurementChanged.emit(buffer if plain else _typed_value_text(buffer))
-    vp._release_axis_lock_after_operation(committed=drew)
-    return True
 
 
 def _parse_length_field(field: str):
@@ -7520,9 +7349,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _np_mvp(self):
         """Current MVP as a (4, 4) float64 NumPy matrix (row-major indexing).
         ``QMatrix4x4.data()`` is column-major, hence the Fortran reshape."""
-        import numpy as np
         m = self.camera.projection_matrix() * self.camera.view_matrix()
-        return np.array(m.data(), dtype=np.float64).reshape(4, 4, order="F")
+        return np.asarray(m.data(), dtype=np.float64).reshape(4, 4, order="F")
 
     def _camera_px(self):
         """``(mvp, width, height)``: what the native pick kernels project
@@ -7533,11 +7361,9 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _project_px(self, pts):
         """Batch world points (N, 3) → ``(px, py, in_front)`` arrays — the
         exact math of :meth:`_world_to_pixel` (``ingetrazo_core.project_px``)."""
-        import numpy as np
-        from ingetrazo_core import project_px
-        return project_px(np.ascontiguousarray(pts, dtype=np.float64).reshape(-1, 3),
-                          list(self._np_mvp().reshape(-1, order="F")),
-                          float(self.width()), float(self.height()))
+        points = np.ascontiguousarray(pts, dtype=np.float64).reshape(-1, 3)
+        matrix = self._np_mvp().ravel(order="F").tolist()
+        return ingetrazo_core.project_px(points, matrix, float(self.width()), float(self.height()))
 
     @staticmethod
     def _frustum_planes(mvp):
@@ -7865,71 +7691,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return False
 
     def _gedge_screen(self):
-        """Screen-projected endpoints of every group hard edge —
-        ``(ax, ay, bx, by, ok)`` arrays, cached until the scene or the
-        camera moves. Shared by pick_group's edge fallback and the snap
-        prefilter (during a drawing hover the camera is still, so the two
-        big projections run once, not per mouse move)."""
-        import numpy as np
-        idx = self._pick_index(near="skip")
-        if idx.gedge_a is None or not len(idx.gedge_a):
-            return None
-        M = self._np_mvp()
-        # The rest-of-model mode changes WHICH edges the index holds
-        # (hidden surroundings leave it), so it keys the projection too.
-        key = (id(idx.gedge_a), id(self.scene.mesh), M.tobytes(),
-               self.width(), self.height(),
-               getattr(self, "_edit_rest_mode", None))
-        cached = getattr(self, "_gedge_px_cache", None)
-        # The array itself, not only its id(): a rebuilt index's edges can
-        # be given the address of the ones they replaced.
-        if (cached is not None and cached[0] == key and len(cached) > 2
-                and cached[2] is idx.gedge_a):
-            return cached[1]
-        # A hover that brings new lazy placements in rebuilds the index:
-        # the fixed part's edges lead it unchanged and each lazy chunk
-        # keeps its edge array, so only what is new to this view is
-        # projected (all 1.6 M edges, four times a mouse move with Line
-        # beside the plant of #158).
-        fx = getattr(idx, "gedge_fixed", None)
-        head = getattr(self, "_gedge_px_head", None)
-        vkey = key[1:]
-        if fx is None or fx[1] + sum(map(len, fx[2])) != len(idx.gedge_a):
-            ax, ay, oka = self._project_px(idx.gedge_a)
-            bx, by, okb = self._project_px(idx.gedge_b)
-            data = (ax, ay, bx, by, oka & okb)
-        else:
-            n = fx[1]
-            if (head is None or head[0] != vkey or head[1] is not fx[0]
-                    or head[2] != n):
-                ax, ay, oka = self._project_px(idx.gedge_a[:n])
-                bx, by, okb = self._project_px(idx.gedge_b[:n])
-                head = self._gedge_px_head = (vkey, fx[0], n,
-                                              (ax, ay, bx, by, oka & okb))
-            memo = getattr(self, "_gedge_px_pieces", None)
-            if memo is None or memo[0] != vkey:
-                memo = self._gedge_px_pieces = (vkey, {})
-            pieces, todo = memo[1], []
-            for ge in fx[2]:
-                hit = pieces.get(id(ge))
-                if hit is None or hit[0] is not ge:
-                    todo.append(ge)
-            if todo:
-                # The new chunks in one projection, split back after.
-                flat = np.concatenate([ge.reshape(-1, 3) for ge in todo])
-                x, y, ok = self._project_px(flat)
-                o = 0
-                for ge in todo:
-                    m = 2 * len(ge)
-                    sx, sy, sk = x[o:o + m], y[o:o + m], ok[o:o + m]
-                    pieces[id(ge)] = (ge, (sx[0::2], sy[0::2], sx[1::2],
-                                           sy[1::2], sk[0::2] & sk[1::2]))
-                    o += m
-            parts = [head[3]] + [pieces[id(ge)][1] for ge in fx[2]]
-            data = tuple(np.concatenate([p[k] for p in parts])
-                         for k in range(5))
-        self._gedge_px_cache = (key, data, idx.gedge_a)
-        return data
+        return ingetrazo_core.gedge_screen(self)
 
     #: The group-edge distances' contract with their two readers (the
     #: hovered-edge pick, within ``pick_threshold_px``; the snap prefilter,
@@ -7949,1044 +7711,92 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     GEDGE_GRID_MIN = 20000
 
     def _gedge_dist(self, px: float, py: float):
-        """Screen distance from the cursor to every group hard edge, shared
-        by the hovered-edge pick and the snap prefilter (both used to
-        compute it); see ``GEDGE_NEAR_PX`` for how far it is exact.
-
-        On a 330 k-face city the full pass was ~30 ms of every mouse move
-        for the few dozen edges that matter. A camera that stays put for a
-        second hover gets the edges binned into a screen grid (once — the
-        projection's own lifetime), and each move then measures the cells
-        around the cursor: 0.2 ms zoomed onto a building, ~2 ms with the
-        whole city in view (11 edges per pixel: the near radius already
-        holds hundreds). The grid lives as long as the projection: the
-        first hover of a projection keeps the full pass, so one that
-        changes every event (the camera moving) never pays for a grid it
-        would use once. City-L, the interaction benchmark: hover with Line
-        103 -> 60 ms, a Move drag 101 -> 49 ms per event (median)."""
-        import numpy as np
-        from core.edge_grid import EdgeGrid, segment_distances
-        proj = self._gedge_screen()
-        # Whole pixels: the hovered-edge pick gets the float position and
-        # the snap scene the rounded one — the same pass must serve both.
-        key = (id(proj), int(round(px)), int(round(py)))
-        cached = getattr(self, "_gedge_dist_cache", None)
-        if (cached is not None and cached[0] == key and len(cached) > 2
-                and cached[2] is proj):
-            return cached[1]
-        ax, ay, bx, by, ok = proj
-        d = None
-        if (not _NO_SNAP_FAST and len(ax) >= DocumentInteraction.GEDGE_GRID_MIN
-                and getattr(self, "pick_threshold_px", 0.0)
-                <= DocumentInteraction.GEDGE_REACH_PX):
-            # (projection, grid or None): the grid waits for the second hover.
-            slot = getattr(self, "_gedge_grid_cache", None)
-            if slot is None or slot[0] is not proj:
-                self._gedge_grid_cache = (proj, None)
-            else:
-                grid = slot[1]
-                if grid is None:
-                    grid = EdgeGrid(ax, ay, bx, by, ok, self.width(),
-                                    self.height(), DocumentInteraction.GEDGE_REACH_PX)
-                    self._gedge_grid_cache = (proj, grid)
-                near_px = max(DocumentInteraction.GEDGE_NEAR_PX,
-                              getattr(self, "pick_threshold_px", 0.0))
-                for reach in (near_px, DocumentInteraction.GEDGE_REACH_PX):
-                    ids = grid.near(px, py, reach)
-                    if ids is None:
-                        break
-                    sub = segment_distances(ax, ay, bx, by, ok, px, py, ids)
-                    if (reach >= DocumentInteraction.GEDGE_REACH_PX
-                            or int((sub < reach).sum()) >= DocumentInteraction.GEDGE_ENOUGH):
-                        d = np.full(len(ax), np.inf)
-                        d[ids] = sub
-                        break
-        if d is None:
-            d = segment_distances(ax, ay, bx, by, ok, px, py)
-        self._gedge_dist_cache = (key, d, proj)
-        return d
+        return ingetrazo_core.gedge_dist(self, px, py)
 
     def _ledge_screen(self):
-        """Screen-projected endpoints of every loose edge — the
-        ``_gedge_screen`` twin for the snap prefilter after an explode
-        leaves a big loose mesh. While a context is open the rest of the
-        model's loose edges ride along (see ``_outer_loose_meshes``); their
-        ``edge_sel`` is False, so picks and the box leave them alone.
-        Cached until the scene/camera moves."""
-        idx = self._pick_index(near="skip")
-        if idx.edge_a is None or not len(idx.edge_a):
-            return None
-        M = self._np_mvp()
-        # Whether the rest of the model's loose edges are in the index
-        # changes with «Hide rest of model», which bumps no scene version.
-        key = (_content_ver(self), id(self.scene.mesh), M.tobytes(),
-               self.width(), self.height(),
-               bool(getattr(self, "_rest_is_hidden", lambda: False)()))
-        cached = getattr(self, "_ledge_px_cache", None)
-        if cached is not None and cached[0] == key:
-            return cached[1]
-        ax, ay, oka = self._project_px(idx.edge_a)
-        bx, by, okb = self._project_px(idx.edge_b)
-        data = (ax, ay, bx, by, oka & okb)
-        self._ledge_px_cache = (key, data)
-        return data
+        return ingetrazo_core.ledge_screen(self)
 
     def _nearby_loose_edges(self, px: float, py: float,
                             radius_px: float = 64.0, cap: int = 400) -> list:
-        """The loose edges whose screen segment passes near the cursor —
-        real Edge objects, nearest first, at most ``cap``."""
-        proj = self._ledge_screen()
-        if proj is None:
-            return []
-        import numpy as np
-        ax, ay, bx, by, ok = proj
-        if not ok.any():
-            return []
-        dx, dy = bx - ax, by - ay
-        l2 = dx * dx + dy * dy
-        safe = np.where(l2 > 1e-12, l2, 1.0)
-        t = np.clip(((px - ax) * dx + (py - ay) * dy) / safe, 0.0, 1.0)
-        d = np.hypot(ax + t * dx - px, ay + t * dy - py)
-        d = np.where(ok, d, np.inf)
-        cand = np.where(d < radius_px)[0]
-        if len(cand) > cap:
-            cand = cand[np.argsort(d[cand])[:cap]]
-        idx = self._pick_index(near="skip")
-        edges = idx.edges
-        n = len(edges)
-        return [edges[int(i)] for i in cand if int(i) < n]
+        return ingetrazo_core.nearby_loose_edges(self, px, py, radius_px, cap)
 
     def _nearby_group_edges(self, px: float, py: float,
                             radius_px: float = 48.0, cap: int = 48) -> list:
-        """Group hard edges whose screen-space segment passes within
-        ``radius_px`` of the cursor, as :class:`_SnapEdge` pseudo-edges —
-        at most ``cap``, nearest first. Vectorised prefilter:
-        ``compute_snap`` walks its edge list in Python several times per
-        hover, so feeding it ALL 160k edges of an import would freeze every
-        mouse move; the ~dozens near the cursor cover the point/edge snaps
-        the user can actually see."""
-        # The placements near THIS pixel enter the index first (lazy mode,
-        # #158): the projection below reads the index as it stands, and the
-        # edges are read from that same one. Asking again bakes more and
-        # reorders the lazy part: the measured positions then pointed at
-        # other edges, or past the end (the SPR, hovering with Line).
-        nat = (self._lazy_native() if hasattr(self, "_lazy_native")
-               else None)
-        if (nat is not None and radius_px <= DocumentInteraction.GEDGE_REACH_PX
-                and cap <= DocumentInteraction.GEDGE_ENOUGH):
-            return self._nearby_edges_unbaked(px, py, radius_px, cap, nat)
-        idx = self._pick_index(near=("snap", px, py))
-        proj = self._gedge_screen()
-        if proj is None:
-            return []
-        import numpy as np
-        if not proj[4].any():
-            return []
-        dist = getattr(self, "_gedge_dist", None)          # stub VPs in tests
-        if radius_px > DocumentInteraction.GEDGE_REACH_PX or cap > DocumentInteraction.GEDGE_ENOUGH:
-            # Past what _gedge_dist promises (GEDGE_NEAR_PX): every edge.
-            from core.edge_grid import segment_distances
-            d = segment_distances(*proj, px, py)
-        else:
-            d = (dist(px, py) if dist is not None
-                 else DocumentInteraction._gedge_dist(self, px, py))
-        cand = np.where(d < radius_px)[0]
-        if len(cand) > cap:
-            # The nearest ``cap`` first, then those in order: sorting all
-            # of them was 90 ms a move with the whole plant of #158 in view
-            # (half a million edges inside the radius).
-            dc = d[cand]
-            if len(cand) > 4 * cap:
-                part = np.argpartition(dc, cap - 1)[:cap]
-                cand, dc = cand[part], dc[part]
-            cand = cand[np.lexsort((cand, dc))[:cap]]
-        return [_group_pseudo_edge(idx, int(i)) for i in cand]
+        return ingetrazo_core.nearby_group_edges(self, px, py, radius_px, cap)
 
     def _nearby_edges_unbaked(self, px, py, radius, cap, nat,
                               with_d=False) -> list:
-        """``_nearby_group_edges`` with the lazy placements' edges from the
-        native engine, none of them baked (#158): the fixed placements'
-        edges as the index holds them, those of the placements the snap's
-        footprint takes in as their bakes would hold them — the nearest
-        ``cap`` within ``radius`` px, nearest first (with their distances
-        as ``(d, edge)`` when ``with_d``).
-
-        Within one input event the cursor's own edge (``pick_edge_any``:
-        the nearest under the pick threshold) and the snap's (the nearest
-        48 within 48 px) are both read off one search of the wider: by
-        distance, then fixed before lazy, then index or (candidate, edge),
-        the order is total, so the nearest ``cap`` within ``radius`` are
-        those of the wider within it. Over the plant of #158 each search
-        was ~10 ms, twice a pointer move."""
-        wide, ncap = DocumentInteraction.GEDGE_SHARED_PX, DocumentInteraction.GEDGE_ENOUGH
-        serial = getattr(self, "_input_serial", None)
-        if (not _EDGES_SHARED or serial is None or not radius <= wide
-                or not 0 < cap <= ncap):
-            out = self._nearby_edges_found(px, py, radius, cap, nat)
-        else:
-            key = (serial, float(px), float(py), id(nat[0]), id(nat[1]),
-                   self._placements_epoch(),
-                   getattr(self.scene, "version", None),
-                   tuple(self._np_mvp().ravel()), self.width(),
-                   self.height(), id(self._pick_index(near="skip")),
-                   id(self._gedge_screen()),
-                   id(getattr(self, "_depth_snap", None)))
-            memo = getattr(self, "_edges_near_shared", None)
-            if memo is None or memo[0] != key:
-                memo = self._edges_near_shared = (key, self._nearby_edges_found(
-                    px, py, wide, ncap, nat))
-            out = [(d, _copy_snap_edge(e)) for d, e in memo[1]
-                   if d < radius][:cap]
-        return out if with_d else [e for _d, e in out]
+        return ingetrazo_core.nearby_edges_unbaked(self, px, py, radius, cap, nat, with_d)
 
     def _nearby_edges_found(self, px, py, radius, cap, nat) -> list:
-        """_nearby_edges_unbaked's search: ``(d, edge)``, nearest first."""
-        import numpy as np
-        iset, snap, _vis = nat
-        idx = self._pick_index(near="skip")
-        fx = getattr(idx, "gedge_fixed", None)
-        m = fx[1] if fx is not None else 0
-        out = []                           # (d, edge)
-        if m and self._gedge_screen() is not None:
-            d = self._gedge_dist(px, py)[:m]
-            cand = _nearest_within(d, radius, cap)
-            out += [(float(d[i]), _group_pseudo_edge(idx, int(i)))
-                    for i in cand]
-        table = self._pick_lazy_table()
-        rows = self._footprint_need(table, float(px), float(py), radius)
-        rows = rows[np.isin(rows, snap)] if len(rows) else rows
-        if len(rows):
-            M = self._np_mvp()
-            pl, _e, a, b, d = iset.edges_near(
-                np.ascontiguousarray(rows, np.int64),
-                np.ascontiguousarray(M.T).ravel().tolist(),
-                float(self.width()), float(self.height()), float(px),
-                float(py), float(radius), int(cap))
-            groups = table[0]
-            for i, aa, bb, dd in zip(pl.tolist(), a.tolist(), b.tolist(),
-                                     d.tolist()):
-                owner = self._owner_of(groups[i])
-                out.append((dd, _SnapEdge(
-                    QVector3D(*aa), QVector3D(*bb), in_group=True,
-                    context=_snap_context_of(self, groups[i]), group=owner)))
-        out.sort(key=lambda de: de[0])        # stable: the fixed ones first
-        return out[:cap]
+        return ingetrazo_core.nearby_edges_found(self, px, py, radius, cap, nat)
 
     def _pick_group_edge_unbaked(self, px, py, nat):
-        """pick_group's edge fallback with the lazy placements' edges from
-        the engine, none baked (#158): ``(d, owner)`` of the nearest group
-        edge within the pick threshold that a pick may land on and the
-        user can see, or ``(threshold, None)``."""
-        import numpy as np
-        best = self.pick_threshold_px
-        idx = self._pick_index(near="skip")
-        cands = []                         # (d, a, b, t, owner)
-        fx = getattr(idx, "gedge_fixed", None)
-        m = fx[1] if fx is not None else 0
-        proj = self._gedge_screen() if m else None
-        if proj is not None:
-            ax, ay, bx, by, ok = (v[:m] for v in proj)
-            dx, dy = bx - ax, by - ay
-            l2 = dx * dx + dy * dy
-            safe = np.where(l2 > 1e-12, l2, 1.0)
-            t = np.clip(((px - ax) * dx + (py - ay) * dy) / safe, 0.0, 1.0)
-            d = np.hypot(ax + t * dx - px, ay + t * dy - py)
-            sel = getattr(idx, "gedge_sel", None)
-            if sel is not None:
-                ok = ok & sel[:m]
-            d = np.where(ok, d, np.inf)
-            near = np.where(d < best)[0]
-            for i in near[np.argsort(d[near], kind="stable")]:
-                cands.append((float(d[i]), QVector3D(*idx.gedge_a[i]),
-                              QVector3D(*idx.gedge_b[i]), float(t[i]),
-                              idx.gedge_groups[int(idx.gedge_gi[i])]))
-        table = self._pick_lazy_table()
-        rows = self._footprint_need(table, float(px), float(py), best)
-        if len(rows):
-            rows = rows[np.isin(rows, DocumentInteraction._lazy_sel_rows(self, nat))]
-        if len(rows):
-            M = self._np_mvp()
-            pl, _e, a, b, d = nat[0].edges_near(
-                np.ascontiguousarray(rows, np.int64),
-                np.ascontiguousarray(M.T).ravel().tolist(),
-                float(self.width()), float(self.height()), float(px),
-                float(py), float(best), int(DocumentInteraction.GEDGE_ENOUGH))
-            if len(pl):
-                # Where along each the cursor is, as the index's
-                # projection of it reads it.
-                ex, ey, _ok = self._project_px(
-                    np.concatenate([np.asarray(a, np.float64),
-                                    np.asarray(b, np.float64)]))
-                n = len(pl)
-                ax, ay, bx, by = ex[:n], ey[:n], ex[n:], ey[n:]
-                dx, dy = bx - ax, by - ay
-                l2 = dx * dx + dy * dy
-                safe = np.where(l2 > 1e-12, l2, 1.0)
-                t = np.clip(((px - ax) * dx + (py - ay) * dy) / safe,
-                            0.0, 1.0)
-                groups = table[0]
-                for k, i in enumerate(pl.tolist()):
-                    cands.append((float(d[k]), QVector3D(*a[k]),
-                                  QVector3D(*b[k]), float(t[k]),
-                                  self._owner_of(groups[i])))
-        cands.sort(key=lambda c: c[0])         # stable: the fixed ones first
-        for dd, a, b, t, owner in cands:
-            if not self._is_occluded(a + (b - a) * t):
-                return dd, owner
-        return best, None
+        return ingetrazo_core.pick_group_edge_unbaked(self, px, py, nat)
 
     def pick_edge_any(self, screen_x: float, screen_y: float):
-        """The edge under the cursor, loose OR a group's (as a world
-        pseudo-edge with ``in_group``), nearest first — what the linear
-        inferences hover: parallel / perpendicular to a component's edge,
-        the reference lock, Push/Pull level with it (groups are read
-        from outside without opening them).
-
-        The loose half is picked with the SNAP rule, not the click one: the
-        rest of the model drawn around an open group / component is a
-        reference too, even though a click cannot select it."""
-        loose = self._pick_edge(screen_x, screen_y, visible_only=False,
-                                which="snap")
-        nat = (self._lazy_native() if hasattr(self, "_lazy_native")
-               else None)
-        if nat is not None:
-            # The nearest group edge under the threshold, fixed or lazy
-            # (see _nearby_edges_unbaked), against the loose one as below.
-            near = self._nearby_edges_unbaked(screen_x, screen_y,
-                                              self.pick_threshold_px, 1, nat,
-                                              with_d=True)
-            if not near:
-                return loose
-            dg, g = near[0]
-            if loose is not None:
-                pa = self._world_to_pixel(loose.a)
-                pb = self._world_to_pixel(loose.b)
-                if pa is not None and pb is not None:
-                    from core.snap import _closest_on_segment_2d
-                    dl, _t = _closest_on_segment_2d((screen_x, screen_y),
-                                                    pa, pb)
-                    if dl <= dg:
-                        return loose
-            return g
-        # The index this pixel asks for, then its projection: the edge is
-        # read from the index it was measured on (see _nearby_group_edges).
-        idx = self._pick_index(near=("px", screen_x, screen_y))
-        proj = self._gedge_screen()
-        if proj is None:
-            return loose
-        import numpy as np
-        ax, ay, bx, by, ok = proj
-        if not ok.any():
-            return loose
-        d = self._gedge_dist(screen_x, screen_y)
-        i = int(np.argmin(d))
-        if d[i] >= self.pick_threshold_px:
-            return loose
-        if loose is not None:
-            pa = self._world_to_pixel(loose.a)
-            pb = self._world_to_pixel(loose.b)
-            if pa is not None and pb is not None:
-                from core.snap import _closest_on_segment_2d
-                dl, _t = _closest_on_segment_2d((screen_x, screen_y), pa, pb)
-                if dl <= d[i]:
-                    return loose
-        return _group_pseudo_edge(idx, i)
+        return ingetrazo_core.pick_edge_any(self, screen_x, screen_y)
 
     #: How close (px) the cursor must come to a component's origin or an
     #: arc's midpoint for it to enter the snap scene at all.
     POINT_INFERENCE_PX = 40.0
 
     def _component_origin_points(self, px: float, py: float) -> list:
-        """The "Component Origin Point": each placed group's own
-        origin (its insertion point), as a degenerate pseudo-edge when it
-        lies near the cursor. One projection per placement."""
-        import numpy as np
-        cache = getattr(self, "_corigin_cache", None)
-        # The content's version: a view-only bump (a hover's highlight, a
-        # click) moves no origin — 21 000 of them re-mapped a mouse move.
-        key = (_content_ver(self), id(self.scene.edit_group))
-        if cache is None or cache[0] != key:
-            groups, pts = [], []
-            for g in self._placements():
-                xf = getattr(g, "xform", None)
-                if xf is None or getattr(g, "billboard", False):
-                    continue
-                o = xf.map(QVector3D(0.0, 0.0, 0.0))
-                groups.append(g)
-                pts.append((o.x(), o.y(), o.z()))
-            cache = (key, groups, np.array(pts, dtype=np.float64).reshape(-1, 3))
-            self._corigin_cache = cache
-        _k, groups, pts = cache
-        if not len(pts):
-            return []
-        sx, sy, ok = self._project_px(pts)
-        d = np.where(ok, np.hypot(sx - px, sy - py), np.inf)
-        moving = getattr(self.active_tool, "_group", None)
-        out: list = []
-        near = np.flatnonzero(d <= self.POINT_INFERENCE_PX)
-        cap = DocumentInteraction.GEDGE_ENOUGH
-        if len(near) > cap:
-            # The nearest ones, as with the group edges: with the whole
-            # plant of #158 in view 17 000 origins fell inside the radius
-            # and the snap weighed each in Python (~0.1 s a mouse move).
-            near = near[np.lexsort((near, d[near]))[:cap + 1]]
-        for i in near:
-            if groups[i] is moving:
-                continue
-            if len(out) >= cap:
-                break
-            o = QVector3D(*pts[i])
-            out.append(_SnapEdge(o, QVector3D(o), component_origin=True,
-                                 context=_snap_context_of(self, groups[i])))
-        return out
+        return ingetrazo_core.component_origin_points(self, px, py)
 
     def _arc_midpoints(self, px: float, py: float) -> list:
-        """The "Arc Midpoint": the middle of each loose arc's sweep
-        (the point on the arc bisecting its two ends — not any facet's
-        midpoint). Closed curves (circles) have none. Computed once per
-        scene version, offered when near the cursor."""
-        cache = getattr(self, "_arc_mid_cache", None)
-        # On the content, not the version: a click's selection bump made
-        # every placement's midpoints over again.
-        ckey = (_content_ver(self), id(self.scene.mesh),
-                id(self.scene.edit_group),
-                bool(getattr(self, "_rest_is_hidden", lambda: False)()))
-        if cache is None or cache[0] != ckey:
-            # Per MESH, keyed by its mutation serial: a scene version bump
-            # (every frame of a drag) used to walk every prototype's curves
-            # again — 31 ms a frame while moving a face (2026-09-14). Now a
-            # mesh's midpoints are recomputed only when that mesh changed;
-            # the version pass only maps them through the placements.
-            by_mesh = getattr(self, "_arc_mid_by_mesh", None)
-            if by_mesh is None:
-                by_mesh = self._arc_mid_by_mesh = {}
-            # Only the meshes met in this pass are kept. Emptying the whole
-            # memo past 2 048 meshes emptied it on EVERY pass on a model
-            # with more (2 721 on the plant of #158): all of them were
-            # worked out again, ~0.5 s of the first hover after an edit.
-            seen: dict = {}
-
-            def local_mids(mesh):
-                serial = getattr(mesh, "_mut_serial", None)
-                hit = seen.get(id(mesh)) or by_mesh.get(id(mesh))
-                if hit is None or hit[0] != serial or hit[2] is not mesh:
-                    hit = (serial, self._mesh_arc_midpoints(mesh), mesh)
-                seen[id(mesh)] = hit
-                return hit[1]
-            mids = [(m, None) for m in local_mids(self.scene.mesh)]
-            # …the root loose mesh drawn around an open context (a reference
-            # outside it), in its own world coordinates…
-            outer_of = getattr(self, "_outer_loose_meshes", None)
-            for om in (outer_of() if outer_of is not None else ()):
-                mids += [(m, "outside") for m in local_mids(om)]
-            # …and the arcs inside every placed group / component, through
-            # each placement's matrix.
-            for g in self._placements():
-                mesh = getattr(g, "mesh", None)
-                if mesh is None or getattr(g, "billboard", False):
-                    continue
-                lm = local_mids(mesh)
-                if not lm:
-                    continue
-                xf = getattr(g, "xform", None)
-                ctx = _snap_context_of(self, g)
-                mids += [(xf.map(m) if xf is not None else QVector3D(m), ctx)
-                         for m in lm]
-            self._arc_mid_by_mesh = seen
-            cache = (ckey, mids)
-            self._arc_mid_cache = cache
-        out: list = []
-        for m, ctx in cache[1]:
-            pc = self._world_to_pixel(m)
-            if pc is None or math.hypot(pc[0] - px, pc[1] - py) > self.POINT_INFERENCE_PX:
-                continue
-            out.append(_SnapEdge(QVector3D(m), QVector3D(m),
-                                 arc_midpoint=True, context=ctx))
-        return out
+        return ingetrazo_core.arc_midpoints(self, px, py)
 
     @staticmethod
     def _mesh_arc_midpoints(mesh) -> list:
-        """The sweep midpoint of every open curve chain of ``mesh`` (in the
-        mesh's own space)."""
-        from core.snap import arc_sweep_midpoint
-        from core.lazy_mesh import plan_of
-        plan = plan_of(mesh)
-        by_curve: dict = {}
-        if plan is not None:
-            # A lazy mesh: its curves from the planned edges, the same
-            # chains in the same order, nothing built.
-            # (only the curve edges listed: listing all of them was
-            # most of the first hover over the plant of #158)
-            curved = _plan_curved_edges(plan)
-            ab = plan.edges[curved].tolist()
-            for k, i in enumerate(curved.tolist()):
-                by_curve.setdefault(plan.curve[i], []).append(ab[k])
-        else:
-            for e in mesh.edges:
-                cid = getattr(e, "curve", None)
-                if cid is not None:
-                    by_curve.setdefault(cid, []).append(e)
-        mids = []
-        for edges in by_curve.values():
-            degree: dict = {}
-            pos: dict = {}
-            for e in edges:
-                if plan is not None:
-                    for v in e:
-                        degree[v] = degree.get(v, 0) + 1
-                        if v not in pos:
-                            pos[v] = QVector3D(*plan.pos[v])
-                    continue
-                for v in (e.v0, e.v1):
-                    degree[element_identity(v)] = degree.get(element_identity(v), 0) + 1
-                    pos[element_identity(v)] = v.position
-            ends = [pos[k] for k, n in degree.items() if n == 1]
-            if len(ends) != 2 or len(pos) < 3:
-                continue                     # a circle, or not a chain
-            mid = arc_sweep_midpoint(list(pos.values()))
-            if mid is not None:
-                mids.append(mid)
-        return mids
+        return ingetrazo_core.mesh_arc_midpoints(mesh)
 
     def _billboard_placements(self) -> list:
-        """The face-me placements of ``_placements()``, kept while it is:
-        walking the 21 406 placements of #158 for the two of them was
-        ~2 ms of every pointer move."""
-        groups = self._placements()
-        epoch_of = getattr(self, "_placements_epoch", None)
-        if epoch_of is None:                         # stub viewports
-            return [g for g in groups if getattr(g, "billboard", False)]
-        key = (epoch_of(), id(groups), len(groups))
-        memo = getattr(self, "_billboard_memo", None)
-        if memo is None or memo[0] != key or memo[1] is not groups:
-            memo = self._billboard_memo = (
-                key, groups,
-                [g for g in groups if getattr(g, "billboard", False)])
-        return memo[2]
+        return ingetrazo_core.billboard_placements(self)
 
     def _billboard_snap_edges(self) -> list:
-        """The one snap a face-me billboard offers: its FEET, the anchor
-        point, as a degenerate pseudo-edge (a point, like a guide point) —
-        enough to place a figure or measure from where it stands. It used
-        to offer its base edge and vertical axis too (corners, midpoints,
-        head, and two whole lines to ride), and the scale figure beside the
-        origin stole the inference from the drawing around it («me está
-        cogiendo el paisano», Rafael, revision 4; Marco: «siempre toma
-        protagonismo»). The group a transform tool is currently dragging is
-        excluded (it would snap to itself)."""
-        moving = getattr(self.active_tool, "_group", None)
-        out: list = []
-        for g in self._billboard_placements():
-            if g is moving:
-                continue
-            if not self.scene.group_snappable(g):
-                continue
-            quad = self._billboard_quad(g)
-            if quad is None:
-                continue
-            c = quad[0]
-            feet = (c[0] + c[1]) * 0.5
-            out.append(_SnapEdge(QVector3D(feet), QVector3D(feet), figure=True))
-        return out
+        return ingetrazo_core.billboard_snap_edges(self)
 
     def _snap_scene(self, px: Optional[float] = None,
                     py: Optional[float] = None):
-        """The scene the snap engine sees: loose edges, construction guides as
-        pseudo-edges (``Guide.a/.b`` span the long segment), and — when the
-        cursor position is given — the group edges near it plus the face-me
-        billboard anchors, so drawing and dimensioning over an imported
-        reference model snaps to its corners and edges.
-
-        Loose edges the scene itself says are not there (hidden, or on a
-        hidden layer) are left out — see :func:`_snap_dropped_loose`."""
-        # Guide lines are clipped to the part in front of the camera so the
-        # snap engine gets projectable endpoints (an endpoint behind the eye
-        # used to kill on-line snapping in ordinary 3D views); guide POINTS
-        # snap as degenerate pseudo-edges, exactly like survey points.
-        lines = []
-        circles = []
-        # Guides that Move is dragging pass through the cursor: left out,
-        # or the cursor locks onto its own guide (#627).
-        moving = getattr(self.active_tool, "moving_guide_ids", None)
-        moving = moving() if callable(moving) else ()
-        for g in shown_guides(self.scene):
-            if id(g) in moving:
-                continue
-            if getattr(g, "is_circle", False):
-                circles.append(g)   # rim is resolved in compute_snap; centre below
-                continue
-            if g.is_line:
-                seg = self._guide_snap_segment(g)
-                if seg is not None:
-                    lines.append(_SnapEdge(*seg, guide=True))
-            else:
-                lines.append(_SnapEdge(QVector3D(g.point), QVector3D(g.point)))
-        # Reference-image borders snap like guides: aligning a scan against
-        # real geometry (or drawing to its edge) is what tracing needs.
-        for im in getattr(self.scene, "image_planes", None) or []:
-            if getattr(im, "locked", False) or not self.scene.entity_selectable(im):
-                continue
-            for a, b in im.border_edges():
-                seg = self._clip_segment_front(a, b)
-                if seg is not None:
-                    lines.append(_SnapEdge(*seg))
-        near = self._nearby_group_edges(px, py) if px is not None else []
-        # What a transform tool is dragging must not attract snaps (the
-        # entities in motion stay out of inference; issue #19): the
-        # tool names the edges/groups in motion and they are dropped here.
-        excl = getattr(self.active_tool, "snap_excluded", None)
-        excl = excl() if callable(excl) else None
-        if excl is not None and excl[1]:
-            near = [e for e in near
-                    if id(getattr(e, "group", None)) not in excl[1]]
-        if px is not None:
-            near += self._billboard_snap_edges()
-            origins = getattr(self, "_component_origin_points", None)   # stub VPs in tests
-            if origins is not None:
-                near += origins(px, py)
-            arcs = getattr(self, "_arc_midpoints", None)
-            if arcs is not None:
-                near += arcs(px, py)
-        box_pts = self._selection_box_points()
-        if excl is not None and excl[1]:
-            # A selected group's box corners are the group itself: Scale
-            # dragging it must not land its grip on its own box (#233).
-            box_pts = self._selection_box_points(skip=excl[1])
-        near += box_pts
-        valid = getattr(self, "_valid_center_ref", None)   # stub VPs in tests
-        ref = valid() if callable(valid) else None
-        if ref is not None:
-            # No dot, no snap: a circle too small on screen keeps quiet.
-            pc = self._world_to_pixel(ref[0])
-            hint = getattr(self, "_center_hint_px", None)
-            if pc is not None and (hint is None or hint(ref, pc) > 0.0):
-                near.append(_SnapEdge(QVector3D(ref[0]), QVector3D(ref[0]),
-                                      center=True))
-        # 10/Oct/26 added BastelBaus: add snapping to dimension edges.
-        # Added before the early return below (a scene with only dimensions
-        # must still snap to them) and before the cut filter (a dimension
-        # the section hides must not attract snaps).
-        for dim in getattr(self.scene, "dimensions", None) or []:
-            if not self.scene.entity_selectable(dim):
-                continue
-            near.append(_SnapEdge(*dim.line_points()))
-        # A guide circle's centre is a permanent snap target, like the centre
-        # of a visited mesh circle (the rim is resolved in compute_snap).
-        for c in circles:
-            near.append(_SnapEdge(QVector3D(c.center), QVector3D(c.center),
-                                  center=True))
-        sp = _active_cut(self.scene)
-        if sp is not None:
-            # What the cut hides must not attract snaps: drop
-            # edges whose BOTH endpoints are on the hidden side.
-            def _kept(e):
-                return not (sp.side(e.a) > 1e-6 and sp.side(e.b) > 1e-6)
-            near = [e for e in near if _kept(e)]
-        # Survey points snap as degenerate pseudo-edges: the endpoint snap
-        # lands EXACTLY on the surveyed coordinate (the municipal flow's whole
-        # point); direction-based inferences skip zero-length edges safely.
-        for gp in getattr(self.scene, "geo_points", None) or []:
-            near.append(_SnapEdge(QVector3D(gp.position),
-                                  QVector3D(gp.position)))
-        # The rest of the model's loose geometry — the root mesh drawn faded
-        # around an open group / component — is a reference too.
-        # Its edges are filtered one by one (each carries its own layer and
-        # hidden flag), and «Hide rest of model» leaves them out already.
-        outer_of = getattr(self, "_outer_loose_meshes", None)
-        outer = []
-        for om in (outer_of() if outer_of is not None else ()):
-            outer += [e for e in om.edges if self.scene.edge_snappable(e)]
-        big = (px is not None
-               and (len(self.scene.edges) + len(outer)) > _LOOSE_SNAP_CAP)
-        if not lines and not near and not circles and sp is None \
-                and not big and not outer and excl is None \
-                and not _snap_dropped_loose(self):
-            return self.scene
-        if big:
-            # Only the edges near the cursor are considered, so ask each one
-            # (dozens) rather than walking a mesh of 160k to build the drop
-            # set above. The index holds the rest of the model's loose
-            # edges too, so this reaches them.
-            loose = [e for e in self._nearby_loose_edges(px, py)
-                     if self.scene.edge_snappable(e)]
-        else:
-            loose = list(self.scene.edges) + outer
-            drops = _snap_dropped_loose(self)
-            if drops:
-                loose = [e for e in loose if element_identity(e) not in drops]
-        if excl is not None and excl[0]:
-            loose = [e for e in loose if element_identity(e) not in excl[0]]
-        if sp is not None:
-            loose = [e for e in loose if _kept(e)]
-        if outer:
-            # The ScreenTip must say these are outside the open context:
-            # a real Edge carries no context of its own.
-            outer_ids = {element_identity(e) for e in outer}
-            loose = [_SnapEdge(e.a, e.b, context="outside")
-                     if element_identity(e) in outer_ids else e for e in loose]
-        from types import SimpleNamespace
-        return SimpleNamespace(edges=loose + lines + near, circles=circles)
+        return ingetrazo_core.document_snap_scene(self, px, py)
 
     def _group_obb(self, group):
-        """``(frame, lo, hi)`` of the group in its OWN axes, cached on its
-        chunk. A world-aligned box on a rotated object reads as skewed and
-        wraps far more air than object — and its corners, which are the
-        handles you grab, end up nowhere near the thing.
-
-        A CONTAINER's box comes from its children, and its own chunk knows
-        nothing about them: cached there, the box outlived a deleted child
-        (the frame stayed long after one of two fountains was gone) and
-        followed the container's own matrix when entering pushed that
-        matrix down into the children — the box slid to the axes while
-        the fountain stayed put (Marco, 2026-09-11). So a container's box
-        is cached per scene version instead: it is recomputed on any
-        change, and ``placement_points`` makes that one matrix multiply
-        per placement."""
-        kids = getattr(group, "children", None)
-        if kids:
-            cache = getattr(self, "_container_obb", None)
-            if cache is None:
-                cache = self._container_obb = {}
-            key = _content_ver(self)
-            hit = cache.get(id(group))
-            if hit is not None and hit[0] == key:
-                return hit[1]
-            fetch = getattr(self, "_proto_points_cache", None)   # stub VPs in tests
-            protos = fetch(group) if fetch is not None else None
-            obb = self._compute_obb(group, protos)
-            if fetch is not None:
-                self._proto_points_store(group, protos)
-            if len(cache) > 256:            # ids of groups long gone
-                cache.clear()
-            cache[id(group)] = (key, obb)
-            return obb
-        # The box follows the group's axes (issue #44), and Change Axes can
-        # turn them without touching one vertex — so the cached box is only
-        # good for the frame it was measured on.
-        from core.group import group_frame
-        fr = group_frame(group)
-        fkey = tuple(fr.data()) if fr is not None else None
-        xf = getattr(group, "xform", None)
-        if xf is not None and id(group) not in (
-                getattr(self, "_inst_chunks", None) or ()):
-            # A placement nobody has baked to the world: the box is measured
-            # on the points, the bake would only have carried it. Selecting
-            # the 590 objects of a big model baked them all (#1092). Good for
-            # what its bake would have been good for.
-            base = self._group_chunk(
-                _proto_wrapper(self, group.mesh, _paint_of(self, group)))
-            key = (base["uid"], tuple(xf.data()), base.get("rev"), fkey)
-            memo = getattr(self, "_inst_obb", None)
-            if memo is None:
-                memo = self._inst_obb = {}
-            hit = memo.get(id(group))
-            if hit is not None and hit[0] == key:
-                return hit[1]
-            obb = self._compute_obb(group)
-            if len(memo) > 65536:          # ids of placements long gone
-                memo.clear()
-            memo[id(group)] = (key, obb)
-            return obb
-        entry = self._group_chunk(group)
-        obb = entry.get("obb")
-        if obb is not None and entry.get("obb_frame") == fkey:
-            return obb
-        obb = entry["obb"] = self._compute_obb(group)
-        entry["obb_frame"] = fkey
-        return obb
+        return ingetrazo_core.group_obb(self, group)
 
     def _proto_points_cache(self, group) -> dict:
-        """``{id(mesh): local points}`` of the prototypes under ``group``
-        that are still current. A prototype's LOCAL array only changes
-        when its mesh is edited — never when a placement moves — so an
-        entry is dropped when the mesh is the one open for editing (or
-        under a share-back) or a mutation primitive flagged it
-        (``_chunk_dirty``, O(1)). No chunk is built to find out: validating
-        against fresh local chunks built one per nested child, 384 ms on
-        the first box after entering the plaza."""
-        from core.purge import iter_groups
-        store = getattr(self, "_proto_pts_store", None)
-        if store is None:
-            store = self._proto_pts_store = {}
-        editing = self._editing_meshes()
-        valid: dict = {}
-        from core.mesh import DeferredMesh
-        for g in iter_groups((group,)):
-            mesh = g.mesh
-            if mesh is None or id(mesh) in valid:
-                continue
-            # A lazy mesh still unbuilt was never edited (an edit builds
-            # it): its cached points stand, and asking for its vertices
-            # would build it -- the box over a big model built them all.
-            lazy = type(mesh) is DeferredMesh
-            if not lazy and not mesh.vertices:
-                continue
-            hit = store.get(id(mesh))
-            if hit is None:
-                continue
-            serial, arr = hit
-            if (id(mesh) in editing
-                    or getattr(mesh, "_mut_serial", None) != serial
-                    or (not lazy and len(arr) != len(mesh.vertices))):
-                del store[id(mesh)]
-                continue
-            valid[id(mesh)] = arr
-        return valid
+        return ingetrazo_core.proto_points_cache(self, group)
 
     def _editing_meshes(self) -> set:
-        """ids of the meshes a command can be mutating right now: the open
-        context's, and every level's share-back prototype."""
-        scene = self.scene
-        ids = {id(scene.mesh)}
-        for level in getattr(scene, "_edit_stack", None) or ():
-            share = level.get("share") if isinstance(level, dict) else None
-            if share:
-                ids.add(id(share[1]))                  # the prototype
-                ids.add(id(share[0].mesh))             # the working copy
-        return ids
+        return ingetrazo_core.editing_meshes(self)
 
     def _proto_points_store(self, group, protos: dict) -> None:
-        store = self._proto_pts_store
-        if len(store) > 512:
-            store.clear()
-        from core.purge import iter_groups
-        editing = self._editing_meshes()
-        serials = {id(g.mesh): getattr(g.mesh, "_mut_serial", None)
-                   for g in iter_groups((group,)) if g.mesh is not None}
-        for mid, arr in protos.items():
-            if mid not in editing:
-                store[mid] = (serials.get(mid), arr)
+        return ingetrazo_core.proto_points_store(self, group, protos)
 
     @staticmethod
     def _compute_obb(group, protos=None):
-        from core.group import (frame_axes, frame_from_points, group_frame,
-                                oriented_bounds, placement_points)
-        # The corners come from the POINTS — never from a merged copy of the
-        # component (see ``placement_points``).
-        pos = placement_points(group, protos)
-        frame = group_frame(group)
-        if frame is not None:
-            # A group that knows its own axes is boxed on them — the
-            # selection box and Scale grips follow the object's axes
-            # (issue #44), turned however the object is.
-            _o, x, y, z = frame_axes(frame)
-            return oriented_bounds(None, (x, y, z), points=pos)
-        world = oriented_bounds(None, points=pos)         # world axes
-        own = oriented_bounds(None, frame_from_points(pos if len(pos) else None),
-                              points=pos)
-
-        def volume(b):
-            _f, lo, hi = b
-            # A flat group has zero volume; rank those by their largest face.
-            side = sorted(hi[i] - lo[i] for i in range(3))
-            return side[1] * side[2] * max(side[0], 1e-6)
-
-        # Derived axes are meaningless on organic geometry — a hedge has no
-        # dominant plane, and its "own" box came out 25% LARGER than the world
-        # one. Keep the derived frame only when it earns its place.
-        return own if volume(own) < 0.9 * volume(world) else world
+        return ingetrazo_core.compute_obb(group, protos)
 
     def _update_center_ref(self, x: float, y: float) -> None:
-        """Acquire the centre of the circle or arc under the cursor.
-
-        A loose curve edge gives its own curve; a face gives the curves on
-        its boundary — a cylinder's lid, a rounded corner, a circular hole
-        — placed through the group's matrix when the face is inside one.
-        With several on one face, the one whose points come closest to the
-        cursor wins. Nothing under the cursor keeps the last centre: you
-        hover the rim, then travel to the centre and snap to it."""
-        found = None
-        edge = self._hover_edge
-        if getattr(edge, "curve", None) is not None:
-            found = self._center_of_edge(edge, self.scene.mesh)
-        elif getattr(edge, "in_group", False) and getattr(edge, "group", None) is not None:
-            found = self._center_of_group_edge(edge)
-        if found is None:
-            pick = (getattr(self, "pick_face_inference", None)
-                    or getattr(self, "pick_face_placement", None)
-                    or self.pick_face_any)   # stub VPs in tests
-            face, group = pick(x, y)
-            if face is not None:
-                mesh = getattr(group, "mesh", None) if group is not None \
-                    else self.scene.mesh
-                if mesh is None:
-                    mesh = self.scene.mesh
-                found = self._center_of_face(face, group, mesh, x, y)
-        if found is not None:
-            self._center_ref = found
-            return found
-        self._valid_center_ref()
-        return None
+        return ingetrazo_core.update_center_ref(self, x, y)
 
     def _center_of_group_edge(self, pseudo):
-        """The rim of a circle inside a top-level group / component: the
-        world pseudo-edge is matched to the group's own edge (positions in
-        its space) and the curve's centre comes back through its matrix."""
-        g = pseudo.group
-        mesh = getattr(g, "mesh", None)
-        xf = getattr(g, "xform", None)
-        if mesh is None:
-            return None
-        inv = None
-        if xf is not None:
-            inv, ok = xf.inverted()
-            if not ok:
-                return None
-        la = inv.map(pseudo.a) if inv is not None else pseudo.a
-        lb = inv.map(pseudo.b) if inv is not None else pseudo.b
-        if not _lazy_edge_may_be_curve(mesh, la, lb):
-            # A lazy mesh with no curve edge where the lookups below could
-            # land: building it (~0.5 s for a big group of the plant of
-            # #158, on the hover that crosses into it) would answer None.
-            return None
-        if not mesh.edges:
-            return None
-        # The mesh's own registry: two O(1) vertex lookups (tolerant, the
-        # weld grid) and the edge between them by incidence. This used to
-        # build a dict of EVERY edge of the group, keyed by rounded
-        # positions, cached for one group at a time — so a cursor crossing
-        # from one group to the next rebuilt it on nearly every move:
-        # 9 ms of a 14 ms hover on pileta-fuente (2 500 edges per group).
-        edge = None
-        if not _NO_SNAP_FAST:
-            va, vb = mesh.vertex_at(la), mesh.vertex_at(lb)
-            if va is not None and vb is not None:
-                edge = mesh.find_edge(va, vb)
-        if edge is None:
-            # The registry missed (a position past the weld tolerance):
-            # the rounded-position table, one per mesh, built once.
-            tables = getattr(self, "_group_edge_tables", None)
-            if tables is None or tables[0] != self.scene.version:
-                tables = self._group_edge_tables = (self.scene.version, {})
-            def k(p):
-                return (round(p.x(), 4), round(p.y(), 4), round(p.z(), 4))
-            table = tables[1].get(id(mesh))
-            if table is None:
-                table = tables[1][id(mesh)] = {
-                    frozenset((k(e.a), k(e.b))): e for e in mesh.edges}
-            edge = table.get(frozenset((k(la), k(lb))))
-        if edge is None or getattr(edge, "curve", None) is None:
-            return None
-        found = self._center_of_edge(edge, mesh)
-        if found is None:
-            return None
-        c = xf.map(found[0]) if xf is not None else found[0]
-        return (c, found[1], found[2], found[3], found[4], found[5], g)
+        return ingetrazo_core.center_of_group_edge(self, pseudo)
 
     def _center_of_edge(self, edge, mesh):
-        from core.snap import fit_circle
-        pts = {}
-        for e in mesh.curve_edges(edge):
-            pts[element_identity(e.v0)] = e.v0.position
-            pts[element_identity(e.v1)] = e.v1.position
-        fit = fit_circle(list(pts.values())) if len(pts) >= 3 else None
-        if fit is None:
-            return None
-        return (fit[0], fit[1], ("edge", edge.curve), self.scene.version,
-                edge, mesh, None)
+        return ingetrazo_core.center_of_edge(self, edge, mesh)
 
     def _center_of_face(self, face, group, mesh, x, y):
-        from core.snap import curve_centers_of_face
-        xf = getattr(group, "xform", None) if group is not None else None
-        centers = curve_centers_of_face(face, xf)
-        if not centers:
-            return None
-        if len(centers) == 1:
-            c, r, key = centers[0]
-        else:
-            # Several arcs on one face (a rounded slab): the one whose
-            # centre projects nearest the cursor.
-            best = None
-            for c, r, key in centers:
-                pc = self._world_to_pixel(c)
-                if pc is None:
-                    continue
-                d = math.hypot(pc[0] - x, pc[1] - y)
-                if best is None or d < best[0]:
-                    best = (d, c, r, key)
-            if best is None:
-                return None
-            _d, c, r, key = best
-        return (c, r, (element_identity(face), key), self.scene.version, face, mesh, group)
+        return ingetrazo_core.center_of_face(self, face, group, mesh, x, y)
 
     def _center_hint_px(self, ref, pc) -> float:
-        """How close (px) the cursor must come for the centre's dot to show:
-        a share of the circle's own size on screen, capped — so a fountain
-        seen from far, a few pixels across, does not light up whenever the
-        cursor wanders over it («estoy lejos y me puse cerca de la pileta y
-        aparece ese círculo», Marco, 2026-09-12). Zero when the circle is
-        too small on screen to mean anything."""
-        rim = self._world_to_pixel(ref[0] + QVector3D(ref[1], 0.0, 0.0))
-        rim2 = self._world_to_pixel(ref[0] + QVector3D(0.0, ref[1], 0.0))
-        r_px = 0.0
-        for q in (rim, rim2):
-            if q is not None:
-                r_px = max(r_px, math.hypot(q[0] - pc[0], q[1] - pc[1]))
-        if r_px < self.CENTER_MIN_RADIUS_PX:
-            return 0.0
-        return min(self.CENTER_HINT_PX, 0.5 * r_px)
+        return ingetrazo_core.center_hint_px(self, ref, pc)
 
     def _valid_center_ref(self):
-        """The acquired centre, re-checked against the scene: once the
-        circle is gone the dot goes with it — it lingered after the circle
-        was erased («elimino el círculo y el punto verde continúa allí»,
-        Marco, 2026-09-11) — and once it moved, the centre follows.
-        Costs nothing until the scene changes."""
-        ref = getattr(self, "_center_ref", None)
-        if ref is None:
-            return None
-        if ref[3] == self.scene.version:
-            return ref
-        src, mesh, group = ref[4], ref[5], ref[6]
-        fresh = None
-        real = getattr(src, "real", None)
-        from core.mesh import DeferredMesh
-        lazy = real is not None and type(mesh) is DeferredMesh
-        if real is not None and not lazy:
-            # Found over a lazy mesh's light face, since built: an edit asks
-            # of the real one. Still lazy, the mesh has not changed: only the
-            # matrix can have, and building it here cost a big group's whole
-            # build on the frame after any edit (#1092).
-            src = real()
-        if isinstance(src, Face):
-            if lazy or src in mesh.faces:
-                # the same arc of the face, wherever it is now
-                from core.snap import curve_centers_of_face
-                xf = getattr(group, "xform", None) if group is not None else None
-                same = [c for c in curve_centers_of_face(src, xf)
-                        if c[2] == ref[2][1]]
-                if same:
-                    fresh = (same[0][0], same[0][1], ref[2],
-                             self.scene.version, src, mesh, group)
-        elif src in mesh.edges:
-            fresh = self._center_of_edge(src, mesh)
-            xf = getattr(group, "xform", None) if group is not None else None
-            if fresh is not None and xf is not None:
-                fresh = (xf.map(fresh[0]), fresh[1], fresh[2], fresh[3],
-                         fresh[4], fresh[5], group)
-        self._center_ref = fresh
-        return fresh
+        return ingetrazo_core.valid_center_ref(self)
 
     def _selection_box_points(self, skip=()) -> list:
-        """The corners of a selected group's bounding box, as degenerate
-        pseudo-edges so the snap engine offers them as endpoints.
-
-        Those corners are grabbable: with a group selected they are
-        what you take hold of to move it somewhere exact, and the green dot
-        tells you the grab landed. The box is the group's selection cue here
-        too (see ``_sync_edges``), so the corners were already on screen —
-        they just were not snap targets. Costs nothing: the chunk's bbox is
-        already cached, so a 230k-face group contributes eight points."""
-        pts: list = []
-        for ent in self.scene.selection:
-            if not isinstance(ent, Group) or getattr(ent, "billboard", False):
-                continue
-            if id(ent) in skip:
-                continue
-            from core.group import oriented_box_corners
-            for p in oriented_box_corners(*self._group_obb(ent)):
-                pts.append(_SnapEdge(p, QVector3D(p)))
-        return pts
+        return ingetrazo_core.selection_box_points(self, skip)
 
     def pick_axis(self, screen_x: float, screen_y: float):
         """The model axis line under the cursor — ``"x"`` / ``"y"`` /
@@ -10611,100 +9421,17 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
 
     def _model_point_at(self, x: float, y: float):
-        """The model point under pixel ``(x, y)`` -- what the frame on screen
-        shows there, else the nearest face the pick ray hits -- or ``None``
-        when the cursor is on sky or ground."""
-        origin, direction = self._pixel_to_ray(x, y)
-        seen = self._depth_world_at(x, y) if hasattr(self, "_depth_world_at") \
-            else None
-        if seen is not None and seen[0] == "hit":
-            return seen[1]
-        if origin is not None and direction is not None and seen is None:
-            try:
-                idx = self._pick_index(near=DocumentInteraction._ray_near(self, x, y))
-                import numpy as np
-                hits = self._hover_hits(idx, origin, direction)
-                if hits is not None and len(hits.t):
-                    t = float(np.min(hits.t))
-                    if math.isfinite(t) and t > 0.0:
-                        return origin + direction * t
-            except Exception:                  # noqa: BLE001 - no point then
-                pass
-        return None
+        return ingetrazo_render.model_point_at(self, x, y)
 
 
     def _orbit_pivot_at(self, x: float, y: float):
-        """Where an orbit gesture that starts at pixel ``(x, y)`` turns (#164).
-
-        1. The model point under the cursor -- the nearest face the pick
-           ray hits (loose geometry and groups alike);
-        2. else, with the cursor on sky or ground, the middle of the
-           stretch of the view's central ray that crosses the model's
-           bounding box -- the middle of what is on screen;
-        3. else the camera target (an empty scene, a model off screen).
-        Worked out once per gesture: the pivot stays put while dragging.
-        """
-        point = DocumentInteraction._model_point_at(self, x, y)
-        if point is not None:
-            return point
-        lo, hi = self.scene.bounds()
-        if lo is not None:
-            o, d = self._pixel_to_ray(self.width() / 2.0, self.height() / 2.0)
-            if o is not None and d is not None:
-                span = _ray_aabb_span(
-                    (o.x(), o.y(), o.z()), (d.x(), d.y(), d.z()),
-                    (lo.x(), lo.y(), lo.z()), (hi.x(), hi.y(), hi.z()))
-                if span is not None:
-                    return o + d * ((span[0] + span[1]) * 0.5)
-        return QVector3D(self.camera.target)
+        return ingetrazo_render.orbit_pivot_at(self, x, y)
 
     def _set_middle_drag_pan_mode(self, pan: bool) -> None:
-        """Switch an active MMB drag between orbit and pan."""
-        if not self._middle_drag_active or self.nav_mode is not None:
-            return
-        pan = bool(pan)
-        if self._pan_mode == pan:
-            return
-        self._pan_mode = pan
-        cur = self._pointer_for_tool("pan" if pan else "orbit")
-        if cur is not None:
-            self.setCursor(cur)
+        return ingetrazo_render.set_middle_drag_pan_mode(self, pan)
 
     def set_nav_mode(self, mode: Optional[str]) -> None:
-        """Enter a camera navigation mode ("orbit" / "pan").
-
-        For trackpad users with no middle mouse button: while a nav mode is
-        active the left-drag drives the camera (orbit or pan). The active
-        drawing tool is suspended with its state (``suspended_tool``):
-        picking it again resumes it where it was, a line's first point
-        still placed; picking any other tool, or Space (Select), resets it.
-        ``None`` clears the nav mode and leaves no tool, as before: the
-        suspended one is reset.
-        """
-        if mode is None and self.suspended_tool is not None:
-            suspended, self.suspended_tool = self.suspended_tool, None
-            suspended.on_deactivate(self)
-        if self.active_tool is not None:
-            if mode is not None:
-                self.suspended_tool = self.active_tool
-                suspend = getattr(self.active_tool, "on_suspend", None)
-                if callable(suspend):
-                    suspend(self)
-            else:
-                self.active_tool.on_deactivate(self)
-            self.active_tool = None
-        self._hover_entity = None
-        self.last_snap = None
-        self.nav_mode = mode
-        self._last_pos = None             # a drag in progress ends here
-        self._orbit_pivot = None
-        self._pan_mode = False
-        self._middle_drag_active = False
-        if mode is not None:
-            self._apply_nav_cursor()      # orbit / pan / magnifier icons
-        else:
-            self.unsetCursor()
-        self.update()
+        return ingetrazo_render.set_nav_mode(self, mode)
 
     # ---- Input --------------------------------------------------------------
     def _context_pick(self, x: float, y: float):
@@ -10712,91 +9439,13 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return context_pick(self, x, y)
 
     def _face_or_image_in_front(self, x: float, y: float):
-        face = self.pick_face(x, y)
-        return self.image_in_front_of(face, x, y) or face
+        return ingetrazo_render.face_or_image_in_front(self, x, y)
 
     def _dispatch_tool_click(self, ev, double: bool = False) -> None:
-        """Forward a (double-)click to the active tool, then run the shared
-        follow-ups: lock the chain to a clicked face's plane, clear the VCB."""
-        had_start = getattr(self.active_tool, "start_point", None) is not None
-        had_plane = getattr(self.active_tool, "work_plane", None) is not None
-        face_at_click = None
-        group_at_click = None
-        from views.array_bake import reading_only
-        if not had_start and not had_plane:
-            # Only its plane is read, below: no need to build a big group's
-            # mesh for that (seconds and gigabytes, #1092).
-            with reading_only():
-                face_at_click, group_at_click = self.pick_face_placement(
-                    ev.position().x(), ev.position().y())
-        ctx = self._build_ctx(ev)
-        if ctx is not None:
-            # The tool hears the cursor's snap KIND before it is called, as on
-            # every hover (``_note_snap``): a click that never had its own
-            # hover would otherwise leave a stale — or absent — kind in the
-            # tool, and ``PlaneLock.snapped_plane`` decides with it whether
-            # the shape re-plans onto the clicked point (#37) or stays on the
-            # face under the cursor (#545).
-            self._note_snap(ctx.snap)
-            _before = len(self.history.undo_stack)
-            if double:
-                self.active_tool.on_double_click(ctx)
-            else:
-                self.active_tool.on_click(ctx)
-            # Did this click actually MAKE something? That, not «the tool
-            # went idle», is when the arrow lock should go — @pacaeiro on
-            # 0.4.4: «I draw a line with hard lock (arrows) and, after the
-            # line is created the lock is still active». The Line tool
-            # chains, so it is still busy the instant a segment exists, and
-            # the first fix waited for the whole polyline to end.
-            _drew = len(self.history.undo_stack) > _before
-            # If the click established a new start point on top of an
-            # existing face, lock the rest of the chain to that face's
-            # plane so subsequent clicks stay coplanar.
-            now_start = getattr(self.active_tool, "start_point", None)
-            if (
-                not had_start
-                and now_start is not None
-                and face_at_click is not None
-                and hasattr(self.active_tool, "work_plane")
-                and self.active_tool.work_plane is None   # a plane lock wins
-            ):
-                # In WORLD space: a component's face keeps its own
-                # coordinates, and the plane it captured for a rectangle
-                # on the pergola's post was the untransformed one — the
-                # second corner landed on a plane nowhere near the post
-                # («la inferencia se atasca», Marco, 2026-09-14).
-                from core.snap import face_plane_world
-                self.active_tool.work_plane = face_plane_world(
-                    face_at_click, getattr(group_at_click, "xform", None))
-            # Any pending typed value is invalidated once the user
-            # commits a point with the mouse.
-            self._set_value_buffer("")
-            # A command that failed was rolled back (History is
-            # transactional) — surface it instead of failing silently.
-            if self.history.last_error:
-                self.flash_status(
-                    tr("Operation failed and was undone: {err}",
-                       err=self.history.last_error), 8000)
-            self._release_axis_lock_after_operation(committed=_drew)
-            if _drew:
-                self._reassert_tool_cursor()
-            self.update()
+        return ingetrazo_render.dispatch_tool_click(self, ev, double)
 
     def _reassert_tool_cursor(self) -> None:
-        """Put the active tool's pointer back after an operation (#191,
-        fafecm on Windows: «after the push/pull cursor is used once, the
-        cursor symbol disappears» — the Line did the same). On Windows the
-        viewport is a native OpenGL window and the system brought the arrow
-        back when an operation ended, while Qt still believed its cursor
-        set, so setting the same one again changed nothing: unset first,
-        then set. Nothing to do while a camera mode or a look drag owns
-        the pointer."""
-        if (self.active_tool is None or self.nav_mode is not None
-                or self._look_drag is not None):
-            return
-        self.unsetCursor()
-        self._apply_tool_cursor()
+        return ingetrazo_render.reassert_tool_cursor(self)
 
     # ---- Mouse look (a tool with ``on_look``: First Person) -----------------
 
@@ -10809,125 +9458,21 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     # hooks). These properties and thin wrappers keep the surface the tools,
     # the extensions, the probe and the tests read and write, so the
     # extraction stays behaviour-neutral.
-    @property
-    def _acquired_point(self) -> Optional[QVector3D]:
-        return self.inference._acquired_point
-
-    @_acquired_point.setter
-    def _acquired_point(self, value: Optional[QVector3D]) -> None:
-        self.inference._acquired_point = value
-
-    @property
-    def _encouraged(self) -> list:
-        return self.inference._encouraged
-
-    @_encouraged.setter
-    def _encouraged(self, value: list) -> None:
-        self.inference._encouraged = value
-
-    @property
-    def _dwell_point(self) -> Optional[QVector3D]:
-        return self.inference._dwell_point
-
-    @_dwell_point.setter
-    def _dwell_point(self, value: Optional[QVector3D]) -> None:
-        self.inference._dwell_point = value
-
-    @property
-    def _dwell_timer(self) -> QTimer:
-        return self.inference._dwell_timer
-
-    @_dwell_timer.setter
-    def _dwell_timer(self, value: QTimer) -> None:
-        self.inference._dwell_timer = value
-
-    @property
-    def axis_lock(self) -> Optional[str]:
-        return self.inference.axis_lock
-
-    @axis_lock.setter
-    def axis_lock(self, value: Optional[str]) -> None:
-        self.inference.axis_lock = value
-
-    @property
-    def last_snap(self) -> Optional[SnapResult]:
-        return self.inference.last_snap
-
-    @last_snap.setter
-    def last_snap(self, value) -> None:
-        self.inference.last_snap = value
-
-    @property
-    def reference_edge(self):
-        return self.inference.reference_edge
-
-    @reference_edge.setter
-    def reference_edge(self, value) -> None:
-        self.inference.reference_edge = value
-
-    @property
-    def reference_mode(self) -> Optional[str]:
-        return self.inference.reference_mode
-
-    @reference_mode.setter
-    def reference_mode(self, value: Optional[str]) -> None:
-        self.inference.reference_mode = value
-
-    @property
-    def _shift_lock(self):
-        return self.inference._shift_lock
-
-    @_shift_lock.setter
-    def _shift_lock(self, value) -> None:
-        self.inference._shift_lock = value
-
-    @property
-    def _shift_lock_ref(self):
-        return self.inference._shift_lock_ref
-
-    @_shift_lock_ref.setter
-    def _shift_lock_ref(self, value) -> None:
-        self.inference._shift_lock_ref = value
-
-    @property
-    def _hover_edge(self):
-        return self.inference._hover_edge
-
-    @_hover_edge.setter
-    def _hover_edge(self, value) -> None:
-        self.inference._hover_edge = value
-
-    @property
-    def _hover_center(self):
-        return self.inference._hover_center
-
-    @_hover_center.setter
-    def _hover_center(self, value) -> None:
-        self.inference._hover_center = value
-
-    @property
-    def _center_ref(self):
-        return self.inference._center_ref
-
-    @_center_ref.setter
-    def _center_ref(self, value) -> None:
-        self.inference._center_ref = value
-
-    @property
-    def _acquired_edge(self):
-        return self.inference._acquired_edge
-
-    @_acquired_edge.setter
-    def _acquired_edge(self, value) -> None:
-        self.inference._acquired_edge = value
-
-    @property
-    def _acquired_face_normal(self):
-        return self.inference._acquired_face_normal
-
-    @_acquired_face_normal.setter
-    def _acquired_face_normal(self, value) -> None:
-        self.inference._acquired_face_normal = value
+    _acquired_point = ingetrazo_render.InferenceField("_acquired_point")
+    _encouraged = ingetrazo_render.InferenceField("_encouraged")
+    _dwell_point = ingetrazo_render.InferenceField("_dwell_point")
+    _dwell_timer = ingetrazo_render.InferenceField("_dwell_timer")
+    axis_lock = ingetrazo_render.InferenceField("axis_lock")
+    last_snap = ingetrazo_render.InferenceField("last_snap")
+    reference_edge = ingetrazo_render.InferenceField("reference_edge")
+    reference_mode = ingetrazo_render.InferenceField("reference_mode")
+    _shift_lock = ingetrazo_render.InferenceField("_shift_lock")
+    _shift_lock_ref = ingetrazo_render.InferenceField("_shift_lock_ref")
+    _hover_edge = ingetrazo_render.InferenceField("_hover_edge")
+    _hover_center = ingetrazo_render.InferenceField("_hover_center")
+    _center_ref = ingetrazo_render.InferenceField("_center_ref")
+    _acquired_edge = ingetrazo_render.InferenceField("_acquired_edge")
+    _acquired_face_normal = ingetrazo_render.InferenceField("_acquired_face_normal")
 
     def _dwell_on(self, point: Optional[QVector3D]) -> None:
         self.inference._dwell_on(point)
@@ -10949,60 +9494,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return self.inference._extension_snap(snap, px_x, px_y)
 
     def _process_hover(self, pos, modifiers) -> None:
-        if (self._last_pos is not None or self._box_active
-                or self.nav_mode is not None):
-            # Navigation tools don't select or snap. In particular, a
-            # pointer move between orbit drags must not build the editing
-            # pick index and block the next press on a large assembly.
-            return
-        self._tick = getattr(self, "_tick", 0) + 1     # a new epoch memo
-        ev = _HoverEvent(pos, modifiers)
-        _hp0 = _time_mod.perf_counter() if _PERF else 0.0
-
-        def _hmark(name):
-            nonlocal _hp0
-            if _PERF:
-                now = _time_mod.perf_counter()
-                _plog(f"hover.{name}", (now - _hp0) * 1000.0, floor=200.0)
-                _hp0 = now
-
-        # Track cursor + hover edge so Down can capture a reference edge.
-        self._last_mouse_pos = ev.position()
-        self._emit_coordinate(ev)
-        _hmark("coord")
-        # What the snap reads of a face under the cursor builds no lazy mesh
-        # (#1092); a tool's on_hover below may keep what it picks, and a click
-        # gets the real faces.
-        from views.array_bake import reading_only
-        with reading_only():
-            self.inference.acquire(ev.position().x(), ev.position().y())
-
-            if self.active_tool is None:
-                return
-            _hmark("acquire")
-            ctx = self._build_ctx(ev)
-        _hmark("ctx")
-        if ctx is None:
-            return
-        self._note_snap(ctx.snap)
-        if (self.active_tool.uses_snap
-                and getattr(self.active_tool, "allow_inferences", True)):
-            # Encouraging: the point the snap already found — no extra pick
-            # per hover. A circle's rim encourages its CENTRE (found by the
-            # centre reference while the cursor is on the rim); on a face
-            # with arcs a real corner under the cursor still wins.
-            center = getattr(self, "_hover_center", None)
-            point = None
-            if ctx.snap.kind in self._ENCOURAGING_KINDS:
-                point = ctx.snap.point
-            if center is not None and (point is None or center[2][0] == "edge"):
-                point = QVector3D(center[0])
-            self._dwell_on(point)
-        self.active_tool.on_hover(ctx)
-        _hmark("tool")
-        self.measurementChanged.emit(self._measurement_text())
-        _hmark("measure")
-        self.update()
+        return ingetrazo_render.process_hover(self, pos, modifiers)
 
     # Below this many pixels of drag, a left press/release is a click, not a box.
     BOX_DRAG_THRESHOLD_PX = 4.0
@@ -11012,30 +9504,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         # imitation of the same push (3Dconnexion does that for programs it
         # does not know): zooming on them too made the view jump a step
         # about eight times a second over the smooth move.
-        from views.ndof_input import cap_in_use
-        if cap_in_use():
-            ev.accept()
-            return
-        self._input_t = _time_mod.monotonic()   # P0: input→paint latency
-        self._input_serial = getattr(self, "_input_serial", 0) + 1
-        # A finger slide (trackpad, or the touch screen) orbits or pans
-        # instead, by preference; it says so by taking the event.
-        from ingetrazo_render import trackpad_nav
-        if trackpad_nav.slide(self, ev):
-            self.update()
-            return
-        import time as _time
-        from views.wheel_zoom import zoom_steps
-        steps = zoom_steps(ev, self._invert_wheel)
-        if steps == 0.0:
-            ev.accept()            # trackpad begin/end events do not zoom or pick
-            return
-        now = _time.monotonic()
-        reproj, reused = self._zoom_at(steps, ev.position())
-        if _PERF:
-            _plog("wheel", (_time_mod.monotonic() - now) * 1000.0,
-                  extra=f"reused={'proj' if reproj else reused}", floor=10.0)
-        self.update()
+        return ingetrazo_render.document_wheel(self, ev)
 
 
     #: The least a notch of the wheel backs out, from a close-up, once the
@@ -11045,22 +9514,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
 
     def _model_diag(self) -> float:
-        """The model's size, for the zoom step. On a huge model it comes
-        from the placement boxes the pick index already holds: the exact
-        box read every vertex, ~2 s on the first wheel notch (#158)."""
-        cached = getattr(self.scene, "_bounds_cache", None)
-        if cached is None or cached[0] != self.scene.version:
-            table = (self._pick_lazy_table()
-                     if hasattr(self, "_pick_lazy_table") else None)
-            if table is not None:
-                import numpy as np
-                lo, hi = table[1], table[2]
-                ok = np.isfinite(lo).all(axis=1) & np.isfinite(hi).all(axis=1)
-                if ok.any():
-                    return float(np.linalg.norm(hi[ok].max(axis=0)
-                                                - lo[ok].min(axis=0)))
-        lo, hi = self.scene.bounds()
-        return (hi - lo).length() if lo is not None else 0.0
+        return ingetrazo_render.model_diag(self)
 
     _MODIFIER_KEYS = frozenset({Qt.Key_Control, Qt.Key_Shift, Qt.Key_Alt,
                                 Qt.Key_Meta, Qt.Key_AltGr})
@@ -11073,258 +9527,32 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return getattr(self, "_ctrl_alone", False)
 
     def event(self, ev) -> bool:
-        if ev.type() == QEvent.NativeGesture:
-            # Pinch, smart zoom: a trackpad's, or the touch screen's (#248).
-            from ingetrazo_render import trackpad_nav
-            if trackpad_nav.native_gesture(self, ev):
-                return True
-        if (ev.type() in (QEvent.ShortcutOverride, QEvent.KeyPress)
-                and ev.key() not in self._MODIFIER_KEYS):
-            self._ctrl_alone = False
-        # With a VCB buffer in progress, claim keys that continue it (unit
-        # suffixes m/cm/mm, separators, sign) before the window's QAction
-        # shortcuts swallow them — otherwise typing "2m" would fire the Move
-        # tool instead of finishing the length. Bare letters with no buffer
-        # still reach the shortcuts.
-        # A tool that plays letters as keys (First Person's W/A/S/D) takes
-        # them from the window's tool shortcuts while it is active.
-        if ev.type() == QEvent.ShortcutOverride and self._tool_claims_key(ev):
-            ev.accept()
-            return True
-        if (ev.type() == QEvent.ShortcutOverride
-                and self._measurement_claims_key(ev, self._value_buffer)):
-            ev.accept()
+        if ingetrazo_render.document_event(self, ev):
             return True
         return super().event(ev)
 
     def _measurement_claims_key(self, ev, buffer) -> bool:
-        """Reserve measurement text before Qt dispatches window shortcuts
-        (``value_field::claims``)."""
-        if _is_chord(ev.modifiers()):
-            return False
-        return _value_claims(self, ev.text().lower(), buffer)
+        return ingetrazo_render.measurement_claims_key(self, ev, buffer)
 
     def _tool_claims_key(self, ev) -> bool:
-        claims = getattr(self.active_tool, "claims_key", None)
-        return callable(claims) and bool(claims(ev.key(), ev.modifiers()))
+        return ingetrazo_render.tool_claims_key(self, ev)
 
     def keyPressEvent(self, ev) -> None:
-        if ev.key() == Qt.Key_Control and not ev.isAutoRepeat():
-            self._ctrl_alone = True       # until another key says otherwise
-        # Held keys (First Person): the press and the release are the
-        # tool's; auto-repeat says nothing new.
-        if self._tool_claims_key(ev):
-            if not ev.isAutoRepeat():
-                self.active_tool.on_key(self, ev.key(), ev.modifiers())
+        if ingetrazo_render.document_key_press(self, ev):
             return
-        # 0. Shift state change → refresh snap immediately so the user sees
-        #the contextual lock take effect without moving the mouse.
-        if ev.key() == Qt.Key_Down and not ev.isAutoRepeat():
-            # A Down press takes the plane over from a held Shift (see
-            # _mark_plane_for_shift): what the user locks with it now
-            # outlives the key, so the Shift release must not undo it.
-            self._shift_plane_mark = None
-        if ev.key() == Qt.Key_Shift and not ev.isAutoRepeat():
-            self._set_middle_drag_pan_mode(True)
-            self._capture_shift_lock()
-            self._refresh_snap()
-            # Do not return — Shift is a modifier; let the rest fall through.
-        # 0b. Alt turns Paint into the eyedropper: show it on the pointer the
-        #     moment the key goes down, not after the next mouse move.
-        if ev.key() == Qt.Key_Alt and not ev.isAutoRepeat():
-            self._apply_alt_cursor(True)
-        elif self._alt_tap and not ev.isAutoRepeat():
-            # Alt+something is a shortcut: we are not taking its release.
-            self._alt_tap = False
-
-        # 1. Numeric value buffer (VCB-style length input).
-        if self._handle_value_key(ev):
-            return
-
-        # 2. Active tool gets first shot at the key.
-        if self.active_tool is not None:
-            if self.active_tool.on_key(self, ev.key(), ev.modifiers()):
-                return
-
-        # 2b. Delete in any other tool (Paint, Push/Pull, Offset…): with the
-        #     tool idle, erase the selection or — nothing selected — the edge
-        #     or face highlighted under the cursor. Mid-operation it would
-        #     pull the geometry out from under the tool, so it waits.
-        if ev.key() == Qt.Key_Delete and not ev.isAutoRepeat():
-            tool = self.active_tool
-            if tool is None or not self._tool_busy_for_delete(tool):
-                from tools.select import delete_selection_or_hover
-                delete_selection_or_hover(self)
-                return
-
-        # 3. Esc, escalating (standard CAD): first clear the typed value buffer,
-        #    then cancel the tool's in-progress action (an unfinished chain, a
-        #    drag), and finally — nothing in progress — clear the selection.
-        if ev.key() == Qt.Key_Escape:
-            self.escape()
-            return
-
-        # 3. Projection toggle.
-        if ev.key() == Qt.Key_P:
-            self.toggle_projection()
-            return
-
-        # 3b. Alt: cycle linear inferences — ONLY while an operation is in
-        #     progress, the classic behaviour. Its status bar offers
-        #     «Alt = Activar/desactivar "Inferencias lineales"» after the
-        #     first click of a line and not before, and the three states are
-        #     ours exactly: all → off → parallel/perp.
-        #
-        #     We had it global, at any moment, and that is the whole of
-        #     issue #26: Pedro Caeiro switches windows with Alt+Tab all day
-        #     and every switch moved a mode he was not using. Idle, there is
-        #     now nothing to steal. Cycling on the PRESS (not the release) is
-        #     deliberate: the release is what makes Qt's menu bar take focus,
-        #     so it lands on the QMenuBar, not here — measured on Marco's
-        #     desktop, one tap in six reached us.
-        if ev.key() == Qt.Key_Alt and not ev.isAutoRepeat():
-            if self.active_tool is not None and self._tool_busy(
-                    self.active_tool):
-                self._alt_tap = True        # the release is ours too
-                self._cycle_linear_inference_mode()
-            return
-
-        # 4. Axis lock (arrow keys). Pressing the same arrow toggles it off.
-        if ev.key() == Qt.Key_Right:
-            self.axis_lock = None if self.axis_lock == "x" else "x"
-            self._refresh_snap()
-            return
-        if ev.key() == Qt.Key_Left:
-            self.axis_lock = None if self.axis_lock == "y" else "y"
-            self._refresh_snap()
-            return
-        if ev.key() == Qt.Key_Up:
-            self.axis_lock = None if self.axis_lock == "z" else "z"
-            self._refresh_snap()
-            return
-
-        # 5. Reference edge — Down cycles None → parallel → perpendicular → None.
-        if ev.key() == Qt.Key_Down:
-            self._cycle_reference_mode()
-            self._refresh_snap()
-            return
-
-        super().keyPressEvent(ev)
+        return super().keyPressEvent(ev)
 
     def _release_linear_mode(self) -> None:
-        """Back to «all inferences» once the operation is over.
-
-        The toggle lasts ONE operation (the classic behaviour), and Marco checked it
-        against the real thing (2026-09-17): «desactivo con alt, termino de
-        dibujar la línea, aprieto la flechita y aprieto otra vez la línea y
-        está activo la inferencia». Ours was sticky — switched off it stayed
-        off for the rest of the session, which is a trap: you turn it off
-        for one line and then wonder for an hour why nothing snaps. It is
-        also what made issue #26 bite so hard, since an accidental Alt+Tab
-        left it off for good.
-
-        Called where an operation can END: a click that commits, a release,
-        Esc, and any change of tool."""
-        if self.linear_inference_mode == "all":
-            return
-        tool = self.active_tool
-        if tool is not None and self._tool_busy(tool):
-            return
-        self.linear_inference_mode = "all"
-        self._refresh_snap()
-        self.update()
+        return ingetrazo_render.release_linear_mode(self)
 
     def _release_axis_lock_after_operation(self, committed: bool = False) -> None:
-        """Drop the arrow-key axis lock when the operation that used it ends.
-
-        The classic rule, reported by @pacaeiro (issue #30): «if you're
-        drawing a line and press Arrow to lock X and finish drawing the
-        line, the X lock is released automatically. In ingeTrazo the Axis
-        lock keeps active». Ours only came off in the Esc cascade, so the
-        lock — and its label on screen — outlived the line it was for and
-        silently constrained whatever you drew next.
-
-        Same shape as the Alt toggle two issues ago (#26): a mode meant to
-        last one operation that lasted the session. The Down-arrow
-        reference is deliberately NOT released here — it is bound to an
-        edge the user went and picked, which is a more deliberate act than
-        tapping an arrow, and it already has Esc.
-
-        Called where an operation can END: a click that commits, a stroke
-        released, a typed value applied. A no-op mid-operation, so the
-        second click of a line keeps its lock.
-        """
-        if self.axis_lock is None:
-            return
-        tool = self.active_tool
-        if not committed and tool is not None and self._tool_busy(tool):
-            return
-        self.axis_lock = None
-        self._refresh_snap()
-        self.update()
+        return ingetrazo_render.release_axis_lock_after_operation(self, committed)
 
     def _cycle_linear_inference_mode(self) -> None:
-        """Alt: cycle linear inferences all → off → parallel/perp → all.
-
-        The classic toggle, states and all — the usual status bar reads «Alt =
-        Activar/desactivar "Inferencias lineales"» while a line is being
-        drawn. Offered only DURING an operation there, and here too since
-        issue #26. Point snaps (endpoint, midpoint, …) stay on; explicit
-        locks (arrow keys, Down reference) keep working in every mode."""
-        order = {"all": "off", "off": "parallel_perp", "parallel_perp": "all"}
-        self.linear_inference_mode = order[self.linear_inference_mode]
-        label = {
-            "all": "Linear inferences: all on",
-            "off": "Linear inferences: off",
-            "parallel_perp": "Linear inferences: parallel / perpendicular only",
-        }[self.linear_inference_mode]
-        self.measurementChanged.emit(label)
-        self._refresh_snap()
+        return ingetrazo_render.cycle_linear_inference_mode(self)
 
     def escape(self) -> None:
-        """The Esc cascade (standard CAD), ONE step per press: a typed value
-        buffer, then a sticky constraint (axis lock / reference), then the
-        array window a copy just opened, then the tool's in-progress action, then — nothing in progress — step out ONE level of the open group,
-        then clear the selection at the root, and
-        finally the tool's own cancel. The window's «Cancel current tool»
-        action (shortcut Esc, which fires BEFORE this widget's key event)
-        calls this too: it used to carry its own copy of the cascade,
-        without the group step, so Esc never left a group (Marco,
-        2026-09-14: «he hecho Esc varias veces y no salgo»)."""
-        if self._value_buffer:
-            self._set_value_buffer("")
-            return
-        if self.release_constraints():
-            return
-        tool = self.active_tool
-        close = getattr(tool, "close_array_window", None)
-        if callable(close) and self._array_pending():
-            # Right after a copy the array window is what is open: Esc
-            # closes it before touching the selection, so a bare X is the
-            # Text shortcut again (#542).
-            close()
-            return
-        if tool is not None and type(tool).__name__ == "PasteTool":
-            win = self.window()
-            activate = getattr(win, "_activate_tool", None)
-            if activate is not None:
-                activate("select")
-                return
-        if tool is not None and self._tool_busy(tool):
-            tool.on_cancel(self)
-            self._release_linear_mode()
-            return
-        if self.scene.edit_group is not None:
-            self.clear_extension_pick()
-            self.end_one_group_edit()       # selection must not consume Esc
-            return
-        if self.scene.selection or self.extension_pick is not None:
-            self.scene.clear_selection()
-            self.clear_extension_pick()
-            self.update()
-            return
-        if tool is not None:
-            tool.on_cancel(self)
+        return ingetrazo_render.document_escape(self)
 
     # ---- Items an extension lets the user select (issue #205) ---------------
     #: The one extension item selected — ``(entry, item_id, scene version)``
@@ -11334,203 +9562,48 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     extension_pick = None
 
     def pick_extension_item(self, px: float, py: float):
-        """The first extension item under the pixel, as ``(entry, id)``."""
-        for entry in getattr(self, "_ext_pickables", ()):
-            try:
-                item = entry["pick"](self, px, py)
-            except Exception:  # noqa: BLE001 — an extension's bug, not ours
-                import logging
-                logging.getLogger(__name__).exception("pickable failed")
-                continue
-            if item is not None:
-                return entry, item
-        return None
+        return ingetrazo_render.pick_extension_item(self, px, py)
 
     def set_extension_pick(self, hit) -> None:
-        """Select one extension item (``hit`` from pick_extension_item),
-        telling the extension what was let go and what was taken."""
-        self.clear_extension_pick()
-        entry, item = hit
-        self.extension_pick = (entry, item, self.scene.version)
-        if entry.get("on_select") is not None:
-            entry["on_select"](item)
-        self.update()
+        return ingetrazo_render.set_extension_pick(self, hit)
 
     def clear_extension_pick(self, notify: bool = True) -> None:
-        pick = self.extension_pick
-        self.extension_pick = None
-        if pick is not None and notify and pick[0].get("on_select") is not None:
-            pick[0]["on_select"](None)
+        return ingetrazo_render.clear_extension_pick(self, notify)
 
     def delete_extension_pick(self) -> bool:
-        """Supr on a selected extension item: the extension deletes it (as
-        its own undo step). A pick older than the document's last change
-        is dropped instead — after an undo the id may name another item."""
-        pick = self.extension_pick
-        if pick is None:
-            return False
-        entry, item, version = pick
-        self.clear_extension_pick()
-        if version != self.scene.version or entry.get("delete") is None:
-            return version != self.scene.version
-        entry["delete"](item)
-        self.update()
-        return True
+        return ingetrazo_render.delete_extension_pick(self)
 
     def release_constraints(self) -> bool:
-        """Drop the sticky drawing constraints — the arrow-key axis lock and
-        the Down-arrow parallel/perpendicular reference. First stop of the
-        Esc cascade: returns True if there was one to release (that Esc press
-        is consumed; the next one cancels the tool action as before)."""
-        if self.axis_lock is None and self.reference_mode is None:
-            return False
-        self.axis_lock = None
-        self.reference_edge = None
-        self.reference_mode = None
-        self._refresh_snap()
-        return True
+        return ingetrazo_render.release_constraints(self)
 
     def _cycle_reference_mode(self, edge=None) -> None:
-        """Down arrow: cycle None → parallel → perpendicular → None.
-
-        the modeller's: on entry to parallel mode it captures ``edge`` (the
-        Metal view's pick under the cursor), else the edge under the cursor,
-        else the last edge the line being drawn referenced (the soft
-        parallel/perpendicular the cursor picked up and then left: Down
-        makes that reference a lock). With no edge at all, do nothing —
-        there is nothing to be parallel/perpendicular to.
-        """
-        if self.reference_mode is None:
-            edge = (edge if edge is not None else self._hover_edge
-                    if self._hover_edge is not None
-                    else self.inference._acquired_edge)
-            if edge is None:
-                return  # nothing to capture
-            self.reference_edge = edge
-            self.reference_mode = "parallel"
-        elif self.reference_mode == "parallel":
-            self.reference_mode = "perpendicular"
-        else:
-            self.reference_edge = None
-            self.reference_mode = None
+        return ingetrazo_render.cycle_reference_mode(self, edge)
 
     def _refresh_snap(self) -> None:
-        """Re-run snap with the last known cursor position. Used when modifier
-        state changes (axis lock, reference mode, Shift) without mouse motion."""
-        self._sync_axes()
-        self.update()
-        if (
-            self._last_mouse_pos is None
-            or self.active_tool is None
-            or not self.active_tool.uses_snap
-        ):
-            return
-        from views import input_state
-
-        modifiers = input_state.modifiers(self)
-        p = self._last_mouse_pos.toPoint()
-        snap = self._snap_at(p.x(), p.y(), modifiers)
-        if snap is None:
-            return                              # the ray casts no world point
-        # Same bookkeeping as a hover with movement: the tool reads the KIND
-        # of the snap it is being handed (``_note_snap``), and a modifier
-        # changing with the hand still is exactly when a planar shape has to
-        # know whether the cursor is on a FACE or on a point of the model.
-        self._note_snap(snap)
-        ctx = ToolContext(
-            viewport=self,
-            world=snap.point,
-            screen=self._last_mouse_pos,
-            modifiers=modifiers,
-            snap=snap,
-        )
-        self.active_tool.on_hover(ctx)
-        self.measurementChanged.emit(self._measurement_text())
+        return ingetrazo_render.refresh_snap(self)
 
     def refresh_status_hint(self) -> None:
-        """Redraw the status bar's base line now. The hint otherwise rides
-        the 12 Hz text timer, which only ticks on mouse movement — a tool
-        that changes mode on a KEY needs to say so without waiting for the
-        hand to move (the Tape's Ctrl, issue #29)."""
-        win = self.window()
-        fn = getattr(win, "_update_status_hint", None)
-        if fn is not None:
-            fn()
+        return ingetrazo_render.refresh_status_hint(self)
 
     def _alt_tapped(self) -> bool:
-        """A clean Alt tap (press and release, nothing in between) toggles
-        Paint's eyedropper and it STAYS until one sample is taken or Alt is
-        tapped again — the usual behaviour (Marco, 2026-09-23: «se alterna
-        con Alt, no es que se mantenga presionado»). Holding Alt and
-        clicking still samples, as before."""
-        if self.nav_mode is not None or getattr(
-                self.active_tool, "icon", None) != "paint":
-            return False
-        from tools.paint import PaintTool
-        win = self.window()
-        act = getattr(win, "_act_eyedropper", None)
-        if act is not None:
-            act.setChecked(not act.isChecked())   # the button shows it too
-        else:
-            PaintTool.sample_armed = not PaintTool.sample_armed
-        self._apply_tool_cursor()
-        return True
+        return ingetrazo_render.alt_tapped(self)
 
     def _apply_alt_cursor(self, down: bool) -> None:
-        """Refresh the pointer for an Alt state change (Paint <-> eyedropper);
-        no-op while a camera nav mode owns the cursor. ``down`` is the key's
-        state after this event — see ``_apply_tool_cursor``."""
-        self._alt_down = bool(down)
-        if self.nav_mode is None and getattr(
-                self.active_tool, "icon", None) == "paint":
-            self._apply_tool_cursor()
+        return ingetrazo_render.apply_alt_cursor(self, down)
 
     def keyReleaseEvent(self, ev) -> None:
-        release = getattr(self.active_tool, "on_key_release", None)
-        if callable(release):
-            if ev.isAutoRepeat() and self._tool_claims_key(ev):
-                return
-            if not ev.isAutoRepeat() and release(self, ev.key()):
-                return
-        if ev.key() == Qt.Key_Alt and not ev.isAutoRepeat():
-            self._apply_alt_cursor(False)
-            if self._alt_tap:
-                # We acted on the press, so the release is ours: swallowing
-                # it keeps Qt's menu bar from taking focus on it. Otherwise
-                # the focus ping-pongs viewport → menu bar → viewport and
-                # every other Alt lands on the menu bar instead of here
-                # (issue #26; measured: one tap in six got through).
-                self._alt_tap = False
-                ev.accept()
-                return
-        if ev.key() == Qt.Key_Shift and not ev.isAutoRepeat():
-            self._set_middle_drag_pan_mode(False)
-            self._shift_lock = None
-            self._shift_lock_ref = None
-            self._release_shift_plane_mark()
-            self._refresh_snap()
-        super().keyReleaseEvent(ev)
+        if ingetrazo_render.document_key_release(self, ev):
+            return
+        return super().keyReleaseEvent(ev)
 
     #: The view shown in this one's place (the Metal view), which takes the
     #: keyboard whenever this hidden one is given it.
     keys_stand_in = None
 
     def setFocus(self, *args) -> None:  # noqa: N802 — Qt's name
-        """Orbit / Pan, a scene picked in its list, the camera panel, a
-        project switch… all give the keyboard back with
-        ``viewport.setFocus()``. Under Metal this viewport is hidden and Qt
-        ignores it there, so the keys stayed in the list or on a button:
-        the view the user sees takes them instead."""
-        shown = self.keys_stand_in
-        if shown is not None and not self.isVisible():
-            try:
-                visible = shown.isVisible()
-            except RuntimeError:        # its C++ side is gone
-                self.keys_stand_in = visible = None
-            if visible:
-                shown.setFocus(*args)
-                return
-        super().setFocus(*args)
+        if ingetrazo_render.document_focus(self, args):
+            return
+        return super().setFocus(*args)
 
     def focusNextPrevChild(self, next) -> bool:  # noqa: A002 — Qt's name
         """Tab is a tool key (``views.shortcuts.reserved_reason``): Qt's
@@ -11539,16 +9612,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return False
 
     def focusOutEvent(self, ev) -> None:
-        """Focus gone means the Alt release will land somewhere else, so the
-        claim on it lapses (issue #26)."""
-        self._alt_tap = False
-        self._alt_down = False        # its release will not reach us either
-        self._ctrl_alone = False      # nor will Ctrl's
-        self._release_shift_plane_mark()   # nor Shift's: unmark the plane
-        # Nor will the release of a held walking key (First Person).
-        lost = getattr(self.active_tool, "on_focus_out", None)
-        if callable(lost):
-            lost(self)
+        ingetrazo_render.document_focus_out(self)
         super().focusOutEvent(ev)
 
     # Inferences whose direction can be captured by a Shift lock.
@@ -11558,103 +9622,21 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     })
 
     def _capture_shift_lock(self) -> None:
-        """On Shift press, mark the plane the shape is drawing on and freeze
-        the active inference's direction so it holds even as the cursor
-        wanders off it (inference lock). Both at once, one does not take
-        the other's place: the mark only says WHICH plane, and the pointer
-        goes on marking midpoints, endpoints and alignments (Marco: «100%
-        aditivo»). Each side keeps its own guard."""
-        self._shift_lock = None
-        self._shift_lock_ref = None
-        self._mark_plane_for_shift()
-        snap = self.last_snap
-        tool = self.active_tool
-        owns = getattr(tool, "owns_shift_lock", None)
-        if owns is not None and owns():
-            return  # the tool reads the cursor's motion itself
-        start = getattr(tool, "start_point", None) if tool is not None else None
-        if snap is None or snap.kind not in self._SHIFT_LOCKABLE:
-            return
-        axis = snap.axis if snap.axis in _AXIS_VECTORS else None
-        if start is None and axis is None:
-            return          # no start point and no axis: nothing to lock
-
-        # Lock to the exact inferred axis, preserving its direction.
-        if axis is not None:
-            d = QVector3D(_AXIS_VECTORS[axis])
-            if start is not None and QVector3D.dotProduct(snap.point - start, d) < 0.0:
-                d = -d
-        else:
-            d = snap.point - start
-        if d.length() > 1e-6:
-            self._shift_lock = (d.normalized(), snap.color)
-            if (snap.kind == "from_point" and axis is not None
-                    and getattr(snap, "guide", None) is not None):
-                self._shift_lock_ref = (snap.guide[0], axis)
+        return ingetrazo_render.capture_shift_lock(self)
 
     def _mark_plane_for_shift(self) -> None:
-        """Shift marks the plane the shape would draw on — the tool's call
-        (``PlaneLock.mark_plane``). Unlike the inference lock above this is
-        HELD, not locked: the release hands the plane back
-        (``_release_shift_plane_mark``)."""
-        self._shift_plane_mark = None
-        tool = self.active_tool
-        if tool is None:
-            return
-        from tools.base import PlaneLock
-        if not isinstance(tool, PlaneLock):
-            return
-        if tool.mark_plane(self):
-            self._shift_plane_mark = tool
+        return ingetrazo_render.mark_plane_for_shift(self)
 
     def _release_shift_plane_mark(self) -> None:
-        """Shift let go (or the window lost focus): hand the plane back.
-        Only the mark that Shift itself put there goes — a plane locked with
-        an arrow or with Down in the meantime outlives the key."""
-        tool = getattr(self, "_shift_plane_mark", None)
-        self._shift_plane_mark = None
-        if tool is None:
-            return
-        ref = getattr(tool, "plane_ref", None)
-        if ref is not None and ref[1] == "plane":
-            tool.plane_ref = None
+        return ingetrazo_render.release_shift_plane_mark(self)
 
     # ---- Zoom: the lens typed in the value box ------------------------------
     def apply_zoom_value(self, typed: str) -> bool:
-        """Set the lens from what was typed with Zoom on: ``35mm`` is a
-        focal length on the camera's sensor (Camera Settings), ``60deg``,
-        ``60°`` or ``60`` the vertical field of view. Only in perspective
-        — a parallel view has no lens. ``False`` (and nothing changes) when
-        it cannot be done; the status bar says why."""
-        from core.camera import FOV_RANGE
-        m = re.fullmatch(r"\s*(\d+(?:[.,]\d*)?|[.,]\d+)\s*(mm|deg|°)?\s*",
-                         typed.lower())
-        value = float(m.group(1).replace(",", ".")) if m else 0.0
-        if m is None or not math.isfinite(value) or value <= 0.0:
-            self.flash_status(tr(
-                "Type a focal length like 35mm, or an angle like 60deg."))
-            return False
-        cam = self.camera
-        if not cam.perspective:
-            self.flash_status(tr(
-                "Field of view applies to perspective; switch to "
-                "Perspective first."))
-            return False
-        fov = cam.fov_for_focal(value) if m.group(2) == "mm" else value
-        lo, hi = FOV_RANGE
-        cam.fov_deg = float(min(hi, max(lo, fov)))
-        self.update()
-        self.flash_status(tr(
-            "Lens {mm} mm, field of view {deg}°",
-            mm=f"{cam.focal_mm:.0f}", deg=f"{cam.fov_deg:.1f}"), 4000)
-        return True
+        return ingetrazo_render.apply_zoom_value(self, typed)
 
     # ---- Numeric value buffer (VCB-style) ----------------------------------
     def _handle_value_key(self, ev) -> bool:
-        """The value box's keys: ``rust/ingetrazo_core/src/value_field.rs``
-        takes or refuses each one (``docs/rust-tools.md`` §20) and reads
-        Enter; :func:`_enter_value` hands the reading to the tool. With
-        Zoom on and no tool, the box takes the lens (``35mm``, ``60deg``)."""
+        """Route a value-box key to its document tool or the camera lens."""
         return _value_key(self, ev)
 
     @staticmethod
@@ -11670,17 +9652,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return parse_value_box(buffer, comma_lists)
 
     def _array_pending(self) -> bool:
-        """Whether the active tool just made a copy that «x5» would turn
-        into an array (#542)."""
-        pending = getattr(self.active_tool, "array_pending", None)
-        return bool(pending(self)) if callable(pending) else False
+        return ingetrazo_render.array_pending(self)
 
     def _set_value_buffer(self, text: str) -> None:
-        if text == self._value_buffer:
-            return
-        self._value_buffer = text
-        self.valueBufferChanged.emit(text)
-        self.update()
+        return ingetrazo_render.set_value_buffer(self, text)
 
     def toggle_projection(self) -> None:
         self.camera.toggle_projection()
@@ -11702,58 +9677,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _snap_at(
         self, px_x: float, px_y: float, modifiers
     ) -> Optional[SnapResult]:
-        """The snap engine's answer for the cursor at ``(px_x, px_y)``.
-
-        THE one code path: both ``_build_ctx`` (mouse motion and clicks) and
-        ``_refresh_snap`` (a modifier changing with the hand still) go through
-        here, so the :func:`compute_snap` argument list lives in exactly one
-        place. Returns ``None`` when the pixel casts no world point (the ray
-        misses the plane / the point is behind the camera). A tool that does
-        not snap (Select, Push/Pull) gets a ``"none"`` result instead - no
-        snap engine, no occlusion raycasts, no marker.
-
-        A point that is not finite counts as no point: a NaN that reached a
-        tool showed «nan m» in the length box and failed the Line's commit
-        with «AddEdgeCommand: cannot convert float NaN to integer» (#466,
-        #754). Whatever inference produced it, the cursor just gives
-        nothing for that pixel.
-
-        The answer is values, no face: whatever the search picks it only
-        reads, so a big lazy mesh under the cursor stays unbuilt (#1092)."""
-        from views.array_bake import reading_only
-        with reading_only():
-            snap = self.inference.snap(px_x, px_y, modifiers)
-        if snap is not None and not _finite_point(snap.point):
-            return None
-        return snap
+        return ingetrazo_render.document_snap_at(self, px_x, px_y, modifiers)
 
     def _build_ctx(self, ev) -> Optional[ToolContext]:
-        self._sync_axes()
-        p = ev.position().toPoint()
-        snap = self._snap_at(p.x(), p.y(), ev.modifiers())
-        if snap is None:
-            return None
-        return ToolContext(
-            viewport=self,
-            world=snap.point,
-            screen=ev.position(),
-            modifiers=ev.modifiers(),
-            snap=snap,
-        )
+        return ingetrazo_render.build_ctx(self, ev)
 
     def _note_snap(self, snap: SnapResult) -> None:
-        """Record the cursor's snap and hand its KIND to the active tool
-        (``Tool.snap_kind``).
-
-        The kind is known only once the snap has been computed — the plane
-        comes first, the point and its snap second — so a planar tool
-        asking the viewport which face the cursor is over cannot be told
-        whether the cursor is on that face as a FACE or snapped to a point
-        that merely lies on it. The tool hears it here, on every hover and
-        click, before it is called: that is where ``PlaneLock.
-        snapped_plane`` decides whether the shape re-plans onto a point
-        (#37) or stays on the face under the cursor (#545)."""
-        self.last_snap = snap
-        tool = self.active_tool
-        if tool is not None:
-            tool.snap_kind = getattr(snap, "kind", None)
+        return ingetrazo_render.note_snap(self, snap)

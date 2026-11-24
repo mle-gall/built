@@ -6,14 +6,10 @@ Any change of content rebuilds the table, and opening a group is one: every
 folded branch of the tree came open again on picking a row."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication, QTreeWidgetItemIterator  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from tests.test_tree_links import _View
+from views import wgpu_ui
 
 from core.bim import tag_group  # noqa: E402
 from core.group import Group  # noqa: E402
@@ -50,72 +46,53 @@ def _model(scene):
     return floors
 
 
-def _rows(panel):
-    rows = {}
-    it = QTreeWidgetItemIterator(panel.tree)
-    while it.value() is not None:
-        rows[it.value().text(1) or it.value().text(0)] = it.value()
-        it += 1
-    return rows
+def rows(view, win):
+    wgpu_ui._tree(view, win)
+    return {text[0]: state for text, state in view.renderer.calls["ui_set_tree"][0]}
 
 
-def _window():
-    from views.main_window import MainWindow
-    return MainWindow()
+def toggle(view, win, key):
+    wgpu_ui._tree_action(win, view, "toggle" + wgpu_ui.SEP + key)
+    return rows(view, win)
 
 
-def _close(win):
-    win._saved_version = win.viewport.scene.version
-    win.close()
+def test_opening_a_group_leaves_the_folded_branches_folded(native_host):
+    from views.tree_navigation import open_to
+    win, vp, view = native_host.window, native_host.viewport, _View()
+    first, second = _model(vp.scene)
+    walls, = first.children
+    view._ui_exp = {"n:", "i:" + first.uid, "c:" + walls.uid, "i:" + second.uid}
+    wgpu_ui._measure(view, win)
+    before = rows(view, win)
+    assert before["c:" + walls.uid][8] and before["i:" + second.uid][8]
+    toggle(view, win, "c:" + walls.uid)
+    toggle(view, win, "i:" + second.uid)
+    cv = vp.scene.content_version
+    assert open_to(vp, [first, walls])
+    vp.scene.select([walls.children[0]])
+    assert vp.scene.content_version != cv
+    assert "context:fold" in rows(view, win)
+    assert open_to(vp, [])
+    restored = rows(view, win)
+    assert restored["i:" + first.uid][8]
+    assert not restored["c:" + walls.uid][8] and not restored["i:" + second.uid][8]
 
 
-def test_opening_a_group_leaves_the_folded_branches_folded():
-    win = _window()
-    try:
-        vp = win.viewport
-        _model(vp.scene)
-        panel = win.bim_tray.bim
-        panel.refresh()
-        rows = _rows(panel)
-        assert rows["walls"].isExpanded() and rows["floor1"].isExpanded()
-        rows["walls"].setExpanded(False)
-        rows["floor2"].setExpanded(False)
-        height = panel.tree.height()
-
-        cv = vp.scene.content_version
-        panel._on_pick_object(rows["W1"], 0)    # opens the groups around it
-        panel.refresh()
-        assert vp.scene.content_version != cv   # the table was rebuilt ...
-        rows = _rows(panel)
-        assert not rows["walls"].isExpanded()   # ... with the folds in place
-        assert not rows["floor2"].isExpanded()
-        assert rows["floor1"].isExpanded()
-        assert panel.tree.height() == height    # and no taller for it
-    finally:
-        _close(win)
-
-
-def test_a_new_branch_comes_open_and_a_folded_tagged_group_stays_folded():
-    win = _window()
-    try:
-        vp = win.viewport
-        floors = _model(vp.scene)
-        tag_group(floors[1], "IfcBuildingStorey", "tagged floor")
-        vp.scene.version += 1
-        panel = win.bim_tray.bim
-        panel.refresh()
-        rows = _rows(panel)
-        rows["tagged floor"].setExpanded(False)  # a tagged group's own row
-
-        extra = Group(_box(9))
-        tag_group(extra, "IfcWall", "W3")
-        outer = Group(Mesh(), name="floor3")
-        outer.children.append(extra)
-        vp.scene.groups.append(outer)
-        vp.scene.version += 1
-        panel.refresh()
-        rows = _rows(panel)
-        assert not rows["tagged floor"].isExpanded()
-        assert rows["floor3"].isExpanded()
-    finally:
-        _close(win)
+def test_a_new_branch_can_open_without_reopening_a_folded_tagged_group(native_host):
+    win, scene, view = native_host.window, native_host.viewport.scene, _View()
+    _, floor = _model(scene)
+    tag_group(floor, "IfcBuildingStorey", "tagged floor")
+    scene.version += 1
+    view._ui_exp = {"n:", "i:" + floor.uid}
+    assert rows(view, win)["i:" + floor.uid][8]
+    toggle(view, win, "i:" + floor.uid)
+    extra = Group(_box(9), name="W3")
+    tag_group(extra, "IfcWall", "W3")
+    outer = Group(name="floor3")
+    outer.adopt([extra])
+    scene.groups.append(outer)
+    scene.version += 1
+    assert not rows(view, win)["i:" + floor.uid][8]
+    after = toggle(view, win, "i:" + outer.uid)
+    assert after["i:" + outer.uid][8] and "c:" + extra.uid in after
+    assert not after["i:" + floor.uid][8]

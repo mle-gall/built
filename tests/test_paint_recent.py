@@ -12,7 +12,9 @@ import random
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QPointF, QSettings, Qt
+from core.input_types import QPointF, Qt
+from core.settings import settings as QSettings
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from PySide6.QtGui import QColor, QImage
 from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
@@ -183,71 +185,48 @@ def test_a_sampled_positioned_texture_is_remembered_without_its_map():
 
 # ---- the panel ----------------------------------------------------------------
 
-def _row_tips(panel):
-    g = panel._recent_grid
-    return [g.itemAt(i).widget().toolTip() for i in range(g.count())]
-
-
-@pytest.fixture
-def window():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    yield w
-    w._saved_version = w.viewport.scene.version
-    w.close()
-
-
-def _panel(w):
-    from views.tray import MaterialsPanel
-    return w.findChild(MaterialsPanel)
-
-
-def test_panel_row_follows_paints_and_hides_when_empty(window, tmp_path):
-    panel = _panel(window)
-    vp = window.viewport
-    assert _row_tips(panel) == []
-    assert panel._recent_heading.isHidden()
+def test_palette_follows_paints_and_hides_recent_when_empty(native_host, tmp_path, monkeypatch):
+    from tests.test_tree_links import _View
+    from views import wgpu_library as library
+    vp, view = native_host.viewport, _View()
+    rows = lambda: library.palette_items(view, native_host.window)
+    assert not any(key.startswith("stamp:") for key, *_ in rows())
     face = _quad(vp.scene.mesh)
-    vp._pixel_to_ray = lambda *_a: (None, None)
-    vp.pick_face_any = lambda *_a: (face, None)
-    tex = _png(tmp_path / "ladrillo.png", (0.7, 0.3, 0.2))
-    _use(texture={"path": tex, "sw": 0.3, "sh": 0.2, "rot": 0.0})
-    PaintTool().on_click(ToolContext(viewport=vp, world=QVector3D(),
-                                     screen=QPointF(0, 0),
-                                     modifiers=Qt.NoModifier, snap=None))
-    _use(color=(0.2, 0.4, 0.6), name="RAL 5015")
-    PaintTool().on_click(ToolContext(viewport=vp, world=QVector3D(),
-                                     screen=QPointF(0, 0),
-                                     modifiers=Qt.NoModifier, snap=None))
-    assert _row_tips(panel) == ["RAL 5015", "ladrillo"]
-    assert not panel._recent_heading.isHidden()
+    monkeypatch.setattr(vp, "pick_face_any", lambda *_: (face, None))
+    monkeypatch.setattr(vp, "pick_group", lambda *_: None)
+    tex = _png(tmp_path / "ladrillo.png", (.7, .3, .2))
+    _use(texture={"path": tex, "sw": .3, "sh": .2, "rot": 0.})
+    _click(vp, face)
+    _use(color=(.2, .4, .6), name="RAL 5015")
+    _click(vp, face)
+    # Most-used model swatches appear once, even when also recently painted.
+    from ingetrazo_core import recent_swatches
+    ordered = [name for _, name, _, _ in recent_swatches(PaintTool)]
+    assert ordered[0] == "RAL 5015" and "ladrillo" in ordered[1].lower()
+    labels = [name for key, name, *_ in rows() if key not in ("", "-")]
+    assert all(labels.count(name) == 1 for name in ordered)
 
 
-def test_clicking_a_recent_swatch_restores_it_exactly(window, tmp_path):
-    panel = _panel(window)
-    tex = _png(tmp_path / "vidrio.png", (0.6, 0.8, 0.9))
+def test_clicking_a_recent_swatch_restores_it_exactly(native_host, tmp_path):
+    from tests.test_tree_links import _View
+    from views import wgpu_library as library
+    win = native_host.window
+    tex = _png(tmp_path / "vidrio.png", (.6, .8, .9))
     PaintTool.recent = [
-        {"texture": {"path": tex, "sw": 1.5, "sh": 0.75, "rot": 90.0},
-         "opacity": 0.4, "mat": "Vidrio"},
-        {"color": [0.25, 0.5, 0.75]},
+        {"texture": {"path": tex, "sw": 1.5, "sh": .75, "rot": 90.},
+         "opacity": .4, "mat": "Vidrio"},
+        {"color": [.25, .5, .75]},
     ]
-    panel._refresh_recent()
+    entries = [r[0] for r in library.palette_items(_View(), win) if r[0].startswith("stamp:")]
+    assert len(entries) == 2
     PaintTool.current_is_default = True
-    panel._recent_grid.itemAt(0).widget().click()
-    assert PaintTool.current_is_default is False
-    assert PaintTool.current_texture == {"path": tex, "sw": 1.5, "sh": 0.75,
-                                         "rot": 90.0}
-    assert PaintTool.current_opacity == 0.4
-    assert PaintTool.current_material.name == "Vidrio"
-    assert panel._sw_box.value() == 1.5 and panel._rot_box.value() == 90.0
-    assert isinstance(window.viewport.active_tool, PaintTool)
-
-    panel._recent_grid.itemAt(1).widget().click()
-    assert PaintTool.current_texture is None
-    assert PaintTool.current_color == (0.25, 0.5, 0.75)
-    assert PaintTool.current_material is None
-    assert PaintTool.current_opacity is None
-    # Picking from the row does not reorder it: only painting does.
+    library.paint_from_strip(win, entries[0])
+    assert not PaintTool.current_is_default and PaintTool.current_material.name == "Vidrio"
+    assert PaintTool.current_texture == PaintTool.recent[0]["texture"] and PaintTool.current_opacity == .4
+    assert isinstance(win.viewport.active_tool, PaintTool)
+    library.paint_from_strip(win, entries[1])
+    assert PaintTool.current_texture is None and PaintTool.current_color == (.25, .5, .75)
+    assert PaintTool.current_material is None and PaintTool.current_opacity is None
     assert PaintTool.recent[0]["mat"] == "Vidrio"
 
 

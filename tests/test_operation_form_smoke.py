@@ -1051,3 +1051,55 @@ def test_native_survey_imports_share_datum_and_save(tmp_path):
     load_into(scene, path)
     assert len(scene.geo_paths) == len(scene.geo_points) == 1
     assert scene.photo_mesh.triangle_count == 2 and scene.georef.alt == pytest.approx(1750.)
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires a built window and BUILT_WINDOW_TESTS=1")
+def test_native_takeoff_picks_tagged_faces_in_their_edit_context(tmp_path):
+    from core.bim import tag_faces
+    from core.history import History
+    from core.scene import Scene
+    from formats.igz import save_scene
+    from tests.test_bim_grouped_tags import _box, _group
+
+    scene = Scene()
+    faces = _box(scene)
+    tag_faces(faces, "IfcWall", "West wall", 1)
+    _group(scene, History(scene), faces).name = "Wall assembly"
+    model = tmp_path / "wall.built"
+    save_scene(scene, model)
+    venv = fixture_venv(tmp_path, """from app_shell.host import Host
+from views import wgpu_ui
+menu, state = Host.menu, Host.state
+def drive(self, command):
+    scene = self.viewport.scene
+    if command == "fixture-measure":
+        wgpu_ui._tree_action(self.window, self.view, "insp:measure")
+    elif command == "fixture-select-faces":
+        group, = scene.selection
+        (key, label), = scene._inspector_takeoff.face_actions(group)
+        assert label == "Select West wall faces"
+        wgpu_ui._tree_action(self.window, self.view, "insp:" + key)
+    else:
+        return menu(self, command)
+def inspect(self):
+    scene = self.viewport.scene
+    return dict(state(self), context=scene.edit_group.name if scene.edit_group else "",
+                tagged_faces=sum((getattr(f, "attrs", {}).get("ifc") or {}).get("name") == "West wall"
+                                 for f in scene.selection))
+Host.menu, Host.state = drive, inspect
+""")
+    steps = tmp_path / "steps"
+    steps.write_text("wait 600\nkey escape\nmenu select_all\nmenu fixture-measure\nwait 250\n"
+                     "menu fixture-select-faces\nwait 250\nstate\nkey escape\nkey escape\nwait 250\nstate\nquit\n")
+    result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
+                  "--size", "1000x720", "--script", str(steps), str(model)],
+                 env=dict(os.environ, BUILT_ANSWERS="cmd-d"), capture_output=True, text=True, timeout=45)
+    log = result.stdout + result.stderr
+    assert result.returncode == 0 and "Traceback" not in log, log
+    states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
+              if line.startswith("[built] state ")]
+    selected, closed = states[:2]
+    assert (selected["context"], selected["tagged_faces"]) == ("Wall assembly", 6), log
+    assert closed["context"] == "" and not closed["tagged_faces"], log
+    assert all(not s["errors"] and not s["blocked_widgets"] for s in (selected, closed)), log
