@@ -31,7 +31,6 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFocusEvent, QKeyEvent
 from ingetrazo_core import Vec3 as QVector3D
@@ -139,32 +138,6 @@ def test_losing_focus_drops_the_claim_on_the_release():
         vp.focusOutEvent(QFocusEvent(QFocusEvent.FocusOut,
                                      Qt.ActiveWindowFocusReason))
         assert vp._alt_tap is False
-    finally:
-        _close(win, vp)
-
-
-def test_the_toggle_lasts_one_operation_and_no_longer():
-    """The usual rule, checked by Marco against the real thing: «desactivo
-    con alt, termino de dibujar la línea, aprieto la flechita y aprieto otra
-    vez la línea y está activo la inferencia». Ours was sticky — off stayed
-    off for the session, which is a trap, and it is what made an accidental
-    Alt+Tab bite so hard in issue #26."""
-    from PySide6.QtCore import QPointF
-    from PySide6.QtGui import QMouseEvent
-
-    win, vp = _viewport()
-    try:
-        win._activate_tool("line")
-        _busy(vp)
-        _press(vp, Qt.Key_Alt)
-        assert vp.linear_inference_mode == "off"
-
-        vp.active_tool.start_point = None          # the line was finished
-        # the NEXT gesture starts clean
-        vp.mousePressEvent(QMouseEvent(
-            QMouseEvent.MouseButtonPress, QPointF(5, 5), Qt.LeftButton,
-            Qt.LeftButton, Qt.NoModifier))
-        assert vp.linear_inference_mode == "all"
     finally:
         _close(win, vp)
 

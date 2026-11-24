@@ -89,7 +89,6 @@ from core.texture import face_uv_axes
 from core.layers import is_link_untagged
 from core.triangulate import plane_axes
 from tools.base import Tool, ToolContext
-from tools.rust_tools import selection_mode
 from core.inference import InferenceEngine
 
 
@@ -13210,17 +13209,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                     return o + d * ((span[0] + span[1]) * 0.5)
         return QVector3D(self.camera.target)
 
-    def _end_camera_drag(self) -> None:
-        """Forget a camera drag in progress (orbit, pan or zoom by drag)."""
-        self._last_pos = None
-        self._orbit_pivot = None
-        self._pan_mode = False
-        self._middle_drag_active = False
-        if self.nav_mode is not None:
-            self._apply_nav_cursor()
-        else:
-            self._apply_tool_cursor()
-
     def _set_middle_drag_pan_mode(self, pan: bool) -> None:
         """Switch an active MMB drag between orbit and pan."""
         if not self._middle_drag_active or self.nav_mode is not None:
@@ -13270,12 +13258,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             self.unsetCursor()
         self.update()
 
-    def leaveEvent(self, ev) -> None:
-        if self._hover_entity is not None:
-            self._hover_entity = None
-            self.update()
-        super().leaveEvent(ev)
-
     # ---- Input --------------------------------------------------------------
     def _context_pick(self, x: float, y: float):
         """Right-click at ``(x, y)``: select the thing under the cursor
@@ -13310,136 +13292,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _face_or_image_in_front(self, x: float, y: float):
         face = self.pick_face(x, y)
         return self.image_in_front_of(face, x, y) or face
-
-    # ---- A side-tray tab dropped here: the window moves it to that side ----
-    def _dock_drag(self, ev) -> bool:
-        win = self.window()
-        mime = getattr(win, "DOCK_MIME", None)
-        return bool(mime) and ev.mimeData().hasFormat(mime)
-
-    def dragEnterEvent(self, ev) -> None:
-        if self._dock_drag(ev):
-            ev.acceptProposedAction()
-            return
-        super().dragEnterEvent(ev)
-
-    def dragMoveEvent(self, ev) -> None:
-        if self._dock_drag(ev):
-            ev.acceptProposedAction()
-            return
-        super().dragMoveEvent(ev)
-
-    def dropEvent(self, ev) -> None:
-        if self._dock_drag(ev):
-            self.window().drop_dock_on_viewport(ev)
-            return
-        super().dropEvent(ev)
-
-    def contextMenuEvent(self, ev) -> None:
-        """Right-click: select what's under the cursor and open
-        a context menu of actions relevant to the current selection."""
-        win = self.window()
-        # A tool with its own right-click menu (Position Texture: Done /
-        # Reset / Flip / Rotate) takes the click instead.
-        hook = getattr(self.active_tool, "context_menu", None)
-        if callable(hook) and hook(self, ev.globalPos()):
-            return
-        if not hasattr(win, "show_viewport_context_menu"):
-            return
-        x, y = ev.pos().x(), ev.pos().y()
-        # Where the menu was opened, for entries that act at the cursor
-        # (Texture ▸ Position puts its pins on the tile under it).
-        self._context_pixel = (x, y)
-        picked = self._context_pick(x, y)
-        # A locked image under the cursor is offered even when the click
-        # landed on geometry drawn over it (the plaza on its orthomosaic):
-        # the menu is the only way back to Unlock / Delete for it.
-        under = self.pick_locked_image_plane(x, y)
-        # A locked group the same way: it can no longer be selected, and
-        # its Unlock lives here (#782).
-        win.show_viewport_context_menu(
-            ev.globalPos(), locked_image=under if under is not picked else None,
-            locked_group=self.pick_locked_group(x, y))
-
-    def mousePressEvent(self, ev) -> None:
-        # A new gesture starts with the inferences back on: the Alt
-        # toggle lasts ONE operation. Mid-operation (the
-        # second click of a line) the tool is still busy and nothing moves.
-        self._release_linear_mode()
-        self._input_t = _time_mod.monotonic()   # P0: input→paint latency
-        self._input_serial = getattr(self, "_input_serial", 0) + 1
-        if (ev.button() in (Qt.LeftButton, Qt.RightButton)
-                and self.nav_mode is None and self._look_drag is None
-                and callable(getattr(self.active_tool, "on_look", None))):
-            self._begin_look(ev)
-            return
-        if ev.button() == Qt.MiddleButton:
-            self._last_pos = ev.position().toPoint()
-            self._pan_mode = bool(ev.modifiers() & Qt.ShiftModifier)
-            self._middle_drag_active = True
-            self._orbit_pivot = self._orbit_pivot_at(
-                ev.position().x(), ev.position().y())
-            self._pan_depth = self._depth_of(self._orbit_pivot)
-            # While the wheel-drag lasts, the pointer becomes the
-            # orbit (or pan) icon; the tool cursor comes back on release.
-            from views.icons import tool_cursor
-            cur = tool_cursor("pan" if self._pan_mode else "orbit")
-            if cur is not None:
-                self.setCursor(cur)
-            return
-        # Nav buttons: left-drag orbits/pans the camera.
-        # Hold Shift while orbiting to pan temporarily (matches MMB+Shift).
-        if ev.button() == Qt.LeftButton and self.nav_mode is not None:
-            if self.nav_mode == "zoom_window":
-                # Drag a rectangle; the camera zooms to it on release.
-                self._zoom_box_active = True
-                self._zoom_box_start = ev.position()
-                self._zoom_box_cur = ev.position()
-                return
-            self._last_pos = ev.position().toPoint()
-            self._pan_mode = (
-                self.nav_mode == "pan"
-                or bool(ev.modifiers() & Qt.ShiftModifier)
-            )
-            self._orbit_pivot = (
-                self._orbit_pivot_at(ev.position().x(), ev.position().y())
-                if self.nav_mode == "orbit" else None)
-            self._pan_depth = (
-                self._depth_of(self._orbit_pivot_at(
-                    ev.position().x(), ev.position().y()))
-                if self._pan_mode else None)
-            # The orbit/pan icon stays through the drag.
-            self._apply_nav_cursor()
-            return
-        if ev.button() == Qt.LeftButton and self.active_tool is not None:
-            # Triple click: a press landing right after a double-click at the
-            # same spot (Qt has no native triple event): select all
-            # connected.
-            if self._is_triple_click(ev):
-                self._last_double = None
-                ctx = self._build_ctx(ev)
-                if ctx is not None:
-                    self.active_tool.on_triple_click(ctx)
-                    self.update()
-                return
-            # Box-select tools defer the decision to release: a tiny drag is a
-            # click, a real drag is a rubber-band box.
-            if self.active_tool.box_select:
-                self._box_active = True
-                self._box_start = ev.position()
-                self._box_cur = ev.position()
-                return
-            self._dispatch_tool_click(ev)
-
-    def _is_triple_click(self, ev) -> bool:
-        from PySide6.QtWidgets import QApplication
-        last = self._last_double
-        if last is None:
-            return False
-        t, pos = last
-        return (ev.timestamp() - t
-                <= QApplication.doubleClickInterval()
-                and (ev.position() - pos).manhattanLength() < 8)
 
     def _dispatch_tool_click(self, ev, double: bool = False) -> None:
         """Forward a (double-)click to the active tool, then run the shared
@@ -13524,144 +13376,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         self.unsetCursor()
         self._apply_tool_cursor()
 
-    def enterEvent(self, ev) -> None:
-        # Coming back from a panel or a dialog is the other moment Windows
-        # shows the arrow over the viewport (#191).
-        self._reassert_tool_cursor()
-        super().enterEvent(ev)
-
-    def mouseDoubleClickEvent(self, ev) -> None:
-        """Qt replaces the second press of a double-click with this event, so
-        route it to ``tool.on_double_click`` — whose default re-runs
-        ``on_click``, keeping fast click-click rhythms working for drawing
-        tools while Push/Pull overrides it to repeat its last distance.
-
-        Box-select tools (Select) get the double-click DIRECTLY (no drag box
-        starts on a double), and the event is remembered so the next press in
-        place counts as a triple click.
-
-        A double click of the wheel recentres the view on the point under
-        the cursor and starts no orbit; the tool in use never hears of it
-        (#979, #1154)."""
-        if ev.button() == Qt.MiddleButton:
-            self._recentre_on(ev.position().x(), ev.position().y())
-            return
-        if ev.button() != Qt.LeftButton or self.active_tool is None \
-                or self.nav_mode is not None:
-            self.mousePressEvent(ev)
-            return
-        self._last_double = (ev.timestamp(), ev.position())
-        if self.active_tool.box_select:
-            ctx = self._build_ctx(ev)
-            if ctx is not None:
-                self.active_tool.on_double_click(ctx)
-                self.update()
-            return
-        self._dispatch_tool_click(ev, double=True)
-
     # ---- Mouse look (a tool with ``on_look``: First Person) -----------------
 
-
-    def _end_look(self) -> None:
-        self._look_drag = None
-        self._apply_tool_cursor()
-
-    def mouseMoveEvent(self, ev) -> None:
-        self._input_t = _time_mod.monotonic()   # P0: input→paint latency
-        self._input_serial = getattr(self, "_input_serial", 0) + 1
-        # An Alt released while another window had the keyboard never
-        # reaches any filter here; the pointer re-reads it on the move.
-        alt = bool(ev.modifiers() & Qt.AltModifier)
-        if alt != self._alt_down:
-            self._apply_alt_cursor(alt)
-        if self._look_drag is not None and ev.buttons() == Qt.NoButton:
-            # The look drag's release was lost (the same hole as the orbit
-            # below): with the pointer hidden and put back on every move it
-            # would be trapped in the window. No button held ends it.
-            self._end_look()
-        if self._look_drag is not None:
-            if callable(getattr(self.active_tool, "on_look", None)):
-                self._look_move(ev)
-                return
-            self._end_look()                    # the tool changed mid-drag
-        if self._last_pos is not None and ev.buttons() == Qt.NoButton:
-            # A camera drag with no button held: its release never reached
-            # us (a Windows mouse or touchpad driver, a click on another
-            # window, a tool switched by keyboard mid-drag). Left alone,
-            # EVERY mouse move orbited the view whatever tool was picked —
-            # «el orbital se mantiene activo… no se desactiva con nada»
-            # (Andrés Rodríguez, Windows 11 + NVIDIA, 0.5.0).
-            self._end_camera_drag()
-        if self._middle_drag_active:
-            self._set_middle_drag_pan_mode(
-                bool(ev.modifiers() & Qt.ShiftModifier))
-        if self._last_pos is not None:
-            p = ev.position().toPoint()
-            dx = p.x() - self._last_pos.x()
-            dy = p.y() - self._last_pos.y()
-            self._last_pos = p
-            if self.nav_mode == "zoom":
-                self.camera.zoom(-dy * 0.035)        # drag up = zoom in
-            elif self._pan_mode:
-                self.camera.pan(dx, dy, self.height(),
-                                depth=getattr(self, "_pan_depth", None))
-            else:
-                pivot = getattr(self, "_orbit_pivot", None)
-                ody = -dy if self._invert_orbit_y else dy
-                if pivot is not None:
-                    self.camera.orbit_about(pivot, dx, ody, self.height())
-                else:
-                    self.camera.orbit(dx, ody, self.height())
-            self.update()
-            return
-
-        if self._box_active:
-            self._box_cur = ev.position()
-            self.update()
-            return
-
-        if self._zoom_box_active:
-            self._zoom_box_cur = ev.position()
-            self.update()
-            return
-
-        # Adaptive hover coalescing: against a big imported model one hover
-        # costs ~25-30 ms (picks + snap) while the mouse delivers 60-125
-        # events/s — processing every event backlogs the queue and the whole
-        # app reads as frozen. Gate by the measured cost of the LAST hover
-        # (a small model gates at ~0 → immediate), and let a trailing-edge
-        # timer process the final position so the highlight never sticks.
-        self._pending_hover = (ev.position(), ev.modifiers())
-        now = _time_mod.monotonic()
-        gate = min(0.06, getattr(self, "_hover_cost", 0.0) * 1.5)
-        elapsed = now - getattr(self, "_hover_last_t", 0.0)
-        if elapsed < gate:
-            timer = getattr(self, "_hover_timer", None)
-            if timer is None:
-                from PySide6.QtCore import QTimer
-                timer = self._hover_timer = QTimer(self)
-                timer.setSingleShot(True)
-                timer.timeout.connect(self._run_pending_hover)
-            if not timer.isActive():
-                timer.start(max(1, int((gate - elapsed) * 1000) + 1))
-            return
-        self._run_pending_hover()
-
-    def _run_pending_hover(self) -> None:
-        pending = getattr(self, "_pending_hover", None)
-        if pending is None:
-            return
-        self._pending_hover = None
-        pos, modifiers = pending
-        t0 = _time_mod.monotonic()
-        self._process_hover(pos, modifiers)
-        self._hover_last_t = _time_mod.monotonic()
-        self._hover_cost = self._hover_last_t - t0
-        if _PERF:
-            # A per-move cost near ~100 ms starves paints during a tool drag
-            # (the push "sticks"): name it in the log instead of hiding
-            # under the frame telemetry's floor.
-            _plog("hover.move", self._hover_cost * 1000.0, floor=80.0)
 
     # -- Snapping inference, delegated to self.inference -----------------
     # The reference state (the hover / acquired edges and points, the centre
@@ -13868,81 +13584,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     # Below this many pixels of drag, a left press/release is a click, not a box.
     BOX_DRAG_THRESHOLD_PX = 4.0
-
-    def mouseReleaseEvent(self, ev) -> None:
-        if self._look_drag is not None and ev.button() == self._look_drag[0]:
-            self._end_look()
-            return
-        if ev.button() == Qt.MiddleButton:
-            self._last_pos = None
-            self._orbit_pivot = None
-            self._pan_mode = False
-            self._middle_drag_active = False
-            if self.nav_mode is not None:
-                self._apply_nav_cursor()
-            else:
-                self._apply_tool_cursor()
-            return
-
-        if ev.button() == Qt.LeftButton and self._zoom_box_active:
-            self._zoom_box_active = False
-            start, end = self._zoom_box_start, self._zoom_box_cur
-            self._zoom_box_start = None
-            self._zoom_box_cur = None
-            if start is not None and end is not None:
-                self._zoom_to_box(start, end)
-            self.update()
-            return
-
-        if ev.button() == Qt.LeftButton and self.nav_mode is not None:
-            self._last_pos = None
-            self._orbit_pivot = None
-            self._pan_mode = False
-            self._apply_nav_cursor()
-            return
-
-        # Stroke tools (the Eraser): notify the release so a press-drag-release
-        # stroke can commit as one step. No-op default on other tools.
-        if (ev.button() == Qt.LeftButton and self.active_tool is not None
-                and not self._box_active and self.nav_mode is None):
-            _before = len(self.history.undo_stack)
-            self.active_tool.on_release(self)
-            self._release_axis_lock_after_operation()
-            if len(self.history.undo_stack) > _before:
-                self._reassert_tool_cursor()     # a drag committed (#191)
-
-        if ev.button() == Qt.LeftButton and self._box_active:
-            self._box_active = False
-            start = self._box_start
-            end = ev.position()
-            self._box_start = None
-            self._box_cur = None
-            tool = self.active_tool
-            if tool is None or start is None:
-                self.update()
-                return
-            dx = end.x() - start.x()
-            dy = end.y() - start.y()
-            # The box reads the same modifiers as a click: Shift
-            # toggles what it catches — the way you rub a wall out of a big
-            # catch — Ctrl adds and Shift+Ctrl removes.
-            mode = selection_mode(ev.modifiers())
-            additive = mode != "replace"
-            if math.hypot(dx, dy) < self.BOX_DRAG_THRESHOLD_PX:
-                # A click: pick the single entity under the cursor.
-                ctx = self._build_ctx(ev)
-                if ctx is not None:
-                    tool.on_click(ctx)
-            else:
-                rect = (
-                    min(start.x(), end.x()), min(start.y(), end.y()),
-                    max(start.x(), end.x()), max(start.y(), end.y()),
-                )
-                crossing = dx < 0  # right-to-left drag = crossing selection
-                tool.on_box_select(self, rect, crossing, additive, mode=mode)
-            self.update()
-
-
 
     def wheelEvent(self, ev) -> None:
         # While a 3D mouse moves the view, wheel notches are its driver's

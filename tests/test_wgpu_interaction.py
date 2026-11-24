@@ -4,7 +4,6 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from PySide6.QtCore import Qt, QPointF
-from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 from PySide6.QtWidgets import QApplication
 from core.scene import Scene
@@ -104,32 +103,6 @@ def test_camera_projection_matches_gl(view):
     point = QVector3D(5, 4, 0)
     assert view._world_to_pixel(point) == Viewport._world_to_pixel(view, point)
     assert view._pixel_to_ray(240, 180) == Viewport._pixel_to_ray(view, 240, 180)
-
-
-@pytest.mark.parametrize('modifiers', [Qt.NoModifier, Qt.ShiftModifier])
-def test_middle_gesture_matches_gl(view, modifiers):
-    import copy
-    from tests.controller_surface import ControllerSurface as Viewport
-    gl = Viewport()
-    gl.resize(view.size())
-    gl.scene = view.scene
-    gl.camera = copy.deepcopy(view.camera)
-    pivot = QVector3D(5, 4, 0)
-    view._orbit_pivot_at = lambda *args: pivot
-    gl._orbit_pivot_at = lambda *args: pivot
-    view.source_viewport = gl
-    gl._invert_orbit_y = False
-    press = QMouseEvent(QMouseEvent.MouseButtonPress, QPointF(400, 300),
-                        QPointF(400, 300), Qt.MiddleButton, Qt.MiddleButton, modifiers)
-    move = QMouseEvent(QMouseEvent.MouseMove, QPointF(420, 311),
-                       QPointF(420, 311), Qt.NoButton, Qt.MiddleButton, modifiers)
-    view.mousePressEvent(press)
-    gl.mousePressEvent(press)
-    view.mouseMoveEvent(move)
-    gl.mouseMoveEvent(move)
-    assert view.camera.view_matrix().data() == gl.camera.view_matrix().data()
-    view.source_viewport = None
-    gl.close()
 
 
 def test_edit_context_does_not_duplicate_group_geometry(view):

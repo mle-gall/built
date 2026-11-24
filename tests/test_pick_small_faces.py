@@ -10,13 +10,10 @@ from __future__ import annotations
 
 import math
 import os
-import time
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
-from PySide6.QtCore import QPointF, Qt  # noqa: E402
-from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -78,49 +75,3 @@ def test_the_scalar_and_the_batched_test_agree_on_a_small_triangle():
     assert ts is not None and abs(ts - t[0]) < 1e-9
 
 
-def test_push_pull_pulls_a_millimetre_square():
-    """The reporter's gesture with the real tool and mouse events."""
-    from views.main_window import MainWindow
-
-    def ev(kind, x, y, button, buttons):
-        return QMouseEvent(kind, QPointF(x, y), QPointF(x, y), button,
-                           buttons, Qt.NoModifier)
-
-    s = 0.001
-    win = MainWindow()
-    win.show()
-    win.resize(1600, 900)
-    _app.processEvents()
-    try:
-        vp = win.viewport
-        cam = vp.camera
-        cam.target = V(s / 2, s / 2, 0)
-        cam.distance = 20 * s
-        cam.pitch = math.radians(35)
-        cam.yaw = math.radians(-40)
-        face = vp.scene.mesh.add_face([V(0, 0, 0), V(s, 0, 0),
-                                       V(s, s, 0), V(0, s, 0)])
-        vp.scene.version += 1
-        vp.update()
-        _app.processEvents()
-        win._activate_tool("pushpull")
-        tool = vp.active_tool
-        cx, cy = vp._world_to_pixel(V(s / 2, s / 2, 0))
-        vp._last_mouse_pos = QPointF(cx, cy)
-        vp._process_hover(QPointF(cx, cy), Qt.NoModifier)
-        assert tool.hovered_face == face
-        vp.mousePressEvent(ev(QMouseEvent.MouseButtonPress, cx, cy,
-                              Qt.LeftButton, Qt.LeftButton))
-        assert tool.dragging
-        for dy in (20, 60, 120, 200):
-            time.sleep(0.08)
-            vp.mouseMoveEvent(ev(QMouseEvent.MouseMove, cx, cy - dy,
-                                 Qt.NoButton, Qt.LeftButton))
-        vp.mouseReleaseEvent(ev(QMouseEvent.MouseButtonRelease, cx, cy - 200,
-                                Qt.LeftButton, Qt.NoButton))
-        assert len(vp.scene.mesh.faces) == 6
-        top = max(v.position.z() for v in vp.scene.mesh.vertices)
-        assert top > s, top
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()

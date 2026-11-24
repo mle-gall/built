@@ -70,16 +70,6 @@ def test_a_click_that_makes_nothing_leaves_the_cursor_alone(window,
     assert calls == []
 
 
-def test_coming_back_into_the_viewport_restores_it(window, monkeypatch):
-    vp = window.viewport
-    window._activate_tool("line")
-    calls = _spy(vp, monkeypatch)
-    from PySide6.QtGui import QEnterEvent
-    vp.enterEvent(QEnterEvent(QPointF(5, 5), QPointF(5, 5), QPointF(5, 5)))
-    assert calls == ["unset"]
-    assert vp.cursor().shape() == Qt.BitmapCursor
-
-
 def test_nothing_is_forced_while_a_camera_mode_owns_the_pointer(window,
                                                                 monkeypatch):
     vp = window.viewport
