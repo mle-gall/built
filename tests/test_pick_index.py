@@ -212,3 +212,18 @@ def test_selected_group_offers_its_box_corners_to_the_snap_engine():
     assert (2.0, 2.0, 0.0) in corners and (-2.0, -2.0, 0.0) in corners
     # and they reach the engine even with no cursor position to look near
     assert len(list(vp._snap_scene().edges)) >= 8
+
+
+def test_loose_index_keeps_triangle_offsets_and_reuses_view_only_revision():
+    import numpy as np
+    scene = Scene()
+    face = scene.mesh.add_face([V(-1, -1), V(1, -1), V(1, 1), V(-1, 1)])
+    vp = _bind(_VP(scene))
+    idx = vp._pick_index()
+    assert idx.entities == [(face, None)]
+    assert idx.tri_spans == [(None, 0, 2)]
+    np.testing.assert_array_equal(idx.tri_ent, [0, 0])
+    np.testing.assert_array_equal(idx.ent_place_idx, [-1])
+    np.testing.assert_array_equal(idx.ent_loose, [True])
+    scene.bump_view()
+    assert vp._pick_index() is idx
