@@ -360,3 +360,27 @@ def test_picking_does_not_dash_the_model_again(native_host, monkeypatch):
     scene.version += 1                                   # the model changed
     assert vp._model_linetype_edges() is not groups
     assert len(walked) == 2
+
+
+def test_a_dragged_cut_defers_changed_fill_but_reuses_equal_segments(monkeypatch):
+    from types import SimpleNamespace
+    import time
+    from core import timers
+    import views.document_interaction as interaction
+    old = np.zeros((2, 2, 3), dtype=np.float32)
+    tris = object()
+    current = old.copy()
+    scheduled = []
+    def schedule(view, ms, callback):
+        scheduled.append((view, ms, callback))
+    monkeypatch.setattr(timers, "later", schedule)
+    monkeypatch.setattr(interaction, "later", schedule)
+    view = SimpleNamespace(_section_cut_segments=lambda: current,
+                           _section_fill_cache=(old, tris), update=lambda: None,
+                           _section_fill_changed=time.monotonic())
+    fill = interaction.DocumentInteraction._section_fill_tris
+    assert fill(view) is tris
+    assert view._section_fill_cache[0] is current
+    current = current + 1
+    assert fill(view) is None
+    assert scheduled == [(view, 200, view.update)]

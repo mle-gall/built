@@ -73,3 +73,14 @@ def test_on_guide_snap_in_perspective(native_host):
     off = snap.point - g.point
     along = QVector3D.dotProduct(off, g.direction)
     assert (off - g.direction * along).length() < 1e-3
+
+
+def test_pixel_clip_preserves_border_and_endpoint_order():
+    from types import SimpleNamespace
+    from views.document_interaction import DocumentInteraction
+    view = SimpleNamespace(width=lambda: 100, height=lambda: 50)
+    clip = DocumentInteraction._clip_pixel_line
+    assert clip(view, (200, 25), (-100, 25), 0) == ((100, 25), (0, 25))
+    assert clip(view, (0, -50), (0, 80), 0) == ((0, 0), (0, 50))
+    assert clip(view, (-1, 20), (-1, 40), 0) is None
+    assert clip(view, (42, 8), (42, 8), 0) == ((42, 8), (42, 8))

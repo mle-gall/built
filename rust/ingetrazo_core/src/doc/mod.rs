@@ -35,7 +35,7 @@ mod execute;
 pub mod commands;
 mod steps;
 mod file_view;
-mod drawing;
+pub(crate) mod drawing;
 pub mod occurrences;
 pub mod py;
 pub mod value;
