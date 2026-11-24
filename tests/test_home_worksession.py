@@ -22,7 +22,7 @@ def win():
 
 
 def make_project(tmp_path):
-    path = tmp_path / 'job.igzproj'
+    path = tmp_path / 'job.builtproject'
     project.create(Scene(), path)
     value = storage.load(path)
     for name, role in [('a', 'host'), ('b', 'host'), ('source', 'linked')]:
@@ -40,7 +40,9 @@ def test_portable_roundtrip(tmp_path):
     assert [r['path'] for r in state['files']] == [str(b), str(a)]
     assert state['files'][0]['camera'] == {'distance': 7}
     assert state['active_file'] == str(a)
-    assert storage.load(path)['worksession']['active_file'] == 'a.igz'
+    # This person's session file, never the shared manifest.
+    assert 'worksession' not in storage.load(path)
+    assert project.worksession(path)['active_file'] == str(a)
 
 
 def test_recent_bounded_pin_and_relocation(tmp_path):
@@ -67,7 +69,7 @@ def test_home_lists_opens_and_locates(win, tmp_path, monkeypatch):
     win.show_home()
     rows = wgpu_start.page(win).sheet.items(False)
     assert any(row[2] == str(old) for key in ("cont", "recent") for row in rows[key])
-    assert any(row[2] == str(tmp_path / "job.igzproj") for row in rows["projects"])
+    assert any(row[2] == str(tmp_path / "job.builtproject") for row in rows["projects"])
     monkeypatch.setattr(file_dialogs, 'getOpenFileName', lambda *a: (str(tmp_path / 'moved.igz'), ''))
     assert wgpu_start.open_recent(win, old)
     assert win._doc.path == a
@@ -93,7 +95,7 @@ def test_active_file_tabs_and_reopen(win, tmp_path):
     assert next(e for e in storage.load(path)['files'] if e['path'] == 'source.igz')['role'] == 'linked'
     win._project_tabs.tabs.moveTab(win._project_tabs.index_of(source), 0)
     win.persist_worksession()
-    assert storage.load(path)['worksession']['files'][0]['path'] == 'source.igz'
+    assert project.worksession(path)['files'][0]['path'] == str(source.path.resolve())
     win.open_project(path)
     assert win.documents()[0] is source
     assert win._active_file == str(source.path)
@@ -154,4 +156,4 @@ def test_new_document_can_be_saved_into_session(win, tmp_path):
     win._do_save(new_path)
     assert win._active_file == str(new_path)
     assert new_path.is_file()
-    assert storage.load(path)['worksession']['active_file'] == 'new.igz'
+    assert project.worksession(path)['active_file'] == str(new_path.resolve())

@@ -5464,6 +5464,8 @@ class SetRegistryCommand(SetPluginDataCommand):
     def do(self, scene):
         from core import project, bim_registry
         stamp = getattr(scene, '_project_mtime_ns', None)
+        # What the edit was derived from: the merge base of the shared write.
+        base = getattr(scene, '_project_registry_base', None)
         current = bim_registry.get(scene)
         removed = (current.get('structure', {}).get('nodes', {}).keys()
                    - self.value.get('structure', {}).get('nodes', {}).keys())
@@ -5476,6 +5478,8 @@ class SetRegistryCommand(SetPluginDataCommand):
             self._project_before = current
         if stamp is not None:
             scene._project_mtime_ns = stamp
+        if base is not None:
+            scene._project_registry_base = base
         if project.write_registry(scene, self.value):
             scene.version += 1
         else:
@@ -5484,7 +5488,8 @@ class SetRegistryCommand(SetPluginDataCommand):
 
     def undo(self, scene):
         from core import project
-        if project.write_registry(scene, self._project_before):
+        # Revert only what this command changed (base: its after-value).
+        if project.write_registry(scene, self._project_before, base=self.value):
             scene.version += 1
         else:
             super().undo(scene)
