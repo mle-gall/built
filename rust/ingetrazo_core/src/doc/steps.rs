@@ -249,6 +249,32 @@ impl RecordStep {
     }
 }
 
+thread_local! {
+    /// The steps running on this thread, innermost last: what an operation
+    /// hands to a kernel that still writes results onto the command object.
+    static RUNNING: std::cell::RefCell<Vec<Py<PyAny>>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// The Python object of the step whose operation is running.
+pub(super) fn running(py: Python<'_>) -> Option<Bound<'_, PyAny>> {
+    RUNNING.with(|r| r.borrow().last().map(|s| s.clone_ref(py).into_bound(py)))
+}
+
+/// Run `f` with `step` as the running step (popped however `f` ends).
+fn as_running<T>(step: &Bound<'_, PyAny>, f: impl FnOnce() -> T) -> T {
+    struct Pop;
+    impl Drop for Pop {
+        fn drop(&mut self) {
+            RUNNING.with(|r| {
+                r.borrow_mut().pop();
+            });
+        }
+    }
+    RUNNING.with(|r| r.borrow_mut().push(step.clone().unbind()));
+    let _pop = Pop;
+    f()
+}
+
 fn bump(scene: &Obj<'_>, kind: Bump, target: &Obj<'_>) -> PyResult<()> {
     match kind {
         Bump::Version => version(scene),
@@ -350,7 +376,7 @@ impl RecordStep {
         let outer = lock().depth();
         if key.is_none() && outer == 0 {
             Self::read_journal(slf)?;
-            return (me.run)(me, py, scene);
+            return as_running(slf.as_any(), || (me.run)(me, py, scene));
         }
         if outer == 0 {
             // A direct call: the step's own transaction.
@@ -363,7 +389,7 @@ impl RecordStep {
         }
         let pins = lock().open.as_ref().map_or(0, |o| o.pins.len());
         Self::read_journal(slf)?;
-        let result = (me.run)(me, py, scene);
+        let result = as_running(slf.as_any(), || (me.run)(me, py, scene));
         let own = match (&result, outer) {
             (Ok(()), 0) => {
                 let txn = doc.call_method0("commit")?;
@@ -415,7 +441,7 @@ impl RecordStep {
         }
         Self::read_journal(slf)?;
         me.direct.store(true, Ordering::Relaxed);
-        let r = me.after(py, scene, Some("undo"));
+        let r = as_running(slf.as_any(), || me.after(py, scene, Some("undo")));
         me.direct.store(false, Ordering::Relaxed);
         r
     }
@@ -428,7 +454,7 @@ impl RecordStep {
     #[pyo3(signature = (scene, phase = None))]
     fn doc_after(slf: &Bound<'_, Self>, scene: &Obj<'_>, phase: Option<&str>) -> PyResult<()> {
         Self::read_journal(slf)?;
-        slf.get().after(slf.py(), scene, phase)
+        as_running(slf.as_any(), || slf.get().after(slf.py(), scene, phase))
     }
 
     /// The meshes a mesh step's History transaction enlists.
