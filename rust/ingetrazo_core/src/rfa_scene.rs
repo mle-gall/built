@@ -35,7 +35,11 @@ fn invalid(py: Python<'_>, msg: &str) -> PyErr {
         .unwrap_or_else(|e| e)
 }
 #[pyfunction]
-fn rfa_read<'p>(py: Python<'p>, path: &Obj<'p>) -> PyResult<Obj<'p>> {
+fn rfa_read(py: Python<'_>, path: &Obj<'_>) -> PyResult<Py<PyAny>> {
+    let path = path.str()?.to_string();
+    crate::file_open::DocumentOpen::stage(py, None, move |py, _| Ok(read(py, &path)?.unbind()))
+}
+fn read<'p>(py: Python<'p>, path: &str) -> PyResult<Obj<'p>> {
     let reader = match py.import("ingetrazo_rfa") {
         Err(e) if e.is_instance_of::<PyImportError>(py) => {
             let err = PyRuntimeError::new_err(
@@ -51,7 +55,7 @@ fn rfa_read<'p>(py: Python<'p>, path: &Obj<'p>) -> PyResult<Obj<'p>> {
         }
         other => other?,
     };
-    let text = reader.call_method1("read_family", (path.str()?,))?;
+    let text = reader.call_method1("read_family", (path,))?;
     py.import("json")?.call_method1("loads", (text,))
 }
 #[pyfunction]
@@ -79,7 +83,10 @@ fn rfa_triangle_mesh<'p>(
         return Err(bad());
     }
     let mut verts = vec![];
-    for row in idx.as_array().outer_iter() {
+    for (i, row) in idx.as_array().outer_iter().enumerate() {
+        if i % 1024 == 0 {
+            crate::file_open::checkpoint(py)?;
+        }
         let mut tri = [DVec3::ZERO; 3];
         for (i, &j) in row.iter().enumerate() {
             let j = usize::try_from(j)
@@ -222,11 +229,69 @@ fn clearance<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
     l.getattr("key")
 }
 #[pyfunction]
-fn rfa_apply<'p>(
+fn rfa_apply<'p>(py: Python<'p>, scene: &Obj<'p>, payload: &Obj<'p>) -> PyResult<Obj<'p>> {
+    let original = scene.getattr("materials")?;
+    let baseline = py
+        .get_type::<PyDict>()
+        .call1((&original,))?
+        .cast_into::<PyDict>()?;
+    let registry = baseline.copy()?.into_any().unbind();
+    let layers = py.get_type::<PyList>().call1((scene.getattr("layers")?,))?;
+    let existing = layers.len()?;
+    let layers = layers.unbind();
+    let payload = payload.clone().unbind();
+    let built = crate::file_open::DocumentOpen::stage(py, None, move |py, _| {
+        let scope = py.import("types")?.call_method0("SimpleNamespace")?;
+        scope.setattr("materials", registry.bind(py))?;
+        scope.setattr("layers", layers.bind(py))?;
+        let (warnings, definitions, placement) = build_family(py, &scope, payload.bind(py))?;
+        Ok((warnings, definitions, placement, layers, registry)
+            .into_pyobject(py)?
+            .into_any()
+            .unbind())
+    })?;
+    let (warnings, defs, group, layers, mats) =
+        built.bind(py).extract::<(Obj, Obj, Obj, Obj, Obj)>()?;
+    let additions = layers.get_item(
+        py.get_type::<pyo3::types::PySlice>()
+            .call1((existing, py.None()))?,
+    )?;
+    let registered = scene.getattr("materials")?;
+    // The modal host can pump events while staging. Preserve unrelated changes
+    // and refuse a conflicting material recipe before publishing any geometry.
+    let new_materials = PyDict::new(py);
+    for (k, v) in mats.cast::<PyDict>()?.iter() {
+        if !baseline.contains(&k)? {
+            new_materials.set_item(&k, &v)?;
+        }
+        if let Some(current) = registered.cast::<PyDict>()?.get_item(&k)? {
+            if !current.is(&v) && !current.eq(&v)? {
+                return Err(PyRuntimeError::new_err(
+                    "A family material changed during import",
+                ));
+            }
+        }
+    }
+    registered.call_method1("update", (new_materials,))?;
+    for ly in additions.try_iter()? {
+        let ly = ly?;
+        let key = ly.getattr("key")?;
+        if scene.call_method1("layer", (&key,))?.is_none() {
+            scene.getattr("layers")?.call_method1("append", (ly,))?;
+        }
+    }
+    scene
+        .getattr("kept_components")?
+        .call_method1("extend", (defs,))?;
+    scene.getattr("groups")?.call_method1("append", (group,))?;
+    scene.setattr("version", scene.getattr("version")?.add(1)?)?;
+    Ok(warnings)
+}
+fn build_family<'p>(
     py: Python<'p>,
     scene: &Obj<'p>,
     payload: &Obj<'p>,
-) -> PyResult<Bound<'p, PyList>> {
+) -> PyResult<(Bound<'p, PyList>, Bound<'p, PyList>, Obj<'p>)> {
     if !val(payload, "schema")?.eq("ingetrazo.rfa/1")? {
         return Err(invalid(py, "Unsupported Revit family JSON schema."));
     }
@@ -272,6 +337,7 @@ fn rfa_apply<'p>(
     let copy = py.import("copy")?.getattr("deepcopy")?;
     let mut zone_layer = None;
     for typ in types.try_iter()? {
+        crate::file_open::checkpoint(py)?;
         let typ = typ?;
         let name = typ.get_item("name")?;
         let def = group(&name)?;
@@ -306,6 +372,7 @@ fn rfa_apply<'p>(
             }
             let grouped = PyDict::new(py);
             for part in geometry.get_item("parts")?.try_iter()? {
+                crate::file_open::checkpoint(py)?;
                 let p = part?;
                 let zone = val(&p, "zone")?.is_truthy()?;
                 let mut mat = materials.get_item(val(&p, "material")?)?;
@@ -385,16 +452,10 @@ fn rfa_apply<'p>(
         def.call_method1("adopt", (solids,))?;
         defs.append(def)?;
     }
-    scene
-        .getattr("kept_components")?
-        .call_method1("extend", (&defs,))?;
-    scene.getattr("groups")?.call_method1(
-        "append",
-        (py.import("core.kept_components")?
-            .call_method1("place_copy", (defs.get_item(0)?,))?,),
-    )?;
-    scene.setattr("version", scene.getattr("version")?.add(1)?)?;
-    Ok(warnings)
+    let placement = py
+        .import("core.kept_components")?
+        .call_method1("place_copy", (defs.get_item(0)?,))?;
+    Ok((warnings, defs, placement))
 }
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rfa_read, m)?)?;

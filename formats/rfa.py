@@ -2,19 +2,11 @@
 """Optional Revit reader and deterministic JSON-to-scene mapping (metres, Z up)."""
 from __future__ import annotations
 
-from copy import deepcopy
-import importlib
-import json
 import math
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.group import Group
 from core.history import SnapshotImport, SetRegistryCommand
 from core.i18n import tr
-from core.kept_components import place_copy
-from core.layers import Layer
-from core.materials import Material, register
 
 
 from ingetrazo_core import rfa_read as read_rfa, rfa_triangle_mesh as _triangle_mesh, rfa_apply as apply_payload
