@@ -12,10 +12,11 @@ data out, so the registry can move to Rust with the rest of the app
      "category": "Wood", "uses": 12, "hex": "#a0703c", "thumb": "/path.png" | None,
      "verbs": ("apply", "edit", ...)}
 
-and runs a verb on one (``run``). This module owns the browsing state
-(type, grid/list, sort, filter, folded sections, recent picks), turns the
-items into the rows ``ui.rs`` draws (``Ui::set_library``), and answers the
-``lib:<verb>\\x1f<key>[\\x1f<arg>]`` actions it sends back. Model edits go
+and runs a verb on one (``run``). This module keeps the browsing state
+(type, sort, facet, filter, folded sections, recent picks) and answers the
+``lib:<verb>\\x1f<key>[\\x1f<arg>]`` actions; what the sheet lists, how it
+sorts, filters and groups, each tile's words and a material's details come
+from ``rust/ingetrazo_render/src/library_view.rs``. Model edits go
 through ``core.protocol.commands`` (docs/core-protocol.md §1).
 
 The dock's places: Project (the tree, with Problems as one of its modes)
@@ -32,23 +33,16 @@ from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QImage
 
 SEP = "\x1f"
-#: Sections, in the order they show.
-SECTIONS = [("model", "In this model"), ("linked", "From linked files"), ("mine", "My library"),
-            ("bundled", "Bundled")]
-SORTS = [("name", "Name"), ("used", "Most used"), ("recent", "Recently used")]
-#: Verb ids and their menu labels (a provider may relabel "apply").
-VERBS = {"apply": "Use", "edit": "Edit in the inspector", "duplicate": "Duplicate", "rename": "Rename",
-         "keep": "Add to My library", "unkeep": "Remove from My library", "select": "Select uses",
-         "replace": "Replace selection with this", "keepfile": "Keep in file", "unkeepfile": "Stop keeping in file",
-         "delete": "Delete…", "-": ""}
+from ingetrazo_render import (library_by_use, library_filtered, library_groups, library_linked,  # noqa: E402
+                              library_sheet, library_side, library_type, library_verbs)
+
+SORTS = library_type("")[0]
+#: Verb ids and their menu labels (a type relabels "apply").
+VERBS = dict(library_verbs("")) | {"-": ""}
 RECENT_MAX = 40
 ROW_CAP = 600
 THUMB_PX = 96
 _MINE_KEY = "library/mine"
-
-
-def _natural(text):
-    return [int(p) if p.isdigit() else p for p in re.split(r"(\d+)", (text or "").lower())]
 
 
 def _hex(rgb) -> str:
@@ -197,14 +191,20 @@ class Provider:
     id = ""
     label = ""
     ready = True
-    apply_label = "Use"
-    empty = ""
+
+    @property
+    def empty(self) -> str:
+        return library_type(self.id)[3]
+
+    @property
+    def facets(self) -> list:
+        return library_type(self.id)[1]
 
     def items(self, ctx) -> list[dict]:
         return []
 
     def verbs(self) -> list[tuple[str, str]]:
-        return [(k, self.apply_label if k == "apply" else v) for k, v in VERBS.items() if k != "-"]
+        return library_verbs(self.id)
 
     def type_actions(self, ctx) -> list[tuple[str, str]]:
         return []
@@ -238,13 +238,6 @@ class MaterialsProvider(Provider):
     colours (older files), My library, then the bundled images by category
     and the bundled colours (RAL) as one more category."""
     id, label = "materials", "Materials"
-    apply_label = "Paint with it"
-    empty = "No materials yet."
-    #: Browsing by base, offered in the sort menu.
-    facets = [("facet:all", "Every base"), ("facet:colour", "Colour bases"), ("facet:image", "Image bases")]
-
-    def verbs(self):
-        return super().verbs() + [("name", "Name these colours")]
 
     def _model_items(self, ctx):
         uses = material_uses(ctx.scene)
@@ -284,22 +277,9 @@ class MaterialsProvider(Provider):
         per_file = linked_material_uses(ctx.scene)
         if not per_file:
             return model, []
-        own = material_uses(ctx.scene)
-        linked_total = Counter()
-        for counts in per_file.values():
-            linked_total.update(counts)
-        out = []
-        by_name = {e["name"]: e for e in model}
-        for path, counts in per_file.items():
-            for name, n in counts.items():
-                e = by_name.get(name)
-                if e is None:
-                    continue
-                out.append(dict(e, key=f"lk:{path}|{name}", source="linked", file=path, uses=n, category="",
-                                verbs=("apply", "select")))
-        keep = [e for e in model if not (e["key"].startswith("m:") and e["name"] in linked_total
-                                         and own.get(e["name"], 0) <= linked_total[e["name"]])]
-        return keep, out
+        keep, linked = library_linked(json.dumps(model), json.dumps([(p, list(c.items())) for p, c in per_file.items()]),
+                                      json.dumps(dict(material_uses(ctx.scene))))
+        return json.loads(keep), json.loads(linked)
 
     def items(self, ctx):
         if getattr(self, "_bundled_cache", None) is None:
@@ -507,8 +487,6 @@ class ComponentsProvider(Provider):
     """Definitions in the model (copies counted, kept-in-file ones too),
     then the bundled starters and 2D people."""
     id, label = "components", "Components"
-    apply_label = "Place a copy"
-    empty = "No components yet."
 
     def _model(self, ctx):
         from views.wgpu_ui import _components_in_model
@@ -626,8 +604,6 @@ class ProfilesProvider(Provider):
     """Coming: section outlines (steel shapes, extrusion and sweep
     profiles) to draw, extrude and run along a path."""
     id, label, ready = "profiles", "Profiles", False
-    empty = ("Profiles are coming: section outlines — steel shapes, mouldings, gaskets — "
-             "to extrude, or run along a path with Follow Me.")
 
 
 def _is_linked(g) -> bool:
@@ -698,122 +674,29 @@ def _save_state(st) -> None:
                                   "fold": sorted(st["fold"]), "open": sorted(st.get("open", ()))})
 
 
-def _sorted(items, sort, recent):
-    rank = {k: i for i, k in enumerate(recent)}
-    if sort == "used":
-        return sorted(items, key=lambda e: (-e["uses"], _natural(e.get("label") or e["name"])))
-    if sort == "recent":
-        return sorted(items, key=lambda e: (rank.get(e["key"], len(rank)), _natural(e.get("label") or e["name"])))
-    return sorted(items, key=lambda e: _natural(e.get("label") or e["name"]))
-
-
-# ---- what the sheet lists -------------------------------------------------------------
-#: Scopes of the side list, in order (ids: "s:<scope>"; a category "c:<scope>:<name>";
-#: a linked file "s:linked:<path>").
-SCOPES = [("model", "In this model"), ("recent", "Recently used"), ("mine", "My library"),
-          ("bundled", "Bundled")]
-#: A search lists at most this many items per group (the category shows them all).
-SEARCH_CAP = 60
+# ---- what the sheet lists (library_view.rs) ---------------------------------------------
+def _browse(st) -> str:
+    return json.dumps({"sort": st.get("sort", "name"), "facet": st.get("facet", "all"), "filter": st.get("filter", ""),
+                       "scope": st.get("scope") or "s:model", "fold": sorted(st.get("fold", ())),
+                       "recent": list(st.get("recent", ())), "cursor": st.get("cursor")})
 
 
 def filtered(items, st):
-    """The items the facet and the search keep (``is:colour``/``is:image``
-    tokens browse by base, like the facet)."""
-    words = st["filter"].lower().split()
-    bases = {"is:colour": "colour", "is:color": "colour", "is:image": "image"}
-    base = next((bases[w] for w in words if w in bases), None)
-    words = [w for w in words if w not in bases]
-    facet = st.get("facet", "all")
-    base = base or (facet if facet in ("colour", "image") else None)
-    if base:
-        items = [e for e in items if e.get("base", base) == base]
-    if words:
-        items = [e for e in items
-                 if all(w in f"{e['name']} {e.get('label', '')} {e.get('short', '')} {e['category']} "
-                             f"{e.get('file', '')}".lower() for w in words)]
-    return items
-
-
-def in_scope(items, scope, recent=()):
-    """The items of one side row."""
-    if scope == "s:recent":
-        by_key = {e["key"]: e for e in items}
-        return [by_key[k] for k in recent if k in by_key]
-    if scope.startswith("s:linked:"):
-        path = scope[len("s:linked:"):]
-        return [e for e in items if e["source"] == "linked" and e.get("file") == path]
-    if scope.startswith("c:"):
-        _c, sec, cat = scope.split(":", 2)
-        return [e for e in items if e["source"] == sec and e["category"] == cat]
-    sec = scope[2:]
-    return [e for e in items if e["source"] == sec]
+    """The items the facet and the search keep."""
+    by_key = {e["key"]: e for e in items}
+    return [by_key[k] for k in library_filtered(json.dumps(items, default=str), _browse(st))]
 
 
 def side_rows(items, st) -> list:
-    """The side list: (id, label, count, depth, kind, fold) per row; a
-    caption has no id. Bundled folds open on its categories."""
-    out = []
-    for sec, title in SCOPES:
-        group = in_scope(items, f"s:{sec}", st["recent"])
-        fold = None
-        cats = []
-        if sec in ("model", "bundled", "mine"):
-            cats = sorted({e["category"] for e in group if e["category"]}, key=_natural)
-        if sec == "bundled" and cats:
-            fold = f"s:{sec}" not in st["fold"]
-        out.append((f"s:{sec}", title, len(group), 0, "", fold))
-        if cats and (fold is None or fold):
-            for cat in cats:
-                out.append((f"c:{sec}:{cat}", cat, sum(1 for e in group if e["category"] == cat), 1, "", None))
-    files = {}
-    for e in items:
-        if e["source"] == "linked" and e.get("file"):
-            files.setdefault(e["file"], 0)
-            files[e["file"]] += 1
-    if files:
-        out.append(("", "Linked files · read-only", 0, 0, "caption", None))
-        for path, n in sorted(files.items(), key=lambda kv: _natural(kv[0].rsplit("/", 1)[-1])):
-            out.append((f"s:linked:{path}", path.replace("\\", "/").rsplit("/", 1)[-1], n, 0, "file", None))
-    return out
-
-
-def scope_title(scope, items) -> str:
-    if scope.startswith("s:linked:"):
-        return scope[len("s:linked:"):].replace("\\", "/").rsplit("/", 1)[-1]
-    if scope.startswith("c:"):
-        return scope.split(":", 2)[2]
-    return dict(SCOPES).get(scope[2:], "")
+    """The side list: (id, label, count, depth, kind, fold) per row."""
+    return library_side(json.dumps(items, default=str), _browse(st))
 
 
 def groups_for(items, st):
-    """The content: [(caption, sub, items)]. Browsing shows the side
-    row's items (the model's grouped by category); a search shows every
-    match, grouped by where it comes from."""
-    scope = st.get("scope") or "s:model"
-    if st["filter"].strip() and not st["filter"].strip().startswith("is:"):
-        out = []
-        found = filtered(items, st)
-        for sec, title in SCOPES:
-            if sec == "recent":
-                continue
-            group = [e for e in found if e["source"] == sec]
-            for cat in sorted({e["category"] for e in group}, key=lambda c: (c != "", _natural(c))):
-                members = _sorted([e for e in group if e["category"] == cat], st["sort"], st["recent"])
-                cap = f"{title} · {cat}" if cat else title
-                out.append((cap, f"{len(members)}", members[:SEARCH_CAP]))
-        linked = [e for e in found if e["source"] == "linked"]
-        for path in sorted({e.get("file", "") for e in linked}):
-            members = _sorted([e for e in linked if e.get("file") == path], st["sort"], st["recent"])
-            out.append((path.rsplit("/", 1)[-1] + " · read-only", f"{len(members)}", members[:SEARCH_CAP]))
-        return out
-    members = filtered(in_scope(items, scope, st["recent"]), st)
-    if scope != "s:recent":
-        members = _sorted(members, st["sort"], st["recent"])
-    if scope in ("s:model", "s:mine", "s:bundled"):
-        cats = sorted({e["category"] for e in members}, key=lambda c: (c != "", _natural(c)))
-        if len(cats) > 1 or (cats and cats[0]):
-            return [(c or "", "", [e for e in members if e["category"] == c][:ROW_CAP]) for c in cats]
-    return [("", "", members[:ROW_CAP])]
+    """The content: [(caption, sub, items)]."""
+    by_key = {e["key"]: e for e in items}
+    return [(cap, sub, [by_key[k] for k in keys])
+            for cap, sub, keys in library_groups(json.dumps(items, default=str), _browse(st))]
 
 
 def _thumb(view, path) -> str:
@@ -883,7 +766,6 @@ class LibrarySheet(_chrome_sheet().Provider):
         view, st = self.view, _state(self.view)
         prov = provider(st["type"])
         items, counts = self._items(ctx)
-        current = _current_material_name() if prov.id == "materials" else None
         s = cs.Sheet(self.id, "", width=1240)
         for p in PROVIDERS:
             s.tab(p.id, p.label, counts.get(p.id, "") if p.ready else "soon", on=p.id == st["type"], enabled=p.ready)
@@ -894,24 +776,18 @@ class LibrarySheet(_chrome_sheet().Provider):
                 self.registry = RegistryEditor(ctx.win.viewport.scene)
             self.registry.build(s)
             return s
-        s.search("Search all " + prov.label.lower())
-        sorts = list(SORTS) + ([("-", "")] + list(prov.facets) if getattr(prov, "facets", None) else [])
-        label = "Sort: " + dict(SORTS).get(st["sort"], "Name")
-        s.menus.append({"id": "sort", "label": label, "on": st["sort"],
-                        "options": [dict(cs.verb(i, lab), role=1 if (i == st["sort"] or i == "facet:" + st.get("facet", "all")) else 0)
-                                    for i, lab in sorts]})
-        scope = st.get("scope") or "s:model"
-        sides = side_rows(items, st)
-        online = prov.id == "components" and scope == "s:online"
-        if not online and scope not in {r[0] for r in sides if r[0]}:
-            scope = st["scope"] = "s:model"
-        searching = bool(st["filter"].strip()) and not st["filter"].strip().startswith("is:")
-        for rid, lab, n, depth, kind, fold in sides:
-            if kind == "caption":
-                s.side_caption(lab)
-            else:
-                s.side_item(rid, lab, right=str(n) if n else "", depth=depth, kind=kind, fold=fold,
-                            on=rid == scope and not searching)
+        scene = ctx.win.viewport.scene
+        out = json.loads(library_sheet(json.dumps({
+            "type": prov.id, "items": items, "st": json.loads(_browse(st)),
+            "current": _current_material_name() if prov.id == "materials" else None,
+            "model_uses": dict(material_uses(scene)) if prov.id == "materials" else {},
+            "unnamed": len(unnamed_colours_cached(scene)) if prov.id == "materials" else 0}, default=str)))
+        for path in out["thumbs"]:
+            _thumb(view, path)
+        st["scope"], searching, online = out["scope"], out["searching"], out["online"]
+        s.search(out["search"])
+        s.menus.append(out["sort"])
+        s.side = out["side"]
         if prov.id == "components":
             from core.i18n import tr
             s.side_item("s:online", tr("Component library"), on=online)
@@ -923,110 +799,25 @@ class LibrarySheet(_chrome_sheet().Provider):
                 return self.catalogue.build(s, "")
         else:
             self.close_catalogue()
-        groups = groups_for(items, st)
-        shown = [e for _c, _s, members in groups for e in members]
-        if searching:
-            c = s.content(f"“{st['filter'].strip()}”", f"{len(shown)} found", empty="Nothing matches.")
-        else:
-            n = len(in_scope(items, scope, st["recent"]))
-            where = "Bundled" if scope.startswith("c:bundled") else ""
-            c = s.content(scope_title(scope, items), " · ".join(x for x in (where, str(n)) if x),
-                          empty=self._empty(prov, scope))
-        for cap, sub, members in groups:
-            if not members:
-                continue
-            if cap:
-                c.caption(cap, right=sub)
-            c.tiles([self._tile(prov, e, current) for e in members], size=96)
-        if not searching and scope.startswith("s:model"):
+        c = s.content(**out["content"])
+        for g in out["groups"]:
+            if g["caption"]:
+                c.caption(g["caption"], right=g["right"])
+            c.tiles(g["tiles"], size=96)
+        if out["type_actions"]:
             acts = [cs.verb(f"typeact:{a}", lab, quiet=True) for a, lab in prov.type_actions(Ctx(ctx.win, view))]
             if acts:
                 c.buttons(acts, align="left")
-        keys = [e["key"] for e in shown]
-        if st.get("cursor") not in keys:
-            st["cursor"] = keys[0] if keys else None
-        self._detail(s, prov, ctx, st.get("cursor"), current)
+        st["cursor"] = out["cursor"]
+        d = s.detail(width=340, empty="Pick an item to see it here.")
+        d.blocks = out["detail"]
+        e = st["items"].get(st["cursor"]) if st["cursor"] else None
+        if e is not None and prov.id == "components":
+            self._component_detail(d, prov, ctx, e)
         s.footer((), "Click to see it · double-click or ↩ uses it · esc back to the model")
         if st.get("cursor"):
             s.focus(st["cursor"], force=bool(st.pop("force_focus", False)))
         return self.catalogue.build(s, st["filter"]) if self.catalogue is not None else s
-
-    def _empty(self, prov, scope):
-        if scope == "s:mine":
-            return "Keep a material for every project: Add to My library, on a material of this model."
-        if scope == "s:recent":
-            return "What you used last shows here."
-        if scope == "s:model":
-            return prov.empty or "Nothing of this type in the model yet."
-        return "Nothing here."
-
-    def _tile(self, prov, e, current):
-        cs = _chrome_sheet()
-        verbs = [v for v in e["verbs"]]
-        labels = dict(prov.verbs())
-        menu = [("-", "") if v == "-" else (v, labels.get(v, VERBS.get(v, v))) for v in verbs]
-        while menu and menu[-1][0] == "-":
-            menu.pop()
-        shown = e.get("label") or e["name"]
-        if e.get("short") and e["source"] == "bundled":
-            shown = e["short"]
-        sub = ""
-        if prov.id == "materials":
-            tex = e.get("thumb")
-            sub = "image" if e.get("base") == "image" else "colour"
-            if e["uses"]:
-                sub += f" · used by {e['uses']}"
-        elif e["uses"]:
-            sub = f"{e['uses']} cop{'ies' if e['uses'] != 1 else 'y'}"
-        icon = _thumb(self.view, e.get("thumb")) if e.get("thumb") else ""
-        return cs.item(e["key"], shown, sub=sub, icon=icon, hex=e.get("hex") or "", menu=menu,
-                       on=current is not None and e["name"] == current, tip=e["name"])
-
-    # -- the details pane ------------------------------------------------------------
-    def _detail(self, s, prov, ctx, key, current):
-        cs = _chrome_sheet()
-        d = s.detail(width=340, empty="Pick an item to see it here.")
-        e = _state(self.view)["items"].get(key) if key else None
-        if e is None:
-            return
-        icon = _thumb(self.view, e.get("thumb")) if e.get("thumb") else ""
-        d.picture(icon=icon, hex=e.get("hex") or "", size=180)
-        where = {"model": "In this model", "mine": "My library", "bundled": "Bundled · read-only",
-                 "linked": (e.get("file", "").rsplit("/", 1)[-1] + " · read-only")}.get(e["source"], "")
-        d.heading(e.get("label") or e["name"], right=where)
-        scene = ctx.win.viewport.scene
-        if prov.id == "components":
-            self._component_detail(d, prov, ctx, e)
-            return
-        kind = e["key"].partition(":")[0]
-        if kind == "uc":
-            k = len(unnamed_colours_cached(scene))
-            d.text("A colour painted before materials had names (an older file). Name these makes each a material.")
-            d.kv([("Colour", e["name"]), ("Used by", f"{e['uses']} object" + ("s" if e["uses"] != 1 else ""))])
-            d.buttons([cs.verb("apply", "Paint with it", key="↩", primary=True),
-                       cs.verb("select", "Select uses"), cs.verb("name", f"Name these ({k})")], align="fill")
-            return
-        if kind == "m":
-            d.kv([("Used by", f"{e['uses']} object" + ("s" if e["uses"] != 1 else ""))])
-            d.buttons([cs.verb("apply", "Paint with it", key="↩", primary=True),
-                       cs.verb("edit", "Edit in inspector"), cs.verb("select", "Select uses")], align="fill")
-            d.buttons([cs.verb("duplicate", "Duplicate", quiet=True), cs.verb("keep", "Add to My library", quiet=True),
-                       cs.verb("delete", "Delete…", quiet=True)], align="left")
-            return
-        rows = [("Base", ("Image · " + _file_stem(e["thumb"])) if e.get("base") == "image" and e.get("thumb")
-                 else "Colour " + (e.get("hex") or "").upper())]
-        if e["category"]:
-            rows.append(("Category", e["category"]))
-        used = material_uses(scene).get(e["name"], 0)
-        rows.append(("In this model", f"used by {used}" if used else "not used"))
-        d.kv(rows)
-        verbs = [cs.verb("apply", "Paint with it", key="↩", primary=True)]
-        if e["source"] == "mine":
-            verbs.append(cs.verb("unkeep", "Remove from My library"))
-        if e["source"] == "linked":
-            d.text("Edit it in its own file: the change comes in when the link reloads.", tone="faint")
-            verbs.append(cs.verb("opensource", "Open " + e.get("file", "").rsplit("/", 1)[-1]))
-        d.buttons(verbs, align="fill")
 
     def _component_detail(self, d, prov, ctx, e):
         cs = _chrome_sheet()
@@ -1299,7 +1090,7 @@ def palette_items(view, win) -> list:
     mats = list((getattr(scene, "materials", None) or {}).items())
     uses = material_uses(scene)
     # The model's, most used first (what you paint with most is under the hand).
-    mats.sort(key=lambda kv: (-uses.get(kv[0], 0), _natural(kv[0])))
+    mats = [mats[i] for i in library_by_use([n for n, _m in mats], [uses.get(n, 0) for n, _m in mats])]
     for name, mat in mats[:STRIP_MODEL]:
         tex = getattr(mat, "texture", None)
         icon = _thumb(view, tex["path"]) if tex and tex.get("path") else ""
