@@ -24,7 +24,9 @@ from core.mesh import element_identity
 import math
 from typing import Iterable, Optional, Sequence
 
-from ingetrazo_core import Vec3 as QVector3D, polygon_newell as _newell
+from ingetrazo_core import Vec3 as QVector3D, object_drawing, polygon_newell as _newell
+
+_order_chain = object_drawing.order_chain
 
 from core.geometry import Edge, Face
 from core.history import (
@@ -1102,7 +1104,6 @@ def divide_edges(mesh, edges, n: int) -> int:
     A mark that lands on an existing facet vertex cuts nothing there but
     still parts the curve. Faces the edges bound take the new vertices in
     their loops (``Mesh.split_edge``). Returns the number of cuts made."""
-    from core.mesh import Mesh, edge_flags, stamp_edge_flags
     n = int(n)
     if n < 2:
         return 0
@@ -1118,93 +1119,7 @@ def divide_edges(mesh, edges, n: int) -> int:
         if change.modified["edge"]:
             mesh._chunk_dirty = True
         return cuts
-    done: set = set()
-    cuts = 0
-    for edge in list(edges):
-        if element_identity(edge) in done:
-            continue
-        is_curve = getattr(edge, "curve", None) is not None
-        chain = mesh.curve_edges(edge) if is_curve else [edge]
-        walk = _order_chain(chain, edge)
-        for e, _, _ in walk:
-            done.add(element_identity(e))
-        total = sum((vt.position - vf.position).length() for _, vf, vt in walk)
-        if total < 1e-9:
-            continue
-        step = total / n
-        # The facets of each of the n pieces, in walking order; a piece's
-        # index is the k/n span its facets fall in.
-        pieces: list = [[] for _ in range(n)]
-
-        def piece_of(s0: float, s1: float) -> int:
-            return max(0, min(n - 1, int(((s0 + s1) * 0.5) // step)))
-
-        walked = 0.0
-        for e, v_from, v_to in walk:
-            a, b = QVector3D(v_from.position), QVector3D(v_to.position)
-            ln = (b - a).length()
-            if ln < 1e-12:
-                continue
-            flags = edge_flags(e)
-            inside = [k for k in range(1, n)
-                      if walked + 1e-9 < step * k < walked + ln - 1e-9]
-            rest, rest_from, rest_start = e, v_from, walked
-            for k in inside:
-                at = step * k
-                point = a + (b - a) * ((at - walked) / ln)
-                e0, e1 = mesh.split_edge(rest, point)
-                if e0 == e1:
-                    break
-                # split_edge hands the halves back in v0→v1 order of the
-                # facet, which need not be the walking order: pick by the
-                # vertex we came from.
-                first = e0 if rest_from in (e0.v0, e0.v1) else e1
-                second = e1 if first == e0 else e0
-                for half in (first, second):
-                    stamp_edge_flags(half, flags)
-                pieces[piece_of(rest_start, at)].append(first)
-                rest, rest_from, rest_start = second, first.other(rest_from), at
-                cuts += 1
-            pieces[piece_of(rest_start, walked + ln)].append(rest)
-            walked += ln
-        if is_curve:
-            for facets in pieces:
-                if not facets:
-                    continue
-                cid = Mesh.next_curve_id()
-                for f in facets:
-                    f.curve = cid
-    return cuts
-
-
-# How far a point may sit off the line through its neighbours and still go.
-# A distance, not an angle: float32 coordinates tilt a 2 cm piece 300 m
-# out more than a real 0.1° kink in a 10 m line, yet move the point far
-# less. And it follows that precision, not a fixed figure: a few float32
-# steps of the coordinates' size (~1e-7 each), so mm work near the origin
-# gets a thousandth of a mm, and the first facet of a 2 mm fillet is never
-# taken for part of the line it leaves. Capped at the mesh's own stitch
-# tolerance (0.1 mm); beyond that the point is not on the line.
-_JOIN_TOL_FLOOR = 1e-6
-_JOIN_TOL_REL = 1e-6
-_JOIN_TOL_MAX = 1e-4
-
-
-def _off_line(p, a, b) -> tuple:
-    """Distance from ``p`` to the line through ``a`` and ``b``, and the
-    tolerance the size of those coordinates allows it — in double
-    precision, so the test adds no float32 noise of its own."""
-    p, a, b = ((q.x(), q.y(), q.z()) for q in (p, a, b))
-    ab = [b[i] - a[i] for i in range(3)]
-    ap = [p[i] - a[i] for i in range(3)]
-    cross = (ap[1] * ab[2] - ap[2] * ab[1],
-             ap[2] * ab[0] - ap[0] * ab[2],
-             ap[0] * ab[1] - ap[1] * ab[0])
-    off = math.sqrt(sum(c * c for c in cross)) / math.sqrt(
-        sum(c * c for c in ab))
-    size = max(abs(c) for q in (p, a, b) for c in q)
-    tol = min(_JOIN_TOL_MAX, _JOIN_TOL_FLOOR + _JOIN_TOL_REL * size)
-    return off, tol
+    return object_drawing.divide_edges(mesh, edges, n)
 
 
 #: Why Join Segments leaves a point where it is, for its preview: the
@@ -1212,32 +1127,6 @@ def _off_line(p, a, b) -> tuple:
 #: keeps all the same, each for its reason. A plain corner is not listed:
 #: only a kink close enough to straight to be mistaken for none.
 JOIN_REASONS = ("join", "kink", "branch", "flags", "curve")
-
-# Under this angle a corner kept by Join Segments is worth pointing out:
-# it looks straight but is not (a fillet's first facet, a stray click).
-_JOIN_KINK_DEG = 1.0
-
-
-def _kink_deg(v, a, b) -> float:
-    """The turn, in degrees, a path a → v → b takes at ``v``."""
-    d1, d2 = v.position - a.position, b.position - v.position
-    if d1.length() == 0 or d2.length() == 0:
-        return 180.0
-    c = QVector3D.dotProduct(d1.normalized(), d2.normalized())
-    return math.degrees(math.acos(max(-1.0, min(1.0, c))))
-
-
-def _straight_through(v, picked) -> bool:
-    """Whether two of the ``picked`` edges at ``v`` run on in one straight
-    line through it — a T or a cross whose bar Join Segments must keep."""
-    ends = [e.other(v) for e in v.edges if element_identity(e) in picked]
-    for i, a in enumerate(ends):
-        for b in ends[i + 1:]:
-            off, tol = _off_line(v.position, a.position, b.position)
-            if off <= tol and _kink_deg(v, a, b) < 90.0:
-                return True
-    return False
-
 
 def join_edges(mesh, edges, verdicts: Optional[dict] = None) -> list:
     """Join Segments, the inverse of Divide: every vertex where two of
@@ -1255,7 +1144,6 @@ def join_edges(mesh, edges, verdicts: Optional[dict] = None) -> list:
     ``verdicts``, when given, is filled with what happened to each point
     on the way, ``{vertex: reason}`` (see :data:`JOIN_REASONS`): what
     :func:`join_preview` shows."""
-    from core.mesh import edge_flags, stamp_edge_flags
     live = [e for e in edges if e in mesh.edges]
     from core.store_mesh import StoreMesh, EdgeView, VertexView, _hypot
     import sys
@@ -1266,52 +1154,7 @@ def join_edges(mesh, edges, verdicts: Optional[dict] = None) -> list:
         if verdicts is not None:
             verdicts.update((VertexView(mesh, k), why) for k, why in reasons)
         return [EdgeView(mesh, k) for k in keys]
-    picked = set(map(element_identity, live))
-    seen: set = set()
-    candidates = []
-    for e in live:
-        for v in (e.v0, e.v1):
-            if element_identity(v) not in seen:
-                seen.add(element_identity(v))
-                candidates.append(v)
-
-    def keep(v, reason):
-        if verdicts is not None:
-            verdicts[v] = reason
-
-    for v in candidates:
-        if len(v.edges) != 2:
-            if len(v.edges) > 2 and _straight_through(v, picked):
-                keep(v, "branch")
-            continue
-        e1, e2 = list(v.edges)
-        if element_identity(e1) not in picked or element_identity(e2) not in picked:
-            continue
-        a, b = e1.other(v), e2.other(v)
-        off, tol = _off_line(v.position, a.position, b.position)
-        if off > tol:
-            if _kink_deg(v, a, b) < _JOIN_KINK_DEG:
-                keep(v, "kink")
-            continue
-        flags = edge_flags(e1)
-        if flags != edge_flags(e2):
-            keep(v, "flags")
-            continue
-        if e1.curve is not None or e2.curve is not None:
-            keep(v, "curve")
-            continue
-        if not mesh.collapsible_vertex(v):
-            continue
-        if mesh.find_edge(a, b) is not None:
-            continue                     # the whole line is there already
-        joined = mesh.collapse_vertex(v)["new_edge"]
-        stamp_edge_flags(joined, flags)
-        keep(v, "join")
-        picked.discard(element_identity(e1))
-        picked.discard(element_identity(e2))
-        picked.add(element_identity(joined))
-        live.append(joined)
-    return [e for e in live if element_identity(e) in picked and e in mesh.edges]
+    return object_drawing.join_edges(mesh, live, verdicts)
 
 
 def join_preview(mesh, edges) -> dict:
@@ -1327,32 +1170,3 @@ def join_preview(mesh, edges) -> dict:
     finally:
         mesh.restore_state(snap)
     return verdicts
-
-
-def _order_chain(chain, seed):
-    """The edges of a curve in walking order as ``(edge, v_from, v_to)``
-    triples, starting at one end (or at ``seed.v0`` for a closed loop) so
-    the k/n marks land where users expect them. The orientation matters: a
-    facet's own ``v0→v1`` may run against the walk, and a mark measured
-    along the wrong way lands mirrored inside the facet."""
-    if len(chain) <= 1:
-        e = chain[0]
-        return [(e, e.v0, e.v1)]
-    by_vertex: dict = {}
-    for e in chain:
-        for v in (e.v0, e.v1):
-            by_vertex.setdefault(element_identity(v), (v, []))[1].append(e)
-    ends = [v for v, es in by_vertex.values() if len(es) == 1]
-    v = ends[0] if ends else seed.v0
-    ordered, seen = [], set()
-    while True:
-        nxt = next((e for e in by_vertex[element_identity(v)][1] if element_identity(e) not in seen), None)
-        if nxt is None:
-            break
-        seen.add(element_identity(nxt))
-        w = nxt.other(v)
-        ordered.append((nxt, v, w))
-        v = w
-        if len(ordered) == len(chain):
-            break
-    return ordered

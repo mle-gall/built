@@ -492,5 +492,13 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(divide_face, &sub)?)?;
     sub.add_function(wrap_pyfunction!(erase_selection, &sub)?)?;
     sub.add_function(wrap_pyfunction!(prune_soft_edges, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_edge_edits::order_chain, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_edge_edits::divide_edges, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_edge_edits::join_edges, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_edge_edits::interior_vertex, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_edge_edits::collapsible, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_edge_edits::collapse_vertex, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_edge_edits::revert_collapse, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_edge_edits::dedupe_faces, &sub)?)?;
     m.add_submodule(&sub)
 }
