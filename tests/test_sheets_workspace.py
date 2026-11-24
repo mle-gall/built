@@ -112,7 +112,7 @@ class Recorder:
     def ui_top_empty(self, *a):
         return False
 
-    def ui_claims_key(self, name):
+    def ui_claims_key(self, name, mods=0):
         return False
 
     def ui_wheel(self, *a):

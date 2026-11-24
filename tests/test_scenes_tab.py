@@ -115,65 +115,6 @@ def test_scenes_is_a_tab_of_its_own_right_after_layers(win):
     assert not win.tray.widget().isAncestorOf(dock.panel)
 
 
-def test_on_a_first_run_the_tab_comes_right_after_layers(win):
-    """Layers is seated again at start-up and goes to the end of the row;
-    Scenes follows it there instead of staying in front of it."""
-    scenes, layers = win.scenes_dock.windowTitle(), win.layers_dock.windowTitle()
-    rows = [[bar.tabText(i) for i in range(bar.count())] for bar in win._dock_tab_bars()]
-    row = next(row for row in rows if scenes in row)
-    assert row.index(scenes) == row.index(layers) + 1
-
-
-def test_a_layout_saved_before_the_tab_seats_it_beside_layers(win):
-    """A layout saved before the tab existed leaves it apart from the
-    other tabs; at start-up it goes back among them."""
-    dock = win.scenes_dock
-    win.removeDockWidget(dock)
-    win.addDockWidget(Qt.RightDockWidgetArea, dock)      # a block apart
-    dock.show()
-    _app.processEvents()
-    assert win.layers_dock not in win.tabifiedDockWidgets(dock)
-    win._seat_new_trays()
-    _app.processEvents()
-    assert win.layers_dock in win.tabifiedDockWidgets(dock)
-
-
-def test_seated_behind_layers_even_with_extension_tabs_saved_after_it(win):
-    """A layout that knows an extension's panels tabbed after Layers, but
-    not Scenes: Qt adds a tab at the end of the row, behind them. Scenes
-    goes right after Layers; the extensions' tabs follow it, in order."""
-    from PySide6.QtWidgets import QDockWidget, QLabel
-    exts = []
-    for name in ("Extension one", "Extension two"):
-        d = QDockWidget(name, win)
-        d.setObjectName("extension_" + name.split()[1])
-        d.setWidget(QLabel(name))
-        win.addDockWidget(Qt.RightDockWidgetArea, d)
-        win.tabifyDockWidget(win.layers_dock, d)
-        d.show()                 # made after the window showed: hidden
-        exts.append(d)
-    dock = win.scenes_dock
-    win.removeDockWidget(dock)                    # unknown to the layout
-    win._seat_new_tray(dock, [win.layers_dock, win.project_browser])
-    dock.show()
-    _app.processEvents()
-    # The row in tab order, Properties aside (tabifiedDockWidgets).
-    row = [d.objectName() for d in win.tabifiedDockWidgets(win.tray)]
-    at = row.index("tray_layers")
-    assert row[at:at + 4] == ["tray_layers", "tray_scenes",
-                              "extension_one", "extension_two"]
-
-
-def test_moved_alone_to_the_other_side_it_stays(win, monkeypatch):
-    dock = win.scenes_dock
-    win.removeDockWidget(dock)
-    win.addDockWidget(Qt.LeftDockWidgetArea, dock)
-    dock.show()
-    monkeypatch.setattr(win, "restoreDockWidget", lambda d: True)
-    win._seat_new_trays()
-    assert win.dockWidgetArea(dock) == Qt.LeftDockWidgetArea
-
-
 def test_restore_default_panels_brings_it_back(win):
     win.set_tray_shown(win.scenes_dock, False)
     assert win.scenes_dock.isHidden()

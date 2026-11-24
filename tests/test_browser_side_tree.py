@@ -207,26 +207,6 @@ def test_a_drop_says_into_or_beside_and_outlines_what_it_covers():
         _close(win)
 
 
-def test_a_drop_reparents_in_one_undo_step():
-    building, tree = _building()
-    _level1, level2 = building.children
-    win, scene, panel = _window_with(building, tree)
-    try:
-        t = panel.tree
-        _row(panel, tree).setSelected(True)
-        steps = len(win.viewport.history.undo_stack)
-        pos = t.visualItemRect(_row(panel, level2)).center()
-        _drop(t, pos)
-        assert tree in level2.children
-        assert len(win.viewport.history.undo_stack) == steps + 1
-        win.viewport.history.undo()
-        panel.refresh()
-        assert tree in scene.groups
-        assert _row(panel, tree).parent() is panel.tree.topLevelItem(0)
-    finally:
-        _close(win)
-
-
 # ---- The cells that act without selecting ----------------------------------
 
 def test_a_wobble_on_an_eye_selects_nothing():

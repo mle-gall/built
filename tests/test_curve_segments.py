@@ -188,13 +188,12 @@ def test_a_curve_is_described_by_its_shape(native_host):
     assert "Side" in rows["Polygon"]
 
 
-def test_a_painted_face_shows_a_swatch_and_its_code():
-    from views.tray import EntityInfoPanel
-
-    class _Face:
-        attrs = {"color": (0.85, 0.45, 0.2)}
-    text = EntityInfoPanel._material_of(_Face())
-    assert "#D97333" in text and "■" in text
+def test_a_painted_face_shows_a_swatch_and_its_code(native_host):
+    from tests.native_tree import inspector
+    mesh = native_host.viewport.scene.mesh
+    face = mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(0, 1, 0)])
+    face.attrs["color"] = (.85, .45, .2)
+    assert inspector(native_host, [face])["Geometry"]["Material"] == "\x1dswatch\x1d#D97333"
 
 
 @pytest.mark.parametrize("offset,r", [(1000.0, 0.05), (10000.0, 0.5),

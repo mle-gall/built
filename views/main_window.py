@@ -1976,7 +1976,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         choice, the ones most work needs open and the rest wait there
         (``DEFAULT_HIDDEN_TRAYS``)."""
         hidden = self._hidden_tray_names(st)
-        self._seat_new_trays()
         docks = self._sidebar_docks()
         for d in docks:
             self._keep_docked(d)
@@ -1995,77 +1994,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         menu = getattr(self, "_panels_menu", None)
         if menu is not None:
             self._fill_panels_menu(menu)
-
-    #: The tabs younger than some saved layouts, each with the tabs it
-    #: follows on a first run, nearest first: Layers after the Browser,
-    #: Scenes after Layers (#1158).
-    _NEW_TRAYS = (("layers_dock", ("project_browser",)),
-                  ("scenes_dock", ("layers_dock", "project_browser")))
-
-    def _seat_new_trays(self) -> None:
-        """A tab younger than the saved layout (Layers, Scenes) goes in its
-        place of a first run when that layout does not know it (saved
-        before it existed) or left it in a block of its own on the same
-        side as the other tabs — ``restoreState`` puts a dock it does not
-        know apart from the tabs, and closing the window then saved it
-        there. Moved to the other side on purpose (Window tabs ▸ Move to
-        the left side), it stays.
-
-        A tab seated goes to the end of the row, so the ones that follow
-        it go again after it: on a first run Layers went behind Scenes."""
-        moved = set()
-        for name, after in self._NEW_TRAYS:
-            dock = getattr(self, name, None)
-            if dock is None:
-                continue
-            after = [d for d in (getattr(self, a, None) for a in after)
-                     if d is not None]
-            follow = any(d in moved and self.dockWidgetArea(d)
-                         == self.dockWidgetArea(dock) for d in after)
-            if self._seat_new_tray(dock, after, follow):
-                moved.add(dock)
-
-    def _seat_new_tray(self, dock, after, follow: bool = False) -> bool:
-        """Seat one tab; ``follow``: a tab it follows was just seated.
-        Whether it was moved."""
-        if not follow and self.restoreDockWidget(dock):
-            area = self.dockWidgetArea(dock)
-            mates = [d for d in (self.tray, *after)
-                     if self.dockWidgetArea(d) == area]
-            tabbed = self.tabifiedDockWidgets(dock)
-            if not mates or any(d in tabbed for d in mates):
-                return False
-        anchor = next((d for d in after
-                       if self.dockWidgetArea(d) != Qt.NoDockWidgetArea),
-                      self.tray)
-        area = self.dockWidgetArea(anchor)
-        if area == Qt.NoDockWidgetArea:
-            area = Qt.RightDockWidgetArea
-        # Qt adds a tab at the end of the row; the ones the saved layout
-        # had after the anchor (an extension's panels…) go again after it,
-        # so it lands right behind the anchor, not behind them.
-        tail = self._tabs_after(anchor, dock)
-        self.addDockWidget(area, dock)
-        self.tabifyDockWidget(anchor, dock)
-        last = dock
-        for d in tail:
-            self.tabifyDockWidget(last, d)
-            last = d
-        return True
-
-    def _tabs_after(self, anchor, dock) -> list:
-        """The tabs in ``anchor``'s row that come after it, ``dock`` aside,
-        in their order. ``tabifiedDockWidgets`` gives the row in tab order
-        without ``anchor`` itself (and without the closed tabs, which stay
-        where they are): what follows the built-in tabs that go before
-        ``anchor`` follows ``anchor``."""
-        built = self._default_tray_order()
-        before = built[:built.index(anchor)] if anchor in built else []
-        others = [d for d in self.tabifiedDockWidgets(anchor)
-                  if d is not dock]
-        cut = max((i for i, d in enumerate(others) if d in before),
-                  default=-1)
-        return others[cut + 1:]
 
     def _keep_docked(self, dock) -> None:
         """The trays stay in the sidebar, as Blender's side panel does

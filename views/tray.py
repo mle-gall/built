@@ -3667,10 +3667,8 @@ class EntityInfoPanel(QWidget):
         if len(sel) == 1:
             e = sel[0]
             if isinstance(e, Face):
-                mat = self._material_of(e)
                 return (f"<b>{tr('Face')}</b><br>{tr('Area')}: {fmt_area(face_net_area(e))}<br>"
-                        f"{tr('Vertices')}: {len(e.vertices)}<br>"
-                        f"{tr('Material')}: {mat}")
+                        f"{tr('Vertices')}: {len(e.vertices)}")
             if isinstance(e, Edge):
                 return (f"<b>{tr('Edge')}</b><br>"
                         f"{tr('Length')}: {fmt_len((e.b - e.a).length())}")
@@ -3740,19 +3738,6 @@ class EntityInfoPanel(QWidget):
             if sa is not None:
                 rows.append(f"{tr('Area (3D terrain)')}: {fmt_area(sa)}")
         return "<br>".join(rows)
-
-    @staticmethod
-    def _material_of(face) -> str:
-        tex = face.attrs.get("texture")
-        if tex and tex.get("path"):
-            return Path(tex["path"]).stem
-        col = face.attrs.get("color")
-        if col is not None:
-            # A swatch of the colour and its hex code, not a tuple of floats.
-            hexa = "#" + "".join(f"{max(0, min(255, round(c * 255))):02X}"
-                                 for c in col[:3])
-            return f'<span style="color:{hexa}">■</span> {hexa}'
-        return "—"
 
 
 def _restore_scrollbar_later(bar, value: int) -> None:

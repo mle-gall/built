@@ -26,6 +26,7 @@ mod context_menu;
 mod lens;
 use lens::Lens;
 mod tree_order;
+mod tree_keys;
 mod drawing;
 mod drawing_catalog;
 mod drawing_hatches;
@@ -286,6 +287,7 @@ pub struct Column {
     inspector_title: String,
     inspector: Vec<(String, Vec<(String, String)>)>,
     highlighted: Option<String>,
+    focused_row: Option<String>,
 }
 
 impl Ui {
@@ -445,7 +447,7 @@ impl Ui {
             kind_menu: None, kinds: Vec::new(), prompt: None, lens: Lens::Filing, edits: Default::default(), mode: String::new(), issues: false,
             identity: Vec::new(),
             inspector_title: String::new(),
-            inspector: Vec::new(), highlighted: None,
+            inspector: Vec::new(), highlighted: None, focused_row: None,
         });
         let g = |v: &Vec<i64>, i: usize| v.get(i).copied().unwrap_or(0);
         let s = |v: &Vec<String>, i: usize| v.get(i).cloned().unwrap_or_default();
@@ -505,7 +507,7 @@ impl Ui {
     }
     pub fn style_catalog(&mut self, owner: usize, lines: Vec<String>, patterns: String, scene: Option<&pyo3::Bound<'_,pyo3::PyAny>>) -> pyo3::PyResult<()> {
         if let Some(col)=self.column.as_mut() {
-            if col.styles.owner != owner { col.styles = Default::default(); col.styles.owner=owner; col.proposal_dismissed=false; col.highlighted=None; col.issue_at=None; }
+            if col.styles.owner != owner { col.styles = Default::default(); col.styles.owner=owner; col.proposal_dismissed=false; col.highlighted=None; col.focused_row=None; col.issue_at=None; }
             col.styles.lines=lines;
             col.styles.set_patterns(patterns);
             if let Some(scene)=scene { col.styles.catalog.sync(scene)?; col.styles.hatches.sync(scene)?; }
@@ -734,7 +736,7 @@ impl Ui {
 
     /// Keyboard ownership: the chrome takes a key only while one of its
     /// fields has focus, or Escape while one of its popups is open.
-    pub fn claims_key(&self, name: &str) -> bool {
+    pub fn claims_key(&self, name: &str, mods: u8) -> bool {
         if self.gallery.is_some() || self.font_picker.is_some() { return true; }
         if name == "Escape" && (self.ctx_menu.is_some() || self.strip.menus_open() || self.egui_popup_open() || self.panels.data["terrain"].is_object()) { return true; }
         // The large sheet owns every key while it is up (Python keeps the
@@ -743,7 +745,7 @@ impl Ui {
         if self.sheets.shown { return self.sheets_claims_key(name); }
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some()
             || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some() || c.edits.contains_key("\u{1d}pick"));
-        self.sheet.is_some() || self.dialog.is_some() || self.cmd_open || (name == "Escape" && (self.view_open || self.menu.is_some() || self.form.is_some() || filing
+        self.column.as_ref().is_some_and(|c| !self.review && c.claims_row_key(name, mods)) || self.sheet.is_some() || self.dialog.is_some() || self.cmd_open || (name == "Escape" && (self.view_open || self.menu.is_some() || self.form.is_some() || filing
             || self.ctx_menu.is_some() || self.strip.menus_open()))
             || self.ctx.wants_keyboard_input()
     }
@@ -868,6 +870,14 @@ impl Ui {
                 }
             }
         }
+        if self.form.is_none() && self.menu.is_none() && !self.review {
+            if let Some(col) = self.column.as_mut().filter(|c| c.claims_row_key(name, mods)) {
+                if pressed {
+                    if let Some(action) = col.row_key(name, mods) { self.actions.push(action); }
+                }
+                return true;
+            }
+        }
         if !self.ctx.wants_keyboard_input() {
             return false;
         }
@@ -986,7 +996,10 @@ impl Ui {
     pub fn pointer(&mut self, kind: &str, x: f32, y: f32, button: u8, mods: u8) -> bool {
         let pos = pos2(x, y);
         // A press is the next action: the committed value's readback goes.
-        if kind == "press" { self.cursor.end_readback(); }
+        if kind == "press" {
+            self.cursor.end_readback();
+            if let Some(c) = self.column.as_mut() { c.focused_row = None; }
+        }
         self.modifiers = mods_from(mods);
         let button = match button {
             2 => egui::PointerButton::Secondary,
@@ -1792,8 +1805,9 @@ impl Ui {
                                 if editable {
                                     if resp.drag_started() { resp.dnd_set_drag_payload(drawing::DraggedRow::Node(n.key.clone())); }
                                     drawing::drop_on(ui, &resp, n.key.strip_prefix("n:").unwrap_or(""), &mut actions);
-                                } else if n.local_placement && resp.drag_started() {
-                                    resp.dnd_set_drag_payload(drawing::DraggedRow::Placement { key: n.key.clone(), selected: n.selected > 0 });
+                                } else if n.local_placement {
+                                    if resp.drag_started() { resp.dnd_set_drag_payload(drawing::DraggedRow::Placement { key: n.key.clone(), selected: n.selected > 0 }); }
+                                    drawing::drop_on_occurrence(ui, &resp, &n.key, &mut actions);
                                 }
                                 // Items in the selection are lit like a picked row; nodes count them.
                                 let lit = (col.lens == Lens::Drawing && col.styles.selected(n)) || n.mark == 1 || (selection.is_none() && col.highlighted.as_deref() == Some(n.key.as_str()));
@@ -2012,9 +2026,11 @@ impl Ui {
                                     if n.expandable && tri.contains(p) {
                                         actions.push(format!("toggle\u{1f}{}", n.key));
                                     } else if n.eye >= 0 && eye_r.expand(2.0).contains(p) {
-                                        actions.push(format!("eye\u{1f}{}", n.key));
+                                        let edit = (col.lens == Lens::Drawing).then(|| col.styles.state_action(n, false)).flatten();
+                                        actions.push(edit.unwrap_or_else(|| format!("{}\u{1f}{}", if n.local_placement { "roweye" } else { "eye" }, n.key)));
                                     } else if n.lock >= 0 && lock_r.expand(2.0).contains(p) {
-                                        actions.push(format!("lock\u{1f}{}", n.key));
+                                        let edit = (col.lens == Lens::Drawing).then(|| col.styles.state_action(n, true)).flatten();
+                                        actions.push(edit.unwrap_or_else(|| format!("lock\u{1f}{}", n.key)));
                                     } else if col.lens == Lens::Drawing && n.cells.len() >= 7 && !linked && col.filing.is_none() {
                                         col.styles.pick(n, ui.input(|i| i.modifiers.command || i.modifiers.shift));
                                     } else if col.lens==Lens::Drawing && n.key.starts_with("preview-folder:") {
@@ -2036,9 +2052,13 @@ impl Ui {
                                         }
                                     } else {
                                         col.highlighted = Some(n.key.clone());
+                                        if col.lens == Lens::Filing && (n.local_placement || n.key.starts_with("section:")) {
+                                            col.focused_row = Some(n.key.clone());
+                                            resp.surrender_focus();
+                                        }
                                         let verb = if n.local_placement && ui.input(|i| i.modifiers.shift || i.modifiers.command) {
                                             "toggleitem"
-                                        } else { match n.row { 0 => "node", 3 => "reveal", 4 => "loose", 5 => "mat", _ => "item" } };
+                                        } else if n.local_placement { "pickrow" } else { match n.row { 0 => "node", 3 => "reveal", 4 => "loose", 5 => "mat", _ => "item" } };
                                         actions.push(format!("{verb}\u{1f}{}", n.key));
                                     }
                                 }
@@ -2744,6 +2764,10 @@ fn doc_tab(ui: &mut egui::Ui, name: &str, active: bool, dirty: bool) -> Option<b
 fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::collections::HashMap<String, String>,
                   actions: &mut Vec<String>) {
     for (label, value) in rows {
+        if let Some(hex) = value.strip_prefix("\u{1d}swatch\u{1d}") {
+            if let Some(color) = parse_hex(hex) { kit::material_readout(ui, label, color, hex); }
+            continue;
+        }
         if let Some(rest) = value.strip_prefix("\u{1d}slider\u{1d}") {
             let mut parts = rest.split('\u{1d}');
             let id = parts.next().unwrap_or_default();
@@ -3009,39 +3033,138 @@ fn dismissal_consumes_press_drag_and_release() {
     assert!(!ui.pointer("release", 300., 400., 1, 0));
 }
 
+#[cfg(test)]
+fn tree_frame(ui: &mut Ui, events: Vec<egui::Event>) -> std::collections::HashMap<String, Pos2> {
+    let screen = Rect::from_min_size(Pos2::ZERO, vec2(1024., 700.));
+    let ctx = ui.ctx.clone();
+    let raw = egui::RawInput {
+        screen_rect: Some(screen),
+        events,
+        ..Default::default()
+    };
+    let frame = ctx.run(raw, |c| ui.right_column(c, screen, 0.));
+    frame
+        .shapes
+        .into_iter()
+        .filter_map(|shape| {
+            if let egui::Shape::Text(text) = shape.shape {
+                let at = text.visual_bounding_rect().center();
+                if shape.clip_rect.contains(at) {
+                    return Some((text.galley.text().to_owned(), at));
+                }
+            }
+            None
+        })
+        .collect::<std::collections::HashMap<_, _>>()
+}
+
+#[cfg(test)]
+fn tree_click(ui: &mut Ui, pos: Pos2, button: egui::PointerButton) {
+    tree_frame(ui, vec![egui::Event::PointerMoved(pos)]);
+    for pressed in [true, false] {
+        tree_frame(
+            ui,
+            vec![egui::Event::PointerButton {
+                pos,
+                button,
+                pressed,
+                modifiers: Default::default(),
+            }],
+        );
+    }
+}
+
 #[test]
 fn occurrence_menu_runs_the_document_action_and_closes() {
     let Some(mut ui) = test_chrome() else { return };
     ui.ctx = test_context();
     let key = "i:box";
-    ui.set_tree(vec![(vec![key.into(), "Box".into()], vec![0, 0, 0, 0, 1, -1, -1])], 0);
-    let screen = Rect::from_min_size(Pos2::ZERO, vec2(1024., 700.));
-    let frame = |ui: &mut Ui, events| {
-        let ctx = ui.ctx.clone();
-        let raw = egui::RawInput { screen_rect: Some(screen), events, ..Default::default() };
-        let frame = ctx.run(raw, |c| ui.right_column(c, screen, 0.));
-        frame.shapes.into_iter().filter_map(|shape| {
-            if let egui::Shape::Text(text) = shape.shape {
-                let at = text.visual_bounding_rect().center();
-                if shape.clip_rect.contains(at) { return Some((text.galley.text().to_owned(), at)); }
-            }
-            None
-        }).collect::<std::collections::HashMap<_, _>>()
-    };
-    let click = |ui: &mut Ui, pos, button| {
-        frame(ui, vec![egui::Event::PointerMoved(pos)]);
-        for pressed in [true, false] {
-            frame(ui, vec![egui::Event::PointerButton {pos, button, pressed, modifiers: Default::default()}]);
-        }
-    };
-    for _ in 0..3 { frame(&mut ui, vec![]); }
-    let at = frame(&mut ui, vec![])["Box"];
-    click(&mut ui, at, egui::PointerButton::Secondary);
-    assert!(ui.take_actions().contains(&format!("tree:grouprows\u{1f}{key}")));
-    ui.set_tree_group_rows(key.into(), vec![("explode".into(), "Explode Group".into(), String::new())]);
-    for _ in 0..3 { frame(&mut ui, vec![]); }
-    let at = frame(&mut ui, vec![])["Explode Group"];
-    click(&mut ui, at, egui::PointerButton::Primary);
-    assert!(ui.take_actions().contains(&format!("tree:explode\u{1f}{key}")));
+    ui.set_tree(
+        vec![(vec![key.into(), "Box".into()], vec![0, 0, 0, 0, 1, -1, -1])],
+        0,
+    );
+    for _ in 0..3 {
+        tree_frame(&mut ui, vec![]);
+    }
+    let at = tree_frame(&mut ui, vec![])["Box"];
+    tree_click(&mut ui, at, egui::PointerButton::Secondary);
+    assert!(ui
+        .take_actions()
+        .contains(&format!("tree:grouprows\u{1f}{key}")));
+    ui.set_tree_group_rows(
+        key.into(),
+        vec![("explode".into(), "Explode Group".into(), String::new())],
+    );
+    for _ in 0..3 {
+        tree_frame(&mut ui, vec![]);
+    }
+    let at = tree_frame(&mut ui, vec![])["Explode Group"];
+    tree_click(&mut ui, at, egui::PointerButton::Primary);
+    assert!(ui
+        .take_actions()
+        .contains(&format!("tree:explode\u{1f}{key}")));
     assert!(ui.column.unwrap().row_menu.is_none());
+}
+
+#[test]
+fn focused_tree_keys_win_over_viewport_shortcuts() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    let group = |name: &str| {
+        (
+            vec![format!("i:{name}"), name.to_owned()],
+            vec![0, 0, 0, 0, 1, -1, -1],
+        )
+    };
+    ui.set_tree(vec![group("A"), group("B")], 0);
+    for _ in 0..3 {
+        tree_frame(&mut ui, vec![]);
+    }
+    let pos = tree_frame(&mut ui, vec![])["A"];
+    tree_click(&mut ui, pos, egui::PointerButton::Primary);
+    assert_eq!(ui.take_actions(), ["tree:pickrow\x1fi:A"]);
+    assert!(!ui.claims_key("Z", 1));
+    assert!(!ui.claims_key("Space", 4));
+    for (key, mods, action) in [
+        ("ArrowDown", 0, "pickrow\x1fi:B"),
+        ("Tab", 0, "into\x1fi:B\x1fi:A"),
+        ("Tab", 4, "outdent\x1fi:B"),
+        ("Space", 0, "roweye\x1fi:B"),
+        ("Enter", 0, "open\x1fi:B"),
+        ("Escape", 0, "stepout\x1f"),
+    ] {
+        assert!(ui.claims_key(key, mods), "{key}");
+        assert!(ui.key(key, true, mods));
+        assert_eq!(ui.take_actions(), [format!("tree:{action}")]);
+    }
+    assert!(ui.key("F2", true, 0));
+    assert_eq!(
+        ui.column.as_ref().unwrap().renaming.as_ref().unwrap().0,
+        "i:B"
+    );
+    ui.pointer("press", 300., 400., 1, 0);
+    assert!(ui.column.as_ref().unwrap().focused_row.is_none());
+}
+
+#[test]
+fn drawing_lock_and_visibility_address_the_selected_tags() {
+    let Some(mut ui) = test_chrome() else { return };
+    let tag = |key: &str| {
+        let mut text = vec![String::new(); 12];
+        text[0] = format!("preview-tag:{key}");
+        text[10] = key.into();
+        (text, vec![0, 0, 0, 0, 0, 1, 0])
+    };
+    ui.set_tree(vec![tag("a"), tag("b"), tag("other")], 0);
+    let col = ui.column.as_mut().unwrap();
+    col.styles.pick(&col.nodes[0], false);
+    col.styles.pick(&col.nodes[1], true);
+    for (lock, field, expected) in [(true, "locked", true), (false, "visible", false)] {
+        let action = col.styles.state_action(&col.nodes[1], lock).unwrap();
+        let patch: serde_json::Value =
+            serde_json::from_str(action.strip_prefix("tagstate\x1f").unwrap()).unwrap();
+        assert_eq!(patch["tags"], serde_json::json!(["a", "b"]));
+        assert_eq!(patch[field], expected);
+        assert!(col.styles.state_action(&col.nodes[2], lock).is_none());
+    }
 }
