@@ -1,5 +1,6 @@
 //! A resident Metal scene: compute compaction precedes native indirect draws.
 mod timing;
+mod pick_tile;
 mod captured_frame;
 use captured_frame::CapturedFrame;
 mod window_timers;
@@ -139,13 +140,13 @@ struct Scene {
 /// The last CPU read of a pick pixel remains valid across hit queries until
 /// a render or a view / geometry change. A scissored ID pass alone cannot
 /// mark the rest of the ID texture clean.
-#[derive(Clone, Copy)]
 struct PickRead {
     dirty: bool,
     pixel: Option<(u32, u32, i64)>,
+    tiles: pick_tile::Tiles,
 }
 impl PickRead {
-    const DIRTY: Self = Self { dirty: true, pixel: None };
+    const DIRTY: Self = Self { dirty: true, pixel: None, tiles: pick_tile::Tiles::EMPTY };
 }
 
 /// One more view of the resident scene: its own surface, size-dependent
@@ -419,7 +420,8 @@ impl Renderer {
         let old_size = (self.config.width, self.config.height);
         let old_camera = self.camera_data.clone();
         let old_style = self.look.data;
-        let old_flags = (self.style, self.edges, self.textures_enabled, self.pick_read,
+        let old_pick = std::mem::replace(&mut self.pick_read, PickRead::DIRTY);
+        let old_flags = (self.style, self.edges, self.textures_enabled, old_pick,
                          self.stable_frames, self.pick_pending, self.capture_next);
         let old_capture = self.captured.take();
         // Keep the original resources alive until the transaction has completed.
@@ -697,11 +699,12 @@ impl Renderer {
             &[0; timing::BYTES],
             wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
         );
-        let read = buffer(
-            &device,
-            &[0; 256],
-            wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-        );
+        let read = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("hover ID readback"),
+            size: u64::from(pick_tile::MAX_BYTES),
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         let samples = antialias::SampleModes::adapter(&a, format, features);
         let requested = Python::attach(|py| navigation::setting(py,"display/msaa","4"))?;
         samples.select(requested.parse().unwrap_or(4));
@@ -1920,7 +1923,7 @@ impl Renderer {
         let plan = PassPlan::new(self.antialias && self.samples.count() > 1, self.style, self.look.data[6][2] != 0., self.ao.active(self.style));
         let msaa = plan.msaa && !self.pick_pending;
         self.stable_frames = self.stable_frames.saturating_add(1);
-        let color_only = !msaa && !self.edges && self.style != 4 && !plan.ao && !plan.xray;
+        let color_only = !msaa && plan.color_only(self.style, self.edges);
         let draw_ids = if color_only { needs_settled_ids(self.pick_pending, self.pick_read.dirty, self.stable_frames) }
             else { needs_id_pass(msaa, self.pick_pending, self.pick_read.dirty, self.stable_frames) };
         if !msaa { self.references.draw(&mut e, &color, &depth, None); }
@@ -2061,7 +2064,10 @@ impl Renderer {
                 self.ao.draw(&self.device, &self.queue, &mut e, target, &depth, &output, msaa && !self.pick_pending, tq);
             }
         }
-        if (!msaa || self.pick_pending) && (draw_ids || ao_active) { self.pick_read.dirty = false; }
+        if (!msaa || self.pick_pending) && (draw_ids || ao_active) {
+            self.pick_read.dirty = false;
+            self.pick_read.tiles = pick_tile::Tiles::EMPTY;
+        }
         if self.sections.count > 0 && !ao_active {
             if msaa && !self.pick_pending {
                 self.sections.draw(&mut e, &self.aa.color_view(), &self.aa.depth_view(), Some(&color), tq, &self.camera_data);
@@ -2933,27 +2939,37 @@ impl Renderer {
         if let Some((px,py,row)) = self.pick_read.pixel {
             if (px,py) == (x,y) { return Ok(row); }
         }
+        if let Some(row) = self.pick_read.tiles.get(x, y) { return Ok(row); }
         let measure_id = self.pick_read.dirty && self.style != 4 && self.queries.is_some();
         self.ensure_ids_region(Some((x, y)))?;
+        // A scissored pass only produced the requested pixel. A settled ID
+        // texture can supply adjacent hits without another GPU synchronization.
+        let plan = PassPlan::new(self.antialias && self.samples.count() > 1, self.style, self.look.data[6][2] != 0., self.ao.active(self.style));
+        let tile = !self.pick_read.dirty && !measure_id && (plan.msaa || plan.color_only(self.style, self.edges));
+        let region = if tile {
+            pick_tile::Region::around(x, y, self.config.width, self.config.height)
+        } else {
+            pick_tile::Region { x, y, width: 1, height: 1 }
+        };
         let mut e = self.device.create_command_encoder(&Default::default());
         e.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
                 texture: &self.ids,
                 mip_level: 0,
-                origin: wgpu::Origin3d { x, y, z: 0 },
+                origin: wgpu::Origin3d { x: region.x, y: region.y, z: 0 },
                 aspect: wgpu::TextureAspect::All,
             },
             wgpu::TexelCopyBufferInfo {
                 buffer: &self.read,
                 layout: wgpu::TexelCopyBufferLayout {
                     offset: 0,
-                    bytes_per_row: Some(256),
-                    rows_per_image: Some(1),
+                    bytes_per_row: Some(region.stride()),
+                    rows_per_image: Some(region.height),
                 },
             },
             wgpu::Extent3d {
-                width: 1,
-                height: 1,
+                width: region.width,
+                height: region.height,
                 depth_or_array_layers: 1,
             },
         );
@@ -2963,13 +2979,15 @@ impl Renderer {
             e.copy_buffer_to_buffer(&self.resolve, 0, &self.read, 8, 16);
         }
         self.queue.submit([e.finish()]);
-        let b = self.readback(if measure_id { 24 } else { 4 })?;
+        let bytes = if tile { u64::from(region.bytes()) } else if measure_id { 24 } else { 4 };
+        let b = self.readback(bytes)?;
         self.last_pick_gpu = measure_id.then(|| {
             let first = u64::from_le_bytes(b[8..16].try_into().unwrap());
             let last = u64::from_le_bytes(b[16..24].try_into().unwrap());
             last.saturating_sub(first) as f64 * self.queue.get_timestamp_period() as f64 / 1e6
         });
-        let row = u32::from_le_bytes(b[..4].try_into().unwrap()) as i64 - 1;
+        let row = region.row(&b, x, y);
+        if tile { self.pick_read.tiles.insert(region, b); }
         self.pick_read.pixel = Some((x,y,row));
         Ok(row)
     }
@@ -3503,6 +3521,9 @@ mod plain_face_tests {
 
 struct PassPlan { msaa: bool, ao: bool, xray: bool }
 impl PassPlan {
+    fn color_only(&self, style: u32, edges: bool) -> bool {
+        !edges && style != 4 && !self.ao && !self.xray
+    }
     fn new(antialias: bool, mode: u32, back_edges: bool, ao: bool) -> Self {
         Self { msaa: antialias && mode != 1 && !back_edges,
             ao: ao && mode != 1 && mode != 4, xray: mode == 1 }
