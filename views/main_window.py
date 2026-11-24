@@ -1734,13 +1734,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         from ingetrazo_render import show_report_sheet
         show_report_sheet(self, "extensions")
 
-    @staticmethod
-    def example_extensions() -> list:
-        """``(path, title, blurb)`` of each extension shipped with the app
-        (``examples/extensions``); the extension manager installs them."""
-        from core.extension_manager import example_extension_files
-        return example_extension_files()
-
     # ---- Extension panels (views.extension_api.ExtensionApp.add_panel) -------
     def _register_extension_dock(self, dock) -> None:
         """Give an extension's panel what the built-in trays get for free.
@@ -2070,14 +2063,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self._tool_label.hide()
         self._refresh_sheet_tabs()
 
-        # Live UTM readout, the way a CAD shows coordinates. Local scene metres
-        # are meaningless to anyone outside the file; easting/northing is what
-        # goes on a plan, into a GPS, and into a report. Only shown once the
-        # scene has a datum — there is no coordinate without one.
-        self._coord_label = QLabel("")
-        theme_style(self._coord_label, "color:{muted}; padding:0 8px;")
-        bar.addPermanentWidget(self._coord_label)
-
         # Measurements box (VCB), pinned bottom-right: a caption
         # ("Length" / "Dimensions" / "Distance") plus a boxed field showing the
         # live measurement, or what you're typing (highlighted while typing).
@@ -2094,21 +2079,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         # Numbers and coordinates read left to right in a mirrored (right-to-
         # left, #1067) interface too: what is typed here goes to the tools.
         from views.rtl import keep_ltr
-        keep_ltr(self._vcb_value, self._coord_label)
-
-        # (valueBufferChanged → _on_value_buffer: see _wire_viewport.)
-        # The coordinate and measurement texts change on EVERY mouse move;
-        # each setText dirties the status bar and Qt flushes the top-level
-        # window's backing store (3072×1920 px at scale 2 on Marco's
-        # laptop) — measured 2026-09-14 on the plaza: frames p90 190 ms with
-        # the labels live, 57 ms with them frozen. They now settle at most
-        # ~12 times a second, and only when the text actually changed.
-        self._status_pending: dict = {}
-        self._status_timer = QTimer(self)
-        self._status_timer.setSingleShot(True)
-        self._status_timer.setInterval(self.STATUS_TEXT_MS)
-        self._status_timer.timeout.connect(self._flush_status_texts)
-        # (measurementChanged / coordinateChanged: see _wire_viewport.)
+        keep_ltr(self._vcb_value)
 
     _VCB_IDLE_STYLE = (
         "color:#0F141B; background:#FFFFFF; border:1px solid #9aa3ad;"
@@ -2122,26 +2093,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
     def _on_value_buffer(self, text: str) -> None:
         self._vcb_buffer = text
         self._refresh_vcb()
-
-    #: How often the per-hover status texts may repaint (ms).
-    STATUS_TEXT_MS = 80
-
-    def _queue_status_text(self, which: str, text: str) -> None:
-        self._status_pending[which] = text
-        if not self._status_timer.isActive():
-            self._status_timer.start()
-
-    def _flush_status_texts(self) -> None:
-        pending, self._status_pending = self._status_pending, {}
-        coord = pending.get("coordinate")
-        if coord is not None and coord != self._coord_label.text():
-            self._coord_label.setText(coord)
-            # The compact readout above; the full one, zone included, on hover.
-            self._coord_label.setToolTip(
-                getattr(self.viewport, "_last_coordinate_full", "") or "")
-        meas = pending.get("measurement")
-        if meas is not None and meas != getattr(self, "_vcb_live", None):
-            self._on_measurement(meas)
 
     def _on_measurement(self, text: str) -> None:
         self._vcb_live = text
@@ -2219,51 +2170,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         tool = self._tools["scale_manager"]
         tool.target = group
         self._activate_tool("scale_manager")
-
-    def _on_components_from_file(self) -> None:
-        start = (str(self._current_path.parent)
-                 if getattr(self, "_current_path", None) else "")
-        path, _ = file_dialogs.getOpenFileName(
-            self, tr("Components from File"), start,
-            built.DOCUMENT_FILTER)
-        if not path:
-            return
-        try:
-            n = self.import_kept_components(path)
-        except Exception as exc:  # noqa: BLE001 - any unreadable file
-            _dialogs.warning(self, tr("Components from File"),
-                                tr("Could not read {p}: {e}", p=path, e=exc))
-            return
-        if n:
-            text = tr("{n} components added to the list, ready to place",
-                      n=n)
-        else:
-            text = tr("That file holds no components")
-        self.statusBar().showMessage(text, 5000)
-
-    def import_kept_components(self, path) -> int:
-        """Bring every component definition of another document into this
-        one as KEPT components — in the list, none placed: a library to
-        draw from. Its materials and layers come along by name, as Insert
-        does. Returns how many; nothing changes for a file without one."""
-        from core.history import AddKeptComponentsCommand
-        from core.insert import ensure_layers, merge_materials
-        from core.kept_components import definitions_of
-        from core.scene import Scene as _Scene
-        from formats import igz as _igz
-        temp = _Scene()
-        _igz.load_into(temp, Path(path))       # raises before anything moves
-        templates = definitions_of(temp)
-        if not templates:
-            return 0
-        scene = self.viewport.scene
-        for t in templates:
-            merge_materials(getattr(temp, "materials", {}) or {},
-                            scene.materials, t)
-            ensure_layers(scene, t)
-        self.viewport.history.execute(AddKeptComponentsCommand(templates))
-        self.viewport.notify_scene_changed()
-        return len(templates)
 
     def _fill_intersect_menu(self, menu) -> None:
         from core.intersect import WITH_CONTEXT, WITH_MODEL, WITH_SELECTION
@@ -2627,46 +2533,9 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self.viewport.update()
 
     # ---- Terrain-surface fill (Track G) -------------------------------------
-    def _surface_dem(self, datum):
-        """Shared DEM sampler for surface fills, rebuilt when the datum changes."""
-        if getattr(self, "_surf_sampler", None) is not None \
-                and self._surf_datum is datum:
-            return self._surf_sampler
-        from georef.dem import DEMSampler
-        self._surf_sampler = DEMSampler(datum, parent=self)
-        self._surf_datum = datum
-        self._surf_sampler.changed.connect(self._rebuild_surfaces)
-        self._surf_sampler.changed.connect(self._build_terrain)
-        return self._surf_sampler
-
-    def _rebuild_surfaces(self) -> None:
-        """(Re)compute the 3D triangles of every surfaced path from the DEM."""
-        from georef.surface import build_surface
-        scene = self.viewport.scene
-        datum = getattr(scene, "georef", None)
-        surfaced = [p for p in scene.geo_paths if getattr(p, "surface", None)]
-        if datum is None:
-            for p in surfaced:
-                p._surface_tris = None
-            self.viewport.update()
-            return
-        sampler = self._surface_dem(datum)
-        area = None
-        for p in surfaced:
-            xs = [pt.x() for pt in p.points]
-            ys = [pt.y() for pt in p.points]
-            lo = self._local_to_ll(datum, min(xs), min(ys))
-            hi = self._local_to_ll(datum, max(xs), max(ys))
-            sampler.ensure_area(min(lo[0], hi[0]), min(lo[1], hi[1]),
-                                max(lo[0], hi[0]), max(lo[1], hi[1]))
-            p._surface_tris = build_surface(p, sampler, datum)
-        self.viewport.update()
-
-    @staticmethod
-    def _local_to_ll(datum, x, y):
-        from ingetrazo_core import Vec3 as QVector3D
-        lat, lon, _ = datum.local_to_geodetic(QVector3D(x, y, 0.0))
-        return lat, lon
+    def _rebuild_surfaces(self):
+        from ingetrazo_render import rebuild_path_surfaces
+        rebuild_path_surfaces(self.viewport)
 
     def _on_surfaces_scene_changed(self) -> None:
         """Re-drape surfaced paths when their nodes move (version bump)."""
@@ -2685,91 +2554,17 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             return bool(getattr(layer, "terrain3d", False))
         return bool(self.__dict__.get("_terrain_wish", False))
 
-    @_terrain_on.setter
-    def _terrain_on(self, on: bool) -> None:
-        self.__dict__["_terrain_wish"] = bool(on)
-        layer = self._terrain_layer()
-        if layer is not None:
-            layer.terrain3d = bool(on)
-
     def _terrain_layer(self):
-        vp = self.__dict__.get("viewport") or getattr(self, "viewport", None)
-        scene = getattr(vp, "scene", None)
-        return getattr(scene, "tile_layer", None)
+        return getattr(self.viewport.scene, "tile_layer", None)
 
-    def set_terrain_enabled(self, on: bool) -> None:
-        self._terrain_on = on
-        if on:
-            terrain = getattr(self.viewport.scene, "terrain", None)
-            if terrain is not None and not getattr(terrain, "visible", True):
-                terrain.visible = True      # hidden by a scene: just show it
-                self.viewport.update()
-                return
-            self._build_terrain()
-        else:
-            self.viewport.scene.terrain = None
-            self.viewport.upload_terrain(None)
-            self.viewport.update()
+    def set_terrain_enabled(self, on):
+        from ingetrazo_render import set_terrain_enabled
+        self._terrain_wish = bool(on)
+        set_terrain_enabled(self.viewport, on)
 
-    @staticmethod
-    def _capture_bbox(layer):
-        """Local-metre bounding box ``(minx, miny, maxx, maxy)`` of the capture
-        patches — the area the 3D terrain should cover."""
-        patches = getattr(layer, "patches", None) or [(0, 0, layer.radius_m,
-                                                        layer.radius_m)]
-        minx = min(cx - hw for cx, cy, hw, hh in patches)
-        maxx = max(cx + hw for cx, cy, hw, hh in patches)
-        miny = min(cy - hh for cx, cy, hw, hh in patches)
-        maxy = max(cy + hh for cx, cy, hw, hh in patches)
-        return minx, miny, maxx, maxy
-
-    def _build_terrain(self) -> None:
-        """(Re)build the 3D terrain from the DEM + base-map tiles (async-ready)."""
-        if not getattr(self, "_terrain_on", False):
-            return
-        from georef.terrain import build_mosaic, build_terrain
-        from georef.surface import ground_reference
-        scene = self.viewport.scene
-        datum = getattr(scene, "georef", None)
-        layer = getattr(scene, "tile_layer", None)
-        if datum is None or layer is None:
-            return
-        sampler = self._surface_dem(datum)
-        zoom = layer.zoom
-        # The terrain covers the captured area (the drawn patches' bounding box),
-        # not a fixed square — so the 3D matches what you captured.
-        bbox = self._capture_bbox(layer)
-        minx, miny, maxx, maxy = bbox
-        lo = self._local_to_ll(datum, minx, miny)
-        hi = self._local_to_ll(datum, maxx, maxy)
-        sampler.ensure_area(min(lo[0], hi[0]), min(lo[1], hi[1]),
-                            max(lo[0], hi[0]), max(lo[1], hi[1]))
-        self.viewport.prefetch_tiles(layer.source, layer.flat_tiles(datum), zoom)
-        # When a survey has already fixed the scene's vertical zero, the DEM
-        # terrain must use the SAME zero or the two grounds render tens of
-        # metres apart. (They still differ by the geoid/ellipsoid separation —
-        # that gap is real, not a bug, and is why elevations are labelled with
-        # where they came from.)
-        ground = float(datum.alt) if datum.alt else ground_reference(sampler, datum)
-        if ground is None:
-            return                         # DEM not ready — retry on changed
-        terrain = build_terrain(datum, sampler, ground, bbox, zoom=zoom)
-        if terrain is None:
-            return                         # DEM grid not fully loaded yet
-        first = scene.terrain is None
-        terrain.texture_image = build_mosaic(terrain, layer.images)
-        # An async rebuild keeps the visibility a scene may have set.
-        terrain.visible = True if first else bool(
-            getattr(scene.terrain, "visible", True))
-        scene.terrain = terrain
-        self.viewport.upload_terrain(terrain)
-        # Frame the terrain only the first time it appears (not on async rebuilds).
-        if first:
-            mn, mx = terrain.bounds()
-            if mn is not None:
-                self.viewport.camera.set_view("iso")
-                self.viewport.camera.fit_to(mn, mx)
-        self.viewport.update()
+    def _build_terrain(self):
+        from ingetrazo_render import restore_terrain
+        restore_terrain(self.viewport)
 
     # ---- Undo / redo --------------------------------------------------------
     # ---- File handling ------------------------------------------------------
@@ -2989,12 +2784,8 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         vp.sceneVersionChanged.connect(
             live(lambda _v: self._on_surfaces_scene_changed(),
                  after_picture=True))
-        vp.tilesChanged.connect(live(lambda: self._build_terrain()))
         vp.valueBufferChanged.connect(live(self._on_value_buffer))
-        vp.measurementChanged.connect(
-            live(lambda text: self._queue_status_text("measurement", text)))
-        vp.coordinateChanged.connect(
-            live(lambda text: self._queue_status_text("coordinate", text)))
+        vp.measurementChanged.connect(live(self._on_measurement))
         vp.sceneVersionChanged.connect(live(self._on_scene_version_changed))
         # The extensions' «the document changed» calls (ExtensionApp).
         for fn in self.__dict__.get("_doc_change_hooks", ()):

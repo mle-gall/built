@@ -41,6 +41,10 @@ fn on_tile_ready(v: &Obj, source_id: &Obj, x: i64, y: i64, z: i64, img: &Obj) ->
         && layer.getattr("zoom")?.eq(z)?
     {
         layer.getattr("images")?.set_item((x, y, z), img)?;
+        let terrain = opt(&v.getattr("scene")?, "terrain")?;
+        if !terrain.is_none() && crate::document_terrain::enabled(v)? {
+            crate::document_terrain::texture(v, &terrain, &layer)?;
+        }
         v.getattr("tilesChanged")?.call_method0("emit")?;
         v.call_method0("update")?;
     }
@@ -153,6 +157,10 @@ fn reset_tiles(v: &Obj) -> PyResult<()> {
     let layer = opt(&v.getattr("scene")?, "tile_layer")?;
     if !layer.is_none() {
         layer.getattr("images")?.call_method0("clear")?;
+        if crate::document_terrain::enabled(v)? {
+            v.getattr("scene")?.setattr("terrain", v.py().None())?;
+            crate::document_terrain::restore_terrain(v)?;
+        }
     }
     v.call_method0("update")?;
     Ok(())

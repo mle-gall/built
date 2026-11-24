@@ -2,6 +2,8 @@
 """Blender panel model for the renderer-owned extension UI."""
 from pathlib import Path
 
+from ingetrazo_render import blender_availability
+
 from core import render_blender as rb
 from core.desktop_open import open_url
 from core.settings import settings as QSettings
@@ -66,11 +68,8 @@ class BlenderPanel:
             self.sync_timer.timeout.connect(self._sync_camera)
         self.last_camera = self.observed_camera = None
         self.lines = []
-        self.status = "Ready"
         self.fraction = 0.
-        self.found = rb.find_blender(self.opts["binary"] or None)
-        if not self.found:
-            self.status = "Choose the Blender executable to render"
+        self.found, self.status = blender_availability(self.opts["binary"])
 
     def sections(self):
         from core.plugin_panels import field, item, section
@@ -123,7 +122,7 @@ class BlenderPanel:
             self.opts[control] = int(value) if control in ("width", "height") else value
             if control == "binary":
                 QSettings().setValue(rb.SETTINGS_KEY, value)
-                self.found = rb.find_blender(value)
+                self.found, self.status = blender_availability(value)
         elif event == "commit" and control in ("sun_scale", "ambience"):
             _store(self.app, {**_state(self.app), control: value})
         elif control == "sync":

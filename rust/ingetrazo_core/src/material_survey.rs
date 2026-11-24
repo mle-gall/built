@@ -118,7 +118,14 @@ pub(crate) fn material_survey<'py>(
             .is_truthy()?,
         None => false,
     };
-    if cache.version == Some(version) && (feed.is_none() || current) {
+    // A transform may increment even a baked mesh's geometry serial. A
+    // complete paint-preserving edit keeps the totals as well as each swatch.
+    let same_paints = match &feed {
+        Some(f) => f.call_method1("current", ("library_paint_totals", version))?.is_truthy()?,
+        None => false,
+    };
+    if same_paints || (cache.version == Some(version) && (feed.is_none() || current)) {
+        cache.version = Some(version);
         if let Some(result) = &cache.result {
             return Ok(result.bind(py).clone());
         }
@@ -200,8 +207,9 @@ pub(crate) fn material_survey<'py>(
         .call_method1("Counter", (named,))?;
     let result = (counts, anonymous, worn).into_pyobject(py)?;
     if let Some(f) = feed {
-        f.getattr("readers")?
-            .call_method1("mark", ("library_paint", version))?;
+        let readers = f.getattr("readers")?;
+        readers.call_method1("mark", ("library_paint", version))?;
+        readers.call_method1("mark", ("library_paint_totals", version))?;
     }
     cache.version = Some(version);
     cache.meshes = next;

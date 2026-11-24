@@ -403,7 +403,8 @@ def before_frame(view) -> None:
     timer = getattr(bar, "_timer", None)
     if timer is not None and timer.isActive():
         hint = getattr(bar, "_msg", None).text() if getattr(bar, "_msg", None) is not None else hint
-    view.renderer.ui_set_status(name, hint)
+    from ingetrazo_render import sync_status_readout
+    sync_status_readout(view, name, hint)
     _sync_units(view, win.viewport.history)
     _cursor_value(view, win)
     _selection(view, win, active)
@@ -2719,10 +2720,6 @@ FORMS = {
         ("color", "_bg_c", "Background", None, "background"),
         ("check", "_fill", "Section fill"),
         ("color", "_fill_c", "Section fill colour", None, "section_fill_color"),
-        ("caption", None, "Ambient occlusion"),
-        ("check", "_ao", "Ambient occlusion"),
-        ("slider", "_ao_dist", lambda p: p._ao_dist_lbl.text().rstrip(": ") or "Distance", "_ao_dist_val"),
-        ("slider", "_ao_int", "Intensity", "_ao_int_val"),
         ("button", "_on_save", "Save style…"),
         ("button", "_on_delete", "Delete style", None, "_del_btn"),
     ]),
