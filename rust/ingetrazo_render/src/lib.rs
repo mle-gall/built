@@ -2910,6 +2910,7 @@ mod about;
 mod sheet_host;
 mod start_view;
 mod library_view;
+mod resident_rows;
 mod scene_photo;
 /// The Sheets workspace's page, native (docs/rust-sheets.md).
 pub mod sheet_page;
@@ -2979,6 +2980,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(scene_photo::save_thumbnail_mode,m)?)?;
     start_view::register(m)?;
     library_view::register(m)?;
+    m.add_class::<resident_rows::ResidentRows>()?;
     m.add_function(wrap_pyfunction!(sheet_host::show_delivery_form, m)?)?;
     m.add_function(wrap_pyfunction!(sheet_host::show_view_export, m)?)?;
     m.add_class::<units_start::UnitsDraft>()?;

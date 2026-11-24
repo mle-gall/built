@@ -199,9 +199,9 @@ def test_metal_rebakes_the_smoothed_definition_without_a_repack(monkeypatch):
 
     hist.execute(SoftenByAngleCommand(selected_edges(scene), 40))
     settle()
-    code = int(updates.packed.instances["info"][updates.rows[a.uid], 0])
+    code = int(updates.packed.instances["info"][updates.resident.row(a.uid), 0])
     smooth = updates.packed.vertices.copy()
-    assert code == int(updates.packed.instances["info"][updates.rows[b.uid], 0])
+    assert code == int(updates.packed.instances["info"][updates.resident.row(b.uid), 0])
     assert not np.array_equal(flat, smooth)       # the normals moved
     hist.undo()
     settle()

@@ -44,11 +44,11 @@ def assert_matches_fresh_pack(updates, scene, **kw):
     fresh = pack_scene(scene, **kw)
     packed = updates.packed
     live = [r for r in range(len(packed.instances)) if r not in set(updates.removed)
-            and packed.uids[r] in updates.active]
+            and updates.resident.is_active(packed.uids[r])]
     assert sorted(packed.uids[r] for r in live) == sorted(fresh.uids)
     for uid in fresh.uids:
         f = fresh.uids.index(uid)
-        r = updates.rows[uid]
+        r = updates.resident.row(uid)
         np.testing.assert_array_equal(packed.instances[r]['world'], fresh.instances[f]['world'])
         np.testing.assert_array_equal(packed.instances[r]['info'][1:], fresh.instances[f]['info'][1:])
         assert (_prototype(packed, int(packed.instances[r]['info'][0]))
@@ -89,7 +89,7 @@ def test_equal_leaf_uids_keep_distinct_metal_rows_on_hide():
     tracker = InstanceUpdates(scene, packed)
     history = History(scene)
     tracker.observe(history)
-    ri, li = (tracker.rows[packed.row_key(g)] for g in (right, left))
+    ri, li = (tracker.resident.row(packed.row_key(g)) for g in (right, left))
     assert ri != li and packed.instances[ri]['info'][0] == packed.instances[li]['info'][0]
     history.execute(HideCommand([right]))
     tracker.apply(*tracker.diff(scene))
@@ -129,7 +129,7 @@ def test_add_shared_instance_and_remove_preserve_ids():
     scene.groups.pop(0)
     ids, rows = updates.diff(scene)
     updates.apply(ids, rows)
-    assert updates.rows[added.uid] == 2
+    assert updates.resident.row(added.uid) == 2
     assert updates.packed.instances['info'][0, 2] == 1
 
 
@@ -139,11 +139,9 @@ def test_shared_mutation_bakes_once(monkeypatch):
     original = pack_scene
     monkeypatch.setattr('views.wgpu_updates.pack_scene', lambda scene, **kw: (calls.append(scene), original(scene, **kw))[1])
     mesh = scene.groups[0].mesh
-    boxes = updates.world_boxes
     mesh.move_vertex(mesh.vertices[0], QVector3D(0, 0, 2))
     renderer = Renderer()
     updates.apply(*updates.diff(scene), renderer)
-    assert updates.world_boxes is boxes
     assert updates.changed_code_rows[0].tolist() == [0, 1]
     assert len(calls) == 1
     assert len(calls[0].groups) == 1
@@ -194,7 +192,7 @@ def test_new_prototype_preserves_resident_ids():
     scene.groups.append(group)
     renderer = Renderer()
     updates.apply(*updates.diff(scene), renderer)
-    assert updates.rows[group.uid] == 2
+    assert updates.resident.row(group.uid) == 2
     assert updates.packed.instances['info'][2, 0] == 1
     assert [name for name, _ in renderer.calls] == ['replace_prototype', 'update_prototype_materials', 'update_instances']
 
@@ -236,7 +234,7 @@ def test_prototype_reassignment_preserves_row():
     mesh.add_edge(QVector3D(), QVector3D(2, 2, 2))
     scene.groups[0].mesh = mesh
     updates.apply(*updates.diff(scene))
-    assert updates.rows[scene.groups[0].uid] == 0
+    assert updates.resident.row(scene.groups[0].uid) == 0
     assert updates.packed.instances['info'][:, 0].tolist() == [1, 0]
     assert updates.packed.commands['start'].tolist() == [0, 1]
 
@@ -263,7 +261,7 @@ def test_native_move_preview_then_history_commit(completion):
             updates.apply(*updates.diff(scene))
     view = SimpleNamespace(scene=scene, packed=updates.packed, renderer=Renderer(),
                            source_viewport=source, overlay_primitives=[],
-                           uid_rows={uid: [row] for uid, row in updates.rows.items()},
+                           uid_rows=updates.uid_rows,
                            _instance_updates=updates, update=lambda: None,
                            _world_to_pixel=lambda point: (point.x(), point.y()),
                            set_scene=set_scene)
@@ -476,7 +474,7 @@ def test_nested_row_edits_preserve_painted_variants_and_inherited_flags():
     root.xform.translate(1, 2, 3)
     root.hidden = True
     ids, rows = updates.diff(scene)
-    assert ids.tolist() == [updates.rows[a.uid]]
+    assert ids.tolist() == [updates.resident.row(a.uid)]
     updates.apply(ids, rows)
     np.testing.assert_array_equal(updates.packed.instances, pack_scene(scene).instances)
     a.mesh.move_vertex(a.mesh.vertices[0], QVector3D(0, 0, 2))

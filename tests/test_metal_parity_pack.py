@@ -138,7 +138,7 @@ def test_incremental_hidden_change_rebakes_hidden_ranges_without_repack():
     g.mesh.faces[0].attrs['hidden'] = True
     g.mesh.move_vertex(g.mesh.vertices[0], QVector3D(0, 0, 1))
     updates.apply(*updates.diff(scene))
-    code = int(updates.packed.instances['info'][updates.rows[g.uid], 0])
+    code = int(updates.packed.instances['info'][updates.resident.row(g.uid), 0])
     assert updates.packed.hidden_commands[code]['count'] == 3
     assert updates.packed.commands[code]['count'] == 0
     assert_matches_fresh_pack(updates, scene)

@@ -61,25 +61,23 @@ class InstanceUpdates:
         for key, code in (packed.prototype_lookup or {}).items():
             if code >= 0:
                 self.variants.setdefault(key[0], {})[code] = (paints.get(code), key[2])
-        self.prototype_rows = {}
+        # The rows' keys, prototypes, live keys and world boxes, in Rust
+        # (rust/ingetrazo_render/src/resident_rows.rs); also the view's
+        # uid_rows mapping.
+        from ingetrazo_render import ResidentRows
+        self.resident = ResidentRows(list(packed.uids), packed.instances.view(np.uint8).reshape(-1),
+                                     np.ascontiguousarray(packed.bounds).view(np.uint8).reshape(-1))
         self.changed_code_rows = {}
+        codes = packed.instances['info'][:, 0].tolist()
         for row, group in enumerate(packed.groups):
-            code = int(packed.instances['info'][row, 0])
-            self.prototype_rows.setdefault(code, set()).add(row)
             mesh = group.mesh if group is not None else scene.loose_mesh
-            self.meshes[id(mesh)] = (mesh, mesh._mut_serial, code)
+            self.meshes[id(mesh)] = (mesh, mesh._mut_serial, codes[row])
         # Empty containers have no GPU row, but still need a serial sentinel.
         all_meshes = [scene.loose_mesh]
         all_meshes.extend(g.mesh for g in iter_groups(scene.groups))
         for mesh in all_meshes:
             self.meshes.setdefault(id(mesh), (mesh, mesh._mut_serial, -1))
         self.mesh_revisions = {key: mesh.revision for key, (mesh, _, _) in self.meshes.items()}
-        self.uid_rows = {}
-        self.rows = {}
-        for row, uid in enumerate(packed.uids):
-            self.uid_rows.setdefault(uid, []).append(row)
-            self.rows[uid] = row
-        self.active = set(self.rows)
         self.changed = []
         self.removed = []
         self.version = _resident_version(scene)
@@ -105,21 +103,11 @@ class InstanceUpdates:
         self.mesh_changes = {}
         self.changed_records = {}
         self.roots = set(scene.groups)
-        self.world_boxes = self._boxes(np.arange(len(packed.instances)))
 
-    def _boxes(self, ids):
-        rows = self.packed.instances[ids]
-        bounds = self.packed.bounds[rows['info'][:, 0], :, :3]
-        matrix = rows['world'].transpose(0, 2, 1)
-        center = bounds.mean(axis=1)
-        extent = (bounds[:, 1]-bounds[:, 0])*.5
-        wc = np.einsum('nij,nj->ni', matrix[:, :3, :3], center)+matrix[:, :3, 3]
-        we = np.einsum('nij,nj->ni', abs(matrix[:, :3, :3]), extent)
-        boxes = np.stack((wc-we, wc+we), axis=1)
-        hidden = (rows['info'][:, 2] & 1) != 0
-        boxes[hidden, 0] = np.inf
-        boxes[hidden, 1] = -np.inf
-        return boxes
+    @property
+    def uid_rows(self):
+        """key -> its rows (the view's mapping)."""
+        return self.resident
 
     def observe(self, history):
         """Use History's existing journal callbacks to avoid scanning known edits."""
@@ -279,7 +267,7 @@ class InstanceUpdates:
             if not chain and group not in self.roots:
                 return
             chain.append(group)
-            if self.packed.row_key(group) in self.rows:
+            if self.resident.row(self.packed.row_key(group)) is not None:
                 self.chains[self.packed.row_key(group)] = list(chain)
 
     def _stack_chain(self, mesh):
@@ -307,7 +295,7 @@ class InstanceUpdates:
         one no longer stands (the path was restructured meanwhile)."""
         out = []
         for uid, chain in self.pending_swaps.items():
-            row = self.rows.get(uid)
+            row = self.resident.row(uid)
             if row is None or chain[0] not in self.roots or row >= len(self.packed.groups):
                 return None
             matrix = None
@@ -334,8 +322,9 @@ class InstanceUpdates:
             return None
         swaps = []
         for group, old_mesh in change[2]:
-            row = self.rows.get(self.packed.row_key(group))
-            if row is None or self.packed.row_key(group) not in self.active or not _has_vertices(group.mesh):
+            row = self.resident.row(self.packed.row_key(group))
+            if (row is None or not self.resident.is_active(self.packed.row_key(group))
+                    or not _has_vertices(group.mesh)):
                 return None
             code = int(self.packed.instances['info'][row, 0])
             variant = self.variants.get(old_mesh, {}).get(code)
@@ -387,7 +376,9 @@ class InstanceUpdates:
         vp = SimpleNamespace(scene=scene)
         roots = self.pending if local else scene.groups
         placements.extend(_placement_records(scene, roots, vp, state))
-        seen, ids, values, changed = (self.active if local else set()), [], [], {}
+        # A local diff adds to the live keys; a full one starts from none.
+        self.resident.begin(local)
+        ids, values, changed = [], [], {}
         if local:
             changed.update((key, self.meshes[key]) for key in self.pending_meshes
                            if self.meshes[key][0]._mut_serial != self.meshes[key][1])
@@ -425,12 +416,12 @@ class InstanceUpdates:
                 code, old = self._new_prototype(mesh, key, paint, mode, old, fresh)
             if old[1] != mesh._mut_serial:
                 changed[id(mesh)] = old
-            row = self.rows.get(uid)
+            row = self.resident.row(uid)
             if group in self.packed.occurrence_keys:
                 from core.link_structure import row_id
                 if row_id(scene.occurrence_path(group)) != uid:
                     return None
-            if row is not None and uid in self.active:
+            if row is not None and self.resident.is_active(uid):
                 previous_group = self.packed.groups[row]
                 if previous_group is not group and (previous_group is None or
                         scene.occurrence_path(previous_group) is not None):
@@ -445,7 +436,7 @@ class InstanceUpdates:
                 additions.append((uid, group, row))
             if row < len(self.packed.groups):
                 self.packed.groups[row] = group
-            seen.add(uid)
+            self.resident.see(uid)
             value = np.zeros((), INSTANCE)
             value['world'] = (np.eye(4, dtype=np.float32) if matrix is None
                               else np.asarray(matrix, np.float32))
@@ -479,11 +470,11 @@ class InstanceUpdates:
         if local:
             for root in self.pending_removed:
                 for group in iter_groups((root,)):
-                    row = self.rows.get(self.packed.row_key(group))
+                    row = self.resident.row(self.packed.row_key(group))
                     if row is not None:
-                        seen.discard(self.packed.row_key(group))
+                        self.resident.unsee(self.packed.row_key(group))
                         removed.append(row)
-        if any(key not in seen and (key in self.active or self.rows.get(key) in removed)
+        if any(not self.resident.has_seen(key) and (self.resident.is_active(key) or self.resident.row(key) in removed)
                for key in self.packed.occurrence_keys.values()):
             return None
         self.pending.clear()
@@ -521,13 +512,13 @@ class InstanceUpdates:
         self.changed = [(mesh, self.meshes[id(mesh)][1], code) for code, mesh in bake.items()]
         for mesh in {id(m): m for m in bake.values()}.values():
             self.mesh_revisions[id(mesh)] = mesh.revision
-        self.removed = removed if local else [self.rows[uid] for uid in self.active - seen]
+        gone = self.resident.finish()
+        self.removed = removed if local else gone
         self.added = len(additions)
-        self.active = seen
         if additions:
             self.packed.instances = np.concatenate((self.packed.instances, np.zeros(len(additions), INSTANCE)))
             for uid, group, row in additions:
-                self.rows[uid] = row
+                self.resident.add(uid, row)
                 self.packed.uids.append(uid)
                 self.packed.groups.append(group)
         return np.asarray(ids, np.int64), np.asarray(values, dtype=INSTANCE)
@@ -720,16 +711,10 @@ class InstanceUpdates:
                                 for _, _, code in self.changed)
                     if moved:
                         renderer.set_profile_exclusions(self.packed.profile_exclusions)
-        old_count = len(self.world_boxes)
+        old_count = self.resident.count
         membership_changed = len(self.packed.instances) != old_count
-        for row, code in zip(ids, rows['info'][:, 0]):
-            if row < old_count:
-                old_code = self.packed.instances['info'][row, 0]
-                if old_code == code:
-                    continue
-                self.prototype_rows[old_code].remove(row)
-            self.prototype_rows.setdefault(code, set()).add(int(row))
-            membership_changed = True
+        if len(ids):
+            membership_changed = self.resident.set_codes(ids.tolist(), rows['info'][:, 0].tolist()) or membership_changed
         if len(ids):
             if renderer is not None:
                 renderer.update_instances(ids.tolist(), rows.view(np.uint8).reshape(-1))
@@ -743,34 +728,15 @@ class InstanceUpdates:
         # A rebake (self.changed) keeps membership but re-anchors its
         # prototypes' ranges: recompute the starts then too (c5a8bfde).
         if membership_changed or self.changed:
-            counts = np.zeros(len(self.packed.commands), dtype=np.int64)
-            for code, members in self.prototype_rows.items():
-                counts[code] = len(members)
-            starts = np.cumsum(counts) - counts
+            starts = self.resident.starts(len(self.packed.commands))
             self.packed.commands['start'] = self.packed.edge_commands['start'] = starts
             self.packed.hidden_commands['start'] = self.packed.hidden_edge_commands['start'] = starts
-        if len(self.packed.instances) != old_count:
-            extra = np.empty((len(self.packed.instances)-old_count, 2, 3), np.float32)
-            extra[:, 0] = np.inf
-            extra[:, 1] = -np.inf
-            self.world_boxes = np.concatenate((self.world_boxes, extra))
-        touched = set(ids.tolist()) | set(self.removed)
-        self.changed_code_rows = {}
-        for _, _, code in self.changed:
-            affected = self.prototype_rows.get(code, ())
-            self.changed_code_rows[code] = np.asarray(sorted(affected), np.int64)
-            touched.update(affected)
-        touched = np.asarray(sorted(touched), np.int64)
+        self.changed_code_rows = {code: self.resident.members(code) for _, _, code in self.changed}
+        parts = [ids, np.asarray(self.removed, np.int64), *self.changed_code_rows.values()]
+        touched = np.unique(np.concatenate(parts)) if parts else np.empty(0, np.int64)
         if len(touched):
-            old = self.world_boxes[touched]
-            bounds = self.packed.world_bounds
-            new = self._boxes(touched)
-            reduce = (np.any((old[:, 0] == bounds[0]) & (new[:, 0] > old[:, 0]))
-                      or np.any((old[:, 1] == bounds[1]) & (new[:, 1] < old[:, 1])))
-            self.world_boxes[touched] = new
-            subset = self.world_boxes if reduce else new
-            low, high = subset[:, 0].min(axis=0), subset[:, 1].max(axis=0)
-            if not reduce:
-                low, high = np.minimum(low, bounds[0]), np.maximum(high, bounds[1])
-            self.packed.world_bounds = (np.array([low, high]) if np.isfinite(low).all()
-                                        else np.zeros((2, 3)))
+            lo, hi = np.asarray(self.packed.world_bounds, np.float32)
+            got = self.resident.refresh_boxes(touched.tolist(), self.packed.instances.view(np.uint8).reshape(-1),
+                                              np.ascontiguousarray(self.packed.bounds).view(np.uint8).reshape(-1),
+                                              lo.tolist(), hi.tolist())
+            self.packed.world_bounds = np.array(got, np.float32) if got is not None else np.zeros((2, 3))
