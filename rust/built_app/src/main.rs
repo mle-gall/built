@@ -1384,6 +1384,8 @@ mod profile_tests {
     #[test]
     fn a_running_shell_answers_and_receives_the_file() {
         let path = private_socket("answers");
+        let _ = std::fs::remove_file(&path);
+        assert!(!forward_to(&path, None)); // no shell listening: nothing is handed over
         let (tx, rx) = std::sync::mpsc::channel();
         listen_on(&path, move |e| tx.send(format!("{e:?}")).is_ok());
         assert!(forward_to(&path, Some(Path::new("/tmp/a.built"))));
