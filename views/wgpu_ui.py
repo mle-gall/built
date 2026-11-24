@@ -1423,7 +1423,17 @@ def _tree_action(win, view, action) -> None:
         elif verb == "sectioncut" and kind == "section":
             _core(vp, "edit_section_plane", uid=ident, field="cut")
             vp.notify_scene_changed()
-        elif verb in ("pickrow", "roweye", "toggleitem", "group", "component", "explode", "unique", "instances"):
+        elif verb == "deletetag" and kind == "preview-tag":
+            from ingetrazo_render import tree_delete_tag
+            tree_delete_tag(win, ident)
+            rebuild()
+        elif verb == "deleterows":
+            from ingetrazo_render import tree_delete_rows
+            target = (next((p for p in scene.section_planes if str(p.uid) == ident), None)
+                      if kind == "section" else item())
+            tree_delete_rows(vp, target)
+            rebuild()
+        elif verb in ("isolaterows", "pickrow", "roweye", "toggleitem", "group", "component", "explode", "unique", "instances"):
             from ingetrazo_render import tree_group_action
             tree_group_action(win, copies() if kind == "d" else item(), verb)
         elif verb == "hosteye":
@@ -1648,7 +1658,8 @@ def _tree_action(win, view, action) -> None:
         elif verb == "exportcsv":
             _export_csv(win)
         elif verb == "expandall":
-            exp.update(f"n:{k}" for k in data.get("nodes", {}))
+            from ingetrazo_core import expand_project_folders
+            exp.update(expand_project_folders(scene, data.get("nodes", {})))
             rebuild()
         elif verb == "collapseall":
             exp.clear()
@@ -1802,11 +1813,8 @@ def _tree_action(win, view, action) -> None:
                 vp.notify_scene_changed()
                 rebuild()
         elif verb in ("tagselect","tagisolate") and kind == "preview-tag":
-            matches = [g for g in data["unfiled"] if (g.layer or L.DEFAULT_LAYER) == ident]
-            if verb == "tagselect":
-                _select(win, matches)
-            else:
-                _isolate(win, matches)
+            from ingetrazo_render import tree_tag_action
+            tree_tag_action(win, ident, verb == "tagisolate")
         elif verb == "kind" and node:
             cls = next((c for c, k in KINDS.items() if k == extra and c), None)
             recipe = dict(structure._nodes(bim_registry.get(scene)).get(node, {}).get("recipe", {}))

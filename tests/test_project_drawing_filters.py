@@ -271,3 +271,40 @@ def test_hatch_edits_restore_each_tag_and_keep_document_piece_kinds_separate():
     assert wall.hatch == "block" and wall.brick is None and wall.hatch_on_paper
     assert wall.hatch_ground is None and wall.hatch_color == (.4, .4, .4)
     assert slab.hatch == "brick" and slab.hatch_on_paper is None
+
+
+def test_mixed_drawing_drop_moves_only_outermost_rows_in_one_step():
+    import json
+
+    p = Project(Layer("Desk"), Layer("Wall", folder="Storey"), Layer("Glass", folder="Detail"))
+    scene, history = p.scene, p.win.viewport.history
+    scene.layer_folders = ["Building", "Storey", "Detail", "Other", "Destination"]
+    scene.folder_parents.update(Storey="Building", Detail="Storey")
+
+    def layout():
+        return (dict(scene.folder_parents), [tag.folder for tag in scene.layers])
+
+    def move(**changes):
+        payload = dict(owner=id(scene), parent="Destination", folders=["Building", "Storey", "Other"],
+                       tags=["Desk", "Wall", "Glass"])
+        payload.update(changes)
+        p.action("tagfolder", "batch" + wgpu_ui.SEP + json.dumps(payload))
+
+    before = layout()
+    for invalid in [dict(parent="Detail"), dict(parent="Missing"), dict(owner=id(p)),
+                    dict(tags=["Desk", "Missing"]), dict(folders=["Other", "Missing"]),
+                    dict(tags=["Layer 0"])]:
+        move(**invalid)
+        assert layout() == before and not history.undo_stack
+
+    move()
+    assert scene.folder_parents == dict(Building="Destination", Storey="Building", Detail="Storey",
+                                        Other="Destination")
+    assert [scene.layer(name).folder for name in ["Desk", "Wall", "Glass"]] == ["Destination", "Storey", "Detail"]
+    after = layout()
+    move()
+    assert len(history.undo_stack) == 1
+    assert history.undo() and layout() == before
+    assert history.redo() and layout() == after
+    move(parent="")
+    assert layout() == before

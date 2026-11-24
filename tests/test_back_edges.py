@@ -5,19 +5,15 @@ dashed over the opaque model — where a bar continues behind a face in a
 shop drawing. Renders a box in front of a horizontal line and a diagonal
 one and reads the pixels.
 
-Needs a GL context that renders; skipped where the platform has none."""
+Pixel cases use the native wgpu surface."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 from tests.controller_surface import live_image
+from tests.shell_isolation import native_gpu_host, native_window, restore_shell_patches  # noqa: F401
+from tests.test_xray_toggle import _state
+from views import view_commands
 import pytest
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
 
 
 def _box(scene, x0, y0, z0, x1, y1, z1):
@@ -35,16 +31,9 @@ def _dark(c, ref=None):
 
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w.show()
-    for _ in range(10):
-        _app.processEvents()
+def win(native_gpu_host):
+    w = native_gpu_host.window
     vp = w.viewport
-    if not vp.keys_stand_in._can_create_surface():
-        w.close()
-        pytest.skip("the Qt platform has no native GPU surface")
     sc = vp.scene
     sc.guides.clear()
     _box(sc, -1, -1, 0, 1, 0, 2)                          # the wall, in front
@@ -56,9 +45,7 @@ def win():
     vp.camera.set_view("front")                           # looking toward +Y
     vp.camera.perspective = False
     vp.camera.fit_to(V(-3.2, -1, 0), V(3.2, 1, 2))
-    yield w
-    w._saved_version = vp.scene.version
-    w.close()
+    return w
 
 
 def _row(win, pts):
@@ -102,7 +89,7 @@ def test_hidden_edges_stay_hidden_by_default(win):
 def test_back_edges_draws_them_dashed(win):
     st = win.viewport.scene.display_style
     ec = st.edge_color
-    win._act_style_back_edges.setChecked(True)            # K
+    assert view_commands.run(win, "back_edges")
     assert st.back_edges
     behind = [_dark(c, ec) for c in _row(win, _samples())]
     assert 0.25 < sum(behind) / len(behind) < 0.75, behind   # dashes, not solid
@@ -119,27 +106,16 @@ def test_back_edges_draws_them_dashed(win):
     assert all(_dark(c, ec) for c in _row(win, _samples(x0=1.6, x1=2.8)))
 
 
-def test_k_is_back_edges_and_the_style_remembers_it():
+def test_k_is_back_edges_and_the_style_remembers_it(native_window):
     from core.style import Style
     s = Style(back_edges=True)
     assert Style.from_dict(s.to_dict()).back_edges is True
     assert Style.from_dict({"name": "Old"}).back_edges is False
-    from views.main_window import MainWindow
-    w = MainWindow()
-    try:
-        assert w._act_style_back_edges.shortcut().toString() == "K"
-        holders = [a for a in w.findChildren(type(w._act_style_back_edges))
-                   if a.shortcut().toString() == "K"]
-        assert holders == [w._act_style_back_edges]
-        from views import view_commands
-        action = w._act_style_back_edges
-        before = w.active_style().back_edges
-        assert view_commands.run(w, "back_edges")
-        assert action.isChecked() == w.active_style().back_edges == (not before)
-        action.trigger()
-        assert w.active_style().back_edges == before
-        action.setEnabled(False)
-        assert not view_commands.run(w, "back_edges")
-    finally:
-        w._saved_version = w.viewport.scene.version
-        w.close()
+    from ingetrazo_render import command_registry
+    assert [r[0] for r in command_registry([], []) if "K" in r[3]] == ["view:back_edges"]
+    w = native_window
+    before = w.active_style().back_edges
+    assert view_commands.run(w, "back_edges") and _state(w, "back_edges") == int(not before)
+    assert view_commands.run(w, "back_edges") and w.active_style().back_edges == before
+    w._view_bindings = {"back_edges": ("K", False)}
+    assert not view_commands.run(w, "back_edges") and w.active_style().back_edges == before

@@ -434,18 +434,6 @@ class _Tree(SideTree):
     #: selected rows hides them all (as the material panel paints them all).
     CELLS = (COL_EYE, COL_LOCK, COL_ISOLATE)
 
-    #: Delete removes the picked rows (groups, components, section planes),
-    #: as in the Layers tab; Ctrl+Z brings them back.
-    DELETE_KEY = True
-
-    #: The thin band at the top edge of a row that means «beside it, at its
-    #: level»; anywhere else on a group's row means «into it». A narrow
-    #: band, because dropping ON a group is what nesting looks like: half
-    #: the row used to read as «beside», and nesting seemed to work only
-    #: with rows that already sat inside another group — beside one of
-    #: those lands inside its parent.
-    BESIDE_BAND = 0.18
-
     def event(self, ev) -> bool:
         from PySide6.QtCore import QEvent
         editing = self.state() == QAbstractItemView.EditingState
@@ -482,104 +470,6 @@ class _Tree(SideTree):
                 return
         super().keyPressEvent(ev)
 
-    def mouseDoubleClickEvent(self, ev) -> None:  # noqa: N802 — Qt override
-        """A double click on a layer heading selects its objects, and only
-        that: the heading does not also fold, as Qt's own double click
-        would have it."""
-        pos = ev.position().toPoint()
-        head = self._panel._head_of(self.itemAt(pos))
-        if (head is not None and ev.button() == Qt.LeftButton
-                and self.columnAt(pos.x()) not in self.CELLS):
-            self._panel.select_head(head)
-            ev.accept()
-            return
-        super().mouseDoubleClickEvent(ev)
-
-    # ---- Dragging --------------------------------------------------------
-    def drag_rows(self):
-        """Only groups drag: the document's row, the section planes and
-        their folder stay where they are."""
-        return [it for it in super().drag_rows()
-                if self._panel._group_of(it) is not None]
-
-    def mimeTypes(self):
-        from core.composition import SCENE_MIME
-        return [SCENE_MIME]
-
-    def mimeData(self, items):
-        from PySide6.QtCore import QMimeData
-        from core.composition import SCENE_MIME
-        groups = [g for item in items if (g := self._panel._group_of(item)) is not None]
-        data = QMimeData()
-        data.setData(SCENE_MIME, "\n".join(g.name for g in groups).encode())
-        return data
-
-    def drop_target(self, pos):
-        """The group a drop at `pos` goes into — anywhere on its row, the
-        thin band at the top edge aside, which stands the row beside it —
-        or, on a row that is not a group, the row it stands beside. Nothing:
-        the model's top level."""
-        item = self.itemAt(pos)
-        if item is None or self._panel._head_of(item) is not None:
-            return None             # a layer heading: the model's top level
-        group = self._panel._group_of(item)
-        if (group is None or item is self._panel._sec_root
-                or self._panel._plane_of(item) is not None):
-            return ("beside", item)
-        rect = self.visualItemRect(item)
-        rel = ((pos.y() - rect.top()) / rect.height()
-               if rect.height() > 0 else 1.0)
-        return ("beside", item) if rel < self.BESIDE_BAND else ("into", item)
-
-    def drop_items(self, token):
-        """The rows the outline covers: a group and what it shows inside,
-        or the single row a drop stands beside."""
-        kind, item = token
-        if kind != "into":
-            return [item]
-        items = [item]
-        stack = [item]
-        while stack:
-            node = stack.pop()
-            if not node.isExpanded():
-                continue
-            for i in range(node.childCount()):
-                child = node.child(i)
-                if child.isHidden():
-                    continue
-                items.append(child)
-                stack.append(child)
-        return items
-
-    def drop_text(self, token) -> str:
-        if token is None:
-            return tr("At the top level")
-        kind, item = token
-        group = self._panel._group_of(item)
-        name = ((group.name or tr("Unnamed group")) if group is not None
-                else item.text(COL_NAME))
-        return (tr("Into «{name}»", name=name) if kind == "into"
-                else tr("Beside «{name}»", name=name))
-
-    def apply_drop(self, token, rows) -> None:
-        """Re-nest through the panel — one undoable command — and never
-        let Qt move the rows itself: the tree follows the model, not the
-        other way round."""
-        sections = self._panel._sec_root
-        if token is None:
-            target = None
-        else:
-            kind, item = token
-            if item is None or (sections is not None and (
-                    item is sections or item.parent() is sections)):
-                return                      # planes are not containers
-            target = item if kind == "into" else item.parent()
-        picked = [g for g in (self._panel._group_of(it) for it in rows)
-                  if g is not None]
-        self._panel.reparent(picked or self._panel._selected_groups(),
-                             self._panel._group_of(target))
-
-
 class OutlinerPanel(QWidget):
     """The model's tree of groups and components (the Model 3D tab)."""
 
@@ -612,11 +502,6 @@ class OutlinerPanel(QWidget):
         self._sec_items: dict = {}          # id(plane) -> its row
         self._sec_state: dict = {}
         self._sec_shape = None
-        #: Ordering by layer: ``(kind, name)`` -> the heading row of a layer
-        #: or a layer folder, and the headings folded by hand — remembered
-        #: while the document stays open, as the rows' own branches.
-        self._heads: dict = {}
-        self._heads_closed: set = set()
         lay = QVBoxLayout(self)
         lay.setContentsMargins(6, 6, 6, 6)
         lay.setSpacing(4)
@@ -810,7 +695,6 @@ class OutlinerPanel(QWidget):
             self._updating = was
         self._sec_state = {}
         self._sec_folder = None
-        self._head_marks = {}
         self._rows_key = None
         self.refresh()
 
@@ -837,9 +721,8 @@ class OutlinerPanel(QWidget):
         self._kind_providers = tuple(
             getattr(self._window, "_outliner_kinds", None) or ())
         scene = self._scene()
-        shape = self._rows_shape(scene)
+        struct = outliner.structure(scene.groups)
         yield
-        struct = shape[0]               # _rows_shape already walked it
         # A click changes the view, not the rows: with the content and the
         # open path as they were, every row reads as it did (21 406 rows
         # read again after each click on the plant of #158, ~0.15 s).
@@ -867,21 +750,18 @@ class OutlinerPanel(QWidget):
         ctx_only = (rows_if_changed and old_key is not None
                     and rows_key[0] is not None
                     and not self._kind_providers
-                    and shape == self._shape
+                    and struct == self._shape
                     and old_key[1:3] == rows_key[1:3]
                     and old_key[4:] == rows_key[4:]
                     and hist is not None
                     and hist.feed.current("row_groups", rows_key[0]))
         patched = rebuilt = False
-        if shape != self._shape:
-            order_same = (self._shape is not None
-                          and shape[1:] == self._shape[1:])
-            patched = (groups_only and order_same and not self._heads
-                       and self._patch_rows(scene, struct))
+        if struct != self._shape:
+            patched = groups_only and self._patch_rows(scene, struct)
             if not patched:
                 yield from self._rebuild(scene)
                 rebuilt = True
-            self._shape = shape
+            self._shape = struct
             self._struct_shape = struct
         # Nor does a Move — unless an extension's kind
         # adds properties to the rows, which may well be sizes.
@@ -909,7 +789,6 @@ class OutlinerPanel(QWidget):
                 hist.feed.readers.mark("row_groups", rows_key[0])
         self._rows_key = rows_key
         self._sync_sections(scene)
-        self._paint_heads(scene)
         if self._filters_active():
             self._apply_filter()
         self._sync_selection(scene)
@@ -941,8 +820,6 @@ class OutlinerPanel(QWidget):
         self._rows_key = None
         self._root = None
         self._shape = None
-        self._heads = {}
-        self._heads_closed = set()
 
     def _update_summary(self) -> None:
         """The footer: what the model holds, or what the filter found."""
@@ -967,11 +844,6 @@ class OutlinerPanel(QWidget):
         expanded = {self._groups[key].uid
                     for key, item in self._items.items() if item.isExpanded()}
         expanded |= self.__dict__.get("_kept_expanded", set())
-        for key, item in self._heads.items():
-            if item.isExpanded():
-                self._heads_closed.discard(key)
-            else:
-                self._heads_closed.add(key)
         scroll = self.tree.verticalScrollBar().value()
         counts = outliner.instance_counts(scene.groups)
         opened = {id(g) for g in outliner.open_path(scene)}
@@ -984,7 +856,6 @@ class OutlinerPanel(QWidget):
         font = QFont(root.font(COL_NAME))
         font.setBold(True)
         root.setFont(COL_NAME, font)
-        heads = self._make_heads(scene, root)
         editable = Qt.ItemIsEditable
         # Imported assemblies contain many rows with identical roles,
         # icons and tooltips. Copy those Qt values once instead of
@@ -994,7 +865,7 @@ class OutlinerPanel(QWidget):
         from core.materials import material_sig
         around = inherited_states(scene.groups)
         yield
-        for i, (g, parent, _depth) in enumerate(self._display_walk(scene)):
+        for i, (g, parent, _depth) in enumerate(outliner.walk(scene.groups)):
             key = id(g)
             state = self._row_state(g, counts, opened,
                                     around.get(key, (None, None)))
@@ -1019,10 +890,7 @@ class OutlinerPanel(QWidget):
                     template = item.clone()
                     template_owner.addChild(template)
                     templates[template_key] = template
-            if parent is not None:
-                holder = items[id(parent)]
-            else:
-                holder = heads.get(("layer", state[2]), root)
+            holder = root if parent is None else items[id(parent)]
             holder.addChild(item)
             items[key] = item
             groups[key] = g
@@ -1035,11 +903,9 @@ class OutlinerPanel(QWidget):
             self.tree.clear()
             self.__dict__.pop("_kept_expanded", None)
             self._items, self._groups, self._state = items, groups, states
-            self._counts, self._root, self._heads = counts, root, heads
+            self._counts, self._root = counts, root
             self.tree.addTopLevelItem(root)
             root.setExpanded(True)
-            for key, head in self._heads.items():
-                head.setExpanded(key not in self._heads_closed)
             sec = self._sec_root = QTreeWidgetItem(["", "", "", "", ""])
             sec.setIcon(COL_NAME, node_icon("sections"))
             sec.setFlags(Qt.ItemIsEnabled)
@@ -1377,7 +1243,6 @@ class OutlinerPanel(QWidget):
             for item in self._items.values():
                 if item.isHidden():
                     item.setHidden(False)
-            self._filter_heads()
             return
         scene = self._scene()
         counts = outliner.instance_counts(scene.groups)
@@ -1389,231 +1254,10 @@ class OutlinerPanel(QWidget):
             item.setHidden(key not in keep)
             if key in keep and key not in hit:
                 item.setExpanded(True)
-        self._filter_heads()
-
-    def _filter_heads(self) -> None:
-        """A layer or folder heading shows while a row under it does: the
-        filter leaves no empty heading behind. Inner headings come after
-        their folder's, so they are settled first walking backwards."""
-        for item in reversed(list(self._heads.values())):
-            shown = any(not item.child(i).isHidden()
-                        for i in range(item.childCount()))
-            if item.isHidden() == shown:
-                item.setHidden(not shown)
-
-    # ---- Order ---------------------------------------------------------------
-    #: QSettings key of the rows' order: the document's or by layer.
-    ORDER_KEY = "browser/order"
-
-    @property
-    def order_by(self) -> str:
-        from core.settings import settings as QSettings
-        v = str(QSettings().value(self.ORDER_KEY, "document") or "document")
-        return v if v in dict(self.ORDERS) else "document"
-
-    def set_order_by(self, how: str) -> None:
-        """Order the rows as the model holds them or by layer —
-        siblings only: a group stays inside its parent. A way of reading
-        the tree, remembered between sessions; the model is left as it
-        is."""
-        from core.settings import settings as QSettings
-        how = how if how in dict(self.ORDERS) else "document"
-        if how == self.order_by:
-            return
-        QSettings().setValue(self.ORDER_KEY, how)
-        self._shape = None              # the same rows, in another order
-        self.refresh()
-
-    #: The ways to order the rows, in menu order: (key, label).
-    ORDERS = (("document", "Document order"),
-              ("layer", "Order by layer"))
-
-    def _layer_outline(self, scene) -> list:
-        """The layers and their folders as the Layers tab lists them now —
-        its sort and its folders — or, without the tab, in the order they
-        were made: ``(kind, name, depth)``."""
-        dock = getattr(self._window, "layers_dock", None)
-        panel = getattr(dock, "panel", None)
-        if panel is not None and hasattr(panel, "display_outline"):
-            # Behind another tab the Layers list waits to be shown: a layer
-            # made or filed since is read in its place, not guessed at.
-            # Never under a name being typed there.
-            if (getattr(panel, "_drawn_signature", None) != panel._signature()
-                    and panel.tree.state()
-                    != QAbstractItemView.EditingState):
-                self._reading_outline = True
-                try:
-                    panel.refresh()
-                finally:
-                    self._reading_outline = False
-            outline = panel.display_outline()
-            # A layer the tab has not listed yet (it waits to be shown):
-            # after the ones it lists, in the order they were made.
-            listed = {n for k, n, _d in outline if k == "layer"}
-            return outline + [row for row in outliner.layer_outline(scene)
-                              if row[0] == "layer" and row[1] not in listed]
-        return outliner.layer_outline(scene)
-
-    def _layer_rank(self, scene) -> dict:
-        """``{layer name: place}`` in the Layers tab's order: a group's
-        children sort by it."""
-        return outliner.outline_rank(self._layer_outline(scene))
-
-    def _display_walk(self, scene) -> list:
-        """The rows' groups in the order they show: the document's, or each
-        container's children by layer (in the Layers tab's own order)."""
-        if self.order_by != "layer":
-            return outliner.walk(scene.groups)
-        return outliner.walk_by_layer(scene.groups, self._layer_rank(scene))
-
-    def _rows_shape(self, scene) -> tuple:
-        """What tells whether the rows are the right ones in the right
-        order: the model's shape and, ordering by layer, each row's layer
-        and the order the layers are in (a layer filed into another folder,
-        or the Layers tab sorted another way, moves the rows without
-        changing any of their layers)."""
-        shape = outliner.structure(scene.groups)
-        if self.order_by != "layer":
-            return (shape, False)
-        return (shape, True,
-                tuple((id(g), outliner.layer_name(g))
-                      for g, _p, _d in outliner.walk(scene.groups)),
-                tuple(self._layer_outline(scene)))
-
-    def _make_heads(self, scene, root) -> dict:
-        """Ordering by layer, a heading row under the document's for every
-        layer a top-level group is on, inside the headings of its folders —
-        each folds and unfolds on its own. Not groups: they never drag,
-        select or rename, and nothing of them reaches the model. Ordering
-        as the document holds them: none."""
-        if self.order_by != "layer":
-            return {}
-        from collections import Counter
-        from core import layers as L
-        from views.tree_icons import layer_swatch
-        on_layer = Counter(outliner.layer_name(g) for g in scene.groups)
-        heads: dict = {}
-        tip = tr("Double-click to select its objects in the model")
-        for kind, name, parent in outliner.layer_headings(
-                self._layer_outline(scene), set(on_layer)):
-            if kind == "folder":
-                count = sum(on_layer[n] for n in L.layers_in_folder(scene, name))
-            else:
-                count = on_layer[name]
-            # The count of top-level objects, seen without unfolding.
-            text = (L.folder_label(scene, name) if kind == "folder"
-                    else L.layer_label(scene, name))
-            item = QTreeWidgetItem([f"{text} · {count}"])
-            item.setData(COL_NAME, Qt.UserRole, ("heading", kind, name))
-            item.setFlags(Qt.ItemIsEnabled)
-            item.setToolTip(COL_NAME, tip)
-            if kind == "folder":
-                item.setIcon(COL_NAME, node_icon("folder"))
-                item.setText(COL_TYPE, tr("Folder"))
-            else:
-                item.setIcon(COL_NAME, layer_swatch(scene.layer(name)))
-                item.setText(COL_TYPE, tr("Layer"))
-            heads.get(("folder", parent), root).addChild(item)
-            heads[(kind, name)] = item
-        self._head_marks = {}
-        return heads
-
-    def _head_layers(self, head) -> list:
-        """The layers a heading stands for: its own, or every layer in the
-        folder (and the folders inside it) — the ones the model has."""
-        from core import layers as L
-        kind, name = head
-        scene = self._scene()
-        names = (L.layers_in_folder(scene, name) if kind == "folder"
-                 else [name])
-        return [n for n in names if scene.layer(n) is not None]
-
-    def _paint_heads(self, scene) -> None:
-        """The eye and the padlock of every heading, as the Layers tab
-        shows them: closed when every layer under it is hidden, locked when
-        every one is locked. Read on each refresh — a layer shown or locked
-        does not rebuild the rows — and written only when it changed."""
-        marks = getattr(self, "_head_marks", None)
-        if marks is None:
-            marks = self._head_marks = {}
-        for head, item in self._heads.items():
-            layers = [scene.layer(n) for n in self._head_layers(head)]
-            hidden = bool(layers) and not any(ly.visible for ly in layers)
-            locked = bool(layers) and all(ly.locked for ly in layers)
-            if marks.get(head) == (hidden, locked):
-                continue
-            marks[head] = (hidden, locked)
-            item.setIcon(COL_EYE, mark_icon("eye_off" if hidden else "eye"))
-            item.setIcon(COL_LOCK, mark_icon("lock" if locked
-                                             else "lock_open"))
-            item.setForeground(COL_NAME, self.tree.palette().brush(
-                QPalette.PlaceholderText if hidden else QPalette.Text))
-
-    def toggle_head(self, head, column) -> None:
-        """The eye or the padlock of a heading: the layers under it shown or
-        hidden, locked or unlocked — through the Layers tab, so it is the
-        same change as there, «Previous layer state» bringing it back."""
-        names = self._head_layers(head)
-        panel = getattr(getattr(self._window, "layers_dock", None),
-                        "panel", None)
-        if not names or panel is None:
-            return
-        scene = self._scene()
-        if column == COL_EYE:
-            panel.set_visible(names, not any(scene.layer(n).visible
-                                             for n in names))
-        else:
-            panel.set_locked(names, not all(scene.layer(n).locked
-                                            for n in names))
-        self.refresh()
-
-    def select_head(self, head) -> None:
-        """Double-click on a heading: its objects selected in the model —
-        the top-level groups on its layers, the ones the view can take
-        (hidden or locked ones stay picked here only)."""
-        names = set(self._head_layers(head)) | (
-            {head[1]} if head[0] == "layer" else set())
-        scene = self._scene()
-        groups = [g for g in scene.groups if outliner.layer_name(g) in names]
-        if not groups or not self._open_to([]):
-            return
-        picks = [g for g in groups if scene.entity_selectable(g)]
-        self._tree_only = {id(g) for g in groups if g not in picks}
-        scene.selection.clear()
-        scene.selection.update(picks)
-        # Picked here, in sight: the refresh keeps the rows the view could
-        # not take and does not scroll; the heading opens on them.
-        self._shown_selection = tuple(id(g) for g in picks)
-        item = self._heads.get(head)
-        if item is not None:
-            item.setExpanded(True)
-        scene.bump_view()
-        self._window.viewport.update()
-        self.refresh()
-
-    def _head_of(self, item):
-        """``(kind, name)`` of a layer or folder heading row, else None."""
-        data = item.data(COL_NAME, Qt.UserRole) if item is not None else None
-        if isinstance(data, tuple) and len(data) == 3 \
-                and data[0] == "heading":
-            return data[1], data[2]
-        return None
-
-    def on_layer_order_changed(self) -> None:
-        """The Layers tab lists its layers in another order: ordering by
-        layer, the headings and the rows follow it."""
-        if self.order_by != "layer" or getattr(self, "_reading_outline", False):
-            return                  # read by this very refresh
-        if not self.isVisible():
-            self._stale = True
-            return
-        self.refresh()
 
     def _all_expanded(self) -> bool:
-        """Whether every row that holds others is unfolded — the layer
-        headings too."""
+        """Whether every group with children is unfolded."""
         rows = list((getattr(self, "_items", None) or {}).values())
-        rows += list((getattr(self, "_heads", None) or {}).values())
         return all(item.isExpanded() for item in rows if item.childCount())
 
     def _update_expand_button(self) -> None:
@@ -1952,9 +1596,9 @@ class OutlinerPanel(QWidget):
         step with the menu and the toolbar."""
         w = self._window
         if planes is not None:
-            w._set_section_visibility("show_section_planes", planes)
+            w._set_scene_visibility("show_section_planes", planes)
         if cuts is not None:
-            w._set_section_visibility("show_section_cuts", cuts)
+            w._set_scene_visibility("show_section_cuts", cuts)
         sync = getattr(w, "_sync_section_menu", None)
         if sync is not None:
             sync()
@@ -2018,11 +1662,6 @@ class OutlinerPanel(QWidget):
         self._window.viewport.update()
 
     def _on_item_clicked(self, item, column) -> None:
-        head = self._head_of(item)
-        if head is not None:
-            if column in (COL_EYE, COL_LOCK):
-                self.toggle_head(head, column)
-            return
         if column == COL_ISOLATE:
             group = self._group_of(item)
             if group is None:
@@ -2087,12 +1726,7 @@ class OutlinerPanel(QWidget):
 
     def open_item(self, item) -> None:
         """Open the row's group for editing — double-click or Enter. On a
-        section plane: it cuts, or stops cutting. On a layer heading: its
-        objects selected in the model."""
-        head = self._head_of(item)
-        if head is not None:
-            self.select_head(head)
-            return
+        section plane: it cuts, or stops cutting."""
         plane = self._plane_of(item)
         if plane is not None:
             self._toggle_section(plane, COL_LOCK)
@@ -2259,94 +1893,6 @@ class OutlinerPanel(QWidget):
         self.refresh()
         return True
 
-    def reparent(self, groups, target) -> bool:
-        from ingetrazo_render import tree_move
-        if not tree_move(self._window.viewport, list(groups), target,
-                         "root" if target is None else "into"):
-            return False
-        self.refresh()
-        if target is not None:
-            self._items[id(target)].setExpanded(True)
-        return True
-
-    def delete_row(self) -> None:
-        """Delete the rows picked in the tree: what the Delete key runs
-        (see :meth:`delete_rows`). The current row when none is picked."""
-        rows = self.tree.selectedItems()
-        if not rows:
-            current = self.tree.currentItem()
-            rows = [current] if current is not None else []
-        self.delete_rows(rows)
-
-    def delete_rows(self, rows) -> None:
-        """Remove the groups, components and section planes of ``rows`` —
-        one undoable step, so Ctrl+Z brings them back where they were.
-        A group takes what it holds with it; picking a group and one of
-        its parts deletes it once."""
-        groups: list = []
-        planes: list = []
-        seen: set = set()
-        for item in rows:
-            group = self._group_of(item)
-            if group is not None:
-                if id(group) not in seen:
-                    seen.add(id(group))
-                    groups.append(group)
-                continue
-            plane = self._plane_of(item)
-            if plane is not None and id(plane) not in seen:
-                seen.add(id(plane))
-                planes.append(plane)
-        self.delete_parts(groups, planes)
-
-    def delete_parts(self, groups=(), planes=()) -> None:
-        """Remove these groups, components and section planes as one
-        undoable step. The menu says what to remove before opening it, so
-        it comes here with the objects themselves, not their rows: the
-        tree may have been rebuilt since."""
-        from core.history import (CompoundCommand, DeleteGroupCommand,
-                                  DeleteSectionPlanesCommand)
-        scene = self._scene()
-        # A part picked with the group around it travels with the group.
-        moving = outliner.topmost(scene.groups, [g for g in groups
-                                                 if g is not None])
-        # Locked is «cannot be picked, selected or opened», and a locked
-        # row can still be picked in the tree: it stays, with a group
-        # around it locked, or holding a locked one that would go with it.
-        up = outliner.parents(scene.groups)
-
-        def locked(g) -> bool:
-            p = g
-            while p is not None:
-                if getattr(p, "locked", False):
-                    return True
-                p = up.get(id(p))
-            return any(getattr(k, "locked", False)
-                       for k, _p, _d in outliner.walk(g.children or ()))
-        kept = [g for g in moving if locked(g)]
-        if kept:
-            moving = [g for g in moving if not locked(g)]
-            self._window.viewport.flash_status(tr(
-                "Locked rows are not deleted: unlock them first"), 3500)
-        planes = [p for p in planes if p is not None]
-        cmds = [DeleteGroupCommand(g) for g in moving]
-        if planes:
-            cmds.append(DeleteSectionPlanesCommand(planes))
-        if not cmds:
-            return
-        viewport = self._window.viewport
-        viewport.history.execute(
-            cmds[0] if len(cmds) == 1 else CompoundCommand(cmds))
-        # Isolate must not remember what is gone: it would count as
-        # isolated for ever, with nothing to bring back.
-        gone = {id(g) for g in moving}
-        self._isolated = [g for g in self._isolated if id(g) not in gone]
-        self._kept = [g for g in self._kept if id(g) not in gone]
-        self._tree_only -= gone
-        self.refresh()
-        viewport.update()
-        viewport.notify_scene_changed()
-
     # ---- Columns ---------------------------------------------------------
     #: The step, in pixels, from one level of nesting to the next.
     INDENT = 12
@@ -2405,8 +1951,7 @@ class OutlinerPanel(QWidget):
         from core.settings import settings as QSettings
         st = QSettings()
         for key in ("browser/model_column_order",
-                    "browser/model_hidden_columns",
-                    self.ORDER_KEY):
+                    "browser/model_hidden_columns"):
             st.remove(key)
         self._apply_column_order(self.COLUMN_ORDER)
         self._apply_column_choice()
@@ -2903,9 +2448,6 @@ class OutlinerPanel(QWidget):
                            lambda: QTimer.singleShot(
                                0, lambda: self.ask_cut_view(plane)))
             menu.addSeparator()
-            menu.addAction(tr("Delete"), lambda: QTimer.singleShot(
-                0, lambda: self.delete_parts(planes=[plane])))
-            menu.addSeparator()
             current = outliner.section_mode(plane)
             for mode in ("both", "cut", "frame", "off"):
                 act = menu.addAction(tr(self._SECTION_MODE_TEXT[mode]),
@@ -2956,11 +2498,6 @@ class OutlinerPanel(QWidget):
             menu.addAction(tr("Create plan of this group…"),
                            lambda: QTimer.singleShot(
                                0, lambda: self.ask_plan(group)))
-            # Last, apart: it takes what it holds with it (Ctrl+Z brings
-            # it back), and on several selected rows it takes them all.
-            menu.addSeparator()
-            menu.addAction(tr("Delete"), lambda: QTimer.singleShot(
-                0, lambda: self.delete_parts(targets)))
         if self._scene().edit_group is not None:
             menu.addAction(tr("Close group"), self.step_out)
         if self._scene().selection:

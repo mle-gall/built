@@ -10,38 +10,14 @@ face shows where it is, without the faces losing their transparency.
 """
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import numpy as np
-import pytest
-from PySide6.QtGui import QImage
-from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
-V = QVector3D
+from ingetrazo_core import Vec3 as V
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 
 
-def _viewport():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
-    _app.processEvents()
-    vp = win.viewport
-    if not vp.keys_stand_in._can_create_surface():
-        win._saved_version = vp.scene.version   # not left shown (see
-        win.close()                             # test_guides_behind_geometry)
-        pytest.skip("the Qt platform has no native GPU surface")
-    return win, vp
-
-
-def _pixels(img: QImage):
-    a = img.convertToFormat(QImage.Format_RGB32)
-    buf = np.frombuffer(a.constBits(), np.uint8).reshape(
-        a.height(), a.bytesPerLine())[:, :a.width() * 4]
-    return buf.reshape(a.height(), a.width(), 4)[..., :3].astype(int).copy()
+def _pixels(vp):
+    width, height, rgba = vp.keys_stand_in.render_pixels(300, 300, overlays=False)
+    return np.frombuffer(rgba, np.uint8).reshape(height, width, 4)[..., :3].astype(int)
 
 
 def _contrast(before, after) -> int:
@@ -50,39 +26,32 @@ def _contrast(before, after) -> int:
     return int(np.abs(after - before).sum())
 
 
-def test_an_edge_under_a_face_is_fainter_than_one_in_the_open():
+def test_an_edge_under_a_face_is_fainter_than_one_in_the_open(native_gpu_host):
     from core.style import style_by_name
-    win, vp = _viewport()
+    vp = native_gpu_host.viewport
     scene = vp.scene
-    try:
-        # A lid over the left half (x < 0), two metres up; nothing on the
-        # right. Seen from above.
-        scene.mesh.add_face([V(-60, -60, 2), V(0, -60, 2), V(0, 60, 2),
-                             V(-60, 60, 2)])
-        scene.version += 1
-        cam = vp.camera
-        cam.target = V(0, 0, 0)
-        cam.distance, cam.yaw, cam.pitch = 30.0, 0.0, 1.5
-        cam.perspective = False
-        vp.style_override = style_by_name("X-ray")
-        bare = _pixels(vp.render_image(300, 300, overlays=False))
+    # A lid over the left half (x < 0), two metres up; nothing on the
+    # right. Seen from above.
+    scene.mesh.add_face([V(-60, -60, 2), V(0, -60, 2), V(0, 60, 2),
+                         V(-60, 60, 2)])
+    scene.version += 1
+    cam = vp.camera
+    cam.target = V(0, 0, 0)
+    cam.distance, cam.yaw, cam.pitch = 30.0, 0.0, 1.5
+    cam.perspective = False
+    vp.style_override = style_by_name("X-ray")
+    bare = _pixels(vp)
 
-        under = scene.add_edge(V(-5, -4, 0), V(-5, 4, 0))
-        scene.version += 1
-        hidden = _contrast(bare, _pixels(
-            vp.render_image(300, 300, overlays=False)))
-        scene.mesh.remove_edge(under)
+    under = scene.add_edge(V(-5, -4, 0), V(-5, 4, 0))
+    scene.version += 1
+    hidden = _contrast(bare, _pixels(vp))
+    scene.mesh.remove_edge(under)
 
-        scene.add_edge(V(5, -4, 0), V(5, 4, 0))
-        scene.version += 1
-        shown = _contrast(bare, _pixels(
-            vp.render_image(300, 300, overlays=False)))
+    scene.add_edge(V(5, -4, 0), V(5, 4, 0))
+    scene.version += 1
+    shown = _contrast(bare, _pixels(vp))
 
-        assert hidden > 0, "X-ray must still show the edge through the lid"
-        assert hidden < 0.7 * shown, (
-            f"the edge under the lid must read fainter "
-            f"(hidden={hidden}, open={shown})")
-    finally:
-        vp.style_override = None
-        win._saved_version = scene.version
-        win.close()
+    assert hidden > 0, "X-ray must still show the edge through the lid"
+    assert hidden < 0.7 * shown, (
+        f"the edge under the lid must read fainter "
+        f"(hidden={hidden}, open={shown})")

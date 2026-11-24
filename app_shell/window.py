@@ -880,7 +880,7 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
     def repaint_styled(self):
         self._host.request_frame()
 
-    def _set_section_visibility(self, attr, on):
+    def _set_scene_visibility(self, attr, on):
         setattr(self.viewport.scene, attr, bool(on))
         self.viewport.update()
 

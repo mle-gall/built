@@ -718,24 +718,14 @@ class _LayerTree(SideTree):
              COL_LINETYPE, COL_WEIGHT, COL_OPACITY, COL_PRINT, COL_CUT,
              COL_HATCH)
 
-    #: Delete belongs to the list while it has the focus, not to a window
-    #: shortcut.
-    DELETE_KEY = True
-
 
 class LayersPanel(QWidget):
     """The layer tree, its filter and its buttons. See the module doc."""
-
-    #: The rows now list the layers and folders in another order (a sort,
-    #: a layer made, filed or renamed): the Browser ordering by layer
-    #: follows it.
-    orderChanged = Signal()
 
     def __init__(self, window) -> None:
         super().__init__()
         self._window = window
         self._updating = False
-        self._told_outline = None
         self._collapsed: set[str] = set()
         lay = QVBoxLayout(self)
         lay.setContentsMargins(6, 6, 6, 6)
@@ -1048,30 +1038,6 @@ class LayersPanel(QWidget):
         self._drawn_structure = self._structure()
         self.tree.horizontalScrollBar().setValue(scroll[0])
         self.tree.verticalScrollBar().setValue(scroll[1])
-        self._tell_order()
-
-    def display_outline(self) -> list:
-        """``(kind, name, depth)`` of every row — ``kind`` ``"folder"`` or
-        ``"layer"`` — in the order the tab lists them now, a folder before
-        what it holds, folded or filtered out alike."""
-        out = []
-
-        def walk(item, depth) -> None:
-            kind, name = self._key(item)
-            out.append((kind, name, depth))
-            for c in self._children(item):
-                walk(c, depth + 1)
-
-        for i in range(self.tree.topLevelItemCount()):
-            walk(self.tree.topLevelItem(i), 0)
-        return out
-
-    def _tell_order(self) -> None:
-        """Announce a new order of the rows — once, not on every rebuild."""
-        outline = tuple(self.display_outline())
-        if outline != self._told_outline:
-            self._told_outline = outline
-            self.orderChanged.emit()
 
     def refresh_icons(self) -> None:
         """Repaint the marks drawn in the palette's ink and accent after the
@@ -1128,7 +1094,6 @@ class LayersPanel(QWidget):
                  else Qt.AscendingOrder)
         self._sort = (col, order)
         self.tree.sortItems(col, order)
-        self._tell_order()
 
     # ---- Isolate (the target column) -------------------------------------------
     def _isolated_now(self) -> list[str]:
@@ -1301,7 +1266,6 @@ class LayersPanel(QWidget):
         self._drawn_signature = self._signature()
         col, order = self._sort
         self.tree.sortItems(col, order)
-        self._tell_order()
         self.color_by_layer.blockSignals(True)
         self.color_by_layer.setChecked(bool(getattr(scene.display_style, "color_by_layer", False)))
         self.color_by_layer.blockSignals(False)
@@ -2270,41 +2234,6 @@ class LayersPanel(QWidget):
         if ok and name.strip():
             self.move_to_folder(names, name.strip())
 
-    def delete_row(self) -> None:
-        """Delete the current row: what the list's Delete key does (see
-        :meth:`_on_delete`)."""
-        self._on_delete()
-
-    def _on_delete(self) -> None:
-        """Delete the highlighted layer — one undo step, so Ctrl+Z brings
-        it back with everything it carried. A layer with content asks
-        first, saying how much goes to the default layer. A folder goes
-        on its own; its layers stay."""
-        from core.history import DeleteLayerCommand
-        from core.purge import layer_counts
-        scene = self._scene()
-        item = self.tree.currentItem()
-        if item is None:
-            return
-        kind, name = self._key(item)
-        if kind == KIND_FOLDER:
-            L.remove_folder(scene, name)
-            self._touch()
-            return
-        if name == L.DEFAULT_LAYER or scene.layer(name) is None:
-            return                                  # the default is permanent
-        n = layer_counts(scene).get(name, 0)
-        if n and QMessageBox.question(
-                self, tr("Layers"),
-                tr("Delete the layer '{layer}'? Its {n} entities go to "
-                   "'{default}'.", layer=name, n=n, default=L.DEFAULT_LAYER)
-                ) != QMessageBox.Yes:
-            return
-        viewport = self._window.viewport
-        viewport.history.execute(DeleteLayerCommand(name))
-        self.refresh()
-        viewport.notify_scene_changed()
-
     # ---- Templates and options -------------------------------------------------
     def _fill_more_menu(self) -> None:
         """The panel's options: how the rows are ordered, new layers in the
@@ -2611,8 +2540,6 @@ class LayersPanel(QWidget):
         if kind == KIND_FOLDER or name != L.DEFAULT_LAYER:
             menu.addAction(tr("Rename"), lambda: self.tree.editItem(item,
                                                                     COL_NAME))
-            menu.addAction(tr("Delete folder") if kind == KIND_FOLDER
-                           else tr("Delete"), self._delete_item(item))
         menu.addSeparator()
         menu.addAction(tr("Purge unused layers…"), self._on_purge)
 
@@ -2929,12 +2856,6 @@ class LayersPanel(QWidget):
             self._on_assign()
         return run
 
-    def _delete_item(self, item):
-        def run():
-            self.tree.setCurrentItem(item)
-            self._on_delete()
-        return run
-
     # ---- The window's scene-changed signal -------------------------------------
     def on_scene_changed(self) -> None:
         """The window's per-change call: rebuild once the event loop is
@@ -2999,7 +2920,6 @@ class LayersPanel(QWidget):
         self._apply_filter()
         self._drawn_signature = signature
         self._drawn_structure = self._structure()
-        self._tell_order()
         return True
 
     def _signature(self) -> tuple:

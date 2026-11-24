@@ -425,6 +425,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(structure::plan_filing, m)?)?;
     m.add_function(wrap_pyfunction!(structure::check_filing_paths, m)?)?;
     m.add_function(wrap_pyfunction!(structure::plan_node_edit, m)?)?;
+    m.add_function(wrap_pyfunction!(project_tree::expand_project_folders, m)?)?;
     m.add_function(wrap_pyfunction!(project_tree::reveal_branches, m)?)?;
     m.add_function(wrap_pyfunction!(project_tree::reveal_selection, m)?)?;
     m.add_function(wrap_pyfunction!(project_tree::loose_edit, m)?)?;

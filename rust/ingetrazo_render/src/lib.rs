@@ -3295,6 +3295,9 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(inspector_geometry::inspector_curve, m)?)?;
     m.add_function(wrap_pyfunction!(inspector_geometry::inspector_rename, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::tree_move, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::row_actions::tree_delete_tag, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::row_actions::tree_tag_action, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::row_actions::tree_delete_rows, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::tree_group_rows, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::tree_group_action, m)?)?;
     m.add_function(wrap_pyfunction!(model_escape, m)?)?;

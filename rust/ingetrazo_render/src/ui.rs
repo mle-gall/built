@@ -509,7 +509,7 @@ impl Ui {
             if col.styles.owner != owner { col.styles = Default::default(); col.styles.owner=owner; col.proposal_dismissed=false; col.highlighted=None; col.focused_row=None; col.issue_at=None; }
             col.styles.lines=lines;
             col.styles.set_patterns(patterns);
-            if let Some(scene)=scene { col.styles.catalog.sync(scene)?; col.styles.hatches.sync(scene)?; }
+            if let Some(scene)=scene { col.styles.sync_catalog(scene)?; col.styles.hatches.sync(scene)?; }
         }
         Ok(())
     }
@@ -1741,7 +1741,7 @@ impl Ui {
                         export::strip(ui,&self.panels.data["readiness"],&mut cmds);
                     } else if col.lens == Lens::Drawing {
                         ui.horizontal(|ui| {
-                            if kit::quiet(ui, "Tag folders").clicked() { col.styles.pick_folder(""); }
+                            if kit::quiet(ui, "Tag folders").clicked() { col.styles.pick_folder("", false); }
                             egui::ComboBox::from_id_salt("drawing_visibility").selected_text("Visibility set").show_ui(ui, |ui| {
                                 for set in &visibility_sets {
                                     if ui.selectable_label(false, &set.1).clicked() { cmds.push(format!("tab:{}",set.0)); }
@@ -1850,20 +1850,6 @@ impl Ui {
                                 let drawing_row = col.lens == Lens::Drawing && (n.key.starts_with("preview-folder:") || n.key.starts_with("preview-tag:"));
                                 let sense = if editable || n.local_placement || drawing_row { Sense::click_and_drag() } else { Sense::click() };
                                 let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), sense);
-                                if drawing_row {
-                                    if resp.drag_started() {
-                                        if let Some(payload) = drawing::DrawingDrag::begin(&col.styles, n) {
-                                            resp.dnd_set_drag_payload(payload);
-                                        }
-                                    }
-                                    drawing::drawing_drop(ui, &resp, &col.nodes, Some(index), col.styles.owner, &mut actions);
-                                } else if editable {
-                                    if resp.drag_started() { resp.dnd_set_drag_payload(drawing::DraggedRow::Node(n.key.clone())); }
-                                    drawing::drop_on(ui, &resp, n.key.strip_prefix("n:").unwrap_or(""), &mut actions);
-                                } else if n.local_placement {
-                                    if resp.drag_started() { resp.dnd_set_drag_payload(drawing::DraggedRow::Placement { key: n.key.clone(), selected: n.selected > 0 }); }
-                                    drawing::drop_on_occurrence(ui, &resp, &n.key, &mut actions);
-                                }
                                 // Items in the selection are lit like a picked row; nodes count them.
                                 let lit = (col.lens == Lens::Drawing && col.styles.selected(n)) || n.mark == 1 || (selection.is_none() && col.highlighted.as_deref() == Some(n.key.as_str()));
                                 let file_state = if n.row == 0 { lens::file_state(&n.icon) } else { None };
@@ -2075,6 +2061,25 @@ impl Ui {
                                     let r = Rect::from_min_max(pos2(tx, rect.min.y), pos2(kx, rect.max.y));
                                     ui.interact(r, ui.id().with(("kind_tip", i)), Sense::hover()).on_hover_text(n.tip.clone());
                                 }
+                                let on_control = |p: Pos2| (n.expandable && tri.contains(p)) ||
+                                    (n.eye >= 0 && eye_r.expand(2.0).contains(p)) ||
+                                    (n.lock >= 0 && lock_r.expand(2.0).contains(p));
+                                let drag_started = resp.drag_started() &&
+                                    !ui.input(|i| i.pointer.press_origin().is_some_and(on_control));
+                                if drawing_row {
+                                    if drag_started {
+                                        if let Some(payload) = drawing::DrawingDrag::begin(&col.styles, n) {
+                                            resp.dnd_set_drag_payload(payload);
+                                        }
+                                    }
+                                    drawing::drawing_drop(ui, &resp, &col.nodes, Some(index), col.styles.owner, &mut actions);
+                                } else if editable {
+                                    if drag_started { resp.dnd_set_drag_payload(drawing::DraggedRow::Node(n.key.clone())); }
+                                    drawing::drop_on(ui, &resp, n.key.strip_prefix("n:").unwrap_or(""), &mut actions);
+                                } else if n.local_placement {
+                                    if drag_started { resp.dnd_set_drag_payload(drawing::DraggedRow::Placement { key: n.key.clone(), selected: n.selected > 0 }); }
+                                    drawing::drop_on_occurrence(ui, &resp, &n.key, &mut actions);
+                                }
                                 if resp.clicked() {
                                     let p = resp.interact_pointer_pos().unwrap_or(rect.center());
                                     if col.lens==Lens::Drawing && n.cells.len()<7 && !n.key.starts_with("preview-folder:") {col.styles.clear_focus();}
@@ -2087,10 +2092,13 @@ impl Ui {
                                         let edit = (col.lens == Lens::Drawing).then(|| col.styles.state_action(n, true)).flatten();
                                         actions.push(edit.unwrap_or_else(|| format!("lock\u{1f}{}", n.key)));
                                     } else if col.lens == Lens::Drawing && n.cells.len() >= 7 && !linked && col.filing.is_none() {
+                                        col.focused_row = Some(n.key.clone());
+                                        resp.surrender_focus();
                                         col.styles.pick(n, ui.input(|i| i.modifiers.command || i.modifiers.shift));
                                     } else if col.lens==Lens::Drawing && n.key.starts_with("preview-folder:") {
-                                        col.styles.pick_folder(&n.key["preview-folder:".len()..]);
-                                        col.highlighted=Some(n.key.clone());
+                                        col.focused_row = None;
+                                        col.styles.pick_folder(&n.key["preview-folder:".len()..], ui.input(|i| i.modifiers.command || i.modifiers.shift));
+                                        col.highlighted=None;
                                     } else if n.row == 9 {
                                         actions.push(format!("toggle\u{1f}{}",n.key));
                                     } else if n.row == 6 {
@@ -2117,11 +2125,11 @@ impl Ui {
                                         actions.push(format!("{verb}\u{1f}{}", n.key));
                                     }
                                 }
-                                if resp.double_clicked() && (n.row < 6 || n.row == 8) && col.filing.is_none() {
+                                if resp.double_clicked() && !resp.interact_pointer_pos().is_some_and(on_control) && (n.row < 6 || n.row == 8) && col.filing.is_none() {
                                     let verb = if n.row == 0 { "isolate" } else { "open" };
                                     actions.push(format!("{verb}\u{1f}{}", n.key));
                                 }
-                                if resp.secondary_clicked() && n.row < 6 && n.row != 4 && (n.row != 5 || n.key.starts_with("cm:")) {
+                                if resp.secondary_clicked() && (drawing_row && n.key.starts_with("preview-tag:") || n.key.starts_with("section:") || n.row < 6 && n.row != 4 && (n.row != 5 || n.key.starts_with("cm:"))) {
                                     col.group_rows.clear();
                                     if n.key.starts_with("g:") || n.key.starts_with("i:") || n.key.starts_with("c:") || n.key.starts_with("d:") {
                                         actions.push(format!("grouprows\u{1f}{}", n.key));
@@ -2268,7 +2276,9 @@ impl Ui {
                 ("isolate", "Isolate"), ("zoom", "Zoom to"), ("-", ""), ("eye", "Show / hide"), ("lock", "Lock / unlock"),
                 ("-", ""), ("linkopen", "Edit source"), ("linkfinder", "Show in Finder"),
                 ("linkreload", "Reload"), ("linkrelink", "Locate…"), ("linkunlink", "Unlink")];
-            let menu = if row == 0 && key.starts_with("n:link") { link_menu } else if row == 0 { node_menu }
+            let section_menu: &[(&str, &str)] = &[("sectioncut", "Toggle cut"), ("eye", "Show / hide"), ("deleterows", "Delete")];
+            let tag_menu: &[(&str, &str)] = &[("tagselect", "Select items"), ("tagisolate", "Isolate"), ("deletetag", "Delete")];
+            let menu = if key.starts_with("preview-tag:") { tag_menu } else if key.starts_with("section:") { section_menu } else if row == 0 && key.starts_with("n:link") { link_menu } else if row == 0 { node_menu }
                 else if row == 5 { comp_menu } else { item_menu };
             let resp = egui::Area::new(egui::Id::new("row_menu"))
                 .fixed_pos(at + vec2(4.0, 4.0))
@@ -2280,6 +2290,7 @@ impl Ui {
                         let row = col.nodes.iter().find(|n| n.key == key);
                         let editable_file = row.is_some_and(|n| n.icon.starts_with("file:") && !n.badge.starts_with("via "));
                         for (id, label) in menu {
+                            if *id == "deletetag" && key == "preview-tag:Layer 0" { continue; }
                             if row.is_some_and(|n| n.icon == "file:missing") &&
                                 matches!(*id, "contents" | "isolate" | "zoom" | "linkopen" | "linkfinder" | "linkreload") { continue; }
                             if matches!(*id, "linkreload" | "linkrelink" | "linkunlink") &&
@@ -3126,6 +3137,10 @@ fn tree_frame(ui: &mut Ui, events: Vec<egui::Event>) -> std::collections::HashMa
     let ctx = ui.ctx.clone();
     let raw = egui::RawInput {
         screen_rect: Some(screen),
+        modifiers: events.iter().find_map(|ev| match ev {
+            egui::Event::PointerButton { modifiers, .. } => Some(*modifiers),
+            _ => None,
+        }).unwrap_or_default(),
         events,
         ..Default::default()
     };
@@ -3193,6 +3208,18 @@ fn occurrence_menu_runs_the_document_action_and_closes() {
     assert!(ui.column.unwrap().row_menu.is_none());
 }
 
+#[cfg(test)]
+fn tree_drag(ui: &mut Ui, from: Pos2, to: Pos2) -> Vec<String> {
+    let button = |pos, pressed| egui::Event::PointerButton {
+        pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default()
+    };
+    tree_frame(ui, vec![egui::Event::PointerMoved(from), button(from, true)]);
+    tree_frame(ui, vec![egui::Event::PointerMoved(from + vec2(8., 0.))]);
+    tree_frame(ui, vec![egui::Event::PointerMoved(to)]);
+    tree_frame(ui, vec![button(to, false)]);
+    ui.take_actions()
+}
+
 #[test]
 fn dragging_sorted_drawing_rows_files_tags_and_folders_by_key() {
     let Some(mut ui) = test_chrome() else { return };
@@ -3214,31 +3241,37 @@ fn dragging_sorted_drawing_rows_files_tags_and_folders_by_key() {
     ui.column.as_mut().unwrap().lens = Lens::Drawing;
     for _ in 0..3 { tree_frame(&mut ui, vec![]); }
     let at = tree_frame(&mut ui, vec![]);
-    let drag = |ui: &mut Ui, from: Pos2, to: Pos2| {
-        let button = |pos, pressed| egui::Event::PointerButton {
-            pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default()
-        };
-        tree_frame(ui, vec![egui::Event::PointerMoved(from), button(from, true)]);
-        tree_frame(ui, vec![egui::Event::PointerMoved(from + vec2(8., 0.))]);
-        tree_frame(ui, vec![egui::Event::PointerMoved(to)]);
-        tree_frame(ui, vec![button(to, false)]);
-        ui.take_actions()
-    };
-    for (source, dest, verb, tags, folder, parent) in [
-        ("Brick", "Section", "file", vec!["z"], "", "f"),
-        ("Plans", "Elevations", "move", vec![], "f", "g"),
-        ("Section", "Name", "file", vec!["inside"], "", ""),
+    for (source, dest, tags, folders, parent) in [
+        ("Brick", "Section", vec!["z"], vec![], "f"),
+        ("Plans", "Elevations", vec![], vec!["f"], "g"),
+        ("Section", "Name", vec!["inside"], vec![], ""),
     ] {
-        let actions = drag(&mut ui, at[source], at[dest]);
-        let expected = serde_json::json!({"tags":tags,"folder":folder,"parent":parent});
-        assert!(actions.contains(&format!("tree:tagfolder\u{1f}{verb}\u{1f}{expected}")), "{source}: {actions:?}");
+        let actions = tree_drag(&mut ui, at[source], at[dest]);
+        let expected = serde_json::json!({"owner":0,"tags":tags,"folders":folders,"parent":parent});
+        assert!(actions.contains(&format!("tree:tagfolder\u{1f}batch\u{1f}{expected}")), "{source}: {actions:?}");
     }
-    let col = ui.column.as_mut().unwrap();
-    col.styles.pick(&col.nodes[3], false);
-    col.styles.pick(&col.nodes[4], true);
-    let actions = drag(&mut ui, at["Brick"], at["Plans"]);
-    let expected = serde_json::json!({"tags":["a","z"],"folder":"","parent":"f"});
-    assert!(actions.contains(&format!("tree:tagfolder\u{1f}file\u{1f}{expected}")), "{actions:?}");
+    tree_click(&mut ui, at["Brick"], egui::PointerButton::Primary);
+    for name in ["Steel", "Plans", "Steel", "Steel"] {
+        let pos = at[name];
+        tree_frame(&mut ui, vec![egui::Event::PointerMoved(pos)]);
+        for pressed in [true, false] {
+            tree_frame(&mut ui, vec![egui::Event::PointerButton {
+                pos, pressed, button: egui::PointerButton::Primary,
+                modifiers: egui::Modifiers::SHIFT,
+            }]);
+        }
+    }
+    let actions = tree_drag(&mut ui, at["Brick"], at["Elevations"]);
+    let expected = serde_json::json!({"owner":0,"tags":["a","z"],"folders":["f"],"parent":"g"});
+    assert!(actions.contains(&format!("tree:tagfolder\u{1f}batch\u{1f}{expected}")), "{actions:?}");
+    tree_click(&mut ui, at["Brick"], egui::PointerButton::Primary);
+    assert!(ui.key("Delete", true, 0));
+    assert_eq!(ui.take_actions(), ["tree:deletetag\x1fpreview-tag:z"]);
+    tree_click(&mut ui, at["Brick"], egui::PointerButton::Secondary);
+    let menu = tree_frame(&mut ui, vec![]);
+    tree_click(&mut ui, menu["Delete"], egui::PointerButton::Primary);
+    assert_eq!(ui.take_actions(), ["tree:deletetag\x1fpreview-tag:z"]);
+
 
 }
 
@@ -3284,6 +3317,46 @@ fn name_sort_uses_the_new_label_and_unknown_preferences_restore_project_order() 
 }
 
 #[test]
+fn the_drop_band_files_beside_or_into_an_occurrence() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    ui.set_tree(["House", "Shed"].into_iter().map(|name|
+        (vec![format!("i:{name}"), name.into()], vec![0, 0, 0, 0, 1, -1, -1])
+    ).collect(), 0);
+    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+    let at = tree_frame(&mut ui, vec![]);
+    for (offset, verb) in [(0.35, "into"), (-0.43, "beside")] {
+        let to = at["House"] + vec2(0., ROW_H * offset);
+        assert_eq!(tree_drag(&mut ui, at["Shed"], to), [format!("tree:{verb}\x1fi:Shed\x1fi:House")]);
+    }
+    assert_eq!(tree_drag(&mut ui, at["Shed"], at["Name"]), ["tree:root\x1fi:Shed"]);
+}
+
+#[test]
+fn an_eye_gesture_never_opens_or_drags_its_occurrence() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    ui.set_tree(["House", "Shed"].into_iter().map(|name|
+        (vec![format!("i:{name}"), name.into()], vec![0, 0, 0, 0, 1, 1, 0])
+    ).collect(), 0);
+    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+    let at = tree_frame(&mut ui, vec![]);
+    let eye = pos2(at["Name"].x - 26., at["House"].y);
+    for _ in 0..2 {
+        tree_click(&mut ui, eye, egui::PointerButton::Primary);
+        assert_eq!(ui.take_actions(), ["tree:roweye\x1fi:House"]);
+    }
+    let button = |pos, pressed| egui::Event::PointerButton {
+        pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default(),
+    };
+    tree_frame(&mut ui, vec![button(eye, true)]);
+    tree_frame(&mut ui, vec![egui::Event::PointerMoved(eye + vec2(10., 0.))]);
+    tree_frame(&mut ui, vec![egui::Event::PointerMoved(at["Shed"])]);
+    tree_frame(&mut ui, vec![button(at["Shed"], false)]);
+    assert!(ui.take_actions().is_empty());
+}
+
+#[test]
 fn focused_tree_keys_win_over_viewport_shortcuts() {
     let Some(mut ui) = test_chrome() else { return };
     ui.ctx = test_context();
@@ -3307,6 +3380,8 @@ fn focused_tree_keys_win_over_viewport_shortcuts() {
         ("Tab", 0, "into\x1fi:B\x1fi:A"),
         ("Tab", 4, "outdent\x1fi:B"),
         ("Space", 0, "roweye\x1fi:B"),
+        ("Delete", 0, "deleterows\x1fi:B"),
+        ("Backspace", 0, "deleterows\x1fi:B"),
         ("Enter", 0, "open\x1fi:B"),
         ("Escape", 0, "stepout\x1f"),
     ] {

@@ -25,6 +25,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 _app = QApplication.instance() or QApplication([])
 
 from core.group import Group
+from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from core.history import DeleteLayerCommand, History
 from core.layers import (DEFAULT_LAYER, Layer, assign_layer, layer_of,
                          rename_layer)
@@ -280,51 +281,22 @@ def test_panel_add_and_rename_stay_off_the_undo_stack():
         win.close()
 
 
-def test_panel_delete_asks_when_the_layer_has_content(monkeypatch):
-    win = _window()
-    try:
-        scene = win.viewport.scene
-        panel = win.layers_dock.panel
-        face = _square(scene.mesh)
-        scene.layers.append(Layer("Muros"))
-        scene.layers.append(Layer("Vacia"))
-        for e in [face] + list(scene.mesh.edges):     # 1 face + 4 edges
-            assign_layer(e, "Muros")
-        panel.refresh()
-        asked = []
-
-        def answer(reply):
-            def question(_parent, _title, text, *a, **k):
-                asked.append(text)
-                return reply
-            return question
-
-        # An empty layer goes without a question.
-        monkeypatch.setattr(QMessageBox, "question", answer(QMessageBox.No))
-        panel.tree.setCurrentItem(_item(panel.tree, "Vacia"))
-        panel._on_delete()
-        assert scene.layer("Vacia") is None and not asked
-
-        # «No» keeps the layer and everything on it.
-        panel.tree.setCurrentItem(_item(panel.tree, "Muros"))
-        panel._on_delete()
-        assert len(asked) == 1 and "Muros" in asked[0] and "5" in asked[0]
-        assert scene.layer("Muros") is not None and layer_of(face) == "Muros"
-
-        # «Yes» deletes; Ctrl+Z brings it back with its content.
-        monkeypatch.setattr(QMessageBox, "question", answer(QMessageBox.Yes))
-        panel.tree.setCurrentItem(_item(panel.tree, "Muros"))
-        panel._on_delete()
-        assert scene.layer("Muros") is None
-        assert layer_of(face) == DEFAULT_LAYER
-
-        win._on_undo()
-        assert scene.layer("Muros") is not None
-        assert layer_of(face) == "Muros"
-        # The panel rebuilds on the next turn of the event loop — never
-        # inside a paint nor a drop-down's own signal, where it crashed.
-        _app.processEvents()
-        assert _item(panel.tree, "Muros") is not None   # the panel follows
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_panel_delete_asks_when_the_layer_has_content(native_question_host):
+    from tests.native_tree import action
+    from views import chrome_dialogs as dialogs
+    win = native_question_host.window
+    scene = win.viewport.scene
+    face = _square(scene.mesh)
+    scene.layers.extend([Layer("Muros"), Layer("Vacia")])
+    for entity in [face, *scene.mesh.edges]:
+        assign_layer(entity, "Muros")
+    action(native_question_host, "deletetag", "preview-tag:Vacia")
+    assert scene.layer("Vacia") is None and dialogs.current_sheet(win) is None
+    action(native_question_host, "deletetag", "preview-tag:Muros")
+    sheet = dialogs.current_sheet(win)
+    assert "Muros" in sheet.text and "5" in sheet.text
+    assert dialogs.answer(win, "cancel") and layer_of(face) == "Muros"
+    action(native_question_host, "deletetag", "preview-tag:Muros")
+    assert dialogs.answer(win, "delete")
+    assert scene.layer("Muros") is None and layer_of(face) == DEFAULT_LAYER
+    assert win.viewport.history.undo() and layer_of(face) == "Muros"

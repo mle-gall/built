@@ -707,7 +707,19 @@ def dispatch(self, command):
     elif command=="fixture-folder":
         act("tagfolder","new",dict(name="Survey",parent="Site"))
         folder=next(key for key in scene.layer_folders if scene.layer_folder_names.get(key,key)=="Survey")
-        act("tagfolder","file",dict(parent=folder,tags=["Paths"]))
+        act("tagfolder","new",dict(name="Details",parent="Site"))
+        detail=next(key for key in scene.layer_folders if scene.layer_folder_names.get(key,key)=="Details")
+        act("tagfolder","batch",dict(owner=id(scene),parent=folder,folders=[detail],tags=["Paths"]))
+        self.fixture_mixed_folder=scene.folder_parents.get(detail)==folder
+    elif command=="fixture-delete-tag":
+        from core.layers import Layer
+        if scene.layer_by_key("Disposable") is None:
+            scene.layers.append(Layer("Disposable"))
+            scene.groups[0].layer="Disposable"
+            scene.version+=1
+        wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("deletetag","preview-tag:Disposable")))
+    elif command=="fixture-confirm-delete":
+        wgpu_ui._run(self.window,["sheet:delete"])
     elif command=="fixture-scenes":
         wgpu_ui._run(self.window,["tab:scene:add","tab:scenefolders:"+json.dumps(["add",str(id(scene)),"","","Field views"])])
         saved=self.window._scene_tabs.marked_view()
@@ -738,6 +750,8 @@ def dispatch(self, command):
     self.request_frame()
 def facts(self):
     scene=self.viewport.scene
+    from views.chrome_dialogs import current_sheet
+    question=current_sheet(self.window)
     paths=scene.layer("Paths")
     row=self.window._scene_tabs.marked_view()
     return dict(state(self), photo=getattr(self,"fixture_photo",False), restored=getattr(self,"fixture_restored",False),
@@ -745,7 +759,8 @@ def facts(self):
         paint_sheet=getattr(self,"fixture_paint_sheet",None), row_paint=getattr(self,"fixture_row_paint",None),
         swatch=getattr(self,"fixture_swatch",False), editor=self.renderer.ui_input_state()["drawing_line"],
         line=paths.linetype, hatch=paths.hatch, mortar=paths.mortar, size=scene.bricks.get("brick"),
-        folder=scene.layer_folder_names.get(paths.folder,paths.folder),scene_folder=getattr(row,"folder",None))
+        disposable=scene.layer_by_key("Disposable") is not None, question=question.text if question else "",
+        mixed_folder=getattr(self,"fixture_mixed_folder",False),folder=scene.layer_folder_names.get(paths.folder,paths.folder),scene_folder=getattr(row,"folder",None))
 Host.menu,Host.state=dispatch,facts
 """)
     steps = tmp_path / "commands.txt"
@@ -769,6 +784,17 @@ wait 450
 menu fixture-apply-paint
 wait 350
 state
+menu fixture-delete-tag
+wait 250
+state
+key escape
+wait 150
+state
+menu fixture-delete-tag
+wait 200
+menu fixture-confirm-delete
+wait 250
+state
 quit
 """)
     result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
@@ -779,11 +805,16 @@ quit
     states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
               if line.startswith("[built] state ")]
     assert states[3]["paint_sheet"] == "tree-material" and states[3]["row_paint"].startswith("RAL 1000"), log
+    asked, cancelled, deleted = states[4:7]
+    assert "Disposable" in asked["question"] and asked["disposable"], log
+    assert not cancelled["question"] and cancelled["disposable"], log
+    assert not deleted["question"] and not deleted["disposable"], log
     opened, saved, edited = states[:3]
     assert edited["hatch_prefs"] == {"pinned": ["brick", "glass"], "recent": ["brick", "glass"],
                                      "saved": {"brick": [[300, 150, 80, 12, 8]]}, "removed": {}}
     assert opened["editor"] and not saved["editor"] and saved["line"] == "lin:Boundary", log
     assert edited["hatch"] == "brick" and edited["mortar"] and edited["size"] == [250, 115, 60, 8], log
+    assert edited["mixed_folder"], log
     assert edited["folder"] == "Survey" and edited["scene_folder"] == "Field views", log
     assert edited["photo"] and edited["restored"] and edited["swatch"], log
     assert output.is_file() and "*" in output.read_text(), log

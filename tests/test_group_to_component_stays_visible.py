@@ -9,18 +9,12 @@ The pixel test needs a GL context that renders; skipped where the platform
 has none. The epoch tests run everywhere."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 
 from core.history import GroupToComponentCommand, MakeGroupCommand
-
-_app = QApplication.instance() or QApplication([])
 
 
 def _box(scene):
@@ -33,19 +27,13 @@ def _box(scene):
 
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w.show()
-    for _ in range(10):
-        _app.processEvents()
+def win(native_host):
+    w = native_host.window
     sc = w.viewport.scene
     sc.groups.clear()
     sc.guides.clear()
     _box(sc)
-    yield w
-    w._saved_version = sc.version
-    w.close()
+    return w
 
 
 def _group_the_box(vp):
@@ -80,10 +68,8 @@ def test_moving_a_component_is_still_a_move(win):
     assert vp._epoch_only_matrices(before, after)
 
 
-def test_the_box_stays_on_screen(win):
+def test_the_box_stays_on_screen(win, native_gpu_host):
     vp = win.viewport
-    if not vp.keys_stand_in._can_create_surface():
-        pytest.skip("the Qt platform has no native GPU surface")
     sc = vp.scene
     sc.display_style.sky = False
     vp.camera.set_view("front")                           # looking toward +Y

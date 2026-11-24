@@ -92,6 +92,15 @@ def native_host(tmp_path, restore_shell_patches, monkeypatch):
 
 
 @pytest.fixture
+def native_question_host(native_host, monkeypatch):
+    """Use the real sheet stack while driving a native document without a renderer."""
+    from views import chrome_dialogs
+    monkeypatch.setattr(chrome_dialogs, "async_host",
+                        lambda parent: native_host.window if parent is native_host.window else None)
+    return native_host
+
+
+@pytest.fixture
 def native_window(native_host):
     """A fresh document in the native window."""
     native_host.window.new_document()

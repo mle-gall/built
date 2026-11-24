@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
+from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from core.group import Group
 from core.history import History, PurgeUnusedCommand
 from core.layers import DEFAULT_LAYER, Layer, assign_layer
@@ -194,38 +195,27 @@ def _row(panel, name):
     return panel.item_for(name)
 
 
-def test_deleting_a_layer_reassigns_faces_INSIDE_groups(monkeypatch):
-    """The − button walked scene.groups as a flat list, so geometry inside a
-    group kept a tag pointing at a layer that no longer existed."""
-    from PySide6.QtWidgets import QMessageBox
+def test_deleting_a_layer_reassigns_faces_INSIDE_groups(native_question_host):
     from core.layers import layer_of
-    monkeypatch.setattr(QMessageBox, "question",
-                        staticmethod(lambda *a, **k: QMessageBox.Yes))
-    win = _window()
-    try:
-        scene = win.viewport.scene
-        panel = win.layers_dock.panel
-        inner = Mesh()
-        f = _quad(inner)
-        deep = Mesh()
-        g = _quad(deep)
-        child = Group(deep, name="Silla")
-        child.xform = QMatrix4x4()
-        parent = Group(inner, name="Mesa")
-        parent.adopt([child])
-        scene.groups.append(parent)
-        scene.layers.append(Layer("CANAL"))
-        assign_layer(f, "CANAL")
-        assign_layer(g, "CANAL")
-        panel.refresh()
-        panel.tree.setCurrentItem(_row(panel, "CANAL"))
-        panel._on_delete()
-        assert scene.layer("CANAL") is None
-        assert layer_of(f) == DEFAULT_LAYER
-        assert layer_of(g) == DEFAULT_LAYER
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    from tests.native_tree import action
+    from views import chrome_dialogs
+    scene = native_question_host.viewport.scene
+    inner = Mesh()
+    f = _quad(inner)
+    deep = Mesh()
+    g = _quad(deep)
+    child = Group(deep, name="Silla")
+    child.xform = QMatrix4x4()
+    parent = Group(inner, name="Mesa")
+    parent.adopt([child])
+    scene.groups.append(parent)
+    scene.layers.append(Layer("CANAL"))
+    assign_layer(f, "CANAL")
+    assign_layer(g, "CANAL")
+    action(native_question_host, "deletetag", "preview-tag:CANAL")
+    assert chrome_dialogs.answer(native_question_host.window, "delete")
+    assert scene.layer("CANAL") is None
+    assert layer_of(f) == layer_of(g) == DEFAULT_LAYER
 
 
 def test_the_purge_button_sweeps_and_ctrl_z_brings_them_back(monkeypatch):

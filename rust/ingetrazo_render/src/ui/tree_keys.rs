@@ -3,9 +3,14 @@ use super::{Column, Lens};
 
 impl Column {
     pub(super) fn claims_row_key(&self, name: &str, mods: u8) -> bool {
-        let Some(key) = self.focused_row.as_ref() else { return false };
+        let Some(key) = self.focused_row.as_ref() else {
+            return false;
+        };
         (name == "Escape" || self.nodes.iter().any(|n| &n.key == key))
-            && self.lens == Lens::Filing
+            && (self.lens == Lens::Filing
+                || (self.lens == Lens::Drawing
+                    && key.starts_with("preview-tag:")
+                    && matches!(name, "Delete" | "Backspace")))
             && self.mode.is_empty()
             && self.renaming.is_none()
             && self.row_menu.is_none()
@@ -13,7 +18,15 @@ impl Column {
             && (mods == 0 || (name == "Tab" && mods == 4))
             && matches!(
                 name,
-                "ArrowUp" | "ArrowDown" | "Space" | "Escape" | "Enter" | "F2" | "Tab"
+                "ArrowUp"
+                    | "ArrowDown"
+                    | "Space"
+                    | "Escape"
+                    | "Enter"
+                    | "F2"
+                    | "Tab"
+                    | "Delete"
+                    | "Backspace"
             )
     }
 
@@ -29,6 +42,12 @@ impl Column {
         let node = &self.nodes[self.ordered[pos]];
         let plane = key.starts_with("section:");
         match name {
+            "Delete" | "Backspace" if self.lens == Lens::Drawing => {
+                Some(format!("tree:deletetag\u{1f}{key}"))
+            }
+            "Delete" | "Backspace" if plane || node.local_placement => {
+                Some(format!("tree:deleterows\u{1f}{key}"))
+            }
             "Enter" | "Space" => {
                 let verb = match (name, plane) {
                     ("Enter", true) => "sectioncut",
