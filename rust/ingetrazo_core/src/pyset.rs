@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! CPython's `set` of non-negative ints, slot for slot (`Objects/setobject.c`,
-//! 3.13): for native passes whose result depends on the order a Python set
-//! of element keys iterates in (the plane rebuild picks each plane's origin
-//! from the first fresh face on it). A view of a store element hashes and
-//! compares as its key, so a set of views has this table.
+//! CPython's `set`, slot for slot (`Objects/setobject.c`, 3.13), for keys
+//! whose Python hash is known here (ints, tuples of two ints): for native
+//! passes whose result depends on the order a Python set iterates in (the
+//! plane rebuild picks each plane's origin from the first fresh face on it;
+//! the planar arrangement walks a vertex's neighbours in set order). A view
+//! of a store element hashes and compares as its key, so a set of views has
+//! the table of a set of keys.
 //!
 //! `tests/test_pyset_order.py` replays random operation sequences on real
 //! sets and on this one (`ingetrazo_core.py_set_replay`).
@@ -17,31 +19,74 @@ const MINSIZE: usize = 8;
 const MODULUS: u128 = (1 << 61) - 1;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Slot {
+enum Slot<K> {
     Empty,
     Dummy,
-    Key(u128, usize),
+    Key(K, usize),
+}
+
+/// A key's Python `hash()`, as the `size_t` a set's table uses.
+pub trait PyHash: Copy + Eq {
+    fn py_hash(&self) -> usize;
+}
+
+/// `hash(n)` for a Python int.
+pub fn int_hash(n: i128) -> i64 {
+    let m = MODULUS as i128;
+    let h = if n >= 0 { n % m } else { -((-n) % m) };
+    if h == -1 {
+        -2
+    } else {
+        h as i64
+    }
+}
+
+impl PyHash for u128 {
+    fn py_hash(&self) -> usize {
+        (self % MODULUS) as usize
+    }
+}
+
+/// `hash((a, b))` (`tuplehash`, xxHash lanes).
+impl PyHash for [i128; 2] {
+    fn py_hash(&self) -> usize {
+        const P1: u64 = 11400714785074694791;
+        const P2: u64 = 14029467366897019727;
+        const P5: u64 = 2870177450012600261;
+        let mut acc = P5;
+        for &x in self {
+            let lane = int_hash(x) as u64;
+            acc = acc.wrapping_add(lane.wrapping_mul(P2));
+            acc = acc.rotate_left(31);
+            acc = acc.wrapping_mul(P1);
+        }
+        acc = acc.wrapping_add(2 ^ (P5 ^ 3527539));
+        if acc == u64::MAX {
+            return 1546275796;
+        }
+        acc as usize
+    }
 }
 
 /// `hash(k)` for an int `k >= 0`, as the `size_t` the table uses.
 pub fn hash(k: u128) -> usize {
-    (k % MODULUS) as usize
+    k.py_hash()
 }
 
 #[derive(Clone, Debug)]
-pub struct PySet {
-    table: Vec<Slot>,
+pub struct PySet<K = u128> {
+    table: Vec<Slot<K>>,
     fill: usize,
     used: usize,
 }
 
-impl Default for PySet {
+impl<K: PyHash> Default for PySet<K> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl PySet {
+impl<K: PyHash> PySet<K> {
     pub fn new() -> Self {
         Self { table: vec![Slot::Empty; MINSIZE], fill: 0, used: 0 }
     }
@@ -59,7 +104,7 @@ impl PySet {
     }
 
     /// `set(keys)` from a list or any iterator that is not a set.
-    pub fn from_keys(keys: impl IntoIterator<Item = u128>) -> Self {
+    pub fn from_keys(keys: impl IntoIterator<Item = K>) -> Self {
         let mut s = Self::new();
         for k in keys {
             s.add(k);
@@ -68,14 +113,14 @@ impl PySet {
     }
 
     /// Iteration order: the table's slots.
-    pub fn iter(&self) -> impl Iterator<Item = u128> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = K> + '_ {
         self.table.iter().filter_map(|s| match *s {
             Slot::Key(k, _) => Some(k),
             _ => None,
         })
     }
 
-    fn entries(&self) -> impl Iterator<Item = (u128, usize)> + '_ {
+    fn entries(&self) -> impl Iterator<Item = (K, usize)> + '_ {
         self.table.iter().filter_map(|s| match *s {
             Slot::Key(k, h) => Some((k, h)),
             _ => None,
@@ -83,7 +128,7 @@ impl PySet {
     }
 
     /// `set_lookkey`: the slot holding `k`, or None.
-    fn find(&self, k: u128, h: usize) -> Option<usize> {
+    fn find(&self, k: K, h: usize) -> Option<usize> {
         let mask = self.mask();
         let mut i = h & mask;
         let mut perturb = h;
@@ -101,16 +146,16 @@ impl PySet {
         }
     }
 
-    pub fn contains(&self, k: u128) -> bool {
-        self.find(k, hash(k)).is_some()
+    pub fn contains(&self, k: K) -> bool {
+        self.find(k, k.py_hash()).is_some()
     }
 
     /// `set_add_entry`.
-    pub fn add(&mut self, k: u128) {
-        self.add_entry(k, hash(k));
+    pub fn add(&mut self, k: K) {
+        self.add_entry(k, k.py_hash());
     }
 
-    fn add_entry(&mut self, k: u128, h: usize) {
+    fn add_entry(&mut self, k: K, h: usize) {
         let mask = self.mask();
         let mut i = h & mask;
         let mut perturb = h;
@@ -148,7 +193,7 @@ impl PySet {
     }
 
     /// `set_insert_clean`: into a table with no dummies and no `k`.
-    fn insert_clean(table: &mut [Slot], k: u128, h: usize) {
+    fn insert_clean(table: &mut [Slot<K>], k: K, h: usize) {
         let mask = table.len() - 1;
         let mut i = h & mask;
         let mut perturb = h;
@@ -190,8 +235,8 @@ impl PySet {
     }
 
     /// `set_discard_entry`.
-    pub fn discard(&mut self, k: u128) -> bool {
-        match self.find(k, hash(k)) {
+    pub fn discard(&mut self, k: K) -> bool {
+        match self.find(k, k.py_hash()) {
             Some(j) => {
                 self.table[j] = Slot::Dummy;
                 self.used -= 1;
@@ -202,7 +247,7 @@ impl PySet {
     }
 
     /// `s.update(other)` / `set(other)` for a set `other` (`set_merge`).
-    pub fn merge(&mut self, other: &PySet) {
+    pub fn merge(&mut self, other: &PySet<K>) {
         if other.used == 0 {
             return;
         }
@@ -229,7 +274,7 @@ impl PySet {
     }
 
     /// `set(self)`.
-    pub fn copy(&self) -> PySet {
+    pub fn copy(&self) -> PySet<K> {
         let mut s = PySet::new();
         s.merge(self);
         s
@@ -237,13 +282,13 @@ impl PySet {
 
     /// `self - other` with `other` a set (`set_difference`): `other` is
     /// asked only whether it holds a key.
-    pub fn difference(&self, other_len: usize, holds: impl Fn(u128) -> bool) -> PySet {
+    pub fn difference(&self, other_len: usize, holds: impl Fn(K) -> bool) -> PySet<K> {
         if (self.used >> 2) > other_len {
             // set_copy_and_difference: a copy, the shared keys discarded
             // (dummies), the dummies resized away when they are more than
             // a quarter of the table (set_difference_update_internal).
             let mut s = self.copy();
-            let keys: Vec<u128> = s.iter().filter(|&k| holds(k)).collect();
+            let keys: Vec<K> = s.iter().filter(|&k| holds(k)).collect();
             for k in keys {
                 s.discard(k);
             }
@@ -270,7 +315,7 @@ impl PySet {
 /// (`current - saved[i]`).
 #[pyfunction]
 pub fn py_set_replay(ops: Vec<(String, Vec<u128>)>) -> PyResult<Vec<Vec<u128>>> {
-    let mut cur = PySet::new();
+    let mut cur: PySet = PySet::new();
     let mut saved: Vec<PySet> = Vec::new();
     let mut out = Vec::new();
     for (op, arg) in ops {
@@ -300,4 +345,16 @@ pub fn py_set_replay(ops: Vec<(String, Vec<u128>)>) -> PyResult<Vec<Vec<u128>>> 
         out.push(cur.iter().collect());
     }
     Ok(out)
+}
+
+/// Test face: the iteration order of a set of int pairs built by adding
+/// `pairs` in order, then copied (`set(s)`) when `copy`.
+#[pyfunction]
+pub fn py_pair_set_order(pairs: Vec<(i128, i128)>, copy: bool) -> Vec<(i128, i128)> {
+    let mut s: PySet<[i128; 2]> = PySet::new();
+    for (a, b) in pairs {
+        s.add([a, b]);
+    }
+    let s = if copy { s.copy() } else { s };
+    s.iter().map(|[a, b]| (a, b)).collect()
 }

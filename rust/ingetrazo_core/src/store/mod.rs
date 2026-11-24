@@ -36,6 +36,8 @@ mod landing;
 pub(crate) mod push_band;
 mod soften;
 mod stitch_command;
+mod push_rebuild;
+pub use push_rebuild::{Fresh, Paint};
 mod erase;
 mod drawing_face;
 pub(crate) use drawing_face::Outline;

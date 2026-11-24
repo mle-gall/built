@@ -78,3 +78,23 @@ def test_large_sets_and_both_difference_paths():
            ("minus", [0]), ("copy", [0]), ("new", big[:1000]), ("minus", [1]),
            ("new", big[:40]), ("update", [1])]
     assert replay(ops) == _python(ops)
+
+
+@pytest.mark.parametrize("seed", range(40))
+def test_pair_sets_iterate_as_cpython(seed):
+    """Sets of plane cells (int pairs, negative ones and big ones too), as
+    the planar arrangement and the outline tracer build them."""
+    order = getattr(ingetrazo_core, "py_pair_set_order", None)
+    if order is None:
+        pytest.skip("engine without py_pair_set_order")
+    rng = random.Random(seed)
+    span = rng.choice([3, 50, 10 ** 6, 2 ** 62, 2 ** 70])
+    pairs = [(rng.randrange(-span, span), rng.randrange(-span, span))
+             for _ in range(rng.randrange(0, rng.choice([6, 40, 3000])))]
+    if pairs and rng.random() < 0.5:
+        pairs += rng.sample(pairs, len(pairs) // 2)      # repeats
+    s = set()
+    for p in pairs:
+        s.add(p)
+    assert order(pairs, False) == list(s)
+    assert order(pairs, True) == list(set(s))

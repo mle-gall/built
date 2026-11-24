@@ -1066,10 +1066,11 @@ class PushPullOperation:
             # on it: run the same fixpoint plane rebuild as the extrude path
             # over every face the translation touched.
             if not _mesh_is_flat(scene.mesh):
-                fresh = {f for f in scene.mesh.faces
-                         if any(_key(v) in seedkeys for v in f.vertices)}
-                self._rebuild_planes_fixpoint(scene.mesh, fresh, seedkeys,
-                                              removing=d < 0)
+                listed = [f for f in scene.mesh.faces
+                          if any(_key(v) in seedkeys for v in f.vertices)]
+                self._rebuild_planes_fixpoint(scene.mesh, set(listed), seedkeys,
+                                              removing=d < 0,
+                                              native=([f.key for f in listed], None, None))
             else:
                 # A full collapse flattened the solid. The cap may have landed
                 # on a *subdivided* base (hole-bearing cycles never dedupe as
@@ -1192,6 +1193,7 @@ class PushPullOperation:
         if far is not None and far[1] and far[0].face in scene.mesh.faces:
             far[0].face.attrs = dict(far[1])
         new_faces = None
+        now = None
         if before_fkeys is not None:
             now = push_scans.live_keys(scene.mesh, "face")
             if now is not None:
@@ -1231,7 +1233,9 @@ class PushPullOperation:
         if solid:
             self._rebuild_planes_fixpoint(scene.mesh, set(new_faces), seedkeys,
                                           keep_mode=self._keep_base,
-                                          removing=d < 0)
+                                          removing=d < 0,
+                                          native=(None, now, before_fkeys)
+                                          if now is not None else None)
         # Give any closed solid a consistent outward orientation — every face's
         # normal pointing out. The extrude can otherwise commit a closed solid
         # wound inconsistently (a flipped cap, or the base of a first flat→solid
@@ -1288,7 +1292,7 @@ class PushPullOperation:
     @staticmethod
     def _rebuild_planes_fixpoint(mesh, fresh: set, seedkeys: set,
                                  keep_mode: bool = False,
-                                 removing: bool = True) -> None:
+                                 removing: bool = True, native=None) -> None:
         """Deterministic root-fix (path C): recompute each touched plane's
         faces from its edges — the planar arrangement finds every region,
         winding-classification keeps the ones inside the solid and drops
@@ -1306,7 +1310,15 @@ class PushPullOperation:
         adds as fresh re-flags the affected planes next round, and
         ``apply_rebuild`` returning False on a stable plane makes the loop
         terminate. Plane keys are sorted, so the whole pass is
-        order-deterministic. No case tree."""
+        order-deterministic. No case tree.
+
+        On a store the whole of it runs natively (``Store::
+        rebuild_push_planes``, ``native``: how ``fresh`` was made, see
+        :func:`core.cap_rebuild.rebuild_push_planes_native`)."""
+        from core.cap_rebuild import rebuild_push_planes_native
+        if native is not None and rebuild_push_planes_native(
+                mesh, native, seedkeys, keep_mode, removing):
+            return
         # The push's own rims, captured by *position* before any rebuild (the
         # objects die as rounds consolidate them): plane edges lying on none
         # of these are the user's hand-drawn subdivisions and survive the

@@ -646,3 +646,77 @@ def seam_planes(mesh, new_faces) -> list:
                         elif key not in seen:
                             seen[key] = (False, origin, cn)
     return [(o, n) for _a, o, n in seen.values()]
+
+
+def _frozen(x):
+    """A hashable stand-in for an attrs value: equal values freeze equal."""
+    if isinstance(x, dict):
+        return ("d", tuple(sorted((k, _frozen(v)) for k, v in x.items())))
+    if isinstance(x, list):
+        return ("l", tuple(_frozen(v) for v in x))
+    if isinstance(x, tuple):
+        return ("t", tuple(_frozen(v) for v in x))
+    hash(x)
+    return x
+
+
+def paint_classes(mesh):
+    """``(own, rows, reps)`` for the native rebuild: the paint class of each
+    face's own attrs dict and of each attribute-table row (equal dicts, one
+    class; 0 for none) and a dict per class."""
+    from core.store_mesh import _attribute_owner
+    owner = _attribute_owner(mesh)
+    reps = [{}]
+    index: dict = {}
+
+    def cls(d):
+        if not d:
+            return 0
+        try:
+            key = _frozen(d)
+        except TypeError:
+            key = None
+        if key is not None:
+            c = index.get(key)
+            if c is None:
+                c = index[key] = len(reps)
+                reps.append(d)
+            return c
+        for c, r in enumerate(reps):
+            if c and r == d:
+                return c
+        reps.append(d)
+        return len(reps) - 1
+
+    rows = [cls(r) for r in owner["_attr_table"]]
+    own = {k: cls(d) for k, d in owner["_attr_own"].items()}
+    return own, rows, reps
+
+
+def rebuild_push_planes_native(mesh, native, seedkeys, keep_mode, removing) -> bool:
+    """The push's plane-rebuild fixpoint and trailing stitch in one store
+    call (``Store::rebuild_push_planes``). ``native``: ``(listed, now,
+    before)`` face keys saying how the fresh faces were made. False when the
+    mesh is not a store or the store refused (nothing changed)."""
+    from core.store_mesh import (FaceView, StoreMesh, _copy_attrs, _fallback,
+                                 _hypot, _note_refusal)
+    h = _hypot()
+    if type(mesh) is not StoreMesh or h is None:
+        return False
+    listed, now, before = native
+    own, rows, reps = paint_classes(mesh)
+    try:
+        (painted, deduped, bumps), _ch = mesh._store.rebuild_push_planes(
+            listed, now, before, sorted(seedkeys or ()), keep_mode, removing,
+            own, rows, sys.version_info >= (3, 12), h)
+    except _fallback():
+        _note_refusal("rebuild_push_planes")
+        return False
+    mesh._dirty(bumps)
+    for k, c in painted:
+        FaceView(mesh, k).attrs = _copy_attrs(reps[c])
+    for d, k in deduped:
+        drop, keep = FaceView(mesh, d), FaceView(mesh, k)
+        if drop.attrs and not keep.attrs:
+            keep.attrs = dict(drop.attrs)
+    return True

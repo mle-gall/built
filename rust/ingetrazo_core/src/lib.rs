@@ -121,6 +121,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(location::utm_inverse, m)?)?;
     m.add_function(wrap_pyfunction!(push_command::rebuild_push_planes, m)?)?;
     m.add_function(wrap_pyfunction!(pyset::py_set_replay, m)?)?;
+    m.add_function(wrap_pyfunction!(pyset::py_pair_set_order, m)?)?;
     m.add_function(wrap_pyfunction!(store::arrangement::arrange_plane, m)?)?;
     m.add_function(wrap_pyfunction!(store::arrangement::plane_split_graph, m)?)?;
     m.add_function(wrap_pyfunction!(store::arrangement::plane_segment_parameter, m)?)?;

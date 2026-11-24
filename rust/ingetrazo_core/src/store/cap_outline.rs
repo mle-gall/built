@@ -16,17 +16,33 @@ pub(super) fn on_segment(p: Point, [a, b]: [Point; 2], tol: f64) -> bool {
         && dot <= x * x + y * y + tol
 }
 
+/// How angle ties around a vertex are broken: as the old tracer's Python
+/// set ordered the neighbours (that set, or its replay in Rust), or not at
+/// all (the trace declines).
+#[derive(Clone, Copy)]
+pub(super) enum Ties<'py> {
+    Python(Python<'py>),
+    Native,
+    Decline,
+}
+
 /// Store-only callers can decline ties when no interpreter is attached.
 pub fn trace(regions: Vec<Region>, keep: &[[Point; 2]], tol: f64) -> Option<Vec<Vec<Point>>> {
-    trace_ordered(regions, keep, tol, None).ok().flatten()
+    trace_ordered(regions, keep, tol, Ties::Decline).ok().flatten()
+}
+
+/// `trace` with ties broken as the Python set broke them, in Rust.
+pub(super) fn trace_native(regions: Vec<Region>, keep: &[[Point; 2]], tol: f64) -> Option<Vec<Vec<Point>>> {
+    trace_ordered(regions, keep, tol, Ties::Native).ok().flatten()
 }
 
 pub(super) fn trace_ordered(
     regions: Vec<Region>,
     keep: &[[Point; 2]],
     tol: f64,
-    py: Option<Python<'_>>,
+    ties: Ties<'_>,
 ) -> PyResult<Option<Vec<Vec<Point>>>> {
+    let record = !matches!(ties, Ties::Decline);
     let mut encounter = Vec::new();
     let mut coords = BTreeMap::new();
     let mut counts = BTreeMap::new();
@@ -38,7 +54,7 @@ pub(super) fn trace_ordered(
                 let Some(cell) = Cell::at(p, tol) else {
                     return Ok(None);
                 };
-                if py.is_none() && cell.point().iter().any(|v| v.abs() >= i64::MAX as f64) {
+                if matches!(ties, Ties::Decline) && cell.point().iter().any(|v| v.abs() >= i64::MAX as f64) {
                     return Ok(None);
                 }
                 coords.insert(cell, p);
@@ -46,7 +62,7 @@ pub(super) fn trace_ordered(
             }
             for (&a, &b) in cells.iter().zip(cells.iter().cycle().skip(1)) {
                 let count = counts.entry((a, b)).or_insert(0usize);
-                if *count == 0 && py.is_some() {
+                if *count == 0 && record {
                     encounter.push((a, b));
                 }
                 *count += 1;
@@ -110,18 +126,35 @@ pub(super) fn trace_ordered(
             .collect();
         angles.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
         if angles.windows(2).any(|p| p[0].0 == p[1].0) {
-            let Some(py) = py else { return Ok(None) };
             // The old tracer inserts surviving neighbours into a Python set
             // in directed-edge encounter order, then stable-sorts by angle.
-            let set = PySet::empty(py)?;
-            for &(a, b) in &encounter {
-                if net.contains_key(&(a, b)) && (a == k || b == k) {
-                    set.add(if a == k { b } else { a }.tuple(py)?)?;
+            let around = encounter
+                .iter()
+                .filter(|&&(a, b)| net.contains_key(&(a, b)) && (a == k || b == k))
+                .map(|&(a, b)| if a == k { b } else { a });
+            let cells: Vec<Cell> = match ties {
+                Ties::Decline => return Ok(None),
+                Ties::Python(py) => {
+                    let set = PySet::empty(py)?;
+                    for c in around {
+                        set.add(c.tuple(py)?)?;
+                    }
+                    set.iter()
+                        .map(|cell| Ok(Cell::at(cell.extract()?, 1.).unwrap()))
+                        .collect::<PyResult<_>>()?
                 }
-            }
+                Ties::Native => {
+                    let mut set: crate::pyset::PySet<[i128; 2]> = crate::pyset::PySet::new();
+                    for c in around {
+                        set.add(super::arrangement::cell_key(c));
+                    }
+                    set.iter()
+                        .map(|[a, b]| Cell::at([a as f64, b as f64], 1.).unwrap())
+                        .collect()
+                }
+            };
             angles.clear();
-            for cell in set.iter() {
-                let key = Cell::at(cell.extract()?, 1.).unwrap();
+            for key in cells {
                 let q = coords[&key];
                 angles.push(((q[1] - p[1]).atan2(q[0] - p[0]), key));
             }
