@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Metadata carried in .skp VFF model.dat records. Tags are little-endian.
+mod packed;
+mod payload;
+mod dispatch;
+pub use dispatch::register as register_dispatch;
 mod lifetime;
 pub use lifetime::{image_stage_geometry, FlatGeometry, PrototypeGeometry};
 mod finish;

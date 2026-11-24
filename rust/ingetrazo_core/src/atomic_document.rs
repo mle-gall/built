@@ -71,6 +71,11 @@ impl AtomicDocument {
             }
         }
     }
+    pub fn pending_path(&self) -> io::Result<&std::path::Path> {
+        self.temp
+            .as_deref()
+            .ok_or_else(|| io::Error::other("closed output"))
+    }
     pub fn output(&mut self) -> io::Result<&mut File> {
         self.file
             .as_mut()

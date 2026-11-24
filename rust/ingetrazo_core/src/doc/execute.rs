@@ -2,7 +2,7 @@
 //! The document transaction enclosing a host tool invocation.
 use super::py::PyTransaction;
 use pyo3::prelude::*;
-use pyo3::types::PyList;
+use pyo3::types::{PyDict, PyList};
 use std::collections::HashSet;
 
 fn owner<'py>(mesh: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -24,7 +24,8 @@ pub(super) fn execute<'py>(
     let active = scene.getattr("mesh")?;
     let parts = PyList::empty(py);
     let mutation = api.getattr("SnapshotMutation")?;
-    let snapshot_commands = (&mutation, api.getattr("SnapshotCompound")?).into_pyobject(py)?;
+    let compound = api.getattr("SnapshotCompound")?;
+    let snapshot_commands = (&mutation, &compound).into_pyobject(py)?;
     let auto_tags = (
         api.getattr("AddDimensionCommand")?,
         api.getattr("AddTextLabelCommand")?,
@@ -42,6 +43,7 @@ pub(super) fn execute<'py>(
     let depth: usize = doc.call_method1("begin", (document,))?.extract()?;
     let mut rollback = None;
     let mut annotation = None;
+    let mut share_before = false;
     let result = (|| {
         if !parts.is_empty() && replay {
             cmd.setattr("_journal_geometry", depth == 1)?;
@@ -72,7 +74,21 @@ pub(super) fn execute<'py>(
         if !owners.contains(&owner(&active)?.as_ptr()) {
             rollback = Some(active.call_method0("capture_state")?);
         }
-        cmd.call_method1("do", (&scene,))?;
+        // A fresh materialised drawing step and the transaction both need the
+        // same pre-edit state. Keep the transaction's strong reference until
+        // document commit, including any failing tag or attachment callbacks.
+        share_before = rollback.is_some()
+            && cmd.get_type().is(&compound)
+            && cmd.getattr("after")?.is_none()
+            && !cmd.getattr("_journal_geometry")?.is_truthy()?
+            && !cmd.getattr("__dict__")?.contains("do")?;
+        if share_before {
+            let kw = PyDict::new(py);
+            kw.set_item("transaction_captured_before", true)?;
+            cmd.call_method("do", (&scene,), Some(&kw))?;
+        } else {
+            cmd.call_method1("do", (&scene,))?;
+        }
         if !tag_objects.is_none() {
             host.call_method0("_follow_text_placements")?;
         }
@@ -86,6 +102,11 @@ pub(super) fn execute<'py>(
         }
         doc.call_method0("commit")
     })();
+    // Publish only after user callbacks finished. In particular a callback must
+    // never be able to mutate the transaction's private recovery dictionary.
+    if let Some(state) = rollback.as_ref().filter(|_| share_before) {
+        cmd.setattr("before", state)?;
+    }
     let txn = match result {
         Ok(txn) => txn,
         Err(error) => {

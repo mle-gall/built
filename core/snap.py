@@ -394,23 +394,11 @@ def _two_point_snap(
     lines meet — coplanar within a millimetre) within the snap radius of
     the cursor. Green point, one dotted guide from each point in its axis
     colour."""
-    pts = [p for p in refs if p is not None]
-    if len(pts) < 2:
+    hit = kernel.cross_guide(refs, _axis_tuples(), (cx, cy), threshold_px, world_to_pixel, is_occluded)
+    if hit is None:
         return None
-    best = None
-    hits = kernel.reference_crossings([p.toTuple() for p in pts], _axis_tuples())
-    for point, i, k, j, l in hits:
-        cross = QVector3D(*point)
-        pixel = world_to_pixel(cross)
-        if pixel is None:
-            continue
-        d = math.hypot(pixel[0]-cx, pixel[1]-cy)
-        if d <= threshold_px and (best is None or d < best[0]):
-            if is_occluded is None or not is_occluded(cross):
-                best = (d, cross, pts[i], "xyz"[k], pts[j], "xyz"[l])
-    if best is None:
-        return None
-    _, cross, p, ka, q, kb = best
+    cross, p, k, q, l = hit
+    ka, kb = "xyz"[k], "xyz"[l]
     return SnapResult(cross, "from_point", COLOR_ENDPOINT,
                       guide=(QVector3D(p), cross), guide_color=AXIS_COLORS[ka],
                       guides=[(QVector3D(q), cross, AXIS_COLORS[kb])])
@@ -438,27 +426,13 @@ def _first_point_from_point(
     free placements) — reads the foot off the cursor RAY instead, so an
     elevated corner still offers its horizontal 'level with' line while the
     cursor sits on the ground (#1095)."""
-    if free_3d and project_onto_line is not None:
-        feet = ((axis, project_onto_line(ref, a)) for axis, a in _AXIS_VECTORS.items())
-    else:
-        feet = (("xyz"[i], QVector3D(*p)) for i, p in kernel.reference_feet(
-            ref.toTuple(), candidate.toTuple(), _axis_tuples(),
-            plane_normal.toTuple() if plane_normal is not None else None))
-    best = None
-    for axis, foot in feet:
-        fp = world_to_pixel(foot)
-        if fp is None:
-            continue
-        d = math.hypot(fp[0] - cx, fp[1] - cy)
-        if d > threshold_px:
-            continue
-        if is_occluded is not None and is_occluded(foot):
-            continue
-        if best is None or d < best[0]:
-            best = (d, foot, axis)
-    if best is None:
+    hit = kernel.axis_guide(ref, candidate, tuple(_AXIS_VECTORS.values()), (cx, cy),
+                            threshold_px, world_to_pixel, is_occluded, plane_normal,
+                            project_onto_line if free_3d else None)
+    if hit is None:
         return None
-    _, foot, axis = best
+    k, foot = hit
+    axis = "xyz"[k]
     return SnapResult(foot, "from_point", COLOR_ENDPOINT,
                       guide=(QVector3D(ref), foot),
                       guide_color=AXIS_COLORS[axis], axis=axis)
@@ -493,43 +467,16 @@ def _in_plane_with_point_snap(
     exactly one of those when the point is on the same wall, and the foot
     is then the same point) — an inference derived from a point never
     beats the point, and this one never beats the line it generalises."""
-    if plane_normal is None or plane_normal.length() < 1e-9:
+    hit = kernel.plane_guide(ref, candidate, plane_normal, _axis_tuples(), (cx, cy),
+                             threshold_px, world_to_pixel, is_occluded)
+    if hit is None:
         return None
-    best = None
-    alignments = kernel.plane_alignments(ref.toTuple(), candidate.toTuple(),
-                                        plane_normal.toTuple(), _axis_tuples())
-    for k, coords, direction in alignments:
-        axis, foot, d = "xyz"[k], QVector3D(*coords), QVector3D(*direction)
-        fp = world_to_pixel(foot)
-        if fp is None:
-            continue
-        dist = math.hypot(fp[0] - cx, fp[1] - cy)
-        if dist > threshold_px:
-            continue
-        if is_occluded is not None and is_occluded(foot):
-            continue
-        if best is None or dist < best[0]:
-            best = (dist, foot, axis, d)
-    if best is None:
-        return None
-    _, foot, axis, d = best
-    # The reference's own projection onto the line: the guide's elbow.
-    elbow = foot + d * QVector3D.dotProduct(ref - foot, d)
-
-    def _colour_along(v):
-        if v.length() < 1e-6:
-            return COLOR_EXTENSION
-        u = v.normalized()
-        k = max(_AXIS_VECTORS,
-                key=lambda k: abs(QVector3D.dotProduct(u, _AXIS_VECTORS[k])))
-        return AXIS_COLORS[k]
-
-    guides = []
-    if (elbow - QVector3D(ref)).length() > 1e-4:
-        guides.append((QVector3D(ref), elbow, _colour_along(elbow - ref)))
-    return SnapResult(foot, "aligned", COLOR_ENDPOINT, axis=axis,
-                      guide=(elbow, foot), guide_color=_colour_along(foot - elbow),
-                      guides=guides or None)
+    k, foot, elbow, first, second, extra = hit
+    def color(index):
+        return COLOR_EXTENSION if index is None else AXIS_COLORS["xyz"[index]]
+    return SnapResult(foot, "aligned", COLOR_ENDPOINT, axis="xyz"[k], guide=(elbow, foot),
+                      guide_color=color(second),
+                      guides=[(QVector3D(ref), elbow, color(first))] if extra else None)
 
 
 def _from_point_snap(
@@ -555,25 +502,11 @@ def _from_point_snap(
     how the lock is used: Tape from the wall's bottom edge, ↑, hover
     the window's corner, and the guide takes the window's height (Rafael,
     04:20: «cuando pulso la flechita para subir no me hace el snap»)."""
-    if start_point is None or draw_dir.length() < 1e-6:
+    if start_point is None:
         return None
-    if line_dir is not None:
-        if line_dir.length() < 1e-6:
-            return None
-        adir = QVector3D(line_dir).normalized()
-    else:
-        u = draw_dir.normalized()
-        # The draw must be along an axis; orient that axis along the draw direction.
-        adir = None
-        cos_axis = math.cos(math.radians(axis_deg))
-        for a in _AXIS_VECTORS.values():
-            dp = QVector3D.dotProduct(u, a)
-            if abs(dp) >= cos_axis:
-                adir = a if dp > 0 else -a
-                break
-        if adir is None:
-            return None  # diagonal draw — no clean 'from point'
-
+    adir = kernel.reference_direction(draw_dir, line_dir, _axis_tuples(), axis_deg)
+    if adir is None:
+        return None
     if query is None:
         from core.snap_query import make_query
         query = make_query(scene.edges, world_to_pixel, (cx, cy))
@@ -600,17 +533,9 @@ def _from_point_snap(
     if body is None:
         return None
     ref = QVector3D(*body[0])
-    foot = start_point + adir * QVector3D.dotProduct(ref - start_point, adir)
-    if (foot - ref).length() < 1e-4:
-        return None
-    pixel = world_to_pixel(foot)
-    if pixel is None:
-        return None
-    distance = math.dist(pixel, (cx, cy))
-    ref_pixel = world_to_pixel(ref)
-    if ref_pixel is not None and (is_occluded is None or not is_occluded(ref)):
-        distance = min(distance, math.dist(ref_pixel, (cx, cy)))
-    if distance > threshold_px or (is_occluded is not None and is_occluded(foot)):
+    foot = kernel.body_reference(start_point, adir, ref, (cx, cy), threshold_px,
+                                 world_to_pixel, is_occluded)
+    if foot is None:
         return None
     return _from_point_result(foot, ref, "from_point", COLOR_ENDPOINT)
 
@@ -622,11 +547,8 @@ def _from_point_result(foot, ref, kind, color):
     # blue» (#711).
     guide_color = None
     if kind == "from_point":
-        gdn = (foot - ref).normalized()
-        gaxis = max(_AXIS_VECTORS,
-                    key=lambda k: abs(QVector3D.dotProduct(gdn, _AXIS_VECTORS[k])))
-        along = abs(QVector3D.dotProduct(gdn, _AXIS_VECTORS[gaxis]))
-        guide_color = AXIS_COLORS[gaxis] if along > 0.999 else COLOR_EXTENSION
+        axis = kernel.reference_colour(foot, ref, _axis_tuples())
+        guide_color = AXIS_COLORS['xyz'[axis]] if axis is not None else COLOR_EXTENSION
     return SnapResult(foot, kind, color, guide=(ref, foot),
                       guide_color=guide_color)
 
@@ -826,67 +748,14 @@ def _lock_reference_snap(
                                   guide=(end, hit), guide_color=COLOR_EXTENSION)
     if hover_plane is not None:
         p0, n, ref = hover_plane
-        den = QVector3D.dotProduct(n, line_dir)
-        if abs(den) > 1e-6:
-            s = QVector3D.dotProduct(n, p0 - start_point) / den
-            hit = start_point + line_dir * s
-            # A plane through the start meets the lock line AT the start:
-            # nothing to offer, the line leaves the plane there. Offering
-            # it pinned a Z lock from a box's top corner to that corner
-            # while the cursor, over the top face, went up (upstream #1085,
-            # seen on the Metal view, whose hover edge is visible-only).
-            if abs(s) > 1e-6 and world_to_pixel(hit) is not None:
-                return SnapResult(hit, "intersection_face",
-                                  COLOR_LOCK_INTERSECT, guide=(ref, hit),
-                                  guide_color=COLOR_EXTENSION)
+        hit = kernel.lock_plane(start_point, line_dir, p0, n)
+        if hit is not None and world_to_pixel(hit) is not None:
+            return SnapResult(hit, "intersection_face", COLOR_LOCK_INTERSECT,
+                              guide=(ref, hit), guide_color=COLOR_EXTENSION)
     return None
 
 
-def _resolve_point_candidates(candidates, is_occluded, are_occluded=None):
-    """Nearest visible point, preferring the drawing context in a near-tie.
-
-    Candidates are (distance, point, kind, color, context, occludable).
-    Anchor the tie window to the nearest VISIBLE candidate, not absolute
-    half-pixel buckets or a hidden point. Original order breaks remaining
-    ties so named points keep precedence. Cache visibility across both passes.
-    """
-    if not candidates:
-        return None
-    ordered = sorted(enumerate(candidates), key=lambda c: c[1][0])
-    hidden = {}
-
-    def key(candidate):
-        return candidate[1].toTuple()
-
-    def one(candidate):
-        if not candidate[5] or is_occluded is None:
-            return False
-        point_key = key(candidate)
-        if point_key not in hidden:
-            hidden[point_key] = is_occluded(candidate[1])
-        return hidden[point_key]
-
-    def many(batch):
-        unseen = {}
-        for candidate in batch:
-            if candidate[5] and key(candidate) not in hidden:
-                unseen.setdefault(key(candidate), candidate[1])
-        if unseen:
-            hidden.update(zip(unseen, are_occluded(list(unseen.values()))))
-        return [one(candidate) for candidate in batch]
-
-    nearest = _first_visible([c for _i, c in ordered],
-                             one if is_occluded is not None else None,
-                             many if are_occluded is not None else None)
-    if nearest is None:
-        return None
-    limit = ordered[nearest][1][0] + _TIE_PX
-    ties = [(i, c) for i, c in ordered[nearest:] if c[0] < limit]
-    ties.sort(key=lambda c: (c[1][4] is not None, c[0]))
-    for _i, candidate in ties:
-        if not one(candidate):
-            return candidate
-    return None
+_resolve_point_candidates = kernel.resolve_points
 
 
 def _lock_line_snaps(
@@ -959,142 +828,13 @@ def _lock_line_snaps(
                                 None, hover_plane)
 
 
-#: Two point candidates closer than this on screen are a tie, and the tie
-#: goes to the drawing context (see ``_resolve_point_candidates``).
-_TIE_PX = 0.5
+_first_visible = kernel.first_visible
 
 
-def _first_visible(points, is_occluded, are_occluded=None):
-    """Index of the first of ``points`` that is not occluded, or ``None``.
-
-    The first is asked alone (it is usually the answer); past it the rest go
-    in batches of 8, 16, 32… through ``are_occluded`` when there is one, as
-    ``compute_snap``'s ``_resolve`` asks its candidates: a dense model hides
-    dozens behind the first wall, and one ray each was the hover's cost."""
-    if not points:
-        return None
-    if is_occluded is None:
-        return 0
-    if are_occluded is None:
-        return next((i for i, p in enumerate(points) if not is_occluded(p)),
-                    None)
-    if not is_occluded(points[0]):
-        return 0
-    k, size = 1, 8
-    while k < len(points):
-        batch = points[k:k + size]
-        for j, h in enumerate(are_occluded(batch)):
-            if not h:
-                return k + j
-        k += size
-        size *= 2
-    return None
-
-
-def _closest_on_circle(circ, candidate_world, cx, cy, world_to_pixel, et):
-    """The nearest point on a guide circle's rim to the cursor, as
-    ``(screen_distance_px, world_point)`` when within ``et``, else
-    ``(None, None)``.
-
-    The circle is analytic: the candidate is projected onto the circle's
-    plane and then radially onto the rim, so the snap is exact, not a
-    polygon's vertex.
-    """
-    c = circ.center
-    n = circ.normal
-    r = float(circ.radius)
-    if r <= 0.0:
-        return None, None
-    proj = candidate_world - n * QVector3D.dotProduct(candidate_world - c, n)
-    v = proj - c
-    if v.length() < 1e-9:
-        # On the circle's axis every rim point is equally near: pick the
-        # circle's own x-axis as a stable representative.
-        from core.axes import plane_axes
-        u, _w = plane_axes(n)
-        v = u * r
-    rim = c + v.normalized() * r
-    px = world_to_pixel(rim)
-    if px is None:
-        return None, None
-    d = math.hypot(px[0] - cx, px[1] - cy)
-    return (d, rim) if d <= et else (None, None)
-
-
-def _circle_circle_intersections(c1, r1, n1, c2, r2, n2):
-    """The points where two circles meet: a list of 0, 1 or 2 ``QVector3D``.
-
-    The circles must be coplanar (parallel normals, same plane); otherwise
-    they do not meet in a point. Exact — no polygon vertices involved.
-    """
-    if r1 <= 0.0 or r2 <= 0.0:
-        return []
-    if abs(abs(QVector3D.dotProduct(n1, n2)) - 1.0) > 1e-6:
-        return []                    # not coplanar
-    d = c2 - c1
-    dist = d.length()
-    if dist < 1e-12:
-        return []                    # concentric: no two points to offer
-    if abs(QVector3D.dotProduct(d, n1)) > 1e-6 * max(1.0, dist):
-        return []                    # parallel planes, offset apart
-    dd = d / dist
-    a = (dist * dist + r1 * r1 - r2 * r2) / (2.0 * dist)
-    h2 = r1 * r1 - a * a
-    if h2 < -1e-12:
-        return []                    # separate, or one inside the other
-    h = math.sqrt(max(h2, 0.0))
-    mid = c1 + dd * a
-    perp = QVector3D.crossProduct(n1, dd)
-    if h < 1e-9:
-        return [mid]                 # tangent
-    return [mid + perp * h, mid - perp * h]
-
-
-def _segment_circle_intersections(a, b, c, r, n):
-    """Where a finite segment ``a→b`` meets a circle (centre ``c``, radius
-    ``r``, unit normal ``n``): 0, 1 or 2 points, clamped to the segment."""
-    if r <= 0.0:
-        return []
-    ab = b - a
-    lab2 = QVector3D.dotProduct(ab, ab)
-    if lab2 < 1e-12:
-        return []
-    denom = QVector3D.dotProduct(ab, n)
-    if abs(denom) > 1e-9 * math.sqrt(lab2):
-        # The segment's line pierces the circle's plane once.
-        t = QVector3D.dotProduct(c - a, n) / denom
-        if t < 0.0 or t > 1.0:
-            return []
-        p = a + ab * t
-        return [p] if abs((p - c).length() - r) < 1e-6 else []
-    # The segment lies in (or parallel to) the circle's plane.
-    if abs(QVector3D.dotProduct(c - a, n)) > 1e-6:
-        return []                    # parallel, not in the plane
-    f = a - c
-    dd = QVector3D.dotProduct(ab, ab)
-    df = QVector3D.dotProduct(ab, f)
-    ff = QVector3D.dotProduct(f, f)
-    disc = df * df - dd * (ff - r * r)
-    if disc < 0.0:
-        return []
-    sq = math.sqrt(max(disc, 0.0))
-    out = []
-    for t in ((-df - sq) / dd, (-df + sq) / dd):
-        if 0.0 <= t <= 1.0:
-            p = a + ab * t
-            if not out or (p - out[-1]).length() > 1e-6:
-                out.append(p)
-    return out
-
-
-def _circle_quadrants(c, r, n):
-    """The four cardinal points of a circle (centre ``c``, radius ``r``,
-    plane normal ``n``): N/E/S/W in the circle's own basis."""
-    if r <= 0.0:
-        return []
-    from core.axes import plane_axes
-    u, v = plane_axes(n)
-    return [c + u * r, c - u * r, c + v * r, c - v * r]
+_closest_on_circle = kernel.closest_rim
+_circle_circle_intersections = kernel.circle_crossings
+_segment_circle_intersections = kernel.segment_crossings
+_circle_quadrants = kernel.quadrants
 
 
 def _circle_tangent_points(c, r, n, p):

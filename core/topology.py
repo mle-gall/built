@@ -308,11 +308,7 @@ def find_containing_face(
     return kernel.containing_object(faces, loop, exclude)
 
 
-def _loop_edges(loop: list[QVector3D]) -> list[frozenset]:
-    n = len(loop)
-    return [
-        frozenset((_key(loop[i]), _key(loop[(i + 1) % n]))) for i in range(n)
-    ]
+_loop_edges = kernel.loop_edges
 
 
 def orphaned_edges_at(
@@ -337,32 +333,9 @@ def _faces_coplanar(n1: QVector3D, n2: QVector3D) -> bool:
     return abs(QVector3D.dotProduct(n1.normalized(), n2.normalized())) > 0.999
 
 
-def _face_all_edges(face: Face) -> set:
-    edges = set(_loop_edges(face.vertices))
-    for hole in face.holes:
-        edges.update(_loop_edges(hole))
-    return edges
-
-
+_face_all_edges = kernel.face_edges
+_segment_on_face_boundary = kernel.boundary_carries
 _point_on_seg_incl = kernel.object_drawing.point_on_segment
-
-
-def _segment_on_face_boundary(a: QVector3D, b: QVector3D, face: Face) -> bool:
-    """Whether segment ``a``–``b`` lies on a boundary edge of ``face`` (a
-    possibly-shorter sub-segment of one of its edges).
-
-    Checks the outer loop *and* every hole: a face stacked on another sits with
-    its base edges on the host's *hole* boundary (the opening the stack punched),
-    so a perpendicular neighbour must be found there too — otherwise pushing the
-    stack's side wall is misread as a free extrusion."""
-    for loop in (face.vertices, *face.holes):
-        n = len(loop)
-        for i in range(n):
-            p = loop[i]
-            q = loop[(i + 1) % n]
-            if _point_on_seg_incl(a, p, q) and _point_on_seg_incl(b, p, q):
-                return True
-    return False
 
 
 def refine_loop_with_points(
@@ -421,31 +394,7 @@ def classify_push_edge(
         if store is not None:
             kind, k = store.classify_segment(face.key, a.toTuple(), b.toTuple(), candidates, _hypot())
             return kind, None if k is None else FaceView(face._m, k)
-    if memo is None:
-        memo = {}
-    split = memo.get("split")
-    if split is None or split[0] != face:
-        fn = face.normal()
-        coplanar, others = [], []
-        for g in faces:
-            if g == face:
-                continue
-            (coplanar if _faces_coplanar(fn, g.normal()) else others).append(g)
-        split = memo["split"] = (face, coplanar, others)
-        memo["edges"] = {}
-    _, coplanar, others = split
-    edges = memo["edges"]
-    eset = frozenset((_key(a), _key(b)))
-    for g in coplanar:
-        all_edges = edges.get(g)
-        if all_edges is None:
-            all_edges = edges[g] = _face_all_edges(g)
-        if eset in all_edges or _segment_on_face_boundary(a, b, g):
-            return ("coplanar", g)
-    for s in others:
-        if _segment_on_face_boundary(a, b, s):
-            return ("perp", s)
-    return ("free", None)
+    return kernel.classify_object_edge(face, a, b, faces, memo)
 
 
 def face_is_bordered(face: Face, faces: Iterable[Face]) -> bool:

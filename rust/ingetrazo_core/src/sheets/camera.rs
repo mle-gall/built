@@ -70,7 +70,7 @@ impl Default for Cam {
 
 impl Cam {
     pub fn eye(&self) -> DVec3 {
-        let (cp, sp, cy, sy) = (self.pitch.cos(), self.pitch.sin(), self.yaw.cos(), self.yaw.sin());
+        let (cp, sp, cy, sy) = (crate::pyfloat::cos(self.pitch), crate::pyfloat::sin(self.pitch), crate::pyfloat::cos(self.yaw), crate::pyfloat::sin(self.yaw));
         self.target + DVec3::new(self.distance * cp * cy, self.distance * cp * sy, self.distance * sp)
     }
     pub fn forward(&self) -> DVec3 {
@@ -94,7 +94,7 @@ impl Cam {
             self.up
         } else {
             let sign = if self.pitch > 0.0 { -1.0 } else { 1.0 };
-            DVec3::new(sign * self.yaw.cos(), sign * self.yaw.sin(), 0.0)
+            DVec3::new(sign * crate::pyfloat::cos(self.yaw), sign * crate::pyfloat::sin(self.yaw), 0.0)
         };
         if self.roll_deg != 0.0 && self.level_forward().is_none() {
             up = DQuat::from_axis_angle(f.normalize_or_zero(), self.roll_deg.to_radians()) * up;
@@ -236,7 +236,7 @@ impl Cam {
             return;
         }
         let th = deg.to_radians();
-        let (cp, sp, cy, sy) = (self.pitch.cos(), self.pitch.sin(), self.yaw.cos(), self.yaw.sin());
+        let (cp, sp, cy, sy) = (crate::pyfloat::cos(self.pitch), crate::pyfloat::sin(self.pitch), crate::pyfloat::cos(self.yaw), crate::pyfloat::sin(self.yaw));
         let f = DVec3::new(-cp * cy, -cp * sy, -sp);
         let u0 = self.up_vector();
         let r = DVec3::new(f.y * u0.z - f.z * u0.y, f.z * u0.x - f.x * u0.z, f.x * u0.y - f.y * u0.x);
@@ -246,7 +246,7 @@ impl Cam {
         }
         let r = r / rn;
         let u = DVec3::new(r.y * f.z - r.z * f.y, r.z * f.x - r.x * f.z, r.x * f.y - r.y * f.x);
-        let (c, s) = (th.cos(), th.sin());
+        let (c, s) = (crate::pyfloat::cos(th), crate::pyfloat::sin(th));
         self.up = DVec3::new(u.x * c - r.x * s, u.y * c - r.y * s, u.z * c - r.z * s);
     }
 }
