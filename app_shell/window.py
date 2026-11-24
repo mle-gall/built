@@ -13,7 +13,7 @@ from core.input_types import NATIVE, QEvent, Qt
 if not NATIVE:
     from PySide6.QtCore import QObject
 
-from app_shell.command_action import ShellAction
+from ingetrazo_render import shell_action as ShellAction
 from views.view_host import MISSING
 from views.document_commands import WindowDocumentCommands
 
@@ -407,8 +407,8 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         super().childEvent(event)
 
     def refresh_commands(self):
-        from app_shell.command_bindings import refresh
-        refresh(self)
+        from ingetrazo_render import bind_window_commands
+        bind_window_commands(self)
 
     def __getattr__(self, name):
         if name.startswith("__"):

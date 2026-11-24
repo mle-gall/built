@@ -203,7 +203,7 @@ def test_annotation_font_options(host, tool):
 
 def test_registered_shortcuts_use_rust_and_plugin_actions_still_trigger(host, monkeypatch):
     from PySide6.QtGui import QAction, QKeySequence
-    from app_shell.command_action import ShellAction
+    from ingetrazo_render import ShellAction
 
     win = host.window
     assert all(isinstance(a, ShellAction) for a in win._registry_actions.values())

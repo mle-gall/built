@@ -48,6 +48,7 @@ mod pane_dividers;
 /// The one verb source: kinds, menu rows, inspector verbs, dispatch.
 mod verbs;
 mod viewport_menu;
+mod shell_commands;
 pub mod ui;
 mod host_context;
 mod inspector;
@@ -3234,6 +3235,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     inspection_edits::register(m)?;
     context_edits::register(m)?;
     viewport_menu::register(m)?;
+    shell_commands::register(m)?;
     native_view_actions::register(m)?;
     plugin_workspace::register(m)?;
     m.add_class::<link_watch::LinkWatch>()?;
