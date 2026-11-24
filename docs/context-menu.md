@@ -10,9 +10,7 @@ no More › and no submenus. Related verbs share one row as segments (for
 example **Intersect: Model | Selection | Context**). No kind has more than
 14 rows under its header.
 
-This menu is drawn by the chrome in both apps: the native `built` shell
-(egui) and the Qt app. Some Qt-host callers still use
-`MainWindow.show_viewport_context_menu`.
+The native shell draws this menu with egui. The Select row grows the selection in the current editing context and leaves document history untouched. Extensions can declare actions in the Plugins menu. Their legacy right-click callbacks have no native host.
 
 ## How it works
 
@@ -83,6 +81,7 @@ Isolate is left out: it shows placements, and loose geometry has none.
 | 11 | Flip along: Red \| Green \| Blue | | Simplify mesh… |
 | 12 | Align view *(one face)* | | Flip along: Red \| Green \| Blue |
 | 13 | Texture: Position \| Reset *(a textured face)* | | |
+| 14 | Select: Connected \| Boundary \| Same material \| Same tag | Select: Connected \| Same tag | Select: Connected \| Boundary \| Same material \| Same tag |
 
 ### Groups and components
 
@@ -92,17 +91,17 @@ Isolate is left out: it shows placements, and loose geometry has none.
 | 1 | Repeat … | Repeat … | Repeat … |
 | 2 | Open for editing | Open for editing | Hide |
 | 3 | Rename… | Rename… | Isolate |
-| 4 | Hide | Hide | Lock *(Unlock when all are locked)* |
-| 5 | Isolate | Isolate | Zoom to \| Reveal selection \| Tag… |
-| 6 | Lock *(Unlock when locked)* | Lock *(Unlock when locked)* | File to… |
-| 7 | Zoom to \| Reveal selection \| Tag… | Zoom to \| Reveal selection \| Tag… | Make group \| Make component… |
-| 8 | File to… | File to… | Merge groups \| Explode |
-| 9 | Explode \| Make component… | Select instances \| Make unique | Make unique *(if components)* |
-| 10 | Split into pieces | Explode \| Replace component… *(Replace when another definition fits)* | Intersect: Model \| Selection \| Context |
-| 11 | Intersect: Model \| Selection \| Context | Keep in file *(check)* | Solid: Union \| Intersect \| Split \| Outer shell *(all solids; Split for two)* |
-| 12 | Soften / Smooth edges… | Intersect: Model \| Selection \| Context | Soften / Smooth edges… |
-| 13 | Flip along: Red \| Green \| Blue | Flip along: Red \| Green \| Blue | Flip along: Red \| Green \| Blue |
-| 14 | Change axes | Change axes | |
+| 4 | Hide \| Isolate | Hide \| Isolate | Lock *(Unlock when all are locked)* |
+| 5 | Lock *(Unlock when locked)* | Lock *(Unlock when locked)* | Zoom to \| Reveal selection \| Tag… |
+| 6 | Zoom to \| Reveal selection \| Tag… | Zoom to \| Reveal selection \| Tag… | File to… |
+| 7 | File to… | File to… | Make group \| Make component… |
+| 8 | Explode \| Make component… | Select instances \| Make unique | Merge groups \| Explode |
+| 9 | Split into pieces | Explode \| Replace component… *(Replace when another definition fits)* | Make unique \| Replace component… \| Keep in file *(if components and applicable)* |
+| 10 | Intersect: Model \| Selection \| Context | Keep in file *(check)* | Intersect: Model \| Selection \| Context |
+| 11 | Soften / Smooth edges… | Intersect: Model \| Selection \| Context | Solid: Union \| Intersect \| Split \| Outer shell *(all solids; Split for two)* |
+| 12 | Flip along: Red \| Green \| Blue | Flip along: Red \| Green \| Blue | Soften / Smooth edges… |
+| 13 | Change axes | Change axes | Flip along: Red \| Green \| Blue |
+| 14 | Select: Same material \| Same tag | Select: Same material \| Same tag | Select: Same material \| Same tag \| Instances |
 
 ### Mixed, linked, annotations, guides, empty space
 
@@ -119,6 +118,7 @@ Isolate is left out: it shows placements, and loose geometry has none.
 | 8 | Intersect: Model \| Selection \| Context | Reload | | | | |
 | 9 | Soften / Smooth edges… | Include nested files *(check)* | | | | |
 | 10 | Flip along: Red \| Green \| Blue | | | | | |
+| 11 | Select: Connected \| Boundary \| Same material \| Same tag \| Instances | | | | | |
 
 Hide is not offered on texts, dimensions or guides: Edit ▸ Hide does not
 act on them (`MainWindow._hideable`). On a part inside a linked file it

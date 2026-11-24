@@ -352,7 +352,7 @@ def test_the_menus_carry_the_expected_verbs(host, kinds):
                                  "Reverse faces | Orient faces", "Intersect: Model | Selection | Context",
                                  "Soften / Smooth edges…"]
     assert "Divide…" in rows("edges") and "Reverse faces | Orient faces" not in rows("edges")
-    assert rows("group")[:7] == ["Open for editing", "Rename…", "Hide", "Isolate", "Lock", "Zoom to | Reveal selection | Tag…", "File to…"]
+    assert rows("group")[:6] == ["Open for editing", "Rename…", "Hide | Isolate", "Lock", "Zoom to | Reveal selection | Tag…", "File to…"]
     assert "Explode | Make component…" in rows("group") and "Split into pieces" in rows("group")
     assert "Select instances | Make unique" in rows("component")
     assert "Merge groups | Explode" in rows("groups")
