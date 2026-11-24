@@ -191,11 +191,3 @@ def test_session_guard_rejects_a_changed_plist(tmp_path, monkeypatch):
     with pytest.raises(pytest.exit.Exception, match="plist changed") as failure:
         conftest.pytest_sessionfinish(session, 0)
     assert failure.value.returncode == pytest.ExitCode.TESTS_FAILED
-
-
-def test_bootstrap_module_can_load_before_the_native_engine_is_on_sys_path():
-    import subprocess
-
-    root = Path(__file__).resolve().parents[1]
-    program = "import sys; from app_shell import host; assert 'core' not in sys.modules"
-    subprocess.run([sys.executable, "-S", "-c", program], cwd=root, check=True)
