@@ -270,19 +270,17 @@ def composite_pixels(rgba, width, height, scene, camera, *, logical_size,
 
 def composite_annotations(image, scene, camera, *, logical_size,
                           overlays=True, annotations_only=False, occluded=None):
-    """``composite_pixels`` for a caller holding an ``RgbaImage``: a new one
-    with the marks; its device pixel ratio is kept."""
-    from ingetrazo_render import RgbaImage
-    if not overlays:
-        return image.copy()
-    if image.isNull():
-        raise ValueError("Cannot annotate a null image")
+    """``composite_pixels`` for a caller holding a ``SurveyRaster``: a new
+    one with the marks."""
+    from ingetrazo_render import SurveyRaster
     w, h = image.width(), image.height()
+    if not overlays:
+        return SurveyRaster(w, h, image.rgba())
+    if not w or not h:
+        raise ValueError("Cannot annotate a null image")
     rgba = composite_pixels(image.rgba(), w, h, scene, camera, logical_size=logical_size,
                             annotations_only=annotations_only, occluded=occluded)
-    result = RgbaImage(w, h, rgba)
-    result.setDevicePixelRatio(image.devicePixelRatio())
-    return result
+    return SurveyRaster(w, h, rgba)
 
 
 def draw_tool_overlays(painter, tools, *, labels=True):

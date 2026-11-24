@@ -8,7 +8,7 @@ pub mod billboards;
 pub mod cursors;
 pub mod document_tabs;
 pub mod headless;
-pub mod rgba_image;
+pub mod svg_raster;
 pub mod icon_art;
 
 pub fn register_render_glue(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -19,7 +19,7 @@ pub fn register_render_glue(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<document_tabs::DocumentTabs>()?;
     m.add_function(wrap_pyfunction!(cursors::tool_cursor_raster, m)?)?;
     m.add_function(wrap_pyfunction!(headless::headless_layer, m)?)?;
-    m.add_class::<rgba_image::RgbaImage>()?;
+    m.add_function(wrap_pyfunction!(svg_raster::svg_rgba, m)?)?;
     m.add_function(wrap_pyfunction!(billboards::billboard_stances, m)?)?;
     m.add_function(wrap_pyfunction!(billboards::billboard_worlds, m)?)?;
     m.add_function(wrap_pyfunction!(billboards::sprite_mapping, m)?)?;

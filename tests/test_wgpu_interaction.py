@@ -13,7 +13,7 @@ from core.group import Group
 from core.snap import compute_snap
 from views.wgpu_scene import pack_scene
 from views.wgpu_inference import prepare, snap
-from views.wgpu_view import WgpuView
+from tests.headless_gpu import HeadlessView as WgpuView
 
 app = QApplication.instance() or QApplication([])
 

@@ -125,7 +125,7 @@ class Metal:
     renderer's ID pass, otherwise the CPU ray test stands in for it."""
 
     def __init__(self, scene, native=False):
-        from views.wgpu_view import WgpuView
+        from tests.headless_gpu import HeadlessView as WgpuView
         from views.wgpu_inference import prepare
         self.source = _gl(scene)
         self.flashed = self.source.flashed

@@ -60,7 +60,7 @@ def test_off_or_nonsense_is_the_crisp_map():
 def test_the_metal_view_reads_the_level_off_its_viewport(monkeypatch):
     from core.camera import OrbitCamera
     from views import wgpu_style
-    from views.wgpu_view import WgpuView
+    from tests.headless_gpu import HeadlessView as WgpuView
 
     class PayloadReceived(Exception):
         pass

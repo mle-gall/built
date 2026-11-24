@@ -109,7 +109,7 @@ def _alpha_bleed(img):
     """Fill transparent texels with nearby opaque RGB: cutout foliage keeps
     black under alpha 0, and mip/bilinear sampling mixes it in — a tree
     canopy renders as a dark silhouette without this."""
-    from ingetrazo_render import RgbaImage
+    from ingetrazo_render import SurveyRaster
     h, w = img.height(), img.width()
     a = np.frombuffer(img.rgba(), np.uint8).reshape(h, w, 4).copy()
     rgb = a[..., :3].astype(np.float64)
@@ -133,14 +133,14 @@ def _alpha_bleed(img):
     if not known.all():
         rgb[~known] = rgb[known].mean(axis=0)
     a[..., :3] = np.clip(rgb, 0, 255).astype(np.uint8)
-    return RgbaImage(w, h, a.tobytes())
+    return SurveyRaster(w, h, a.tobytes())
 
 
 def _auto_exposure(img, target=125.0, max_gain=2.0):
     """PBR albedo is authored to be LIT; IngeTrazo displays it the classic
     way (texel × orientation shade), so dark-baked foliage reads near black.
     Lift dark textures toward a mid luminance with a soft shoulder."""
-    from ingetrazo_render import RgbaImage
+    from ingetrazo_render import SurveyRaster
     h, w = img.height(), img.width()
     a = np.frombuffer(img.rgba(), np.uint8).reshape(h, w, 4).copy()
     opaque = a[..., 3] > 128
@@ -152,23 +152,22 @@ def _auto_exposure(img, target=125.0, max_gain=2.0):
         return img
     x = a[..., :3].astype(np.float64) * gain
     a[..., :3] = np.clip(x, 0, 255).astype(np.uint8)
-    return RgbaImage(w, h, a.tobytes())
+    return SurveyRaster(w, h, a.tobytes())
 
 
 def _shrink_texture(path, tex_size, out_dir):
-    from ingetrazo_render import RgbaImage
-    try:
-        img = RgbaImage.load(str(path))
-    except ValueError:
+    from ingetrazo_render import SurveyRaster
+    img = SurveyRaster.open(str(path))
+    if img is None:
         return str(path)
-    has_alpha = img.hasAlphaChannel()
+    has_alpha = bool((np.frombuffer(img.rgba(), np.uint8)[3::4] < 255).any())
     if max(img.width(), img.height()) > tex_size:
-        img = img.scaled(min(img.width(), tex_size), min(img.height(), tex_size))
+        img = img.resized(min(img.width(), tex_size), min(img.height(), tex_size))
     img = _auto_exposure(img)
     if has_alpha:
         img = _alpha_bleed(img)
     out = Path(out_dir) / (Path(path).stem + (".png" if has_alpha else ".jpg"))
-    img.save(str(out), None if has_alpha else "JPEG", -1 if has_alpha else 88)
+    img.save(str(out))                   # PNG or JPEG by the extension
     return str(out)
 
 

@@ -26,10 +26,9 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMouseEvent
+from core import input_types
+from core.input_codes import Input as Qt
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from core.group import Group
 from core.history import History
@@ -40,9 +39,7 @@ from tools.rust_tools import LineTool
 from tools.rust_tools import RectangleTool
 from tests.controller_surface import ControllerSurface as Viewport
 from views.wgpu_inference import prepare, surface
-from views.wgpu_view import WgpuView
-
-app = QApplication.instance() or QApplication([])
+from tests.headless_gpu import HeadlessView as WgpuView, mouse
 
 
 # ---- An unshown Metal view driving the real tools --------------------------
@@ -65,7 +62,6 @@ def view():
     v.camera.distance = 8
     v.camera.aspect = 800 / 600
     v.set_scene(source.scene)
-    v.setAttribute(Qt.WA_DontShowOnScreen)
     v._upload = lambda: None
     v.pick_row = lambda x, y: _pick(v, x, y)
     yield v
@@ -96,21 +92,19 @@ def refresh(view):
         view.inference_index = prepare(view.packed, view.scene)
 
 
-def _event(view, kind, p, buttons=Qt.NoButton, button=Qt.NoButton,
-           modifiers=Qt.NoModifier):
+def _event(view, kind, p, held=0, button=0, modifiers=0):
     x, y = view._world_to_pixel(p)
-    q = QPointF(x, y)
-    QApplication.sendEvent(view, QMouseEvent(kind, q, q, button, buttons, modifiers))
+    mouse(view, kind, x, y, button, held, modifiers)
 
 
 def move(view, p, modifiers=Qt.NoModifier):
-    _event(view, QMouseEvent.MouseMove, p, modifiers=modifiers)
+    _event(view, "move", p, modifiers=modifiers)
     return view.last_snap
 
 
 def click(view, p):
-    _event(view, QMouseEvent.MouseButtonPress, p, Qt.LeftButton, Qt.LeftButton)
-    _event(view, QMouseEvent.MouseButtonRelease, p, Qt.NoButton, Qt.LeftButton)
+    _event(view, "press", p, Qt.LeftButton, Qt.LeftButton)
+    _event(view, "release", p, 0, Qt.LeftButton)
     refresh(view)
 
 
@@ -235,7 +229,7 @@ def test_metal_hands_compute_snap_every_engine_keyword(view, monkeypatch):
     click(view, V(0.5, 0.5, 0))
     move(view, V(1.5, 0.52, 0))
     wanted = set(view.source_viewport.inference.snap_options(
-        view.source_viewport.active_tool, Qt.NoModifier))
+        view.source_viewport.active_tool, input_types.Qt.NoModifier))
     assert wanted <= set(seen), wanted - set(seen)
     assert seen["diagonal_span"] is True
     assert seen["work_plane_normal"] is not None

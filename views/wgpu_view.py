@@ -955,8 +955,8 @@ class MetalView(ViewNavigation):
         if frame is None:
             return None
         w, h, pixels = frame
-        from ingetrazo_render import RgbaImage
-        return RgbaImage(w, h, bytes(pixels))
+        from ingetrazo_render import SurveyRaster
+        return SurveyRaster(w, h, bytes(pixels))
 
     def render_pixels(self, width_px, height_px=None, *, overlays=False, annotations_only=False, **frame_options):
         """RGBA of the requested frame, including any document marks for that camera."""

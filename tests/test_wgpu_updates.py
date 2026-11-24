@@ -273,7 +273,7 @@ def test_native_move_preview_then_history_commit(completion):
     native.hover(event)
     assert scene.groups[0].xform.column(3).x() == 0
     assert view.packed.instances['world'][0, 3, 0] == 2
-    from views.wgpu_view import WgpuView
+    from tests.headless_gpu import HeadlessView as WgpuView
     view.tools = native
     if completion == 'escape':
         WgpuView.keyPressEvent(view, SimpleNamespace(key=lambda: Qt.Key_Escape))
@@ -399,7 +399,7 @@ def test_history_insert_undo_redo_keeps_one_row(monkeypatch):
 def test_tool_change_signal_reports_unsupported_tool_without_mouse_input():
     from PySide6.QtCore import QObject, Signal
     from PySide6.QtWidgets import QApplication
-    from views.wgpu_view import WgpuView
+    from tests.headless_gpu import HeadlessView as WgpuView
     app = QApplication.instance() or QApplication([])
     messages = []
     class Source(QObject):
@@ -771,7 +771,7 @@ def test_older_module_gets_the_whole_list_when_an_exclusion_moved():
 def test_an_edit_keeps_the_container_boxes_it_did_not_touch():
     """Every set_scene used to drop the container boxes measured after the
     open (0.9 s each on the ride, measured again at the next double-click)."""
-    from views.wgpu_view import WgpuView
+    from tests.headless_gpu import HeadlessView as WgpuView
     scene, updates = fixture_scene()
     view = SimpleNamespace(packed=updates.packed, _container_boxes={}, _container_box_rows={})
     far, near = object(), object()

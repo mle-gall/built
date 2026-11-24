@@ -24,7 +24,7 @@ from core.mesh import Mesh
 from core.scene import Scene
 from views.wgpu_inference import prepare
 from views.wgpu_scene import pack_scene
-from views.wgpu_view import WgpuView
+from tests.headless_gpu import HeadlessView as WgpuView
 
 _app = QApplication.instance() or QApplication([])
 

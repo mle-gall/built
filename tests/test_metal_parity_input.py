@@ -15,7 +15,7 @@ from core.group import Group
 from core.history import History
 from tools.rust_tools import SelectTool
 from tests.controller_surface import ControllerSurface as Viewport
-from views.wgpu_view import WgpuView
+from tests.headless_gpu import HeadlessView as WgpuView
 from views.wgpu_inference import prepare
 
 app = QApplication.instance() or QApplication([])

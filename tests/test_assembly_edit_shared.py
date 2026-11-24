@@ -431,7 +431,7 @@ class _Metal:
     every placement."""
 
     def __init__(self, vp, monkeypatch):
-        from views.wgpu_view import WgpuView
+        from tests.headless_gpu import HeadlessView as WgpuView
         self.view = view = WgpuView()
         view.source_viewport = vp
         view.camera = vp.camera

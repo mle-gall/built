@@ -23,14 +23,12 @@ class Primitive:
 
 def rasterize(primitives, width, height, scale, annotations=None):
     """The primitives on a fresh annotation canvas, as a straight-alpha
-    ``RgbaImage`` at physical resolution (scripts and tests read its pixels)."""
-    from ingetrazo_render import AnnotationCanvas, RgbaImage
+    ``SurveyRaster`` at physical resolution (scripts and tests read its pixels)."""
+    from ingetrazo_render import AnnotationCanvas, SurveyRaster
     w, h = max(1, int(width * scale)), max(1, int(height * scale))
     canvas = AnnotationCanvas(w, h, float(width))
     paint_layer(canvas, primitives, annotations)
-    image = RgbaImage(w, h, canvas.composite(bytes(w * h * 4)))
-    image.setDevicePixelRatio(scale)
-    return image
+    return SurveyRaster(w, h, canvas.composite(bytes(w * h * 4)))
 
 
 def paint_layer(painter, primitives, annotations=None):

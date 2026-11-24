@@ -218,7 +218,7 @@ def test_editing_commands_and_cancel(tool_type):
 
 def test_first_person_claims_shortcuts_and_timer_stops_on_focus_loss():
     from tests.controller_surface import ControllerSurface as Viewport
-    from views.wgpu_view import WgpuView
+    from tests.headless_gpu import HeadlessView as WgpuView
     from PySide6.QtCore import QEvent
     from PySide6.QtGui import QKeyEvent, QFocusEvent
     from tests.test_wgpu_mesh_tools import app

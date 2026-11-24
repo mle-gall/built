@@ -190,7 +190,7 @@ def test_snap_tooltip_is_painted():
 
 @pytest.fixture
 def view():
-    from views.wgpu_view import WgpuView
+    from tests.headless_gpu import HeadlessView as WgpuView
     from views.wgpu_inference import prepare
     scene = Scene()
     mesh = Mesh()

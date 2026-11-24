@@ -15,14 +15,14 @@ import struct
 import sys
 from pathlib import Path
 
-from ingetrazo_render import RgbaImage
+from ingetrazo_render import SurveyRaster, svg_rgba
 
 ICONS = Path(__file__).resolve().parent.parent / "resources" / "icons"
 SIZES = (16, 32, 48, 64, 128, 256, 512)
 
 
-def render(size: int) -> RgbaImage:
-    return RgbaImage.from_svg(ICONS / "ingetrazo.svg", size)
+def render(size: int) -> SurveyRaster:
+    return SurveyRaster(*svg_rgba(ICONS / "ingetrazo.svg", size))
 
 
 def write_ico(path: Path, images: dict[int, bytes]) -> None:
@@ -47,7 +47,7 @@ def main() -> int:
         render(size).save(str(ICONS / f"ingetrazo_{size}.png"))
     render(1024).save(str(ICONS / "ingetrazo_master.png"))
     write_ico(ICONS / "ingetrazo.ico",
-              {s: bytes(render(s).encode("PNG")) for s in (16, 32, 48, 64, 128, 256)})
+              {s: bytes(render(s).png()) for s in (16, 32, 48, 64, 128, 256)})
     print("wrote", ", ".join(f"{s}px" for s in SIZES), "+ master + ico")
     return 0
 
