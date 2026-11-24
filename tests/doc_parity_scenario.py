@@ -26,10 +26,11 @@ from core.history import (AddKeptComponentsCommand,  # noqa: E402
                           PurgeUnusedCommand, NativeCommand,
                           ReparentGroupsCommand, RotateGroupCommand,
                           ScaleGroupCommand,
-                          SetLayerVisibilityCommand, SetMaterialFinishCommand,
+                          SetMaterialFinishCommand,
                           SetPluginDataCommand, SetRecordCommand,
                           SetStructureNodeCommand, TagGroupsCommand)
 from core.material_commands import AddMaterialCommand  # noqa: E402
+from core.protocol.commands import SetTagStateCommand  # noqa: E402
 from core.layers import TAG_FIELDS, Layer  # noqa: E402
 from core.materials import Material  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
@@ -216,7 +217,7 @@ def slice_two(scene, h):
         SetStructureNodeCommand([parts[1], parts[2]], "level-1"),
         SetPluginDataCommand("windowizer", {"version": 3}),
         SetPluginDataCommand("other", {"a": [1, 2, {"b": None}]}),
-        SetLayerVisibilityCommand(["Tag 0"], False, folders=["Site"]),
+        SetTagStateCommand(["Tag 0"], ["Site"], False, None),
         KeepComponentCommand(scene.kept_components[0], False),
         AddKeptComponentsCommand([template()]),
         AddMaterialCommand(Material("Fresh", color=(0.9, 0.8, 0.1))),
@@ -757,7 +758,7 @@ def main(work: Path):
         MoveGroupCommand(scene.groups[2], QVector3D(0.0, 1.0, 0.0)),
         InsertGroupCommand(extra),
         DeleteGroupCommand(scene.groups[1]),
-        SetLayerVisibilityCommand(["Tag 1"], False),
+        SetTagStateCommand(["Tag 1"], [], False, None),
         SetMaterialFinishCommand("Mat 0", "matte"),
     ]
     for c in cmds:

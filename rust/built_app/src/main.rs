@@ -206,9 +206,12 @@ struct Win {
     last_key_text: Option<String>,
     contact: Option<(u64, (f64, f64), bool)>,
     second_contact: Option<(u64, (f64, f64))>,
+    /// The part of the finger slide not yet handed over (gestures::carry).
+    slide_carry: (f64, f64),
 }
 
-/// `BUILT_PERF=1`: pointer-move handler and frame times, reported (and
+/// `BUILT_PERF=1`: pointer-move, wheel (slide, notch) and gesture (pinch,
+/// rotate) handler times and frame times, reported (and
 /// reset) by each scripted `state` step (docs/rust-tools.md §13).
 mod perf {
     use std::sync::Mutex;
@@ -239,7 +242,7 @@ mod perf {
         }
         let samples = std::mem::take(&mut *SAMPLES.lock().unwrap());
         let mut parts = Vec::new();
-        for what in ["move_ms", "frame_ms", "py_frame_ms", "open_stall_ms", "open_total_ms", "open_handover_ms"] {
+        for what in ["move_ms", "wheel_ms", "gesture_ms", "frame_ms", "py_frame_ms", "open_stall_ms", "open_total_ms", "open_handover_ms"] {
             let mut v: Vec<f64> = samples.iter().filter(|(w, _)| *w == what).map(|(_, x)| *x).collect();
             if v.is_empty() {
                 continue;
@@ -635,11 +638,7 @@ impl App {
                     h.call("text", (text,));
                 }
             }
-            Step::Wheel(x, y, dy, phase) => {
-                if let Some(h) = self.host(id) {
-                    h.call("wheel", (x, y, 0.0, dy, 0.0, dy * 2.0, phase.as_str(), 0u32, 0u32, true));
-                }
-            }
+            Step::Wheel(x, y, dy, phase) => self.slide(id, (x, y), (0.0, dy), &phase, false, true),
             Step::Notch(x, y, n) => {
                 if let Some(h) = self.host(id) {
                     h.call("wheel", (x, y, 0.0, 0.0, 0.0, n * 120.0, "none", 0u32, 0u32, false));
@@ -765,7 +764,7 @@ impl App {
         let id = window.id();
         self.wins.push((id, Win {
             window, host, ns_view, cursor: (0.0, 0.0), held: 0, last_press: None, last_key_text: None,
-            contact: None, second_contact: None, open_frame: None, after_open: None,
+            contact: None, second_contact: None, slide_carry: (0., 0.), open_frame: None, after_open: None,
         }));
         self.focused = Some(id);
         Ok(id)

@@ -237,8 +237,9 @@ class InspectionTools:
             if not matches:
                 raise ValueError(f"unknown layer {key!r}")
             chosen.extend(matches)
-        from core.history import SetLayerVisibilityCommand
-        self._viewport.history.execute(SetLayerVisibilityCommand([layer.key for layer in chosen], visible))
+        from core.protocol import commands
+        commands.set_tag_state(self._viewport.history,
+                               tags=list(dict.fromkeys(layer.key for layer in chosen)), visible=visible)
         return self._tool_query_layers()
 
     def _tool_query_camera(self):
