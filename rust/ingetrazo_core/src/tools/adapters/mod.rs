@@ -68,6 +68,8 @@ mod rotated_rectangle_tool_api;
 mod scale;
 mod select_tool_api;
 mod solid_tool_api;
+mod tape_host_api;
+mod tape_measure_tool_api;
 mod text_tool_api;
 mod texture;
 mod texture_preview;
@@ -184,6 +186,11 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
         ("tools.followme_host", "FollowMeHost") => {
             (follow_me_host_api::METHODS, stringify!(follow_me_host_api))
         }
+        ("tools.tape_host", "TapeHost") => (tape_host_api::METHODS, stringify!(tape_host_api)),
+        ("tools.rust_tools", "TapeMeasureTool") => (
+            tape_measure_tool_api::METHODS,
+            stringify!(tape_measure_tool_api),
+        ),
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })

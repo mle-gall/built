@@ -346,6 +346,7 @@ class FilletTool(FilletHost, RustTool):
 from tools.tape_host import TapeHost
 
 
+@register_tool_adapter
 class TapeMeasureTool(TapeHost, RustTool):
     kind = "tape"
     _READ_DURING = ("start_point", "hover_point", "mode", "direction")
@@ -354,15 +355,6 @@ class TapeMeasureTool(TapeHost, RustTool):
     _mode = property(lambda self: self._state("mode"),
                      lambda self, value: self._machine.set("mode", value))
     _measured = property(lambda self: self._state("measured"))
-
-    @property
-    def _edge(self):
-        return self._source if self._state("direction") is not None else None
-
-    @_edge.setter
-    def _edge(self, edge):
-        self._source = edge
-        self._machine.set("direction", _tuple(edge.b - edge.a) if edge is not None else None)
 
 from tools.paste_host import PasteHost
 
