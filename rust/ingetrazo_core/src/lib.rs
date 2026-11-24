@@ -277,6 +277,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(segment_distances, m)?)?;
     m.add_function(wrap_pyfunction!(nearest_within, m)?)?;
     m.add_function(wrap_pyfunction!(visible_parts, m)?)?;
+    m.add_function(wrap_pyfunction!(polygon::polygon_is_planar, m)?)?;
     m.add_function(wrap_pyfunction!(polygon::polygon_normal, m)?)?;
     m.add_function(wrap_pyfunction!(polygon::polygon_is_convex, m)?)?;
     m.add_function(wrap_pyfunction!(polygon::polygon_earcut, m)?)?;

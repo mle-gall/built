@@ -102,3 +102,17 @@ def test_a_figure_eight_is_judged_by_its_points():
            V(0, 1, 0)]
     assert is_planar(pts)
     assert not is_planar(pts[:3] + [V(2, 1, 0.5)] + pts[4:])
+
+
+def test_seeded_planarity_decisions():
+    """Decisions from the object-mesh predicate, including sub-mm profiles."""
+    import hashlib
+    rng = random.Random(43502)
+    decisions = bytearray()
+    for _ in range(4096):
+        scale = 10 ** rng.uniform(-6, 4)
+        pts = [V(x, y, x - y + rng.choice([0, 1e-3]) * rng.random())
+               for x, y in [(scale * rng.random(), scale * rng.random())
+                            for _ in range(rng.randrange(1, 14))]]
+        decisions.append(is_planar(pts, rng.choice([0., 1e-3, 1e-5])))
+    assert hashlib.sha256(decisions).hexdigest() == "9e2d76f722598480b66fb54147c000f5b14256083b14d4ac62faee3569380b92"

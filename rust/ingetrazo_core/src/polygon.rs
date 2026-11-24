@@ -104,3 +104,23 @@ pub fn polygon_triangles<'py>(
         .map(|[a, b, c]| (outer[a].clone(), outer[b].clone(), outer[c].clone()))
         .collect())
 }
+
+/// Test the widest plane anchored at the first point. A triangle only has
+/// to span a plane, even when the caller asks for zero distance tolerance.
+#[pyfunction]
+#[pyo3(signature=(vertices, tolerance=1e-3))]
+pub fn polygon_is_planar(vertices: Vec<Corner<'_>>, tolerance: f64) -> PyResult<bool> {
+    if vertices.len() < 3 {
+        return Ok(false);
+    }
+    let pts = vertices.iter().map(xyz).collect::<PyResult<Vec<_>>>()?;
+    if let [a, b, c] = pts.as_slice() {
+        let (ab, ac) = (*b - *a, *c - *a);
+        let cross = ab.cross(ac).length();
+        return Ok(cross > 1e-6 || cross > 1e-5 * ab.length().max(ac.length()));
+    }
+    Ok(crate::store::access::is_planar(
+        &pts.into_iter().map(|p| p.to_array()).collect::<Vec<_>>(),
+        tolerance,
+    ))
+}
