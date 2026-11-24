@@ -114,6 +114,43 @@ def _push_face(history, f, distance, keep_base, tool):
     return _answer(history, before)
 
 
+def bevel_selection(history, radius, segments=8, profile=.5, measure="radius", corners="round",
+                    shape=None, edges=(), vertices=(), _plan=None):
+    """Round keyed edges or bevel keyed corners of the open mesh in a single step."""
+    from math import isfinite
+    from core.fillet import apply_fillet, plan_fillet
+    from core.vertex_bevel import plan_vertex_bevel
+    from core.history import SnapshotMutation
+    from core.store_face_edit import StoreFaceMutation
+    from core import bevel_profiles
+    if bool(edges) == bool(vertices):
+        raise ValueError("supply edges or vertices")
+    if not isfinite(radius) or radius <= 0 or type(segments) is not int or segments < 1:
+        raise ValueError("bevel needs a positive size and segment count")
+    if not 0 < profile < 1 or measure not in ("radius", "offset", "width", "depth") or corners not in ("round", "cut"):
+        raise ValueError("invalid bevel profile, measure or corner fill")
+    if shape is not None:
+        if vertices or (isinstance(shape, str) and shape not in ("steps", "supports", "cornice", "crown")):
+            raise ValueError("unknown shape for this bevel")
+        if not isinstance(shape, str):
+            if not bevel_profiles.valid(shape):
+                raise ValueError("invalid drawn bevel profile")
+            shape = tuple(tuple(p) for p in shape)
+    mesh = history.scene.mesh
+    before = history.revision
+    plan = _plan
+    if plan is None:
+        if vertices:
+            plan = plan_vertex_bevel(mesh, _need(mesh, "vertex", vertices), radius, segments, profile)
+        else:
+            plan = plan_fillet(mesh, _need(mesh, "edge", edges), radius, segments, profile, measure, corners, shape)
+    if isinstance(plan, str):
+        return {**_answer(history, before, ok=False), "error": plan}
+    constructor = StoreFaceMutation if plan._store_plan is not None else SnapshotMutation
+    history.execute(constructor(lambda scene: apply_fillet(scene.mesh, plan), mesh=mesh))
+    return _answer(history, before)
+
+
 def paint_material(history, *, placement=None, mesh=None, faces=(), seed=None, material=None,
                    color=None, texture=None, opacity=None, default=False, back=False, plane=None,
                    _picked_placement=None):
@@ -1373,7 +1410,7 @@ COMMANDS = {"set_location": set_location, "set_model_units": set_model_units, "s
             "add_guide": add_guide, "change_guide": change_guide, "add_guide_circle": add_guide_circle, "add_arc": add_arc,
             "move_placements": move_placements, "copy_placements": copy_placements,
             "move_selection": move_selection, "scale_selection": scale_selection,
-            "rotate_selection": rotate_selection, "offset_outline": offset_outline, "paint_material": paint_material,
+            "bevel_selection": bevel_selection, "rotate_selection": rotate_selection, "offset_outline": offset_outline, "paint_material": paint_material,
             "divide_edges": divide_edges, "join_edges": join_edges,
             "move_vertices": move_vertices, "erase": erase,
             "reverse_faces": reverse_faces, "push_pull": push_pull, "orient_faces": orient_faces,

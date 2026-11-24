@@ -567,3 +567,15 @@ def test_paint_material_uses_named_recipe_on_the_requested_side_and_preserves_it
     assert face.attrs["back"]["mat"] == "Blue glass"
     assert history.undo() and dict(face.attrs) == {}
     assert "Blue glass" in scene.materials
+
+
+def test_bridge_bevels_keyed_edges_and_undoes(bridge):
+    from tests.test_fillet_tool import _box_scene, edge_at
+    win, b = bridge
+    vp = win.viewport
+    mesh = _box_scene(vp)
+    edge = edge_at(mesh, (0, 0, 1), (2, 0, 1))
+    result = _call(b, "bevel_selection", edges=[str(edge.key)], radius=.1, segments=4)
+    assert result["ok"] and result["step"]
+    assert len(mesh.faces) == 10
+    assert vp.history.undo() and len(mesh.faces) == 6

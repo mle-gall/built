@@ -301,6 +301,16 @@ BUILTIN_TOOLS.append(dict(
     }, required=["distance"], oneOf=[{"required": ["face"]}, {"required": ["points", "normal"]}])))
 
 BUILTIN_TOOLS.append(dict(
+    name="bevel_selection", mutates=True,
+    description="Round edges or bevel vertex corners of the open mesh. The size is in metres.",
+    inputSchema=dict(type="object", properties={
+        "edges": _KEYS, "vertices": _KEYS, "radius": {"type": "number", "exclusiveMinimum": 0},
+        "segments": {"type": "integer", "minimum": 1}, "profile": {"type": "number"},
+        "measure": {"enum": ["radius", "offset", "width", "depth"]}, "corners": {"enum": ["round", "cut"]},
+        "shape": {"oneOf": [{"enum": ["steps", "supports", "cornice", "crown"]}, {"type": "array"}]},
+    }, required=["radius"], oneOf=[{"required": ["edges"]}, {"required": ["vertices"]}])))
+
+BUILTIN_TOOLS.append(dict(
     name="paint_material", mutates=True,
     description="Paint a placement or named faces with a material, or restore the default on one side.",
     inputSchema=dict(type="object", properties={

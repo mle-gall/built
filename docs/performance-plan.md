@@ -2939,7 +2939,7 @@ Native denotes routed, not exhaustive parity acceptance.
 | scale | ScaleTool | native | Rust state machine, _pixel_to_ray, _world_to_pixel, pick_edge, pick_face, scale_box_state (screen handles) |
 | flip | FlipTool | native | _world_to_pixel |
 | followme | FollowMeTool | native | pick_edge, pick_face, rubber_band_lines |
-| fillet | FilletTool | native | rubber_band_lines |
+| fillet | FilletTool | native | Rust state machine, rubber_band_lines |
 | texture_position | TexturePositionTool | native | shared viewport / tool base |
 | paint | PaintTool | native | Rust state machine, pick_face_any |
 | dimension | DimensionTool | native | rubber_band_lines |

@@ -117,6 +117,7 @@ fn event(d: &Bound<'_, PyDict>) -> PyResult<ToolEvent> {
     use super::walkthrough::Navigation;
     let field = |key: &str| d.get_item(key)?.ok_or_else(|| PyValueError::new_err(format!("missing {key}")));
     Ok(match kind.as_str() {
+        "profile" => ToolEvent::Profile(field("value")?.extract()?),
         "protractor_frame" => ToolEvent::ProtractorFrame { basis: field("basis")?.extract()?, near: field("near")?.extract()?, exact: field("exact")?.extract()? },
         "place_camera" => ToolEvent::Navigate(Navigation::Place { base: p3(&field("base")?)?, look: opt(d,"look")?.map(|v| p3(&v)).transpose()? }),
         "look_delta" => ToolEvent::Navigate(Navigation::Look(field("delta")?.extract()?)),

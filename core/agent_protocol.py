@@ -60,14 +60,19 @@ class ProtocolTools:
         self._viewport.update()
         return {**out, "step": out["step"].to_json() if out["step"] else None}
 
-    def _guide_command(self, name, **args):
+    def _tool_bevel_selection(self, radius, segments=8, profile=.5, measure="radius", corners="round",
+                              shape=None, edges=(), vertices=()):
+        return self._edit_command("bevel_selection", radius=radius, segments=segments, profile=profile,
+                                  measure=measure, corners=corners, shape=shape, edges=edges, vertices=vertices)
+
+    def _edit_command(self, name, **args):
         from core.protocol.commands import run
         out = run(self._viewport.history, name, **args)
         self._viewport.update()
         return {**out, "step": out["step"].to_json() if out["step"] else None}
 
     def _tool_add_guide(self, point, direction=None, origin=None):
-        return self._guide_command("add_guide", point=point, direction=direction, origin=origin)
+        return self._edit_command("add_guide", point=point, direction=direction, origin=origin)
 
     def _tool_change_guide(self, index, direction):
-        return self._guide_command("change_guide", index=index, direction=direction)
+        return self._edit_command("change_guide", index=index, direction=direction)

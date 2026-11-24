@@ -66,6 +66,8 @@ class _Host:
     def run(self, name, args):
         from core.protocol.commands import run
         args = json.loads(args)
+        if name == "bevel_selection":
+            args["_plan"] = self.tool._plan
         if name == "paint_material":
             # Painting a closed, lazy group needs no topology or face count.
             try:
@@ -1799,3 +1801,15 @@ class ProtractorTool(ProtractorHost, RustTool):
     _guides = property(lambda self: self._state("guides"),
                        lambda self, g: self._machine.set("guides", bool(g)))
     _last = property(lambda self: True if self._state("retype") else None)
+
+from tools.fillet_host import FilletHost
+
+
+class FilletTool(FilletHost, RustTool):
+    kind = "fillet"
+    _READ_DURING = ("sizing",)
+    sizing = property(lambda self: self._state("sizing"))
+
+    def __init__(self):
+        RustTool.__init__(self)
+        FilletHost.__init__(self)
