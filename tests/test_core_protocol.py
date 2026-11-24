@@ -158,11 +158,9 @@ def test_store_changes_since_matches_the_oracle_over_random_ops(seed):
 def test_python_steps_report_the_mesh_replaced():
     sc = _scene(False)
     h = History(sc)
-    face = sc.mesh.faces[0]
-    r = C.run(h, "push_pull", face=str(face.key), distance=1.0)
+    r = C.run(h, "move_vertices", vertices=[str(sc.mesh.vertices[0].key)],
+              delta=[0, 0, 0.25])
     for got in (r, C.run(h, "undo"), C.run(h, "redo"),
-                C.run(h, "move_vertices", vertices=[str(sc.mesh.vertices[0].key)],
-                      delta=[0, 0, 0.25]),
                 C.run(h, "erase", edges=[str(sc.mesh.edges[0].key)])):
         assert got["ok"]
         (change,) = got["step"].meshes
@@ -170,7 +168,25 @@ def test_python_steps_report_the_mesh_replaced():
         assert change.key == mesh_key(sc.mesh)
         assert not any(change.created.values()) and not change.moved
     assert [s.phase for s in h.feed.since(0)["steps"]] == [
-        "execute", "undo", "redo", "execute", "execute"]
+        "execute", "undo", "redo", "execute"]
+
+
+@needs_store
+def test_a_push_on_a_python_mesh_reports_a_store():
+    """A push makes a Python mesh store-backed first (docs/rust-tools.md
+    §24), outside the step: the step reports the store, and so does its
+    undo (it restores the store state the push started from)."""
+    sc = _scene(False)
+    h = History(sc)
+    face = sc.mesh.faces[0]
+    got = C.run(h, "push_pull", face=str(face.key), distance=1.0)
+    assert got["ok"]
+    (change,) = got["step"].meshes
+    assert change.backing == "store"
+    assert change.key == mesh_key(sc.mesh)
+    got = C.run(h, "undo")
+    (change,) = got["step"].meshes
+    assert change.backing == "store" and not change.replaced
 
 
 @pytest.mark.parametrize("store", [False, pytest.param(True, marks=needs_store)])
