@@ -3463,18 +3463,11 @@ class ShadowsPanel(QWidget):
 
 
 class EntityInfoPanel(QWidget):
-    """Facts about the current selection, plus the one thing an Entity
-    Info panel lets you CHANGE here: the layer (its Tag field). Rafael
-    went looking for it exactly here — «debo de tener que ir a las
-    propiedades del objeto… no sé cómo cambiarlo de aquí» (2026-09-16,
-    39:00) — and found only the Layers panel's button, which he did not
-    understand."""
+    """Classic selection summary."""
 
     def __init__(self, window) -> None:
         super().__init__()
-        from PySide6.QtWidgets import QComboBox, QHBoxLayout
         self._window = window
-        self._updating = False
         lay = QVBoxLayout(self)
         lay.setContentsMargins(8, 6, 8, 8)
         self._label = QLabel(tr("Nothing selected"))
@@ -3482,136 +3475,10 @@ class EntityInfoPanel(QWidget):
         self._label.setTextFormat(Qt.RichText)
         self._label.setStyleSheet("font-size: 12px;")
         lay.addWidget(self._label)
-        row = QHBoxLayout()
-        self._layer_caption = QLabel(tr("Layer:"))
-        self._layer_box = QComboBox()
-        self._layer_box.setToolTip(
-            tr("The layer the selection is on — pick another to move it"))
-        self._layer_box.currentIndexChanged.connect(self._on_layer_picked)
-        row.addWidget(self._layer_caption)
-        row.addWidget(self._layer_box, 1)
-        lay.addLayout(row)
-        self._structure_row = QWidget()
-        structure_layout = QHBoxLayout(self._structure_row)
-        structure_layout.setContentsMargins(0, 0, 0, 0)
-        structure_layout.addWidget(QLabel(tr("Structure")))
-        self._structure_path = QLabel()
-        self._structure_path.setTextFormat(Qt.PlainText)
-        self._structure_path.setWordWrap(True)
-        structure_layout.addWidget(self._structure_path, 1)
-        self._refile_button = QPushButton(tr("Re-file under…"))
-        self._refile_button.clicked.connect(self._refile)
-        structure_layout.addWidget(self._refile_button)
-        lay.addWidget(self._structure_row)
-        self._structure_row.hide()
-        self._layer_caption.hide()
-        self._layer_box.hide()
 
     def refresh(self) -> None:
         sel = list(self._window.viewport.scene.selection)
         self._label.setText(self._describe(sel))
-        self._refresh_layer(sel)
-        self._refresh_structure(sel)
-
-    def _refresh_structure(self, sel):
-        from core import bim_registry, links, structure
-        groups = [g for g in sel if isinstance(g, Group)]
-        self._structure_row.setVisible(bool(groups))
-        if not groups:
-            return
-        scene = self._window.viewport.scene
-        registry = bim_registry.get(scene)
-        nodes = structure._nodes(registry)
-        keys = {structure.node_of(g) for g in groups}
-        linked = any(links.linked_ancestor(g) for g in groups)
-        if linked:
-            mounts = structure._mount_index(registry)
-            keys = {structure._membership(g, (links.link_of(links.linked_ancestor(g)) or {}).get('path'), mounts)
-                    for g in groups}
-        label = tr("(several)")
-        if len(keys) == 1:
-            key, = keys
-            label = ' › '.join(structure.path(registry, key)) if key in nodes else tr("Unsorted")
-        self._structure_path.setText(label)
-        self._refile_button.setEnabled(not linked and any('source' not in n for n in nodes.values()))
-
-    def _refile(self):
-        from core import bim_registry, structure
-        from core.protocol import commands
-        from ingetrazo_core import filing_choices
-        from views.chrome_forms import ask_choice
-
-        vp = self._window.viewport
-        scene = vp.scene
-        targets = [scene.occurrence_path(g) for g in scene.selection if isinstance(g, Group)]
-        choices = filing_choices(structure._nodes(bim_registry.get(scene)))
-
-        def picked(label):
-            if label in choices and self._window.viewport.scene is scene:
-                try:
-                    commands.run(vp.history, "file_placements", placements=targets, node=choices[label])
-                    vp.refresh_after_edit()
-                except (KeyError, ValueError) as exc:
-                    vp.flash_status(str(exc))
-            self.refresh()
-
-        if choices and targets:
-            ask_choice(self._window, tr("Re-file under…"), tr("Structure"), list(choices), done=picked)
-
-    # ---- Layer field --------------------------------------------------------
-    def _refresh_layer(self, sel: list) -> None:
-        from core.layers import layer_of, taggable
-        tagged = taggable(sel)
-        show = bool(tagged)
-        self._layer_caption.setVisible(show)
-        self._layer_box.setVisible(show)
-        if not show:
-            return
-        scene = self._window.viewport.scene
-        names = [ly.key for ly in scene.layers]
-        current = {layer_of(e) for e in tagged}
-        self._updating = True
-        try:
-            self._layer_box.clear()
-            if len(current) > 1:
-                # A mixed selection reads as such; picking a layer moves
-                # everything onto it.
-                self._layer_box.addItem(tr("(several)"), None)
-            from core.layers import path_label
-            for name in names:
-                self._layer_box.addItem(path_label(scene, name), name)
-            if len(current) == 1:
-                idx = self._layer_box.findData(next(iter(current)))
-                self._layer_box.setCurrentIndex(max(idx, 0))
-            else:
-                self._layer_box.setCurrentIndex(0)
-        finally:
-            self._updating = False
-
-    def _on_layer_picked(self, _index: int) -> None:
-        if self._updating:
-            return
-        name = self._layer_box.currentData()
-        if not name:
-            return
-        from core.history import AssignLayerCommand
-        from core.layers import layer_of, taggable
-        scene = self._window.viewport.scene
-        targets = [e for e in taggable(scene.selection)
-                   if layer_of(e) != name]
-        if not targets:
-            return
-        from core import links, structure
-        if any(isinstance(g, Group) and (structure.node_of(g) or links.linked_ancestor(g))
-               for g in targets):
-            self._refile()
-            return
-        self._window.viewport.history.execute(AssignLayerCommand(targets, name))
-        self._window.viewport.update()
-        self._window.statusBar().showMessage(
-            tr("{n} entities moved to '{layer}'", n=len(targets),
-               layer=self._layer_box.currentText()),
-            2500)
 
     def _describe(self, sel: list) -> str:
         if not sel:

@@ -11,6 +11,9 @@ pub(super) struct Catalog {
     labels: BTreeMap<String, String>,
     parents: BTreeMap<String, Option<String>>,
     pub folder: String,
+    pub new_hidden: bool,
+    pub color_by_layer: bool,
+    pub model_linetypes: bool,
     name: String,
     parent: String,
     line: Option<Line>,
@@ -196,6 +199,10 @@ impl Catalog {
             return Ok(());
         }
         let py = scene.py();
+        let style = scene.getattr("display_style")?;
+        self.color_by_layer = style.getattr("color_by_layer")?.extract()?;
+        self.model_linetypes = style.getattr("model_linetypes")?.extract()?;
+        self.new_hidden = crate::tree_grouping::tag_controls::new_hidden(py)?;
         let entries: String = py
             .import("json")?
             .call_method1("dumps", (scene.getattr("line_types")?,))?

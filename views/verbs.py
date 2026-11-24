@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 
-from ingetrazo_render import (verbs_constants, verbs_dispatch, verbs_file, verbs_inspector,  # noqa: F401
+from ingetrazo_render import (text_editable, verbs_constants, verbs_dispatch, verbs_file, verbs_inspector,  # noqa: F401
                               verbs_kind, verbs_menu, verbs_name_editable, verbs_offered,
                               verbs_read_only)
 
@@ -65,8 +65,9 @@ def facts(scene, sel, win=None, view=None, *, locked_group=None, locked_image=No
     loose = [e for e in edges if e in scene.mesh.edges]
     f.update(loose_edges=len(loose), curve=any(getattr(e, "curve", None) is not None for e in loose))
     if isinstance(one, Group):
+        editable = text_editable(scene, one)
         f.update(name=getattr(one, "name", "") or "", filed=_filed_path(scene, one),
-                 text3d=bool(getattr(one, "text3d", None)) and not one.locked,
+                 text3d=editable is not None, edited_letters=editable is False,
                  billboard=bool(getattr(one, "billboard", False)))
         if one.is_component():
             from core.kept_components import kept_template

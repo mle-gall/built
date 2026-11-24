@@ -3174,12 +3174,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
              tr("Save the view on screen as a 2D line drawing for CAD, with "
                 "the hidden lines removed."),
              self._on_export_view_dxf),
-            (tr("Current view as SVG…"),
-             tr("Save the view on screen as a vector drawing at 1:100: the "
-                "faces in their colours and textures under the lines, one "
-                "layer per model layer, to edit in an illustration "
-                "program."),
-             self._on_export_view_svg),
             (tr("Image (PNG / JPG)…"),
              tr("Save the view on screen as a PNG or JPG picture at the "
                 "width you choose."),
@@ -4028,19 +4022,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                 one = groups[0]
                 menu.addAction(tr("Edit Group"),
                                lambda: self.viewport.begin_group_edit(one))
-            text = self._selected_text3d()
-            if text is not None:
-                from core.text3d import text_is_pristine
-                if text_is_pristine(text):
-                    menu.addAction(tr("Edit 3D Text…"),
-                                   lambda: self._on_edit_3d_text(text))
-                else:
-                    # A letter touched by hand would be thrown away by a
-                    # regeneration, so the text is plain geometry now:
-                    # the entry stays, greyed, saying why.
-                    off = menu.addAction(
-                        tr("Edit 3D Text… (letters edited by hand)"))
-                    off.setEnabled(False)
             if not has_mesh and (
                     any(isinstance(e, Group) and not e.is_component()
                         and not getattr(e, "billboard", False) for e in sel)

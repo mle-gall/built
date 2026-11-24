@@ -21,7 +21,7 @@ from core.group import Group
 from core.layers import DEFAULT_LAYER, Layer, assign_layer
 from core.mesh import Mesh
 from core.saved_views import SavedView
-from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from tests.test_drawing_records import _square
 from core.scene import Scene
 
@@ -46,68 +46,37 @@ def win():
     QSettings().remove("ui/window_geometry")
 
 
-def test_the_add_buttons_sit_left_of_the_filter_icon_only(win):
-    from PySide6.QtWidgets import QPushButton, QToolButton
-    panel = win.layers_dock.panel
-    bar = panel.layout().itemAt(0).layout()
-    widgets = [bar.itemAt(i).widget() for i in range(bar.count())]
-    assert widgets[:3] == [panel.add_layer_btn, panel.add_folder_btn,
-                           panel.search]
-    for btn, tip in ((panel.add_layer_btn, "Add layer"),
-                     (panel.add_folder_btn, "Add folder")):
-        assert isinstance(btn, QToolButton) and btn.autoRaise()
-        assert btn.text() == "" and not btn.icon().isNull()
-        assert btn.toolTip() == tip
-    texts = {b.text() for b in panel.findChildren(QPushButton)}
-    assert "Purge" not in texts and "+ Layer" not in texts
+def test_add_opens_the_selected_folder_and_preserves_its_parent(native_host):
+    from ingetrazo_core import edit_tag_folder
+    from tests.native_tree import action
+    import json
+    scene = native_host.viewport.scene
+    action(native_host, "newtag", "")
+    assert scene.layers[-1].folder is None
+    folder = edit_tag_folder(native_host.viewport.history, "new", json.dumps({"name": "Survey"}))
+    inner = edit_tag_folder(native_host.viewport.history, "new", json.dumps({"name": "Roads", "parent": folder}))
+    action(native_host, "newtag", "preview-folder:" + inner)
+    assert scene.layers[-1].folder == inner and L.folder_parent(scene, inner) == folder
+    assert {"preview-folder:" + inner, "preview-folder:" + folder} <= native_host.view._ui_exp
 
 
-def test_add_goes_into_the_selected_folder_with_the_name_open(win):
-    from PySide6.QtWidgets import QAbstractItemView
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    panel.add_layer_btn.click()                       # nothing selected
-    first = scene.layers[-1]
-    assert first.folder is None
-    assert panel.tree.state() == QAbstractItemView.EditingState
-    assert panel.tree.currentItem() is panel.item_for(first.name)
-    panel.add_folder_btn.click()
-    folder = L.folders_of(scene)[-1]
-    assert L.folder_parent(scene, folder) is None
-    item = panel.item_for(folder, "folder")
-    panel.tree.setCurrentItem(item)                   # select the folder
-    panel.add_layer_btn.click()
-    assert scene.layers[-1].folder == folder
-    panel.tree.setCurrentItem(panel.item_for(folder, "folder"))
-    panel.add_folder_btn.click()
-    inner = L.folders_of(scene)[-1]
-    assert L.folder_parent(scene, inner) == folder
-    assert panel.item_for(inner, "folder").parent() is \
-        panel.item_for(folder, "folder")
-
-
-def test_purge_lives_in_the_right_click_and_asks_with_the_count(win,
-                                                                monkeypatch):
-    from PySide6.QtWidgets import QMessageBox
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("Vacia 1"), Layer("Vacia 2")]
-    panel.refresh()
-    asked = []
-
-    def question(_parent, _title, text, *a, **k):
-        asked.append(text)
-        return QMessageBox.Yes
-
-    monkeypatch.setattr(QMessageBox, "question", staticmethod(question))
-    for item in (None, panel.item_for("Vacia 1")):
-        menu = QMenu()
-        panel.fill_menu(menu, item)
-        assert "Purge unused layers…" in [a.text() for a in menu.actions()]
-    next(a for a in menu.actions()
-         if a.text() == "Purge unused layers…").trigger()
-    assert asked and "2" in asked[0]
-    assert [ly.name for ly in scene.layers] == [DEFAULT_LAYER]
+def test_purge_asks_for_the_count_and_accepts_only_a_current_confirmation(native_question_host):
+    from tests.native_tree import action
+    from views import chrome_dialogs
+    host = native_question_host
+    scene = host.viewport.scene
+    scene.layers.extend([Layer("Vacia 1"), Layer("Vacia 2")])
+    for answer in ("cancel", "stale", "readonly", "delete"):
+        action(host, "purgetags", "preview-tag:Vacia 1")
+        assert "2" in chrome_dialogs.current_sheet(host.window).text
+        if answer == "stale":
+            scene.version += 1
+        scene.worksession_read_only = answer == "readonly"
+        assert chrome_dialogs.answer(host.window, "cancel" if answer == "cancel" else "delete")
+        assert len(scene.layers) == (1 if answer == "delete" else 3)
+        scene.worksession_read_only = False
+    action(host, "purgetags", "")
+    assert chrome_dialogs.current_sheet(host.window) is None
 
 
 def test_columns_and_indent_follow_the_browser(win):
@@ -123,46 +92,16 @@ def test_columns_and_indent_follow_the_browser(win):
     assert panel.tree.indentation() == 12
 
 
-def test_the_top_bar_ends_with_expand_colour_by_layer_and_more(win):
-    from PySide6.QtWidgets import QPushButton, QToolButton
-    panel = win.layers_dock.panel
-    bar = panel.layout().itemAt(0).layout()
-    widgets = [bar.itemAt(i).widget() for i in range(bar.count())]
-    assert widgets[-3:] == [panel.expand_btn, panel.color_by_layer,
-                            panel.more_btn]
-    assert not hasattr(panel, "isolate_btn")       # isolating is per row
-    # No row of buttons under the list any more: the tree is the last.
-    assert panel.layout().itemAt(panel.layout().count() - 1).widget()         is panel.tree
-    assert not panel.findChildren(QPushButton)
-    panel._fill_more_menu()
-    assert any("template" in a.text() for a in panel.more_menu.actions())
-    btn = panel.color_by_layer
-    assert isinstance(btn, QToolButton) and btn.isCheckable()
-    assert btn.autoRaise() and not btn.icon().isNull()
-    btn.click()
-    assert win.viewport.scene.display_style.color_by_layer
-    btn.click()
-    assert not win.viewport.scene.display_style.color_by_layer
-
-
-def test_the_eye_and_padlock_headers_act_on_every_layer(win):
-    from views.layers_panel import COL_EYE, COL_LOCK, COL_NAME
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A"), Layer("B", visible=False)]
-    panel.refresh()
-    panel._on_header_clicked(COL_EYE)            # not all visible → all on
-    assert all(ly.visible for ly in scene.layers)
-    panel._on_header_clicked(COL_EYE)            # all visible → all off
-    assert not any(ly.visible for ly in scene.layers)
-    panel._on_header_clicked(COL_LOCK)
-    assert all(ly.locked for ly in scene.layers)
-    panel._on_header_clicked(COL_LOCK)
-    assert not any(ly.locked for ly in scene.layers)
-    panel._on_header_clicked(COL_NAME)           # Name: sorts, descending
-    names = [panel.tree.topLevelItem(i).text(0)
-             for i in range(panel.tree.topLevelItemCount())]
-    assert names == [DEFAULT_LAYER, "B", "A"]
+def test_the_eye_and_padlock_headers_act_on_every_layer(native_host):
+    from tests.native_tree import action
+    scene = native_host.viewport.scene
+    scene.layers.extend([Layer("A"), Layer("B", visible=False)])
+    for verb, field, expected in [("headereye", "visible", True), ("headereye", "visible", False),
+                                  ("headerlock", "locked", True), ("headerlock", "locked", False)]:
+        action(native_host, verb, "tags")
+        assert all(getattr(tag, field) == expected for tag in scene.layers)
+    assert len(native_host.viewport.history.undo_stack) == 4
+    assert native_host.viewport.history.undo() and all(tag.locked for tag in scene.layers)
 
 
 def test_a_real_click_on_the_eye_of_a_selected_row_acts_on_all(win):
@@ -336,120 +275,56 @@ def test_expand_button_folds_and_unfolds_every_folder(win):
     assert btn.property("opened")
 
 
-def test_the_top_bar_buttons_share_one_size(win):
-    """Icons, not text glyphs: the expand and templates buttons are as tall
-    as the add buttons beside them."""
-    panel = win.layers_dock.panel
-    win.layers_dock.raise_()
-    _app.processEvents()
-    assert not panel.more_btn.icon().isNull() and panel.more_btn.text() == ""
-    sizes = {b.sizeHint().height() for b in (
-        panel.add_layer_btn, panel.add_folder_btn, panel.expand_btn,
-        panel.color_by_layer, panel.more_btn)}
-    assert len(sizes) == 1
+def test_drawing_quick_filters_and_inversion_follow_document_use_and_selection():
+    from tests.test_project_drawing_filters import Project
+    p = Project(Layer("Usada"), Layer("Oculta", visible=False),
+                Layer("Fija", locked=True), Layer("Vacia", printable=False))
+    p.view._ui_lens = 1
+    group = Group(Mesh(), name="g")
+    group.layer = "Usada"
+    p.scene.groups.append(group)
+    all_tags = {"Untagged", "Usada", "Oculta", "Fija", "Vacia"}
+    for query, expected in [("", all_tags), ("is:visible", all_tags - {"Oculta"}),
+                            ("is:hidden", {"Oculta"}), ("is:locked", {"Fija"}),
+                            ("is:used", {"Untagged", "Usada"}), ("is:unused", {"Fija", "Oculta", "Vacia"}),
+                            ("is:unprinted", {"Vacia"}), ("is:selected", set()),
+                            ("! is:hidden", all_tags - {"Oculta"}), ("! is:visible is:locked", all_tags - {"Fija"})]:
+        assert set(p.names(query, "preview-tag:")) == expected
+    p.scene.select([group])
+    assert p.names("is:selected", "preview-tag:") == ["Usada"]
+    p.scene.saved_views.append(SavedView("Plan", hidden_layers=["Vacia"]))
+    p.scene.version += 1
+    assert set(p.names("is:unused", "preview-tag:")) == {"Oculta", "Fija"}
+    assert set(p.names("", "preview-tag:")) == all_tags
 
 
-def _shown(panel):
-    return sorted(panel._key(it)[1] for it in panel._all_items()
-                  if panel._key(it)[0] == "layer" and not it.isHidden())
-
-
-def test_the_funnels_quick_filters(win):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("Usada"), Layer("Oculta", visible=False),
-                     Layer("Fija", locked=True), Layer("Vacia")]
-    g = Group(Mesh(), name="g")
-    g.layer = "Usada"
-    scene.groups.append(g)
-    panel.refresh()
-    expect = {
-        "all": [DEFAULT_LAYER, "Fija", "Oculta", "Usada", "Vacia"],
-        "visible": [DEFAULT_LAYER, "Fija", "Usada", "Vacia"],
-        "hidden": ["Oculta"],
-        "locked": ["Fija"],
-        "used": [DEFAULT_LAYER, "Usada"],
-        "unused": ["Fija", "Oculta", "Vacia"],
-        "selection": [],
-    }
-    for key, names in expect.items():
-        panel.set_state_filter(key)
-        assert _shown(panel) == sorted(names), key
-    scene.select([g])
-    win.viewport.notify_scene_changed()             # follows the selection
-    _app.processEvents()                            # the rebuild is deferred
-    assert _shown(panel) == ["Usada"]
-
-
-def test_invert_and_the_funnel_says_it_is_on(win):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A", visible=False), Layer("B")]
-    panel.refresh()
-    assert "All layers" in panel.filter_btn.toolTip()
-    panel.set_state_filter("hidden")
-    assert _shown(panel) == ["A"]
-    panel.set_invert_filter(True)
-    assert _shown(panel) == sorted([DEFAULT_LAYER, "B"])
-    assert "inverted" in panel.filter_btn.toolTip()
-    panel.set_state_filter("all")
-    panel.set_invert_filter(False)
-    assert _shown(panel) == sorted([DEFAULT_LAYER, "A", "B"])
-
-
-def test_the_filter_menu_lists_the_filters_and_invert(win):
-    panel = win.layers_dock.panel
-    panel._fill_filter_menu()
-    texts = [a.text() for a in panel.filter_menu.actions() if not a.isSeparator()]
-    assert texts == ["All layers", "Visible layers", "Hidden layers",
-                     "Locked layers", "Layers not printed",
-                     "Layers in use", "Unused layers",
-                     "Layers of the selection", "Invert filter"]
-    next(a for a in panel.filter_menu.actions()
-         if a.text() == "Hidden layers").trigger()
-    assert panel.state_filter == "hidden"
-
-
-def test_active_column_and_new_layer_option(win, monkeypatch):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
+def test_saved_scene_preference_and_make_active(native_host):
+    from tests.native_tree import action
+    from core.settings import settings
+    scene = native_host.viewport.scene
     scene.saved_views.append(SavedView("Planta"))
-    monkeypatch.setattr(type(panel), "new_layers_hidden_in_scenes",
-                        classmethod(lambda cls: True))
-    panel._on_add()
-    name = scene.layers[-1].name
-    assert scene.saved_views[0].hidden_layers == [name]
-    panel.click_cell(("layer", name), 1)                    # COL_ACTIVE
-    assert L.active_layer(scene) == name
+    action(native_host, "newtaghidden", "1")
+    action(native_host, "newtag", "")
+    key = scene.layers[-1].key
+    assert settings().value("layers/new_hidden_in_scenes", False, type=bool)
+    assert list(scene.saved_views[0].hidden_layers) == [key]
+    scene.layers[-1].locked = True
+    action(native_host, "tagactive", "preview-tag:" + key)
+    assert L.active_layer(scene) == key and not scene.layers[-1].locked
+    action(native_host, "newtaghidden", "0")
+    action(native_host, "newtag", "")
+    assert list(scene.saved_views[0].hidden_layers) == [key]
 
 
-def test_active_pencil_uses_the_interface_accent(win):
-    from views import theme
-
-    panel = win.layers_dock.panel
-    item = panel.item_for(DEFAULT_LAYER)
-
-    def has(icon, colour):
-        image = icon.pixmap(18, 18).toImage()
-        return any(
-            image.pixelColor(x, y).alpha() > 200
-            and abs(image.pixelColor(x, y).red() - colour.red()) < 12
-            and abs(image.pixelColor(x, y).green() - colour.green()) < 12
-            and abs(image.pixelColor(x, y).blue() - colour.blue()) < 12
-            for y in range(image.height()) for x in range(image.width())
-        )
-
-    blue = theme.accent_color()
-    assert has(item.icon(1), blue)                       # COL_ACTIVE
-    assert has(panel.tree.headerItem().icon(1), blue)
-
-
-def test_colour_by_layer_button_sets_the_style(win):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    panel.color_by_layer.setChecked(True)
-    assert scene.display_style.color_by_layer
-    panel.color_by_layer.setChecked(False)
+def test_drawing_model_colours_belong_to_the_style(native_host):
+    from core.style import Style
+    from tests.native_tree import action
+    scene = native_host.viewport.scene
+    for on in (True, False):
+        action(native_host, "tagcolours", str(int(on)))
+        assert Style.from_dict(scene.display_style.to_dict()).color_by_layer == on
+    scene.worksession_read_only = True
+    action(native_host, "tagcolours", "1")
     assert not scene.display_style.color_by_layer
 
 
@@ -472,15 +347,33 @@ def test_context_menu_offers_the_layer_actions(win):
     assert scene.layer("A") is None
 
 
-def test_template_export_and_import_through_the_panel(win, tmp_path):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers.append(Layer("Ejes", linetype="dashdot"))
-    path = str(tmp_path / "plantilla.json")
-    assert panel.export_template(path)
+def test_template_export_and_import_in_drawing(native_host, tmp_path, monkeypatch):
+    from tests.native_tree import action
+    from views.filedialogs import file_dialogs
+    scene = native_host.viewport.scene
+    folder = L.add_folder(scene, "Oficina")
+    tag = Layer("Ejes", folder=folder, linetype="dashdot")
+    scene.layers.append(tag)
+    path = tmp_path / "plantilla.json"
+    for picker in ("getSaveFileName", "getOpenFileName"):
+        monkeypatch.setattr(file_dialogs, picker, lambda *a: (str(path), ""))
+    action(native_host, "exporttags", "")
     scene.layers[:] = [Layer(DEFAULT_LAYER)]
-    assert panel.import_template(path)
-    assert scene.layer("Ejes").linetype == "dashdot"
+    action(native_host, "importtags", "")
+    restored = scene.layer("Ejes")
+    assert (restored.uid, restored.folder, restored.linetype) == (tag.uid, folder, "dashdot")
+    restored.visible = False
+    action(native_host, "importtags", "")
+    assert not restored.visible and scene.layer("Ejes") is restored
+
+    # Bad input cannot leave a newly imported folder behind.
+    path.write_text('{"ingetrazo_layers":1,"folders":["Partial"],"layers":[],"folder_uids":[1]}')
+    action(native_host, "importtags", "")
+    assert "Partial" not in L.folders_of(scene)
+    scene.worksession_read_only = True
+    path.write_text('{"ingetrazo_layers":1,"layers":[{"name":"Forbidden"}]}')
+    action(native_host, "importtags", "")
+    assert scene.layer("Forbidden") is None
 
 
 def test_right_click_hides_and_isolates_the_clicked_layer(win):
@@ -526,7 +419,7 @@ def test_back_in_the_drawing_the_picked_rows_let_go(win):
     panel.refresh()
     panel.tree.selectAll()
     assert panel.tree.selectedItems()
-    panel._on_focus_changed(win.viewport.keys_stand_in, panel.search)     # still in here
+    panel._on_focus_changed(win.viewport.keys_stand_in, panel.more_btn)     # still in here
     assert panel.tree.selectedItems()
     panel._on_focus_changed(panel.tree, win.viewport.keys_stand_in)       # to the model
     assert not panel.tree.selectedItems()
@@ -541,79 +434,6 @@ def test_back_in_the_drawing_the_picked_rows_let_go(win):
         assert not panel.tree.selectedItems()
 
 
-def test_the_headers_take_a_real_mouse_click(win):
-    """Switching sorting off makes Qt's header unclickable; the eye and
-    padlock headers must still answer the mouse."""
-    from PySide6.QtCore import QPoint
-    from PySide6.QtTest import QTest
-    from views.layers_panel import COL_EYE, COL_LOCK
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A"), Layer("B")]
-    panel.refresh()
-    win.layers_dock.raise_()
-    _app.processEvents()
-    head = panel.tree.header()
-    assert head.sectionsClickable()
-
-    def click(col):
-        x = head.sectionViewportPosition(col) + head.sectionSize(col) // 2
-        QTest.mouseClick(head.viewport(), Qt.LeftButton, Qt.NoModifier,
-                         QPoint(x, head.height() // 2))
-        _app.processEvents()
-
-    click(COL_EYE)
-    assert not any(ly.visible for ly in scene.layers)
-    click(COL_EYE)
-    assert all(ly.visible for ly in scene.layers)
-    click(COL_LOCK)
-    assert all(ly.locked for ly in scene.layers)
-    click(COL_LOCK)
-    assert not any(ly.locked for ly in scene.layers)
-
-
-def _drag_move(tree, pos):
-    from PySide6.QtCore import QMimeData
-    from PySide6.QtGui import QDragMoveEvent
-
-    class _Move(QDragMoveEvent):
-        def source(self):
-            return tree
-
-    ev = _Move(pos, Qt.MoveAction, QMimeData(), Qt.LeftButton, Qt.NoModifier)
-    tree.dragMoveEvent(ev)
-    return ev
-
-
-def test_a_new_row_opens_its_name_without_a_half_lit_highlight(win):
-    from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QAbstractItemView
-    panel = win.layers_dock.panel
-    win.layers_dock.raise_()
-    _app.processEvents()
-    for add, kind in ((panel.add_layer, "layer"), (panel.add_folder, "folder")):
-        name = add()
-        _app.processEvents()
-        tree = panel.tree
-        assert tree.state() == QAbstractItemView.EditingState
-        assert tree.currentItem() is panel.item_for(name, kind)
-        assert tree.selectedItems() == []
-        # Typed and Enter: the row is selected whole, under its new name.
-        editor = tree.focusWidget()
-        editor.setText(kind + " nueva")
-        QTest.keyClick(editor, Qt.Key_Return)
-        _app.processEvents()
-        _app.processEvents()
-        assert tree.state() != QAbstractItemView.EditingState
-        # The row keeps its key (#tags-by-key); the typed text is its label.
-        assert [panel._key(i) for i in tree.selectedItems()] == [(kind, name)]
-        assert [i.text(0) for i in tree.selectedItems()] == [kind + " nueva"]
-        made = name
-    # The folder just made is selected: the next layer goes into it.
-    inner = panel.add_layer()
-    assert win.viewport.scene.layer(inner).folder == made
-
-
 def test_the_delete_key_deletes_the_current_row(native_host):
     from tests.native_tree import action
     scene = native_host.viewport.scene
@@ -623,30 +443,6 @@ def test_the_delete_key_deletes_the_current_row(native_host):
     assert native_host.viewport.history.undo() and scene.layer("A") is not None
     action(native_host, "deletetag", "preview-tag:" + DEFAULT_LAYER)
     assert scene.layer(DEFAULT_LAYER) is not None and not native_host.viewport.history.undo_stack
-
-
-def test_leaving_a_new_name_for_the_model_leaves_nothing_selected(win):
-    """Typing a new layer's name and clicking straight into the drawing:
-    the row used to get selected AFTER the drawing took the focus, and
-    stayed lit while working in the model."""
-    from PySide6.QtCore import QPoint
-    from PySide6.QtTest import QTest
-    panel = win.layers_dock.panel
-    win.activateWindow()
-    win.layers_dock.raise_()
-    _app.processEvents()
-    panel.add_layer()
-    _app.processEvents()
-    QTest.mouseClick(win.viewport.keys_stand_in, Qt.LeftButton, Qt.NoModifier,
-                     QPoint(300, 300))
-    for _ in range(3):
-        _app.processEvents()
-    if QApplication.focusWidget() is win.viewport.keys_stand_in:
-        assert panel.tree.selectedItems() == []
-    # Left with Enter instead (still in the panel): selected, as before.
-    panel._just_made = None
-    panel._select_just_made()                          # nothing pending
-    assert panel.tree.selectedItems() == []
 
 
 def test_line_type_and_weight_columns_follow_the_colour(win):
@@ -749,7 +545,6 @@ def test_dropped_menus_stay_inside_the_panel(win):
     for col in (COL_CUT, COL_WEIGHT):
         panel.click_cell(("layer", "A"), col)
     panel._open_more_menu()
-    panel._open_filter_menu()
     for w, at in seen:
         assert at.x() >= inside.left() + MENU_MARGIN
         assert at.x() + w <= inside.right() + 1 - MENU_MARGIN             or at.x() == inside.left() + MENU_MARGIN
@@ -791,25 +586,19 @@ def test_the_weight_list_looks_like_the_line_type_list(win):
 
 # ---- Order and where new rows go -------------------------------------------
 
-def test_a_new_layer_goes_into_the_folder_of_the_selected_layer(win):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
+def test_new_tag_at_a_tag_uses_its_folder_and_rejects_a_stale_target(native_host):
+    from tests.native_tree import action
+    scene = native_host.viewport.scene
     arq = L.add_folder(scene, "Arq")
-    scene.layers += [Layer("Muros", folder=arq), Layer("Suelta")]
-    panel.refresh()
-    panel.tree.setCurrentItem(panel.item_for("Muros"))
-    name = panel.add_layer(edit=False)
-    assert scene.layer(name).folder == arq
-    panel.tree.setCurrentItem(panel.item_for("Muros"))
-    sub = panel.add_folder(edit=False)                 # a folder too
-    assert L.folder_parent(scene, sub) == arq
-    panel.refresh()
-    panel.tree.setCurrentItem(panel.item_for("Suelta"))
-    top = panel.add_layer(edit=False)
-    assert scene.layer(top).folder is None           # a loose one: the top
-
-
-# ---- DXF: every layer with its colour ---------------------------------------
+    scene.layers.extend([Layer("Muros", folder=arq), Layer("Suelta")])
+    action(native_host, "newtag", "preview-tag:Muros")
+    assert scene.layers[-1].folder == arq
+    action(native_host, "newtag", "preview-tag:Suelta")
+    assert scene.layers[-1].folder is None
+    count = len(scene.layers)
+    for key in ["preview-tag:missing", "preview-folder:missing"]:
+        action(native_host, "newtag", key)
+        assert len(scene.layers) == count
 
 
 def test_behind_another_tab_the_panel_waits_until_shown(win):
@@ -820,10 +609,10 @@ def test_behind_another_tab_the_panel_waits_until_shown(win):
     assert not panel.isVisible()
     scene.layers += [Layer("Nueva")]
     win.viewport.notify_scene_changed()
-    assert "Nueva" not in _shown(panel)                 # not rebuilt hidden
+    assert panel.item_for("Nueva") is None                 # not rebuilt hidden
     win.layers_dock.show()
     _app.processEvents()
-    assert "Nueva" in _shown(panel)
+    assert panel.item_for("Nueva") is not None
 # ---- The rebuild waits for the event loop -----------------------------------
 
 def _count_rebuilds(panel):
@@ -868,20 +657,6 @@ def test_a_scene_change_rebuilds_after_the_event_loop_not_inside_it(win):
         assert len(calls) == 1              # one rebuild for the burst
     finally:
         _stop_counting(panel, real)
-
-
-def test_a_new_layer_keeps_its_name_editor_open(win):
-    """The row whose name is being typed must not be rebuilt under the
-    editor: the panel announces the change first, then rebuilds — the
-    deferred rebuild it armed is the one it just did."""
-    from PySide6.QtWidgets import QAbstractItemView
-    panel = win.layers_dock.panel
-    win.layers_dock.raise_()
-    _app.processEvents()
-    name = panel.add_layer()
-    _app.processEvents()
-    assert panel.tree.state() == QAbstractItemView.EditingState
-    assert panel.tree.currentItem().text(0) == name
 
 
 def test_the_layer_of_what_is_picked_in_the_model_stands_out(win):

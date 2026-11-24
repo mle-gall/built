@@ -1282,8 +1282,8 @@ impl PyPlacement {
         super::drawing::prepare(py, self.key, tags, field, value)
     }
 
-    fn _drawing_preview(&self, expanded: HashSet<String>, filter: &str, has_links: bool) -> PyResult<Vec<(Vec<String>, Vec<i64>)>> {
-        super::drawing::preview(&lock(), self.key, expanded, filter, has_links).map_err(err)
+    fn _drawing_preview(&self, expanded: HashSet<String>, filter: &str, has_links: bool, used: HashSet<String>, held: HashSet<String>, selected: HashSet<String>) -> PyResult<Vec<(Vec<String>, Vec<i64>)>> {
+        super::drawing::preview(&lock(), self.key, expanded, filter, has_links, &used, &held, &selected).map_err(err)
     }
 
     /// A root's tag list (`scene.layers`).

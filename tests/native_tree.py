@@ -29,3 +29,15 @@ def inspector(host, selection):
         host.view._ui_insp_sig = None
         wgpu_ui._inspector(host.view, host.window)
     return {title: dict(rows) for title, rows in sections}
+
+
+def tag_picker(host, selection):
+    """Read the selected stable key and the choices provided to the native inspector."""
+    import json
+    sections = inspector(host, selection)
+    for rows in sections.values():
+        value = rows.get("Tag", "")
+        if value.startswith("\x1dtagpicker\x1d"):
+            index, choices = json.loads(value.split("\x1d", 2)[2])
+            return choices[index][0], dict(choices)
+    return None

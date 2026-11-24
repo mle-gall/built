@@ -578,13 +578,6 @@ class OutlinerPanel(QWidget):
         head.setFirstSectionMovable(True)
         self._apply_column_order()
         head.sectionMoved.connect(self._save_column_order)
-        self.tree.headerItem().setIcon(COL_EYE, node_icon("eye"))
-        self.tree.headerItem().setToolTip(COL_EYE, tr(
-            "Visible — click to hide everything, or to show it all again"))
-        self.tree.headerItem().setIcon(COL_LOCK, node_icon("lock"))
-        self.tree.headerItem().setToolTip(COL_LOCK, tr(
-            "Locked: drawn, but it cannot be picked, selected or opened — "
-            "click to lock everything, or to unlock it all again"))
         self.tree.headerItem().setIcon(COL_ISOLATE, isolate_icon(False))
         self.tree.headerItem().setToolTip(COL_ISOLATE, tr(
             "Isolate — a row's target shows only that group, a second click "
@@ -2386,24 +2379,12 @@ class OutlinerPanel(QWidget):
             self.isolate_groups(groups)
 
     def _on_header_clicked(self, col: int) -> None:
-        """The eye's header hides everything, or shows it all again when
-        something is hidden; the padlock's locks or unlocks it all; the
-        target's ends the isolation. On the model's top-level groups: what
-        they hold follows, faded, and keeps its own state — a group locked
-        on purpose inside stays locked."""
         if col == COL_ISOLATE:
             if self._isolated_now():
                 self.exit_isolation()
             else:
                 self.isolate()
             return
-        tops = list(self._scene().groups)
-        if not tops:
-            return
-        if col == COL_EYE:
-            self.toggle_hidden(tops)
-        elif col == COL_LOCK:
-            self.toggle_locked(tops)
 
     def show_all(self) -> None:
         """Show every hidden group of the tree, at every level — one

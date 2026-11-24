@@ -506,7 +506,7 @@ impl Ui {
     }
     pub fn style_catalog(&mut self, owner: usize, lines: Vec<String>, patterns: String, scene: Option<&pyo3::Bound<'_,pyo3::PyAny>>) -> pyo3::PyResult<()> {
         if let Some(col)=self.column.as_mut() {
-            if col.styles.owner != owner { col.styles = Default::default(); col.styles.owner=owner; col.proposal_dismissed=false; col.highlighted=None; col.focused_row=None; col.issue_at=None; }
+            if col.styles.owner != owner { col.styles = Default::default(); col.styles.owner=owner; col.renaming=None; col.proposal_dismissed=false; col.highlighted=None; col.focused_row=None; col.issue_at=None; }
             col.styles.lines=lines;
             col.styles.set_patterns(patterns);
             if let Some(scene)=scene { col.styles.sync_catalog(scene)?; col.styles.hatches.sync(scene)?; }
@@ -532,7 +532,20 @@ impl Ui {
     }
 
     pub fn drawing_edit_applied(&mut self,verb:&str,key:&str){
-        if let Some(col)=self.column.as_mut(){col.styles.applied(verb,key);}
+        if let Some(col) = self.column.as_mut() {
+            if verb == "newtag" {
+                let row = format!("preview-tag:{key}");
+                col.styles.clear_focus();
+                col.focused_row = None;
+                col.highlighted = None;
+                col.filter.clear();
+                col.reveal = Some(row.clone());
+                col.renaming = Some((row, key.into()));
+                col.focus_rename = true;
+            } else {
+                col.styles.applied(verb, key);
+            }
+        }
     }
     pub fn set_export_focus(&mut self, node: Option<String>, placements: Vec<Vec<String>>) {
         if let Some(col) = self.column.as_mut() {
@@ -1826,7 +1839,7 @@ impl Ui {
                     let row_left = ui.cursor().min.x;
                     let cols = lens::RowLayout::plan(col.lens, row_left, row_left + ui.available_width());
                     let row_room = if col.mode.is_empty() && nodes_len > 0 {
-                        let header = cols.header(ui, row_left);
+                        let header = cols.header(ui, row_left, &mut actions);
                         if col.lens == Lens::Drawing {
                             drawing::drawing_drop(ui, &header, &col.nodes, None, col.styles.owner, &mut actions);
                         }
@@ -1977,6 +1990,11 @@ impl Ui {
                                     if col.focus_rename { r.request_focus(); col.focus_rename = false; }
                                     if r.lost_focus() {
                                         let (key, name) = col.renaming.take().unwrap();
+                                        if col.lens == Lens::Drawing && key.starts_with("preview-tag:") &&
+                                            ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                                            col.styles.pick(n, false);
+                                            col.focused_row = Some(key.clone());
+                                        }
                                         if !ui.input(|i| i.key_pressed(egui::Key::Escape)) && !name.trim().is_empty() && name != n.name {
                                             actions.push(format!("rename\u{1f}{key}\u{1f}{}", name.trim()));
                                         }
@@ -2129,7 +2147,7 @@ impl Ui {
                                     let verb = if n.row == 0 { "isolate" } else { "open" };
                                     actions.push(format!("{verb}\u{1f}{}", n.key));
                                 }
-                                if resp.secondary_clicked() && (drawing_row && n.key.starts_with("preview-tag:") || n.key.starts_with("section:") || n.row < 6 && n.row != 4 && (n.row != 5 || n.key.starts_with("cm:"))) {
+                                if resp.secondary_clicked() && (drawing_row || n.key.starts_with("section:") || n.row < 6 && n.row != 4 && (n.row != 5 || n.key.starts_with("cm:"))) {
                                     col.group_rows.clear();
                                     if n.key.starts_with("g:") || n.key.starts_with("i:") || n.key.starts_with("c:") || n.key.starts_with("d:") {
                                         actions.push(format!("grouprows\u{1f}{}", n.key));
@@ -2277,8 +2295,8 @@ impl Ui {
                 ("-", ""), ("linkopen", "Edit source"), ("linkfinder", "Show in Finder"),
                 ("linkreload", "Reload"), ("linkrelink", "Locate…"), ("linkunlink", "Unlink")];
             let section_menu: &[(&str, &str)] = &[("sectioncut", "Toggle cut"), ("eye", "Show / hide"), ("deleterows", "Delete")];
-            let tag_menu: &[(&str, &str)] = &[("tagselect", "Select items"), ("tagisolate", "Isolate"), ("deletetag", "Delete")];
-            let menu = if key.starts_with("preview-tag:") { tag_menu } else if key.starts_with("section:") { section_menu } else if row == 0 && key.starts_with("n:link") { link_menu } else if row == 0 { node_menu }
+            let tag_menu: &[(&str, &str)] = &[("newtag", "New tag"), ("rename", "Rename"), ("tagactive", "Make active"), ("tagassign", "Move selection here"), ("tagselect", "Select items"), ("tagisolate", "Isolate"), ("deletetag", "Delete"), ("purgetags", "Purge unused tags…")];
+            let menu = if key.starts_with("preview-tag:") { tag_menu } else if key.starts_with("preview-folder:") { &[("newtag", "New tag in folder")] } else if key.starts_with("section:") { section_menu } else if row == 0 && key.starts_with("n:link") { link_menu } else if row == 0 { node_menu }
                 else if row == 5 { comp_menu } else { item_menu };
             let resp = egui::Area::new(egui::Id::new("row_menu"))
                 .fixed_pos(at + vec2(4.0, 4.0))
@@ -2290,7 +2308,7 @@ impl Ui {
                         let row = col.nodes.iter().find(|n| n.key == key);
                         let editable_file = row.is_some_and(|n| n.icon.starts_with("file:") && !n.badge.starts_with("via "));
                         for (id, label) in menu {
-                            if *id == "deletetag" && key == "preview-tag:Layer 0" { continue; }
+                            if matches!(*id, "rename" | "deletetag") && key == "preview-tag:Layer 0" { continue; }
                             if row.is_some_and(|n| n.icon == "file:missing") &&
                                 matches!(*id, "contents" | "isolate" | "zoom" | "linkopen" | "linkfinder" | "linkreload") { continue; }
                             if matches!(*id, "linkreload" | "linkrelink" | "linkunlink") &&
@@ -2362,51 +2380,85 @@ impl Ui {
                 .show(ctx, |ui| {
                     glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
                         ui.set_width(220.0);
-                        ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
-                        if col.mode.is_empty() {
-                            if col.lens == Lens::Filing && tree_filter::controls(ui, &mut col.filter) {
-                                actions.push(format!("filter\u{1f}{}", col.filter));
+                        egui::ScrollArea::vertical().id_salt("project_header_actions")
+                            .max_height((screen.max.y - at.y - GUT * 2.).max(80.0)).show(ui, |ui| {
+                            ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
+                            if col.mode.is_empty() {
+                                if (col.lens == Lens::Filing || col.lens == Lens::Drawing && col.proposal_available) &&
+                                    tree_filter::controls(ui, &mut col.filter, col.lens == Lens::Drawing) {
+                                    actions.push(format!("filter\u{1f}{}", col.filter));
+                                }
+                                if col.lens == Lens::Drawing && col.proposal_available {
+                                    if menu_row(ui, &("newtag".into(), "New tag".into(), String::new(), String::new(), -1, true)) {
+                                        actions.push(format!("newtag\u{1f}{}", col.styles.creation_row()));
+                                        close = true;
+                                    }
+                                    let hidden = col.styles.catalog.new_hidden;
+                                    if menu_row(ui, &("newtaghidden".into(), "New tags hidden in saved scenes".into(), String::new(), String::new(), i8::from(hidden), true)) {
+                                        col.styles.catalog.new_hidden = !hidden;
+                                        actions.push(format!("newtaghidden\u{1f}{}", u8::from(!hidden)));
+                                        close = true;
+                                    }
+                                }
+                                if col.lens == Lens::Drawing {
+                                    for (id, label, check) in [
+                                        ("tagcolours", "Colour by tag", Some(col.styles.catalog.color_by_layer)),
+                                        ("modellines", "Line types in the model", Some(col.styles.catalog.model_linetypes)),
+                                        ("exporttags", "Export layer template…", None),
+                                        ("importtags", "Import layer template…", None),
+                                    ] {
+                                        if menu_row(ui, &(id.into(), label.into(), String::new(), String::new(), check.map_or(-1, i8::from), true)) {
+                                            let value = check.map_or("", |on| if on { "0" } else { "1" });
+                                            actions.push(format!("{id}\u{1f}{value}"));
+                                            close = true;
+                                        }
+                                    }
+                                }
+                                if col.lens == Lens::Drawing && menu_row(ui, &("purgetags".into(), "Purge unused tags…".into(), String::new(), String::new(), -1, true)) {
+                                    actions.push("purgetags\u{1f}".into());
+                                    close = true;
+                                }
+                                let options = tree_order::Sort::OPTIONS;
+                                let old = options.iter().position(|(sort, _)| *sort == col.sort).unwrap_or(0);
+                                let mut index = old;
+                                ui.horizontal(|ui| {
+                                    kit::caption_plain(ui, "Sort by");
+                                    kit::choice(ui, "project_sort", &mut index, &options.map(|(_, label)| label));
+                                });
+                                if index != old {
+                                    col.sort = options[index].0;
+                                    col.ordered = col.sort.order(&col.nodes);
+                                    actions.push(format!("sort\u{1f}{index}"));
+                                    close = true;
+                                }
                             }
-                            let options = tree_order::Sort::OPTIONS;
-                            let old = options.iter().position(|(sort, _)| *sort == col.sort).unwrap_or(0);
-                            let mut index = old;
-                            ui.horizontal(|ui| {
-                                kit::caption_plain(ui, "Sort by");
-                                kit::choice(ui, "project_sort", &mut index, &options.map(|(_, label)| label));
-                            });
-                            if index != old {
-                                col.sort = options[index].0;
-                                col.ordered = col.sort.order(&col.nodes);
-                                actions.push(format!("sort\u{1f}{index}"));
-                                close = true;
-                            }
-                        }
-                        if col.mode.is_empty() {
-                            for (id, label) in [("linkselection", "Link selection from open file…"), ("linkregistry", "Move registry to project…")] {
-                                let item = (id.to_owned(), label.to_owned(), String::new(), String::new(), -1, true);
+                            if col.mode.is_empty() {
+                                for (id, label) in [("linkselection", "Link selection from open file…"), ("linkregistry", "Move registry to project…")] {
+                                    let item = (id.to_owned(), label.to_owned(), String::new(), String::new(), -1, true);
+                                    if menu_row(ui, &item) {
+                                        actions.push(format!("{id}\u{1f}"));
+                                        close = true;
+                                    }
+                                }
+                                let shortcut = if cfg!(target_os = "macos") { "⇧⌘J" } else { "Ctrl+Shift+J" };
+                                let item = ("revealselection".into(), "Reveal selection".into(), shortcut.into(), String::new(), -1, selection.is_some());
                                 if menu_row(ui, &item) {
+                                    actions.push("revealselection\u{1f}".into());
+                                    close = true;
+                                }
+                            }
+                            if self.plugins.available() && menu_row(ui,&("plugins".into(),"Plugins".into(),String::new(),String::new(),-1,true)) {
+                                self.plugins.showing = !self.plugins.showing; close = true;
+                            }
+                            for (id, label) in [("new", "New node"), ("propose", "Propose structure from tags…"),
+                                                ("expandall", "Expand all"), ("collapseall", "Collapse all"), ("showall", "Show all"),
+                                                ("measure", "Measure quantities"), ("exportcsv", "Export quantities CSV…")] {
+                                if menu_row(ui, &(id.to_owned(), label.to_owned(), String::new(), String::new(), -1i8, true)) {
                                     actions.push(format!("{id}\u{1f}"));
                                     close = true;
                                 }
                             }
-                            let shortcut = if cfg!(target_os = "macos") { "⇧⌘J" } else { "Ctrl+Shift+J" };
-                            let item = ("revealselection".into(), "Reveal selection".into(), shortcut.into(), String::new(), -1, selection.is_some());
-                            if menu_row(ui, &item) {
-                                actions.push("revealselection\u{1f}".into());
-                                close = true;
-                            }
-                        }
-                        if self.plugins.available() && menu_row(ui,&("plugins".into(),"Plugins".into(),String::new(),String::new(),-1,true)) {
-                            self.plugins.showing = !self.plugins.showing; close = true;
-                        }
-                        for (id, label) in [("new", "New node"), ("propose", "Propose structure from tags…"),
-                                            ("expandall", "Expand all"), ("collapseall", "Collapse all"), ("showall", "Show all"),
-                                            ("measure", "Measure quantities"), ("exportcsv", "Export quantities CSV…")] {
-                            if menu_row(ui, &(id.to_owned(), label.to_owned(), String::new(), String::new(), -1i8, true)) {
-                                actions.push(format!("{id}\u{1f}"));
-                                close = true;
-                            }
-                        }
+                        });
                     });
                 });
             if close { col.head_menu = None; }
@@ -2835,6 +2887,19 @@ fn doc_tab(ui: &mut egui::Ui, name: &str, active: bool, dirty: bool) -> Option<b
 fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::collections::HashMap<String, String>,
                   actions: &mut Vec<String>) {
     for (label, value) in rows {
+        if let Some(data) = value.strip_prefix("\u{1d}tagpicker\u{1d}") {
+            if let Ok((mut at, options)) = serde_json::from_str::<(usize, Vec<(String, String)>)>(data) {
+                let before = at;
+                kit::property_control(ui, label, |ui| {
+                    let labels: Vec<_> = options.iter().map(|(_, text)| text.as_str()).collect();
+                    kit::choice(ui, "selection tag", &mut at, &labels);
+                });
+                if at != before && !options[at].0.is_empty() {
+                    actions.push(format!("tagpick\u{1f}{}", serde_json::json!(&options[at].0)));
+                }
+            }
+            continue;
+        }
         if let Some(hex) = value.strip_prefix("\u{1d}swatch\u{1d}") {
             if let Some(color) = parse_hex(hex) { kit::material_readout(ui, label, color, hex); }
             continue;
@@ -3208,6 +3273,25 @@ fn occurrence_menu_runs_the_document_action_and_closes() {
     assert!(ui.column.unwrap().row_menu.is_none());
 }
 
+#[test]
+fn only_eye_and_lock_headers_dispatch_and_each_targets_its_lens() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    ui.set_tree(vec![(vec!["i:sample".into(), "Sample".into()], vec![0, 0, 0, 0, 1, 1, 0])], 0);
+    for (lens, scope) in [(Lens::Filing, "placements"), (Lens::Drawing, "tags")] {
+        ui.column.as_mut().unwrap().lens = lens;
+        for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+        let at = tree_frame(&mut ui, vec![]);
+        tree_click(&mut ui, at["Name"], egui::PointerButton::Primary);
+        assert!(ui.take_actions().is_empty());
+        for field in ["eye", "lock"] {
+            let cell = ui.ctx.read_response(egui::Id::new(("project header", field))).unwrap();
+            tree_click(&mut ui, cell.rect.center(), egui::PointerButton::Primary);
+            assert_eq!(ui.take_actions(), [format!("tree:header{field}\x1f{scope}")]);
+        }
+    }
+}
+
 #[cfg(test)]
 fn tree_drag(ui: &mut Ui, from: Pos2, to: Pos2) -> Vec<String> {
     let button = |pos, pressed| egui::Event::PointerButton {
@@ -3273,6 +3357,48 @@ fn dragging_sorted_drawing_rows_files_tags_and_folders_by_key() {
     assert_eq!(ui.take_actions(), ["tree:deletetag\x1fpreview-tag:z"]);
 
 
+}
+
+#[test]
+fn new_drawing_tag_keeps_its_editor_through_refresh_and_commits_only_its_own_name() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    let row = || {
+        let mut text = vec![String::new(); 12];
+        text[0] = "preview-tag:Layer 1".into();
+        text[1] = "Layer 1".into();
+        text[10] = "Layer 1".into();
+        (text, vec![0, 0, 0, 0, 6, 1, 0])
+    };
+    ui.set_tree(vec![row()], 0);
+    ui.set_lens(1);
+    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+    for enter in [true, false] {
+        ui.drawing_edit_applied("newtag", "Layer 1");
+        tree_frame(&mut ui, vec![]);
+        ui.set_tree(vec![row()], 0);
+        let tool = ui.active.clone();
+        assert!(ui.claims_key("L", 0));
+        assert!(ui.key("L", true, 0) && ui.text("l".into()) && ui.key("L", false, 0));
+        let events = std::mem::take(&mut ui.events);
+        tree_frame(&mut ui, events);
+        let col = ui.column.as_ref().unwrap();
+        assert!(ui.ctx.wants_keyboard_input() && ui.active == tool);
+        assert!(!col.styles.selected(&col.nodes[0]));
+        assert!(col.renaming.as_ref().unwrap().1.ends_with('l'));
+        if enter {
+            tree_frame(&mut ui, vec![egui::Event::Key {
+                key: egui::Key::Enter, physical_key: None, pressed: true, repeat: false,
+                modifiers: Default::default(),
+            }]);
+        } else {
+            tree_click(&mut ui, pos2(100., 400.), egui::PointerButton::Primary);
+        }
+        let col = ui.column.as_ref().unwrap();
+        assert!(col.renaming.is_none());
+        assert_eq!(col.styles.selected(&col.nodes[0]), enter);
+        assert!(ui.take_actions().iter().any(|a| a.starts_with("tree:rename\x1fpreview-tag:Layer 1\x1f")));
+    }
 }
 
 #[test]

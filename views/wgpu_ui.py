@@ -785,7 +785,7 @@ def _tree(view, win, *, discover=False):
     # Watertight checks in Export must follow mesh edits.
     geometric = lens == 2
     cv = scene.content_version if geometric else _tree_version(view, win, scene)
-    sig = (id(scene), id(scene.edit_group), scene.mesh.revision, cv, tuple(sorted(exp)), tuple(sorted(pages.items())), flt, len(sel_ids),
+    sig = (id(scene), id(scene.edit_group), scene.mesh.revision, cv, tuple(sorted(exp)), tuple(sorted(pages.items())), flt, scene.content_version if flt else None, len(sel_ids),
            hash(frozenset(sel_ids)), lens, getattr(view, "_ui_layer_rev", 0), scene.show_section_planes, sheet_revision)
     if not discover and sig == getattr(view, "_ui_tree_sig", None):
         return
@@ -1423,6 +1423,27 @@ def _tree_action(win, view, action) -> None:
         elif verb == "sectioncut" and kind == "section":
             _core(vp, "edit_section_plane", uid=ident, field="cut")
             vp.notify_scene_changed()
+        elif verb in ("headereye", "headerlock"):
+            from ingetrazo_render import tree_header_state
+            tree_header_state(vp, rk, verb == "headerlock")
+            rebuild()
+        elif verb == "purgetags":
+            from ingetrazo_render import tree_purge_tags
+            tree_purge_tags(win)
+        elif verb == "newtaghidden":
+            from ingetrazo_render import set_new_tags_hidden
+            set_new_tags_hidden(rk == "1")
+        elif verb in ("newtag", "tagassign", "tagactive", "tagpick", "tagcolours", "modellines") or (verb == "rename" and kind == "preview-tag"):
+            from ingetrazo_render import tree_edit_tag
+            if verb == "tagpick":
+                import json
+                verb, rk = "tagassign", "preview-tag:" + json.loads(rk)
+            key = tree_edit_tag(win, verb, rk, extra, exp)
+            if key:
+                view._ui_filter = ""
+                if view.renderer is not None:
+                    view.renderer.ui_drawing_applied("newtag", key)
+            rebuild()
         elif verb == "deletetag" and kind == "preview-tag":
             from ingetrazo_render import tree_delete_tag
             tree_delete_tag(win, ident)
@@ -1572,6 +1593,21 @@ def _tree_action(win, view, action) -> None:
             _core(vp, "patch_record_field", **json.loads(rk))
             vp.notify_scene_changed()
             rebuild()
+        elif verb in ("importtags", "exporttags"):
+            from ingetrazo_core import tag_template_file
+            from views.filedialogs import file_dialogs
+            save = verb == "exporttags"
+            chooser = file_dialogs.getSaveFileName if save else file_dialogs.getOpenFileName
+            path, _ = chooser(win, "Export layer template" if save else "Import layer template",
+                              "layers.json" if save else "", "Layer template (*.json)")
+            if path and win.viewport.scene is scene:
+                try:
+                    vp.flash_status(tag_template_file(scene, path, save))
+                    if not save:
+                        vp.notify_scene_changed()
+                        rebuild()
+                except (OSError, ValueError) as exc:
+                    vp.flash_status(str(exc))
         elif verb in ("exportpat", "exportlin"):
             from ingetrazo_core import export_style_file
             from views.filedialogs import file_dialogs
@@ -2076,6 +2112,8 @@ def _inspector(view, win) -> None:
         view.renderer.ui_set_inspector("", [])
         return
     identity = selection_identity(scene, data, filename, KINDS)
+    from ingetrazo_render import inspector_tag_row
+    tag_row = inspector_tag_row(scene)
     groups = [g for g in sel if isinstance(g, Group)]
     from views import verbs
     sel_kind = verbs.kind_of(scene, sel)
@@ -2086,7 +2124,7 @@ def _inspector(view, win) -> None:
         filed_ok = key in nodes
         recipe = data.get("recipes", {}).get(key, {})
         name_cell = _edit(f"groupname:{g.uid}", g.name or "") if verbs.name_editable(sel_kind) else (g.name or "")
-        rows = [("Name", name_cell)]
+        rows = [("Name", name_cell), *tag_row]
         if verbs.read_only(sel_kind):
             rows.append(("Edits", "Read-only here"))
         if g.is_component():
@@ -2163,6 +2201,7 @@ def _inspector(view, win) -> None:
         loose = C2("Faces" if isinstance(e, Face) else "Edges" if isinstance(e, Edge) else type(e).__name__
                    for e in sel if not isinstance(e, Group))
         rows += [(t, str(n)) for t, n in loose.most_common()]
+    rows.extend(tag_row)
     sections = [("By node" if groups else "Geometry", rows)]
     if any(type(e).__name__ == "Dimension" for e in sel):
         sections.append(("Actions", [("form:dimstyle", "Dimension style…")]))

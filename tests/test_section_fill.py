@@ -14,6 +14,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
 from core.section import cut_chords, fill_triangles
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 _QUADS = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6),
           (0, 2, 6, 4), (1, 5, 7, 3)]
@@ -139,27 +140,22 @@ def test_a_box_cut_on_a_slant_fills_in_its_own_plane():
     assert abs(_area(fill) - 1.9 * 2 ** 0.5 * 2) < 1e-5
 
 
-def test_the_viewport_fills_the_cut_and_keeps_it_across_a_selection():
-    from PySide6.QtWidgets import QApplication
+def test_the_viewport_fills_the_cut_and_keeps_it_across_a_selection(native_host):
     from core.group import Group
     from core.section import SectionPlane
-    from views.main_window import MainWindow
-    QApplication.instance() or QApplication([])
-    win = MainWindow()
-    scene = win.viewport.scene
+    vp = native_host.viewport
+    scene = vp.scene
     m = Mesh()
     _box(m, 0, 0, 0, 2, 3, 2)
     scene.groups[:] = [Group(m, name="Block")]
     scene.section_planes[:] = [SectionPlane(QVector3D(0, 0, 1), UP,
                                             active=True)]
     scene.version += 1
-    vp = win.viewport
     tris = vp._section_fill_tris()
     assert tris is not None and abs(_area(tris) - 6.0) < 1e-5
     scene.selection.add(scene.groups[0])
     scene.bump_view()                      # a click: new version, same cut
     assert vp._section_fill_tris() is tris
-    win._saved_version = scene.version
 
 
 # ---- Pattern, colour, spacing ------------------------------------------------
@@ -233,23 +229,134 @@ def test_the_plane_fill_over_the_style():
                                                 "spacing": 0.1}
 
 
-def test_the_viewport_hatches_the_cut_it_fills():
-    from PySide6.QtWidgets import QApplication
+def test_the_viewport_hatches_the_cut_it_fills(native_host):
     from core.group import Group
     from core.section import SectionPlane
-    from views.main_window import MainWindow
-    QApplication.instance() or QApplication([])
-    win = MainWindow()
-    scene = win.viewport.scene
+    vp = native_host.viewport
+    scene = vp.scene
     m = Mesh()
     _box(m, 0, 0, 0, 2, 3, 2)
     scene.groups[:] = [Group(m, name="Block")]
     scene.section_planes[:] = [SectionPlane(QVector3D(0, 0, 1), UP,
                                             active=True)]
     scene.version += 1
-    vp = win.viewport
     assert vp._section_fill_tris() is not None
     lines = vp._section_hatch(0.2, False)
     assert lines is not None and len(lines)
     assert vp._section_hatch(0.2, False) is lines      # cached
-    win._saved_version = scene.version
+
+
+def test_the_viewer_fills_the_cut_by_layer_and_keeps_it(native_host):
+    from tests.test_layer_cut import _wall_and_door
+    vp = native_host.viewport
+    scene = _wall_and_door(vp.scene)
+    scene.layer("Muros").hatch = "brick"
+    scene.active_section().fill = {"pattern": "layers"}
+    scene.version += 1
+    grey = (0.35, 0.37, 0.41)
+    fills = vp._section_layer_fills(grey)
+    assert fills is not None
+    hatched = [f for f in fills if f[2] is not None]
+    assert len(hatched) == 1 and len(hatched[0][2]) > 20
+    assert vp._section_layer_fills(grey) is fills        # kept
+    scene.layer("Muros").hatch = "concrete"              # a layer changes
+    assert vp._section_layer_fills(grey) is not fills
+
+
+def test_the_viewer_draws_each_layers_cut_weight_with_its_hatches(native_host):
+    from tests.test_layer_cut import _wall_and_door
+    from core.layers import DEFAULT_LAYER
+    import pytest
+    vp = native_host.viewport
+    scene = _wall_and_door(vp.scene)                 # Muros at 0.70
+    scene.layer("Carpinterías").cut_weight = 0.18
+    sp = scene.active_section()
+    scene.version += 1
+    segs = vp._section_cut_segments()
+    keep = np.ones(len(segs), dtype=bool)
+    vp._frame_style = vp._effective_style()
+    assert set(vp._cut_edge_weights(sp, keep)) == {1.0}     # all alike
+    sp.fill = {"pattern": "layers"}
+    tags = vp._section_cut_cache[2]
+    weights = vp._cut_edge_weights(sp, keep)
+    assert weights[tags == "Muros"] == pytest.approx(1.4)
+    assert weights[tags == "Carpinterías"] == pytest.approx(0.4)   # floor
+    assert weights[tags == DEFAULT_LAYER] == pytest.approx(1.0)
+
+
+def test_the_model_draws_the_line_types_by_default(native_host):
+    """«Line types in the model», on unless a style says otherwise: a
+    layer's edges come out dashed and in their line type's colour."""
+    from tests.test_layer_cut import _gas_scene
+    from core.style import Style
+    vp = native_host.viewport
+    scene = _gas_scene(vp.scene)
+    scene.version += 1
+    groups = vp._model_linetype_edges()
+    assert len(groups) == 1
+    rgb, dashes, gaps, words = groups[0]
+    assert not len(words)                                # no text: no words
+    assert rgb == (0.85, 0.65, 0.0)
+    assert len(dashes) > 12 and len(gaps) > 0           # cut into dashes
+    assert vp._model_linetype_edges() is groups         # kept
+    assert Style(name="t").model_linetypes               # on by default
+    off = Style(name="t")
+    off.model_linetypes = False
+    assert Style.from_dict(off.to_dict()).model_linetypes is False
+    assert Style.from_dict({}).model_linetypes is True   # an old file: on
+    from tests.native_tree import action
+    action(native_host, "modellines", "0")
+    assert not scene.display_style.model_linetypes
+    action(native_host, "modellines", "1")
+    assert scene.display_style.model_linetypes
+
+
+def test_the_model_writes_a_line_types_words(native_host):
+    """GAS along a gas line in the 3D view too: the letters' outlines in
+    the gaps the pattern leaves for them, lying along the edge."""
+    from core.layers import Layer
+    from core.group import Group
+    from ingetrazo_core import Vec3 as V
+    import numpy as np
+    from core.layers import load_line_types, with_text
+    vp = native_host.viewport
+    scene = vp.scene
+    drawn, spec = with_text([10.0, -2.0], "GAS", 2.0)
+    load_line_types(scene, {"Gas": dict({"pattern": drawn,
+                                         "pieces": [10.0, -2.0],
+                                         "color": [0.85, 0.65, 0.0]},
+                                        **spec)})
+    scene.layers.append(Layer("Gas", linetype="lin:Gas"))
+    pipe = Group(Mesh(), name="caño")
+    pipe.mesh.add_edge(V(0, 0, 0), V(6, 0, 0))
+    pipe.layer = "Gas"
+    scene.groups.append(pipe)
+    scene.version += 1
+    (_rgb, _d, _g, words), = vp._model_linetype_edges()
+    assert len(words) > 20                               # letters drawn
+    w = words.reshape(-1, 3)
+    assert w[:, 0].min() >= -0.01 and w[:, 0].max() <= 6.01   # on the edge
+    assert np.ptp(w[:, 1]) < 0.2                         # 2 mm at 1:50: 10 cm
+
+
+def test_picking_does_not_dash_the_model_again(native_host, monkeypatch):
+    """A click moves the scene's version (the view's caches follow it); the
+    dashes of the layers' line types follow the document's."""
+    from tests.test_layer_cut import _gas_scene
+    vp = native_host.viewport
+    scene = _gas_scene(vp.scene)
+    scene.version += 1
+    walked = []                 # the geometry read (the arrays, no walk)
+    real = type(vp).hlr_geometry
+    monkeypatch.setattr(
+        type(vp), "hlr_geometry",
+        lambda self, *a, **k: walked.append(1) or real(self, *a, **k))
+    groups = vp._model_linetype_edges()
+    assert len(walked) == 1
+    scene.select([scene.groups[0]])
+    scene.clear_selection()
+    assert vp._model_linetype_edges() is groups
+    assert len(walked) == 1
+    scene.version += 1                                   # the model changed
+    assert vp._model_linetype_edges() is not groups
+    assert len(walked) == 2

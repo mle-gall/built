@@ -44,6 +44,9 @@ def setup(app):
         assert app.viewport.copy_selection()
         assert app.window._clipboard_available()
         app.window._on_select_none()
+        view = app.window._host.view
+        view._pick_frame_dirty = True
+        view.hover(view.width() // 2, view.height() // 2)
         assert drawing_cache.signature()
         assert wgpu_sheets._cajetin_template()[0]
         wgpu_sheets.to_sheets(app.window)

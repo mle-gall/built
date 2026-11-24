@@ -25,6 +25,8 @@ def test_two_faces_and_three_edges_show_their_totals(native_host):
     rows = inspector(native_host, loose + [edge])["Geometry"]
     assert rows["Length"] == fmt_len_with(7.5, scene.units)
     both = inspector(native_host, [a, b] + loose)["Geometry"]
+    tag = both.pop("Tag")
+    assert tag.startswith("\x1dtagpicker\x1d")
     assert both == {"Faces": "2", "Edges": "2", "Area": fmt_area_with(7, scene.units),
                     "Length": fmt_len_with(4.5, scene.units)}
 

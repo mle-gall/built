@@ -21,6 +21,7 @@ from PySide6.QtWidgets import QApplication
 
 _app = QApplication.instance() or QApplication([])
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from core.group import Group
 from core.history import AssignLayerCommand, History
 from core.layers import Layer, layer_of
@@ -63,43 +64,25 @@ def _window():
     return win
 
 
-def test_entity_info_shows_the_layer_and_changes_it():
-    win = _window()
-    vp = win.viewport
-    try:
-        scene = vp.scene
-        scene.layers.append(Layer("Muros"))
-        face = _square(scene.mesh)
-        g = Group(Mesh(), name="caja")
-        scene.groups.append(g)
-        panel = win.tray.entity_info
-
-        scene.select([face])
-        panel.refresh()
-        assert panel._layer_box.isVisibleTo(panel)
-        assert panel._layer_box.currentData() == "Layer 0"
-
-        idx = panel._layer_box.findData("Muros")
-        panel._layer_box.setCurrentIndex(idx)          # the user picks Muros
-        assert layer_of(face) == "Muros"
-        vp.history.undo()
-        assert layer_of(face) == "Layer 0"
-
-        # a mixed selection reads as such, and picking moves everything
-        g.layer = "Muros"
-        scene.select([face, g])
-        panel.refresh()
-        assert panel._layer_box.currentData() is None
-        assert panel._layer_box.currentText() == "(several)"
-        panel._layer_box.setCurrentIndex(panel._layer_box.findData("Muros"))
-        assert layer_of(face) == "Muros" and layer_of(g) == "Muros"
-
-        scene.clear_selection()
-        panel.refresh()
-        assert not panel._layer_box.isVisibleTo(panel)
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+def test_inspector_tag_field_single_mixed_and_empty_selection(native_host):
+    import json
+    from tests.native_tree import action, tag_picker
+    scene = native_host.viewport.scene
+    scene.layers.append(Layer("Muros"))
+    face = _square(scene.mesh)
+    group = Group(Mesh(), name="caja")
+    scene.groups.append(group)
+    key, labels = tag_picker(native_host, [face])
+    assert key == "Layer 0" and labels["Muros"] == "Muros"
+    action(native_host, "tagpick", json.dumps("Muros"))
+    assert layer_of(face) == "Muros" and native_host.viewport.history.undo()
+    assert layer_of(face) == "Layer 0"
+    group.layer = "Muros"
+    key, labels = tag_picker(native_host, [face, group])
+    assert not key and labels[key] == "(several)"
+    action(native_host, "tagpick", json.dumps("Muros"))
+    assert layer_of(face) == layer_of(group) == "Muros"
+    assert tag_picker(native_host, []) is None
 
 
 def test_right_click_layer_submenu_and_new_layer():
@@ -138,34 +121,19 @@ def test_right_click_layer_submenu_and_new_layer():
         win.close()
 
 
-def test_layers_panel_assign_button_speaks_and_undoes():
-    win = _window()
-    vp = win.viewport
-    try:
-        scene = vp.scene
-        scene.layers.append(Layer("Muros"))
-        g = Group(Mesh(), name="caja")
-        scene.groups.append(g)
-        panel = win.layers_dock.panel
-        panel.refresh()
-        # nothing highlighted in the list: it says so instead of doing nothing
-        panel.tree.setCurrentItem(None)
-        scene.select([g])
-        panel._on_assign()
-        assert layer_of(g) == "Layer 0"
-        assert "layer" in win.statusBar().currentMessage().lower()
-        # highlight Muros, nothing selected in the model: says so too
-        item = panel.item_for("Muros")
-        panel.tree.setCurrentItem(item)
-        scene.clear_selection()
-        panel._on_assign()
-        assert "select" in win.statusBar().currentMessage().lower()
-        # both in place: moves, undoably
-        scene.select([g])
-        panel._on_assign()
-        assert layer_of(g) == "Muros"
-        vp.history.undo()
-        assert layer_of(g) == "Layer 0"
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+def test_drawing_assign_moves_the_selection_or_explains_what_is_missing(native_host, monkeypatch):
+    from tests.native_tree import action
+    vp = native_host.viewport
+    g = Group(Mesh(), name="caja")
+    vp.scene.groups.append(g)
+    vp.scene.layers.append(Layer("Muros"))
+    messages = []
+    monkeypatch.setattr(vp, "flash_status", lambda message, *a: messages.append(message))
+    action(native_host, "tagassign", "preview-tag:Muros")
+    assert messages and "select" in messages[-1].lower() and not vp.history.undo_stack
+    vp.scene.select([g])
+    action(native_host, "tagassign", "preview-tag:missing")
+    assert layer_of(g) == "Layer 0" and not vp.history.undo_stack
+    action(native_host, "tagassign", "preview-tag:Muros")
+    assert layer_of(g) == "Muros" and vp.history.undo()
+    assert layer_of(g) == "Layer 0"

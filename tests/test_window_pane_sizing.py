@@ -101,14 +101,14 @@ def test_picking_flushes_pending_resize_before_reading_ids():
     view = WgpuView()
     view.renderer = Mock()
     view.sync_edit_context = Mock()
-    view.draw_frame = Mock()
+    view._present_frame = Mock()
     try:
         view.resize(400, 300)
         view.resizeEvent(QResizeEvent(QSize(400, 300), QSize(300, 200)))
         view._prepare_pick_frame()
         assert not view._resize_timer.isActive()
         view.renderer.resize.assert_called_once_with(400, 300, view.devicePixelRatioF())
-        view.draw_frame.assert_called_once()
+        view._present_frame.assert_called_once_with(pick_only=True)
     finally:
         view.renderer = None
         view.deleteLater()

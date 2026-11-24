@@ -711,6 +711,22 @@ def dispatch(self, command):
         detail=next(key for key in scene.layer_folders if scene.layer_folder_names.get(key,key)=="Details")
         act("tagfolder","batch",dict(owner=id(scene),parent=folder,folders=[detail],tags=["Paths"]))
         self.fixture_mixed_folder=scene.folder_parents.get(detail)==folder
+    elif command=="fixture-tag-controls":
+        from core.layers import add_folder
+        wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("tagcolours","1")))
+        wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("modellines","0")))
+        template={str(tmp_path / "drawing.json")!r}
+        file_dialogs.getSaveFileName=lambda *args: (template,"")
+        file_dialogs.getOpenFileName=lambda *args: (template,"")
+        for verb in ("exporttags","importtags"):
+            wgpu_ui._tree_action(self.window,self.view,verb+wgpu_ui.SEP)
+        folder=add_folder(scene,"Temporary tags")
+        wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("newtag","preview-folder:"+folder)))
+        tag=scene.layers[-1]
+        self.fixture_tag=tag.key
+        self.fixture_filed_tag=tag.folder==folder
+        wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("rename","preview-tag:"+tag.key,"Unused survey tag")))
+        wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("purgetags","")))
     elif command=="fixture-delete-tag":
         from core.layers import Layer
         if scene.layer_by_key("Disposable") is None:
@@ -758,9 +774,12 @@ def facts(self):
         hatch_prefs=getattr(self,"fixture_hatch_prefs",False),
         paint_sheet=getattr(self,"fixture_paint_sheet",None), row_paint=getattr(self,"fixture_row_paint",None),
         swatch=getattr(self,"fixture_swatch",False), editor=self.renderer.ui_input_state()["drawing_line"],
-        line=paths.linetype, hatch=paths.hatch, mortar=paths.mortar, size=scene.bricks.get("brick"),
+        line=getattr(paths,"linetype",None), hatch=getattr(paths,"hatch",None), mortar=getattr(paths,"mortar",None), size=scene.bricks.get("brick"),
+        created_tag=scene.layer_by_key(getattr(self,"fixture_tag","")) is not None,
+        tag_in_folder=getattr(self,"fixture_filed_tag",False), tag_colours=scene.display_style.color_by_layer,
+        model_lines=scene.display_style.model_linetypes,
         disposable=scene.layer_by_key("Disposable") is not None, question=question.text if question else "",
-        mixed_folder=getattr(self,"fixture_mixed_folder",False),folder=scene.layer_folder_names.get(paths.folder,paths.folder),scene_folder=getattr(row,"folder",None))
+        mixed_folder=getattr(self,"fixture_mixed_folder",False),folder=scene.layer_folder_names.get(paths.folder,paths.folder) if paths else None,scene_folder=getattr(row,"folder",None))
 Host.menu,Host.state=dispatch,facts
 """)
     steps = tmp_path / "commands.txt"
@@ -795,6 +814,12 @@ wait 200
 menu fixture-confirm-delete
 wait 250
 state
+menu fixture-tag-controls
+wait 200
+state
+menu fixture-confirm-delete
+wait 200
+state
 quit
 """)
     result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
@@ -809,6 +834,11 @@ quit
     assert "Disposable" in asked["question"] and asked["disposable"], log
     assert not cancelled["question"] and cancelled["disposable"], log
     assert not deleted["question"] and not deleted["disposable"], log
+    proposed, purged = states[7:9]
+    assert proposed["tag_colours"] and not proposed["model_lines"], log
+    assert "Paths" in [tag["name"] for tag in json.loads((tmp_path / "drawing.json").read_text())["layers"]]
+    assert proposed["created_tag"] and proposed["tag_in_folder"] and "Unused survey tag" in proposed["question"], log
+    assert not purged["created_tag"] and not purged["question"], log
     opened, saved, edited = states[:3]
     assert edited["hatch_prefs"] == {"pinned": ["brick", "glass"], "recent": ["brick", "glass"],
                                      "saved": {"brick": [[300, 150, 80, 12, 8]]}, "removed": {}}
