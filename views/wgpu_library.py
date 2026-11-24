@@ -444,7 +444,7 @@ class MaterialsProvider(Provider):
                 self.run(ctx, "image", {**item, "key": f"m:{name}"})
             else:
                 ctx.core("set_material_base", name=name, base="color")
-        elif field == "color" or field.startswith("brush_"):
+        elif field in ("color", "finish") or field.startswith("brush_"):
             mat = ctx.scene.materials.get(name)
             if field == "color" and mat is not None and (mat.texture or {}).get("path"):
                 ctx.core("edit_material", name=name, color=list(_parse_hex(text)))

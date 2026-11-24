@@ -2939,6 +2939,19 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
             }
             continue;
         }
+        if let Some((id, data)) = value.strip_prefix("\u{1d}picker\u{1d}").and_then(|rest| rest.split_once('\u{1d}')) {
+            if let Ok((original, options)) = serde_json::from_str::<(usize, Vec<(String, String)>)>(data) {
+                let mut at = original;
+                let labels: Vec<_> = options.iter().map(|(_, text)| text.as_str()).collect();
+                kit::property_control(ui, label, |ui| kit::choice(ui, id, &mut at, &labels));
+                if at != original {
+                    if let Some((key, _)) = options.get(at) {
+                        actions.push(format!("edit\u{1f}{id}\u{1f}{key}"));
+                    }
+                }
+            }
+            continue;
+        }
         if let Some(hex) = value.strip_prefix("\u{1d}swatch\u{1d}") {
             if let Some(color) = parse_hex(hex) { kit::material_readout(ui, label, color, hex); }
             continue;
