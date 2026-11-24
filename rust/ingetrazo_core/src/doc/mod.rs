@@ -35,6 +35,8 @@ mod execute;
 pub mod commands;
 mod steps;
 mod group_steps;
+mod paint_steps;
+mod tag_steps;
 mod file_view;
 pub(crate) mod drawing;
 pub mod occurrences;

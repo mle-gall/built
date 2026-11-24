@@ -1076,6 +1076,17 @@ def rename_placement(history, placement, name):
     return _answer(history, before)
 
 
+def make_unique(history, placement, rename=False):
+    """Make Unique: bake one copy (uid, nested included) into its own
+    definition, so edits stop reaching the siblings. ``rename`` also gives
+    it a name of its own when another object wears the same one."""
+    from core.history import MakeUniqueCommand
+    g, = _placements(history, [placement])
+    before = history.revision
+    history.execute(MakeUniqueCommand(g, bool(rename)))
+    return _answer(history, before)
+
+
 def rename_placements(history, placements, names):
     """Give each placement (uid, nested included) its own name, as one
     native step. Placements whose name is already that one are left out."""
@@ -1760,6 +1771,7 @@ COMMANDS = {"set_location": set_location, "set_model_units": set_model_units, "s
             "purge_debris": purge_debris, "undo": undo, "redo": redo,
             "hide": hide, "unhide": unhide, "lock": lock, "rename_placement": rename_placement,
             "rename_placements": rename_placements, "paint_placements": paint_placements,
+            "make_unique": make_unique,
             "edit_assembly_part": edit_assembly_part, "edit_visibility_set": edit_visibility_set, "edit_saved_scene": edit_saved_scene, "edit_link_subset": edit_link_subset, "reset_link_tags": reset_link_tags, "unlink_placements": unlink_placements, "edit_section_plane": edit_section_plane, "edit_loose_geometry": edit_loose_geometry, "file_placements": file_placements, "promote_tag": promote_tag, "edit_structure_node": edit_structure_node, "edit_tag": edit_tag, "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
             "rename_material": rename_material, "edit_material": edit_material,
             "duplicate_material": duplicate_material, "delete_material": delete_material,

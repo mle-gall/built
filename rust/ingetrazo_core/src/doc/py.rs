@@ -2627,7 +2627,7 @@ pub(super) fn fval_for(f: Field, v: &Bound<'_, PyAny>) -> PyResult<FVal> {
 /// journalled as one op: what a command writing one value over a
 /// selection uses (Lock, Hide, Tag of 20,000 placements).
 #[pyfunction]
-fn doc_set_many(py: Python<'_>, handles: &Bound<'_, PyAny>, field: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
+pub(super) fn doc_set_many(py: Python<'_>, handles: &Bound<'_, PyAny>, field: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
     let f = Field::from_name(field).ok_or_else(|| PyValueError::new_err(format!("no document field {field}")))?;
     let v = fval_for(f, value)?;
     let members = keys_of(handles)?;
@@ -2649,7 +2649,7 @@ fn doc_set_many(py: Python<'_>, handles: &Bound<'_, PyAny>, field: &str, value: 
 /// One field of every handle of `handles`, as a list (one call instead of
 /// one attribute read each). Matrices are not read this way.
 #[pyfunction]
-fn doc_get_many<'py>(py: Python<'py>, handles: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<'py, PyList>> {
+pub(super) fn doc_get_many<'py>(py: Python<'py>, handles: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<'py, PyList>> {
     let f = Field::from_name(field).ok_or_else(|| PyValueError::new_err(format!("no document field {field}")))?;
     if matches!(f, Field::Xform | Field::Axes) {
         return Err(PyTypeError::new_err("matrices are read one placement at a time"));
@@ -3052,6 +3052,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     super::commands::register(m)?;
     super::steps::register(m)?;
     super::group_steps::register(m)?;
+    super::paint_steps::register(m)?;
+    super::tag_steps::register(m)?;
     m.add_class::<super::feed::FeedReaders>()?;
     m.add_class::<DocRecord>()?;
     m.add_class::<DocAttr>()?;
