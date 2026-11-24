@@ -1,13 +1,33 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Build incidence from a welded corner stream without allocating packed numpy
 //! arrays or reordering the first occurrence of an edge.
+use numpy::PyReadonlyArray1;
 use pyo3::{
     exceptions::{PyIndexError, PyValueError},
+    intern,
     prelude::*,
     types::{PyDict, PyList, PySet},
 };
 use std::collections::HashMap;
 type Obj<'py> = Bound<'py, PyAny>;
+
+// NumPy indices are already packed int64 on import. Avoid boxing every index
+// into a Python integer. Callers can also supply lists or iterators.
+fn indices(values: &Obj<'_>) -> PyResult<Vec<i64>> {
+    if let Ok(rows) = values.extract::<PyReadonlyArray1<'_, i64>>() {
+        return Ok(rows.as_array().iter().copied().collect());
+    }
+    values.try_iter()?.map(|item| item?.extract()).collect()
+}
+
+fn sizes(values: &Obj<'_>) -> PyResult<Vec<usize>> {
+    indices(values)?
+        .into_iter()
+        .map(|i| {
+            usize::try_from(i).map_err(|_| PyValueError::new_err("negative ring size or count"))
+        })
+        .collect()
+}
 
 struct Builder<'py> {
     mesh: Obj<'py>,
@@ -17,11 +37,14 @@ struct Builder<'py> {
     face_class: Obj<'py>,
     next_key: Obj<'py>,
     map: Obj<'py>,
+    dict: Option<Bound<'py, PyDict>>,
 }
 impl<'py> Builder<'py> {
     fn new(mesh: &Obj<'py>, vertices: &Obj<'py>, map: Option<&Obj<'py>>) -> PyResult<Self> {
         let py = mesh.py();
         let api = py.import("core.mesh")?;
+        let map = map.cloned().unwrap_or_else(|| PyDict::new(py).into_any());
+        let dict = map.cast_exact::<PyDict>().ok().cloned();
         Ok(Self {
             mesh: mesh.clone(),
             vertices: vertices.try_iter()?.collect::<PyResult<_>>()?,
@@ -29,12 +52,13 @@ impl<'py> Builder<'py> {
             edge_class: api.getattr("Edge")?,
             face_class: api.getattr("Face")?,
             next_key: mesh.getattr("_keys")?.getattr("__next__")?,
-            map: map.cloned().unwrap_or_else(|| PyDict::new(py).into_any()),
+            map,
+            dict,
         })
     }
     fn kwargs(&self) -> PyResult<Bound<'py, PyDict>> {
         let kw = PyDict::new(self.mesh.py());
-        kw.set_item("key", self.next_key.call0()?)?;
+        kw.set_item(intern!(self.mesh.py(), "key"), self.next_key.call0()?)?;
         Ok(kw)
     }
     fn vertex(&self, i: i64) -> PyResult<&Obj<'py>> {
@@ -49,14 +73,28 @@ impl<'py> Builder<'py> {
     }
     fn edge(&self, a: i64, b: i64) -> PyResult<Obj<'py>> {
         let k = self.pair(a, b);
-        let existing = self.map.call_method1("get", (k,))?;
-        if !existing.is_none() {
-            return Ok(existing);
+        if let Some(dict) = &self.dict {
+            if let Some(e) = dict.get_item(k)? {
+                if !e.is_none() {
+                    return Ok(e);
+                }
+            }
+        } else {
+            let existing = self
+                .map
+                .call_method1(intern!(self.mesh.py(), "get"), (k,))?;
+            if !existing.is_none() {
+                return Ok(existing);
+            }
         }
         let (v, w) = (self.vertex(a)?, self.vertex(b)?);
         let e = self.edge_class.call((v, w), Some(&self.kwargs()?))?;
-        v.getattr("edges")?.cast_into::<PySet>()?.add(&e)?;
-        w.getattr("edges")?.cast_into::<PySet>()?.add(&e)?;
+        v.getattr(intern!(self.mesh.py(), "edges"))?
+            .cast_into::<PySet>()?
+            .add(&e)?;
+        w.getattr(intern!(self.mesh.py(), "edges"))?
+            .cast_into::<PySet>()?
+            .add(&e)?;
         self.edges.append(&e)?;
         self.map.set_item(k, &e)?;
         Ok(e)
@@ -66,12 +104,27 @@ impl<'py> Builder<'py> {
             .vertices
             .iter()
             .enumerate()
-            .map(|(i, v)| Ok((v.getattr("key")?.extract::<i128>()?, i as i64)))
+            .map(|(i, v)| {
+                Ok((
+                    v.getattr(intern!(self.mesh.py(), "key"))?
+                        .extract::<i128>()?,
+                    i as i64,
+                ))
+            })
             .collect::<PyResult<HashMap<_, _>>>()?;
         for e in self.edges.iter() {
-            let id = |name| e.getattr(name)?.getattr("key")?.extract::<i128>();
-            if let (Some(&a), Some(&b)) = (ids.get(&id("v0")?), ids.get(&id("v1")?)) {
-                self.map.call_method1("setdefault", (self.pair(a, b), e))?;
+            let key = intern!(self.mesh.py(), "key");
+            let a = e
+                .getattr(intern!(self.mesh.py(), "v0"))?
+                .getattr(key)?
+                .extract::<i128>()?;
+            let z = e
+                .getattr(intern!(self.mesh.py(), "v1"))?
+                .getattr(key)?
+                .extract::<i128>()?;
+            if let (Some(&a), Some(&b)) = (ids.get(&a), ids.get(&z)) {
+                self.map
+                    .call_method1(intern!(self.mesh.py(), "setdefault"), (self.pair(a, b), e))?;
             }
         }
         Ok(())
@@ -87,9 +140,6 @@ pub(crate) fn add_edges_welded<'py>(
     ib: &Obj<'py>,
     flags: Option<&Obj<'py>>,
 ) -> PyResult<Obj<'py>> {
-    let indices = |values: &Obj<'_>| -> PyResult<Vec<i64>> {
-        values.try_iter()?.map(|item| item?.extract()).collect()
-    };
     let (ia, ib) = (indices(ia)?, indices(ib)?);
     let b = Builder::new(mesh, vertices, None)?;
     if ib.len() < ia.len() || flags.is_some_and(|f| f.len().is_ok_and(|n| n < ia.len())) {
@@ -126,21 +176,24 @@ pub(crate) fn add_edges_welded<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature=(mesh, vertices, inverse, sizes, counts, attrs=None, edge_map=None))]
+#[pyo3(signature=(mesh, vertices, inverse, ring_sizes, counts, attrs=None, edge_map=None))]
 pub(crate) fn add_faces_welded<'py>(
     mesh: &Obj<'py>,
     vertices: &Obj<'py>,
-    inverse: Vec<i64>,
-    sizes: Vec<usize>,
-    counts: Vec<usize>,
+    inverse: &Obj<'py>,
+    ring_sizes: &Obj<'py>,
+    counts: &Obj<'py>,
     attrs: Option<&Obj<'py>>,
     edge_map: Option<&Obj<'py>>,
 ) -> PyResult<Bound<'py, PyList>> {
     let py = mesh.py();
     let result = PyList::empty(py);
+    let counts = sizes(counts)?;
     if counts.is_empty() {
         return Ok(result);
     }
+    let inverse = indices(inverse)?;
+    let sizes = sizes(ring_sizes)?;
     if counts.contains(&0)
         || counts.iter().try_fold(0usize, |s, &n| s.checked_add(n)) != Some(sizes.len())
         || sizes.iter().try_fold(0usize, |s, &n| s.checked_add(n)) != Some(inverse.len())
@@ -173,9 +226,11 @@ pub(crate) fn add_faces_welded<'py>(
             let k = b.pair(a, z);
             let edge = match seen.entry(k) {
                 std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
-                std::collections::hash_map::Entry::Vacant(entry) => {
-                    entry.insert(b.edge(a, z)?.getattr("faces")?.cast_into::<PyList>()?)
-                }
+                std::collections::hash_map::Entry::Vacant(entry) => entry.insert(
+                    b.edge(a, z)?
+                        .getattr(intern!(py, "faces"))?
+                        .cast_into::<PyList>()?,
+                ),
             };
             incidence.push(edge.clone());
         }

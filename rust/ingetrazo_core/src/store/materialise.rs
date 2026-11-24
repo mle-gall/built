@@ -8,6 +8,7 @@ use super::{
 use crate::math::Vec3;
 use glam::DVec3;
 use pyo3::{
+    intern,
     prelude::*,
     types::{PyDict, PyList, PySet},
 };
@@ -20,6 +21,7 @@ fn objects<'py>(
     class: Obj<'py>,
     map: &Bound<'py, PyDict>,
 ) -> PyResult<Vec<Obj<'py>>> {
+    let py = class.py();
     let new = class.getattr("__new__")?;
     (0..s.state.slots[kind as usize].len() as u32)
         .map(|slot| {
@@ -28,7 +30,7 @@ fn objects<'py>(
                 return Ok(obj);
             }
             let obj = new.call1((&class,))?;
-            obj.setattr("key", key)?;
+            obj.setattr(intern!(py, "key"), key)?;
             map.set_item(key, &obj)?;
             Ok(obj)
         })
@@ -38,7 +40,16 @@ fn objects<'py>(
 pub(super) fn materialise(s: &Store, mesh: &Obj<'_>) -> PyResult<()> {
     let py = mesh.py();
     let api = py.import("core.store_mesh")?;
-    let map = mesh.getattr("_objmap")?.cast_into::<PyDict>()?;
+    let d = mesh.getattr("__dict__")?.cast_into::<PyDict>()?;
+    // A freshly copied definition has never issued object handles.
+    let map = match d.get_item("_objmap")? {
+        Some(map) => map.cast_into::<PyDict>()?,
+        None => {
+            let map = PyDict::new(py);
+            d.set_item("_objmap", &map)?;
+            map
+        }
+    };
     let own = mesh.getattr("_attr_own")?.cast_into::<PyDict>()?;
     let table = mesh.getattr("_attr_table")?;
     let copy = api.getattr("_copy_attrs")?;
@@ -46,9 +57,15 @@ pub(super) fn materialise(s: &Store, mesh: &Obj<'_>) -> PyResult<()> {
     let edges = objects(s, Kind::Edge, api.getattr("_MEdge")?, &map)?;
     let faces = objects(s, Kind::Face, api.getattr("_MFace")?, &map)?;
     let st = &s.state;
+    let mut disks = Vec::with_capacity(verts.len());
     for (i, v) in verts.iter().enumerate() {
-        v.setattr("position", Vec3::from(DVec3::from_array(*st.vpos.get(i))))?;
-        v.setattr("edges", PySet::empty(py)?)?;
+        v.setattr(
+            intern!(py, "position"),
+            Vec3::from(DVec3::from_array(*st.vpos.get(i))),
+        )?;
+        let disk = PySet::empty(py)?;
+        v.setattr(intern!(py, "edges"), &disk)?;
+        disks.push(disk);
     }
     for (i, f) in faces.iter().enumerate() {
         let mut rings = s
@@ -59,9 +76,9 @@ pub(super) fn materialise(s: &Store, mesh: &Obj<'_>) -> PyResult<()> {
             .next()
             .transpose()?
             .unwrap_or_else(|| PyList::empty(py));
-        f.setattr("loop", outer)?;
+        f.setattr(intern!(py, "loop"), outer)?;
         f.setattr(
-            "hole_loops",
+            intern!(py, "hole_loops"),
             PyList::new(py, rings.collect::<PyResult<Vec<_>>>()?)?,
         )?;
         let attrs = match own.get_item(s.key(Kind::Face, i as u32))? {
@@ -71,23 +88,26 @@ pub(super) fn materialise(s: &Store, mesh: &Obj<'_>) -> PyResult<()> {
                 None => PyDict::new(py).into_any(),
             },
         };
-        f.setattr("attrs", attrs)?;
-        f.setattr("interior", st.fflags.get(i) & INTERIOR != 0)?;
+        f.setattr(intern!(py, "attrs"), attrs)?;
+        f.setattr(intern!(py, "interior"), st.fflags.get(i) & INTERIOR != 0)?;
     }
     for (i, e) in edges.iter().enumerate() {
         let [a, b] = st.ends.get(i).map(|v| &verts[v as usize]);
-        e.setattr("v0", a)?;
-        e.setattr("v1", b)?;
+        e.setattr(intern!(py, "v0"), a)?;
+        e.setattr(intern!(py, "v1"), b)?;
         let flags = st.eflags.get(i);
-        e.setattr("soft", flags & SOFT != 0)?;
-        e.setattr("hidden", flags & HIDDEN != 0)?;
-        e.setattr("flat", flags & FLAT != 0)?;
+        e.setattr(intern!(py, "soft"), flags & SOFT != 0)?;
+        e.setattr(intern!(py, "hidden"), flags & HIDDEN != 0)?;
+        e.setattr(intern!(py, "flat"), flags & FLAT != 0)?;
         let curve = *st.ecurve.get(i);
-        e.setattr("curve", (curve >= 0).then_some(curve))?;
+        e.setattr(intern!(py, "curve"), (curve >= 0).then_some(curve))?;
         let layer = *st.elayer.get(i);
-        e.setattr("layer", (layer != NONE).then(|| &st.layers[layer as usize]))?;
         e.setattr(
-            "faces",
+            intern!(py, "layer"),
+            (layer != NONE).then(|| &st.layers[layer as usize]),
+        )?;
+        e.setattr(
+            intern!(py, "faces"),
             PyList::new(
                 py,
                 s.edge_faces(i as u32).iter().map(|&f| &faces[f as usize]),
@@ -97,10 +117,7 @@ pub(super) fn materialise(s: &Store, mesh: &Obj<'_>) -> PyResult<()> {
     let live_edges = s.live_slots(Kind::Edge);
     for &i in &live_edges {
         for &v in st.ends.get(i as usize) {
-            verts[v as usize]
-                .getattr("edges")?
-                .cast_into::<PySet>()?
-                .add(&edges[i as usize])?;
+            disks[v as usize].add(&edges[i as usize])?;
         }
     }
     let registry = PyDict::new(py);
@@ -116,7 +133,6 @@ pub(super) fn materialise(s: &Store, mesh: &Obj<'_>) -> PyResult<()> {
             PyList::new(py, q.iter().map(|&v| &verts[v as usize]))?,
         )?;
     }
-    let d = mesh.getattr("__dict__")?.cast_into::<PyDict>()?;
     for (name, slots, handles) in [
         ("vertices", s.live_slots(Kind::Vertex), &verts),
         ("edges", live_edges, &edges),
@@ -141,5 +157,5 @@ pub(super) fn materialise(s: &Store, mesh: &Obj<'_>) -> PyResult<()> {
             d.del_item(name)?;
         }
     }
-    mesh.setattr("__class__", api.getattr("MaterialisedMesh")?)
+    mesh.setattr(intern!(py, "__class__"), api.getattr("MaterialisedMesh")?)
 }
