@@ -27,10 +27,12 @@ class Billboards:
             self.ids = candidates[(flags[candidates] & 8) != 0]
         self.base = packed.instances['world'][self.ids].copy()
         self.key = None
-        codes = packed.instances['info'][self.ids, 0]
-        ranges = [(int(packed.commands[c]['base']), int(packed.commands[c]['count'])) for c in codes]
-        self.entries = billboard_stances(np.ascontiguousarray(packed.vertices['pos']), ranges,
-                                         np.ascontiguousarray(self.base))
+        self.entries = []
+        if len(self.ids):
+            codes = packed.instances['info'][self.ids, 0]
+            ranges = [(int(packed.commands[c]['base']), int(packed.commands[c]['count'])) for c in codes]
+            self.entries = billboard_stances(np.ascontiguousarray(packed.vertices['pos']), ranges,
+                                             np.ascontiguousarray(self.base))
         self._mesh = [packed.groups[i].billboard == 'mesh' for i in self.ids]
 
     def restore(self):
