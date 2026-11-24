@@ -5,8 +5,6 @@ The file I/O, the envelope checks, conversion and merging are Rust
 (``ingetrazo_core.project_*``); the registry's contents stay Python's
 (``core.bim_registry.validate``), and link filters the Navigator grammar's.
 """
-import json
-from pathlib import Path
 
 SUFFIX = '.builtproject'
 LEGACY_SUFFIX = '.igzproj'

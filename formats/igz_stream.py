@@ -5,7 +5,7 @@ import json
 import tempfile
 
 from functools import partialmethod
-from ingetrazo_core import Fragment, igz_json_chunks as json_chunks, igz_stream_store, igz_stream_encode
+from ingetrazo_core import Fragment, igz_json_chunks as json_chunks, igz_stream_start, igz_stream_store, igz_stream_encode
 
 _CHUNK = 1024 * 1024
 
@@ -13,16 +13,7 @@ _CHUNK = 1024 * 1024
 class SaveStream(dict):
     """Keep geometry blocks and completed mesh JSON on disk, one mesh at a time."""
 
-    def __init__(self, *, built=False, compatibility=False, destination=None):
-        self.built = built
-        self.compatibility = compatibility
-        self.destination = destination
-        self.displacement_mm = 0.0
-        super().__init__()  # ZIP geometry member names -> scratch ranges
-        self.file = tempfile.TemporaryFile()
-        self.blobs = {}
-        self.resolved = {}
-        self.missing = 0
+    __init__ = partialmethod(igz_stream_start)
 
     def __enter__(self):
         return self

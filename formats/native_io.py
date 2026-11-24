@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Bindings shared by the IGZ/Built document reader and writer."""
-import os
 import zipfile
 
 

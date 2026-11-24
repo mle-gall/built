@@ -1,5 +1,4 @@
 """Built document identity and precision at the Qt/model boundary."""
-from pathlib import Path
 
 from ingetrazo_core import (
     is_built, built_displacement as displacement_mm,
