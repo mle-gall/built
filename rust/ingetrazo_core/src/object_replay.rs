@@ -240,5 +240,25 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(undo_edge, &sub)?)?;
     sub.add_function(wrap_pyfunction!(explode_curves, &sub)?)?;
     sub.add_function(wrap_pyfunction!(restore_curves, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_relink::add_face, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_relink::remove_face, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_relink::add_hole, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_relink::remove_hole, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_relink::surface_of, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_relink::relink_vertices, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_relink::relink_edge, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_relink::relink_face, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_relink::relink_hole, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_vertices::probe_vertex, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_vertices::vertex, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_vertices::weld_candidates, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_vertices::bulk_weld, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_bulk::add_edges_welded, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_bulk::add_faces_welded, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_fold::fold_objects, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_registry::rekey, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_registry::drop_orphans, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_registry::registers, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_registry::purge_debris, &sub)?)?;
     m.add_submodule(&sub)
 }

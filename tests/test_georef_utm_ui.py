@@ -8,7 +8,7 @@ import pytest
 from georef.datum import utm_forward, utm_inverse
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_settings_sheet import win, act, fields, frame
-from views.settings_sheet import edit_location
+from ingetrazo_render.settings_sheet import edit_location
 
 # Plaza de Yanque, Caylloma — UTM zone 19, southern hemisphere.
 LAT, LON = -15.8402, -70.0219
@@ -59,7 +59,7 @@ def test_utm_mode_hides_the_geo_rows(win):
 
 def test_choice_is_remembered_everywhere(win):
     from core.settings import settings
-    from views import chrome_sheet
+    from ingetrazo_render import chrome_sheet
     open_location(win)
     act(win, "v", "site_mode", "1")
     assert settings().value("georef/coord_mode") == "utm"
@@ -82,7 +82,7 @@ def test_center_fills_both_coordinate_rows(win):
 
 
 def test_typed_utm_moves_the_pin(win):
-    from views.chrome_sheet import current
+    from ingetrazo_render.chrome_sheet import current
     edit_location(win, center=(LAT, LON))
     frame(win)
     act(win, "v", "site_mode", "1")

@@ -1,5 +1,5 @@
 """Drive a Settings unit row through the same typed field as the chrome."""
-from views import settings_sheet
+from ingetrazo_render import settings_sheet
 
 
 def units_row(window, key):

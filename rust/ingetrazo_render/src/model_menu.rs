@@ -14,6 +14,7 @@ pub struct MenuEntry {
 enum Handler {
     Window(&'static str),
     Web(&'static str),
+    PluginsFolder,
     Argument(&'static str, &'static str),
     Tool(&'static str),
     View(&'static str),
@@ -160,6 +161,7 @@ fn build_entries() -> Vec<MenuEntry> {
     ] {
         add(id, path, label, if id == "toggle_projection" { "Shift+P" } else { "" }, Window(method));
     }
+    add("plugins_folder", "Plugins", "Open extensions folder", "", Handler::PluginsFolder);
     add("develop_plugin", "Plugins", "Develop an extension…", "",
         Handler::Web("https://github.com/ingelibre/ingetrazo/blob/main/docs/plugins.md"));
     for (group, id, label, _, _) in crate::commands::view_commands() {
@@ -185,20 +187,26 @@ pub fn run_model_menu(win: &Bound<'_, PyAny>, id: &str) -> PyResult<bool> {
         return Ok(false);
     };
     match entry.handler {
+        Handler::PluginsFolder => {
+            let py = win.py();
+            let folder = py.import("core.extensions")?.call_method0("user_plugins_dir")?;
+            std::fs::create_dir_all(folder.extract::<std::path::PathBuf>()?)?;
+            py.import("core.desktop_open")?.call_method1("open_url", (folder,))?
+        }
         Handler::Web(url) => win.py().import("core.desktop_open")?.call_method1("open_url", (url,))?,
         Handler::Window(method) => win.call_method0(method)?,
         Handler::Argument(method, arg) => win.call_method1(method, (arg,))?,
         Handler::Tool(tool) => win.call_method1("_activate_tool", (tool,))?,
         Handler::Export(fmt) => win
             .py()
-            .import("views.wgpu_deliveries")?
-            .call_method1("export_form", (win, win.py().None(), true, fmt))?,
+            .import("ingetrazo_render")?
+            .call_method1("delivery_export_form", (win, win.py().None(), true, fmt))?,
         Handler::RestMode(mode) => win
             .getattr("viewport")?
             .call_method1("set_edit_rest_mode", (mode,))?,
         Handler::DisplaySettings => win
             .py()
-            .import("views.settings_sheet")?
+            .import("ingetrazo_render.settings_sheet")?
             .call_method1("show", (win, "display"))?,
         Handler::Review => {
             let view = win.getattr("view")?;

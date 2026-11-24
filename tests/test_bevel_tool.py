@@ -185,8 +185,8 @@ def test_p_stays_push_pull_for_other_tools(viewport):
 # ---- The panel -----------------------------------------------------------------
 
 def _edit(viewport, key, value=None):
-    from views.inspector_bridge import _bevel
-    _bevel(viewport, viewport.active_tool, key, value)
+    from ingetrazo_render import bevel_edit
+    bevel_edit(viewport, viewport.active_tool, key, value)
 
 
 def test_panel_edits_reach_the_tool_and_the_preview(viewport):

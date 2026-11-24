@@ -13,6 +13,21 @@ mod component_rows;
 mod context_pick;
 mod context_placements;
 mod document_input;
+mod document_chunks;
+mod document_records;
+mod document_state;
+mod document_environment;
+mod document_cache;
+mod document_grid;
+mod document_edits;
+mod document_targets;
+mod document_hlr;
+mod document_placements;
+mod document_annotations;
+mod document_planes;
+mod document_host;
+mod document_bindings;
+mod document_camera;
 mod section_display;
 mod inspection_edits;
 mod context_edits;
@@ -49,6 +64,15 @@ mod model_views;
 mod pane_dividers;
 /// The one verb source: kinds, menu rows, inspector verbs, dispatch.
 mod verbs;
+mod viewport_menu;
+mod shell_commands;
+mod report_sheets;
+mod inspector_host;
+mod shell_events;
+mod deliveries_host;
+mod sheet_runtime;
+mod settings_rows;
+mod settings_host;
 pub mod ui;
 mod host_context;
 mod inspector;
@@ -70,6 +94,8 @@ mod shadow_fit;
 mod textures;
 pub mod tool_cursors;
 pub mod icon_art;
+mod billboards;
+mod document_tabs;
 mod annotation_canvas;
 mod tool_overlay;
 mod image_assets;
@@ -201,6 +227,8 @@ static NEXT_RENDERER_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::Atomi
 #[pyclass(unsendable)]
 struct Renderer {
     id: u64,
+    /// What the document ▾ and the project tabs were last sent (document_tabs.rs).
+    document_tabs: Option<Py<document_tabs::DocumentTabs>>,
     instance: wgpu::Instance,
     /// Inactive views of the same scene, addressed by a never-recycled id.
     targets: std::collections::HashMap<usize, Target>,
@@ -750,6 +778,7 @@ impl Renderer {
         transparency.bind_textures(&device, &textures);
         Ok(Self {
             id: NEXT_RENDERER_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            document_tabs: None,
             instance, targets: Default::default(), active: 0, next_target: 1, scene_epoch: 0,
             textures, texture_groups, textures_enabled: true, material_transparency: true,
             ao: ao::AmbientOcclusion::new(samples.clone(), &device, format),
@@ -2521,7 +2550,7 @@ impl Renderer {
     /// typed, its anchor (points), the tool's start on screen and the
     /// document's revision (a commit is read from them, ui/value_field.rs).
     #[pyo3(signature = (caption, value, typing, x, y, start=None, revision=0))]
-    fn ui_set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: f32, y: f32,
+    fn ui_set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: Option<f32>, y: Option<f32>,
                            start: Option<(f32, f32)>, revision: u64) {
         if let Some(ui) = self.ui.as_mut() { ui.set_cursor_value(caption, value, typing, x, y, start, revision); }
     }
@@ -2644,6 +2673,15 @@ impl Renderer {
     fn ui_finish_scene_photo(&mut self,key:&str,pixels:Option<scene_photo::Pixels>){
         if let Some(ui)=self.ui.as_mut(){ui.finish_scene_photo(key,pixels);}
     }
+    /// The window's documents as this renderer's chrome was last sent them
+    /// (``DocumentTabs.sync``, document_tabs.rs): one per renderer, so the
+    /// comparison is always with what it shows.
+    fn document_tabs(&mut self, py: Python<'_>) -> PyResult<Py<document_tabs::DocumentTabs>> {
+        if self.document_tabs.is_none() {
+            self.document_tabs = Some(Py::new(py, document_tabs::DocumentTabs::default())?);
+        }
+        Ok(self.document_tabs.as_ref().unwrap().clone_ref(py))
+    }
     fn ui_set_projects(&mut self, left: f32, docs: Vec<(String, bool, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_projects(left, docs); }
     }
@@ -2665,7 +2703,7 @@ impl Renderer {
     fn ui_project_tab_rects(&self) -> Vec<Option<(f32, f32, f32, f32)>> {
         self.ui.as_ref().map_or_else(Vec::new, |ui| ui.project_tab_rects())
     }
-    /// The right-click menu at (x, y) (views/context_menu.py): header, then
+    /// The right-click menu at (x, y) (viewport_menu.rs): header, then
     /// rows of (family label, [(id, label, key, enabled, checked)]).
     fn ui_set_context_menu(&mut self, x: f32, y: f32, title: String, subtitle: String,
                            rows: Vec<(String, Vec<(String, String, String, bool, i8)>)>) {
@@ -2769,7 +2807,7 @@ impl Renderer {
     fn ui_set_form(&mut self, title: String, fields: Vec<ui::FormField>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_form(title, fields); }
     }
-    /// The large sheet (views/chrome_sheet.py): the whole sheet as JSON
+    /// The large sheet (sheet_runtime.rs): the whole sheet as JSON
     /// (ui/large_sheet.rs `Spec`); "" closes it.
     fn ui_set_large_sheet(&mut self, spec: &str) -> PyResult<()> {
         match self.ui.as_mut() {
@@ -3156,7 +3194,7 @@ impl Renderer {
 /// Public so the `built` app can register the module statically
 /// (`append_to_inittab`) and share one renderer with the embedded Python.
 /// Check a large sheet's JSON against the chrome's schema without a
-/// renderer (views/chrome_sheet.py tests): "" when it parses, else why.
+/// renderer (sheet_runtime.rs tests): "" when it parses, else why.
 #[pyfunction]
 fn large_sheet_check(spec: &str) -> String {
     match serde_json::from_str::<ui::large_sheet::Spec>(spec) {
@@ -3228,7 +3266,21 @@ fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<P
 
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    document_bindings::register(m)?;
+    document_camera::register(m)?;
     document_input::register(m)?;
+    document_chunks::register(m)?;
+    document_records::register(m)?;
+    document_state::register(m)?;
+    document_environment::register(m)?;
+    document_cache::register(m)?;
+    document_grid::register(m)?;
+    document_edits::register(m)?;
+    document_targets::register(m)?;
+    document_hlr::register(m)?;
+    document_placements::register(m)?;
+    document_annotations::register(m)?;
+    document_planes::register(m)?;
     m.add_class::<tool_instances::InstancePreview>()?;
     window_document::register(m)?;
     close_documents::register(m)?;
@@ -3241,6 +3293,13 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     component_replacement::register(m)?;
     inspection_edits::register(m)?;
     context_edits::register(m)?;
+    viewport_menu::register(m)?;
+    shell_commands::register(m)?;
+    report_sheets::register(m)?;
+    inspector_host::register(m)?;
+    shell_events::register(m)?;
+    deliveries_host::register(m)?;
+    sheet_runtime::register(m)?;
     native_view_actions::register(m)?;
     plugin_workspace::register(m)?;
     m.add_class::<link_watch::LinkWatch>()?;
@@ -3268,6 +3327,10 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(icon_art::icon_keys, m)?)?;
     m.add_function(wrap_pyfunction!(icon_art::letter_art, m)?)?;
     m.add_function(wrap_pyfunction!(icon_art::row_icon_art, m)?)?;
+    m.add_class::<document_tabs::DocumentTabs>()?;
+    m.add_function(wrap_pyfunction!(billboards::billboard_stances, m)?)?;
+    m.add_function(wrap_pyfunction!(billboards::billboard_worlds, m)?)?;
+    m.add_function(wrap_pyfunction!(billboards::sprite_mapping, m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_name, m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_art, m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::texture_has_alpha,m)?)?;
@@ -3354,6 +3417,8 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<units_start::UnitsDraft>()?;
     m.add_class::<preferences::PreferencesView>()?;
     m.add_class::<preferences::RestartPreferences>()?;
+    // Settings needs the preference classes above.
+    settings_host::register(m)?;
     m.add_class::<preferences::PreferencePage>()?;
     m.add_function(wrap_pyfunction!(preferences::edit_ai_connection, m)?)?;
     m.add_class::<preferences::DevicePreferences>()?;

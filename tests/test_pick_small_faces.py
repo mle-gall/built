@@ -75,3 +75,18 @@ def test_the_scalar_and_the_batched_test_agree_on_a_small_triangle():
     assert ts is not None and abs(ts - t[0]) < 1e-9
 
 
+
+
+def test_ray_batches_keep_row_order_across_array_layouts():
+    origin, direction = [0.25, 0.25, 3], (0, 0, -1)
+    corners = np.array([[0, 0, 0], [4, 4, 1], [0, 0, 2]], dtype=np.float32)
+    edges = np.tile(np.eye(3)[:2], (3, 1, 1))
+
+    for rows in (corners, np.asfortranarray(corners), corners.ravel().tolist(),
+                 np.repeat(corners, 2, axis=1)[:, ::2]):
+        times, hits = _moller_trumbore(origin, direction, rows, edges[:, 0], edges[:, 1])
+        np.testing.assert_array_equal(times, [3, 0, 1])
+        np.testing.assert_array_equal(hits, [True, False, True])
+
+    times, hits = _moller_trumbore(origin, direction, [], [], [])
+    assert times.shape == hits.shape == (0,)

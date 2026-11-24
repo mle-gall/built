@@ -444,7 +444,7 @@ class MaterialsProvider(Provider):
                 self.run(ctx, "image", {**item, "key": f"m:{name}"})
             else:
                 ctx.core("set_material_base", name=name, base="color")
-        elif field == "color" or field.startswith("brush_"):
+        elif field in ("color", "finish") or field.startswith("brush_"):
             mat = ctx.scene.materials.get(name)
             if field == "color" and mat is not None and (mat.texture or {}).get("path"):
                 ctx.core("edit_material", name=name, color=list(_parse_hex(text)))
@@ -731,7 +731,7 @@ def item(view, key):
 # ---- the sheet -------------------------------------------------------------------------
 
 def _chrome_sheet():
-    from views import chrome_sheet
+    from ingetrazo_render import chrome_sheet
     return chrome_sheet
 
 
@@ -1065,7 +1065,7 @@ def install(win) -> None:
         return
     win._lib_installed = True
     if "_command_store" in vars(win):
-        from app_shell.command_action import ShellAction
+        from ingetrazo_render import shell_action as ShellAction
         win._lib_actions = {p.id: ShellAction(win, p.label, run=lambda t=p.id: open_library(win, t), listed=False)
                             for p in PROVIDERS if p.ready}
         win._act_library_components = ShellAction(win, "Components", run=lambda: open_library(win, "components"), listed=False)

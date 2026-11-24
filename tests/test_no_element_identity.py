@@ -45,8 +45,7 @@ _KERNEL = ("kernel: runs on Python objects only (a StoreMesh materialises "
 _ALLOWED = {
     # The Mesh kernel itself, mutation and its helpers.
     **{("core/mesh.py", fn): _KERNEL for fn in (
-        "registers", "find_edge", "add_edge", "add_edges_welded", "_rekey",
-        "_insert_into_face_loops")},
+        "find_edge", "add_edge", "_insert_into_face_loops")},
     # Not elements: names that look like them.
     ("core/topology.py", "__call__"): "id()-keyed memo of a QVector3D",
     ("core/history_commands.py", "_sync"): "tag-state dict values against a sentinel, not elements",
@@ -56,9 +55,6 @@ _ALLOWED = {
     ("core/outliner.py", "reparent_problem"): "groups",
     ("views/outliner.py", "toggle_isolated"): "groups",
     ("views/tray.py", "_component_steps"): "groups",
-    ("views/document_interaction.py", "_cat_kept"): "cached arrays",
-    ("views/document_interaction.py", "_epoch_only_matrices"): "draw-record tuples",
-    ("views/document_interaction.py", "_epoch_kept_tops"): "draw-record tuples",
 }
 
 

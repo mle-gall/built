@@ -135,7 +135,7 @@ def dispatch(h, ev) -> None:
     """One input event during a wait: the chrome only."""
     from core.input_types import Qt
     from views import chrome_dialogs, wgpu_ui
-    from app_shell.events import KeyEvent, MouseEvent
+    from ingetrazo_render import KeyEvent, MouseEvent
     kind, x, y, button, mods, key, text = ev
     view = h.view
     win = h.window

@@ -85,11 +85,11 @@ def command(win, name, *args):
     """A command by name (menu bar, start page, document ▾). Returns what
     the command returns (open/save: whether it happened)."""
     if name in ("about", "extensions", "cutlist"):
-        from views.report_sheets import show
+        from ingetrazo_render import show_report_sheet as show
         return show(win, name)
     if name == "delivery_export":
-        from views.wgpu_deliveries import export_form
-        return export_form(win, one_off=True)
+        from ingetrazo_render import delivery_export_form
+        return delivery_export_form(win, one_off=True)
     if name in ("cut", "copy", "paste", "paste_in_place"):
         return _clipboard.run(win, name)
     kind, _, arg = name.partition(":")
@@ -150,8 +150,8 @@ def command(win, name, *args):
         from views import wgpu_tabs
         return wgpu_tabs.open_link_source(win, Path(arg))
     if kind == "ctx_demo":
-        from app_shell import harness
-        return harness.context_menu_for(win, arg)
+        from ingetrazo_render import context_menu_demo
+        return context_menu_demo(win, arg)
     if kind == "close_doc":
         docs = win._documents
         return close_document(win, docs[int(arg)] if arg else None)
@@ -175,7 +175,7 @@ def open_library(win) -> bool:
 
 
 def open_settings(win) -> bool:
-    from views import settings_sheet
+    from ingetrazo_render import settings_sheet
     return settings_sheet.show(win)
 
 

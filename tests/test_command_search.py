@@ -8,7 +8,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from app_shell.command_action import ShellAction
+from ingetrazo_render import shell_action as ShellAction
 from core import string_search as ss
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from views import command_metadata as cs, wgpu_ui
@@ -186,7 +186,7 @@ def test_unavailable_action_cannot_run_from_a_previous_search(win):
 
 def test_shortcut_editor_opens_on_the_searched_command(win):
     from tests.scene_controls import chrome
-    from views import chrome_sheet
+    from ingetrazo_render import chrome_sheet
     with chrome(win):
         rows, detail = query(win, "orient faces")
         assert rows[0][:2] == ("Orient Faces", "Edit") and detail[0][2]
@@ -292,10 +292,10 @@ def setup(app):
 def test_sheet_binding_shares_the_keyboard_table_and_follows_the_active_document(win, monkeypatch):
     from core.input_types import Qt
     from core.shortcuts import export_shortcuts, import_shortcuts
-    from app_shell.events import KeyEvent
+    from ingetrazo_render import KeyEvent
     from tests.scene_controls import chrome
     from views import wgpu_sheets
-    from views.settings_sheet import SettingsSheet
+    from ingetrazo_render.settings_sheet import SettingsSheet
 
     sheet = SettingsSheet("keyboard")
     sheet._win = win
@@ -318,7 +318,7 @@ def test_sheet_binding_shares_the_keyboard_table_and_follows_the_active_document
             assert ws.composer.tool_mode == "cota_cadena"
             query(win, "chain dimension")
             wgpu_ui.command_action(win.view, win, "cmdshortcut", "0")
-            from views import chrome_sheet
+            from ingetrazo_render import chrome_sheet
             assert chrome_sheet.current(win).kb_focus == "sc:sheet:cota_cadena"
             chrome_sheet.close(win)
         ws.shown = False

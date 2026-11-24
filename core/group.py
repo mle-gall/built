@@ -933,75 +933,15 @@ def _copy_definition_mesh(mesh):
 
 
 def _hull_2d(pts):
-    """Convex hull of 2D points (monotone chain), counter-clockwise.
-
-    Points strictly inside the quadrilateral of the four axis extremes cannot
-    be hull vertices, so they are dropped first (Akl-Toussaint). That test is
-    one vectorised pass and typically discards almost everything: the 189k
-    vertices of the hedge in piscina.igz come down to a few hundred before the
-    Python scan, which is the difference between half a second and a blink."""
+    """Convex hull of 2D points (monotone chain), counter-clockwise from
+    the lowest x, as an ``(H, 2)`` array. Points strictly inside the
+    quadrilateral of the four axis extremes, then of sixteen directions'
+    extremes, are dropped first (Akl-Toussaint): the 189k vertices of a
+    hedge come down to a few hundred before the scan. In Rust
+    (``rust/ingetrazo_core/src/group_frame.rs``)."""
     import numpy as np
-    pts = np.asarray(pts, dtype=np.float64)
-
-    def outside(points, poly):
-        """Mask of points NOT strictly inside the convex polygon ``poly``
-        (counter-clockwise) — the only ones that can still be hull
-        vertices."""
-        inside = np.ones(len(points), dtype=bool)
-        for i in range(len(poly)):
-            a, b = poly[i], poly[(i + 1) % len(poly)]
-            side = ((b[0] - a[0]) * (points[:, 1] - a[1])
-                    - (b[1] - a[1]) * (points[:, 0] - a[0]))
-            inside &= side > 1e-12          # strictly left of every edge
-        return ~inside
-
-    if len(pts) > 64:
-        # Stage 1, four axis extremes: one cheap pass over everything.
-        quad = pts[[int(np.argmin(pts[:, 0])), int(np.argmin(pts[:, 1])),
-                    int(np.argmax(pts[:, 0])), int(np.argmax(pts[:, 1]))]]
-        keep = outside(pts, quad)
-        if keep.any():
-            pts = pts[keep]
-    if len(pts) > 64:
-        # Stage 2, sixteen directions on what survived: the four axis
-        # extremes of a rectangular site are its corners, and everything
-        # along its slightly bowed edges survived stage 1 — 100k points
-        # reached the Python scan on the Plaza Yanque, 350 ms per box
-        # (2026-09-14). The extremes along 16 directions are hull vertices
-        # themselves and, in angular order, a convex polygon; what lies
-        # strictly inside it cannot be a hull vertex either.
-        ang = np.arange(16) * (2.0 * np.pi / 16)
-        dirs = np.stack([np.cos(ang), np.sin(ang)], axis=1)
-        ext = np.unique(np.argmax(pts @ dirs.T, axis=0))
-        poly = pts[ext]
-        c = poly.mean(axis=0)
-        poly = poly[np.argsort(np.arctan2(poly[:, 1] - c[1], poly[:, 0] - c[0]))]
-        if len(poly) >= 3:
-            keep = outside(pts, poly)
-            if keep.any():
-                pts = pts[keep]
-    if len(pts) > 1:
-        # Coincident survivors (a mesh repeats positions across faces and
-        # placements) only cost scan time — deduped HERE, on the few that
-        # are left: a sort of the whole million cost 75 ms.
-        pts = np.unique(pts, axis=0)
-    p = pts[np.lexsort((pts[:, 1], pts[:, 0]))]
-    if len(p) < 3:
-        return p
-
-    def half(seq):
-        out: list = []
-        for q in seq:
-            while len(out) >= 2:
-                a, b = out[-2], out[-1]
-                if (b[0] - a[0]) * (q[1] - a[1]) - (b[1] - a[1]) * (q[0] - a[0]) > 0:
-                    break
-                out.pop()
-            out.append(q)
-        return out
-
-    lower, upper = half(p), half(p[::-1])
-    return np.array(lower[:-1] + upper[:-1])
+    from ingetrazo_core import group_hull_2d
+    return group_hull_2d(np.ascontiguousarray(np.asarray(pts, dtype=np.float64)[:, :2]))
 
 
 def frame_from_points(positions) -> tuple:
@@ -1023,31 +963,16 @@ def frame_from_points(positions) -> tuple:
     frame from face geometry instead and picked triangulation DIAGONALS for
     the long axis, which is how a rectangle ends up with a skew frame."""
     import numpy as np
-    from ingetrazo_core import Vec3 as QVector3D
+    from ingetrazo_core import Vec3 as QVector3D, group_frame_axis
     world = (QVector3D(1.0, 0.0, 0.0), QVector3D(0.0, 1.0, 0.0),
              QVector3D(0.0, 0.0, 1.0))
     if positions is None or len(positions) < 3:
         return world
-    hull = _hull_2d(np.asarray(positions, dtype=np.float64)[:, :2])
-    if len(hull) < 3:
+    u = group_frame_axis(np.ascontiguousarray(
+        np.asarray(positions, dtype=np.float64)[:, :2]))
+    if u is None:
         return world
-    best = None
-    for i in range(len(hull)):
-        d = hull[(i + 1) % len(hull)] - hull[i]
-        length = float(np.hypot(d[0], d[1]))
-        if length < 1e-12:
-            continue
-        u = d / length
-        v = np.array([-u[1], u[0]])
-        a, b = hull @ u, hull @ v
-        area = float((a.max() - a.min()) * (b.max() - b.min()))
-        if best is None or area < best[0]:
-            best = (area, u)
-    if best is None:
-        return world
-    u = best[1]
-    return (QVector3D(float(u[0]), float(u[1]), 0.0),
-            QVector3D(float(-u[1]), float(u[0]), 0.0),
+    return (QVector3D(u[0], u[1], 0.0), QVector3D(-u[1], u[0], 0.0),
             QVector3D(0.0, 0.0, 1.0))
 
 
@@ -1153,9 +1078,11 @@ def oriented_bounds(mesh, frame=None, points=None) -> tuple:
             return frame, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0)
         pos = np.array([[v.position.x(), v.position.y(), v.position.z()]
                         for v in verts], dtype=np.float64)
+    from ingetrazo_core import group_oriented_extent
     axes = np.array([[a.x(), a.y(), a.z()] for a in frame], dtype=np.float64)
-    proj = pos @ axes.T
-    return frame, tuple(proj.min(axis=0)), tuple(proj.max(axis=0))
+    lo, hi = group_oriented_extent(
+        np.ascontiguousarray(np.asarray(pos, dtype=np.float64).reshape(-1, 3)), axes)
+    return frame, lo, hi
 
 
 def oriented_box_corners(frame, lo, hi) -> list:

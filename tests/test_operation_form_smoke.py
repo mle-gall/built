@@ -11,6 +11,17 @@ ROOT = Path(__file__).resolve().parents[1]
 BIN = ROOT / "rust/built_app/target/release/built"
 
 
+def english(profile):
+    """The scripted runs below type and click on English text and layout;
+    a profile without a language follows the system's."""
+    from ingetrazo_core import NativeSettings
+    profile.mkdir(parents=True, exist_ok=True)
+    st = NativeSettings(str(profile)).fresh()
+    st.setValue("language", "en")
+    st.sync()
+    return profile
+
+
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_soften_and_export(tmp_path):
@@ -48,7 +59,7 @@ quit
     result = run([str(BIN), "--root", str(ROOT), "--new-instance", "--size", "1280x800",
                   "--script", str(steps), str(model)],
                  env=dict(os.environ, BUILT_ANSWERS="escape"),
-                 home=tmp_path / "home", settings=tmp_path / "profile",
+                 home=tmp_path / "home", settings=english(tmp_path / "profile"),
                  capture_output=True, text=True, timeout=90)
     log = result.stdout + result.stderr
     assert result.returncode == 0, log
@@ -266,7 +277,7 @@ def test_native_location_coordinates_map_apply_and_cancel(tmp_path):
                      f"click 431 351\nwait 200\nkey escape\nwait 200\nmenu save_to:{saved}\nwait 500\nstate\nquit\n")
     result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
                   "--size", "1000x920", "--script", str(steps), str(model)],
-                 env=dict(os.environ, BUILT_ANSWERS="escape,cmd-d,cmd-d"), home=home, settings=tmp_path / "profile",
+                 env=dict(os.environ, BUILT_ANSWERS="escape,cmd-d,cmd-d"), home=home, settings=english(tmp_path / "profile"),
                  capture_output=True, text=True, timeout=90)
     log = result.stdout + result.stderr
     states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
@@ -564,7 +575,8 @@ def test_camera_registry_text_and_plugin_utilities(tmp_path):
 from core import bim_registry
 from ingetrazo_render import RenderResult
 from core.plugin_panels import show_utility
-from views import chrome_sheet, wgpu_ui
+from ingetrazo_render import chrome_sheet
+from views import wgpu_ui
 from pathlib import Path
 menu, state = Host.menu, Host.state
 def fixture_menu(self, command):
@@ -728,13 +740,13 @@ def dispatch(self, command):
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("rename","preview-tag:"+tag.key,"Unused survey tag")))
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("purgetags","")))
     elif command=="fixture-selection-tag":
-        from views import context_menu
+        from ingetrazo_render import context_menu_build, context_menu_run
         from core.group import Group
         group=Group(name="Loose tag target")
         scene.groups.append(group)
         scene.select([group])
-        menu_state=context_menu.build(self.window,self.view)
-        context_menu.run(self.window,self.view,menu_state.kind,"selectiontag",menu_state.sel)
+        menu_state=context_menu_build(self.window,self.view)
+        context_menu_run(self.window,self.view,menu_state.kind,"selectiontag",menu_state.sel)
     elif command=="fixture-rename":
         from core.group import Group
         if not hasattr(self,"fixture_rename"):
@@ -783,11 +795,11 @@ def dispatch(self, command):
         wgpu_library.edit_field(self.window,self.view,"brush_name:"+PaintTool.current_material.name,"Site paint")
         self.fixture_swatch=(PaintTool.current_material.name=="Site paint" and "Site paint" not in scene.materials)
     elif command=="fixture-paint-rows":
-        from views import chrome_sheet
+        from ingetrazo_render import chrome_sheet
         group=scene.groups[0]
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("paintrows","i:"+group.uid)))
     elif command=="fixture-apply-paint":
-        from views import chrome_sheet
+        from ingetrazo_render import chrome_sheet
         st=self.window._chrome_sheet
         self.fixture_paint_sheet=st.built.id
         chrome_sheet.action(self.window,chrome_sheet.SEP.join(("tree-material","open","ral:RAL 1000")))

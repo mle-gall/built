@@ -148,7 +148,8 @@ def test_the_3d_mouse_page_shows_the_device_live(settings_file, monkeypatch):
     monkeypatch.setattr(ndof_input, "_shared", dev)
     monkeypatch.setattr(type(dev), "backend_name",
                         property(lambda self: "rawinput"))
-    from views import chrome_sheet, settings_sheet
+    from ingetrazo_render import chrome_sheet
+    from ingetrazo_render import settings_sheet
     win = _Win()
     settings_sheet.show(win, page="ndof")
     sheet = chrome_sheet.current(win)

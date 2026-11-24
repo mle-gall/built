@@ -59,12 +59,131 @@ impl FaceOutline {
         Ok(self.0.solid_at(xyz(p)?.to_array()))
     }
 
+    fn merged_hole(&self, ring: &Bound<'_, PyAny>) -> PyResult<Option<(usize, Vec<Vec3>)>> {
+        Ok(self
+            .0
+            .merged_hole(ring.py(), &positions(ring)?)?
+            .map(|(i, r)| (i, vectors(r))))
+    }
+
     fn carve(&self, ring: &Bound<'_, PyAny>) -> PyResult<Option<Vec<Vec<Vec3>>>> {
         Ok(self
             .0
             .carve(&positions(ring)?)
             .map(|pieces| pieces.into_iter().map(vectors).collect()))
     }
+}
+
+#[pyfunction]
+pub(crate) fn containing_object<'py>(
+    faces: &Bound<'py, PyAny>,
+    ring: &Bound<'py, PyAny>,
+    exclude: &Bound<'py, PyAny>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let ring = positions(ring)?;
+    let Some(&p) = ring.first() else {
+        return Ok(None);
+    };
+    let pad = 1e-3 + 1e-6 * p.iter().copied().map(f64::abs).fold(1., f64::max);
+    let mut best = None;
+    let mut count = usize::MAX;
+    for f in faces.try_iter()? {
+        let f = f?;
+        if f.eq(exclude)? {
+            continue;
+        }
+        let outer = f.getattr("vertices")?;
+        let n = outer.len()?;
+        if n >= count || n < 3 {
+            continue;
+        }
+        let bbox = crate::drawing_queries::points_box(&outer)?;
+        if (0..3).all(|i| bbox[i] - pad <= p[i] && p[i] <= bbox[i + 3] + pad)
+            && FaceOutline::new(&f)?.0.contains(&ring, true)
+        {
+            best = Some(f);
+            count = n;
+        }
+    }
+    Ok(best)
+}
+
+type Cell = crate::store::commands::Cell;
+fn segment_key(a: Cell, b: Cell) -> [Cell; 2] {
+    if a <= b {
+        [a, b]
+    } else {
+        [b, a]
+    }
+}
+fn keyed_rings(f: &Bound<'_, PyAny>) -> PyResult<Vec<Vec<Cell>>> {
+    use crate::store::commands::cell;
+    let mut rings = vec![positions(&f.getattr("vertices")?)?];
+    for h in f.getattr("holes")?.try_iter()? {
+        rings.push(positions(&h?)?);
+    }
+    Ok(rings
+        .into_iter()
+        .map(|r| r.into_iter().map(cell).collect())
+        .collect())
+}
+fn segments(r: &[Cell]) -> impl Iterator<Item = [Cell; 2]> + '_ {
+    r.iter()
+        .zip(r.iter().cycle().skip(1))
+        .map(|(&a, &b)| segment_key(a, b))
+}
+#[pyfunction]
+pub(crate) fn orphan_objects<'py>(
+    edges: &Bound<'py, PyAny>,
+    faces: &Bound<'py, PyAny>,
+    vertices: &Bound<'py, PyAny>,
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    use crate::store::commands::cell;
+    use std::collections::HashSet;
+    let seeds: HashSet<_> = positions(vertices)?.into_iter().map(cell).collect();
+    let mut attached = HashSet::new();
+    for f in faces.try_iter()? {
+        let rings = keyed_rings(&f?)?;
+        if rings.iter().flatten().any(|p| seeds.contains(p)) {
+            for r in rings {
+                attached.extend(segments(&r));
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for e in edges.try_iter()? {
+        let e = e?;
+        let a = cell(xyz(&e.getattr("a")?)?.to_array());
+        let b = cell(xyz(&e.getattr("b")?)?.to_array());
+        if (seeds.contains(&a) || seeds.contains(&b)) && !attached.contains(&segment_key(a, b)) {
+            out.push(e);
+        }
+    }
+    Ok(out)
+}
+#[pyfunction]
+pub(crate) fn bordered_object(face: &Bound<'_, PyAny>, faces: &Bound<'_, PyAny>) -> PyResult<bool> {
+    use std::collections::HashSet;
+    let r: Vec<_> = positions(&face.getattr("vertices")?)?
+        .into_iter()
+        .map(crate::store::commands::cell)
+        .collect();
+    if r.is_empty() {
+        return Ok(false);
+    }
+    let mut missing: HashSet<_> = segments(&r).collect();
+    for f in faces.try_iter()? {
+        let f = f?;
+        if f.eq(face)? {
+            continue;
+        }
+        for ring in keyed_rings(&f)? {
+            for s in segments(&ring) {
+                missing.remove(&s);
+            }
+        }
+    }
+    Ok(missing.is_empty())
 }
 
 #[pyfunction]
@@ -153,4 +272,275 @@ pub(crate) fn locate_boundary(
 #[pyfunction]
 pub(crate) fn polygon_contains_2d(p: [f64; 2], ring: Vec<[f64; 2]>, strict: bool) -> bool {
     crate::store::drawing_face::inside(p, &ring, strict)
+}
+
+/// Plan changes by list position, so materialised meshes retain their handles and keys.
+#[pyfunction]
+pub(crate) fn heal_objects(
+    faces: &Bound<'_, PyAny>,
+    coverage: f64,
+    partial: bool,
+    pad: f64,
+    compensated: bool,
+) -> PyResult<(Vec<u128>, Vec<(u128, Vec<u128>)>)> {
+    let outlines = faces
+        .try_iter()?
+        .map(|f| Ok(FaceOutline::new(&f?)?.0))
+        .collect::<PyResult<Vec<_>>>()?;
+    let keys = (0..outlines.len() as u128).collect::<Vec<_>>();
+    Ok(crate::store::drawing_face::outline_heal_plan(
+        &outlines,
+        &keys,
+        coverage,
+        partial,
+        pad,
+        Hypot::LibStdCxx,
+        compensated,
+    ))
+}
+
+#[pyfunction]
+pub(crate) fn heal_partners(
+    normals: Vec<Point>,
+    areas: Vec<f64>,
+    lo: Vec<Point>,
+    hi: Vec<Point>,
+    pad: f64,
+) -> PyResult<std::collections::HashMap<usize, Vec<usize>>> {
+    if [normals.len(), lo.len(), hi.len()]
+        .iter()
+        .any(|n| *n != areas.len())
+    {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "inconsistent face columns",
+        ));
+    }
+    let mut out = std::collections::HashMap::new();
+    for (i, &area) in areas.iter().enumerate() {
+        for (j, &other) in areas.iter().enumerate() {
+            let parallel = DVec3::from_array(normals[i])
+                .dot(DVec3::from_array(normals[j]))
+                .abs()
+                > 0.999;
+            if crate::store::drawing_face::heal_partner(
+                area,
+                other,
+                (lo[i], hi[i]),
+                (lo[j], hi[j]),
+                parallel,
+                pad,
+            ) {
+                out.entry(i).or_insert_with(Vec::new).push(j);
+            }
+        }
+    }
+    Ok(out)
+}
+
+// The public footprint keeps the original handles and independent copies of
+// their regions: history can move or remove the originals before consulting it.
+#[pyfunction]
+pub(crate) fn winding_footprint<'py>(
+    faces: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, pyo3::types::PyList>> {
+    let out = pyo3::types::PyList::empty(faces.py());
+    for f in faces.try_iter()? {
+        let f = f?;
+        let ring = positions(&f.getattr("vertices")?)?;
+        if ring.is_empty() {
+            continue;
+        }
+        let mut lo = ring[0];
+        let mut hi = lo;
+        for p in &ring {
+            for j in 0..3 {
+                lo[j] = lo[j].min(p[j]);
+                hi[j] = hi[j].max(p[j]);
+            }
+        }
+        let holes = f
+            .getattr("holes")?
+            .try_iter()?
+            .map(|r| Ok(vectors(positions(&r?)?)))
+            .collect::<PyResult<Vec<_>>>()?;
+        out.append((
+            &f,
+            f.call_method0("normal")?,
+            vectors(ring),
+            holes,
+            (lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]),
+        ))?;
+    }
+    Ok(out)
+}
+
+#[pyfunction]
+#[pyo3(signature=(faces, footprint=None))]
+pub(crate) fn object_winding<'py>(
+    faces: &Bound<'py, PyAny>,
+    footprint: Option<&Bound<'py, PyAny>>,
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    let py = faces.py();
+    let fs = faces.try_iter()?.collect::<PyResult<Vec<_>>>()?;
+    let outlines = fs
+        .iter()
+        .map(|f| Ok(FaceOutline::new(f)?.0))
+        .collect::<PyResult<Vec<_>>>()?;
+    let keys = fs
+        .iter()
+        .map(|f| Ok(f.getattr("key")?.extract::<i128>()? as u128))
+        .collect::<PyResult<Vec<_>>>()?;
+    let mut owned = std::collections::HashSet::new();
+    let mut old = vec![];
+    let h = Hypot::LibStdCxx;
+    if let Some(footprint) = footprint {
+        for row in footprint.try_iter()? {
+            let row = row?;
+            owned.insert(row.get_item(0)?.getattr("key")?.extract::<i128>()? as u128);
+            let [x, y, z] = xyz(&row.get_item(1)?)?.to_array();
+            let mut rings = vec![positions(&row.get_item(2)?)?];
+            for r in row.get_item(3)?.try_iter()? {
+                rings.push(positions(&r?)?);
+            }
+            let [a, b, c, d, e, f] = row.get_item(4)?.extract::<[f64; 6]>()?;
+            old.push((
+                [a, b, c],
+                [d, e, f],
+                Outline::from_rings(rings, V3(x, y, z), h),
+            ));
+        }
+    }
+    let rounded = |x: f64| {
+        format!("{:.2}", x.abs())
+            .parse::<f64>()
+            .unwrap_or(x.abs())
+            .to_bits()
+    };
+    let flips = crate::store::drawing_face::outline_winding(
+        &outlines,
+        &keys,
+        &owned,
+        &old,
+        h,
+        py.version_info().minor >= 12,
+        rounded,
+    );
+    let by_key: std::collections::HashMap<_, _> = keys.into_iter().zip(fs).collect();
+    Ok(flips.iter().map(|k| by_key[k].clone()).collect())
+}
+
+/// Hole rejection bound exposed for comparison with an exhaustive containment walk.
+#[pyclass(frozen)]
+pub(crate) struct HoleBounds {
+    boxes: crate::store::fillet::HoleBoxes,
+    origins: Option<Vec<V3>>,
+}
+#[pymethods]
+impl HoleBounds {
+    #[new]
+    fn new(holes: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let rings = holes
+            .try_iter()?
+            .map(|r| {
+                Ok(positions(&r?)?
+                    .into_iter()
+                    .map(|[x, y, z]| V3(x, y, z))
+                    .collect::<Vec<_>>())
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        let origins = rings.iter().map(|r| r.first().copied()).collect();
+        Ok(Self {
+            boxes: crate::store::fillet::HoleBoxes::new(&rings),
+            origins,
+        })
+    }
+    fn maybe_around(
+        &self,
+        i: usize,
+        normal: &Bound<'_, PyAny>,
+        others: Vec<usize>,
+    ) -> PyResult<Vec<usize>> {
+        let Some(ref origins) = self.origins else {
+            return Ok(others);
+        };
+        if i >= origins.len() || others.iter().any(|&j| j >= origins.len()) {
+            return Err(pyo3::exceptions::PyIndexError::new_err(
+                "hole index out of range",
+            ));
+        }
+        let [x, y, z] = xyz(normal)?.to_array();
+        let gap = self.boxes.gap(origins[i], V3(x, y, z));
+        Ok(others
+            .into_iter()
+            .filter(|&j| self.boxes.near(i, j, gap))
+            .collect())
+    }
+}
+
+#[pyfunction]
+pub(crate) fn interior_point(
+    ring: &Bound<'_, PyAny>,
+    normal: &Bound<'_, PyAny>,
+) -> PyResult<Option<Vec3>> {
+    let [x, y, z] = xyz(normal)?.to_array();
+    let outline = Outline::from_rings(vec![positions(ring)?], V3(x, y, z), Hypot::LibStdCxx);
+    Ok(outline.interior().map(|p| Vec3::from(DVec3::from_array(p))))
+}
+
+#[pyfunction]
+pub(crate) fn inside_loop(
+    inner: &Bound<'_, PyAny>,
+    outer: &Bound<'_, PyAny>,
+    normal: &Bound<'_, PyAny>,
+    compensated: bool,
+) -> PyResult<bool> {
+    let [x, y, z] = xyz(normal)?.to_array();
+    let outline = |rings| Outline::from_rings(rings, V3(x, y, z), Hypot::LibStdCxx);
+    let inner = outline(vec![positions(inner)?]);
+    let outer = outline(vec![vec![], positions(outer)?]);
+    Ok(outer.hole_contains(&inner, compensated))
+}
+
+#[pyfunction]
+pub(crate) fn object_hole_mask(holes: &Bound<'_, PyAny>) -> PyResult<Vec<bool>> {
+    let rings = holes
+        .try_iter()?
+        .map(|r| {
+            let ring = positions(&r?)?;
+            if ring.len() < 3 {
+                return Err(pyo3::exceptions::PyIndexError::new_err(
+                    "hole has fewer than three corners",
+                ));
+            }
+            Ok(ring.into_iter().map(|[x, y, z]| V3(x, y, z)).collect())
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    let v = holes.py().version_info();
+    Ok(crate::store::fillet::maximal_holes_with_sum(
+        &rings,
+        Hypot::LibStdCxx,
+        (v.major, v.minor) >= (3, 12),
+    ))
+}
+
+#[pyfunction]
+pub(crate) fn flat_faces(faces: &Bound<'_, PyAny>, tol: f64) -> PyResult<bool> {
+    if faces.len()? < 2 {
+        return Ok(true);
+    }
+    let plane = |f: &Bound<'_, PyAny>| -> PyResult<_> {
+        let n = xyz(&f.call_method0("normal")?)?;
+        let p = xyz(&f.getattr("vertices")?.get_item(0)?)?;
+        Ok((n, p))
+    };
+    let (n, p) = plane(&faces.get_item(0)?)?;
+    let u = n.normalize_or_zero();
+    let offset = n.dot(p);
+    for face in faces.try_iter()?.skip(1) {
+        let (m, q) = plane(&face?)?;
+        if !(u.dot(m.normalize_or_zero()).abs() > 0.999) || (n.dot(q) - offset).abs() > tol {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }

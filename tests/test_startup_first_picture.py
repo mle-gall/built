@@ -1,87 +1,41 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Opening returns to the renderer before optional document work runs."""
-from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QApplication
+"""Pending document work waits for a picture of the newly opened document."""
 from core.scene import Scene
 from formats import igz
-from views.main_window import MainWindow
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
-def test_open_does_not_prepare_before_picture(tmp_path, monkeypatch):
-    path = tmp_path/'empty.igz'
+def test_open_runs_optional_work_after_the_first_picture(native_host, tmp_path, monkeypatch):
+    path = tmp_path / "empty.igz"
     igz.save_scene(Scene(), path)
-    win = MainWindow(defer_extensions=True)
+    win = native_host.window
     order = []
-    monkeypatch.setattr(win.viewport, 'prepare_drawing', lambda *a: order.append('prepare'))
-    monkeypatch.setattr(win, '_after_links_loaded', lambda: order.append('links'))
-    monkeypatch.setattr(win, 'settle_heap', lambda: order.append('heap'))
-    try:
-        assert win.open_path(path)
-        assert order == []
-        assert win._doc._awaiting_picture
-        win._doc._resident_scene_ready = False
-        win._doc.stand_in.frameReady.emit(0., None, 0.)
-        assert win._doc._awaiting_picture
-        assert order == []
-        order.append('frame')
-        win._doc._resident_scene_ready = True
-        win._doc.stand_in.frameReady.emit(0., None, 0.)
-        assert not win._doc._awaiting_picture
-        # Use a bounded Qt loop to drain paced jobs without needing a GL driver.
-        # The jobs run one per 16 ms slice and the georef syncs between
-        # 'links' and 'heap' can take a while late in a full run: wait for
-        # the last one (bounded) instead of a fixed 500 ms.
-        import time
-        from PySide6.QtCore import QEventLoop
-        deadline = time.monotonic() + 30.0   # an order test, not a speed test: a loaded run needs room
-        while 'heap' not in order and time.monotonic() < deadline:
-            loop = QEventLoop()
-            QTimer.singleShot(50, loop.quit)
-            loop.exec()
-        assert order == ['frame', 'links', 'heap']
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-        win.deleteLater()
-        QApplication.processEvents()
+    monkeypatch.setattr(win, "_after_links_loaded", lambda: order.append("links"))
+    monkeypatch.setattr(win, "settle_heap", lambda: order.append("heap"))
+    assert win.open_path(path)
+    native_host.idle()
+    assert order == []
+    monkeypatch.setattr(native_host.view, "draw_frame", lambda: (0., 0., 0.))
+    native_host.frame()
+    assert order == []
+    native_host.idle()
+    assert order == ["links"]
+    native_host.idle()
+    assert order == ["links", "heap"]
 
 
-def test_previous_metal_frame_cannot_release_loaded_document(monkeypatch):
-    from types import SimpleNamespace
-    from core import _native
-    doc = SimpleNamespace(viewport=object(), _renderer_wgpu=True, _resident_scene_ready=False,
-                          _awaiting_picture=True, _renderer_starting=True)
+def test_previous_frame_cannot_release_new_work(native_host, monkeypatch):
+    draw = iter([(0., 0., 0.), None, (1., 0., 1.)])
+    monkeypatch.setattr(native_host.view, "draw_frame", lambda: next(draw))
+    native_host.frame()
     calls = []
-    monkeypatch.setattr(_native, 'start_ok', lambda: calls.append('guard'))
-    host = SimpleNamespace(_drain_document_startup=lambda d: calls.append('work'))
-    MainWindow._document_first_frame(host, doc)
-    assert calls == []
-    assert doc._awaiting_picture
-    doc._resident_scene_ready = True
-    host._opening_document = True
-    MainWindow._document_first_frame(host, doc)
-    assert calls == []
-    host._opening_document = False
-    MainWindow._document_first_frame(host, doc)
-    assert calls == ['guard', 'work']
-    assert not doc._awaiting_picture
-
-
-def test_a_metal_first_frame_clears_the_rust_engine_guard(monkeypatch):
-    """The GL viewport never swaps under the Metal view, so the window's
-    first-frame hook must satisfy the engine guard itself."""
-    from types import SimpleNamespace
-    from core import _native
-    from views.main_window import MainWindow
-    calls = []
-    monkeypatch.setattr(_native, "start_ok", lambda: calls.append(1))
-    window = MainWindow.__new__(MainWindow)
-    window._opening_document = False
-    doc = SimpleNamespace(viewport=object(), _renderer_wgpu=True, _resident_scene_ready=True)
-    try:
-        MainWindow._document_first_frame(window, doc)
-    except AttributeError:
-        pass  # the rest of the hook needs a real window; the guard call comes first
-    MainWindow._document_first_frame(window, doc)
-    assert calls == [1]
+    native_host.after_picture(lambda: calls.append("work"))
+    native_host.idle()
+    assert not calls
+    native_host.frame()
+    native_host.idle()
+    assert not calls
+    native_host.frame()
+    native_host.idle()
+    assert calls == ["work"]

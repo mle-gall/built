@@ -85,3 +85,30 @@ def test_a_slide_gesture_picks_the_point_under_the_cursor_once():
         Viewport.wheelEvent(vp, event)
     assert len(picks) == 1
     assert vp.camera.distance != 50.0
+
+
+def test_recentering_and_zoom_keep_their_grazing_ray_boundaries():
+    view = SimpleNamespace(
+        camera=SimpleNamespace(target=V(1, 0, 0), eye=lambda: V(0, 0, 0)),
+        _pixel_to_ray=lambda x, y: (V(0, 0, 0), V(1e-6, 1, 0)),
+        _depth_world_at=lambda x, y: ('miss', None),
+    )
+    assert Viewport._point_at_centre_depth(view, 0, 0).toTuple() == (1.0, 1e6, 0.0)
+    assert Viewport._world_under_cursor(view, 0, 0) is None
+
+
+@pytest.mark.parametrize("value", [
+    -0.0, -1e-15, 0.0000005, -0.0000015, 0.0000000005, -0.0000000015,
+    4503599627.370497, -4503599627370.497, 1e100,
+])
+def test_zoom_focus_preserves_public_rounded_pose(value):
+    view = SimpleNamespace(
+        camera=SimpleNamespace(yaw=value, pitch=value, distance=value,
+                               target=V(value, value, value), zoom=lambda steps: None),
+        scene=SimpleNamespace(version=0), _world_under_cursor=lambda x, y: None,
+    )
+    at = QPointF(17, 23)
+    assert Viewport._zoom_at(view, 1., at) == (False, False)
+    expected = (round(value, 9),) * 2 + (round(value, 6),) * 4
+    assert [x.hex() for x in view._zoom_focus[0]] == [x.hex() for x in expected]
+    assert Viewport._zoom_at(view, 1., at) == (False, True)

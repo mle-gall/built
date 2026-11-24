@@ -28,7 +28,7 @@ from contextvars import ContextVar
 from typing import Iterable, Optional
 from itertools import count
 
-from ingetrazo_core import object_drawing, Vec3 as QVector3D, polygon_centroid, polygon_net_area, polygon_newell
+from ingetrazo_core import object_drawing, object_replay, Vec3 as QVector3D, polygon_centroid, polygon_net_area, polygon_newell
 
 
 # Weld tolerance — two positions within this many decimals (~0.1 mm at metric
@@ -52,6 +52,7 @@ _STITCH_TOL = 1e-4
 
 
 _KEY_SCALE = 10.0 ** _KEY_DECIMALS
+_WELD_TOL2 = (10.0 ** -_KEY_DECIMALS) ** 2
 
 #: ``Mesh.__dict__`` entries of a store-backed or materialised mesh that
 #: belong to the store (``core.store_mesh.STORE_SIDE``): never deep-copied.
@@ -78,50 +79,7 @@ def _key(p: QVector3D) -> tuple[int, int, int]:
             round(z * _KEY_SCALE))
 
 
-def _weld_candidates(keys):
-    """Which distinct cells touch another cell in the batch (26 neighbours).
-
-    Compress each axis, keeping a gap of two for every gap larger than one:
-    adjacency is unchanged, but the packed keys fit in int64 for far larger
-    coordinate ranges. Two padding cells prevent carries between axes from
-    looking like neighbours. Each positive offset finds both ends of a pair,
-    so thirteen integer searches replace twenty-six three-axis searches.
-    """
-    import numpy as np
-
-    candidate = np.zeros(len(keys), dtype=bool)
-    if len(keys) < 2:
-        return candidate
-    codes, spans = [], []
-    for axis in keys.T:
-        values, inverse = np.unique(axis, return_inverse=True)
-        steps = np.ones(len(values), dtype=np.int64)
-        steps[0] = 0
-        steps[1:] += np.diff(values) != 1
-        ranks = steps.cumsum()
-        codes.append(ranks[inverse])
-        spans.append(int(ranks[-1]) + 3)
-    nx, ny, nz = spans
-    if nx * ny * nz > np.iinfo(np.int64).max:
-        # An exceptionally large batch: use unbounded integers, never wrap
-        # a packed key and change the set (and thus the vertex order).
-        codes = [c.astype(object) for c in codes]
-    packed = (codes[0] * ny + codes[1]) * nz + codes[2]
-    order = np.argsort(packed)
-    ordered = packed[order]
-    for dx in (0, 1):
-        for dy in (-1, 0, 1):
-            for dz in (-1, 0, 1):
-                offset = (dx * ny + dy) * nz + dz
-                if offset <= 0:
-                    continue
-                indices = np.searchsorted(ordered, ordered + offset)
-                src = np.flatnonzero(indices < len(ordered))
-                dst = indices[src]
-                hit = ordered[dst] == ordered[src] + offset
-                candidate[order[src[hit]]] = True
-                candidate[order[dst[hit]]] = True
-    return candidate
+_weld_candidates = object_replay.weld_candidates
 
 
 class Vertex:
@@ -463,41 +421,17 @@ class Mesh:
         slanted plane's corner computed via two float paths) — so a miss in
         the exact cell probes the neighbouring cells and checks real
         distance."""
-        k = _key(position)
-        v = self._registry.get(k)
-        if v is not None:
-            return v
-        return self._probe_neighbours(k, position)
+        return object_replay.vertex(self, position, _key(position), _WELD_TOL2, False)
 
     def _probe_neighbours(self, k, position: QVector3D) -> Optional[Vertex]:
         """The boundary-hole rescue of :meth:`_lookup`: probe the 26 cells
         around ``k`` and accept a vertex within real weld distance."""
-        step = 10.0 ** -_KEY_DECIMALS
-        tol2 = step * step
-        kx, ky, kz = k
-        for dx in (-1, 0, 1):
-            for dy in (-1, 0, 1):
-                for dz in (-1, 0, 1):
-                    if dx == 0 and dy == 0 and dz == 0:
-                        continue
-                    n = self._registry.get((kx + dx, ky + dy, kz + dz))
-                    if n is not None and (
-                            (n.position - position).lengthSquared() < tol2):
-                        return n
-        return None
+        return object_replay.probe_vertex(self._registry, k, position, _WELD_TOL2)
 
     def vertex(self, position: QVector3D) -> Vertex:
         """Get-or-create the shared vertex at ``position`` (welds coincident
         points to one object)."""
-        k = _key(position)
-        v = self._registry.get(k)
-        if v is None:
-            v = self._probe_neighbours(k, position)
-        if v is None:
-            v = Vertex(position, key=next(self._keys))
-            self._registry[k] = v
-            self.vertices.append(v)
-        return v
+        return object_replay.vertex(self, position, _key(position), _WELD_TOL2, True)
 
     def vertex_at(self, position: QVector3D) -> Optional[Vertex]:
         """The existing vertex at ``position``, or ``None``."""
@@ -510,16 +444,7 @@ class Mesh:
         ``_displaced`` while the other keeps the key: it is still this
         mesh's vertex, and a dimension holding it must not let go (#563).
         A vertex welded away or erased is filed nowhere."""
-        k = _key(v.position)
-        holder = self._registry.get(k)
-        if holder is v:
-            return True
-        waiting = self._displaced.get(k)
-        if waiting and any(w is v for w in waiting):
-            return True
-        if holder is None:
-            return self._probe_neighbours(k, v.position) is v
-        return False
+        return object_replay.registers(self, v, _key(v.position), _WELD_TOL2)
 
     # ---- Edges --------------------------------------------------------------
     def find_edge(self, v0: Vertex, v1: Vertex) -> Optional[Edge]:
@@ -549,27 +474,10 @@ class Mesh:
         all its pieces tagged. Returns the id, or ``None`` if nothing matched."""
         self._chunk_dirty = True
         self._mut_serial += 1
-        from core.topology import _point_on_seg_incl
-        global _CURVE_COUNTER
-        pts = list(loop_points)
-        if len(pts) < 2:
-            return None
+        points = list(loop_points)
         cid = _CURVE_COUNTER
-        pairs = list(zip(pts, pts[1:]))
-        if closed:
-            pairs.append((pts[-1], pts[0]))
-        tagged = False
-        for e in self.edges:
-            if e.curve is not None:
-                continue
-            a, b = e.a, e.b
-            for pa, pb in pairs:
-                if _point_on_seg_incl(a, pa, pb) and _point_on_seg_incl(b, pa, pb):
-                    e.curve = cid
-                    tagged = True
-                    break
-        if tagged:
-            _CURVE_COUNTER += 1
+        if object_drawing.tag_curve(self.edges, points, closed, cid):
+            self.next_curve_id()
             return cid
         return None
 
@@ -593,74 +501,8 @@ class Mesh:
         curve per segment on every copy, explode or solid operation."""
         self._chunk_dirty = True
         self._mut_serial += 1
-        by_id: dict[int, list[Edge]] = {}
-        for e in self.edges:
-            if e.curve is not None:
-                by_id.setdefault(e.curve, []).append(e)
-        self._resplit_curve_groups(by_id)
-
-    @staticmethod
-    def _resplit_curve_groups(by_id) -> None:
-        """:meth:`resplit_curves` past its scan: ``by_id`` maps each curve
-        id to its edges in mesh order."""
         global _CURVE_COUNTER
-        for cid, edges in by_id.items():
-            eset = set(edges)
-
-            def is_break(v) -> bool:
-                mine = [e for e in v.edges if e in eset]
-                if len(mine) != 2:
-                    return True
-                if len(v.edges) == 2:
-                    return False
-                p = v.position
-                a = mine[0].other(v).position - p
-                b = mine[1].other(v).position - p
-                n = QVector3D.crossProduct(a, b)
-                if n.length() <= 1e-6 * a.length() * b.length():
-                    return True              # straight through: no plane
-                n.normalize()
-                for e in v.edges:
-                    if e in eset:
-                        continue
-                    u = e.other(v).position - p
-                    length = u.length()
-                    if (length <= 1e-12
-                            or abs(QVector3D.dotProduct(u, n)) < 0.05 * length):
-                        return True
-                return False
-
-            # Walk chains between break vertices; a break-free component is a
-            # closed loop (one chain).
-            unvisited = set(edges)
-            chains: list[list[Edge]] = []
-            # Seed from break vertices first so open chains are walked end-to-end.
-            seeds = [e for e in edges if is_break(e.v0) or is_break(e.v1)]
-            for seed in seeds + edges:
-                if seed not in unvisited:
-                    continue
-                start_v = seed.v0 if is_break(seed.v0) else (
-                    seed.v1 if is_break(seed.v1) else seed.v0)
-                chain, v, e = [], start_v, seed
-                while e in unvisited:
-                    unvisited.discard(e)
-                    chain.append(e)
-                    v = e.other(v)
-                    if is_break(v):
-                        break
-                    nxt = next((n for n in v.edges if n in unvisited), None)
-                    if nxt is None:
-                        break
-                    e = nxt
-                chains.append(chain)
-            if len(chains) <= 1:
-                continue  # still one contour — keep the id stable
-            for i, chain in enumerate(chains):
-                new_id = cid if i == 0 else _CURVE_COUNTER
-                if i > 0:
-                    _CURVE_COUNTER += 1
-                for e in chain:
-                    e.curve = new_id
+        _CURVE_COUNTER = object_drawing.resplit_curves(self.edges, _CURVE_COUNTER)
 
     def _link_edge(self, v0: Vertex, v1: Vertex) -> Edge:
         self._chunk_dirty = True
@@ -736,59 +578,13 @@ class Mesh:
         is not enough on its own: the corners of a face with no free edges
         would go with it. Both are checked.
         """
-        used = set()
-        for f in self.faces:
-            for v in f.loop:
-                used.add(v.key)
-            for hole in f.hole_loops:
-                for v in hole:
-                    used.add(v.key)
-        doomed = {v.key for v in self.vertices
-                  if not v.edges and v.key not in used}
-        live = {v.key for v in self.vertices if v.key not in doomed}
-        ghosts = [k for k, v in self._registry.items() if v.key not in live]
-        for k in list(self._displaced):
-            waiting = [v for v in self._displaced[k] if v.key in live]
-            if waiting:
-                self._displaced[k] = waiting
-            else:
-                del self._displaced[k]
-        if not doomed and not ghosts:
-            return 0, 0
-        if doomed:
-            self.vertices[:] = [v for v in self.vertices
-                                if v.key not in doomed]
-        for k in ghosts:
-            del self._registry[k]
-        self._chunk_dirty = True
-        self._mut_serial += 1
-        return len(doomed), len(ghosts)
-
-    def _relist_corners(self, vertices) -> None:
-        """Before a relink: list again each of ``vertices`` the mesh no
-        longer has (a restore to a state older than the vertex, then the
-        redo of the edge or face it carries), in order, so the relinked
-        element never rests on an unlisted vertex."""
-        listed = {v.key for v in self.vertices}
-        for v in vertices:
-            if v.key not in listed:
-                self.vertices.append(v)
-                listed.add(v.key)
-                self._registry.setdefault(_key(v.position), v)
+        return object_replay.purge_debris(self)
 
     def relink_vertices(self, vertices) -> None:
         """Re-attach vertices a previous :meth:`drop_orphan_vertices` took
         out (redo), preserving their identity; a position already filed
         under another vertex keeps that one."""
-        present = {v.key for v in self.vertices}
-        for v in vertices:
-            if v.key in present:
-                continue
-            self.vertices.append(v)
-            present.add(v.key)
-            self._registry.setdefault(_key(v.position), v)
-        self._chunk_dirty = True
-        self._mut_serial += 1
+        object_replay.relink_vertices(self, vertices, _key)
 
     def drop_orphan_vertices(self, vertices) -> int:
         """Drop the given vertices that nothing references any more — the
@@ -796,19 +592,7 @@ class Mesh:
         knows exactly which vertices it created (no pass over the model).
         A face's corners always carry its boundary edges, so a vertex with
         no edges is in no face. The registry is cleaned by identity."""
-        doomed = {v.key for v in vertices if not v.edges}
-        doomed &= {v.key for v in self.vertices}
-        if not doomed:
-            return 0
-        self.vertices[:] = [v for v in self.vertices if v.key not in doomed]
-        for v in vertices:
-            if v.key in doomed:
-                k = _key(v.position)
-                if self._registry.get(k) is v:
-                    del self._registry[k]
-        self._chunk_dirty = True
-        self._mut_serial += 1
-        return len(doomed)
+        return object_replay.drop_orphans(self, vertices, _key)
 
     # ---- Bulk construction (imports / .igz load) ----------------------------
     def bulk_weld(self, pos):
@@ -839,97 +623,7 @@ class Mesh:
         if not len(pos):
             return [], np.empty(0, dtype=np.int64)
         model = store._definition_points(pos) if store is not None and not store._model_frame else pos
-        keys = np.round(model * _KEY_SCALE).astype(np.int64)
-        # Byte records group equal int64 triples without the field-by-field
-        # structured sort. Only equality matters: first occurrence restores
-        # the cell order below, regardless of the byte sort's ordering.
-        view = np.ascontiguousarray(keys).view("V24").reshape(-1)
-        uview, first, inverse = np.unique(
-            view, return_index=True, return_inverse=True)
-        order = np.argsort(first, kind="stable")
-        rank = np.empty_like(order)
-        rank[order] = np.arange(len(order))
-        inverse = rank[inverse]                # point → unique cell (creation order)
-        first = first[order]
-        ukeys = keys[first]                    # unique cells, creation order
-        nu = len(first)
-        candidate = _weld_candidates(ukeys)
-        registry = (set(map(tuple, store.registry()[0].tolist())) if store is not None
-                    else self._registry)
-        if registry:
-            # Existing cells participate in the neighbourhood test too.
-            key_rows = ukeys.tolist()
-            flat = ~candidate
-            for u in np.flatnonzero(flat).tolist():
-                kx, ky, kz = key_rows[u]
-                found = False
-                for dx in (-1, 0, 1):
-                    for dy in (-1, 0, 1):
-                        for dz in (-1, 0, 1):
-                            if (kx + dx, ky + dy, kz + dz) in registry:
-                                found = True
-                                break
-                        if found:
-                            break
-                    if found:
-                        break
-                candidate[u] = found
-        vertices = self.vertices
-        vobjs: list = []
-        vindex: dict = {}
-
-        def _vid(v):
-            i = vindex.get(v.key)
-            if i is None:
-                i = len(vobjs)
-                vindex[v.key] = i
-                vobjs.append(v)
-            return i
-
-        point_ids = np.empty(len(pos), dtype=np.int64)
-        cand_pt = candidate[inverse]
-        # Non-candidate cells: one vertex at the cell's first point.
-        nc_cells = np.flatnonzero(~candidate)
-        cell_vid = np.full(nu, -1, dtype=np.int64)
-        if len(nc_cells):
-            nc_keys = ukeys[nc_cells].tolist()
-            nc_pos = pos[first[nc_cells]].tolist()
-            ids = np.empty(len(nc_cells), dtype=np.int64)
-            for j, (k3, p3) in enumerate(zip(nc_keys, nc_pos)):
-                if store is None:
-                    v = Vertex(QVector3D(*p3), key=next(self._keys))
-                    registry[tuple(k3)] = v
-                    vertices.append(v)
-                else:
-                    v = self.vertex(p3)
-                ids[j] = _vid(v)
-            cell_vid[nc_cells] = ids
-            ncp = ~cand_pt
-            point_ids[ncp] = cell_vid[inverse[ncp]]
-        # Candidate points: exact sequential replay, in input order.
-        cp = np.flatnonzero(cand_pt)
-        if len(cp):
-            cp_list = cp.tolist()
-            cp_keys = keys[cp].tolist()
-            cp_pos = pos[cp].tolist()
-            probe = self._probe_neighbours
-            for j, i in enumerate(cp_list):
-                if store is not None:
-                    point_ids[i] = _vid(self.vertex(cp_pos[j]))
-                    continue
-                k3 = cp_keys[j]
-                k = (k3[0], k3[1], k3[2])
-                v = registry.get(k)
-                if v is None:
-                    p3 = cp_pos[j]
-                    p = QVector3D(p3[0], p3[1], p3[2])
-                    v = probe(k, p)
-                    if v is None:
-                        v = Vertex(p, key=next(self._keys))
-                        registry[k] = v
-                        vertices.append(v)
-                point_ids[i] = _vid(v)
-        return vobjs, point_ids
+        return object_replay.bulk_weld(self, pos, model, store, _KEY_SCALE, _WELD_TOL2)
 
     def add_edges_welded(self, vobjs, ia, ib, flags=None):
         """Create the edges ``(vobjs[ia[i]], vobjs[ib[i]])`` — the vectorized
@@ -941,38 +635,7 @@ class Mesh:
         reuse these edges without rescanning ``self.edges``."""
         self._chunk_dirty = True
         self._mut_serial += 1
-        u = len(vobjs)
-        emap: dict = {}
-        ia = list(ia.tolist() if hasattr(ia, "tolist") else ia)
-        ib = list(ib.tolist() if hasattr(ib, "tolist") else ib)
-        for i in range(len(ia)):
-            a = ia[i]
-            b = ib[i]
-            v0 = vobjs[a]
-            v1 = vobjs[b]
-            if v0 is v1:
-                continue                       # degenerate: endpoints welded
-            key = a * u + b if a <= b else b * u + a
-            e = emap.get(key)
-            if e is None:
-                e = Edge(v0, v1, key=next(self._keys))
-                v0.edges.add(e)
-                v1.edges.add(e)
-                self.edges.append(e)
-                emap[key] = e
-            if flags is not None:
-                soft, curve, layer = flags[i][:3]
-                if soft:
-                    e.soft = True
-                if len(flags[i]) > 3 and flags[i][3]:
-                    e.hidden = True
-                if len(flags[i]) > 4 and flags[i][4]:
-                    e.flat = True
-                if curve is not None:
-                    e.curve = curve
-                if layer is not None:
-                    e.layer = layer
-        return emap
+        return object_replay.add_edges_welded(self, vobjs, ia, ib, flags)
 
     def add_faces_welded(self, vobjs, inverse, ring_sizes, face_ring_counts,
                          attrs=None, edge_map=None):
@@ -991,89 +654,10 @@ class Mesh:
         import numpy as np
         self._chunk_dirty = True
         self._mut_serial += 1
-        u = len(vobjs)
-        inverse = np.ascontiguousarray(inverse, dtype=np.int64)
-        ring_sizes = np.ascontiguousarray(ring_sizes, dtype=np.int64)
-        face_ring_counts = np.ascontiguousarray(face_ring_counts,
-                                                dtype=np.int64)
-        if not len(face_ring_counts):
-            return []
-        ring_ends = np.cumsum(ring_sizes)
-        ring_starts = ring_ends - ring_sizes
-        total = int(ring_ends[-1]) if len(ring_ends) else 0
-        # Boundary segments: each corner to the next within its ring.
-        nxt = np.arange(1, total + 1, dtype=np.int64)
-        nxt[ring_ends - 1] = ring_starts
-        seg_a = inverse
-        seg_b = inverse[nxt]
-        packed = np.minimum(seg_a, seg_b) * u + np.maximum(seg_a, seg_b)
-        if edge_map is None:
-            edge_map = {}
-            if self.edges:
-                vid_of = {v.key: i for i, v in enumerate(vobjs)}
-                for e in self.edges:
-                    i0 = vid_of.get(e.v0.key)
-                    i1 = vid_of.get(e.v1.key)
-                    if i0 is not None and i1 is not None:
-                        key = i0 * u + i1 if i0 <= i1 else i1 * u + i0
-                        edge_map.setdefault(key, e)
-        upacked, efirst, einv = np.unique(
-            packed, return_index=True, return_inverse=True)
-        eorder = np.argsort(efirst, kind="stable")
-        erank = np.empty_like(eorder)
-        erank[eorder] = np.arange(len(eorder))
-        einv = erank[einv]
-        upacked = upacked[eorder]
-        efirst = efirst[eorder]
-        eobjs: list = []
-        seg_a_list = seg_a.tolist()
-        seg_b_list = seg_b.tolist()
-        for key, src in zip(upacked.tolist(), efirst.tolist()):
-            e = edge_map.get(key)
-            if e is None:
-                v0 = vobjs[seg_a_list[src]]    # first occurrence's orientation
-                v1 = vobjs[seg_b_list[src]]
-                e = Edge(v0, v1, key=next(self._keys))
-                v0.edges.add(e)
-                v1.edges.add(e)
-                self.edges.append(e)
-                edge_map[key] = e
-            eobjs.append(e)
-        # Face objects, loops sliced from the welded corner list (plain list
-        # slicing — np.split into hundreds of thousands of views is slow).
-        corner_list = [vobjs[i] for i in inverse.tolist()]
-        rs_list = ring_starts.tolist()
-        re_list = ring_ends.tolist()
-        faces_out = []
-        ri = 0
-        for nr in face_ring_counts.tolist():
-            loop = corner_list[rs_list[ri]:re_list[ri]]
-            holes = [corner_list[rs_list[ri + k]:re_list[ri + k]]
-                     for k in range(1, nr)]
-            ri += nr
-            face = Face(loop, holes or None, key=next(self._keys))
-            if attrs is not None:
-                a = attrs[len(faces_out)]
-                if a:
-                    face.attrs.update(a)
-            self.faces.append(face)
-            faces_out.append(face)
-        # Radial incidence: every boundary segment registers its face on its
-        # edge, in global segment order (= add_face's per-face order),
-        # multiplicity preserved.
-        seg_face = np.repeat(np.arange(len(face_ring_counts), dtype=np.int64),
-                             np.add.reduceat(ring_sizes,
-                                             np.cumsum(face_ring_counts)
-                                             - face_ring_counts))
-        order2 = np.argsort(einv, kind="stable")
-        sorted_faces = [faces_out[i] for i in seg_face[order2].tolist()]
-        bounds = np.cumsum(np.bincount(einv, minlength=len(eobjs))).tolist()
-        b0 = 0
-        for ei, b1 in enumerate(bounds):
-            if b1 > b0:
-                eobjs[ei].faces.extend(sorted_faces[b0:b1])
-            b0 = b1
-        return faces_out
+        return object_replay.add_faces_welded(
+            self, vobjs, np.ascontiguousarray(inverse, dtype=np.int64),
+            np.ascontiguousarray(ring_sizes, dtype=np.int64),
+            np.ascontiguousarray(face_ring_counts, dtype=np.int64), attrs, edge_map)
 
     def add_faces_bulk(self, pos, ring_sizes, face_ring_counts, attrs=None):
         """Convenience: :meth:`bulk_weld` + :meth:`add_faces_welded`."""
@@ -1100,21 +684,7 @@ class Mesh:
         solid as watertight (defeating the BIM push guard)."""
         self._chunk_dirty = True
         self._mut_serial += 1
-        loop = [self.vertex(p) for p in loop_positions]
-        raw_holes = [list(h) for h in (hole_loops or [])]
-        if len(raw_holes) > 1:
-            from core.topology import _maximal_holes
-
-            raw_holes = _maximal_holes(raw_holes)
-        holes = [[self.vertex(p) for p in h] for h in raw_holes]
-        face = Face(loop, holes, key=next(self._keys))  # Face stores them as hole_loops (vertices)
-        for lp in (loop, *holes):
-            n = len(lp)
-            for i in range(n):
-                edge = self._link_edge(lp[i], lp[(i + 1) % n])
-                edge.faces.append(face)
-        self.faces.append(face)
-        return face
+        return object_replay.add_face(self, loop_positions, hole_loops)
 
     def surface_of(self, face: "Face") -> list:
         """The faces forming the same **curved surface** as ``face`` — the
@@ -1122,95 +692,39 @@ class Mesh:
         sweep's hidden seams). Faces joined by softened edges form one
         surface, so clicking/painting one acts on the whole curved
         side. Returns just ``[face]`` for ordinary (hard-edged) geometry."""
-        seen = {face}
-        stack = [face]
-        while stack:
-            f = stack.pop()
-            for lp in (f.loop, *f.hole_loops):
-                n = len(lp)
-                for i in range(n):
-                    e = self.find_edge(lp[i], lp[(i + 1) % n])
-                    if e is None or not e.soft:
-                        continue
-                    for g in e.faces:
-                        if g != f and g not in seen:
-                            seen.add(g)
-                            stack.append(g)
-        return list(seen)
+        return object_replay.surface_of(self, face)
 
     def remove_face(self, face: Face) -> None:
         """Drop a face and detach it from its boundary edges' radial lists. The
         edges themselves stay (they may border other faces or stand alone)."""
         self._chunk_dirty = True
         self._mut_serial += 1
-        for lp in (face.loop, *face.hole_loops):
-            n = len(lp)
-            for i in range(n):
-                edge = self.find_edge(lp[i], lp[(i + 1) % n])
-                if edge is not None and face in edge.faces:
-                    edge.faces.remove(face)
-        if face in self.faces:
-            self.faces.remove(face)
+        object_replay.remove_face(self, face)
 
     # ---- Re-link (undo support) --------------------------------------------
     def relink_edge(self, edge: Edge) -> None:
         """Re-attach a previously removed edge object (undo), preserving its
         identity so other commands' references stay valid."""
-        if edge in self.edges:
-            return
-        self._relist_corners((edge.v0, edge.v1))
-        edge.v0.edges.add(edge)
-        edge.v1.edges.add(edge)
-        self.edges.append(edge)
-        self._registry.setdefault(_key(edge.v0.position), edge.v0)
-        self._registry.setdefault(_key(edge.v1.position), edge.v1)
-        self.mark_modified()
+        object_replay.relink_edge(self, edge, _key)
 
     def relink_face(self, face: Face) -> None:
         """Re-attach a previously removed face object (undo), recreating any
         missing boundary edges and re-registering incidence."""
-        if face in self.faces:
-            return
-        self._relist_corners([v for lp in (face.loop, *face.hole_loops) for v in lp])
-        for lp in (face.loop, *face.hole_loops):
-            n = len(lp)
-            for i in range(n):
-                edge = self._link_edge(lp[i], lp[(i + 1) % n])
-                if face not in edge.faces:
-                    edge.faces.append(face)
-        self.faces.append(face)
-        self.mark_modified()
+        object_replay.relink_face(self, face, _key)
 
     # ---- Holes --------------------------------------------------------------
     def add_hole(self, face: Face, loop_positions: Iterable[QVector3D]) -> list[Vertex]:
         """Punch a hole into ``face`` (a window/door drawn inside it). Welds the
         loop's vertices, ensures its boundary edges, and registers the face on
         them. Returns the vertex loop so undo can remove exactly this hole."""
-        loop = [self.vertex(p) for p in loop_positions]
-        face.hole_loops.append(loop)
-        n = len(loop)
-        for i in range(n):
-            edge = self._link_edge(loop[i], loop[(i + 1) % n])
-            if face not in edge.faces:
-                edge.faces.append(face)
-        return loop
+        return object_replay.add_hole(self, face, loop_positions)
 
     def relink_hole(self, face: Face, ring: list[Vertex]) -> None:
         """Restore a detached hole and its incidence on existing edges."""
-        face.hole_loops.append(ring)
-        for i, vertex in enumerate(ring):
-            edge = self.find_edge(vertex, ring[(i + 1) % len(ring)])
-            if edge is not None and face not in edge.faces:
-                edge.faces.append(face)
+        object_replay.relink_hole(self, face, ring)
 
     def remove_hole(self, face: Face, loop: list[Vertex]) -> None:
-        if loop in face.hole_loops:
-            face.hole_loops.remove(loop)
-        n = len(loop)
-        for i in range(n):
-            edge = self.find_edge(loop[i], loop[(i + 1) % n])
-            if edge is not None and face in edge.faces:
-                edge.faces.remove(face)
+        object_replay.remove_hole(self, face, loop)
 
     # ---- State snapshot (identity-preserving) -------------------------------
     def capture_state(self) -> dict:
@@ -1276,15 +790,7 @@ class Mesh:
         self._mut_serial += 1
         old = _key(v.position)
         v.position = v.position + delta
-        new = _key(v.position)
-        if old == new:
-            return
-        reg = self._registry
-        if not self._displaced and reg.get(old) is v and new not in reg:
-            del reg[old]               # the common case, kept inline
-            reg[new] = v
-            return
-        self._rekey(v, old, new)
+        self._rekey(v, old, _key(v.position))
 
     def place_vertex(self, v: Vertex, position: QVector3D) -> None:
         """Put a vertex AT ``position`` -- :meth:`move_vertex` with an
@@ -1295,43 +801,11 @@ class Mesh:
         self._mut_serial += 1
         old = _key(v.position)
         v.position = QVector3D(position)
-        new = _key(v.position)
-        if old == new:
-            return
-        reg = self._registry
-        if not self._displaced and reg.get(old) is v and new not in reg:
-            del reg[old]               # the common case, kept inline
-            reg[new] = v
-            return
-        self._rekey(v, old, new)
+        self._rekey(v, old, _key(v.position))
 
     def _rekey(self, v: Vertex, old: tuple, new: tuple) -> None:
-        """File a moved vertex under its new key.
-
-        A selection moved along itself -- two chained lines shifted one
-        length down their own axis -- moves each vertex onto the spot the
-        next one still holds. The newcomer cannot take that key yet, so it
-        waits in ``_displaced``; when the holder moves on, the first waiter
-        still standing there takes the key. Without the queue the moved
-        vertex was never filed again: Delete missed its edges and a new line
-        to it welded a duplicate."""
-        if self._registry.get(old) is v:
-            del self._registry[old]
-            for w in self._displaced.pop(old, ()):
-                if w is not v and w.edges and _key(w.position) == old:
-                    self._registry[old] = w
-                    break
-        else:
-            waiting = self._displaced.get(old)
-            if waiting is not None:
-                waiting[:] = [w for w in waiting if w is not v]
-                if not waiting:
-                    del self._displaced[old]
-        holder = self._registry.get(new)
-        if holder is None:
-            self._registry[new] = v
-        elif holder is not v:
-            self._displaced.setdefault(new, []).append(v)
+        """Refill a vacated cell and queue a vertex landing on an occupied one."""
+        object_replay.rekey(self, v, old, new, _key)
 
     def split_edge(self, edge: Edge, position: QVector3D) -> tuple[Edge, Edge]:
         """Split ``edge`` at ``position``, inserting a shared vertex, and return

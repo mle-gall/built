@@ -42,6 +42,82 @@ fn natural(a: &str, b: &str) -> Ordering {
     a.len().cmp(&b.len())
 }
 
+// Count occurrences in this document only. A definition can also be held by
+// undo, a component library, or a different open document.
+#[derive(Default)]
+struct PlacementIndex {
+    repeated: HashSet<String>,
+    copies: HashMap<usize, usize>,
+}
+
+impl PlacementIndex {
+    fn read(scene: &Obj<'_>, reject_links: bool) -> PyResult<Option<Self>> {
+        use crate::doc::{self, value::Value, Data};
+        let root = doc::py::handle_key(&scene.getattr("_root")?)?;
+        let ext = doc::attr_id("ext").map_err(pyo3::exceptions::PyValueError::new_err)?;
+        let doc = doc::lock();
+        let Some(root) = doc.node(root) else {
+            return Ok(None);
+        };
+        let mut stack = root.children.clone();
+        let mut index = Self::default();
+        let mut seen = HashSet::new();
+        let mut uids = HashSet::new();
+        while let Some(key) = stack.pop() {
+            if !seen.insert(key) {
+                continue;
+            }
+            let Some(node) = doc.node(key) else {
+                return Ok(None);
+            };
+            let Data::Placement(p) = &node.data else {
+                return Ok(None);
+            };
+            if reject_links
+                && matches!(node.attr(ext), Some(Value::Dict(fields)) if fields.iter().any(
+                    |(k, _)| matches!(k, Value::Str(s) if s == "link")
+                ))
+            {
+                return Ok(None);
+            }
+            if reject_links {
+                if let Some(uid) = &p.uid {
+                    if !uids.insert(uid.as_str()) {
+                        index.repeated.insert(uid.clone());
+                    }
+                }
+            }
+            if p.component && p.xform.is_some() {
+                if let Some(def) = &p.definition {
+                    let mesh = def.0.get().geometry.as_ptr() as usize;
+                    *index.copies.entry(mesh).or_default() += 1;
+                }
+            }
+            stack.extend(&node.children);
+        }
+        Ok(Some(index))
+    }
+}
+
+/// An unstructured document files its root placements in the unfiled branch.
+/// An inserted linked descendant needs the full mounted-file projection.
+#[pyfunction]
+pub(crate) fn refresh_unfiled(scene: &Obj<'_>, tree: &Obj<'_>) -> PyResult<bool> {
+    if tree.getattr("nodes")?.is_truthy()? {
+        return Ok(false);
+    }
+    let Some(index) = PlacementIndex::read(scene, true)? else {
+        return Ok(false);
+    };
+    let groups = scene.getattr("groups")?.extract::<Vec<Obj<'_>>>()?;
+    tree.setattr("unfiled", groups)?;
+    tree.setattr("_qualified", index.repeated)?;
+    tree.setattr("_filing_copies", index.copies)?;
+    tree.getattr("__dict__")?
+        .call_method1("pop", ("_sidebar_scope", scene.py().None()))?;
+    Ok(true)
+}
+
 struct Catalogue<'py> {
     scene: Obj<'py>,
     tree: Obj<'py>,
@@ -201,6 +277,24 @@ impl<'py> Catalogue<'py> {
         );
         if kind == "link" {
             r.0[3] = "⛓".into();
+        } else if kind == "component" {
+            let copies = match self.tree.getattr_opt("_filing_copies")? {
+                Some(cached) => cached,
+                None => {
+                    let counts = PlacementIndex::read(&self.scene, false)?
+                        .unwrap_or_default()
+                        .copies;
+                    let cached = counts.into_pyobject(self.scene.py())?;
+                    self.tree.setattr("_filing_copies", &cached)?;
+                    cached.into_any()
+                }
+            };
+            let count: usize = copies
+                .call_method1("get", (id(&g.getattr("mesh")?), 0))?
+                .extract()?;
+            if count > 1 {
+                r.0[3] = format!("×{count}");
+            }
         }
         r.1[2] = self.bad.contains(&id(g)) as i64;
         crate::project_tree::placement_controls(&mut r, g)?;

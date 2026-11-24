@@ -28,7 +28,7 @@ from core.arrangement import planar_rebuild  # noqa: E402
 from core.history import RebuildPlanarFacesCommand, _segment_grid  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
 from core.scene import Scene  # noqa: E402
-from core.topology import _box_grid, _point_on_seg_incl  # noqa: E402
+from core.topology import _point_on_seg_incl  # noqa: E402
 
 # A square cut by two verticals whose feet land 0.02 mm apart, astride a
 # 0.1 mm line of the arrangement's grid: two keys, one welded vertex.
@@ -167,8 +167,12 @@ def test_the_box_grid_meets_exactly_the_boxes_the_full_scan_meets():
         hi = lo + size * rng.uniform(0, 1, (n, 3))
         if trial % 2:
             hi[rng.random(n) < 0.05] *= 3.0          # a few long walls
-        meeting = _box_grid(lo, hi)
+        from ingetrazo_core import touching_boxes
+        rows, cols = touching_boxes(lo, hi, lo, hi, False, 0.)
+        meeting = [[] for _ in lo]
+        for row, col in zip(rows, cols):
+            meeting[row].append(col)
         for i in range(n):
             full = np.flatnonzero((hi >= lo[i]).all(axis=1)
                                   & (lo <= hi[i]).all(axis=1)).tolist()
-            assert meeting(i) == full
+            assert meeting[i] == full

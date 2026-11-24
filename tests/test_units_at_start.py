@@ -105,7 +105,7 @@ def test_dont_show_again(win):
 
 def test_preferences_turn_it_back_on(win):
     from tests.units_chrome import edit_unit, units_row
-    from views.settings_sheet import Env
+    from ingetrazo_render.settings_sheet import Env
     units.set_ask_at_start(False)
     assert not units_row(win, "ask_start").value(Env(win))
     edit_unit(win, "ask_start", 1)
@@ -135,7 +135,7 @@ def test_a_document_already_open_is_not_asked_about(win, tmp_path):
 # ---- Ctrl+U -------------------------------------------------------------------------
 
 def test_ctrl_u_opens_the_units_page(win):
-    from views import chrome_sheet
+    from ingetrazo_render import chrome_sheet
     from views.shortcuts import collect_actions, action_keys
     act = win._registry_actions["menu:units"]
     assert [a for a in collect_actions(win) if "Ctrl+U" in action_keys(a)] == [act]

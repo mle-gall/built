@@ -89,7 +89,7 @@ def plugin_dirs() -> list[Path]:
     return [app_root() / "plugins", user_plugins_dir()]
 
 
-def note_failure(what: str) -> None:
+def note_failure(what: str, exc_info=None) -> None:
     """Append the exception being handled to the error log. A windowed
     Windows build has no stderr: without this a failing extension leaves no
     trace at all, and «Open logs folder» shows nothing (#1152)."""
@@ -100,7 +100,7 @@ def note_failure(what: str) -> None:
         with open(user_log_dir() / "ingetrazo-errors.log", "a",
                   encoding="utf-8") as f:
             f.write(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] {what}\n"
-                    f"{traceback.format_exc()}")
+                    f"{''.join(traceback.format_exception(*(exc_info or sys.exc_info())))}")
     except OSError:
         pass
 

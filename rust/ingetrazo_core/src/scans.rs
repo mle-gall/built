@@ -540,7 +540,7 @@ impl MeshScan {
     }
 
     /// ``(vertices, edges, faces)`` counts (listed vertices only).
-    fn counts(&self, py: Python<'_>) -> (usize, usize, usize) {
+    pub(crate) fn counts(&self, py: Python<'_>) -> (usize, usize, usize) {
         match &self.lists {
             Some(l) => (l[0].bind(py).len(), l[1].bind(py).len(), l[2].bind(py).len()),
             None => (self.n_listed, self.ends.len(), self.n_faces()),
@@ -571,7 +571,7 @@ impl MeshScan {
     }
 
     /// Faces whose outer-loop box meets ``[lo, hi]``.
-    fn faces_meeting(&mut self, py: Python<'_>, lo: (f64, f64, f64), hi: (f64, f64, f64)) -> PyResult<Vec<u32>> {
+    pub(crate) fn faces_meeting(&mut self, py: Python<'_>, lo: (f64, f64, f64), hi: (f64, f64, f64)) -> PyResult<Vec<u32>> {
         self.need(py, FACES)?;
         let w = window(lo, hi);
         let b = self.fboxes();
@@ -612,7 +612,7 @@ impl MeshScan {
     }
 
     /// Edges whose box meets ``[lo, hi]``.
-    fn edges_meeting(&mut self, py: Python<'_>, lo: (f64, f64, f64), hi: (f64, f64, f64)) -> PyResult<Vec<u32>> {
+    pub(crate) fn edges_meeting(&mut self, py: Python<'_>, lo: (f64, f64, f64), hi: (f64, f64, f64)) -> PyResult<Vec<u32>> {
         self.need(py, EDGES)?;
         let w = window(lo, hi);
         let b = self.eboxes();
@@ -666,6 +666,24 @@ impl MeshScan {
             .collect())
     }
 
+    fn drawing_plane(&mut self, py: Python<'_>, extra: Vec<[f64; 3]>, hypot: &str) -> PyResult<Option<[[f64; 3]; 2]>> {
+        use crate::store::geometry::V3;
+        self.need(py, VERTS)?;
+        let points = self.pos[..self.n_listed].iter().chain(&extra).map(|&[x, y, z]| V3(x, y, z));
+        Ok(crate::store::drawing::drawing_plane(points, crate::hypot_of(hypot)?))
+    }
+
+    fn rebuild_plane(&mut self, py: Python<'_>, points: Vec<[f64; 3]>, cap: usize, hypot: &str) -> PyResult<Option<[[f64; 3]; 2]>> {
+        use crate::store::geometry::V3;
+        self.need(py, FACES)?;
+        let planes = self.fplanes().iter().map(|p| {
+            let [x, y, z] = p.o;
+            let [nx, ny, nz] = p.n;
+            (V3(x, y, z), V3(nx, ny, nz))
+        });
+        Ok(crate::store::drawing::rebuild_plane(planes, &points, cap, crate::hypot_of(hypot)?))
+    }
+
     /// Faces whose own plane (first corner, unit Newell normal) passes
     /// within ``tol`` (+ slack) of every row of ``points`` (K, 3).
     fn faces_through(&mut self, py: Python<'_>, points: PyReadonlyArray2<'_, f64>, tol: f64) -> PyResult<Vec<u32>> {
@@ -701,7 +719,7 @@ impl MeshScan {
             .collect())
     }
 
-    fn split_plan(
+    pub(crate) fn split_plan(
         &mut self,
         py: Python<'_>,
         a: [f64; 3],
@@ -723,7 +741,7 @@ impl MeshScan {
         Ok(crate::store::drawing::split_plan(a, b, edges, h, compensated))
     }
 
-    fn drawing_cycles(
+    pub(crate) fn drawing_cycles(
         &mut self,
         py: Python<'_>,
         a: [f64; 3],
@@ -775,6 +793,81 @@ impl MeshScan {
         self.need(py, VERTS)?;
         let p = self.pos.get(v).ok_or_else(|| PyValueError::new_err("vertex out of range"))?;
         Ok((p[0], p[1], p[2]))
+    }
+
+    /// Ordered T-junction splits. Keep the dense arrays in the scan and only
+    /// return the edge and vertex indices which the facade has to reattach.
+    fn stitch_hits(
+        &mut self,
+        py: Python<'_>,
+        seeds: Vec<[f64; 3]>,
+        tolerance: f64,
+    ) -> PyResult<Vec<(u32, u32)>> {
+        use crate::store::stitch_command::{junction_scope, junctions};
+        self.need(py, EDGES)?;
+        let bounds = (!seeds.is_empty()).then(|| {
+            let mut lo = [f64::INFINITY; 3];
+            let mut hi = [f64::NEG_INFINITY; 3];
+            for p in seeds {
+                for k in 0..3 {
+                    lo[k] = lo[k].min(p[k]);
+                    hi[k] = hi[k].max(p[k]);
+                }
+            }
+            [lo.map(|x| x - tolerance), hi.map(|x| x + tolerance)]
+        });
+        let (verts, edges) = junction_scope(
+            (0..self.n_listed as u32).collect(),
+            (0..self.ends.len() as u32).collect(),
+            bounds,
+            tolerance,
+            |v| self.pos[v as usize],
+            |e| self.ends[e as usize],
+        );
+        if edges.is_empty() || verts.is_empty() {
+            return Ok(vec![]);
+        }
+        let points: Vec<_> = verts.iter().map(|&v| self.pos[v as usize]).collect();
+        let mut local = vec![-1; self.pos.len()];
+        for (i, &v) in verts.iter().enumerate() {
+            local[v as usize] = i as i64;
+        }
+        let ends: Vec<_> = edges
+            .iter()
+            .map(|&e| self.ends[e as usize].map(|v| local[v as usize]))
+            .collect();
+        let hits = junctions(&points, &ends, bounds, tolerance).map_err(PyValueError::new_err)?;
+        Ok(hits
+            .into_iter()
+            .map(|(e, v)| (edges[e], verts[v]))
+            .collect())
+    }
+
+    /// Loose edges to remove and the uncovered stretches to restore, in live-list order.
+    fn orphan_pieces(&mut self, py: Python<'_>) -> PyResult<Vec<(usize, Vec<[[f64; 3]; 2]>)>> {
+        use crate::store::geometry::{Hypot, V3};
+        self.need(py, EFLAGS)?;
+        let orphans: Vec<_> = (0..self.enf.len()).filter(|&e| self.enf[e] == 0).collect();
+        if orphans.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.need(py, EDGES)?;
+        let segments: Vec<_> = self
+            .ends
+            .iter()
+            .map(|ends| {
+                ends.map(|v| {
+                    let [x, y, z] = self.pos[v as usize];
+                    V3(x, y, z)
+                })
+            })
+            .collect();
+        let cuts =
+            crate::store::orphan_overlap::orphan_pieces(&segments, &orphans, Hypot::LibStdCxx);
+        Ok(cuts
+            .into_iter()
+            .map(|(i, pieces)| (i, pieces.into_iter().map(|s| s.map(Into::into)).collect()))
+            .collect())
     }
 
     /// Edges bounding no face (``soft_only``: soft ones only).

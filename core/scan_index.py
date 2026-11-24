@@ -30,6 +30,7 @@ import os
 import weakref
 from collections import OrderedDict
 
+import ingetrazo_core as kernel
 from ingetrazo_core import Vec3 as QVector3D
 
 #: ``id(mesh) -> (weakref to it, token, Scan)``, most recent last. A few
@@ -151,15 +152,13 @@ class Scan:
         return self
 
     def __init__(self, mesh) -> None:
-        from core import _native
         from core import store_mesh
-        mod = _native.native
         self._mesh = weakref.ref(mesh)
         self.store_backed = type(mesh) is store_mesh.StoreMesh
         if self.store_backed:
-            self.native = mod.MeshScan.from_store(mesh.__dict__["_store"])
+            self.native = kernel.MeshScan.from_store(mesh.__dict__["_store"])
         else:
-            self.native = mod.MeshScan.from_objects(
+            self.native = kernel.MeshScan.from_objects(
                 list(mesh.vertices), list(mesh.edges), list(mesh.faces))
         self._vec: dict = {}
         self._tkey: dict = {}
@@ -188,8 +187,7 @@ class Scan:
     def face_indices(self, faces) -> list:
         """Each face's index in the scan's face list (``None``: not
         there)."""
-        from core import _native
-        return _native.native.scan_face_indices(self.native, list(faces))
+        return kernel.scan_face_indices(self.native, list(faces))
 
     def edges(self, idx) -> list:
         return self._elements("edge", idx)

@@ -46,6 +46,15 @@ pub struct ValueField {
 const LIFT: f32 = 22.0;
 
 impl ValueField {
+    /// An idle retype stays at the result as subsequent digits arrive.
+    pub(super) fn retype_anchor(&self, revision: u64) -> Option<Pos2> {
+        if self.revision != Some(revision) {
+            return None;
+        }
+        self.readback.as_ref().map(|r| r.at)
+            .or_else(|| self.live.as_ref().filter(|l| l.typing).map(|l| l.at))
+    }
+
     /// One frame's facts. `caption` empty and not typing: no live field.
     pub fn set(&mut self, caption: String, value: String, typing: bool, at: Pos2,
                start: Option<Pos2>, revision: u64) {
@@ -98,6 +107,22 @@ mod tests {
 
     fn typed(f: &mut ValueField, v: &str, rev: u64, start: Option<Pos2>) {
         f.set("Length".into(), v.into(), true, pos2(400., 300.), start, rev);
+    }
+
+    #[test]
+    fn retyping_without_an_anchor_reuses_the_committed_result() {
+        let mut f = ValueField::default();
+        let at = pos2(350., 240.);
+        f.set("Distance".into(), "2 m".into(), true, at, None, 7);
+        f.set(String::new(), String::new(), false, Pos2::ZERO, None, 8);
+        assert_eq!(f.retype_anchor(8), Some(at));
+        for text in ["3 m", "30 m"] {
+            f.set("Distance".into(), text.into(), true, f.retype_anchor(8).unwrap(), None, 8);
+        }
+        f.set(String::new(), String::new(), false, Pos2::ZERO, None, 9);
+        let result = f.readback.as_ref().unwrap();
+        assert_eq!((&*result.value, result.at), ("30 m", at));
+        assert_eq!(f.retype_anchor(10), None);
     }
 
     #[test]

@@ -3,14 +3,14 @@
 //! the right-click menu lays them out, which ones the inspector offers as
 //! chips or under More, the linked-file rows' verbs, and what runs each one.
 //!
-//! Python reads the document and sends a few facts about the selection
-//! (`Facts`, JSON); it runs the dispatch this module names (a window slot, a
-//! Project tree verb on the item's row, a core command, or one of a few
-//! named glue actions: views/context_menu.py). The viewport menu, the
+//! `viewport_menu.rs` reads the document into a few facts about the
+//! selection (`Facts`) and runs the dispatch this module names (a window
+//! slot, a Project tree verb on the item's row, a core command, or one of a
+//! few named glue actions). The viewport menu, the
 //! inspector and the tree's file rows all read this table, so they cannot
 //! disagree on a verb or its label. docs/context-menu.md has the menu.
 use pyo3::prelude::*;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Kinds, in docs/context-menu.md's order.
 pub const KINDS: [&str; 15] = ["faces", "edges", "geometry", "group", "component", "groups", "mixed",
@@ -26,7 +26,7 @@ pub const MAX_ROWS: usize = 14;
 
 /// What Python knows about the selection (and the window) when a menu or
 /// the inspector asks. Every field defaults to "no".
-#[derive(Deserialize, Default, Debug, Clone)]
+#[derive(Deserialize, Serialize, Default, Debug, Clone)]
 #[serde(default)]
 pub struct Facts {
     // What is selected.
@@ -46,6 +46,7 @@ pub struct Facts {
     // What applies.
     pub repeat: Option<String>,
     pub repeat_value: String,
+    pub repeat_key: Option<String>,
     pub locked_group: Option<String>,
     pub locked_image: Option<String>,
     pub text3d: bool,
@@ -303,12 +304,14 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
     let read_only = READ_ONLY.contains(&kind);
     let mut r = Rows(Vec::new());
     // Repeat, with the value the last command runs with.
+    let key = crate::shortcut_text::shortcut_text(f.repeat_key.as_deref().unwrap_or("Shift+R"))
+        .map(|sequence| sequence.1).unwrap_or_default();
     let repeat = match &f.repeat {
         Some(label) => {
             let text = if f.repeat_value.is_empty() { format!("Repeat {label}") } else { format!("Repeat {label}  {}", f.repeat_value) };
-            (String::from("repeat"), text, String::from("⇧R"), !read_only, -1)
+            (String::from("repeat"), text, key, !read_only, -1)
         }
-        None => ("repeat".into(), "Repeat".into(), "⇧R".into(), false, -1),
+        None => ("repeat".into(), "Repeat".into(), key, false, -1),
     };
     r.one(vec![repeat]);
     // A locked thing under the pointer the click could not select: its
@@ -630,7 +633,7 @@ pub fn file_verbs(nested: bool, state: &str) -> Vec<(String, String)> {
 ///   else the literal string);
 /// - `tree`: the Project tree's verb `name` on the first selected item's row;
 /// - `core`: the core command `name` on the selected placements;
-/// - `glue`: a named action in views/context_menu.py.
+/// - `glue`: a named action in viewport_menu.rs.
 pub fn dispatch(kind: &str, id: &str) -> (&'static str, String, String) {
     let slot = |n: &str, a: &str| ("slot", n.to_owned(), a.to_owned());
     let glue = |n: &str, a: &str| ("glue", n.to_owned(), a.to_owned());

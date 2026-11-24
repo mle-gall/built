@@ -77,6 +77,7 @@ def _tool_frame(method):
     return handle
 
 
+import ingetrazo_render
 from views.view_navigation import ViewNavigation
 
 
@@ -873,8 +874,17 @@ class MetalView(ViewNavigation):
             before = time.perf_counter()
             w, h, scale = self.width(), self.height(), self.devicePixelRatioF()
             draw = self.tools.draw_annotations if annotations else None
-            from ingetrazo_render import AnnotationCanvas
-            layer = AnnotationCanvas(max(1, int(w * scale)), max(1, int(h * scale)), w)
+            # One canvas while the size holds: clear() blanks only what the
+            # last frame drew, instead of a new window-sized image a frame.
+            size = (max(1, int(w * scale)), max(1, int(h * scale)), float(w))
+            kept = self.__dict__.get('_annotation_canvas')
+            if kept is not None and kept[0] == size:
+                layer = kept[1]
+                layer.clear()
+            else:
+                from ingetrazo_render import AnnotationCanvas
+                layer = AnnotationCanvas(*size)
+                self._annotation_canvas = (size, layer)
             wgpu_overlay.paint_layer(layer, primitives, draw)
             if section_widgets:
                 self._draw_section_widgets(layer)
@@ -1491,14 +1501,7 @@ class MetalView(ViewNavigation):
         self.last = event.position()
         mode = getattr(self.source_viewport, 'nav_mode', None)
         if self._drag_nav and mode != 'zoom_window':
-            if mode == 'zoom':
-                self.camera.zoom(-delta.y()*.035)
-            elif mode == 'pan' or event.modifiers() & Qt.ShiftModifier:
-                depth = QVector3D.dotProduct(self._pivot-self.camera.eye(), self.camera.forward())
-                self.camera.pan(delta.x(), delta.y(), self.height(), depth=depth)
-            else:
-                dy = -delta.y() if getattr(self.source_viewport, '_invert_orbit_y', False) else delta.y()
-                self.camera.orbit_about(self._pivot, delta.x(), dy, self.height())
+            ingetrazo_render.camera_drag(self, mode, delta, bool(event.modifiers() & Qt.ShiftModifier))
         elif self.tools.sync() in ('tape', 'move', 'mesh'):
             self.hover(event.position().x(), event.position().y(), event.modifiers())
             self.tools.hover(event)
@@ -1581,8 +1584,8 @@ class MetalView(ViewNavigation):
         if wgpu_sheets.context_menu(self, event):   # the sheet's own menus
             return
         point = event.pos()
-        from views import context_menu
-        chrome = context_menu.chrome_menu_available(self)
+        from ingetrazo_render import context_menu_available, context_menu_open_at
+        chrome = context_menu_available(self)
         if chrome and self.renderer.ui_over_chrome(float(point.x()), float(point.y())):
             return
         self.tools.sync()
@@ -1599,7 +1602,7 @@ class MetalView(ViewNavigation):
         if not chrome:
             source.flash_status("Built could not draw the context menu.")
             return
-        context_menu.open_at(self, point.x(), point.y())
+        context_menu_open_at(self, point.x(), point.y())
 
     @_tool_frame
     def mouseDoubleClickEvent(self, event):
@@ -1729,7 +1732,7 @@ class MetalView(ViewNavigation):
         source._cycle_reference_mode(edge)
         if pos is not None:
             # The lock shows at once, the hand still (GL's _refresh_snap).
-            from app_shell.events import MouseEvent
+            from ingetrazo_render import MouseEvent
             from views import input_state
             held = input_state.modifiers(self)
             self.hover(pos.x(), pos.y(), held)
@@ -1775,16 +1778,7 @@ class MetalView(ViewNavigation):
         return point if seen == 'hit' else None
 
     def _orbit_pivot_at(self, x, y):
-        from views.document_interaction import _ray_aabb_span
-        seen, point = self._depth_world_at(x, y)
-        if seen == 'hit':
-            return point
-        origin, direction = self._pixel_to_ray(self.width()/2, self.height()/2)
-        lo, hi = self.packed.world_bounds
-        span = _ray_aabb_span(origin.toTuple(), direction.toTuple(), tuple(lo), tuple(hi))
-        if span is not None:
-            return origin + direction*((span[0]+span[1])*.5)
-        return QVector3D(self.camera.target)
+        return ingetrazo_render.metal_pivot(self, x, y)
 
     @_tool_frame
     def wheelEvent(self, event):

@@ -261,7 +261,7 @@ def test_right_click_builds_the_menu_for_what_was_hit(host, tmp_path, monkeypatc
     """The native app's right-click menu (docs/context-menu.md): what is
     under the pointer is selected first, and the menu is that kind's. The
     per-kind menus are tests/test_shell_tabs_menu.py's."""
-    from views import context_menu
+    from ingetrazo_render import selection_kind
     host.open_path(_copy(tmp_path))
     from tests.test_shell_tabs_menu import StubRenderer
     monkeypatch.setattr(host.view, "renderer", StubRenderer())
@@ -271,7 +271,7 @@ def test_right_click_builds_the_menu_for_what_was_hit(host, tmp_path, monkeypatc
     host.pointer("release", 600, 400, 2, 0, 0)
     menu = host.view._ctx_menu
     scene = host.viewport.scene
-    assert menu.kind == context_menu.kind_of(scene, scene.selection)
+    assert menu.kind == selection_kind(scene, scene.selection)
     assert menu.labels()[0].startswith("Repeat")
     assert host.errors == []
 
