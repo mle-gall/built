@@ -3562,6 +3562,13 @@ fn focused_tree_keys_win_over_viewport_shortcuts() {
     let pos = tree_frame(&mut ui, vec![])["A"];
     tree_click(&mut ui, pos, egui::PointerButton::Primary);
     assert_eq!(ui.take_actions(), ["tree:pickrow\x1fi:A"]);
+    assert!(!ui.claims_key("ArrowRight", 0)); // axis lock belongs to the model
+    assert!(ui.claims_key("ArrowDown", 0));
+    ui.set_review(true);
+    assert!(ui.project_hidden() && !ui.claims_key("ArrowDown", 0));
+    ui.set_review(false);
+    assert!(ui.claims_key("ArrowDown", 0));
+    ui.take_actions();
     assert!(!ui.claims_key("Z", 1));
     assert!(!ui.claims_key("Space", 4));
     for (key, mods, action) in [
