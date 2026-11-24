@@ -65,6 +65,8 @@ def test_the_tape_leaves_no_guide_from_a_nan_pick():
     vp = _Vp(scene)
     tool = TapeMeasureTool()
     tool.start_point = QVector3D(0, 0, 0)
-    tool._place_guide_point(vp, QVector3D(NAN, 1, 0), QVector3D(0, 0, 0))
+    from tests.test_tape_axis_source_and_guide_segment import _ctx
+    tool._mode = "point"
+    tool.on_click(_ctx(vp, NAN, 1, 0))
     assert scene.guides == []
     assert not vp.history.undo_stack         # no empty step either

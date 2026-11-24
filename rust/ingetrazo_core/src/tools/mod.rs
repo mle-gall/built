@@ -6,6 +6,7 @@
 //! `py.rs` is the only PyO3 face, and `tests.rs` drives the machines
 //! against a fake host.
 
+mod tape;
 mod fillet_tool;
 mod protractor;
 mod paint;
@@ -342,6 +343,7 @@ pub(crate) fn json_p3(v: &serde_json::Value) -> Option<P3> {
 
 pub fn new_tool(kind: &str) -> Option<Box<dyn Tool>> {
     match kind {
+        "tape" => Some(Box::new(tape::Tape::default())),
         "fillet" => Some(Box::new(fillet_tool::Fillet::default())),
         "protractor" => Some(Box::new(protractor::Protractor::default())),
         "paint" => Some(Box::new(paint::Paint)),
