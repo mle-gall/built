@@ -13,6 +13,7 @@ use numpy::IntoPyArray;
 use pyo3::types::PyBytes;
 
 mod math;
+mod texture_position;
 mod navigation;
 mod recents;
 mod builtproject;
@@ -196,6 +197,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     recents::register(m)?;
     delivery_form::register(m)?;
     m.add_class::<math::Vec3>()?;
+    m.add_class::<texture_position::TextureMap>()?;
+    m.add_class::<texture_position::TexturePlacement>()?;
     m.add_class::<math::Vec4>()?;
     m.add_class::<math::Matrix4>()?;
     m.add_class::<math::Quaternion>()?;

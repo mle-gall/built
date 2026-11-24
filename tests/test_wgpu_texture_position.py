@@ -122,11 +122,14 @@ def test_slow_preview_defers_until_release_and_back_material_undo():
     preview = native.view._texture_preview
     preview.overlay_only = True
     count = len(calls)
-    tool._drag = ('texture', tool.map.copy(), list(tool.pin_uv))
+    body = QVector3D(1.5, 1.5, 0)
+    tool.on_click(ToolContext(native, body, QPointF(*native._world_to_pixel(body)),
+                              Qt.NoModifier, None))
+    assert tool.gesture_active
     tool.map.R += QVector3D(.1, .2, 0)
     preview.update(tool)
     assert len(calls) == count
-    tool._drag = None
+    tool.on_release(native)
     preview.update(tool)
     assert len(calls) == count + 1
     expected = tool.result_texture()

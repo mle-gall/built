@@ -25,7 +25,7 @@ class TexturePreview:
         signature = (tool.face.key, tool.side, repr(texture))
         if signature == self.signature:
             return
-        if self.overlay_only and tool._drag is not None:
+        if self.overlay_only and tool.gesture_active:
             return
         view = self.view
         tracker = getattr(view, '_instance_updates', None)

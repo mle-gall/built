@@ -121,7 +121,7 @@ def test_the_red_pin_moves_the_texture_without_scaling_it(viewport):
     # Dragging the texture body does the same.
     _drag(viewport, tool, (1.5, 1.5, 0), (1.6, 1.5, 0))
     assert _close(_uv(tool, (0.9, 0.2, 0)), (1.0, 0.0))
-    assert len(tool._undo) == 2
+    assert tool.undo_depth == 2
 
 
 def test_the_green_pin_scales_and_rotates_about_the_red_one(viewport):
