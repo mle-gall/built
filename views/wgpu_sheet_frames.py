@@ -112,10 +112,9 @@ def frame_style(viewport, scene, frame):
     return picked
 
 
-def frame_camera(live, frame, view, scene, origin=None):
-    """An OrbitCamera at the frame's view whose matrices are the Rust ones
-    (``origin``: the resident geometry's offset, subtracted)."""
-    from ingetrazo_core import Matrix4, Vec3
+def camera_inputs(live, scene):
+    """What a frame camera starts from (sheet_frame_camera's ``base`` and
+    ``bounds``): the live camera's fields, the model's box and depth reach."""
     lo, hi = scene.bounds()
     bounds = None if lo is None else (lo.toTuple(), hi.toTuple())
     base = {k: getattr(live, k) for k in ("target", "distance", "yaw", "pitch", "up", "fov_deg",
@@ -125,6 +124,14 @@ def frame_camera(live, frame, view, scene, origin=None):
     if bounds is not None:
         c = (np.add(bounds[0], bounds[1]) * 0.5)
         base["depth_reach"] = (tuple(c.tolist()), float(np.linalg.norm(np.subtract(bounds[1], bounds[0])) * 0.5))
+    return base, bounds
+
+
+def frame_camera(live, frame, view, scene, origin=None):
+    """An OrbitCamera at the frame's view whose matrices are the Rust ones
+    (``origin``: the resident geometry's offset, subtracted)."""
+    from ingetrazo_core import Matrix4, Vec3
+    base, bounds = camera_inputs(live, scene)
     got = NATIVE.sheet_frame_camera(frame, view or None, base, bounds)
     cam = copy(live)
     for k in _CAMERA_FIELDS:
@@ -512,3 +519,68 @@ def level_at(source, frame, x, y):
     cx = (x - frame.x_mm) / k - half_w
     cy = half_h - (y - frame.y_mm) / k
     return float(eye[2] + right[2] * cx + up[2] * cy)
+
+
+def follow_hold(scene, item, attr, holds) -> bool:
+    """Carry ``item.<attr>`` along with the model element it is held by (the
+    composer's ``_follow_anchor`` without the capture): its own hold when it
+    has one for this point, else a session hold on the vertex under it,
+    kept in ``holds``. True when a hold answered (moved or not)."""
+    from ingetrazo_core import Vec3
+    from core.annotation_anchor import Attachment
+    from core.dimension import resolve_vertex_anchor
+    cur = getattr(item, attr, None)
+    if not cur:
+        return False
+    slot = "hold_" + attr[0]
+    saved = getattr(item, slot, None)
+    if saved is not None and tuple(saved[0]) == tuple(cur):
+        ref = saved[1]
+        if isinstance(ref, dict):
+            ref = Attachment.restore(scene, ref, Vec3(*cur))
+        point = ref.position() if ref is not None else None
+        if point is not None:
+            now = point.toTuple()
+            if tuple(cur) != now:
+                setattr(item, attr, list(now))
+            if tuple(cur) != now or ref is not saved[1]:
+                setattr(item, slot, (now, ref))
+            return True
+    key = (item._doc_key, attr)
+    held = holds.get(key)
+    if held is None or held[0] != list(cur):
+        hold = resolve_vertex_anchor(scene, Vec3(*cur))
+        holds[key] = (list(cur), hold)
+        return hold is not None
+    hold = held[1]
+    if hold is None:
+        return False
+    p = hold.position(scene)
+    if p is None:                     # erased or welded away: let go
+        holds[key] = (list(cur), None)
+        return False
+    now = [float(p.x()), float(p.y()), float(p.z())]
+    if now != list(cur):
+        setattr(item, attr, now)
+        holds[key] = (now, hold)
+    return True
+
+
+def follow_anchors(source, comp, memo, holds) -> int:
+    """Every item of sheet ``comp`` bound to a frame follows the model
+    (sheets::anchors): its hold, else the frame's current snap points,
+    then reprojected through its frame. Returns how many moved."""
+    scene = source.scene
+    base, bounds = camera_inputs(source.camera, scene)
+    frames = []
+    for frame in comp.frames:
+        view = saved_view(scene, frame)
+        if view is False or not frame.uid:
+            continue
+        frames.append({"frame": frame, "view": view, "base": base, "bounds": bounds})
+
+    def snaps_of(frame):
+        got = snaps(source, frame)
+        return None if got is None else (got[1], got[3])
+    return NATIVE.sheet_follow_anchors(comp, frames, snaps_of, lambda item, attr: follow_hold(scene, item, attr, holds),
+                                       memo)

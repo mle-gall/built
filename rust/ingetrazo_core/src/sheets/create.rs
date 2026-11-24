@@ -8,10 +8,6 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-/// The tools ``sheet_new_item`` makes an item for.
-pub const PLACE_TOOLS: [&str; 16] = ["vista", "texto", "llamada", "cajetin", "escala", "norte", "leyenda", "perfil",
-                                     "linea", "flecha", "terreno", "rect", "elipse", "poligono", "etiqueta", "nivel"];
-
 fn new_uid(py: Python<'_>) -> PyResult<String> {
     py.import("uuid")?.call_method0("uuid4")?.getattr("hex")?.extract()
 }

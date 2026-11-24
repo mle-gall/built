@@ -585,6 +585,43 @@ def test_a_dimension_measured_on_the_page_is_bound_to_the_model(host):
     assert len(comp.comp.cotas) == before
 
 
+def test_a_bound_dimension_follows_its_frame_and_the_model(host):
+    """sheets::anchors: a dimension bound to a frame's model points is
+    reprojected when the frame moves or rescales, and its ends follow the
+    model's vertices when the model moves."""
+    import numpy as np
+    from views import wgpu_sheet_frames
+    ws = _sheets(host)
+    comp = ws.composer
+    plan = comp.comp.frames[0]
+    pts, wpts, _e, _w, _c = wgpu_sheet_frames.snaps(host.view.source_viewport, plan)
+    i = int(np.argmin(pts[:, 0] + pts[:, 1]))
+    j = int(np.argmax(pts[:, 0] - pts[:, 1]))
+    pt = lambda k: {"p": pts[k].tolist(), "world": wpts[k].tolist(), "frame": plan._doc_key, "segment": None}  # noqa: E731
+    _run_actions(host, "sheets:tool\x1fcota")
+    _run_actions(host, "sheets:cota\x1f" + json.dumps({"a": pt(i), "b": pt(j), "sep": -6.0, "axis": ""}))
+    ct = comp.comp.cotas[-1]
+    x0, dx0 = ct.x_mm, ct.dx_mm
+    host.view.draw_frame()
+    assert (ct.x_mm, ct.dx_mm) == pytest.approx((x0, dx0))           # nothing moved: nothing changes
+    plan.x_mm += 10.0
+    host.view.draw_frame()
+    assert ct.x_mm == pytest.approx(x0 + 10.0) and ct.dx_mm == pytest.approx(dx0)
+    plan.scale_n = plan.scale_n * 2.0
+    host.view.draw_frame()
+    assert ct.dx_mm == pytest.approx(dx0 / 2.0) and ct.scale_n == plan.scale_n
+    # The vertex under one end moves 0.6 m along x: that end goes with it.
+    scene = comp._scene()
+    from ingetrazo_core import Vec3
+    mesh = scene.mesh
+    before = list(ct.a_world)
+    v = next(v for v in mesh.vertices if np.allclose(v.position.toTuple(), before))
+    mesh.move_vertex(v, Vec3(0.6, 0.0, 0.0))
+    scene.version += 1
+    host.view.draw_frame()
+    assert ct.a_world == pytest.approx([before[0] + 0.6, before[1], before[2]])
+
+
 def test_a_chain_s_total_stacks_one_row_beyond_its_line(host):
     ws = _sheets(host)
     comp = ws.composer

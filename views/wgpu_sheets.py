@@ -259,6 +259,9 @@ class Workspace:
         self._ground = None             # the samplers terrain profiles read
         self._edit_after = None         # a new text block, opened for typing once on the page
         self._snapped = {}              # frame key → what its snaps were worked out from
+        self._followed = None           # what bound items last followed
+        self._anchor_memo = {}          # (item key, attr) → (point, seen on an edge)
+        self._holds = {}                # (item key, attr) → session hold on a vertex
         self._tried = {}                # frame key → the page a render was tried on
         self._more = False              # frames still to render after this turn
         self._selection = None          # the keys the page and the composer agree on
@@ -583,6 +586,25 @@ class Workspace:
         self._run(AddItemCommand(comp, item))
         self._page = None
 
+    def _follow_model(self) -> None:
+        """The sheet's items bound to the model follow it when the model or
+        a frame's window on it changed (wgpu_sheet_frames.follow_anchors);
+        derived state, never a step of the history."""
+        from views import wgpu_sheet_frames
+        comp = self.composer.comp
+        scene = self.composer._scene()
+        frames = tuple((f.uid, f.x_mm, f.y_mm, f.w_mm, f.h_mm, f.scale_n, f.view_key, f.cam_yaw, f.cam_pitch,
+                        tuple(f.cam_target or ()), f.rot_deg, f.perspective) for f in comp.frames)
+        sig = (comp._doc_key, getattr(scene, "version", None), frames)
+        if sig == self._followed:
+            return
+        self._followed = sig
+        try:
+            wgpu_sheet_frames.follow_anchors(self.view.source_viewport, comp, self._anchor_memo, self._holds)
+        except Exception:  # noqa: BLE001 — a broken projection never takes the page down
+            import traceback
+            traceback.print_exc()
+
     def _send_snaps(self, renderer) -> None:
         """What each frame offers a snapping tool (wgpu_sheet_frames.snaps),
         one frame per turn, again when the model or the frame changed."""
@@ -689,6 +711,7 @@ class Workspace:
     def before_frame(self, view) -> None:
         renderer = view.renderer
         self._keep_a_sheet()
+        self._follow_model()
         self._send_page(renderer)
         self._send_contents(renderer)
         if self.composer.tool_mode in SNAP_TOOLS and not self._more:
