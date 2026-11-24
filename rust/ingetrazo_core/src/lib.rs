@@ -40,6 +40,8 @@ mod file_geometry;
 mod file_mesh;
 mod file_scene;
 mod gltf_read;
+mod dae_read;
+mod dae_write;
 mod gltf_maps;
 mod gltf_mesh;
 mod gltf_write;
@@ -136,6 +138,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     file_mesh::register(m)?;
     file_precision::register(m)?;
     gltf_read::register(m)?;
+    dae_write::register(m)?;
+    dae_read::register(m)?;
     gltf_maps::register(m)?;
     gltf_mesh::register(m)?;
     gltf_write::register(m)?;
