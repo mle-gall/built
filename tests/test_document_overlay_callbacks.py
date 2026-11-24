@@ -1,4 +1,4 @@
-"""Extension overlays may change their registration during a paint pass."""
+"""Document overlay callbacks and navigation cues on an unshown surface."""
 from types import SimpleNamespace
 
 from views.document_interaction import DocumentInteraction
@@ -31,3 +31,8 @@ def test_a_self_removing_overlay_finishes_the_current_pass(caplog):
     calls.clear()
     DocumentInteraction._draw_extension_overlays(view, painter)
     assert calls == ["save", "survivor", "restore", "save", "next", "restore"]
+
+
+def test_unsnapped_navigation_point_draws_no_axis_label():
+    point = SimpleNamespace(kind=None, point=None, context=None)
+    DocumentInteraction._draw_inference_label(SimpleNamespace(last_snap=point), object())

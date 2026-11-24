@@ -338,8 +338,9 @@ fn draw_inference_label(v: &Obj, p: &Obj) -> PyResult<()> {
     if snap.is_none() {
         return Ok(());
     }
-    let kind = snap.getattr("kind")?.extract::<String>()?;
-    if !matches!(kind.as_str(), "axis" | "axis_inference") {
+    let kind = snap.getattr("kind")?;
+    let inferred = kind.eq("axis_inference")?;
+    if !inferred && !kind.eq("axis")? {
         return Ok(());
     }
     let mut s = match snap
@@ -352,7 +353,7 @@ fn draw_inference_label(v: &Obj, p: &Obj) -> PyResult<()> {
         Some("z") => tr(v.py(), "On Blue Axis")?,
         _ => "?".to_owned(),
     };
-    if kind == "axis_inference" {
+    if inferred {
         s.push_str(&format!(" ({})", tr(v.py(), "hold Shift to lock")?))
     }
     let c = Paint::new(v, p)?;
