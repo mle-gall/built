@@ -26,6 +26,7 @@ pub type Button = (String, String, String, u8);
 pub const DISABLED: u32 = 1;
 pub const FOCUS: u32 = 2;
 pub const MULTILINE: u32 = 4;
+const COMMIT_ON_BLUR: u32 = 32;
 pub const PASSWORD: u32 = 8;
 /// No label column: the control takes the whole row.
 pub const FULL: u32 = 16;
@@ -91,6 +92,11 @@ impl Dialog {
             return true;
         }
         let Some(focus) = ctx.memory(|m| m.focused()) else { return false };
+        // Deferred numeric edits close on Escape without committing a partial value.
+        if self.fields.iter().any(|f| f.8 & COMMIT_ON_BLUR != 0 &&
+                focus == egui::Id::new(("dlg_edit", &self.seq, &f.0))) {
+            return false;
+        }
         for (id, buf) in &mut self.bufs {
             if focus == egui::Id::new(("dlg_edit", &self.seq, id)) {
                 if buf.is_empty() {
@@ -149,7 +155,26 @@ impl Ui {
             if let Some(id) = d.button_of(3) { self.actions.push(d.act("b", &id, None)); }
             return true;
         }
+        if pressed && mods & (2 | 8) != 0 && d.fields.iter().any(|f| f.8 & COMMIT_ON_BLUR != 0) {
+            let action = match (name, super::mods_from(mods).shift) {
+                ("Z" | "z", false) => Some("undo"),
+                ("Z" | "z", true) | ("Y" | "y", _) => Some("redo"),
+                _ => None,
+            };
+            if let Some(id) = action.filter(|id| d.fields.iter().any(|f| f.0 == *id && f.1 == "button")) {
+                self.actions.push(d.act("b", id, None));
+                return true;
+            }
+        }
         if pressed && name == "Enter" {
+            let focus = self.ctx.memory(|m| m.focused());
+            if let Some(field) = d.fields.iter().find(|f| f.8 & COMMIT_ON_BLUR != 0 &&
+                    focus == Some(egui::Id::new(("dlg_edit", &d.seq, &f.0)))) {
+                if let Some(text) = d.bufs.get(&field.0) {
+                    self.actions.push(d.act("v", &field.0, Some(text)));
+                }
+                return true;
+            }
             let multiline = d.multiline_focused(self.ctx.memory(|m| m.focused()));
             let command = mods & (2 | 8) != 0;
             if !multiline || command {
@@ -321,7 +346,10 @@ pub(super) fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                             egui::text::CCursor::new(0), egui::text::CCursor::new(n))));
                         state.store(ui.ctx(), resp.id);
                     }
-                    if *buf != before {
+                    let send = if flags & COMMIT_ON_BLUR != 0 {
+                        resp.lost_focus() && buf != text
+                    } else { *buf != before };
+                    if send {
                         out.push(format!("{prefix}\u{1f}v\u{1f}{id}\u{1f}{buf}"));
                     }
                 });

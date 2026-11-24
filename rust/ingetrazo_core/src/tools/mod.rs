@@ -8,6 +8,17 @@
 
 mod change_axes;
 mod freehand;
+mod followme;
+mod move_grips;
+mod place_group;
+mod eraser;
+mod geopath;
+mod annotations;
+mod section_tool;
+mod north;
+mod image;
+mod scale_manager;
+mod solid;
 mod paste;
 mod flip;
 mod tape;
@@ -321,6 +332,14 @@ pub struct ToolInfo {
     pub axis_source_empty_only: bool,
 }
 
+impl ToolInfo {
+    const fn basic(kind: &'static str, name: &'static str, shortcut: &'static str,
+                   description: &'static str, uses_snap: bool, vcb_label: Option<&'static str>) -> Self {
+        Self {kind, name, shortcut, description, uses_snap, vcb_label, box_select: false,
+              magnetic_axis_deg: None, screen_axis_px: None, axis_source: false, axis_source_empty_only: false}
+    }
+}
+
 pub trait Tool {
     fn info(&self) -> &'static ToolInfo;
     fn event(&mut self, ev: &ToolEvent, host: &mut dyn ToolHost) -> Reply;
@@ -350,6 +369,17 @@ pub(crate) fn json_p3(v: &serde_json::Value) -> Option<P3> {
 pub fn new_tool(kind: &str) -> Option<Box<dyn Tool>> {
     match kind {
         "freehand" => Some(Box::new(freehand::Freehand::default())),
+        "outer_shell" | "solid_union" | "solid_subtract" | "solid_trim" | "solid_intersect" | "solid_split" => Some(Box::new(solid::Solid::new(kind)?)),
+        "scale_manager" => Some(Box::new(scale_manager::ScaleManager::default())),
+        "image" => Some(Box::new(image::ImageTool::default())),
+        "north" => Some(Box::new(north::North::default())),
+        "section" => Some(Box::new(section_tool::Section::default())),
+        "dimension" => Some(Box::new(annotations::Dimension::default())),
+        "text" => Some(Box::new(annotations::Text::default())),
+        "geopath" => Some(Box::new(geopath::GeoPath::default())),
+        "eraser" => Some(Box::new(eraser::Eraser::default())),
+        "place_group" => Some(Box::new(place_group::PlaceGroup::default())),
+        "followme" => Some(Box::new(followme::FollowMe::default())),
         "change_axes" => Some(Box::new(change_axes::ChangeAxes::default())),
         "paste" => Some(Box::new(paste::Paste::default())),
         "flip" => Some(Box::new(flip::Flip::default())),

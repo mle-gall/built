@@ -7,7 +7,7 @@ from ingetrazo_core import Vec3 as QVector3D
 from core.i18n import tr
 from core.mesh import Edge
 from core.units import fmt_len
-from tools.rust_tools import _point_property
+from tools.rust_tool_base import _point_property
 
 
 def _field(key):

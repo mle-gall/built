@@ -15,7 +15,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
 from core.texture import continuous_maps, face_uv_axes
-from tools.paint import _face_plane, _surface_commands
+from core.paint_ops import _face_plane, _surface_commands
 
 TEX = {"path": "brick.png", "sw": 0.5, "sh": 0.5}
 

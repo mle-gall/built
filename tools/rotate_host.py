@@ -95,7 +95,7 @@ class RotateHost(ProtractorBase):
         self._pointer_event("click", ctx)
 
     def host_pick_rotation(self, viewport, point):
-        from tools.move import gather_targets
+        from tools.move_host import gather_targets
         ctx = self._ctx
         groups, positions = gather_targets(ctx)
         from core.section import SectionPlane
@@ -110,7 +110,7 @@ class RotateHost(ProtractorBase):
             if sp is not None:
                 splanes = [sp]
                 groups, positions = [], []
-        from tools.move import gather_images
+        from tools.move_host import gather_images
         images = gather_images(ctx)
         guides = [g for g in viewport.scene.selection
                   if is_guide(g)]
@@ -187,7 +187,7 @@ class RotateHost(ProtractorBase):
         return result["consumed"]
 
     def array_pending(self, viewport):
-        from tools.rust_tools import _Host
+        from tools.rust_tool_base import _Host
         token = self._state("array_token")
         return token is not None and token == _Host(viewport).revision()
 
@@ -247,7 +247,7 @@ class RotateHost(ProtractorBase):
             if deg is not None:
                 segments.extend(self._arc_segments(deg))
                 if self._copy and self._groups_ghost_due:
-                    from tools.move import groups_ghost_segments
+                    from tools.move_host import groups_ghost_segments
                     self._groups_ghost_due = False
                     self._base_segments[:0] = groups_ghost_segments(
                         self._groups)
@@ -293,7 +293,7 @@ class RotateHost(ProtractorBase):
         self._groups_ghost_due = True     # asked of only when copying (#1092)
         cam = getattr(viewport, "camera", None)
         reach = max(float(getattr(cam, "distance", 10.0)), 1e-3)
-        from tools.move import guide_ghost_segments
+        from tools.move_host import guide_ghost_segments
         self._base_segments.extend(guide_ghost_segments(self._moved_guides, reach))
         sel = list(viewport.scene.selection)
         if not sel and not self._groups:

@@ -7,7 +7,7 @@ from ingetrazo_core import Vec3, ToolMachine
 
 from core.i18n import tr
 from core.units import fmt_len
-from tools.rust_tools import _Host, _mods, _tuple
+from tools.rust_tool_base import _Host, _mods, _tuple
 
 #: The classic default eye height, 5' 6".
 DEFAULT_EYE_HEIGHT = 1.68
@@ -120,12 +120,11 @@ class EyeHost:
         return walkthrough.eye_height()
 
     def host_ray_distance(self, viewport, args):
-        from tools import walkthrough
         ray = getattr(viewport, "ray_distance", None)
         if ray is None:
             return None
         at, direction, reach = args
-        if reach is None or walkthrough._NO_WALK_REACH:
+        if reach is None or _NO_WALK_REACH:
             return ray(Vec3(*at), Vec3(*direction))
         return ray(Vec3(*at), Vec3(*direction), reach)
 

@@ -12,7 +12,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
 from core.texture import face_uv_axes, flattened_texture, placement_of
-from tools.paint import _face_plane, _texture_commands
+from core.paint_ops import _face_plane, _texture_commands
 
 
 def _floor_and_wall():

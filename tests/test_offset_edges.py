@@ -13,7 +13,8 @@ from core.history import History
 from core.offset import offset_chain
 from core.scene import Scene
 from tools.base import ToolContext
-from tools.offset import OffsetTool, _run_from_edge, _run_from_edges
+from tools.offset import OffsetTool
+from tools.offset_host import _run_from_edge, _run_from_edges
 
 
 def V(x, y, z=0.0):

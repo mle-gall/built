@@ -350,7 +350,9 @@ def follow_me(history, face, path, closed=False):
     from core.sweep import build_sweep_face
     points = (list(path) if store_of(history.scene.mesh) is not None else
               [QVector3D(*p) for p in path])
-    cmd = build_sweep_face(history.scene.mesh, from_json_key(face), points, closed)
+    from core.i18n import tr
+    failed = tr("Follow Me: could not sweep along that path (reversal or degenerate segment)")
+    cmd = build_sweep_face(history.scene.mesh, from_json_key(face), points, closed, failed)
     before = history.revision
     history.execute(cmd)
     return _answer(history, before)
@@ -426,7 +428,13 @@ def solid_operation(history, operation, placements):
     groups = {g.uid: g for g in siblings}
     inputs = [groups[uid] for uid in placements]
     before = history.revision
-    history.execute(SolidOperationCommand(operation, inputs))
+    from core.solids import SolidError
+    command = SolidOperationCommand(operation, inputs)
+    try:
+        command.prepare()
+    except SolidError as error:
+        return {**_answer(history, before, False), "error": str(error)}
+    history.execute(command)
     return _answer(history, before)
 
 
@@ -675,6 +683,176 @@ def rotate_selection(history, center, axis, angles, copy=False, placements=(), v
     before = history.revision
     if cmd is not None:
         history.execute(cmd)
+    return _answer(history, before)
+
+
+def place_group(history, template, basis, offset, point=None, attachment=None, _pending=None):
+    """Stamp a named placement template, or the active tool's detached import."""
+    from ingetrazo_core import Matrix4, Vec3
+    from core.annotation_anchor import Attachment
+    from core.group import carry_axes, copy_group, _remap_uvws
+    from core.history import InsertGroupCommand
+    if _pending is not None and _pending.uid != template:
+        raise KeyError("unknown placement template")
+    group = _pending if _pending is not None else copy_group(_placements(history, [template])[0])
+    x, y, z = basis
+    shift = Vec3(*offset)
+    matrix = Matrix4(x[0], y[0], z[0], shift.x(), x[1], y[1], z[1], shift.y(),
+                     x[2], y[2], z[2], shift.z(), 0., 0., 0., 1.)
+    if isinstance(attachment, dict):
+        attachment = Attachment.restore(history.scene, attachment, Vec3(*(point or offset)))
+    old_xform, old_axes = group.xform, group.axes
+    state = group.mesh.capture_state() if group.xform is None else None
+    before = history.revision
+    try:
+        if group.xform is not None:
+            group.xform = matrix * group.xform
+        else:
+            for vertex in list(group.mesh.vertices):
+                delta = matrix.map(vertex.position) - vertex.position
+                if delta.length() > 1e-9:
+                    group.mesh.move_vertex(vertex, delta)
+            _remap_uvws(group.mesh, matrix)
+            carry_axes(group, matrix)
+        history.execute(InsertGroupCommand(group, attachment=attachment))
+    finally:
+        if history.revision == before:
+            group.xform, group.axes = old_xform, old_axes
+            if state is not None:
+                group.mesh.restore_state(state)
+    return _answer(history, before)
+
+
+def erase_stroke(history, hide=False, edges=(), placements=(), guides=(), dimensions=(),
+                 geo_paths=(), text_labels=()):
+    from core.history import (CompoundCommand, EraseSelectionCommand, HideEdgesCommand, HideCommand,
+                              DeleteGroupCommand, DeleteGuidesCommand, DeleteDimensionsCommand,
+                              DeleteGeoPathsCommand, DeleteTextLabelsCommand)
+    scene = history.scene
+    es = _need(scene.mesh, "edge", edges)
+    groups = _placements(history, placements)
+    commands = []
+    if hide:
+        es = [e for e in es if not e.hidden]
+        groups = [g for g in groups if not g.hidden]
+        if es:
+            commands.append(HideEdgesCommand(es, hidden=True))
+        if groups:
+            commands.append(HideCommand(groups, hidden=True))
+    else:
+        if es:
+            commands.append(EraseSelectionCommand(es, []))
+        commands.extend(DeleteGroupCommand(g) for g in groups)
+        for indices, items, delete in ((guides, scene.guides, DeleteGuidesCommand),
+                (dimensions, scene.dimensions, DeleteDimensionsCommand),
+                (geo_paths, scene.geo_paths, DeleteGeoPathsCommand),
+                (text_labels, scene.text_labels, DeleteTextLabelsCommand)):
+            if any(type(i) is not int or not 0 <= i < len(items) for i in indices):
+                raise KeyError("unknown stroke target")
+            if indices:
+                commands.append(delete([items[i] for i in dict.fromkeys(indices)]))
+    before = history.revision
+    if commands:
+        history.execute(commands[0] if len(commands) == 1 else CompoundCommand(commands))
+    return _answer(history, before)
+
+
+def add_geo_path(history, points, closed=False):
+    from ingetrazo_core import Vec3
+    from georef.geopath import GeoPath
+    from core.history import AddGeoPathCommand
+    if len(points) < 2:
+        raise ValueError("expected at least two path nodes")
+    before = history.revision
+    history.execute(AddGeoPathCommand(GeoPath([Vec3(*p) for p in points], closed=closed)))
+    return _answer(history, before)
+
+
+def move_geo_path_node(history, path, node, point):
+    from ingetrazo_core import Vec3
+    from core.history import MoveGeoPathNodeCommand
+    paths = history.scene.geo_paths
+    if not 0 <= path < len(paths) or not 0 <= node < len(paths[path].points):
+        raise KeyError("unknown path node")
+    before = history.revision
+    history.execute(MoveGeoPathNodeCommand(paths[path], node, Vec3(*point)))
+    return _answer(history, before)
+
+
+def add_text_label(history, anchor, offset, text, attachment=None):
+    from ingetrazo_core import Vec3
+    from core.annotation_anchor import Attachment
+    from core.history import AddTextLabelCommand
+    from core.textlabel import TextLabel
+    point = Vec3(*anchor)
+    label = TextLabel(point, Vec3(*offset), text, attachment=Attachment.restore(history.scene, attachment, point))
+    before = history.revision
+    history.execute(AddTextLabelCommand(label))
+    return _answer(history, before)
+
+
+def add_dimension(history, a, b, offset, axis=None, attachments=(None, None)):
+    from ingetrazo_core import Vec3
+    from core.annotation_anchor import Attachment
+    from core.dimension import Dimension
+    from core.history import AddDimensionCommand
+    dim = Dimension(Vec3(*a), Vec3(*b), Vec3(*offset), axis=axis)
+    dim.attachment_a, dim.attachment_b = (Attachment.restore(history.scene, raw, pos)
+                                          for raw, pos in zip(attachments, (dim.a, dim.b), strict=True))
+    before = history.revision
+    history.execute(AddDimensionCommand(dim))
+    return _answer(history, before)
+
+
+def place_section_plane(history, point, normal, name=None, symbol=None):
+    from ingetrazo_core import Vec3
+    from core.i18n import tr
+    from core.history import PlaceSectionPlaneCommand
+    from core.section import SectionPlane, next_symbol
+    planes = history.scene.section_planes
+    plane = SectionPlane(Vec3(*point), Vec3(*normal),
+                         name=tr("Section {n}", n=len(planes) + 1) if name is None else name,
+                         symbol=next_symbol(planes) if symbol is None else symbol)
+    before = history.revision
+    history.execute(PlaceSectionPlaneCommand(plane))
+    return _answer(history, before)
+
+
+def set_north(history, degrees):
+    import math
+    from core.history import SetNorthCommand
+    from core.sun import wrap_north_deg, scene_north_deg
+    if not math.isfinite(degrees):
+        raise ValueError("expected a finite north angle")
+    deg = wrap_north_deg(degrees)
+    before = history.revision
+    if abs(deg - scene_north_deg(history.scene)) > 1e-9:
+        history.execute(SetNorthCommand(deg))
+    return _answer(history, before)
+
+
+def add_image_plane(history, path, origin, u, v, aspect=1.0, name=""):
+    from ingetrazo_core import Vec3
+    from core.history import AddImagePlaneCommand
+    from core.image_plane import ImagePlane
+    before = history.revision
+    plane = ImagePlane(path, Vec3(*origin), Vec3(*u), Vec3(*v), aspect=aspect, name=name)
+    history.execute(AddImagePlaneCommand(plane))
+    return _answer(history, before)
+
+
+def set_group_scale(history, placement, factors):
+    """Set absolute scale along a placement's local axes."""
+    import math
+    from core.group_scale import scale_command
+    values = tuple(float(v) for v in factors)
+    if len(values) != 3 or not all(map(math.isfinite, values)):
+        raise ValueError("expected three finite scale factors")
+    group, = _placements(history, [placement])
+    before = history.revision
+    command = scale_command(group, values)
+    if command is not None:
+        history.execute(command)
     return _answer(history, before)
 
 
@@ -1506,6 +1684,11 @@ COMMANDS = {"set_location": set_location, "set_model_units": set_model_units, "s
             "add_guide": add_guide, "change_guide": change_guide, "add_guide_circle": add_guide_circle, "add_arc": add_arc,
             "move_placements": move_placements, "copy_placements": copy_placements,
             "move_selection": move_selection, "scale_selection": scale_selection,
+            "place_group": place_group, "erase_stroke": erase_stroke,
+            "add_geo_path": add_geo_path, "move_geo_path_node": move_geo_path_node,
+            "add_text_label": add_text_label, "add_dimension": add_dimension,
+            "place_section_plane": place_section_plane, "set_north": set_north,
+            "add_image_plane": add_image_plane, "set_group_scale": set_group_scale,
             "set_group_axes": set_group_axes, "flip_selection": flip_selection, "paste_clipboard": paste_clipboard, "bevel_selection": bevel_selection, "rotate_selection": rotate_selection, "offset_outline": offset_outline, "paint_material": paint_material,
             "divide_edges": divide_edges, "join_edges": join_edges,
             "move_vertices": move_vertices, "erase": erase,

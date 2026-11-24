@@ -86,11 +86,16 @@ def test_a_new_section_takes_a_LETTER_not_a_number():
 
 
 def test_the_section_tool_letters_the_plane_it_places():
-    import inspect
-    from tools import section
-    src = inspect.getsource(section.SectionPlaneTool.on_click)
-    assert "next_symbol(planes)" in src
-    assert 'symbol=str(count)' not in src
+    from core.scene import Scene
+    from tests.test_parity_tools import _Vp, _ctx
+    from tools.section import SectionPlaneTool
+
+    vp = _Vp(Scene())
+    tool = SectionPlaneTool()
+    for x in range(2):
+        tool.on_activate(vp)
+        tool.on_click(_ctx(vp, x, 0))
+    assert [p.symbol for p in vp.scene.section_planes] == ["A", "B"]
 
 
 def test_the_plane_can_be_renamed_after_it_is_placed():

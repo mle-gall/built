@@ -579,12 +579,19 @@ def test_the_placement_matrix_is_the_move_the_tool_actually_makes():
     # the texture map. If the two ever disagree the image slides off, so pin
     # them to each other.
     from tools.place_group import PlaceGroupTool
-    group, _face = _textured_group()
-    tool = PlaceGroupTool(group)
+    from tests.test_parity_tools import _Vp, _ctx
+    group, face = _textured_group()
+    uv = _uvs(face)
+    points = [V(*v.toTuple()) for v in face.vertices]
+    vp = _Vp(Scene())
+    vp.window = lambda: None
+    vp.pick_face_any = lambda x, y: (None, None)
+    tool = PlaceGroupTool(group, anchor=V(0, 0))
     shift = V(2, 3, 1)
-    m = tool._pose_matrix(shift)
-    for p in (V(0, 0, 0), V(1, 0, 0), V(0.5, 0.25, 2)):
-        assert (m.map(p) - (tool._rotate(p) + shift)).length() < 1e-6
+    tool.on_click(_ctx(vp, *shift.toTuple()))
+    placed = vp.scene.groups[0].mesh.faces[0]
+    assert all((v - (p + shift)).length() < 1e-6 for v, p in zip(placed.vertices, points))
+    assert _uvs(placed) == uv
 
 
 # ---- The file's own smoothing groups ----------------------------------------

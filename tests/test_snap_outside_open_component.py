@@ -167,7 +167,7 @@ def test_a_root_loose_edge_is_a_linear_reference_but_not_a_pick():
 def test_the_box_does_not_take_the_rest_of_the_model():
     """The box reads the same edge index: the rest's loose edges are there
     as references and must be filtered out, not selected."""
-    from tools.select import _box_loose_fast
+    from tools.select_host import _box_loose_fast
     win, vp, a, _b = _window()
     try:
         vp.begin_group_edit(a)

@@ -3439,14 +3439,14 @@ class ShadowsPanel(QWidget):
     def _on_north_edited(self) -> None:
         if self._updating:
             return
-        from core.history import SetNorthCommand
+        from core.protocol.commands import run
         from core.sun import scene_north_deg
         from tools.north import refresh_north_display
         vp = self._window.viewport
         value = self._north.value()
         if abs(value - scene_north_deg(vp.scene)) < 1e-9:
             return
-        vp.history.execute(SetNorthCommand(value))
+        run(vp.history, "set_north", degrees=value)
         refresh_north_display(vp)
 
     def _on_north_tool(self) -> None:

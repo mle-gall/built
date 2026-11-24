@@ -154,3 +154,21 @@ def test_freehand_matches_the_recorded_python_tool(name):
 @pytest.mark.parametrize("name", sorted(tp.CHANGE_AXES_SCENARIOS))
 def test_change_axes_matches_the_recorded_python_tool(name):
     assert tp.run_change_axes(tp.CHANGE_AXES_SCENARIOS[name]) == tp.load("change_axes")[name]
+
+
+@pytest.mark.parametrize("name", sorted(tp.FOLLOWME_SCENARIOS))
+def test_followme_matches_the_recorded_python_tool(name):
+    assert tp.run_followme(tp.FOLLOWME_SCENARIOS[name]) == tp.load("followme")[name]
+
+
+from tests import remaining_tool_parity as remaining
+
+
+@pytest.mark.parametrize("kind,case", [(k, c) for k, cases in remaining.CASES.items() for c in cases])
+def test_remaining_tool_matches_recorded_python(kind, case):
+    assert remaining.run(kind, remaining.CASES[kind][case]) == tp.load(kind)[case]
+
+
+@pytest.mark.parametrize("case", sorted(remaining.solid_cases()))
+def test_solid_tool_matches_recorded_python(case):
+    assert remaining.run_solid(*remaining.solid_cases()[case]) == tp.load("solid_tools")[case]

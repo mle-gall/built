@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from tools.select import _box_group_fast, _local_bounds, _seg_rect_overlap
+from tools.select_host import _box_group_fast, _local_bounds, _seg_rect_overlap
 
 
 def _chunk(v0=(), e1=(), e2=(), edges=(), uid=1, dtype=np.float64):

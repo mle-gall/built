@@ -286,6 +286,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<tools::py::ToolMachine>()?;
     m.add_class::<tools::py::ScaleGripSpec>()?;
     m.add_function(wrap_pyfunction!(tools::py::scale_box_geometry, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::py::move_rotation_grips, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::py::move_grip_region, m)?)?;
     m.add_function(wrap_pyfunction!(tools::arc::py_last_fillet_d, m)?)?;
     m.add_function(wrap_pyfunction!(tools::py::select_mode, m)?)?;
     m.add_function(wrap_pyfunction!(tools::py::select_pick, m)?)?;

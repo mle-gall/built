@@ -87,7 +87,7 @@ def test_the_triple_click_still_selects_the_whole_piece(monkeypatch):
 
     vp = _Vp()
     tool = SelectTool()
-    from tools import select
+    from tools import select_host as select
     kind = "face" if select.pick_kind(a) == "face" else "visible_edge"
     monkeypatch.setattr(select, "QUERIES", {kind: lambda _vp, _x, _y: [(a, 0.0)]})
     tool.on_triple_click(ToolContext(viewport=vp, world=V(0, 0),
