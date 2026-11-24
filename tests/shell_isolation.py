@@ -109,7 +109,7 @@ def native_window(native_host):
 
 def one_off_export(win, fmt, destination):
     """Drive the File menu, Export sheet and queued writer on the UI thread."""
-    from views import chrome_sheet
+    from ingetrazo_render import chrome_sheet
     win.run_command(f"export:{fmt}")
     ctx = chrome_sheet.Ctx(win, win.view)
     provider = chrome_sheet.current(win)

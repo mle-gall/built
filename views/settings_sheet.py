@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Settings as a large sheet (``views/chrome_sheet.py``): option B of the
+"""Settings as a large sheet (``ingetrazo_render.chrome_sheet``): option B of the
 2026-11-23 review, the Preferences of the Built window.
 
 Sections on the left, in two groups: **Built · this Mac** (General,
@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 
 from core.i18n import tr
-from views import chrome_sheet
+from ingetrazo_render import chrome_sheet
 from views import chrome_forms as cf
 
 #: The sections, in the side list's order: (id, label, scope).

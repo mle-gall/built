@@ -564,7 +564,8 @@ def test_camera_registry_text_and_plugin_utilities(tmp_path):
 from core import bim_registry
 from ingetrazo_render import RenderResult
 from core.plugin_panels import show_utility
-from views import chrome_sheet, wgpu_ui
+from ingetrazo_render import chrome_sheet
+from views import wgpu_ui
 from pathlib import Path
 menu, state = Host.menu, Host.state
 def fixture_menu(self, command):
@@ -728,13 +729,13 @@ def dispatch(self, command):
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("rename","preview-tag:"+tag.key,"Unused survey tag")))
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("purgetags","")))
     elif command=="fixture-selection-tag":
-        from views import context_menu
+        from ingetrazo_render import context_menu_build, context_menu_run
         from core.group import Group
         group=Group(name="Loose tag target")
         scene.groups.append(group)
         scene.select([group])
-        menu_state=context_menu.build(self.window,self.view)
-        context_menu.run(self.window,self.view,menu_state.kind,"selectiontag",menu_state.sel)
+        menu_state=context_menu_build(self.window,self.view)
+        context_menu_run(self.window,self.view,menu_state.kind,"selectiontag",menu_state.sel)
     elif command=="fixture-rename":
         from core.group import Group
         if not hasattr(self,"fixture_rename"):
@@ -783,11 +784,11 @@ def dispatch(self, command):
         wgpu_library.edit_field(self.window,self.view,"brush_name:"+PaintTool.current_material.name,"Site paint")
         self.fixture_swatch=(PaintTool.current_material.name=="Site paint" and "Site paint" not in scene.materials)
     elif command=="fixture-paint-rows":
-        from views import chrome_sheet
+        from ingetrazo_render import chrome_sheet
         group=scene.groups[0]
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("paintrows","i:"+group.uid)))
     elif command=="fixture-apply-paint":
-        from views import chrome_sheet
+        from ingetrazo_render import chrome_sheet
         st=self.window._chrome_sheet
         self.fixture_paint_sheet=st.built.id
         chrome_sheet.action(self.window,chrome_sheet.SEP.join(("tree-material","open","ral:RAL 1000")))

@@ -33,7 +33,7 @@ def setup(app):
         from georef.tile_fetcher import TileFetcher
         from ingetrazo_render import SurveyRaster, notice_text
         from views import drawing_cache, wgpu_sheets
-        from views.report_sheets import about_review
+        from ingetrazo_render import about_review
         from views.ndof_input import shared_input
         from views.scale_editor import ask_scale
 

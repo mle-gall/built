@@ -5,7 +5,7 @@ Preferences, free everywhere else."""
 from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from views import chrome_sheet
+from ingetrazo_render import chrome_sheet
 from views.shortcuts import action_keys, collect_actions
 
 

@@ -116,7 +116,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 def start_sheet():
     """A start page with recent files, link states and a detail."""
-    from views.chrome_sheet import Sheet, item
+    from ingetrazo_render.chrome_sheet import Sheet, item
     sh = Sheet("start", "Start")
     sh.verb("new", "New model", key="⌘N", primary=True)
     sh.verb("open", "Open…", key="⌘O")
@@ -141,7 +141,7 @@ def start_sheet():
 
 def library_sheet():
     """The Library sheet with materials, a selection and its detail."""
-    from views.chrome_sheet import Sheet, item
+    from ingetrazo_render.chrome_sheet import Sheet, item
     sh = Sheet("library", "Library")
     sh.tab("materials", "Materials", count=3, on=True)
     sh.tab("components", "Components", count=12)

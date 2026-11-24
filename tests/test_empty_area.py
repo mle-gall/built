@@ -43,7 +43,7 @@ def test_plus_brings_a_project_and_its_scene_commands_back(win):
 def test_start_claims_modelling_shortcuts_until_a_document_opens(win):
     from PySide6.QtCore import QEvent, Qt
     from PySide6.QtGui import QKeyEvent
-    from views import chrome_sheet
+    from ingetrazo_render import chrome_sheet
 
     win.close_document()
     key = QKeyEvent(QEvent.KeyPress, Qt.Key_L, Qt.NoModifier, "l")

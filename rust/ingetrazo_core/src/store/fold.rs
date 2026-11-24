@@ -22,6 +22,114 @@ pub(super) struct Fold {
     tolerance: Option<f64>,
 }
 
+/// The two ordered triangle fans and the rim points whose edges may be softened.
+pub(crate) fn strip_geometry(
+    points: &[Point],
+    moved: &HashSet<Cell>,
+    normal: super::geometry::V3,
+    h: Hypot,
+) -> Option<(Vec<Triangle>, Point, Vec<Point>)> {
+    let n = points.len();
+    if n < 4 || moved.is_empty() {
+        return None;
+    }
+    let flags: Vec<_> = points.iter().map(|&p| moved.contains(&cell(p))).collect();
+    let mut starts = (0..n).filter(|&i| flags[i] && !flags[(i + n - 1) % n]);
+    let first = starts.next()?;
+    if starts.next().is_some() {
+        return None;
+    }
+    let order: Vec<_> = (0..n).map(|i| points[(first + i) % n]).collect();
+    let count = flags.into_iter().filter(|&v| v).count();
+    let (moving, fixed) = order.split_at(count);
+    let apex = fixed[0];
+    let mut triangles: Vec<_> = fixed
+        .windows(2)
+        .rev()
+        .map(|pair| [moving[0], pair[0], pair[1]])
+        .collect();
+    triangles.extend(moving.windows(2).map(|pair| [pair[0], pair[1], apex]));
+    for tri in &triangles {
+        let [a, b, c] = tri.map(vector);
+        let cross = b.sub(a).cross(c.sub(a), h);
+        if length(cross, h) < 1e-12 || cross.dot(normal, h) <= 0. {
+            return None;
+        }
+    }
+    let rim = moving
+        .iter()
+        .skip(1)
+        .take(count.saturating_sub(2))
+        .copied()
+        .collect();
+    Some((triangles, apex, rim))
+}
+
+pub(crate) fn exact_geometry<K: std::hash::Hash + Eq>(
+    points: &[Point],
+    triangles: &[Triangle],
+    adjacent: &HashMap<[u64; 3], HashSet<K>>,
+    normal: super::geometry::V3,
+    h: Hypot,
+) -> Option<Vec<Triangle>> {
+    let n = points.len();
+    if !(3..=96).contains(&n) {
+        return None;
+    }
+    let doubles_neighbour = |tri: Triangle| {
+        let [Some(a), Some(b), Some(c)] = tri.map(|p| adjacent.get(&p.map(f64::to_bits))) else {
+            return false;
+        };
+        a.iter().any(|f| b.contains(f) && c.contains(f))
+    };
+    if !triangles.iter().any(|&t| doubles_neighbour(t)) {
+        return None;
+    }
+    // Least total area triangulation with no inverted piece or piece
+    // lying on a neighbour. Equal costs retain the first split.
+    let mut costs = vec![0.; n * n];
+    let mut splits = vec![0; n * n];
+    for gap in 2..n {
+        for i in 0..n - gap {
+            let j = i + gap;
+            let mut best = f64::INFINITY;
+            for k in i + 1..j {
+                let sub = costs[i * n + k] + costs[k * n + j];
+                if sub >= best {
+                    continue;
+                }
+                let tri = [points[i], points[k], points[j]];
+                let [a, b, c] = tri.map(vector);
+                let cross = b.sub(a).cross(c.sub(a), h);
+                let area = length(cross, h) * 0.5;
+                if cross.dot(normal, h) > 0.
+                    && area >= 1e-12
+                    && !doubles_neighbour(tri)
+                    && sub + area < best
+                {
+                    best = sub + area;
+                    splits[i * n + j] = k;
+                }
+            }
+            costs[i * n + j] = best;
+        }
+    }
+    if !costs[n - 1].is_finite() {
+        return None;
+    }
+    let mut out = Vec::new();
+    let mut stack = vec![(0, n - 1)];
+    while let Some((i, j)) = stack.pop() {
+        if j - i < 2 {
+            continue;
+        }
+        let k = splits[i * n + j];
+        out.push([points[i], points[k], points[j]]);
+        stack.extend([(i, k), (k, j)]);
+    }
+    Some(out)
+}
+
 impl Store {
     fn corner_positions(&self, ring: &[u32]) -> Vec<Point> {
         ring.iter()
@@ -46,30 +154,7 @@ impl Store {
             return None;
         }
         let points = self.corner_positions(ring);
-        let flags: Vec<_> = points.iter().map(|&p| moved.contains(&cell(p))).collect();
-        let mut starts = (0..n).filter(|&i| flags[i] && !flags[(i + n - 1) % n]);
-        let first = starts.next()?;
-        if starts.next().is_some() {
-            return None;
-        }
-        let order: Vec<_> = (0..n).map(|i| points[(first + i) % n]).collect();
-        let count = flags.into_iter().filter(|&v| v).count();
-        let (moving, fixed) = order.split_at(count);
-        let apex = fixed[0];
-        let mut triangles: Vec<_> = fixed
-            .windows(2)
-            .rev()
-            .map(|pair| [moving[0], pair[0], pair[1]])
-            .collect();
-        triangles.extend(moving.windows(2).map(|pair| [pair[0], pair[1], apex]));
-        let normal = self.face_normal(face, h);
-        for tri in &triangles {
-            let [a, b, c] = tri.map(vector);
-            let cross = b.sub(a).cross(c.sub(a), h);
-            if length(cross, h) < 1e-12 || cross.dot(normal, h) <= 0. {
-                return None;
-            }
-        }
+        let (triangles, apex, rim) = strip_geometry(&points, moved, self.face_normal(face, h), h)?;
         // The facade indexes a repeated corner by its last loop occurrence.
         let index: HashMap<_, _> = points
             .iter()
@@ -77,7 +162,7 @@ impl Store {
             .map(|(i, &p)| (cell(p), i))
             .collect();
         let mut soft = Vec::new();
-        for &p in moving.iter().skip(1).take(count.saturating_sub(2)) {
+        for p in rim {
             let i = index[&cell(p)];
             let curved = |a, b| {
                 self.find_edge(a, b)
@@ -115,57 +200,7 @@ impl Store {
             .iter()
             .map(|&p| (p.map(f64::to_bits), self.fold_neighbours(face, p)))
             .collect();
-        let doubles_neighbour = |tri: Triangle| {
-            let [a, b, c] = tri.map(|p| &adjacent[&p.map(f64::to_bits)]);
-            a.iter().any(|f| b.contains(f) && c.contains(f))
-        };
-        if !triangles.iter().any(|&t| doubles_neighbour(t)) {
-            return None;
-        }
-        // Least total area triangulation with no inverted piece or piece
-        // lying on a neighbour. Equal costs retain the first split.
-        let mut costs = vec![0.; n * n];
-        let mut splits = vec![0; n * n];
-        let normal = self.face_normal(face, h);
-        for gap in 2..n {
-            for i in 0..n - gap {
-                let j = i + gap;
-                let mut best = f64::INFINITY;
-                for k in i + 1..j {
-                    let sub = costs[i * n + k] + costs[k * n + j];
-                    if sub >= best {
-                        continue;
-                    }
-                    let tri = [points[i], points[k], points[j]];
-                    let [a, b, c] = tri.map(vector);
-                    let cross = b.sub(a).cross(c.sub(a), h);
-                    let area = length(cross, h) * 0.5;
-                    if cross.dot(normal, h) > 0.
-                        && area >= 1e-12
-                        && !doubles_neighbour(tri)
-                        && sub + area < best
-                    {
-                        best = sub + area;
-                        splits[i * n + j] = k;
-                    }
-                }
-                costs[i * n + j] = best;
-            }
-        }
-        if !costs[n - 1].is_finite() {
-            return None;
-        }
-        let mut out = Vec::new();
-        let mut stack = vec![(0, n - 1)];
-        while let Some((i, j)) = stack.pop() {
-            if j - i < 2 {
-                continue;
-            }
-            let k = splits[i * n + j];
-            out.push([points[i], points[k], points[j]]);
-            stack.extend([(i, k), (k, j)]);
-        }
-        Some(out)
+        exact_geometry(&points, triangles, &adjacent, self.face_normal(face, h), h)
     }
 
     pub(super) fn plan_fold(

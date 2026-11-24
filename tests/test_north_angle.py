@@ -23,6 +23,9 @@ from formats import igz
 from georef.datum import SceneDatum
 from georef.tiles import PRESETS, DEFAULT_SOURCE_ID, TileLayer
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from tests.test_settings_sheet import act, fields, frame, win  # noqa: F401
+
 YANQUE = (-15.459809, -72.947774)
 
 
@@ -186,40 +189,20 @@ def test_straighten_refuses_without_a_location_or_a_placed_component():
 
 # ---- Tray -----------------------------------------------------------------------
 
-def test_tray_north_field_retargets_the_datum_and_refreshes_the_map():
-    """Typing a north angle swaps in a NEW datum (tile geometry is cached
-    by datum identity) and asks the viewport for fresh tiles."""
-    from PySide6.QtWidgets import QApplication
-    app = QApplication.instance() or QApplication([])   # noqa: F841
-    from views.tray import BaseMapPanel
-
-    class _Viewport:
-        scene = Scene()
-        resets = 0
-
-        def reset_tiles(self):
-            self.resets += 1
-
-        def notify_scene_changed(self):
-            pass
-
-    class _Win:
-        viewport = _Viewport()
-
-    win = _Win()
-    win.viewport.scene.georef = SceneDatum(*YANQUE)
-    panel = BaseMapPanel(win)
-    panel._sync_from_scene()
-    assert panel._north.value() == 0.0
-    old = win.viewport.scene.georef
-    panel._north.setValue(33.5)
-    panel._on_north_edited()
-    new = win.viewport.scene.georef
+def test_model_north_field_retargets_the_datum_and_refreshes_the_map(win, monkeypatch):
+    vp = win.viewport
+    old = vp.scene.georef = SceneDatum(*YANQUE)
+    resets = []
+    monkeypatch.setattr(vp, "reset_tiles", lambda: resets.append(vp.scene.georef))
+    win.open_preferences(page="location")
+    assert fields(frame(win))["north"][4] == 0.0
+    act(win, "v", "north", "33.5")
+    new = vp.scene.georef
     assert new is not old and abs(new.north - 33.5) < 1e-9
     assert (new.lat, new.lon, new.alt) == (old.lat, old.lon, old.alt)
-    assert win.viewport.resets == 1
-    panel._on_north_edited()                  # same value: nothing happens
-    assert win.viewport.scene.georef is new and win.viewport.resets == 1
+    assert resets == [new]
+    act(win, "v", "north", "33.5")
+    assert vp.scene.georef is new and resets == [new]
 
 
 def test_placement_is_identity_spots_a_group_that_was_never_turned():

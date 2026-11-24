@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Host bindings for the update worker, its activity notice and release sheet."""
+import json
 from concurrent.futures import Future
 import threading
 import sys
@@ -10,8 +11,8 @@ from core.timers import later
 from core import desktop_open, update_check
 from core.i18n import tr
 from core.version import __version__
-from views import chrome_dialogs, chrome_sheet
-from views.report_sheets import NativeSheet
+from ingetrazo_render import chrome_sheet
+from views import chrome_dialogs
 
 _RETRY_MS = 5000
 
@@ -23,7 +24,7 @@ class ReleaseSheet(chrome_sheet.Provider):
         self.model = model
 
     def build(self, ctx):
-        return NativeSheet(self.id, spec=self.model.sheet(tr))
+        return chrome_sheet.Spec(json.loads(self.model.sheet(tr)))
 
     def act(self, ctx, verb, args):
         action = self.model.action(args[0]) if verb == "verb" and args else None

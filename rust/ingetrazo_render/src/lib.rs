@@ -62,6 +62,13 @@ mod model_views;
 mod pane_dividers;
 /// The one verb source: kinds, menu rows, inspector verbs, dispatch.
 mod verbs;
+mod viewport_menu;
+mod shell_commands;
+mod report_sheets;
+mod inspector_host;
+mod shell_events;
+mod deliveries_host;
+mod sheet_runtime;
 pub mod ui;
 mod host_context;
 mod inspector;
@@ -83,6 +90,7 @@ mod shadow_fit;
 mod textures;
 pub mod tool_cursors;
 pub mod icon_art;
+mod billboards;
 mod annotation_canvas;
 mod tool_overlay;
 mod image_assets;
@@ -2534,7 +2542,7 @@ impl Renderer {
     /// typed, its anchor (points), the tool's start on screen and the
     /// document's revision (a commit is read from them, ui/value_field.rs).
     #[pyo3(signature = (caption, value, typing, x, y, start=None, revision=0))]
-    fn ui_set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: f32, y: f32,
+    fn ui_set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: Option<f32>, y: Option<f32>,
                            start: Option<(f32, f32)>, revision: u64) {
         if let Some(ui) = self.ui.as_mut() { ui.set_cursor_value(caption, value, typing, x, y, start, revision); }
     }
@@ -2678,7 +2686,7 @@ impl Renderer {
     fn ui_project_tab_rects(&self) -> Vec<Option<(f32, f32, f32, f32)>> {
         self.ui.as_ref().map_or_else(Vec::new, |ui| ui.project_tab_rects())
     }
-    /// The right-click menu at (x, y) (views/context_menu.py): header, then
+    /// The right-click menu at (x, y) (viewport_menu.rs): header, then
     /// rows of (family label, [(id, label, key, enabled, checked)]).
     fn ui_set_context_menu(&mut self, x: f32, y: f32, title: String, subtitle: String,
                            rows: Vec<(String, Vec<(String, String, String, bool, i8)>)>) {
@@ -2782,7 +2790,7 @@ impl Renderer {
     fn ui_set_form(&mut self, title: String, fields: Vec<ui::FormField>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_form(title, fields); }
     }
-    /// The large sheet (views/chrome_sheet.py): the whole sheet as JSON
+    /// The large sheet (sheet_runtime.rs): the whole sheet as JSON
     /// (ui/large_sheet.rs `Spec`); "" closes it.
     fn ui_set_large_sheet(&mut self, spec: &str) -> PyResult<()> {
         match self.ui.as_mut() {
@@ -3169,7 +3177,7 @@ impl Renderer {
 /// Public so the `built` app can register the module statically
 /// (`append_to_inittab`) and share one renderer with the embedded Python.
 /// Check a large sheet's JSON against the chrome's schema without a
-/// renderer (views/chrome_sheet.py tests): "" when it parses, else why.
+/// renderer (sheet_runtime.rs tests): "" when it parses, else why.
 #[pyfunction]
 fn large_sheet_check(spec: &str) -> String {
     match serde_json::from_str::<ui::large_sheet::Spec>(spec) {
@@ -3266,6 +3274,13 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     component_replacement::register(m)?;
     inspection_edits::register(m)?;
     context_edits::register(m)?;
+    viewport_menu::register(m)?;
+    shell_commands::register(m)?;
+    report_sheets::register(m)?;
+    inspector_host::register(m)?;
+    shell_events::register(m)?;
+    deliveries_host::register(m)?;
+    sheet_runtime::register(m)?;
     native_view_actions::register(m)?;
     plugin_workspace::register(m)?;
     m.add_class::<link_watch::LinkWatch>()?;
@@ -3293,6 +3308,9 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(icon_art::icon_keys, m)?)?;
     m.add_function(wrap_pyfunction!(icon_art::letter_art, m)?)?;
     m.add_function(wrap_pyfunction!(icon_art::row_icon_art, m)?)?;
+    m.add_function(wrap_pyfunction!(billboards::billboard_stances, m)?)?;
+    m.add_function(wrap_pyfunction!(billboards::billboard_worlds, m)?)?;
+    m.add_function(wrap_pyfunction!(billboards::sprite_mapping, m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_name, m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_art, m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::texture_has_alpha,m)?)?;

@@ -191,8 +191,8 @@ pub fn run_model_menu(win: &Bound<'_, PyAny>, id: &str) -> PyResult<bool> {
         Handler::Tool(tool) => win.call_method1("_activate_tool", (tool,))?,
         Handler::Export(fmt) => win
             .py()
-            .import("views.wgpu_deliveries")?
-            .call_method1("export_form", (win, win.py().None(), true, fmt))?,
+            .import("ingetrazo_render")?
+            .call_method1("delivery_export_form", (win, win.py().None(), true, fmt))?,
         Handler::RestMode(mode) => win
             .getattr("viewport")?
             .call_method1("set_edit_rest_mode", (mode,))?,

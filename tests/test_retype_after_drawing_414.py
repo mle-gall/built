@@ -18,7 +18,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
 from PySide6.QtCore import QPointF, Qt  # noqa: E402
-from app_shell.events import KeyEvent
+from ingetrazo_render import KeyEvent
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication  # noqa: E402

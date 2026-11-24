@@ -283,7 +283,7 @@ fn import_file(
     let mut make_faces = false;
     if kind == "dxf" {
         let backend = py.import("formats.dxf_in")?;
-        let doc = match backend.call_method1("open_document", (path,)) {
+        let source = match backend.call_method1("prepare_import", (path,)) {
             Ok(doc) => doc,
             Err(e) => {
                 dialogs.call_method1(
@@ -297,9 +297,7 @@ fn import_file(
                 return Ok(false);
             }
         };
-        let suggested = backend
-            .call_method1("suggest_unit_scale", (&doc,))?
-            .get_item(0)?;
+        let (doc, suggested): (Bound<'_, PyAny>, Bound<'_, PyAny>) = source.extract()?;
         let opts = win.call_method1("_dxf_options", (shown, suggested))?;
         let Some((scale, faces)) = opts.extract::<Option<(f64, bool)>>()? else {
             return Ok(false);

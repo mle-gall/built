@@ -18,7 +18,7 @@ from core import units
 from core.scene import Scene
 from formats import igz
 from views import chrome_forms
-from views import chrome_sheet as cs
+from ingetrazo_render import chrome_sheet as cs
 from views import settings_sheet as ss
 
 SEP = cs.SEP

@@ -491,25 +491,6 @@ class BaseMapPanel(QWidget):
         self._coord_mode.setCurrentIndex(max(idx, 0))
         self._apply_coord_mode()
 
-        # North angle: turns the map, terrain and
-        # every geographic import UNDER the model — the model, its standard
-        # views and axis locks stay square. 0 = the green axis points north.
-        self._north_label = QLabel(tr("North:"))
-        grid.addWidget(self._north_label, 8, 0)
-        self._north = QDoubleSpinBox()
-        self._north.setRange(-180.0, 180.0)
-        self._north.setDecimals(2)
-        self._north.setSingleStep(1.0)
-        self._north.setWrapping(True)
-        self._north.setSuffix("°")
-        self._north.setToolTip(tr(
-            "Where true north lies, in degrees clockwise from the green (Y) "
-            "axis. Turns the base map, the terrain and every geographic "
-            "import under the model; the model itself does not move, so its "
-            "front/right/top views and axis locks stay square."))
-        self._north.editingFinished.connect(self._on_north_edited)
-        grid.addWidget(self._north, 8, 1)
-
         self._straighten = QPushButton(tr("Straighten model on the map"))
         self._straighten.setToolTip(tr(
             "Select the model you turned and dragged onto the site (one "
@@ -936,22 +917,6 @@ class BaseMapPanel(QWidget):
         vp.update()
 
     # ---- North angle ----------------------------------------------------------
-    def _on_north_edited(self) -> None:
-        """Retarget the datum's north angle: a NEW datum object (the tile
-        geometry is cached by datum identity), tiles and terrain rebuilt."""
-        vp = self._window.viewport
-        scene = vp.scene
-        datum = getattr(scene, "georef", None)
-        if datum is None:
-            return
-        value = self._north.value()
-        if abs(value - getattr(datum, "north", 0.0)) < 1e-9:
-            return
-        scene.georef = SceneDatum(datum.lat, datum.lon, alt=datum.alt,
-                                  north=value)
-        scene.version += 1
-        self._refresh_map()
-
     def _refresh_map(self) -> None:
         """The datum changed under the map: drop tile geometry, redo the
         terrain if it is on, repaint."""
@@ -1096,7 +1061,7 @@ class BaseMapPanel(QWidget):
         layer = getattr(scene, "tile_layer", None)
         blockers = [QSignalBlocker(w) for w in
                     (self._source, self._lat, self._lon, self._zoom, self._show,
-                     self._north, self._terrain3d, self._photo_mesh,
+                     self._terrain3d, self._photo_mesh,
                      self._opacity)]
         # A scene recalls the terrain / survey visibility too: keep the
         # boxes honest (an unchecked box over a hidden terrain re-shows it).
@@ -1110,7 +1075,6 @@ class BaseMapPanel(QWidget):
         if datum is not None:
             self._lat.setValue(datum.lat)
             self._lon.setValue(datum.lon)
-            self._north.setValue(getattr(datum, "north", 0.0))
             self._sync_utm_from_ll()
         if layer is not None:
             idx = self._source.findData(layer.source.id)
@@ -3102,28 +3066,6 @@ class ShadowsPanel(QWidget):
         self._tz.currentIndexChanged.connect(self._apply)
         grid.addWidget(self._tz, 7, 1)
 
-        # Where true north lies (core.sun.scene_north_deg): typed here, or
-        # aimed on screen with Tools ▸ North — the button picks it up.
-        grid.addWidget(QLabel(tr("North:")), 8, 0)
-        north_row = QHBoxLayout()
-        self._north = QDoubleSpinBox()
-        self._north.setRange(-180.0, 180.0)
-        self._north.setDecimals(1)
-        self._north.setSingleStep(1.0)
-        self._north.setWrapping(True)
-        self._north.setSuffix("°")
-        self._north.setToolTip(tr(
-            "Where true north lies, in degrees clockwise from the green (Y) "
-            "axis. The shadows turn with it; the model does not move."))
-        self._north.editingFinished.connect(self._on_north_edited)
-        north_row.addWidget(self._north, 1)
-        self._north_btn = QPushButton(tr("On screen"))
-        self._north_btn.setToolTip(tr(
-            "Tools ▸ North: click a centre, then click toward north."))
-        self._north_btn.clicked.connect(self._on_north_tool)
-        north_row.addWidget(self._north_btn)
-        grid.addLayout(north_row, 8, 1)
-
         self._site = QLabel("")
         self._site.setWordWrap(True)
         theme_style(self._site, "color:{muted}; font-size: 11px;")
@@ -3203,8 +3145,6 @@ class ShadowsPanel(QWidget):
             self._dark.setValue(round((1.0 - sh.darkness) * 100))
             idx = self._tz.findData(sh.utc_offset)
             self._tz.setCurrentIndex(idx if idx >= 0 else 0)
-            from core.sun import scene_north_deg
-            self._north.setValue(scene_north_deg(self._window.viewport.scene))
             datum = getattr(self._window.viewport.scene, "georef", None)
             if datum is not None:
                 self._site.setText(tr(
@@ -3222,19 +3162,6 @@ class ShadowsPanel(QWidget):
         # panel last dropped down.
         self.refresh()
         super().showEvent(event)
-
-    def _on_north_edited(self) -> None:
-        if self._updating:
-            return
-        from core.protocol.commands import run
-        from core.sun import scene_north_deg
-        from tools.north import refresh_north_display
-        vp = self._window.viewport
-        value = self._north.value()
-        if abs(value - scene_north_deg(vp.scene)) < 1e-9:
-            return
-        run(vp.history, "set_north", degrees=value)
-        refresh_north_display(vp)
 
     def _on_north_tool(self) -> None:
         activate = getattr(self._window, "_activate_tool", None)

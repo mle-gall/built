@@ -322,14 +322,14 @@ def _matches(row, documented):
 
 @pytest.mark.parametrize("kind", list(DOC_COLUMNS) + ["dimension"])
 def test_each_kind_gets_the_rows_docs_context_menu_lists(host, kinds, kind):
-    from views import context_menu as cm
+    from ingetrazo_render import context_menu_build, context_menu_action, verbs_constants
     scene = host.viewport.scene
     scene.select(kinds[kind])
-    menu = cm.build(host.window, host.view)
+    menu = context_menu_build(host.window, host.view)
     expected = "annotation" if kind == "dimension" else kind
     assert menu.kind == expected
     assert menu.rows[0].verbs[0].id == "repeat"
-    assert len(menu.rows) <= cm.MAX_ROWS
+    assert len(menu.rows) <= verbs_constants()[3]
     heading, col = DOC_COLUMNS[expected]
     documented = _doc_columns()[heading][col]
     missing = [r.text() for r in menu.rows[1:] if not _matches(r, documented)]
@@ -338,7 +338,7 @@ def test_each_kind_gets_the_rows_docs_context_menu_lists(host, kinds, kind):
 
 
 def test_the_menus_carry_the_expected_verbs(host, kinds):
-    from views import context_menu as cm
+    from ingetrazo_render import context_menu_build, context_menu_action, verbs_constants
     from PySide6.QtWidgets import QApplication
     scene = host.viewport.scene
     # A model copied by an earlier test would add "Paste here" to empty space.
@@ -347,7 +347,7 @@ def test_the_menus_carry_the_expected_verbs(host, kinds):
 
     def rows(kind):
         scene.select(kinds[kind])
-        return cm.build(host.window, host.view).labels()[1:]
+        return context_menu_build(host.window, host.view).labels()[1:]
     assert rows("faces")[:6] == ["Hide", "Zoom to | Reveal selection | Tag…", "Make group | Make component…",
                                  "Reverse faces | Orient faces", "Intersect: Model | Selection | Context",
                                  "Soften / Smooth edges…"]
@@ -365,36 +365,36 @@ def test_the_menus_carry_the_expected_verbs(host, kinds):
 
 @pytest.mark.parametrize("kind", ["link", "linked_part"])
 def test_read_only_kinds_offer_no_editing_verbs(host, kinds, kind):
-    from views import context_menu as cm
+    from ingetrazo_render import context_menu_build, context_menu_action, verbs_constants
     host.viewport.scene.select(kinds[kind])
-    menu = cm.build(host.window, host.view)
+    menu = context_menu_build(host.window, host.view)
     assert menu.kind == kind and "read-only" in menu.subtitle
     ids = {i.split(":")[0] for i in menu.ids()}
-    assert not ids & set(cm.EDITING), ids & set(cm.EDITING)
+    assert not ids & set(verbs_constants()[2]), ids & set(verbs_constants()[2])
     assert not menu.rows[0].verbs[0].enabled            # Repeat, greyed
 
 
 def test_the_header_says_what_and_where(host, kinds):
-    from views import context_menu as cm
+    from ingetrazo_render import context_menu_build, context_menu_action, verbs_constants
     scene = host.viewport.scene
     scene.select(kinds["group"])
-    menu = cm.build(host.window, host.view)
+    menu = context_menu_build(host.window, host.view)
     assert (menu.title, menu.subtitle) == ("Box A", "Group · Unfiled")
     scene.select(kinds["linked_part"])
-    assert cm.build(host.window, host.view).subtitle == "in parts.built ↗ · read-only"
+    assert context_menu_build(host.window, host.view).subtitle == "in parts.built ↗ · read-only"
     scene.select(kinds["groups"])
-    assert cm.build(host.window, host.view).title == "2 items"
+    assert context_menu_build(host.window, host.view).title == "2 items"
 
 
 def test_repeat_names_the_last_command_and_its_value(host, kinds):
     from tools.pushpull import PushPullTool
-    from views import context_menu as cm
+    from ingetrazo_render import context_menu_build, context_menu_action, verbs_constants
     host.window._activate_tool("pushpull")
     host.window._activate_tool("select")
     old = PushPullTool.last_distance
     PushPullTool.last_distance = 0.45
     try:
-        repeat = cm.build(host.window, host.view).rows[0].verbs[0]
+        repeat = context_menu_build(host.window, host.view).rows[0].verbs[0]
     finally:
         PushPullTool.last_distance = old
     name = host.window._tools["pushpull"].name
@@ -404,13 +404,13 @@ def test_repeat_names_the_last_command_and_its_value(host, kinds):
 
 def test_a_verb_runs_the_same_command_as_the_tree(host, kinds):
     """Hide on one group goes through the tree's row verb (core ``hide``)."""
-    from views import context_menu as cm
+    from ingetrazo_render import context_menu_build, context_menu_action, verbs_constants
     scene = host.viewport.scene
     box = kinds["group"][0]
     scene.select([box])
-    menu = cm.build(host.window, host.view)
+    menu = context_menu_build(host.window, host.view)
     host.view._ctx_menu = menu
-    assert cm.action(host.window, host.view, "hide")
+    assert context_menu_action(host.window, host.view, "hide")
     assert box.hidden
     host.menu("undo")
     assert not box.hidden
@@ -467,7 +467,7 @@ def test_with_the_chrome_the_menu_goes_to_it(host, kinds, monkeypatch):
     view._ui_attached = True
     view._ui_tools_sent = True
     try:
-        from app_shell.events import ContextMenuEvent
+        from ingetrazo_render import ContextMenuEvent
         view.contextMenuEvent(ContextMenuEvent(520, 410, 0))
         x, y, title, subtitle, rows = stub.menu
         assert (x, y, title) == (520.0, 410.0, "Box A")

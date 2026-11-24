@@ -4,7 +4,8 @@ from core.group_scale import group_scale
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from tests.native_tree import action
 from tests.test_project_drawing_filters import Project
-from views import chrome_forms, context_menu, scale_editor
+from views import chrome_forms, scale_editor
+from ingetrazo_render import context_menu_build, context_menu_run
 
 
 def test_shared_menus_and_dock_selection(native_question_host, monkeypatch):
@@ -32,8 +33,8 @@ def test_shared_menus_and_dock_selection(native_question_host, monkeypatch):
     win._on_unhide_all()
     assert not group.hidden
     scene.select([group])
-    menu = context_menu.build(win)
-    assert context_menu.run(win, host.view, menu.kind, "lock", menu.sel, facts=menu.facts)
+    menu = context_menu_build(win)
+    assert context_menu_run(win, host.view, menu.kind, "lock", menu.sel, facts=menu.facts)
     assert group.locked
     win._unlock_group(group)
     assert not group.locked
