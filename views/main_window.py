@@ -6307,37 +6307,9 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             dialog.setModal(False)
             dialog.show()
 
-    def _on_export_stl(self) -> None:
-        # An STL records no unit and slicers read it as millimetres, so the
-        # model's own metres came out 1000x too small (#513): ask, the way
-        # the import does, with millimetres first and the last choice kept.
-        from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox,
-                                       QFormLayout)
-
-        keys = ["mm", "cm", "m", "in", "ft"]
-        labels = [tr("Millimetres"), tr("Centimetres"), tr("Metres"),
-                  tr("Inches"), tr("Feet")]
-        settings = QSettings()
-        guess = str(settings.value("export/stl_unit", "mm") or "mm")
-        dialog = QDialog(self)
-        dialog.setWindowTitle(tr("Export STL"))
-        form = QFormLayout(dialog)
-        units = QComboBox(dialog)
-        units.addItems(labels)
-        units.setCurrentIndex(keys.index(guess) if guess in keys else 0)
-        form.addRow(tr("Unit of the STL file (3D printing programs expect "
-                       "millimetres)"), units)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dialog)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        form.addRow(buttons)
-        if dialog.exec() != QDialog.Accepted:
-            return
-        unit = keys[units.currentIndex()]
-        settings.setValue("export/stl_unit", unit)
-        self._export("STL", "stl", tr("STL mesh (*.stl)"),
-                     lambda scene, path: stl_format.save_stl(scene, path, unit))
+    def _on_export_stl(self):
+        from views.wgpu_deliveries import export_form
+        return export_form(self, one_off=True, initial_format="stl")
 
     def _on_export_obj(self) -> None:
         self._export("OBJ", "obj", tr("Wavefront OBJ (*.obj)"), obj_format.save_obj)
@@ -6378,65 +6350,9 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         texture images beside the .dae (send both, or use GLB)."""
         self._export("COLLADA", "dae", tr("COLLADA (*.dae)"), dae_format.save_dae)
 
-    def _on_export_view_dxf(self) -> None:
-        """The view on screen as a 2D line drawing for CAD, hidden lines
-        removed (José Castro Basso, FADU–UDELAR) — see _view_line_groups."""
-        path, _ = file_dialogs.getSaveFileName(
-            self, tr("Export current view as DXF"), "vista.dxf",
-            "DXF (*.dxf)")
-        if not path:
-            return
-        from formats.dxf_out import save_dxf_layers
-        self._export_view_lines(path, save_dxf_layers, tr("Export DXF failed"))
-
-    def _export_view_lines(self, path: str, save, failed: str) -> None:
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            from core.hlr import (KIND_CUT, KIND_PROFILE, hlr_drawing,
-                                  hlr_perspective)
-            vp = self._active_view()    # with several views, the active one
-            geometry = vp.hlr_geometry()
-            solids, texts = [], []
-            if vp.camera.perspective:
-                groups = [("VISTA", hlr_perspective(vp.scene, vp.camera,
-                                                    geometry=geometry))]
-            elif len(vp.scene.layers) > 1:
-                # With layers, each one as a DXF layer of its own, with its
-                # colour and line type — as the composer's export.
-                from core.layers import line_styles
-                from formats.dxf_views import dxf_groups_by_layer
-                tagged = vp.hlr_geometry(tags=True)
-                d = hlr_drawing(vp.scene, vp.camera, layers=True,
-                                geometry=tagged)
-                d.styles = line_styles(vp.scene, True)
-                from core.layers import export_labels
-                d.labels = export_labels(vp.scene)
-                groups = dxf_groups_by_layer(d, "VISTA", hidden_lines=False,
-                                             texts=texts)
-            else:
-                d = hlr_drawing(vp.scene, vp.camera, geometry=geometry)
-                k = d.kinds
-                groups = [("VISTA", d.segs[(k != KIND_CUT)
-                                           & (k != KIND_PROFILE)]),
-                          ("VISTA-PERFIL", d.segs[k == KIND_PROFILE]),
-                          ("VISTA-CORTE", d.segs[k == KIND_CUT])]
-            if not vp.camera.perspective:
-                # The cut hatches and fills too, as a sheet at 1:50 draws
-                # them — as the composer's export does at its frame's scale.
-                from formats.dxf_views import dxf_cut_layers
-                lines, solids = dxf_cut_layers(
-                    vp.scene, vp.camera,
-                    geometry=tagged if len(vp.scene.layers) > 1
-                    else vp.hlr_geometry(tags=True))
-                groups += lines
-            n = save(path, groups, solids, texts)
-        except Exception as exc:  # noqa: BLE001
-            QApplication.restoreOverrideCursor()
-            _dialogs.critical(self, failed, str(exc))
-            return
-        QApplication.restoreOverrideCursor()
-        self.statusBar().showMessage(
-            tr("Exported {n} lines to {name}", n=n, name=path), 5000)
+    def _on_export_view_dxf(self):
+        from views.wgpu_deliveries import export_form
+        return export_form(self, one_off=True, initial_format="dxf")
 
     def _export(self, label: str, suffix: str, file_filter, writer) -> None:
         base = (self._current_path.stem if self._current_path is not None

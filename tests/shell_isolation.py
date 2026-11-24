@@ -96,3 +96,22 @@ def native_window(native_host):
     """A fresh document in the native window."""
     native_host.window.new_document()
     return native_host.window
+
+
+def one_off_export(win, fmt, destination):
+    """Drive the File menu, Export sheet and queued writer on the UI thread."""
+    from views import chrome_sheet
+    win.run_command(f"export:{fmt}")
+    ctx = chrome_sheet.Ctx(win, win.view)
+    provider = chrome_sheet.current(win)
+    assert provider.id == "export"
+    form = provider.build(ctx).forms()[0]
+    assert form.value("format") == fmt
+    form.receive("destination", str(destination))
+    form.press("export")
+    for _ in range(20):
+        if not win._delivery_queue:
+            break
+        win._host.idle()
+    assert not win._delivery_queue and destination.is_file()
+    return form

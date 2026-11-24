@@ -4,6 +4,7 @@
 path the hidden-line pass takes from the viewport caches."""
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import math
 
 import numpy as np
@@ -22,58 +23,53 @@ def _fountain_like(scene):
     scene.version += 1
 
 
-def test_hlr_geometry_matches_the_python_walk():
+def test_hlr_geometry_matches_the_python_walk(native_host):
     """Viewport.hlr_geometry() (arrays from the caches) carries the same
     triangles, hard edges and soft edges as core.hlr.collect_geometry, and
     hlr_view draws the same segments from either."""
     from core.camera import OrbitCamera
     from core.hlr import collect_geometry, hlr_view
-    from views.main_window import MainWindow
 
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        vp.resize(800, 600)
-        scene = vp.scene
-        _fountain_like(scene)
-        tris, hard, soft, soft_n = vp.hlr_geometry()
-        lt, lh, ls = collect_geometry(scene)
-        assert (len(tris), len(hard), len(soft)) == (len(lt), len(lh), len(ls))
-        assert soft_n.shape == (len(soft), 2, 3)
+    win = native_host.window
+    vp = win.viewport
+    native_host.resize(800, 600, 1.)
+    scene = vp.scene
+    _fountain_like(scene)
+    tris, hard, soft, soft_n = vp.hlr_geometry()
+    lt, lh, ls = collect_geometry(scene)
+    assert (len(tris), len(hard), len(soft)) == (len(lt), len(lh), len(ls))
+    assert soft_n.shape == (len(soft), 2, 3)
 
-        def sym(pairs):
-            out = set()
-            for a, b in pairs:
-                a = tuple(np.round(np.asarray(a, dtype=float), 5))
-                b = tuple(np.round(np.asarray(b, dtype=float), 5))
-                out.add((a, b) if a <= b else (b, a))
-            return out
-        assert sym(hard) == sym(lh)
-        assert sym(soft) == sym([(p0, p1) for p0, p1, _a, _b in ls])
-        # Open-boundary flag: the revolve caps close everything here.
-        assert not np.isnan(soft_n[:, 1, 0]).any()
+    def sym(pairs):
+        out = set()
+        for a, b in pairs:
+            a = tuple(np.round(np.asarray(a, dtype=float), 5))
+            b = tuple(np.round(np.asarray(b, dtype=float), 5))
+            out.add((a, b) if a <= b else (b, a))
+        return out
+    assert sym(hard) == sym(lh)
+    assert sym(soft) == sym([(p0, p1) for p0, p1, _a, _b in ls])
+    # Open-boundary flag: the revolve caps close everything here.
+    assert not np.isnan(soft_n[:, 1, 0]).any()
 
-        cam = OrbitCamera()
-        cam.set_view("front")
-        cam.perspective = False
-        lo, hi = scene.bounds()
-        cam.fit_to(lo, hi, 1.1)
-        slow = hlr_view(scene, cam)
-        fast = hlr_view(scene, cam, geometry=(tris, hard, soft, soft_n))
-        assert len(fast) == len(slow)
-        assert sym([(s[:2], s[2:]) for s in slow]) == sym(
-            [(s[:2], s[2:]) for s in fast])
-        # Section cut: the array path falls back to the list clipper.
-        from core.section import SectionPlane
-        sp = SectionPlane(QVector3D(0, 0, 0.5), QVector3D(0, 0, 1),
-                          name="Planta", symbol="1")
-        scene.section_planes.append(sp)
-        scene.set_active_section(sp)
-        cut_slow = hlr_view(scene, cam)
-        cut_fast = hlr_view(scene, cam, geometry=(tris, hard, soft, soft_n))
-        assert len(cut_fast) == len(cut_slow) != len(slow)   # chords added
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    cam = OrbitCamera()
+    cam.set_view("front")
+    cam.perspective = False
+    lo, hi = scene.bounds()
+    cam.fit_to(lo, hi, 1.1)
+    slow = hlr_view(scene, cam)
+    fast = hlr_view(scene, cam, geometry=(tris, hard, soft, soft_n))
+    assert len(fast) == len(slow)
+    assert sym([(s[:2], s[2:]) for s in slow]) == sym(
+        [(s[:2], s[2:]) for s in fast])
+    # Section cut: the array path falls back to the list clipper.
+    from core.section import SectionPlane
+    sp = SectionPlane(QVector3D(0, 0, 0.5), QVector3D(0, 0, 1),
+                      name="Planta", symbol="1")
+    scene.section_planes.append(sp)
+    scene.set_active_section(sp)
+    cut_slow = hlr_view(scene, cam)
+    cut_fast = hlr_view(scene, cam, geometry=(tris, hard, soft, soft_n))
+    assert len(cut_fast) == len(cut_slow) != len(slow)   # chords added
 
 

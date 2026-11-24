@@ -9,13 +9,13 @@ callers that want the raw model), and Export ▸ STL asks, like the import.
 """
 from __future__ import annotations
 
+from tests.shell_isolation import one_off_export, restore_shell_patches  # noqa: F401
 import os
 import struct
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from PySide6.QtCore import QSettings  # noqa: E402
 from ingetrazo_core import Vec3 as V
 
 from core.scene import Scene  # noqa: E402
@@ -67,24 +67,22 @@ def test_exported_in_mm_and_imported_as_mm_keeps_the_size(tmp_path):
     assert w == pytest.approx(0.015, rel=1e-5)
 
 
-def test_the_menu_asks_and_defaults_to_millimetres(tmp_path, monkeypatch):
-    from PySide6.QtWidgets import QDialog
-    import views.main_window as mw
-    from views.main_window import MainWindow
+@pytest.mark.parametrize(("last_unit", "expected", "size"), [
+    (None, "mm", (15.0, 25.0)), ("incompatible", "mm", (15.0, 25.0)),
+    ("cm", "cm", (1.5, 2.5)),
+])
+def test_stl_sheet_remembers_the_unit(native_host, tmp_path, last_unit, expected, size):
+    from core.settings import settings
 
     out = tmp_path / "part.stl"
-    monkeypatch.setattr(mw.file_dialogs, "getSaveFileName",
-                        lambda *a, **k: (str(out), ""))
-    monkeypatch.setattr(QDialog, "exec", lambda self: QDialog.Accepted)
-    QSettings().remove("export/stl_unit")
-    win = MainWindow()
-    try:
-        win.viewport.scene.mesh.add_face(
-            [V(0, 0, 0), V(0.015, 0, 0), V(0.015, 0.025, 0), V(0, 0.025, 0)])
-        win.viewport.scene.version += 1
-        win._on_export_stl()
-        assert _extent(out) == pytest.approx((15.0, 25.0), rel=1e-5)
-        assert QSettings().value("export/stl_unit") == "mm"
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    settings().remove("export/stl_unit")
+    if last_unit is not None:
+        settings().setValue("export/stl_unit", last_unit)
+    win = native_host.window
+    win.viewport.scene.mesh.add_face(
+        [V(0, 0, 0), V(0.015, 0, 0), V(0.015, 0.025, 0), V(0, 0.025, 0)])
+    win.viewport.scene.version += 1
+    form = one_off_export(win, "stl", out)
+    assert form.value("unit") == expected
+    assert _extent(out) == pytest.approx(size, rel=1e-5)
+    assert settings().value("export/stl_unit") == expected

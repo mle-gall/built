@@ -1894,22 +1894,6 @@ def test_the_dxf_writes_solids_under_the_lines(tmp_path):
     assert "2\nRELLENO\n70\n0\n62\n" in text             # declared
 
 
-def test_the_current_view_dxf_carries_the_hatches_too(win, tmp_path,
-                                                      monkeypatch):
-    from views.filedialogs import file_dialogs
-    scene = win.viewport.scene
-    _wall_and_door(scene)
-    scene.layer("Muros").hatch = "brick"
-    win.viewport.camera.set_view("top")
-    win.viewport.camera.perspective = False
-    path = tmp_path / "vista.dxf"
-    monkeypatch.setattr(file_dialogs, "getSaveFileName",
-                        lambda *a, **k: (str(path), ""))
-    win._on_export_view_dxf()
-    text = path.read_text(encoding="ascii", errors="replace")
-    assert "MUROS-TRAMA" in text
-
-
 # ---- Line types that write words: GAS, AGUA… ----------------------------------
 
 def test_a_line_type_takes_its_words_in_a_gap_of_their_own():

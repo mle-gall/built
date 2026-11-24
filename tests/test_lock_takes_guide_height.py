@@ -12,6 +12,7 @@ lock stayed free. Now it goes through the cursor ray, as the on-edge snap.
 """
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import sys
 
 import pytest
@@ -27,22 +28,17 @@ ALTURA = 0.825
 
 
 @pytest.fixture
-def vp():
+def vp(native_host):
     from core.guide import Guide
-    from views.main_window import MainWindow
-    win = MainWindow()
+    win = native_host.window
     v = win.viewport
-    v.resize(1200, 800)
+    native_host.resize(1200, 800, 1.)
     # A horizontal guide 3 m behind the start, at the height to fetch.
     v.scene.guides.append(Guide(QVector3D(0, 3.0, ALTURA), QVector3D(1, 0, 0)))
     v.camera.target = QVector3D(0, 1, 0.5)
     win._activate_tool("line")
     v.active_tool.start_point = QVector3D(0.5, 0, 0)
-    try:
-        yield v
-    finally:
-        win._saved_version = v.scene.version
-        win.close()
+    yield v
 
 
 def _hover_guide(v, x, mods=Qt.NoModifier):

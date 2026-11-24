@@ -13,6 +13,7 @@ the same layers, on built meshes, on a lazy placement and on loose
 geometry, with an edge's own layer inside an object kept."""
 from __future__ import annotations
 
+from tests.shell_isolation import one_off_export, restore_shell_patches  # noqa: F401
 import os
 
 import numpy as np
@@ -182,37 +183,29 @@ def test_with_a_section_cut_too(tmp_path, lazy):
     vp.close()
 
 
-def test_the_exports_hand_the_arrays_over(tmp_path, monkeypatch):
+def test_the_exports_hand_the_arrays_over(native_host, tmp_path, monkeypatch):
     """The SVG and DXF exports of a view with layers no longer walk."""
     from core import hlr as H
-    from views import main_window as mw
-    from views.main_window import MainWindow
     _app()
-    win = MainWindow()
-    try:
-        scene = _scene(tmp_path, False)
-        win.viewport.scene.layers[:] = scene.layers
-        groups = list(scene.groups)
-        scene.groups.clear()                 # one parent per placement
-        win.viewport.scene.groups[:] = groups
-        for f in list(scene.loose_mesh.faces):
-            win.viewport.scene.loose_mesh.add_face(
-                [V(v) for v in f.vertices]).attrs.update(f.attrs)
-        win.viewport.scene.version += 1
-        win.viewport.notify_scene_changed()
-        walked = []
-        real = H.collect_geometry
-        monkeypatch.setattr(H, "collect_geometry",
-                            lambda *a, **k: (walked.append(1), real(*a, **k))[1])
-        groups = win._view_line_groups()
-        assert groups and walked == []
-        monkeypatch.setattr(mw.file_dialogs, "getSaveFileName",
-                            lambda *a, **k: (str(tmp_path / "v.dxf"), ""))
-        win._on_export_view_dxf()
-        assert (tmp_path / "v.dxf").exists() and walked == []
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_host.window
+    scene = _scene(tmp_path, False)
+    win.viewport.scene.layers[:] = scene.layers
+    groups = list(scene.groups)
+    scene.groups.clear()                 # one parent per placement
+    win.viewport.scene.groups[:] = groups
+    for f in list(scene.loose_mesh.faces):
+        win.viewport.scene.loose_mesh.add_face(
+            [V(v) for v in f.vertices]).attrs.update(f.attrs)
+    win.viewport.scene.version += 1
+    win.viewport.notify_scene_changed()
+    walked = []
+    real = H.collect_geometry
+    monkeypatch.setattr(H, "collect_geometry",
+                        lambda *a, **k: (walked.append(1), real(*a, **k))[1])
+    groups = win._view_line_groups()
+    assert groups and walked == []
+    one_off_export(win, "dxf", tmp_path / "v.dxf")
+    assert (tmp_path / "v.dxf").exists() and walked == []
 
 
 def test_a_hidden_face_inside_an_object_hides_nothing():
