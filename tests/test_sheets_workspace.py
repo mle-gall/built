@@ -382,6 +382,47 @@ def test_inspector_edits_are_steps_of_the_document_history(host):
     assert host.errors == []
 
 
+def test_the_next_dimension_level_and_ground_line_take_the_last_look(host):
+    """Remembered looks (sheets::looks, the composer's _last_cota_style and
+    kin): an edited look dresses the next item of its kind — never its
+    units, never where its text sits along it — and the dimension's lasts
+    into the next session, the others not."""
+    import ingetrazo_core as NATIVE
+    from core.composition import AddItemCommand
+    from views import wgpu_sheets
+    ws = _sheets(host)
+    comp = ws.composer.comp
+    scene = ws.composer._scene()
+
+    def add(item):
+        ws._run(AddItemCommand(comp, item))
+        return item
+    first = add(NATIVE.sheet_new_cota(comp, (20.0, 20.0), (60.0, 20.0), 5.0, "", scene))
+    assert first.ends == "arrow"
+    _set(host, first, ends="tick", color="#c03020", text_mm=3.5, text_along="end", units="cm")
+    _set(host, first, x_mm=25.0)                      # a move teaches nothing
+    nxt = NATIVE.sheet_new_cota(comp, (20.0, 40.0), (60.0, 40.0), 5.0, "", scene)
+    assert (nxt.ends, nxt.color, nxt.text_mm, nxt.text_along) == ("tick", "#c03020", 3.5, "middle")
+    assert nxt.units != "cm"                          # the document's
+    radial = NATIVE.sheet_new_radial(comp, (80.0, 80.0), (90.0, 80.0), "radius", scene)
+    angular = NATIVE.sheet_new_angular(comp, (80.0, 80.0), (90.0, 80.0), (80.0, 70.0), 6.0)
+    assert (radial.ends, radial.color, angular.color) == ("tick", "#c03020", "#c03020")
+    level = add(NATIVE.sheet_new_item(comp, "nivel", 30.0, 30.0, 30.0, 30.0, scene))
+    _set(host, level, size_mm=4.0, mirror=True, text="NPT")
+    level2 = NATIVE.sheet_new_item(comp, "nivel", 50.0, 30.0, 50.0, 30.0, scene)
+    assert (level2.size_mm, level2.mirror, level2.text) == (4.0, True, "NPT")
+    ground = add(NATIVE.sheet_new_item(comp, "terreno", 10.0, 90.0, 80.0, 90.0, scene))
+    assert ground.stroke_mm == 0.5
+    _set(host, ground, ground="band", band_mm=4.0)
+    ground2 = NATIVE.sheet_new_item(comp, "terreno", 10.0, 100.0, 80.0, 100.0, scene)
+    assert (ground2.ground, ground2.band_mm, ground2.stroke_mm) == ("band", 4.0, 0.5)
+    wgpu_sheets.Workspace(ws.composer)                # a new session
+    again = NATIVE.sheet_new_cota(comp, (20.0, 60.0), (60.0, 60.0), 5.0, "", scene)
+    assert (again.ends, again.color) == ("tick", "#c03020")
+    assert NATIVE.sheet_new_item(comp, "nivel", 50.0, 50.0, 50.0, 50.0, scene).size_mm != 4.0
+    assert host.errors == []
+
+
 def test_the_sheet_and_several_items_through_the_inspector(host):
     import json
     ws = _sheets(host)

@@ -113,5 +113,9 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(super::annots::sheet_frame_annotations, m)?)?;
     m.add_function(wrap_pyfunction!(super::annots::sheet_frame_annots, m)?)?;
     m.add_class::<super::annots::SheetContext>()?;
+    m.add_function(wrap_pyfunction!(super::looks::sheet_remember_look, m)?)?;
+    m.add_function(wrap_pyfunction!(super::looks::sheet_restore_looks, m)?)?;
+    m.add_function(wrap_pyfunction!(super::looks::sheet_look, m)?)?;
+    m.add_function(wrap_pyfunction!(super::looks::sheet_forget_looks, m)?)?;
     Ok(())
 }

@@ -214,13 +214,40 @@ impl Page {
     /// taken (snapped when it caught the model). The linear dimension takes
     /// two points (⇧ on the second puts it on a row or a column), then
     /// the click that sets its offset makes it.
+    /// The page's linear dimensions' lines (a new one's offset lines up on them).
+    fn cota_lines(&self) -> Vec<([f64; 2], [f64; 2])> {
+        let Some(doc) = self.doc.as_ref() else { return Vec::new() };
+        doc.items.iter().filter(|i| i.kind == "dimension" && !i.hidden)
+            .filter_map(|i| crate::sheet_tools::cota_line(&i.data["fields"])).collect()
+    }
+    /// The offset the cursor at `mm` gives the dimension line of a→b, onto a
+    /// parallel dimension's line within ~7 px (`snap_sep_to_cotas`), and
+    /// the end of the line it took.
+    fn offset_at(&self, a: [f64; 2], b: [f64; 2], axis: &str, mm: [f64; 2]) -> (f64, Option<[f64; 2]>) {
+        let thr = 7.0 / f64::from(self.zoom.max(1e-6));
+        crate::sheet_tools::snap_sep(a, b, axis, mm, &self.cota_lines(), thr)
+    }
+    /// The one dimension selected, unlocked: where a chain or a baseline
+    /// run carries on from (`_seed_run_from`, AutoCAD's DIMCONTINUE and
+    /// DIMBASELINE) — its points, its line's offset, its axis.
+    fn run_seed(&self) -> Option<([f64; 2], [f64; 2], f64, String)> {
+        let [k] = self.selection.as_slice() else { return None };
+        let i = self.item(*k).filter(|i| i.kind == "dimension" && !i.locked)?;
+        let f = &i.data["fields"];
+        let n = |k: &str| f.get(k).and_then(J::as_f64).unwrap_or(0.0);
+        let (x, y) = (n("x_mm"), n("y_mm"));
+        Some(([x, y], [x + n("dx_mm"), y + n("dy_mm")], n("sep_mm"),
+              f.get("axis").and_then(J::as_str).unwrap_or("").to_string()))
+    }
+
     fn pick_pointer(&mut self, kind: &str, p: Pos2, mods: u8, out: &mut Vec<String>) {
-        use crate::sheet_tools::{sep_of, snap_at, Pt};
+        use crate::sheet_tools::{snap_at, Pt};
         if kind == "release" {
             return;                       // a click is its press; the release adds nothing
         }
         let mm = self.to_mm(p);
         let thr = 7.0 / f64::from(self.zoom.max(1e-6));
+        let seed = if matches!(kind, "press" | "double") { self.run_seed() } else { None };
         let pick = self.pick.get_or_insert_with(|| crate::sheet_tools::Pick { tool: self.tool.clone(), ..Default::default() });
         if pick.tool != self.tool {
             *pick = crate::sheet_tools::Pick { tool: self.tool.clone(), ..Default::default() };
@@ -230,13 +257,36 @@ impl Page {
             "cota_radio" => false,
             _ => pick.sep.is_none() && pick.pts.len() == 2,
         };
-        self.hot = if offsetting { None } else { snap_at(&self.snaps, mm, thr) };
+        let sep_dot = match self.pick.as_ref() {
+            Some(pk) if offsetting && pk.tool != "cota_ang" => self.offset_at(pk.pts[0].p, pk.pts[1].p, &pk.axis, mm).1,
+            _ => None,
+        };
+        // Offsetting, the dot shows the parallel dimension the line lines up on.
+        self.hot = if offsetting { sep_dot.map(Pt::free) } else { snap_at(&self.snaps, mm, thr) };
         self.cursor = "crosshair";
         if !matches!(kind, "press" | "double") {
             return;
         }
         let mut pt = self.hot.clone().unwrap_or_else(|| Pt::free(mm));
+        let sep_here = match self.pick.as_ref() {
+            Some(pk) if pk.pts.len() >= 2 => self.offset_at(pk.pts[0].p, pk.pts[1].p, &pk.axis, mm).0,
+            _ => 0.0,
+        };
         let Some(pick) = self.pick.as_mut() else { return };
+        if matches!(pick.tool.as_str(), "cota_cadena" | "cota_base") && pick.pts.is_empty() {
+            if let Some((a, b, sep, axis)) = seed {
+                // Carrying on from the selected dimension: this click is
+                // already the run's next point.
+                pick.pts = vec![Pt::free(a), Pt::free(b)];
+                pick.sep = Some(sep);
+                pick.axis = axis;
+                pick.placed = 1;
+                if offsetting || self.hot.is_none() {
+                    self.hot = snap_at(&self.snaps, mm, thr);
+                }
+                pt = self.hot.clone().unwrap_or_else(|| Pt::free(mm));
+            }
+        }
         if pick.tool == "cota_ang" && mods & 4 != 0 && !pick.pts.is_empty() && pick.pts.len() < 3 {
             pt = Pt::free(crate::sheet_tools::ang_step(pt.p, &pick.pts));
         }
@@ -282,7 +332,7 @@ impl Page {
             }
             ("cota", _) => {
                 let (a, b) = (&pick.pts[0], &pick.pts[1]);
-                let sep = sep_of(a.p, b.p, &pick.axis, mm);
+                let sep = sep_here;
                 let body = serde_json::json!({"a": a.json(), "b": b.json(), "sep": sep, "axis": pick.axis});
                 out.push(format!("sheets:cota\u{1f}{body}"));
                 self.pick = None;
@@ -308,10 +358,13 @@ impl Page {
                 };
                 let Some(run_sep) = pick.sep else {
                     let (a, b) = (pick.pts[0].p, pick.pts[1].p);
-                    if mods & 4 != 0 {
-                        pick.axis = crate::sheet_tools::axis_out(a, b, mm, &pick.axis);
-                    }
-                    let sep = sep_of(a, b, &pick.axis, mm);
+                    let sep = if mods & 4 != 0 {
+                        let was = pick.axis.clone();
+                        pick.axis = crate::sheet_tools::axis_out(a, b, mm, &was);
+                        if pick.axis == was { sep_here } else { crate::sheet_tools::sep_of(a, b, &pick.axis, mm) }
+                    } else {
+                        sep_here
+                    };
                     pick.sep = Some(sep);
                     pick.placed = 1;
                     out.push(one(&pick.pts[0], &pick.pts[1], sep, &pick.axis));
@@ -349,7 +402,7 @@ impl Page {
 
     /// The tool's clicks so far and the snap dot, over the page.
     fn paint_pick(&self, painter: &egui::Painter) {
-        use crate::sheet_tools::{line_ends, sep_of};
+        use crate::sheet_tools::line_ends;
         let stroke = Stroke::new(1.0_f32, ACCENT);
         if let (Some(pick), Some(cur)) = (&self.pick, self.pointer_mm) {
             let scr = |q: [f64; 2]| self.to_screen(q[0], q[1]);
@@ -395,7 +448,7 @@ impl Page {
                 }
                 (_, 2) => {
                     let (a, b) = (pick.pts[0].p, pick.pts[1].p);
-                    let (a2, b2) = line_ends(a, b, sep_of(a, b, &pick.axis, cur), &pick.axis);
+                    let (a2, b2) = line_ends(a, b, self.offset_at(a, b, &pick.axis, cur).0, &pick.axis);
                     for (p, q) in [(a, a2), (b, b2), (a2, b2)] {
                         painter.extend(egui::Shape::dashed_line(&[scr(p), scr(q)], stroke, 4.0, 3.0));
                     }
@@ -1375,6 +1428,76 @@ mod tests {
         assert!(p.pick.is_none());
         p.pointer("press", at(&p, 10.0, 10.0), 1, 0, &mut out);
         assert!(p.key("Escape", 0, &mut out) && p.pick.is_none());
+    }
+
+    /// The page with a dimension from (100, 60) to (140, 60), its line 10 mm above.
+    fn page_with_a_dimension() -> Page {
+        let mut p = page();
+        p.set(r#"{"key":7,"size":[420,297],"margin":10,"border":{"on":false},"guides":{"v":[],"h":[]},
+            "items":[{"key":1,"kind":"frame","rect":[20,20,190,150],"locked":false,"hidden":false,"editable":true,"frame":{}},
+                     {"key":4,"kind":"dimension","rect":[100,50,40,10],"locked":false,"hidden":false,"editable":false,
+                      "fields":{"x_mm":100.0,"y_mm":60.0,"dx_mm":40.0,"dy_mm":0.0,"sep_mm":-10.0,"axis":""}}]}"#.into());
+        p
+    }
+
+    fn cota_of(action: &str) -> serde_json::Value {
+        serde_json::from_str(action.strip_prefix("sheets:cota\u{1f}").unwrap()).unwrap()
+    }
+
+    #[test]
+    fn a_dimension_s_offset_lines_up_on_a_parallel_one() {
+        let mut p = page_with_a_dimension();
+        p.tool = "cota".into();
+        let mut out = vec![];
+        for (x, y) in [(50.0, 60.0), (90.0, 60.0)] {
+            p.pointer("press", at(&p, x, y), 1, 0, &mut out);
+            p.pointer("release", at(&p, x, y), 1, 0, &mut out);
+        }
+        // 1.5 mm off the other's line (3.5 mm is ~7 px at this zoom): on it,
+        // the dot at its nearer end.
+        p.pointer("move", at(&p, 70.0, 51.5), 0, 0, &mut out);
+        assert_eq!(p.hot.as_ref().map(|h| h.p), Some([100.0, 50.0]));
+        p.pointer("press", at(&p, 70.0, 51.5), 1, 0, &mut out);
+        assert!((cota_of(&out[0])["sep"].as_f64().unwrap() - -10.0).abs() < 1e-9, "{out:?}");
+        // Far from it: free.
+        out.clear();
+        for (x, y) in [(50.0, 60.0), (90.0, 60.0), (70.0, 45.0)] {
+            p.pointer("press", at(&p, x, y), 1, 0, &mut out);
+            p.pointer("release", at(&p, x, y), 1, 0, &mut out);
+        }
+        assert!((cota_of(&out[0])["sep"].as_f64().unwrap() - -15.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_run_carries_on_from_the_selected_dimension() {
+        let mut p = page_with_a_dimension();
+        p.set_selection(vec![4]);
+        p.tool = "cota_cadena".into();
+        let mut out = vec![];
+        // The first click is already the next point: from the selected
+        // one's second end, on its line.
+        p.pointer("press", at(&p, 170.0, 60.0), 1, 0, &mut out);
+        p.pointer("release", at(&p, 170.0, 60.0), 1, 0, &mut out);
+        assert_eq!(out.len(), 1, "{out:?}");
+        let c = cota_of(&out[0]);
+        assert_eq!(c["a"]["p"], serde_json::json!([140.0, 60.0]));
+        assert_eq!(c["b"]["p"], serde_json::json!([170.0, 60.0]));
+        assert!((c["sep"].as_f64().unwrap() - -10.0).abs() < 1e-9);
+        // A baseline carries on from its first end, a row further out.
+        let mut p = page_with_a_dimension();
+        p.set_selection(vec![4]);
+        p.tool = "cota_base".into();
+        out.clear();
+        p.pointer("press", at(&p, 170.0, 60.0), 1, 0, &mut out);
+        let c = cota_of(&out[0]);
+        assert_eq!(c["a"]["p"], serde_json::json!([100.0, 60.0]));
+        assert!((c["sep"].as_f64().unwrap() - -(10.0 + p.run_step)).abs() < 1e-9);
+        // Nothing selected: a run starts from scratch.
+        let mut p = page_with_a_dimension();
+        p.tool = "cota_cadena".into();
+        out.clear();
+        p.pointer("press", at(&p, 170.0, 60.0), 1, 0, &mut out);
+        assert!(out.is_empty() && p.pick.as_ref().unwrap().pts.len() == 1);
     }
 
     #[test]

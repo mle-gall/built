@@ -253,7 +253,10 @@ class _Act:
 # ---- The workspace ---------------------------------------------------------------
 class Workspace:
     def __init__(self, composer):
+        import ingetrazo_core as NATIVE
         self.composer = composer
+        NATIVE.sheet_forget_looks()       # a new session: the saved dimension look only (sheets::looks)
+        NATIVE.sheet_restore_looks()
         self.shown = False
         self.view = None
         self._sent = {}
@@ -472,7 +475,10 @@ class Workspace:
                 commands.append(EditItemCommand(model, changes))
                 self._forget_render(model)
         if commands:
+            import ingetrazo_core as NATIVE
             self._run(commands[0] if len(commands) == 1 else CompoundCommand(commands))
+            for c in commands:                # the next one of its kind is born with this look
+                NATIVE.sheet_remember_look(c.item, list(c.after))
 
     def _move(self, arg: str) -> None:
         """``key:x:y:w:h;…`` from a gesture on the page."""
