@@ -216,9 +216,7 @@ def test_live_preview():
     assert "rad → 70,7°" in rows(model)["preview"][3]
 
 
-def test_preferences_dialog_applies_the_panel(scene, tmp_path):
-    from PySide6.QtCore import QSettings
-    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path))
+def test_preferences_dialog_applies_the_panel(scene, tmp_path, private_settings):
     from tests.units_chrome import edit_unit
     win = SimpleNamespace(viewport=SimpleNamespace(scene=scene, update=lambda: None))
     edit_unit(win, "for_new", 0)

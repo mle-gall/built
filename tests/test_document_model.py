@@ -72,6 +72,13 @@ def test_copy_of_open_document_edits_its_copied_definition():
 
 
 def placements():
+    """Live placements once nothing is waiting to be freed: Python's
+    garbage, then the handles dropped while the document was busy, which
+    are freed on its next use (doc/mod.rs ``drain_pending``; making a
+    placement drains them). Another file's leftovers on the same
+    pytest-xdist worker were freed between two counts."""
+    gc.collect()
+    Group()
     gc.collect()
     return N.doc_stats()["placements"]
 

@@ -647,9 +647,7 @@ def test_the_nested_files_copies_of_their_tags_go(tmp_path):
 # ---- 3. the window ---------------------------------------------------------
 
 @pytest.fixture
-def win(monkeypatch, tmp_path):
-    from PySide6.QtCore import QSettings
-    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path / "qs"))
+def win(monkeypatch, tmp_path, private_settings):
     monkeypatch.setenv("INGETRAZO_AUTOSAVE_DIR", str(tmp_path / "autosave"))
     from views.main_window import MainWindow
     w = MainWindow()

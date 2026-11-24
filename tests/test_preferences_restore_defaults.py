@@ -157,8 +157,7 @@ def test_cancel_after_restore_touches_nothing(settings_file):
     assert win.viewport.edit_rest_mode == "hide"
 
 
-def test_restore_does_not_copy_the_document_units_to_new_documents(tmp_path):
-    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path))
+def test_restore_does_not_copy_the_document_units_to_new_documents(tmp_path, private_settings):
     from core import units
     from views.main_window import MainWindow
     from views.settings_sheet import SettingsSheet

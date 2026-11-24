@@ -26,10 +26,7 @@ SEP = cs.SEP
 
 
 @pytest.fixture(autouse=True)
-def _throwaway_settings(tmp_path, monkeypatch):
-    QSettings.setDefaultFormat(QSettings.IniFormat)
-    for scope in (QSettings.UserScope, QSettings.SystemScope):
-        QSettings.setPath(QSettings.IniFormat, scope, str(tmp_path / "settings"))
+def _throwaway_settings(private_settings, monkeypatch):
     QSettings().clear()
     monkeypatch.setenv("INGETRAZO_STORE", "0")
     ss._PENDING.clear()

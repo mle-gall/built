@@ -38,17 +38,11 @@ _app = QApplication.instance() or QApplication([])
 
 
 @pytest.fixture
-def win(tmp_path, monkeypatch):
+def win(tmp_path, monkeypatch, private_settings):
     # A settings store of this test's own. Qt's, pointed elsewhere and put
     # back: patching PySide6.QtCore.QSettings instead stuck to every module
     # first imported during the test (views/fold_section.py kept writing to
     # this tmp file, and later tests read another store).
-    import sys
-    store = tmp_path / "settings"
-    store.mkdir()
-    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(store))
-    shared = next(m._settings_dir for n, m in list(sys.modules.items())
-                  if n.endswith("conftest") and hasattr(m, "_settings_dir"))
     # Isolate the user plugin folder too (test_extension_api.py's own
     # pattern) — on a machine with a user extension installed,
     # MainWindow() would discover and load it, and
@@ -66,7 +60,6 @@ def win(tmp_path, monkeypatch):
     w._workspace = None                 # let the window close without prompts
     w._saved_version = w.viewport.scene.version
     w.close()
-    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, shared)
 
 
 def _app_for(win, key="myext"):
