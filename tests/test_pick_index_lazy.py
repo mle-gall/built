@@ -7,15 +7,12 @@ with the ordinary index."""
 from __future__ import annotations
 
 import math
-import sys
 
 from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication
-
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
+from core.input_types import QPointF
 
 
 def _cube():
@@ -30,12 +27,10 @@ def _cube():
 
 
 @pytest.fixture
-def vp():
+def vp(native_host):
     from core.group import Group
-    from views.main_window import MainWindow
-    win = MainWindow()
-    v = win.viewport
-    v.resize(1000, 700)
+    native_host.resize(1000, 700, 1.)
+    v = native_host.viewport
     v.scene.guides.clear()
     proto = _cube()
     for i in range(6):
@@ -51,11 +46,7 @@ def vp():
     v.camera.set_view("top")
     v.camera.perspective = False
     v.camera.fit_to(V(-2, -2, 0), V(18, 12, 1))
-    try:
-        yield v
-    finally:
-        win._saved_version = v.scene.version
-        win.close()
+    return v
 
 
 def _lazy(v, on, cap=None):
@@ -189,8 +180,6 @@ def test_occlusion_is_the_same(vp):
     def run():
         out = []
         for p in probes:
-            vp._last_mouse_pos = None
-            from PySide6.QtCore import QPointF
             vp._last_mouse_pos = QPointF(*vp._world_to_pixel(p))
             out.append(vp._is_occluded(p))
         return out
@@ -200,22 +189,10 @@ def test_occlusion_is_the_same(vp):
     assert run() == full
 
 
-def test_with_a_frame_on_screen_the_depth_cull_changes_no_answer(vp):
+def test_with_a_frame_on_screen_the_depth_cull_changes_no_answer(vp, native_gpu_host):
     """With a painted frame the lazy mode also leaves out placements wholly
     behind what the screen shows; picks and snap edges stay the same."""
-    from PySide6.QtGui import QGuiApplication
-    if QGuiApplication.platformName() == "offscreen":
-        # The offscreen platform opens a compatibility-profile context whose
-        # instanced draw of many placements crashes in the driver (it did
-        # before 0.5.7 too; xcb, hardware or llvmpipe, draws them fine).
-        pytest.skip("instanced draw needs a real window platform")
-    win = vp.window()
-    win.show()
-    for _ in range(10):
-        QApplication.processEvents()
-    if not vp.keys_stand_in._can_create_surface():
-        pytest.skip("the Qt platform has no native GPU surface")
-    vp.camera.set_view("iso") if hasattr(vp.camera, "set_view") else None
+    vp.camera.set_view("iso")
     vp.camera.fit_to(V(-2, -2, 0), V(18, 12, 1))
     live_image(vp)
     if vp._depth_world_at(10, 10) is None:

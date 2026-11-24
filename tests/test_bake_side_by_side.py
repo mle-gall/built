@@ -7,15 +7,13 @@ its own entry. Skipped without the engine."""
 from __future__ import annotations
 
 import gc
-import os
 import random
 import threading
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
 import core._native as _native  # noqa: E402
 from core import mesh as M  # noqa: E402
@@ -25,7 +23,6 @@ from formats import igz  # noqa: E402
 from tests.test_deferred_mesh import _random_scene  # noqa: E402
 from views import array_bake  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
 nat = _native.native
 pytestmark = pytest.mark.skipif(
     nat is None or _native.qt_hypot() is None,
@@ -75,49 +72,39 @@ def _doc(tmp_path, seed):
     return path
 
 
-def _window(path):
-    from views.main_window import MainWindow
-    win = MainWindow()
-    assert win.open_path(path) is not False
-    # The fork's open presents first and leaves the drawing to the first
-    # paint (f5324e00); upstream built it under the open's bar. The bakes
-    # side by side are prepare_drawing's either way: asked for here.
-    win.viewport.prepare_drawing()
-    return win
-
-
-def _close(win):
-    win._saved_version = win.viewport.scene.version
-    win.close()
+def _open_view(win, path):
+    assert win.open_path(str(path)) is not False
+    vp = win.viewport
+    vp.prepare_drawing()
+    return vp
 
 
 @pytest.mark.parametrize("seed", range(4))
-def test_each_bake_is_the_one_made_alone(tmp_path, monkeypatch, seed):
+def test_each_bake_is_the_one_made_alone(native_window, tmp_path, monkeypatch, seed):
     monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)
     monkeypatch.setattr(array_bake, "_PREBAKE_MIN_FACES", 0)
     path = _doc(tmp_path, seed)
-    together = _window(path)
+    from shutil import copyfile
+    second = tmp_path / "sequential.igz"
+    copyfile(path, second)
+    together = _open_view(native_window, path)
     with monkeypatch.context() as m:
         m.setattr(array_bake, "prebake", lambda vp, jobs: None)
-        alone = _window(path)
-    try:
-        assert any(type(g.mesh) is M.DeferredMesh
-                   for g in together.viewport._placements())
-        a, b = _entries(together.viewport), _entries(alone.viewport)
-        for k, (x, y) in enumerate(zip(a, b)):
-            # Numbered per process, the same order in both.
-            x["uid"] = y["uid"] = None
-            assert x.keys() == y.keys()
-            for field in x:
-                assert x[field] == y[field], (k, field)
-        # The test tells the two paints apart, or the first assert says little.
-        assert a[0]["vcol"] != a[1]["vcol"]
-    finally:
-        _close(together)
-        _close(alone)
+        alone = _open_view(native_window, second)
+    assert any(type(g.mesh) is M.DeferredMesh
+               for g in together._placements())
+    a, b = _entries(together), _entries(alone)
+    for k, (x, y) in enumerate(zip(a, b)):
+        # Numbered per process, the same order in both.
+        x["uid"] = y["uid"] = None
+        assert x.keys() == y.keys()
+        for field in x:
+            assert x[field] == y[field], (k, field)
+    # The test tells the two paints apart, or the first assert says little.
+    assert a[0]["vcol"] != a[1]["vcol"]
 
 
-def test_small_meshes_are_not_worth_a_thread(tmp_path, monkeypatch):
+def test_small_meshes_are_not_worth_a_thread(native_window, tmp_path, monkeypatch):
     monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)
     path = _doc(tmp_path, 1)
     where = []
@@ -127,14 +114,11 @@ def test_small_meshes_are_not_worth_a_thread(tmp_path, monkeypatch):
         where.append(threading.current_thread() is threading.main_thread())
         return real(vp, mesh, paint, msig)
     monkeypatch.setattr(array_bake, "_bake", spy)
-    win = _window(path)
-    try:
-        assert where and all(where)
-    finally:
-        _close(win)
+    vp = _open_view(native_window, path)
+    assert where and all(where)
 
 
-def test_the_threads_did_the_baking_and_nothing_is_left(tmp_path, monkeypatch):
+def test_the_threads_did_the_baking_and_nothing_is_left(native_window, tmp_path, monkeypatch):
     monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)
     monkeypatch.setattr(array_bake, "_PREBAKE_MIN_FACES", 0)
     path = _doc(tmp_path, 1)
@@ -145,15 +129,12 @@ def test_the_threads_did_the_baking_and_nothing_is_left(tmp_path, monkeypatch):
         where.append(threading.current_thread() is threading.main_thread())
         return real(vp, mesh, paint, msig)
     monkeypatch.setattr(array_bake, "_bake", spy)
-    win = _window(path)
-    try:
-        assert where and not any(where)
-        assert win.viewport._prebaked is None
-        n = len(where)
-        _entries(win.viewport)
-        assert len(where) == n, "a prebaked mesh baked again"
-    finally:
-        _close(win)
+    vp = _open_view(native_window, path)
+    assert where and not any(where)
+    assert vp._prebaked is None
+    n = len(where)
+    _entries(vp)
+    assert len(where) == n, "a prebaked mesh baked again"
 
 
 def _lazy_mesh(tmp_path):
