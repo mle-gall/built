@@ -66,23 +66,14 @@ _probe_heights: dict = {}
 
 
 def panel_tab_height(bar) -> int:
-    """A side panel's tab height for ``bar``'s font and style: the style's
-    tab with no button in it (Qt makes a tab with a cross taller), and
-    with the icon a side panel's tab has (that sets its height). The
-    project tabs and the scene tabs are this tall too."""
+    """The text tab height for the current font and style."""
     key = (bar.font().key(), bar.style().name())
     h = _probe_heights.get(key)
     if h is None:
-        from PySide6.QtCore import QSize
-        from PySide6.QtGui import QIcon, QPixmap
-        from views.main_window import DOCK_TAB_ICON_PX
         probe = QTabBar()
         probe.setFont(bar.font())
         probe.setStyle(bar.style())
-        probe.setIconSize(QSize(DOCK_TAB_ICON_PX, DOCK_TAB_ICON_PX))
-        pix = QPixmap(DOCK_TAB_ICON_PX, DOCK_TAB_ICON_PX)
-        pix.fill(Qt.transparent)
-        probe.addTab(QIcon(pix), "Xg")
+        probe.addTab("Xg")
         h = _probe_heights[key] = probe.tabSizeHint(0).height()
         probe.deleteLater()
     return h
