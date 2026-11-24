@@ -53,6 +53,7 @@ mod shell_commands;
 mod report_sheets;
 mod inspector_host;
 mod shell_events;
+mod deliveries_host;
 pub mod ui;
 mod host_context;
 mod inspector;
@@ -3251,6 +3252,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     report_sheets::register(m)?;
     inspector_host::register(m)?;
     shell_events::register(m)?;
+    deliveries_host::register(m)?;
     native_view_actions::register(m)?;
     plugin_workspace::register(m)?;
     m.add_class::<link_watch::LinkWatch>()?;

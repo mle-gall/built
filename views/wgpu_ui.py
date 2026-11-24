@@ -426,8 +426,8 @@ def before_frame(view) -> None:
     _selection(view, win, active)
     _cluster(view, win)
     _form(view, win)
-    from views import wgpu_deliveries
-    wgpu_deliveries.bind(win)
+    from ingetrazo_render import bind_deliveries
+    bind_deliveries(win)
     _sync_project_rows(view, win)
     from views import wgpu_library
     wgpu_library.before_frame(view, win)
@@ -2729,8 +2729,8 @@ def _run(win, actions, source_view=None) -> None:
             elif arg == "active" and data.get("active"):
                 _select(win, _tree_groups(view, data["active"]))
             else:
-                from views import wgpu_deliveries
-                wgpu_deliveries.action(win, view, arg)
+                from ingetrazo_render import delivery_action
+                delivery_action(win, view, arg)
         elif kind == "act" and arg.startswith("form-"):
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             if view is not None:

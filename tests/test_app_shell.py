@@ -349,7 +349,7 @@ def test_open_unitless_mesh_preserves_original_tab_on_cancel_or_failure(host, tm
 
 
 def test_scene_menu_acts_on_marked_scene_and_export_uses_chosen_format(host, monkeypatch):
-    from views import wgpu_deliveries
+    import ingetrazo_render as wgpu_deliveries
     assert host.open(FIXTURE)
     win = host.window
     scene = host.viewport.scene
@@ -362,7 +362,7 @@ def test_scene_menu_acts_on_marked_scene_and_export_uses_chosen_format(host, mon
     host.menu("scene_show")
     assert win._scene_tabs.marked_view() is copy
     formats = []
-    monkeypatch.setattr(wgpu_deliveries, "export_form",
+    monkeypatch.setattr(wgpu_deliveries, "delivery_export_form",
                         lambda _w, key, one_off, fmt: formats.append((key, one_off, fmt)))
     for fmt in ("ifc", "glb", "dae", "stl", "obj", "dxf"):
         win._registry_actions["menu:export:" + fmt].trigger()

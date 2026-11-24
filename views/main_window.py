@@ -3139,7 +3139,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         actions.append(import_menu)
 
 
-        from views.wgpu_deliveries import export_form
+        from ingetrazo_render import delivery_export_form as export_form
         delivery_export = QAction(tr("Export…"), self)
         delivery_export.triggered.connect(lambda: export_form(self, one_off=True))
         actions.append(delivery_export)
@@ -5909,7 +5909,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             dialog.show()
 
     def _on_export_stl(self):
-        from views.wgpu_deliveries import export_form
+        from ingetrazo_render import delivery_export_form as export_form
         return export_form(self, one_off=True, initial_format="stl")
 
     def _on_export_obj(self) -> None:
@@ -5952,7 +5952,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self._export("COLLADA", "dae", tr("COLLADA (*.dae)"), dae_format.save_dae)
 
     def _on_export_view_dxf(self):
-        from views.wgpu_deliveries import export_form
+        from ingetrazo_render import delivery_export_form as export_form
         return export_form(self, one_off=True, initial_format="dxf")
 
     def _export(self, label: str, suffix: str, file_filter, writer) -> None:

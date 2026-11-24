@@ -88,8 +88,8 @@ def command(win, name, *args):
         from ingetrazo_render import show_report_sheet as show
         return show(win, name)
     if name == "delivery_export":
-        from views.wgpu_deliveries import export_form
-        return export_form(win, one_off=True)
+        from ingetrazo_render import delivery_export_form
+        return delivery_export_form(win, one_off=True)
     if name in ("cut", "copy", "paste", "paste_in_place"):
         return _clipboard.run(win, name)
     kind, _, arg = name.partition(":")
