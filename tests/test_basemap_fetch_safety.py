@@ -2,7 +2,7 @@
 """Regression checks for the Windows base-map crash (#327)."""
 from __future__ import annotations
 
-from PySide6.QtCore import QUrl
+from concurrent.futures import Future
 
 from georef.datum import SceneDatum
 from georef.tile_fetcher import TileFetcher
@@ -55,31 +55,22 @@ def test_missing_tiles_leave_paint_before_starting_network(monkeypatch):
     viewport.deleteLater()
 
 
-class _Signal:
-    def connect(self, callback):
-        self.callback = callback
+def test_tile_download_submits_the_tile_url_to_the_worker(tmp_path, monkeypatch):
+    from georef import transport
 
+    received = Future()
 
-class _Reply:
-    def __init__(self):
-        self.finished = _Signal()
+    def download(url, agent):
+        received.set_result(url)
+        return b""
 
-
-class _NetworkManager:
-    def get(self, request):
-        self.request = request
-        return _Reply()
-
-
-def test_tile_download_passes_an_explicit_qurl_to_qt(tmp_path):
+    monkeypatch.setattr(transport, "_download", download)
     fetcher = TileFetcher(TileCache(tmp_path))
-    manager = _NetworkManager()
-    fetcher._nam = manager
-
-    fetcher._start_download(PRESETS["osm"], 1, 2, 3)
-
-    assert isinstance(manager.request.url(), QUrl)
-    assert manager.request.url().toString() == "https://tile.openstreetmap.org/3/1/2.png"
+    try:
+        fetcher._start_download(PRESETS["osm"], 1, 2, 3)
+        assert received.result(timeout=5) == "https://tile.openstreetmap.org/3/1/2.png"
+    finally:
+        fetcher.cancel_all()
 
 
 def test_a_tile_on_disk_is_read_at_once_without_the_network(tmp_path):
