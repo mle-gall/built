@@ -1189,6 +1189,12 @@ impl PyMeshStore {
             .map(|r: super::command_facade::RebuiltPlane| (r.ran,r.rebuilt,r.dirty)))
     }
 
+    #[staticmethod]
+    fn command_rebuild_planar(mesh: &Bound<'_, PyAny>) -> PyResult<Option<(bool,usize,usize)>> {
+        Ok(super::command_facade::command_rebuild_planar(mesh)?
+            .map(|r: super::command_facade::RebuiltPlanar| (r.flat,r.rebuilt,r.dirty)))
+    }
+
     fn drawing_paint_owners(
         &self,
         before: &PyStoreSnapshot,

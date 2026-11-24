@@ -467,7 +467,7 @@ fn welded<'py>(mesh: &Obj<'py>, ring: &Obj<'py>) -> PyResult<Option<Vec<Obj<'py>
     ))
 }
 #[pyfunction]
-fn install_flat(
+pub(crate) fn install_flat(
     mesh: &Obj<'_>,
     store: bool,
     edges: &Obj<'_>,

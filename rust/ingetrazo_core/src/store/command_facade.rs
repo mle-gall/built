@@ -4,7 +4,7 @@
 mod erase;
 mod vertices;
 mod plane;
-pub(crate) use plane::{command_rebuild_plane, RebuiltPlane};
+pub(crate) use plane::{command_rebuild_plane, command_rebuild_planar, RebuiltPlane, RebuiltPlanar};
 pub(crate) use vertices::{command_move_vertices, command_transform_vertices, MovedVertices, VertexResult};
 pub(crate) use erase::{command_erase_cleanup, command_erase_selection, ErasedCleanup, ErasedSelection};
 use crate::math::Vec3;

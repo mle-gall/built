@@ -53,3 +53,29 @@ def test_plane_refusal_leaves_rows_untouched(monkeypatch):
     mesh._planned_points = {}
     assert MeshStore.command_rebuild_plane(mesh, (0.,0.,0.), (0.,0.,1.)) is None
     assert (fingerprint(mesh), mesh.revision) == before
+
+@pytest.mark.parametrize("kind", ["empty", "solid", "painted", "unpainted", "reversed"])
+def test_flat_rebuild_matches_history(monkeypatch, kind):
+    from core.history import RebuildPlanarFacesCommand
+    monkeypatch.setenv("INGETRAZO_STORE", "1")
+    def make():
+        scene = Scene()
+        mesh = scene.mesh
+        if kind == "empty":
+            return scene
+        loop = [(0,0,0),(2,0,0),(2,2,0),(0,2,0)]
+        f = mesh.add_face(list(reversed(loop)) if kind == "reversed" else loop)
+        if kind != "unpainted":
+            f.attrs.update({"mat":"ochre","texture":{"sw":1.}})
+        mesh.add_edge((0,0,0),(2,2,0)).curve = 13
+        if kind == "solid":
+            mesh.add_edge((0,0,0),(0,0,2))
+        return scene
+    actual, expected = make(), make()
+    start = actual.mesh._mut_serial
+    out = MeshStore.command_rebuild_planar(actual.mesh)
+    command = RebuildPlanarFacesCommand()
+    command.do(expected)
+    assert out == (command.flat,command.rebuilt,actual.mesh._mut_serial-start)
+    assert fingerprint(actual.mesh) == fingerprint(expected.mesh)
+    assert actual.mesh.revision == expected.mesh.revision

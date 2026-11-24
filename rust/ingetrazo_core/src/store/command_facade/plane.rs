@@ -151,3 +151,111 @@ pub(crate) fn command_rebuild_plane(
         dirty: serial(mesh)? - start,
     }))
 }
+
+pub(crate) struct RebuiltPlanar {
+    pub(crate) flat: bool,
+    pub(crate) rebuilt: usize,
+    pub(crate) dirty: usize,
+}
+
+fn inherit_flat_paint(
+    mesh: &Obj<'_>,
+    store: &Obj<'_>,
+    snapshot: &Obj<'_>,
+    hypot: &str,
+) -> PyResult<()> {
+    let own = snapshot
+        .getattr("own")?
+        .cast_into::<pyo3::types::PyDict>()?;
+    let table = snapshot.getattr("table")?;
+    if own.is_empty() && table.is_empty()? {
+        return Ok(());
+    }
+    let mut painted = std::collections::HashMap::new();
+    for (k, v) in own.iter() {
+        painted.insert(k.extract::<u128>()?, v.is_truthy()?);
+    }
+    let mut rows = Vec::new();
+    for (i, attrs) in table.try_iter()?.enumerate() {
+        if attrs?.is_truthy()? {
+            rows.push(i + 1);
+        }
+    }
+    let owners: Vec<(u128, u128, i64)> = store
+        .call_method1(
+            "drawing_paint_owners",
+            (snapshot.getattr("snap")?, painted, rows, hypot),
+        )?
+        .extract()?;
+    let view = mesh.py().import("core.store_mesh")?.getattr("FaceView")?;
+    for (face, source, row) in owners {
+        let attrs = snapshot.call_method1("_face_attrs", (source, row))?;
+        view.call1((mesh, face))?
+            .getattr("attrs")?
+            .call_method1("update", (attrs,))?;
+    }
+    Ok(())
+}
+
+pub(crate) fn command_rebuild_planar(mesh: &Obj<'_>) -> PyResult<Option<RebuiltPlanar>> {
+    let Some(hypot) = store_hypot(mesh)? else {
+        return Ok(None);
+    };
+    let py = mesh.py();
+    let h = crate::hypot_of(&hypot)?;
+    let store = mesh.getattr("_store")?;
+    let plane = {
+        let read = PyMeshStore::read(&store)?;
+        let s = &read.inner;
+        if s.state.order[1].live(&s.state.slots[1]).is_empty() {
+            None
+        } else {
+            s.drawing_plane(&[], h)
+        }
+    };
+    let Some([mut origin, mut normal]) = plane else {
+        return Ok(Some(RebuiltPlanar {
+            flat: false,
+            rebuilt: 0,
+            dirty: 0,
+        }));
+    };
+    let start = serial(mesh)?;
+    let snapshot = mesh.call_method0("capture_state")?;
+    let topo = py.import("core.topology")?;
+    let winding = topo.call_method1("winding_footprint", (mesh,))?;
+    let faces = mesh.getattr("faces")?;
+    if !faces.is_empty()? {
+        let first = faces.get_item(0)?;
+        origin = crate::math::xyz(&first.getattr("vertices")?.get_item(0)?)?.to_array();
+        normal = crate::math::xyz(&first.call_method0("normal")?)?.to_array();
+    }
+    let (segments, flagged) = PyMeshStore::read(&store)?
+        .inner
+        .drawing_plane_edges(origin, normal, h, true);
+    let flags = flags(mesh, flagged)?;
+    let (edges, regions) = crate::store::planar_api::planar_rebuild(
+        segments.into_pyobject(py)?.as_any(),
+        &vector(py, origin)?,
+        &vector(py, normal)?,
+    )?;
+    let rebuilt = regions.len();
+    planar_edits::install_flat(
+        mesh,
+        true,
+        edges.into_pyobject(py)?.as_any(),
+        regions.into_pyobject(py)?.as_any(),
+        flags.as_any(),
+        PyList::empty(py).as_any(),
+    )?;
+    inherit_flat_paint(mesh, &store, &snapshot, &hypot)?;
+    if !winding.is_none() {
+        topo.call_method1("orient_coplanar_faces", (mesh, winding))?;
+    }
+    mesh.call_method0("resplit_curves")?;
+    Ok(Some(RebuiltPlanar {
+        flat: true,
+        rebuilt,
+        dirty: serial(mesh)? - start,
+    }))
+}
