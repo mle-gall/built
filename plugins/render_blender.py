@@ -191,7 +191,8 @@ class SyncSession(QObject):
             self._seen_key = cam_key
             self._still_since = now
             return
-        if QApplication.mouseButtons() != Qt.NoButton:
+        from views import input_state
+        if input_state.mouse_buttons(self.panel.app.viewport) != Qt.NoButton:
             self._still_since = now          # still dragging, only paused
             return
         if (now - self._still_since) * 1000 < rb.SYNC_REST_MS:

@@ -142,16 +142,12 @@ def dispatch(h, ev) -> None:
     if kind in ("press", "release", "move"):
         if view is None or not getattr(view, "_ui_attached", False):
             return
-        held = qt_host.INPUT.get("buttons", 0)
-        if kind == "press":
-            held |= button
-        elif kind == "release":
-            held &= ~button
-        qt_host.INPUT.update(modifiers=int(mods), buttons=int(held), pos=(x, y))
+        held = h.input_state.modal_pointer(kind, x, y, button, mods)
         h._guard("modal pointer", wgpu_ui.pointer, view, kind,
                  MouseEvent(kind, x, y, button, held, mods))
         h.request_frame()
     elif kind == "key":
+        h.input_state.modifiers = mods
         event = KeyEvent(True, key, mods, text)
         if chrome_dialogs.current_sheet(win) is not None:
             h._guard("sheet key", chrome_dialogs.sheet_key, win, event)

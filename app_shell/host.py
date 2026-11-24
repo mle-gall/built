@@ -88,6 +88,8 @@ class Host:
         from app_shell.view import ShellView
         from app_shell.window import ShellWindow
         from app_shell import files, modal
+        from ingetrazo_core import WindowInput
+        self.input_state = WindowInput()
         self.window = ShellWindow(self)
         viewport = DocumentController(self)
         try:
@@ -414,7 +416,7 @@ class Host:
 
     def pointer(self, kind, x, y, button=0, held=0, modifiers=0, timestamp=0):
         from app_shell.events import ContextMenuEvent, MouseEvent
-        qt_host.INPUT.update(modifiers=int(modifiers), buttons=int(held), pos=(x, y))
+        self.input_state.pointer(x, y, held, modifiers)
         if kind == "press":
             self._front()
         view = self.view
@@ -432,7 +434,7 @@ class Host:
     def wheel(self, x, y, pixel_dx, pixel_dy, angle_dx, angle_dy, phase="none",
               modifiers=0, held=0, inverted=True, touch_screen=False):
         from app_shell.events import WheelEvent
-        qt_host.INPUT["modifiers"] = int(modifiers)
+        self.input_state.pointer(x, y, held, modifiers)
         if self._modal():
             return
         ev = WheelEvent(x, y, pixel_dx, pixel_dy, angle_dx, angle_dy, phase, modifiers, held, inverted, touch_screen)
@@ -441,6 +443,7 @@ class Host:
 
     def gesture(self, kind, value, x, y, modifiers=0):
         from app_shell.events import NativeGestureEvent
+        self.input_state.pointer(x, y, self.input_state.buttons, modifiers)
         if self._modal():
             return
         ev = NativeGestureEvent(kind, value, x, y, modifiers=modifiers)
@@ -455,7 +458,7 @@ class Host:
         from PySide6.QtCore import Qt
         from app_shell.events import KeyEvent, ShortcutOverride
         from views import chrome_dialogs as cd
-        qt_host.INPUT["modifiers"] = int(modifiers)
+        self.input_state.modifiers = modifiers
         view = self.view
         if pressed:
             self._front()
@@ -577,6 +580,7 @@ class Host:
             self._device.button.disconnect(self.window._on_ndof_button)
             self._device = None
         if not on:
+            self.input_state.focus_lost()
             self._guard("focus out", self.view.focusOutEvent, None)
 
     # ---- menus ---------------------------------------------------------

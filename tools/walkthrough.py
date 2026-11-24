@@ -412,8 +412,8 @@ class WalkTool(_EyeTool):
         vp = self._viewport
         if vp is None or self._anchor_px is None or self._cursor_px is None:
             return
-        from PySide6.QtWidgets import QApplication
-        mods = QApplication.keyboardModifiers() | self._modifiers
+        from views import input_state
+        mods = input_state.modifiers(vp) | self._modifiers
         dx = self._cursor_px.x() - self._anchor_px.x()
         dy = self._anchor_px.y() - self._cursor_px.y()      # up = forward
         self.step(vp, dx, dy, self.TICK_MS / 1000.0, mods)
@@ -585,9 +585,9 @@ class FirstPersonTool(_EyeTool):
         vp = self._viewport
         if vp is None or not self.held:
             return
-        from PySide6.QtWidgets import QApplication
+        from views import input_state
         self.step(vp, set(self.held), self.TICK_MS / 1000.0,
-                  QApplication.keyboardModifiers())
+                  input_state.modifiers(vp))
         emit = getattr(vp, "measurementChanged", None)
         if emit is not None and hasattr(vp, "_measurement_text"):
             emit.emit(vp._measurement_text())

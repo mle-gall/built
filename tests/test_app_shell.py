@@ -97,16 +97,14 @@ def test_events_answer_the_qt_calls_the_handlers_make():
     assert g.gestureType() == Qt.ZoomNativeGesture and g.value() == pytest.approx(0.1)
 
 
-def test_qt_input_queries_answer_from_the_shell(host):
-    """Push/Pull asks QApplication.queryKeyboardModifiers() for its keep-base
-    Ctrl; offscreen Qt sees no keyboard, so the shell answers it."""
-    from PySide6.QtWidgets import QApplication
-    from PySide6.QtGui import QCursor
+def test_window_input_answers_from_winit(host):
+    from views import input_state
+    from PySide6.QtCore import QPoint
     host.pointer("move", 30, 40, 0, 0, Qt.ControlModifier.value)
-    assert QApplication.queryKeyboardModifiers() & Qt.ControlModifier
-    assert (QCursor.pos().x(), QCursor.pos().y()) == (30, 40)
+    assert input_state.modifiers(host.viewport, query=True) & Qt.ControlModifier
+    assert input_state.cursor_position(host.viewport) == QPoint(30, 40)
     host.key(True, Qt.Key_Shift.value, Qt.ShiftModifier.value)
-    assert QApplication.keyboardModifiers() == Qt.ShiftModifier
+    assert input_state.modifiers(host.viewport) == Qt.ShiftModifier
 
 
 def test_rail_matches_classic_groups_and_dispatches(host):

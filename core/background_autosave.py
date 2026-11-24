@@ -8,7 +8,7 @@ import time
 import uuid
 
 from PySide6.QtCore import QObject, QTimer, Qt, Signal
-from PySide6.QtWidgets import QApplication
+from views import input_state
 
 from core import autosave
 from formats.igz_snapshot import snapshot_steps
@@ -124,7 +124,7 @@ class BackgroundAutosave(QObject):
             return
         if getattr(self.window, '_opening_document', False):
             return
-        if QApplication.mouseButtons() != Qt.NoButton:
+        if input_state.mouse_buttons(self.window) != Qt.NoButton:
             return
         if self.job is None:
             self._start_next()

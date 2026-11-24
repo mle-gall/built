@@ -14382,9 +14382,9 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             or not self.active_tool.uses_snap
         ):
             return
-        from PySide6.QtGui import QGuiApplication
+        from views import input_state
 
-        modifiers = QGuiApplication.keyboardModifiers()
+        modifiers = input_state.modifiers(self)
         p = self._last_mouse_pos.toPoint()
         snap = self._snap_at(p.x(), p.y(), modifiers)
         if snap is None:

@@ -66,38 +66,9 @@ def start(settings: str | None = None, *, temporary: bool = False) -> str | None
     from core import i18n, settings
     settings.use_native(profile)
     i18n.set_language(i18n.resolve_language(settings.settings().value("language")))
-    _answer_input_state()
     _track_timers()
     install_widget_guard()
     return _SETTINGS_DIR
-
-
-#: The input state winit last reported (app_shell.host keeps it current).
-INPUT = {"modifiers": 0, "buttons": 0, "pos": (0.0, 0.0)}
-
-
-def _answer_input_state():
-    """The offscreen platform sees no keyboard or mouse, so Qt's global
-    input queries (Push/Pull's keep-base Ctrl, Dimension's Shift, Walk,
-    Tape's cursor, autosave's "a button is down") would always answer
-    "nothing". They answer from what winit reported instead."""
-    from PySide6.QtCore import QPoint, Qt
-    from PySide6.QtGui import QCursor, QGuiApplication
-
-    def modifiers():
-        return Qt.KeyboardModifier(INPUT["modifiers"])
-
-    def buttons():
-        return Qt.MouseButton(INPUT["buttons"])
-
-    def pos(*_):
-        x, y = INPUT["pos"]
-        return QPoint(int(x), int(y))
-
-    QGuiApplication.keyboardModifiers = staticmethod(modifiers)
-    QGuiApplication.queryKeyboardModifiers = staticmethod(modifiers)
-    QGuiApplication.mouseButtons = staticmethod(buttons)
-    QCursor.pos = staticmethod(pos)
 
 
 # ---- Qt timers: when the loop must wake ----------------------------------------

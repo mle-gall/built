@@ -44,6 +44,7 @@ mod style_files;
 mod style_edit;
 mod settings;
 mod document_watch;
+mod window_input;
 mod filing_rows;
 mod readiness;
 mod project_sections;
@@ -99,6 +100,7 @@ mod sheets;
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<settings::NativeSettings>()?;
     m.add_class::<document_watch::DocumentWatch>()?;
+    m.add_class::<window_input::WindowInput>()?;
     m.add_class::<file_open::DocumentOpen>()?;
     m.add_class::<command_search::SearchItem>()?;
     m.add_function(wrap_pyfunction!(command_search::damerau_levenshtein, m)?)?;

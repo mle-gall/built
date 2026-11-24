@@ -16,7 +16,7 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication
+from views import input_state
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.dimension import Dimension, _AXIS_VECTORS, _linear_frame
@@ -78,9 +78,8 @@ class DimensionTool(AxisMagnet, Tool):
         axis = getattr(self._vp, "axis_lock", None)
         return QVector3D(_AXIS_VECTORS[axis]) if axis in _AXIS_VECTORS else None
 
-    @staticmethod
-    def _shift_held() -> bool:
-        return bool(QGuiApplication.keyboardModifiers() & Qt.ShiftModifier)
+    def _shift_held(self) -> bool:
+        return bool(input_state.modifiers(self._vp) & Qt.ShiftModifier)
 
     def owns_shift_lock(self) -> bool:
         """While placing, Shift freezes what the preview already shows
