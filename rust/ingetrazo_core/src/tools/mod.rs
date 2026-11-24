@@ -9,6 +9,7 @@
 mod change_axes;
 mod freehand;
 mod followme;
+pub mod edit_box;
 mod move_grips;
 pub mod move_hover;
 pub mod move_gesture;

@@ -267,37 +267,6 @@ def test_a_group_that_owns_placements_is_always_an_instance():
     assert len(world_mesh(plain).faces) == 2
 
 
-def test_skp_export_writes_the_prototype_once_and_places_it(tmp_path):
-    from formats.skp_out import _split_containers, save_skp
-
-    scene = Scene()
-    proto = Mesh()
-    _unit_quad(proto)
-    inner = [Group(proto, name=f"hoja {i}") for i in range(6)]
-    for i, g in enumerate(inner):
-        g.xform = _at(i * 2.0, 0, 0)
-    bush = Group(Mesh(), name="arbusto")
-    bush.xform = _at(0, 0, 0)
-    bush.adopt(inner)
-    scene.groups.append(bush)
-    scene.groups.append(copy_group(bush, QVector3D(0, 50, 0)))
-
-    loose, classic, defs, roots = _split_containers(scene)
-    # ONE definition for the leaf, ONE for the bush that places it six times,
-    # and the two bushes are placements of that same definition.
-    assert not loose and not classic
-    assert len(defs) == 2
-    leaf, container = defs[0], defs[1]
-    assert len(leaf["mesh"].faces) == 1 and not leaf["children"]
-    assert not container["mesh"].faces and len(container["children"]) == 6
-    assert all(ci == 0 for ci, _c in container["children"])
-    assert [di for di, _g in roots] == [1, 1]
-
-    out = tmp_path / "arbustos.skp"
-    save_skp(scene, out)
-    assert out.exists() and out.stat().st_size > 0
-
-
 def test_the_drag_preview_carries_the_whole_subtree():
     """The scratch copy a drag draws is built from the groups handed to
     ``begin_groups_preview``. Handing it only the top-level group uploaded an

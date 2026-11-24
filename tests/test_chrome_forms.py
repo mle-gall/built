@@ -12,15 +12,11 @@ import sys
 import types
 
 import pytest
-from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QKeyEvent
-from PySide6.QtWidgets import QApplication
+from core.input_types import Qt
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from views import chrome_dialogs as cd
 from views import chrome_forms as cf
-
-_app = QApplication.instance() or QApplication([])
-
 
 class FakeRenderer:
     def __init__(self):
@@ -53,9 +49,8 @@ class FakeView:
 
 
 @pytest.fixture
-def win(monkeypatch):
-    from views.main_window import MainWindow
-    w = MainWindow(defer_extensions=True)
+def win(native_host, monkeypatch):
+    w = native_host.window
     view = FakeView()
     monkeypatch.setattr(cd, "live", lambda parent: view if cd.window_of(parent) is w else None)
     monkeypatch.setattr(cd, "view_of", lambda win: view if win is w else None)
@@ -63,8 +58,6 @@ def win(monkeypatch):
     yield w
     for form in list(cf.forms(w)):
         form.close()                    # releases the window's guard
-    w._saved_version = w.viewport.scene.version
-    w.close()
 
 
 def drawn(win):
@@ -181,19 +174,14 @@ def test_clicks_for_a_form_already_gone_do_nothing(win):
     assert got == [None] and cf.current(win) is not None
 
 
-def test_keys_reach_the_form_through_the_qt_guard(win):
+def test_keys_reach_only_the_open_form_in_the_native_window(win, monkeypatch):
     from views import wgpu_ui
-    view = win._fake_view
     calls = []
-    original = wgpu_ui.key
-    wgpu_ui.key = lambda v, e, pressed: calls.append((v, e.key(), pressed)) or True
-    try:
-        cf.ask_text(win, "A", "a", "", done=lambda _v: None)
-        for kind in (QEvent.ShortcutOverride, QEvent.KeyPress, QEvent.KeyRelease):
-            QApplication.sendEvent(win, QKeyEvent(kind, Qt.Key_A, Qt.NoModifier, "a"))
-    finally:
-        wgpu_ui.key = original
-    assert calls == [(view, Qt.Key_A, True), (view, Qt.Key_A, False)]
+    monkeypatch.setattr(wgpu_ui, "key", lambda view, ev, pressed: calls.append((view, ev.key(), pressed)) or True)
+    cf.ask_text(win, "A", "a", "", done=lambda _v: None)
+    for pressed in (True, False):
+        win._host.key(pressed, Qt.Key_A, text="a")
+    assert calls == [(win.view, Qt.Key_A, True), (win.view, Qt.Key_A, False)]
     cf.current(win).close()
 
 

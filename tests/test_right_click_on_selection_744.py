@@ -49,3 +49,18 @@ def test_right_click_on_the_group_beside_it_still_picks_the_group():
     vp.scene.select([lid, *edges])
     vp._context_pick(*vp._world_to_pixel(V(5, 5, 0)))
     assert list(vp.scene.selection) == [g]
+
+
+def test_right_click_rect_label_precedes_group_without_probing_later_hits():
+    from unittest.mock import Mock
+    from views.document_interaction import DocumentInteraction
+    label = object()
+    vp = Mock()
+    vp.scene.selection = set()
+    vp.pick_edge.return_value = vp.pick_face.return_value = None
+    vp.pick_text_label.return_value = label
+    assert DocumentInteraction._context_pick(vp, 2., 3.) is label
+    vp.pick_text_label.assert_called_once_with(2., 3., rect_only=True)
+    vp.pick_group.assert_not_called()
+    vp.scene.select.assert_called_once_with([label])
+    vp.update.assert_called_once_with()

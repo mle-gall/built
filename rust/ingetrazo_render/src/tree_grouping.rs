@@ -1,7 +1,9 @@
 //! Document facts and commands for an occurrence's context menu.
 pub mod paint;
+pub mod placement_controls;
 pub mod row_actions;
 pub mod tag_controls;
+pub mod tag_visibility;
 use super::model_edit::translated;
 use pyo3::{
     prelude::*,
@@ -300,50 +302,12 @@ pub fn tree_group_action(
         win.py().import("views.wgpu_ui")?.call_method1("_isolate", (win, groups))?;
         return Ok(());
     }
-    if verb == "pickrow" || verb == "roweye" {
-        let vp = win.getattr("viewport")?;
-        let scene = vp.getattr("scene")?;
-        let tree = Occurrences::read(&scene, clicked)?;
-        let Some(i) = tree.rows.iter().position(|r| r.group.is(clicked)) else {
-            return Ok(());
-        };
-        if verb == "pickrow" {
-            if !scene
-                .call_method1("entity_selectable", (clicked,))?
-                .is_truthy()?
-            {
-                return Ok(());
-            }
-            if !win
-                .py()
-                .import("views.tree_navigation")?
-                .call_method1("open_to", (&vp, tree.path(tree.rows[i].parent)))?
-                .is_truthy()?
-            {
-                return Ok(());
-            }
-            scene.call_method1("select", ([clicked],))?;
-        } else {
-            if scene.getattr("worksession_read_only").is_ok_and(|v| v.is_truthy().unwrap_or(false)) {
-                vp.call_method1("flash_status", (translated(win.py(), READ_ONLY, None)?, 4000))?;
-                return Ok(());
-            }
-            let groups = PyList::new(win.py(), tree.targets.iter().map(|&i| &tree.rows[i].group))?;
-            let hide = !clicked.getattr("hidden")?.is_truthy()?;
-            let cmd = win
-                .py()
-                .import("core.history")?
-                .call_method1("HideCommand", (groups, hide))?;
-            win.py()
-                .import("views.tree_navigation")?
-                .call_method1("execute", (&vp, cmd))?;
-        }
-        vp.call_method0("notify_scene_changed")?;
-        return Ok(());
+    if matches!(verb, "pickrow" | "toggleitem" | "roweye" | "rowlock") {
+        return placement_controls::act(win, clicked, verb);
     }
     if !matches!(
         verb,
-        "group" | "component" | "explode" | "toggleitem" | "unique" | "instances"
+        "group" | "component" | "explode" | "unique" | "instances"
     ) {
         return Err(pyo3::exceptions::PyValueError::new_err(
             "Unknown tree action",
@@ -351,17 +315,6 @@ pub fn tree_group_action(
     }
     let vp = win.getattr("viewport")?;
     let scene = vp.getattr("scene")?;
-    if verb == "toggleitem" {
-        if !clicked.is_none()
-            && scene
-                .call_method1("entity_selectable", (clicked,))?
-                .is_truthy()?
-        {
-            scene.call_method1("select", ([clicked], false, "toggle"))?;
-            vp.call_method0("notify_scene_changed")?;
-        }
-        return Ok(());
-    }
     let tree = Occurrences::read(&scene, clicked)?;
     let comps = if matches!(verb, "instances" | "unique") {
         tree.components()?

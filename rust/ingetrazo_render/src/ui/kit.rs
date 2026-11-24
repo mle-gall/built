@@ -58,8 +58,12 @@ pub mod atoms {
     use super::*;
     /// The visibility eye: open, or closed with a slash.
     pub fn paint_eye(ui: &egui::Ui, r: Rect, on: bool) {
+        paint_row_eye(ui, r, i8::from(on));
+    }
+    pub fn paint_row_eye(ui: &egui::Ui, r: Rect, state: i8) {
         let c = r.center();
-        let col = if on { DIM } else { WARN };
+        let on = state == 1;
+        let col = match state { 2 => FAINT, 1 => DIM, _ => WARN };
         let pts: Vec<Pos2> = (0..=16)
             .map(|i| {
                 let t = std::f32::consts::PI * i as f32 / 16.0;
@@ -83,8 +87,12 @@ pub mod atoms {
 
     /// The lock: shackle closed when locked, open when not.
     pub fn paint_lock(ui: &egui::Ui, r: Rect, on: bool) {
+        paint_row_lock(ui, r, i8::from(on));
+    }
+    pub(super) fn paint_row_lock(ui: &egui::Ui, r: Rect, state: i8) {
         let c = r.center();
-        let col = if on { INK } else { FAINT };
+        let on = state > 0;
+        let col = if state == 1 { INK } else { FAINT };
         let body = Rect::from_center_size(c + vec2(0.0, 2.0), vec2(9.0, 7.0));
         ui.painter().rect_filled(body, CornerRadius::same(2), col);
         let shackle =
@@ -842,10 +850,10 @@ pub mod molecules {
         let slot = |dx| Rect::from_center_size(pos2(count_right - dx, y), vec2(16., 16.));
         let (e, l) = (slot(64.), slot(44.));
         if show && eye >= 0 {
-            paint_eye(ui, e, eye == 1);
+            paint_row_eye(ui, e, eye);
         }
         if show && lock >= 0 {
-            paint_lock(ui, l, lock == 1);
+            atoms::paint_row_lock(ui, l, lock);
         }
         (e, l)
     }

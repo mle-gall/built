@@ -187,32 +187,11 @@ def test_the_frame_keeps_its_fill_by_layer_switch():
 
 # ---- The Layers panel ------------------------------------------------------
 
-@pytest.fixture
-def win():
-    from PySide6.QtCore import QSettings
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w.show()
-    _app.processEvents()
-    yield w
-    w._saved_version = w.viewport.scene.version
-    w.close()
-    QSettings().remove("ui/window_state")      # see test_layers_panel.win
-    QSettings().remove("ui/window_geometry")
-
-
-def test_the_right_click_offers_the_cut_weight(win):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers.append(Layer("A"))
-    panel.refresh()
-    from PySide6.QtWidgets import QMenu
-    menu = QMenu()
-    panel._add_look_menus(menu, ["A"], scene.layer("A"))
-    sub = next(m for m in menu.findChildren(QMenu)
-               if m.title() == "Cut weight")
-    next(a for a in sub.actions() if a.text() == "0.50 mm").trigger()
-    assert scene.layer("A").cut_weight == 0.5
+def test_drawing_sets_the_cut_weight():
+    from tests.test_project_drawing_filters import Project, drawing_edit
+    p = Project(Layer("A"))
+    drawing_edit(p, "drawingpatch", [["A"], {"cut_weight": "0.50"}])
+    assert p.scene.layer("A").cut_weight == 0.5
 
 
 # ---- Hatches by layer --------------------------------------------------------
@@ -512,28 +491,6 @@ def test_imported_patterns_live_in_the_document(tmp_path):
     assert back.hatch_patterns == {}
 
 
-def test_the_hatch_thumbnail_has_the_colour_swatch_shape(win):
-    """The Hatch column reads like the Colour column beside it: the same
-    18 px icon, the same rounded box and border, in a column as wide; no
-    hatch is the same «none» swatch as a layer with no colour."""
-    from views.layers_panel import (COL_COLOR, COL_HATCH, hatch_icon,
-                                    none_swatch, swatch_icon)
-
-    def mask(icon):
-        img = icon.pixmap(18, 18).toImage()
-        return [[QColor.fromRgba(img.pixel(x, y)).alpha() > 0
-                 for x in range(img.width())] for y in range(img.height())]
-    colour = mask(swatch_icon((0.8, 0.2, 0.2)))
-    for key in ("brick", "concrete", "insulation"):
-        assert mask(hatch_icon(key)) == colour, key
-    assert mask(hatch_icon(None)) == mask(none_swatch())
-    panel = win.layers_dock.panel
-    assert panel.tree.columnWidth(COL_HATCH) == panel.tree.columnWidth(
-        COL_COLOR)
-    head = panel.tree.headerItem()
-    assert head.text(COL_HATCH) == "" and not head.icon(COL_HATCH).isNull()
-
-
 # ---- The catalogue's entries, the pattern file out, the frame's hatch pen ---
 
 def test_every_pattern_has_its_catalogue_entry():
@@ -738,42 +695,37 @@ def test_a_template_and_the_legend_carry_the_own_line_type():
     assert swatches["Lindero"]["pattern"] == [6.0, 1.5, 0.0, 1.5]
 
 
-def test_the_line_type_list_ends_with_custom_and_its_tools(win):
-    from PySide6.QtWidgets import QMenu
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers.append(Layer("A"))
-    panel.refresh()
-    menu = QMenu()
-    panel._fill_linetypes(menu, ["A"], scene.layer("A"))
-    texts = [a.text() for a in menu.actions()]
-    assert texts[-3:] == ["New line type…", "Import .lin…", "Export .lin…"]
-    assert "Custom line types" not in texts       # none of its own yet
-    assert not menu.actions()[-1].isEnabled()     # nothing to export
-    assert panel.add_line_type("Borde", [6, -1.5, 0, -1.5], ["A"])
-    assert scene.layer("A").linetype == "lin:Borde"
-    menu = QMenu()
-    panel._fill_linetypes(menu, ["A"], scene.layer("A"))
-    texts = [a.text() for a in menu.actions()]
-    assert "Custom line types" in texts and "Borde" in texts
-    assert texts.index("Borde") > texts.index("Custom line types")
-    assert menu.actions()[-1].isEnabled()
-    assert panel.item_for("A").toolTip(4 + 3) == "Borde" or True
-    assert panel.add_line_type("Mal", [5, 5], ["A"]) is None
+def edit_line(project, op, **fields):
+    from views import wgpu_ui
+    project.action("editline", op + wgpu_ui.SEP + json.dumps(fields))
 
 
-def test_the_panel_imports_and_exports_line_type_files(win, tmp_path):
-    panel = win.layers_dock.panel
+def test_drawing_creates_a_valid_custom_line_and_rejects_a_pattern_without_gaps():
+    from tests.test_project_drawing_filters import Project
+    p = Project(Layer("A"))
+    edit_line(p, "save", name="Borde", pieces=[6, -1.5, 0, -1.5], tags=["A"])
+    assert p.scene.layer("A").linetype == "lin:Borde"
+    edit_line(p, "save", name="Mal", pieces=[5, 5], tags=["A"])
+    assert "Mal" not in p.scene.line_types and p.scene.layer("A").linetype == "lin:Borde"
+
+
+def test_drawing_imports_and_exports_line_type_files(tmp_path, monkeypatch):
+    from tests.test_project_drawing_filters import Project
+    from views.filedialogs import file_dialogs
+    p = Project()
     lin = tmp_path / "mine.lin"
     lin.write_text(_LIN, encoding="utf-8")
-    n, skipped = panel.import_lin_file(lin)
-    assert n == 3 and skipped == ["BOXES"]
-    assert panel.import_lin_file(tmp_path / "missing.lin") == (0, [])
+    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *_: (str(lin), ""))
+    p.action("importlin", "")
+    assert "3" in p.win.viewport.status[-1] and "BOXES" in p.win.viewport.status[-1]
+    lin.unlink()
+    p.action("importlin", "")
+    assert set(p.scene.line_types) == {"BORDE_2", "FENCE", "GAS"}
     out = tmp_path / "out.lin"
-    assert panel.export_lin_file(out) == 3
+    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *_: (str(out), ""))
+    p.action("exportlin", "")
     found, _ = L.parse_lin(out.read_text(encoding="utf-8"))
-    assert set(found) == {"BORDE_2", "FENCE", "GAS"}
-    assert found["GAS"]["text"] == "GAS"           # written, read back
+    assert set(found) == {"BORDE_2", "FENCE", "GAS"} and found["GAS"]["text"] == "GAS"
 
 
 # ---- Bonds: brick by brick, by the wall's thickness and the brick's size -----
@@ -1163,24 +1115,17 @@ def test_a_document_keeps_and_draws_a_line_type_with_words(tmp_path):
 
 # ---- Favourite hatches, and the line type editor -------------------------------
 
-def test_the_panel_edits_and_deletes_its_line_types(win):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers.append(Layer("Gas"))
-    panel.refresh()
-    key = panel.add_line_type("Gas", [8, -2], ["Gas"], "GAS", 2.0)
-    entry = scene.line_types["Gas"]
-    assert entry["pieces"] == [8.0, -2.0] and entry["text"] == "GAS"
-    assert entry["pattern"][1] < -2.0              # room for the words
-    assert L.linetype_text(key, scene)[0] == "GAS"
-    # Edited, renamed: its layers follow.
-    panel.add_line_type("Gas natural", [10, -2], (), "GN", 2.0,
-                        replaces="Gas")
-    assert "Gas" not in scene.line_types
-    assert scene.layer("Gas").linetype == "lin:Gas natural"
-    panel.delete_line_type("Gas natural")
-    assert scene.line_types == {}
-    assert scene.layer("Gas").linetype == "continuous"
+def test_drawing_edits_and_deletes_its_line_types():
+    from tests.test_project_drawing_filters import Project
+    p = Project(Layer("Gas"))
+    edit_line(p, "save", name="Gas", pieces=[8,-2], tags=["Gas"], text="GAS", text_size=2.0)
+    entry = p.scene.line_types["Gas"]
+    assert entry["pieces"] == [8., -2.] and entry["text"] == "GAS" and entry["pattern"][1] < -2.
+    assert L.linetype_text("lin:Gas", p.scene)[0] == "GAS"
+    edit_line(p, "save", original="Gas", name="Gas natural", pieces=[10,-2], text="GN", text_size=2.)
+    assert "Gas" not in p.scene.line_types and p.scene.layer("Gas").linetype == "lin:Gas natural"
+    edit_line(p, "delete", original="Gas natural")
+    assert not p.scene.line_types and p.scene.layer("Gas").linetype == "continuous"
 
 
 # ---- The document's brick ----------------------------------------------------
@@ -1520,18 +1465,14 @@ def test_the_line_type_colour_is_saved(tmp_path):
     assert tuple(back.line_types["Gas"]["color"]) == (0.85, 0.65, 0.0)
 
 
-def test_the_panel_keeps_the_colour_it_is_given(win):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers.append(Layer("Red"))
-    key = panel.add_line_type("Agua", [6.0, -2.0], ["Red"], "AGUA", 2.5,
-                              color=(0.0, 0.40, 0.85))
-    assert scene.line_types["Agua"]["color"] == (0.0, 0.40, 0.85)
-    assert scene.layer("Red").linetype == key
-    panel.add_line_type("Agua", [6.0, -2.0], (), "", 2.5, replaces="Agua")
-    assert "color" not in scene.line_types["Agua"]     # by layer again
-
-
+def test_document_line_ink_is_kept_until_changed_back_to_by_tag():
+    from tests.test_project_drawing_filters import Project
+    p = Project(Layer("Red"))
+    edit_line(p, "save", name="Agua", pieces=[6,-2], tags=["Red"], text="AGUA", text_size=2.5, color=[0,.40,.85])
+    assert p.scene.line_types["Agua"]["color"] == (0., .40, .85)
+    assert p.scene.layer("Red").linetype == "lin:Agua"
+    edit_line(p, "save", name="Agua", original="Agua", pieces=[6,-2])
+    assert "color" not in p.scene.line_types["Agua"]
 
 
 def test_a_dash_pattern_cuts_an_edge_as_a_sheet_at_1_50():
@@ -1570,138 +1511,16 @@ def test_a_built_in_line_type_takes_a_colour_of_the_document(tmp_path):
     assert not scene.linetype_colors
 
 
-def test_a_right_click_colours_any_line_type(win, monkeypatch):
-    from views.layers_panel import LINE_COLOURS
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    picks = []
-
-    def fake_popup(menu, _at):
-        texts = [a.text() for a in menu.actions()]
-        assert texts == [l for _v, l in LINE_COLOURS]
-        next(a for a in menu.actions() if a.text() == picks[-1]).trigger()
-
-    monkeypatch.setattr(panel, "_popup", fake_popup)
-    picks.append("Blue")
-    panel.ask_linetype_colour("dashed")
-    assert scene.linetype_colors["dashed"] == (0.0, 0.40, 0.85)
-    panel.add_line_type("Agua", [6.0, -2.0], ())
-    picks.append("Red")
-    panel.ask_linetype_colour("lin:Agua")
-    assert scene.line_types["Agua"]["color"] == (0.85, 0.10, 0.10)
-    picks.append("By layer")
-    panel.ask_linetype_colour("dashed")
-    assert "dashed" not in scene.linetype_colors
-
-
-def _line_panel(win, monkeypatch, linetype, act):
-    """Open the Line type cell of a layer «Ejes» and run ``act(menu)``
-    with the panel shown."""
-    from views.layers_panel import COL_LINETYPE
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers.append(Layer("Ejes", linetype=linetype))
-    panel.refresh()
-
-    def fake_popup(menu, _at):
-        menu.show()
-        _app.processEvents()
-        act(menu)
-
-    monkeypatch.setattr(panel, "_popup", fake_popup)
-    panel.click_cell(("layer", "Ejes"), COL_LINETYPE)
-    return panel, scene
-
-
-def test_the_line_panel_stays_open_and_shows_the_colour(win, monkeypatch):
-    """A pick ticks its line and shows its colour under the list, in
-    sight; the panel stays open; only «Done» keeps it."""
-    from PySide6.QtCore import QPoint, Qt
-    from PySide6.QtTest import QTest
-    from views.layers_panel import _LineSample
-    seen = {}
-
-    def act(menu):
-        panel = win.layers_dock.panel
-        row = panel.line_colour_row
-        seen["title0"] = row.title.text()
-        sample = next(w for w in menu.findChildren(_LineSample)
-                      if w.key == "dashdot")
-        QTest.mouseClick(sample, Qt.LeftButton, Qt.NoModifier, QPoint(40, 10))
-        _app.processEvents()
-        seen["open"] = menu.isVisible()
-        seen["ticked"] = sample._checked
-        row.buttons[(0.85, 0.10, 0.10)].click()
-        seen["title1"] = row.title.text()
-        seen["sample"] = sample.colour
-        panel.line_done_button.click()
-
-    panel, scene = _line_panel(win, monkeypatch, "dashed", act)
-    assert "COLOUR OF THE LINE" in seen["title0"]
-    assert seen["title0"].endswith("· By layer")
-    assert seen["open"] and seen["ticked"]
-    assert seen["title1"].endswith("· Red")
-    assert seen["sample"] == (0.85, 0.10, 0.10)
-    assert scene.layer("Ejes").linetype == "dashdot"            # kept
-    assert scene.linetype_colors["dashdot"] == (0.85, 0.10, 0.10)
-
-
-def test_closing_the_line_panel_without_done_puts_it_back(win, monkeypatch):
-    from views.layers_panel import _LineSample
-
-    def act(menu):
-        panel = win.layers_dock.panel
-        next(w for w in menu.findChildren(_LineSample)
-             if w.key == "dotted").pick()
-        panel.line_colour_row.buttons[(0.0, 0.40, 0.85)].click()
-        assert win.viewport.scene.layer("Ejes").linetype == "dotted"
-        menu.close()                          # Esc, or a click outside
-
-    _panel, scene = _line_panel(win, monkeypatch, "dashed", act)
-    assert scene.layer("Ejes").linetype == "dashed"
-    assert not scene.linetype_colors
-
-
-def test_enter_on_a_line_picks_it_and_keeps_it(win, monkeypatch):
-    def act(menu):
-        next(a for a in menu.actions() if a.text() == "Dotted").trigger()
-        menu.close()
-
-    _panel, scene = _line_panel(win, monkeypatch, "dashed", act)
-    assert scene.layer("Ejes").linetype == "dotted"
-
-
-def test_the_line_panel_foot_and_the_pencil(win, monkeypatch):
-    """Its foot: «New», import and export .lin, «Done»; an own line type
-    has a pencil to edit it, and the editor can delete it."""
-    from views.layers_panel import _LineSample
-    seen = {}
-    panel0 = win.layers_dock.panel
-    panel0.add_line_type("Borde", [6.0, -1.5], ())
-
-    def act(menu):
-        panel = win.layers_dock.panel
-        seen["tools"] = [b.toolTip() for b in panel.line_tool_buttons]
-        seen["export"] = panel.line_tool_buttons[2].isEnabled()
-        seen["pencil"] = [w.key for w in menu.findChildren(_LineSample)
-                          if w.edit is not None]
-        seen["width"] = menu.sizeHint().width()
-        menu.close()
-
-    _panel, scene = _line_panel(win, monkeypatch, "dashed", act)
-    assert seen["tools"] == ["New line type…", "Import .lin…",
-                             "Export .lin…"]
-    assert seen["export"] and seen["pencil"] == ["lin:Borde"]
-    assert seen["width"] < 360                        # still a narrow panel
-    from views import wgpu_ui
-    called = []
-    monkeypatch.setattr(wgpu_ui, "open_line_type", lambda win, name, tags: called.append(name))
-    panel0.edit_line_type("Borde")
-    assert called == ["Borde"]
-    panel0.delete_line_type("Borde")
-    assert "Borde" not in scene.line_types
-
-
+def test_standard_and_custom_line_inks_are_independent():
+    from tests.test_project_drawing_filters import Project
+    p = Project()
+    edit_line(p, "ink", name="dashed", color=[0., .4, .85])
+    assert p.scene.linetype_colors["dashed"] == (0., .4, .85)
+    edit_line(p, "save", name="Agua", pieces=[6,-2], color=[.85, .10, .10])
+    assert p.scene.line_types["Agua"]["color"] == (.85, .10, .10)
+    edit_line(p, "ink", name="dashed", color=None)
+    assert "dashed" not in p.scene.linetype_colors
+    assert p.win.viewport.history.undo() and p.scene.linetype_colors["dashed"] == (0., .4, .85)
 
 
 def test_an_open_cell_of_a_honeycomb_bond_is_closed_on_both_sides():

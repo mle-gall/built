@@ -12,6 +12,7 @@ pub(super) struct Catalog {
     parents: BTreeMap<String, Option<String>>,
     pub folder: String,
     pub new_hidden: bool,
+    pub tag_isolation: bool,
     pub color_by_layer: bool,
     pub model_linetypes: bool,
     name: String,
@@ -19,6 +20,7 @@ pub(super) struct Catalog {
     line: Option<Line>,
     external_tags: Vec<String>,
     standard_inks: BTreeMap<String, [f64; 3]>,
+    patterns: BTreeMap<String, Vec<f64>>,
     standard: String,
     revision: Option<u64>,
 }
@@ -194,6 +196,7 @@ impl Catalog {
         selected: &mut BTreeMap<String, (String, Vec<String>)>,
         selected_folders: &mut BTreeSet<String>,
     ) -> PyResult<()> {
+        self.tag_isolation = scene.getattr("_drawing_tag_isolation").is_ok_and(|s| !s.is_none());
         let version = scene.getattr("version")?.extract()?;
         if self.revision == Some(version) {
             return Ok(());
@@ -210,6 +213,12 @@ impl Catalog {
         self.lines = serde_json::from_str(&entries)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
         self.standard_inks = scene.getattr("linetype_colors")?.extract()?;
+        if self.patterns.is_empty() {
+            self.patterns = py.import("core.layers")?.getattr("LINETYPES")?.extract()?;
+            for pattern in self.patterns.values_mut() {
+                for gap in pattern.iter_mut().skip(1).step_by(2) { *gap = -*gap; }
+            }
+        }
         let labels: BTreeMap<String, String> = scene.getattr("layer_folder_names")?.extract()?;
         let parents: BTreeMap<String, Option<String>> =
             scene.getattr("folder_parents")?.extract()?;
@@ -331,6 +340,20 @@ impl Catalog {
             }
         });
     }
+    pub fn sample(&self, ui: &egui::Ui, rect: egui::Rect, key: &str, by_tag: egui::Color32) {
+        if let Some(entry) = key.strip_prefix("lin:").and_then(|k| self.lines.get(k)) {
+            let pieces: Vec<f64> = serde_json::from_value(entry.get("pieces").unwrap_or(&entry["pattern"]).clone()).unwrap_or_default();
+            let color = serde_json::from_value(entry["color"].clone()).ok();
+            kit::line_type_preview(ui, rect, &pieces, entry["text"].as_str().unwrap_or(""),
+                entry["text_size"].as_f64().unwrap_or(2.5), color.map_or(by_tag, |rgb| ink(Some(rgb))));
+        } else {
+            let color = self.standard_inks.get(key).map_or(by_tag, |rgb| ink(Some(*rgb)));
+            if let Some(pattern) = self.patterns.get(key).filter(|p| !p.is_empty()) {
+                kit::line_type_preview(ui, rect, pattern, "", 0., color);
+            } else { kit::line_sample(ui, rect, "", key, color); }
+        }
+    }
+
     pub fn lines(
         &mut self,
         ui: &mut egui::Ui,
@@ -391,7 +414,7 @@ impl Catalog {
             if kit::quiet(ui, "Import LIN…").clicked() {
                 actions.push("importlin\u{1f}".into());
             }
-            if kit::quiet(ui, "Export LIN…").clicked() {
+            if ui.add_enabled_ui(!self.lines.is_empty(), |ui| kit::quiet(ui, "Export LIN…")).inner.clicked() {
                 actions.push("exportlin\u{1f}".into());
             }
         });

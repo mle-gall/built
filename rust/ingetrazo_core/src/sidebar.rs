@@ -83,7 +83,7 @@ fn imported_families(scene: &Bound<'_, PyAny>, name: &str) -> Option<String> {
     serde_json::to_string(&families).ok()
 }
 
-#[pyfunction(signature = (scene, tree, rows, query, expanded, filename, drawing_lens=false))]
+#[pyfunction(signature = (scene, tree, rows, query, expanded, filename, drawing_lens=false, browser_selected=None))]
 pub(crate) fn project_sidebar(
     scene: &Bound<'_, PyAny>,
     tree: &Bound<'_, PyAny>,
@@ -92,6 +92,7 @@ pub(crate) fn project_sidebar(
     expanded: HashSet<String>,
     filename: &str,
     drawing_lens: bool,
+    browser_selected: Option<HashSet<usize>>,
 ) -> PyResult<(Vec<Row>, PathBar)> {
     let group = scene.getattr("edit_group")?;
     let tags_only = tree.getattr("_host_roots")?.extract::<i64>()? < 0;
@@ -181,7 +182,7 @@ pub(crate) fn project_sidebar(
         }
     }
     let mut path = Vec::new();
-    let mut context = project_context_rows(scene, query, expanded.clone())?;
+    let mut context = project_context_rows(scene, query, expanded.clone(), browser_selected)?;
     if group.is_none() {
         rows.append(&mut context);
     } else {

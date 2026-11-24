@@ -214,6 +214,14 @@ impl StyleEditor {
             .is_some_and(|key| self.selected.contains_key(key))
     }
 
+    pub fn isolate_action(&self, row: &Node) -> String {
+        let keys = if self.selected(row) {
+            self.selected.keys().map(|k| format!("preview-tag:{k}"))
+                .chain(self.selected_folders.iter().map(|k| format!("preview-folder:{k}"))).collect()
+        } else { vec![row.key.clone()] };
+        format!("isolatetags\u{1f}{}", serde_json::json!(keys))
+    }
+
     pub fn state_action(&self, n: &Node, lock: bool) -> Option<String> {
         if n.cells.get(5).is_none() || !self.selected(n) {
             return None;
@@ -609,22 +617,59 @@ impl StyleEditor {
                     ("hatch_on_paper", "1") => "Paper".into(),
                     ("print" | "lock" | "mortar" | "hatch_cross", "0") => "Off".into(),
                     ("print" | "lock" | "mortar" | "hatch_cross", "1") => "On".into(),
+                    ("cut_weight" | "weight", "auto") => "From sheet".into(),
+                    ("linetype", k) => k.strip_prefix("lin:").unwrap_or(k).replace('_', " "),
                     (_, "") => "Automatic".into(),
                     _ => s.replace('_', " "),
                 };
-                egui::ComboBox::from_id_salt(("style", field))
+                let pen = matches!(field, "linetype" | "weight" | "cut_weight");
+                let cursor = ui.make_persistent_id(("pen cursor", field));
+                let popup = egui::ComboBox::from_id_salt(("style", field))
                     .width(ui.available_width().min(168.))
                     .selected_text(current.as_deref().map(label).unwrap_or("Mixed".into()))
                     .show_ui(ui, |ui| {
-                        for value in choices {
-                            if ui
-                                .selectable_label(current.as_ref() == Some(&value), label(&value))
-                                .clicked()
-                            {
+                        let mut focus = ui.data(|d| d.get_temp::<usize>(cursor));
+                        if pen && !choices.is_empty() {
+                            let (up, down, enter) = ui.input_mut(|i| (
+                                i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp),
+                                i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
+                                i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)));
+                            let current_index = choices.iter().position(|s| Some(s) == current.as_ref());
+                            if up || down {
+                                let next = focus.or(current_index).map_or(0, |i| if up { i.saturating_sub(1) } else { i + 1 }).min(choices.len()-1);
+                                ui.data_mut(|d| d.insert_temp(cursor, next));
+                                focus = Some(next);
+                            }
+                            if enter {
+                                if let Some(value) = focus.or(current_index).and_then(|i| choices.get(i)) {
+                                    self.patch.insert(field.into(), value.clone());
+                                    ui.close_menu();
+                                    return;
+                                }
+                            }
+                        }
+                        for (i, value) in choices.into_iter().enumerate() {
+                            let selected = focus.map_or(current.as_ref() == Some(&value), |at| at == i);
+                            let response = if pen {
+                                let (rect, hit) = kit::list_row(ui, super::ROW_H, selected);
+                                let sample = egui::Rect::from_center_size(rect.left_center() + egui::vec2(26., 0.), egui::vec2(44., 16.));
+                                if field == "linetype" {
+                                    let color = self.common(0, "color").as_deref().and_then(parse_hex).unwrap_or(super::INK);
+                                    self.catalog.sample(ui, sample, &value, color);
+                                } else if value != "auto" {
+                                    kit::line_sample(ui, sample, &value, "continuous", super::INK);
+                                }
+                                ui.painter().text(rect.left_center() + egui::vec2(54., 0.),
+                                    egui::Align2::LEFT_CENTER, label(&value), super::body(), super::INK);
+                                hit.on_hover_text(label(&value))
+                            } else { ui.selectable_label(selected, label(&value)) };
+                            if response.clicked() {
+                                ui.close_menu();
                                 self.patch.insert(field.into(), value);
                             }
                         }
                     });
+                if popup.inner.is_none() { ui.data_mut(|d| d.remove::<usize>(cursor)); }
             }
         });
     }
@@ -888,6 +933,48 @@ mod picker_tests {
 
     #[test]
     fn search_keyboard_and_discard_in_the_hatch_inspector() {
+        exercise_picker(false);
+    }
+
+    #[test]
+    fn line_samples_accept_keyboard_and_pointer_and_discard_drafts_for_all_tags() {
+        exercise_picker(true);
+    }
+
+    #[test]
+    fn cut_and_projection_weights_show_their_printed_stroke() {
+        let ctx = super::super::test_context();
+        for field in ["weight", "cut_weight"] {
+            let mut editor = StyleEditor::default();
+            let mut draw = |events| ctx.run(egui::RawInput { events, ..Default::default() }, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    editor.field(ui, 2, field, "Weight", vec!["0.25".into(), "1.00".into()], &mut vec![]);
+                });
+            });
+            let mut frame = draw(vec![]);
+            let at = frame.shapes.iter().find_map(|s| match &s.shape {
+                egui::Shape::Text(t) if t.galley.text() == "Mixed" => Some(t.visual_bounding_rect().center()),
+                _ => None,
+            }).unwrap();
+            for pressed in [true, false] {
+                draw(vec![egui::Event::PointerMoved(at), egui::Event::PointerButton {
+                    pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Default::default(),
+                }]);
+            }
+            draw(vec![]);
+            frame = draw(vec![]);
+            let strokes: Vec<_> = frame.shapes.iter().filter_map(|s| match &s.shape {
+                egui::Shape::LineSegment { points, stroke } if (points[1].x - points[0].x - 44.).abs() < 0.1 =>
+                    Some(stroke.width),
+                _ => None,
+            }).collect();
+            for expected in [0.95, 3.8] {
+                assert!(strokes.iter().any(|v| (v - expected).abs() < 0.01), "{field}: {strokes:?}");
+            }
+        }
+    }
+
+    fn exercise_picker(line: bool) {
         let ctx = super::super::test_context();
         let mut editor = StyleEditor::default();
         let mut node = Node {
@@ -896,6 +983,7 @@ mod picker_tests {
             ..Default::default()
         };
         node.cells[4] = "brick".into();
+        node.cells[1] = "dashed".into();
         node.cells[5] = "wall".into();
         editor.pick(&node, false);
         node.cells[5] = "slab".into();
@@ -913,7 +1001,9 @@ mod picker_tests {
             };
             let frame = ctx.run(raw, |ctx| {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    editor.field(ui, 4, "hatch", "Hatch", vec![], &mut actions);
+                    if line {
+                        editor.field(ui, 1, "linetype", "Line type", vec!["dashed".into(),"dotted".into()], &mut actions);
+                    } else { editor.field(ui, 4, "hatch", "Hatch", vec![], &mut actions); }
                     editor.apply_row(ui, &mut actions);
                 });
             });
@@ -954,6 +1044,25 @@ mod picker_tests {
             modifiers: Default::default(),
         };
         let points = frame(&mut editor, vec![]).0;
+        if line {
+            click(&mut editor, points["dashed"]);
+            frame(&mut editor, vec![]);
+            let points = frame(&mut editor, vec![]).0;
+            assert!(points.contains_key("dotted"));
+            click(&mut editor, points["dotted"]);
+            let points = frame(&mut editor, vec![]).0;
+            assert_eq!(editor.common(1, "linetype").as_deref(), Some("dotted"));
+            click(&mut editor, points["Discard"]);
+            let points = frame(&mut editor, vec![]).0;
+            click(&mut editor, points["dashed"]);
+            frame(&mut editor, vec![]);
+            frame(&mut editor, vec![key(egui::Key::ArrowDown)]);
+            frame(&mut editor, vec![key(egui::Key::Enter)]);
+            let points = frame(&mut editor, vec![]).0;
+            let sent = click(&mut editor, points["Apply to 2 tags"]);
+            assert_eq!(sent, vec![format!("drawingpatch\u{1f}{}", serde_json::json!([["slab","wall"],{"linetype":"dotted"}]))]);
+            return;
+        }
         click(&mut editor, points["brick"]);
         frame(&mut editor, vec![]);
         let points = frame(&mut editor, vec![]).0;

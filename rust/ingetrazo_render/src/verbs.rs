@@ -51,6 +51,7 @@ pub struct Facts {
     pub text3d: bool,
     pub edited_letters: bool,
     pub hideable: bool,
+    pub taggable: bool,
     pub makes_faces: bool,
     pub textured_face: bool,
     pub bridgeable: bool,
@@ -516,6 +517,13 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
             }
         }
     }
+    if f.taggable && !read_only {
+        // The same footprint as Zoom to for large selection menus.
+        let tag = e("selectiontag", "Tag…");
+        if let Some((_, row)) = r.0.iter_mut().find(|(_, row)| row.iter().any(|verb| verb.0 == "zoom")) {
+            row.push(tag);
+        } else { r.one(vec![tag]); }
+    }
     r.0
 }
 
@@ -646,6 +654,7 @@ pub fn dispatch(kind: &str, id: &str) -> (&'static str, String, String) {
         "unlockimage" => slot("_unlock_image", "locked_image"),
         "deleteimage" => slot("_delete_image", "locked_image"),
         "edittext3d" => slot("_on_edit_3d_text", "sel0"),
+        "selectiontag" => glue("selectiontag", ""),
         "hide" if one => tree("hideitem"),
         "hide" if kind == "link" => ("core", "hide".into(), String::new()),
         "hide" => slot("_on_hide", ""),
@@ -808,7 +817,9 @@ mod tests {
     #[test]
     fn every_kind_is_recognised_and_its_menu_fits() {
         for k in KINDS {
-            let f = facts_for(k);
+            let mut f = facts_for(k);
+            f.taggable = !matches!(k, "empty" | "link" | "linked_part" | "path");
+            f.reveal_key = Some("⇧⌘J".into());
             assert_eq!(kind(&f), k);
             let rows = menu_rows(&f, k);
             assert!(rows.len() <= MAX_ROWS, "{k}: {} rows", rows.len());

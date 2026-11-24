@@ -10,6 +10,8 @@ mod window_document;
 mod close_documents;
 mod component_replacement;
 mod component_rows;
+mod context_pick;
+mod context_placements;
 mod inspection_edits;
 mod context_edits;
 mod native_view_actions;
@@ -3203,8 +3205,10 @@ fn parallel_annotation_ray(eye: [f64; 3], forward: [f64; 3], point: [f64; 3]) ->
 }
 
 /// Document state comes from the controller. Headless views have no dock to unwind.
-#[pyfunction(signature = (busy, selected, editing, renderer=None, array_pending=false))]
-fn model_escape(busy: bool, selected: bool, editing: bool, mut renderer: Option<PyRefMut<'_, Renderer>>, array_pending: bool) -> &'static str {
+#[pyfunction(signature = (busy, selected, editing, renderer=None, array_pending=false, typed=false, constrained=false))]
+fn model_escape(busy: bool, selected: bool, editing: bool, mut renderer: Option<PyRefMut<'_, Renderer>>, array_pending: bool, typed: bool, constrained: bool) -> &'static str {
+    if typed { return "value"; }
+    if constrained { return "constraint"; }
     ui::Ui::model_escape(renderer.as_mut().and_then(|r| r.ui.as_mut()), busy, array_pending, selected, editing)
 }
 
@@ -3221,6 +3225,9 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     window_document::register(m)?;
     close_documents::register(m)?;
     m.add_class::<component_rows::ComponentRows>()?;
+    m.add_function(wrap_pyfunction!(context_placements::pick_candidates, m)?)?;
+    m.add_function(wrap_pyfunction!(context_placements::context_placements, m)?)?;
+    m.add_function(wrap_pyfunction!(context_pick::context_pick, m)?)?;
     m.add_function(wrap_pyfunction!(component_rows::select_component_instances, m)?)?;
     component_replacement::register(m)?;
     inspection_edits::register(m)?;
@@ -3301,9 +3308,14 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tree_grouping::row_actions::tree_header_state, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::row_actions::tree_purge_tags, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::row_actions::tree_delete_tag, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::tag_visibility::isolate_tags, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::tag_visibility::has_tag_actions, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::tag_visibility::viewport_tag_menu, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::tag_visibility::choose_merge_tag, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::row_actions::tree_tag_action, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::row_actions::tree_delete_rows, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::tree_group_rows, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::placement_controls::browser_selection, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::tree_group_action, m)?)?;
     m.add_function(wrap_pyfunction!(model_escape, m)?)?;
     m.add_function(wrap_pyfunction!(context_targets, m)?)?;

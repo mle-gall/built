@@ -93,6 +93,7 @@ mod snap_build;
 mod snap;
 mod snap_engine;
 mod tools;
+mod guide_vertices;
 mod pick;
 mod units;
 mod value_field;
@@ -112,9 +113,13 @@ mod object_weld;
 mod object_merge;
 mod panic_log;
 mod sheets;
+mod stl;
+mod alignment;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    stl::register(m)?;
+    alignment::register(m)?;
     screen::register(m)?;
     scene_animation::register(m)?;
     survey_pixels::register(m)?;
@@ -361,6 +366,12 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tools::arc::py_last_fillet_d, m)?)?;
     m.add_function(wrap_pyfunction!(tools::py::select_mode, m)?)?;
     m.add_function(wrap_pyfunction!(tools::py::select_pick, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::edit_box::box_edge_vertices, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::edit_box::point_in_screen_hull, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::edit_box::edit_group_box, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::edit_box::edit_box_contains_pixel, m)?)?;
+    m.add("MIN_CIRCLE_DASHES", guide_vertices::MIN_CIRCLE_DASHES)?;
+    m.add_function(wrap_pyfunction!(guide_vertices::guide_vertices, m)?)?;
     m.add_function(wrap_pyfunction!(pick::ray_triangles, m)?)?;
     m.add_function(wrap_pyfunction!(units::units_table, m)?)?;
     m.add_function(wrap_pyfunction!(tools::plane::drawing_plane_axes, m)?)?;
@@ -455,6 +466,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hatch_file::import_hatch_file, m)?)?;
     m.add_function(wrap_pyfunction!(style_files::tag_template_file, m)?)?;
     m.add_function(wrap_pyfunction!(style_files::export_style_file, m)?)?;
+    m.add_function(wrap_pyfunction!(style_edit::tags_in_saved_views, m)?)?;
     m.add_function(wrap_pyfunction!(style_edit::edit_line_type, m)?)?;
     m.add_function(wrap_pyfunction!(style_edit::edit_tag_folder, m)?)?;
     m.add_function(wrap_pyfunction!(style_edit::document_piece, m)?)?;

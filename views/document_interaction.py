@@ -1321,15 +1321,6 @@ EDIT_REST_MODES = ("normal", "fade", "hide")
 #: tests.
 EDIT_REST_FADE = 0.75
 
-#: The edit box must sit clear of the geometry. A tight box disappears on a
-#: cuboid because every dotted segment lands exactly on a model edge. Keep a
-#: small screen-space gutter, allowed to grow a little with a large object but
-#: capped so a long beam does not acquire a huge empty envelope.
-EDIT_BOX_PAD_MIN_PX = 8.0
-EDIT_BOX_PAD_MAX_PX = 32.0
-EDIT_BOX_PAD_RATIO = 0.05
-
-
 def edit_fade_color(background) -> tuple:
     """What the rest of the model fades TOWARDS while a group is edited: a
     grey half way between the background and a neutral mid grey. Fading
@@ -1484,29 +1475,9 @@ def _axes_vertices(spacing: float, pos_len: float = 1.0e5):
 
 
 def _box_edge_vertices(corners):
-    """The twelve edges of a box (``corners`` in ``oriented_box_corners``
-    order) as world-space LINES for the GL pass — so the part behind the
-    geometry is hidden like any line, the way guides are (issue #23). The
-    edit box used to be painted in the QPainter overlay, which has no depth:
-    inside a cube its back edges showed through the faces (Marco, 23-09).
-
-    Whole edges, not dashes: the pattern is the shader's (u_stipple 4,
-    measured in window pixels, like Back Edges). Tessellating dashes here
-    sized them by camera distance, and the count scaled as
-    edge_length/(0.012·distance) — zooming into a large open group pushed
-    it past a million segments rebuilt and re-uploaded EVERY frame (the
-    «viewport dies when I zoom in close» report: 5.8 s/frame at 5 cm on a
-    50 m box)."""
+    from ingetrazo_core import box_edge_vertices
     coords = array("f")
-    for i in range(8):
-        for bit in (1, 2, 4):
-            j = i | bit
-            if j == i:
-                continue
-            a, b = corners[i], corners[j]
-            if (b - a).length() < 1e-9:
-                continue
-            coords.extend([a.x(), a.y(), a.z(), b.x(), b.y(), b.z()])
+    coords.frombytes(memoryview(box_edge_vertices(corners)).cast("B"))
     return coords
 
 
@@ -1522,210 +1493,20 @@ def shown_guides(scene) -> list:
     return [g for g in guides if visible(g)]
 
 
-def _point_in_screen_hull(x: float, y: float, points,
-                          tolerance_px: float = 1.5) -> bool:
-    """Whether a screen point lies in the convex hull of ``points``.
-
-    The projection of a 3D box is a convex polygon (usually a hexagon), not
-    its axis-aligned screen rectangle. Testing that hull makes the visible
-    dotted frame the honest boundary for leaving group edit: its empty corner
-    triangles do not silently count as inside. The small tolerance keeps a
-    click directly on a one-pixel dotted edge inside the context.
-    """
-    pts = sorted({(float(px), float(py)) for px, py in points
-                  if math.isfinite(px) and math.isfinite(py)})
-    if not pts:
-        return False
-
-    def cross(a, b, p):
-        return ((b[0] - a[0]) * (p[1] - a[1])
-                - (b[1] - a[1]) * (p[0] - a[0]))
-
-    def half(seq):
-        out = []
-        for p in seq:
-            while len(out) >= 2 and cross(out[-2], out[-1], p) <= 0.0:
-                out.pop()
-            out.append(p)
-        return out
-
-    if len(pts) == 1:
-        return math.hypot(x - pts[0][0], y - pts[0][1]) <= tolerance_px
-    lower, upper = half(pts), half(reversed(pts))
-    hull = lower[:-1] + upper[:-1]
-    if len(hull) == 2:
-        a, b = hull
-        dx, dy = b[0] - a[0], b[1] - a[1]
-        length2 = dx * dx + dy * dy
-        t = (0.0 if length2 <= 1e-12 else
-             max(0.0, min(1.0, ((x - a[0]) * dx + (y - a[1]) * dy)
-                              / length2)))
-        return math.hypot(x - (a[0] + t * dx),
-                          y - (a[1] + t * dy)) <= tolerance_px
-    point = (float(x), float(y))
-    for i, a in enumerate(hull):
-        b = hull[(i + 1) % len(hull)]
-        edge_len = math.hypot(b[0] - a[0], b[1] - a[1])
-        if cross(a, b, point) < -tolerance_px * max(edge_len, 1.0):
-            return False
-    return True
-
-
-#: Fewest dashes a guide circle is ever cut into: below this a circle too
-#: small for the camera's dash spacing would collapse into a single dash
-#: and stop reading as a dashed circle.
-_MIN_CIRCLE_DASHES = 12
-
-
-def _circle_guide_dashes(g, spacing: float, eye=None,
-                         base_dist: float = 0.0) -> list:
-    """World-space dashes along one guide circle, as a flat
-    ``[x,y,z, x,y,z, …]`` float list for the GL vertex stream.
-
-    The circle is analytic; only this display tessellation is polygonal,
-    and only into the few chords that keep a dash reading round on screen.
-    The dash period follows the camera's spacing like a guide line, but a
-    circle too small for that spacing gets proportionally smaller dashes
-    (never fewer than ``_MIN_CIRCLE_DASHES``) so it stays visibly dashed.
-    """
-    r = float(g.radius)
-    if r <= 0.0:
-        return []
-    from core.axes import plane_axes
-    u, v = plane_axes(g.normal)
-    k = 1.0
-    if eye is not None and base_dist > 0.0:
-        k = max(1.0, (QVector3D(g.center) - QVector3D(eye)).length()
-                / base_dist)
-    sp = max(float(spacing), 1e-6) * k
-    circ = 2.0 * math.pi * r
-    n = min(max(int(circ / sp), _MIN_CIRCLE_DASHES), 4000)
-    # Half of each angular period is drawn, half is a gap — the same 1:1
-    # dash/gap ratio the guide lines use.
-    dash_angle = math.pi / n
-    chords = max(1, int(math.ceil(dash_angle / 0.15)))
-    out: list = []
-    c = QVector3D(g.center)
-    for i in range(n):
-        t0 = 2.0 * math.pi * i / n
-        step = dash_angle / chords
-        for j in range(chords):
-            a0 = t0 + step * j
-            a1 = a0 + step
-            pa = c + u * (r * math.cos(a0)) + v * (r * math.sin(a0))
-            pb = c + u * (r * math.cos(a1)) + v * (r * math.sin(a1))
-            out.extend([pa.x(), pa.y(), pa.z(), pb.x(), pb.y(), pb.z()])
-    return out
+from ingetrazo_core import point_in_screen_hull as _point_in_screen_hull
+from ingetrazo_core import MIN_CIRCLE_DASHES as _MIN_CIRCLE_DASHES
 
 
 def _guide_vertices(guides, spacing: float, selection=(), centre=None,
                     reach: float = 0.0, eye=None):
-    """Guides as world-space DASHES for the GL pass, so they are hidden by
-    the geometry in front of them like any other line (issue #23,
-    @pacaeiro: «guide lines are always in front of other objects, even if
-    they are behind the object»).
-
-    The QPainter overlay they used to live in has no depth buffer at all —
-    it paints after the render, so a guide could only ever be on top. And
-    the cheap fix does not exist: asking the pick index per sample point
-    (``_is_occluded``, what the snap engine uses) measured **618 µs a ray**
-    on the Plaza Yanque model, so ten guides would have cost 200 ms a
-    frame. The depth buffer already knows the answer for free.
-
-    A guide is a HALF-MILLION-METRE line (``GUIDE_HALF_LEN``), so it is not
-    dashed end to end: the run is centred on the guide's closest point to
-    ``centre`` (the camera target) and reaches ``reach`` metres each way,
-    with ``spacing`` scaled to the camera distance — the recipe of
-    ``_axes_vertices``, so the on-screen density stays put across zoom and
-    the dashes converge toward the horizon in perspective. Dashing the
-    whole length instead, under any sane cap, gave 27-metre dashes with
-    22-metre gaps: at a 16-metre view the guide fell in a gap and vanished.
-
-    With ``eye`` given, each guide LINE scales ``spacing`` and ``reach``
-    by how much farther from the eye its looked-at stretch lies than the
-    camera's own distance (never less): a guide 30 m away while the view
-    sits a metre from a detail drew 3 cm dashes — under a pixel — over
-    15 m, and read as faint or gone on big models (#481); and a 2 cm orbit
-    distance left after a deep zoom (#579) did the same to every guide.
-
-    Returns ``(coords, spans)``: a flat float array and
-    ``[(first_vertex, count, selected)]``, one entry per guide LINE, so the
-    caller can colour the selected ones without a second buffer. Guide
-    points are not here — they stay screen-space crosses in the overlay.
-    """
-    import numpy as np
-    coords = array("f")
-    spans: list[tuple[int, int, bool]] = []
-    spacing = max(float(spacing), 1e-6)
-    reach = float(reach) if reach > 0 else spacing * 500.0
-    dash = spacing * 0.5
-    origin = QVector3D(centre) if centre is not None else QVector3D(0, 0, 0)
-    sel = {id(g) for g in (selection or ())}
-    n = max(1, min(int(2.0 * reach / spacing), 4000))
-    # The camera distance the spacing was made for (eye to centre).
-    base_dist = ((QVector3D(eye) - origin).length()
-                 if eye is not None else 0.0)
-    for g in guides or ():
-        if getattr(g, "is_circle", False):
-            flat = _circle_guide_dashes(g, spacing, eye, base_dist)
-            if flat:
-                start = len(coords) // 3
-                coords.extend(flat)
-                count = len(coords) // 3 - start
-                if count:
-                    spans.append((start, count, id(g) in sel))
-            continue
-        if not getattr(g, "is_line", False):
-            # A guide POINT measured from a vertex draws its guide SEGMENT
-            # (Rafael, Revisión 3): finite, dashed the same way, from the
-            # vertex to the point. The cross itself stays in the overlay.
-            o = getattr(g, "origin", None)
-            p = getattr(g, "point", None)
-            if o is None or p is None:
-                continue
-            seg = p - o
-            length = seg.length()
-            if length < 1e-9:
-                continue
-            d = seg / length
-            start = len(coords) // 3
-            t = 0.0
-            while t < length:
-                a = o + d * t
-                b = o + d * min(t + dash, length)
-                coords.extend([a.x(), a.y(), a.z(), b.x(), b.y(), b.z()])
-                t += spacing
-            count = len(coords) // 3 - start
-            if count:
-                spans.append((start, count, id(g) in sel))
-            continue
-        d = getattr(g, "direction", None)
-        p = getattr(g, "point", None)
-        if d is None or p is None:
-            continue
-        # Foot of the perpendicular from the centre: the stretch of guide
-        # the camera is actually looking at.
-        tf = QVector3D.dotProduct(origin - p, d)
-        g_sp, g_reach, g_dash = spacing, reach, dash
-        if eye is not None and base_dist > 0.0:
-            k = max(1.0, (p + d * tf - eye).length() / base_dist)
-            g_sp, g_reach, g_dash = spacing * k, reach * k, dash * k
-        t0 = tf - g_reach
-        start = len(coords) // 3
-        # The n dashes in one NumPy pass: a Python loop of QVector3D maths
-        # here cost ~2 ms a guide on EVERY frame, so forty guides took a
-        # frame from 18 to 110 ms (#816).
-        ts = t0 + np.arange(n, dtype=np.float64) * g_sp
-        pv = np.array((p.x(), p.y(), p.z()), dtype=np.float64)
-        dv = np.array((d.x(), d.y(), d.z()), dtype=np.float64)
-        seg = np.empty((n, 2, 3), dtype=np.float32)
-        seg[:, 0] = pv + ts[:, None] * dv
-        seg[:, 1] = pv + (ts + g_dash)[:, None] * dv
-        coords.frombytes(seg.tobytes())
-        count = len(coords) // 3 - start
-        if count:
-            spans.append((start, count, id(g) in sel))
-    return coords, spans
+    from core import axes
+    from ingetrazo_core import guide_vertices
+    coords, spans = guide_vertices(guides or (), spacing, selection or (),
+                                   centre, reach, eye,
+                                   None if axes.is_world() else axes.frame())
+    data = array("f")
+    data.frombytes(memoryview(coords).cast("B"))
+    return data, spans
 
 
 def _ray_triangle(
@@ -4811,64 +4592,12 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             painter.drawText(QPointF(px + 10, py + 16), label)
 
     def _edit_group_box_corners(self):
-        """The eight corners of the dashed box around the group being edited
-        — the visual cue that you are INSIDE it (the classic dashed
-        box) — or None. Drawn in the GL pass, depth-tested."""
-        group = self.scene.edit_group
-        if group is None:
-            return None
-        if not group.mesh.vertices and not getattr(group, "children", None):
-            return None     # nothing to wrap
-        # A CONTAINER's own mesh is usually empty — its geometry is in its
-        # children — so testing that mesh alone left you inside a group with
-        # no box at all, the one cue that tells you where you are.
-        # In the group's OWN axes, like the selection cue: on a rotated
-        # object a world-aligned box reads as skewed and wraps mostly air.
-        from core.group import oriented_box_corners
-        frame, lo, hi = self._group_obb(group)
-        tight = oriented_box_corners(frame, lo, hi)
-
-        # Size the gutter in screen pixels. This keeps the dotted cue clearly
-        # separate from a cuboid's solid edges at every useful zoom level,
-        # without making the box of a long object needlessly large.
-        projected = [p for p in (self._world_to_pixel(c) for c in tight)
-                     if p is not None]
-        extent_px = 0.0
-        if projected:
-            xs, ys = zip(*projected)
-            extent_px = max(max(xs) - min(xs), max(ys) - min(ys))
-        pad_px = min(EDIT_BOX_PAD_MAX_PX,
-                     max(EDIT_BOX_PAD_MIN_PX,
-                         extent_px * EDIT_BOX_PAD_RATIO))
-
-        centre = sum(tight[1:], QVector3D(tight[0])) / len(tight)
-        span = float(self.camera.distance)
-        if self.camera.perspective:
-            depth = QVector3D.dotProduct(
-                centre - self.camera.eye(), self.camera.forward())
-            if math.isfinite(depth) and depth > 1e-9:
-                span = depth
-        world_per_px = (2.0 * max(span, 1e-9)
-                        * math.tan(math.radians(self.camera.fov_deg) / 2.0)
-                        / max(self.height(), 1))
-        pad = pad_px * world_per_px
-        padded_lo = tuple(float(v) - pad for v in lo)
-        padded_hi = tuple(float(v) + pad for v in hi)
-        return oriented_box_corners(frame, padded_lo, padded_hi)
+        from ingetrazo_core import edit_group_box
+        return edit_group_box(self)
 
     def edit_group_box_contains_pixel(self, x: float, y: float) -> bool:
-        """Whether ``(x, y)`` lies inside the visible dotted edit box.
-
-        This is the click boundary for stepping out of a group/component.
-        Geometry need not fill its box: clicking the deliberate empty margin,
-        or a hole in an irregular object, keeps the current edit context.
-        """
-        corners = self._edit_group_box_corners()
-        if corners is None:
-            return False
-        projected = [p for p in (self._world_to_pixel(c) for c in corners)
-                     if p is not None]
-        return _point_in_screen_hull(x, y, projected)
+        from ingetrazo_core import edit_box_contains_pixel
+        return edit_box_contains_pixel(self, x, y)
 
     # ---- Section planes ------------------------------------------------------
 
@@ -13249,55 +12978,12 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                 and self._edit_rest_mode == "hide")
 
     def _pick_candidates(self, oculto, lazy):
-        """What the pick index takes from the placements: the ids the
-        context lets you touch, the fixed placements in order, and the lazy
-        ones as ``id → (position, group)`` (see ``_pick_index``)."""
-        scene = self.scene
-        del_contexto = self._context_placements()
-        tocables = {id(g) for g in del_contexto}
-        # What the current context lets you TOUCH: the whole scene at the
-        # root, the children of the group you are inside otherwise. This
-        # used to be `if scene.edit_group is None`, which took EVERY group
-        # out of the index while you were inside one — so a group's children
-        # were drawn and could not be clicked, and «todo está combinado»
-        # (Marco, 2026-09-11).
-        # What the snap engine may LAND ON is the whole model. Inside a
-        # group the snap still infers against the rest — faded, but every
-        # corner and edge of it is a reference. Holding only the context
-        # here meant no green dot on the pavement while moving a nested
-        # group onto it («me debería salir un punto verde de la referencia»,
-        # Marco, 2026-09-11). So the index carries every placement and the
-        # context decides SELECTABILITY, not membership: the rest occludes
-        # and snaps, and cannot be picked. What the open group itself owns is
-        # already here as the loose part. «Hide» is the exception — what is
-        # not drawn is not there.
-        ctx = scene.edit_group
-        if ctx is None or oculto:
-            candidatos = del_contexto
-        else:
-            candidatos = [g for g in self._placements()
-                          if g is not ctx and self._owner_of(g) is not ctx]
-        lazy_ids = lazy[4] if lazy is not None else ()
-        fixed = [g for g in candidatos if id(g) not in lazy_ids]
-        lazy_pos = {id(g): (i, g) for i, g in enumerate(candidatos)
-                    if id(g) in lazy_ids}
-        return tocables, fixed, lazy_pos
+        from ingetrazo_render import pick_candidates
+        return pick_candidates(self, oculto, lazy)
 
     def _context_placements(self):
-        """The placements the CURRENT context lets you touch.
-
-        At the root that is the whole scene. Inside a group it is its
-        children and their subtrees — never the model around it, which is
-        exactly why you cannot grab the rest of the drawing while you are
-        inside a group.
-        """
-        ctx = self.scene.edit_group
-        todo = self._placements()
-        if ctx is None:
-            return todo
-        return [g for g in todo
-                if getattr(g, "context", None) is ctx
-                and getattr(g, "owner", None) is not ctx]
+        from ingetrazo_render import context_placements
+        return context_placements(self)
 
     def _owner_of(self, group):
         """The object a click on ``group`` must select: a nested placement
@@ -13413,34 +13099,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     # ---- Input --------------------------------------------------------------
     def _context_pick(self, x: float, y: float):
-        """Right-click at ``(x, y)``: select the thing under the cursor
-        before the menu opens — unless it is already selected, which keeps
-        the selection as it is. Returns that thing (or ``None``).
-
-        «Under the cursor» is what the cursor SHOWS: a group behind a
-        selected loose face used to take the right-click and drop the
-        selection, and «Make Group» with it (#378).
-
-        Something already selected under the cursor wins outright: loose
-        geometry flush on a group (a block standing on it, a face drawn on
-        its surface) is coplanar with the group there, and the group took
-        the click (#744)."""
-        mine = self.pick_edge(x, y) or self.pick_face(x, y)
-        if mine is not None and mine in self.scene.selection:
-            return mine
-        picked = (self.pick_text_label(x, y, rect_only=True)
-                  or self.pick_group(x, y) or self.pick_edge(x, y)
-                  or self.pick_geopath(x, y) or self.pick_dimension(x, y)
-                  or self.pick_text_label(x, y)
-                  or self.pick_section_plane(x, y)
-                  or self.pick_guide(x, y)
-                  or self._face_or_image_in_front(x, y)
-                  or self.pick_image_plane(x, y)
-                  or self.pick_locked_image_plane(x, y))
-        if picked is not None and picked not in self.scene.selection:
-            self.scene.select([picked])
-            self.update()
-        return picked
+        from ingetrazo_render import context_pick
+        return context_pick(self, x, y)
 
     def _face_or_image_in_front(self, x: float, y: float):
         face = self.pick_face(x, y)

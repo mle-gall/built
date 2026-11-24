@@ -57,7 +57,9 @@ def facts(scene, sel, win=None, view=None, *, locked_group=None, locked_image=No
     if locked_image is not None and locked_image not in sel:
         f["locked_image"] = getattr(locked_image, "name", "") or "image"
     geometry = bool(sel) and len(faces) + len(edges) == len(sel)
-    f.update(hideable=bool(win._hideable(sel)),
+    from ingetrazo_render import has_tag_actions
+    f.update(taggable=has_tag_actions(scene, sel),
+             hideable=bool(win._hideable(sel)),
              makes_faces=bool(geometry and win._makes_faces(sel)),
              textured_face=len(faces) == 1 == len(sel) and win._single_textured_face() is not None,
              bridgeable=bool(geometry and win._bridgeable(sel)),

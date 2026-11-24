@@ -1151,6 +1151,22 @@ impl PyPlacement {
         Ok((c.matched, c.allowed, c.through, qualified))
     }
 
+    /// Nearest enclosing placement responsible for each closed Browser control.
+    /// Filing nodes may be unrelated to physical containment.
+    pub(crate) fn _closed_ancestors(&self) -> (Option<String>, Option<String>) {
+        let doc = lock();
+        let mut key = self.key;
+        let (mut hidden, mut locked) = (None, None);
+        while let Some(parent) = doc.node(key).and_then(|n| n.owners.first()) {
+            let Some(super::Data::Placement(p)) = doc.node(*parent).map(|n| &n.data) else { break };
+            if p.hidden && hidden.is_none() { hidden = Some(p.name.clone().unwrap_or_default()); }
+            if p.locked && locked.is_none() { locked = Some(p.name.clone().unwrap_or_default()); }
+            if hidden.is_some() && locked.is_some() { break; }
+            key = *parent;
+        }
+        (hidden, locked)
+    }
+
     fn _occurrence_path(&self, placement: &PyPlacement) -> Option<Vec<String>> {
         let d = lock();
         let mut k = placement.key;

@@ -570,7 +570,8 @@ impl Gallery {
             paint_eye(ui, Rect::from_min_size(pos2(ax + i as f32 * 20., ay), vec2(16., 16.)), on);
             paint_lock(ui, Rect::from_min_size(pos2(ax + 40. + i as f32 * 20., ay), vec2(16., 16.)), on);
         }
-        ax += 84.;
+        paint_row_eye(ui, Rect::from_min_size(pos2(ax + 80., ay), vec2(16., 16.)), 2);
+        ax += 104.;
         chevron(ui.painter(), pos2(ax, ay + 8.), true, FAINT);
         chevron(ui.painter(), pos2(ax + 14., ay + 8.), false, FAINT);
         dot(ui.painter(), pos2(ax + 30., ay + 8.), FOUND);
@@ -622,11 +623,12 @@ impl Gallery {
                 ui.add(search(&mut self.dock_filter, "Filter nodes").desired_width(w));
                 ui.spacing_mut().item_spacing = vec2(0., 0.);
                 // (name, depth, expanded, selected, eye, lock, count, state dot, note)
-                let rows: [(&str, usize, Option<bool>, bool, i8, i8, &str, Option<Color32>, &str); 6] = [
+                let rows: [(&str, usize, Option<bool>, bool, i8, i8, &str, Option<Color32>, &str); 7] = [
                     ("Ride.igz", 0, Some(false), false, 1, 0, "48", Some(FOUND), ""),
                     ("Studio", 0, Some(true), false, 1, 0, "12", None, ""),
                     ("Walls", 1, None, true, 1, 0, "6", None, ""),
-                    ("Roof", 1, None, false, 1, 1, "4", None, ""),
+                    ("Roof", 1, Some(true), false, 1, 1, "4", None, ""),
+                    ("Rafter", 2, None, false, 1, 2, "", None, ""),
                     ("Furniture", 1, None, false, 0, 0, "2", None, ""),
                     ("Survey.igz", 0, None, false, -1, -1, "", Some(MISSING), "via Ride"),
                 ];
@@ -653,7 +655,7 @@ impl Gallery {
                     if !note.is_empty() {
                         ui.painter().text(pos2(x, r.center().y), Align2::LEFT_CENTER, note, meta(), FAINT);
                     }
-                    tree_slots(ui, r.right() - 8., r.center().y, eye, lock, resp.hovered() || eye == 0 || lock == 1 || selected);
+                    tree_slots(ui, r.right() - 8., r.center().y, eye, lock, resp.hovered() || eye != 1 || lock >= 1 || selected);
                     ui.painter().text(r.right_center() - vec2(8., 0.), Align2::RIGHT_CENTER, count, meta(), DIM);
                 });
             });
