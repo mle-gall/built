@@ -236,3 +236,17 @@ def test_a_plain_move_still_moves():
     tool.on_click(_ctx(vp, 0.5, 2.5))
     ys = [c[1] for c in _corners(g)]
     assert min(ys) == pytest.approx(2.0)
+
+
+def test_native_move_hover_uses_the_displayed_placements_box():
+    from types import SimpleNamespace
+    from views.wgpu_mesh_tools import MeshToolAccess
+
+    scene, group, vp, tool = _setup()
+    access = MeshToolAccess()
+    access.view = SimpleNamespace(_group_obb=vp._group_obb)
+    access.scene, access.camera = scene, vp.camera
+    access.pick_group = vp.pick_group
+    access._world_to_pixel = vp._world_to_pixel
+    tool._track_grips(_ctx(access, 3.2, .5))
+    assert tool._grip_group is group and tool._hot_grip is not None

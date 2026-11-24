@@ -219,7 +219,11 @@ def draw_tool_feedback(painter, tools, layout):
     axis a line follows. ``layout`` is the frame's AnnotationLayout (live
     camera at the overlay's logical size); ``tools`` is NativeTools."""
     tool = getattr(tools, "active_tool", None)
+    view = getattr(tools, "view", None)
+    native_wire = getattr(getattr(view, "renderer", None), "set_tool_wire", None)
     if tool is None:
+        if native_wire is not None:
+            native_wire(None, (), 1.)
         return
     layout.active_tool = tool
     layout.last_snap = getattr(tools, "last_snap", None)
@@ -230,11 +234,18 @@ def draw_tool_feedback(painter, tools, layout):
     layout._route_marker = getattr(tools, "_route_marker", None)
     painter.save()
     try:
-        band = rubber_band(tools) if callable(getattr(tool, "rubber_band_lines", None)) else None
-        layout._overlay_rubber = band[:3] if band is not None and not band[3] else None
-        layout._draw_rubber_band_overlay(painter)
-        if hasattr(tool, "guide_preview_lines"):
-            layout._draw_guide_preview(painter)
+        floating = (not getattr(tool, "wireframe_depth_tested", False)
+                    and callable(getattr(tool, "rubber_band_lines", None)))
+        band = rubber_band(tools) if floating else None
+        if native_wire is not None:
+            visible = getattr(getattr(view, "source_viewport", None), "tool_preview", True)
+            guides = getattr(tool, "guide_preview_lines", lambda: ())() if visible else ()
+            native_wire(band if visible else None, guides, painter.device().devicePixelRatioF())
+        else:
+            layout._overlay_rubber = band[:3] if band is not None else None
+            layout._draw_rubber_band_overlay(painter)
+            if hasattr(tool, "guide_preview_lines"):
+                layout._draw_guide_preview(painter)
         layout._draw_inference_marker(painter)
         layout._draw_scale_box(painter)
         layout._draw_route_marker(painter)

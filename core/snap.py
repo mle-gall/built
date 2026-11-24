@@ -214,38 +214,7 @@ def first_point_work_plane(forward: QVector3D, scene_center: QVector3D,
     return scene_center, normal
 
 
-def face_plane_world(face, xform=None):
-    """A face's plane as ``(point, normal)`` in WORLD coordinates.
-
-    A component instance's face lives in its prototype's local frame, so
-    its centroid and normal describe the copy at the origin — using them
-    raw put the drawing plane of every instance in the wrong place (no
-    reference on the far face of a placed slat: Marco, 2026-09-03). The
-    normal is rebuilt from the mapped polygon, exact for any affine map."""
-    if xform is None:
-        return face.centroid(), face.normal()
-    pts = [xform.map(QVector3D(v)) for v in face.vertices]
-    if hasattr(_native.native, 'face_plane') and pts:
-        center, normal = _native.native.face_plane([p.toTuple() for p in pts])
-        n = QVector3D(*normal)
-        if n.isNull():
-            n = xform.mapVector(face.normal()).normalized()
-        return QVector3D(*center), n
-    n = len(pts)
-    c = QVector3D(0.0, 0.0, 0.0)
-    for p in pts:
-        c += p
-    c /= float(n)
-    nx = ny = nz = 0.0
-    for i in range(n):
-        a, b = pts[i], pts[(i + 1) % n]
-        nx += (a.y() - b.y()) * (a.z() + b.z())
-        ny += (a.z() - b.z()) * (a.x() + b.x())
-        nz += (a.x() - b.x()) * (a.y() + b.y())
-    normal = QVector3D(nx, ny, nz)
-    if normal.length() < 1e-12:
-        return c, xform.mapVector(face.normal()).normalized()
-    return c, normal.normalized()
+from ingetrazo_core import face_plane_world
 
 
 def _detect_axis_alignment(

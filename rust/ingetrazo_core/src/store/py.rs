@@ -92,9 +92,8 @@ struct InstanceStore {
 impl InstanceStore {
     fn refresh(slf: &Bound<'_, Self>) -> PyResult<()> {
         let definition = slf.get().definition.bind(slf.py()).try_borrow()?;
-        let mut view = slf.as_super().try_borrow_mut()?;
-        if definition.inner.revision != view.inner.revision {
-            view._publish_frame(&definition)?;
+        if definition.inner.revision != slf.as_super().try_borrow()?.inner.revision {
+            slf.as_super().try_borrow_mut()?._publish_frame(&definition)?;
         }
         Ok(())
     }
@@ -172,6 +171,22 @@ impl InstanceMethod {
 type OrderCache = (u64, Arc<Vec<u32>>, Arc<Vec<u32>>);
 
 impl PyMeshStore {
+    pub(crate) fn place_tool_batch(store: &Bound<'_, PyAny>, positions: Vec<(u128, [f64; 3])>) -> PyResult<()> {
+        if store.is_exact_instance_of::<Self>() {
+            return store.cast::<Self>()?.try_borrow_mut()?.place_tool_vertices(positions);
+        }
+        store.call_method1("place_tool_vertices", (positions,))?;
+        Ok(())
+    }
+
+    /// Native queries must observe the latest definition when reading an occurrence.
+    pub(crate) fn read<'py>(store: &Bound<'py, PyAny>) -> PyResult<PyRef<'py, Self>> {
+        if let Ok(view) = store.cast::<InstanceStore>() {
+            InstanceStore::refresh(view)?;
+        }
+        Ok(store.extract()?)
+    }
+
     fn wrap(inner: Store) -> Self {
         Self { inner, cache: Mutex::new(Default::default()) }
     }
@@ -691,6 +706,65 @@ impl PyMeshStore {
         dense_dict(py, d)
     }
 
+    fn tool_face_picker(&self, py: Python<'_>, hypot: &str) -> PyResult<crate::pick::FacePicker> {
+        let hypot = crate::hypot_of(hypot)?;
+        Ok(py.detach(|| crate::pick::FacePicker::from_store(&self.inner, hypot)))
+    }
+
+    fn nearest_edges(&self, py: Python<'_>, matrix: [f64;16], width: f64, height: f64,
+                     x: f64, y: f64, radius: f64) -> Vec<(usize,f64,f64)> {
+        let camera = crate::pick::Projector::new(&matrix, width, height);
+        let st = &self.inner;
+        let edges = self.order_of(Kind::Edge).0;
+        py.detach(|| {
+            let projected = edges.iter().map(|&edge| {
+                let [a,b] = st.state.ends.get(edge as usize).map(|v|
+                    camera.px(*st.state.vpos.get(v as usize)));
+                (a,b)
+            });
+            crate::pick::nearest_projected(projected, x, y, radius)
+        })
+    }
+
+    fn tool_selection(&self, key: u128, grow: &str) -> Option<(Vec<u128>, Vec<u128>)> {
+        crate::tools::selection_growth::selection(&self.inner, key, grow)
+    }
+
+    fn preview_points(&self, py: Python<'_>, keys: Vec<u128>, origin: [f64; 3]) -> Option<Vec<[f64; 3]>> {
+        py.detach(|| crate::tools::loose_preview::preview_points(&self.inner, keys, origin))
+    }
+
+    /// The maximal degree-two path through an Offset pick.
+    fn edge_run(&self, key: u128) -> PyResult<(Vec<crate::math::Vec3>, bool)> {
+        let edge = any_of(&self.inner, Kind::Edge, key)?;
+        Ok(crate::tools::edge_runs::store_run(&self.inner, edge))
+    }
+
+    /// Box selection reads live topology in document order without exporting
+    /// topology, attributes or adjacency arrays to the viewport.
+    fn box_pick(&self, py: Python<'_>, matrix: [f64; 16], width: f64, height: f64,
+                rect: [f64; 4], crossing: bool) -> (Vec<usize>, Vec<usize>) {
+        use crate::pick::{face_in_box, seg_rect, Projector};
+        let proj = Projector::new(&matrix, width, height);
+        let store = &self.inner;
+        py.detach(|| {
+            let vertex_slots = &store.state.slots[Kind::Vertex as usize];
+            let mut px = vec![(0., 0., false); vertex_slots.len()];
+            for v in store.live_slots(Kind::Vertex) {
+                px[v as usize] = proj.px(*store.state.vpos.get(v as usize));
+            }
+            let edges = store.live_slots(Kind::Edge).into_iter().enumerate().filter_map(|(i,e)| {
+                let [a,b] = store.state.ends.get(e as usize).map(|v| px[v as usize]);
+                seg_rect((a.0,a.1), (b.0,b.1), a.2 && b.2, &rect, crossing).then_some(i)
+            }).collect();
+            let faces = store.live_slots(Kind::Face).into_iter().enumerate().filter_map(|(i,f)| {
+                let rings = store.face_rings(f);
+                face_in_box(rings.iter().map(|ring| ring.iter().map(|&v| px[v as usize])), &rect, crossing).then_some(i)
+            }).collect();
+            (edges, faces)
+        })
+    }
+
     /// Which snapshots are this store's own (`restore` keeps their keys).
     #[getter]
     fn lineage(&self) -> u64 {
@@ -913,6 +987,16 @@ impl PyMeshStore {
     fn place_vertex(&mut self, key: u128, position: (f64, f64, f64)) -> PyResult<PyChange> {
         let v = self.inner.slot(Kind::Vertex, key).ok_or_else(|| PyKeyError::new_err(key))?;
         Ok(PyChange { inner: self.inner.place_vertex(v, [position.0, position.1, position.2]) })
+    }
+
+    /// Resolve every key before writing an absolute tool pose. Occurrence
+    /// stores publish the completed batch through their normal method wrapper.
+    fn place_tool_vertices(&mut self, positions: Vec<(u128, [f64; 3])>) -> PyResult<()> {
+        let targets = positions.into_iter().map(|(key, p)| {
+            self.inner.slot(Kind::Vertex, key).map(|v| (v, p)).ok_or_else(|| PyKeyError::new_err(key))
+        }).collect::<PyResult<Vec<_>>>()?;
+        for (v, p) in targets { self.inner.place_vertex(v, p); }
+        Ok(())
     }
 
     /// Batch move of many vertices by one delta (a Move drag frame),

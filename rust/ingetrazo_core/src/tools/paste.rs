@@ -21,6 +21,7 @@ pub struct Paste {
     reference: Option<P3>,
     offset: P3,
     lines: Vec<[P3; 2]>,
+    surfaces: Vec<Vec<Vec<P3>>>,
 }
 impl Paste {
     fn stamp(&self, offset: P3, host: &mut dyn ToolHost) -> Reply {
@@ -56,6 +57,12 @@ impl Tool for Paste {
             "clipboard" => {
                 self.reference = json_p3(&v["ref"]);
                 self.lines.clear();
+                self.surfaces = serde_json::from_value(v["faces"].clone()).unwrap_or_default();
+                for face in &self.surfaces {
+                    for ring in face {
+                        self.lines.extend(ring.iter().zip(ring.iter().cycle().skip(1)).map(|(a,b)| [*a,*b]));
+                    }
+                }
                 if let Some(loops) = v["rings"].as_array() {
                     for ring in loops {
                         let Ok(pts) = serde_json::from_value::<Vec<P3>>(ring.clone()) else {
@@ -93,6 +100,7 @@ impl Tool for Paste {
             ToolEvent::Deactivate | ToolEvent::Cancel => {
                 host.call("end_paste_preview", Json::Null);
                 self.reference = None;
+                self.surfaces.clear();
                 self.lines.clear();
             }
             ToolEvent::Hover(p) => {
@@ -112,6 +120,10 @@ impl Tool for Paste {
             _ => return Reply::ignored(),
         }
         Reply::redraw()
+    }
+    fn preview_surfaces(&self) -> std::borrow::Cow<'_, [Vec<Vec<P3>>]> {
+        std::borrow::Cow::Owned(self.surfaces.iter().map(|face| face.iter().map(|ring|
+            ring.iter().map(|p| add(*p,self.offset)).collect()).collect()).collect())
     }
     fn preview(&self) -> Preview {
         Preview {

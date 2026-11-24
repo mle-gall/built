@@ -118,13 +118,6 @@ class DimensionTool(_AnnotationTool):
             ends = [Attachment.capture(vp.scene, hit, owner, p) if hit else None for p in (edge.a, edge.b)]
             return _tuple(edge.a), _tuple(edge.b), [e.archive() if e else None for e in ends]
 
-    def host_dimension_lock(self, vp, _):
-        return getattr(vp, "axis_lock", None)
-
-    def host_dimension_unlock(self, vp, _):
-        if getattr(vp, "_shift_lock", None):
-            vp._shift_lock = None
-
     _free = property(fset=lambda self, value: self._machine.set("free", (_tuple(value[0]), value[1]) if value else None))
 
     def _proposed(self, cursor):

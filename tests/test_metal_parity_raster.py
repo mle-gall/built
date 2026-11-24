@@ -163,6 +163,83 @@ def test_preview_and_face_marks_are_depth_tested(native,aa):
     np.testing.assert_array_equal(original,capture(native))
 
 
+def test_tool_wire_draws_over_faces_and_clears(native):
+    upload(native, 255)
+    native.set_style(dict(sky=False, edges=False))
+    original = capture(native)
+    band = ([((-.7, 0., -.5), (.7, 0., -.5))], (0., 1., 0., 1.), 3.)
+    native.set_tool_wire(band, (), 1.)
+    marked = capture(native)
+    assert (marked[31:33, 15:49, 1] > 200).all()
+    native.set_tool_wire(None, (), 1.)
+    np.testing.assert_array_equal(original, capture(native))
+
+
+def test_loose_transform_preview_restores_resident_faces(native):
+    vertices, _, _, _, _ = upload(native, 255)
+    native.set_style(dict(sky=False, edges=False))
+    original = capture(native)
+    selected = vertices["pos"][:6].tolist()
+    assert native.begin_tool_geometry(0, vertices.view(np.uint8).ravel(), selected, [0., 0., 0.])
+    transform = np.eye(4)
+    transform[3, 0] = 3.
+    native.pose_tool_geometry(transform.ravel().tolist())
+    moved = capture(native)
+    assert moved[32, 32, 2] > moved[32, 32, 0]
+    native.end_tool_geometry()
+    np.testing.assert_array_equal(original, capture(native))
+
+
+def test_texture_tool_updates_only_one_faces_uv_rows(native, tmp_path):
+    from types import SimpleNamespace
+    from PySide6.QtGui import QColor, QImage
+    from ingetrazo_core import Vec3
+    from tools.texture_position import TexturePositionTool
+    from tools.texture_position_metal import TexturePreview
+    from views.wgpu_scene import pack_scene
+
+    path = tmp_path / "tile.png"
+    image = QImage(16, 16, QImage.Format_RGBA8888)
+    for y in range(16):
+        for x in range(16):
+            image.setPixelColor(x, y, QColor("red") if x < 8 else QColor("blue"))
+    assert image.save(str(path))
+    scene = Scene()
+    for x in (-.85, .1):
+        face = scene.mesh.add_face([Vec3(x+u, v, 0) for u, v in
+                                    ((0, -.7), (.7, -.7), (.7, .7), (0, .7))])
+        face.attrs["texture"] = {"path": str(path), "sw": 1., "sh": 1.}
+    pack = pack_scene(scene)
+    pack.upload(native)
+    native.set_style(dict(sky=False, edges=False))
+    view = SimpleNamespace(scene=scene, packed=pack, renderer=native, _instance_updates=True)
+    tool = TexturePositionTool()
+    assert tool.begin(view, face, face.centroid())
+    preview = TexturePreview(view)
+    before = capture(native)
+    memory = native.gpu_memory
+    tool.map.R += Vec3(.5, 0, 0)
+    preview.update(tool)
+    shifted = capture(native)
+    np.testing.assert_array_equal(before[:, :31], shifted[:, :31])
+    assert np.count_nonzero(np.any(before[:, 34:] != shifted[:, 34:], axis=2)) > 80
+    assert native.gpu_memory == memory
+    preview.restore()
+    np.testing.assert_array_equal(before, capture(native))
+
+
+def test_tool_pick_same_pixel_tracks_instance_changes(native):
+    _, _, _, _, rows = upload(native, 255)
+    assert native.pick(32, 32) == 0
+    assert native.pick(32, 32) == 0
+    rows["world"][0, 3, 0] = 4.
+    native.update_instances([0], rows.view(np.uint8).ravel())
+    assert native.pick(32, 32) == -1
+    rows["world"][0, 3, 0] = 0.
+    native.update_instances([0], rows.view(np.uint8).ravel())
+    assert native.pick(32, 32) == 0
+
+
 @pytest.mark.parametrize('aa',[False,True])
 def test_scaffold_lines_are_depth_tested_and_dashed(native,aa):
     """The edit box and guides (``lines.rs``): hidden behind a face, drawn
@@ -678,3 +755,79 @@ def test_model_behind_reference_only_hidden_by_opaque_imagery(native, antialias)
     # Flat tiles and faded images leave geometry visible behind their plane.
     np.testing.assert_array_equal(frame(1., False), original[32, 32])
     np.testing.assert_array_equal(frame(.5, False), original[32, 32])
+
+
+def test_selection_marks_follow_the_grab_and_leave_hover_marks_in_place(native):
+    from ingetrazo_core import Vec3
+    vertices, *_ = upload(native, 255)
+    native.set_style(dict(sky=False, edges=False))
+    marks = np.tile(vertices[:6], 2)
+    marks['pos'][:, :2] *= .3
+    marks['pos'][:6, 0] -= .45
+    marks['pos'][6:, 1] += .6
+    marks['pos'][:, 2] = .1
+    marks['color'][:] = [0, 255, 0, 255]
+    native.set_face_marks(marks.view(np.uint8).ravel())
+    before = capture(native)
+    assert np.count_nonzero(before[24:40, 7:26, 1] > 150) > 4
+
+    scene = Scene()
+    edge = scene.mesh.add_edge(Vec3(-.65, -.5, .1), Vec3(-.25, -.5, .1))
+    native.begin_tool_marks({edge}, None, {edge.v0.key, edge.v1.key})
+    matrix = np.eye(4)
+    matrix[3, 0] = .9
+    native.pose_tool_marks(matrix.ravel(), 6)
+    moved = capture(native)
+    assert not np.any(moved[24:40, 7:26, 1] > 150)
+    assert np.count_nonzero(moved[24:40, 38:58, 1] > 150) > 4
+    assert np.count_nonzero(moved[46:50, 38:58, 1] > 50) > 4
+    np.testing.assert_array_equal(before[:20], moved[:20])
+    native.end_tool_marks()
+    np.testing.assert_array_equal(before, capture(native))
+
+
+@pytest.mark.parametrize('aa', [False, True])
+def test_clipboard_group_preview_moves_nested_texture_and_preserves_scene(native, tmp_path, aa):
+    from types import SimpleNamespace
+    from PySide6.QtGui import QColor, QImage
+    from ingetrazo_core import Vec3, Matrix4
+    from core.scene import Scene
+    from core.group import Group
+    from core.mesh import Mesh
+    from views.wgpu_mesh_tools import MeshToolAccess
+
+    upload(native, 255)
+    native.set_antialias(aa)
+    native.set_style(dict(sky=False, edges=False))
+    original = capture(native)
+    path = str(tmp_path / 'clipboard.png')
+    img = QImage(2, 1, QImage.Format_RGBA8888)
+    img.fill(QColor(0, 255, 100))
+    assert img.save(path)
+    mesh = Mesh()
+    face = mesh.add_face([Vec3(x, y, .3) for x, y in
+                          [(-.3, -.3), (.3, -.3), (.3, .3), (-.3, .3)]])
+    face.attrs = {'texture': {'path': path}}
+    child = Group(mesh)
+    root = Group(Mesh())
+    root.children.append(child)
+    placement = Matrix4()
+    placement.translate(Vec3(-.5, 0, 0))
+    root.xform = placement
+    scene = Scene()
+    access = MeshToolAccess()
+    access.scene = scene
+    access.update = lambda: None
+    access.view = SimpleNamespace(renderer=native, packed=SimpleNamespace(origin=(0., 0., 0.)))
+    version = scene.version
+    access.begin_groups_preview([root], external=True)
+    before = capture(native)
+    access.set_groups_preview_offset(Vec3(1., 0, 0))
+    after = capture(native)
+    access.end_groups_preview()
+    np.testing.assert_array_equal(capture(native), original)
+    for frame, on, off in [(before, 16, 48), (after, 48, 16)]:
+        assert frame[32, on, 1] > 220 and frame[32, on, 0] < 20
+        np.testing.assert_array_equal(frame[32, off], original[32, off])
+    assert list(root.children) == [child] and list(scene.groups) == []
+    assert scene.version == version

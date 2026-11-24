@@ -44,7 +44,7 @@ import math
 import time
 
 from PySide6.QtCore import Qt
-from ingetrazo_core import Vec3 as QVector3D
+from ingetrazo_core import Vec3 as QVector3D, push_sweep_preview, push_reference_target
 from views import input_state
 
 from core.geometry import Face
@@ -380,7 +380,7 @@ class PushPullTool(PushPullOperation, RustTool):
         self._prism_applied = 0.0
         self._prism_verts = []
         self._light_faces = []
-        self._light_rings = []
+        self._light_wires = []
         self._infer_cache = None
         self._refused = False
         self._topped_out = False
@@ -388,7 +388,7 @@ class PushPullTool(PushPullOperation, RustTool):
 
     def host_cancel(self, viewport, args):
         self._light_faces = []
-        self._light_rings = []
+        self._light_wires = []
         self._revert_preview(viewport)
         viewport.set_hover(None)
         viewport.set_suppressed_faces(set())
@@ -410,99 +410,25 @@ class PushPullTool(PushPullOperation, RustTool):
     # commit replaces both with the real stitched geometry. A prism or staged
     # preview shows the model itself and leaves both empty.
     def rubber_band_lines(self):
-        """The sweep's edges: the base ring, the moved ring, and one riser per
-        corner — for the outer loop and every hole.
-
-        The overlay draws its faces FILLED and nothing else, so without this
-        the forming solid slid under the cursor as a flat silhouette with no
-        edges, and only snapped into a real box once the drag ended (Marco,
-        2026-08-27). The mesh-mutating preview it replaced got its edges for
-        free, from the mesh; the overlay has to say them out loud.
-
-        A riser that the commit is going to SOFTEN is left out: pushing a
-        circle drew every facet seam of the cylinder's side, so the shape
-        arrived streaked with lines and only cleaned up on release (Marco,
-        2026-08-27). The same dihedral rule ``Store::finish_push`` applies
-        afterwards decides it here — read off the sweep's own wall normals,
-        no mesh needed — so a circle previews as a smooth cylinder while a
-        hexagon keeps the edges it will really have. A circle's own segments
-        stay visible either way: the Circle tool does not soften them, only
-        the sweep's verticals are.
-
-        The BASE ring is not drawn at all. Those edges belong to the base
-        face and are already in the mesh, so the model draws them itself —
-        saying them again put a seam across the block the drag was forming,
-        because the preview's polygon offset let the repeat win the depth
-        test against its own faces (Marco, 2026-08-27).
-
-        They cost a handful of points: the rings are the base face's own
-        loops, already built for the sweep. Drawn in ``wireframe_color`` and
-        depth-tested (class attributes above), so the box hides its own back
-        edges and reads like real geometry rather than a loose rubber band."""
-        segs = []
-        for low, high in self._light_rings:
-            n = len(low)
-            if n < 2:
-                continue
-            # Wall i spans low[i]→low[i+1]; its normal is that edge crossed
-            # with the sweep. The riser at corner i divides walls i-1 and i.
-            off = high[0] - low[0]
-            normals = []
-            for i in range(n):
-                nv = QVector3D.crossProduct(low[(i + 1) % n] - low[i], off)
-                normals.append(nv.normalized() if nv.length() > 1e-12 else None)
-            for i in range(n):
-                j = (i + 1) % n
-                segs.append((high[i], high[j]))
-                a, b = normals[i - 1], normals[i]
-                if a is not None and b is not None:
-                    d = QVector3D.dotProduct(a, b)
-                    if self._CURVE_FACET_COS < d < 0.99995:
-                        continue          # curve facet: soft once committed
-                segs.append((low[i], high[i]))
-        return segs
+        return self._light_wires
 
     def preview_faces(self):
         return self._light_faces
 
     def _build_light_faces(self):
-        """The naive sweep of the base face as plain preview polygons: the
-        moved cap (holes carried) and one quad per boundary and hole edge.
-
-        This is the *shape* the push makes, without any of the work that makes
-        it a valid solid — no stitch, no per-plane rebuild, no guard. Those
-        decide how the new geometry MERGES with what is already there, which
-        is exactly what you cannot see while the shape is still moving."""
-        d = self.extrusion
-        self._light_rings = []
-        if (self.base_face is None or self._normal is None
-                or abs(d) < _MIN_EXTRUDE):
+        self._light_wires = []
+        if self.base_face is None or self._normal is None or abs(self.extrusion) < _MIN_EXTRUDE:
             return []
-        out = self._sweep_faces(self.base_face, self._normal * d)
-        for face, n in zip(self._extra_faces, self._extra_normals):
-            out += self._sweep_faces(face, n * d)
-        return out
-
-    def _sweep_faces(self, face, off: QVector3D) -> list:
-        """One face's naive sweep by ``off``; its rings join
-        ``_light_rings``, which the wireframe reads back."""
-        attrs = dict(face.attrs) if face.attrs else None
-        # The walls take the base's PAINT, re-anchored to their own planes —
-        # the same thing the commit stamps on them, so the drag shows the
-        # material the push is about to produce instead of bare cream.
-        wall_attrs = _paint_of(face) or None
-        rings = [(list(face.vertices), [p + off for p in face.vertices])]
-        rings += [(list(h), [p + off for p in h]) for h in face.holes]
-        self._light_rings += rings
-        cap = Face(rings[0][1], [r[1] for r in rings[1:]], attrs=attrs)
-        out = [cap]
-        for low, high in rings:
-            count = len(low)
-            for i in range(count):
-                j = (i + 1) % count
-                out.append(Face([low[i], low[j], high[j], high[i]],
-                                attrs=wall_attrs))
-        return out
+        faces = []
+        for face, normal in zip((self.base_face, *self._extra_faces),
+                                (self._normal, *self._extra_normals)):
+            cap, walls, wires = push_sweep_preview(face, normal * self.extrusion,
+                                                  self._CURVE_FACET_COS)
+            faces.append(Face(cap[0], cap[1:], dict(face.attrs) if face.attrs else None))
+            paint = _paint_of(face) or None
+            faces.extend(Face(wall, attrs=paint) for wall in walls)
+            self._light_wires.extend(wires)
+        return faces
 
     def _show_light_preview(self, viewport) -> None:
         """Drop any applied preview and show the sweep as an overlay instead.
@@ -585,7 +511,7 @@ class PushPullTool(PushPullOperation, RustTool):
         operation, so the two always agree.
         """
         self._light_faces = []
-        self._light_rings = []
+        self._light_wires = []
         viewport.set_suppressed_faces(set())
         delta = self.extrusion - self._prism_applied
         if abs(delta) > 1e-12:
@@ -624,7 +550,7 @@ class PushPullTool(PushPullOperation, RustTool):
         stages anew (_enter_stage). A refused or failed stage, or any new one
         once staging proved slow, shows the overlay instead."""
         self._light_faces = []
-        self._light_rings = []
+        self._light_wires = []
         d = self.extrusion
         if abs(d) < _MIN_EXTRUDE:
             # Nothing to show, as the overlay. Parked, not dropped: the
@@ -703,111 +629,21 @@ class PushPullTool(PushPullOperation, RustTool):
         return True
 
     def _resolve_stage(self, mesh) -> bool:
-        """After a stage: the moving vertices (new, on the cap plane), the
-        open interval ``(lo, hi)`` the slide is exact in, and the new
-        faces/edges. False when a face holding a moving vertex would bend.
-
-        The interval is bounded by the nearest event levels: the base plane
-        (a reversal), the parallel faces over/under the base (a through
-        punch, a flush landing, an overhang), the inward limit, and every
-        non-moving vertex of a face the cap drags (a wall's bottom, a
-        neighbour's top, a ledge). A stage sitting ON a level is exact only
-        at its own distance."""
-        snap = self._preview_snapshot
-        n, anchor, d = self._normal, self._anchor, self.extrusion
-        made = _made_since(mesh, snap, "vertex")
-        movers = [v for v in (mesh.vertices if made is None else made)
-                  if v.key not in snap["vpos"]
-                  and abs(QVector3D.dotProduct(v.position - anchor, n) - d)
-                  < _STITCH_TOL]
-        moving = set(movers)
-        levels = [0.0, *self._plane_levels]
+        from ingetrazo_core import PushSlide
+        levels = [0., *self._plane_levels]
         if self._limit_in is not None:
             levels.append(-self._limit_in)
-        # The faces each mover drags that keep a fixed vertex (the cap and
-        # anything else wholly on the cap plane just translate with it).
-        anchored: dict = {v: [] for v in movers}
-        for f in {f for v in movers for f in v.faces()}:
-            rest = [w for lp in (f.loop, *f.hole_loops) for w in lp
-                    if w not in moving]
-            if not rest:
-                continue
-            levels.extend(QVector3D.dotProduct(w.position - anchor, n)
-                          for w in rest)
-            for lp in (f.loop, *f.hole_loops):
-                for w in lp:
-                    if w in moving:
-                        anchored[w].append(f)
-        if any(abs(lv - d) <= _STITCH_TOL for lv in levels):
-            # On a level: valid at exactly this distance, nothing to slide.
-            self._stage_lo = self._stage_hi = d
-        else:
-            # No movers is right for a through punch (no cap, the same result
-            # at any depth). But a base out of true by more than the tolerance
-            # has a cap whose corners all miss the plane: nothing would slide,
-            # and every distance would commit this frame's, the value typed
-            # silently ignored. New vertices within the base's own spread of
-            # the plane tell that cap from a punch.
-            if not movers:
-                spread = max((abs(QVector3D.dotProduct(p - anchor, n))
-                              for p in self._cap_positions), default=0.0)
-                if any(abs(QVector3D.dotProduct(v.position - anchor, n) - d)
-                       <= spread + _STITCH_TOL
-                       for v in mesh.vertices if v not in snap["vpos"]):
-                    return False
-            rates = [self._slide_rate(anchored[v], n) for v in movers]
-            if any(r is None for r in rates):
-                return False              # a face it drags would bend
-            self._stage_lo = max((lv for lv in levels if lv < d),
-                                 default=-math.inf)
-            self._stage_hi = min((lv for lv in levels if lv > d),
-                                 default=math.inf)
-            self._stage_verts = movers
-            self._stage_pos = [(v.position_tuple() if "_store" in mesh.__dict__ else QVector3D(v.position), r)
-                               for v, r in zip(movers, rates)]
-        made_f = _made_since(mesh, snap, "face")
-        made_e = _made_since(mesh, snap, "edge")
-        if made_f is not None and made_e is not None:
-            # Read by membership only: the same elements, found by key.
-            self._stage_new = ElementSet(made_f) | set(made_e)
-        else:
-            self._stage_new = (
-                (ElementSet(mesh.faces) - ElementSet(snap["faces"]))
-                | (set(mesh.edges) - set(snap["edges"])))
+        slide = PushSlide.resolve(mesh._store, self._preview_snapshot.snap, self._anchor,
+                                  self._normal, self.extrusion, levels, self._cap_positions,
+                                  _STITCH_TOL)
+        if slide is None:
+            return False
+        self._stage_slide = slide
+        self._stage_lo, self._stage_hi = slide.interval
+        self._stage_verts = push_scans.views(mesh, "vertex", slide.vertices)
+        self._stage_new = ElementSet(push_scans.views(mesh, "face", slide.faces))
+        self._stage_new.update(push_scans.views(mesh, "edge", slide.edges))
         return True
-
-    @staticmethod
-    def _slide_rate(faces, n: QVector3D):
-        """How a moving vertex travels per unit of push, keeping every face
-        in ``faces`` (the ones it drags that keep a fixed vertex) flat: the
-        push normal when they all contain it (a wall), otherwise the line
-        the slanted face shares with the others, scaled to keep pace with
-        the cap — the crossing of a cap rim with a slope runs down the
-        slope's edge (#434 follow-up). None when no such line exists."""
-        normals: list = []
-        for f in faces:
-            m = f.normal().normalized()
-            if all(QVector3D.crossProduct(m, o).length() > 1e-3
-                   for o in normals):
-                normals.append(m)
-        nn = n.normalized()
-        slanted = [m for m in normals
-                   if abs(QVector3D.dotProduct(m, nn)) >= 1e-3]
-        if not slanted:
-            return QVector3D(n)           # walls only: straight along n
-        if len(normals) == 1:
-            m = normals[0]
-            line = nn - m * QVector3D.dotProduct(nn, m)
-        else:
-            line = QVector3D.crossProduct(normals[0], normals[1])
-        along = QVector3D.dotProduct(line, nn)
-        if line.length() < 1e-9 or abs(along) < 1e-3 * line.length():
-            return None                   # the line runs in the cap plane
-        rate = line * (QVector3D.dotProduct(n, nn) / along)
-        if any(abs(QVector3D.dotProduct(m, rate)) > 1e-6 * rate.length()
-               for m in normals):
-            return None                   # 3+ faces with no common line
-        return rate
 
     def _park_stage(self, viewport) -> None:
         """Keep the current stage for a return trip: its fields plus a
@@ -819,7 +655,7 @@ class PushPullTool(PushPullOperation, RustTool):
             return
         self._stage_rec = {
             "d": self._stage_d, "lo": self._stage_lo, "hi": self._stage_hi,
-            "verts": self._stage_verts, "pos": self._stage_pos,
+            "verts": self._stage_verts, "slide": self._stage_slide,
             "new": self._stage_new, "applied": self._stage_applied,
             "state": self._target_mesh(viewport.scene).capture_state(),
             "sel": set(viewport.scene.selection),
@@ -837,8 +673,8 @@ class PushPullTool(PushPullOperation, RustTool):
         scene.selection.update(rec["sel"])
         self._stage_d, self._stage_lo, self._stage_hi = (
             rec["d"], rec["lo"], rec["hi"])
-        self._stage_verts, self._stage_pos, self._stage_new = (
-            rec["verts"], rec["pos"], rec["new"])
+        self._stage_verts, self._stage_slide, self._stage_new = (
+            rec["verts"], rec["slide"], rec["new"])
         self._stage_applied = rec["applied"]
         self._stage_rec = rec
         self._stage_serial = (id(mesh), mesh._mut_serial)
@@ -918,353 +754,18 @@ class PushPullTool(PushPullOperation, RustTool):
         occluded = getattr(vp, "_is_occluded", None)   # stub viewports in tests
         return occluded is not None and occluded(world)
 
-    def _clear_candidates(self, vp, arr, cand, exclude, verts):
-        """The rows of ``cand``, in order, that may be a reference: neither
-        the base's own corners, which would pin the drag to 0, nor hidden."""
-        import numpy as np
-        first_clear = getattr(vp, "_first_clear", None)
-        start = 0
-        if first_clear is not None and len(cand):
-            # What a QVector3D of each holds, as _reference_hidden asks.
-            pts = (arr[cand].astype(np.float32).astype(np.float64)
-                   if arr.dtype != np.float32 else arr[cand].astype(np.float64))
-            while start < len(cand):
-                at = first_clear(pts[start:])
-                if at is None:
-                    break                # the engine cannot say: one by one
-                if at < 0:
-                    return
-                start += at
-                i = int(cand[start])
-                start += 1
-                if _key(verts[i].position) not in exclude:
-                    yield i
-        for i in cand[start:]:
-            i = int(i)
-            p = verts[i].position
-            if _key(p) not in exclude and not self._reference_hidden(vp, p):
-                yield i
-
-    def _screen_boxes(self, vp):
-        """Per entry of ``_infer_cache``, its vertices' box in pixels (as far
-        as they are known) for this camera and size; None for a viewport that
-        cannot say which camera it has (stubs in tests)."""
-        mvp = getattr(vp, "_np_mvp", None)
-        if mvp is None:
-            return None
-        key = (mvp().tobytes(), vp.width(), vp.height())
-        held = getattr(self, "_infer_boxes", None)
-        if held is None or held[0] != key:
-            held = self._infer_boxes = (key, {})
-        return held[1]
-
     def _infer_reference_distance(self, ctx: ToolContext):
-        """Distance making the moved face level with the model geometry under the
-        cursor — the classic mid-push inference ("push until even with that
-        corner / that face"). Reads the *clean* mesh (the caller reverts a prism
-        preview first, the vertex cache predates any stage, and a staged
-        preview's own faces/edges are skipped), so the forming solid's moving
-        points never feed back. A model **vertex** within the snap threshold
-        wins first (a precise corner), followed by a nearby edge's fixed
-        **midpoint**. Otherwise an edge or face under the cursor is used,
-        projecting its point onto the push axis (level with where you point).
-        Records the engaged point in ``self._inference_point`` for the overlay
-        marker. Returns ``None`` when nothing engages."""
-        vp = ctx.viewport
-        sx, sy = ctx.screen.x(), ctx.screen.y()
-        thr = getattr(vp, "snap_threshold_px", 9.0)
-        exclude = {_key(p) for p in self._cap_positions}
-        best = None
-        # Batch-project the candidate vertices ONCE per mesh (positions
-        # cached for the whole drag — the clean mesh is constant between
-        # reverts). The per-vertex ``_world_to_pixel`` walk projected the
-        # WHOLE scene (~250k QMatrix4x4.map calls) on EVERY drag move —
-        # 1.3 s per move, the "push sticks" report; paints starved until
-        # the hand paused.
-        import numpy as np
-        cache = getattr(self, "_infer_cache", None)
-        if cache is None:
-            cache = []
-            candidates = getattr(vp, "inference_meshes", None)
-            meshes = (candidates(sx, sy) if candidates is not None else
-                      [vp.scene.mesh] + [g.mesh for g in getattr(vp.scene, "groups", [])])
-            seen = set()
-            for mesh in meshes:
-                if id(mesh) in seen:      # shared prototypes: project once
-                    continue
-                seen.add(id(mesh))
-                from core.lazy_mesh import plan_of, PlannedVertices
-                plan = plan_of(mesh)
-                if plan is not None:
-                    # A lazy mesh (experimental engine): its planned
-                    # positions, the same vertices in the same order —
-                    # pushing beside a plant no longer builds all of it.
-                    if len(plan.pos):
-                        cache.append((PlannedVertices(plan.pos),
-                                      plan.pos.copy()))
-                    continue
-                # A COPY: a staged preview edits the live list in place, and
-                # the rows of ``arr`` must keep naming the same vertices.
-                verts = list(mesh.vertices)
-                if not verts:
-                    continue
-                arr = np.array(
-                    [[v.position.x(), v.position.y(), v.position.z()]
-                     for v in verts])
-                cache.append((verts, arr))
-            self._infer_cache = cache
-            self._infer_boxes = None
-        proj = getattr(vp, "_project_px", None)
-        boxes = self._screen_boxes(vp) if proj is not None else None
-        for n, (verts, arr) in enumerate(cache):
-            if proj is not None:
-                # A prototype whose box on screen is far from the cursor is
-                # not projected: 1 300 of them, 230 ms a move on 5 M faces.
-                box = None if boxes is None else boxes.get(n)
-                if box is not None and (sx + thr + 1 < box[0]
-                                        or sx - thr - 1 > box[1]
-                                        or sy + thr + 1 < box[2]
-                                        or sy - thr - 1 > box[3]):
-                    continue
-                px, py, ok = proj(arr)
-                if boxes is not None and box is None:
-                    boxes[n] = ((px[ok].min(), px[ok].max(),
-                                 py[ok].min(), py[ok].max()) if ok.any()
-                                else (np.inf, -np.inf, np.inf, -np.inf))
-                d2 = (px - sx) ** 2 + (py - sy) ** 2
-                near = ok & (d2 <= thr * thr)
-                if best is not None:
-                    near &= d2 < best[0]
-                near = np.flatnonzero(near)
-                # Nearest first, ties in vertex order: the first that counts
-                # is the one the whole scan would keep, and the rest are never
-                # read. Over a million vertices fall within the radius when
-                # the prototypes pile up at their local origin (#1092).
-                cand = near[np.argsort(d2[near], kind="stable")]
-            else:
-                # Stub viewports (tests) expose only the scalar projector.
-                d2 = {}
-                for i, vtx in enumerate(verts):
-                    pix = vp._world_to_pixel(vtx.position)
-                    if pix is None:
-                        continue
-                    dd = (pix[0] - sx) ** 2 + (pix[1] - sy) ** 2
-                    if dd <= thr * thr and (best is None or dd < best[0]):
-                        d2[i] = dd
-                cand = sorted(d2, key=d2.get)
-            for i in self._clear_candidates(vp, arr, cand, exclude, verts):
-                p = verts[i].position
-                best = (float(d2[i]), QVector3D.dotProduct(
-                    p - self._anchor, self._normal), QVector3D(p), "vertex")
-                break
-        # Tape Measure guides (issue #165): a guide POINT is a corner like
-        # any vertex -- the nearest one on screen wins -- and a guide LINE
-        # is tried right after, like an edge. They live in ``scene.guides``,
-        # outside the mesh, so the vertex scan above never saw them.
-        from views.document_interaction import shown_guides
-        guides = shown_guides(vp.scene)
-        for g in guides:
-            if getattr(g, "direction", None) is not None:
-                continue
-            pix = vp._world_to_pixel(g.point)
-            if pix is None:
-                continue
-            dd = (pix[0] - sx) ** 2 + (pix[1] - sy) ** 2
-            if dd <= thr * thr and (best is None or dd < best[0]):
-                best = (dd, QVector3D.dotProduct(
-                    g.point - self._anchor, self._normal),
-                    QVector3D(g.point), "guide_point")
-        # The origin is a point like a corner (#407): every other tool snaps
-        # to it, and pushing "level with the origin" is the usual way back
-        # to the ground plane.
-        origin = QVector3D(0.0, 0.0, 0.0)
-        pix = vp._world_to_pixel(origin)
-        if pix is not None:
-            dd = (pix[0] - sx) ** 2 + (pix[1] - sy) ** 2
-            if dd <= thr * thr and (best is None or dd < best[0]):
-                best = (dd, QVector3D.dotProduct(
-                    origin - self._anchor, self._normal), origin, "origin")
-        if best is not None:
-            self._inference_point = best[2]
-            self._inference_kind = best[3]
-            return best[1]
-
-        midpoint = self._infer_edge_midpoint(vp, sx, sy, thr, exclude)
-        if midpoint is not None:
-            self._inference_point = midpoint
-            self._inference_kind = "midpoint"
-            return QVector3D.dotProduct(midpoint - self._anchor, self._normal)
-
-        line_hit = self._infer_guide_line(vp, guides, sx, sy, thr)
-        if line_hit is not None:
-            on, dist = line_hit
-            self._inference_point = on
-            self._inference_kind = "guide_line"
-            return dist
-
-        # No corner nearby: the EDGE under the cursor — the usual "On edge"
-        # while pushing (Marco's capture, 2026-09-14: the half cylinder
-        # pushed until level with the slab's far edge). The point on the
-        # edge nearest the cursor ray sets the distance; the base's own
-        # edges are not references, nor the ones a staged preview created.
-        edge = getattr(vp, "_hover_edge", None)
-        project = getattr(vp, "_project_to_lock_line", None)
-        if edge is not None and project is not None and edge not in self._stage_new:
-            a, b = QVector3D(edge.a), QVector3D(edge.b)
-            ab = b - a
-            # An edge along the push axis says nothing about how far to push
-            # (the guide-line rule): its nearest point clamps to an end, and
-            # a box's own vertical edge snapped an inward push back to the
-            # top (#839).
-            along = (ab.length() > 1e-9 and abs(QVector3D.dotProduct(
-                ab.normalized(), self._normal)) > 0.999)
-            if (_key(a) not in exclude or _key(b) not in exclude) \
-                    and ab.length() > 1e-9 and not along:
-                on = project(a, ab, sx, sy)
-                t = QVector3D.dotProduct(on - a, ab) / QVector3D.dotProduct(ab, ab)
-                on = a + ab * max(0.0, min(1.0, t))
-                dist = QVector3D.dotProduct(on - self._anchor, self._normal)
-                if abs(dist) >= _MIN_EXTRUDE \
-                        and not self._reference_hidden(vp, on):
-                    self._inference_point = on
-                    self._inference_kind = "edge"
-                    return dist
-
-        # No edge either: align to the face under the cursor (its plane).
-        # Project the ray∩plane hit onto the push axis. The base face (and
-        # anything coplanar with it) reads ~0 distance — guarded out so the
-        # push doesn't pin to its own plane; a face the staged preview
-        # created (its moving cap, a riser) would pin it to itself.
-        pick = getattr(vp, "pick_face_placement", None) or vp.pick_face_any
-        from views.array_bake import reading_only
-        with reading_only():                # its plane is all it is asked
-            face, _grp = pick(sx, sy)
-        if (face is not None and face != self.base_face
-                and face not in self._stage_new
-                and not (_grp is None and self._borders_base(face, exclude))):
-            origin, direction = vp._pixel_to_ray(sx, sy)
-            if origin is not None and direction is not None:
-                # In world space — a placed component's face lives in its
-                # prototype's frame.
-                from core.snap import face_plane_world
-                fpt, fn = face_plane_world(face, getattr(_grp, "xform", None))
-                fn = fn.normalized()
-                denom = QVector3D.dotProduct(fn, direction)
-                if abs(denom) >= 1e-6:
-                    t = QVector3D.dotProduct(fn, fpt - origin) / denom
-                    if t > 0:
-                        hit = origin + direction * t
-                        dist = QVector3D.dotProduct(
-                            hit - self._anchor, self._normal)
-                        if abs(dist) >= _MIN_EXTRUDE:
-                            self._inference_point = hit
-                            self._inference_kind = "face"
-                            return dist
-        self._inference_point = None
-        self._inference_kind = None
-        return None
-
-    def _infer_edge_midpoint(self, vp, sx, sy, thr, exclude):
-        """A visible fixed midpoint within the normal point-snap radius.
-
-        Read nearby loose and placed edges in world space, excluding the
-        cap and staged edges. Spatial prefilters avoid walking every edge
-        of a large import. An edge parallel to the push axis still has a
-        precise midpoint, even though an arbitrary point along it is not a
-        useful distance reference.
-        """
-        edges = []
-        for name in ("_nearby_loose_edges", "_nearby_group_edges"):
-            nearby = getattr(vp, name, None)
-            if callable(nearby):
-                edges.extend(nearby(sx, sy, radius_px=thr))
-        hovered = getattr(vp, "_hover_edge", None)
-        if hovered is not None:
-            edges.append(hovered)
-        best = None
-        for edge in edges:
-            # A guide or an image border is a SimpleNamespace (unhashable):
-            # never staged geometry.
-            if getattr(edge, "guide", False) or (
-                    type(edge).__hash__ is not None and edge in self._stage_new):
-                continue
-            a, b = QVector3D(edge.a), QVector3D(edge.b)
-            if (a - b).lengthSquared() < 1e-18:
-                continue
-            if _key(a) in exclude or _key(b) in exclude:
-                # The moving cap's own edges, and the side edges of the
-                # solid being pushed (one end on the cap), are no reference
-                # — the same as its side faces since #839.
-                continue
-            point = (a + b) * 0.5
-            pixel = vp._world_to_pixel(point)
-            if pixel is None:
-                continue
-            dd = (pixel[0] - sx) ** 2 + (pixel[1] - sy) ** 2
-            if (dd <= thr * thr and (best is None or dd < best[0])
-                    and not self._reference_hidden(vp, point)):
-                best = (dd, point)
-        return None if best is None else best[1]
+        ref = push_reference_target(self, ctx.viewport,
+                                    (ctx.screen.x(), ctx.screen.y()), _MIN_EXTRUDE)
+        self._inference_point, self._inference_kind, distance = ref or (None, None, None)
+        return distance
 
     @staticmethod
-    def _borders_base(face, base_keys) -> bool:
-        """Whether *face* shares an edge with the face being pushed: its
-        walls stretch or shrink with the push, so they are part of the
-        operation, not a level to push to (#839, @hamzah1985: pushing a
-        box's top inward, the cursor crossing the front wall snapped the
-        cap back up to where the wall was). Other faces, however far,
-        still engage — the classic "push until level with that face"."""
-        for lp in (face.loop, *face.hole_loops):
-            n = len(lp)
-            for i in range(n):
-                if (_key(lp[i].position) in base_keys
-                        and _key(lp[(i + 1) % n].position) in base_keys):
-                    return True
-        return False
-
-    def _infer_guide_line(self, vp, guides, sx, sy, thr):
-        """The guide LINE under the cursor, as (point on it, push distance):
-        the point of the guide nearest the cursor's ray, taken when it lands
-        within the snap threshold on screen. A guide parallel to the push
-        axis says nothing about how far to push, so it is skipped."""
-        lines = [g for g in guides if getattr(g, "direction", None) is not None]
-        to_ray = getattr(vp, "_pixel_to_ray", None)
-        if not lines or to_ray is None:
-            return None
-        origin, direction = to_ray(sx, sy)
-        if origin is None or direction is None:
-            return None
-        best = None
-        for g in lines:
-            gd = getattr(g, "direction", None)
-            if gd is None:
-                continue
-            if abs(QVector3D.dotProduct(gd, self._normal)) > 0.999:
-                continue
-            # closest points between the guide line and the cursor ray
-            w0 = g.point - origin
-            a = QVector3D.dotProduct(gd, gd)
-            b = QVector3D.dotProduct(gd, direction)
-            c = QVector3D.dotProduct(direction, direction)
-            d = QVector3D.dotProduct(gd, w0)
-            e = QVector3D.dotProduct(direction, w0)
-            den = a * c - b * b
-            if abs(den) < 1e-12:
-                continue
-            s_ = (b * e - c * d) / den
-            on = g.point + gd * s_
-            pix = vp._world_to_pixel(on)
-            if pix is None:
-                continue
-            dd = (pix[0] - sx) ** 2 + (pix[1] - sy) ** 2
-            if dd > thr * thr:
-                continue
-            dist = QVector3D.dotProduct(on - self._anchor, self._normal)
-            if abs(dist) < _MIN_EXTRUDE:
-                continue
-            if best is None or dd < best[0]:
-                best = (dd, QVector3D(on), dist)
-        return None if best is None else (best[1], best[2])
+    def _reference_face(viewport, x, y):
+        from views.array_bake import reading_only
+        pick = getattr(viewport, "pick_face_placement", None) or viewport.pick_face_any
+        with reading_only():
+            return pick(x, y)
 
     @staticmethod
     def _selected_faces(scene) -> list:

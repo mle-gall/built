@@ -105,12 +105,6 @@ class EyeHost:
         if self._viewport is not None:
             return fmt_len(self._viewport.camera.eye().z()), None
 
-    def host_forward(self, viewport, _):
-        return _tuple(viewport.camera.forward())
-
-    def host_view_size(self, viewport, _):
-        return getattr(viewport, "width", lambda: 1000)(), getattr(viewport, "height", lambda: 700)()
-
     def host_set_camera(self, viewport, args):
         from core.agent_inspection import set_camera
         set_camera(viewport.camera, **args)

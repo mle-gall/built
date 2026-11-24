@@ -37,7 +37,6 @@ class MeshToolAccess:
 
 
     def inference_meshes(self, x, y):
-        picked = self._picked_mesh(x, y)
         # Other placements are queried through their world-space face plane;
         # their local vertices must not be projected as world coordinates.
         return [self.scene.mesh]
@@ -188,7 +187,6 @@ class MeshToolAccess:
 
     def _face_placement_at(self, x, y):
         from types import SimpleNamespace
-        from views.document_interaction import _moller_trumbore
         picked = self._picked_mesh(x, y)
         if picked is None:
             return None, None
@@ -199,29 +197,17 @@ class MeshToolAccess:
             return None, None
         origin = inverse.map(origin)
         direction = inverse.mapVector(direction)
-        faces, owner, v0, e1, e2 = self._face_triangles(mesh)
-        if not len(v0):
-            return None, (SimpleNamespace(xform=matrix, source_occurrence=group) if group is not None else None)
-        t, hit = _moller_trumbore(np.array(origin.toTuple()),
-                                  np.array(direction.toTuple()), v0, e1, e2)
         excluded = getattr(self.tool, 'moving_face_ids', lambda: set())()
-        if excluded and hit.any():
-            moving = np.fromiter((f.key in excluded for f in faces), bool, len(faces))
-            hit &= ~moving[owner]
-        best = None
-        if hit.any():
-            best = faces[int(owner[int(np.argmin(np.where(hit, t, np.inf)))])]
+        ordinal = self._face_picker(mesh).first(origin.toTuple(), direction.toTuple(), excluded)
+        best = mesh.faces[ordinal] if ordinal is not None else None
         return best, (SimpleNamespace(xform=matrix, source_occurrence=group) if group is not None else None)
 
     #: Meshes whose triangles :meth:`_face_triangles` keeps at once (the
     #: cursor goes back and forth between a few).
     FACE_TRIANGLE_MEMO = 8
 
-    def _face_triangles(self, mesh):
-        """``(faces, owner, v0, e1, e2)``: the shown faces of ``mesh`` and
-        their triangles in its own space, ``owner[i]`` the face of triangle
-        ``i`` — kept until the mesh mutates or the scene's version moves
-        (a hide, a vertex dragged)."""
+    def _face_picker(self, mesh):
+        """The native ray picker for this mesh revision and tool coordinate frame."""
         store = mesh.__dict__.get('_store')
         key = (getattr(mesh, '_mut_serial', None), getattr(self.scene, 'version', None),
                tuple(store.frame_origin) if store is not None else None)
@@ -229,26 +215,9 @@ class MeshToolAccess:
         hit = memo.get(id(mesh))
         if hit is not None and hit[0] is mesh and hit[1] == key:
             return hit[2]
-        faces, owner, pts = [], [], []
-        shown = [f for f in mesh.faces if not getattr(f, 'hidden', False)]
         from core._native import qt_hypot
-        if store is not None and qt_hypot():
-            # One crossing for the whole mesh: the store's own triangulation.
-            rows = store.snapshot().triangles_by_face([f.key for f in shown], qt_hypot())
-        else:
-            rows = [[tuple(p.toTuple() for p in t) for t in f.triangulate()] for f in shown]
-        for face, tris in zip(shown, rows):
-            if not tris:
-                continue
-            k = len(faces)
-            faces.append(face)
-            owner.extend([k] * len(tris))
-            pts.extend(tris)
-        arr = np.asarray(pts, dtype=np.float64).reshape(-1, 3, 3)
-        v0 = np.ascontiguousarray(arr[:, 0])
-        value = (faces, np.asarray(owner, np.int64), v0,
-                 np.ascontiguousarray(arr[:, 1] - v0),
-                 np.ascontiguousarray(arr[:, 2] - v0))
+        from ingetrazo_core import FacePicker
+        value = store.tool_face_picker(qt_hypot()) if store is not None and qt_hypot() else FacePicker(mesh.faces)
         memo.pop(id(mesh), None)
         while len(memo) >= self.FACE_TRIANGLE_MEMO:
             memo.pop(next(iter(memo)))
@@ -256,11 +225,8 @@ class MeshToolAccess:
         return value
 
     def pick_face_any(self, x, y):
-        face, _ = self.pick_face_placement(x, y)
-        picked = self._picked_mesh(x, y)
-        if picked is None:
-            return None, None
-        mesh, group, _ = picked
+        face, placement = self.pick_face_placement(x, y)
+        group = getattr(placement, "source_occurrence", placement)
         if face is None or not self.scene.entity_selectable(face):
             return None, None
         if group is self.scene.edit_group:
@@ -304,20 +270,15 @@ class MeshToolAccess:
         opening it and after each repack). Without it a face covered in
         the ID pass by the faded rest — a plate against a profile, a nut on
         its bolt — took no click at all until the index came back."""
-        from views.document_interaction import _moller_trumbore
         rows = [r for r in self.view.uid_rows.get(context.uid, ())
                 if 0 <= r < len(self.view.packed.instances)
                 and self.view.packed.groups[r] is context
                 and not self.view.packed.instances['info'][r, 2] & 129]
         if not rows:
             return None
-        _faces, _owner, v0, e1, e2 = self._face_triangles(self.scene.mesh)
-        if not len(v0):
-            return None
         origin, direction = self._pixel_to_ray(x, y)
-        _t, hit = _moller_trumbore(np.array(origin.toTuple()),
-                                   np.array(direction.toTuple()), v0, e1, e2)
-        return rows[0] if hit.any() else None
+        face = self._face_picker(self.scene.mesh).first(origin.toTuple(), direction.toTuple(), set())
+        return rows[0] if face is not None else None
 
     def _face_row_under(self, x, y, default):
         """The row of the front face at ``(x, y)`` among the placements
@@ -373,18 +334,10 @@ class MeshToolAccess:
         st = mesh.__dict__.get('_store')
         if st is None:
             return self._pick_loose_edge_walk(x, y, hidden)
-        from ingetrazo_core import nearest_segments_px
-        arrays = st.arrays()
-        pos = np.ascontiguousarray(arrays['pos'], dtype=np.float64).reshape(-1, 3)
-        ends = np.asarray(arrays['edges'], dtype=np.int64).reshape(-1, 2)
-        if not len(ends):
-            return None, float('inf')
-        idx, dist, t = nearest_segments_px(
-            np.ascontiguousarray(pos[ends[:, 0]]), np.ascontiguousarray(pos[ends[:, 1]]),
-            *self._camera_px(), float(x), float(y), self.EDGE_PICK_PX)
+        hits = st.nearest_edges(*self._camera_px(), float(x), float(y), self.EDGE_PICK_PX)
         edges = mesh.edges
         reveal = self.scene.show_hidden_geometry
-        for i, d, k in zip(idx.tolist(), dist.tolist(), t.tolist()):
+        for i, d, k in hits:
             edge = edges[i]
             if not self.scene.entity_selectable(edge) or (
                     (getattr(edge, 'hidden', False) or getattr(edge, 'soft', False)) and not reveal):
@@ -579,45 +532,9 @@ class MeshToolAccess:
         self.view.update()
 
     def mesh_feedback(self):
-        """Push the tool's depth-tested preview to the renderer and report
-        its measurement. Everything that floats over the model (rubber
-        band, guide preview, grips, labels, snap) is painted each frame by
-        draw_annotations with GL's own painters, so this adds no overlay
-        primitives. The upload is skipped when the preview is unchanged:
-        the frame loop calls this whenever no primitive is pending."""
-        faces = list(getattr(self.tool, 'preview_faces', lambda: [])())
-        self.view.preview_faces = faces
-        renderer = getattr(self.view, 'renderer', None)
-        if renderer is not None and hasattr(renderer, 'set_preview_mesh'):
-            from views.wgpu_parity import preview_mesh
-            from views.wgpu_annotations import rubber_band
-            band = rubber_band(self) if callable(getattr(self.tool, 'rubber_band_lines', None)) else None
-            # GL draws a depth-tested band (Push/Pull's forming box) in
-            # the scene pass so the faces hide its back edges; the preview
-            # faces themselves carry no outline of their own.
-            edges = ([(a, b, band[1]) for a, b in band[0]]
-                     if band is not None and band[3] else [])
-            from ingetrazo_render import preview_materials
-            plain, runs = preview_materials(faces, getattr(self.view, 'source_viewport', None),
-                                            getattr(self.tool, 'preview_opacity', 1.0))
-            mesh = preview_mesh(plain, edges)
-            key = tuple(bytes(part) for part in mesh)
-            key += tuple((path, shade, opacity, bytes(vertices)) for path, shade, opacity, vertices in runs)
-            # The selected groups' boxes, depth-tested like GL's: the
-            # preview is this tool's while it is active. Cached vertices,
-            # compared by their key, not their bytes.
-            boxes = getattr(self.view, '_selection_box_vertices', None)
-            box_key, box = boxes() if boxes is not None else (None, None)
-            if (key, box_key) != getattr(self.view, '_preview_key', None):
-                if box is not None and len(box):
-                    from views.wgpu_parity import raw
-                    mesh = (mesh[0], np.concatenate((mesh[1], raw(box))))
-                if runs:
-                    renderer.set_preview_mesh(*mesh, [(path, shade, opacity, np.asarray(vertices))
-                        for path, shade, opacity, vertices in runs])
-                else:
-                    renderer.set_preview_mesh(*mesh)
-                self.view._preview_key = (key, box_key)
+        """Publish the machine's transient mesh and its formatted measurement."""
+        from ingetrazo_render import sync_tool_preview
+        sync_tool_preview(self)
         label = self.tool.value_label() if hasattr(self.tool, 'value_label') else None
         if label is not None:
             self.measurementChanged.emit(label[0])
@@ -628,7 +545,7 @@ class MeshToolAccess:
         from views.wgpu_overlay import draw_snap_indicator
         self._hover_entity = getattr(self, '_mesh_hover', None)
         marks = getattr(self.view, '_draw_selection_marks', None)
-        if marks is not None:
+        if marks is not None and getattr(self, "_moving_marks", None) is None:
             marks(painter)
         layout = draw_annotations(painter, self.scene, self.camera,
             (painter.device().width()/painter.device().devicePixelRatioF(),
@@ -710,18 +627,76 @@ class MeshToolAccess:
         from views.document_interaction import DocumentInteraction
         return DocumentInteraction.pick_extension_item(self, x, y)
 
-    _group_obb = _unsupported_pick
-    def begin_groups_preview(self, groups):
-        # Their selection boxes stay behind until the commit (GL skips them).
+    def _group_obb(self, group):
+        bounds = getattr(self.view, "_group_obb", None)
+        return bounds(group) if bounds is not None else None
+
+    def begin_loose_preview(self, groups, vertices):
+        view, mesh = self.view, self.scene.mesh
+        renderer = getattr(view, 'renderer', None)
+        if renderer is None or mesh is not self.scene.loose_mesh:
+            return False
+        rows = view.uid_rows.get('loose', ())
+        if len(rows) != 1:
+            return False
+        keys = {v.key for v in vertices}
+        if len(keys) == len(mesh.vertices):
+            self._begin_marks(renderer, keys)
+            self._begin_rows(groups, include_loose=True)
+            return True
+        store = mesh.__dict__.get('_store')
+        if store is None or not hasattr(renderer, 'begin_tool_geometry'):
+            return False
+        packed = view.packed
+        code = int(packed.instances['info'][rows[0], 0])
+        if (getattr(self.scene, 'show_hidden_geometry', False)
+                or np.count_nonzero(packed.instances['info'][:, 0] == code) != 1):
+            return False
+        origins = packed.prototype_origins
+        anchor = origins[code] if code < len(origins) else (0., 0., 0.)
+        origin = np.subtract(anchor, store.frame_origin)
+        points = store.preview_points(list(keys), origin)
+        if points is None:
+            return False
+        face = packed.commands[code]
+        at, count = int(face['first']), int(face['count'])
+        indices = packed.indices[at:at + count].astype(np.int64) + int(face['base'])
+        corners = packed.vertices[indices].view(np.uint8).reshape(-1)
+        if not renderer.begin_tool_geometry(code, corners, points, origin):
+            return False
+        self._begin_marks(renderer, keys)
+        self._begin_rows(groups, include_loose=False)
+        self._loose_deform = renderer
+        return True
+
+    def _begin_marks(self, renderer, keys):
+        if hasattr(renderer, 'begin_tool_marks'):
+            renderer.begin_tool_marks(self.scene.selection, getattr(self, '_mesh_hover', None), keys)
+            self._moving_marks = renderer
+
+    def begin_groups_preview(self, groups, external=False):
+        if external:
+            from views.wgpu_scene import pack_scene
+            pack = pack_scene(self.scene, roots=groups, texture_images=False)
+            self.view.renderer.begin_group_feedback(pack, self.view.packed.origin)
+            self._clipboard_renderer = self.view.renderer
+            return
+        self._begin_rows(groups, include_loose=False)
+
+    def _begin_rows(self, groups, include_loose):
         self._moving_groups = tuple(groups)
         selected = {g.uid for g in iter_groups(self._moving_groups)}
+        if include_loose:
+            selected.add('loose')
         self.ids = np.asarray([row for uid in selected
                                for row in self.view.uid_rows.get(uid, ())], np.int64)
         billboards = getattr(self.view, '_billboards', None)
         if billboards is not None:
             billboards.restore()
             billboards.key = None
-        self.original = self.view.packed.instances[self.ids].copy()
+        from ingetrazo_render import InstancePreview
+        self.original = self.view.packed.instances[self.ids]
+        self._instance_preview = InstancePreview(self.original.view(np.uint8).reshape(-1))
 
     def set_groups_preview_offset(self, delta):
         matrix = QMatrix4x4()
@@ -729,15 +704,40 @@ class MeshToolAccess:
         self.set_groups_preview_matrix(matrix)
 
     def set_groups_preview_matrix(self, matrix):
+        clipboard = self.__dict__.get('_clipboard_renderer')
+        if clipboard is not None:
+            clipboard.pose_group_feedback(matrix.data())
+            self.update()
+            return
         if self.original is None:
             return
-        transform = np.asarray(matrix.data(), np.float32).reshape(4, 4).T
-        rows = self.original.copy()
-        rows['world'] = (transform @ rows['world'].transpose(0, 2, 1)).transpose(0, 2, 1)
-        self.write_rows(rows)
+        transform = matrix.data()
+        marks = getattr(self, '_moving_marks', None)
+        if marks is not None:
+            marks.pose_tool_marks(transform, getattr(self.view, '_selected_mark_count', 0))
+        if len(self.original):
+            rows = self._instance_preview.transformed(transform).view(self.original.dtype)
+            self.write_rows(rows)
+        renderer = getattr(self, '_loose_deform', None)
+        if renderer is not None:
+            renderer.pose_tool_geometry(transform)
 
     def end_groups_preview(self):
+        clipboard = self.__dict__.pop('_clipboard_renderer', None)
+        if clipboard is not None:
+            clipboard.end_group_feedback()
+            self.update()
+            return
+        marks = getattr(self, '_moving_marks', None)
+        if marks is not None:
+            marks.end_tool_marks()
+            self._moving_marks = None
+        renderer = getattr(self, '_loose_deform', None)
+        if renderer is not None:
+            renderer.end_tool_geometry()
+            self._loose_deform = None
         self._moving_groups = ()
+        self._instance_preview = None
         self.restore()
         self.original = None
 

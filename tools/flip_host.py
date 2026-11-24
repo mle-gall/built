@@ -113,60 +113,14 @@ class FlipHost(Tool):
 
     # ---- Internals ----------------------------------------------------------
     def _bounds(self, viewport):
-        import numpy as np
-        from core.group import placement_points
-        sel = viewport.scene.selection
-        arrays: list = []
-        pts: list = []
-        for ent in sel:
-            if isinstance(ent, Group):
-                # Its nested placements too: a group made of groups keeps
-                # its geometry there and its own mesh empty, and the box
-                # came out empty — no planes, nothing to click (#380).
-                # Kept as arrays: this runs on every hover.
-                arr = placement_points(ent)
-                if len(arr):
-                    arrays.append(arr)
-            elif isinstance(ent, Face):
-                pts.extend((v.x(), v.y(), v.z()) for v in ent.vertices)
-            elif isinstance(ent, Edge):
-                pts.extend((p.x(), p.y(), p.z()) for p in (ent.a, ent.b))
-        if pts:
-            arrays.append(np.asarray(pts, dtype=np.float64))
-        if not arrays:
-            return None, None
-        allp = np.concatenate(arrays)
-        lo, hi = allp.min(axis=0), allp.max(axis=0)
-        return QVector3D(*lo.tolist()), QVector3D(*hi.tolist())
+        from tools.rust_tool_base import selection_bounds
+        return selection_bounds(viewport.scene).limits()
 
     def _plane_quad(self, axis, centre, half, margin):
         return [QVector3D(*p) for p in ToolMachine.flip_quad(axis, centre.toTuple(), half.toTuple(), margin)]
 
     def _plane_under_cursor(self, viewport, sx: float, sy: float):
-        """Which of the three planes the cursor is inside (projected); ties
-        break toward the plane whose centre is nearest on screen."""
-        lo, hi = self._bounds(viewport)
-        if lo is None:
-            return None
-        centre = (lo + hi) * 0.5
-        half = (hi - lo) * 0.5
-        w2p = getattr(viewport, "_world_to_pixel", None)
-        if w2p is None:
-            return None
-        best = None
-        best_d = float("inf")
-        for axis in _AXES:
-            quad = self._plane_quad(axis, centre, half, 1.15)
-            pts = [w2p(q) for q in quad]
-            if any(p is None for p in pts):
-                continue
-            poly = QPolygonF([QPointF(*p) for p in pts])
-            if not poly.containsPoint(QPointF(sx, sy), Qt.OddEvenFill):
-                continue
-            cpx = w2p(centre)
-            mid = (sum(p[0] for p in pts) / 4.0, sum(p[1] for p in pts) / 4.0)
-            d = (mid[0] - sx) ** 2 + (mid[1] - sy) ** 2
-            if cpx is not None and d < best_d:
-                best_d = d
-                best = axis
-        return best
+        from tools.rust_tool_base import selection_bounds
+        box = selection_bounds(viewport.scene)
+        if box.limits()[0] is not None and hasattr(viewport, "_world_to_pixel"):
+            return box.flip_pick(viewport, (sx, sy))

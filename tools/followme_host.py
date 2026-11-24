@@ -3,7 +3,7 @@
 from ingetrazo_core import Vec3
 from core.i18n import tr
 from core.mesh import Edge, Face
-from core.sweep import manual_path_extend, manual_path_start, order_path_edges, sweep_preview_faces
+from core.sweep import manual_path_extend, manual_path_start, order_path_edges
 
 _MESSAGES = {
     "invalid": "Follow Me: the selected edges must form one simple path",
@@ -20,7 +20,6 @@ class FollowMeHost:
     def __init__(self):
         super().__init__()
         self._entities = {}
-        self._polygons = []
 
     def _keep(self, obj):
         key = str(obj.key)
@@ -48,7 +47,12 @@ class FollowMeHost:
         return [Vec3(*p) for p in self._state("points")], self._state("closed")
 
     def preview_faces(self):
-        return self._polygons
+        faces = super().preview_faces()
+        if faces and self._profile.attrs:
+            attrs = dict(self._profile.attrs)
+            for face in faces:
+                face.attrs = attrs
+        return faces
 
     def host_sweep_pick_face(self, vp, px):
         face = vp.pick_face(*px)
@@ -59,7 +63,6 @@ class FollowMeHost:
 
     def host_sweep_selection(self, vp, _):
         self._entities.clear()
-        self._polygons = []
         edges = [e for e in vp.scene.selection if isinstance(e, Edge)]
         if edges:
             ordered = order_path_edges(edges)
@@ -97,13 +100,9 @@ class FollowMeHost:
         return (crossing.toTuple() if crossing is not None else None,
                 [(self._keep(v), v.position.toTuple()) for v in chain])
 
-    def host_sweep_preview(self, vp, args):
-        face, pts, closed = args
-        self._polygons = (sweep_preview_faces(self._entities[face], [Vec3(*p) for p in pts], closed)
-                          if len(pts) >= 2 else [])
-
-    def host_sweep_clear_preview(self, vp, _):
-        self._polygons = []
+    def host_sweep_profile(self, vp, key):
+        face = self._entities[key]
+        return (face.vertices, *face.holes)
 
     def host_sweep_message(self, vp, code):
         vp.flash_status(tr(_MESSAGES[code]), 6000 if code in ("intro", "drag") else 2500)

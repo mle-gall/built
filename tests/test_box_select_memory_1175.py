@@ -226,3 +226,19 @@ def test_empty_and_unavailable_chunks_keep_the_fallback():
         raise ValueError('unavailable')
     vp._group_chunk = unavailable
     assert _box_group_fast(vp, vp.places[0], (0, 0, 1, 1), True) is None
+
+
+def test_world_box_includes_rounded_endpoints_of_a_placed_wire():
+    xf = QMatrix4x4()
+    xf.translate(0, 10000.123, 0)
+    vp = _Viewport([_chunk(edges=[[-1, .1, 0], [1, .1, 0]])], [xf])
+    assert _box_group_fast(vp, vp.places[0], (-.5, 10000.2225, .5, 10000.2228), True)
+
+
+def test_scripted_projector_accepts_float32_pixels_and_a_wire_buffer():
+    ch = _chunk(edges=[[-3, .5, 0], [3, .5, 0]])
+    ch["edges"] = memoryview(ch["edges"])
+    vp = _Viewport([ch])
+    vp._project_px = lambda pts: (pts[:, 0].astype("f4"), pts[:, 1].astype("f4"),
+                                  np.ones(len(pts), dtype=bool))
+    assert _box_group_fast(vp, vp.places[0], (0, 0, 1, 1), True)

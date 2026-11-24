@@ -82,6 +82,7 @@ impl TexturedPreview {
         device: &wgpu::Device,
         format: wgpu::TextureFormat,
         scene: &wgpu::BindGroupLayout,
+        cull_back: bool,
     ) -> Self {
         let images = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("tool preview image"),
@@ -137,7 +138,7 @@ impl TexturedPreview {
                         write_mask: wgpu::ColorWrites::ALL,
                     })],
                 }),
-                primitive: Default::default(),
+                primitive: wgpu::PrimitiveState { cull_mode: cull_back.then_some(wgpu::Face::Back), ..Default::default() },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: wgpu::TextureFormat::Depth32Float,
                     depth_write_enabled: true,

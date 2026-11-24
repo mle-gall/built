@@ -10,6 +10,7 @@ mod change_axes;
 mod freehand;
 mod followme;
 mod move_grips;
+pub mod move_hover;
 mod place_group;
 mod eraser;
 mod geopath;
@@ -20,6 +21,7 @@ mod image;
 mod scale_manager;
 mod solid;
 mod paste;
+mod paste_host;
 mod flip;
 mod tape;
 mod fillet_tool;
@@ -35,6 +37,30 @@ pub mod line;
 pub mod move_tool;
 pub mod push_pull;
 pub mod plane;
+pub mod plane_input;
+pub mod host_geometry;
+pub mod box_records;
+pub mod chunk_selection;
+pub mod record_queries;
+mod arc_queries;
+pub(crate) mod selection_growth;
+pub mod bevel_queries;
+pub(crate) mod loose_preview;
+mod material_queries;
+pub mod disc_host;
+pub mod transform_pose;
+pub mod preview_pack;
+pub mod texture_rows;
+pub mod push_preview;
+pub mod push_references;
+pub mod push_targets;
+pub mod push_stage;
+pub mod packed_selection;
+mod protocol_host;
+pub mod handles;
+pub mod edge_runs;
+pub mod view_queries;
+pub mod transform_queries;
 pub mod preview;
 pub mod rectangle;
 pub mod arc;
@@ -344,6 +370,13 @@ impl ToolInfo {
 pub trait Tool {
     fn info(&self) -> &'static ToolInfo;
     fn event(&mut self, ev: &ToolEvent, host: &mut dyn ToolHost) -> Reply;
+    /// Surface rings in renderer order, outer first then openings.
+    fn preview_surfaces(&self) -> std::borrow::Cow<'_, [Vec<Vec<P3>>]> {
+        std::borrow::Cow::Borrowed(&[])
+    }
+    fn cursor_preview(&self, _plane: &preview::CursorPlane, _hover: Option<P3>) -> Preview {
+        self.preview()
+    }
     fn preview(&self) -> Preview { Preview::default() }
     /// An operation is under way: Esc cancels it before anything else.
     fn busy(&self) -> bool { false }

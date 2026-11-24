@@ -497,16 +497,7 @@ pub fn scan_faces_meeting_rings(
 pub fn store_keys_since(store: PyRef<'_, PyMeshStore>, snap: PyRef<'_, PyStoreSnapshot>, kind: &str) -> PyResult<Vec<u128>> {
     let k = Kind::parse(kind).ok_or_else(|| pyo3::exceptions::PyValueError::new_err(format!("kind {kind:?}")))?;
     let st = &store.inner;
-    let old = &snap.inner.state;
-    let same = old.ns == st.state.ns;
-    let os = &old.slots[k as usize];
-    let ns = &st.state.slots[k as usize];
-    Ok(st
-        .live_slots(k)
-        .into_iter()
-        .filter(|&s| !(same && os.alive(s) && os.gen(s) == ns.gen(s)))
-        .map(|s| st.key(k, s))
-        .collect())
+    Ok(st.new_slots_since(&snap.inner, k).into_iter().map(|slot| st.key(k, slot)).collect())
 }
 
 /// `topology.sweep_tjunctions`' inputs for a scoped sweep: the listed

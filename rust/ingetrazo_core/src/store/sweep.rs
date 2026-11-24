@@ -337,3 +337,17 @@ impl Store {
         out
     }
 }
+
+/// Transient sweep surfaces use the same station and wall kernels as a commit.
+pub(crate) fn preview_surfaces(profile: &Station, path: &[[f64; 3]], closed: bool) -> Vec<Station> {
+    let h = Hypot::LibStdCxx; // V3 geometry uses f64 on all platforms.
+    let Some((stations, _)) = projected_stations(profile.clone(), path, closed, h, true) else {
+        return vec![];
+    };
+    let mut faces = Vec::new();
+    let result = emit_sweep_faces(&stations, closed, h, None, false, |rings| {
+        faces.push(rings.to_vec());
+        Ok(())
+    });
+    if result.is_ok() { faces } else { vec![] }
+}

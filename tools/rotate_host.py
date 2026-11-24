@@ -3,24 +3,20 @@
 """Host picking, protractor inference and resident-row preview for Rotate."""
 from __future__ import annotations
 
-import math
 
 from PySide6.QtCore import Qt
-from ingetrazo_core import Vec3 as QVector3D
+from ingetrazo_core import TransformPose, Vec3 as QVector3D
 
 from core.group import Group
-from core.history import RotateGuidesCommand, rotation_matrix
+from core.history import rotation_matrix
 
 from core.i18n import tr
-from core.mesh import Edge, Face
-from core.axes import plane_axes  # drawing axes (#44)
-from core.guide import is_guide
-from tools.base import ToolContext
+from tools.move_host import CopyPreview
 
 from tools.protractor_host import ProtractorBase
 
 
-class RotateHost(ProtractorBase):
+class RotateHost(CopyPreview, ProtractorBase):
     accepts_angle_ratio = True  # VCB "3:12" (rise:run) arrives as degrees
     accepts_array = True  # VCB "3x" / "/3" after a copy: a POLAR array
 
@@ -95,46 +91,12 @@ class RotateHost(ProtractorBase):
         self._pointer_event("click", ctx)
 
     def host_pick_rotation(self, viewport, point):
-        from tools.move_host import gather_targets
+        from ingetrazo_core import transform_grab
         ctx = self._ctx
-        groups, positions = gather_targets(ctx)
-        from core.section import SectionPlane
-        splanes = [p for p in viewport.scene.selection
-                   if isinstance(p, SectionPlane)]
-        if not splanes and not viewport.scene.selection:
-            # Rotate grabs a section plane directly by its
-            # frame, no pre-selection needed.
-            pick = getattr(viewport, "pick_section_plane", None)
-            sp = (pick(ctx.screen.x(), ctx.screen.y())
-                  if pick is not None else None)
-            if sp is not None:
-                splanes = [sp]
-                groups, positions = [], []
-        from tools.move_host import gather_images
-        images = gather_images(ctx)
-        guides = [g for g in viewport.scene.selection
-                  if is_guide(g)]
-        if not (groups or positions or splanes or images or guides):
-            viewport.flash_status(
-                tr("Select (or click) the geometry to rotate first"))
-            return
-        self._groups = groups
-        self._splanes = splanes
-        self._images = images
-        self._moved_guides = guides
-        self._positions = positions
-        mesh = viewport.scene.mesh
-        self._verts = [v for v in (mesh.vertex_at(p) for p in positions)
-                       if v is not None]
-        self._vp_preview = False
-        if groups and not self._verts and not positions:
-            # Groups-only rotate: viewport-side preview (see MoveTool) —
-            # the classic-group live rotate walked 190k vertices in
-            # Python and forced a 7 s chunk rebuild EVERY frame.
-            begin = getattr(viewport, "begin_groups_preview", None)
-            if begin is not None:
-                begin(groups)
-                self._vp_preview = True
+        if not transform_grab(self, ctx, "rotate"):
+            viewport.flash_status(tr("Select (or click) the geometry to rotate first"))
+            return False
+        self._vp_preview = TransformPose.begin(viewport, self)
         self._gather_copy_entities(ctx)
         self._centre_plane = (ctx.world, QVector3D(self._axis()))
         self._axis_drag_armed = True
@@ -213,14 +175,8 @@ class RotateHost(ProtractorBase):
         MoveTool.snap_excluded; in copy mode the original stays put."""
         if self.ref_point is None or self._copy:
             return None
-        edges: set[int] = set()
-        for v in self._verts:
-            for e in getattr(v, "edges", ()):
-                edges.add(e.key)
-        groups = {id(g) for g in self._groups}
-        if not edges and not groups:
-            return None
-        return edges, groups
+        from ingetrazo_core import snap_exclusions
+        return snap_exclusions(self, False)
 
     def moving_guide_ids(self) -> set:
         """The guides swinging live, kept out of the snap (#627)."""
@@ -230,47 +186,14 @@ class RotateHost(ProtractorBase):
 
     # ---- Visual preview -----------------------------------------------------
     def rubber_band_lines(self):
-        centre = (self.start_point if self.start_point is not None
-                  else self.hover_point)
-        if centre is None:
-            return []
-        # The disc the drag from the vertex WOULD land on, drawn as the hand
-        # moves instead of only at the release (issue #25).
-        tilt = self._axis_drag_live if self._axis_drag_armed else None
-        segments = list(self._protractor_disc(centre, tilt))
-        if self.start_point is None or self.hover_point is None:
-            return segments
-        segments.append((self.start_point, self.hover_point))
-        if self.ref_point is not None:
-            segments.append((self.start_point, self.ref_point))
-            deg = self._commit_deg(self.hover_point)
-            if deg is not None:
-                segments.extend(self._arc_segments(deg))
-                if self._copy and self._groups_ghost_due:
-                    from tools.move_host import groups_ghost_segments
-                    self._groups_ghost_due = False
-                    self._base_segments[:0] = groups_ghost_segments(
-                        self._groups)
-                if self._copy and self._base_segments:
-                    # Copy mode: the original stays put — preview the rotated
-                    # COPY as a wireframe at the cursor angle.
-                    m = rotation_matrix(self.start_point, self._axis(), deg)
-                    segments.extend(
-                        (m.map(a), m.map(b)) for a, b in self._base_segments)
+        angle = (self._commit_deg(self.hover_point) if self.start_point is not None
+                 and self.ref_point is not None and self.hover_point is not None else None)
+        segments = self._disc_lines(angle)
+        if self._copy and angle is not None:
+            self._fill_groups_ghost()
+            matrix = rotation_matrix(self.start_point, self._axis(), angle)
+            segments.extend(self._base_segments.lines(matrix=matrix.data()))
         return segments
-
-    def _arc_segments(self, deg: float):
-        """Protractor arc between the two arms, at the reference radius."""
-        u, v = plane_axes(self._axis())
-        a = self.ref_point - self.start_point
-        r = a.length() * 0.75
-        a0 = math.atan2(QVector3D.dotProduct(a, v), QVector3D.dotProduct(a, u))
-        steps = max(2, int(abs(deg) // 10) + 1)
-        pts = []
-        for k in range(steps + 1):
-            t = a0 + math.radians(deg) * k / steps
-            pts.append(self.start_point + (u * math.cos(t) + v * math.sin(t)) * r)
-        return list(zip(pts, pts[1:]))
 
     def value_label(self):
         if self.ref_point is None or self.hover_point is None:
@@ -285,92 +208,10 @@ class RotateHost(ProtractorBase):
         return "Angle"
 
     # ---- Internals ----------------------------------------------------------
-    def _gather_copy_entities(self, ctx: ToolContext) -> None:
-        """The faces/edges copy mode duplicates, and the wireframe segments
-        the copy preview swings (group wireframe, or the loose selection)."""
-        viewport = ctx.viewport
-        self._sel_faces, self._sel_edges, self._base_segments = [], [], []
-        self._groups_ghost_due = True     # asked of only when copying (#1092)
-        cam = getattr(viewport, "camera", None)
-        reach = max(float(getattr(cam, "distance", 10.0)), 1e-3)
-        from tools.move_host import guide_ghost_segments
-        self._base_segments.extend(guide_ghost_segments(self._moved_guides, reach))
-        sel = list(viewport.scene.selection)
-        if not sel and not self._groups:
-            # Nothing selected and no group hover-picked: the click grabbed
-            # the loose entity under the cursor (mirror of gather_targets).
-            edge = viewport.pick_edge(ctx.screen.x(), ctx.screen.y())
-            if edge is not None:
-                sel = [edge]
-            else:
-                face = viewport.pick_face(ctx.screen.x(), ctx.screen.y())
-                if face is not None:
-                    sel = [face]
-        self._sel_faces = [f for f in sel if isinstance(f, Face)]
-        self._sel_edges = [e for e in sel if isinstance(e, Edge)]
-        for f in self._sel_faces:
-            for lp in (list(f.vertices), *[list(h) for h in f.holes]):
-                n = len(lp)
-                for i in range(n):
-                    self._base_segments.append(
-                        (QVector3D(lp[i]), QVector3D(lp[(i + 1) % n])))
-        for e in self._sel_edges:
-            self._base_segments.append((QVector3D(e.a), QVector3D(e.b)))
-
-    def _snapshot(self) -> dict:
-        """The rotating set exactly as it was before the preview touched it.
-
-        The live preview used to turn everything by the DELTA of each mouse
-        move and, to cancel or commit, turn it back by the total: hundreds
-        of single-precision rotations that do not cancel, so the geometry
-        the commit started from had already drifted (issue #163). Every
-        preview frame is now computed from this copy, and reverting puts
-        these exact values back."""
-        snap = getattr(self, "_orig", None)
-        if snap is not None:
-            return snap
-        from ingetrazo_core import Matrix4 as QMatrix4x4
-        snap = {"xf": [], "gv": [], "v": [], "sp": [], "im": [], "gd": []}
-        vp_only = getattr(self, "_vp_preview", False)
-        if not vp_only:
-            for group in self._groups:
-                if getattr(group, "xform", None) is not None:
-                    snap["xf"].append((group, QMatrix4x4(group.xform)))
-                else:
-                    snap["gv"].extend((group.mesh, vx, QVector3D(vx.position))
-                                      for vx in list(group.mesh.vertices))
-            snap["v"] = [(vx, QVector3D(vx.position)) for vx in self._verts]
-        snap["sp"] = [(sp, QVector3D(sp.point), QVector3D(sp.normal))
-                      for sp in self._splanes]
-        snap["im"] = [(im, QVector3D(im.origin), QVector3D(im.u),
-                       QVector3D(im.v)) for im in self._images]
-        snap["gd"] = [RotateGuidesCommand.state(g) for g in self._moved_guides]
-        self._orig = snap
-        return snap
-
-    def _pose(self, viewport, m) -> None:
-        """Place the rotating set at ``m`` applied to its snapshot
-        (``None`` puts the snapshot back as it was)."""
-        snap = self._snapshot()
-        for group, xf in snap["xf"]:
-            group.xform = (m * xf) if m is not None else xf
-        for gmesh, vx, pos in snap["gv"]:
-            gmesh.place_vertex(vx, m.map(pos) if m is not None else pos)
-        for vx, pos in snap["v"]:
-            viewport.scene.mesh.place_vertex(
-                vx, m.map(pos) if m is not None else pos)
-        for sp, point, normal in snap["sp"]:
-            sp.point = m.map(point) if m is not None else QVector3D(point)
-            n2 = m.mapVector(normal) if m is not None else QVector3D(normal)
-            sp.normal = n2.normalized() if n2.length() > 1e-12 else normal
-        for im, origin, u, v in snap["im"]:
-            im.origin = m.map(origin) if m is not None else QVector3D(origin)
-            im.u = m.mapVector(u) if m is not None else QVector3D(u)
-            im.v = m.mapVector(v) if m is not None else QVector3D(v)
-        for st in snap["gd"]:
-            RotateGuidesCommand.place(st, m)
-        if snap["xf"] or snap["gv"] or snap["v"]:
-            viewport.scene.version += 1
+    def _pose(self, viewport, matrix):
+        if self._orig is None:
+            self._orig = TransformPose(self, viewport.scene, "rotate", getattr(self, "_vp_preview", False))
+        self._orig.apply(viewport.scene, matrix)
 
     def _apply_preview(self, viewport, target_deg: float) -> None:
         m = rotation_matrix(self.start_point, self._axis(), target_deg)

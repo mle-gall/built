@@ -25,12 +25,6 @@ class SectionPlaneTool(RustTool):
     def _current_normal(self):
         return self._point("current")
 
-    def host_section_normal(self, vp, px):
-        pick = getattr(vp, "pick_face_any", None)
-        hit = pick(*px) if pick else None
-        face = hit[0] if isinstance(hit, tuple) else hit
-        return face.normal().normalized().toTuple() if face else None
-
     def _send(self, vp, event):
         from core import axes
         if event["type"] in ("hover", "click", "key"):

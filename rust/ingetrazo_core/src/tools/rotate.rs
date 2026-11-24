@@ -138,6 +138,9 @@ impl Rotate {
 }
 
 impl Tool for Rotate {
+    fn cursor_preview(&self, plane: &super::preview::CursorPlane, hover: Option<super::P3>) -> super::Preview {
+        plane.protractor(self.centre, self.reference, hover)
+    }
     fn info(&self) -> &'static ToolInfo {
         &INFO
     }

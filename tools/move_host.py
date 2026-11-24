@@ -8,187 +8,47 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.group import Group
 from core.i18n import tr
-from core.mesh import Edge, Face
-from core.dimension import Dimension
-from core.guide import Guide, is_guide
-from core.history import (CompoundCommand, MoveDimensionsCommand,  # noqa: F401
-                          MoveGuidesCommand)
+from core.guide import Guide
+from core.history import CompoundCommand
 from core.textlabel import TextLabel
-from core.topology import _key
 from tools.base import ToolContext
 from tools.rust_tool_base import RustTool, _mods, _point_property, _tuple
 from core.units import fmt_len
 
 
 
-def _dedup(positions: list[QVector3D]) -> list[QVector3D]:
-    seen = set()
-    out = []
-    for p in positions:
-        k = _key(p)
-        if k not in seen:
-            seen.add(k)
-            out.append(QVector3D(p))
-    return out
+from ingetrazo_core import (CopyWire, TransformPose, moving_faces, rotation_handles as rotation_grips,
+                            snap_exclusions, track_move_grips, transform_records, transform_targets as gather_targets)
 
 
-def gather_targets(ctx: ToolContext):
-    """What a transform tool acts on: ``(groups, positions)``. EVERY selected
-    (or hovered) group transforms as a unit — a mixed selection carries the
-    groups AND the loose geometry together (rotating a whole drawing used to
-    grab only the first group). Positions are the unique loose coordinates
-    from the selection or the entity under the cursor. Shared by Move,
-    Rotate and Scale."""
-    viewport = ctx.viewport
-    entities = list(viewport.scene.selection)
-    if not entities:
-        group = viewport.pick_group(ctx.screen.x(), ctx.screen.y())
-        if group is not None:
-            return [group], []
-        edge = viewport.pick_edge(ctx.screen.x(), ctx.screen.y())
-        if edge is not None:
-            entities = [edge]
-        else:
-            face = viewport.pick_face(ctx.screen.x(), ctx.screen.y())
-            if face is not None:
-                entities = [face]
-    groups = [ent for ent in entities if isinstance(ent, Group)]
-    positions: list[QVector3D] = []
-    for ent in entities:
-        if isinstance(ent, Edge):
-            positions.extend([ent.a, ent.b])
-        elif isinstance(ent, Face):
-            positions.extend(ent.vertices)
-    return groups, _dedup(positions)
+def gather_images(ctx):
+    return transform_records(ctx, "image_plane")
 
 
-def groups_ghost_segments(groups) -> list:
-    """Every edge of ``groups`` as a world segment: the wireframe a Ctrl-copy
-    previews. A component's geometry lives in the placements it holds, so the
-    ghost has to swing the whole subtree — the top-level mesh of an imported
-    component is often empty. It reads every mesh, so it waits until a copy is
-    asked for: on the first click of a plain move it built the whole group,
-    seconds and gigabytes on a big one (#1092)."""
-    from core.group import iter_placements
-    segments = []
-    for group in groups:
-        for pg, xf in iter_placements(group):
-            for e in pg.mesh.edges:
-                a, b = QVector3D(e.a), QVector3D(e.b)
-                if xf is not None:
-                    a, b = xf.map(a), xf.map(b)
-                segments.append((a, b))
-    return segments
-
-
-def gather_dimensions(ctx: ToolContext, groups, verts) -> dict:
-    """Dimensions Move acts on, each with how: the selected ones, or (with
-    nothing selected) the one under the cursor. ``"line"`` — both ends
-    anchored to geometry: the dimension LINE slides and the extension
-    lines stretch from their vertices (the user of DriveMeca's video:
-    «no se puede mover después de colocarlo»); ``"rigid"`` — a free end
-    travels with the delta. A dimension whose anchors are themselves
-    being moved in this very drag is left alone: it rides along with its
-    vertices, and shifting its line too would move it twice."""
-    viewport = ctx.viewport
-    dims = [d for d in viewport.scene.selection if isinstance(d, Dimension)]
-    if not dims and not viewport.scene.selection:
-        pick = getattr(viewport, "pick_dimension", None)
-        d = pick(ctx.screen.x(), ctx.screen.y()) if pick else None
-        if d is not None:
-            dims = [d]
+def gather_dimensions(ctx, groups, vertices):
     from core.move_ops import dimension_modes
-    return dimension_modes(dims, groups, verts)
+    return dimension_modes(transform_records(ctx, "dimension"), groups, vertices)
 
 
-def gather_labels(ctx: ToolContext) -> list[TextLabel]:
-    """Leader texts Move acts on: the selected ones, or (with nothing
-    selected) the one whose text block is under the cursor — the glyphs
-    overdraw all geometry, so that grab is exclusive. Their label end
-    translates while the anchor stays pinned — the classic Move-on-text
-    behaviour."""
-    viewport = ctx.viewport
-    labels = [t for t in viewport.scene.selection if isinstance(t, TextLabel)]
-    if not labels and not viewport.scene.selection:
-        pick = getattr(viewport, "pick_text_label", None)
-        lab = (pick(ctx.screen.x(), ctx.screen.y(), rect_only=True)
-               if pick else None)
-        if lab is not None:
-            labels = [lab]
-    return labels
+class CopyPreview:
+    def _gather_copy_entities(self, ctx):
+        self._groups_ghost_due = True
+        self._sel_faces, self._sel_edges, self._base_segments = CopyWire.gather(
+            ctx, self._moved_guides, not self._groups and not self._moved_guides)
 
-
-def gather_guides(ctx: ToolContext) -> list[Guide]:
-    """Construction guides Move acts on (#627): the selected ones, or (with
-    nothing selected) the guide under the cursor. A loose edge under the
-    cursor wins over the guide — the edge is the finer target — while the
-    guide wins over the face or group behind it. To move something else
-    from a point on a guide, select it first."""
-    viewport = ctx.viewport
-    guides = [g for g in viewport.scene.selection if is_guide(g)]
-    if guides or viewport.scene.selection:
-        return guides
-    pick = getattr(viewport, "pick_guide", None)
-    guide = pick(ctx.screen.x(), ctx.screen.y()) if pick else None
-    if guide is None or not viewport.scene.entity_selectable(guide):
-        return []
-    if viewport.pick_edge(ctx.screen.x(), ctx.screen.y()) is not None:
-        return []
-    return [guide]
-
-
-def guide_ghost_segments(guides, reach: float) -> list:
-    """Wireframe of guides for a copy preview: a guide line as a segment
-    ``reach`` long each way (its 10 km span would end behind the camera),
-    a guide point as a small cross, plus its dashed segment's line."""
-    out = []
-    tick = reach * 0.02
-    for g in guides:
-        if g.direction is not None:
-            d = g.direction * reach
-            out.append((g.point - d, g.point + d))
-            continue
-        for ax in (QVector3D(tick, 0, 0), QVector3D(0, tick, 0),
-                   QVector3D(0, 0, tick)):
-            out.append((g.point - ax, g.point + ax))
-        if g.origin is not None:
-            out.append((QVector3D(g.origin), QVector3D(g.point)))
-    return out
-
-
-from core.move_ops import copied_guide  # noqa: E402,F401  (Rotate imports it from here)
-
-
-def gather_images(ctx: ToolContext):
-    """Reference images a transform tool acts on: the selected ones, or (with
-    nothing selected) the picture under the cursor. Locked images are already
-    filtered out by ``pick_image_plane`` — an aligned scan should not jump
-    because the user grabbed near it. Shared by Move, Rotate and Scale."""
-    from core.image_plane import ImagePlane
-    viewport = ctx.viewport
-    images = [e for e in viewport.scene.selection if isinstance(e, ImagePlane)]
-    if not images and not viewport.scene.selection:
-        pick = getattr(viewport, "pick_image_plane", None)
-        hit = pick(ctx.screen.x(), ctx.screen.y()) if pick else None
-        if hit is not None:
-            images = [hit]
-    return images
+    def _fill_groups_ghost(self):
+        # Imported components may be huge. Only read placement edges for a copy.
+        if self._groups_ghost_due:
+            self._groups_ghost_due = False
+            for group in self._groups:
+                self._base_segments.add_group(group)
 
 
 #: How near (px) the cursor must come to a rotation grip to take it.
 GRIP_PX = 9.0
-#: Where the four grips of a face sit: this fraction of the face's size
-#: from its centre, along each of its two directions.
-def rotation_grips(obb, eye):
-    from ingetrazo_core import move_rotation_grips
-    if obb is None:
-        return []
-    frame, lo, hi = obb
-    grips = move_rotation_grips([_tuple(v) for v in frame], _tuple(lo), _tuple(hi), eye.toTuple())
-    return [tuple(QVector3D(*v) for v in grip) for grip in grips]
 
 
-class MoveHost(RustTool):
+class MoveHost(CopyPreview, RustTool):
     """Move (``rust/ingetrazo_core/src/tools/move_tool.rs`` decides: the
     grab, the Ctrl copy, typed distances and deltas, the array window).
     This class is the host: what a click grabs (it is picking), the live
@@ -218,6 +78,7 @@ class MoveHost(RustTool):
         self._grip_rot_done = None             # its hot retype after the commit
 
     def _clear_sets(self) -> None:
+        self._pose = None
         self._positions: list[QVector3D] = []  # unique positions to translate
         self._verts: list = []                 # resolved vertex objects (identity)
         self._groups: list[Group] = []         # whole groups being moved
@@ -374,66 +235,11 @@ class MoveHost(RustTool):
         self._after(viewport)
 
     def _grab_under(self, ctx: ToolContext, world) -> bool:
-        """What the first click grabs: the selection, or what lies under the
-        cursor (a group, a vertex, a guide, a label, a dimension, a section
-        plane, an image). True when there is something."""
+        from ingetrazo_core import transform_grab
         viewport = ctx.viewport
-        groups, positions = self._gather(ctx)
-        labels = gather_labels(ctx)
-        guides = gather_guides(ctx)
-        from core.section import SectionPlane
-        splanes = [p for p in viewport.scene.selection
-                   if isinstance(p, SectionPlane)]
-        if not splanes and not viewport.scene.selection:
-            # Move grabs a section plane directly by hovering
-            # its frame — no pre-selection needed. The cut follows live.
-            pick = getattr(viewport, "pick_section_plane", None)
-            sp = (pick(ctx.screen.x(), ctx.screen.y())
-                  if pick is not None else None)
-            if sp is not None:
-                splanes = [sp]
-                groups, positions, guides = [], [], []
-        if labels and not viewport.scene.selection:
-            # A click on the glyphs grabs just the text, never the
-            # geometry that happens to sit behind it.
-            groups, positions, guides = [], [], []
-        hovered_guide = bool(guides) and not viewport.scene.selection
-        if hovered_guide:
-            # A click on a guide grabs the guide, not the face behind.
-            groups, positions = [], []
-        images = [] if hovered_guide else gather_images(ctx)
-        mesh = viewport.scene.mesh
-        verts = [v for v in (mesh.vertex_at(p) for p in positions)
-                 if v is not None]
-        dims = gather_dimensions(ctx, groups, verts)
-        if dims and not viewport.scene.selection:
-            # A click on a dimension's lines grabs the dimension, not
-            # the geometry behind it.
-            groups, positions, verts, guides = [], [], [], []
-        if not (groups or positions or labels or splanes or images
-                or dims or guides):
-            return False  # nothing under the cursor / selected to move
-        self._groups = groups
-        self._positions = positions
-        self._labels = labels
-        self._moved_guides = guides
-        self._dims = dims
-        self._splanes = splanes
-        self._images = images
-        # The grabbed positions resolved to vertex OBJECTS once: the live
-        # preview then moves these identities directly, so dragging through
-        # (or onto) a coincident vertex never drags the innocent one along.
-        self._verts = verts
-        self._vp_preview = False
-        if (self._groups and not self._verts and not self._positions):
-            # Groups-only drag: viewport-side preview — the caches
-            # freeze and the movers render from one-time scratch VBOs
-            # at a translated MVP (the per-frame rebuild storm was the
-            # 'mover un grupo demora' lag).
-            begin = getattr(viewport, "begin_groups_preview", None)
-            if begin is not None:
-                begin(self._groups)
-                self._vp_preview = True
+        if not transform_grab(self, ctx, "move"):
+            return False
+        self._vp_preview = TransformPose.begin(viewport, self)
         self._gather_copy_entities(ctx)
         return True
 
@@ -519,7 +325,7 @@ class MoveHost(RustTool):
             # Copy mode: the original stays put — preview the translated
             # COPY as a wireframe at the cursor offset.
             d = hover - grab
-            segments.extend((a + d, b + d) for a, b in self._base_segments)
+            segments.extend(self._base_segments.lines(delta=d.toTuple()))
         return segments
 
     def value_label(self):
@@ -544,14 +350,7 @@ class MoveHost(RustTool):
             return self._grip_rot.snap_excluded()
         if self.grab is None or self._copy:
             return None
-        edges: set[int] = set()
-        for v in self._verts:
-            for e in getattr(v, "edges", ()):
-                edges.add(e.key)
-        groups = {id(g) for g in self._groups}
-        if not edges and not groups:
-            return None
-        return edges, groups
+        return snap_exclusions(self, False)
 
     def moving_face_ids(self) -> set:
         """The loose faces the drag bends — any face with a corner on a
@@ -559,8 +358,7 @@ class MoveHost(RustTool):
         them (it chased its own face and shook)."""
         if self.grab is None or self._copy:
             return set()
-        return {f.key for v in self._verts
-                for e in getattr(v, "edges", ()) for f in e.faces}
+        return moving_faces(self)
 
     def moving_guide_ids(self) -> set:
         """The guides the drag carries (#627). They pass through the
@@ -595,93 +393,12 @@ class MoveHost(RustTool):
         self._grips = []
         self._hot_grip = None
 
-    def _grip_candidate(self, viewport, x: float, y: float):
-        """The group that should show grips: the one under the cursor, when
-        nothing else is selected (Move would act on the selection)."""
-        pick = getattr(viewport, "pick_group", None)
-        g = pick(x, y) if pick is not None else None
-        if g is None or getattr(g, "billboard", False):
-            return None
-        sel = viewport.scene.selection
-        if sel and set(sel) != {g}:
-            return None
-        return g
+    def _track_grips(self, ctx):
+        track_move_grips(self, ctx, GRIP_PX)
 
-    def _grips_stay(self, viewport, obb_of, w2p, x: float, y: float) -> bool:
-        """Whether the grips on show may stay although the cursor is off
-        the group's geometry and off every grip: the selection must still
-        be this group (or nothing), and the cursor still inside the
-        group's box as projected on screen, GRIP_PX of margin around it.
-        On a thin, long object — a pipe, an elbow — the grips sit on the
-        box, far from the mesh, and the way from the mesh out to one of
-        them crosses a stretch where the pick finds nothing and no grip
-        is near yet: the grips vanished mid-journey and none could be
-        taken (issue #871). This only ever KEEPS grips that are already
-        on show; acquiring a group still takes the pick, as before."""
-        group = self._grip_group
-        if group is None or not self._grips:
-            return False
-        sel = viewport.scene.selection
-        if sel and set(sel) != {group}:
-            return False
-        frame, lo, hi = obb_of(group)
-        axes = [QVector3D(a) for a in frame]
-        pts = []
-        for i in (0, 1):
-            for j in (0, 1):
-                for k in (0, 1):
-                    corner = (axes[0] * (hi[0] if i else lo[0])
-                              + axes[1] * (hi[1] if j else lo[1])
-                              + axes[2] * (hi[2] if k else lo[2]))
-                    p = w2p(corner)
-                    if p is None:
-                        return False
-                    pts.append((p[0], p[1]))
-        from ingetrazo_core import move_grip_region
-        return move_grip_region(pts, (x, y), GRIP_PX)
-
-    def _track_grips(self, ctx: ToolContext) -> None:
-        viewport = ctx.viewport
-        obb_of = getattr(viewport, "_group_obb", None)
-        w2p = getattr(viewport, "_world_to_pixel", None)
-        cam = getattr(viewport, "camera", None)
-        if obb_of is None or w2p is None or cam is None:
-            return
-        x, y = ctx.screen.x(), ctx.screen.y()
-        g = self._grip_candidate(viewport, x, y)
-        # A grip can sit off the geometry (the box of an L is bigger than
-        # the L): while the cursor is on one, the grips stay.
-        hot = self._grip_under(w2p, x, y)
-        if g is None and hot is not None:
-            self._hot_grip = hot
-            return
-        if g is None and self._grips_stay(viewport, obb_of, w2p, x, y):
-            # Off the mesh but still inside the shown group's box: the
-            # grips stay (issue #871). The camera may have moved: re-face
-            # them, exactly as when the group is picked again.
-            self._grips = rotation_grips(obb_of(self._grip_group),
-                                         cam.eye())
-            self._hot_grip = self._grip_under(w2p, x, y)
-            return
-        if g is not self._grip_group:
-            self._grip_group = g
-            self._grips = (rotation_grips(obb_of(g), cam.eye())
-                           if g is not None else [])
-        elif g is not None:
-            # The camera may have moved: re-face the grips.
-            self._grips = rotation_grips(obb_of(g), cam.eye())
-        self._hot_grip = self._grip_under(w2p, x, y)
-
-    def _grip_under(self, w2p, x: float, y: float):
-        best, best_d = None, GRIP_PX
-        for i, (pos, _c, _n) in enumerate(self._grips):
-            p = w2p(pos)
-            if p is None:
-                continue
-            d = ((p[0] - x) ** 2 + (p[1] - y) ** 2) ** 0.5
-            if d <= best_d:
-                best, best_d = i, d
-        return best
+    def _grip_under(self, viewport, x, y):
+        from ingetrazo_core import move_grip_hit
+        return move_grip_hit(viewport, self._grips, (x, y), GRIP_PX) if self._grips else None
 
     def _start_grip_rotation(self, ctx: ToolContext) -> None:
         """Hand the turn to a Rotate tool set up the classic way: the
@@ -727,61 +444,10 @@ class MoveHost(RustTool):
             painter.drawLine(QPointF(p[0], p[1] - r), QPointF(p[0], p[1] + r))
 
     # ---- Internals ----------------------------------------------------------
-    def _gather(self, ctx: ToolContext):
-        vertex = self._hovered_vertex(ctx)
-        if vertex is not None:
-            return [], [QVector3D(vertex.position)]
-        return gather_targets(ctx)
-
     @staticmethod
-    def _hovered_vertex(ctx: ToolContext):
-        """With nothing selected, a grab ON a corner (the Endpoint snap of
-        loose geometry) takes that one vertex — not the edge or face it
-        belongs to, which is what the pick under the cursor would give."""
-        viewport = ctx.viewport
-        snap = getattr(ctx, "snap", None)
-        if (viewport.scene.selection or snap is None
-                or snap.kind != "endpoint" or snap.context):
-            return None
-        return viewport.scene.mesh.vertex_at(snap.point)
-
-    def _fill_groups_ghost(self) -> None:
-        """The grabbed groups' wireframe, first thing in the copy preview."""
-        if self._groups_ghost_due:
-            self._groups_ghost_due = False
-            self._base_segments[:0] = groups_ghost_segments(self._groups)
-
-    def _gather_copy_entities(self, ctx: ToolContext) -> None:
-        """The faces/edges copy mode duplicates, and the wireframe segments
-        the copy preview carries (group wireframe, or the loose selection).
-        Mirrors RotateTool._gather_copy_entities."""
-        viewport = ctx.viewport
-        self._sel_faces, self._sel_edges, self._base_segments = [], [], []
-        self._groups_ghost_due = True     # asked of only when copying (#1092)
-        cam = getattr(viewport, "camera", None)
-        reach = max(float(getattr(cam, "distance", 10.0)), 1e-3)
-        self._base_segments.extend(guide_ghost_segments(self._moved_guides, reach))
-        sel = list(viewport.scene.selection)
-        if not sel and not self._groups and not self._moved_guides:
-            # Nothing selected and no group hover-picked: the click grabbed
-            # the loose entity under the cursor (mirror of gather_targets).
-            edge = viewport.pick_edge(ctx.screen.x(), ctx.screen.y())
-            if edge is not None:
-                sel = [edge]
-            else:
-                face = viewport.pick_face(ctx.screen.x(), ctx.screen.y())
-                if face is not None:
-                    sel = [face]
-        self._sel_faces = [f for f in sel if isinstance(f, Face)]
-        self._sel_edges = [e for e in sel if isinstance(e, Edge)]
-        for f in self._sel_faces:
-            for lp in (list(f.vertices), *[list(h) for h in f.holes]):
-                n = len(lp)
-                for i in range(n):
-                    self._base_segments.append(
-                        (QVector3D(lp[i]), QVector3D(lp[(i + 1) % n])))
-        for e in self._sel_edges:
-            self._base_segments.append((QVector3D(e.a), QVector3D(e.b)))
+    def _hovered_vertex(ctx):
+        from ingetrazo_core import move_endpoint
+        return move_endpoint(ctx)
 
     def _make_copy_builder(self, scene=None):
         """The copy command for a list of offsets, kept by the array window
@@ -792,89 +458,23 @@ class MoveHost(RustTool):
                             self._moved_guides)
 
     def _shift(self, viewport, step: QVector3D) -> None:
-        """Translate the live geometry by ``step`` — every grabbed group's
-        mesh AND the grabbed loose vertex objects (identity-exact: apply and
-        revert stay symmetric even when the drag crosses another vertex's
-        position)."""
-        for group in self._groups:
-            if getattr(group, "xform", None) is not None:
-                from ingetrazo_core import Matrix4 as QMatrix4x4
-                t = QMatrix4x4()
-                t.translate(step)
-                group.xform = t * group.xform   # instance: O(1)
-            else:
-                for v in list(group.mesh.vertices):
-                    group.mesh.move_vertex(v, step)
-        for v in self._verts:
-            viewport.scene.mesh.move_vertex(v, step)
-        for lab in self._labels:
-            lab.offset = lab.offset + step
-        for g in self._moved_guides:
-            MoveGuidesCommand.shift(g, step)
-        for dim, mode in self._dims.items():
-            MoveDimensionsCommand.shift(dim, mode, step)
-        for sp in self._splanes:
-            sp.point = sp.point + step
-        for im in self._images:
-            im.origin = im.origin + step
-        if self._splanes and not (self._groups or self._verts or self._labels
-                                  or self._moved_guides or self._dims
-                                  or self._images):
-            # Only section planes ride the drag: no face moved, so nothing
-            # built from the model is thrown away on each pointer move.
-            viewport.scene.bump_sections()
-        else:
-            viewport.scene.version += 1
+        TransformPose(self, viewport.scene, "move", False).translate(viewport.scene, step)
 
-    def _apply_preview(self, viewport, target_delta: QVector3D) -> None:
-        """Live-deform the scene so the current offset is ``target_delta`` from
-        the grab point, by translating the incremental step."""
-        step = target_delta - self._preview_delta
-        if step.length() < 1e-12:
+    def _apply_preview(self, viewport, target_delta):
+        if (target_delta - self._preview_delta).length() < 1e-12:
             return
-        if getattr(self, "_vp_preview", False):
-            # Groups-only drag: the viewport draws the frozen scratch copy
-            # at the offset — no geometry mutation, no version churn, no
-            # rebuilds. Labels/section planes ride along in Python (few).
-            for lab in self._labels:
-                lab.offset = lab.offset + step
-            for g in self._moved_guides:
-                MoveGuidesCommand.shift(g, step)
-            for dim, mode in self._dims.items():
-                MoveDimensionsCommand.shift(dim, mode, step)
-            for sp in self._splanes:
-                sp.point = sp.point + step
-            for im in self._images:
-                im.origin = im.origin + step
-            self._preview_delta = target_delta
+        if self._pose is None:
+            self._pose = TransformPose(self, viewport.scene, "move", self._vp_preview)
+        self._pose.translate(viewport.scene, target_delta)
+        if self._vp_preview:
             viewport.set_groups_preview_offset(target_delta)
-            return
-        self._shift(viewport, step)
         self._preview_delta = target_delta
 
-    def _revert_preview(self, viewport) -> None:
-        """Undo the live deformation, returning geometry to its grab-time spot."""
-        if getattr(self, "_vp_preview", False):
-            # Viewport-side preview: no geometry was mutated — only the
-            # labels/section planes moved live. Put those back.
-            if self._preview_delta.length() >= 1e-12:
-                step = -self._preview_delta
-                for lab in self._labels:
-                    lab.offset = lab.offset + step
-                for g in self._moved_guides:
-                    MoveGuidesCommand.shift(g, step)
-                for dim, mode in self._dims.items():
-                    MoveDimensionsCommand.shift(dim, mode, step)
-                for sp in self._splanes:
-                    sp.point = sp.point + step
-                for im in self._images:
-                    im.origin = im.origin + step
-            self._preview_delta = QVector3D(0.0, 0.0, 0.0)
-            return
-        if self._preview_delta.length() < 1e-12:
-            return
-        self._shift(viewport, -self._preview_delta)
-        self._preview_delta = QVector3D(0.0, 0.0, 0.0)
+    def _revert_preview(self, viewport):
+        if self._pose is not None and self._preview_delta.length() >= 1e-12:
+            self._pose.apply(viewport.scene)
+        self._pose = None
+        self._preview_delta = QVector3D()
 
     def _end_freeze(self, viewport) -> None:
         end = getattr(viewport, "end_groups_preview", None)

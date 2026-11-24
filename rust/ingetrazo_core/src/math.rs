@@ -254,7 +254,7 @@ impl From<DMat4> for Matrix4 {
     fn from(matrix: DMat4) -> Self { Self(matrix) }
 }
 
-fn mat(obj: &Bound<'_, PyAny>) -> PyResult<DMat4> {
+pub(crate) fn mat(obj: &Bound<'_, PyAny>) -> PyResult<DMat4> {
     if let Ok(m) = obj.cast::<Matrix4>() {
         return Ok(m.borrow().0);
     }

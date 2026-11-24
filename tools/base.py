@@ -14,13 +14,11 @@ position, keyboard modifiers and the snap metadata.
 """
 from __future__ import annotations
 
-import math
-
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from PySide6.QtCore import QPointF, Qt
-from ingetrazo_core import Vec3 as QVector3D
+from ingetrazo_core import Vec3 as QVector3D, cursor_pixel_scale, cursor_plane_reference, cursor_plane_color, plane_input
 
 from core.snap import POINT_SNAP_KINDS, SnapResult
 
@@ -106,7 +104,7 @@ class PlaneLock:
     «quiero dibujar un círculo en el plano ZX… apretando las teclas de
     desplazamiento»).
         Before the first click the key only chooses the plane, and that click
-    anchors it at the point (``_anchor_lock``); after it the plane stops
+    anchors it at the point; after it the plane stops
     following the cursor and the key holds the shape on the plane it is
     drawing on — the same key frees it (handing the plane back to the
     cursor), a different one switches it. The lock is spent by the shape
@@ -267,20 +265,7 @@ class PlaneLock:
             return QVector3D(point), plane[1]
         return QVector3D(point), axes.axis("z")
 
-    @staticmethod
-    def plane_color(normal: QVector3D):
-        """RGBA of the axis the plane is normal to (red = YZ, green = XZ,
-        blue = XY), or ``None`` for a plane off the axes."""
-        from core.snap import AXIS_COLORS
-        from core import axes
-        n = normal.normalized()
-        if not axes.is_world():
-            n = axes.to_local(n)             # the context's own colours
-        for axis, comp in (("x", n.x()), ("y", n.y()), ("z", n.z())):
-            if abs(comp) > 0.99:
-                r, g, b = AXIS_COLORS[axis][:3]
-                return (r, g, b, 1.0)
-        return None
+    plane_color = staticmethod(cursor_plane_color)
 
     def lock_color(self):
         """The rubber band colour for a locked or camera-selected plane."""
@@ -294,32 +279,8 @@ class PlaneLock:
             return self.plane_color(self.hover_plane[1])
         return None
 
-    @staticmethod
-    def world_per_pixel(viewport, point: QVector3D, along: QVector3D):
-        """Metres per screen pixel at ``point`` along ``along``, or ``None``
-        when the viewport cannot project (headless stand-ins)."""
-        project = getattr(viewport, "_world_to_pixel", None)
-        if project is None:
-            return None
-        try:
-            a = project(point)
-            b = project(point + along.normalized() * 0.25)
-        except Exception:  # noqa: BLE001 — no projection, no preview
-            return None
-        if a is None or b is None:
-            return None
-        d = math.hypot(b[0] - a[0], b[1] - a[1])
-        return 0.25 / d if d > 1e-6 else None
-
-    @classmethod
-    def plane_preview_scale(cls, viewport, point: QVector3D,
-                            u: QVector3D, v: QVector3D):
-        """World scale for a preview glyph, based on its most visible axis."""
-        scales = [
-            scale for axis in (u, v)
-            if (scale := cls.world_per_pixel(viewport, point, axis)) is not None
-        ]
-        return min(scales) if scales else None
+    world_per_pixel = staticmethod(cursor_pixel_scale)
+    plane_preview_scale = staticmethod(cursor_pixel_scale)
 
     def plane_lock_key(self, viewport, key: int) -> bool:
         if (getattr(self, "start_point", None) is not None
@@ -330,114 +291,15 @@ class PlaneLock:
         axis = PLANE_LOCK_KEYS.get(int(key))
         if axis is None:
             return False
-        self._plane_state.toggle(axis)
-        self._anchor_lock()
-        flash = getattr(viewport, "flash_status", None)
-        if flash is not None:
-            from core.i18n import tr
-            flash(tr("Drawing plane locked: {plane}",
-                     plane=PLANE_LOCK_NAMES[self.plane_lock])
-                  if self.plane_lock else tr("Drawing plane free"))
-        update = getattr(viewport, "update", None)
-        if update is not None:
-            update()
-        return True
-
-    def _anchor_lock(self) -> None:
-        """Put the shape on the plane a lock just took — ``work_plane``
-        through the first point. A lock taken with the first point already
-        down MOVES the plane, and this is what makes it bite: with the
-        first point down the viewport re-plans the shape onto whatever the
-        cursor detects as it moves (#545), which is a plane through the
-        CURSOR — without this the lock just asked for loses to it. Before
-        the first click the click itself anchors the plane at the point,
-        and freeing the lock here drops ``work_plane`` so the cursor has
-        the plane back."""
-        start = getattr(self, "start_point", None)
-        if start is None:
-            return
-        self.work_plane = self.locked_work_plane(start)
+        return plane_input(self, viewport, axis)
 
     def reference_lock_key(self, viewport) -> bool:
-        """The Down arrow: lock the plane perpendicular to the edge under
-        the cursor (or parallel to the face under it); Down again frees it.
-        With nothing under the cursor the classic lock does nothing, and
-        neither do we — but the key stays ours, so the viewport's linear
-        reference (which is for the SECOND point) does not swallow it.
-        Before as after the first click, and shared with a held Shift
-        (``mark_plane``)."""
-        from core.i18n import tr
-        flash = getattr(viewport, "flash_status", None)
-        update = getattr(viewport, "update", None)
-        if self.plane_ref is not None:
-            self.plane_ref = None
-            self._anchor_lock()
-            if flash is not None:
-                flash(tr("Drawing plane free"))
-        else:
-            ref = self.hovered_reference(viewport)
-            if ref is None:
-                return True
-            self.plane_ref = ref
-            self.plane_lock = None
-            self._anchor_lock()
-            if flash is not None:
-                flash(tr("Drawing plane locked: perpendicular to the edge")
-                      if ref[1] == "edge" else
-                      tr("Drawing plane locked: parallel to the face"))
-        if update is not None:
-            update()
-        return True
+        return plane_input(self, viewport, "reference")
 
     def mark_plane(self, viewport) -> bool:
-        """Mark the plane the shape is drawing on — the held-Shift mark.
+        return plane_input(self, viewport, "mark")
 
-        The plane the cursor is detecting, kept for as long as the key is
-        down; the viewport owns the key and calls ``Viewport.
-        _mark_plane_for_shift``. It is the same ``plane_ref`` the Down
-        arrow toggles, so the magenta cue, the preview and the locks that
-        never yield all come for free — but it does NOT touch
-        ``work_plane``: the mark is the plane the shape is ON, and with the
-        first point down that plane is the one the cursor is detecting
-        (#545), not a parallel through the first point (freezing onto the
-        latter is the very bug #545 fixed).
-
-        Returns whether Shift is the one holding the plane now: an arrow or
-        Down lock already on is not Shift's to release, and with no plane
-        detected there is nothing to mark."""
-        if self.plane_lock is not None or self.plane_ref is not None:
-            return False
-        plane = (self.work_plane if self.work_plane is not None
-                 else self.hover_plane)
-        if plane is None:
-            return False
-        self.plane_ref = (QVector3D(plane[1]).normalized(), "plane")
-        update = getattr(viewport, "update", None)
-        if update is not None:
-            update()
-        return True
-
-    @staticmethod
-    def hovered_reference(viewport):
-        """``(normal, kind)`` of the reference under the cursor: the edge
-        (loose or a group's, as the viewport's hover pick returns it in
-        world space) beats the face, the usual convention; ``None`` over
-        nothing."""
-        edge = getattr(viewport, "_hover_edge", None)
-        if edge is not None:
-            d = QVector3D(edge.b) - QVector3D(edge.a)
-            if d.length() > 1e-9:
-                return d.normalized(), "edge"
-        pos = getattr(viewport, "_last_mouse_pos", None)
-        pick = getattr(viewport, "pick_face_placement", None)
-        if pos is not None and pick is not None:
-            face, grp = pick(pos.x(), pos.y())
-            if face is not None:
-                from core.snap import face_plane_world
-                _p, n = face_plane_world(face, getattr(grp, "xform", None))
-                if n.length() > 1e-9:
-                    return n.normalized(), "face"
-        return None
+    hovered_reference = staticmethod(cursor_plane_reference)
 
     def clear_plane_lock(self) -> None:
         """Both locks off — the shape spent them, or Esc / deactivation. A

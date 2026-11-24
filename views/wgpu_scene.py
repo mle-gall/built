@@ -479,7 +479,7 @@ def open_focus(scene):
 
 
 def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=True,
-               baked_paints=None, progress=None, previous_origin=(0., 0., 0.), previous_pack=None, focus=None):
+               baked_paints=None, progress=None, previous_origin=(0., 0., 0.), previous_pack=None, focus=None, roots=None):
     """``baked_paints`` (id(group) -> paint) bakes those groups with that
     paint instead of the one they resolve to: the incremental bake of a
     changed prototype variant (views.wgpu_updates). ``progress(fraction,
@@ -507,7 +507,10 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
             if 0 <= code < len(previous_pack.prototype_origins):
                 old_anchors[mesh_id] = previous_pack.prototype_origins[code]
     from itertools import chain
-    placements = chain([(None, None, None, 0, None)], _placement_records(scene, scene.groups, vp, state))
+    # Off-document clipboard roots share the model bake without changing the
+    # document tree or walking its unrelated resident placements.
+    placements = (_native_records(scene, roots) if roots is not None else
+                  chain([(None, None, None, 0, None)], _placement_records(scene, scene.groups, vp, state)))
     total = 0
     if progress is not None:
         total = max(1, sum(1 for _ in iter_groups(scene.groups)))
@@ -565,8 +568,8 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
         groups.append(group)
         paints.append(got[1])
     occurrence_keys = {}
-    repeated = scene.repeated_uids()
-    if repeated or any(u.startswith('@[') for u in uids):
+    repeated = scene.repeated_uids() if roots is None else ()
+    if roots is None and (repeated or any(u.startswith('@[') for u in uids)):
         from core.link_structure import row_id
         for i, group in enumerate(groups):
             if group is not None and (group.uid in repeated or group.uid.startswith('@[')):

@@ -312,6 +312,9 @@ impl RadialTool {
 fn d3(p: [f64; 3]) -> DVec3 { DVec3::from_array(p) }
 
 impl Tool for RadialTool {
+    fn cursor_preview(&self, plane: &super::preview::CursorPlane, _hover: Option<super::P3>) -> super::Preview {
+        plane.ring(self.sides.max(3), 0.)
+    }
     fn info(&self) -> &'static ToolInfo { self.info }
 
     fn event(&mut self, ev: &ToolEvent, host: &mut dyn ToolHost) -> Reply {

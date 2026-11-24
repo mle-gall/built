@@ -87,9 +87,9 @@ def test_the_triple_click_still_selects_the_whole_piece(monkeypatch):
 
     vp = _Vp()
     tool = SelectTool()
-    from tools import select_host as select
-    kind = "face" if select.pick_kind(a) == "face" else "visible_edge"
-    monkeypatch.setattr(select, "QUERIES", {kind: lambda _vp, _x, _y: [(a, 0.0)]})
+    from core.mesh import Face
+    method = "pick_face" if isinstance(a, Face) else "pick_visible_edge"
+    monkeypatch.setattr(vp, method, lambda _x, _y: a, raising=False)
     tool.on_triple_click(ToolContext(viewport=vp, world=V(0, 0),
                                      screen=QPointF(0, 0),
                                      modifiers=Qt.NoModifier, snap=None))

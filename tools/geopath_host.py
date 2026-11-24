@@ -26,23 +26,6 @@ class GeoPathTool(RustTool):
             self._saved_view = None
             vp.update()
 
-    def host_geo_elevation(self, vp, point):
-        return vp.ground_elevation(*point[:2])
-
-    def host_geo_project(self, vp, point):
-        return vp._world_to_pixel(Vec3(*point))
-
-    def host_geo_nodes(self, vp, _):
-        return [(self._handles.id(path), i, p.toTuple(), px) for path in vp.scene.geo_paths
-                for i, p in enumerate(path.points) if (px := vp._world_to_pixel(vp.drape(p))) is not None]
-
-    def host_geo_highlight(self, vp, item):
-        vp._hover_geo_node = (self._handles.get(item[0]), item[1]) if item else None
-
-    def host_geo_index(self, vp, handle):
-        path = self._handles.get(handle)
-        return vp.scene.geo_paths.index(path) if path in vp.scene.geo_paths else None
-
     def host_geo_preview(self, vp, args):
         key, i, point = args
         path = self._handles.get(key)

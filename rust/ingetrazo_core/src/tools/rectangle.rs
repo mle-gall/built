@@ -360,6 +360,9 @@ impl RectangleTool {
 }
 
 impl Tool for RectangleTool {
+    fn cursor_preview(&self, plane: &super::preview::CursorPlane, _hover: Option<super::P3>) -> super::Preview {
+        plane.rectangle(self.from_center)
+    }
     fn info(&self) -> &'static ToolInfo { &INFO }
 
     fn event(&mut self, ev: &ToolEvent, host: &mut dyn ToolHost) -> Reply {

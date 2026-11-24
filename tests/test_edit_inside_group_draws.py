@@ -78,8 +78,8 @@ def test_empty_click_leaves_only_beyond_the_dotted_box(native_window, monkeypatc
 
     # Exercise the empty-click branch independently of face picking: the
     # centre stands for a hole/empty patch inside an irregular group's box.
-    from tools import select_host as select
-    monkeypatch.setattr(select, "QUERIES", {})
+    from tools.rust_tool_base import _Host
+    monkeypatch.setattr(_Host, "query", lambda *args: [])
     tool = SelectTool()
     pixels = [vp._world_to_pixel(c) for c in vp._edit_group_box_corners()]
     pixels = [p for p in pixels if p is not None]

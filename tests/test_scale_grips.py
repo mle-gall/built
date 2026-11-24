@@ -277,3 +277,23 @@ def test_hot_retype_absolute_size_can_imply_a_small_factor():
     assert len(vp.history.undo_stack) == 1
     assert vp.history.undo()
     assert max(v.position.x() for v in vp.scene.mesh.vertices) == 4.
+
+
+def test_grip_scales_the_inner_and_outer_rim_of_a_selected_face():
+    scene = Scene()
+    vp = _Stub(scene)
+    def ring(lo, hi):
+        return [V(lo, lo), V(hi, lo), V(hi, hi), V(lo, hi)]
+    face = scene.mesh.add_face(ring(0, 4), [ring(1, 3)])
+    scene.select([face])
+    tool = ScaleTool()
+    tool.on_activate(vp)
+    corner = next(g for g in tool._grips if g.params[:2] == (1., 1.))
+    tool._grab(vp, corner, (0., 0.))
+    assert {v.key for v in tool._verts} == {v.key for v in scene.mesh.vertices}
+    assert tool.on_value(vp, 2.)
+    assert {(v.x(), v.y()) for v in scene.mesh.faces[0].holes[0]} == {
+        (2., 2.), (6., 2.), (6., 6.), (2., 6.)}
+    assert vp.history.undo()
+    assert {(v.x(), v.y()) for v in scene.mesh.faces[0].holes[0]} == {
+        (1., 1.), (3., 1.), (3., 3.), (1., 3.)}

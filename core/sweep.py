@@ -27,40 +27,7 @@ from core.topology import _key
 _CURVE_FACET_COS = 0.85
 
 
-def order_path_edges(edges):
-    """Chain the selected edges into an ordered polyline.
-
-    Returns ``(points, closed)`` or ``None`` when the edges do not form one
-    simple chain (branching, disjoint pieces)."""
-    edges = list(edges)
-    if not edges:
-        return None
-    adj: dict = {}
-    for e in edges:
-        adj.setdefault(e.v0, []).append(e.v1)
-        adj.setdefault(e.v1, []).append(e.v0)
-    if any(len(nbrs) > 2 for nbrs in adj.values()):
-        return None                                  # branching
-    ends = [v for v, nbrs in adj.items() if len(nbrs) == 1]
-    if len(ends) not in (0, 2):
-        return None
-    closed = not ends
-    start = ends[0] if ends else edges[0].v0
-    pts = [QVector3D(start.position)]
-    prev, cur = None, start
-    for _ in range(len(edges)):
-        nxt = next((v for v in adj[cur] if v != prev), None)
-        if nxt is None:
-            return None
-        pts.append(QVector3D(nxt.position))
-        prev, cur = cur, nxt
-    if closed:
-        if cur != start:
-            return None                              # disjoint loops
-        pts.pop()                                    # implicit wrap
-    elif len(pts) != len(edges) + 1:
-        return None                                  # disjoint chains
-    return pts, closed
+from ingetrazo_core import ordered_edge_path as order_path_edges
 
 
 def _wall(quad):
