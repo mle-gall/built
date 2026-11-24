@@ -99,7 +99,16 @@ def sources(scene) -> list:
     return out
 
 
+def registry_view(scene) -> dict:
+    """The links registry to read: the document's, or an empty dict that
+    is not attached to it. A read must not write ``plugin_data``."""
+    data = getattr(scene, "plugin_data", None)
+    reg = data.get(REGISTRY_KEY) if isinstance(data, dict) else None
+    return reg if isinstance(reg, dict) else {}
+
+
 def registry(scene) -> dict:
+    """The links registry to write, created in ``plugin_data`` if absent."""
     data = getattr(scene, "plugin_data", None)
     if not isinstance(data, dict):
         data = scene.plugin_data = {}
@@ -120,7 +129,7 @@ def _entry(scene, path) -> dict:
 
 
 def is_packed(scene, path) -> bool:
-    return bool(registry(scene).get(_norm(path), {}).get("packed"))
+    return bool(registry_view(scene).get(_norm(path), {}).get("packed"))
 
 
 def stem(path) -> str:
@@ -143,7 +152,7 @@ def link_tags(scene, path) -> list:
 
 def source_of_tag(scene, name: str):
     """The source file a host tag belongs to, or None for the host's own."""
-    for key, entry in registry(scene).items():
+    for key, entry in registry_view(scene).items():
         if isinstance(entry, dict) and name in (entry.get("tags") or ()):
             return key
     return None
