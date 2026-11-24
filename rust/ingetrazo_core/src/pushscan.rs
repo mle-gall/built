@@ -50,6 +50,10 @@ pub(crate) fn grown_ring_box(scan: &MeshScan, f: usize, pad: f64, rel: f64) -> [
     if b[0].is_finite() {
         let diagonal = ((b[3] - b[0]).powi(2) + (b[4] - b[1]).powi(2) + (b[5] - b[2]).powi(2)).sqrt();
         let g = pad + rel * diagonal + slack(big(&b));
+        if !g.is_finite() {
+            return [f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY,
+                    f64::INFINITY, f64::INFINITY, f64::INFINITY];
+        }
         for i in 0..3 {
             b[i] -= g;
             b[i + 3] += g;
@@ -90,7 +94,7 @@ pub fn scan_faces_holding_points(
             .into_par_iter()
             .filter(|&f| {
                 let b = grown_ring_box(s, f as usize, pad, rel);
-                points.iter().all(|&(x, y, z)| holds_point(&b, [x, y, z]))
+                b[0] <= b[3] && points.iter().all(|&(x, y, z)| holds_point(&b, [x, y, z]))
             })
             .collect()
     }))

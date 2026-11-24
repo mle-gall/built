@@ -1130,7 +1130,9 @@ impl PyMeshStore {
         -> PyResult<(usize,usize,Vec<(u128,u32)>,Vec<u128>,Vec<u128>,Vec<u128>)> {
         let f=live_of(&self.inner,Kind::Face,face)?;
         let h=crate::hypot_of(hypot)?;
-        if own.values().chain(&rows).chain(&swapped).any(|&c|(c as usize)>=swapped.len() || (c as usize)>=surface.len()) || swapped.is_empty() {
+        let classes = swapped.len();
+        if classes == 0 || surface.len() != classes ||
+            own.values().chain(&rows).chain(&swapped).chain(&surface).any(|&c| c as usize >= classes) {
             return Err(PyValueError::new_err("missing push paint class"));
         }
         let mut paint=super::Paint::new(own,rows);

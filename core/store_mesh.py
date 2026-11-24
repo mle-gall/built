@@ -84,7 +84,6 @@ def paint_classes(mesh, *, push=False):
     """``(own, rows, reps)`` for the native rebuild: the paint class of each
     face's own attrs dict and of each attribute-table row (equal dicts, one
     class; 0 for none) and a dict per class."""
-    from core.store_mesh import _attribute_owner
     owner = _attribute_owner(mesh)
     reps = [{}]
     index: dict = {}
