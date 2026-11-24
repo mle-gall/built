@@ -39,7 +39,6 @@ def test_palette_names_are_absent_from_settings():
     assert "Solarized" not in fields and "Campbell" not in fields
 
 
-
 def _grip_pixels(app, vertical=False):
     win = QMainWindow()
     tb = QToolBar(win)
@@ -202,10 +201,3 @@ def test_the_overflow_chevron_keeps_its_weight(app):
     # A full-weight stroke: some column holds three opaque pixels in a run.
     runs = [sum(1 for y in range(48) if img.pixelColor(x, y).alpha() > 200) for x in range(48)]
     assert max(runs) >= 3
-
-
-def test_row_marks_keep_ingetrazo_s_original_look(app):
-    """Rounds 13-16: re-inking the eye and the padlock read worse than the
-    original, in Light and in Dark; they keep the palette's text ink."""
-    from views.outliner import _ink
-    assert _ink() == app.palette().color(QPalette.Text)

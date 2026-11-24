@@ -1,6 +1,6 @@
 //! Component placements share a definition inside one document and reset instance overrides.
 use super::model_edit::translated;
-use pyo3::{prelude::*, types::PyDict};
+use pyo3::{prelude::*, types::{PyDict, PyList}};
 use std::path::PathBuf;
 
 fn notice(
@@ -302,10 +302,83 @@ fn place_catalogue(
     })
 }
 
+/// Stage the archive and its remapped recipes before changing the open model.
+#[pyfunction]
+fn import_kept_components(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<usize> {
+    let py = win.py();
+    let src = py.import("core.scene")?.call_method0("Scene")?;
+    let file = py.import("pathlib")?.call_method1("Path", (path,))?;
+    py.import("formats.igz")?.call_method1("load_into", (&src, file))?;
+    let templates = py.import("core.kept_components")?.call_method1("definitions_of", (&src,))?;
+    let count = templates.len()?;
+    if count == 0 { return Ok(0); }
+
+    let vp = win.getattr("viewport")?;
+    let dst = vp.getattr("scene")?;
+    let existing = dst.getattr("materials")?;
+    let recipes = py.get_type::<PyDict>().call1((&existing,))?;
+    // A detached traversal root lets merge_materials restamp each shared mesh
+    // exactly once, even when it belongs to two imported definitions.
+    let root = py.import("types")?.getattr("SimpleNamespace")?.call0()?;
+    root.setattr("mesh", py.import("core.mesh")?.call_method0("Mesh")?)?;
+    root.setattr("xform", py.None())?;
+    root.setattr("material", py.None())?;
+    root.setattr("children", &templates)?;
+    let insert = py.import("core.insert")?;
+    insert.call_method1("merge_materials", (src.getattr("materials")?, &recipes, root))?;
+    let additions = PyDict::new(py);
+    for (name, recipe) in recipes.cast::<PyDict>()?.iter() {
+        if !existing.contains(&name)? { additions.set_item(name, recipe)?; }
+    }
+    let empty = PyList::empty(py);
+    let names = insert.call_method1("used_layers", (&empty, &empty, &templates))?;
+    let layers = PyList::empty(py);
+    for name in names.try_iter()? {
+        let name = name?;
+        if dst.call_method1("layer_by_key", (&name,))?.is_none() {
+            layers.append(py.import("core.layers")?.call_method1("Layer", (name,))?)?;
+        }
+    }
+    let step = py.import("ingetrazo_core")?.call_method1("AddKeptComponentsCommand", (templates, additions, layers))?;
+    vp.getattr("history")?.call_method1("execute", (step,))?;
+    vp.call_method0("notify_scene_changed")?;
+    Ok(count)
+}
+
+#[pyfunction]
+pub(super) fn choose_kept_components(win: &Bound<'_, PyAny>) -> PyResult<()> {
+    let py = win.py();
+    let title = translated(py, "Components from File", None)?;
+    let path = win.getattr("_current_path")?;
+    let folder = if path.is_none() { String::new() } else { path.getattr("parent")?.str()?.to_string() };
+    let file = py.import("views.filedialogs")?.getattr("file_dialogs")?.call_method1(
+        "getOpenFileName", (win, &title, folder, py.import("formats.built")?.getattr("DOCUMENT_FILTER")?))?.get_item(0)?;
+    if !file.is_truthy()? { return Ok(()); }
+    let vars = PyDict::new(py);
+    let msg = match import_kept_components(win, &file) {
+        Ok(0) => translated(py, "That file holds no components", None)?,
+        Ok(n) => {
+            vars.set_item("n", n)?;
+            translated(py, "{n} components added to the list, ready to place", Some(&vars))?
+        }
+        Err(e) => {
+            vars.set_item("p", file)?;
+            vars.set_item("e", e.value(py).str()?)?;
+            let msg = translated(py, "Could not read {p}: {e}", Some(&vars))?;
+            py.import("views.chrome_dialogs")?.call_method1("warning", (win, title, msg))?;
+            return Ok(());
+        }
+    };
+    win.getattr("viewport")?.call_method1("flash_status", (msg, 5000))?;
+    Ok(())
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(bundled_component, m)?)?;
     m.add_function(wrap_pyfunction!(catalogue_component, m)?)?;
     m.add_function(wrap_pyfunction!(place_bundled, m)?)?;
     m.add_function(wrap_pyfunction!(place_catalogue, m)?)?;
+    m.add_function(wrap_pyfunction!(import_kept_components, m)?)?;
+    m.add_function(wrap_pyfunction!(choose_kept_components, m)?)?;
     Ok(())
 }

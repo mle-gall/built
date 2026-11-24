@@ -16,6 +16,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from pathlib import Path
 
 import pytest
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as V
 
 from core.history import History, SetPluginDataCommand
@@ -63,40 +64,15 @@ def test_a_setup_only_plugin_is_discovered(tmp_path):
     assert plugins[0].tools == [] and callable(plugins[0].setup)
 
 
-def _window():
-    from views.main_window import MainWindow
-    return MainWindow()
-
-
-def _close(win):
-    win._saved_version = win.viewport.scene.version
-    win.close()
-
-
-def test_a_failing_setup_is_an_error_entry_not_a_crash(tmp_path, monkeypatch):
-    from core import extensions
-    (tmp_path / "rota.py").write_text(
-        "def setup(app):\n    raise RuntimeError('boom')\n")
-    monkeypatch.setattr(extensions, "plugin_dirs", lambda: [tmp_path])
-    win = _window()
-    try:
-        ext = next(m for m in win.menuBar().actions()
-                   if m.menu() is not None and "xtensi" in m.text()).menu()
-        entries = [a for a in ext.actions() if "rota" in a.text()]
-        assert entries and not entries[0].isEnabled()
-        assert "boom" in entries[0].toolTip()
-    finally:
-        _close(win)
-
-
 @pytest.fixture
-def levels(monkeypatch):
-    """A window with the Levels example installed."""
+def levels(monkeypatch, request):
     from core import extensions
     monkeypatch.setattr(extensions, "plugin_dirs", lambda: [EXAMPLES])
-    win = _window()
-    yield win
-    _close(win)
+    return request.getfixturevalue("native_host").window
+
+
+def _panel(win):
+    return win._panel_factories["niveles"](_app(win), win.viewport.update)
 
 
 def _app(win):
@@ -106,17 +82,17 @@ def _app(win):
 
 def test_levels_adds_its_tab_and_keeps_levels_in_the_document(levels):
     win = levels
-    assert any(d.objectName() == "extension_niveles"
-               for d in win._extension_docks)
+    panel = _panel(win)
+    assert panel.slot == "dock"
     app = _app(win)
     app.set_document_data({"levels": [{"name": "PB", "z": 0.0},
                                       {"name": "PA", "z": 2.6}],
                            "guides": True})
-    panel = win._extension_docks[0].widget()
-    assert panel.list.count() == 2
-    assert panel.list.item(0).text().startswith("PA")     # highest on top
-    win._on_undo()                                        # one undo step
-    assert panel.list.count() == 0
+    def rows():
+        return next(c["rows"] for c in panel.sections()[0]["items"] if c["kind"] == "list")
+    assert [row["cells"][0] for row in rows()] == ["PA", "PB"]
+    assert win.viewport.history.undo()
+    assert rows() == []
 
 
 def _front_parallel(vp):
@@ -124,7 +100,7 @@ def _front_parallel(vp):
     vp.camera.perspective = False
     vp.camera.target = V(0, 0, 1.5)
     vp.camera.distance = 20.0
-    vp.resize(800, 600)
+    vp.window()._host.resize(800, 600, 1.0)
     vp.camera.set_aspect(800, 600)
 
 
@@ -156,37 +132,38 @@ def test_levels_guides_turn_off_with_their_checkbox(levels):
     win = levels
     vp = win.viewport
     _app(win).set_document_data({"levels": [{"name": "PA", "z": 2.6}],
-                                 "guides": False})
+                                 "guides": True})
+    _panel(win).event("guides", "commit", False)
     _front_parallel(vp)
     free = SnapResult(V(1.0, 0.0, 2.58), "on_face")
     near = vp._world_to_pixel(V(1.0, 0.0, 2.6))
     assert vp._extension_snap(free, near[0], near[1]) is free
 
 
-def test_a_raising_provider_cannot_take_the_cursor(levels):
+def test_a_raising_provider_cannot_take_the_cursor(native_host):
     from core.snap import SnapResult
-    vp = levels.viewport
+    vp = native_host.window.viewport
 
     def broken(*_a):
         raise ValueError("plugin bug")
-    vp._ext_snap_providers.insert(0, broken)
+    _app(native_host.window).add_snap_provider(broken)
     s = SnapResult(V(0, 0, 0), "on_face")
     assert vp._extension_snap(s, 10, 10) is s
 
 
-def test_a_provider_is_handed_the_viewport_not_the_engine(levels):
+def test_a_provider_is_handed_the_viewport_not_the_engine(native_host):
     """The provider signature stayed ``fn(viewport, snap, px, py)`` across
     the extraction (the rule now lives in ``InferenceEngine``): a plugin
     never learns that there is an engine."""
     from core.snap import SnapResult
-    vp = levels.viewport
+    vp = native_host.window.viewport
     seen = []
 
     def spy(viewport, snap, x, y):
         seen.append((viewport, snap, x, y))
         return None
 
-    vp._ext_snap_providers.insert(0, spy)
+    _app(native_host.window).add_snap_provider(spy)
     s = SnapResult(V(0, 0, 0), "on_face")
     assert vp._extension_snap(s, 10, 10) is s
     assert seen and seen[0][0] is vp and seen[0][2:] == (10, 10)
@@ -198,8 +175,7 @@ def test_levels_panel_has_a_one_click_way_to_where_the_guides_show(levels):
     win = levels
     vp = win.viewport
     vp.camera.perspective = True
-    panel = win._extension_docks[0].widget()
-    panel._show_elevation()
+    _panel(win).event("elevation", "invoke", None)
     assert not vp.camera.perspective
     assert abs(vp.camera.pitch) < 1e-6
 
@@ -213,22 +189,14 @@ def test_the_example_extensions_ship_but_install_only_on_request(tmp_path,
     managed extensions: disable and uninstall work on them like on any."""
     from core import extension_manager as manager
     from core import extensions
-    from views.main_window import MainWindow
-    examples = MainWindow.example_extensions()
+    examples = manager.example_extension_files()
     assert any(p.name == "niveles.py" and title == "Niveles"
                for p, title, _blurb in examples)
     user = tmp_path / "plugins"
     monkeypatch.setattr(extensions, "user_plugins_dir", lambda: user)
     monkeypatch.setattr(extensions, "plugin_dirs", lambda: [user])
     monkeypatch.setattr(manager, "user_plugins_dir", lambda: user)
-    win = _window()
-    try:
-        assert not win._extension_docks            # not loaded by default
-        menu = next(m for m in win.menuBar().actions()
-                    if m.menu() is not None and "xtensi" in m.text()).menu()
-        assert "Example extensions" not in [a.text() for a in menu.actions()]
-    finally:
-        _close(win)
+    assert not extensions.discover_plugins([user])[0]
     niveles = next(e for e in manager.bundled_extensions()
                    if e.id == "niveles")
     manager.install_extension(niveles)             # from the local copy

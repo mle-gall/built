@@ -123,11 +123,7 @@ hiddenimports = [
     'core.textlabel',
 ]
 
-# ezdxf (DXF/DWG import) is imported INSIDE functions — without this the
-# packaged build ships with CAD import dead (the core.ai lesson again).
-# collect_submodules because ezdxf lazy-loads its own internals too.
 from PyInstaller.utils.hooks import collect_submodules
-hiddenimports += collect_submodules('ezdxf')
 # manifold3d (Solid Tools) is imported inside core.solids' functions — one
 # self-contained native extension module (libstdc++/libm/libc only).
 hiddenimports += ['manifold3d', 'core.solids', 'tools.solid_tools']
@@ -282,8 +278,11 @@ excludes = [
     'pytest',
 ]
 
+for package in ('app_shell', 'core', 'formats', 'views', 'tools'):
+    hiddenimports += collect_submodules(package)
+
 a = Analysis(
-    ['main.py'],
+    ['packaging/native_check.py'],
     pathex=[str(ROOT)],
     binaries=_earcut_libs,
     datas=datas,
@@ -292,7 +291,7 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=excludes,
-    noarchive=False,
+    noarchive=True,
 )
 # ── The X client libraries come from the HOST, never from here ───────────────
 # Bundling libX11 puts a SECOND copy of it in the process: Qt loads ours

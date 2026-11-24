@@ -297,8 +297,9 @@ def test_truncated_code_detects_a_cut_reply():
 
 # ---- In-app agent loop ------------------------------------------------------
 
-def test_assistant_loop_executes_recipes_transactionally(plugin_parent, native_host, monkeypatch):
-    from plugins.ai_assistant import AsistenteDialog
+def test_assistant_loop_executes_recipes_transactionally(native_host, monkeypatch):
+    import time
+    from views.extension_api import ExtensionApp
 
     replies = iter([
         "Dibujo la arista:\n```python\n"
@@ -316,20 +317,19 @@ def test_assistant_loop_executes_recipes_transactionally(plugin_parent, native_h
 
     win = native_host.window
     vp = win.viewport
-    dlg = AsistenteDialog(vp, parent=plugin_parent)
-    dlg._key.setText("sk-ant-test")
-    dlg._shots.setChecked(False)           # offscreen has no GL anyway
+    panel = win._panel_factories["ai_assistant"](ExtensionApp(win, "ai_assistant"), vp.update)
+    panel.event("provider", "commit", "ollama")
+    panel.event("shots", "commit", False)
     edges0 = len(vp.scene.mesh.edges)
     depth0 = len(vp.history.undo_stack)
 
-    dlg._input.setText("dibuja una arista de 3 m")
-    dlg._on_send()
-    app = QApplication.instance()
-    for _ in range(2000):
-        app.processEvents()
-        if not dlg._busy:
-            break
-    assert not dlg._busy
+    panel.event("prompt", "commit", "dibuja una arista de 3 m")
+    panel.event("send", "invoke", None)
+    deadline = time.monotonic() + 5
+    while panel.busy and time.monotonic() < deadline:
+        native_host.timers.run_due()
+        time.sleep(.01)
+    assert not panel.busy
 
     assert len(vp.scene.mesh.edges) == edges0 + 1
     assert len(vp.history.undo_stack) == depth0 + 1   # ONE undo step
@@ -337,7 +337,7 @@ def test_assistant_loop_executes_recipes_transactionally(plugin_parent, native_h
     assert any("arista lista" in m["text"]
                for m in seen[1] if m["role"] == "user")
     # The transcript keeps user → assistant → feedback → assistant.
-    roles = [m["role"] for m in dlg._convo]
+    roles = [m["role"] for m in panel._convo]
     assert roles == ["user", "assistant", "user", "assistant"]
 
 

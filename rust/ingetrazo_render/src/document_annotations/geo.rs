@@ -67,12 +67,32 @@ fn drape<'py>(v: &Obj<'py>, pt: &Obj<'py>) -> PyResult<Obj<'py>> {
         Ok(pt.clone())
     }
 }
+/// Sample hover state once per frame. Reattach the readout when the renderer changes.
+#[pyfunction]
+fn sync_status_readout(view: &Obj, name: &str, hint: &str) -> PyResult<()> {
+    let vp = view.getattr("source_viewport")?;
+    let text = |key: &str| -> PyResult<String> {
+        Ok(vp.getattr_opt(key)?.and_then(|v| v.extract().ok()).unwrap_or_default())
+    };
+    let coord = text("_last_coordinate")?;
+    let full = text("_last_coordinate_full")?;
+    let renderer = view.getattr("renderer")?;
+    let values = (name, hint, &coord, &full).into_pyobject(view.py())?;
+    if view.getattr_opt("_ui_readout_sig")?.is_some_and(|v| v.eq(&values).unwrap_or(false)) {
+        return Ok(());
+    }
+    renderer.call_method1("ui_set_status", &values)?;
+    view.setattr("_ui_readout_sig", values)?;
+    Ok(())
+}
+
 #[pyfunction]
 fn emit_coordinate(v: &Obj, ev: &Obj) -> PyResult<()> {
     let datum = opt(&v.getattr("scene")?, "georef")?;
     if datum.is_none() {
         if truth(v, "_last_coordinate")? {
             v.setattr("_last_coordinate", "")?;
+            v.setattr("_last_coordinate_full", "")?;
             v.getattr("coordinateChanged")?
                 .call_method1("emit", ("",))?;
         }
@@ -312,6 +332,7 @@ pub(super) fn register(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(has_ground_surface, m)?)?;
     m.add_function(wrap_pyfunction!(drape, m)?)?;
     m.add_function(wrap_pyfunction!(emit_coordinate, m)?)?;
+    m.add_function(wrap_pyfunction!(sync_status_readout, m)?)?;
     m.add_function(wrap_pyfunction!(draw_geo_points, m)?)?;
     m.add_function(wrap_pyfunction!(draw_route_marker, m)?)?;
     m.add_function(wrap_pyfunction!(draw_geo_paths, m)?)?;

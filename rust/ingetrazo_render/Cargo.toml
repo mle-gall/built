@@ -7,6 +7,7 @@ publish = false
 [lib]
 crate-type = ["cdylib", "rlib"]
 [dependencies]
+built_python_bindings = { path = "../python_bindings" }
 numpy = "0.29"
 pyo3 = { version = "0.29", features = ["abi3-py310"] }
 wgpu = { version = "24", features = ["vulkan-portability"] }

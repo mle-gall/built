@@ -6,7 +6,7 @@ use crate::file_open::{checkpoint, DocumentOpen};
 use glam::{DMat4, DVec3};
 use numpy::{ndarray::Array2, IntoPyArray};
 use pyo3::{
-    exceptions::{PyKeyError, PyZeroDivisionError},
+    exceptions::PyZeroDivisionError,
     prelude::*,
     types::{PyDict, PyFrozenSet, PyList, PySet, PyTuple},
 };
@@ -16,6 +16,12 @@ use std::{
 };
 #[path = "dxf_ascii.rs"]
 mod ascii;
+#[path = "dwg_bridge.rs"]
+mod dwg;
+#[path = "dxf_live.rs"]
+mod live;
+#[path = "dxf_wire.rs"]
+mod wire;
 
 type Obj<'p> = Bound<'p, PyAny>;
 type Ring = Vec<DVec3>;
@@ -39,70 +45,31 @@ struct Drawing {
     sample: Vec<f64>,
     skipped: BTreeMap<String, usize>,
 }
-fn read<'p>(py: Python<'p>, path: &Path) -> PyResult<Obj<'p>> {
-    let ez = py.import("ezdxf")?;
-    match ez.call_method1("readfile", (path,)) {
-        Err(e) if e.value(py).is_instance(&ez.getattr("DXFStructureError")?)? => py
-            .import("ezdxf.recover")?
-            .call_method1("readfile", (path,))?
-            .get_item(0),
-        other => other,
-    }
-}
-#[pyfunction]
-fn dxf_layout_lookup<'p>(
-    py: Python<'p>,
-    obj: &Obj<'p>,
-    original: &Obj<'p>,
-    key: &Obj<'p>,
-) -> PyResult<Obj<'p>> {
-    match original.call1((obj, key)) {
-        Err(e) if e.is_instance_of::<PyKeyError>(py) => {
-            let ty = py.import("ezdxf.lldxf.const")?.getattr("DXFKeyError")?;
-            if e.value(py).is_instance(&ty)? {
-                return Err(e);
-            }
-            let err =
-                PyErr::from_value(ty.call1((format!("Layout with key \"{key}\" is not listed"),))?);
-            err.set_cause(py, Some(e));
-            Err(err)
-        }
-        other => other,
-    }
-}
-fn document<'p>(py: Python<'p>, path: &Path) -> PyResult<Obj<'p>> {
-    let first = read(py, path);
-    if !matches!(&first,Err(e) if e.is_instance_of::<PyKeyError>(py)) {
-        return first;
-    }
-    // Serialize temporary overrides during recovery. Acquire the Python lock
-    // so another worker can continue executing Python while this caller waits.
-    static LOCK: pyo3::sync::PyOnceLock<Py<PyAny>> = pyo3::sync::PyOnceLock::new();
-    let lock = LOCK
-        .get_or_try_init(py, || -> PyResult<_> {
-            Ok(py.import("threading")?.call_method0("RLock")?.unbind())
-        })?
-        .bind(py);
-    lock.call_method0("acquire")?;
-    let result = (|| {
-        let class = py.import("ezdxf.layouts.layouts")?.getattr("Layouts")?;
-        let method = "get_layout_by_key";
-        let orig = class.getattr(method)?;
-        let wrapper = py.import("functools")?.call_method1(
-            "partialmethod",
-            (wrap_pyfunction!(dxf_layout_lookup, py)?, &orig),
-        )?;
-        class.setattr(method, wrapper)?;
-        let retry = read(py, path);
-        class.setattr(method, orig)?;
-        retry
-    })();
-    lock.call_method0("release")?;
-    result
-}
+/// Explicit script access preserves the third-party CAD object when installed.
 #[pyfunction]
 fn dxf_open_document(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyAny>> {
-    DocumentOpen::stage(py, None, move |py, _| Ok(document(py, &path)?.unbind()))
+    DocumentOpen::stage(py, None, move |py, _| {
+        match py.import("ezdxf") {
+            Ok(cad) => match cad.call_method1("readfile", (&path,)) {
+                Ok(doc) => return Ok(doc.unbind()),
+                Err(e) if !e.is_instance_of::<pyo3::exceptions::PyException>(py) => return Err(e),
+                _ => (),
+            },
+            Err(e) if !e.is_instance_of::<pyo3::exceptions::PyImportError>(py) => return Err(e),
+            _ => (),
+        }
+        let source = py.detach(|| NativeDocument::open(&path, true))?;
+        Ok(Py::new(
+            py,
+            (
+                ScriptDrawing {},
+                PreparedDrawing {
+                    source: std::sync::Arc::new(source),
+                },
+            ),
+        )?
+        .into_any())
+    })
 }
 fn unit(code: i64) -> Option<f64> {
     Some(match code {
@@ -129,14 +96,8 @@ fn dxf_read_unit_scale(path: &Obj<'_>) -> PyResult<(Option<f64>, i64)> {
     } else {
         let path = path.extract::<PathBuf>()?;
         let result = DocumentOpen::stage(py, None, move |py, _| {
-            if let Some(doc) = py.detach(|| NativeDocument::read(&path)) {
-                let code = doc.units();
-                return Ok((unit(code), code).into_pyobject(py)?.into_any().unbind());
-            }
-            Ok(dxf_read_unit_scale(&document(py, &path)?)?
-                .into_pyobject(py)?
-                .into_any()
-                .unbind())
+            let code = py.detach(|| NativeDocument::open(&path, false))?.units();
+            Ok((unit(code), code).into_pyobject(py)?.into_any().unbind())
         });
         return match result {
             Ok(value) => value.extract(py),
@@ -301,62 +262,42 @@ fn prune(points: impl IntoIterator<Item = DVec3>, close: bool) -> Ring {
     }
     out
 }
-fn mesh_entity(e: &Obj<'_>, k: &str) -> PyResult<Vec<Ring>> {
-    let builder = e.py().import("ezdxf.render")?.getattr("MeshBuilder")?;
-    let model = builder.call_method1(
-        if k == "MESH" {
-            "from_mesh"
-        } else {
-            "from_polyface"
-        },
-        (e,),
-    )?;
-    let pts = model
-        .getattr("vertices")?
-        .try_iter()?
-        .map(|p| v(&p?))
-        .collect::<PyResult<Vec<_>>>()?;
-    let mut loops = vec![];
-    for f in model.getattr("faces")?.try_iter()? {
-        let ids = f?.extract::<Vec<usize>>()?;
-        if let Some(p) = ids
-            .iter()
-            .map(|&i| pts.get(i).copied())
-            .collect::<Option<Vec<_>>>()
-        {
-            let ring = prune(p, true);
-            if ring.len() >= 3 {
-                loops.push(ring);
+fn segments(e: &Obj<'_>, kind: &str, tolerance: f64) -> PyResult<Option<(Ring, bool)>> {
+    if kind == "CIRCLE" || kind == "ARC" {
+        let d = e.getattr("dxf")?;
+        if v(&d.getattr("extrusion")?)? == DVec3::Z {
+            let (start, span) = if kind == "CIRCLE" {
+                (0., -std::f64::consts::TAU)
+            } else {
+                let a = d.getattr("start_angle")?.extract::<f64>()?;
+                let b = d.getattr("end_angle")?.extract::<f64>()?;
+                if a == b {
+                    return Ok(None);
+                }
+                let sweep = (b - a).rem_euclid(360.);
+                (
+                    a.to_radians(),
+                    if sweep == 0. {
+                        -std::f64::consts::TAU
+                    } else {
+                        sweep.to_radians()
+                    },
+                )
+            };
+            if d.getattr("radius")?.extract::<f64>()? == 0. {
+                return Ok(None);
             }
+            return Ok(ascii::arc(
+                v(&d.getattr("center")?)?,
+                d.getattr("radius")?.extract()?,
+                start,
+                span,
+                tolerance,
+            )
+            .map(|r| (r, true)));
         }
     }
-    Ok(loops)
-}
-fn segments(e: &Obj<'_>, k: &str, sagitta: f64) -> PyResult<Option<(Ring, bool)>> {
-    let path = e
-        .py()
-        .import("ezdxf.path")?
-        .call_method1("make_path", (e,))?;
-    let pts = path
-        .call_method1("flattening", (sagitta, 8))?
-        .try_iter()?
-        .map(|p| v(&p?))
-        .collect::<PyResult<Vec<_>>>()?;
-    if pts.len() < 2 {
-        return Ok(None);
-    }
-    let curved = match k {
-        "POLYLINE" => e.getattr("vertices")?.try_iter()?.any(|v| {
-            v.and_then(|v| v.getattr("dxf")?.getattr("bulge")?.extract::<f64>())
-                .is_ok_and(|b| b.abs() > 1e-12)
-        }),
-        "LWPOLYLINE" => e
-            .getattr("has_arc")
-            .and_then(|v| v.is_truthy())
-            .unwrap_or(false),
-        _ => true,
-    };
-    Ok(Some((pts, curved)))
+    Ok(live::geometry(e, kind, tolerance)?.runs.pop())
 }
 fn entity(
     b: &mut Bucket,
@@ -371,7 +312,10 @@ fn entity(
             && (e.getattr("is_poly_face_mesh")?.is_truthy()?
                 || e.getattr("is_polygon_mesh")?.is_truthy()?))
     {
-        let part = mesh_entity(e, k).unwrap_or_default();
+        let part = live::geometry(e, k, sagitta)?
+            .parts
+            .pop()
+            .unwrap_or_default();
         if part.is_empty() {
             return Ok(false);
         }
@@ -599,22 +543,30 @@ enum NativeDocument {
     Cad(ascii::Document),
 }
 impl NativeDocument {
-    fn read(path: &Path) -> Option<Self> {
-        use std::io::{BufRead, BufReader, Read};
-        let mut file = BufReader::new(std::fs::File::open(path).ok()?);
-        // Binary DXF goes directly to the compatibility reader.
-        if file.fill_buf().ok()?.starts_with(b"AutoCAD Binary DXF") {
-            return None;
-        }
-        let mut raw = String::new();
-        file.read_to_string(&mut raw).ok()?;
-        let text = raw.as_str();
-        if text.starts_with("0\nSECTION\n2\nTABLES\n") {
+    fn open(path: &Path, inspect: bool) -> PyResult<Self> {
+        let bytes = std::fs::read(path)?;
+        let invalid = || {
+            pyo3::exceptions::PyValueError::new_err(format!(
+                "Unreadable DXF drawing: {}",
+                path.display()
+            ))
+        };
+        let decoded = wire::text(&bytes).ok_or_else(invalid)?;
+        let text = decoded.as_ref();
+        if !inspect && text.starts_with("0\nSECTION\n2\nTABLES\n") {
             if let Some(sheet) = sheet_records(text) {
-                return Some(Self::Sheet(std::sync::Arc::new(sheet)));
+                return Ok(Self::Sheet(std::sync::Arc::new(sheet)));
             }
         }
-        ascii::decode(text).map(Self::Cad)
+        let parsed = if inspect {
+            ascii::decode_mode(text, false, true)
+        } else {
+            ascii::decode(text)
+        };
+        parsed
+            .or_else(|| ascii::decode_mode(text, true, inspect))
+            .map(Self::Cad)
+            .ok_or_else(invalid)
     }
     fn units(&self) -> i64 {
         match self {
@@ -926,10 +878,62 @@ fn prepare<'p>(
     cb.call1((1., "Done"))?;
     Ok((groups, tags, stats).into_pyobject(py)?.into_any())
 }
-#[pyclass]
+#[pyclass(subclass)]
 struct PreparedDrawing {
     source: std::sync::Arc<NativeDocument>,
-    path: PathBuf,
+}
+
+#[pyclass]
+struct CadEntity {
+    kind: String,
+}
+#[pymethods]
+impl CadEntity {
+    fn dxftype(&self) -> &str {
+        &self.kind
+    }
+}
+
+#[pyclass]
+struct CadLayouts {
+    names: Vec<String>,
+}
+#[pymethods]
+impl CadLayouts {
+    fn names(&self) -> Vec<String> {
+        self.names.clone()
+    }
+}
+
+#[pyclass(extends=PreparedDrawing)]
+struct ScriptDrawing {}
+#[pymethods]
+impl ScriptDrawing {
+    fn modelspace(slf: PyRef<'_, Self>) -> Vec<CadEntity> {
+        match slf.into_super().source.as_ref() {
+            NativeDocument::Cad(doc) => doc
+                .kinds
+                .iter()
+                .cloned()
+                .map(|kind| CadEntity { kind })
+                .collect(),
+            _ => vec![],
+        }
+    }
+    #[getter]
+    fn layouts(slf: PyRef<'_, Self>) -> CadLayouts {
+        let names = match slf.into_super().source.as_ref() {
+            NativeDocument::Cad(doc) if !doc.layouts.is_empty() => doc.layouts.clone(),
+            _ => vec!["Model".into(), "Layout1".into()],
+        };
+        CadLayouts { names }
+    }
+    #[getter]
+    fn header<'p>(slf: PyRef<'p, Self>, py: Python<'p>) -> PyResult<Bound<'p, PyDict>> {
+        let h = PyDict::new(py);
+        h.set_item("$INSUNITS", slf.into_super().source.units())?;
+        Ok(h)
+    }
 }
 
 /// The options dialog and the import command share the same decoded drawing.
@@ -937,22 +941,15 @@ struct PreparedDrawing {
 #[pyfunction]
 fn dxf_prepare_import(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyAny>> {
     DocumentOpen::stage(py, None, move |py, _| {
-        if let Some(decoded) = py.detach(|| NativeDocument::read(&path)) {
-            let suggestion = decoded.suggestion();
-            let source = Py::new(
-                py,
-                PreparedDrawing {
-                    source: std::sync::Arc::new(decoded),
-                    path,
-                },
-            )?;
-            Ok((source, suggestion).into_pyobject(py)?.into_any().unbind())
-        } else {
-            checkpoint(py)?;
-            let doc = document(py, &path)?;
-            let (suggestion, _) = suggest_unit(&doc)?;
-            Ok((doc, suggestion).into_pyobject(py)?.into_any().unbind())
-        }
+        let decoded = py.detach(|| NativeDocument::open(&path, false))?;
+        let suggestion = decoded.suggestion();
+        let source = Py::new(
+            py,
+            PreparedDrawing {
+                source: std::sync::Arc::new(decoded),
+            },
+        )?;
+        Ok((source, suggestion).into_pyobject(py)?.into_any().unbind())
     })
 }
 #[pyfunction]
@@ -974,32 +971,29 @@ fn dxf_load<'p>(
         cb.call1((0.05, "Reading file…"))?;
         let source = doc.map(|d| d.into_bound(py));
         let tolerance = (0.01 / scale).max(1e-6);
-        let cached = source
+        let model = if let Some(d) = source
             .as_ref()
-            .and_then(|s| s.cast::<PreparedDrawing>().ok())
-            .map(|s| {
-                let d = s.borrow();
-                (d.source.clone(), d.path.clone())
-            });
-        let model = if let Some((d, _)) = &cached {
-            py.detach(|| d.model(tolerance))
-        } else if source.is_none() {
-            py.detach(|| NativeDocument::read(&path)?.model(tolerance))
+            .filter(|s| s.cast::<PreparedDrawing>().is_err())
+        {
+            // Callers may supply a live CAD object with unsaved edits.
+            cb.call1((0.2, "Collecting entities…"))?;
+            std::sync::Arc::new(drawing(d, tolerance)?)
         } else {
-            None
-        };
-        let model = match model {
-            Some(model) => model,
-            None => {
-                checkpoint(py)?;
-                let doc = match (cached, source) {
-                    (Some((_, original)), _) => document(py, &original)?,
-                    (_, Some(doc)) => doc,
-                    _ => document(py, &path)?,
+            let cached = source
+                .as_ref()
+                .and_then(|s| s.cast::<PreparedDrawing>().ok())
+                .map(|s| s.borrow().source.clone());
+            let result = py.detach(|| -> PyResult<_> {
+                let doc = match cached {
+                    Some(doc) => doc,
+                    None => std::sync::Arc::new(NativeDocument::open(&path, false)?),
                 };
-                cb.call1((0.2, "Collecting entities…"))?;
-                std::sync::Arc::new(drawing(&doc, tolerance)?)
-            }
+                Ok(doc.model(tolerance))
+            })?;
+            checkpoint(py)?;
+            result.ok_or_else(|| {
+                pyo3::exceptions::PyValueError::new_err("Could not construct DXF geometry")
+            })?
         };
         let stem = path.file_stem().unwrap_or_default().to_string_lossy();
         Ok(prepare(
@@ -1053,6 +1047,7 @@ fn dxf_save_lines(path: PathBuf, segments: &Obj<'_>, layer: &str) -> PyResult<us
     crate::sheets::dxf::sheet_dxf(path, vec![g], None, None)
 }
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    dwg::register(m)?;
     m.add_function(wrap_pyfunction!(dxf_prepare_import, m)?)?;
     m.add_function(wrap_pyfunction!(dxf_open_document, m)?)?;
     m.add_function(wrap_pyfunction!(dxf_load, m)?)?;

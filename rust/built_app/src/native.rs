@@ -101,8 +101,15 @@ fn alert(py: Python<'_>, title: &str, text: &str, buttons: Vec<String>, tone: &s
 
 // ---- the modal pump -----------------------------------------------------------
 
-/// One input event for the chrome: (kind, x, y, button bit, Qt modifiers,
-/// Qt key, text). Kinds: press, release, move, key, keyup.
+#[cfg(windows)]
+#[path = "modal_windows.rs"]
+mod modal_windows;
+
+#[cfg(all(unix, not(target_os = "macos")))]
+#[path = "modal_linux.rs"]
+mod modal_linux;
+
+/// (kind, x, y, button bit, Qt modifiers, Qt key, text).
 pub type Input = (String, f64, f64, u32, u32, u32, String);
 
 /// Qt's modifier bits from AppKit's flags (⌘ is Qt's Control on the Mac).
@@ -140,16 +147,13 @@ pub fn qt_key_for(key_code: u16, chars: &str) -> u32 {
 /// the shell window's input, and return those that are.
 #[pyfunction]
 #[pyo3(signature = (view, timeout_ms=16.0))]
-fn pump(view: usize, timeout_ms: f64) -> Vec<Input> {
+fn pump(py: Python<'_>, view: usize, timeout_ms: f64) -> PyResult<Vec<Input>> {
     #[cfg(target_os = "macos")]
-    {
-        pump_macos(view, timeout_ms)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = (view, timeout_ms);
-        Vec::new()
-    }
+    { let _ = py; Ok(pump_macos(view, timeout_ms)) }
+    #[cfg(windows)]
+    { let _ = py; Ok(modal_windows::pump(view, timeout_ms)) }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    { let _ = view; modal_linux::pump(py, timeout_ms) }
 }
 
 #[cfg(target_os = "macos")]
@@ -248,10 +252,12 @@ fn post_key(view: usize, key_code: u16, chars: &str, command: bool) -> bool {
         }
         true
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    { modal_windows::post_key(view, key_code, chars, command) }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
-        let _ = (view, key_code, chars, command);
-        false
+        let _ = chars;
+        Python::attach(|py| modal_linux::post_key(py, view, key_code, command)).unwrap_or(false)
     }
 }
 

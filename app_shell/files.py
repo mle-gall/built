@@ -457,6 +457,8 @@ def _finish_open(win, path, recovered, slot, bar, cb, prepared=None, initial_asp
     view._shell_resident_version = version
     if clean:
         win._saved_version = vp.scene.version
+    from ingetrazo_render import defer_document_terrain
+    defer_document_terrain(host, vp)
     host.after_picture(win._after_links_loaded)
     for job in list(getattr(view, "after_open", ()) or ()):
         host.after_picture(job)

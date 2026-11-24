@@ -9,7 +9,7 @@ use pyo3::{
 };
 use std::collections::{HashMap, HashSet};
 
-fn rows<'py>(dict: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
+pub(super) fn rows<'py>(dict: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
     let val = dict.call_method1("get", (key,))?;
     Ok(if val.is_none() {
         PyList::empty(dict.py()).into_any()
@@ -17,7 +17,7 @@ fn rows<'py>(dict: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>>
         val
     })
 }
-fn opt<'py>(dict: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
+pub(super) fn opt<'py>(dict: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
     dict.call_method1("get", (key,))
 }
 
@@ -398,7 +398,7 @@ pub fn skp_apply_geometry<'py>(
     })
 }
 
-fn apply_geometry<'py>(
+pub(super) fn apply_geometry<'py>(
     scene: &Bound<'py, PyAny>,
     payload: &Bound<'py, PyDict>,
     mut build: impl FnMut(&Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>,
@@ -504,6 +504,16 @@ pub fn skp_apply<'py>(
         Some(v) => v,
         None => opt(payload, "_consume_geometry")?.is_truthy()?,
     };
+    if opt(payload, "backend")?.extract::<String>().as_deref().ok() != Some("openskp") {
+        let gc = py.import("gc")?;
+        let enabled = gc.call_method0("isenabled")?.is_truthy()?;
+        gc.call_method0("disable")?;
+        let result = super::payload::apply(scene, payload, progress, consume);
+        if enabled {
+            gc.call_method0("enable")?;
+        }
+        return result;
+    }
     let mut remaining = HashMap::new();
     let mut total = 0;
     for (key, weight) in [("groups", 1), ("protos", 2)] {
@@ -559,6 +569,14 @@ pub fn skp_apply<'py>(
             Ok(())
         },
     )?;
+    finish(scene, payload, consume)
+}
+pub(super) fn finish(
+    scene: &Bound<'_, PyAny>,
+    payload: &Bound<'_, PyDict>,
+    consume: bool,
+) -> PyResult<String> {
+    let py = scene.py();
     if consume {
         payload.set_item("groups", PyList::empty(py))?;
         payload.set_item("protos", PyList::empty(py))?;

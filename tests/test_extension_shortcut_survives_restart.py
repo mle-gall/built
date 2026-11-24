@@ -7,7 +7,7 @@ import pytest
 from core import extensions, settings
 from ingetrazo_core import NativeSettings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from views import shortcuts
+from core import shortcuts
 
 
 @pytest.mark.parametrize("factory,rebound", [(None, "Ctrl+Alt+U"), ("Ctrl+Alt+J", "Ctrl+Alt+K")])
@@ -33,4 +33,4 @@ def test_extension_keeps_its_user_and_factory_bindings_across_restart(tmp_path, 
         shortcuts.save_shortcut(action, [rebound])
     with session() as action:
         assert action.portable_keys() == [rebound]
-        assert [str(k.toString()) for k in shortcuts.default_shortcuts(action)] == expected
+        assert shortcuts.default_keys(action) == expected

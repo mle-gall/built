@@ -935,6 +935,20 @@ fn is_linked(g: &Bound<'_, PyAny>) -> bool {
     g.py().import("core.links").and_then(|l| l.call_method1("is_linked", (g,))).and_then(|v| v.is_truthy()).unwrap_or(false)
 }
 
+/// Only mesh identities are needed to decide whether a row can replace any selected copy.
+fn selected_definitions(scene: &Bound<'_, PyAny>) -> PyResult<std::collections::HashSet<usize>> {
+    let mut meshes = std::collections::HashSet::new();
+    for group in scene.getattr("selection")?.try_iter()? {
+        let group = group?;
+        if let Some(is_component) = group.getattr_opt("is_component")? {
+            if is_component.call0()?.is_truthy()? {
+                meshes.insert(group.getattr("mesh")?.as_ptr() as usize);
+            }
+        }
+    }
+    Ok(meshes)
+}
+
 #[pymethods]
 impl ComponentsProvider {
     #[new]
@@ -959,24 +973,32 @@ impl ComponentsProvider {
     fn items<'py>(slf: &Bound<'py, Self>, ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
         let py = slf.py();
         let out = PyList::empty(py);
+        let scene = ctx.getattr("scene")?;
+        let selected = selected_definitions(&scene)?;
         for (i, row) in slf.call_method1("_model", (ctx,))?.try_iter()?.enumerate() {
             let row = row?;
             let (name, groups, kept) = (row.get_item(0)?, row.get_item(2)?, row.get_item(3)?);
             let gs: Vec<Bound<'_, PyAny>> = groups.try_iter()?.collect::<PyResult<_>>()?;
             let linked = !gs.is_empty() && gs.iter().all(is_linked);
-            let v: Vec<&str> = if gs.is_empty() {
-                vec!["apply", "rename", "-", "unkeepfile"]
+            let mut v = if gs.is_empty() {
+                vec!["apply", "replace", "rename", "-", "unkeepfile"]
             } else {
                 vec!["apply", "edit", "select", "replace", "-", "rename", if kept.is_none() { "keepfile" } else { "unkeepfile" }, "-", "delete"]
             };
+            let definition = gs.first().unwrap_or(&kept);
+            let mesh = definition.getattr("mesh")?;
+            if !selected.iter().any(|&id| id != mesh.as_ptr() as usize) {
+                v.retain(|verb| *verb != "replace");
+            }
             out.append(item(py, &[
                 ("key", s(py, &format!("cm:{i}"))),
+                ("definition_id", obj(py, mesh.as_ptr() as usize)?.into_bound(py)),
                 ("name", if name.is_truthy()? { name } else { s(py, "Component") }),
                 ("source", s(py, if linked { "linked" } else { "model" })),
                 ("category", s(py, if gs.is_empty() { "Kept, not placed" } else { "" })),
                 ("uses", obj(py, gs.len())?.into_bound(py)),
                 ("hex", s(py, "")),
-                ("thumb", py.None().into_bound(py)),
+                ("thumb", s(py, &format!("component:{}:{}:{i}", scene.as_ptr() as usize, scene.getattr("content_version")?))),
                 ("verbs", verbs(py, &v)?),
             ])?)?;
         }
@@ -1018,11 +1040,17 @@ impl ComponentsProvider {
                 n += 1;
             }
         }
-        PyList::new(py, [("purge", if n != 0 { format!("Stop keeping unplaced components ({n})") } else { "Stop keeping unplaced components (none)".into() })])
+        let actions = PyList::empty(py);
+        actions.append(("import", crate::model_edit::translated(py, "Components from File…", None)?))?;
+        actions.append(("purge", if n != 0 { format!("Stop keeping unplaced components ({n})") } else { "Stop keeping unplaced components (none)".into() }))?;
+        Ok(actions)
     }
 
     fn type_action(slf: &Bound<'_, Self>, ctx: &Bound<'_, PyAny>, action: &str) -> PyResult<()> {
         let py = slf.py();
+        if action == "import" {
+            return crate::component_files::choose_kept_components(&ctx.getattr("win")?);
+        }
         if action != "purge" {
             return Ok(());
         }
@@ -1444,6 +1472,7 @@ impl LibrarySheet {
             scene.getattr("content_version")?,
             ui(py)?.call_method0("_current_material_name")?,
             st.get_item("mine_rev")?,
+            if st.get_item("type")?.eq("components")? { scene.getattr("version")? } else { py.None().into_bound(py) },
             PyTuple::new(py, recent)?.into_any(),
         ])
     }
@@ -1452,6 +1481,36 @@ impl LibrarySheet {
         let view = self.view.bind(py);
         let st = _state(view)?;
         let lctx = ctx_of(py, &ctx.getattr("win")?, view)?;
+        let scene = lctx.getattr("scene")?;
+        let components = st.get_item("type")?.eq("components")?;
+        let generation = (scene.as_ptr() as usize, scene.getattr("content_version")?, st.get_item("mine_rev")?);
+        let revision = scene.getattr("version")?;
+        // A selection edit only changes which component rows offer Replace.
+        if components {
+            let cache = st.call_method1("get", ("component_selection_rows",))?;
+            if !cache.is_none() && cache.get_item(0)?.eq(&generation)? && !cache.get_item(1)?.eq(&revision)? {
+                let items = cache.get_item(2)?;
+                let selected = selected_definitions(&scene)?;
+                for item in items.try_iter()? {
+                    let item = item?;
+                    let Some(mesh) = item.cast::<PyDict>()?.get_item("definition_id")? else { continue };
+                    let id: usize = mesh.extract()?;
+                    let verbs = item.get_item("verbs")?;
+                    let has = verbs.contains("replace")?;
+                    let allowed = selected.iter().any(|&m| m != id);
+                    if has != allowed {
+                        let mut actions: Vec<String> = verbs.extract()?;
+                        actions.retain(|v|v != "replace");
+                        if allowed { actions.insert(1, "replace".into()); }
+                        item.set_item("verbs", PyTuple::new(py, actions)?)?;
+                    }
+                }
+                let counts = cache.get_item(3)?.cast_into::<PyDict>()?;
+                st.set_item("component_selection_rows", (&generation, &revision, &items, &counts))?;
+                st.set_item("items", by_key(&items)?)?;
+                return Ok((items,counts));
+            }
+        }
         let counts = PyDict::new(py);
         let mut active = PyList::empty(py).into_any();
         for p in lib(py)?.getattr("PROVIDERS")?.try_iter()? {
@@ -1472,6 +1531,7 @@ impl LibrarySheet {
                 active = items;
             }
         }
+        if components { st.set_item("component_selection_rows", (generation, revision, &active, &counts))?; }
         st.set_item("items", by_key(&active)?)?;
         Ok((active, counts))
     }
@@ -1628,8 +1688,9 @@ impl LibrarySheet {
         }
         let mut vs = vec![cs_verb(py, "apply", "Place a copy", &[("key", s(py, "↩")), ("primary", true.into_pyobject(py)?.to_owned().into_any())])?];
         if model {
-            vs.push(cs_verb(py, "select", "Select copies", &[])?);
-            vs.push(cs_verb(py, "edit", "Open for editing", &[])?);
+            for (id,label) in [("select","Select copies"),("replace","Replace selection with this"),("edit","Open for editing")] {
+                if e.get_item("verbs")?.contains(id)? {vs.push(cs_verb(py,id,label,&[])?);}
+            }
         }
         d.call_method("buttons", (vs,), Some(&[("align", "fill")].into_py_dict(py)?))?;
         if model {
@@ -1692,6 +1753,9 @@ impl LibrarySheet {
         let st = _state(&view)?;
         let arg = args.first().cloned().unwrap_or_default();
         let lctx = ctx_of(py, &win, &view)?;
+        if verb == "component-previews" {
+            return crate::model_panels::component_preview::upload(&lctx, &args);
+        }
         let target = slf.getattr("paint_target")?;
         if !target.is_none() {
             if verb == "tab" {

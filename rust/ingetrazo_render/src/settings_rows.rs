@@ -8,6 +8,8 @@
 //! its value lives: the native preference store (`env.st`), the window's
 //! appliers in `views/settings_apply.py`, or the document (units, dimension
 //! style, north and location, through the protocol and its history).
+mod appearance;
+
 use pyo3::{
     prelude::*,
     types::{IntoPyDict, PyCFunction, PyDict, PyList, PyTuple},
@@ -1078,6 +1080,17 @@ fn location<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py
             ("words", obj(py, "georeference map site")?),
             ("tip", obj(py, tr(py, "Pick the site on the map: the sun and the base map stand there.")?)?)])?,
     ])?;
+    if has && opt(&scene, "tile_layer").is_some_and(|l| !l.is_none()) {
+        rows.append(row(py, "terrain3d", "check", &tr(py, "3D terrain")?, Some(func(py, |py, a| {
+            let vp = a.get_item(0)?.getattr("win")?.getattr("viewport")?;
+            let terrain = vp.getattr("scene")?.getattr("terrain")?;
+            obj(py, crate::document_terrain::enabled(&vp)? && (terrain.is_none() || terrain.getattr("visible")?.is_truthy()?))
+        })?), Some(func(py, |py, a| {
+            let vp = a.get_item(0)?.getattr("win")?.getattr("viewport")?;
+            crate::document_terrain::set_terrain_enabled(&vp, a.get_item(1)?.extract()?)?;
+            Ok(none(py))
+        })?), &[])?)?;
+    }
     PyList::new(py, [PyTuple::new(py, [s(py, "location"), s(py, &tr(py, "Location & north")?), rows.into_any()])?])
 }
 
@@ -1092,7 +1105,17 @@ pub fn section_groups<'py>(py: Python<'py>, env: &Bound<'py, PyAny>, section: &s
         "import" => import(py, env),
         "units" => _units(env),
         "dimensions" => dimensions(py, env),
-        "location" => location(py, env),
+        "appearance" => {
+            let groups = appearance::groups(py, env)?;
+            crate::model_panels::model_appearance::append(py, env, &groups)?;
+            crate::model_panels::shadows::append(py, env, &groups)?;
+            Ok(groups)
+        },
+        "location" => {
+            let groups = location(py, env)?;
+            crate::model_panels::basemap::append(py, env, &groups)?;
+            Ok(groups)
+        },
         other => Err(pyo3::exceptions::PyKeyError::new_err(other.to_owned())),
     }
 }

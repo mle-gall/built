@@ -42,37 +42,11 @@ def _pivot(group) -> QVector3D:
 
 
 def _exact_command(group, center, factor, axes):
-    """``ScaleGroupCommand`` whose undo puts the saved matrices back as they
-    were: undoing by the inverse factor leaves float32 residue that piles up
-    over repeated edits (2 → undo → 2 → undo drifted to 0.999998)."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    """``ScaleGroupCommand``: an instance is undone and redone by its
+    transaction, so the saved matrices come back exactly (no float32
+    residue piling up over repeated edits)."""
     from core.history import ScaleGroupCommand
-
-    class _ExactScale(ScaleGroupCommand):
-        def do(self, scene) -> None:
-            g = self.group
-            if self._saved is None:
-                self._saved = (QMatrix4x4(g.xform) if g.xform is not None
-                               else None)
-            super().do(scene)
-            if g.xform is not None:
-                if self._after_xform is None:
-                    self._after_xform = QMatrix4x4(g.xform)
-                else:
-                    g.xform = QMatrix4x4(self._after_xform)
-
-        def undo(self, scene) -> None:
-            g = self.group
-            if g.xform is not None and self._saved is not None:
-                g.xform = QMatrix4x4(self._saved)
-                scene.version += 1
-                return
-            super().undo(scene)
-
-    cmd = _ExactScale(group, center, factor, axes)
-    cmd._saved = None
-    cmd._after_xform = None
-    return cmd
+    return ScaleGroupCommand(group, center, factor, axes)
 
 
 def scale_command(group, target):

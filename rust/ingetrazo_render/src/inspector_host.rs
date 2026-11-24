@@ -97,8 +97,10 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
     let records = PyList::empty(py);
     let mut schema = "IFC4".into_pyobject(py)?.into_any();
     let bim = py.import("core.bim_registry")?;
+    let mut vocabulary = py.None().into_bound(py);
     if !groups.is_empty() {
         let registry = bim.call_method1("get", (&scene,))?;
+        vocabulary = py.import("core.record_inspector")?.call_method1("vocabulary", (&registry,))?;
         let all = py.import("core.deliveries")?.call_method1("records", (&scene,))?;
         let key = delivery_key.clone().unwrap_or_else(|| py.None().into_bound(py));
         let delivery = all.call_method1("get", (key, PyDict::new(py)))?;
@@ -112,6 +114,16 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
         for g in &groups {
             let linked = links.call_method1("linked_ancestor", (g,))?.is_truthy()?;
             let record = occurrence.call1((g, &registry, linked))?;
+            if scene.call_method1("entity_locked",(g,))?.is_truthy()? || scene.call_method1("_layer_state",(g,))?.get_item(1)?.is_truthy()? || scene.getattr_opt("worksession_read_only")?.is_some_and(|s|s.is_truthy().unwrap_or(false)) {
+                record.set_item("editable",false)?;
+                for field in record.get_item("fields")?.try_iter()? {field?.set_item("editable",false)?;}
+            }
+            let old = g.getattr("ifc")?;
+            if !old.is_none() {
+                let effective = py.import("core.record")?.call_method1("apply_type", (&old,&registry))?;
+                record.set_item("systems", effective.call_method1("get", ("systems",PyList::empty(py)))?)?;
+                record.set_item("quantities", effective.call_method1("get", ("quantities",PyDict::new(py)))?)?;
+            }
             record.set_item("uid", record_address(&scene, g)?)?;
             records.append(record)?;
         }
@@ -144,6 +156,7 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
     let geopath = py.import("georef.geopath")?.getattr("GeoPath")?;
     let out = PyDict::new(py);
     out.set_item("schema", schema)?;
+    out.set_item("vocabulary", vocabulary)?;
     out.set_item("selection_count", sel.len())?;
     out.set_item("rule", rule)?;
     out.set_item("records", records)?;
@@ -410,12 +423,11 @@ fn commands(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     py.import("core.protocol.commands")?.getattr("run")
 }
 
-fn record_edit(view: &Bound<'_, PyAny>, vp: &Bound<'_, PyAny>, v: &Bound<'_, PyAny>) -> PyResult<()> {
+fn record_edit(view: &Bound<'_, PyAny>, vp: &Bound<'_, PyAny>, verb:&str, v: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = view.py();
     let scene = vp.getattr("scene")?;
     let placements = v.get_item(0)?;
-    let (path, value) = (v.get_item(1)?, v.get_item(2)?);
-    let kind = if v.len()? > 3 { v.get_item(3)? } else { py.None().into_bound(py) };
+    if scene.getattr_opt("worksession_read_only")?.is_some_and(|s|s.is_truthy().unwrap_or(false)) {return Ok(());}
     let sel: Vec<Bound<'_, PyAny>> = scene.getattr("selection")?.try_iter()?.collect::<PyResult<_>>()?;
     let targets = PyDict::new(py);
     for g in groups_in(py, &sel)? {
@@ -426,6 +438,14 @@ fn record_edit(view: &Bound<'_, PyAny>, vp: &Bound<'_, PyAny>, v: &Bound<'_, PyA
         let Some(g) = targets.get_item(uid?)? else { return Ok(()) };
         paths.push(scene.call_method1("occurrence_path", (g,))?);
     }
+    if verb != "patch" {
+        let schema = v.get_item(2)?;
+        py.import("core.record_inspector")?.call_method1("edit", (vp.getattr("history")?,paths,verb,v.get_item(1)?,schema))?;
+        vp.call_method0("notify_scene_changed")?;
+        return Ok(());
+    }
+    let (path,value)=(v.get_item(1)?,v.get_item(2)?);
+    let kind = if v.len()? > 3 { v.get_item(3)? } else { py.None().into_bound(py) };
     let kwargs = PyDict::new(py);
     kwargs.set_item("placements", paths)?;
     kwargs.set_item("path", path)?;
@@ -594,7 +614,7 @@ fn inspector_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, payload: &s
     let (surface, verb) = key.split_once('.').ok_or_else(|| pyo3::exceptions::PyValueError::new_err(key.clone()))?;
     let vp = win.getattr("viewport")?;
     let result = match surface {
-        "record" => record_edit(view, &vp, &v),
+        "record" => record_edit(view, &vp, verb, &v),
         "rule" => rule_edit(view, &vp, verb, &v),
         "parts" => parts_edit(win, view, &vp, verb, &v),
         "bevel" => {

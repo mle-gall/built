@@ -190,7 +190,10 @@ fn built_export_placements<'py>(scene: &Obj<'py>) -> PyResult<Bound<'py, PyDict>
     Ok(out)
 }
 
+#[path = "file_facade.rs"]
+mod facade;
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    facade::register(m)?;
     m.add_function(wrap_pyfunction!(built_position, m)?)?;
     m.add_function(wrap_pyfunction!(built_placement, m)?)?;
     m.add_function(wrap_pyfunction!(built_placement_values, m)?)?;

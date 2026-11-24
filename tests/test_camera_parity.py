@@ -119,3 +119,28 @@ if __name__ == "__main__" and "--write" in sys.argv:
     GOLDEN.write_bytes(gzip.compress(json.dumps(rows, separators=(",", ":")).encode(),
                                      mtime=0))
     print(len(rows), "cameras ->", GOLDEN)
+
+
+def test_the_cached_fields_follow_every_change():
+    """The Rust copy of the fields (``_rs_cam``) is dropped on every write
+    and the vectors checked again on use: a target changed in place, a
+    field set, a copy, a pickle all read as the camera they are."""
+    import copy
+    import pickle
+    from ingetrazo_core import Vec3 as V
+    from core.camera import OrbitCamera
+    c = OrbitCamera()
+    first = list(c.view_matrix().data())
+    assert "_rs_cam" in c.__dict__
+    assert list(copy.deepcopy(c).view_matrix().data()) == first
+    assert list(pickle.loads(pickle.dumps(c)).view_matrix().data()) == first
+    c.target.setX(5.0)                       # in place: no __setattr__
+    moved = list(c.view_matrix().data())
+    assert moved != first
+    c.distance = 3.0
+    assert "_rs_cam" not in c.__dict__
+    fresh = OrbitCamera()
+    fresh.target = V(5.0, 0.0, 0.0)
+    fresh.distance = 3.0
+    assert list(c.view_matrix().data()) == list(fresh.view_matrix().data())
+    assert list(c.projection_matrix().data()) == list(fresh.projection_matrix().data())

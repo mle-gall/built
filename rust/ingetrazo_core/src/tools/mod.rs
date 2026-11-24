@@ -450,3 +450,5 @@ pub(crate) fn p3_json(p: P3) -> serde_json::Value { serde_json::json!([p[0], p[1
 pub(crate) fn opt_p3_json(p: Option<P3>) -> serde_json::Value {
     p.map(p3_json).unwrap_or(serde_json::Value::Null)
 }
+
+pub(crate) mod adapters;

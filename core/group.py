@@ -1049,7 +1049,9 @@ def placement_points(group, cache=None):
                 continue
             cache[id(g.mesh)] = arr
         if m is not None:
-            arr = arr @ m[:3, :3] + m[3, :3]
+            from ingetrazo_core import group_placed_points
+            arr = group_placed_points(np.ascontiguousarray(arr, dtype=np.float64),
+                                      np.ascontiguousarray(m, dtype=np.float64))
         out.append(arr)
     return np.concatenate(out) if out else np.empty((0, 3))
 

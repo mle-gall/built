@@ -22,14 +22,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QColor, QFont, QPen, QValidator
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import (
-    QCheckBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout,
-    QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
-    QPushButton, QToolTip, QVBoxLayout, QWidget,
-)
 
 from core.i18n import current_language
 
@@ -150,190 +143,196 @@ def _height_step(unit: str) -> float:
     return 0.10 if unit in ("m", "cm", "mm") else 4 * 0.0254
 
 
-class LengthSpinBox(QDoubleSpinBox):
-    """A spin box whose value is metres and whose text is the document's
-    unit. The arrows add one step of the shown precision (1 mm in a
-    millimetre document); text that is not a length («5 m²», «abc») is not
-    taken, and the reason shows next to the field."""
+def __getattr__(name):
+    # Compatibility with extensions that explicitly import the old Qt editors.
+    if name not in ("LengthSpinBox", "_LevelDialog"):
+        raise AttributeError(name)
+    from PySide6.QtGui import QValidator
+    from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QDoubleSpinBox,
+                                   QFormLayout, QLineEdit, QToolTip)
 
-    def __init__(self, parent=None, minimum: float = 0.0,
-                 maximum: float = 1000.0, unit: str | None = None,
-                 decimals: int | None = None) -> None:
-        super().__init__(parent)
-        self._units = _units()
-        self._unit = unit or self._units.model_unit()
-        # At least to the millimetre: a 2 mm text in a document shown to the
-        # centimetre must not read «0 cm».
-        self._shown = self._units.fine_precision() if decimals is None else decimals
-        # Qt rounds the stored value to decimals(): metres to the micron
-        # keep every unit's shown precision exact.
-        super().setDecimals(9)
-        self.setRange(minimum, maximum)
-        self.setSingleStep(self._units.display_step(self._unit, self._shown))
-        self.setAccelerated(True)
+    class LengthSpinBox(QDoubleSpinBox):
+        """A spin box whose value is metres and whose text is the document's
+        unit. The arrows add one step of the shown precision (1 mm in a
+        millimetre document); text that is not a length («5 m²», «abc») is not
+        taken, and the reason shows next to the field."""
 
-    def unit(self) -> str:
-        return self._unit
+        def __init__(self, parent=None, minimum: float = 0.0,
+                     maximum: float = 1000.0, unit: str | None = None,
+                     decimals: int | None = None) -> None:
+            super().__init__(parent)
+            self._units = _units()
+            self._unit = unit or self._units.model_unit()
+            # At least to the millimetre: a 2 mm text in a document shown to the
+            # centimetre must not read «0 cm».
+            self._shown = self._units.fine_precision() if decimals is None else decimals
+            # Qt rounds the stored value to decimals(): metres to the micron
+            # keep every unit's shown precision exact.
+            super().setDecimals(9)
+            self.setRange(minimum, maximum)
+            self.setSingleStep(self._units.display_step(self._unit, self._shown))
+            self.setAccelerated(True)
 
-    def textFromValue(self, value: float) -> str:
-        return self._units.localized(
-            self._units.format_length(value, self._unit, self._shown))
+        def unit(self) -> str:
+            return self._unit
 
-    def valueFromText(self, text: str) -> float:
-        r = self._units.parse(text, "length", self._unit)
-        return r.value if r.ok else self.value()
+        def textFromValue(self, value: float) -> str:
+            return self._units.localized(
+                self._units.format_length(value, self._unit, self._shown))
 
-    def _reading(self, text: str):
-        r = self._units.parse(text, "length", self._unit)
-        if r.ok and not self.minimum() - 1e-12 <= r.value <= self.maximum() + 1e-12:
-            from core.i18n import tr
-            return None, tr("Out of range: {low} to {high}",
-                            low=self.textFromValue(self.minimum()),
-                            high=self.textFromValue(self.maximum()))
-        return (r.value, "") if r.ok else (None, r.message())
+        def valueFromText(self, text: str) -> float:
+            r = self._units.parse(text, "length", self._unit)
+            return r.value if r.ok else self.value()
 
-    def validate(self, text: str, pos: int):
-        value, _ = self._reading(text)
-        state = QValidator.Acceptable if value is not None \
-            else QValidator.Intermediate
-        return state, text, pos
+        def _reading(self, text: str):
+            r = self._units.parse(text, "length", self._unit)
+            if r.ok and not self.minimum() - 1e-12 <= r.value <= self.maximum() + 1e-12:
+                from core.i18n import tr
+                return None, tr("Out of range: {low} to {high}",
+                                low=self.textFromValue(self.minimum()),
+                                high=self.textFromValue(self.maximum()))
+            return (r.value, "") if r.ok else (None, r.message())
 
-    def error_text(self) -> str:
-        """Why the text in the field is not taken («» when it is)."""
-        return self._reading(self.lineEdit().text())[1]
+        def validate(self, text: str, pos: int):
+            value, _ = self._reading(text)
+            state = QValidator.Acceptable if value is not None \
+                else QValidator.Intermediate
+            return state, text, pos
 
-    def fixup(self, text: str) -> str:
-        msg = self._reading(text)[1]
-        if msg:
-            # Leaving the field puts the last good value back; say why.
-            QToolTip.showText(self.mapToGlobal(self.rect().bottomLeft()),
-                              msg, self)
-        return text
+        def error_text(self) -> str:
+            """Why the text in the field is not taken («» when it is)."""
+            return self._reading(self.lineEdit().text())[1]
 
-
-class _LevelDialog(QDialog):
-    def __init__(self, parent, title: str, name: str, z: float) -> None:
-        super().__init__(parent)
-        self.setWindowTitle(title)
-        form = QFormLayout(self)
-        self.name = QLineEdit(name)
-        form.addRow(_t("Name:"), self.name)
-        if _units() is not None:
-            # The height in the document's units; value() stays in metres.
-            self.z = LengthSpinBox(minimum=-1000.0, maximum=1000.0)
-            self.z.setSingleStep(_height_step(self.z.unit()))
-        else:
-            self.z = QDoubleSpinBox()
-            self.z.setRange(-1000.0, 1000.0)
-            self.z.setDecimals(2)
-            self.z.setSingleStep(0.10)
-            self.z.setSuffix(" m")
-        self.z.setValue(z)
-        form.addRow(_t("Height:"), self.z)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        form.addRow(buttons)
+        def fixup(self, text: str) -> str:
+            msg = self._reading(text)[1]
+            if msg:
+                # Leaving the field puts the last good value back; say why.
+                QToolTip.showText(self.mapToGlobal(self.rect().bottomLeft()),
+                                  msg, self)
+            return text
 
 
-class LevelsPanel(QWidget):
-    def __init__(self, app) -> None:
-        super().__init__()
+    class _LevelDialog(QDialog):
+        def __init__(self, parent, title: str, name: str, z: float) -> None:
+            super().__init__(parent)
+            self.setWindowTitle(title)
+            form = QFormLayout(self)
+            self.name = QLineEdit(name)
+            form.addRow(_t("Name:"), self.name)
+            if _units() is not None:
+                # The height in the document's units; value() stays in metres.
+                self.z = LengthSpinBox(minimum=-1000.0, maximum=1000.0)
+                self.z.setSingleStep(_height_step(self.z.unit()))
+            else:
+                self.z = QDoubleSpinBox()
+                self.z.setRange(-1000.0, 1000.0)
+                self.z.setDecimals(2)
+                self.z.setSingleStep(0.10)
+                self.z.setSuffix(" m")
+            self.z.setValue(z)
+            form.addRow(_t("Height:"), self.z)
+            buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+            buttons.accepted.connect(self.accept)
+            buttons.rejected.connect(self.reject)
+            form.addRow(buttons)
+
+
+    globals().update(LengthSpinBox=LengthSpinBox, _LevelDialog=_LevelDialog)
+    return globals()[name]
+
+
+class LevelsPanel:
+    id, title, slot = "levels", _t("Levels"), "dock"
+
+    def __init__(self, app, invalidate):
         self.app = app
-        lay = QVBoxLayout(self)
-        self.guides = QCheckBox(_t("Level guides"))
-        self.guides.toggled.connect(self._on_guides)
-        lay.addWidget(self.guides)
-        self.list = QListWidget()
-        self.list.itemDoubleClicked.connect(lambda _i: self._edit())
-        lay.addWidget(self.list, 1)
-        row = QHBoxLayout()
-        for text, slot in ((_t("Add"), self._add), (_t("Edit"), self._edit),
-                           (_t("Delete"), self._delete)):
-            b = QPushButton(text)
-            b.clicked.connect(slot)
-            row.addWidget(b)
-        lay.addLayout(row)
-        # The guides only exist in a parallel elevation — which is exactly
-        # where nobody starts. One click gets there (Marco's first try, 25-09:
-        # «hice niveles pero no veo nada en el dibujo» — he was in perspective).
-        elev = QPushButton(_t("Show elevation"))
-        elev.setToolTip(_t("Front view in parallel projection, where the "
-                           "level guides show."))
-        elev.clicked.connect(self._show_elevation)
-        lay.addWidget(elev)
-        hint = QLabel(_t("Double-click a level to edit it. The guides show in "
-                         "elevations and sections in parallel projection."))
-        hint.setWordWrap(True)
-        lay.addWidget(hint)
-        self.refresh()
+        self.selected = None
 
-    def _show_elevation(self) -> None:
-        vp = self.app.viewport
-        vp.camera.set_view("front")
-        vp.camera.perspective = False
-        vp.update()
+    def sections(self):
+        from core.plugin_panels import field, item, section
+        state = _state(self.app)
+        rows = [dict(key=str(i), cells=[lv["name"], _fmt_listed(lv["z"])])
+                for i, lv in reversed(list(enumerate(state["levels"])))]
+        editable = self.selected in {r["key"] for r in rows}
+        return [section("levels", self.title,
+                        item("list", "list", columns=[_t("Name:"), _t("Height:")],
+                             rows=rows, selection=self.selected),
+                        item("button", "add", _t("New level")),
+                        item("button", "edit", _t("Edit level"), enabled=editable),
+                        item("button", "delete", _t("Delete"), enabled=editable),
+                        field("guides", _t("Level guides"), "toggle", state["guides"]),
+                        item("button", "elevation", _t("Front elevation")))]
 
-    def refresh(self) -> None:
-        st = _state(self.app)
-        self.guides.blockSignals(True)
-        self.guides.setChecked(st["guides"])
-        self.guides.blockSignals(False)
-        current = self.list.currentRow()
-        self.list.clear()
-        for lv in reversed(st["levels"]):          # the highest on top
-            self.list.addItem(QListWidgetItem(f"{lv['name']}   {_fmt_listed(lv['z'])}"))
-        if 0 <= current < self.list.count():
-            self.list.setCurrentRow(current)
+    def event(self, control, event, value):
+        state = _state(self.app)
+        levels = state["levels"]
+        if control == "list":
+            self.selected = value
+        elif control == "guides":
+            state["guides"] = value
+            self.app.set_document_data(state)
+        elif control == "elevation":
+            vp = self.app.viewport
+            vp.camera.set_view("front")
+            vp.camera.perspective = False
+            vp.update()
+        elif control == "delete" and self.selected is not None:
+            del levels[int(self.selected)]
+            self.selected = None
+            self.app.set_document_data(state)
+        elif control in ("add", "edit"):
+            from views.chrome_forms import Field, Form, show
+            index = int(self.selected) if control == "edit" else None
+            level = levels[index] if index is not None else dict(
+                name=_t("Level {n}", n=len(levels) + 1), z=_next_height(levels))
+            units = _units()
+            unit = units.model_unit()
+            text = units.format_length(level["z"], unit, units.fine_precision())
+            fields = [Field("name", "edit", _t("Name:"), level["name"]),
+                      Field("height", "edit", _t("Height:"), text)]
+            scene, revision = self.app.scene, self.app.scene.version
 
-    def _index(self):
-        """The selected level's index in the height-sorted list."""
-        row = self.list.currentRow()
-        n = len(_state(self.app)["levels"])
-        return None if row < 0 or row >= n else n - 1 - row
+            def validate(form, answer):
+                height = units.parse(form.value("height"), "length", unit)
+                if not height.ok:
+                    return height.message()
+                if not -1000 <= height.value <= 1000:
+                    return _t("Height must be between -1000 m and 1000 m")
+                if not form.value("name").strip():
+                    return _t("Enter a name")
 
-    def _store(self, st: dict) -> None:
-        self.app.set_document_data(st)             # one undo step
-        self.refresh()
+            def finish(answer, values):
+                if answer != "ok" or scene is not self.app.scene or scene.version != revision:
+                    return
+                changed = dict(name=values["name"].strip(),
+                               z=units.parse(values["height"], "length", unit).value)
+                if index is None:
+                    levels.append(changed)
+                else:
+                    levels[index] = changed
+                self.selected = None
+                self.app.set_document_data(state)
 
-    def _on_guides(self, on: bool) -> None:
-        st = _state(self.app)
-        st["guides"] = bool(on)
-        self._store(st)
+            show(self.app.window, Form(self.title, fields, validate=validate, on_done=finish))
 
-    def _add(self) -> None:
-        st = _state(self.app)
-        dlg = _LevelDialog(self, _t("New level"),
-                           _t("Level {n}", n=len(st["levels"]) + 1),
-                           _next_height(st["levels"]))
-        if dlg.exec() != QDialog.Accepted or not dlg.name.text().strip():
-            return
-        st["levels"].append({"name": dlg.name.text().strip(),
-                             "z": dlg.z.value()})
-        self._store(st)
-
-    def _edit(self) -> None:
-        i = self._index()
-        if i is None:
-            return
-        st = _state(self.app)
-        lv = st["levels"][i]
-        dlg = _LevelDialog(self, _t("Edit level"), lv["name"], lv["z"])
-        if dlg.exec() != QDialog.Accepted or not dlg.name.text().strip():
-            return
-        lv["name"], lv["z"] = dlg.name.text().strip(), dlg.z.value()
-        self._store(st)
-
-    def _delete(self) -> None:
-        i = self._index()
-        if i is None:
-            return
-        st = _state(self.app)
-        del st["levels"][i]
-        self._store(st)
+    def overlay(self, viewport):
+        from views.wgpu_overlay import Primitive
+        state = _state(self.app)
+        if state["guides"] and _sideways(viewport):
+            for level in state["levels"]:
+                ends = [viewport._world_to_pixel(p) for p in _guide_ends(viewport, level["z"])]
+                if None in ends:
+                    continue
+                segment = viewport._clip_pixel_line(*ends, margin=0.0)
+                if segment:
+                    yield Primitive("polyline", segment, "#f27329", dash=(4, 2))
+                    x, y = min(segment)
+                    yield Primitive("text", ((x + 8, y - 4),), "#f27329",
+                                    text=f"{level['name']}  {_fmt(level['z'])}")
 
 
-# ---- Viewport: guides and snapping ------------------------------------------------
+create_panel = LevelsPanel
+
 
 def _guide_ends(viewport, z: float):
     """Two world points of a horizontal line at height ``z`` running across
@@ -344,32 +343,6 @@ def _guide_ends(viewport, z: float):
     span = max(cam.distance * 10.0, 100.0)
     return (QVector3D(c.x(), c.y(), z) - right * span,
             QVector3D(c.x(), c.y(), z) + right * span)
-
-
-def draw_guides(app, viewport, painter) -> None:
-    st = _state(app)
-    if not st["guides"] or not st["levels"] or not _sideways(viewport):
-        return
-    color = QColor.fromRgbF(*COLOR, 0.9)
-    pen = QPen(color, 1.2, Qt.DashLine)
-    font = QFont()
-    font.setPointSize(9)
-    painter.setFont(font)
-    for lv in st["levels"]:
-        a, b = _guide_ends(viewport, lv["z"])
-        pa, pb = viewport._world_to_pixel(a), viewport._world_to_pixel(b)
-        if pa is None or pb is None:
-            continue
-        seg = viewport._clip_pixel_line(pa, pb, margin=0.0)
-        if seg is None:
-            continue
-        (x0, y0), (x1, y1) = seg
-        painter.setPen(pen)
-        painter.drawLine(QPointF(x0, y0), QPointF(x1, y1))
-        left = (x0, y0) if x0 <= x1 else (x1, y1)
-        painter.setPen(QPen(color))
-        painter.drawText(QPointF(left[0] + 8, left[1] - 4),
-                         f"{lv['name']}  {_fmt(lv['z'])}")
 
 
 def snap_to_levels(app, viewport, snap, px: float, py: float):
@@ -399,9 +372,5 @@ def snap_to_levels(app, viewport, snap, px: float, py: float):
 # ---- Entry point --------------------------------------------------------------------
 
 def setup(app) -> None:
-    panel = LevelsPanel(app)
-    app.add_panel(_t("Levels"), panel, icon="panel_levels")
-    app.on_document_changed(panel.refresh)
-    app.add_overlay(lambda vp, painter: draw_guides(app, vp, painter))
     app.add_snap_provider(
         lambda vp, snap, px, py: snap_to_levels(app, vp, snap, px, py))

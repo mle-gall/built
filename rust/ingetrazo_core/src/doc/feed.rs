@@ -292,7 +292,7 @@ impl FeedReaders {
         }
         self.scans.retain(|reader, version| {
             let keep = match reader.as_str() {
-                "paint" | "bim" => paint && !registry && !membership && !tag_changes,
+                "paint" | "bim" | "library_paint_totals" => paint && !registry && !membership && !tag_changes,
                 "rows" => (paint || rows) && !membership && !tag_changes && !registry,
                 "mesh_paint" | "library_paint" => (paint || groups || keyed_paint) && !registry,
                 "filing" => !registry && !tag_changes && (
