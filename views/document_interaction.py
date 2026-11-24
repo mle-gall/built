@@ -4179,146 +4179,13 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
 
     def _snap_context_suffix(self, context) -> str:
-        """What the ScreenTip adds after the snap's own name: the geometry
-        is inside a group / component, or — while one is open — outside the
-        one being edited. Empty when there is nothing to say (the open
-        context's own geometry, or the root)."""
-        if context == "component":
-            return " " + tr("in component")
-        if context == "group":
-            return " " + tr("in group")
-        if context == "outside":
-            # ``edit_group`` is already on its world copy (xform None) while
-            # it is open: ask the shared definition, not is_instance().
-            is_comp = (self.scene.edit_definition() is not None
-                       if self.scene.edit_group is not None else None)
-            word = ("outside the component" if is_comp
-                    else "outside the group")
-            return " " + tr(word)
-        return ""
+        return ingetrazo_render.snap_context_suffix(self, context)
 
     def _draw_snap_indicator(self, painter: QPainter, snap: SnapResult) -> None:
         # Axis-lock and inference state is conveyed by the coloured rubber
         # band; no badge follows the cursor along the lock line. Only the
         # discrete point snaps get a marker.
-        if snap.kind in ("axis_inference", "axis"):
-            return
-        pixel = self._world_to_pixel(snap.point)
-        if pixel is None:
-            return
-        r, g, b = snap.color
-        color = QColor.fromRgbF(r, g, b, 1.0)
-        # Dashed guide line (the extension inference shows the edge's dashed
-        # continuation to the cursor).
-        if snap.guide is not None:
-            gp0 = self._world_to_pixel(snap.guide[0])
-            gp1 = self._world_to_pixel(snap.guide[1])
-            if gp0 is not None and gp1 is not None:
-                # A snap can colour its guide differently from the marker (the
-                # 'from point' guide is axis-coloured while the point is green).
-                gc = snap.guide_color if snap.guide_color is not None else (r, g, b)
-                dash = QPen(QColor.fromRgbF(gc[0], gc[1], gc[2], 0.9), 2.0, Qt.DashLine)
-                painter.setPen(dash)
-                vis = self._clip_pixel_line(gp0, gp1)
-                if vis is not None:
-                    painter.drawLine(QPointF(*vis[0]), QPointF(*vis[1]))
-        for ga, gb_, gc in (snap.guides or []):
-            gp0 = self._world_to_pixel(ga)
-            gp1 = self._world_to_pixel(gb_)
-            if gp0 is not None and gp1 is not None:
-                painter.setPen(QPen(QColor.fromRgbF(gc[0], gc[1], gc[2], 0.9), 2.0, Qt.DashLine))
-                vis = self._clip_pixel_line(gp0, gp1)
-                if vis is not None:
-                    painter.drawLine(QPointF(*vis[0]), QPointF(*vis[1]))
-        # A white halo under the marker lifts it off busy geometry, then
-        # the coloured marker on top — bigger and bolder than before so the
-        # snap point reads at a glance (a common request: the dots were too
-        # small to aim with).
-        halo = QPen(QColor(255, 255, 255, 230), 4.5)
-        mark = QPen(color, 2.6)
-        painter.setBrush(QColor.fromRgbF(r, g, b, 0.30))
-        px, py = pixel
-        if snap.kind == "intersection":
-            # X marker at the crossing (drawn line × projected guide).
-            for pen in (halo, mark):
-                painter.setPen(pen)
-                painter.drawLine(QPointF(px - 8, py - 8), QPointF(px + 8, py + 8))
-                painter.drawLine(QPointF(px - 8, py + 8), QPointF(px + 8, py - 8))
-        elif snap.kind == "center":
-            # The centre of a circle: a filled dot.
-            painter.setPen(halo)
-            painter.setBrush(Qt.NoBrush)
-            painter.drawEllipse(QPointF(px, py), 6.5, 6.5)
-            painter.setPen(mark)
-            painter.setBrush(QColor.fromRgbF(r, g, b, 0.85))
-            painter.drawEllipse(QPointF(px, py), 6.5, 6.5)
-        elif snap.kind in ("endpoint", "origin", "component_origin", "on_edge",
-                           "on_axis", "intersection_edge", "intersection_face",
-                           "on_line", "on_circle", "extension", "from_point",
-                           "aligned", "tangent"):
-            rect = QRectF(px - 7, py - 7, 14, 14)
-            painter.setPen(halo)
-            painter.setBrush(Qt.NoBrush)
-            painter.drawRect(rect)
-            painter.setPen(mark)
-            painter.setBrush(QColor.fromRgbF(r, g, b, 0.30))
-            painter.drawRect(rect)
-        elif snap.kind in ("midpoint", "arc_midpoint", "quadrant"):
-            # Cyan diamond.
-            diamond = QPolygonF([
-                QPointF(px, py - 9), QPointF(px + 9, py),
-                QPointF(px, py + 9), QPointF(px - 9, py),
-            ])
-            painter.setPen(halo)
-            painter.setBrush(Qt.NoBrush)
-            painter.drawPolygon(diamond)
-            painter.setPen(mark)
-            painter.setBrush(QColor.fromRgbF(r, g, b, 0.30))
-            painter.drawPolygon(diamond)
-        elif snap.kind == "on_face":
-            painter.setPen(halo)
-            painter.drawEllipse(QPointF(px, py), 5.5, 5.5)
-            painter.setPen(mark)
-            painter.drawEllipse(QPointF(px, py), 5.5, 5.5)
-        elif snap.kind == "face_center":
-            # A filled ring with a cross inside: the one point of the face,
-            # not just somewhere on it. The size of the endpoint's square
-            # (14 px), so every point marker reads the same.
-            for pen in (halo, mark):
-                painter.setPen(pen)
-                painter.setBrush(Qt.NoBrush if pen is halo
-                                 else QColor.fromRgbF(r, g, b, 0.30))
-                painter.drawEllipse(QPointF(px, py), 7.0, 7.0)
-                painter.drawLine(QPointF(px - 7, py), QPointF(px + 7, py))
-                painter.drawLine(QPointF(px, py - 7), QPointF(px, py + 7))
-        elif snap.kind == "close":
-            painter.setPen(halo)
-            painter.drawEllipse(QPointF(px, py), 9.0, 9.0)
-            painter.setPen(mark)
-            painter.drawEllipse(QPointF(px, py), 9.0, 9.0)
-        elif snap.kind in ("reference", "through_point", "perp_face"):
-            painter.setPen(halo)
-            painter.drawEllipse(QPointF(px, py), 6.5, 6.5)
-            painter.setPen(mark)
-            painter.drawEllipse(QPointF(px, py), 6.5, 6.5)
-
-        # Tooltip text next to the marker ("On Edge", etc.).
-        label = self._SNAP_LABELS.get(snap.kind)
-        if snap.kind == "aligned" and snap.axis == "z":
-            label = "Level with point"
-        if label:
-            label = tr(label)
-        if getattr(snap, "label", None):
-            label = snap.label               # an extension's own words
-        if label:
-            label += self._snap_context_suffix(getattr(snap, "context", None))
-            font = QFont()
-            font.setPointSize(9)
-            painter.setFont(font)
-            painter.setPen(QPen(QColor(255, 255, 255, 220)))
-            painter.drawText(QPointF(px + 11, py + 17), label)
-            painter.setPen(QPen(color))
-            painter.drawText(QPointF(px + 10, py + 16), label)
+        return ingetrazo_render.draw_snap_indicator(self, painter, snap)
 
     def _edit_group_box_corners(self):
         from ingetrazo_core import edit_group_box
@@ -4338,118 +4205,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return section_frame(sp.point, plane_axes(sp.normal), self.scene.bounds())
 
     def _draw_section_planes(self, painter: QPainter) -> None:
-        """The section plane OBJECTS (frame + corner brackets + symbol):
-        orange when active, light grey when not, a solid heavier frame when
-        selected. Hidden by View ▸ Section Planes."""
-        planes = getattr(self.scene, "section_planes", None)
-        if not planes or not getattr(self.scene, "show_section_planes", True):
-            return
-        selection = self.scene.selection
-        for sp in planes:
-            if getattr(sp, "hidden", False) \
-                    or not self.scene.entity_visible(sp):
-                continue                    # its frame is off; a cut stays
-            corners = self.section_plane_frame(sp)
-            px = []
-            ok = True
-            for i in range(4):
-                seg = self._clip_segment_front(corners[i],
-                                               corners[(i + 1) % 4])
-                if seg is None:
-                    ok = False
-                    break
-                a = self._world_to_pixel(seg[0])
-                b = self._world_to_pixel(seg[1])
-                if a is None or b is None:
-                    ok = False
-                    break
-                px.append((a, b))
-            if not ok:
-                continue
-            # Active or not, at a glance (@pacaeiro, #62, second round): the
-            # ACTIVE plane in orange, every other one light grey — the axis
-            # colours of 0.4.9 said which way a plane cut, which stops
-            # meaning anything once it is rotated. Orange is also the
-            # selection's colour, so a selected plane draws its frame SOLID
-            # and heavier instead of dashed.
-            selected = sp in selection
-            if sp.active:
-                col = QColor(243, 115, 41)
-                width = 2.0
-            else:
-                col = QColor(178, 182, 188)
-                width = 1.4
-            if selected:
-                width += 1.2
-            # The frame edges are drawn dashed.
-            pen = QPen(col, width, Qt.SolidLine if selected else Qt.DashLine)
-            painter.setPen(pen)
-            for a, b in px:
-                painter.drawLine(QPointF(*a), QPointF(*b))
-            # Corner brackets: short SOLID ticks into the frame.
-            painter.setPen(QPen(col, width))
-            for i in range(4):
-                c = self._world_to_pixel(corners[i])
-                n1 = self._world_to_pixel(corners[(i + 1) % 4])
-                n2 = self._world_to_pixel(corners[(i + 3) % 4])
-                if c is None or n1 is None or n2 is None:
-                    continue
-                for n_ in (n1, n2):
-                    dx, dy = n_[0] - c[0], n_[1] - c[1]
-                    ln = math.hypot(dx, dy) or 1.0
-                    k = min(14.0, ln * 0.18) / ln
-                    painter.drawLine(QPointF(c[0], c[1]),
-                                     QPointF(c[0] + dx * k, c[1] + dy * k))
-            # The section SYMBOL rides in a little balloon at EVERY
-            # corner of the frame.
-            symbol = (sp.symbol or "").strip()
-            if symbol:
-                painter.save()
-                font = painter.font()
-                font.setPointSizeF(8.5)
-                font.setBold(True)
-                painter.setFont(font)
-                r = 9.0
-                for i in range(4):
-                    c = self._world_to_pixel(corners[i])
-                    if c is None:
-                        continue
-                    centre = QPointF(c[0], c[1])
-                    painter.setBrush(QColor(255, 255, 255, 220))
-                    painter.setPen(QPen(col, width))
-                    painter.drawEllipse(centre, r, r)
-                    painter.setPen(QPen(col, 1))
-                    painter.drawText(
-                        QRectF(c[0] - r, c[1] - r, 2 * r, 2 * r),
-                        Qt.AlignCenter, symbol[:3])
-                painter.restore()
+        return ingetrazo_render.draw_section_planes(self, painter)
 
     def pick_section_plane(self, screen_x: float, screen_y: float):
-        """The section plane whose frame is nearest the cursor within the
-        pick threshold, or ``None`` (Select / context menu / Eraser)."""
-        planes = getattr(self.scene, "section_planes", None)
-        if not planes or not getattr(self.scene, "show_section_planes", True):
-            return None
-        best, best_d = None, self.pick_threshold_px
-        for sp in planes:
-            if getattr(sp, "hidden", False) \
-                    or not self.scene.entity_selectable(sp):
-                continue
-            corners = self.section_plane_frame(sp)
-            for i in range(4):
-                seg = self._clip_segment_front(corners[i],
-                                               corners[(i + 1) % 4])
-                if seg is None:
-                    continue
-                a = self._world_to_pixel(seg[0])
-                b = self._world_to_pixel(seg[1])
-                if a is None or b is None:
-                    continue
-                d = _point_to_segment_distance_2d((screen_x, screen_y), a, b)
-                if d < best_d:
-                    best_d = d
-                    best = sp
-        return best
+        return ingetrazo_render.pick_section_plane(self, screen_x, screen_y)
 
     def _section_cut_segments(self):
         from ingetrazo_render import section_cut
@@ -4508,48 +4267,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                                g.point, g.direction, GUIDE_HALF_LEN, margin)
 
     def _draw_scale_box(self, painter: QPainter) -> None:
-        """The scaling box: yellow edges, green grips, the grabbed grip
-        and its anchor in red. Drawn from whatever the active tool reports via
-        ``scale_box_state()`` (duck-typed, so this file needs no tool import);
-        while an operation is live the box rides the same matrix the geometry
-        is being scaled by."""
-        tool = self.active_tool
-        state_fn = getattr(tool, "scale_box_state", None)
-        if state_fn is None:
-            return
-        state = state_fn()
-        if state is None:
-            return
-        box_pen = QPen(QColor(214, 174, 0), 1)          # grip-box yellow
-        painter.setPen(box_pen)
-        for a, b in state["segments"]:
-            seg = self._clip_segment_front(a, b)
-            if seg is None:
-                continue
-            pa = self._world_to_pixel(seg[0])
-            pb = self._world_to_pixel(seg[1])
-            if pa is not None and pb is not None:
-                painter.drawLine(QPointF(*pa), QPointF(*pb))
-        green = QColor(60, 160, 60)
-        red = QColor(220, 40, 40)
-        # Far grips first, so a grip at the front of the box is drawn over
-        # the one behind it rather than under it (#833).
-        eye = self.camera.eye()
-        fwd = self.camera.target - eye
-        grips = sorted(state["grips"], key=lambda g: -QVector3D.dotProduct(
-            g[0] - eye, fwd))
-        for pos, role in grips:
-            px = self._world_to_pixel(pos)
-            if px is None:
-                continue
-            half = 5.0 if role in ("hover", "active", "anchor") else 4.0
-            color = green if role == "idle" else red
-            painter.fillRect(QRectF(px[0] - half, px[1] - half,
-                                    half * 2, half * 2), color)
-            painter.setPen(QPen(QColor(30, 30, 30), 1))
-            painter.drawRect(QRectF(px[0] - half, px[1] - half,
-                                    half * 2, half * 2))
-        painter.setPen(box_pen)
+        return ingetrazo_render.draw_scale_box(self, painter)
 
     def _clip_pixel_line(
         self, p0: tuple[float, float], p1: tuple[float, float],
@@ -4559,452 +4277,59 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return clip_annotation_line(p0, p1, self.width(), self.height(), margin)
 
     def _draw_guides(self, painter: QPainter) -> None:
-        """The small crosses of guide POINTS, the usual scaffolding.
-
-        Guide LINES are not here any more: they are drawn in the GL pass so
-        the depth buffer hides them behind geometry (issue #23). A cross is
-        a screen-space mark a few pixels wide, not a line through the
-        model, so it stays in the overlay where its size is in pixels."""
-        guides = shown_guides(self.scene)
-        if not guides:
-            return
-        pen = QPen(QColor(70, 90, 120), 1, Qt.DashLine)
-        pen.setDashPattern([14.0, 10.0])
-        sel_pen = QPen(QColor(243, 115, 41), 2, Qt.DashLine)  # selection orange
-        sel_pen.setDashPattern([14.0, 10.0])
-        selection = self.scene.selection
-        for g in guides:
-            if g.is_line or getattr(g, "is_circle", False):
-                continue
-            painter.setPen(sel_pen if g in selection else pen)
-            q = self._world_to_pixel(g.point)
-            if q is not None:
-                painter.drawLine(QPointF(q[0] - 5, q[1]), QPointF(q[0] + 5, q[1]))
-                painter.drawLine(QPointF(q[0], q[1] - 5), QPointF(q[0], q[1] + 5))
+        return ingetrazo_render.draw_guides(self, painter)
 
     def _draw_geo_surfaces(self, painter: QPainter) -> None:
-        """Draw terrain-surface fills as shaded, back-to-front triangles so the
-        relief reads in 3D (Track G). Semi-transparent, so the base map shows."""
-        paths = getattr(self.scene, "geo_paths", None)
-        if not paths:
-            return
-        eye = self.camera.eye()
-        light = QVector3D(0.3, 0.4, 0.85)
-        light = light.normalized()
-        for path in paths:
-            tris = getattr(path, "_surface_tris", None)
-            if not tris:
-                continue
-            flat = getattr(path, "surface", None) == "flat"
-            # Painter's algorithm: far triangles first.
-            ordered = sorted(
-                tris, key=lambda t: -((t[0] + t[1] + t[2]) - eye * 3.0).lengthSquared())
-            painter.setPen(Qt.NoPen)
-            for v0, v1, v2 in ordered:
-                p0 = self._world_to_pixel(v0)
-                p1 = self._world_to_pixel(v1)
-                p2 = self._world_to_pixel(v2)
-                if p0 is None or p1 is None or p2 is None:
-                    continue
-                # Flat shading from the face normal (relief legibility).
-                n = QVector3D.crossProduct(v1 - v0, v2 - v0)
-                if n.length() > 1e-9:
-                    n = n.normalized()
-                shade = 0.55 + 0.45 * max(0.0, abs(QVector3D.dotProduct(n, light)))
-                if flat:
-                    col = QColor(int(90 * shade), int(120 * shade), int(200 * shade), 150)
-                else:
-                    col = QColor(int(120 * shade), int(160 * shade), int(90 * shade), 150)
-                painter.setBrush(col)
-                painter.drawPolygon(QPolygonF([QPointF(*p0), QPointF(*p1), QPointF(*p2)]))
-            painter.setBrush(Qt.NoBrush)
+        return ingetrazo_render.draw_geo_surfaces(self, painter)
 
     def ground_height(self, x: float, y: float) -> float | None:
-        """Ground elevation at a plan position, or ``None`` where none is known.
-
-        One place to ask, so the survey-beats-DEM precedence lives here instead
-        of being re-decided by every caller (drape, the elevation readout, the
-        profile sampler chooser).
-        """
-        survey = getattr(self.scene, "photo_mesh", None)
-        if survey is not None and getattr(survey, "visible", False):
-            z = survey.height_at(x, y)
-            if z is not None:
-                return z
-        t = getattr(self.scene, "terrain", None)
-        if t is not None and getattr(t, "visible", False):
-            return t.height_at(x, y)
-        return None
+        return ingetrazo_render.ground_height(self, x, y)
 
     def _emit_coordinate(self, ev) -> None:
-        """Publish the UTM coordinate under the cursor for the status bar.
-
-        Rides the coalesced hover rather than every mouse event: the readout is
-        for reading, and 16 updates a second is already more than an eye can
-        follow. Silent without a datum — local scene metres are not a
-        coordinate anybody can use.
-        """
-        datum = getattr(self.scene, "georef", None)
-        if datum is None:
-            if self._last_coordinate:
-                self._last_coordinate = ""
-                self.coordinateChanged.emit("")
-            return
-        p = ev.position().toPoint()
-        world = self._world_from_pixel(p.x(), p.y())
-        if world is None:
-            return
-        east, north, _ = datum.local_to_utm(world)
-        z = self.ground_elevation(world.x(), world.y())
-        # Compact on the bar — a decimetre is the pointer's own precision on
-        # a site plan, and the zone does not change under the mouse — and in
-        # full on hover (Marco, 23-09: the bar had no room for the hint).
-        text = f"E {east:.1f}  N {north:.1f}"
-        full = (f"E {east:,.2f}  N {north:,.2f}  "
-                f"{datum.zone}{datum.hemisphere}")
-        if z is not None:
-            text += f"  ·  {z:.1f} m"
-            full += f"  ·  {z:,.2f} m"
-        self._last_coordinate_full = full
-        if text != self._last_coordinate:
-            self._last_coordinate = text
-            self.coordinateChanged.emit(text)
+        return ingetrazo_render.emit_coordinate(self, ev)
 
     def ground_elevation(self, x: float, y: float) -> float | None:
-        """Ground elevation as a REAL altitude, not a local offset.
-
-        ``ground_height`` answers in scene metres, which is what geometry
-        needs; this adds the datum's altitude back so what reaches the user is
-        the number they would read off a level — 1783.19, not 37.19. Anything
-        shown to a person goes through here.
-        """
-        z = self.ground_height(x, y)
-        if z is None:
-            return None
-        datum = getattr(self.scene, "georef", None)
-        return z + float(getattr(datum, "alt", 0.0) or 0.0)
+        return ingetrazo_render.ground_elevation(self, x, y)
 
     def vertical_reference(self) -> str:
-        """Token naming what the scene's elevations are measured against, for
-        labelling. See :mod:`georef.photomesh` for the meanings."""
-        from georef.photomesh import VERTICAL_DEM, VERTICAL_LOCAL, VERTICAL_ODM
-        survey = getattr(self.scene, "photo_mesh", None)
-        if survey is not None and getattr(survey, "visible", False):
-            return getattr(survey, "vertical_reference", VERTICAL_ODM)
-        t = getattr(self.scene, "terrain", None)
-        if t is not None and getattr(t, "visible", False):
-            return VERTICAL_DEM
-        return VERTICAL_LOCAL
+        return ingetrazo_render.vertical_reference(self)
 
     def has_ground_surface(self) -> bool:
-        """Whether anything is showing that a trace could be draped onto."""
-        for name in ("photo_mesh", "terrain"):
-            obj = getattr(self.scene, name, None)
-            if obj is not None and getattr(obj, "visible", False):
-                return True
-        return False
+        return ingetrazo_render.has_ground_surface(self)
 
     def drape(self, v: QVector3D) -> QVector3D:
-        """Lift a Z=0 georef point onto the ground (its relief height) when a
-        ground surface is showing, so routes/markers sit on it instead of
-        floating at the Z=0 reference plane. A no-op otherwise.
-
-        The **survey wins over the DEM terrain** where both are present: it is
-        the user's own flight at centimetres per pixel against 30 m global
-        cells, so a trace should follow what was actually captured.
-        """
-        z = self.ground_height(v.x(), v.y())
-        return QVector3D(v.x(), v.y(), z) if z is not None else v
+        return ingetrazo_render.drape(self, v)
 
     def _draw_geo_points(self, painter: QPainter) -> None:
-        """Draw imported survey points (GPS / total station): a small cross
-        marker with the point's name — the surveyed skeleton the user traces
-        over. Reference-only; they carry their own elevation (no draping)."""
-        points = getattr(self.scene, "geo_points", None)
-        if not points:
-            return
-        ink = QColor(206, 66, 87)               # survey red — distinct from
-        painter.setPen(QPen(ink, 1.6))          # cyan paths / orange selection
-        font = QFont()
-        font.setPointSize(8)
-        painter.setFont(font)
-        for gp in points:
-            q = self._world_to_pixel(gp.position)
-            if q is None:
-                continue
-            x, y = q
-            painter.setPen(QPen(ink, 1.6))
-            painter.drawLine(QPointF(x - 5, y), QPointF(x + 5, y))
-            painter.drawLine(QPointF(x, y - 5), QPointF(x, y + 5))
-            if gp.name:
-                painter.setPen(QColor(120, 34, 48))
-                painter.drawText(QPointF(x + 7, y - 4), gp.name)
+        return ingetrazo_render.draw_geo_points(self, painter)
 
     def _draw_rubber_band_overlay(self, painter: QPainter) -> None:
-        if self._overlay_rubber is None:
-            return
-        segments, color, width = self._overlay_rubber
-        r, g, b = color[0], color[1], color[2]
-        a = color[3] if len(color) > 3 else 1.0
-        pen = QPen(QColor.fromRgbF(r, g, b, a), width)
-        pen.setCapStyle(Qt.RoundCap)
-        pen.setJoinStyle(Qt.RoundJoin)
-        painter.setPen(pen)
-        for p0, p1 in segments:
-            q = self._segment_to_pixels(p0, p1)
-            if q is not None:
-                painter.drawLine(QPointF(*q[0]), QPointF(*q[1]))
+        return ingetrazo_render.draw_rubber_band_overlay(self, painter)
 
     def _draw_guide_preview(self, painter: QPainter) -> None:
-        """The guide the Tape or the Protractor is about to leave, dashed
-        like the guides themselves, following the cursor (#89, @pacaeiro)."""
-        tool = self.active_tool
-        lines = (tool.guide_preview_lines()
-                 if tool is not None
-                 and hasattr(tool, "guide_preview_lines") else [])
-        if not lines:
-            return
-        pen = QPen(QColor(70, 90, 120), 1.5, Qt.DashLine)
-        pen.setDashPattern([10.0, 7.0])
-        painter.setPen(pen)
-        for p0, p1 in lines:
-            q = self._segment_to_pixels(p0, p1)
-            if q is not None:
-                painter.drawLine(QPointF(*q[0]), QPointF(*q[1]))
+        return ingetrazo_render.draw_guide_preview(self, painter)
 
     def _draw_route_marker(self, painter: QPainter) -> None:
-        """Profile→plan marker: the route point at the station hovered in
-        the profile panel (Track G). A method so the Metal overlay paints
-        the same dot."""
-        if getattr(self, "_route_marker", None) is None:
-            return
-        q = self._world_to_pixel(self.drape(self._route_marker))
-        if q is not None:
-            painter.setBrush(QColor(243, 115, 41))
-            painter.setPen(QPen(QColor(255, 255, 255), 1.5))
-            painter.drawEllipse(QPointF(*q), 6, 6)
-            painter.setBrush(Qt.NoBrush)
+        return ingetrazo_render.draw_route_marker(self, painter)
 
     def _draw_linear_mode_label(self, painter: QPainter) -> None:
-        if getattr(self, '_chrome_owns_labels', False):
-            return  # the egui options strip shows it (views/wgpu_ui.py)
-        # The mirror image of the bug above: these had the Spanish written
-        # into the source, so an English UI showed Spanish.
-        text = {
-            "off": tr("Linear inferences: OFF (Alt)"),
-            "parallel_perp": tr("Inferences: parallel / perpendicular only (Alt)"),
-        }.get(self.linear_inference_mode)
-        if not text:
-            return
-        font = QFont()
-        font.setPointSize(9)
-        painter.setFont(font)
-        painter.setPen(QPen(QColor(210, 150, 40)))
-        painter.drawText(QPointF(14, self.height() - 16), text)
+        return ingetrazo_render.draw_linear_mode_label(self, painter)
 
     def _draw_geo_paths(self, painter: QPainter) -> None:
-        """Draw committed georef paths (roads / boundaries): a coloured polyline
-        with node handles. Selected paths and the hovered node highlight."""
-        paths = getattr(self.scene, "geo_paths", None)
-        if not paths:
-            return
-        base_ink = QColor(0, 190, 210)          # cyan — reads over terrain
-        sel_ink = QColor(243, 115, 41)          # selection orange
-        selection = self.scene.selection
-        hover_node = getattr(self, "_hover_geo_node", None)
-        for path in paths:
-            ink = sel_ink if path in selection else base_ink
-            pix = [self._world_to_pixel(self.drape(p)) for p in path.points]
-            painter.setPen(QPen(ink, 2.5))
-            for a, b in zip(pix, pix[1:]):
-                if a is not None and b is not None:
-                    painter.drawLine(QPointF(*a), QPointF(*b))
-            if path.closed and len(pix) > 2 and pix[0] and pix[-1]:
-                painter.drawLine(QPointF(*pix[-1]), QPointF(*pix[0]))
-            # Node handles.
-            painter.setBrush(ink)
-            painter.setPen(QPen(QColor(255, 255, 255), 1))
-            for i, q in enumerate(pix):
-                if q is None:
-                    continue
-                r = 5.0 if (hover_node == (path, i)) else 3.5
-                painter.drawEllipse(QPointF(*q), r, r)
-            painter.setBrush(Qt.NoBrush)
-            # Area + perimeter label at the centroid of a selected polygon.
-            if path in selection and path.closed and len(path.points) >= 3:
-                self._draw_geo_path_label(painter, path)
+        return ingetrazo_render.draw_geo_paths(self, painter)
 
     def _draw_geo_path_label(self, painter: QPainter, path) -> None:
-        n = len(path.points)
-        cx = sum(p.x() for p in path.points) / n
-        cy = sum(p.y() for p in path.points) / n
-        cz = sum(p.z() for p in path.points) / n
-        q = self._world_to_pixel(self.drape(QVector3D(cx, cy, cz)))
-        if q is None:
-            return
-        area = path.area()
-        text = f"{tr('Area')}: {area:.1f} m²  ({area / 10000:.3f} ha)\n" \
-               f"{tr('Perimeter')}: {_fmt_len(path.perimeter())}"
-        font = QFont()
-        font.setPointSize(9)
-        font.setBold(True)
-        painter.setFont(font)
-        fm = painter.fontMetrics()
-        lines = text.split("\n")
-        tw = max(fm.horizontalAdvance(ln) for ln in lines)
-        th = fm.height() * len(lines)
-        x, y = q[0] - tw / 2, q[1] - th / 2
-        painter.fillRect(int(x) - 5, int(y) - 3, tw + 10, th + 6,
-                         QColor(20, 24, 30, 190))
-        painter.setPen(QColor(255, 255, 255))
-        for i, ln in enumerate(lines):
-            painter.drawText(QPointF(x, y + fm.ascent() + i * fm.height()), ln)
+        return ingetrazo_render.draw_geo_path_label(self, painter, path)
 
     @staticmethod
     def _text_block_x(p_pos, p_anchor, block_w: float) -> float:
-        """Left edge of a leader-text block whose leader ends at ``p_pos``.
-
-        The block sits on the side of the leader end AWAY from the anchor
-        (the usual convention): to the right when the anchor is left of the label, to the
-        LEFT when the leader arrives from the right — otherwise the leader
-        runs straight through the words (Marco's "Pileta de piedra basalto"
-        label, 2026-09-02). Shared by the paint pass and the text pick so
-        the hit box is the drawn box."""
-        if p_anchor is not None and p_pos[0] < p_anchor[0]:
-            return p_pos[0] - 6 - block_w
-        return p_pos[0] + 6
+        return ingetrazo_render.text_block_x(p_pos, p_anchor, block_w)
 
     def _draw_text_labels(self, painter: QPainter) -> None:
-        """Draw every leader-text annotation: a leader line from the anchor
-        (hidden where geometry occludes it, like dimensions) up to the label,
-        an anchor dot, and the multi-line text with a white halo."""
-        labels = getattr(self.scene, "text_labels", None)
-        if not labels:
-            return
-        style = getattr(self.scene, "dimension_style", {})
-        col = style.get("color", [45, 55, 75])
-        default_ink = QColor(col[0], col[1], col[2])
-        sel_ink = QColor(243, 115, 41)
-        selection = self.scene.selection
-        font = QFont(style.get("font_family", ""))
-        font.setPointSize(int(style.get("font_size", 9)))
-        font.setBold(style.get("font_bold", True))
-        font.setItalic(style.get("font_italic", False))
-        painter.setFont(font)
-        fm = painter.fontMetrics()
-        for lab in labels:
-            if not self.scene.entity_visible(lab):      # hidden layer
-                continue
-            ink = (sel_ink if (lab in selection or lab is self._hover_entity)
-                   else default_ink)
-            pos = lab.position()
-            p_anchor = self._world_to_pixel(lab.anchor)
-            p_pos = self._world_to_pixel(pos)
-            if p_pos is None:
-                continue
-            painter.setPen(QPen(ink, 1.2))
-            self._draw_occluded_segment(painter, lab.anchor, pos)   # leader
-            if p_anchor is not None and not self._occluded_on_screen(lab.anchor):
-                painter.setBrush(ink)
-                painter.drawEllipse(QPointF(*p_anchor), 2.5, 2.5)
-                painter.setBrush(Qt.NoBrush)
-            lines = lab.text.splitlines() or [""]
-            x = self._text_block_x(
-                p_pos, p_anchor, max(fm.horizontalAdvance(ln) for ln in lines))
-            for i, line in enumerate(lines):
-                y = p_pos[1] - 4 + i * fm.height()
-                painter.setPen(QPen(QColor(255, 255, 255, 230)))
-                painter.drawText(QPointF(x + 1, y + 1), line)
-                painter.setPen(QPen(ink))
-                painter.drawText(QPointF(x, y), line)
+        return ingetrazo_render.draw_text_labels(self, painter)
 
     def _draw_dimensions(self, painter: QPainter) -> None:
-        """Draw every committed static dimension: extension lines from the
-        measured endpoints out to the dimension line, the dimension line with
-        end ticks, and the value label at its midpoint."""
-        dims = getattr(self.scene, "dimensions", None)
-        if not dims:
-            return
-        style = getattr(self.scene, "dimension_style", {})
-        col = style.get("color", [45, 55, 75])
-        default_ink = QColor(col[0], col[1], col[2])
-        sel_ink = QColor(243, 115, 41)  # selection orange
-        selection = self.scene.selection
-        font = QFont(style.get("font_family", ""))
-        font.setPointSize(int(style.get("font_size", 9)))
-        font.setBold(style.get("font_bold", True))
-        font.setItalic(style.get("font_italic", False))
-        # A groups preview (Move/Rotate) moves no geometry until the commit:
-        # the dimensions held by the movers' vertices are drawn where the
-        # commit will put them, or they lagged behind the whole drag (#621).
-        riders = getattr(self, "_preview_groups", None)
-        carry = self._groups_preview_transform() if riders else None
-        for dim in dims:
-            if not self.scene.entity_visible(dim):      # hidden layer
-                continue
-            ink = (sel_ink if (dim in selection or dim is self._hover_entity)
-                   else default_ink)
-            if riders:
-                ends = dim.ends_riding(riders)
-                if ends:
-                    dim = dim.carried(carry, ends)
-            ap, bp = dim.line_points()
-            pap = self._world_to_pixel(ap)
-            pbp = self._world_to_pixel(bp)
-            if pap is None or pbp is None:
-                continue
-            # Lines are hidden where solid geometry sits in front of them, so a
-            # dimension reads as part of the model instead of floating over it.
-            # Each 3D segment is sampled and only its visible runs are drawn.
-            painter.setPen(QPen(ink, 1.0))
-            self._draw_occluded_segment(painter, dim.a, ap)      # extension
-            self._draw_occluded_segment(painter, dim.b, bp)
-            painter.setPen(QPen(ink, 1.5))
-            self._draw_occluded_segment(painter, ap, bp)         # dimension line
-            # The ends, in screen space, drawn only where the end point
-            # itself is visible: filled arrows pointing outward (the
-            # document's default), oblique ticks, or nothing.
-            dx, dy = pbp[0] - pap[0], pbp[1] - pap[1]
-            ln = math.hypot(dx, dy)
-            ends = style.get("ends", "arrow") or "arrow"
-            if ln > 1e-6 and ends != "none":
-                ux, uy = dx / ln, dy / ln
-                for (cx, cy), w, sign in ((pap, ap, 1.0), (pbp, bp, -1.0)):
-                    if self._occluded_on_screen(w):
-                        continue
-                    if ends == "tick":
-                        # 45° to the line, «/» on a horizontal one, as on
-                        # the sheet (composer.oblique_tick_angle); it was
-                        # square to the line, not oblique (#741)
-                        k = 4.0 * math.sqrt(0.5)
-                        ox, oy = (ux + uy) * k, (uy - ux) * k
-                        painter.drawLine(QPointF(cx - ox, cy - oy),
-                                         QPointF(cx + ox, cy + oy))
-                    else:
-                        # tip at the end, wings trailing INTO the line
-                        # (inside arrows: they point at the extension lines)
-                        L, half = 10.0, 2.2
-                        bx, by = cx + sign * ux * L, cy + sign * uy * L
-                        painter.save()
-                        painter.setBrush(ink)
-                        painter.setPen(Qt.NoPen)
-                        painter.drawPolygon(QPolygonF([
-                            QPointF(cx, cy),
-                            QPointF(bx - uy * half, by + ux * half),
-                            QPointF(bx + uy * half, by - ux * half)]))
-                        painter.restore()
-            # Value label at the dimension line's midpoint — hidden if that
-            # point is behind the solid.
-            mid_world = dim.midpoint()
-            mid = self._world_to_pixel(mid_world)
-            if mid is not None and not self._occluded_on_screen(mid_world):
-                text = dim.display_text(
-                    self._format_dim_value(dim.value(), style))
-                painter.setFont(font)
-                painter.setPen(QPen(QColor(255, 255, 255, 230)))
-                painter.drawText(QPointF(mid[0] + 5, mid[1] - 4), text)
-                painter.setPen(QPen(ink))
-                painter.drawText(QPointF(mid[0] + 4, mid[1] - 5), text)
+        return ingetrazo_render.draw_dimensions(self, painter)
 
     @staticmethod
     def _format_dim_value(metres: float, style: dict) -> str:
@@ -5037,232 +4362,28 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return annotation_samples(self, pts, self.camera.projection_matrix() * self.camera.view_matrix())
 
     def _draw_inference_marker(self, painter: QPainter) -> None:
-        """Snap cue where the active tool's distance inference is engaged."""
-        tool = self.active_tool
-        provider = getattr(tool, "inference_marker", None) if tool is not None else None
-        if not callable(provider):
-            return
-        result = provider()
-        if result is None:
-            return
-        world, kind = result
-        # The same colours and words as the snap markers: a corner is the
-        # endpoint green, an edge the on-edge red, a face the on-face blue
-        # — the classic cue says "On edge" while you push level with one.
-        from core.snap import (COLOR_ENDPOINT, COLOR_MIDPOINT, COLOR_ON_EDGE,
-                               COLOR_ON_FACE, COLOR_ORIGIN)
-        palette = {
-            "midpoint": (COLOR_MIDPOINT, "midpoint"),
-            "origin": (COLOR_ORIGIN, "origin"),
-            "edge": (COLOR_ON_EDGE, "on_edge"),
-            "face": (COLOR_ON_FACE, "on_face"),
-            "guide_line": (COLOR_ON_EDGE, "on_line"),
-            "guide_point": (COLOR_ENDPOINT, "guide_point"),
-        }
-        rgb, label = palette.get(kind, (COLOR_ENDPOINT, "endpoint"))
-        color = QColor.fromRgbF(*rgb, 1.0)
-        # The dotted «level with» reference line from the geometry the
-        # inference locked onto to the moving cap, dashed in that snap-kind
-        # colour. Drawn before the marker's own point is projected: a point
-        # behind the eye is dropped whole, a segment crossing it is merely
-        # clipped, and the reference must survive (Fix 3).
-        guide_provider = getattr(tool, "inference_guide_lines", None)
-        if callable(guide_provider):
-            pen = QPen(color, 1.5, Qt.DashLine)
-            pen.setDashPattern([10.0, 7.0])
-            for a, b, g_kind in guide_provider():
-                g_rgb = palette.get(g_kind, (COLOR_ENDPOINT, "endpoint"))[0]
-                pen.setColor(QColor.fromRgbF(*g_rgb, 1.0))
-                painter.setPen(pen)
-                seg = self._segment_to_pixels(a, b)
-                if seg is not None:
-                    painter.drawLine(QPointF(*seg[0]), QPointF(*seg[1]))
-        pixel = self._world_to_pixel(world)
-        if pixel is None:
-            return
-        px, py = pixel
-        diamond = QPolygonF([
-            QPointF(px, py - 9), QPointF(px + 9, py),
-            QPointF(px, py + 9), QPointF(px - 9, py),
-        ]) if kind == "midpoint" else None
-        painter.setPen(QPen(QColor(255, 255, 255, 230), 4.0))
-        painter.setBrush(Qt.NoBrush)
-        if diamond is not None:
-            painter.drawPolygon(diamond)
-        else:
-            painter.drawRect(QRectF(px - 6, py - 6, 12, 12))
-        painter.setPen(QPen(color, 2.4))
-        painter.setBrush(QColor.fromRgbF(*rgb, 0.30))
-        if diamond is not None:
-            painter.drawPolygon(diamond)
-        else:
-            painter.drawRect(QRectF(px - 6, py - 6, 12, 12))
-        text = tr(self._SNAP_LABELS.get(label, ""))
-        if text:
-            font = QFont()
-            font.setPointSize(9)
-            painter.setFont(font)
-            painter.setPen(QPen(QColor(255, 255, 255, 220)))
-            painter.drawText(QPointF(px + 11, py + 17), text)
-            painter.setPen(QPen(color))
-            painter.drawText(QPointF(px + 10, py + 16), text)
+        return ingetrazo_render.draw_inference_marker(self, painter)
 
     def _length_label_at(self):
-        """``(text, world point, typing)`` of the value the tool shows on the
-        geometry — its ``value_label`` or a single segment's length, what is
-        typed instead while typing — or None. The bold label below and the
-        chrome's value field (views/wgpu_ui.py) both read it."""
-        tool = self.active_tool
-        if tool is None:
-            return None
-
-        # Tool-provided label takes priority (e.g. PushPullTool's signed
-        # extrusion distance). Otherwise fall back to the single-segment
-        # length used by LineTool.
-        label_provider = getattr(tool, "value_label", None)
-        if callable(label_provider):
-            result = label_provider()
-            if result is None:
-                return None
-            # Extension tools are outside the viewport's control. A malformed
-            # value_label() must not break the OpenGL paint loop repeatedly.
-            if not isinstance(result, (tuple, list)) or len(result) != 2:
-                return None
-            text, mid_world = result
-            if mid_world is None:        # VCB-only value (Walkthrough eye height)
-                return None
-        else:
-            segments = tool.rubber_band_lines()
-            if len(segments) != 1:
-                return None
-            start, hover = segments[0]
-            text = _fmt_len((hover - start).length())
-            mid_world = QVector3D(
-                (start.x() + hover.x()) * 0.5,
-                (start.y() + hover.y()) * 0.5,
-                (start.z() + hover.z()) * 0.5,
-            )
-        if self._value_buffer:
-            unitless = getattr(tool, "value_is_unitless", None)
-            if callable(unitless) and unitless():
-                text = self._value_buffer   # an angle or a count: no unit mark
-            else:
-                text = _typed_value_text(self._value_buffer)
-        return text, mid_world, bool(self._value_buffer)
+        return ingetrazo_render.length_label_at(self)
 
     def _draw_length_label(self, painter: QPainter) -> None:
-        if getattr(self, '_chrome_owns_labels', False):
-            return  # the value field on the geometry shows it (views/wgpu_ui.py)
-        label = self._length_label_at()
-        if label is None:
-            return
-        text, mid_world, typing = label
-        pixel = self._world_to_pixel(mid_world)
-        if pixel is None:
-            return
-        if typing:
-            fg = QColor("#0F141B")
-            shadow = QColor(255, 220, 130, 235)  # warm tint while typing
-        else:
-            fg = QColor("#0F141B")
-            shadow = QColor(255, 255, 255, 220)
-        font = QFont()
-        font.setPointSize(10)
-        font.setBold(True)
-        painter.setFont(font)
-        painter.setPen(QPen(shadow))
-        painter.drawText(QPointF(pixel[0] + 12, pixel[1] - 7), text)
-        painter.setPen(QPen(fg))
-        painter.drawText(QPointF(pixel[0] + 11, pixel[1] - 8), text)
+        return ingetrazo_render.draw_length_label(self, painter)
 
     def _measurement_text(self) -> str:
-        """Live measurement string for the VCB box: the active tool's
-        ``value_label`` text (rectangle dimensions, push distance, …) or the
-        single-segment length a line is drawing. Empty when nothing applies."""
-        tool = self.active_tool
-        if tool is None:
-            return ""
-        provider = getattr(tool, "value_label", None)
-        if callable(provider):
-            result = provider()
-            if result is not None:
-                return result[0]
-        segments = tool.rubber_band_lines()
-        if len(segments) == 1:
-            start, hover = segments[0]
-            return _fmt_len((hover - start).length())
-        return ""
+        return ingetrazo_render.measurement_text(self)
 
     def _draw_axis_lock_label(self, painter: QPainter) -> None:
-        if getattr(self, '_chrome_owns_labels', False):
-            return  # the egui options strip shows it (views/wgpu_ui.py)
-        label = {
-            "x": ("X", QColor(220, 56, 69)),
-            "y": ("Y", QColor(40, 158, 92)),
-            "z": ("Z", QColor(51, 102, 199)),
-        }[self.axis_lock]
-        font = QFont()
-        font.setPointSize(11)
-        font.setBold(True)
-        painter.setFont(font)
-        painter.setPen(QPen(label[1]))
-        # Through tr(): this read "X axis locked" in English even with the
-        # Spanish UI, because an f-string never reaches the catalogue.
-        painter.drawText(QPointF(14, 24),
-                         tr("{axis} axis locked", axis=label[0]))
+        return ingetrazo_render.draw_axis_lock_label(self, painter)
 
     def _draw_plane_lock_label(self, painter: QPainter) -> None:
-        """The arrow-key plane lock of a planar tool, in the colour of the
-        axis the plane is normal to."""
-        from tools.base import PLANE_LOCK_NAMES
-        axis = self.active_tool.plane_lock
-        color = {"x": QColor(220, 56, 69), "y": QColor(40, 158, 92),
-                 "z": QColor(51, 102, 199)}[axis]
-        font = QFont()
-        font.setPointSize(11)
-        font.setBold(True)
-        painter.setFont(font)
-        painter.setPen(QPen(color))
-        painter.drawText(QPointF(14, 24), tr(
-            "Drawing plane locked: {plane}", plane=PLANE_LOCK_NAMES[axis]))
+        return ingetrazo_render.draw_plane_lock_label(self, painter)
 
     def _draw_inference_label(self, painter: QPainter) -> None:
-        """Show 'On Red Axis' style label when an axis inference is active.
-
-        The soft cue offers Shift; the magnetic lock (``kind == "axis"``,
-        reached here only when no explicit arrow lock is held) is already
-        committed, so it reads without the Shift offer (#962)."""
-        snap = self.last_snap
-        if snap is None:
-            return
-        if snap.kind == "axis_inference":
-            suffix = f' ({tr("hold Shift to lock")})'
-        elif snap.kind == "axis":
-            suffix = ""
-        else:
-            return
-        names = {"x": tr("On Red Axis"), "y": tr("On Green Axis"),
-                 "z": tr("On Blue Axis")}
-        name = names.get(snap.axis or "", "?")
-        r, g, b = snap.color
-        font = QFont()
-        font.setPointSize(10)
-        font.setItalic(True)
-        painter.setFont(font)
-        painter.setPen(QPen(QColor.fromRgbF(r, g, b, 0.95)))
-        painter.drawText(QPointF(14, 44), f"{name}{suffix}")
+        return ingetrazo_render.draw_inference_label(self, painter)
 
     def _draw_reference_label(self, painter: QPainter) -> None:
-        if self.reference_mode is None or self.reference_edge is None:
-            return
-        r, g, b = (0.85, 0.30, 0.80)
-        font = QFont()
-        font.setPointSize(11)
-        font.setBold(True)
-        painter.setFont(font)
-        painter.setPen(QPen(QColor.fromRgbF(r, g, b, 1.0)))
-        word = "Parallel" if self.reference_mode == "parallel" else "Perpendicular"
-        painter.drawText(QPointF(14, 24), f"{word} to reference edge")
+        return ingetrazo_render.draw_reference_label(self, painter)
 
     # ---- Pixel ↔ world ------------------------------------------------------
 
