@@ -9,20 +9,10 @@ writing ``scene.shadows``.
 """
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
+from tests.preferences_chrome import Controls
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from core.scene import Scene  # noqa: E402
 from core.sun import ShadowSettings  # noqa: E402
@@ -73,83 +63,44 @@ def test_light_vp_contains_the_model():
                     assert -1.0 < p.z() < 1.0
 
 
-class _Win:
-    def __init__(self):
-        class _VP:
-            def __init__(self):
-                self.scene = Scene()
-
-            def update(self):
-                pass
-
-        self.viewport = _VP()
+@pytest.fixture
+def sun(native_host):
+    return Controls(native_host.window, "appearance")
 
 
-def test_panel_writes_scene_shadows():
-    from views.tray import ShadowsPanel
-    win = _Win()
-    panel = ShadowsPanel(win)
-    sh = win.viewport.scene.shadows
-    assert sh.enabled is False           # defaults mirrored
-
-    panel._enable.setChecked(True)
-    panel._time.setValue(15 * 60 + 30)
-    panel._dark.setValue(60)
-    assert sh.enabled is True
-    assert (sh.hour, sh.minute) == (15, 30)
+def test_panel_writes_scene_shadows(sun):
+    sh = sun.env.scene.shadows
+    assert not sun.value("sun_enabled")
+    sun.set("sun_enabled", True)
+    sun.set("sun_time", 15 * 60 + 30)
+    sun.set("sun_dark", 60)
+    assert sh.enabled and (sh.hour, sh.minute) == (15, 30)
     assert sh.darkness == pytest.approx(0.4)
-    assert panel._time_lbl.text() == "15:30"
-
-    # refresh() mirrors external changes (a load, the Camera menu).
-    sh.enabled = False
-    sh.hour = 9
-    panel.refresh()
-    assert not panel._enable.isChecked()
-    assert panel._time.value() == 9 * 60 + 30
+    assert sun.row("sun_time").fmt(sun.value("sun_time")) == "15:30"
+    sh.enabled, sh.hour = False, 9
+    assert not sun.value("sun_enabled") and sun.value("sun_time") == 570
 
 
-def test_panel_month_bar_and_time_zone():
-    """The classic shadow bar: the day-of-year slider and the date field
-    are two views of one date, and the time-zone combo overrides the
-    by-longitude default (None = automatic)."""
-    from views.tray import ShadowsPanel
-    win = _Win()
-    panel = ShadowsPanel(win)
-    sh = win.viewport.scene.shadows
-    assert panel._tz.currentData() is None          # automatic by default
-
-    panel._doy.setValue(172)                        # Jun 21 (solstice)
-    assert (sh.month, sh.day) == (6, 21)
-    assert panel._date.date().month() == 6
-
-    from PySide6.QtCore import QDate
-    panel._date.setDate(QDate(2026, 12, 21))        # the other solstice
-    assert (sh.month, sh.day) == (12, 21)
-    assert panel._doy.value() == 355
-
-    panel._tz.setCurrentIndex(panel._tz.findData(-4))
+def test_panel_month_bar_and_time_zone(sun):
+    sh = sun.env.scene.shadows
+    assert sun.value("sun_zone") == "auto"
+    sun.set("sun_day", 172)
+    assert (sh.month, sh.day) == (6, 21) and sun.value("sun_date") == "06-21"
+    sun.set("sun_date", "12-21")
+    assert (sh.month, sh.day) == (12, 21) and sun.value("sun_day") == 355
+    sun.set("sun_zone", "-4")
     assert sh.utc_offset == -4
-    panel._tz.setCurrentIndex(0)                    # back to automatic
+    sun.set("sun_zone", "auto")
     assert sh.utc_offset is None
 
 
-def test_time_slider_is_bounded_to_daylight():
-    """Marco set UTC−10 with 22:39 and the shadows silently vanished — it
-    was night. The classic bar never lets that happen: the slider runs sunrise to
-    sunset, so a zone change drags the hour back into the sun."""
-    from views.tray import ShadowsPanel
-    win = _Win()
-    panel = ShadowsPanel(win)
-    sh = win.viewport.scene.shadows
-    # Natural zone (auto, UTC−5): noon sits inside the window.
-    assert panel._time.minimum() > 0                # sunrise, not 00:00
-    assert panel._time.maximum() < 24 * 60 - 1      # sunset, not 23:59
-    assert panel._time.minimum() <= 12 * 60 <= panel._time.maximum()
-    assert panel._sunrise_lbl.text() != "" and panel._sunset_lbl.text() != ""
-
-    # Force UTC−10: daylight shifts ~5 h earlier and 12:00 falls OUTSIDE —
-    # the slider clamps and the stored hour follows it back into the sun.
-    panel._tz.setCurrentIndex(panel._tz.findData(-10))
-    assert panel._time.maximum() < 14 * 60          # afternoon is night now
-    assert sh.hour * 60 + sh.minute == panel._time.value()
-    assert panel._time.minimum() <= panel._time.value() <= panel._time.maximum()
+def test_time_slider_is_bounded_to_daylight(sun):
+    time = sun.row("sun_time")
+    assert 0 < time.lo < 720 < time.hi < 1439
+    assert time.fmt(time.lo) in time.tip and time.fmt(time.hi) in time.tip
+    sun.set("sun_time", time.hi)
+    sun.set("sun_zone", "-10")
+    time = sun.row("sun_time")
+    sh = sun.env.scene.shadows
+    assert time.hi < 14 * 60
+    assert time.lo <= sh.hour * 60 + sh.minute == sun.value("sun_time") <= time.hi

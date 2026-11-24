@@ -18,6 +18,13 @@ from ingetrazo_core import Vec3 as QVector3D
 # Typed native steps (docs/commands-port.md): placement renames, locks and
 # whole-placement paint are Rust deltas, created through the protocol verbs.
 from ingetrazo_core import NativeCommand
+# Steps with host state (rust/ingetrazo_core/src/doc/host_steps.rs).
+from ingetrazo_core import AddGeoPointsCommand, SetNorthCommand, StraightenModelCommand
+# Group transform steps (rust/ingetrazo_core/src/doc/transform_steps.rs).
+from ingetrazo_core import (ChangeAxesCommand, FlipGroupsCommand, MoveGroupCommand, RotateGroupCommand,
+                            ScaleGroupCommand)
+# Tag-list steps (rust/ingetrazo_core/src/doc/layer_steps.rs).
+from ingetrazo_core import DeleteLayerCommand, EnsureLayersCommand, PurgeUnusedCommand
 # Hide and Tag steps (rust/ingetrazo_core/src/doc/tag_steps.rs).
 from ingetrazo_core import AssignLayerCommand, HideCommand, HideEdgesCommand
 # Face paint steps (rust/ingetrazo_core/src/doc/paint_steps.rs).
@@ -151,7 +158,9 @@ class MeshCommand(Command):
 
 
 # Native mesh steps: History enlists their stores (``geometry_meshes``).
-for _mesh_step in (MakeGroupCommand, HideCommand, HideEdgesCommand, AssignLayerCommand):
+for _mesh_step in (MakeGroupCommand, HideCommand, HideEdgesCommand, AssignLayerCommand,
+                   MoveGroupCommand, RotateGroupCommand, ScaleGroupCommand, FlipGroupsCommand,
+                   ChangeAxesCommand):
     MeshCommand.register(_mesh_step)
 
 
@@ -727,12 +736,6 @@ def _dirty_placements(groups) -> None:
 _RENDER_FIELDS = ["layer", "hidden", "material"]
 
 
-def _all_placements(items) -> bool:
-    """Every item a placement whose fields live in the document: its
-    renderer dirtiness then comes from the step's transaction."""
-    return all(isinstance(e, Group) for e in items)
-
-
 def _unselect(scene, items) -> None:
     """``scene.selection.discard(e)`` for every item: from the selection's
     side when it is the smaller (Lock or Hide of 20,000 placements with a
@@ -812,121 +815,6 @@ class FlipFacesCommand(FaceAttributeCommand):
 
     def undo(self, scene) -> None:
         self._flip(scene)
-
-
-class EnsureLayersCommand(Command):
-    """Give a document the tags (and tag folders) that pasted geometry
-    carries and it lacks — a step of the paste, undone with it. Tags the
-    document already has are left exactly as they are
-    (``core.layers.add_missing``)."""
-
-    #: Tags, tag folders and their tables are in the document (slice 2).
-    doc_undo = True
-
-    def __init__(self, template) -> None:
-        self._template = template
-        self._added: tuple[list, list] = ([], [])
-
-    def doc_after(self, scene, phase) -> None:
-        if any(self._added):
-            scene.version += 1
-
-    def do(self, scene) -> None:
-        from ingetrazo_core import add_template_layers
-        self._added = add_template_layers(scene, self._template)
-        if any(self._added):
-            scene.version += 1
-
-    def undo(self, scene) -> None:
-        from core.layers import remove_added
-        if any(self._added):
-            remove_added(scene, *self._added)
-            scene.version += 1
-
-
-def _carrier_meshes(entities, field):
-    # A Python-only carrier contributes None, making the plan use its inverse.
-    return {getattr(e, "_m", None) for e in entities if not isinstance(e, Group)
-            and field not in getattr(e, "_record_fields", ())}
-
-
-class DeleteLayerCommand(Command):
-    """Delete a layer: what it carried goes to the default layer, and the
-    scenes forget it. Undo puts the layer back at its place in the list,
-    with its visibility and lock, and every entity back on it.
-
-    The only Layers-panel action on the undo stack: creating and renaming
-    are easy to redo by hand and would only get between Ctrl+Z and the
-    drawing, while a deleted layer takes its assignments with it.
-
-    ``into`` merges instead: what the layer carried goes onto that layer
-    (Layers ▸ Merge into…), and the active layer, if it was this one,
-    becomes that one."""
-
-    def __init__(self, name: str, into: str | None = None) -> None:
-        self.name = name
-        self.into = into
-        self._layer = None
-        self._index = 0
-        self._carriers: list = []
-        self._views: list = []
-
-    def doc_undo(self, scene) -> bool:
-        # The tag list, the active tag and placements' tags are in the
-        # document; faces carry theirs in their meshes, saved views in
-        # Python objects.
-        return not _carrier_meshes(self._carriers, "layer")
-
-    def doc_after(self, scene, phase) -> None:
-        scene.version += 1
-
-    def do(self, scene) -> None:
-        from core.layers import DEFAULT_LAYER, assign_layer, layer_of
-        from core.purge import layer_carriers
-        ly = scene.layer(self.name)
-        if ly is None or ly.key == DEFAULT_LAYER:
-            raise CommandRejected("layer cannot be deleted")
-        # Entities carry the tag's KEY; ``name`` may be its label.
-        self.name = ly.key
-        into = scene.layer(self.into or DEFAULT_LAYER)
-        if into is None or into is ly:
-            raise CommandRejected("no layer to merge into")
-        target = into.key
-        self._layer = ly
-        self._index = scene.layers.index(ly)
-        self._carriers = [e for e in layer_carriers(scene)
-                          if layer_of(e) == self.name]
-        self._views = []
-        for view in getattr(scene, "saved_views", None) or ():
-            hidden = getattr(view, "hidden_layers", None)
-            if hidden and self.name in hidden:
-                self._views.append((view, list(hidden)))
-                view.hidden_layers = [n for n in hidden if n != self.name]
-        for e in self._carriers:
-            assign_layer(e, target)
-        self._was_active = getattr(scene, "active_layer", None) == self.name
-        if self._was_active:
-            scene.active_layer = None if target == DEFAULT_LAYER else target
-        scene.layers.remove(ly)
-        if not _all_placements(self._carriers):
-            _dirty_group_chunks(scene)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        from core.layers import assign_layer
-        # A layer made and named the same after the delete (renaming is not
-        # on the stack) takes the entities back instead of a twin.
-        if self._layer not in scene.layers and scene.layer_by_key(self.name) is None:
-            scene.layers.insert(min(self._index, len(scene.layers)),
-                                self._layer)
-        for e in self._carriers:
-            assign_layer(e, self.name)
-        for view, hidden in self._views:
-            view.hidden_layers = list(hidden)
-        if getattr(self, "_was_active", False):
-            scene.active_layer = self.name
-        _dirty_group_chunks(scene)
-        scene.version += 1
 
 
 def _is_hidden(entity) -> bool:
@@ -1055,66 +943,6 @@ class EditTexturedMaterialCommand(RestampMaterialCommand):
         super().do(scene)
 
 
-class PurgeUnusedCommand(Command):
-    """"Purge Unused", for layers and/or materials.
-
-    Layers are labels, not owners (core.layers), so emptying one cannot
-    delete it — an explicit sweep is the only honest way to clear what an
-    import left behind. What goes is decided ONCE, on the first ``do``:
-    redo must remove exactly what the original run removed, not re-survey a
-    model the user has since drawn on.
-
-    Layers come back at their original indices so the panel order survives
-    a round trip, and materials return to the registry with their recipe
-    intact — the faces never changed, since a purged material is by
-    definition one no face wears.
-    """
-
-    #: Tags and the materials registry are in the document (slice 2).
-    doc_undo = True
-
-    def __init__(self, layers: bool = True, materials: bool = True) -> None:
-        self._do_layers = bool(layers)
-        self._do_materials = bool(materials)
-        #: (index, Layer) and (name, Material), captured on the first do.
-        self._layers: Optional[list] = None
-        self._materials: Optional[list] = None
-
-    def _survey(self, scene) -> None:
-        from core.purge import unused_layers, unused_materials
-        current = list(getattr(scene, "layers", None) or ())
-        self._layers = ([(current.index(ly), ly)
-                         for ly in unused_layers(scene)]
-                        if self._do_layers else [])
-        self._materials = ([(n, scene.materials[n])
-                            for n in unused_materials(scene)]
-                           if self._do_materials else [])
-
-    def counts(self, scene) -> tuple[int, int]:
-        """What a run would remove — for the confirmation the panel shows."""
-        if self._layers is None:
-            self._survey(scene)
-        return len(self._layers or []), len(self._materials or [])
-
-    def do(self, scene) -> None:
-        if self._layers is None:
-            self._survey(scene)
-        for _index, ly in self._layers or []:
-            if ly in scene.layers:
-                scene.layers.remove(ly)
-        for name, _material in self._materials or []:
-            scene.materials.pop(name, None)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        for index, ly in sorted(self._layers or [], key=lambda p: p[0]):
-            if ly not in scene.layers:
-                scene.layers.insert(min(index, len(scene.layers)), ly)
-        for name, material in self._materials or []:
-            scene.materials[name] = material
-        scene.version += 1
-
-
 class ExplodeCurvesCommand(MeshCommand):
     """Explode Curve: the curves the given edges belong to become plain
     segments, each one picked on its own. A circle or an arc selects whole
@@ -1186,34 +1014,6 @@ class AutoTagDrawnFacesCommand(MeshCommand):
 
     def undo(self, scene) -> None:
         pass
-
-
-class AddGeoPointsCommand(Command):
-    """Import a batch of survey points into ``scene.geo_points`` (Track G).
-    When the import also anchored the scene datum (first georef action on the
-    document), the datum travels with the command so undo restores the
-    previous one."""
-
-    def doc_undo(self, scene):
-        return self._datum is None
-
-    def __init__(self, points, datum=None) -> None:
-        self._points = list(points)
-        self._datum = datum
-        self._prev_datum = None
-
-    def do(self, scene) -> None:
-        if self._datum is not None:
-            self._prev_datum = scene.georef
-            scene.georef = self._datum
-        _definitions.append_members(scene.geo_points, self._points)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        _definitions.remove_members(scene.geo_points, self._points)
-        if self._datum is not None:
-            scene.georef = self._prev_datum
-        scene.version += 1
 
 
 def translate_points(scene, keys: set, delta: QVector3D) -> None:
@@ -1480,50 +1280,6 @@ def _edit_local_transform(scene, group, transform):
     return transform
 
 
-class FlipGroupsCommand(MeshCommand):
-    """Flip whole groups about an axis plane (the Flip tool). Instances
-    compose the reflection into their transform (O(1)); classic groups map
-    their vertices and re-reverse every face loop so the mirrored solid
-    keeps its faces pointing OUT. A reflection is an involution: undo flips
-    again."""
-
-    keeps_paint = True
-
-    def __init__(self, groups, centre: QVector3D, axis: QVector3D) -> None:
-        self._groups = list(groups)
-        self.centre = QVector3D(centre)
-        self.axis = QVector3D(axis)
-
-    def doc_undo(self, scene) -> bool:
-        # Instances flip by their matrices (document fields); classic groups
-        # map their vertices.
-        return all(getattr(g, "xform", None) is not None for g in self._groups)
-
-    def doc_after(self, scene, phase) -> None:
-        _dirty_placements(self._groups)
-        scene.version += 1
-
-    def meshes(self):
-        return [g.mesh for g in self._groups if getattr(g, "xform", None) is None]
-
-    def geometry_meshes(self, scene):
-        return self.meshes()
-
-    def _flip(self, scene) -> None:
-        _transform.flip_groups(scene, self._groups, mirror_matrix(self.centre, self.axis))
-        if self.doc_undo(scene):
-            _dirty_placements(self._groups)
-        else:
-            _dirty_group_chunks(scene)
-        scene.version += 1
-
-    def do(self, scene) -> None:
-        self._flip(scene)
-
-    def undo(self, scene) -> None:
-        self._flip(scene)
-
-
 class VertexTransformCommand(_VertexEditCommand):
     """Apply a matrix to loose vertices, then fold the faces they warped."""
     carry_textures = False
@@ -1574,43 +1330,6 @@ class RotateVerticesCommand(VertexTransformCommand):
 
     def matrix(self):
         return rotation_matrix(self.center, self.axis, self.degrees)
-
-
-class GroupTransformCommand(MeshCommand):
-    """A classic group edits its mesh, an occurrence edits its placement."""
-    def geometry_meshes(self, scene):
-        return () if self.group.xform is not None else (self.group.mesh,)
-
-
-class RotateGroupCommand(GroupTransformCommand):
-    """Rotate a whole group's isolated mesh (rigid — nothing folds). Snapshot
-    undo/redo on the group's own mesh."""
-
-    keeps_paint = True
-
-    def doc_undo(self, scene) -> bool:
-        # An instance turns by its matrix, and undo puts back that exact
-        # matrix (not the inverse turn composed in float32).
-        return getattr(self.group, "xform", None) is not None
-
-    def __init__(self, group, center: QVector3D, axis: QVector3D,
-                 degrees: float) -> None:
-        self.group = group
-        self.center = QVector3D(center)
-        self.axis = QVector3D(axis)
-        self.degrees = degrees
-        self._transform = _transform.GroupTransform()
-
-    def _matrix(self, reverse):
-        return rotation_matrix(self.center, self.axis, -self.degrees if reverse else self.degrees)
-
-    def do(self, scene) -> None:
-        if self._transform.apply(scene, self.group, self._matrix, False, self._journal_geometry):
-            scene.version += 1
-
-    def undo(self, scene) -> None:
-        if self._transform.apply(scene, self.group, self._matrix, True, self._journal_geometry):
-            scene.version += 1
 
 
 def scale_matrix(center: QVector3D, factor, axes=None):
@@ -1670,36 +1389,6 @@ class ScaleVerticesCommand(VertexTransformCommand):
 
     def matrix(self):
         return scale_matrix(self.center, self.factor, self.axes)
-
-
-class ScaleGroupCommand(GroupTransformCommand):
-    """Uniformly scale a whole group's isolated mesh about ``center``.
-    Snapshot undo/redo on the group's own mesh."""
-
-    keeps_paint = True
-
-    def doc_undo(self, scene) -> bool:
-        return getattr(self.group, "xform", None) is not None
-
-    def __init__(self, group, center: QVector3D, factor: float,
-                 axes=None) -> None:
-        self.group = group
-        self.center = QVector3D(center)
-        self.factor = factor
-        self.axes = axes
-        self._transform = _transform.GroupTransform()
-
-    def _matrix(self, reverse):
-        factor = invert_scale_factor(self.factor) if reverse else self.factor
-        return scale_matrix(self.center, factor, self.axes)
-
-    def do(self, scene) -> None:
-        if self._transform.apply(scene, self.group, self._matrix, False, self._journal_geometry):
-            scene.version += 1
-
-    def undo(self, scene) -> None:
-        if self._transform.apply(scene, self.group, self._matrix, True, self._journal_geometry):
-            scene.version += 1
 
 
 class PruneOrphanEdgesCommand(MeshCommand):
@@ -2152,12 +1841,13 @@ class SnapshotCompound(MeshCommand):
         self.before: Optional[dict] = None
         self.after: Optional[dict] = None
 
-    def do(self, scene) -> None:
+    def do(self, scene, *, transaction_captured_before=False) -> None:
         if self.after is None:
             # First run: snapshot before, apply the plan, clean up any coplanar
             # overlap it created (redundant nested holes / spurious mother), then
             # snapshot the result so undo/redo restore exactly.
-            self.before = self._direct_snapshot(scene.mesh)
+            if not transaction_captured_before:
+                self.before = self._direct_snapshot(scene.mesh)
             # Which way every face looked before the draw: the heal may
             # align the faces the draw MADE, never the ones already there
             # (a Reverse Faces undone by the next rectangle).
@@ -2795,36 +2485,6 @@ def _merge_overlapping_planes(scene, before, added, *, on_rebuild=None,
     return len(planes)
 
 
-class MoveGroupCommand(GroupTransformCommand):
-    """Translate a whole group by ``delta`` (every vertex of its mesh). Because
-    the group is isolated, this never drags the rest of the model."""
-
-    keeps_paint = True
-
-    def __init__(self, group: Group, delta: QVector3D) -> None:
-        self.group = group
-        self.delta = QVector3D(delta)
-
-    def doc_undo(self, scene) -> bool:
-        # An instance moves by its matrix (in the document), and undo puts
-        # back that exact matrix rather than composing -delta in float32.
-        # A classic group moves its vertices: its own undo.
-        return getattr(self.group, "xform", None) is not None
-
-    def _shift(self, scene, delta) -> None:
-        _transform.shift_group(scene, self.group, delta)
-        scene.version += 1
-
-    def do(self, scene) -> None:
-        self._old_axes = self.group.axes
-        self._shift(scene, self.delta)
-
-    def undo(self, scene) -> None:
-        self._shift(scene, -self.delta)
-        if self.group.xform is None:
-            self.group.axes = self._old_axes
-
-
 def placement_is_identity(xform, tol: float = 1e-6) -> bool:
     """True when a placement neither turns nor moves anything (within
     ``tol``) — straightening it would be a silent no-op."""
@@ -2849,77 +2509,6 @@ def placement_rotation_deg(xform) -> float:
     if abs(sx - 1.0) > 1e-4 or abs(sy - 1.0) > 1e-4:
         raise ValueError("the model is scaled")
     return math.degrees(math.atan2(c0.y(), c0.x()))
-
-
-class StraightenModelCommand(Command):
-    """Put a model that was turned and dragged onto its site back on its
-    own axes, and turn the MAP under it instead (a north angle).
-
-    ``group`` is the placed model: a top-level instance whose ``xform`` is a
-    turn about Z plus a translation. The command applies the inverse of that
-    placement to EVERYTHING in the scene — every group, loose geometry,
-    annotations, guides, section planes, geo data, saved views, sheet
-    frames and anchored cotas — so the group's placement becomes identity
-    and nothing moves relative to anything else; then it re-anchors the
-    datum so the base map, terrain and imports stay where they were under
-    the model: the anchor becomes the group's origin and the north angle
-    grows by the group's turn. Front/right/top views, axis locks and the
-    rectangle tool are square to the model again.
-
-    The vertical part of the placement is dropped: the model returns to
-    the heights it was drawn at and the map keeps z = 0 (the reference
-    plane) — the only place a flat map can be.
-    """
-
-    def __init__(self, group: Group) -> None:
-        self.group = group
-        self.degrees: float = 0.0
-        self._placement = None          # the group's xform before do()
-        self._old_datum = None
-        self._new_datum = None
-        self._snaps: dict = {}          # id(mesh) → (before, after)
-        self._terrain = None
-
-    def do(self, scene) -> None:
-        if self.group not in scene.groups or self.group.xform is None:
-            raise ValueError("pick a placed component at the top level")
-        datum = getattr(scene, "georef", None)
-        if datum is None:
-            raise ValueError("the scene has no location yet")
-        if self._placement is None:
-            from ingetrazo_core import Matrix4 as QMatrix4x4
-            from georef.datum import SceneDatum
-            self.degrees = placement_rotation_deg(self.group.xform)
-            self._placement = QMatrix4x4(self.group.xform)
-            self._old_datum = datum
-            t = self._placement.column(3)
-            lat, lon, _ = datum.local_to_geodetic(QVector3D(t.x(), t.y(), 0.0))
-            self._new_datum = SceneDatum(lat, lon, alt=datum.alt,
-                                         north=datum.north + self.degrees)
-        w, ok = self._placement.inverted()
-        if not ok:
-            raise ValueError("the placement is not invertible")
-        self._apply(scene, w, -self.degrees, redo=True)
-        from ingetrazo_core import Matrix4 as QMatrix4x4
-        self.group.xform = QMatrix4x4()     # exactly on its axes, no float dust
-        scene.georef = self._new_datum
-        self._terrain = getattr(scene, "terrain", None)
-        scene.terrain = None            # display-only; rebuilt from the datum
-
-    def undo(self, scene) -> None:
-        self._apply(scene, self._placement, self.degrees, redo=False)
-        from ingetrazo_core import Matrix4 as QMatrix4x4
-        self.group.xform = QMatrix4x4(self._placement)
-        scene.georef = self._old_datum
-        scene.terrain = self._terrain
-
-    # ---- The rigid transform -----------------------------------------------
-    def _apply(self, scene, m, turn_deg: float, redo: bool) -> None:
-        """Move everything by the rigid ``m`` (``turn_deg`` is its turn about
-        Z, for the cameras)."""
-        _transform.reframe_world(scene, m, turn_deg, redo, self._snaps)
-        scene.version += 1
-
 
 
 def group_owner_list(scene, group):
@@ -3220,41 +2809,6 @@ class OccurrenceCommands(CompoundCommand):
         self._replay(scene, True)
 
 
-class ChangeAxesCommand(MeshCommand):
-    """Change Axes (issue #44): give ``group`` a new frame —
-    origin, red, green, blue as the world matrix ``frame`` — while nothing
-    moves in the world.
-
-    A classic group only swaps its ``axes`` (its mesh is in world
-    coordinates already). A component instance re-expresses its SHARED
-    definition in the new axes: the definition takes ``D = frame⁻¹ · xform``,
-    this instance's placement becomes ``frame``, and every other instance of
-    the definition takes ``D⁻¹`` on the right — so all of them now carry the
-    new axes and none of them moves («changing one updates the
-    others»). Undo runs the inverse."""
-
-    def doc_undo(self, scene) -> bool:
-        # A classic group swaps its axes (a document field); an instance
-        # re-expresses its definition's mesh: its own undo.
-        return self._axes_edit.fields_only()
-
-    def __init__(self, group, frame) -> None:
-        from ingetrazo_core import Matrix4 as QMatrix4x4
-        self.group = group
-        self.frame = QMatrix4x4(frame)
-        self._axes_edit = _transform.AxesEdit()
-
-    def geometry_meshes(self, scene):
-        return (self.group.mesh,) if self.group.xform is not None else ()
-
-    def do(self, scene) -> None:
-        if self._axes_edit.apply(scene, self.group, self.frame):
-            scene.version += 1
-
-    def undo(self, scene) -> None:
-        if self._axes_edit.undo(self.group):
-            scene.version += 1
-
 class SetRecordCommand(Command):
     """Top-level patch of group records; None patch removes the record.
 
@@ -3416,49 +2970,3 @@ class SetFaceTagsCommand(Command):
 
     def undo(self, scene):
         self._write(scene, self._before)
-
-
-class SetNorthCommand(Command):
-    """Tools ▸ North: where true north lies, in degrees clockwise from the
-    green (Y) axis — one undo step.
-
-    With a location the datum gets the new north angle (a NEW datum object:
-    the map geometry is cached by datum identity, and the terrain is
-    rebuilt from it — dropped here like :class:`StraightenModelCommand`
-    does, the window builds it again). Without one, ``scene.north_deg``
-    holds it and only the sun turns. The model never moves."""
-
-    def __init__(self, degrees: float) -> None:
-        from core.sun import wrap_north_deg
-        self.degrees = wrap_north_deg(degrees)
-        self._old_datum = None
-        self._new_datum = None
-        self._old_deg = 0.0
-        self._terrain = None
-
-    def do(self, scene) -> None:
-        datum = getattr(scene, "georef", None)
-        if datum is None:
-            self._old_deg = float(getattr(scene, "north_deg", 0.0) or 0.0)
-            scene.north_deg = self.degrees
-        else:
-            from georef.datum import SceneDatum
-            self._old_datum = datum
-            if self._new_datum is None:
-                self._new_datum = SceneDatum(datum.lat, datum.lon,
-                                             alt=datum.alt,
-                                             north=self.degrees)
-            scene.georef = self._new_datum
-            self._terrain = getattr(scene, "terrain", None)
-            if self._terrain is not None:
-                scene.terrain = None     # display-only; rebuilt from the datum
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        if self._old_datum is None:
-            scene.north_deg = self._old_deg
-        else:
-            scene.georef = self._old_datum
-            if self._terrain is not None:
-                scene.terrain = self._terrain
-        scene.version += 1

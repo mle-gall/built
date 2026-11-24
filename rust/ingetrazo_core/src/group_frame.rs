@@ -211,7 +211,51 @@ pub fn group_oriented_extent(points: PyReadonlyArray2<'_, f64>, axes: PyReadonly
     Ok(((lo[0], lo[1], lo[2]), (hi[0], hi[1], hi[2])))
 }
 
+/// `points @ m[:3, :3] + m[3, :3]` for a `(4, 4)` row-major matrix `m`
+/// (`core.group.placement_points`): the fused chain NumPy's BLAS takes for
+/// most sizes, then the translation.
+#[pyfunction]
+pub fn group_placed_points<'py>(py: Python<'py>, points: PyReadonlyArray2<'py, f64>, m: PyReadonlyArray2<'py, f64>)
+    -> PyResult<Bound<'py, PyAny>> {
+    let p = points.as_array();
+    let m = m.as_array();
+    let n = p.shape()[0];
+    let mut out = Vec::with_capacity(n * 3);
+    for i in 0..n {
+        for k in 0..3 {
+            let v = p[[i, 2]].mul_add(m[[2, k]], p[[i, 1]].mul_add(m[[1, k]], p[[i, 0]] * m[[0, k]]));
+            out.push(v + m[[3, k]]);
+        }
+    }
+    Ok(PyArray1::from_vec(py, out).reshape([n, 3])?.into_any())
+}
+
+/// The box of `points` placed by the column-major matrix `d` (16 values;
+/// None: as they are), as `Scene.bounds` reads it: `((lo), (hi))`.
+#[pyfunction]
+#[pyo3(signature = (points, d=None))]
+pub fn group_placed_box(points: PyReadonlyArray2<'_, f64>, d: Option<Vec<f64>>)
+    -> PyResult<((f64, f64, f64), (f64, f64, f64))> {
+    let p = points.as_array();
+    let mut lo = [f64::INFINITY; 3];
+    let mut hi = [f64::NEG_INFINITY; 3];
+    for i in 0..p.shape()[0] {
+        let (x, y, z) = (p[[i, 0]], p[[i, 1]], p[[i, 2]]);
+        for k in 0..3 {
+            let v = match &d {
+                Some(d) => z.mul_add(d[8 + k], y.mul_add(d[4 + k], x * d[k])) + d[12 + k],
+                None => [x, y, z][k],
+            };
+            lo[k] = lo[k].min(v);
+            hi[k] = hi[k].max(v);
+        }
+    }
+    Ok(((lo[0], lo[1], lo[2]), (hi[0], hi[1], hi[2])))
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(group_placed_points, m)?)?;
+    m.add_function(wrap_pyfunction!(group_placed_box, m)?)?;
     m.add_function(wrap_pyfunction!(group_hull_2d, m)?)?;
     m.add_function(wrap_pyfunction!(group_frame_axis, m)?)?;
     m.add_function(wrap_pyfunction!(group_oriented_extent, m)?)?;

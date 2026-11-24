@@ -447,10 +447,7 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
             let vp = viewport(win)?;
             vp.setattr("_last_coordinate", "")?;
             vp.setattr("_last_coordinate_full", "")?;
-            win.getattr("_status_pending")?.call_method1("pop", ("coordinate", py.None()))?;
-            let label = win.getattr("_coord_label")?;
-            label.call_method1("setText", ("",))?;
-            done!(label.call_method1("setToolTip", ("",)))
+            nothing()
         }
         "_configure_recovery" => done!(call!("configure_recovery", (win, a.req(0, "timer")?))),
         "_on_autosave_tick" => done!(call!("request_recovery", (win,))),

@@ -269,7 +269,7 @@ def test_native_location_coordinates_map_apply_and_cancel(tmp_path):
         "from georef.tile_fetcher import TileFetcher\nfrom pathlib import Path\n"
         f"TileFetcher.request = lambda self, src, x, y, z: Path({str(requested)!r}).touch()\n")
     steps = tmp_path / "commands"
-    steps.write_text("wait 600\nkey escape\nmenu prefs\nwait 350\nclick 116 485\nwait 150\n"
+    steps.write_text("wait 600\nkey escape\nmenu prefs\nwait 350\nclick 116 510\nwait 150\n"
                      "click 552 328\nwait 200\nclick 550 282\nkey a cmd\ntype 48.85\n"
                      "click 550 311\nkey a cmd\ntype 2.35\nclick 340 351\nwait 450\n"
                      "drag 590 585 625 585 left 7\nwait 250\nstate\nclick 492 747\nwait 250\n"
@@ -359,7 +359,7 @@ def test_native_menu_search_and_persisted_keyboard_binding(tmp_path):
     from PySide6.QtCore import QSettings
     from core.scene import Scene
     from formats.igz import save_scene
-    from views.shortcuts import _store_key
+    from core.shortcuts import _store_key
     model = tmp_path / "empty.built"
     save_scene(Scene(), model)
     profile, home = tmp_path / "profile", tmp_path / "home"

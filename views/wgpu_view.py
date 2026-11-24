@@ -1584,7 +1584,8 @@ class MetalView(ViewNavigation):
         if wgpu_sheets.context_menu(self, event):   # the sheet's own menus
             return
         point = event.pos()
-        from ingetrazo_render import context_menu_available, context_menu_open_at
+        from ingetrazo_render import context_menu_available
+        from plugins._context_menu import context_menu_open_at
         chrome = context_menu_available(self)
         if chrome and self.renderer.ui_over_chrome(float(point.x()), float(point.y())):
             return

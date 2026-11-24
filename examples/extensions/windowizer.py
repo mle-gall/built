@@ -1280,15 +1280,15 @@ def _at_top_level(viewport) -> bool:
     return True
 
 
-def _selected_faces(scene):
+def _selected_faces(scene, selection=None):
     from core.mesh import Face
-    return [e for e in scene.selection
+    return [e for e in (scene.selection if selection is None else selection)
             if isinstance(e, Face) and e in scene.mesh.faces]
 
 
-def _selected_windows(scene):
+def _selected_windows(scene, selection=None):
     out = []
-    for e in scene.selection:
+    for e in (scene.selection if selection is None else selection):
         g = getattr(e, "owner", None) or e
         if g in scene.groups and window_data(g) is not None and g not in out:
             out.append(g)
@@ -1305,10 +1305,12 @@ def windowize(viewport) -> None:
                            "drawn on a wall), then run Windowizer."))
         return
     mats = sorted(set(scene.materials) | {FRAME_MAT, GLASS_MAT})
-    params = WindowizerDialog.ask(viewport, current_params(scene), mats,
-                                  title=_tr("Windowizer — {n} face(s)", n=len(faces)))
-    if params is None:
-        return
+    WindowizerDialog.ask(viewport, current_params(scene), mats,
+                         title=_tr("Windowizer — {n} face(s)", n=len(faces)),
+                         done=lambda params: _create_windows(viewport, faces, params))
+
+
+def _create_windows(viewport, faces, params):
     skipped, made = [], []
 
     def mutate(sc):
@@ -1344,12 +1346,13 @@ def edit(viewport) -> None:
         return
     base = normalize_params(window_data(wins[0])["params"])
     mats = sorted(set(scene.materials) | {FRAME_MAT, GLASS_MAT})
-    params = WindowizerDialog.ask(viewport, base, mats,
-                                  title=_tr("Edit — {names}", names=", ".join(g.name for g in wins)),
-                                  current=current_params(scene))
-    if params is None:
-        return
+    WindowizerDialog.ask(viewport, base, mats,
+                         title=_tr("Edit — {names}", names=", ".join(g.name for g in wins)),
+                         current=current_params(scene),
+                         done=lambda params: _edit_windows(viewport, wins, params))
 
+
+def _edit_windows(viewport, wins, params):
     def mutate(sc):
         ensure_default_materials(sc)
         for g in wins:
@@ -1400,12 +1403,7 @@ def erase(viewport) -> None:
 # ---------------------------------------------------------------------------
 
 def _warn(viewport, text) -> None:
-    from PySide6.QtWidgets import QMessageBox
-    try:
-        viewport.flash_status("Windowizer: " + text.splitlines()[0], 6000)
-    except Exception:  # noqa: BLE001
-        pass
-    QMessageBox.warning(viewport.window(), "Windowizer", text)
+    viewport.flash_status("Windowizer: " + text, 6000)
 
 
 def _fmt(metres) -> str:
@@ -1420,15 +1418,15 @@ def _fmt(metres) -> str:
 
 
 def _parse(text):
-    from views.viewport import _parse_length_field
-    val = _parse_length_field(str(text).replace(" ", "").replace(",", "."))
+    from core.units import parse_length_field
+    val = parse_length_field(str(text).replace(" ", "").replace(",", "."))
     if val is None:
         raise WindowizerError(_tr("Invalid length: {text} (e.g. 5cm, 50mm, 0.05)", text=repr(text)))
     return val
 
 
 class WindowizerDialog:
-    """The settings dialog (the original inputbox, as a Qt form)."""
+    """The settings dialog (the original inputbox, as a native form)."""
 
     LENGTHS = [
         ("frame_w", "Frame width (left/right)"),
@@ -1442,100 +1440,58 @@ class WindowizerDialog:
     ]
 
     @classmethod
-    def ask(cls, viewport, params, materials, title="Windowizer", current=None):
-        from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox,
-                                       QFormLayout, QLineEdit, QMessageBox,
-                                       QVBoxLayout)
-        dlg = QDialog(viewport.window())
-        dlg.setWindowTitle(title)
-        lay = QVBoxLayout(dlg)
-        form = QFormLayout()
-        lay.addLayout(form)
-        rows = QLineEdit(str(params["rows"]))
-        cols = QLineEdit(str(params["cols"]))
-        rows.setToolTip(_tr("Number of rows (from the bottom) or proportions, e.g. 1,3,1"))
-        cols.setToolTip(_tr("Number of columns (from the left) or proportions, e.g. 2,5,2"))
-        form.addRow(_tr("Rows"), rows)
-        form.addRow(_tr("Columns"), cols)
-        edits = {}
-        for key, label in cls.LENGTHS:
-            edits[key] = QLineEdit(_fmt(params[key]))
-            form.addRow(_tr(label), edits[key])
+    def ask(cls, viewport, params, materials, *, done, title="Windowizer", current=None):
+        from ingetrazo_render.chrome_forms import Field, Form, show
 
-        def combo(value):
-            cb = QComboBox()
-            cb.addItems(list(dict.fromkeys(list(materials) + [value])))
-            cb.setCurrentText(value)
-            return cb
+        fields = [Field(key, "edit", _tr(label), str(params[key]))
+                  for key, label in (("rows", "Rows"), ("cols", "Columns"))]
+        fields.extend(Field(key, "edit", _tr(label), _fmt(params[key]))
+                      for key, label in cls.LENGTHS)
+        for key, label in (("frame_mat", "Frame material"), ("glass_mat", "Glass material")):
+            options = list(dict.fromkeys([*materials, params[key]]))
+            fields.append(Field(key, "choice", _tr(label), params[key], options=options))
+        if current is None:
+            fields.extend([
+                Field("opening", "choice", _tr("Wall opening"), params["opening"],
+                      options=[(key, _tr(label)) for key, label in OPENINGS]),
+                Field("wall_max", "edit", _tr("Max. wall thickness"), _fmt(params["wall_max"]),
+                      enabled=lambda form: form.value("opening") == "auto"),
+            ])
+        else:
+            fields.append(Field("reset", "button", _tr("Current settings")))
 
-        fmat, gmat = combo(params["frame_mat"]), combo(params["glass_mat"])
-        form.addRow(_tr("Frame material"), fmat)
-        form.addRow(_tr("Glass material"), gmat)
-        opening = QComboBox()
-        for code, label in OPENINGS:
-            opening.addItem(_tr(label), code)
-        opening.setCurrentIndex([c for c, _ in OPENINGS].index(params["opening"]))
-        wall_max = QLineEdit(_fmt(params["wall_max"]))
-        wall_max.setToolTip(_tr("The wall is cut through only if its back face is at most "
-                               "this far behind (a single-plane wall has no back face)."))
-        if current is None:            # the opening is cut once, when the window is made
-            form.addRow(_tr("Wall opening"), opening)
-            form.addRow(_tr("Max. wall thickness"), wall_max)
-            opening.currentIndexChanged.connect(
-                lambda _i: wall_max.setEnabled(opening.currentData() == "auto"))
-            wall_max.setEnabled(opening.currentData() == "auto")
+        def reset(form, key):
+            for name in ("rows", "cols", "frame_mat", "glass_mat"):
+                form.set(name, str(current[name]))
+            for name, _ in cls.LENGTHS:
+                form.set(name, _fmt(current[name]))
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        if current is not None:
-            use_cur = buttons.addButton(_tr("Current settings"), QDialogButtonBox.ResetRole)
-
-            def load_current():
-                rows.setText(str(current["rows"]))
-                cols.setText(str(current["cols"]))
-                for k, ed in edits.items():
-                    ed.setText(_fmt(current[k]))
-                fmat.setCurrentText(current["frame_mat"])
-                gmat.setCurrentText(current["glass_mat"])
-            use_cur.clicked.connect(load_current)
-        lay.addWidget(buttons)
         result = {}
+        scene = viewport.scene
+        revision = scene.version
 
-        def accept():
+        def validate(form, answer):
             try:
-                out = {"rows": rows.text(), "cols": cols.text(),
-                       "frame_mat": fmat.currentText(), "glass_mat": gmat.currentText()}
-                for k, ed in edits.items():
-                    out[k] = _parse(ed.text())
+                values = dict(params, **form.values())
+                for key, _ in cls.LENGTHS:
+                    values[key] = _parse(values[key])
                 if current is None:
-                    out["opening"] = opening.currentData()
-                    out["wall_max"] = _parse(wall_max.text())
-                else:                   # editing: the opening stays as it was cut
-                    out["opening"] = params["opening"]
-                    out["wall_max"] = params["wall_max"]
-                result.update(normalize_params(out))
+                    values["wall_max"] = _parse(values["wall_max"])
+                result.update(normalize_params(values))
             except WindowizerError as exc:
-                QMessageBox.warning(dlg, "Windowizer", str(exc))
-                return
-            dlg.accept()
+                return str(exc)
 
-        buttons.accepted.connect(accept)
-        buttons.rejected.connect(dlg.reject)
-        if dlg.exec() != QDialog.Accepted:
-            return None
-        return result
+        def finish(answer, values):
+            if answer == "ok" and viewport.scene is scene and scene.version == revision:
+                done(result)
+
+        show(viewport.window(), Form(title, fields, on_button=reset,
+                                     validate=validate, on_done=finish))
 
 
-# ---- Menus ---------------------------------------------------------------------
-
-def _fill_menu(sub, viewport_of, faces=True, wins=True, later=False) -> None:
-    from PySide6.QtCore import QTimer
-
+def _fill_menu(sub, viewport_of, faces=True, wins=True) -> None:
     def run(fn):
-        if not later:
-            return lambda: fn(viewport_of())
-        # From the right-click menu: after the popup has closed — a modal
-        # dialog opened inside the menu's own event loop asks for trouble.
-        return lambda: QTimer.singleShot(0, lambda: fn(viewport_of()))
+        return lambda: fn(viewport_of())
 
     if faces:
         sub.addAction(_tr("Windowize selected faces"), run(windowize))
@@ -1556,12 +1512,12 @@ def setup(app) -> None:
 
     def context(menu, selection) -> None:
         scene = app.viewport.scene
-        faces, wins = _selected_faces(scene), _selected_windows(scene)
+        faces, wins = _selected_faces(scene, selection), _selected_windows(scene, selection)
         if not faces and not wins:
             return
         menu.addSeparator()
         _fill_menu(menu.addMenu("Windowizer"), viewport_of,
-                   faces=bool(faces), wins=bool(wins), later=True)
+                   faces=bool(faces), wins=bool(wins))
 
     app.add_context_menu(context)
 

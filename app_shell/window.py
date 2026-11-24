@@ -293,7 +293,7 @@ def _doc_attr(name):
 
 
 def discover_window_plugins():
-    from core.extensions import discover_plugins
+    from plugins._native import discover_plugins
     return discover_plugins(native_panels={
         "render_blender": "plugins._blender_panel", "python_console": "plugins.python_console",
         "ai_assistant": None, "ai_bridge": None, "model_info": None, "solid_inspector": None,
@@ -362,10 +362,7 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         self._open_cancelled = False
         self._closed = False
         self.file_openers = {}
-        self._status_pending = {}
-        self._coord_label = _Label()
         self._tool_label = _Label()
-        self._vcb_live = ""
         from core.i18n import tr
         for key, tool in self._tools.items():
             shortcut = getattr(tool, "shortcut", "") or ""
@@ -712,7 +709,7 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
 
     def show_viewport_context_menu(self, global_pos=None, locked_image=None, locked_group=None):
         """The right-click menu (viewport_menu.rs)."""
-        from ingetrazo_render import context_menu_show
+        from plugins._context_menu import context_menu_show
         return context_menu_show(self, locked_image, locked_group)
 
     # ---- a Built project (app_shell/project.py) ------------------------
@@ -900,9 +897,10 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         self._on_toggle_eyedropper(False)
 
     def _set_survey_capture(self, datum, lo, hi):
-        from georef.tiles import DEFAULT_SOURCE_ID, PRESETS, TileLayer
+        from georef.tiles import TileLayer
+        from ingetrazo_render import selected_tile_source
         scene = self.viewport.scene
-        layer = scene.tile_layer or TileLayer(PRESETS[DEFAULT_SOURCE_ID])
+        layer = scene.tile_layer or TileLayer(selected_tile_source())
         layer.capture_bounds(datum, lo.x(), lo.y(), hi.x(), hi.y())
         scene.tile_layer = layer
         self.viewport.reset_tiles()

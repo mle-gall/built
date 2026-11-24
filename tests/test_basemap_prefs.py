@@ -1,95 +1,68 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Saved XYZ sources (QGIS-style): add a named source once and it is always
-in the source menu, across sessions, until explicitly removed."""
-from __future__ import annotations
-
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import pytest
-from PySide6.QtCore import QCoreApplication, QSettings
-from PySide6.QtWidgets import QApplication
-
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
-
-from core.scene import Scene  # noqa: E402
-from views.tray import BaseMapPanel  # noqa: E402
+"""Named XYZ sources in Settings → This model → Location."""
+from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
+from tests.preferences_chrome import Controls
+from ingetrazo_render.chrome_forms import current
 
 URL = "https://tiles.example.com/drone/{z}/{x}/{y}.png"
 
 
-class _Win:
-    class viewport:
-        scene = Scene()
+def controls(host):
+    return Controls(host.window, "location")
 
 
-@pytest.fixture(autouse=True)
-def _isolated_settings():
-    prev_org = QCoreApplication.organizationName()
-    prev_app = QCoreApplication.applicationName()
-    QCoreApplication.setOrganizationName("IngeTrazoTest")
-    QCoreApplication.setApplicationName("basemap-prefs-test")
-    QSettings().clear()
-    yield
-    QSettings().clear()
-    QCoreApplication.setOrganizationName(prev_org)
-    QCoreApplication.setApplicationName(prev_app)
+def add(c, name, url):
+    c.row("basemap_add").press(c.env)
+    form = current(c.env.win)
+    form.receive("name", name)
+    form.receive("url", url)
+    form.press("ok")
+    return form
 
 
-def test_named_source_appears_forever_in_the_menu():
-    panel = BaseMapPanel(_Win())
-    assert panel.add_custom_source("Dron Yanque", URL)
-    # selected right away, with its own cache-safe id
-    assert panel._source.currentData() == "custom-dron-yanque"
-    src = panel._current_source()
-    assert src.url_template == URL and src.name == "Dron Yanque"
-
-    fresh = BaseMapPanel(_Win())                 # "next session"
-    assert fresh._source.findText("Dron Yanque") >= 0   # always in the menu
-    assert fresh._source.currentData() == "custom-dron-yanque"  # remembered
-    assert fresh._current_source().url_template == URL
+def test_named_source_appears_forever_in_the_menu(native_question_host):
+    c = controls(native_question_host)
+    assert add(c, "Dron Yanque", URL).closed
+    fresh = controls(native_question_host)
+    assert fresh.value("basemap_source") == "custom-dron-yanque"
+    assert fresh.options("basemap_source")["custom-dron-yanque"] == "Dron Yanque"
+    import json
+    assert json.loads(fresh.env.st.value("basemap/custom_sources")) == [{"name": "Dron Yanque", "url": URL}]
 
 
-def test_several_sources_coexist_and_upsert_by_name():
-    panel = BaseMapPanel(_Win())
-    assert panel.add_custom_source("Dron Yanque", URL)
-    assert panel.add_custom_source("IGN Perú", "https://ign.example/{z}/{x}/{y}")
-    assert panel.add_custom_source("Dron Yanque",          # same name = update
-                                   "https://v2.example/{z}/{x}/{y}")
-    fresh = BaseMapPanel(_Win())
-    assert fresh._source.findText("Dron Yanque") >= 0
-    assert fresh._source.findText("IGN Perú") >= 0
-    assert fresh._custom_entries["custom-dron-yanque"]["url"] == \
-        "https://v2.example/{z}/{x}/{y}"
-    assert len(fresh._custom_entries) == 2               # no duplicates
+def test_several_sources_coexist_and_upsert_by_name(native_question_host):
+    c = controls(native_question_host)
+    add(c, "Dron Yanque", URL)
+    add(c, "IGN Perú", "https://ign.example/{z}/{x}/{y}")
+    newer = "https://v2.example/{z}/{x}/{y}"
+    add(c, "Dron Yanque", newer)
+    import json
+    assert {e["name"]: e["url"] for e in json.loads(c.env.st.value("basemap/custom_sources"))} == {
+        "Dron Yanque": newer, "IGN Perú": "https://ign.example/{z}/{x}/{y}"}
+    assert {k for k in c.options("basemap_source") if k.startswith("custom-")} == {"custom-dron-yanque", "custom-ign-per"}
 
 
-def test_url_without_placeholders_is_rejected():
-    panel = BaseMapPanel(_Win())
-    assert not panel.add_custom_source("Mala", "https://example.com/tile.png")
-    assert panel._custom_entries == {}
+def test_url_without_placeholders_is_rejected(native_question_host):
+    c = controls(native_question_host)
+    form = add(c, "Mala", "https://example.com/tile.png")
+    assert not form.closed and "{z}" in form.error
+    assert not any(k.startswith("custom-") for k in c.options("basemap_source"))
+    form.press("cancel")
 
 
-def test_remove_forgets_the_source():
-    panel = BaseMapPanel(_Win())
-    panel.add_custom_source("Dron Yanque", URL)
-    panel._remove_current_custom()
-    assert panel._source.findText("Dron Yanque") < 0
-    fresh = BaseMapPanel(_Win())
-    assert fresh._source.findText("Dron Yanque") < 0     # gone for good
+def test_remove_forgets_the_source(native_question_host):
+    c = controls(native_question_host)
+    add(c, "Dron Yanque", URL)
+    assert c.enabled("basemap_remove")
+    c.row("basemap_remove").press(c.env)
+    c = controls(native_question_host)
+    assert "custom-dron-yanque" not in c.options("basemap_source")
+    assert c.value("basemap_source") == "esri_imagery" and not c.enabled("basemap_remove")
 
 
-def test_legacy_single_url_pref_migrates_to_a_named_source():
-    QSettings().setValue("basemap/custom_url", URL)      # pre-rename pref
-    panel = BaseMapPanel(_Win())
-    assert panel._source.findText("XYZ personalizado") >= 0
-    sid = panel._source.itemData(panel._source.findText("XYZ personalizado"))
-    assert panel._custom_entries[sid]["url"] == URL
-    assert QSettings().value("basemap/custom_url", "", type=str) == ""
+def test_legacy_single_url_pref_migrates_to_a_named_source(native_question_host):
+    c = controls(native_question_host)
+    c.env.st.setValue("basemap/custom_url", URL)
+    assert "XYZ personalizado" in c.options("basemap_source").values()
+    assert c.env.st.value("basemap/custom_url", "") == ""
+    assert URL in c.env.st.value("basemap/custom_sources")

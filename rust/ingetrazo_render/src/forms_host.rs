@@ -624,12 +624,21 @@ impl Form {
             };
             rows.append(row)?;
         }
+        // Enter answers; in a form with a multiline field, the platform's submit chord does.
+        let mut multiline = false;
+        for f in me.fields.bind(py).try_iter()? {
+            if f?.getattr("multiline")?.is_truthy()? {
+                multiline = true;
+                break;
+            }
+        }
+        let submit: String = if multiline { py.import("ingetrazo_render")?.call_method0("multiline_submit_hint")?.extract()? } else { "↩".into() };
         let buttons = PyList::empty(py);
         for b in me.buttons.bind(py).try_iter()? {
             let b = b?;
             let (bid, label) = (b.get_item(0)?, b.get_item(1)?);
             let role: i64 = if bid.eq(me.default.bind(py))? { 1 } else if bid.eq(me.discard.bind(py))? { 2 } else if bid.eq(me.cancel.bind(py))? { 3 } else { 0 };
-            let hint = match role { 1 => "↩", 3 => "esc", _ => "" };
+            let hint = match role { 1 => submit.as_str(), 3 => "esc", _ => "" };
             buttons.append((bid, label, hint, role))?;
         }
         let note = me.note.bind(py).str()?.to_string();

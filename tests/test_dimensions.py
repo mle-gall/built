@@ -146,8 +146,8 @@ def test_select_tool_deletes_a_dimension():
 # ---- Style (precision / units) -------------------------------------------------
 
 def test_format_dim_value_respects_units_and_precision():
-    from tests.controller_surface import ControllerSurface as Viewport
-    f = Viewport._format_dim_value
+    from views.document_interaction import DocumentInteraction
+    f = DocumentInteraction._format_dim_value
     assert f(4.0, {"units": "m", "decimals": 2}) == "4.00 m"
     assert f(4.0, {"units": "cm", "decimals": 0}) == "400 cm"
     assert f(4.0, {"units": "mm", "decimals": 1}) == "4000.0 mm"
@@ -172,7 +172,7 @@ def test_is_occluded_matches_geometry():
     # of the wall (or with no geometry) is visible. Exercises the cached
     # NumPy Möller–Trumbore path headless (plaza.igz slowdown report).
     from ingetrazo_core import Vec3 as QVector3D
-    from tests.controller_surface import ControllerSurface as Viewport
+    from views.document_interaction import DocumentInteraction
 
     scene = Scene()
     scene.mesh.add_face([QVector3D(-2, 0, -2), QVector3D(2, 0, -2),
@@ -182,26 +182,12 @@ def test_is_occluded_matches_geometry():
         def eye(self):
             return QVector3D(0.0, -10.0, 0.0)
 
-    class _VP:
-        # Occlusion reaches into the pick index, which pulls in a handful of
-        # viewport helpers; bind whatever it asks for rather than listing them.
-        def __getattr__(self, name):
-            import inspect
-            raw = inspect.getattr_static(Viewport, name, None)
-            if raw is None:
-                raise AttributeError(name)
-            # Plain functions bind to the stub; staticmethods are taken as-is.
-            bound = (raw.__get__(self) if inspect.isfunction(raw)
-                     else getattr(Viewport, name))
-            setattr(self, name, bound)
-            return bound
-
-    vp = _VP()
+    vp = object.__new__(DocumentInteraction)
     vp.scene = scene
     vp.camera = _Cam()
     vp.plano_style = None
     vp.style_override = None
-    occluded = Viewport._is_occluded.__get__(vp)
+    occluded = vp._is_occluded
 
     assert occluded(QVector3D(0, 5, 0)) is True       # behind the wall
     assert occluded(QVector3D(0, -5, 0)) is False     # in front of it
@@ -221,7 +207,7 @@ def test_xray_and_wireframe_let_snaps_through_faces():
     # Shaded/hidden-line styles keep the visible-only rule.
     from ingetrazo_core import Vec3 as QVector3D
     from core.style import Style
-    from tests.controller_surface import ControllerSurface as Viewport
+    from views.document_interaction import DocumentInteraction
 
     scene = Scene()
     scene.mesh.add_face([QVector3D(-2, 0, -2), QVector3D(2, 0, -2),
@@ -231,23 +217,12 @@ def test_xray_and_wireframe_let_snaps_through_faces():
         def eye(self):
             return QVector3D(0.0, -10.0, 0.0)
 
-    class _VP:
-        def __getattr__(self, name):
-            import inspect
-            raw = inspect.getattr_static(Viewport, name, None)
-            if raw is None:
-                raise AttributeError(name)
-            bound = (raw.__get__(self) if inspect.isfunction(raw)
-                     else getattr(Viewport, name))
-            setattr(self, name, bound)
-            return bound
-
-    vp = _VP()
+    vp = object.__new__(DocumentInteraction)
     vp.scene = scene
     vp.camera = _Cam()
     vp.plano_style = None
     vp.style_override = None
-    occluded = Viewport._is_occluded.__get__(vp)
+    occluded = vp._is_occluded
     behind = QVector3D(0, 5, 0)
 
     assert occluded(behind) is True                        # default style
@@ -276,7 +251,7 @@ def test_geometry_inside_a_group_occludes_too():
     from ingetrazo_core import Vec3 as QVector3D
     from core.group import Group
     from core.mesh import Mesh
-    from tests.controller_surface import ControllerSurface as Viewport
+    from views.document_interaction import DocumentInteraction
 
     wall = Mesh()
     wall.add_face([QVector3D(-2, 0, -2), QVector3D(2, 0, -2),
@@ -289,26 +264,12 @@ def test_geometry_inside_a_group_occludes_too():
         def eye(self):
             return QVector3D(0.0, -10.0, 0.0)
 
-    class _VP:
-        # Occlusion reaches into the pick index, which pulls in a handful of
-        # viewport helpers; bind whatever it asks for rather than listing them.
-        def __getattr__(self, name):
-            import inspect
-            raw = inspect.getattr_static(Viewport, name, None)
-            if raw is None:
-                raise AttributeError(name)
-            # Plain functions bind to the stub; staticmethods are taken as-is.
-            bound = (raw.__get__(self) if inspect.isfunction(raw)
-                     else getattr(Viewport, name))
-            setattr(self, name, bound)
-            return bound
-
-    vp = _VP()
+    vp = object.__new__(DocumentInteraction)
     vp.scene = scene
     vp.camera = _Cam()
     vp.plano_style = None
     vp.style_override = None
-    occluded = Viewport._is_occluded.__get__(vp)
+    occluded = vp._is_occluded
 
     assert occluded(QVector3D(0, 5, 0)) is True     # behind the grouped wall
     assert occluded(QVector3D(0, -5, 0)) is False   # in front of it
@@ -320,7 +281,7 @@ def test_world_under_cursor_uses_cached_pick():
     # bursts must not re-triangulate the model per event). Nearest hit wins;
     # empty space falls back to the focal plane through the camera target.
     from ingetrazo_core import Vec3 as QVector3D
-    from tests.controller_surface import ControllerSurface as Viewport
+    from views.document_interaction import DocumentInteraction
 
     scene = Scene()
     scene.mesh.add_face([QVector3D(-2, 0, -2), QVector3D(2, 0, -2),
@@ -333,29 +294,11 @@ def test_world_under_cursor_uses_cached_pick():
         def eye(self):
             return QVector3D(0.0, -10.0, 0.0)
 
-    class _VP:
-        # Occlusion reaches into the pick index, which pulls in a handful of
-        # viewport helpers; bind whatever it asks for rather than listing them.
-        def __getattr__(self, name):
-            import inspect
-            raw = inspect.getattr_static(Viewport, name, None)
-            if raw is None:
-                raise AttributeError(name)
-            # Plain functions bind to the stub; staticmethods are taken as-is.
-            bound = (raw.__get__(self) if inspect.isfunction(raw)
-                     else getattr(Viewport, name))
-            setattr(self, name, bound)
-            return bound
-
-    vp = _VP()
+    vp = object.__new__(DocumentInteraction)
     vp.scene = scene
     vp.camera = _Cam()
     vp._pixel_to_ray = lambda x, y: (QVector3D(0, -10, 0), QVector3D(0, 1, 0))
-    vp._pick_index = Viewport._pick_index.__get__(vp)
-    vp._placements = Viewport._placements.__get__(vp)
-    vp._expand_placements = Viewport._expand_placements.__get__(vp)
-    vp._ray_hits = Viewport._ray_hits.__get__(vp)
-    under = Viewport._world_under_cursor.__get__(vp)
+    under = vp._world_under_cursor
 
     hit = under(0, 0)
     assert abs(hit.y() - 0.0) < 1e-6          # nearest wall, not the far one

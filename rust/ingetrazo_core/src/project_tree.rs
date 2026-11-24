@@ -26,13 +26,15 @@ pub(crate) fn project_item_matches(
     query: &str,
     problem: bool,
 ) -> PyResult<bool> {
-    item_matches(scene, entity, kind, query, problem, false, false)
+    item_matches(scene, entity, kind, "", query, problem, false, false)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn item_matches(
     scene: &Bound<'_, PyAny>,
     entity: &Bound<'_, PyAny>,
     kind: &str,
+    extension_kind: &str,
     query: &str,
     problem: bool,
     parent_hidden: bool,
@@ -67,7 +69,7 @@ pub(crate) fn item_matches(
             "is:link" => kind == "link",
             "has:problem" => problem,
             _ => {
-                let mut matched = text_matches(&name, token) || text_matches(kind, token);
+                let mut matched = text_matches(&name, token) || text_matches(kind, token) || (!extension_kind.is_empty() && text_matches(extension_kind, token));
                 if !matched {
                     if let Ok(record) = entity.getattr("ifc") {
                         if !record.is_none() {

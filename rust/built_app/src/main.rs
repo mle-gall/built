@@ -1,3 +1,5 @@
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 //! `built`: the Rust app shell (docs/rust-port-plan.md, R1.1).
 //!
 //! The event loop is winit's, on the main thread. The window's NSView goes
@@ -14,6 +16,7 @@
 #[cfg(not(target_os = "macos"))]
 mod clipboard;
 mod keys;
+mod launcher;
 mod gestures;
 #[cfg(target_os = "macos")]
 mod menu;
@@ -32,7 +35,6 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle};
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalPosition};
 use winit::event::{ElementState, Ime, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent};
@@ -93,12 +95,12 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
                 a.size = (w.parse().map_err(|_| "--size WxH")?, h.parse().map_err(|_| "--size WxH")?);
             }
             "--gallery" => { a.gallery = true; a.new_instance = true; },
-            "--new-instance" => a.new_instance = true,
+            "--new-instance" | "--new-window" => a.new_instance = true,
             "--measure" => a.measure = true,
             "--check" => a.check = true,
             "-h" | "--help" => {
                 println!("built [file] [--script f] [--shots dir] [--settings dir] [--root dir] \
-                          [--venv dir] [--size WxH] [--new-instance] [--gallery] [--measure] [--check]");
+                          [--venv dir] [--size WxH] [--new-instance] [--gallery] [--measure] [--check]\nbuilt --mcp\nbuilt -i document -p [-o output.pdf]");
                 std::process::exit(0);
             }
             // Launch Services' process serial number (old macOS, Finder launches).
@@ -782,6 +784,17 @@ impl App {
             .with_title("Built (Rust shell)")
             .with_inner_size(LogicalSize::new(w, h))
             .with_min_inner_size(LogicalSize::new(640.0, 480.0));
+        #[cfg(target_os = "linux")]
+        {
+            use winit::platform::wayland::{ActiveEventLoopExtWayland, WindowAttributesExtWayland};
+            use winit::platform::x11::WindowAttributesExtX11;
+            attrs = if event_loop.is_wayland() {
+                let app_id = std::env::var("FLATPAK_ID").unwrap_or_else(|_| "ingetrazo".into());
+                WindowAttributesExtWayland::with_name(attrs, app_id, "ingetrazo")
+            } else {
+                WindowAttributesExtX11::with_name(attrs, "ingetrazo", "ingetrazo")
+            };
+        }
         #[cfg(target_os = "macos")]
         {
             use winit::platform::macos::WindowAttributesExtMacOS;
@@ -801,17 +814,7 @@ impl App {
         if self.timings.window.is_none() {
             self.timings.window = Some(self.timings.process.elapsed());
         }
-        let window_handle = window.window_handle().map_err(|e| e.to_string())?.as_raw();
-        let display_handle = window.display_handle().map_err(|e| e.to_string())?.as_raw();
-        let (window_id, display, platform) = match (window_handle, display_handle) {
-            #[cfg(target_os = "macos")]
-            (RawWindowHandle::AppKit(w), RawDisplayHandle::AppKit(_)) => (w.ns_view.as_ptr() as usize, 0, "cocoa"),
-            (RawWindowHandle::Win32(w), RawDisplayHandle::Windows(_)) => (w.hwnd.get() as usize, 0, "windows"),
-            (RawWindowHandle::Wayland(w), RawDisplayHandle::Wayland(d)) => (w.surface.as_ptr() as usize, d.display.as_ptr() as usize, "wayland"),
-            (RawWindowHandle::Xlib(w), RawDisplayHandle::Xlib(d)) => (w.window as usize, d.display.ok_or("missing X11 display")?.as_ptr() as usize, "xlib"),
-            (RawWindowHandle::Xcb(w), RawDisplayHandle::Xcb(d)) => (w.window.get() as usize, d.connection.ok_or("missing XCB connection")?.as_ptr() as usize, "xcb"),
-            _ => return Err("no supported GPU surface for this window".into()),
-        };
+        let (window_id, display, platform) = launcher::surface_handles(&window)?;
         let ns_view = if platform == "cocoa" { window_id } else { 0 };
         native::configure_window(ns_view);
         if self.args.background() { native::send_window_back(ns_view); }
@@ -828,7 +831,10 @@ impl App {
             pyo3::Python::attach(|py| python::report(py, e, "Host"));
             "the Python host did not start".to_string()
         })?;
-        host.call0("attach_surface").ok_or("the renderer did not start")?;
+        let renderer = host.call0("attach_surface").ok_or("the renderer did not start")?;
+        if pyo3::Python::attach(|py| pyo3::types::PyAnyMethods::is_none(renderer.bind(py))) {
+            return Err("no supported GPU backend".into());
+        }
         if self.timings.host.is_none() {
             self.timings.host = Some(self.timings.process.elapsed());
         }
@@ -1161,6 +1167,7 @@ fn check(args: &Args) -> i32 {
             return 1;
         }
     };
+    if !launcher::check_extensions(&host) { return 1; }
     if let Some(file) = &args.file {
         let ok = host
             .call("open", (file.to_string_lossy().to_string(),))
@@ -1176,6 +1183,7 @@ fn check(args: &Args) -> i32 {
 }
 
 fn main() {
+    launcher::register_launcher();
     let process = Instant::now();
     let args = match parse_args(std::env::args().skip(1)) {
         Ok(a) => a,
@@ -1227,9 +1235,9 @@ fn main() {
             args.file.get_or_insert_with(|| layout.root.join("examples/slab-and-cube.igz"));
             args
         };
-        let result = check(&args);
+        let result = launcher::self_check(&layout).max(check(&args));
         python::shutdown_workers();
-        std::process::exit(result);
+        launcher::exit_now(result);
     }
     let mut builder = EventLoop::<UserEvent>::with_user_event();
     #[cfg(target_os = "macos")]
@@ -1322,7 +1330,7 @@ fn main() {
         w.host.call0("close");
     }
     python::shutdown_workers();
-    std::process::exit(app.exit_code);
+    launcher::exit_now(app.exit_code);
 }
 
 

@@ -8,15 +8,12 @@ from __future__ import annotations
 
 import importlib.util
 import math
-import sys
+import json
 from pathlib import Path
 
 import pytest
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
-
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 _PATH = Path(__file__).resolve().parents[1] / "examples" / "extensions" / "propiedades_poligono.py"
 _spec = importlib.util.spec_from_file_location("ext_polygon_properties", _PATH)
@@ -130,43 +127,39 @@ def test_faces_in_different_planes_are_refused():
 
 
 def test_it_is_listed_among_the_example_extensions():
-    from views.main_window import MainWindow
-    titles = [t for _p, t, _b in MainWindow.example_extensions()]
-    assert "Polygon properties" in titles
+    from core.extension_manager import example_extension_files
+    assert "Polygon properties" in {title for _, title, _ in example_extension_files()}
 
 
-def test_installed_it_adds_its_entries_and_changes_nothing(tmp_path, monkeypatch):
-    """Loaded like a user's plugin: an Extensions entry, a right-click
-    entry when a face is selected, and a report that leaves the document
-    and its undo history as they were."""
+def test_installed_it_adds_its_entry_and_changes_nothing(tmp_path, monkeypatch, request):
     import shutil
-    import core.extensions as extensions
-    from PySide6.QtWidgets import QDialog, QMenu
+    from unittest.mock import MagicMock
+    from core import extensions, plugin_panels
+    from ingetrazo_render import chrome_sheet
+    from app_shell import native
+
     shutil.copy(_PATH, tmp_path / _PATH.name)
     monkeypatch.setattr(extensions, "plugin_dirs", lambda: [tmp_path])
-    from views.main_window import MainWindow
-    w = MainWindow()
-    try:
-        texts = [a.text() for a in w._ext_menu.actions()]
-        assert any("Polygon properties" in t or "Propiedades del polígono" in t
-                   for t in texts)
-        vp = w.viewport
-        f = vp.scene.mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(2, 1, 0), V(0, 1, 0)])
-        vp.scene.selection.clear()
-        vp.scene.selection.add(f)
-        menu = QMenu()
-        for fn in getattr(w, "_ext_context_menus", []) or []:
-            fn(menu, set(vp.scene.selection))
-        assert any("Polygon properties" in a.text() or "Propiedades" in a.text()
-                   for a in menu.actions())
-        ver, undo = vp.scene.version, len(vp.history.undo_stack)
-        shown = []
-        monkeypatch.setattr(QDialog, "exec", lambda self: shown.append(self) or 0)
-        mod = next(m for n, m in sys.modules.items()
-                   if n.endswith("propiedades_poligono") and hasattr(m, "show_properties"))
-        mod.show_properties(vp)
-        assert shown, "the report opened"
-        assert (vp.scene.version, len(vp.history.undo_stack)) == (ver, undo)
-    finally:
-        w._saved_version = w.viewport.scene.version
-        w.close()
+    win = request.getfixturevalue("native_host").window
+    vp, view = win.viewport, win.view
+    renderer = MagicMock()
+    monkeypatch.setattr(view, "renderer", renderer)
+    monkeypatch.setattr(view, "_ui_attached", True, raising=False)
+    face = vp.scene.mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(2, 1, 0), V(0, 1, 0)])
+    vp.scene.select([face])
+    version, undo = vp.scene.version, len(vp.history.undo_stack)
+    command = next(row[0] for row in win._extension_menus.rows() if row[2] == pp._tr("Polygon properties"))
+    assert win._extension_menus.trigger(command)
+    instance = renderer.ui_plugin_open.call_args.args[0]
+    panel = json.loads(renderer.ui_plugin_panel.call_args.args[0])
+    assert (panel["slot"], panel["instance"]) == ("utility", instance)
+    lines = panel["sections"][0]["items"][0]["lines"]
+    assert any("2.00 m²" in line for line in lines)
+    copied = []
+    monkeypatch.setattr(chrome_sheet, "in_shell", lambda: True)
+    monkeypatch.setattr(native, "pasteboard_write", lambda items: copied.append(items[0][1].decode()) or True)
+    plugin_panels.dispatch(win, json.dumps(dict(panel, event_id=1, control="copy", event="invoke", value=None)))
+    assert copied == ["\n".join(lines)]
+    plugin_panels.sync(view, win)
+    assert pp._tr("Copied to the clipboard.") in renderer.ui_plugin_panel.call_args.args[0]
+    assert (vp.scene.version, len(vp.history.undo_stack)) == (version, undo)

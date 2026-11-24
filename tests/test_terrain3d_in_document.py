@@ -6,7 +6,11 @@ window, so a project saved with the terrain on reopened flat after a
 restart, and what stood on the terrain floated over the map."""
 from __future__ import annotations
 
-from tests.qt_window_lifetime import close_window
+import pytest
+
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from tests.test_settings_sheet import win, fields, frame, act  # noqa: F401
+from tests.test_terrain import StubSampler
 from georef.datum import SceneDatum
 
 
@@ -38,80 +42,106 @@ def test_the_flag_round_trips_and_old_files_open_flat(tmp_path):
     assert TileLayer.from_dict(raw).terrain3d is False
 
 
-def _window(monkeypatch):
-    from views.main_window import MainWindow
-    win = MainWindow()
-    built = []
-    monkeypatch.setattr(win, "_build_terrain", lambda: built.append(
-        bool(win._terrain_on)))
-    return win, built
+@pytest.fixture
+def dem(monkeypatch):
+    from georef import dem
+    from ingetrazo_render import ChangeCallbacks
+    from views.document_controller import DocumentController
+
+    class LocalDEM(StubSampler):
+        def __init__(self, datum):
+            super().__init__(datum, lambda x, y: 100.0 + x / 10.0)
+            self.changed = ChangeCallbacks()
+            self.areas = []
+            self._host = None
+
+        def ensure_area(self, *area):
+            self.areas.append(area)
+
+    monkeypatch.setattr(dem, "DEMSampler", LocalDEM)
+    monkeypatch.setattr(DocumentController, "prefetch_tiles", lambda *args: None)
 
 
-def test_turning_it_on_is_kept_in_the_document(monkeypatch):
-    win, built = _window(monkeypatch)
-    try:
-        scene = win.viewport.scene
-        scene.georef = SceneDatum(-16.39889, -71.53694)
-        from georef.tiles import PRESETS, TileLayer
-        scene.tile_layer = TileLayer(PRESETS["esri_imagery"], zoom=16)
-        win.set_terrain_enabled(True)
-        assert scene.tile_layer.terrain3d and win._terrain_on
-        win.set_terrain_enabled(False)
-        assert not scene.tile_layer.terrain3d and not win._terrain_on
-    finally:
-        win._saved_version = win.viewport.scene.version
-        close_window(win)
+def test_turning_it_on_is_kept_in_the_document(win, dem):
+    vp = win.viewport
+    model = _georef_scene()
+    vp.scene.georef, vp.scene.tile_layer = model.georef, model.tile_layer
+    win.open_preferences(page="location")
+    assert fields(frame(win))["terrain3d"][4] == 0
+    act(win, "v", "terrain3d", "1")
+    assert vp.scene.tile_layer.terrain3d and win._is_dirty()
+    assert vp.scene.terrain.height_at(100, 0) == pytest.approx(10.0)
+    assert vp._surface_sampler._host is vp._host and vp._surface_sampler.areas
+    act(win, "v", "terrain3d", "0")
+    assert vp.scene.terrain is None and not vp.scene.tile_layer.terrain3d
+    vp._surface_sampler.changed.emit()
+    assert vp.scene.terrain is None
 
 
-def test_a_file_saved_in_3d_opens_in_3d(tmp_path, monkeypatch):
+def _open(host, path, relief, monkeypatch):
     from formats import igz
-    path = tmp_path / "relieve.igz"
+    igz.save_scene(_georef_scene(relief), path)
+    win = host.window
+    assert win.open_path(path)
+    vp = win.viewport
+    assert vp.scene.terrain is None
+    monkeypatch.setattr(host.view, "draw_frame", lambda: (0., 0., 0.))
+    host.frame()
+    while host._after_picture:
+        host.idle()
+    return vp
+
+
+def test_a_file_saved_in_3d_opens_in_3d(native_host, tmp_path, monkeypatch, dem):
+    vp = _open(native_host, tmp_path / "relief.igz", True, monkeypatch)
+    assert vp.scene.tile_layer.terrain3d
+    assert vp.scene.terrain.bbox == (-200, -150, 200, 150)
+    assert not native_host.window._is_dirty()
+    vp.scene.terrain.visible = False
+    vp.camera.set_view("top")
+    pitch = vp.camera.pitch
+    vp._surface_sampler.changed.emit()
+    assert not vp.scene.terrain.visible and vp.camera.pitch == pitch
+
+
+def test_a_file_saved_flat_opens_flat(native_host, tmp_path, monkeypatch, dem):
+    first = _open(native_host, tmp_path / "hills.igz", True, monkeypatch)
+    vp = _open(native_host, tmp_path / "plain.igz", False, monkeypatch)
+    first._surface_sampler.changed.emit()
+    assert vp is not first and first.scene.terrain is not None
+    assert not vp.scene.tile_layer.terrain3d and vp.scene.terrain is None
+    assert not hasattr(vp, "_surface_sampler")
+
+
+def test_a_new_capture_keeps_the_terrain_as_it_was(win, dem):
+    from ingetrazo_core import Vec3
+    scene = win.viewport.scene
+    scene.georef = SceneDatum(-16.39889, -71.53694)
+    def capture(size):
+        win._set_survey_capture(scene.georef, Vec3(-size, -size, 0), Vec3(size, size, 0))
+    capture(50)
+    win.open_preferences(page="location")
+    assert fields(frame(win))["terrain3d"][4] == 0
+    act(win, "v", "terrain3d", "1")
+    original = scene.terrain.bbox
+    capture(500)
+    assert scene.tile_layer.terrain3d and scene.terrain.bbox[2] > original[2]
+
+
+
+def test_closing_before_the_first_picture_skips_the_dem(native_host, tmp_path, monkeypatch, dem):
+    from formats import igz
+    from georef import dem as backend
+    path = tmp_path / "closed.igz"
     igz.save_scene(_georef_scene(True), path)
-    win, built = _window(monkeypatch)
-    try:
-        assert not win._terrain_on                 # a fresh window: flat
-        assert win.open_path(path)
-        # The fork brings the base map and terrain in after the document's
-        # first picture (views/main_window.py, _after_picture); offscreen
-        # no picture comes, so run what waits for it.
-        doc = win._doc
-        while doc._after_picture:
-            doc._after_picture.pop(0)()
-        assert win._terrain_on
-        assert built and built[-1] is True         # asked to build it
-        assert win.georef_tray.base_map._terrain3d.isChecked()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        close_window(win)
-
-
-def test_a_file_saved_flat_opens_flat(tmp_path, monkeypatch):
-    from formats import igz
-    path = tmp_path / "plano.igz"
-    igz.save_scene(_georef_scene(False), path)
-    win, built = _window(monkeypatch)
-    try:
-        win.__dict__["_terrain_wish"] = True        # on in another project
-        assert win.open_path(path)
-        assert not win._terrain_on and not built
-        assert not win.georef_tray.base_map._terrain3d.isChecked()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        close_window(win)
-
-
-def test_a_new_capture_keeps_the_terrain_as_it_was(monkeypatch):
-    win, built = _window(monkeypatch)
-    try:
-        bm = win.georef_tray.base_map
-        scene = win.viewport.scene
-        scene.georef = SceneDatum(-16.39889, -71.53694)
-        bm._capture_around(bm._current_source(), scene, scene.georef,
-                           -50, -50, 50, 50)
-        win.set_terrain_enabled(True)
-        bm._capture_around(bm._current_source(), scene, scene.georef,
-                           -500, -500, 500, 500)
-        assert scene.tile_layer.terrain3d and win._terrain_on
-    finally:
-        win._saved_version = win.viewport.scene.version
-        close_window(win)
+    win = native_host.window
+    assert win.open_path(path)
+    old = win.viewport
+    assert win.close_document(ask=False)
+    asked = []
+    monkeypatch.setattr(backend, "DEMSampler", lambda datum: asked.append(datum))
+    monkeypatch.setattr(native_host.view, "draw_frame", lambda: (0., 0., 0.))
+    native_host.frame()
+    while native_host._after_picture:
+        native_host.idle()
+    assert not asked and old.scene.terrain is None

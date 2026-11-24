@@ -9,6 +9,7 @@ from core.history import History
 from core.protocol.commands import run
 from core.scene import Scene
 from formats import igz
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_ifc_export import _tagged_wall_scene
 import ingetrazo_render as dock
 from PySide6.QtCore import QTimer
@@ -20,16 +21,18 @@ def add(h, path, **fields):
 
 
 @pytest.mark.parametrize("fmt", deliveries.FORMATS)
-def test_delivery_lifecycle(fmt, tmp_path):
+def test_delivery_lifecycle(fmt, tmp_path, request):
     scene = _tagged_wall_scene()
     ctx = {}
     if fmt == "pdf":
-        from tests.test_outliner import _window_with, _sheets_model
-        win, scene, _ = _window_with()
+        from tests.test_outliner import _sheets_model
+        from views.wgpu_sheets import composer_for
+        win = request.getfixturevalue("native_host").window
+        scene = win.viewport.scene
         sheets = _sheets_model(win)
         for sheet in sheets:
             sheet.frames.clear()
-        ctx["pdf_writer"] = win._ensure_composer().export_all_pdf
+        ctx["pdf_writer"] = composer_for(win).export_all_pdf
     h = History(scene)
     path = tmp_path / f"export.{fmt}"
     key = add(h, path, scope="sheets" if fmt == "pdf" else "whole")
@@ -133,10 +136,12 @@ def test_scenes_cancel_keeps_previous_files(tmp_path):
     assert all((tmp_path / f"plan-{i:02}.dxf").read_text().endswith("EOF\n") for i in (1, 2))
 
 
-def test_checks_and_one_off_export(tmp_path, monkeypatch):
-    from tests.test_outliner import _window_with
+def test_checks_and_one_off_export(tmp_path, native_host):
     from views import wgpu_ui
-    win, scene, _ = _window_with(Group(name="Loose"))
+    win = native_host.window
+    scene = win.viewport.scene
+    scene.groups[:] = [Group(name="Loose")]
+    scene.version += 1
     add(win.viewport.history, tmp_path / "handover.ifc")
     from tests.test_tree_links import _View
     import json
@@ -147,9 +152,10 @@ def test_checks_and_one_off_export(tmp_path, monkeypatch):
     readiness = json.loads(blob)
     assert panel == "readiness" and (readiness["ready"], readiness["total"]) == (0, 1)
     assert readiness["checks"]["*"]["unfiled/"][0] == "Not filed"
-    actions = win._file_actions()
-    assert any(a.text() == "Export…" for a in actions if hasattr(a, "text"))
-    assert any(a.title() == "Export" for a in actions if hasattr(a, "title"))
+    from ingetrazo_render import chrome_sheet
+    native_host.menu("delivery_export")
+    assert chrome_sheet.current(win).id == "export"
+    chrome_sheet.close(win)
 
 
 def test_problem_checks_cover_filed_geometry():

@@ -431,7 +431,7 @@ class Mesh:
     def vertex(self, position: QVector3D) -> Vertex:
         """Get-or-create the shared vertex at ``position`` (welds coincident
         points to one object)."""
-        return object_replay.vertex(self, position, _key(position), _WELD_TOL2, True)
+        return object_replay.vertex(self, position, _key(position), _WELD_TOL2, True, Vertex)
 
     def vertex_at(self, position: QVector3D) -> Optional[Vertex]:
         """The existing vertex at ``position``, or ``None``."""
@@ -450,12 +450,7 @@ class Mesh:
     def find_edge(self, v0: Vertex, v1: Vertex) -> Optional[Edge]:
         """The edge between two vertices (either orientation), or ``None``.
         O(degree) via the smaller vertex's incidence — no list scan."""
-        small = v0 if len(v0.edges) <= len(v1.edges) else v1
-        target = v1 if small is v0 else v0
-        for e in small.edges:
-            if e.other(small) is target:
-                return e
-        return None
+        return object_replay.find_edge(v0, v1)
 
     @staticmethod
     def next_curve_id() -> int:
@@ -505,35 +500,17 @@ class Mesh:
         _CURVE_COUNTER = object_drawing.resplit_curves(self.edges, _CURVE_COUNTER)
 
     def _link_edge(self, v0: Vertex, v1: Vertex) -> Edge:
-        self._chunk_dirty = True
-        self._mut_serial += 1
-        e = self.find_edge(v0, v1)
-        if e is not None:
-            return e
-        e = Edge(v0, v1, key=next(self._keys))
-        v0.edges.add(e)
-        v1.edges.add(e)
-        self.edges.append(e)
-        return e
+        return object_replay.link_edge(self, v0, v1, Edge)
 
     def add_edge(self, a: QVector3D, b: QVector3D) -> Edge:
         """Add a free edge between two positions (welding endpoints, deduping
         the edge). Returns the existing edge if it is already there."""
-        v0 = self.vertex(a)
-        v1 = self.vertex(b)
-        if v0 is v1:
-            raise ValueError("degenerate edge: endpoints weld to one vertex")
-        return self._link_edge(v0, v1)
+        return object_replay.add_edge(self, a, b)
 
     def remove_edge(self, e: Edge) -> None:
         """Detach and drop an edge. Callers remove any incident faces first when
         needed; this does not cascade."""
-        self._chunk_dirty = True
-        self._mut_serial += 1
-        e.v0.edges.discard(e)
-        e.v1.edges.discard(e)
-        if e in self.edges:
-            self.edges.remove(e)
+        object_replay.remove_edge(self, e)
 
     def prune_orphan_vertices(self) -> int:
         """Drop vertices nothing references any more. Returns how many went.

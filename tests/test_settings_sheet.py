@@ -101,7 +101,7 @@ def test_sections_in_two_groups(win):
     assert labels == [("caption", "Built · this Mac"), ("", "General"), ("", "Navigation"),
                       ("", "Display"), ("", "3D mouse"), ("", "Import"), ("", "Keyboard"), ("", "AI assistant"),
                       ("caption", "This model"), ("", "Units"),
-                      ("", "Dimension style"), ("", "Location & north")]
+                      ("", "Appearance"), ("", "Dimension style"), ("", "Location & north")]
     assert [r["id"] for r in side if r.get("on")] == ["general"]
     assert "theme" not in fields(sheet) and "autosave" in fields(sheet)
     # No OK/Cancel anywhere: the footer restores defaults, that is all.
@@ -479,3 +479,33 @@ def test_ai_connection_reads_and_writes_the_plugins_provider_slots(win):
     assert settings.value("ia/claves/openai") == settings.value("ia/api_key") == "fixture-replacement"
     assert settings.value("ia/modelos/openai") == settings.value("ia/modelo") == "updated"
     assert settings.value("ia/ollama_url") == "http://localhost:3210"
+
+
+def test_ambient_occlusion_edits_the_active_style(win):
+    win.open_preferences(page="appearance")
+    before = fields(frame(win))
+    assert before["ambient_occlusion"][4] == 0
+    assert before["ao_distance"][8] & chrome_forms.DISABLED
+    enabled = fields(act(win, "v", "ambient_occlusion", "1"))
+    assert not enabled["ao_distance"][8] & chrome_forms.DISABLED
+    act(win, "v", "ao_intensity", "1.5")
+    assert win.active_style().ao_intensity == 1.5
+    act(win, "v", "ambient_occlusion", "0")
+    assert not win.active_style().ambient_occlusion
+
+
+def test_occlusion_distance_slider_preserves_off_step_file_values(win):
+    from core.style import AO_DISTANCE_RANGE
+    win.active_style().ao_distance = 0.37
+    win.open_preferences(page="appearance")
+    frame(win)
+    rows = fields(act(win, "v", "ambient_occlusion", "1"))
+    distance = rows["ao_distance"]
+    assert distance[1] == "slider" and "m" in distance[2]
+    act(win, "v", "ao_intensity", "1.2")
+    assert win.active_style().ao_distance == 0.37
+    for step, want in ((0, AO_DISTANCE_RANGE[0]), (200, AO_DISTANCE_RANGE[1])):
+        act(win, "v", "ao_distance", str(step))
+        assert win.active_style().ao_distance == want
+    act(win, "v", "ao_distance", "100")
+    assert 0.3 < win.active_style().ao_distance < 1.5

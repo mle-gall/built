@@ -115,6 +115,8 @@ pub struct Ui {
     /// The window as last painted (points).
     screen: Rect,
     active: String,
+    coordinate: String,
+    coordinate_tooltip: String,
     status: String,
     hint: String,
     /// The value field on the geometry and its readback (ui/value_field.rs).
@@ -318,6 +320,8 @@ impl Ui {
             rail_w: rail::width(2),
             screen: Rect::NOTHING,
             active: String::new(),
+            coordinate: String::new(),
+            coordinate_tooltip: String::new(),
             status: String::new(),
             hint: String::new(),
             cursor: Default::default(),
@@ -415,7 +419,7 @@ impl Ui {
                 g.into_iter()
                     .map(|(id, label, key, w, h, rgba)| {
                         let icon = (w > 0 && rgba.len() == w * h * 4).then(|| {
-                            let image = egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba);
+                            let image = if key.starts_with("component:") { egui::ColorImage::from_rgba_premultiplied([w,h],&rgba) } else { egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba) };
                             self.ctx.load_texture(&id, image, egui::TextureOptions::LINEAR)
                         });
                         Tool { enabled: !disabled.contains(&id), id, label, key, icon }
@@ -426,6 +430,9 @@ impl Ui {
     }
 
     pub fn set_icons(&mut self, icons: Vec<(String, usize, usize, Vec<u8>)>) {
+        if let Some(prefix) = icons.iter().filter(|(k,..)|k.starts_with("component:")).find_map(|(k,..)|k.rsplit_once(':').map(|(p,_)|p)) {
+            self.icons.retain(|k,_| !k.starts_with("component:") || k.rsplit_once(':').is_some_and(|(p,_)|p==prefix));
+        }
         for (key, w, h, rgba) in icons {
             if w > 0 && rgba.len() == w * h * 4 {
                 let image = egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba);
@@ -973,7 +980,9 @@ impl Ui {
         if id != self.active { self.cursor.end_readback(); }
         self.active = id;
     }
-    pub fn set_status(&mut self, status: String, hint: String) {
+    pub fn set_status(&mut self, status: String, hint: String, coordinate: &str, tooltip: &str) {
+        coordinate.clone_into(&mut self.coordinate);
+        tooltip.clone_into(&mut self.coordinate_tooltip);
         self.status = status;
         self.hint = hint;
     }
@@ -1311,6 +1320,9 @@ impl Ui {
                         ui.add_space(SPACE_S);
                         let dock_w = if self.review { 0.0 } else { self.dock_w };
                         let room = (ui.available_width() - dock_w - 8.0).max(40.0);
+                        let coordinate = ui.painter().layout_no_wrap(self.coordinate.clone(), meta(), DIM);
+                        let show_coordinate = !self.coordinate.is_empty() && room >= coordinate.size().x + SPACE_S;
+                        let room = if show_coordinate { room - coordinate.size().x - SPACE_S } else { room };
                         let mut job = egui::text::LayoutJob::single_section(self.hint.clone(), egui::TextFormat {
                             font_id: body(), color: DIM, ..Default::default() });
                         job.wrap.max_width = room;
@@ -1319,6 +1331,11 @@ impl Ui {
                         let g = ui.painter().layout_job(job);
                         let (r, _) = ui.allocate_exact_size(vec2(room, 28.0), Sense::hover());
                         ui.painter().galley(pos2(r.min.x, r.center().y - g.size().y / 2.0), g, DIM);
+                        if show_coordinate {
+                            let (rect, response) = ui.allocate_exact_size(vec2(coordinate.size().x, 28.0), Sense::hover());
+                            ui.painter().galley(pos2(rect.left(), rect.center().y - coordinate.size().y / 2.0), coordinate, DIM);
+                            response.on_hover_text(&self.coordinate_tooltip);
+                        }
                         if !self.review {
                             if let Some((active, _, _)) = &self.delivery {
                                 if !active.is_empty() {
@@ -2306,7 +2323,7 @@ impl Ui {
                 ("-", ""), ("rename", "Rename"), ("newchild", "New child node"), ("kind", "Kind  ›"),
                 ("-", ""), ("delete", "Delete node")];
             let item_menu: &[(&str, &str)] = &[("item", "Select"), ("open", "Open for editing"), ("rename", "Rename"),
-                ("-", ""), ("hideitem", "Hide"), ("lockitem", "Lock / unlock"), ("zoom", "Zoom to"), ("-", ""), ("fileto", "File to…")];
+                ("-", ""), ("hideitem", "Hide"), ("lockitem", "Lock / unlock"), ("zoom", "Zoom to"), ("groupplan", "Plan of this group…"), ("-", ""), ("fileto", "File to…")];
             let comp_menu: &[(&str, &str)] = &[("cplace", "Place a copy"), ("cselect", "Select instances"),
                 ("creplace", "Replace selection with this"), ("-", ""), ("ckeep", "Keep in file"), ("crename", "Rename…")];
             // A linked file's rows are read-only here: no filing, kind or rename.
@@ -2314,7 +2331,7 @@ impl Ui {
                 ("isolate", "Isolate"), ("zoom", "Zoom to"), ("-", ""), ("eye", "Show / hide"), ("lock", "Lock / unlock"),
                 ("-", ""), ("linkopen", "Edit source"), ("linkfinder", "Show in Finder"),
                 ("linkreload", "Reload"), ("linkrelink", "Locate…"), ("linkunlink", "Unlink")];
-            let section_menu: &[(&str, &str)] = &[("sectioncut", "Toggle cut"), ("eye", "Show / hide"), ("deleterows", "Delete")];
+            let section_menu: &[(&str, &str)] = &[("cutview", "View of the cut…"), ("sectioncut", "Toggle cut"), ("eye", "Show / hide"), ("deleterows", "Delete")];
             let tag_menu: &[(&str, &str)] = &[("newtag", "New tag"), ("rename", "Rename"), ("tagactive", "Make active"), ("tagassign", "Move selection here"), ("tagselect", "Select items"), ("tagisolate", "Toggle tag isolation"), ("mergetag", "Merge into…"), ("scenetaghide", "Hide in all saved scenes"), ("scenetagshow", "Show in all saved scenes"), ("deletetag", "Delete"), ("purgetags", "Purge unused tags…")];
             let menu = if key.starts_with("preview-tag:") { tag_menu } else if key.starts_with("preview-folder:") { &[("newtag", "New tag in folder"), ("tagisolate", "Toggle tag isolation")] } else if key.starts_with("section:") { section_menu } else if row == 0 && key.starts_with("n:link") { link_menu } else if row == 0 { node_menu }
                 else if row == 5 { comp_menu } else { item_menu };
@@ -2333,6 +2350,7 @@ impl Ui {
                                 matches!(*id, "contents" | "isolate" | "zoom" | "linkopen" | "linkfinder" | "linkreload") { continue; }
                             if matches!(*id, "linkreload" | "linkrelink" | "linkunlink") &&
                                 !editable_file { continue; }
+                            if *id == "groupplan" && !row.is_some_and(|r| r.local_placement) { continue; }
                             if *id == "hideitem" {
                                 for (verb, label, why) in &col.group_rows {
                                     let item = (verb.clone(), label.clone(), String::new(), String::new(), -1, why.is_empty());

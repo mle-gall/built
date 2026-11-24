@@ -1182,10 +1182,9 @@ pub fn edit_location_now(win: &Bound<'_, PyAny>, source: Option<Bound<'_, PyAny>
     sheet.setattr("site", py.import("ingetrazo_core")?.getattr("LocationDraft")?.call1((lat, lon, mode))?)?;
     sheet.setattr("site_scene", scene)?;
     sheet.setattr("site_done", done)?;
-    let tiles = py.import("georef.tiles")?;
     let source = match source {
         Some(s) => s,
-        None => tiles.getattr("PRESETS")?.get_item(tiles.getattr("DEFAULT_SOURCE_ID")?)?,
+        None => crate::model_panels::basemap::current(&env(win)?.getattr("st")?)?,
     };
     sheet.setattr("site_source", source)?;
     chrome(py)?.call_method1("refresh", (win,))?;

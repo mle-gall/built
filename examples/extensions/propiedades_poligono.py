@@ -410,54 +410,24 @@ def format_report(props, plane, counts) -> str:
 
 
 def show_properties(viewport) -> None:
-    from PySide6.QtGui import QGuiApplication
-    from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QPlainTextEdit,
-                                   QVBoxLayout)
+    from core.plugin_panels import show_utility
+    from ingetrazo_render import PluginTextReport
     try:
         props, plane, counts = selection_properties(viewport.scene)
     except PolygonError as exc:
         viewport.flash_status(f"{_tr('Polygon properties')}: {exc}", 6000)
         return
     text = format_report(props, plane, counts)
-    dlg = QDialog(viewport.window())
-    dlg.setWindowTitle(_tr("Polygon properties"))
-    dlg.resize(620, 640)
-    lay = QVBoxLayout(dlg)
-    box = QPlainTextEdit(dlg)
-    box.setReadOnly(True)
-    box.setPlainText(text)
-    box.setStyleSheet("font-family: monospace;")
-    lay.addWidget(box)
-    btns = QDialogButtonBox(dlg)
-    copy = btns.addButton(_tr("Copy"), QDialogButtonBox.ActionRole)
-    close = btns.addButton(_tr("Close"), QDialogButtonBox.RejectRole)
-
-    def _copy():
-        QGuiApplication.clipboard().setText(text)
-        viewport.flash_status(_tr("Copied to the clipboard."), 3000)
-
-    copy.clicked.connect(_copy)
-    close.clicked.connect(dlg.reject)
-    lay.addWidget(btns)
+    report = PluginTextReport(_tr("Polygon properties"), text, _tr("Copy"),
+                              _tr("Copied to the clipboard."))
+    show_utility(viewport.window(), KEY, report)
     from core import units
     viewport.flash_status(
         f"{_tr('Polygon properties')}: {_tr('Area')} {units.fmt_area(props['area'])}, "
         f"{_tr('Perimeter')} {units.fmt_len_fine(props['perimeter'])}", 5000)
-    dlg.exec()
 
 
 def setup(app) -> None:
-    """Extensions ▸ Polygon properties, and the same entry in the viewport's
-    right-click menu when faces are selected."""
     app.add_menu_action(
         _tr("Polygon properties"), lambda: show_properties(app.viewport),
         tip=_tr("Area, centroid and second moments of the selected faces."))
-
-    def context(menu, selection) -> None:
-        if not _selected_faces(app.viewport.scene):
-            return
-        menu.addSeparator()
-        act = menu.addAction(_tr("Polygon properties"))
-        act.triggered.connect(lambda _c=False: show_properties(app.viewport))
-
-    app.add_context_menu(context)
