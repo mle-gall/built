@@ -8,17 +8,6 @@ class DocumentController(DocumentInteraction, WidgetShim):
         super().__init__(host=host)
         self._enabled = False
 
-    @classmethod
-    def for_widget(cls, display):
-        from views.rtl import keep_ltr
-        keep_ltr(display)
-        controller = cls(QtViewHost(display))
-        controller.setParent(display)
-        controller.keys_stand_in = display
-        display.source_viewport = controller
-        display.camera = controller.camera
-        return controller
-
     def resize(self, *size):
         self.keys_stand_in.resize(*size)
 
