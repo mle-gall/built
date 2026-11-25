@@ -55,3 +55,26 @@ def encoded():
 
 def test_camera_controls_match_python():
     assert encoded() == json.loads(gzip.decompress(GOLDEN.read_bytes()))
+
+
+def test_plugin_subclass_and_overrides_survive_copy():
+    from copy import copy, deepcopy
+    from core.camera import OrbitCamera
+
+    class CameraWithLabel(OrbitCamera):
+        __slots__ = ("label",)
+
+        def __init__(self, label):
+            super().__init__()
+            self.label = label
+
+    camera = CameraWithLabel("sheet")
+    camera.target = (1, 2, 3)
+    camera.view_matrix = lambda: "override"
+    for clone in (copy(camera), deepcopy(camera)):
+        assert type(clone) is CameraWithLabel
+        assert clone.label == "sheet"
+        assert clone.target.toTuple() == (1., 2., 3.)
+        assert clone.view_matrix() == "override"
+        del clone.view_matrix
+        assert len(clone.view_matrix().data()) == 16

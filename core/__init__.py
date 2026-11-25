@@ -8,12 +8,13 @@ import sys as _sys
 
 try:
     from ingetrazo_core import install_core_modules as _install_core_modules
-    from ingetrazo_core import arrangement, edits, hatches, push_scans, snap, snap_frame, snap_query, topology
+    from ingetrazo_core import arrangement, camera, edits, hatches, push_scans, snap, snap_frame, snap_query, topology
 except ModuleNotFoundError as _error:
     if _error.name != "ingetrazo_core":
         raise
 else:
     _install_core_modules(__path__)
+    _sys.modules[__name__ + ".camera"] = camera
     _sys.modules[__name__ + ".arrangement"] = arrangement
     _sys.modules[__name__ + ".snap_query"] = snap_query
     _sys.modules[__name__ + ".push_scans"] = push_scans
