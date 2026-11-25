@@ -644,7 +644,7 @@ fn stitch(mesh: &Obj<'_>, faces: &[Ring], scale: f64, offset: DVec3) -> PyResult
         let kw = PyDict::new(py);
         kw.set_item("coplanar_merge", true)?;
         let _ =
-            py.import("core.history")?
+            py.import("ingetrazo_core")?
                 .call_method("run_stitch", (mesh, keys, added), Some(&kw));
     }
     Ok(())

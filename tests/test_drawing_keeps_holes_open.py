@@ -16,7 +16,8 @@ import math
 
 from ingetrazo_core import Vec3 as V
 
-from core.history import History, _point_in_tri
+from core.history import History
+from ingetrazo_core import planar_edits
 from core.scene import Scene
 from core.topology import _point_in_face_solid
 from tools.circle import CircleTool
@@ -99,8 +100,8 @@ def test_a_sliver_triangle_contains_nothing():
     # Three nearly collinear corners: the raw cross-product test let any
     # point through, 8 m away included.
     a, b, s = V(0, 0, 0), V(0.003, 0, 0), V(0.0015, 1e-9, 0)
-    assert not _point_in_tri(V(4, 6, 0), a, b, s)
-    assert _point_in_tri(V(0.3, 0.2, 0), V(0, 0, 0), V(1, 0, 0), V(0, 1, 0))
+    assert not planar_edits.point_in_tri(V(4, 6, 0), a, b, s)
+    assert planar_edits.point_in_tri(V(0.3, 0.2, 0), V(0, 0, 0), V(1, 0, 0), V(0, 1, 0))
 
 
 def test_redrawing_the_whole_top_fills_the_hole_as_in_538():

@@ -2,12 +2,33 @@
 //! Per-document history. Stack entries are host commands while some tools
 //! still implement Python inverses. Existing scripting clients edit these
 //! lists directly when folding a group-edit session or cancelling a preview.
+mod dispatch;
+pub(crate) use dispatch::in_frame;
+pub(crate) mod lifecycle;
 use super::py::PyTransaction;
 use std::collections::VecDeque;
 
 use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
+
+/// Re-enter the geometry on which a step was recorded, even after the
+/// editor has left that placement. Restore the active mesh on exceptions.
+fn in_command_mesh<'py>(
+    scene: &Bound<'py,PyAny>, cmd: &Bound<'py,PyAny>, action: &Bound<'py,PyAny>,
+    args: impl pyo3::call::PyCallArgs<'py>,
+) -> PyResult<()> {
+    let current = scene.getattr("mesh")?;
+    let Some(target) = cmd.getattr_opt("_history_mesh")?.filter(|m| !m.is_none() && !m.is(&current)) else {
+        action.call1(args)?;
+        return Ok(());
+    };
+    target.setattr("_mut_serial",target.getattr("_mut_serial")?.add(1)?)?;
+    scene.setattr("mesh",target)?;
+    let result = action.call1(args);
+    scene.setattr("mesh",current)?;
+    result.map(|_| ())
+}
 
 /// Journal a direct inverse for the change feed. Commands with host-owned
 /// effects run in their original editor mesh just like transaction replays.
@@ -18,20 +39,14 @@ fn replay_direct(
     undo: bool,
 ) -> PyResult<()> {
     let scene = host.getattr("scene")?;
-    let keywords = pyo3::types::PyDict::new(py);
-    keywords.set_item("include_groups", !cmd.getattr("keeps_rows")?.is_truthy()?)?;
-    let objects = if undo {
-        None
-    } else {
-        Some(host.call_method("_objects_before", (), Some(&keywords))?)
-    };
+    let objects = if undo {None} else {Some(lifecycle::objects_before(&scene,!cmd.getattr("keeps_rows")?.is_truthy()?)?)};
     let action = cmd.getattr(if undo { "undo" } else { "do" })?;
     let doc = py.import("core.doc_model")?;
     doc.call_method1("begin", (scene.getattr("_root")?.getattr("_doc_key")?,))?;
     host.setattr("last_txn", py.None())?;
     let result = (|| {
-        host.call_method1("_in_command_mesh", (cmd, action, scene))?;
-        host.call_method0("_follow_text_placements")?;
+        in_command_mesh(&scene, cmd, &action, (&scene,))?;
+        lifecycle::follow_text(host)?;
         doc.call_method0("commit")
     })();
     match result {
@@ -43,7 +58,7 @@ fn replay_direct(
         }
     }
     if let Some(objects) = objects {
-        host.call_method("_tag_new_objects", (objects,), Some(&keywords))?;
+        objects.apply(&scene)?;
     }
     Ok(())
 }
@@ -80,13 +95,35 @@ impl DocumentHistory {
     }
 
     #[staticmethod]
-    fn execute(
-        py: Python<'_>,
-        host: &Bound<'_, PyAny>,
-        cmd: &Bound<'_, PyAny>,
-        tag_objects: &Bound<'_, PyAny>,
-    ) -> PyResult<()> {
-        super::execute::execute(py, host, cmd, tag_objects)
+    fn run<'py>(host:&Bound<'py,PyAny>, command:&Bound<'py,PyAny>, phase:&str) -> PyResult<Bound<'py,PyAny>> {
+        dispatch::run(host, command, phase)
+    }
+
+    #[staticmethod]
+    pub(super) fn transaction_covers(commands:&Bound<'_,PyAny>, scene:&Bound<'_,PyAny>) -> PyResult<bool> {
+        if !commands.is_truthy()? {return Ok(false);}
+        for c in commands.try_iter()? {
+            if !super::journal_plan::uses_transaction(&c?,scene)? {return Ok(false);}
+        }
+        Ok(true)
+    }
+
+    #[staticmethod]
+    fn refresh_dimensions(scene: &Bound<'_,PyAny>) -> PyResult<()> {
+        if let Some(dims) = scene.getattr_opt("dimensions")?.filter(|v| !v.is_none()) {
+            for dim in dims.try_iter()? {
+                if let Some(refresh) = dim?.getattr_opt("refresh_anchors")?.filter(|v| !v.is_none()) {
+                    refresh.call1((scene,))?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[staticmethod]
+    #[pyo3(signature=(scene,include_groups=true))]
+    fn objects_before<'py>(scene:&Bound<'py,PyAny>,include_groups:bool)->PyResult<Bound<'py,PyAny>> {
+        Ok(lifecycle::objects_before(scene,include_groups)?.before)
     }
 
     fn push(&self, py: Python<'_>, command: &Bound<'_, PyAny>, limit: usize) -> PyResult<()> {
@@ -207,23 +244,14 @@ impl DocumentHistory {
                     txn.cast::<PyTransaction>()?.try_borrow()?.run(py, undo)?;
                 } else {
                     let scene = host.getattr("scene")?;
-                    host.call_method1(
-                        "_in_command_mesh",
-                        (&cmd, txn.getattr("replay_editor")?, &cmd, scene, undo),
-                    )?;
+                    in_command_mesh(&scene, &cmd, &txn.getattr("replay_editor")?, (&cmd, &scene, undo))?;
                     host.setattr("last_txn", (txn, undo))?;
                 }
             } else if let Some(group) = cmd.getattr_opt("_mixed_group")? {
                 let doc = py.import("core.doc_model")?;
                 doc.call_method0("flush")?;
-                host.call_method1(
-                    "_in_command_mesh",
-                    (
-                        &cmd,
-                        group.getattr(if undo { "undo" } else { "do" })?,
-                        host.getattr("scene")?,
-                    ),
-                )?;
+                let scene = host.getattr("scene")?;
+                in_command_mesh(&scene, &cmd, &group.getattr(if undo { "undo" } else { "do" })?, (&scene,))?;
                 doc.call_method0("flush")?;
                 host.setattr("last_txn", (cmd.getattr("_group_diff")?, undo))?;
             } else if sheet {
@@ -252,34 +280,34 @@ impl DocumentHistory {
         let parts = group.getattr("commands")?.cast_into::<PyList>()?;
         let dispatch = |cmd: &Bound<'_, PyAny>, backwards: bool| -> PyResult<()> {
             let phase = if backwards { "undo" } else { "redo" };
-            let frame = group.getattr("_in_frame")?;
-            if hooks_only {
-                frame.call1((scene, cmd, cmd.getattr("doc_after")?, scene, phase))?;
-            } else if let Some(txn) = cmd.getattr_opt("_doc_txn")?.filter(|v| !v.is_none()) {
+            let replay = || -> PyResult<()> {
+                if hooks_only {
+                    cmd.call_method1("doc_after", (scene, phase))?;
+                } else if let Some(txn) = cmd.getattr_opt("_doc_txn")?.filter(|v| !v.is_none()) {
+                    txn.call_method1("replay_editor", (cmd, scene, backwards))?;
+                } else {
+                    let target = cmd.getattr_opt("_mixed_group")?.unwrap_or_else(|| cmd.clone());
+                    target.call_method1(if backwards { "undo" } else { "do" }, (scene,))?;
+                }
+                Ok(())
+            };
+            if !hooks_only && cmd.getattr_opt("_doc_txn")?.is_some_and(|v| !v.is_none()) {
                 scene.py().import("core.doc_model")?.call_method0("flush")?;
-                frame.call1((
-                    scene,
-                    cmd,
-                    txn.getattr("replay_editor")?,
-                    cmd,
-                    scene,
-                    backwards,
-                ))?;
-            } else if let Some(mixed) = cmd.getattr_opt("_mixed_group")? {
-                frame.call1((
-                    scene,
-                    cmd,
-                    mixed.getattr(if backwards { "undo" } else { "do" })?,
-                    scene,
-                ))?;
-            } else {
-                frame.call1((
-                    scene,
-                    cmd,
-                    cmd.getattr(if backwards { "undo" } else { "do" })?,
-                    scene,
-                ))?;
             }
+            let active = scene.getattr("mesh")?;
+            let mesh = cmd.getattr_opt("_history_mesh")?.unwrap_or_else(|| active.clone());
+            scene.setattr("mesh", &mesh)?;
+            let result = (|| {
+                if let Some(frame) = cmd.getattr_opt("_tool_frame")?.filter(|f| !f.is_none()) {
+                    let kw = pyo3::types::PyDict::new(scene.py());
+                    kw.set_item("matrix", frame.get_item(1)?)?;
+                    let scope = scene.py().import("core.coordinate_frame")?.call_method(
+                        "mesh_frame", (&mesh, frame.get_item(0)?), Some(&kw))?;
+                    in_frame(&scope, replay)
+                } else { replay() }
+            })();
+            scene.setattr("mesh", active)?;
+            result?;
             Ok(())
         };
         for i in 0..parts.len() {

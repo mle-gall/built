@@ -97,13 +97,12 @@ impl LinkSubset {
             };
             from.call_method1(py, "go", (scene, to))?;
         } else {
-            let state = py.import("core.history")?.getattr("_TagState")?;
-            let before = state.call1((scene,))?;
+            let before = crate::doc::unlink::tags::TagState::capture(scene)?.into_any();
             scene
                 .getattr("materials")?
                 .call_method1("update", (&self.materials,))?;
             crate::model::links::sync_tags(scene, &pyo3::types::PyString::new(py, &self.path), self.tags.bind(py))?;
-            self.tag_states = Some((before.unbind(), state.call1((scene,))?.unbind()));
+            self.tag_states = Some((before.unbind(), crate::doc::unlink::tags::TagState::capture(scene)?.into_any().unbind()));
         }
         let selection = scene.getattr("selection")?;
         let selected = selection.try_iter()?.collect::<PyResult<Vec<_>>>()?;

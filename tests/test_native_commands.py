@@ -330,3 +330,18 @@ def test_nested_group_and_component_of_hold_the_groups():
     h.execute(MakeComponentOfCommand([], [], [a, b]))
     comp = h.undo_stack[-1].container
     assert comp.component and list(scene.groups) == [comp]
+
+
+def test_plugin_compound_state_survives_copy_and_pickle():
+    from copy import deepcopy
+    from pickle import dumps, loads
+    from core.history import SetPluginDataCommand
+
+    command = CompoundCommand([SetPluginDataCommand("extension", {"tags": ["A"]})])
+    for restored in (deepcopy(command), loads(dumps(command))):
+        scene = Scene()
+        restored.do(scene)
+        assert scene.plugin_data["extension"] == {"tags": ["A"]}
+        restored.undo(scene)
+        assert "extension" not in scene.plugin_data
+        assert restored.commands[0].value is not command.commands[0].value

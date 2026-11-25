@@ -51,6 +51,7 @@ import ingetrazo_core as _rs
 
 # The plugin surface (docs/model-port.md).
 link_of = _rs.link_of
+fill_link = _rs.link_fill
 is_linked = _rs.link_is_linked
 linked_groups = _rs.link_linked_groups
 sources = _rs.link_sources
@@ -329,51 +330,6 @@ def resolve(scene, host_path=None, *, progress=None) -> dict:
             errors[path] = str(exc)
     scene.link_errors = errors
     return errors
-
-
-def fill_link(scene, group, mirror=None, host_path=None):
-    """Fill the linked placement ``group`` from its source as a fresh link
-    of the host is filled (:func:`make_link`, :func:`reload`): its parts
-    under the uids a reload gives them, the source's tags brought in under
-    the file's own folder in «Linked files». Returns the error, or None
-    (``group`` is then left as it was).
-
-    ``mirror``: the file ``group`` was linked inside until now (Unlink of
-    that file's link). When this file was not linked directly before, a tag
-    of it the host showed switched there — the outer file's copy of it,
-    «Mid / Leaf / Steel» — shows switched here too, as the host's
-    override."""
-    rec = link_of(group)
-    if rec is None:
-        return "not a link"
-    found = locate(rec, host_path)
-    if found is None:
-        return f"{rec['path']} was not found"
-    path = Path(found).resolve()
-    if _rs.link_norm(path) != _rs.link_norm(rec["path"]):
-        rec["path"] = str(path)          # the project moved: follow it
-    fresh = "tags" not in (scene.link_registry.get(_rs.link_norm(path)) or {})
-    materials = dict(scene.materials)
-    try:
-        comp, tags = _read_definition(materials, path, rec.get("select"),
-                                      rec.get("include_nested", True))
-    except LinkError as exc:
-        return str(exc)
-    scene.materials.update(materials)
-    _rs.link_populate(group, comp)
-    _rs.link_sync_tags(scene, path, tags)
-    entry = _rs.link_entry(scene, path)
-    entry["loaded_mtime_ns"] = path.stat().st_mtime_ns
-    if fresh and mirror:
-        for name in entry.get("tags", ()):
-            ly = scene.layer_by_key(name)
-            was = scene.layer_by_key(_rs.link_stem(mirror) + SEP + name)
-            if ly is not None and was is not None \
-                    and bool(was.visible) != bool(ly.visible):
-                ly.visible = bool(was.visible)
-                entry["overrides"][name] = bool(was.visible)
-    scene.version += 1
-    return None
 
 
 def clear_overrides(scene, path, host_path=None) -> None:

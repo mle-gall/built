@@ -16,9 +16,6 @@ use std::collections::HashSet;
 
 const DEFAULT_LAYER: &str = "Layer 0";
 
-fn host<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
-    py.import("core.history")?.getattr(name)
-}
 
 pub(super) fn all_placements(items: &[Obj<'_>]) -> bool {
     items.iter().all(|e| e.is_instance_of::<PyPlacement>())
@@ -58,7 +55,8 @@ fn layer_meshes<'py>(s: &RecordStep, py: Python<'py>, _scene: &Obj<'py>) -> PyRe
 
 // ------------------------------------------------------------ flags
 
-fn is_hidden(e: &Obj<'_>) -> PyResult<bool> {
+#[pyfunction]
+pub(crate) fn is_hidden(e: &Obj<'_>) -> PyResult<bool> {
     match e.getattr_opt("attrs")?.filter(|a| !a.is_none()) {
         Some(attrs) => attrs.call_method1("get", ("hidden",))?.is_truthy(),
         None => match e.getattr_opt("hidden")? {
@@ -68,7 +66,8 @@ fn is_hidden(e: &Obj<'_>) -> PyResult<bool> {
     }
 }
 
-fn set_hidden(e: &Obj<'_>, hidden: bool) -> PyResult<()> {
+#[pyfunction]
+pub(crate) fn set_hidden(e: &Obj<'_>, hidden: bool) -> PyResult<()> {
     match e.getattr_opt("attrs")?.filter(|a| !a.is_none()) {
         Some(attrs) if hidden => attrs.set_item("hidden", true),
         Some(attrs) => attrs.call_method1("pop", ("hidden", e.py().None())).map(|_| ()),
@@ -120,10 +119,10 @@ fn run_hide(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     }
     if hidden {
         // An invisible entity must not linger in the selection.
-        host(py, "_unselect")?.call1((scene, &list))?;
+        crate::doc::history_support::unselect(scene, &list)?;
     }
     if !bulk {
-        host(py, "_dirty_group_chunks")?.call1((scene,))?;
+        crate::doc::history_support::dirty_group_chunks(scene)?;
     }
     version(scene)
 }
@@ -135,9 +134,9 @@ fn after_hide(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Option<&st
                 set_hidden(e, p?.is_truthy()?)?;
             }
         }
-        host(py, "_dirty_group_chunks")?.call1((scene,))?;
+        crate::doc::history_support::dirty_group_chunks(scene)?;
     } else if phase == Some("redo") && s.arg(py, 1).is_truthy()? {
-        host(py, "_unselect")?.call1((scene, s.arg(py, 0)))?;
+        crate::doc::history_support::unselect(scene, &s.arg(py, 0))?;
     }
     version(scene)
 }
@@ -195,7 +194,7 @@ fn run_assign(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
         s.remember(vec![previous.into_any()]);
     }
     if !bulk {
-        host(py, "_dirty_group_chunks")?.call1((scene,))?;
+        crate::doc::history_support::dirty_group_chunks(scene)?;
     }
     version(scene)
 }
@@ -213,7 +212,7 @@ fn after_assign(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Option<&
                 layers.call_method1("remove", (tag,))?;
             }
         }
-        host(py, "_dirty_group_chunks")?.call1((scene,))?;
+        crate::doc::history_support::dirty_group_chunks(scene)?;
     }
     version(scene)
 }

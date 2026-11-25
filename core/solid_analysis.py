@@ -480,6 +480,6 @@ class RepairSolidsCommand(Command):
                   if (hasattr(s, "v0") or hasattr(s, "loop"))
                   and s not in alive]:
             scene.selection.discard(s)
-        from core.history import _dirty_group_chunks
-        _dirty_group_chunks(scene)
+        from ingetrazo_core import dirty_group_chunks
+        dirty_group_chunks(scene)
         scene.version += 1

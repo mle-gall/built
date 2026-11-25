@@ -908,7 +908,7 @@ fn editable(mesh: &Obj<'_>, faces: &[Face], lines: &[(DVec3, DVec3)]) -> PyResul
     if !faces.is_empty() {
         let kw = PyDict::new(py);
         kw.set_item("coplanar_merge", true)?;
-        py.import("core.history")?
+        py.import("ingetrazo_core")?
             .call_method("run_stitch", (mesh, seed, added), Some(&kw))?;
         py.import("core.orient")?
             .call_method1("orient_outward", (mesh,))?;

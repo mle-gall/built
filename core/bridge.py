@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.history import run_stitch
+from ingetrazo_core import run_stitch
 from core.mesh import Edge, Face, turn_face_over
 from core.orient import orient_outward
 from core.sweep import _CURVE_FACET_COS, _wall, order_path_edges

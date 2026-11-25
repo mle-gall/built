@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! The document transaction enclosing a host tool invocation.
-use super::py::PyTransaction;
+use super::{history::lifecycle::{TagTargets,follow_text}, py::PyTransaction};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use std::collections::HashSet;
@@ -14,7 +14,7 @@ pub(super) fn execute<'py>(
     py: Python<'py>,
     host: &Bound<'py, PyAny>,
     cmd: &Bound<'py, PyAny>,
-    tag_objects: &Bound<'py, PyAny>,
+    tag_objects: Option<&TagTargets<'py>>,
 ) -> PyResult<()> {
     let api = py.import("core.history")?;
     let doc = py.import("core.doc_model")?;
@@ -32,10 +32,7 @@ pub(super) fn execute<'py>(
         api.getattr("AddGuideCommand")?,
     )
         .into_pyobject(py)?;
-    let replay = api
-        .getattr("_geometry_plan")?
-        .call1((cmd, &scene, &parts))?
-        .is_truthy()?;
+    let replay = super::journal_plan::enlist(&api,cmd,&scene,&parts)?;
     if !replay && cmd.get_type().is(&api.getattr("CompoundCommand")?) && super::lock().depth() == 0
     {
         return execute_mixed(py, host, cmd, tag_objects);
@@ -89,16 +86,16 @@ pub(super) fn execute<'py>(
         } else {
             cmd.call_method1("do", (&scene,))?;
         }
-        if !tag_objects.is_none() {
-            host.call_method0("_follow_text_placements")?;
+        if tag_objects.is_some() {
+            follow_text(host)?;
         }
         // Auto-created annotation tags survive undo but belong to the published diff.
-        if !tag_objects.is_none() && depth == 1 && cmd.is_instance(&auto_tags)? {
+        if tag_objects.is_some() && depth == 1 && cmd.is_instance(&auto_tags)? {
             annotation = Some(doc.call_method0("commit")?);
             doc.call_method1("begin", (document,))?;
         }
-        if !tag_objects.is_none() {
-            tag_objects.call0()?;
+        if let Some(tags)=tag_objects {
+            tags.apply(&scene)?;
         }
         doc.call_method0("commit")
     })();
@@ -145,12 +142,7 @@ pub(super) fn execute<'py>(
         }
         txn
     };
-    if !replay.is_none()
-        && api
-            .getattr("_uses_doc_undo")?
-            .call1((cmd, &scene))?
-            .is_truthy()?
-    {
+    if !replay.is_none() && super::journal_plan::uses_transaction(cmd,&scene)? {
         cmd.call_method1("bind_transaction", (replay,))?;
     } else {
         cmd.setattr("_doc_txn", py.None())?;
@@ -165,7 +157,7 @@ fn execute_mixed(
     py: Python<'_>,
     host: &Bound<'_, PyAny>,
     cmd: &Bound<'_, PyAny>,
-    tags: &Bound<'_, PyAny>,
+    tags: Option<&TagTargets<'_>>,
 ) -> PyResult<()> {
     let api = py.import("core.history")?;
     let group = api
@@ -179,19 +171,18 @@ fn execute_mixed(
         for part in cmd.getattr("commands")?.try_iter()? {
             let part = part?;
             host.setattr("last_txn", py.None())?;
-            execute(py, host, &part, py.None().bind(py))?;
+            execute(py, host, &part,None)?;
             finished.append(&part)?;
             let diff = host.getattr("last_txn")?;
             if !diff.is_none() {
                 records.push(diff.get_item(0)?.extract::<Py<PyTransaction>>()?);
             }
         }
-        if !tags.is_none() {
+        if let Some(tags)=tags {
             let doc = py.import("core.doc_model")?;
             doc.call_method1("begin", (document,))?;
-            let tail = host
-                .call_method0("_follow_text_placements")
-                .and_then(|_| tags.call0())
+            let tail = follow_text(host)
+                .and_then(|_| tags.apply(&scene))
                 .and_then(|_| doc.call_method0("commit"));
             let txn = match tail {
                 Ok(txn) => txn,

@@ -108,7 +108,7 @@ fn read_skp<'py>(
         .call1((scene,))?;
     // A private document has no listeners to notify. Reserving the editor's
     // process-wide transaction writer here would reject edits in other tabs.
-    let before = history.call_method0("_objects_before")?;
+    let before = crate::doc::history::lifecycle::objects_before(scene,true)?;
     let original = crate::skp::SkpOpenUndo::capture(scene)?;
     crate::skp::skp_apply(
         scene,
@@ -116,7 +116,7 @@ fn read_skp<'py>(
         args.get_item("progress")?.as_ref(),
         None,
     )?;
-    history.call_method1("_tag_new_objects", (before,))?;
+    before.apply(scene)?;
     let command = Py::new(
         py,
         crate::skp::SkpOpenUndo::new(original, crate::skp::SkpOpenUndo::capture(scene)?),

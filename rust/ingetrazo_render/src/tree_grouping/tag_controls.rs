@@ -140,8 +140,8 @@ pub fn tree_edit_tag(
             }
             style.setattr(field, on)?;
             if verb == "tagcolours" {
-                py.import("core.history")?
-                    .call_method1("_dirty_group_chunks", (&scene,))?;
+                py.import("ingetrazo_core")?
+                    .call_method1("dirty_group_chunks", (&scene,))?;
                 let mode: String = style.getattr("face_mode")?.extract()?;
                 if on && !matches!(mode.as_str(), "textures" | "shaded" | "xray") {
                     vp.call_method1(

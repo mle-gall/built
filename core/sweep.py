@@ -19,7 +19,7 @@ from copy import deepcopy
 
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.history import run_stitch
+from ingetrazo_core import run_stitch
 from core.topology import _key
 
 #: Dihedral cosine above which a sweep seam reads as a *curve* facet and is

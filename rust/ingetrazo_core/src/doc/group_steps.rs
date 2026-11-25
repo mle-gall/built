@@ -20,9 +20,6 @@ fn none(py: Python<'_>) -> Obj<'_> {
     py.None().into_bound(py)
 }
 
-fn host<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
-    py.import("core.history")?.getattr(name)
-}
 
 fn discard<'py>(scene: &Obj<'py>) -> PyResult<Obj<'py>> {
     scene.getattr("selection")?.getattr("discard")
@@ -80,7 +77,7 @@ fn moved<'py>(s: &RecordStep, py: Python<'py>) -> PyResult<Obj<'py>> {
 fn run_reparent(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     let (_, moves) = places::reparent(&scene.getattr("groups")?, &s.arg(py, 0), &s.arg(py, 1), &discard(scene)?)?;
     let groups = PyList::new(py, moves.into_iter().map(|m| m.0))?.into_any();
-    host(py, "_dirty_placements")?.call1((&groups,))?;
+    crate::doc::history_support::dirty_placements(&groups)?;
     s.remember(vec![groups]);
     version(scene)
 }
@@ -90,9 +87,9 @@ fn after_reparent(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Option
     if phase == Some("undo") {
         scene.getattr("selection")?.call_method0("clear")?;
     } else {
-        host(py, "_unselect")?.call1((scene, &groups))?;
+        crate::doc::history_support::unselect(scene, &groups)?;
     }
-    host(py, "_dirty_placements")?.call1((&groups,))?;
+    crate::doc::history_support::dirty_placements(&groups)?;
     version(scene)
 }
 

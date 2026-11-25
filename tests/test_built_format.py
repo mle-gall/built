@@ -9,7 +9,7 @@ from core import _native, store_mesh
 from core.group import Group
 from core.scene import Scene
 from formats import built, igz
-from ingetrazo_core import snapshot_steps
+from ingetrazo_core import snapshot_steps, store_views
 
 POINTS = np.array([[650000.01, 6860000.02, 0], [650000.02, 6860001.02, 0]])
 
@@ -23,7 +23,7 @@ def precise_scene():
     src = dict(pos=POINTS, edges=[[0, 1]], flags=None, counts=empty,
                sizes=empty, rings=empty)
     with patch.object(_native, "native", _native.available()):
-        store, table = store_mesh.store_from_source(src, precise=True)
+        store, table = store_views.store_from_source(src, precise=True)
     store_mesh.become_store(scene.mesh, store, table)
     return scene
 
@@ -155,8 +155,8 @@ def test_legacy_float32_weld_threshold_is_preserved(monkeypatch):
     points = np.array([[0, 0, 0], [3.0003e-8, 1e-4, 0]], dtype="f")
     empty = np.empty(0, dtype=np.int64)
     source = dict(pos=points, edges=[[0, 1]], sizes=empty, counts=empty, rings=empty)
-    legacy, _ = store_mesh.store_from_source(source)
-    precise, _ = store_mesh.store_from_source(source, precise=True)
+    legacy, _ = store_views.store_from_source(source)
+    precise, _ = store_views.store_from_source(source, precise=True)
     assert legacy.counts() == (1, 0, 0)
     assert precise.counts() == (2, 1, 0)
 
