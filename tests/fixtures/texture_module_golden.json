@@ -1,0 +1,188 @@
+{
+ "names": [
+  "wood.png",
+  "passwd",
+  "wood.png",
+  "sumari.png",
+  "hidden",
+  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.jpeg",
+  "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "\u00dcn\u00efc\u00f6d\u00e9 \u00f1ame.png",
+  "texture.png",
+  "texture.png",
+  "yz.png",
+  "name.with.dots.tga",
+  "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.png",
+  "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+ ],
+ "magic": [
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  false,
+  false,
+  false,
+  false
+ ],
+ "constants": [
+  64,
+  0.001,
+  0,
+  1
+ ],
+ "root": "<tmp>/cache",
+ "stats0": [
+  0,
+  0
+ ],
+ "cached": [
+  "<tmp>/cache/skp/bab3d0735a88b9d4-wood.png",
+  "<tmp>/cache/embedded/20f1eea3bcea16d0-wood.png",
+  "<tmp>/cache/skp/e5b5bdb1e186c441-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.png"
+ ],
+ "cached_again": "<tmp>/cache/skp/bab3d0735a88b9d4-wood.png",
+ "stats1": [
+  3,
+  144
+ ],
+ "files": [
+  true,
+  false,
+  true,
+  false
+ ],
+ "tints": [
+  {
+   "path": "<tmp>/cache/tinted/ed9ee5561cad7314-tile.png",
+   "sw": 0.5,
+   "sh": 0.25,
+   "base": "<tmp>/tile.png",
+   "tint": [
+    0.2,
+    0.4,
+    0.8
+   ],
+   "tint_mode": 0
+  },
+  {
+   "path": "<tmp>/cache/tinted/e63af89c1223961b-tile.png",
+   "sw": 0.5,
+   "sh": 0.25,
+   "base": "<tmp>/tile.png",
+   "tint": [
+    0.3,
+    0.3,
+    0.3
+   ],
+   "tint_mode": 0
+  },
+  "ed9ee5561cad73140ff75894050a5dc594895f3b",
+  {
+   "path": "<tmp>/tile.png",
+   "sw": 0.5,
+   "sh": 0.25
+  },
+  {
+   "path": "<tmp>/cache/tinted/cc92e940512d9b55-tile.png",
+   "sw": 0.5,
+   "sh": 0.25,
+   "base": "<tmp>/tile.png",
+   "tint": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "tint_mode": 1
+  },
+  {
+   "path": "<tmp>/cache/tinted/e8797caa819c0e98-tile.png",
+   "sw": 0.5,
+   "sh": 0.25,
+   "base": "<tmp>/tile.png",
+   "tint": [
+    0.3,
+    0.3,
+    0.3
+   ],
+   "tint_mode": 1
+  },
+  "cc92e940512d9b555b0df7efe2073270692fa3e6",
+  {
+   "path": "<tmp>/tile.png",
+   "sw": 0.5,
+   "sh": 0.25
+  },
+  {
+   "path": "<tmp>/cache/tinted/f2dcb1dfa708e344-tile.png",
+   "sw": 0.5,
+   "sh": 0.25,
+   "base": "<tmp>/tile.png",
+   "tint": [
+    1.5,
+    -0.2,
+    0.5
+   ],
+   "tint_mode": 0
+  },
+  {
+   "path": "<tmp>/cache/tinted/e63af89c1223961b-tile.png",
+   "sw": 0.5,
+   "sh": 0.25,
+   "base": "<tmp>/tile.png",
+   "tint": [
+    0.3,
+    0.3,
+    0.3
+   ],
+   "tint_mode": 0
+  },
+  "f2dcb1dfa708e3446d5f1a4be1ca929003710a3a",
+  {
+   "path": "<tmp>/tile.png",
+   "sw": 0.5,
+   "sh": 0.25
+  },
+  true,
+  {}
+ ],
+ "cutout": [
+  true,
+  true,
+  false
+ ],
+ "clear": 8,
+ "stats2": [
+  0,
+  0
+ ],
+ "profile_root": "<tmp>/profile/data/IngeTrazo/textures",
+ "record": [
+  "Texture(path='a.png', sw=1.0, sh=1.0)",
+  {
+   "path": "a.png",
+   "sw": 1.0,
+   "sh": 1.0
+  },
+  "Texture(path='b.png', sw=2.0, sh=3.0)",
+  {
+   "path": "b.png",
+   "sw": 2.0,
+   "sh": 3.0
+  },
+  true,
+  false,
+  "Texture",
+  "core.texture",
+  [
+   "path",
+   "sw",
+   "sh"
+  ]
+ ]
+}
