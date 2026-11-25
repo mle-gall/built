@@ -260,7 +260,7 @@ fn template_name(py: Python<'_>, setting: &str) -> PyResult<Option<String>> {
     })
 }
 fn app_data(py: Python<'_>) -> PyResult<std::path::PathBuf> {
-    py.import("core.autosave")?
+    py.import("ingetrazo_core.autosave")?
         .call_method0("_app_data_base")?
         .extract()
 }

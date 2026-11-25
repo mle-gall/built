@@ -28,7 +28,7 @@ fn file_placements<'py>(history: &Obj<'py>, placements: &Obj<'py>, node: &Obj<'p
     let scene = history.getattr("scene")?;
     let step = history
         .py()
-        .import("core.structure")?
+        .import("ingetrazo_core.structure")?
         .call_method1("file", (scene, placements, node))?;
     execute(history, &step)
 }

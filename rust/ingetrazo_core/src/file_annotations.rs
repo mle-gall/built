@@ -83,7 +83,7 @@ pub fn igz_load_annotations(
     let destination = scene.getattr(table)?;
     let attachment = py.import("core.annotation_anchor")?.getattr("Attachment")?;
     let (module, class) = if labels {
-        ("core.textlabel", "TextLabel")
+        ("ingetrazo_core.textlabel", "TextLabel")
     } else {
         ("core.dimension", "Dimension")
     };

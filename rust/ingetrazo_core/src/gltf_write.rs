@@ -439,7 +439,7 @@ impl<'py> Hierarchy<'py> {
         } else {
             (
                 mesh.as_ptr() as usize,
-                py.import("core.materials")?
+                py.import("ingetrazo_core.materials")?
                     .call_method1("material_sig", (&paint,))?,
             )
                 .into_pyobject(py)?

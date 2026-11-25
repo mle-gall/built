@@ -4,6 +4,103 @@ use pyo3::{
     prelude::*,
     types::{PyModule, PyTuple},
 };
+mod annotations;
+mod autosave;
+mod axes;
+mod geometry;
+mod materials;
+mod paths;
+mod structure;
+mod style;
+mod sun;
+use pyo3::types::PyDict;
+
+fn method(ns: &Bound<PyDict>, name: &str, func: &Obj) -> PyResult<()> {
+    ns.set_item(
+        name,
+        ns.py()
+            .import("functools")?
+            .call_method1("partialmethod", (func,))?,
+    )
+}
+fn class_method(ns: &Bound<PyDict>, name: &str, func: &Obj) -> PyResult<()> {
+    ns.set_item(
+        name,
+        ns.py()
+            .import("builtins")?
+            .call_method1("classmethod", (func,))?,
+    )
+}
+fn data_class<'p>(
+    m: &Module<'p>,
+    name: &str,
+    fields: &[&str],
+    ns: &Bound<'p, PyDict>,
+    base: Option<Obj<'p>>,
+) -> PyResult<Obj<'p>> {
+    let py = m.py();
+    let ann = PyDict::new(py);
+    for &key in fields {
+        ann.set_item(
+            key,
+            match (name, key) {
+                ("Material", "name") => "str",
+                ("Material", "color") => "Optional[tuple]",
+                ("Material", "texture") => "Optional[dict]",
+                ("Material", "opacity") => "Optional[float]",
+                ("Material", "finish") => "Optional[str]",
+                ("Material", "pbr") => "Optional[dict]",
+                ("ShadowSettings", "enabled") => "bool",
+                ("ShadowSettings", "month") => "int",
+                ("ShadowSettings", "day") => "int",
+                ("ShadowSettings", "hour") => "int",
+                ("ShadowSettings", "minute") => "int",
+                ("ShadowSettings", "darkness") => "float",
+                ("ShadowSettings", "utc_offset") => "int | None",
+                ("Style", "name") => "str",
+                ("Style", "face_mode") => "str",
+                ("Style", "edges") => "bool",
+                ("Style", "profiles") => "bool",
+                ("Style", "back_edges") => "bool",
+                ("Style", "edge_color") => "tuple",
+                ("Style", "front_color") => "tuple",
+                ("Style", "back_color") => "tuple | None",
+                ("Style", "background") => "tuple",
+                ("Style", "sky") => "bool",
+                ("Style", "sky_color") => "tuple",
+                ("Style", "ground_color") => "tuple",
+                ("Style", "section_fill") => "bool",
+                ("Style", "section_fill_color") => "tuple",
+                ("Style", "ambient_occlusion") => "bool",
+                ("Style", "ao_distance") => "float",
+                ("Style", "ao_intensity") => "float",
+                ("Style", "color_by_layer") => "bool",
+                ("Style", "model_linetypes") => "bool",
+                _ => "object",
+            },
+        )?;
+    }
+    ns.set_item("__annotations__", ann)?;
+    ns.set_item("__module__", m.name()?)?;
+    let cls = py.import("builtins")?.call_method1(
+        "type",
+        (
+            name,
+            PyTuple::new(py, base.into_iter().collect::<Vec<_>>())?,
+            ns,
+        ),
+    )?;
+    let cls = py
+        .import("dataclasses")?
+        .call_method1("dataclass", (cls,))?;
+    cls.setattr(
+        "__module__",
+        m.name()?.to_string().replace("ingetrazo_core.", "core."),
+    )?;
+    m.add(name, &cls)?;
+    Ok(cls)
+}
+
 type Obj<'p> = Bound<'p, PyAny>;
 type Module<'p> = Bound<'p, PyModule>;
 
@@ -96,9 +193,35 @@ fn cancel_context(m: &Module<'_>, context: &Obj<'_>) -> PyResult<()> {
 pub(crate) fn register(core: &Module<'_>) -> PyResult<()> {
     let py = core.py();
     let modules = py.import("sys")?.getattr("modules")?;
-    for name in ["version", "triangulate", "settings", "timers"] {
+    for name in [
+        "version",
+        "triangulate",
+        "settings",
+        "timers",
+        "paths",
+        "autosave",
+        "axes",
+        "geometry",
+        "guide",
+        "textlabel",
+        "sun",
+        "style",
+        "materials",
+        "structure",
+    ] {
         let m = PyModule::new(py, &format!("ingetrazo_core.{name}"))?;
+        modules.set_item(m.name()?, &m)?;
         match name {
+            "paths" => paths::install(&m)?,
+            "autosave" => autosave::install(&m)?,
+            "axes" => axes::install(&m, core)?,
+            "geometry" => geometry::install(&m, core)?,
+            "guide" => annotations::install(&m, false)?,
+            "textlabel" => annotations::install(&m, true)?,
+            "sun" => sun::install(&m)?,
+            "style" => style::install(&m)?,
+            "materials" => materials::install(&m, core)?,
+            "structure" => structure::install(&m, core)?,
             "version" => {
                 let v = include_str!("../../VERSION").trim();
                 m.add("__version__", v)?;

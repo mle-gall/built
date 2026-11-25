@@ -128,7 +128,7 @@ fn frame_scene<'py>(scene: &Obj<'py>, frame: &Obj<'py>, view: &Obj<'py>) -> PyRe
     if let Some(style) = opt(view, "style").filter(|v| v.is_truthy().unwrap_or(false)) {
         over.set_item(
             "display_style",
-            py.import("core.style")?
+            py.import("ingetrazo_core.style")?
                 .getattr("Style")?
                 .call_method1("from_dict", (style,))?,
         )?;
@@ -195,7 +195,7 @@ fn frame_scene<'py>(scene: &Obj<'py>, frame: &Obj<'py>, view: &Obj<'py>) -> PyRe
         }
     }
     if let Some(shadows) = opt(scene, "shadows") {
-        let class = py.import("core.sun")?.getattr("ShadowSettings")?;
+        let class = py.import("ingetrazo_core.sun")?.getattr("ShadowSettings")?;
         let state = if let Some(v) = opt(view, "shadows") {
             class
                 .call_method1("from_dict", (v,))?
@@ -218,7 +218,7 @@ fn frame_scene<'py>(scene: &Obj<'py>, frame: &Obj<'py>, view: &Obj<'py>) -> PyRe
 #[pyfunction]
 fn frame_style<'py>(viewport: &Obj<'py>, scene: &Obj<'py>, frame: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = frame.py();
-    let module = py.import("core.style")?;
+    let module = py.import("ingetrazo_core.style")?;
     let style = frame
         .getattr("style")?
         .extract::<Option<String>>()?

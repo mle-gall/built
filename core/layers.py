@@ -304,11 +304,11 @@ def taggable(entities) -> list:
     Layers panel and its toolbar all ask."""
     from core.dimension import Dimension
     from core.group import Group
-    from core.guide import Guide, GuideCircle
+    from ingetrazo_core.guide import Guide, GuideCircle
     from core.image_plane import ImagePlane
     from ingetrazo_core.mesh import Edge, Face
     from core.section import SectionPlane
-    from core.textlabel import TextLabel
+    from ingetrazo_core.textlabel import TextLabel
     kinds = (Face, Edge, Group, Dimension, TextLabel, SectionPlane, Guide,
              GuideCircle, ImagePlane)
     return [e for e in entities or () if isinstance(e, kinds)]

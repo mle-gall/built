@@ -15,7 +15,7 @@ def copied_guide(guide, m: QMatrix4x4):
     """A new guide: ``guide`` carried by the transform ``m``. A circle stays
     a circle — centre mapped, plane normal rotated, radius kept — instead of
     collapsing into a guide line (Ctrl+copy of a guide circle, #238)."""
-    from core.guide import Guide, GuideCircle
+    from ingetrazo_core.guide import Guide, GuideCircle
     if getattr(guide, "is_circle", False):
         return GuideCircle(m.map(guide.center),
                            m.mapVector(guide.normal),

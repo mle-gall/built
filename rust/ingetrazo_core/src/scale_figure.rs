@@ -34,7 +34,7 @@ impl Figure {
 }
 fn people_dir(py: Python<'_>) -> PyResult<PathBuf> {
     let root: PathBuf = py
-        .import("core.paths")?
+        .import("ingetrazo_core.paths")?
         .call_method0("app_root")?
         .extract()?;
     Ok(root.join("resources/components"))
@@ -67,7 +67,7 @@ fn people(py: Python<'_>) -> PyResult<Bound<'_, PyList>> {
 }
 fn figures_dir(py: Python<'_>) -> PyResult<PathBuf> {
     let base: PathBuf = py
-        .import("core.autosave")?
+        .import("ingetrazo_core.autosave")?
         .call_method0("_app_data_base")?
         .extract()?;
     Ok(base.join("figures"))

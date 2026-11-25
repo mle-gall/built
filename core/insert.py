@@ -26,7 +26,7 @@ import re
 
 from core.group import Group, iter_placements
 from core.layers import DEFAULT_LAYER, Layer, layer_of
-from core.materials import register
+from ingetrazo_core.materials import register
 
 #: The name a Group gives itself when nobody named it.
 _AUTO_NAME = re.compile(r"^Group \d+$")

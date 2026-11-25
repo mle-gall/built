@@ -129,7 +129,7 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
         Some(g) => py.import("ingetrazo_core")?.call_method1("assembly_selection", (&scene, g, record_address(&scene, g)?))?,
         None => py.None().into_bound(py),
     };
-    let structure = py.import("core.structure")?;
+    let structure = py.import("ingetrazo_core.structure")?;
     let node = match focus_node {
         Some(n) => Some(n),
         None if groups.len() == 1 => Some(structure.call_method1("node_of", (&groups[0],))?),

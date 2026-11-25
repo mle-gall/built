@@ -193,7 +193,7 @@ fn paint_areas<'p>(mesh: &Obj<'p>, cache: Cache<'p>) -> PyResult<Obj<'p>> {
     let py = mesh.py();
     let areas = PyDict::new(py);
     let mut default = 0.;
-    let painted = py.import("core.materials")?.getattr("has_own_material")?;
+    let painted = py.import("ingetrazo_core.materials")?.getattr("has_own_material")?;
     let mut count = |attrs: Obj<'p>, area: f64| -> PyResult<()> {
         if painted.call1((&attrs,))?.is_truthy()? {
             if let Some(name) = label(&attrs)? {

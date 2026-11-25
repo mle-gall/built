@@ -113,7 +113,8 @@ def load_source(path, select=None, *, include_nested=True, link_meshes=None, pro
                 "folder_names": dict(getattr(src, "layer_folder_names", None)
                                      or {}),
                 "parents": dict(getattr(src, "folder_parents", {}) or {})}
-        from core import bim_registry, structure
+        from core import bim_registry
+        from ingetrazo_core import structure
         vocabulary = bim_registry.get(src)
         nodes = vocabulary.get('structure', {}).get('nodes', {})
         if nodes:
@@ -185,7 +186,7 @@ def _read_definition(registry, path, select, include_nested, previous=None, *, p
     its materials registered in ``registry`` (renamed where a name is the
     host's already), its tags and paint on the host's names."""
     from core.link_meshes import LinkMeshes
-    from core.materials import register
+    from ingetrazo_core.materials import register
     reader = LinkMeshes(path, registry, previous, filtered=select is not None and 'filter' in select)
     comp, tags, materials = load_source(path, select, include_nested=include_nested,
                                         link_meshes=reader, progress=progress)

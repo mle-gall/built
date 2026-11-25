@@ -216,7 +216,7 @@ fn material_columns<'py>(
     if !any {
         return Ok((shared()?, PyArray2::<u32>::zeros(py, [faces, 3], false).into_any()));
     }
-    let materials = py.import("core.materials")?;
+    let materials = py.import("ingetrazo_core.materials")?;
     let colors = PyList::empty(py);
     let slots = PyList::empty(py);
     let mut textures: Vec<[Option<Obj<'py>>; 2]> = Vec::with_capacity(table.len());
@@ -441,7 +441,7 @@ fn source_arrays<'py>(
     }
     // The attrs each row is drawn with under the container's paint; row 0
     // is a face without attrs of its own.
-    let materials = py.import("core.materials")?;
+    let materials = py.import("ingetrazo_core.materials")?;
     let paint = paint.unwrap_or_else(|| py.None().into_bound(py));
     let mut rows: Vec<Obj<'py>> = Vec::with_capacity(table.len()? + 1);
     let effective = |own: Obj<'py>| -> PyResult<Obj<'py>> {

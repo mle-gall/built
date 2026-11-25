@@ -1235,7 +1235,7 @@ fn catalogue(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 
 #[pyfunction]
 fn _catalogue(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    let resources = py.import("core.paths")?.call_method0("app_root")?.div("resources")?;
+    let resources = py.import("ingetrazo_core.paths")?.call_method0("app_root")?.div("resources")?;
     let language = py.import("core.i18n")?.call_method0("current_language")?;
     lib(py)?.call_method1("_bundled_by_key", (resources, language))
 }

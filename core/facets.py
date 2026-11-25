@@ -25,7 +25,8 @@ class Index(dict):
 
     def prepare(self, facet):
         if facet == 'structure' and facet not in self.lazy:
-            from core import bim_registry, structure
+            from core import bim_registry
+            from ingetrazo_core import structure
             registry = bim_registry.get(self.scene)
             roots = {k: structure._lineage(registry, k)[0] for k in structure._nodes(registry)}
             for group, _, _, key in structure._memberships(self.scene, registry):

@@ -106,7 +106,7 @@ fn paint_material<'py>(
             Some(mat)
         } else {
             Some(
-                py.import("core.materials")?
+                py.import("ingetrazo_core.materials")?
                     .getattr("Material")?
                     .call_method1("from_dict", (m,))?,
             )

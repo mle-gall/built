@@ -55,7 +55,7 @@ class LinkMeshes:
             stack.extend(group.get("children") or [])
         self.compressed = {}
 
-        from core.materials import register
+        from ingetrazo_core.materials import register
         registry = dict(self.registry)
         self.renames = {name: final for name, mat in materials.items()
                         if (final := register(registry, mat)) != name}

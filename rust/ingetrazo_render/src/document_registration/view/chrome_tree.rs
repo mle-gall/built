@@ -106,7 +106,7 @@ fn prepare_tree_model<'py>(a: &Args<'py>) -> Reply<'py> {
     let scene = a.get_item(0)?;
     let collections = py.import("collections")?;
     let counter = collections.getattr("Counter")?;
-    let structure = py.import("core.structure")?;
+    let structure = py.import("ingetrazo_core.structure")?;
     let registry = py.import("core.bim_registry")?.call_method1("get", (&scene,))?;
     let tree = py.import("core.link_structure")?.getattr("Tree")?.call1((&scene, &registry))?;
     let nodes = tree.getattr("nodes")?;
@@ -279,7 +279,7 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
         render(py)?.call_method1("browser_selection", (&scene,))?
     };
     let mode = if discover { "".into_bound_py_any(py)? } else { state.call_method1("get", ("_ui_mode", ""))? };
-    let structure = py.import("core.structure")?;
+    let structure = py.import("ingetrazo_core.structure")?;
     let layers = py.import("core.layers")?;
     let history = attr(&viewport, "history")?;
     let readers = attr(&attr(&history, "feed")?, "readers")?;
@@ -444,7 +444,7 @@ pub(super) fn tree_version<'py>(a: &Args<'py>) -> Reply<'py> {
 fn problem_rules<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (scene, registry, nodes, recipes, unfiled, profile) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?, a.get_item(3)?, a.get_item(4)?, a.get_item(5)?);
-    let structure = py.import("core.structure")?;
+    let structure = py.import("ingetrazo_core.structure")?;
     let ids_module = py.import("core.structure_ids")?;
     // (severity, rule id, label, [groups])
     let rules = PyList::empty(py);
@@ -573,7 +573,7 @@ fn active_tool_id<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 
 pub(super) fn components_dir<'py>(a: &Args<'py>) -> Reply<'py> {
-    a.py().import("core.paths")?.call_method0("app_root")?.div("resources")?.div("components")
+    a.py().import("ingetrazo_core.paths")?.call_method0("app_root")?.div("resources")?.div("components")
 }
 
 /// The bundled set: `sc:<key>` 3D starters, `pp:<key>` 2D people.
@@ -823,7 +823,7 @@ pub(super) fn group_by_uid<'py>(a: &Args<'py>) -> Reply<'py> {
     if let Some(address) = text.strip_prefix('@').filter(|address| address.starts_with('[')) {
         return scene.call_method1("resolve_occurrence", (py.import("json")?.call_method1("loads", (address,))?,));
     }
-    for entry in py.import("core.structure")?.call_method1("_placements", (&scene,))?.try_iter()? {
+    for entry in py.import("ingetrazo_core.structure")?.call_method1("_placements", (&scene,))?.try_iter()? {
         let group = entry?.get_item(0)?;
         if group.getattr("uid")?.eq(&uid)? {
             return Ok(group);

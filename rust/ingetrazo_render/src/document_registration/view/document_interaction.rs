@@ -4,7 +4,7 @@ use super::*;
 fn document_interaction_sync_axes<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let view = a.get_item(0)?;
-    let _axes = py.import("core.axes")?.into_any();
+    let _axes = py.import("ingetrazo_core.axes")?.into_any();
     _axes.call_method1(
         "sync",
         (optional(&view.getattr("scene")?, "drawing_frame")?,),
@@ -199,7 +199,7 @@ fn guide_vertices<'py>(a: &Args<'py>) -> Reply<'py> {
     let selection = a.get_item(2)?;
     let spacing = a.get_item(1)?;
     let spans: Obj<'py>;
-    let axes = py.import("core.axes")?.into_any();
+    let axes = py.import("ingetrazo_core.axes")?.into_any();
     let guide_vertices = py.import("ingetrazo_core")?.getattr("guide_vertices")?;
     {
         let [part0, part1] = unpack::<2>(&guide_vertices.call1((

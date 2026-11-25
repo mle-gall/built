@@ -181,7 +181,7 @@ fn finish_window_close(win: &Bound<'_, PyAny>) -> PyResult<()> {
     if !auto.is_none() {
         auto.call_method0("cancel")?;
     }
-    let clear = py.import("core.autosave")?.getattr("clear")?;
+    let clear = py.import("ingetrazo_core.autosave")?.getattr("clear")?;
     for doc in win.getattr("_documents")?.try_iter()? {
         let doc = doc?;
         let args = PyDict::new(py);

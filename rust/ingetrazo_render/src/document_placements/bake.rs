@@ -90,7 +90,7 @@ fn prepare_drawing(v: &Obj, progress: &Obj) -> PyResult<()> {
     };
     notify(0.65)?;
     bake.call_method1("prefetch", (meshes,))?;
-    let sig = py.import("core.materials")?.getattr("material_sig")?;
+    let sig = py.import("ingetrazo_core.materials")?.getattr("material_sig")?;
     let mut jobs = Vec::new();
     for (g, p) in &rows {
         let mesh = g.getattr("mesh")?;

@@ -161,7 +161,7 @@ impl<'p> Sources<'p> {
         let mat = py
             .import("core.group")?
             .call_method1("effective_material", (group,))?;
-        let paint = py.import("core.materials")?.getattr("effective_attrs")?;
+        let paint = py.import("ingetrazo_core.materials")?.getattr("effective_attrs")?;
         let mut soup = Surface::empty();
         let ids = PyDict::new(py);
         let mut index = HashMap::new();

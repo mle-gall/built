@@ -231,7 +231,7 @@ fn translated(ring: &Bound<'_, PyAny>, delta: DVec3) -> PyResult<Vec<Vec3>> {
 }
 impl MoveCopies {
     fn member<'py>(&self, py: Python<'py>, d: DVec3) -> PyResult<Member<'py>> {
-        let geometry = py.import("core.geometry")?;
+        let geometry = py.import("ingetrazo_core.geometry")?;
         let edge = geometry.getattr("Edge")?;
         let face = geometry.getattr("Face")?;
         let edges = self

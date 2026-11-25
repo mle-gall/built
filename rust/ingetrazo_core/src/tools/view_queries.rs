@@ -29,11 +29,11 @@ pub(super) fn classify(entity: &Bound<'_, PyAny>) -> PyResult<&'static str> {
             ("core.mesh", "Edge", "edge"),
             ("core.group", "Group", "group"),
             ("core.section", "SectionPlane", "section_plane"),
-            ("core.textlabel", "TextLabel", "text_label"),
+            ("ingetrazo_core.textlabel", "TextLabel", "text_label"),
             ("core.dimension", "Dimension", "dimension"),
             ("core.image_plane", "ImagePlane", "image_plane"),
-            ("core.guide", "Guide", "guide"),
-            ("core.guide", "GuideCircle", "guide"),
+            ("ingetrazo_core.guide", "Guide", "guide"),
+            ("ingetrazo_core.guide", "GuideCircle", "guide"),
             ("georef.geopath", "GeoPath", "geopath"),
         ]
         .into_iter()

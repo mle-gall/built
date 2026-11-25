@@ -1016,7 +1016,7 @@ fn put_north(env: &Bound<'_, PyAny>, value: &Bound<'_, PyAny>) -> PyResult<()> {
     let vp = env.getattr("vp")?;
     let Some(history) = opt(&vp, "history") else { return Ok(()) };
     let value: f64 = py.import("builtins")?.getattr("float")?.call1((value,))?.extract()?;
-    let north: f64 = py.import("core.sun")?.call_method1("scene_north_deg", (vp.getattr("scene")?,))?.extract()?;
+    let north: f64 = py.import("ingetrazo_core.sun")?.call_method1("scene_north_deg", (vp.getattr("scene")?,))?.extract()?;
     if (value - north).abs() < 1e-9 {
         return Ok(());
     }
@@ -1041,7 +1041,7 @@ fn location<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py
         if scene.is_none() {
             return obj(py, 0.0);
         }
-        let deg: f64 = py.import("core.sun")?.call_method1("scene_north_deg", (scene,))?.extract()?;
+        let deg: f64 = py.import("ingetrazo_core.sun")?.call_method1("scene_north_deg", (scene,))?.extract()?;
         Ok(py.import("builtins")?.getattr("round")?.call1((deg, 1))?.unbind())
     })?;
     let where_ = func(py, |py, a| {

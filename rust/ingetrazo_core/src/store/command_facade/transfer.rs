@@ -100,7 +100,7 @@ pub(super) fn paste<'py>(
             shared.entry(r).or_default().push(i);
         }
     }
-    let effective = crate::model::module(py, "core.materials")?.getattr("effective_attrs")?;
+    let effective = crate::model::module(py, "ingetrazo_core.materials")?.getattr("effective_attrs")?;
     let placed = group.getattr("placed_face_paint")?;
     let face = model.getattr("FaceView")?;
     let inverse = inverse.map(|m| Py::new(py, m)).transpose()?;

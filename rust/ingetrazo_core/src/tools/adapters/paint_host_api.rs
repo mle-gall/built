@@ -24,7 +24,7 @@ fn every_face_painted<'py>(a: &Args<'py>) -> Reply<'py> {
     let mut g: Obj<'py>;
     let obj = a.get_item(0)?;
     let iter_placements = imported(py, "core.group")?.getattr("iter_placements")?;
-    let has_own_material = imported(py, "core.materials")?.getattr("has_own_material")?;
+    let has_own_material = imported(py, "ingetrazo_core.materials")?.getattr("has_own_material")?;
     let face_attrs = imported(py, "core.mesh")?.getattr("face_attrs")?;
     let mut seen = false.into_bound_py_any(py)?;
     for item in iter_placements.call1((&obj,))?.try_iter()? {
@@ -220,7 +220,7 @@ fn host_adopt_sample<'py>(a: &Args<'py>) -> Reply<'py> {
     let texture = field("texture")?;
     cls.setattr(
         "current_is_default",
-        !imported(py, "core.materials")?
+        !imported(py, "ingetrazo_core.materials")?
             .call_method1("has_own_material", (&attrs,))?
             .is_truthy()?,
     )?;

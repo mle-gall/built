@@ -47,7 +47,7 @@ impl TextureToolRows {
                 .cast::<PyDict>()
                 .is_err()
                 && !py
-                    .import("core.materials")?
+                    .import("ingetrazo_core.materials")?
                     .call_method1("back_is_default", (&attrs,))?
                     .is_truthy()?);
         let ranges: Vec<(usize, usize, usize)> = py

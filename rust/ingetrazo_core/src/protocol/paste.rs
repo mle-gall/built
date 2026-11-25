@@ -252,7 +252,7 @@ pub(super) fn stamp(history: &Obj<'_>, clip: &Obj<'_>, offset: DVec3) -> PyResul
     if mats.is_truthy()? {
         let current = scene.getattr("materials")?;
         let reg = py.import("builtins")?.call_method1("dict", (&current,))?;
-        let materials = py.import("core.materials")?;
+        let materials = py.import("ingetrazo_core.materials")?;
         for (old, mat) in mats.cast::<PyDict>()?.iter() {
             let name = materials.call_method1("register", (&reg, mat))?;
             if old.ne(&name)? {

@@ -182,7 +182,7 @@ fn send<'py>(a: &Args<'py>) -> Reply<'py> {
 fn preview_faces<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let faces = PyList::empty(py);
-    let ctor = imported(py, "core.geometry")?.getattr("Face")?;
+    let ctor = imported(py, "ingetrazo_core.geometry")?.getattr("Face")?;
     for surface in a
         .get_item(0)?
         .getattr("_machine")?

@@ -10,7 +10,7 @@ import tempfile
 from ingetrazo_render import DwgConverter
 from ingetrazo_core import DwgBridgeError
 
-from core.paths import app_root
+from ingetrazo_core.paths import app_root
 
 _VENDOR_BIN = app_root() / "vendor" / "libredwg" / "bin"
 #: Development-machine courtesy: the sibling IngeCAD checkout's bundle.

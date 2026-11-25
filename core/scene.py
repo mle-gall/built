@@ -28,12 +28,12 @@ from ingetrazo_core.mesh import Edge, Face, Mesh
 
 
 def _make_style():
-    from core.style import Style
+    from ingetrazo_core.style import Style
     return Style()
 
 
 def _make_shadows():
-    from core.sun import ShadowSettings
+    from ingetrazo_core.sun import ShadowSettings
     return ShadowSettings()
 
 

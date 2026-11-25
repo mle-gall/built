@@ -84,7 +84,7 @@ pub(crate) fn registry_apply(step: &Obj<'_>, scene: &Obj<'_>, undo: bool) -> PyR
         };
         let removed = keys(&current)?.bind(py).sub(keys(&value)?.bind(py))?;
         if removed.is_truthy()? {
-            let structure = py.import("core.structure")?;
+            let structure = py.import("ingetrazo_core.structure")?;
             let refiled = step.getattr("refiled_uids")?;
             for row in structure
                 .call_method1("_placements", (scene,))?

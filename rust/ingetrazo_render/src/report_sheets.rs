@@ -572,7 +572,7 @@ impl ExtensionsSheet {
         let model = py.import("ingetrazo_render")?.getattr("ExtensionBrowser")?.call0()?;
         let pool_kwargs = [("max_workers", 3i32.into_pyobject(py)?.into_any()), ("thread_name_prefix", "catalog".into_pyobject(py)?.into_any())].into_py_dict(py)?;
         let pool = py.import("concurrent.futures")?.getattr("ThreadPoolExecutor")?.call((), Some(&pool_kwargs))?;
-        let cache = py.import("core.autosave")?.call_method0("_app_data_base")?.div("extension-screenshots")?;
+        let cache = py.import("ingetrazo_core.autosave")?.call_method0("_app_data_base")?.div("extension-screenshots")?;
         Ok(Self {
             model: model.unbind(),
             catalog: em.call_method0("load_cached_catalog")?.unbind(),
@@ -767,7 +767,7 @@ impl ExtensionsSheet {
                             return Ok(false);
                         }
                         "logs" => {
-                            open_url(py.import("core.paths")?.call_method0("user_log_dir")?)?;
+                            open_url(py.import("ingetrazo_core.paths")?.call_method0("user_log_dir")?)?;
                             return Ok(false);
                         }
                         "folder" => {

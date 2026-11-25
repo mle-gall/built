@@ -97,7 +97,7 @@ fn world_from_pixel<'py>(v: &Obj<'py>, x: f64, y: f64) -> PyResult<Obj<'py>> {
         && plane_lock_free(&tool)?
         && locking(&tool)?
     {
-        let axes = py.import("core.axes")?;
+        let axes = py.import("ingetrazo_core.axes")?;
         let n = xyz(&plane.get_item(1)?)?.normalize_or_zero();
         if !opt(&tool, "start_point")?.is_none()
             || (xyz(&plane.get_item(0)?)? - xyz(&axes.call_method0("origin")?)?).length() < 1e-5
@@ -159,7 +159,7 @@ fn current_work_plane<'py>(v: &Obj<'py>, cursor: &Obj<'py>) -> PyResult<Obj<'py>
         if planar {
             let locked = t.call_method1(
                 "locked_work_plane",
-                (py.import("core.axes")?.call_method0("origin")?,),
+                (py.import("ingetrazo_core.axes")?.call_method0("origin")?,),
             )?;
             if !locked.is_none() {
                 if !cursor.is_none() {
@@ -278,7 +278,7 @@ fn locked_plane_through_reference<'py>(
     cursor: &Obj<'py>,
 ) -> PyResult<Obj<'py>> {
     let py = v.py();
-    let axes = py.import("core.axes")?;
+    let axes = py.import("ingetrazo_core.axes")?;
     let mut refs = v
         .getattr("_encouraged")?
         .try_iter()?

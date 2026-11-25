@@ -13,7 +13,7 @@ fn planar_camera<'py>(v: &Obj<'py>, cursor: &Obj<'py>) -> PyResult<Obj<'py>> {
         return Ok(none(py));
     }
     let view = view.normalize();
-    let axes = py.import("core.axes")?;
+    let axes = py.import("ingetrazo_core.axes")?;
     let origin = axes.call_method0("origin")?;
     let raw: Option<(Obj, Obj)> = if cursor.is_none() {
         None

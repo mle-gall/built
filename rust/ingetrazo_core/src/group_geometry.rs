@@ -168,7 +168,7 @@ impl GroupGeometry {
         }
         let group = facade.getattr("Group")?.call1((&mesh, name))?;
         if let Some([x, y, z]) = axes {
-            let m = py.import("core.axes")?.call_method1(
+            let m = py.import("ingetrazo_core.axes")?.call_method1(
                 "frame_matrix",
                 (
                     Vec3::from(corner),

@@ -276,7 +276,7 @@ impl MeshToolAccess {
         let py = slf.py();
         let s = slf.as_any();
         let picked = optional(&PyTuple::empty(py), kwargs, 0, "picked_row")?;
-        let axes = py.import("core.axes")?;
+        let axes = py.import("ingetrazo_core.axes")?;
         let tool = s.getattr("tool")?;
         let own = tool.call_method1("drag_plane", (s,))?;
         let mut plane = if own.is_truthy()? { own.clone() } else { attr(&tool, "work_plane")? };

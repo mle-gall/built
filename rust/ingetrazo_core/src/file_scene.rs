@@ -310,8 +310,8 @@ fn archive_settings(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_>) -> PyResu
         out.set_item("axes_hidden", true)?;
     }
     for (from, to, module, class) in [
-        ("display_style", "display_style", "core.style", "Style"),
-        ("shadows", "shadows", "core.sun", "ShadowSettings"),
+        ("display_style", "display_style", "ingetrazo_core.style", "Style"),
+        ("shadows", "shadows", "ingetrazo_core.sun", "ShadowSettings"),
     ] {
         let value = attr(scene, from)?;
         if !value.is_none() {
@@ -382,7 +382,7 @@ pub fn igz_archive_scene_fields(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_
     }
     let mats = attr(scene, "materials")?;
     if mats.is_truthy()? {
-        let class = py.import("core.materials")?.getattr("Material")?;
+        let class = py.import("ingetrazo_core.materials")?.getattr("Material")?;
         out.set_item(
             "materials",
             rows(&mats.call_method0("values")?, |m| {
@@ -424,7 +424,7 @@ pub fn igz_archive_scene_fields(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_
     }
     let labels = attr(scene, "text_labels")?;
     if labels.is_truthy()? {
-        let class = py.import("core.textlabel")?.getattr("TextLabel")?;
+        let class = py.import("ingetrazo_core.textlabel")?.getattr("TextLabel")?;
         let mut native = true;
         for label in labels.try_iter()? {
             if !label?.get_type().is(&class) {
@@ -774,8 +774,8 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
         }
     }
     for (key, module, class) in [
-        ("display_style", "core.style", "Style"),
-        ("shadows", "core.sun", "ShadowSettings"),
+        ("display_style", "ingetrazo_core.style", "Style"),
+        ("shadows", "ingetrazo_core.sun", "ShadowSettings"),
     ] {
         let c = py.import(module)?.getattr(class)?;
         let raw = data(payload, key)?;
@@ -823,7 +823,7 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
     let north = py
         .get_type::<pyo3::types::PyFloat>()
         .call1((data(payload, "north_deg")?,))
-        .and_then(|n| py.import("core.sun")?.call_method1("wrap_north_deg", (n,)));
+        .and_then(|n| py.import("ingetrazo_core.sun")?.call_method1("wrap_north_deg", (n,)));
     match north {
         Ok(n) => scene.setattr("north_deg", n)?,
         Err(e) if e.is_instance_of::<PyTypeError>(py) || e.is_instance_of::<PyValueError>(py) => {
@@ -865,7 +865,7 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
     let mut repairs = 0;
     for (key, circles) in [("guides", false), ("guide_circles", true)] {
         if let Some(seq) = payload.get_item(key)? {
-            let factory = py.import("core.guide")?.getattr("guide_from_dict")?;
+            let factory = py.import("ingetrazo_core.guide")?.getattr("guide_from_dict")?;
             let finite = py.import("formats.igz")?.getattr("_finite_points")?;
             for item in seq.try_iter()? {
                 let mut raw = item?.cast_into::<PyDict>()?;

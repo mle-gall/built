@@ -29,7 +29,7 @@ pub(super) fn groups<'py>(
     env: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyList>> {
     let (lo, hi): (f64, f64) = py
-        .import("core.style")?
+        .import("ingetrazo_core.style")?
         .getattr("AO_DISTANCE_RANGE")?
         .extract()?;
     let units = py.import("core.units")?;

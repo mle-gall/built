@@ -1173,7 +1173,7 @@ pub fn edit_location_now(win: &Bound<'_, PyAny>, source: Option<Bound<'_, PyAny>
         Some(c) => c,
         None if !datum.is_none() => (datum.getattr("lat")?.extract()?, datum.getattr("lon")?.extract()?),
         None => {
-            let sun = py.import("core.sun")?;
+            let sun = py.import("ingetrazo_core.sun")?;
             (sun.getattr("DEFAULT_LAT")?.extract()?, sun.getattr("DEFAULT_LON")?.extract()?)
         }
     };

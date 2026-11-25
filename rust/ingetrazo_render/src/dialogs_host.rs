@@ -362,7 +362,7 @@ fn offer_recovery(py: Python<'_>, win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny
     // Reserve the snapshot before auto-save can reuse this document's slot.
     let hex: String = py.import("uuid")?.call_method0("uuid4")?.getattr("hex")?.extract()?;
     let name = format!("{}-{}{}", path.getattr("stem")?.str()?, &hex[..12], slot.getattr("suffix")?.str()?);
-    let archived = py.import("core.autosave")?.call_method0("discarded_dir")?.div(name)?;
+    let archived = py.import("ingetrazo_core.autosave")?.call_method0("discarded_dir")?.div(name)?;
     let archived = match slot.call_method1("rename", (&archived,)) {
         Ok(_) => archived,
         Err(e) if e.is_instance_of::<pyo3::exceptions::PyOSError>(py) => slot.clone(),

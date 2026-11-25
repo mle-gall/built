@@ -498,7 +498,7 @@ fn __getattr__<'p>(m: &Bound<'p, PyModule>, name: &str) -> PyResult<Obj<'p>> {
     let source = match name {
         "AddEdgeCommand" | "AddFaceCommand" | "DeleteFaceCommand" | "DeleteEdgesCommand"
         | "Command" | "CompoundCommand" | "SnapshotCompound" => "ingetrazo_core.history",
-        "Face" | "Edge" => "core.geometry",
+        "Face" | "Edge" => "ingetrazo_core.geometry",
         "element_identity" => "ingetrazo_core.mesh",
         "_point_in_face_solid"
         | "face_exists"

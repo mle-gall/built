@@ -502,7 +502,7 @@ impl Workspace {
             ]);
         }
         let mut styles = vec![vec!["sombreado".to_string(), tr("Model style")?]];
-        let style = py.import("core.style")?;
+        let style = py.import("ingetrazo_core.style")?;
         for (items, translate) in [
             (style.getattr("BUILTIN_STYLES")?, true),
             (style.call_method0("user_styles")?, false),

@@ -45,7 +45,7 @@ pub fn recoloured_name(scene: &Obj<'_>, name: &str, rgb: [f64; 3]) -> PyResult<S
         .import("core.i18n")?
         .call_method1("tr", ("(modified)",))?
         .extract()?;
-    py.import("core.materials")?
+    py.import("ingetrazo_core.materials")?
         .call_method1(
             "free_name",
             (format!("{name} {suffix}"), scene.getattr("materials")?),
@@ -208,7 +208,7 @@ pub fn edit_swatch(
         pick_library_paint(&scene, brush, "", Some(&data))?;
     } else {
         let new = py
-            .import("core.materials")?
+            .import("ingetrazo_core.materials")?
             .getattr("Material")?
             .call_method1("from_dict", (&data,))?;
         if !new.eq(&live)? {

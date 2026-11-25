@@ -175,7 +175,7 @@ fn style_payload<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (scene, given, horizon, scale, fade, soft, camera) =
         (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?, a.get_item(3)?, a.get_item(4)?, a.get_item(5)?, a.get_item(6)?);
-    let styles = py.import("core.style")?;
+    let styles = py.import("ingetrazo_core.style")?;
     let mut style = given.clone();
     if !style.is_truthy()? {
         style = attr(&scene, "display_style")?;
@@ -246,7 +246,7 @@ const SHADOW_CATCHER_Z: f64 = -0.005;
 fn sun_payload<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (scene, given, soft, camera) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?, a.get_item(3)?);
-    let sun = py.import("core.sun")?;
+    let sun = py.import("ingetrazo_core.sun")?;
     let interaction_module = py.import("views.document_interaction")?;
     let interaction = interaction_module.getattr("DocumentInteraction")?;
     let result = fields!(py;
@@ -609,7 +609,7 @@ fn sections_sync<'py>(a: &Args<'py>) -> Reply<'py> {
     let style = if source.is_none() {
         match scene.getattr_opt("display_style")? {
             Some(style) => style,
-            None => py.import("core.style")?.getattr("Style")?.call0()?,
+            None => py.import("ingetrazo_core.style")?.getattr("Style")?.call0()?,
         }
     } else {
         source.call_method0("_effective_style")?
@@ -650,7 +650,7 @@ pub(super) fn install_style(module: &Bound<PyModule>) -> PyResult<()> {
         "__doc__",
         "Translate display styles without a GPU so both viewports share defaults.\n\nThe horizon is supplied by the reference viewport; camera ownership stays there.\nUnsupported controls remain explicit in the payload for subsequent passes.\n",
     )?;
-    modules::import_names(module, "core.style", &[("Style", "Style"), ("effective_back_color", "effective_back_color")])?;
+    modules::import_names(module, "ingetrazo_core.style", &[("Style", "Style"), ("effective_back_color", "effective_back_color")])?;
     module.add("SHADOW_CATCHER_Z", SHADOW_CATCHER_Z)?;
     functions(
         module,
