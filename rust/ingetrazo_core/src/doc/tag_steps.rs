@@ -17,7 +17,7 @@ use std::collections::HashSet;
 const DEFAULT_LAYER: &str = "Layer 0";
 
 fn host<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
-    py.import("core.history_commands")?.getattr(name)
+    py.import("core.history")?.getattr(name)
 }
 
 pub(super) fn all_placements(items: &[Obj<'_>]) -> bool {

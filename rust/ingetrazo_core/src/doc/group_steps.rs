@@ -21,7 +21,7 @@ fn none(py: Python<'_>) -> Obj<'_> {
 }
 
 fn host<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
-    py.import("core.history_commands")?.getattr(name)
+    py.import("core.history")?.getattr(name)
 }
 
 fn discard<'py>(scene: &Obj<'py>) -> PyResult<Obj<'py>> {

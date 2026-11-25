@@ -103,7 +103,7 @@ impl LinkSubset {
             };
             from.call_method1(py, "go", (scene, to))?;
         } else {
-            let state = py.import("core.history_commands")?.getattr("_TagState")?;
+            let state = py.import("core.history")?.getattr("_TagState")?;
             let before = state.call1((scene,))?;
             scene
                 .getattr("materials")?

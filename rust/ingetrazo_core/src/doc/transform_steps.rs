@@ -19,7 +19,7 @@ fn is_instance(g: &Obj<'_>) -> PyResult<bool> {
 }
 
 fn host<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
-    py.import("core.history_commands")?.getattr(name)
+    py.import("core.history")?.getattr(name)
 }
 
 fn kernel<'py>(py: Python<'py>, class: &str) -> PyResult<Obj<'py>> {
@@ -247,7 +247,7 @@ impl ScaleGroup {
     fn new(py: Python<'_>, group: Obj<'_>, center: Obj<'_>, factor: Obj<'_>, axes: Option<Obj<'_>>) -> PyResult<PyClassInitializer<Self>> {
         let center = vector(py, &center)?;
         let axes = axes.unwrap_or_else(|| py.None().into_bound(py));
-        let api = py.import("core.history_commands")?;
+        let api = py.import("core.history")?;
         let forward = api.call_method1("scale_matrix", (&center, &factor, &axes))?;
         let back = api.call_method1("scale_matrix", (&center, api.call_method1("invert_scale_factor", (&factor,))?, &axes))?;
         let extra = vec![("center", center), ("factor", factor), ("axes", axes)];
