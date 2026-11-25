@@ -39,6 +39,9 @@ def _square(scene, z=0.0):
 
 def _rich(tmp_path):
     s = Scene()
+    s.animation.enabled = False
+    s.animation.transition = 7.5
+    s.animation.pause = 3.0
     _square(s)
     s.section_planes = [
         SectionPlane(QVector3D(0, 0, 1), QVector3D(0, 0, 1), "Plan", "P",
@@ -77,6 +80,8 @@ def _state(scene):
             continue
         if k == "layers":
             v = [(ly.name, ly.visible) for ly in v]
+        elif k == "animation":
+            v = v.to_dict()
         out[k] = repr(v)
     return out
 
@@ -132,6 +137,7 @@ def test_nothing_of_the_previous_document_survives_an_open(tmp_path):
     igz.load_into(fresh, plain)
     reused = Scene()
     igz.load_into(reused, rich)
+    assert reused.animation.to_dict() == {"enabled": False, "transition": 7.5, "pause": 3.0}
     igz.load_into(reused, plain)
     a, b = _state(fresh), _state(reused)
     leaks = {k: (a.get(k), b.get(k)) for k in set(a) | set(b)
