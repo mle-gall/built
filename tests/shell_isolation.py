@@ -105,6 +105,8 @@ def one_off_export(win, fmt, destination):
 
 def attach_test_renderer(host):
     """Create a real offscreen GPU target for an isolated Host."""
+    from tests.headless_gpu import require_gpu
+    require_gpu()
     from built_render import Renderer
     renderer = Renderer(0, host.width, host.height, host.scale, platform="offscreen")
     # The offscreen target can present a frame although there is no native window.

@@ -259,6 +259,8 @@ def pytest_collection_modifyitems(config, items):
                 seen[path] = False
         if seen[path]:
             item.add_marker(pytest.mark.window)
+        if os.environ.get("BUILT_CI_SKIP_WINDOWS") and item.get_closest_marker("window"):
+            item.add_marker(pytest.mark.skip(reason=os.environ["BUILT_CI_SKIP_WINDOWS"]))
 
 
 def pytest_configure(config):

@@ -11,16 +11,32 @@ of its own; it replaces the hidden Qt ``WgpuView``. Drive its timers with
 from __future__ import annotations
 
 import importlib.util
+import os
+import sys
 
 import pytest
 
 HAS_RENDERER = importlib.util.find_spec("built_render") is not None
 
 
+def require_gpu():
+    if reason := os.environ.get("BUILT_CI_SKIP_GPU"):
+        pytest.skip(reason)
+
+
+def _surface(width, height):
+    require_gpu()
+    if sys.platform == "darwin":
+        from built_render import headless_layer
+        return headless_layer(width, height), {"platform": "layer"}
+    return 0, {"platform": "offscreen"}
+
+
 def renderer(width: int = 64, height: int = 64, scale: float = 1.0):
-    """A ``Renderer`` on a headless layer of ``width`` × ``height`` points."""
-    from built_render import Renderer, headless_layer
-    return Renderer(headless_layer(width, height), width, height, scale, platform="layer")
+    """Create a renderer on a Metal layer or an offscreen wgpu target."""
+    from built_render import Renderer
+    handle, options = _surface(width, height)
+    return Renderer(handle, width, height, scale, **options)
 
 
 def _view_class():
@@ -51,8 +67,7 @@ def _view_class():
             self._host = host           # WidgetShim's own start cleared it
 
         def _window_handles(self):
-            from built_render import headless_layer
-            return headless_layer(self.width(), self.height()), {"platform": "layer"}
+            return _surface(self.width(), self.height())
 
         def _can_create_surface(self):
             return self._present

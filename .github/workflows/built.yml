@@ -1,0 +1,149 @@
+name: Built CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: built-ci-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+        working-directory: built
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: built
+          persist-credentials: false
+
+      - name: Check out the RFA reader source
+        if: runner.os != 'Linux'
+        uses: actions/checkout@v4
+        with:
+          repository: DrunkOnJava/rvt-rs
+          ref: 62cc17e0d8bc8781cfab482ca50e8216e0a3ce1d
+          path: rvt-rs
+          persist-credentials: false
+
+      - name: Apply Built's saved-graphics style support
+        if: runner.os != 'Linux'
+        run: git -C ../rvt-rs apply ../built/.github/ci/rfa-family.patch
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: built/requirements.txt
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('built/rust/*/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Isolate the application profile
+        run: |
+          python - <<'PY'
+          import os, subprocess, sys, tempfile
+          from pathlib import Path
+          home = Path.home()
+          profile = tempfile.mkdtemp()
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              for key, value in {
+                  "CARGO_TARGET_DIR": Path.cwd() / "rust/built_app/target",
+                  "CARGO_HOME": os.environ.get("CARGO_HOME", home / ".cargo"),
+                  "RUSTUP_HOME": os.environ.get("RUSTUP_HOME", home / ".rustup"),
+                  "PIP_CACHE_DIR": subprocess.check_output(
+                      [sys.executable, "-m", "pip", "cache", "dir"], text=True).strip(),
+                  "HOME": profile, "CFFIXED_USER_HOME": profile,
+                  "BUILT_SETTINGS_DIR": tempfile.mkdtemp(), "BUILT_BACKGROUND": "1",
+                  "PYO3_PYTHON": sys.executable if os.name == "nt" else Path.cwd() / ".venv/bin/python",
+              }.items():
+                  print(f"{key}={value}", file=env)
+          PY
+
+      - name: Linux build and offscreen renderer dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgtk-3-dev libwayland-dev libvulkan1 mesa-vulkan-drivers
+
+      - name: Check every crate for Windows MSVC
+        if: runner.os == 'Windows'
+        run: |
+          for crate in built_core built_render built_rfa built_app; do
+            cargo check --locked --target x86_64-pc-windows-msvc --manifest-path "rust/$crate/Cargo.toml"
+          done
+          cargo check --target x86_64-pc-windows-msvc --manifest-path rust/python_bindings/Cargo.toml
+
+      - name: Build release wheels
+        if: runner.os != 'Windows'
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements.txt pillow
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            test "$(uname -m)" = arm64
+            .venv/bin/python -m pip install pyinstaller ifcopenshell
+            VENV=.venv scripts/build_native.sh --with-launcher
+          else
+            VENV=.venv scripts/build_native.sh
+          fi
+
+      - name: Verify native modules and select the release launcher
+        if: runner.os == 'macOS'
+        run: |
+          .venv/bin/python -c 'import built_core, built_render, built_rfa'
+          echo "BUILT_BINARY=$PWD/rust/built_app/target/release/built" >> "$GITHUB_ENV"
+
+      - name: Run the full macOS suite
+        if: runner.os == 'macOS'
+        run: |
+          if swift .github/ci/window-session.swift; then
+            export BUILT_WINDOW_TESTS=1
+          else
+            code=$?
+            case "$code" in
+              77) export BUILT_CI_SKIP_WINDOWS="Runner lacks a console window session" ;;
+              78) export BUILT_CI_SKIP_GPU="Runner lacks a Metal device"
+                  export BUILT_CI_SKIP_WINDOWS="$BUILT_CI_SKIP_GPU" ;;
+              *) exit "$code" ;;
+            esac
+            echo "::notice::$BUILT_CI_SKIP_WINDOWS; window tests will be marked skipped."
+          fi
+          .venv/bin/python -m pytest -n auto --dist loadfile -q -rs tests
+
+      - name: Run the Linux non-window tier and check the launcher
+        if: runner.os == 'Linux'
+        run: |
+          .venv/bin/python -m pytest -n auto --dist loadfile -q -m "not slow and not window" tests
+          cargo check --locked --manifest-path rust/built_app/Cargo.toml
+
+      - name: Rust library tests
+        if: runner.os != 'Windows'
+        run: |
+          crates=(built_core built_render python_bindings)
+          if [[ "$RUNNER_OS" == macOS ]]; then crates+=(built_rfa); fi
+          for crate in "${crates[@]}"; do
+            cargo test --release --lib --manifest-path "rust/$crate/Cargo.toml"
+          done
+
+      - name: Build and check Built.app
+        if: runner.os == 'macOS'
+        run: |
+          packaging/build-macos-native.sh "$RUNNER_TEMP/bundle"
+          .venv/bin/python scripts/isolated_launch.py "$RUNNER_TEMP/bundle/Built.app/Contents/MacOS/built" --check

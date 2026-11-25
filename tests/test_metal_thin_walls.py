@@ -30,6 +30,8 @@ DISTANCE_M = (10, 50, 200)
 
 @pytest.fixture(scope="module")
 def native():
+    from tests.headless_gpu import require_gpu
+    require_gpu()
     from built_render import Renderer
     renderer = Renderer(0, SIZE, SIZE, 1., platform="offscreen")
     renderer.set_antialias(False)

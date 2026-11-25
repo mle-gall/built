@@ -48,14 +48,17 @@ def test_pointer_moves_wait_for_the_end_of_a_zoom(tmp_path):
     home, settings = tmp_path / "home", tmp_path / "settings"
     home.mkdir()
     settings.mkdir()
+    timings = tmp_path / "viewport.log"
     result = subprocess.run([binary, "--root", root, "--venv", root / ".venv", "--new-instance",
                              "--script", steps, "--size", "1600x1000", model],
                             env=dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home),
-                                     BUILT_SETTINGS_DIR=str(settings), BUILT_PERF="1"),
+                                     BUILT_SETTINGS_DIR=str(settings), BUILT_PERF="1", BUILT_PERF_LOG=str(timings)),
                             capture_output=True, text=True, timeout=90, check=True)
     states = _lines(result.stdout, "state")
     perf = _lines(result.stdout, "perf")
     assert all(s["errors"] == 0 for s in states), result.stderr
+    assert any("] hover " in line and "renderer=wgpu" in line
+               for line in timings.read_text().splitlines())
     still, notches, pinches, slide, plain = perf[:5]
     assert _moves(still) == 1
     # Thirty moves between thirty zoom events: the move before the first
