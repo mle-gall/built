@@ -44,17 +44,20 @@ def _primitive_set():
     ]
 
 
-@pytest.mark.parametrize("dpr", [1, 2, 3])
-def test_primitives_are_pinned(dpr):
-    """The loop moved from Python to AnnotationCanvas.draw_primitives. The
-    digests are of the Python loop on the same canvas with the native paint
-    types, before the port."""
-    import hashlib
+def primitive_pixels(dpr):
     from built_render import AnnotationCanvas
     from views.wgpu_overlay import paint_layer, selection_rectangle
     canvas = AnnotationCanvas(200 * dpr, 200 * dpr, 200.)
     items = _primitive_set() + [selection_rectangle((10, 150), (60, 190)),
                                 selection_rectangle((190, 150), (130, 190), zoom=True)]
     paint_layer(canvas, items)
-    rgba = canvas.composite(bytes(200 * dpr * 200 * dpr * 4))
-    assert hashlib.sha256(rgba).hexdigest()[:24] == PRIMITIVE_DIGESTS[dpr]
+    return canvas.composite(bytes(200 * dpr * 200 * dpr * 4))
+
+
+@pytest.mark.parametrize("dpr", [1, 2, 3])
+def test_primitives_are_pinned(dpr):
+    """The loop moved from Python to AnnotationCanvas.draw_primitives. The
+    digests are of the Python loop on the same canvas with the native paint
+    types, before the port."""
+    import hashlib
+    assert hashlib.sha256(primitive_pixels(dpr)).hexdigest()[:24] == PRIMITIVE_DIGESTS[dpr]

@@ -35,7 +35,8 @@ def test_document_open_matches_pinned_import(reference, tmp_path):
     # A folder's generated UUID is independent of its persisted tree identity.
     for key in actual.get("layer_folder_uids", {}):
         actual["layer_folder_uids"][key] = "<generated>"
-    assert actual == expected
+    from tests.platform_golden import matches
+    assert matches(actual, expected)
 
 
 def _repack(path, *, physical, zip64=False):
