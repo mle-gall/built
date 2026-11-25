@@ -53,7 +53,7 @@ pub(crate) fn start_profile<'p>(
     let language = settings
         .call_method0("settings")?
         .call_method1("value", ("language",))?;
-    let i18n = py.import("core.i18n")?;
+    let i18n = py.import("ingetrazo_core.i18n")?;
     i18n.call_method1(
         "set_language",
         (i18n.call_method1("resolve_language", (language,))?,),

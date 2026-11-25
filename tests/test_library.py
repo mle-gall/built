@@ -239,7 +239,7 @@ def test_a_preview_that_cannot_be_had_never_raises(tmp_path, monkeypatch):
 
 def _catalogue_sheet(entries, language):
     from ingetrazo_render import ComponentCatalogue
-    from core.i18n import current_language, set_language, tr
+    from ingetrazo_core.i18n import current_language, set_language, tr
     catalogue = ComponentCatalogue()
     catalogue.load(json.dumps(entries))
     was = current_language()

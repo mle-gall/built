@@ -31,7 +31,7 @@ fn bit(on: bool) -> &'static str {
 
 #[pyfunction]
 fn apply_language(code: &str, st: &Obj) -> PyResult<bool> {
-    let lang = st.py().import("core.i18n")?;
+    let lang = st.py().import("ingetrazo_core.i18n")?;
     let saved = st.call_method1("value", ("language",))?;
     let saved = if saved.is_truthy()? {
         saved

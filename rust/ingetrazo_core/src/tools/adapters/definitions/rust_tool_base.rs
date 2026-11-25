@@ -21,7 +21,7 @@ fn message<'py>(a: &Args<'py>) -> Reply<'py> {
             )?;
         }
     }
-    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "ingetrazo_core.i18n")?.getattr("tr")?;
     flash.call1((tr.call((a.get_item(1)?,), Some(&args))?,))?;
     Ok(none(py))
 }

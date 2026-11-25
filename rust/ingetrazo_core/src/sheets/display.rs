@@ -11,13 +11,13 @@ use crate::doc::value::Value;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-/// `core.i18n.tr(text, **kw)`.
+/// `ingetrazo_core.i18n.tr(text, **kw)`.
 fn tr(py: Python<'_>, text: &str, kw: &[(&str, String)]) -> PyResult<String> {
     let d = PyDict::new(py);
     for (k, v) in kw {
         d.set_item(k, v)?;
     }
-    py.import("core.i18n")?.getattr("tr")?.call((text,), Some(&d))?.extract()
+    py.import("ingetrazo_core.i18n")?.getattr("tr")?.call((text,), Some(&d))?.extract()
 }
 
 fn swatch_pattern(py: Python<'_>, f: &Fields, name: &str) -> PyResult<Vec<f64>> {

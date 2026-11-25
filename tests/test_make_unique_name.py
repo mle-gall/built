@@ -134,7 +134,7 @@ def test_the_menu_make_unique_renames(native_window, monkeypatch):
 
 
 def test_the_offered_component_name_is_the_first_free_number(native_window, monkeypatch):
-    from core.i18n import tr
+    from ingetrazo_core.i18n import tr
     from ingetrazo_render import chrome_forms
     win = native_window
     scene = win.viewport.scene

@@ -8,7 +8,7 @@ import sys as _sys
 try:
     from ingetrazo_core import install_core_modules as _install_core_modules
     from ingetrazo_core import (
-        arrangement, axes, camera, edits, geometry, guide, hatches, history,
+        arrangement, axes, camera, edits, geometry, guide, hatches, history, i18n,
         materials, mesh, orient, push_scans, saved_views, section, snap,
         snap_frame, snap_query, structure, textlabel, topology,
     )
@@ -18,7 +18,7 @@ except ModuleNotFoundError as _error:
 else:
     _install_core_modules(__path__)
     for _module in (
-        arrangement, axes, camera, edits, geometry, guide, hatches, history,
+        arrangement, axes, camera, edits, geometry, guide, hatches, history, i18n,
         materials, mesh, orient, push_scans, saved_views, section, snap,
         snap_frame, snap_query, structure, textlabel, topology,
     ):

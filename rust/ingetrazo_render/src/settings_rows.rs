@@ -43,7 +43,7 @@ pub fn obj<'py, T: IntoPyObject<'py>>(py: Python<'py>, v: T) -> Res {
 
 /// `tr(text)`.
 pub fn tr(py: Python<'_>, text: &str) -> PyResult<String> {
-    py.import("core.i18n")?.call_method1("tr", (text,))?.extract()
+    py.import("ingetrazo_core.i18n")?.call_method1("tr", (text,))?.extract()
 }
 
 /// `tr(text, **kw)`.
@@ -52,7 +52,7 @@ pub fn trf(py: Python<'_>, text: &str, kw: &[(&str, Bound<'_, PyAny>)]) -> PyRes
     for (k, v) in kw {
         d.set_item(k, v)?;
     }
-    py.import("core.i18n")?.getattr("tr")?.call((text,), Some(&d))?.extract()
+    py.import("ingetrazo_core.i18n")?.getattr("tr")?.call((text,), Some(&d))?.extract()
 }
 
 pub fn s<'py>(py: Python<'py>, v: &str) -> Bound<'py, PyAny> {
@@ -433,7 +433,7 @@ fn pref_page<'py>(py: Python<'py>, env: &Bound<'py, PyAny>, section: &str, bindi
     }
     let json = py.import("json")?;
     let text: String = json.call_method1("dumps", (snapshot,))?.extract()?;
-    let tr_fn = py.import("core.i18n")?.getattr("tr")?;
+    let tr_fn = py.import("ingetrazo_core.i18n")?.getattr("tr")?;
     let page = py.import("ingetrazo_render")?.getattr("PreferencePage")?.call1((section, text, &tr_fn))?;
     let writers: Vec<(&'static str, Py<PyAny>)> = bindings.iter().map(|b| (b.key, b.write.clone_ref(py))).collect();
     let page_ref = page.clone().unbind();
@@ -510,7 +510,7 @@ fn autosave_put(py: Python<'_>, which: &'static str) -> Res {
 }
 
 fn general<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
-    let i18n = py.import("core.i18n")?;
+    let i18n = py.import("ingetrazo_core.i18n")?;
     let system = i18n.getattr("SYSTEM")?;
     let names = i18n.getattr("LANGUAGE_NAMES")?;
     let options = PyList::new(py, [(system.clone(), s(py, &tr(py, "Same as the system")?))])?;
@@ -528,8 +528,8 @@ fn general<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
         })?,
     )
     .with("options", options.into_any().unbind());
-    language.restart_value = Some(func(py, |py, a| Ok(py.import("core.i18n")?.call_method1("resolve_language", (a.get_item(0)?,))?.unbind()))?);
-    language.start = Some(func(py, |py, _a| Ok(py.import("core.i18n")?.call_method0("current_language")?.unbind()))?);
+    language.restart_value = Some(func(py, |py, a| Ok(py.import("ingetrazo_core.i18n")?.call_method1("resolve_language", (a.get_item(0)?,))?.unbind()))?);
+    language.start = Some(func(py, |py, _a| Ok(py.import("ingetrazo_core.i18n")?.call_method0("current_language")?.unbind()))?);
     let mut rows = vec![
         language,
         Binding::new("hover_picture", key_get(py, "tabs/hover_picture", obj(py, "1")?, Kind::Bool)?, key_set(py, "tabs/hover_picture", Kind::Bool)?),
@@ -621,7 +621,7 @@ fn figure_rows(py: Python<'_>) -> PyResult<Vec<Binding>> {
         for p in sf.call_method0("people")?.try_iter()? {
             let p = p?;
             let height: f64 = py.import("builtins")?.getattr("float")?.call1((p.get_item("height")?,))?.extract()?;
-            let name: String = py.import("core.i18n")?.call_method1("tr", (p.get_item("name")?,))?.extract()?;
+            let name: String = py.import("ingetrazo_core.i18n")?.call_method1("tr", (p.get_item("name")?,))?.extract()?;
             out.append((p.get_item("key")?, format!("{name} ({height:.2} m)")))?;
         }
         out.append((sf.getattr("CUSTOM")?, tr(py, "My own picture…")?))?;
@@ -822,7 +822,7 @@ fn ndof<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py, Py
     let shared = py.import("views.ndof_input")?.call_method1("shared_input", (env.getattr("win")?,))?;
     let driver = shared.getattr("backend_name")?;
     let driver = if driver.is_truthy()? { driver.str()?.to_string() } else { String::new() };
-    let tr_fn = py.import("core.i18n")?.getattr("tr")?;
+    let tr_fn = py.import("ingetrazo_core.i18n")?.getattr("tr")?;
     let live = match opt(env, "device_readings").filter(|r| r.is_truthy().unwrap_or(false)) {
         Some(r) => r.call_method1("text", (&tr_fn,))?,
         None => PyTuple::new(py, ["—", "—"])?.into_any(),

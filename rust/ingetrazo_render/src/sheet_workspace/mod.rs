@@ -89,7 +89,7 @@ impl SheetHost {
             let args = PyDict::new(py);
             args.set_item("n", 1)?;
             let name = py
-                .import("core.i18n")?
+                .import("ingetrazo_core.i18n")?
                 .getattr("tr")?
                 .call(("Sheet {n}",), Some(&args))?;
             let args = PyDict::new(py);

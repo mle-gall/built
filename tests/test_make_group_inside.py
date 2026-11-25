@@ -215,7 +215,7 @@ def test_the_browser_makes_a_component_of_one_row(native_host):
 
 
 def test_the_browser_menu_offers_both(native_host):
-    from core.i18n import tr
+    from ingetrazo_core.i18n import tr
     win = _window(native_host)
     scene = win.viewport.scene
     a, b = _placed("A", 0.0), _placed("B", 3.0)
@@ -277,7 +277,7 @@ def test_explode_inside_a_component_still_refuses(native_host):
 # --- when the rows cannot be grouped, say why ---------------------------------
 
 def test_locked_rows_grey_out_make_group_and_say_why(native_host):
-    from core.i18n import tr
+    from ingetrazo_core.i18n import tr
     win = _window(native_host)
     scene = win.viewport.scene
     a, b = _placed("A", 0.0), _placed("B", 3.0)
@@ -296,7 +296,7 @@ def test_locked_rows_grey_out_make_group_and_say_why(native_host):
 
 
 def test_rows_from_different_groups_say_so(native_host):
-    from core.i18n import tr
+    from ingetrazo_core.i18n import tr
     win = _window(native_host)
     scene = win.viewport.scene
     a, b = _placed("A", 0.0), _placed("B", 3.0)
@@ -316,7 +316,7 @@ def test_rows_from_different_groups_say_so(native_host):
 def test_rows_inside_a_component_grey_out_make_group_and_say_why(native_host):
     """The report: two rows inside an open component, Make Group did
     nothing — it is refused there, now greyed with the reason."""
-    from core.i18n import tr
+    from ingetrazo_core.i18n import tr
     win = _window(native_host)
     scene = win.viewport.scene
     a, b = _placed("A", 0.0), _placed("B", 3.0)
@@ -373,7 +373,7 @@ def test_the_browser_explodes_each_kind_as_it_should_in_one_step(native_host):
 
 
 def test_explode_is_in_the_row_menu_and_greyed_inside_a_component(native_host):
-    from core.i18n import tr
+    from ingetrazo_core.i18n import tr
     win = _window(native_host)
     scene = win.viewport.scene
     a, b = _placed("A", 0.0), _placed("B", 3.0)

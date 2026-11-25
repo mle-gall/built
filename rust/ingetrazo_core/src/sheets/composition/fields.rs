@@ -187,7 +187,7 @@ fn field_values<'p>(py: Python<'p>, frame_uid: &str) -> PyResult<Bound<'p, PyDic
 #[pyfunction]
 fn local_field_names(py: Python<'_>, text: &str) -> PyResult<String> {
     let lang: String = py
-        .import("core.i18n")?
+        .import("ingetrazo_core.i18n")?
         .call_method0("current_language")?
         .extract()?;
     let col = match lang.as_str() {

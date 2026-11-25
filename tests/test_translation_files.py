@@ -12,8 +12,10 @@ import string
 
 import pytest
 
-from core.i18n import _I18N_DIR, LANGUAGE_NAMES, available_languages
+from ingetrazo_core.i18n import LANGUAGE_NAMES, available_languages
+from ingetrazo_core.paths import app_root
 
+_I18N_DIR = app_root() / "i18n"
 _FILES = sorted(_I18N_DIR.glob("*.json"))
 
 

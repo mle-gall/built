@@ -10,7 +10,7 @@ const KINDS: [(&str, &str, (u8, u8, u8)); 5] = [
 
 #[pyfunction]
 fn _problem_text(report: &Obj<'_>) -> PyResult<String> {
-    let tr = report.py().import("core.i18n")?.getattr("tr")?;
+    let tr = report.py().import("ingetrazo_core.i18n")?.getattr("tr")?;
     let mut parts = vec![];
     for (key, fmt) in [
         ("open", "{n} open borders"),

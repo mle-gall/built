@@ -595,7 +595,7 @@ fn draw_snap_indicator<'py>(a: &Args<'py>) -> Reply<'py> {
 pub(super) fn snap_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (snap, scene) = (a.get_item(0)?, a.get_item(1)?);
-    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let tr = py.import("ingetrazo_core.i18n")?.getattr("tr")?;
     let kind = snap.getattr("kind")?;
     let mut label = interaction(py)?.getattr("DocumentInteraction")?.getattr("_SNAP_LABELS")?.call_method1("get", (&kind,))?;
     if kind.eq("aligned")? && snap.getattr("axis")?.eq("z")? {

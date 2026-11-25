@@ -133,7 +133,7 @@ impl ShellScenes {
         let kw = PyDict::new(py);
         kw.set_item(
             "name",
-            py.import("core.i18n")?.call_method1("tr", ("Scene",))?,
+            py.import("ingetrazo_core.i18n")?.call_method1("tr", ("Scene",))?,
         )?;
         kw.set_item(
             "camera",

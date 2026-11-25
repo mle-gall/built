@@ -9,7 +9,7 @@ fn path(py: Python<'_>, v: PathBuf) -> PyResult<Obj<'_>> {
     py.import("pathlib")?.call_method1("Path", (v,))
 }
 #[pyfunction]
-fn app_root(py: Python<'_>) -> PyResult<Obj<'_>> {
+pub(super) fn app_root(py: Python<'_>) -> PyResult<Obj<'_>> {
     if let Some(v) = py
         .import("sys")?
         .getattr_opt("_MEIPASS")?

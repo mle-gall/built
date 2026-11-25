@@ -590,7 +590,7 @@ _TEXTS = {
 def _tr(text: str, **kw) -> str:
     """``text`` in the interface language, with ``{fields}`` filled."""
     try:
-        from core.i18n import current_language
+        from ingetrazo_core.i18n import current_language
         lang = current_language()
     except Exception:  # noqa: BLE001
         lang = "en"

@@ -17,7 +17,7 @@ from pathlib import Path
 
 from queue import Empty, Queue
 
-from core.i18n import tr
+from ingetrazo_core.i18n import tr
 
 DEFAULT_PORT = 4763
 _REFUSED = b'{"id": null, "ok": false, "error": "not a bridge request; closing"}\n'

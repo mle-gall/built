@@ -7,7 +7,7 @@ from threading import Thread
 from uuid import uuid4
 
 from core import ai
-from core.i18n import tr
+from ingetrazo_core.i18n import tr
 from core.plugin_panels import field, item, on_document_close, section
 from ingetrazo_core.settings import settings
 from plugins._assistant_prompt import (

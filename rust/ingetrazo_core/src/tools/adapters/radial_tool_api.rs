@@ -248,7 +248,7 @@ fn status_clause<'py>(a: &Args<'py>) -> Reply<'py> {
     if !tool.getattr("_guide_capable")?.is_truthy()? {
         return ("").into_bound_py_any(py);
     }
-    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "ingetrazo_core.i18n")?.getattr("tr")?;
     tr.call1(("Ctrl = guide",))
 }
 fn guide_preview_lines<'py>(a: &Args<'py>) -> Reply<'py> {
@@ -288,7 +288,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     if r.is_none() {
         return Ok(none(py));
     }
-    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "ingetrazo_core.i18n")?.getattr("tr")?;
     let fmt_len = imported(py, "core.units")?.getattr("fmt_len")?;
     Ok((
         ("R ")

@@ -44,7 +44,7 @@ fn description(py: Python, action: &Obj, name: &str) -> PyResult<String> {
     }
     .extract()?;
     tip = tip.trim().into();
-    let i18n = py.import("core.i18n")?;
+    let i18n = py.import("ingetrazo_core.i18n")?;
     if _keys_in(
         &i18n
             .call_method1("source_of", (&tip,))?
@@ -127,7 +127,7 @@ impl Command {
     #[new]
     fn new(action: &Obj, path: &str) -> PyResult<Self> {
         let py = action.py();
-        let i18n = py.import("core.i18n")?;
+        let i18n = py.import("ingetrazo_core.i18n")?;
         let source = i18n.getattr("source_of")?;
         let text = action.call_method0("text")?;
         let mut english = plain(&source.call1((&text,))?.extract::<String>()?);

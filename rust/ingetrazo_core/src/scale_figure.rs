@@ -135,7 +135,7 @@ fn chosen(py: Python<'_>, settings: Option<&Bound<PyAny>>) -> PyResult<Option<Fi
         return Ok(None);
     }
     let pick = setting(PICK, DEFAULT)?;
-    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let tr = py.import("ingetrazo_core.i18n")?.getattr("tr")?;
     if pick == CUSTOM {
         let path = PathBuf::from(setting(IMAGE, "")?);
         if path.is_file() {

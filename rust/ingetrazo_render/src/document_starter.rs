@@ -45,7 +45,7 @@ fn billboard_person(
     let name = match name.filter(|s| !s.is_empty()) {
         Some(s) => s,
         None => py
-            .import("core.i18n")?
+            .import("ingetrazo_core.i18n")?
             .call_method1("tr", ("Person",))?
             .extract()?,
     };

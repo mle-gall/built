@@ -30,7 +30,7 @@ fn tr(py: Python<'_>, text: &str, kw: &[(&str, String)]) -> PyResult<String> {
     for (k, v) in kw {
         d.set_item(k, v)?;
     }
-    py.import("core.i18n")?.getattr("tr")?.call((text,), Some(&d))?.extract()
+    py.import("ingetrazo_core.i18n")?.getattr("tr")?.call((text,), Some(&d))?.extract()
 }
 
 /// `georef.profile.polyline_length`.

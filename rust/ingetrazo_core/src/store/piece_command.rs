@@ -312,7 +312,7 @@ fn split_into_pieces<'p>(group: &Obj<'p>) -> PyResult<Vec<Obj<'p>>> {
             Some(name) => name.into_bound_py_any(py)?,
             None => {
                 kw.set_item("n", i + 1)?;
-                py.import("core.i18n")?
+                py.import("ingetrazo_core.i18n")?
                     .call_method("tr", ("Piece {n}",), Some(&kw))?
             }
         };

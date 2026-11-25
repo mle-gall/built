@@ -267,7 +267,7 @@ fn reflect(win: &Bound<'_, PyAny>, key: &str) -> PyResult<()> {
 #[pyfunction]
 fn bind_window_commands(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
-    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let tr = py.import("ingetrazo_core.i18n")?.getattr("tr")?;
     let shortcuts = py.import("ingetrazo_render.keyboard_bindings")?;
     let defaults_key = crate::keyboard_bindings::DEFAULTS;
     // The installed menu bar's items (the `built` binary), not extensions'.

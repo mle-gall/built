@@ -232,7 +232,7 @@ impl SettingsSheet {
         Self::top(slf, &c)?;
         let site = slf.getattr("site")?;
         if sid == "location" && !site.is_none() {
-            let tr_fn = py.import("core.i18n")?.getattr("tr")?;
+            let tr_fn = py.import("ingetrazo_core.i18n")?.getattr("tr")?;
             let edit = slf.getattr("site_edit")?.unbind();
             let put = func(py, move |py, a| Ok(edit.bind(py).call1((a.get_item(0)?, a.get_item(1)?, a.get_item(2)?))?.unbind()))?;
             let groups = crate::settings_rows::native_groups(py, &site.call_method1("groups", (&tr_fn,))?.extract::<String>()?, put)?;
@@ -749,7 +749,7 @@ impl SettingsSheet {
             let defaults = _keys_text(&sc.call_method1("default_keys", (&act,))?)?;
             rows.append((&key, sc.call_method1("action_label", (act.call_method0("text")?,))?, paths.call_method1("get", (&key, ""))?, keys, defaults))?;
         }
-        let tr_fn = py.import("core.i18n")?.getattr("tr")?;
+        let tr_fn = py.import("ingetrazo_core.i18n")?.getattr("tr")?;
         let text = state(slf)?.call_method1("keyboard", (rows, tr_fn))?;
         py.import("json")?.call_method1("loads", (text,))
     }

@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.i18n import set_language
+from ingetrazo_core.i18n import set_language
 from tools.rust_tools import RectangleTool
 
 

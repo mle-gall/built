@@ -17,7 +17,7 @@ fn dialogs(py: Python) -> PyResult<Bound<PyModule>> {
     py.import("ingetrazo_render.chrome_dialogs")
 }
 fn translation(py: Python) -> PyResult<Obj> {
-    py.import("core.i18n")?.getattr("tr")
+    py.import("ingetrazo_core.i18n")?.getattr("tr")
 }
 #[pyclass(extends=Provider)]
 struct ReleaseSheet {

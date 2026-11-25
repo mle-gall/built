@@ -247,8 +247,8 @@ def test_a_disabled_box_never_counts():
 def test_the_new_texts_are_translated():
     """test_translation_files asks that every language has the message;
     here, that the message is what the dialog asks for."""
-    from core import i18n
-    data = json.loads((i18n._I18N_DIR / "es.json").read_text(encoding="utf-8"))
+    from ingetrazo_core.paths import app_root
+    data = json.loads((app_root() / "i18n/es.json").read_text(encoding="utf-8"))
     assert data["Transparent background"] == "Fondo transparente"
     assert "PNG" in data["Only PNG images keep transparency."]
 

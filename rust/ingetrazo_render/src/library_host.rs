@@ -1236,7 +1236,7 @@ fn catalogue(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 #[pyfunction]
 fn _catalogue(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     let resources = py.import("ingetrazo_core.paths")?.call_method0("app_root")?.div("resources")?;
-    let language = py.import("core.i18n")?.call_method0("current_language")?;
+    let language = py.import("ingetrazo_core.i18n")?.call_method0("current_language")?;
     lib(py)?.call_method1("_bundled_by_key", (resources, language))
 }
 
@@ -1597,7 +1597,7 @@ impl LibrarySheet {
         sheet.getattr("menus")?.call_method1("append", (out.get_item("sort")?,))?;
         sheet.setattr("side", out.get_item("side")?)?;
         if prov_id == "components" {
-            let label = py.import("core.i18n")?.call_method1("tr", ("Component library",))?;
+            let label = py.import("ingetrazo_core.i18n")?.call_method1("tr", ("Component library",))?;
             sheet.call_method("side_item", ("s:online", label), Some(&[("on", online)].into_py_dict(py)?))?;
         }
         if online || (prov_id == "components" && searching) {
@@ -1680,7 +1680,7 @@ impl LibrarySheet {
                 let group = if !row.get_item(3)?.is_none() { row.get_item(3)? } else { row.get_item(2)?.try_iter()?.next().transpose()?.unwrap_or_else(|| py.None().into_bound(py)) };
                 let ext = group.getattr("ext").ok().filter(|x| x.is_truthy().unwrap_or(false));
                 if let Some(record) = ext.map(|x| get(&x, "catalogue")).transpose()?.filter(|r| r.is_truthy().unwrap_or(false)) {
-                    let i18n = py.import("core.i18n")?;
+                    let i18n = py.import("ingetrazo_core.i18n")?;
                     let line = render(py)?.getattr("ComponentCatalogue")?.call_method1("credit_line", (json(py)?.call_method1("dumps", (record,))?, i18n.call_method0("current_language")?, i18n.getattr("tr")?))?;
                     d.call_method1("text", (line,))?;
                 }

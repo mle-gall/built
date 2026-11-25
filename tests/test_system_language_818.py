@@ -9,8 +9,7 @@ from __future__ import annotations
 
 import pytest
 from ingetrazo_render import shell_services as native
-from core import i18n
-from ingetrazo_core import settings
+from ingetrazo_core import i18n, settings
 
 from tests.preferences_chrome import Controls, settings_file
 from ingetrazo_render.settings_sheet import _PENDING

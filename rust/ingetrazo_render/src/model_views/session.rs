@@ -197,7 +197,7 @@ impl DocumentViews {
             vp.setattr("tool_preview", id == preview)?;
             tiles.push((display, vp, [x, y, w, h], id == active));
         }
-        let tr = py.import("core.i18n")?.getattr("tr")?;
+        let tr = py.import("ingetrazo_core.i18n")?.getattr("tr")?;
         let mut batch = Vec::with_capacity(tiles.len());
         for (display, vp, bounds, selected) in tiles {
             display.call_method0("draw_frame")?;

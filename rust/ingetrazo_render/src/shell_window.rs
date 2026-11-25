@@ -24,7 +24,7 @@ fn optional<'p>(owner: &Obj<'p>, name: &str) -> PyResult<Obj<'p>> {
     Ok(owner.getattr_opt(name)?.unwrap_or_else(|| none(owner.py())))
 }
 fn tr<'p>(py: Python<'p>, text: &Obj<'p>) -> PyResult<Obj<'p>> {
-    py.import("core.i18n")?.call_method1("tr", (text,))
+    py.import("ingetrazo_core.i18n")?.call_method1("tr", (text,))
 }
 
 fn discover(py: Python<'_>) -> PyResult<Obj<'_>> {
@@ -405,7 +405,7 @@ impl ShellWindow {
         if bounds.get_item(0)?.is_none() {
             let msg = slf
                 .py()
-                .import("core.i18n")?
+                .import("ingetrazo_core.i18n")?
                 .call_method1("tr", ("Nothing selected",))?;
             slf.getattr("_status")?
                 .call_method1("showMessage", (msg, 2500))?;

@@ -42,7 +42,7 @@ pub fn recoloured_name(scene: &Obj<'_>, name: &str, rgb: [f64; 3]) -> PyResult<S
     }
     let py = scene.py();
     let suffix: String = py
-        .import("core.i18n")?
+        .import("ingetrazo_core.i18n")?
         .call_method1("tr", ("(modified)",))?
         .extract()?;
     py.import("ingetrazo_core.materials")?

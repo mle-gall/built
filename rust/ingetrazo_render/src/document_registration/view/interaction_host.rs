@@ -403,7 +403,7 @@ fn dependencies(m: &Bound<PyModule>) -> PyResult<()> {
             ],
         ),
         ("core.camera", &[("OrbitCamera", "OrbitCamera")]),
-        ("core.i18n", &[("tr", "tr")]),
+        ("ingetrazo_core.i18n", &[("tr", "tr")]),
         (
             "core.group",
             &[

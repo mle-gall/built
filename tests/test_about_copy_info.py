@@ -8,7 +8,7 @@ import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_report_sheets import pasteboard  # noqa: F401
 
-from core.i18n import current_language, set_language
+from ingetrazo_core.i18n import current_language, set_language
 from ingetrazo_render import AboutSheet as About, about_review
 from types import SimpleNamespace
 
@@ -64,7 +64,7 @@ def test_the_button_copies_the_info_to_the_clipboard(native_host, pasteboard):
 
 
 def test_the_button_says_it_copied(native_host, pasteboard):
-    from core.i18n import tr
+    from ingetrazo_core.i18n import tr
     ctx = SimpleNamespace(win=native_host.window)
     sheet = About()
     def label():

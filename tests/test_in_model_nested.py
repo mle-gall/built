@@ -149,7 +149,7 @@ def test_a_locked_group_around_them_is_not_opened(native_host):
 
 
 def test_all_at_the_top_select_as_before(native_host):
-    from core.i18n import tr
+    from ingetrazo_core.i18n import tr
     win = native_host.window
     scene = win.viewport.scene
     silla = _component(_quad(), "Silla")

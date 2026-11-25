@@ -41,7 +41,7 @@ pub fn sheet_new_item<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, tool: &str
                            scene: Option<Bound<'py, PyAny>>, template_dir: Option<std::path::PathBuf>,
                            template: Option<String>) -> PyResult<Option<Bound<'py, PyAny>>> {
     let c = py.import("core.composition")?;
-    let tr = |s: &str| -> PyResult<String> { py.import("core.i18n")?.getattr("tr")?.call1((s,))?.extract() };
+    let tr = |s: &str| -> PyResult<String> { py.import("ingetrazo_core.i18n")?.getattr("tr")?.call1((s,))?.extract() };
     let (w, h, x, y) = ((x1 - x0).abs(), (y1 - y0).abs(), x0.min(x1), y0.min(y1));
     let kw = PyDict::new(py);
     let first_scale = || -> PyResult<f64> {

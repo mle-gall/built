@@ -144,7 +144,7 @@ fn links_loaded(win: &Bound<'_, PyAny>) -> PyResult<()> {
         .getattr("link_errors")
     {
         if errors.is_truthy()? {
-            let tr = py.import("core.i18n")?.getattr("tr")?;
+            let tr = py.import("ingetrazo_core.i18n")?.getattr("tr")?;
             let mut body=tr.call1(("Some linked documents could not be loaded; their copies stay in place, empty, until the files are found:",))?.extract::<String>()?;
             body.push('\n');
             for error in errors.call_method0("values")?.try_iter()? {
@@ -172,7 +172,7 @@ fn toggle_eyedropper(win: &Bound<'_, PyAny>, armed: bool) -> PyResult<()> {
     if armed {
         win.call_method1("_activate_tool", ("paint",))?;
         let hint = py
-            .import("core.i18n")?
+            .import("ingetrazo_core.i18n")?
             .call_method1("tr", ("Click a face to sample its material",))?;
         win.getattr("viewport")?
             .call_method1("flash_status", (hint,))?;

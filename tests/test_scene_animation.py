@@ -464,7 +464,7 @@ def test_the_window_s_esc_stops_play(win):
 def test_play_without_scenes_says_why(win):
     win.play_scenes(True)
     assert not win.scene_player.is_active()
-    from core.i18n import tr
+    from ingetrazo_core.i18n import tr
     assert win.statusBar().currentMessage().startswith(
         tr("This project has no scenes to play: keep a view as a scene "
            "first (Scenes panel, «+ Scene»).")[:20])

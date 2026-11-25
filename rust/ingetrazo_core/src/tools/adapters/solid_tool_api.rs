@@ -88,7 +88,7 @@ fn host_solid_error<'py>(a: &Args<'py>) -> Reply<'py> {
     let module = imported(py, "tools.solid_host")?;
     let message = a.get_item(2)?;
     let vp = a.get_item(1)?;
-    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "ingetrazo_core.i18n")?.getattr("tr")?;
     vp.call_method1(
         "flash_status",
         (
@@ -114,7 +114,7 @@ fn host_solid_error<'py>(a: &Args<'py>) -> Reply<'py> {
 fn host_solid_cutter_hint<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let vp = a.get_item(1)?;
-    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "ingetrazo_core.i18n")?.getattr("tr")?;
     vp.call_method1(
         "flash_status",
         (

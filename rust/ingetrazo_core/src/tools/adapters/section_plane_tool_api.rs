@@ -26,7 +26,7 @@ fn on_click<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let ctx = a.get_item(1)?;
     let tool = a.get_item(0)?;
-    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "ingetrazo_core.i18n")?.getattr("tr")?;
     let vp = ctx.getattr("viewport")?;
     if !(tool
         .call_method1(

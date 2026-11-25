@@ -58,7 +58,7 @@ fn sync<'py>(a: &Args<'py>) -> Reply<'py> {
     let menu: Obj<'py>;
     let view = a.get_item(0)?;
     let win = a.get_item(1)?;
-    let current_language = py.import("core.i18n")?.getattr("current_language")?;
+    let current_language = py.import("ingetrazo_core.i18n")?.getattr("current_language")?;
     let snapshot = module.getattr("_snapshot")?.call1((&win,))?;
     let language = current_language.call0()?;
     let sig = (

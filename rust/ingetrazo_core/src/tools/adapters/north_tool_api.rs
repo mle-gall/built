@@ -45,7 +45,7 @@ fn host_north_done<'py>(a: &Args<'py>) -> Reply<'py> {
     let deg: Obj<'py>;
     let result = a.get_item(2)?;
     let vp = a.get_item(1)?;
-    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "ingetrazo_core.i18n")?.getattr("tr")?;
     let fmt_angle_deg = imported(py, "core.units")?.getattr("fmt_angle_deg")?;
     [deg, changed] = unpack::<2>(&result)?;
     if changed.is_truthy()? {

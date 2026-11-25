@@ -26,7 +26,7 @@ fn action_key(action: &Obj) -> PyResult<String> {
     }
     let source: String = action
         .py()
-        .import("core.i18n")?
+        .import("ingetrazo_core.i18n")?
         .call_method1("source_of", (action.call_method0("text")?,))?
         .extract()?;
     Ok(format!("text:{}", action_label(&source)))
@@ -259,7 +259,7 @@ fn import_shortcuts<'p>(window: &Obj<'p>, data: &Obj<'p>) -> PyResult<(usize, us
         return Err(PyValueError::new_err(
             window
                 .py()
-                .import("core.i18n")?
+                .import("ingetrazo_core.i18n")?
                 .call_method1("tr", ("This is not an IngeTrazo shortcuts file.",))?
                 .extract::<String>()?,
         ));

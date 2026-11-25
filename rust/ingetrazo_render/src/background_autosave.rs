@@ -176,7 +176,7 @@ fn publish(
                 .getattr("finished")?
                 .call_method1("emit", (doc.call_method0("display_name")?, ""))?;
             let msg = py
-                .import("core.i18n")?
+                .import("ingetrazo_core.i18n")?
                 .call_method1("tr", ("Auto-saved.",))?;
             win.call_method0("statusBar")?
                 .call_method1("showMessage", (msg, 2000))?;

@@ -475,7 +475,7 @@ impl Workspace {
     }
     fn _choices(s: &Bound<'_, Self>) -> PyResult<Py<PyDict>> {
         let py = s.py();
-        let i18n = py.import("core.i18n")?;
+        let i18n = py.import("ingetrazo_core.i18n")?;
         let tr = |label: &str| i18n.call_method1("tr", (label,))?.extract::<String>();
         let mut views = vec![vec!["__current__".to_string(), tr("Current view")?]];
         for v in py
@@ -1168,7 +1168,7 @@ impl Workspace {
     }
     fn _add_image(s: &Bound<'_, Self>) -> PyResult<()> {
         let py = s.py();
-        let tr = py.import("core.i18n")?;
+        let tr = py.import("ingetrazo_core.i18n")?;
         let dialog = py
             .import("ingetrazo_render.shell_files")?
             .getattr("ShellFileDialog")?;
@@ -1910,7 +1910,7 @@ impl Workspace {
         args.set_item("n", sheets.len()? + 1)?;
         sheet.setattr(
             "name",
-            py.import("core.i18n")?
+            py.import("ingetrazo_core.i18n")?
                 .getattr("tr")?
                 .call(("Sheet {n}",), Some(&args))?,
         )?;
@@ -1937,7 +1937,7 @@ impl Workspace {
             format!(
                 "{}{}",
                 src.getattr("name")?.str()?,
-                py.import("core.i18n")?
+                py.import("ingetrazo_core.i18n")?
                     .call_method1("tr", (" (copy)",))?
                     .str()?
             ),

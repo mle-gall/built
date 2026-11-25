@@ -27,7 +27,7 @@ pub fn setup_extension_menus(win: &Bound<'_, PyAny>, plugins: &Bound<'_, PyList>
     let py = win.py();
     let menus = win.getattr("_extension_menus")?;
     let app_class = py.import("views.extension_api")?.getattr("ExtensionApp")?;
-    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let tr = py.import("ingetrazo_core.i18n")?.getattr("tr")?;
     let weak = py.import("weakref")?.call_method1("ref", (win,))?;
     for plug in plugins {
         let owner = plug.getattr("stem")?.extract::<String>()?;

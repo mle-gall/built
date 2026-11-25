@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from ingetrazo_render import AboutReview
 
-from core.i18n import tr
+from ingetrazo_core.i18n import tr
 from ingetrazo_render import AboutSheet as About
 
 

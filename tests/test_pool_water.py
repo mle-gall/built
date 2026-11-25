@@ -8,7 +8,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.i18n import tr
+from ingetrazo_core.i18n import tr
 from core.scene import Scene
 from formats.igz import load_into, save_scene
 from tools.base import ToolContext

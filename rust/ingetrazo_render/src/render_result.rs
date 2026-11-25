@@ -14,7 +14,7 @@ pub fn blender_availability<'py>(py: Python<'py>, path: &str) -> PyResult<(Optio
         if found.is_none() { (None, "Choose the Blender executable to render".into()) }
         else { (Some(found), "Ready".into()) }
     };
-    Ok((found, py.import("core.i18n")?.call_method1("tr", (message,))?.extract()?))
+    Ok((found, py.import("ingetrazo_core.i18n")?.call_method1("tr", (message,))?.extract()?))
 }
 
 #[pyclass]

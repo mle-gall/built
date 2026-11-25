@@ -121,7 +121,7 @@ def test_project_link_subset_and_agent_surface(win, tmp_path):
 
 @pytest.mark.parametrize("choice", [True, False, None])
 def test_link_document_action_shows_nested_choice(win, tmp_path, monkeypatch, choice):
-    from core.i18n import tr
+    from ingetrazo_core.i18n import tr
     from ingetrazo_render import chrome_forms
     from ingetrazo_render.shell_files import ShellFileDialog
 

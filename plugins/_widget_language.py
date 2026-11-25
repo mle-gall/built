@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import sys
 
-from core import i18n
+from ingetrazo_core import i18n
 
 
 _LAO_FACES = {

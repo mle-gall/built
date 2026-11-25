@@ -20,7 +20,7 @@ fn schedule<'py>(a: &Args<'py>) -> Reply<'py> {
     let group = tool.getattr("_target_group")?;
     tool.setattr("_target_group", py.None())?;
     if a.get_item(2)?.is_none() {
-        let text = imported(py, "core.i18n")?
+        let text = imported(py, "ingetrazo_core.i18n")?
             .call_method1("tr", ("Select one group or component first",))?;
         vp.call_method1("flash_status", (text,))?;
     } else {

@@ -24,7 +24,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from core import bim
-from core.i18n import tr
+from ingetrazo_core.i18n import tr
 from tools.base import Tool
 from core.units import fmt_area, fmt_volume
 

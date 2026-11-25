@@ -279,7 +279,7 @@ class TestFieldNames:
 
     def test_tooltips_name_the_fields_in_the_language_running(self):
         from core.composition import local_field_names
-        from core.i18n import current_language, set_language
+        from ingetrazo_core.i18n import current_language, set_language
         text = "Fields like {escala}, {lamina} and {n} expand."
         before = current_language()
         try:

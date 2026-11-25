@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from core import i18n
+from ingetrazo_core import i18n
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 

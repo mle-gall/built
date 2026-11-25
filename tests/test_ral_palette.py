@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Named, localized RAL paint from the native Library."""
 import json
-from core.i18n import current_language, set_language
+from ingetrazo_core.i18n import current_language, set_language
 from ingetrazo_core.paths import app_root
 from ingetrazo_core import bundled_materials
 from tests.shell_isolation import restore_shell_patches  # noqa: F401

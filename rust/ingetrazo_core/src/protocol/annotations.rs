@@ -154,7 +154,7 @@ fn place_section_plane<'py>(
     } else {
         let args = PyDict::new(py);
         args.set_item("n", planes.len()? + 1)?;
-        py.import("core.i18n")?
+        py.import("ingetrazo_core.i18n")?
             .call_method("tr", ("Section {n}",), Some(&args))?
     };
     kw.set_item("name", name)?;
