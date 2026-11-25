@@ -446,44 +446,35 @@ impl TileCache {
 }
 #[pyfunction]
 fn default_cache_dir(py: Python<'_>) -> PyResult<Obj<'_>> {
-    let host = py.import("app_shell.native")?.getattr("_shell")?;
-    let root = if !host.is_none() {
-        host.call_method1(
-            "local_data_directory",
-            (py.import("os")?
-                .getattr("environ")?
-                .call_method1("get", ("BUILT_SETTINGS_DIR",))?,),
-        )?
-        .extract::<PathBuf>()?
-        .join("IngeTrazo/IngeTrazo")
+    let profile = std::env::var_os("BUILT_SETTINGS_DIR").map(PathBuf::from);
+    let renderer = py.import("ingetrazo_render")?;
+    let base = if let Some(directory) = renderer.getattr_opt("local_data_directory")? {
+        directory.call1((profile,))?.extract::<Option<PathBuf>>()?
     } else {
-        // A script interpreter has no winit module. Respect its explicit profile
-        // and the same per-user data locations as the application.
-        let base = std::env::var_os("BUILT_SETTINGS_DIR")
-            .map(|p| PathBuf::from(p).join("data"))
-            .or_else(|| {
-                #[cfg(target_os = "macos")]
-                {
-                    std::env::var_os("HOME")
-                        .map(|p| PathBuf::from(p).join("Library/Application Support"))
-                }
-                #[cfg(windows)]
-                {
-                    std::env::var_os("LOCALAPPDATA").map(PathBuf::from)
-                }
-                #[cfg(not(any(target_os = "macos", windows)))]
-                {
-                    std::env::var_os("XDG_DATA_HOME")
-                        .map(PathBuf::from)
-                        .or_else(|| {
-                            std::env::var_os("HOME").map(|p| PathBuf::from(p).join(".local/share"))
-                        })
-                }
-            })
-            .ok_or_else(|| pyo3::exceptions::PyOSError::new_err("Missing user data directory"))?;
-        base.join("IngeTrazo/IngeTrazo")
-    };
-    path_obj(py, &root.join("tiles"))
+        // Older standalone renderer wheels predate the native path binding.
+        profile.map(|p| p.join("data")).or_else(|| {
+            #[cfg(target_os = "macos")]
+            {
+                std::env::var_os("HOME")
+                    .map(|p| PathBuf::from(p).join("Library/Application Support"))
+            }
+            #[cfg(windows)]
+            {
+                std::env::var_os("LOCALAPPDATA").map(PathBuf::from)
+            }
+            #[cfg(not(any(target_os = "macos", windows)))]
+            {
+                std::env::var_os("XDG_DATA_HOME")
+                    .map(PathBuf::from)
+                    .filter(|p| p.is_absolute())
+                    .or_else(|| {
+                        std::env::var_os("HOME").map(|p| PathBuf::from(p).join(".local/share"))
+                    })
+            }
+        })
+    }
+    .ok_or_else(|| pyo3::exceptions::PyOSError::new_err("Missing user data directory"))?;
+    path_obj(py, &base.join("IngeTrazo/IngeTrazo/tiles"))
 }
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     functions!(m;deg2num,num2deg,tile_bbox,bbox,tiles_covering,tile_url,source_slug,custom_source,tile_init,tile_to_dict,tile_from_dict,set_rectangle,add_patch,patch_tiles,flat_tiles,visible_tiles,quad_local,capture_bounds,cap_detail,default_cache_dir);
