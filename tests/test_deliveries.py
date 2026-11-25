@@ -76,10 +76,8 @@ def drain(timers):
 
 @pytest.fixture
 def next_turn(monkeypatch):
-    from core import input_types
     from ingetrazo_render import WindowTimers, chrome_dialogs
     timers = WindowTimers()
-    monkeypatch.setattr(input_types, "NATIVE", True)
     monkeypatch.setattr(chrome_dialogs, "in_shell", lambda: True)
     return SimpleNamespace(timers=timers)
 

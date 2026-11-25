@@ -853,7 +853,6 @@ def test_the_view_picture_without_axes_leaves_the_view_as_it_was(
     win = native_host.window
     vp = win.viewport
     seen = []
-    monkeypatch.setattr("core.input_types.NATIVE", True)
     monkeypatch.setattr(vp.keys_stand_in, "render_pixels", lambda *a, **k: seen.append(
         vp.scene.show_axes))
     vp.scene.show_axes = True
@@ -1335,7 +1334,6 @@ def test_the_picture_of_the_selection_shows_the_selection_alone(native_host, mon
         seen.append((a.hidden, b.hidden))
         return 40, 30, bytes([120, 100, 80, 255]) * 1200
 
-    monkeypatch.setattr("core.input_types.NATIVE", True)
     monkeypatch.setattr(vp.keys_stand_in, "render_pixels", render)
     text, _n = win.view_svg_builder().build(
         {"image": True}, {"area": "selection", "size": None})
