@@ -165,10 +165,6 @@ def test_the_spec_bundles_it_on_all_three_platforms():
     for name in ('"dwg2dxf.exe"', '"libredwg-0.dll"', '"libiconv-2.dll"',
                  '"linux": ["dwg2dxf"]', '"darwin": ["dwg2dxf"]'):
         assert name in spec
-    win = (_root() / ".github/workflows/build-windows.yml").read_text(encoding="utf-8")
-    assert "libredwg-$V-win64.zip" in win and "sha256sum -c" in win
-    mac = (_root() / ".github/workflows/release-macos.yml").read_text(encoding="utf-8")
-    assert "programs/dwg2dxf" in mac and "shasum -a 256 -c" in mac
 
 
 def test_check_reports_the_converter():

@@ -110,3 +110,27 @@ worker.
   once per module (`scope="module"`), at the size the test needs: the
   Project tree tests use 2 000 placements for what the tree shows and 20 000
   only for the three tests that bound its cost.
+
+## Built CI
+
+Pushes to `main` and pull requests run the read-only Built workflow. A newer
+run on the same branch cancels the earlier run. Cargo downloads and pip
+packages are cached by runner platform. Tests use temporary homes and settings.
+
+| Runner | Checks |
+| --- | --- |
+| macOS arm64 | Build the three release wheels and launcher. Run the full pytest suite with `-n auto --dist loadfile`, then the Rust library tests. Build a local app bundle and run its executable with `--check`. |
+| Ubuntu | Install GTK, Wayland and Mesa development/runtime packages, build the core and render wheels, run the `not slow and not window` tier and Rust library tests, and check the launcher with Cargo. |
+| Windows x86-64 | Type-check all five crate manifests with the MSVC target and the runner's Python. |
+
+The macOS window probe checks for a console session and a Metal device. If
+either is missing, pytest reports the window tier as skipped with the reason.
+Blender keeps its usual separate opt-in. The bundle uses the packager's local
+ad-hoc signature for executable integrity. CI uses no signing identity and
+publishes no release artifacts.
+
+The RFA crate expects a sibling `rvt-rs` checkout. CI checks out public
+revision `62cc17e0d8bc8781cfab482ca50e8216e0a3ce1d` and applies
+`.github/ci/rfa-family.patch`, the saved-graphics style change from commit
+`89cbaf5b89d155a9313bfe3516dce8a3b30c511b` on the local
+`ingetrazo/rfa-family` branch. Both macOS and Windows use this source.

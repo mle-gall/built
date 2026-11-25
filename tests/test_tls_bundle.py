@@ -201,12 +201,10 @@ def test_every_python_https_call_uses_the_context(monkeypatch, tmp_path):
 
 
 def test_the_windows_build_ships_truststore():
-    """The Windows build installs its packages by hand, not from
-    requirements.txt: without truststore there, the frozen app falls back
-    to Python's own store and #783 comes back without a word."""
+    """Windows runtime requirements and the bundle both include truststore."""
     root = Path(__file__).resolve().parent.parent
-    workflow = (root / ".github/workflows/build-windows.yml").read_text(
-        encoding="utf-8")
+    requirements = (root / "requirements.txt").read_text(encoding="utf-8")
     spec = (root / "packaging/native.spec").read_text(encoding="utf-8")
-    assert "truststore" in workflow
+    assert any(line.startswith("truststore") and 'sys_platform == "win32"' in line
+               for line in requirements.splitlines())
     assert "'truststore'" in spec

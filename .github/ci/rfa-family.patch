@@ -1,0 +1,92 @@
+diff --git a/src/ifc/mesh_volume.rs b/src/ifc/mesh_volume.rs
+index 2967cc6e..de9fb544 100644
+--- a/src/ifc/mesh_volume.rs
++++ b/src/ifc/mesh_volume.rs
+@@ -831,6 +831,7 @@ mod tests {
+             triangles: Vec::new(),
+             hidden: false,
+             filtered: false,
++            style_id: None,
+         }
+     }
+
+diff --git a/src/ifc/mesh_wall_quantities.rs b/src/ifc/mesh_wall_quantities.rs
+index ef533828..618c27ec 100644
+--- a/src/ifc/mesh_wall_quantities.rs
++++ b/src/ifc/mesh_wall_quantities.rs
+@@ -538,6 +538,7 @@ mod tests {
+             triangles: vec![[0, 1, 2], [0, 2, 3]],
+             hidden: false,
+             filtered: false,
++            style_id: None,
+         }
+     }
+
+@@ -681,6 +682,7 @@ mod tests {
+             triangles,
+             hidden: false,
+             filtered: false,
++            style_id: None,
+         };
+         let triangles = oriented(&face).unwrap();
+         let net: f64 = triangles.iter().map(area).sum();
+diff --git a/src/research/native_saved_mesh.rs b/src/research/native_saved_mesh.rs
+index 99cfaec4..b770d173 100644
+--- a/src/research/native_saved_mesh.rs
++++ b/src/research/native_saved_mesh.rs
+@@ -1948,6 +1948,12 @@ pub struct Primitive {
+     /// holds any (RE-318).
+     #[serde(default, skip_serializing_if = "is_false")]
+     pub filtered: bool,
++    /// The graphics style (`GStyleElem`) of the nearest node on the way to
++    /// it, the drawn node first, that names one (`m_GInfo.m_categoryId`
++    /// not -1): a form's subcategory where the form has one, else the
++    /// element's own style. None where no node names one.
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub style_id: Option<i64>,
+ }
+ fn is_false(value: &bool) -> bool {
+     !*value
+@@ -2114,6 +2120,14 @@ fn graphics_impl<'a>(
+             .or_insert_with(|| PointerIndex::new(g));
+         let oi = selected.object_index;
+         let obj = &g.objects[oi];
++        let style_id = std::iter::once(oi)
++            .chain(selected.path.iter().rev().copied())
++            .filter_map(|i| g.objects.get(i))
++            .find_map(|o| {
++                crate::native_metadata::identifier(&o.fields["m_GInfo"]["m_categoryId"])
++                    .ok()
++                    .filter(|v| *v >= 0)
++            });
+         let mut decoded = Vec::new();
+         let result = (|| -> Result<()> {
+             if obj.class_name == "Geometry" {
+@@ -2151,6 +2165,7 @@ fn graphics_impl<'a>(
+                                 triangles: m.triangles,
+                                 hidden: selected.hidden,
+                                 filtered: selected.filtered,
++                                style_id,
+                             })
+                         }
+                         None => {
+@@ -2281,6 +2296,7 @@ fn graphics_impl<'a>(
+                     triangles,
+                     hidden: selected.hidden,
+                     filtered: selected.filtered,
++                    style_id,
+                 })
+             }
+             for mesh in &mut decoded {
+diff --git a/src/research/native_saved_scene.rs b/src/research/native_saved_scene.rs
+index ac63027a..46e98ece 100644
+--- a/src/research/native_saved_scene.rs
++++ b/src/research/native_saved_scene.rs
+@@ -44,6 +44,7 @@ pub const SAVED_GRAPHICS_FIELDS: &[&str] = &[
+     "m_bHasScale",
+     "m_bIsNestedDetailFamily",
+     "m_cda",
++    "m_categoryId",
+     "m_center",
+     "m_comp",
+     "m_corners",

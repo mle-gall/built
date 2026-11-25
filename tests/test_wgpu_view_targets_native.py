@@ -4,6 +4,7 @@ Each view has its own surface, size, camera, style and pick IDs; the scene
 is sent once. Each view draws on a headless layer (tests/headless_gpu.py).
 """
 import importlib.util
+import sys
 
 import numpy as np
 import pytest
@@ -24,8 +25,12 @@ def _camera(shift_x=0.):
 
 @pytest.fixture
 def two():
+    if sys.platform != "darwin":
+        pytest.skip("multi-surface fixture requires Core Animation layers")
     if not HAS_RENDERER:
         pytest.skip('Metal checks need the release crate')
+    from tests.headless_gpu import require_gpu
+    require_gpu()
     from built_render import Renderer, headless_layer
     hosts = [headless_layer(64, 64), headless_layer(48, 32)]
     renderer = Renderer(hosts[0], 64, 64, 1., platform="layer")
