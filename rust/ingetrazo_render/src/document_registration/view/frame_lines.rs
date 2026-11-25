@@ -5,6 +5,7 @@
 //! boxes (`views.wgpu_edit_context`) (render-glue lane; from the Python
 //! modules of those names).
 use super::*;
+use numpy::PyReadonlyArray3;
 use pyo3::types::PySlice;
 
 fn attr<'py>(o: &Obj<'py>, name: &str) -> Reply<'py> {
@@ -274,11 +275,18 @@ fn selected_hidden<'py>(a: &Args<'py>) -> Reply<'py> {
     for group in groups.iter() {
         rows.call_method1("update", (view.call_method1("_rows_for_group", (group,))?,))?;
     }
-    let local = PyDict::new(py);
-    let parts = empty(py);
+    let numpy_float32 = numpy.getattr("float32")?;
     let placed_groups = packed.getattr("groups")?;
-    let worlds = packed.getattr("instances")?.get_item("world")?;
-    let three = PySlice::new(py, 0, 3, 1);
+    // Instance matrices are stored column by column (the Rust ABI).
+    let worlds: PyReadonlyArray3<'_, f32> = numpy.call_method1("asarray", (packed.getattr("instances")?.get_item("world")?, &numpy_float32))?.extract()?;
+    let worlds = worlds.as_array();
+    let dash = (3.0 * view.call_method0("devicePixelRatioF")?.extract::<f64>()?.max(1.0)) as f32;
+    let rgba: [u8; 4] = module.getattr("SELECTED_RGBA")?.extract()?;
+    // Each mesh's own soft and hidden edges, read once; then one record
+    // per edge per placement: both ends through the row's matrix, in
+    // binary32 as NumPy's product gave them.
+    let mut local: Vec<(usize, Option<PyReadonlyArray3<'py, f32>>)> = Vec::new();
+    let mut records: Vec<u8> = Vec::new();
     for row in py.import("builtins")?.call_method1("sorted", (rows,))?.try_iter()? {
         let row = row?;
         let placed = placed_groups.get_item(&row)?;
@@ -291,20 +299,34 @@ fn selected_hidden<'py>(a: &Args<'py>) -> Reply<'py> {
             }
         }
         let mesh = placed.getattr("mesh")?;
-        if !local.contains(id(&mesh))? {
-            local.set_item(id(&mesh), module.call_method1("_local_hidden_edges", (&scene, &mesh))?)?;
-        }
-        let pairs = local.as_any().get_item(id(&mesh))?;
-        if pairs.len()? == 0 {
+        let known = match local.iter().position(|(mesh_id, _)| *mesh_id == id(&mesh)) {
+            Some(known) => known,
+            None => {
+                let pairs = module.call_method1("_local_hidden_edges", (&scene, &mesh))?;
+                let pairs = if pairs.len()? == 0 { None } else { Some(numpy.call_method1("ascontiguousarray", (pairs, &numpy_float32))?.extract()?) };
+                local.push((id(&mesh), pairs));
+                local.len() - 1
+            }
+        };
+        let Some(pairs) = &local[known].1 else {
             continue;
+        };
+        let row: usize = row.extract()?;
+        let w = |from: usize, to: usize| worlds[[row, from, to]];
+        records.reserve(pairs.as_array().dim().0 * 40);
+        for pair in pairs.as_array().outer_iter() {
+            for end in 0..2 {
+                for value in super::frame_scene::through([pair[[end, 0]], pair[[end, 1]], pair[[end, 2]]], &w) {
+                    records.extend_from_slice(&value.to_le_bytes());
+                }
+            }
+            records.extend_from_slice(&rgba);
+            for value in [1.0f32, dash, dash] {
+                records.extend_from_slice(&value.to_le_bytes());
+            }
         }
-        // Instance matrices are stored column by column (the Rust ABI).
-        let world = numpy.call_method1("asarray", (worlds.get_item(&row)?, numpy.getattr("float32")?))?;
-        parts.append(pairs.matmul(world.get_item((&three, &three))?)?.add(world.get_item((3, &three))?)?)?;
     }
-    let pairs = if parts.is_empty() { numpy.call_method1("empty", ((0, 2, 3), numpy.getattr("float32")?))? } else { numpy.call_method1("concatenate", (parts,))? };
-    let dash = 3.0 * view.call_method0("devicePixelRatioF")?.extract::<f64>()?.max(1.0);
-    let out = make_segments(py, pairs, module.getattr("SELECTED_RGBA")?, 1.0, dash)?;
+    let out = numpy.call_method1("frombuffer", (pyo3::types::PyByteArray::new(py, &records), module.getattr("SEGMENT")?))?;
     view.setattr("_hidden_lines", (&key, &out))?;
     (key, out).into_bound_py_any(py)
 }
