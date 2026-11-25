@@ -2,19 +2,25 @@
 travels through the system clipboard as a small ``.igz``-based payload."""
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication
+import ingetrazo_core as native_clip
+from ingetrazo_core import ClipOffer, Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group, copy_group
 from core.mesh import Mesh
-from formats import clip
+from formats.clip_payload import decode, encode
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
+MIME = "application/x-ingetrazo-clipboard"
 
-@pytest.fixture(scope="module")
-def app():
-    return QApplication.instance() or QApplication([])
+
+@pytest.fixture
+def app(monkeypatch):
+    """No shell: the offer lives in this process, as in a headless run."""
+    from app_shell import native
+    monkeypatch.setattr(native, "available", lambda: False)
 
 
 def _box_group(x: float) -> Group:
@@ -43,7 +49,7 @@ def _clip():
 
 
 def test_the_clipboard_survives_the_trip(app):
-    out = clip.decode(clip.encode(_clip()))
+    out = decode(encode(_clip()))
     assert out is not None
     (loop, holes, attrs), = out["faces"]
     assert len(loop) == 4 and len(holes) == 1
@@ -59,21 +65,26 @@ def test_the_clipboard_survives_the_trip(app):
 
 
 def test_garbage_is_not_a_clipboard(app):
-    assert clip.decode(b"not a zip") is None
+    assert decode(b"not a zip") is None
 
 
 def test_this_windows_own_copy_is_not_foreign(app):
-    clip.publish(_clip())
-    assert clip.available()
-    assert clip.foreign() is None
+    copied = _clip()
+    native_clip.clip_publish(copied)
+    assert native_clip.clip_available()
+    assert native_clip.clip_foreign() is None
+    # Another window of this process pastes its own decoded copy.
+    other = native_clip.clip_own({})
+    assert other is not None and other is not copied
+    assert native_clip.clip_own(copied) is None
 
 
 def test_the_offer_is_rendered_on_demand(app):
-    mime = clip.ClipMime(_clip())
-    assert mime.formats() == [clip.MIME]
-    data = mime.retrieveData(clip.MIME, None)
-    assert clip.decode(data.data()) is not None
-    assert mime.retrieveData("text/plain", None) is None
+    offer = ClipOffer(_clip())
+    assert offer.formats() == [MIME]
+    data = offer.retrieveData(MIME, None)
+    assert decode(data.data()) is not None
+    assert offer.retrieveData("text/plain", None) is None
 
 
 @pytest.mark.parametrize("package", ["APPIMAGE", "FLATPAK_ID", None])
@@ -97,22 +108,41 @@ def test_new_window_uses_the_running_application(native_host, tmp_path, monkeypa
 
 
 def test_quitting_leaves_the_copy_as_plain_data(app):
-    clip.publish(_clip())
-    clip.flush()
-    md = QApplication.clipboard().mimeData()
-    assert not isinstance(md, clip.ClipMime)
-    assert clip.decode(md.data(clip.MIME).data()) is not None
+    native_clip.clip_publish(_clip())
+    native_clip.clip_flush()
+    offer = native_clip.clip_current_offer()
+    assert decode(offer.data(MIME).data()) is not None
+
+
+def test_a_shell_pasteboard_carries_the_copy_to_another_process(monkeypatch):
+    from app_shell import native
+    board = {"types": [], "count": 0, "data": {}}
+
+    def write(items):
+        board["data"] = dict(items)
+        board["types"] = list(board["data"])
+        board["count"] += 1
+        return True
+
+    monkeypatch.setattr(native, "available", lambda: True)
+    monkeypatch.setattr(native, "pasteboard_write", write)
+    monkeypatch.setattr(native, "pasteboard_types", lambda: (board["types"], board["count"]))
+    monkeypatch.setattr(native, "pasteboard_read", lambda kind: board["data"].get(kind))
+    native_clip.clip_publish(_clip())
+    assert native_clip.clip_available() and native_clip.clip_foreign() is None
+    # Another process copies: the offer is no longer ours, and pastes.
+    write([(MIME, encode(_clip()))])
+    pasted = native_clip.clip_foreign()
+    assert pasted is not None and len(pasted["groups"]) == 2
 
 
 def test_native_window_adopts_a_platform_offer_once(app, monkeypatch):
-    from types import SimpleNamespace
+    import formats.clip as adapter
     from ingetrazo_render import ModelClipboard
-    from app_shell import native
 
     original = _clip()
-    offer = clip.ClipMime(original)
-    monkeypatch.setattr(native, "available", lambda: False)
-    monkeypatch.setattr(clip, "current_offer", lambda: offer)
+    offer = ClipOffer(original)
+    monkeypatch.setattr(adapter, "current_offer", lambda: offer)
     released = []
     previous = _clip()
     vp = SimpleNamespace(clipboard=previous, _drop_clip_protos=released.append)

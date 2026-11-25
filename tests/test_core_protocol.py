@@ -483,7 +483,8 @@ def test_placement_commands_reach_nested_placements():
 
 
 def test_resegment_curve_and_repair_solid():
-    from PySide6.QtCore import QPointF, Qt
+    from core.input_codes import Input
+    from ingetrazo_core import ScreenPoint
     from tools.base import ToolContext
     from tools.circle import CircleTool
     from tests.controller_surface import ControllerSurface as Viewport
@@ -493,8 +494,8 @@ def test_resegment_curve_and_repair_solid():
     tool = CircleTool()
     tool.on_activate(vp)
     for p in (V(0, 0, 0), V(2, 0, 0)):
-        tool.on_click(ToolContext(viewport=vp, world=p, screen=QPointF(0, 0),
-                                  modifiers=Qt.NoModifier, snap=None))
+        tool.on_click(ToolContext(viewport=vp, world=p, screen=ScreenPoint(0, 0),
+                                  modifiers=Input.NoModifier, snap=None))
     edge = next(e for e in vp.scene.mesh.edges if e.curve is not None)
     before = sum(1 for e in vp.scene.mesh.edges if e.curve is not None)
     out = C.run(vp.history, "resegment_curve", edge=to_json_key(edge.key), segments=before * 2)
