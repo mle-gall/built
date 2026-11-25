@@ -78,10 +78,10 @@ def test_changed_units_remain_the_default_when_the_open_model_differs(chosen):
     # new-document choice; it cannot be inferred from the old units matching.
     assert window.viewport.scene.units == chosen
     assert units.new_document_units() == chosen
-    from ingetrazo_render.document_commands import WindowDocumentCommands
+    from ingetrazo_render import ShellWindow
     fresh_scene = Scene()
     fresh_window = SimpleNamespace(viewport=SimpleNamespace(scene=fresh_scene))
-    WindowDocumentCommands._apply_new_document_units(fresh_window)
+    ShellWindow._apply_new_document_units(fresh_window)
     assert fresh_scene.units == chosen
 
 

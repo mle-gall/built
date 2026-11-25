@@ -285,9 +285,13 @@ fn open_settings<'py>(py: Python<'py>, win: &Any<'py>) -> PyResult<Any<'py>> {
 
 #[pyfunction]
 fn step_document(win: &Any<'_>, step: i64) -> PyResult<()> {
-    let nxt = win.getattr("_project_tabs")?.call_method1("neighbour", (win.getattr("_doc")?, step))?;
-    if !nxt.is_none() {
-        win.call_method1("activate_document", (nxt,))?;
+    let docs = win.call_method0("documents")?;
+    let current = win.getattr("_doc")?;
+    let count = docs.len()? as i64;
+    if count > 1 && docs.contains(&current)? {
+        let index: i64 = docs.call_method1("index", (current,))?.extract()?;
+        let next = docs.get_item((index + step).rem_euclid(count))?;
+        win.call_method1("activate_document", (next,))?;
     }
     Ok(())
 }

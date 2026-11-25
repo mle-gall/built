@@ -1,4 +1,4 @@
-//! The embedded interpreter and the Python host object (`app_shell.host`).
+//! The embedded interpreter and the per-window controller (`ingetrazo_render.Host`).
 //!
 //! `ingetrazo_render` is linked into this binary and registered as a
 //! built-in module before the interpreter starts, so Python's

@@ -1,15 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! The window's document verbs (`ingetrazo_render.document_commands`): what
-//! the menus, keys and the right-click menu call on a window
-//! (`_on_make_group`, `_on_soften_edges`, `import_igz_path`…), each bound
-//! to the Rust command modules of this crate.
-//!
-//! `WindowDocumentCommands` is a plain class made here whose members are
-//! [`Verb`] descriptors (and a few properties); `ShellWindow` and the Qt
-//! `MainWindow` inherit it. A verb reads `ingetrazo_render`'s function
-//! when called, so a test replacing one replaces it for the window too.
-//! Verbs marked repeatable are remembered for Repeat (Shift+R), with the
-//! arguments they take and without the `checked` flag Qt may append.
+//! Document verbs bound directly to ShellWindow. Repeatable verbs remember
+//! their arguments for Repeat (Shift+R).
 use crate::settings_rows::{func, none, obj, opt, s, tr};
 use pyo3::{
     prelude::*,
@@ -73,7 +64,7 @@ fn kwargs<'py>(py: Python<'py>, items: &[(&str, Bound<'py, PyAny>)]) -> PyResult
 }
 
 /// One verb: its name, and its Repeat label with the arguments it keeps.
-#[pyclass(module = "ingetrazo_render.document_commands", frozen, weakref)]
+#[pyclass(module = "ingetrazo_render", frozen, weakref)]
 pub struct Verb {
     name: &'static str,
     repeat: Option<(&'static str, usize)>,
@@ -115,7 +106,7 @@ impl Verb {
 /// to the same verb on the same window (Qt's `disconnect`, `WeakMethod`).
 /// Not a `types.MethodType`: PySide reads a method's function as Python
 /// code when it connects a signal to it.
-#[pyclass(module = "ingetrazo_render.document_commands", frozen, weakref)]
+#[pyclass(module = "ingetrazo_render", frozen, weakref)]
 pub struct BoundVerb {
     verb: Py<Verb>,
     win: Py<PyAny>,
@@ -277,7 +268,7 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
         "_toggle_projection" => {
             let vp = win.call_method0("_active_view")?;
             vp.call_method0("toggle_projection")?;
-            done!(win.call_method1("_sync_projection_buttons", (vp.getattr("camera")?.call_method0("projection_mode")?,)))
+            nothing()
         }
         // Back to Select once a picture is placed, so the next click doesn't stamp a copy.
         "activate_select_tool" => done!(win.call_method1("_activate_tool", ("select",))),
@@ -287,7 +278,7 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
             let index = a.req(0, "index")?;
             win.setattr("_last_sheet", &index)?;
             win.call_method0("_ensure_composer")?.call_method1("show_sheet", (index,))?;
-            done!(win.call_method0("_refresh_sheet_tabs"))
+            nothing()
         }
 
         // ---- camera ---------------------------------------------------------------------
@@ -773,8 +764,6 @@ fn commands_class<'py>(m: &Bound<'py, PyModule>) -> PyResult<Bound<'py, PyAny>> 
     let py = m.py();
     let n = m;
     let ns = PyDict::new(py);
-    ns.set_item("__module__", "ingetrazo_render.document_commands")?;
-    ns.set_item("__doc__", "The window's document verbs, bound to the Rust command modules.")?;
     for (name, repeat) in VERBS {
         ns.set_item(*name, Bound::new(py, Verb { name, repeat: *repeat })?)?;
     }
@@ -822,16 +811,15 @@ fn commands_class<'py>(m: &Bound<'py, PyModule>) -> PyResult<Bound<'py, PyAny>> 
         Ok(none(py))
     })?;
     ns.set_item("_saved_version", property.call1((get_saved, set_saved))?)?;
-    py.import("builtins")?.getattr("type")?.call1(("WindowDocumentCommands", PyTuple::empty(py), ns))
+    let window = py.get_type::<crate::shell_window::ShellWindow>();
+    for (name, value) in ns.iter() {
+        window.setattr(name.cast::<pyo3::types::PyString>()?, value)?;
+    }
+    Ok(window.into_any())
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    let py = m.py();
-    let sub = PyModule::new(py, "document_commands")?;
-    sub.add_class::<Verb>()?;
-    sub.add_class::<BoundVerb>()?;
-    sub.add("WindowDocumentCommands", commands_class(m)?)?;
-    m.add_submodule(&sub)?;
-    py.import("sys")?.getattr("modules")?.set_item("ingetrazo_render.document_commands", &sub)?;
+    m.add_class::<crate::shell_window::ShellScenes>()?;
+    m.add("ShellWindow", commands_class(m)?)?;
     Ok(())
 }

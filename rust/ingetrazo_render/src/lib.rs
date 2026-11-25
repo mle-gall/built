@@ -86,6 +86,7 @@ mod dialogs_host;
 mod window_commands;
 mod shell_files;
 mod shell_host;
+mod shell_window;
 mod shell;
 pub mod platform_paths;
 pub mod ui;

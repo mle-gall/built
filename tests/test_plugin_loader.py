@@ -222,11 +222,11 @@ def test_activating_a_plugin_keeps_the_real_tool_active(tmp_path, open_window):
         "def on_activate(self, viewport):\n            viewport._plugin_ran = True"))
     win = open_window()
     active = win.viewport.active_tool
-    label = win._tool_label.text()
+    label = win.tool_label
     row, = win._extension_menus.rows()
     win._registry_actions["menu:" + row[0]].trigger()
     assert win.viewport._plugin_ran and win.viewport.active_tool is active
-    assert win._tool_label.text() == label
+    assert win.tool_label == label
 
 
 SETUP_BUILT_TOOL = """

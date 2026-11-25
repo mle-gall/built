@@ -102,7 +102,7 @@ fn recover_untitled(win: &Bound<'_, PyAny>, n: usize, slot: &Bound<'_, PyAny>) -
         return Ok(());
     }
     if !win.call_method0("_doc_is_blank")?.is_truthy()? {
-        win.call_method0("_new_document")?;
+        win.call_method0("new_document")?;
     }
     let target = win.getattr("_doc")?;
     for doc in win.getattr("_documents")?.try_iter()? {
@@ -122,9 +122,7 @@ fn recover_untitled(win: &Bound<'_, PyAny>, n: usize, slot: &Bound<'_, PyAny>) -
     win.setattr("_import_name", py.None())?;
     win.setattr("_saved_version", -1)?;
     vp.call_method0("notify_scene_changed")?;
-    for op in ["_sync_style_menu", "_sync_section_menu", "_update_title"] {
-        win.call_method0(op)?;
-    }
+    win.call_method0("_update_title")?;
     Ok(())
 }
 #[pyfunction]
