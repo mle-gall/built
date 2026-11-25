@@ -149,7 +149,7 @@ pub fn begin_group_edit<'py>(scene: &Obj<'py>, group: &Obj<'py>) -> PyResult<()>
     };
     if !group.getattr("xform")?.is_none() || affine_above {
         let world = scene.getattr("_root")?.call_method1("_edit_matrix", (group,))?;
-        active = module(py, "core.store_mesh")?.call_method1("instance_view", (group.getattr("mesh")?, world))?;
+        active = module(py, "ingetrazo_core.store_mesh")?.call_method1("instance_view", (group.getattr("mesh")?, world))?;
         if !active.is_none() {
             frame = active.getattr("_store")?.call_method0("tool_placement")?;
             let axes = group.getattr("axes")?;
@@ -165,7 +165,7 @@ pub fn begin_group_edit<'py>(scene: &Obj<'py>, group: &Obj<'py>) -> PyResult<()>
         // A singular placement needs the compatibility world copy; keep the
         // placement swaps on entry so its History step can replay them.
         let dm = module(py, "core.doc_model")?;
-        let store_mesh = module(py, "core.store_mesh")?.getattr("StoreMesh")?;
+        let store_mesh = module(py, "ingetrazo_core.store_mesh")?.getattr("StoreMesh")?;
         let depth: i64 = if entry_mesh.get_type().is(&store_mesh) { dm.call_method0("begin")?.extract()? } else { 0 };
         let entered = module(py, "ingetrazo_core")?.getattr("command_protocol")?
             .call_method1("enter_reference", (scene, group, &frame));

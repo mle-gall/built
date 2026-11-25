@@ -161,7 +161,7 @@ fn subset<'py>(py: Python<'py>, src: &Obj<'py>, path: &Obj<'py>, select: &Obj<'p
         part.setattr("xform", world)?;
         out.push(part);
     }
-    let mesh = module(py, "core.mesh")?.getattr("Mesh")?.call0()?;
+    let mesh = module(py, "ingetrazo_core.mesh")?.getattr("Mesh")?.call0()?;
     let stamp = PyTuple::new(py, [PyTuple::new(py, [path.str()?.into_any(), PyString::new(py, "subset-root").into_any()])?.into_any(), mesh.getattr("revision")?])?;
     mesh.getattr("__dict__")?.set_item("_link_geometry", stamp)?;
     Ok((out, mesh))

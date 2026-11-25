@@ -86,7 +86,7 @@ struct UvCx<'py> {
 impl<'py> UvCx<'py> {
     fn new(py: Python<'py>) -> PyResult<Self> {
         Ok(UvCx {
-            hypot: module(py, "core.store_mesh")?.call_method0("_hypot")?,
+            hypot: module(py, "ingetrazo_core.store_mesh")?.call_method0("_hypot")?,
             axes: module(py, "core.texture")?.getattr("face_uv_axes")?,
             vec3: module(py, "ingetrazo_core")?.getattr("Vec3")?,
         })
@@ -392,14 +392,14 @@ fn store_built<'py>(py: Python<'py>, parts: &[(Obj<'py>, Obj<'py>)], all_maps: b
         fa_parts.append(fa)?;
         v_off += n_pos;
     }
-    let mesh = module(py, "core.mesh")?.getattr(pyo3::intern!(py, "Mesh"))?.call0()?;
+    let mesh = module(py, "ingetrazo_core.mesh")?.getattr(pyo3::intern!(py, "Mesh"))?.call0()?;
     if v_off == 0 {
         return Ok(mesh);
     }
     let cat = |l: &Bound<'py, PyList>| -> PyResult<Obj<'py>> { np.call_method1(pyo3::intern!(py, "ascontiguousarray"), (np.call_method1(pyo3::intern!(py, "concatenate"), (l,))?,)) };
-    let kw = module(py, "core.store_mesh")?.call_method0(pyo3::intern!(py, "_weld_args"))?.cast_into::<PyDict>()?;
+    let kw = module(py, "ingetrazo_core.store_mesh")?.call_method0(pyo3::intern!(py, "_weld_args"))?.cast_into::<PyDict>()?;
     kw.set_item("sequential", false)?;
-    let namespace = module(py, "core.mesh")?.getattr(pyo3::intern!(py, "_KEY_NAMESPACES"))?.call_method0(pyo3::intern!(py, "__next__"))?;
+    let namespace = module(py, "ingetrazo_core.mesh")?.getattr(pyo3::intern!(py, "_KEY_NAMESPACES"))?.call_method0(pyo3::intern!(py, "__next__"))?;
     let positions = np.call_method1(pyo3::intern!(py, "ascontiguousarray"), (np.call_method1(pyo3::intern!(py, "concatenate"), (&pos_parts,))?, "float64"))?;
     let args = PyTuple::new(py, [
         namespace,
