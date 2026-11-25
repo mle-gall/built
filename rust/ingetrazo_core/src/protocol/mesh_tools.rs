@@ -101,13 +101,8 @@ fn flip<'py>(h: &Obj<'py>, faces: &Obj<'py>) -> Reply<'py> {
 #[pyfunction]
 fn orient_faces<'py>(history: &Obj<'py>, face: &Obj<'py>) -> Reply<'py> {
     let seed = one(history, "face", face)?;
-    flip(
-        history,
-        &history
-            .py()
-            .import("core.orient_faces")?
-            .call_method1("faces_to_flip", (seed,))?,
-    )
+    let targets = crate::seed_orientation::faces_to_flip(&seed)?;
+    flip(history, PyList::new(history.py(), targets)?.as_any())
 }
 #[pyfunction]
 fn resegment_curve<'py>(history: &Obj<'py>, edge: &Obj<'py>, segments: &Obj<'py>) -> Reply<'py> {
@@ -116,7 +111,7 @@ fn resegment_curve<'py>(history: &Obj<'py>, edge: &Obj<'py>, segments: &Obj<'py>
         history,
         &history
             .py()
-            .import("core.curve_segments")?
+            .import("ingetrazo_core.curve_segments")?
             .call_method1("ResegmentCurveCommand", (seed, int(segments)?))?,
     )
 }

@@ -333,7 +333,7 @@ fn make_builder<'py>(a: &Args<'py>) -> Reply<'py> {
     let module = imported(py, "tools.rotate_host")?;
     let tool = a.get_item(0)?;
     let partial = imported(py, "functools")?.getattr("partial")?;
-    let rotation_command = imported(py, "core.rotate_ops")?.getattr("rotation_command")?;
+    let rotation_command = imported(py, "ingetrazo_core")?.getattr("rotation_command")?;
     partial.call1((
         &rotation_command,
         module.call_method1("QVector3D", (tool.getattr("start_point")?,))?,

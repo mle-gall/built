@@ -9,7 +9,7 @@ from unittest.mock import Mock
 import pytest
 
 from ingetrazo_render import shell_action as ShellAction
-from core import string_search as ss
+import ingetrazo_core as ss
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_render import command_metadata as cs
 from views import wgpu_ui
@@ -21,20 +21,24 @@ def win(native_host):
 
 
 # ---- the matching (Blender's), without a window ------------------------------
-def _rank(query, *labels):
-    entries = [(label, [ss.Item(label.split(" ▸ "))]) for label in labels]
-    return ss.rank(query, entries)
+def _rank(query, *labels, recent=None):
+    entries = [(label, [ss.SearchItem(label.split(" ▸ "))]) for label in labels]
+    short = len(query.strip()) <= 1
+    ranked = ss.rank_commands(ss.command_fold(query), short, [
+        (items, recent.get(label, -1) if short and recent else -1)
+        for label, items in entries])
+    return [entries[index][0] for index in ranked]
 
 
 def test_command_index_preserves_group_boundaries_and_scores():
-    item = ss.Item(["Módelo", "", "Reverse-Faces"])
-    assert ss.words_of("Módelo ▸ Reverse-Faces") == list(item.words)
+    item = ss.SearchItem(["Módelo", "", "Reverse-Faces"])
+    assert ss.SearchItem(["Módelo ▸ Reverse-Faces"]).words == item.words
     assert item.words == ("modelo", "reverse", "faces")
     assert item.main == (False, True, True)
     assert (item.main_length, item.total_length) == (12, 19)
-    assert ss.score(["rev"], item) == 1010
-    assert ss.score(["mod"], item) == 1009
-    assert ss.score(["missing"], item) is None
+    assert ss.command_score(["rev"], item) == 1010
+    assert ss.command_score(["mod"], item) == 1009
+    assert ss.command_score(["missing"], item) is None
     assert ss.fuzzy_errors("revs", "revs") == 0
     assert ss.fuzzy_errors("os", "") == -1
 
@@ -80,11 +84,9 @@ def test_words_out_of_order_rank_lower():
 
 
 def test_recent_ones_lead_only_with_one_letter_or_none():
-    entries = [(n, [ss.Item([n])]) for n in ("Copy", "Cut", "Cutter")]
-    recent = {"Cutter": 2}.get
-    assert ss.rank("", entries, lambda n: recent(n, -1))[0] == "Cutter"
-    assert ss.rank("c", entries, lambda n: recent(n, -1))[0] == "Cutter"
-    assert ss.rank("cut", entries, lambda n: recent(n, -1))[0] == "Cut"
+    labels = ("Copy", "Cut", "Cutter")
+    for query, first in (("", "Cutter"), ("c", "Cutter"), ("cut", "Cut")):
+        assert _rank(query, *labels, recent={"Cutter": 2})[0] == first
 
 
 def test_damerau_levenshtein():

@@ -51,7 +51,7 @@ impl Worker {
             let _ = self.run_job(py, job);
         }
         if self.remaining.fetch_sub(1, Ordering::AcqRel) == 1 {
-            py.import("core.malloc_arenas")?.call_method0("trim")?;
+            py.import("ingetrazo_core")?.call_method0("trim_heap")?;
         }
         Ok(())
     }

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from core import appimage
+from ingetrazo_core import appimage
 
 
 def test_not_an_appimage_without_the_runtime_variables(monkeypatch):
@@ -24,7 +24,7 @@ def test_integrate_writes_launcher_and_icon_pointing_at_the_file(tmp_path, monke
     monkeypatch.setenv("APPIMAGE", str(img))
     monkeypatch.setenv("APPDIR", str(appdir))
     monkeypatch.setenv("XDG_DATA_HOME", str(data))
-    monkeypatch.setattr(appimage, "_refresh_caches", lambda: None)
+    monkeypatch.setenv("PATH", str(tmp_path))
     assert appimage.appimage_path() == img
     assert not appimage.is_integrated(img)
     f = appimage.integrate(img)

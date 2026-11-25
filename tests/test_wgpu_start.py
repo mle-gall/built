@@ -576,3 +576,23 @@ def test_native_save_picture_roundtrips_rgba_without_a_widget():
     encoded = archive_picture_png(2, 2, row * 2)
     assert archive_thumbnail(encoded, 16) == (2, 2, row * 2)
     assert archive_thumbnail(b"broken", 16) is None
+
+
+def test_link_preview_follows_moved_sources_and_stops_at_a_cycle(tmp_path):
+    import json
+    import zipfile
+
+    from ingetrazo_core import scan_document_links
+
+    root = tmp_path / "host.igz"
+    child = tmp_path / "moved.igz"
+    stale = str(tmp_path / "old" / child.name)
+    first = {"link": {"path": stale, "rel": child.name}}
+    with zipfile.ZipFile(root, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("document.json", json.dumps({"groups": [first, first]}))
+    child.write_text(json.dumps({"groups": [{"link": {"path": str(root)}}]}))
+
+    assert scan_document_links(root) == [
+        {"path": stale, "found": str(child.resolve()), "depth": 0, "via": str(root)},
+        {"path": str(root), "found": str(root), "depth": 1, "via": str(child.resolve())},
+    ]

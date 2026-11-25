@@ -235,7 +235,7 @@ fn reclaim_closed_documents(py: Python<'_>) -> PyResult<()> {
     let gc = py.import("gc")?;
     gc.call_method0("unfreeze")?;
     gc.call_method0("collect")?;
-    py.import("core.malloc_arenas")?.call_method0("trim")?;
+    py.import("ingetrazo_core")?.call_method0("trim_heap")?;
     Ok(())
 }
 

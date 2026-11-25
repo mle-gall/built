@@ -93,9 +93,10 @@ def test_native_release_review(tmp_path):
     opened = tmp_path / "download-url"
     release_url = "https://example.invalid/releases/test"
     venv = fixture_venv(tmp_path,
-        "from core import desktop_open, update_check\n"
+        "from core import desktop_open\n"
+        "from ingetrazo_render import release_check\n"
         "from pathlib import Path\n"
-        f"update_check.fetch_latest = lambda: update_check.Release('999', '2026-01-01', '## Fixed', {release_url!r})\n"
+        f"release_check.fetch_latest = lambda: release_check.Release('999', '2026-01-01', '## Fixed', {release_url!r})\n"
         f"desktop_open.open_url = lambda url: Path({str(opened)!r}).write_text(url)\n")
     model = tmp_path / "blank.igz"
     save_scene(Scene(), model)

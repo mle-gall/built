@@ -1800,7 +1800,7 @@ def _tree_action(win, view, action) -> None:
                 _core(vp, "set_filing_rule", node=arg, recipe=recipe, expected=structure._nodes(bim_registry.get(scene))[arg].get("recipe", {}))
                 vp.refresh_after_edit()
             elif what == "segments":
-                from core.curve_segments import MAX_SEGMENTS
+                from ingetrazo_core.curve_segments import MAX_SEGMENTS
                 sel = list(scene.selection)
                 shape = _curve_of(scene, sel)
                 n = int(extra.strip())
@@ -2261,7 +2261,7 @@ def _link_action(win, view, g, key) -> None:
 def _curve_of(scene, sel):
     """One curve selected (all its edges, one curve id) that reads back as a
     regular circle, arc or polygon; else None."""
-    from core.curve_segments import read_curve
+    from ingetrazo_core.curve_segments import read_curve
     from core.mesh import Edge
     if not sel or len(sel) > 4096:
         return None
