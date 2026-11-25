@@ -8,7 +8,7 @@ import pytest
 import time
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 
-from core import update_check as uc
+from ingetrazo_render import release_check as uc
 from ingetrazo_render import chrome_dialogs, chrome_sheet
 from ingetrazo_render import start_check
 from core import settings as settings_module, desktop_open, timers

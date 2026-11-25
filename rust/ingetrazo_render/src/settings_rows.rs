@@ -538,7 +538,7 @@ fn general<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
         Binding::new("backup", gkey_get(py, "backup", obj(py, "1")?, Kind::Bool)?, autosave_put(py, "backup")?),
         Binding::new("undo_steps", gkey_get(py, "undo_steps", obj(py, 200)?, Kind::Int)?, applier(py, "apply_undo_steps")?),
     ];
-    let update = py.import("core.update_check")?;
+    let update = py.import("ingetrazo_render.release_check")?;
     if !update.call_method0("store_managed")?.is_truthy()? {
         let key: String = update.getattr("KEY_AUTO")?.extract()?;
         let key: &'static str = Box::leak(key.into_boxed_str());

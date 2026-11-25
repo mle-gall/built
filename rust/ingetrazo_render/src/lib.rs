@@ -3444,6 +3444,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<preferences::DevicePreferences>()?;
     m.add_class::<preferences::DeviceReadings>()?;
     m.add_class::<about::AboutReview>()?;
+    release::check::register(m)?;
     m.add_class::<release::ReleaseReview>()?;
     m.add_function(wrap_pyfunction!(sheet_search::sheet_command_scope, m)?)?;
     m.add_function(wrap_pyfunction!(text_outlines::text_outlines,m)?)?;
