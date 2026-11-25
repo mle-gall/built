@@ -44,7 +44,7 @@ fn tr(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 /// is none, as headless).
 pub fn copy_text(py: Python<'_>, text: &str) -> PyResult<bool> {
     let item = ("public.utf8-plain-text", PyBytes::new(py, text.as_bytes()));
-    py.import("app_shell.native")?.call_method1("pasteboard_write", (vec![item],))?.is_truthy()
+    py.import("ingetrazo_render.shell_services")?.call_method1("pasteboard_write", (vec![item],))?.is_truthy()
 }
 
 // ---- CSV (Python's csv module, QUOTE_MINIMAL) ------------------------------------------

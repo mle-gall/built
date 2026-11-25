@@ -12,7 +12,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use std::path::PathBuf;
 
-/// Where the repository (core/, tools/, views/, app_shell/) and its venv are.
+/// Where the repository (core/, tools/ and views/) and its venv are.
 #[derive(Clone, Debug)]
 pub struct Layout {
     pub root: PathBuf,
@@ -124,7 +124,7 @@ pub struct Extras {
     pub exit: bool,
     pub ime_area: Option<(f64, f64, f64, f64)>,
     pub recent: Option<Vec<String>>,
-    /// A window Python asked for (app_shell.windows): its token.
+    /// A window Python asked for (ingetrazo_render.shell_windows): its token.
     pub new_window: Option<String>,
     /// This window should come to the front.
     pub focus: bool,

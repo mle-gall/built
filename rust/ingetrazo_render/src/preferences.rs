@@ -671,7 +671,7 @@ pub fn apply_msaa(env: &Bound<'_, PyAny>, value: u32) -> PyResult<()> {
     }
     for host in env
         .py()
-        .import("app_shell.windows")?
+        .import("ingetrazo_render.shell_windows")?
         .call_method0("hosts")?
         .try_iter()?
     {

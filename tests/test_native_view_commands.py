@@ -81,7 +81,7 @@ def test_review_exit_and_modelling_keys(tmp_path):
     plugin.parent.mkdir(parents=True)
     plugin.write_text("""def setup(app):
     def measure():
-        from app_shell.modal import _HOST
+        from ingetrazo_render.shell_modal import _HOST
         from pathlib import Path
         Path(__file__).with_suffix(".txt").write_text(_HOST.view.tools.value_buffer)
     app.add_menu_action("Read measurements", measure)

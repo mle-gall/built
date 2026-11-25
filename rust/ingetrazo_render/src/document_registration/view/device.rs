@@ -135,17 +135,15 @@ fn raw_open<'py>(a: &Args<'py>) -> Reply<'py> {
         return false.into_bound_py_any(py);
     }
     let device = a.get_item(0)?;
-    let shell = py.import("app_shell.native")?.getattr("_shell")?;
-    if shell.is_none() {
+    let Some(shell) = crate::shell_runtime::services::platform(py)? else {
         return false.into_bound_py_any(py);
-    }
+    };
     shell.call_method1("set_raw_input_handler", (device.getattr("_on_msg")?,))?;
     true.into_bound_py_any(py)
 }
 fn raw_close<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let shell = py.import("app_shell.native")?.getattr("_shell")?;
-    if !shell.is_none() {
+    if let Some(shell) = crate::shell_runtime::services::platform(py)? {
         shell.call_method1("set_raw_input_handler", (py.None(),))?;
     }
     Ok(none(py))

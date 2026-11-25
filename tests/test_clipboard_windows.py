@@ -79,7 +79,7 @@ def test_new_window_uses_the_running_application(native_host, tmp_path, monkeypa
 def test_without_a_shell_a_copy_reaches_the_other_documents_once(monkeypatch):
     from types import SimpleNamespace
     from ingetrazo_render import ModelClipboard
-    from app_shell import native
+    from ingetrazo_render import shell_services as native
 
     monkeypatch.setattr(native, "available", lambda: False)
     board = ModelClipboard()

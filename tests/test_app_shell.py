@@ -1,4 +1,4 @@
-"""The Rust app shell's Python half (app_shell/), headless: no surface, so
+"""The native shell and document bindings, headless: no surface, so
 no renderer is made; the document, tools and key routing run as in the
 window. The windowed path is exercised by ``built --script`` (see
 docs/rust-app-shell.md)."""
@@ -29,7 +29,7 @@ def test_opens_a_document_headless(host):
 
 
 def test_shell_view_owns_its_document(host):
-    from app_shell.view import ShellView
+    from ingetrazo_render.shell_views import ShellView
     from views.document_controller import DocumentController
     assert isinstance(host.view, ShellView)
     assert isinstance(host.viewport, DocumentController)

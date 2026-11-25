@@ -235,7 +235,7 @@ def test_the_model_is_parked_and_comes_back(native_window):
 
 
 def test_workspace_cannot_take_over_an_open_or_write_over_the_parked_model(native_window, tmp_path):
-    from app_shell import windows
+    from ingetrazo_render import shell_windows as windows
     from ingetrazo_render import shell_files as files
     win = native_window
     doc = win.active_document()

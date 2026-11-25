@@ -42,7 +42,7 @@ fn install(
 
 /// The shell's pasteboard, when a shell is attached.
 fn shell(py: Python<'_>) -> PyResult<Option<Bound<'_, PyModule>>> {
-    let native = py.import("app_shell.native")?;
+    let native = py.import("ingetrazo_render.shell_services")?;
     Ok(native.call_method0("available")?.is_truthy()?.then_some(native))
 }
 
@@ -161,7 +161,7 @@ impl ModelClipboard {
             r.call_method1("ui_claims_key", ("",))
                 .is_ok_and(|v| v.is_truthy().unwrap_or(false))
         });
-        let native = py.import("app_shell.native")?;
+        let native = py.import("ingetrazo_render.shell_services")?;
         if field {
             if matches!(verb, "paste" | "paste_in_place") {
                 let data = native.call_method1("pasteboard_read", ("public.utf8-plain-text",))?;

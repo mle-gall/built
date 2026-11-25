@@ -265,7 +265,7 @@ excludes = [
 
 hiddenimports.append('georef')  # Rust registers the survey modules on package import.
 
-for package in ('app_shell', 'core', 'formats', 'views', 'tools'):
+for package in ('core', 'formats', 'views', 'tools'):
     hiddenimports += collect_submodules(package)
 
 if omit_rfa:

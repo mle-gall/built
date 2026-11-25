@@ -68,7 +68,7 @@ pub(crate) fn place_mesh(py: Python<'_>, dst: &Obj<'_>, src: &Obj<'_>) -> PyResu
         dst.call_method1("restore_state", (src.call_method0("capture_state")?,))?;
         return Ok(());
     }
-    let modal = py.import("app_shell.modal")?;
+    let modal = py.import("ingetrazo_render.shell_modal")?;
     for (i, f) in src.getattr("faces")?.try_iter()?.enumerate() {
         if i > 0 && i % 512 == 0 {
             modal.call_method0("tick")?;

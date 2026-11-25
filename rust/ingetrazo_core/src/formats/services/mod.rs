@@ -401,7 +401,7 @@ impl SurveyService {
         let host = match inherited {
             Some(h) => h,
             None => {
-                let active = py.import("app_shell.modal")?.call_method0("host")?;
+                let active = py.import("ingetrazo_render.shell_modal")?.call_method0("host")?;
                 if active.is_none() {
                     let kw = PyDict::new(py);
                     kw.set_item(

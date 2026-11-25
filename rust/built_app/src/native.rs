@@ -2,7 +2,7 @@
 //!
 //! Registered as a built-in module next to `ingetrazo_render` (python.rs),
 //! so `import built_shell` works only inside the `built` binary; the
-//! Python side (`app_shell/native.py`) falls back to doing nothing when it
+//! Host service (`shell_runtime/services.rs`) falls back to doing nothing when it
 //! is missing (pytest, the Qt app).
 //!
 //! * **File dialogs** (rfd): NSOpenPanel / NSSavePanel, run modally inside
@@ -407,7 +407,7 @@ pub fn window_tabs_allowed(view: usize) -> bool {
 }
 
 /// Start another `built` process: kept for `--new-instance` users. File ▸
-/// New Window makes a window in this process now (app_shell/windows.py).
+/// New Window makes a window in this process now (shell_runtime/windows.rs).
 #[pyfunction]
 #[pyo3(signature = (args=Vec::new()))]
 fn spawn_self(args: Vec<String>) -> bool {

@@ -13,7 +13,7 @@ from ingetrazo_render import AboutSheet as About, ExtensionsSheet as Extensions,
 
 @pytest.fixture
 def pasteboard(monkeypatch):
-    from app_shell import native
+    from ingetrazo_render import shell_services as native
 
     items = {}
     def write(entries):

@@ -421,7 +421,7 @@ def test_native_svg_preview_and_delivery_edit(tmp_path):
         scope="visible", destination=str(tmp_path / "named.svg"), options={"paper": [297, 210]}))["key"]
     save_scene(scene, initial)
     venv = fixture_venv(tmp_path,
-        f"from app_shell import native\nnative.save_file = lambda *args: {str(drawing)!r}\n")
+        f"from ingetrazo_render import shell_services as native\nnative.save_file = lambda *args: {str(drawing)!r}\n")
     steps = tmp_path / "steps"
     steps.write_text("wait 700\nkey escape\nmenu delivery_export\nwait 650\nclick 630 208\n"
                      "wait 450\nclick 470 377\nwait 450\nclick 843 269\nwait 250\n"
@@ -465,7 +465,7 @@ def test_current_view_svg_modes_stay_centred_and_export(tmp_path):
     save_scene(_tagged_wall_scene(), initial)
     venv = fixture_venv(
         tmp_path,
-        f"""from app_shell import native
+        f"""from ingetrazo_render import shell_services as native
 from ingetrazo_render import Host
 native.save_file = lambda *args: {str(drawing)!r}
 original_state = Host.state

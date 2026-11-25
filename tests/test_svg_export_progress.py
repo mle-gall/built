@@ -209,7 +209,7 @@ def test_cancel_on_a_slow_preview_turns_the_preview_off(native_host, monkeypatch
     import time
     from ingetrazo_core import deliveries
     from ingetrazo_render import chrome_sheet
-    from app_shell import modal
+    from ingetrazo_render import shell_modal as modal
 
     win = native_host.window
     monkeypatch.setattr(chrome_dialogs, "in_shell", lambda: True)

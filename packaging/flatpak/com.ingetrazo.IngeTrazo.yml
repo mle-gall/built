@@ -55,7 +55,7 @@ modules:
       - mkdir -p ${FLATPAK_DEST}/ingetrazo
       - PYO3_PYTHON=$(command -v python3) cargo build --locked --release --manifest-path rust/built_app/Cargo.toml
       - install -Dm755 rust/built_app/target/release/built ${FLATPAK_DEST}/bin/built
-      - cp -a app_shell core views tools formats georef materials styles plugins resources i18n scripts LICENSE ${FLATPAK_DEST}/ingetrazo/
+      - cp -a core views tools formats georef materials styles plugins resources i18n scripts LICENSE ${FLATPAK_DEST}/ingetrazo/
       # The example extensions (Extensions ▸ Example extensions installs one
       # into the user's plugins folder): shipped, never loaded by default.
       # DWG import (#101): LibreDWG's dwg2dxf, the same binary the AppImage

@@ -136,7 +136,7 @@ def test_installed_it_adds_its_entry_and_changes_nothing(tmp_path, monkeypatch, 
     from unittest.mock import MagicMock
     from core import extensions, plugin_panels
     from ingetrazo_render import chrome_sheet
-    from app_shell import native
+    from ingetrazo_render import shell_services as native
 
     shutil.copy(_PATH, tmp_path / _PATH.name)
     monkeypatch.setattr(extensions, "plugin_dirs", lambda: [tmp_path])

@@ -5,7 +5,7 @@
 //! The event loop is winit's, on the main thread. The window's NSView goes
 //! to the wgpu renderer (linked in, see `python.rs`); the document, the
 //! tools and the egui chrome's state run in the embedded Python
-//! (`app_shell/`), which gets every input event already in Qt's terms.
+//! (`ingetrazo_render.Host`), which receives the translated input events.
 //!
 //! ```text
 //! built [file.built|file.igz] [--script steps.txt] [--shots dir]
@@ -262,7 +262,7 @@ enum AfterOpen {
 
 /// One window: its winit window, its Python host (ingetrazo_render.Host:
 /// its projects, its renderer) and its own pointer state. Every window
-/// lives in this one process (app_shell/windows.py): ⇧⌘N and the tab
+/// lives in this one process (shell_runtime/windows.rs): ⇧⌘N and the tab
 /// menu's "Move to new window" make another one here.
 struct Win {
     #[cfg(target_os = "linux")]
@@ -906,7 +906,7 @@ impl App {
         Ok(())
     }
 
-    /// A window Python asked for (app_shell.windows): made here, then its
+    /// A window Python asked for (ingetrazo_render.shell_windows): made here, then its
     /// host adopts the request (the start page, or a project moved in).
     fn new_window(&mut self, event_loop: &ActiveEventLoop, token: &str) {
         match self.make_window(event_loop) {

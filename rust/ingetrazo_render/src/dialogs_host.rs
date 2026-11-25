@@ -7,11 +7,9 @@
 //!
 //! * **The sheet**: one question at a time, hung under the top bar over the
 //!   model, with a scrim that takes every click. Unsaved changes, errors,
-//!   confirmations. `ask` answers synchronously, as `QMessageBox.exec()`
-//!   does: it pushes the sheet and turns the module's `QEventLoop` (Qt's,
-//!   or the shell's modal pump that `app_shell.modal` installs) until the
-//!   chrome's click or a key calls `answer`. Sheets stack: a question asked
-//!   while another waits goes on top and its loop finishes first.
+//!   confirmations. A synchronous question pumps the window until the user answers.
+//!   A watchdog cancels a sheet that never draws.
+//!
 //! * **Jobs**: opening, importing, saving, auto-saving, reloading links. A
 //!   capsule in the top bar with the file, the phase, the progress and
 //!   Cancel when the work can stop. Notices fade below it; the capsule
@@ -23,8 +21,6 @@
 //! (`forms_host.rs`) and `ask_later` never block: they take a continuation
 //! the chrome's click calls on a later turn.
 //!
-//! The functions call each other through the module, so `app_shell.modal`
-//! (`live`, `QEventLoop`) and tests can replace them.
 use crate::settings_rows::{func, none, obj, opt, s, tr, trf};
 use pyo3::{
     prelude::*,
@@ -104,12 +100,10 @@ fn view_of<'py>(py: Python<'py>, win: &Bound<'py, PyAny>) -> Bound<'py, PyAny> {
     opt(win, "_doc").and_then(|doc| opt(&doc, "stand_in")).unwrap_or_else(|| py.None().into_bound(py))
 }
 
-/// The Metal view whose chrome can show a sheet for `parent` now, or `None`
-/// if a blocking question cannot be drawn. Nothing draws one until the
-/// shell's modal host (`app_shell.modal.install`) puts its own `live` here.
+/// Only the front window's attached, idle renderer can draw a blocking question.
 #[pyfunction]
-fn live<'py>(py: Python<'py>, _parent: &Bound<'py, PyAny>) -> Bound<'py, PyAny> {
-    py.None().into_bound(py)
+fn live<'py>(py: Python<'py>, parent: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    crate::shell_runtime::modal::live(py, parent)
 }
 
 /// The window to post an unanswered model on: in the shell, one whose
@@ -220,7 +214,7 @@ fn ask<'py>(py: Python<'py>, parent: &Bound<'py, PyAny>, title: &Bound<'py, PyAn
     let win = m.call_method1("window_of", (parent,))?;
     let sheet = new_sheet(py, title, text, tone, buttons, &default, &cancel, &discard, true)?;
     sheet.borrow_mut().checklist = checklist.map_or_else(|| py.None(), Bound::unbind);
-    let event_loop = m.getattr("QEventLoop")?.call0()?;
+    let event_loop = Bound::new(py, crate::shell_runtime::modal::ModalWait::new())?.into_any();
     sheet.borrow_mut().event_loop = event_loop.clone().unbind();
     push(&win, sheet.as_any())?;
     let frames = attr_or(&view, "_ui_frames", int0(py)).unbind();
@@ -1247,15 +1241,10 @@ impl ChromeBar {
 
 // ---- The module -------------------------------------------------------------------------
 
-/// Read when first asked for (PEP 562): `QEventLoop`, the loop `ask` turns
-/// (the shell's modal pump, `app_shell.modal.ShellLoop`), and `QMessageBox`,
-/// the buttons `critical`/`warning`/`information`/`question` answer with.
+/// Resolve the plugin-facing message box button constants on demand.
 #[pyfunction]
 #[pyo3(name = "__getattr__")]
 fn module_getattr<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    if name == "QEventLoop" {
-        return py.import("app_shell.modal")?.getattr("ShellLoop");
-    }
     if name == "QMessageBox" {
         return message_box(py);
     }
@@ -1267,7 +1256,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(py, "chrome_dialogs")?;
     sub.add("WATCHDOG_MS", WATCHDOG_MS)?;
     sub.add("_UNDRAWN", py.import("builtins")?.getattr("object")?.call0()?)?;
-    sub.add("_shell_installed", false)?;
     sub.add("time", py.import("time")?)?;
     sub.add_class::<Sheet>()?;
     sub.add_class::<Activity>()?;

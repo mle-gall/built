@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Whether this machine has a GPU the window can draw with
 (``ingetrazo_render.gpu_adapter``); the shell's own answer replaces this
-once it runs (``app_shell.files.install``)."""
+once it runs (``ingetrazo_render.shell_files.install``)."""
 import platform
 from dataclasses import dataclass
 from functools import lru_cache

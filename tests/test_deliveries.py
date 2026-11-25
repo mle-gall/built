@@ -15,7 +15,7 @@ from formats import igz
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_ifc_export import _tagged_wall_scene
 import ingetrazo_render as dock
-from app_shell import modal
+from ingetrazo_render import shell_modal as modal
 
 
 def add(h, path, **fields):

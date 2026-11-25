@@ -131,7 +131,7 @@ def save_shortcut(action, seqs: list) -> None:
     else:
         st.setValue(f"{_GROUP}/{_store_key(key)}", _to_text(seqs))
     st.sync()
-    from app_shell.windows import hosts
+    from ingetrazo_render.shell_windows import hosts
     for host in hosts():
         owner = vars(host.window).get("_sheet_command_scope") if key.startswith("sheet:") else host.window
         peer = vars(owner).get("_registry_actions", {}).get(key) if owner is not None else None
