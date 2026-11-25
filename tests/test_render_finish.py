@@ -8,7 +8,6 @@ PBR plus extras, and made into a real material inside Blender."""
 from __future__ import annotations
 
 import json
-import shutil
 import struct
 import subprocess
 from pathlib import Path
@@ -131,8 +130,7 @@ def test_the_flatpak_asks_for_the_permission_only_when_missing():
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(shutil.which("blender") is None,
-                    reason="no Blender on this machine")
+@pytest.mark.blender
 def test_blender_turns_the_finishes_into_materials(tmp_path):
     from core.camera import OrbitCamera
     scene = _scene_with([("water_calm", {"color": (0.1, 0.3, 0.8)}),
