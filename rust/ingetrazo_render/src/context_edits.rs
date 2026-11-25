@@ -282,7 +282,7 @@ pub(crate) fn context_lock(vp: &Bound<'_, PyAny>, groups: Vec<Bound<'_, PyAny>>,
 fn unlock_group(vp: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -> PyResult<()> {
     let groups = PyList::new(vp.py(), [group])?;
     vp.py()
-        .import("core.protocol.commands")?
+        .import("ingetrazo_core.command_protocol")?
         .call_method1("lock", (vp.getattr("history")?, &groups, false))?;
     let scene = vp.getattr("scene")?;
     if scene

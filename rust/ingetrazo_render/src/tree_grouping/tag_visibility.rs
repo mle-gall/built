@@ -346,7 +346,7 @@ fn viewport_tag_answer(
         )?,
         "hide" => {
             let tags: Vec<_> = current.into_iter().collect();
-            py.import("core.protocol.commands")?.call_method1(
+            py.import("ingetrazo_core.command_protocol")?.call_method1(
                 "set_tag_state",
                 (vp.getattr("history")?, tags, PyList::empty(py), false),
             )?;

@@ -159,7 +159,7 @@ fn document_tools_begin_group_edit<'py>(a: &Args<'py>) -> Reply<'py> {
                 .call_method1("_mesh_shared_elsewhere", (&group,))?
                 .is_truthy()?
         {
-            py.import("core.protocol.commands")?
+            py.import("ingetrazo_core.command_protocol")?
                 .call_method1("make_unique", (view.getattr("history")?, &group))?;
         }
     }
@@ -210,8 +210,8 @@ fn document_tools_mesh_shared_elsewhere<'py>(a: &Args<'py>) -> Reply<'py> {
     let group = a.get_item(1)?;
     let mesh = group.getattr("mesh")?;
     let groups = py
-        .import("core.purge")?
-        .call_method1("iter_groups", (view.getattr("scene")?.getattr("groups")?,))?;
+        .import("ingetrazo_core")?
+        .call_method1("purge_iter_groups", (view.getattr("scene")?.getattr("groups")?,))?;
     for g in groups.try_iter()? {
         let g = g?;
         if !g.is(&group) && g.getattr("mesh")?.is(&mesh) {

@@ -32,7 +32,7 @@ impl ScaleEditor {
         args.set_item("placement", self.group.bind(py).getattr("uid")?)?;
         args.set_item("factors", factors)?;
         match py
-            .import("core.protocol.commands")?
+            .import("ingetrazo_core.command_protocol")?
             .getattr("run")?
             .call((vp.getattr("history")?, "set_group_scale"), Some(&args))
         {

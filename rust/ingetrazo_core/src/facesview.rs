@@ -173,7 +173,7 @@ impl Camera {
     /// World ring → drawn ring and depths (`_Parallel.ring` /
     /// `_Perspective.ring`): in perspective, cut to the pyramid first,
     /// then `(x / w, y / w)` scaled and `w` as the depth.
-    fn ring(&self, pts: &[[f64; 3]]) -> (Ring2, Vec<f64>) {
+    pub(crate) fn ring(&self, pts: &[[f64; 3]]) -> (Ring2, Vec<f64>) {
         match self {
             Camera::Parallel { eye, right, up, fwd } => {
                 let mut xy = Vec::with_capacity(pts.len());

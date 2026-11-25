@@ -27,7 +27,7 @@ fn prompt<'py>(view: &Obj<'py>, title: impl IntoPyObject<'py>, body: impl IntoPy
 
 /// Where the model is seen, in device coordinates (ui.rs `free_ndc`): the
 /// window minus the rail, dock and bars showing. None without the chrome.
-fn free_area<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn free_area<'py>(a: &Args<'py>) -> Reply<'py> {
     let view = stand_in(&a.get_item(0)?)?;
     if view.is_none() || !attr_flag(&view, "_ui_attached", false)? {
         return Ok(none(a.py()));
@@ -38,7 +38,7 @@ fn free_area<'py>(a: &Args<'py>) -> Reply<'py> {
 /// Review frames the model into the window the panels left (B8); leaving
 /// it, the camera goes back to where it was if Review's framing is
 /// untouched.
-fn review_camera<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn review_camera<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let win = a.get_item(0)?;
     let state = win.getattr("__dict__")?;
@@ -103,7 +103,7 @@ fn run_one<'py>(win: &Obj<'py>, action: &Obj<'py>, source_view: &Obj<'py>) -> Py
         }
         "scenephotomode" => return glue.call_method1("save_thumbnail_mode", (arg == "1",)).map(drop),
         "font" => return glue.getattr("font_picker")?.call_method1("answer", (win, arg, source_view)).map(drop),
-        "review" => return module.call_method1("_review_camera", (win, arg == "1")).map(drop),
+        "review" => return direct(py, review_camera, (win, arg == "1")).map(drop),
         "sheet" => return dialogs.call_method1("answer", (win, arg)).map(drop),
         "job" => {
             let (verb, job) = partition(arg);
@@ -234,19 +234,19 @@ fn run_one<'py>(win: &Obj<'py>, action: &Obj<'py>, source_view: &Obj<'py>) -> Py
             if arg == "unfiled" || arg == "problems" {
                 library()?.call_method1("set_mode", (&view, win, "problems"))?;
             } else if arg == "active" && data.call_method1("get", ("active",))?.is_truthy()? {
-                module.call_method1("_select", (win, module.call_method1("_tree_groups", (&view, data.get_item("active")?))?))?;
+                module.call_method1("_select", (win, direct(py, super::chrome_tree::tree_groups, (&view, data.get_item("active")?))?))?;
             } else {
                 glue.call_method1("delivery_action", (win, &view, arg))?;
             }
         }
         "act" if arg.starts_with("form-") => {
             if !view.is_none() {
-                module.call_method1("_open_form", (&view, &arg[5..]))?;
+                direct(py, open_form, (&view, &arg[5..]))?;
             }
         }
         "form" => {
             if !view.is_none() {
-                module.call_method1("_form_apply", (win, &view, arg))?;
+                direct(py, form_apply, (win, &view, arg))?;
             }
         }
         "act" if arg.into_bound_py_any(py)?.call_method0("isdecimal")?.is_truthy()? => {
@@ -266,7 +266,7 @@ fn run_one<'py>(win: &Obj<'py>, action: &Obj<'py>, source_view: &Obj<'py>) -> Py
         }
         "cmd" => {
             let selection = py.get_type::<PyList>().call1((viewport()?.getattr("scene")?.getattr("selection")?,))?;
-            for verb in module.call_method1("_commands", (win, selection))?.try_iter()? {
+            for verb in direct(py, super::chrome_frame::commands, (win, selection))?.try_iter()? {
                 let [key, _, _, run, enabled, _] = unpack::<6>(&verb?)?;
                 if key.eq(arg)? && enabled.is_truthy()? {
                     if !run.is_none() {
@@ -314,7 +314,7 @@ fn tab<'py>(win: &Obj<'py>, view: &Obj<'py>, arg: &str) -> PyResult<()> {
             };
             view.setattr("_ui_pending", ("visibility_set", (viewport.getattr("scene")?, operation, key)))?;
             prompt(view, title, body, operation.into_bound_py_any(py)?.call_method0("capitalize")?)?;
-        } else if module.getattr("_core")?.call((&viewport, "edit_visibility_set"), Some(&fields!(py; "verb" => operation, "key" => key)))?.get_item("ok")?.is_truthy()? {
+        } else if super::chrome_tree_action::core_command(&viewport, "edit_visibility_set".into_bound_py_any(py)?.as_any(), Some(&fields!(py; "verb" => operation, "key" => key)))?.get_item("ok")?.is_truthy()? {
             viewport.call_method0("notify_scene_changed")?;
             view.call_method0("update")?;
         }
@@ -508,14 +508,14 @@ fn words(panel: &Obj<'_>, words: Words) -> PyResult<String> {
     })
 }
 
-fn open_form<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn open_form<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, name) = (a.get_item(0)?, a.get_item(1)?);
     let module = ui(py)?;
     let win = module.call_method1("_window", (&view,))?;
     view.setattr("_ui_form", &name)?;
     view.setattr("_ui_form_sig", py.None())?;
-    let panel = if win.is_none() { none(py) } else { module.call_method1("_form_panel", (win, name))? };
+    let panel = if win.is_none() { none(py) } else { direct(py, form_panel, (win, name))? };
     if !panel.is_none() && panel.hasattr("refresh")? {
         panel.call_method0("refresh")?;
     }
@@ -523,7 +523,7 @@ fn open_form<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(none(py))
 }
 
-fn form_panel<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn form_panel<'py>(a: &Args<'py>) -> Reply<'py> {
     match form_named(&a.get_item(1)?)? {
         Some((_, panel, _)) => attr(&a.get_item(0)?, panel),
         None => Ok(none(a.py())),
@@ -531,14 +531,13 @@ fn form_panel<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 
 /// Send the open form's fields (only when they changed).
-fn form_fields<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn form_fields<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, win) = (a.get_item(0)?, a.get_item(1)?);
-    let module = ui(py)?;
     let Some(name) = own(&view, "_ui_form")?.filter(|name| name.is_truthy().unwrap_or(false)) else {
         return Ok(none(py));
     };
-    let panel = module.call_method1("_form_panel", (&win, &name))?;
+    let panel = direct(py, form_panel, (&win, &name))?;
     let renderer = view.getattr("renderer")?;
     let Some((title, _, spec)) = form_named(&name)?.filter(|_| !panel.is_none()) else {
         view.setattr("_ui_form", py.None())?;
@@ -615,7 +614,7 @@ fn form_fields<'py>(a: &Args<'py>) -> Reply<'py> {
                     None => Ok(none(py)),
                 };
                 let shown = match read {
-                    Ok(colour) if colour.is_truthy()? => module.call_method1("_hex", (colour,))?,
+                    Ok(colour) if colour.is_truthy()? => direct(py, super::chrome_tree::hex, (colour,))?,
                     Ok(_) => "".into_bound_py_any(py)?,
                     Err(error) if error.is_instance_of::<PyException>(py) => "".into_bound_py_any(py)?,
                     Err(error) => return Err(error),
@@ -633,7 +632,7 @@ fn form_fields<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(none(py))
 }
 
-fn form_apply<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn form_apply<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (win, view) = (a.get_item(0)?, a.get_item(1)?);
     let arg: String = a.get_item(2)?.extract()?;
@@ -646,7 +645,7 @@ fn form_apply<'py>(a: &Args<'py>) -> Reply<'py> {
         Some(name) => name,
         None => none(py),
     };
-    let panel = ui(py)?.call_method1("_form_panel", (&win, &name))?;
+    let panel = direct(py, form_panel, (&win, &name))?;
     if panel.is_none() {
         return Ok(none(py));
     }
@@ -722,7 +721,7 @@ fn command_action<'py>(a: &Args<'py>) -> Reply<'py> {
             view.setattr("_ui_command_owner", py.None())?;
         }
         "cmdq" => {
-            ui(py)?.call_method1("_command_query", (&view, &win, arg))?;
+            direct(py, command_query, (&view, &win, arg))?;
         }
         "cmdrun" | "cmdshortcut" => {
             let hits = view.getattr_opt("_ui_cmd_hits")?.unwrap_or_else(|| PyTuple::empty(py).into_any());
@@ -744,7 +743,7 @@ fn command_action<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(none(py))
 }
 
-fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, win, query) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?);
     let metadata = render(py)?.getattr("command_metadata")?;
@@ -789,14 +788,7 @@ fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
 
 #[rustfmt::skip]
 pub(super) const FUNCTIONS: &[Method] = &[
-    ("free_area", Mode::Function, free_area, &["win"], "", ""),
-    ("_review_camera", Mode::Function, review_camera, &["win", "on"], "", ""),
     ("_run", Mode::Function, run, &["win", "actions", "source_view=None"], "", ""),
-    ("_open_form", Mode::Function, open_form, &["view", "name"], "", ""),
-    ("_form_panel", Mode::Function, form_panel, &["win", "name"], "", ""),
-    ("_form", Mode::Function, form_fields, &["view", "win"], "", ""),
-    ("_form_apply", Mode::Function, form_apply, &["win", "view", "arg"], "", ""),
     ("_all_commands", Mode::Function, all_commands, &["win"], "", ""),
     ("command_action", Mode::Function, command_action, &["view", "win", "verb", "arg"], "", ""),
-    ("_command_query", Mode::Function, command_query, &["view", "win", "query"], "", ""),
 ];

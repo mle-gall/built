@@ -130,7 +130,7 @@ fn follow_me<'py>(
         ("Follow Me: could not sweep along that path (reversal or degenerate segment)",),
     )?;
     let key = py
-        .import("core.protocol.keys")?
+        .import("ingetrazo_core.command_protocol")?
         .call_method1("from_json_key", (face,))?;
     execute(
         history,

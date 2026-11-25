@@ -10,7 +10,7 @@ type Cache<'p> = Option<&'p Bound<'p, PyDict>>;
 
 fn plan<'p>(mesh: &Obj<'p>) -> PyResult<Obj<'p>> {
     mesh.py()
-        .import("core.lazy_mesh")?
+        .import("ingetrazo_core")?
         .call_method1("plan_of", (mesh,))
 }
 #[pyfunction(signature=(part, cache=None))]

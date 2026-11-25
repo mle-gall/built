@@ -557,8 +557,10 @@ fn geometry<'py>(a: &Args<'py>) -> Reply<'py> {
         if chords.is_none() || chords.len()? == 0 {
             chords = numpy.call_method1("empty", ((0, 2, 3),))?;
         }
-        let fill = core.call_method1("section_fill_triangles", (&chords, &normal))?;
-        cache = (&key, chords, fill, PyDict::new(py)).into_bound_py_any(py)?;
+        // The chords' areas once, for the fill and for any hatch asked later.
+        let areas = core.getattr("SectionAreas")?.call1((&chords, &normal))?;
+        let fill = areas.call_method0("triangles")?;
+        cache = (&key, chords, fill, PyDict::new(py), areas).into_bound_py_any(py)?;
         view.setattr("_section_geometry_cache", &cache)?;
     }
     let (chords, fill, hatches) = (cache.get_item(1)?, cache.get_item(2)?, cache.get_item(3)?);
@@ -587,7 +589,7 @@ fn geometry<'py>(a: &Args<'py>) -> Reply<'py> {
         if cross || pattern.eq("hatch")? {
             let hatch_key = (&spacing, cross).into_bound_py_any(py)?;
             if !hatches.contains(&hatch_key)? {
-                hatches.set_item(&hatch_key, core.call_method1("section_hatch_segments", (&chords, &normal, &spacing, cross))?)?;
+                hatches.set_item(&hatch_key, cache.get_item(4)?.call_method1("hatch", (&spacing, cross))?)?;
             }
             line_vertices(&hatches.get_item(&hatch_key)?, &lens, colour, 0.5, 0.01, &mut vertices)?;
         }

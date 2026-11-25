@@ -1127,8 +1127,7 @@ impl Host {
                             if visible {
                                 none(py)
                             } else {
-                                py.import("views.wgpu_ui")?
-                                    .call_method1("free_area", (&w,))?
+                                crate::document_registration::view::calls::free_area(&w)?
                             },
                         )?;
                         Self::viewport(slf)?.getattr("camera")?.call_method(

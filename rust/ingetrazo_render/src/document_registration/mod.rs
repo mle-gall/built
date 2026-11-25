@@ -9,7 +9,7 @@ mod actions;
 mod defaults;
 mod helpers;
 mod host;
-mod view;
+pub(crate) mod view;
 mod plugin;
 
 struct Registrar<'py> {

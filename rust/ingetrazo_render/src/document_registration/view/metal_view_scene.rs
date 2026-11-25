@@ -730,7 +730,7 @@ fn draw_frame<'py>(a: &Args<'py>) -> Reply<'py> {
     view.setattr("_drawing_frame", true)?;
     let frame = (|| -> Reply<'py> {
         let ui = py.import("views.wgpu_ui")?;
-        if ui.call_method1("chrome_only", (&view,))?.is_truthy()? {
+        if direct(py, super::chrome_frame::chrome_only, (&view,))?.is_truthy()? {
             return ui.call_method1("chrome_frame", (&view,)); // a document is coming in
         }
         let sheets = py.import("ingetrazo_render.sheet_workspace")?;

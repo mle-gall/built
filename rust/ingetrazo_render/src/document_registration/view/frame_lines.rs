@@ -128,7 +128,7 @@ fn segments<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 
 /// GL draws no scaffolding on a plan sheet or a styled composer frame.
-fn scaffold_shown<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn scaffold_shown<'py>(a: &Args<'py>) -> Reply<'py> {
     scaffold(&a.get_item(0)?)?.into_bound_py_any(a.py())
 }
 
@@ -138,7 +138,7 @@ fn edit_box<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let view = a.get_item(0)?;
     let module = lines(py)?;
-    let corners = if module.call_method1("_scaffold_shown", (&view,))?.is_truthy()? { view.call_method0("_edit_group_box_corners")? } else { none(py) };
+    let corners = if direct(py, scaffold_shown, (&view,))?.is_truthy()? { view.call_method0("_edit_group_box_corners")? } else { none(py) };
     if corners.is_none() {
         return no_lines(py);
     }
@@ -160,7 +160,7 @@ fn guides<'py>(a: &Args<'py>) -> Reply<'py> {
     let view = a.get_item(0)?;
     let module = lines(py)?;
     let (scene, camera) = (view.getattr("scene")?, view.getattr("camera")?);
-    let shown = if module.call_method1("_scaffold_shown", (&view,))?.is_truthy()? { interaction(py)?.call_method1("shown_guides", (&scene,))? } else { empty(py).into_any() };
+    let shown = if direct(py, scaffold_shown, (&view,))?.is_truthy()? { interaction(py)?.call_method1("shown_guides", (&scene,))? } else { empty(py).into_any() };
     if !shown.is_truthy()? {
         return no_lines(py);
     }
@@ -193,12 +193,12 @@ fn guides<'py>(a: &Args<'py>) -> Reply<'py> {
 /// Soft and hidden edges of one mesh in its own coordinates, layer
 /// filtered: GL's `_hidden_edge_draw(mesh, 'selected_hidden')`. A lazy
 /// imported mesh answers from its plan, never materialising its faces.
-fn local_hidden_edges<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn local_hidden_edges<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (scene, mesh) = (a.get_item(0)?, a.get_item(1)?);
     let numpy = np(py)?;
     let namespace = py.import("types")?.getattr("SimpleNamespace")?;
-    let plan = py.import("core.lazy_mesh")?.call_method1("plan_of", (&mesh,))?;
+    let plan = py.import("ingetrazo_core")?.call_method1("plan_of", (&mesh,))?;
     if plan.is_none() {
         let pairs = empty(py);
         for edge in mesh.getattr("edges")?.try_iter()? {
@@ -243,7 +243,7 @@ fn selected_hidden<'py>(a: &Args<'py>) -> Reply<'py> {
     let module = lines(py)?;
     let numpy = np(py)?;
     let (scene, packed) = (view.getattr("scene")?, attr(&view, "packed")?);
-    if !truthy(&scene, "show_hidden_geometry")? || packed.is_none() || !module.call_method1("_scaffold_shown", (&view,))?.is_truthy()? {
+    if !truthy(&scene, "show_hidden_geometry")? || packed.is_none() || !direct(py, scaffold_shown, (&view,))?.is_truthy()? {
         return no_lines(py);
     }
     let groups = selected_groups(&view)?;
@@ -302,7 +302,7 @@ fn selected_hidden<'py>(a: &Args<'py>) -> Reply<'py> {
         let known = match local.iter().position(|(mesh_id, _)| *mesh_id == id(&mesh)) {
             Some(known) => known,
             None => {
-                let pairs = module.call_method1("_local_hidden_edges", (&scene, &mesh))?;
+                let pairs = direct(py, local_hidden_edges, (&scene, &mesh))?;
                 let pairs = if pairs.len()? == 0 { None } else { Some(numpy.call_method1("ascontiguousarray", (pairs, &numpy_float32))?.extract()?) };
                 local.push((id(&mesh), pairs));
                 local.len() - 1
@@ -395,10 +395,8 @@ pub(super) fn install_lines(module: &Bound<PyModule>) -> PyResult<()> {
         &module.dict(),
         &[
             ("segments", Mode::Function, segments, &["pairs", "rgba", "width=1.0", "dash=0.0", "gap=None"], "", ""),
-            ("_scaffold_shown", Mode::Function, scaffold_shown, &["view"], "", ""),
             ("edit_box", Mode::Function, edit_box, &["view"], "", ""),
             ("guides", Mode::Function, guides, &["view"], "", ""),
-            ("_local_hidden_edges", Mode::Function, local_hidden_edges, &["scene", "mesh"], "", ""),
             ("selected_hidden", Mode::Function, selected_hidden, &["view"], "", ""),
             ("sync", Mode::Function, lines_sync, &["view"], "", ""),
         ],
@@ -445,7 +443,6 @@ fn paint_layer<'py>(a: &Args<'py>) -> Reply<'py> {
         annotations.call1((&painter,))?;
     }
     if primitives.is_truthy()? {
-        let colour = overlay(py)?.getattr("_colour")?;
         let rows = empty(py);
         for primitive in primitives.try_iter()? {
             let primitive = primitive?;
@@ -463,10 +460,10 @@ fn paint_layer<'py>(a: &Args<'py>) -> Reply<'py> {
             rows.append((
                 primitive.getattr("kind")?,
                 points,
-                colour.call1((primitive.getattr("color")?,))?,
+                direct(py, colour, (primitive.getattr("color")?,))?,
                 number(&primitive.getattr("width")?)?,
                 primitive.getattr("text")?.str()?,
-                if fill.is_truthy()? { colour.call1((fill,))? } else { none(py) },
+                if fill.is_truthy()? { direct(py, colour, (fill,))? } else { none(py) },
                 dash,
                 pen.getattr_opt("value")?.unwrap_or(pen).call_method0("__int__")?,
                 primitive.getattr("snap_kind")?,
@@ -478,7 +475,7 @@ fn paint_layer<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 
 /// A colour string as Qt names one, from a string or a QColor.
-fn colour<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn colour<'py>(a: &Args<'py>) -> Reply<'py> {
     let given = a.get_item(0)?;
     if given.is_instance_of::<PyString>() {
         return Ok(given);
@@ -589,13 +586,13 @@ fn draw_snap_indicator<'py>(a: &Args<'py>) -> Reply<'py> {
             segments.append((tuple(shown.get_item(0)?)?, tuple(shown.get_item(1)?)?, tuple(colour.get_item(PySlice::new(py, 0, 3, 1))?)?))?;
         }
     }
-    let label = if labels.is_truthy()? { overlay(py)?.call_method1("_snap_label", (&snap, scene))? } else { none(py) };
+    let label = if labels.is_truthy()? { direct(py, snap_label, (&snap, scene))? } else { none(py) };
     painter.call_method1("draw_snap", (kind, tuple(pixel)?, rgb, segments, label))?;
     Ok(none(py))
 }
 
 /// The words beside the marker ("On Edge", "in group"), translated.
-fn snap_label<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn snap_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (snap, scene) = (a.get_item(0)?, a.get_item(1)?);
     let tr = py.import("core.i18n")?.getattr("tr")?;
@@ -666,13 +663,11 @@ pub(super) fn install_overlay(module: &Bound<PyModule>) -> PyResult<()> {
         &[
             ("rasterize", Mode::Function, rasterize, &["primitives", "width", "height", "scale", "annotations=None"], "", ""),
             ("paint_layer", Mode::Function, paint_layer, &["painter", "primitives", "annotations=None"], "", ""),
-            ("_colour", Mode::Function, colour, &["c"], "", ""),
             ("pixels", Mode::Function, pixels, &["image"], "", ""),
             ("snap_glyph", Mode::Function, snap_glyph, &["point", "kind", "color='#00dfff'"], "", ""),
             ("selection_rectangle", Mode::Function, selection_rectangle, &["start", "end", "*", "zoom=False"], "", ""),
             ("axes", Mode::Function, overlay_axes, &["origin", "directions", "length=32"], "", ""),
             ("draw_snap_indicator", Mode::Function, draw_snap_indicator, &["painter", "snap", "project", "clip_line", "*", "labels=True", "scene=None"], "", ""),
-            ("_snap_label", Mode::Function, snap_label, &["snap", "scene"], "", ""),
         ],
     )
 }
@@ -691,7 +686,7 @@ fn rest_rows<'py>(a: &Args<'py>) -> Reply<'py> {
         return Ok(rows.into_any());
     }
     let mut subject = std::collections::HashSet::new();
-    for group in py.import("core.purge")?.call_method1("iter_groups", ((&context,),))?.try_iter()? {
+    for group in py.import("ingetrazo_core")?.call_method1("purge_iter_groups", ((&context,),))?.try_iter()? {
         subject.insert(id(&group?));
     }
     for (row, group) in groups.try_iter()?.enumerate() {
@@ -740,7 +735,7 @@ fn box_primitives<'py>(a: &Args<'py>) -> Reply<'py> {
 /// screen) and groups a Move/Rotate drag is previewing. Boxes are cached
 /// per group and document version: a selection change reuses them, an edit
 /// (move, scale, geometry) measures again.
-fn selection_box_segments<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn selection_box_segments<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let view = a.get_item(0)?;
     let module = edit_context(py)?;
@@ -795,7 +790,7 @@ fn selection_box_vertices<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let view = a.get_item(0)?;
     let numpy = np(py)?;
-    let [key, segments] = unpack::<2>(&edit_context(py)?.call_method1("selection_box_segments", (&view,))?)?;
+    let [key, segments] = unpack::<2>(&direct(py, selection_box_segments, (&view,))?)?;
     let cache = view.getattr("__dict__")?.call_method1("setdefault", ("_selection_boxes", PyDict::new(py)))?;
     if cache.call_method1("get", ("vertex_key",))?.ne(&key)? || !cache.contains("vertices")? {
         let vertices = numpy.call_method1("zeros", (segments.len()? * 2, py.import("ingetrazo_core")?.getattr("VERTEX")?))?;
@@ -813,7 +808,7 @@ fn selection_box_vertices<'py>(a: &Args<'py>) -> Reply<'py> {
 fn selection_box_primitives<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let view = a.get_item(0)?;
-    let segments = edit_context(py)?.call_method1("selection_box_segments", (&view,))?.get_item(1)?;
+    let segments = direct(py, selection_box_segments, (&view,))?.get_item(1)?;
     let scale: f64 = view.call_method0("devicePixelRatioF")?.extract()?;
     let result = empty(py);
     for segment in segments.try_iter()? {
@@ -880,7 +875,6 @@ pub(super) fn install_edit_context(module: &Bound<PyModule>) -> PyResult<()> {
         &[
             ("rest_rows", Mode::Function, rest_rows, &["groups", "context"], "", ""),
             ("box_primitives", Mode::Function, box_primitives, &["view"], "", ""),
-            ("selection_box_segments", Mode::Function, selection_box_segments, &["view"], "", ""),
             ("selection_box_vertices", Mode::Function, selection_box_vertices, &["view"], "", ""),
             ("selection_box_primitives", Mode::Function, selection_box_primitives, &["view"], "", ""),
             ("billboard_outline_primitives", Mode::Function, billboard_outline_primitives, &["view"], "", ""),

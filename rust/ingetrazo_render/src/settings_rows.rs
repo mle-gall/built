@@ -957,7 +957,7 @@ fn dimensions<'py>(py: Python<'py>, _env: &Bound<'py, PyAny>) -> PyResult<Bound<
                 return Ok(none(py));
             }
             let history = apply(py)?.call_method1("document_history", (env.getattr("vp")?,))?;
-            let done = py.import("core.protocol.commands")?.call_method1("set_dimension_style", (history, key, value))?;
+            let done = py.import("ingetrazo_core.command_protocol")?.call_method1("set_dimension_style", (history, key, value))?;
             if done.get_item("ok")?.is_truthy()? {
                 _scene_changed(&env)?;
             }
@@ -1027,7 +1027,7 @@ fn put_north(env: &Bound<'_, PyAny>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         history.call_method0("undo")?; // the step being typed: replaced
     }
     let kwargs = [("degrees", value)].into_py_dict(py)?;
-    let changed = py.import("core.protocol.commands")?.getattr("run")?.call((&history, "set_north"), Some(&kwargs))?;
+    let changed = py.import("ingetrazo_core.command_protocol")?.getattr("run")?.call((&history, "set_north"), Some(&kwargs))?;
     let undo = history.getattr("undo_stack")?;
     let cmd = if changed.get_item("ok")?.is_truthy()? && undo.is_truthy()? { undo.get_item(-1)? } else { py.None().into_bound(py) };
     module.setattr("_north_cmd", cmd)?;

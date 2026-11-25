@@ -38,7 +38,7 @@ fn deliveries(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
 }
 
 fn run_command<'py>(py: Python<'py>, history: &Bound<'py, PyAny>, name: &str, kwargs: &Bound<'py, PyDict>) -> PyResult<Bound<'py, PyAny>> {
-    py.import("core.protocol.commands")?.getattr("run")?.call((history, name), Some(kwargs))
+    py.import("ingetrazo_core.command_protocol")?.getattr("run")?.call((history, name), Some(kwargs))
 }
 
 fn history_of<'py>(win: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {

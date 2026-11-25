@@ -129,7 +129,7 @@ fn plan_curved_edges<'py>(plan: &Obj<'py>) -> PyResult<Obj<'py>> {
 fn lazy_edge_may_be_curve(mesh: &Obj, a: &Obj, b: &Obj, tol: f64) -> PyResult<bool> {
     let py = mesh.py();
     let p = py
-        .import("core.lazy_mesh")?
+        .import("ingetrazo_core")?
         .call_method1("plan_of", (mesh,))?;
     if p.is_none() {
         return Ok(true);

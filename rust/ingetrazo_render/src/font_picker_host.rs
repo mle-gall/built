@@ -209,7 +209,7 @@ fn annotation(win: &Obj) -> PyResult<()> {
         let p = args.get_item(0)?;
         let settings = py.import("ingetrazo_render.settings_sheet")?;
         let history = settings.call_method1("document_history", (env.getattr("vp")?,))?;
-        let result = py.import("core.protocol.commands")?.call_method1(
+        let result = py.import("ingetrazo_core.command_protocol")?.call_method1(
             "set_annotation_font",
             (
                 history,

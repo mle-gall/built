@@ -537,7 +537,7 @@ def _local_points(mesh):
     build would make, in the same order. A box drawn over the 590 groups of
     a 5-million-face model built every one of them, past 12 GB."""
     import numpy as np
-    from core import lazy_mesh
+    from ingetrazo_core import deferred_weld
     from core.mesh import DeferredMesh
     if type(mesh) is DeferredMesh:
         d = mesh.__dict__
@@ -546,7 +546,7 @@ def _local_points(mesh):
             pos = hit.pos
         else:
             s = d["_deferred_source"]
-            pos = lazy_mesh.weld(s["pos"], s.get("sequential", False))[0]
+            pos = deferred_weld(s["pos"], s.get("sequential", False))[0]
         return np.array(pos, dtype=np.float64) if len(pos) else None
     from core.store_mesh import StoreMesh
     if mesh.__class__ is StoreMesh:

@@ -117,7 +117,7 @@ impl ViewportToolHost {
                 .flatten();
             kw.set_item(arg, value)?;
         }
-        let protocol = py.import("core.protocol.commands")?;
+        let protocol = py.import("ingetrazo_core.command_protocol")?;
         match protocol.getattr("run")?.call((history, name), Some(&kw)) {
             Ok(answer) => {
                 let revision = self.history_token(py)?;

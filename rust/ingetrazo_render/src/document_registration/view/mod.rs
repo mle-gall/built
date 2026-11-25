@@ -77,6 +77,67 @@ mod texture_probe;
 mod view_commands;
 mod view_host;
 mod view_navigation;
+/// Call one of this lane's bindings from Rust: `args` is every parameter,
+/// defaults included (nothing fills them in on this path). For the
+/// functions no one outside their own module calls, which are therefore
+/// not names on the Python module.
+fn direct<'py, A>(py: Python<'py>, binding: fn(&Args<'py>) -> Reply<'py>, args: A) -> Reply<'py>
+where
+    A: IntoPyObject<'py, Target = PyTuple>,
+{
+    binding(&pyo3::BoundObject::into_bound(args.into_pyobject(py).map_err(Into::into)?))
+}
+/// This lane's functions that the rest of the crate calls: the Rust behind
+/// what were names on `views.wgpu_ui` and `views.wgpu_tabs`.
+pub(crate) mod calls {
+    use super::*;
+
+    /// Where the model is seen, in device coordinates; `None` without the
+    /// chrome (`ui.rs` `free_ndc`).
+    pub(crate) fn free_area<'py>(win: &Obj<'py>) -> Reply<'py> {
+        direct(win.py(), chrome_actions::free_area, (win,))
+    }
+    /// Whether exclusive work holds the window, so a frame draws the chrome
+    /// alone.
+    pub(crate) fn chrome_only(view: &Obj<'_>) -> PyResult<bool> {
+        direct(view.py(), chrome_frame::chrome_only, (view,))?.is_truthy()
+    }
+    /// Whether the chrome owns this key (a shortcut override).
+    pub(crate) fn claims_key<'py>(view: &Obj<'py>, event: &Obj<'py>) -> Reply<'py> {
+        direct(view.py(), chrome_input::claims_key, (view, event))
+    }
+    /// `(host document, placements)` of a tab whose file another open
+    /// project links, else `(None, 0)`.
+    pub(crate) fn link_host<'py>(win: &Obj<'py>, doc: &Obj<'py>) -> Reply<'py> {
+        direct(win.py(), frame_tabs::link_host, (win, doc, win.py().None()))
+    }
+    /// Run a core protocol command on the viewport's history; a key outside
+    /// the open context is told in the status line and answers `None`.
+    pub(crate) fn core_command<'py>(viewport: &Obj<'py>, command: &str, args: Option<&Bound<'py, PyDict>>) -> Reply<'py> {
+        chrome_tree_action::core_command(viewport, command.into_bound_py_any(viewport.py())?.as_any(), args)
+    }
+    /// The tree takes the next pick as where to file `count` items.
+    pub(crate) fn file_to(win: &Obj<'_>, count: usize) -> PyResult<()> {
+        direct(win.py(), chrome_inspector::file_to, (win, count)).map(drop)
+    }
+    /// `#rrggbb` of a colour, "" without one.
+    pub(crate) fn hex<'py>(rgb: &Obj<'py>) -> Reply<'py> {
+        direct(rgb.py(), chrome_tree::hex, (rgb,))
+    }
+    /// The bundled components' folder.
+    pub(crate) fn components_dir(py: Python<'_>) -> Reply<'_> {
+        direct(py, chrome_tree::components_dir, ())
+    }
+    /// The bundled set: `sc:<key>` 3D starters, `pp:<key>` 2D people.
+    pub(crate) fn starter_components(py: Python<'_>) -> Reply<'_> {
+        direct(py, chrome_tree::starter_components, ())
+    }
+    /// The name of the material Paint holds, or `None`.
+    pub(crate) fn current_material_name(py: Python<'_>) -> Reply<'_> {
+        direct(py, chrome_tree::current_material_name, ())
+    }
+}
+
 fn install(owner: &Obj, namespace: &Bound<PyDict>, entries: &[Method]) -> PyResult<()> {
     let py = owner.py();
     let registrar = Bindings::new(py)?

@@ -135,7 +135,7 @@ fn mesh_arc_midpoints<'py>(mesh: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = mesh.py();
     let h = host(py)?;
     let plan = py
-        .import("core.lazy_mesh")?
+        .import("ingetrazo_core")?
         .call_method1("plan_of", (mesh,))?;
     let curves = PyDict::new(py);
     let identity = h.getattr("element_identity")?;

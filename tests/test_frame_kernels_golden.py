@@ -70,6 +70,39 @@ def section_cases(geometry, scene, packed):
     return out
 
 
+def kernel_cases(scene, packed):
+    """The chords of each plane, and what the fill kernels make of them:
+    the rings (``section_loops``), the fill's triangles, the hatch's
+    segments at two spacings, one way and both."""
+    import ingetrazo_core
+    from ingetrazo_core import Vec3
+    from core.camera import OrbitCamera
+    from core.section import SectionPlane
+    from core.style import Style
+    from views.wgpu_sections import geometry
+    low, high = scene.bounds()
+    low, high = low.toTuple(), high.toTuple()
+    out = {}
+    for name, (at, normal) in PLANES.items():
+        point = Vec3(*(lo + (hi - lo) * t for lo, hi, t in zip(low, high, at)))
+        plane = SectionPlane(point, Vec3(*normal), active=True)
+        scene.section_planes = [plane]
+        view = SimpleNamespace(packed=packed)
+        geometry(view, scene, Style(), OrbitCamera(), 600)
+        chords = view._section_geometry_cache[1]
+        rings = ingetrazo_core.section_loops(chords)
+        fill = ingetrazo_core.section_fill_triangles(chords, plane.normal)
+        out[name] = {"chords": [len(chords), digest(chords)],
+                     "rings": [len(rings), digest(np.concatenate(rings)) if rings else ""],
+                     "fill": [len(fill), digest(fill)]}
+        for spacing in (0.25, 1.5):
+            for cross in (False, True):
+                hatch = ingetrazo_core.section_hatch_segments(chords, plane.normal, spacing, cross)
+                out[name][f"hatch/{spacing}/{cross}"] = [len(hatch), digest(hatch)]
+    scene.section_planes = []
+    return out
+
+
 def hidden_view(scene):
     from ingetrazo_core import pack_scene
     from tests.controller_surface import ControllerSurface
@@ -131,3 +164,11 @@ def test_selected_hidden_edges_are_the_recorded_bytes(golden):
     got = hidden_cases(selected_hidden, scene)
     assert got == golden["hidden"]
     assert got["all"][0] > 1000, "the cases draw something"
+
+
+def test_fill_kernels_are_the_recorded_bytes(golden):
+    from ingetrazo_core import pack_scene
+    scene = city()
+    got = kernel_cases(scene, pack_scene(scene))
+    assert got == golden["kernels"]
+    assert all(case["fill"][0] > 100 for case in got.values()), "the cases fill something"

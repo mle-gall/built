@@ -303,8 +303,8 @@ fn delivery_scoped<'p>(py: Python<'p>, scene: &Obj<'p>, record: &Obj<'p>) -> PyR
     if kept.is_truthy()? {
         let memo = PyDict::new(py);
         for g in py
-            .import("core.purge")?
-            .call_method1("iter_groups", (&kept,))?
+            .import("ingetrazo_core")?
+            .call_method1("purge_iter_groups", (&kept,))?
             .try_iter()?
         {
             let m = g?.getattr("mesh")?;

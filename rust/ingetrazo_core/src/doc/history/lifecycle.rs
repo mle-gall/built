@@ -48,8 +48,8 @@ impl TagTargets<'_> {
             .is_truthy()?
         {
             for g in py
-                .import("core.purge")?
-                .call_method1("iter_groups", (tagged,))?
+                .import("ingetrazo_core")?
+                .call_method1("purge_iter_groups", (tagged,))?
                 .try_iter()?
             {
                 let mesh = g?.getattr("mesh")?;

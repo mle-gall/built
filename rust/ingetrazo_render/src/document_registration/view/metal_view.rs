@@ -147,11 +147,6 @@ pub(super) fn ctrl_tap(view: &Obj<'_>, event: &Obj<'_>) -> PyResult<()> {
     }
     Ok(())
 }
-fn note_ctrl_tap<'py>(a: &Args<'py>) -> Reply<'py> {
-    ctrl_tap(&a.get_item(0)?, &a.get_item(1)?)?;
-    Ok(none(a.py()))
-}
-
 /// Shutting the view's worker down first takes the document back from a
 /// snap-index job (`SceneLease`).
 #[pyfunction(signature = (this, wait = true, *, cancel_futures = false))]
@@ -185,10 +180,6 @@ pub(super) fn index_worker<'py>(py: Python<'py>) -> Reply<'py> {
     kw.set_item("max_workers", 1)?;
     class.call((), Some(&kw))
 }
-fn index_worker_of<'py>(a: &Args<'py>) -> Reply<'py> {
-    index_worker(a.py())
-}
-
 /// The tools' coordinate frame while a handler runs: the open mesh and the
 /// remote prototypes moved into the view frame, put back on leaving.
 #[pyclass(module = "ingetrazo_render", unsendable)]
@@ -437,8 +428,6 @@ fn hide_event<'py>(a: &Args<'py>) -> Reply<'py> {
 pub(super) const FUNCTIONS: &[Method] = &[
     ("_paint_key", Mode::Function, paint_key, &["scene"], "", ""),
     ("_ui_claims", Mode::Function, ui_claims, &["view", "name", "event"], "", ""),
-    ("_note_ctrl_tap", Mode::Function, note_ctrl_tap, &["view", "event"], "", ""),
-    ("_index_worker", Mode::Function, index_worker_of, &[], "", ""),
 ];
 
 #[rustfmt::skip]

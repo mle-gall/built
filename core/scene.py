@@ -514,7 +514,7 @@ class Scene:
 
     def groups_by_uid(self) -> dict:
         """``uid → group`` over the whole tree (nested placements too)."""
-        from core.purge import iter_groups
+        from ingetrazo_core import purge_iter_groups as iter_groups
         return {g.uid: g for g in iter_groups(self.groups)}
 
     # ---- Sections (section planes) -------------------------------------------

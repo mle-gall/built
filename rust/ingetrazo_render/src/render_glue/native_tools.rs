@@ -1301,7 +1301,7 @@ impl MeshToolAccess {
         let moving = py.get_type::<PyTuple>().call1((groups,))?;
         s.setattr("_moving_groups", &moving)?;
         let selected = PySet::empty(py)?;
-        for group in py.import("core.purge")?.call_method1("iter_groups", (&moving,))?.try_iter()? {
+        for group in py.import("ingetrazo_core")?.call_method1("purge_iter_groups", (&moving,))?.try_iter()? {
             selected.add(group?.getattr("uid")?)?;
         }
         if include_loose {

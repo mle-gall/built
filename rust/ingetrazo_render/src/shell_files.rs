@@ -430,7 +430,7 @@ fn open_path<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>) -> PyResult<
         // A Finder/CLI open can arrive before the first frame. Its camera
         // fit uses the initial aperture, before the dock and tool rail appear.
         let mut initial_frame = nil(py);
-        if py.import("views.wgpu_ui")?.call_method1("free_area", (win,))?.is_none() && !host.getattr("_picture_seen")?.is_truthy()? {
+        if crate::document_registration::view::calls::free_area(win)?.is_none() && !host.getattr("_picture_seen")?.is_truthy()? {
             let view = win.getattr("view")?;
             initial_frame = PyTuple::new(py, [win.getattr("viewport")?.getattr("camera")?.getattr("aspect")?, view.call_method0("width")?, view.call_method0("height")?])?.into_any();
         }
@@ -587,7 +587,7 @@ fn finish_open<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>, recovered:
             }
             Some(aspect) => {
                 let bounds = win.call_method0("_extents_bounds")?;
-                let area = py.import("views.wgpu_ui")?.call_method1("free_area", (win,))?;
+                let area = crate::document_registration::view::calls::free_area(win)?;
                 if !bounds.is_none() {
                     let camera = vp.getattr("camera")?;
                     let kept = camera.getattr("aspect")?;

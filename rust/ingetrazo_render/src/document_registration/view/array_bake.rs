@@ -545,11 +545,11 @@ fn bake_entry<'py>(a: &Args<'py>) -> Reply<'py> {
             module.call_method1("prefetch", (meshes,))?;
         }
     }
-    module.getattr("_bake_uncached")?.call1((vp, mesh, a.get_item(2)?, a.get_item(3)?, a.get_item(4)?, a.get_item(5)?))
+    direct(py, bake_uncached, (vp, mesh, a.get_item(2)?, a.get_item(3)?, a.get_item(4)?, a.get_item(5)?))
 }
 
 /// `Viewport._group_chunk`'s rebuild, from arrays.
-fn bake_uncached<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn bake_uncached<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (vp, mesh, paint, msig) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?, a.get_item(3)?);
     let module = bake(py)?;
@@ -730,7 +730,6 @@ const FUNCTIONS: &[Method] = &[
     ("_attrs_table", Mode::Function, attrs_table, &["src"], "", ""),
     ("fingerprint", Mode::Function, fingerprint, &["mesh", "plan", "table", "face_attr"], "", ""),
     ("bake", Mode::Function, bake_entry, &["vp", "mesh", "paint", "msig", "vkey", "uid"], "", ""),
-    ("_bake_uncached", Mode::Function, bake_uncached, &["vp", "mesh", "paint", "msig", "vkey", "uid"], "", ""),
 ];
 
 fn slotted<'py>(module: &Bound<'py, PyModule>, name: &str, bases: &[Obj<'py>], slots: &[&str], doc: &str, methods: &[Method]) -> Reply<'py> {

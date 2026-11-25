@@ -326,7 +326,7 @@ fn event<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     if kind.eq(kinds.getattr("ShortcutOverride")?)? {
         ctrl_tap(&view, &event)?;
-        if py.import("views.wgpu_ui")?.call_method1("claims_key", (&view, &event))?.is_truthy()? {
+        if direct(py, super::chrome_input::claims_key, (&view, &event))?.is_truthy()? {
             return taken();
         }
         if view.hasattr("tools")? {

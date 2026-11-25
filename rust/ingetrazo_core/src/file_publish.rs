@@ -293,7 +293,7 @@ fn igz_export<'p>(
 #[pyfunction]
 fn igz_live_element_count(scene: &Obj<'_>) -> PyResult<i64> {
     let py = scene.py();
-    let count = py.import("core.lazy_mesh")?.getattr("entity_count")?;
+    let count = py.import("ingetrazo_core")?.getattr("entity_count")?;
     let mut n = count
         .call1((scene.getattr_opt("mesh")?.unwrap_or_else(|| scene.clone()),))?
         .extract::<i64>()?;

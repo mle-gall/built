@@ -58,7 +58,7 @@ fn intersect_faces<'py>(
         .transpose()?;
     let keys = if let Some(faces) = faces {
         let keys = PyList::empty(py);
-        let key = py.import("core.protocol.keys")?.getattr("from_json_key")?;
+        let key = py.import("ingetrazo_core.command_protocol")?.getattr("from_json_key")?;
         for f in faces.try_iter()? {
             keys.append(key.call1((f?,))?)?;
         }

@@ -56,7 +56,7 @@ def _canon_py(rows):
 def _both(name):
     """The engine's visible faces of the reference scene ``name``, and the
     Python pass's (canonical, from the golden)."""
-    rust = VC._visible_parts_native(R.VISIBLE[name](), native)
+    rust = VC._visible_parts(R.VISIBLE[name]())
     return rust, R.python_visible(name)
 
 
@@ -103,7 +103,7 @@ def test_the_pass_reports_how_far_it_has_come_and_stops_when_told(monkeypatch):
     told = []
     faces = _faces(np.random.default_rng(5), 300)
     with P.reporting(told.append):
-        VC._visible_parts_native([FaceFill(**vars(f)) for f in faces], native)
+        VC._visible_parts([FaceFill(**vars(f)) for f in faces])
     assert len(told) >= 4 and told == sorted(told)
     assert told[0] == 0.0 and told[-1] < 1.0
 
@@ -116,25 +116,7 @@ def test_the_pass_reports_how_far_it_has_come_and_stops_when_told(monkeypatch):
 
     with pytest.raises(Enough):
         with P.reporting(stop):
-            VC._visible_parts_native([FaceFill(**vars(f)) for f in faces],
-                                     native)
-
-
-def test_view_faces_goes_through_the_engine_when_it_is_on(monkeypatch):
-    called = []
-    real = VC._visible_parts_native
-
-    def spy(faces, mod):
-        called.append(len(faces))
-        return real(faces, mod)
-
-    monkeypatch.setattr(VC, "_visible_parts_native", spy)
-    VC._visible_parts(_faces(np.random.default_rng(1), 20))
-    assert called == [22]                  # 20 tiles, the floor, the roof
-    # The engine is the only pass: no Python one to fall back to.
-    monkeypatch.setattr(_native, "native", None)
-    VC._visible_parts(_faces(np.random.default_rng(1), 20))
-    assert called == [22, 22]
+            VC._visible_parts([FaceFill(**vars(f)) for f in faces])
 
 
 def test_a_hair_is_nothing_to_the_engine():
@@ -148,7 +130,7 @@ def test_a_hair_is_nothing_to_the_engine():
     faces = R.vp_hair()
     hair = faces[-1].rings[0]
     assert 0.01e-6 < abs(VC._area(hair)) < 1e-6          # above the least area
-    rust = VC._visible_parts_native(faces, native)
+    rust = VC._visible_parts(faces)
     py = R.python_visible("hair")
     # Python kept the hair (last, nearest); the engine did not …
     assert any(f["depth"] == -5.0 for f in py)

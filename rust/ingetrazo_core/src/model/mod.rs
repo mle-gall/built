@@ -14,6 +14,8 @@ pub mod dimension_frame;
 pub mod group_frame;
 pub mod group_mesh;
 pub mod hlr_view;
+pub(crate) mod hlr_api;
+pub(crate) mod vista;
 pub mod linetypes;
 pub mod links;
 pub mod placement_walks;
@@ -32,6 +34,7 @@ pub mod tag_folders;
 pub mod tag_styles;
 pub mod texture_maths;
 pub mod units_format;
+pub(crate) mod units_api;
 
 /// A module already imported, from `sys.modules`: `py.import` runs the
 /// import hooks every time (over a microsecond under PySide's), and these
