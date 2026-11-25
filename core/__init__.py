@@ -29,3 +29,6 @@ else:
     _sys.modules[__name__ + ".history"] = history
     _sys.modules[__name__ + ".mesh"] = mesh
     store_mesh = _sys.modules[__name__ + ".store_mesh"]
+    from ingetrazo_core import autosave, axes, geometry, guide, materials, paths, settings, structure, style, sun, textlabel, timers, triangulate, version
+    for _module in (autosave, axes, geometry, guide, materials, paths, settings, structure, style, sun, textlabel, timers, triangulate, version):
+        _sys.modules[__name__ + "." + _module.__name__.rsplit(".", 1)[1]] = _module

@@ -228,7 +228,7 @@ pub(crate) fn promote_tag<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     use pyo3::{exceptions::PyValueError, types::PyDict};
     let py = scene.py();
-    let api = py.import("core.structure")?;
+    let api = py.import("ingetrazo_core.structure")?;
     let registry = api.getattr("bim_registry")?.call_method1("get", (scene,))?;
     if api.call_method1("_nodes", (&registry,))?.is_truthy()?
         || !py

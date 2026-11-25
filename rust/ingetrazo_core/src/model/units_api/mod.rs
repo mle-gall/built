@@ -15,7 +15,7 @@ fn module(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
     py.import("core.units")
 }
 fn setting_store(py: Python<'_>) -> PyResult<Obj<'_>> {
-    py.import("core.settings")?.call_method0("settings")
+    py.import("ingetrazo_core.settings")?.call_method0("settings")
 }
 #[pyfunction]
 fn bind_scene(py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {

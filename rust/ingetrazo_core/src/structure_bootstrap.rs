@@ -180,7 +180,7 @@ pub(crate) fn structure_proposal<'py>(
     registry: &Obj<'py>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py = scene.py();
-    let api = py.import("core.structure")?;
+    let api = py.import("ingetrazo_core.structure")?;
     let sep = crate::model::links::SEP.to_string();
     let default = api.getattr("DEFAULT_LAYER")?;
     let mut tree = Tree {

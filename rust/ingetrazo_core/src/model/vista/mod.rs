@@ -328,7 +328,7 @@ fn view_faces<'p>(
         Some(v) if v.is_truthy()? => rgb(&v)?,
         _ => vec![1.; 3],
     };
-    let styles = py.import("core.style")?;
+    let styles = py.import("ingetrazo_core.style")?;
     if !flat {
         for (c, d) in front
             .iter_mut()
@@ -362,7 +362,7 @@ fn view_faces<'p>(
     let mut depths = Vec::new();
     let mut casters = Vec::new();
     let tick = progress(py)?;
-    let mats = py.import("core.materials")?;
+    let mats = py.import("ingetrazo_core.materials")?;
     let class = py.import("core.vista_caras")?.getattr("FaceFill")?;
     for ((face, m, paint, layer), g) in items.into_iter().zip(geo) {
         tick.call0()?;
@@ -486,7 +486,7 @@ fn view_faces<'p>(
     let mut out = visible_fills(py, &raw, &visibility, &depths)?;
     if shadows {
         let sun = py
-            .import("core.sun")?
+            .import("ingetrazo_core.sun")?
             .call_method1("scene_sun_direction", (scene,))?;
         if !sun.is_none() {
             let darkness = scene

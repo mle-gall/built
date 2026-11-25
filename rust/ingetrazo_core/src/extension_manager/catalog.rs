@@ -15,7 +15,7 @@ pub(super) fn download<'p>(py: Python<'p>, url: &str, limit: usize) -> PyResult<
     let headers = PyDict::new(py);
     headers.set_item(
         "User-Agent",
-        py.import("core.version")?.getattr("USER_AGENT")?,
+        py.import("ingetrazo_core.version")?.getattr("USER_AGENT")?,
     )?;
     kw.set_item("headers", headers)?;
     let req = request.call_method("Request", (url,), Some(&kw))?;

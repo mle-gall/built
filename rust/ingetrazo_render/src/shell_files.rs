@@ -475,7 +475,7 @@ fn open_document<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>) -> PyRes
     let vp = doc.getattr("viewport")?;
     let view = doc.getattr("stand_in")?;
     let mut recovered = false;
-    let slot = py.import("core.autosave")?.call_method1("pending", (path,))?;
+    let slot = py.import("ingetrazo_core.autosave")?.call_method1("pending", (path,))?;
     let defer_recovery = !slot.is_none() && !dialogs.call_method1("live", (win,))?.is_none();
     if !slot.is_none() && !defer_recovery {
         let got = render(py)?.call_method1("named_recovery", (win, path))?;
@@ -552,7 +552,7 @@ fn install_open<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>, bar: &Any
             initial_aspect = frame.get_item(0)?;
         }
     }
-    let slot = py.import("core.autosave")?.call_method1("pending", (path,))?;
+    let slot = py.import("ingetrazo_core.autosave")?.call_method1("pending", (path,))?;
     let prepared = PyTuple::new(py, [packed, tracker, tree])?;
     fm(py)?.call_method1("_finish_open", (win, path, false, slot, bar, bar.getattr("job")?.getattr("update")?, prepared, initial_aspect))
 }
@@ -983,7 +983,7 @@ fn with_busy<'py, T>(py: Python<'py>, activity: &Any<'py>, body: impl FnOnce(&An
 fn do_save<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>, copy: bool) -> PyResult<bool> {
     let m = fm(py)?;
     let dialogs = cd(py)?;
-    let autosave = py.import("core.autosave")?;
+    let autosave = py.import("ingetrazo_core.autosave")?;
     let project = py.import("ingetrazo_render.shell_project")?;
     if !win.getattr("_workspace")?.is_none() {
         return Ok(false);

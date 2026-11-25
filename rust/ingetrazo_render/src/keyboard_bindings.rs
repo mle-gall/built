@@ -114,7 +114,7 @@ fn read_key(key: &str) -> String {
         .replace("%25", "%")
 }
 fn settings(py: Python<'_>) -> PyResult<Obj<'_>> {
-    py.import("core.settings")?.call_method0("settings")
+    py.import("ingetrazo_core.settings")?.call_method0("settings")
 }
 fn text(value: &Obj) -> PyResult<String> {
     Ok(if value.is_truthy()? {

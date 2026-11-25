@@ -9,7 +9,7 @@ from uuid import uuid4
 from core import ai
 from core.i18n import tr
 from core.plugin_panels import field, item, on_document_close, section
-from core.settings import settings
+from ingetrazo_core.settings import settings
 from plugins._assistant_prompt import (
     MAX_ROUNDS, MAX_TOKENS, TOKENS_BY_PROVIDER, env_key_note, handle_reply, system_prompt,
 )

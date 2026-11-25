@@ -186,7 +186,7 @@ impl LinkMeshes {
             stack.extend(entries(&g, "children")?);
         }
         let registry = py.get_type::<PyDict>().call1((self.registry.bind(py),))?;
-        let register = py.import("core.materials")?.getattr("register")?;
+        let register = py.import("ingetrazo_core.materials")?.getattr("register")?;
         for pair in materials.call_method0("items")?.try_iter()? {
             let pair = pair?;
             let name = pair.get_item(0)?.extract::<String>()?;

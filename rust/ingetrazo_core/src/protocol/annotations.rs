@@ -99,7 +99,7 @@ fn add_text_label<'py>(
     annotation(
         history,
         "AddTextLabelCommand",
-        py.import("core.textlabel")?.call_method(
+        py.import("ingetrazo_core.textlabel")?.call_method(
             "TextLabel",
             (point, vec3(offset)?, text),
             Some(&kw),
@@ -182,7 +182,7 @@ fn set_north<'py>(history: &Obj<'py>, degrees: f64) -> Reply<'py> {
     if !degrees.is_finite() {
         return Err(PyValueError::new_err("expected a finite north angle"));
     }
-    let sun = history.py().import("core.sun")?;
+    let sun = history.py().import("ingetrazo_core.sun")?;
     let deg = sun
         .call_method1("wrap_north_deg", (degrees,))?
         .extract::<f64>()?;

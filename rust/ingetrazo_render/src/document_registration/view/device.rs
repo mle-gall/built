@@ -82,7 +82,7 @@ fn spnav_open<'py>(a: &Args<'py>) -> Reply<'py> {
     device.setattr("sock", &sock)?;
     let owner = device.getattr("owner")?;
     let read = device.getattr("_read")?;
-    let notifier = py.import("core.timers")?.call_method(
+    let notifier = py.import("ingetrazo_core.timers")?.call_method(
         "timer", (owner, read, 12), Some(&fields!(py;"repeat"=>true)),
     )?;
     notifier.call_method0("start")?;

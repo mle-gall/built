@@ -188,7 +188,7 @@ impl StagedOpen {
                 callbacks(win, key)?.call_method0("clear")?;
             }
             if win.get_type().hasattr("closeEvent")? {
-                py.import("core.timers")?
+                py.import("ingetrazo_core.timers")?
                     .call_method1("later", (win, 0, win.getattr("close")?))?;
             }
         } else {
@@ -277,7 +277,7 @@ fn start(win: &Obj, path: &Obj, install: &Obj, target: Option<&Obj>) -> PyResult
         bar.setattr("next_poll", 0.)?;
         host.call_method0("request_frame")?;
     } else {
-        let timer = py.import("core.timers")?.getattr("timer")?.call(
+        let timer = py.import("ingetrazo_core.timers")?.getattr("timer")?.call(
             (win, job.getattr("poll")?, 32),
             Some(&[("repeat", true)].into_py_dict(py)?),
         )?;

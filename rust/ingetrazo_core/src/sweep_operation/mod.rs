@@ -105,7 +105,7 @@ fn sweep_preview_faces<'p>(face: &Obj<'p>, path: &Obj, closed: bool) -> PyResult
         return Ok(vec![]);
     };
     let py = face.py();
-    let class = py.import("core.geometry")?.getattr("Face")?;
+    let class = py.import("ingetrazo_core.geometry")?.getattr("Face")?;
     let attrs = face.getattr("attrs")?;
     let kw = PyDict::new(py);
     if attrs.is_truthy()? {

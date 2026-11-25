@@ -105,7 +105,7 @@ pub fn plane_input(
 #[pyfunction]
 pub fn cursor_plane_color(normal: &Bound<'_, PyAny>) -> PyResult<Option<(f64, f64, f64, f64)>> {
     let py = normal.py();
-    let axes = super::plane::axes_of(Some(&py.import("core.axes")?.call_method0("frame")?))?;
+    let axes = super::plane::axes_of(Some(&py.import("ingetrazo_core.axes")?.call_method0("frame")?))?;
     let n = xyz(normal)?.normalize_or_zero();
     for (name, axis) in [("x", axes.x), ("y", axes.y), ("z", axes.z)] {
         if n.dot(axis).abs() > 0.99 {

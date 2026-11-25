@@ -83,7 +83,7 @@ pub(super) fn build_project_tree<'py>(
     for (i, (_, n)) in files.into_iter().enumerate() {
         n.set_item("order", host.add(i + 1)?)?;
     }
-    let structure = crate::model::module(py, "core.structure")?;
+    let structure = crate::model::module(py, "ingetrazo_core.structure")?;
     let member = tree.getattr("member")?;
     let direct = tree.getattr("direct")?;
     let links = tree.getattr("links")?;

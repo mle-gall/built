@@ -76,8 +76,7 @@ jobs:
           # the release — but write one by hand with a real description.
           python3 - <<'PY'
           import datetime, pathlib, re
-          ver = re.search(r"__version__\s*=\s*.([^'\"]+)",
-                          pathlib.Path("core/version.py").read_text()).group(1)
+          ver = pathlib.Path("rust/ingetrazo_core/VERSION").read_text().strip()
           f = pathlib.Path(
               "packaging/flatpak/com.ingetrazo.IngeTrazo.metainfo.xml")
           xml = f.read_text(encoding="utf-8")
@@ -100,11 +99,7 @@ jobs:
       - name: Name it after the version
         id: name
         run: |
-          # Anchor on the assignment: a bare quoted-string search picks up
-          # the module docstring instead.
-          VERSION=$(python3 -c "import re,pathlib; \
-            print(re.search(r'__version__\s*=\s*.([^\x27\"]+)', \
-            pathlib.Path('core/version.py').read_text()).group(1))")
+          VERSION=$(cat rust/ingetrazo_core/VERSION)
           mkdir -p dist
           cp packaging/flatpak/.staging/IngeTrazo.flatpak \
              "dist/IngeTrazo-${VERSION}-x86_64.flatpak"

@@ -167,7 +167,7 @@ pub fn skp_materials<'py>(
         return Ok((attrs, list));
     }
     let ids = ids.cast::<PyDict>()?;
-    let module = py.import("core.materials")?;
+    let module = py.import("ingetrazo_core.materials")?;
     let mut images = Images {
         adapter: py.import("formats.skp_reader")?.into_any(),
         source,

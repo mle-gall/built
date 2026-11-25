@@ -185,7 +185,7 @@ impl SetNorth {
     /// into (−180, 180]. The model never moves.
     #[new]
     fn new(py: Python<'_>, degrees: f64) -> PyResult<PyClassInitializer<Self>> {
-        let degrees = py.import("core.sun")?.call_method1("wrap_north_deg", (degrees,))?;
+        let degrees = py.import("ingetrazo_core.sun")?.call_method1("wrap_north_deg", (degrees,))?;
         let step = RecordStep::new("SetNorthCommand", run_north, vec![("degrees", degrees)])
             .explicit_inverse()
             .hook(After(after_north));

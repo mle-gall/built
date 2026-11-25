@@ -241,7 +241,7 @@ pub fn run_view_command(win: &Bound<'_, PyAny>, id: &str, on: bool) -> PyResult<
         Style => {
             let preset = win
                 .py()
-                .import("core.style")?
+                .import("ingetrazo_core.style")?
                 .call_method1("style_by_name", (c.label,))?;
             win.call_method1("_apply_display_style", (preset,))?
         }

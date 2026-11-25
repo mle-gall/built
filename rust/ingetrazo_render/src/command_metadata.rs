@@ -183,7 +183,7 @@ impl Command {
 }
 fn recent(py: Python) -> PyResult<Vec<String>> {
     let value = py
-        .import("core.settings")?
+        .import("ingetrazo_core.settings")?
         .call_method0("settings")?
         .call_method1("value", (RECENT,))?;
     if !value.is_truthy()? {
@@ -208,7 +208,7 @@ fn run(action: &Obj) -> PyResult<()> {
         order.retain(|s| s != &key);
         order.insert(0, key);
         order.truncate(100);
-        py.import("core.settings")?
+        py.import("ingetrazo_core.settings")?
             .call_method0("settings")?
             .call_method1("setValue", (RECENT, order))?;
         action.call_method0("trigger")?;

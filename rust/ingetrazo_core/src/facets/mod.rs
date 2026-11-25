@@ -226,7 +226,7 @@ fn prepare(idx: &Obj, facet: &str) -> PyResult<()> {
         .import("core.bim_registry")?
         .call_method1("get", (&scene,))?;
     if facet == "structure" {
-        let st = py.import("core.structure")?;
+        let st = py.import("ingetrazo_core.structure")?;
         let roots = PyDict::new(py);
         for k in st.call_method1("_nodes", (&registry,))?.try_iter()? {
             let k = k?;

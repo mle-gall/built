@@ -86,7 +86,7 @@ fn grab_geometry<'py>(
                 let class = match &vertex_type {
                     Some(class) => class,
                     None => vertex_type
-                        .insert(mesh.py().import("core.store_mesh")?.getattr("VertexView")?),
+                        .insert(mesh.py().import("ingetrazo_core.store_mesh")?.getattr("VertexView")?),
                 };
                 for v in slots {
                     let key = st.inner.key(Kind::Vertex, v);

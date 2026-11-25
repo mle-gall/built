@@ -331,7 +331,7 @@ pub(super) fn install_module(module: &Bound<PyModule>) -> PyResult<()> {
     module.add("os", py.import("os")?)?;
     modules::import_names(module, "pathlib", &[("Path", "Path")])?;
     modules::import_names(module, "ingetrazo_core", &[("Input", "Qt")])?;
-    modules::import_names(module, "core.timers", &[("later", "later")])?;
+    modules::import_names(module, "ingetrazo_core.timers", &[("later", "later")])?;
     modules::import_names(module, "ingetrazo_render", &[("shortcut_text", "shortcut_text"), ("rail_icon", "_icon_rgba")])?;
     modules::import_names(module, "ingetrazo_render.keyboard_bindings", &[("action_keys", "action_keys")])?;
     modules::import_names(module, "plugins._widget_language", &[("FONT", "FONT")])?;

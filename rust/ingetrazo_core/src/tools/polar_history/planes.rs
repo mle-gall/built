@@ -136,7 +136,7 @@ pub(super) fn merge<'py>(
     let keep = py
         .import("ingetrazo_core")?
         .call_method1("ElementSet", (scene.getattr("selection")?,))?;
-    let view = py.import("core.store_mesh")?.getattr("FaceView")?;
+    let view = py.import("ingetrazo_core.store_mesh")?.getattr("FaceView")?;
     for plane in planes {
         let faces = PyList::empty(py);
         for key in plane.old.into_iter().chain(plane.new) {

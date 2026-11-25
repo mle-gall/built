@@ -78,7 +78,7 @@ fn store(py: Python<'_>, kind: &'static str, d: &Bound<'_, PyDict>) {
 
 /// The host's preference store (core.settings).
 fn prefs(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    py.import("core.settings")?.getattr("settings")?.call0()
+    py.import("ingetrazo_core.settings")?.getattr("settings")?.call0()
 }
 
 /// ``item``'s look becomes the next one of its kind when ``changed`` —

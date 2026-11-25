@@ -96,7 +96,7 @@ fn merge_materials<'p>(
 ) -> PyResult<Bound<'p, PyDict>> {
     let py = comp.py();
     let renamed = PyDict::new(py);
-    let register = py.import("core.materials")?.getattr("register")?;
+    let register = py.import("ingetrazo_core.materials")?.getattr("register")?;
     for row in src_materials.call_method0("items")?.try_iter()? {
         let row = row?;
         let key = row.get_item(0)?;

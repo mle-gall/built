@@ -243,7 +243,7 @@ impl TreePaint {
                 let mut mat = materials.call_method1("get", (&name,))?;
                 if mat.is_none() {
                     mat = py
-                        .import("core.materials")?
+                        .import("ingetrazo_core.materials")?
                         .getattr("Material")?
                         .call_method1("from_dict", (&data,))?;
                     cmds.append(history.call_method1(

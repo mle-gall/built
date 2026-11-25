@@ -61,7 +61,7 @@ pub(super) fn write(mesh: &Obj, op: &Obj, reason: &str) -> PyResult<()> {
         return Ok(());
     }
     written.call_method1("add", (digest,))?;
-    let folder = match py.import("core.paths")?.call_method0("user_log_dir") {
+    let folder = match py.import("ingetrazo_core.paths")?.call_method0("user_log_dir") {
         Ok(d) => d.extract::<std::path::PathBuf>()?.join("push-refusals"),
         Err(e) if e.is_instance_of::<pyo3::exceptions::PyOSError>(py) => return Ok(()),
         Err(e) => return Err(e),

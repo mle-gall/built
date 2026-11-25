@@ -385,7 +385,7 @@ coll = COLLECT(
 # onedir the other platforms ship); nothing launches it but a stdio-speaking
 # MCP client that already knows its path, so it does not need its own bundle.
 if sys.platform == 'darwin':
-    from core.version import __version__ as _version
+    _version = (ROOT / 'rust/ingetrazo_core/VERSION').read_text().strip()
     mac_icon = ROOT / 'resources' / 'icons' / 'ingetrazo.icns'
     app = BUNDLE(
         coll,

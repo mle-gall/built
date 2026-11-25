@@ -77,7 +77,7 @@ fn drawing_plane<'py>(a: &Args<'py>) -> Reply<'py> {
 fn own_plane<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
-    let axes = imported(py, "core.axes")?.into_any();
+    let axes = imported(py, "ingetrazo_core.axes")?.into_any();
     tool.getattr("_plane_state")?.call_method1(
         "own_plane",
         (tool.getattr("work_plane")?, axes.call_method0("frame")?),
@@ -92,7 +92,7 @@ fn snapped_plane<'py>(a: &Args<'py>) -> Reply<'py> {
     let module = imported(py, "tools.base")?;
     let plane = a.get_item(1)?;
     let tool = a.get_item(0)?;
-    let axes = imported(py, "core.axes")?.into_any();
+    let axes = imported(py, "ingetrazo_core.axes")?.into_any();
     let names_point = if tool.getattr("snap_kind")?.is_none() {
         none(py)
     } else {
@@ -131,7 +131,7 @@ fn preview_plane<'py>(a: &Args<'py>) -> Reply<'py> {
         return Ok(locked.clone());
     }
     let plane = optional(&viewport, "_last_work_plane")?;
-    let axes = imported(py, "core.axes")?.into_any();
+    let axes = imported(py, "ingetrazo_core.axes")?.into_any();
     if !plane.is_none() {
         return (
             module.call_method1("QVector3D", (&point,))?,
@@ -197,7 +197,7 @@ fn locked_work_plane<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let point = a.get_item(1)?;
     let tool = a.get_item(0)?;
-    let axes = imported(py, "core.axes")?.into_any();
+    let axes = imported(py, "ingetrazo_core.axes")?.into_any();
     tool.getattr("_plane_state")?
         .call_method1("locked", (&point, axes.call_method0("frame")?))
 }

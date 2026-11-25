@@ -358,13 +358,13 @@ fn move_selection<'py>(
             ("ingetrazo_core.mesh", "Face", &fs),
             ("core.dimension", "Dimension", &dims),
             ("ingetrazo_core.section", "SectionPlane", &planes),
-            ("core.textlabel", "TextLabel", &labels),
+            ("ingetrazo_core.textlabel", "TextLabel", &labels),
         ];
         let classes = classes
             .into_iter()
             .map(|(m, c, l)| Ok((py.import(m)?.getattr(c)?, l)))
             .collect::<PyResult<Vec<_>>>()?;
-        let is_guide = py.import("core.guide")?.getattr("is_guide")?;
+        let is_guide = py.import("ingetrazo_core.guide")?.getattr("is_guide")?;
         for e in scene.getattr("selection")?.try_iter()? {
             let e = e?;
             for (class, list) in &classes {

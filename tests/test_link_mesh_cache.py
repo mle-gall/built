@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from core.group import Group
-from core.materials import Material
+from ingetrazo_core.materials import Material
 from ingetrazo_core import Vec3
 from ingetrazo_core.link_meshes import LinkMeshes
 from ingetrazo_core.mesh import Mesh

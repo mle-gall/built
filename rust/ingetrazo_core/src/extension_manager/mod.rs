@@ -53,7 +53,7 @@ fn name(p: &Path) -> &str {
     p.file_name().and_then(|s| s.to_str()).unwrap_or("")
 }
 fn version(py: Python) -> PyResult<String> {
-    py.import("core.version")?.getattr("__version__")?.extract()
+    py.import("ingetrazo_core.version")?.getattr("__version__")?.extract()
 }
 fn digest(py: Python, bytes: &[u8]) -> PyResult<String> {
     py.import("hashlib")?

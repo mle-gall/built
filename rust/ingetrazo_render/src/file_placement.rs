@@ -230,7 +230,7 @@ fn ask_mesh_units(
         .eq_ignore_ascii_case(".stl");
     let model = py.import("ingetrazo_render")?.getattr("OperationForm")?;
     let model = if stl {
-        let store = py.import("core.settings")?.call_method0("settings")?;
+        let store = py.import("ingetrazo_core.settings")?.call_method0("settings")?;
         model.call_method1(
             "mesh_import",
             (
@@ -288,7 +288,7 @@ fn mesh_units_answer(
     let partial = py.import("functools")?.getattr("partial")?;
     let load = if stl {
         let mode = values.as_any().get_item("simplify")?;
-        let store = py.import("core.settings")?.call_method0("settings")?;
+        let store = py.import("ingetrazo_core.settings")?.call_method0("settings")?;
         store.call_method1("setValue", ("import/stl_unit", &unit))?;
         store.call_method1("setValue", ("import/stl_simplify_mode", &mode))?;
         partial.call1((

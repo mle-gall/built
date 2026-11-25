@@ -151,7 +151,7 @@ pub fn untitled_slot(docs: &Bound<'_, PyAny>) -> PyResult<u64> {
         }
     }
     let py = docs.py();
-    let pending = py.import("core.autosave")?.getattr("pending")?;
+    let pending = py.import("ingetrazo_core.autosave")?.getattr("pending")?;
     let kw = PyDict::new(py);
     for slot in 1.. {
         if used.contains(&slot) {

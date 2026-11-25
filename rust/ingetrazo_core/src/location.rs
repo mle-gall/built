@@ -376,7 +376,7 @@ impl LocationEdit {
         let py = scene.py();
         let old = scene.getattr("georef")?;
         let north = py
-            .import("core.sun")?
+            .import("ingetrazo_core.sun")?
             .call_method1("scene_north_deg", (scene,))?;
         let alt = if old.is_none() {
             0.

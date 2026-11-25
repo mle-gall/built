@@ -441,7 +441,7 @@ impl Workspace {
     fn set_auto_render(s: &Bound<'_, Self>, on: bool) -> PyResult<()> {
         s.getattr("composer")?.setattr("_auto_render", on)?;
         s.py()
-            .import("core.settings")?
+            .import("ingetrazo_core.settings")?
             .call_method0("settings")?
             .call_method1(
                 "setValue",
@@ -502,7 +502,7 @@ impl Workspace {
             ]);
         }
         let mut styles = vec![vec!["sombreado".to_string(), tr("Model style")?]];
-        let style = py.import("core.style")?;
+        let style = py.import("ingetrazo_core.style")?;
         for (items, translate) in [
             (style.getattr("BUILTIN_STYLES")?, true),
             (style.call_method0("user_styles")?, false),

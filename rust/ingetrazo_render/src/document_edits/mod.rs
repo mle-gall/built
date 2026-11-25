@@ -11,7 +11,7 @@ fn truth(v: &Obj, k: &str) -> PyResult<bool> {
 }
 fn setting(v: &Obj, key: &str, value: &Obj) -> PyResult<()> {
     v.py()
-        .import("core.settings")?
+        .import("ingetrazo_core.settings")?
         .call_method0("settings")?
         .call_method1("setValue", (key, value))?;
     Ok(())

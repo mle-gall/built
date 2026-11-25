@@ -97,7 +97,7 @@ impl ReadMesh {
 }
 fn materials<'p>(payload: &Obj<'p>, links: Option<&Obj<'p>>) -> PyResult<Bound<'p, PyDict>> {
     let py = payload.py();
-    let m = py.import("core.materials")?.getattr("Material")?;
+    let m = py.import("ingetrazo_core.materials")?.getattr("Material")?;
     let decode = api(py)?
         .call_method0("native_io")?
         .getattr("igz_load_material")

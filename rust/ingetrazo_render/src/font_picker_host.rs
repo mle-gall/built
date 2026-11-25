@@ -36,7 +36,7 @@ fn show(
     {
         return Ok(false);
     }
-    let settings = py.import("core.settings")?.call_method0("settings")?;
+    let settings = py.import("ingetrazo_core.settings")?.call_method0("settings")?;
     let list = |key: &str| -> PyResult<Vec<String>> {
         settings
             .call_method(
@@ -92,7 +92,7 @@ fn answer(win: &Obj, payload: &str, source_view: Option<&Obj>) -> PyResult<()> {
         .call_method1("pop", ("_font_done", py.None()))?;
     if !done.is_none() && !payload.is_empty() && current.is(source) {
         let choice = py.import("json")?.call_method1("loads", (payload,))?;
-        let settings = py.import("core.settings")?.call_method0("settings")?;
+        let settings = py.import("ingetrazo_core.settings")?.call_method0("settings")?;
         for key in ["recent", "favourites"] {
             settings.call_method1("setValue", (format!("fonts/{key}"), choice.get_item(key)?))?;
         }

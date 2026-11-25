@@ -1317,7 +1317,7 @@ impl<'p> Structured<'p> {
         } else {
             None
         };
-        let module = py.import("core.materials")?;
+        let module = py.import("ingetrazo_core.materials")?;
         let material = module.getattr("Material")?.call1((n, color, texture))?;
         let name: String = module
             .call_method1("register", (&self.registry, material))?
