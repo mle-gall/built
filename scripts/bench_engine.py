@@ -111,9 +111,9 @@ def op_intersect_find(ctx):
 def op_intersect_apply(ctx):
     """…and adding them as edges (one undo step), as the menu does."""
     from core.edits import build_add_edges
-    from core.history import History
+    from ingetrazo_core.history import History
     scene = ctx["scene"]
-    from core.mesh import _KEY_SCALE
+    from ingetrazo_core.mesh import _KEY_SCALE
     segs = [(a, b) for a, b in ctx.get("segs", [])
             if (b - a).length() >= 1.0 / _KEY_SCALE][:ctx["apply_cap"]]
     ctx["applied"] = len(segs)
@@ -168,7 +168,7 @@ def push_faces(scene, n=12, seed=3, after=None):
     import random
 
     from core.group import iter_placements
-    from core.history import History
+    from ingetrazo_core.history import History
     from tools.pushpull import PushPullTool
     rng = random.Random(seed)
     hist = History(scene)

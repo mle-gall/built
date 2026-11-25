@@ -22,7 +22,7 @@ fn edit_done(
         };
         if (dimension || value.is_truthy()?) && !value.eq(entity.getattr("text")?)? {
             let command = if dimension {
-                imported(py, "core.history")?.getattr("EditDimensionTextCommand")?
+                imported(py, "ingetrazo_core.history")?.getattr("EditDimensionTextCommand")?
             } else {
                 imported(py, "tools.select_host")?.getattr("EditTextLabelCommand")?
             };

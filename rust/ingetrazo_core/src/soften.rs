@@ -12,7 +12,7 @@ type Obj<'p> = Bound<'p, PyAny>;
 fn selected_edges<'p>(scene: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
     let py = scene.py();
     let mesh = scene.getattr("mesh")?;
-    let geo = py.import("core.mesh")?;
+    let geo = py.import("ingetrazo_core.mesh")?;
     let (edge, face, group) = (
         geo.getattr("Edge")?,
         geo.getattr("Face")?,
@@ -131,7 +131,7 @@ fn meshes<'p>(cmd: &Obj<'p>) -> PyResult<Vec<Obj<'p>>> {
 #[pyfunction]
 fn matching<'p>(mesh: &Obj<'p>, faces: &Obj<'p>, a: &Obj<'p>, b: &Obj<'p>) -> PyResult<bool> {
     let py = mesh.py();
-    let view = py.import("core.store_mesh")?.getattr("FaceView")?;
+    let view = py.import("ingetrazo_core.store_mesh")?.getattr("FaceView")?;
     let sig = py.import("formats.fuse")?.getattr("_smooth_sig")?;
     let face_sig = |key: &Obj<'p>| -> PyResult<Obj<'p>> {
         let f = if faces.is_none() {
@@ -154,7 +154,7 @@ fn normal<'p>(faces: &Obj<'p>, k: &Obj<'p>) -> PyResult<Obj<'p>> {
 fn prepare<'p>(cmd: &Obj<'p>) -> PyResult<Bound<'p, PyList>> {
     let py = cmd.py();
     let changes = PyList::empty(py);
-    let api = py.import("core.store_mesh")?;
+    let api = py.import("ingetrazo_core.store_mesh")?;
     let native = py.import("ingetrazo_core")?.getattr("MeshStore")?;
     let bind = py.import("functools")?.getattr("partial")?;
     for (mesh, keys) in cmd.getattr("targets")?.cast::<PyDict>()?.iter() {
@@ -239,7 +239,7 @@ fn apply_changes(cmd: &Obj<'_>, scene: &Obj<'_>, after: bool) -> PyResult<()> {
     }
     for (mesh, rows) in by_mesh.iter() {
         let store = py
-            .import("core.store_mesh")?
+            .import("ingetrazo_core.store_mesh")?
             .call_method1("_store_of", (&mesh,))?;
         if store.is_none() {
             py.import("ingetrazo_core")?
@@ -295,7 +295,7 @@ fn __getattr__<'p>(m: &Bound<'p, PyModule>, name: &str) -> PyResult<Obj<'p>> {
         "type",
         (
             name,
-            (py.import("core.history")?.getattr("MeshCommand")?,),
+            (py.import("ingetrazo_core.history")?.getattr("MeshCommand")?,),
             ns,
         ),
     )?;

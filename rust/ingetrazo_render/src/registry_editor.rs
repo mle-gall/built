@@ -154,7 +154,7 @@ impl RegistryEditor {
                 }
                 if value != self.original {
                     let command = py
-                        .import("core.history")?
+                        .import("ingetrazo_core.history")?
                         .getattr("SetRegistryCommand")?
                         .call1((parsed,))?;
                     let history = vp.getattr("history")?;

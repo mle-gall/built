@@ -46,7 +46,7 @@ fn float64_rows<'py>(py: Python<'py>, pos: &Bound<'py, PyAny>) -> PyResult<PyRea
 }
 
 fn is_deferred(py: Python<'_>, mesh: &Bound<'_, PyAny>) -> PyResult<bool> {
-    Ok(mesh.get_type().is(&super::module(py, "core.mesh")?.getattr("DeferredMesh")?))
+    Ok(mesh.get_type().is(&super::module(py, "ingetrazo_core.mesh")?.getattr("DeferredMesh")?))
 }
 
 fn xyz(p: &Bound<'_, PyAny>) -> PyResult<[f64; 3]> {

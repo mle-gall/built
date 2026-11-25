@@ -511,7 +511,7 @@ def test_intersected_wall_occludes_loose_slab_edges(native, monkeypatch):
     from core.history import History
     from core.intersect import WITH_CONTEXT
     from core.protocol.commands import run
-    from core.store_mesh import StoreMesh
+    from ingetrazo_core.store_mesh import StoreMesh
     from tests.test_intersect_faces import _box, RED, BLUE
     from ingetrazo_core import pack_scene
 

@@ -5,7 +5,7 @@ from copy import deepcopy
 
 from core import record, bim_registry
 from core.agent_tools import json_value
-from core.history import SetRecordCommand, SetRegistryCommand, CompoundCommand
+from ingetrazo_core.history import SetRecordCommand, SetRegistryCommand, CompoundCommand
 from core.ifc_tables import IFC_CLASSES, TABLES, SCHEMAS, STATUS, common_pset, predefined_types
 
 

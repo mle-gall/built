@@ -21,7 +21,7 @@ from core.input_codes import Input
 from ingetrazo_core import ScreenPoint, Vec3 as QVector3D
 
 import core._native as _native                                    # noqa: E402
-from core import store_mesh as S                                  # noqa: E402
+from ingetrazo_core import store_mesh as S                                  # noqa: E402
 from core.history import History                                  # noqa: E402
 from core.mesh import Edge, Face                                  # noqa: E402
 from core.scene import Scene                                      # noqa: E402

@@ -294,7 +294,7 @@ fn sections(scene: &Obj<'_>) -> PyResult<()> {
 
 fn rejected(py: Python<'_>, why: &Obj<'_>) -> PyErr {
     match py
-        .import("core.history")
+        .import("ingetrazo_core.history")
         .and_then(|m| m.getattr("CommandRejected"))
         .and_then(|c| c.call1((why,)))
     {

@@ -2,7 +2,8 @@
 """Differential drawing through History, including exact stable-key feed records."""
 import pytest
 from ingetrazo_core import MeshElements, Vec3 as V
-from core import store_mesh as S, scan_index
+from core import scan_index
+from ingetrazo_core import store_mesh as S
 from core.history import History, SnapshotMutation
 from core.protocol.commands import run
 from core.edits import join_preview

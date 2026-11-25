@@ -125,7 +125,7 @@ fn gltf_build_mesh<'py>(
     batches: &Obj<'py>,
     progress: Option<&Obj<'py>>,
 ) -> PyResult<Obj<'py>> {
-    let mesh = py.import("core.mesh")?.call_method0("Mesh")?;
+    let mesh = py.import("ingetrazo_core.mesh")?.call_method0("Mesh")?;
     let mut flat = Vec::new();
     let mut textured = false;
     let attrs = PyList::empty(py);

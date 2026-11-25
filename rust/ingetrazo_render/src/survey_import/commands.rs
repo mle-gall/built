@@ -354,7 +354,7 @@ pub(crate) fn orthophoto(win: &Obj) -> PyResult<()> {
         .getattr("ImagePlane")?
         .call((cached.str()?, bl, u, v), Some(&kw))?;
     let cmd = py
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .call_method1("AddImagePlaneCommand", (&plane,))?;
     vp.getattr("history")?.call_method1("execute", (cmd,))?;
     if first {

@@ -48,7 +48,7 @@ pub(super) fn unique_rows(
     let py = win.py();
     let vp = win.getattr("viewport")?;
     let links = py.import("core.links")?;
-    let hist = py.import("core.history")?;
+    let hist = py.import("ingetrazo_core.history")?;
     let linked = PyList::empty(py);
     let kw = PyDict::new(py);
     kw.set_item("rename", true)?;
@@ -131,7 +131,7 @@ fn merge_groups(win: &Bound<'_, PyAny>) -> PyResult<()> {
     vp.call_method0("end_group_edit")?;
     execute(
         &vp,
-        &py.import("core.history")?
+        &py.import("ingetrazo_core.history")?
             .call_method1("MergeGroupsCommand", (groups,))?,
     )?;
     vp.call_method0("update")?;
@@ -145,7 +145,7 @@ fn explode_curves(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let mesh_edges = vp.getattr("scene")?.getattr("mesh")?.getattr("edges")?;
     let edges = PyList::empty(py);
     let mut curved = false;
-    for edge in selected(win, "core.mesh", "Edge")?.iter() {
+    for edge in selected(win, "ingetrazo_core.mesh", "Edge")?.iter() {
         if mesh_edges.contains(&edge)? {
             curved |= !edge.getattr("curve")?.is_none();
             edges.append(edge)?;
@@ -155,7 +155,7 @@ fn explode_curves(win: &Bound<'_, PyAny>) -> PyResult<()> {
         return status(win, "No curve selected.", None, 3000);
     }
     let cmd = py
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .call_method1("ExplodeCurvesCommand", (edges,))?;
     execute(&vp, &cmd)?;
     let vars = PyDict::new(py);
@@ -207,7 +207,7 @@ fn section_action(win: &Bound<'_, PyAny>, verb: &str) -> PyResult<()> {
     let py = win.py();
     let vp = win.getattr("viewport")?;
     let planes = selected(win, "core.section", "SectionPlane")?;
-    let hist = py.import("core.history")?;
+    let hist = py.import("ingetrazo_core.history")?;
     match verb {
         "align" => {
             let plane = if planes.is_empty() {
@@ -317,7 +317,7 @@ pub(crate) fn assign_tag(win: &Bound<'_, PyAny>, name: &str) -> PyResult<()> {
     vars.set_item("layer", name)?;
     execute(
         &vp,
-        &py.import("core.history")?
+        &py.import("ingetrazo_core.history")?
             .call_method1("AssignLayerCommand", (targets, name))?,
     )?;
     vp.call_method0("update")?;
@@ -344,7 +344,7 @@ fn toggle_paths(win: &Bound<'_, PyAny>) -> PyResult<()> {
         execute(
             &vp,
             &win.py()
-                .import("core.history")?
+                .import("ingetrazo_core.history")?
                 .call_method1("ToggleGeoPathClosedCommand", (paths,))?,
         )?;
         vp.call_method0("update")?;
@@ -364,7 +364,7 @@ fn set_path_surface(win: &Bound<'_, PyAny>, mode: &Bound<'_, PyAny>) -> PyResult
     if !paths.is_empty() {
         execute(
             &win.getattr("viewport")?,
-            &py.import("core.history")?
+            &py.import("ingetrazo_core.history")?
                 .call_method1("SetGeoPathSurfaceCommand", (paths, mode))?,
         )?;
         win.call_method0("_rebuild_surfaces")?;

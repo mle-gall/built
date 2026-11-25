@@ -7,7 +7,7 @@ from ingetrazo_core import Matrix4, MeshStore, Vec3
 from core.history import AddFaceCommand, History, SnapshotMutation
 from core.mesh import Mesh
 from core.scene import Scene
-from core import store_mesh
+from ingetrazo_core import store_mesh
 from tests.test_store_mesh import fingerprint
 
 

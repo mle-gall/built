@@ -181,7 +181,7 @@ pub(super) fn act(win: &Bound<'_, PyAny>, clicked: &Bound<'_, PyAny>, verb: &str
                 .getattr("NativeCommand")?
                 .call_method1("lock", (groups, close))?
         } else {
-            py.import("core.history")?
+            py.import("ingetrazo_core.history")?
                 .call_method1("HideCommand", (groups, close))?
         };
         nav.call_method1("execute", (&vp, cmd))?;

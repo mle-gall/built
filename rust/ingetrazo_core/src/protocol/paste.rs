@@ -53,7 +53,7 @@ impl PruneStamp {
             }
         }
         let faces = keys("faces")?;
-        let face = py.import("core.mesh")?.getattr("Face")?;
+        let face = py.import("ingetrazo_core.mesh")?.getattr("Face")?;
         let sel = scene.getattr("selection")?;
         for ent in sel.try_iter()?.collect::<PyResult<Vec<_>>>()? {
             if ent.is_instance(&face)? && !faces.contains(ent.getattr("key")?)? {
@@ -228,7 +228,7 @@ pub(super) fn stamp(history: &Obj<'_>, clip: &Obj<'_>, offset: DVec3) -> PyResul
     let py = history.py();
     let scene = history.getattr("scene")?;
     let mesh = scene.getattr("mesh")?;
-    let api = py.import("core.history")?;
+    let api = py.import("ingetrazo_core.history")?;
     let native = py.import("ingetrazo_core")?;
     let off = vector(py, offset)?;
     let copy_attrs = py
@@ -324,7 +324,7 @@ pub(super) fn stamp(history: &Obj<'_>, clip: &Obj<'_>, offset: DVec3) -> PyResul
     plane_merges(&steps, &api, &mesh, &loops)?;
     let edge_layers = clip.call_method1("get", ("edge_layers",))?;
     let ids = PyDict::new(py);
-    let mesh_type = py.import("core.mesh")?.getattr("Mesh")?;
+    let mesh_type = py.import("ingetrazo_core.mesh")?.getattr("Mesh")?;
     let mut copied_edges = Vec::new();
     for (i, row) in clip.get_item("edges")?.try_iter()?.enumerate() {
         let row = row?;

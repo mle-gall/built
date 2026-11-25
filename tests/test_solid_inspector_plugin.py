@@ -827,7 +827,7 @@ def test_showing_the_tab_again_unchanged_does_not_inspect_again(win, monkeypatch
 @pytest.mark.parametrize("edit", ["topology", "attribute", "geometry_version"])
 def test_same_count_group_edit_invalidates_inspection(win, monkeypatch, backend, edit):
     import plugins.solid_inspector as si
-    from core import mesh as meshes, store_mesh
+    from ingetrazo_core import mesh as meshes, store_mesh
     mesh = Mesh()
     if backend == "store":
         from core._native import available

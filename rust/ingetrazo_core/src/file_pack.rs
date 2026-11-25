@@ -80,7 +80,7 @@ fn face_table<'p>(
 #[pyo3(signature=(mesh,precise=false))]
 fn igz_store_columns<'p>(mesh: &Obj<'p>, precise: bool) -> PyResult<Option<Obj<'p>>> {
     let py = mesh.py();
-    let store = py.import("core.store_mesh")?;
+    let store = py.import("ingetrazo_core.store_mesh")?;
     if !mesh.get_type().is(&store.getattr("StoreMesh")?)
         || api(py)?.call_method0("native_io")?.is_none()
     {

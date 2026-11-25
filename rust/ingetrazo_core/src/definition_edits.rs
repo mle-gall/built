@@ -205,7 +205,7 @@ pub(crate) fn merge_group_geometry<'py>(groups: &Obj<'py>) -> PyResult<Obj<'py>>
             ))?;
         }
     }
-    let mesh = py.import("core.mesh")?.getattr("Mesh")?.call0()?;
+    let mesh = py.import("ingetrazo_core.mesh")?.getattr("Mesh")?.call0()?;
     let edge_end = (edge_coords.len() / 3) as isize;
     edge_coords.append(&mut face_coords);
     if !edge_coords.is_empty() {

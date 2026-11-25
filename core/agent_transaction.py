@@ -4,7 +4,7 @@ from copy import deepcopy
 
 from core import doc_model as _dm
 from core.group import iter_placements
-from core.history import SnapshotImport
+from ingetrazo_core.history import SnapshotImport
 
 
 class AgentSnapshot(SnapshotImport):
@@ -26,7 +26,7 @@ class AgentSnapshot(SnapshotImport):
         objects = list(groups) + list(scene.layers)
         memo = {id(o): o for o in [*objects, *meshes]}
         attrs = [(o, deepcopy(_dm.object_state(o), memo)) for o in objects]
-        from core.mesh import DeferredMesh
+        from ingetrazo_core.mesh import DeferredMesh
         mesh_states = {m: None if type(m) is DeferredMesh else m.capture_state()
                        for m in meshes if m is not scene.mesh}
         fields = {k: deepcopy(getattr(scene, k), memo) for k in (
@@ -78,7 +78,7 @@ class AgentSnapshot(SnapshotImport):
             super().do(scene)
             self.restore(scene, self.extra_after, self.changed_meshes)
             return
-        from core.mesh import on_mesh_materialized
+        from ingetrazo_core.mesh import on_mesh_materialized
         self.extra_before = self.capture(scene)
         before = self.extra_before[1]
 

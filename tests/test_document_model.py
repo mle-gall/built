@@ -459,7 +459,7 @@ def test_scoped_delivery_copies_kept_placements_and_material_mapping():
 def test_geometry_savepoints_across_occurrences_and_placement_fields():
     from core.history import SnapshotMutation
     from core.mesh import Mesh
-    from core.store_mesh import instance_view
+    from ingetrazo_core.store_mesh import instance_view
 
     scene = Scene()
     group = Group(Mesh(), name="before")
@@ -520,7 +520,7 @@ def test_singular_store_session_keeps_shared_keys_on_replay():
     scene.begin_group_edit(a)
     level = scene._edit_stack[-1]
     level["undo_mark"] = 0
-    from core.store_mesh import StoreMesh
+    from ingetrazo_core.store_mesh import StoreMesh
     assert (level["entry_transaction"] is not None) == isinstance(definition, StoreMesh)
     h.execute(AddEdgeCommand(QVector3D(0, 1, 0), QVector3D(1, 1, 0)))
     share = level.pop("share")
@@ -566,7 +566,7 @@ def test_staged_occurrence_undo_after_leaving_keeps_canonical_coordinates():
 
 def test_geometry_commit_failure_rolls_back_all_targets_and_fields(monkeypatch):
     from core.history import SnapshotMutation
-    from core.store_mesh import StoreMesh
+    from ingetrazo_core.store_mesh import StoreMesh
 
     scene = Scene()
     part = Group(name="before")
@@ -759,7 +759,7 @@ def test_reader_rescans_after_an_unversioned_plugin_write():
 def test_mesh_pickle_preserves_handles_and_precision():
     import pickle
     from core.mesh import Mesh
-    from core.store_mesh import StoreMesh
+    from ingetrazo_core.store_mesh import StoreMesh
 
     mesh = Mesh()
     corner = (1.000000000000001, 0., 0.)

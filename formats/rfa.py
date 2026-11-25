@@ -6,7 +6,7 @@ import math
 from functools import partialmethod
 
 
-from core.history import SnapshotImport, SetRegistryCommand
+from ingetrazo_core.history import SnapshotImport, SetRegistryCommand
 from core.i18n import tr
 
 

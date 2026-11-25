@@ -22,7 +22,7 @@ fn none(py: Python<'_>) -> Obj<'_> {
 }
 
 fn host<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
-    py.import("core.history")?.getattr(name)
+    py.import("ingetrazo_core.history")?.getattr(name)
 }
 
 fn optional<'py>(o: &Obj<'py>, name: &str) -> PyResult<Option<Obj<'py>>> {
@@ -30,7 +30,7 @@ fn optional<'py>(o: &Obj<'py>, name: &str) -> PyResult<Option<Obj<'py>>> {
 }
 
 fn store_state<'py>(py: Python<'py>) -> PyResult<Obj<'py>> {
-    py.import("core.store_mesh")?.getattr("StoreState")
+    py.import("ingetrazo_core.store_mesh")?.getattr("StoreState")
 }
 
 fn kids<'py>(py: Python<'py>, lifted: &Obj<'py>) -> PyResult<Bound<'py, PySet>> {

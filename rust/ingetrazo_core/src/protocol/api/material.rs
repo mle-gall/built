@@ -354,7 +354,7 @@ fn name_undo(this: &Obj<'_>, scene: &Obj<'_>) -> PyResult<()> {
 }
 pub(super) fn install(m: &Module<'_>) -> PyResult<()> {
     let py = m.py();
-    let h = py.import("core.history")?;
+    let h = py.import("ingetrazo_core.history")?;
     m.add("DeleteMaterialCommand", h.getattr("DeleteMaterialCommand")?)?;
     let ns = PyDict::new(py);
     ns.set_item("doc_undo", true)?;

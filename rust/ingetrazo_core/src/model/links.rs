@@ -738,7 +738,7 @@ struct Shared {
 }
 
 fn is_deferred(py: Python<'_>, mesh: &Obj<'_>) -> PyResult<bool> {
-    Ok(mesh.get_type().is(module(py, "core.mesh")?.getattr(pyo3::intern!(py, "DeferredMesh"))?))
+    Ok(mesh.get_type().is(module(py, "ingetrazo_core.mesh")?.getattr(pyo3::intern!(py, "DeferredMesh"))?))
 }
 
 /// The index array `a` copied (`np.full(n, -1, int32)` when absent), with
@@ -2065,7 +2065,7 @@ fn project_parts<'py>(copy: &Obj<'py>, comp: &Obj<'py>) -> PyResult<Bound<'py, P
 #[pyo3(name = "link_own_mesh")]
 pub fn own_mesh<'py>(mesh: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = mesh.py();
-    let m = module(py, "core.mesh")?;
+    let m = module(py, "ingetrazo_core.mesh")?;
     if is_deferred(py, mesh)? {
         let d = mesh.getattr(pyo3::intern!(py, "__dict__"))?;
         let out = m.getattr(pyo3::intern!(py, "Mesh"))?.call0()?;

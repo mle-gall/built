@@ -293,7 +293,7 @@ fn part_row<'p>(part: &Obj<'p>, cache: Cache<'p>) -> PyResult<Bound<'p, PyDict>>
     )?;
     out.set_item("material", part_material(part, cache)?)?;
     out.set_item("size", part_size(part_points(part, cache)?.extract()?)?)?;
-    let face_count = py.import("core.mesh")?.getattr("face_count")?;
+    let face_count = py.import("ingetrazo_core.mesh")?.getattr("face_count")?;
     let mut faces = 0usize;
     for row in py
         .import("core.group")?

@@ -167,7 +167,7 @@ fn plog(py: Python, tag: &str, ms: f64, extra: &str, floor: f64) -> PyResult<()>
             .getattr("_PERF")?
             .is_truthy()?
     {
-        py.import("core.history")?
+        py.import("ingetrazo_core.history")?
             .call_method1("_plog", (tag, ms, extra, floor))?;
     }
     Ok(())
@@ -355,7 +355,7 @@ fn dependencies(m: &Bound<PyModule>) -> PyResult<()> {
     m.add("weakref", py.import("weakref")?)?;
     let groups: &[(&str, &[(&str, &str)])] = &[
         (
-            "core.mesh",
+            "ingetrazo_core.mesh",
             &[
                 ("element_identity", "element_identity"),
                 ("Edge", "Edge"),
@@ -416,7 +416,7 @@ fn dependencies(m: &Bound<PyModule>) -> PyResult<()> {
             ],
         ),
         (
-            "core.history",
+            "ingetrazo_core.history",
             &[
                 ("EraseSelectionCommand", "EraseSelectionCommand"),
                 ("History", "History"),

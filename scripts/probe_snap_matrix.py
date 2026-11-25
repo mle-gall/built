@@ -176,7 +176,7 @@ def _build_turned_edit(vp, kind: str) -> None:
     edge 1.5 m out along its local +X, both built in local coordinates and
     placed by the turn — the geometry a local-axes change must answer to."""
     from core.group import Group
-    from core.mesh import Mesh
+    from ingetrazo_core.mesh import Mesh
     P = QVector3D
     local = Mesh()
     local.add_face([P(-1.0, -1.0, 0.0), P(1.0, -1.0, 0.0),
@@ -193,7 +193,7 @@ def _build_turned_edit(vp, kind: str) -> None:
     # twice about the origin — so it remembers its axes the way the program
     # keeps them (a mesh built already turned would be a group that was
     # never rotated, whose axes are the world's).
-    from core.history import RotateGroupCommand
+    from ingetrazo_core.history import RotateGroupCommand
     g = Group(local, name="turned group")
     vp.scene.groups.append(g)
     vp.history.execute(RotateGroupCommand(g, P(0, 0, 0), P(1, 0, 0), 20.0))

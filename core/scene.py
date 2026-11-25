@@ -13,7 +13,7 @@ to rebuild its dynamic VBOs.
 """
 from __future__ import annotations
 import ingetrazo_core
-from core.mesh import element_identity
+from ingetrazo_core.mesh import element_identity
 from core.element_set import ElementSet
 
 from dataclasses import InitVar, dataclass, field
@@ -24,7 +24,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core import layers as _layers
 from core import doc_model as _dm
-from core.mesh import Edge, Face, Mesh
+from ingetrazo_core.mesh import Edge, Face, Mesh
 
 
 def _make_style():

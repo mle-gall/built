@@ -97,7 +97,7 @@ pub(crate) fn registry_apply(step: &Obj<'_>, scene: &Obj<'_>, undo: bool) -> PyR
                 let g = row.get_item(0)?;
                 let node = structure.call_method1("node_of", (&g,))?;
                 if removed.contains(&node)? && !refiled.contains(g.getattr("uid")?)? {
-                    return Err(PyErr::from_value(py.import("core.history")?.call_method1(
+                    return Err(PyErr::from_value(py.import("ingetrazo_core.history")?.call_method1(
                         "CommandRejected",
                         (format!("Cannot delete occupied node: {}", node.str()?),),
                     )?));

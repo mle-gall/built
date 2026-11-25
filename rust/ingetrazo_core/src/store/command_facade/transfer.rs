@@ -57,7 +57,7 @@ pub(super) fn paste<'py>(
 ) -> PyResult<(Vec<u128>, Obj<'py>)> {
     let py = mesh.py();
     let group = crate::model::module(py, "core.group")?;
-    let model = crate::model::module(py, "core.store_mesh")?;
+    let model = crate::model::module(py, "ingetrazo_core.store_mesh")?;
     let st = mesh.getattr("_store")?;
     let sst = src.getattr("_store")?;
     let snap = sst.call_method0("snapshot")?;

@@ -8,7 +8,7 @@ fn textured_face<'py>(
 ) -> PyResult<Option<(Bound<'py, PyAny>, &'static str)>> {
     let faces = matching(
         &vp.getattr("scene")?.getattr("selection")?,
-        "core.mesh",
+        "ingetrazo_core.mesh",
         "Face",
     )?;
     if faces.len() != 1 {
@@ -218,7 +218,7 @@ fn apply_text(
         vp.call_method0("end_group_edit")?;
     }
     let cmd = py
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .call_method1("EditText3DCommand", (group, params))?;
     vp.getattr("history")?.call_method1("execute", (cmd,))?;
     scene.call_method1("select", (vec![group],))?;

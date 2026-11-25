@@ -332,7 +332,7 @@ impl MoveCopies {
             .iter()
             .map(|&d| self.member(py, d))
             .collect::<PyResult<Vec<_>>>()?;
-        let history = py.import("core.history")?;
+        let history = py.import("ingetrazo_core.history")?;
         let ops = py.import("core.move_ops")?;
         let group = py.import("core.group")?;
         let new_attrs = py

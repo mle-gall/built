@@ -59,7 +59,7 @@ pub(super) fn plan_of<'py>(mesh: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
     let py = mesh.py();
     if !mesh
         .get_type()
-        .is(crate::model::module(py, "core.store_mesh")?.getattr("DeferredMesh")?)
+        .is(crate::model::module(py, "ingetrazo_core.store_mesh")?.getattr("DeferredMesh")?)
     {
         return Ok(None);
     }

@@ -77,7 +77,7 @@ fn clip_encode<'p>(py: Python<'p>, clip: &Obj<'p>) -> PyResult<Obj<'p>> {
     if registry.is_truthy()? {
         let mats = scene.getattr("materials")?;
         let placements = py.import("core.group")?.getattr("iter_placements")?;
-        let face_attrs = py.import("core.mesh")?.getattr("face_attrs")?;
+        let face_attrs = py.import("ingetrazo_core.mesh")?.getattr("face_attrs")?;
         let mut seen = HashSet::new();
         for root in groups.try_iter()? {
             for row in placements.call1((root?,))?.try_iter()? {

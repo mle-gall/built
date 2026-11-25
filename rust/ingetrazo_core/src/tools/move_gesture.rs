@@ -179,7 +179,7 @@ impl ViewportToolHost {
                     0 => None,
                     1 => Some(cmds.get_item(0)?),
                     _ => Some(
-                        py.import("core.history")?
+                        py.import("ingetrazo_core.history")?
                             .call_method1("CompoundCommand", (&cmds,))?,
                     ),
                 };

@@ -16,7 +16,7 @@ pub(super) fn execute<'py>(
     cmd: &Bound<'py, PyAny>,
     tag_objects: Option<&TagTargets<'py>>,
 ) -> PyResult<()> {
-    let api = py.import("core.history")?;
+    let api = py.import("ingetrazo_core.history")?;
     let doc = py.import("core.doc_model")?;
     let scene = host.getattr("scene")?;
     let document = scene.getattr("_root")?.getattr("_doc_key")?.extract::<super::Key>()?;
@@ -159,7 +159,7 @@ fn execute_mixed(
     cmd: &Bound<'_, PyAny>,
     tags: Option<&TagTargets<'_>>,
 ) -> PyResult<()> {
-    let api = py.import("core.history")?;
+    let api = py.import("ingetrazo_core.history")?;
     let group = api
         .getattr("OccurrenceCommands")?
         .call1((PyList::empty(py),))?;

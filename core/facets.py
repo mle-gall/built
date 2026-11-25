@@ -206,7 +206,7 @@ def palette(value):
 
 
 def apply_rule(scene, history, registry, key):
-    from core.history import CompoundCommand, SetRecordCommand
+    from ingetrazo_core.history import CompoundCommand, SetRecordCommand
     from core.record import validate
     rule = registry['rules'][key]
     index = build(scene)

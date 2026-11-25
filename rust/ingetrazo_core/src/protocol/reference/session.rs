@@ -8,7 +8,7 @@ use pyo3::{
 #[pyfunction]
 pub(super) fn record_leave(history: &Obj<'_>, level: &Obj<'_>, share: &Obj<'_>) -> PyResult<bool> {
     let py = history.py();
-    let h = crate::model::module(py, "core.history")?;
+    let h = crate::model::module(py, "ingetrazo_core.history")?;
     let steps = crate::model::module(py, "core.reference_edit")?;
     let parts = level.call_method1("get", ("parts",))?;
     let g = share.get_item(0)?;
@@ -91,7 +91,7 @@ impl StoreSessionStep {
         version(scene)
     }
     fn doc_after(slf: &Bound<'_, Self>, scene: &Obj<'_>, phase: &str) -> PyResult<()> {
-        crate::model::module(scene.py(), "core.history")?
+        crate::model::module(scene.py(), "ingetrazo_core.history")?
             .call_method1("OccurrenceCommands", (slf.getattr("inner")?,))?
             .call_method1("doc_after", (scene, phase))?;
         version(scene)
@@ -115,7 +115,7 @@ impl StoreSessionStep {
             edits.append(txn)?;
             return slf.setattr("_doc_txn", txn.call_method1("compose", (edits,))?);
         }
-        let h = crate::model::module(py, "core.history")?;
+        let h = crate::model::module(py, "ingetrazo_core.history")?;
         let compound = h.getattr("CompoundCommand")?;
         let open = compound.call1((PyList::empty(py),))?;
         let close = compound.call1((PyList::empty(py),))?;

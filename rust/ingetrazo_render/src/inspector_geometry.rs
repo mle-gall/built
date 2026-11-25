@@ -9,7 +9,7 @@ pub fn inspector_totals(scene: &Bound<'_, PyAny>, selection: &Bound<'_, PyAny>) 
         return Ok(vec![]);
     }
     let py = scene.py();
-    let mesh = py.import("core.mesh")?;
+    let mesh = py.import("ingetrazo_core.mesh")?;
     let face = mesh.getattr("Face")?;
     let edge = mesh.getattr("Edge")?;
     let net_area = py.import("core.bim")?.getattr("face_net_area")?;

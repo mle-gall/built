@@ -194,7 +194,7 @@ impl<'py> Flags<'py> {
         Ok(Self {
             entries,
             near,
-            stamp: py.import("core.mesh")?.getattr("stamp_edge_flags")?,
+            stamp: py.import("ingetrazo_core.mesh")?.getattr("stamp_edge_flags")?,
         })
     }
     fn apply(&self, e: &Obj<'_>) -> PyResult<()> {
@@ -261,7 +261,7 @@ pub(crate) fn store_regions(
     owners: &Obj<'_>,
     flags: &Obj<'_>,
 ) -> PyResult<usize> {
-    let view = mesh.py().import("core.store_mesh")?.getattr("FaceView")?;
+    let view = mesh.py().import("ingetrazo_core.store_mesh")?.getattr("FaceView")?;
     let mut same = HashSet::new();
     let mut keep = Vec::new();
     for row in owners.try_iter()? {
@@ -293,7 +293,7 @@ pub(crate) fn rebuild_selected<'py>(
         }
         return Ok(None);
     }
-    let mesh_api = py.import("core.mesh")?;
+    let mesh_api = py.import("ingetrazo_core.mesh")?;
     let mut flags = Vec::new();
     let mut segs = Vec::new();
     for e in edges {

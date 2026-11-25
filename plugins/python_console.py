@@ -33,7 +33,7 @@ import sys
 import traceback
 from pathlib import Path
 
-from core.history import SnapshotImport
+from ingetrazo_core.history import SnapshotImport
 from core.i18n import tr
 from ingetrazo_render.shell_files import ShellFileDialog
 from tools.base import Tool
@@ -46,7 +46,7 @@ class _ConsoleExecution:
         from ingetrazo_core import Vec3 as QVector3D
         from core import bim
         from core.group import Group
-        from core.mesh import Edge, Face, Mesh, Vertex
+        from ingetrazo_core.mesh import Edge, Face, Mesh, Vertex
         from core.scene import Scene
 
         vp = self._viewport

@@ -9,7 +9,7 @@ fn live_edges<'py>(
     mesh: &Bound<'py, PyAny>,
     selection: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyList>> {
-    let selected = matching(selection, "core.mesh", "Edge")?;
+    let selected = matching(selection, "ingetrazo_core.mesh", "Edge")?;
     if selected.is_empty() {
         return Ok(selected);
     }
@@ -138,7 +138,7 @@ fn split_pieces(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let kw = PyDict::new(py);
     kw.set_item("n", pieces.len()?)?;
     let command = py
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .call_method1("SplitIntoPiecesCommand", (group, pieces))?;
     let history = vp.getattr("history")?;
     history.call_method1("execute", (command,))?;
@@ -349,7 +349,7 @@ fn join_answer(
         (wrap_pyfunction!(join_mutation, py)?, edges, &result),
     )?;
     let cmd = py
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .call_method1("SnapshotMutation", (mutation,))?;
     vp.getattr("history")?.call_method1("execute", (&cmd,))?;
     if cmd.getattr("after")?.is_none() {

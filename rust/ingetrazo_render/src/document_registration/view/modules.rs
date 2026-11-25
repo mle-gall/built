@@ -93,7 +93,7 @@ pub(super) fn install_interaction_module(module: &Bound<PyModule>) -> PyResult<(
             import_names(module, "__future__", &[("annotations", "annotations")])?;
             import_names(module, "typing", &[("Optional", "Optional")])?;
             import_names(module, "core.camera", &[("OrbitCamera", "OrbitCamera")])?;
-            import_names(module, "core.history", &[("History", "History")])?;
+            import_names(module, "ingetrazo_core.history", &[("History", "History")])?;
             import_names(module, "core.i18n", &[("tr", "tr")])?;
             import_names(
                 module,

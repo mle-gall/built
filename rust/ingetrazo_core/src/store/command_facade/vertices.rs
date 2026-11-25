@@ -42,7 +42,7 @@ fn apply(
     }
     let owner = mesh
         .py()
-        .import("core.store_mesh")?
+        .import("ingetrazo_core.store_mesh")?
         .call_method1("_attribute_owner", (mesh,))?;
     let result: Option<VertexResult> = mesh
         .getattr("_store")?

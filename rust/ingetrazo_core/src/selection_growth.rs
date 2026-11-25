@@ -21,7 +21,7 @@ fn loops<'p>(face: &Obj<'p>) -> PyResult<Vec<Obj<'p>>> {
 #[pyfunction]
 fn all_connected<'p>(entities: &Obj<'p>) -> PyResult<Bound<'p, PyList>> {
     let py = entities.py();
-    let mesh = py.import("core.mesh")?;
+    let mesh = py.import("ingetrazo_core.mesh")?;
     let face = mesh.getattr("Face")?;
     let edge = mesh.getattr("Edge")?;
     let mut stack = vec![];
@@ -70,7 +70,7 @@ fn all_connected<'p>(entities: &Obj<'p>) -> PyResult<Bound<'p, PyList>> {
 #[pyfunction]
 fn bounding_edges<'p>(entities: &Obj<'p>) -> PyResult<Bound<'p, PyList>> {
     let py = entities.py();
-    let face = py.import("core.mesh")?.getattr("Face")?;
+    let face = py.import("ingetrazo_core.mesh")?.getattr("Face")?;
     let faces = PySet::empty(py)?;
     for obj in entities.try_iter()? {
         let obj = obj?;
@@ -146,7 +146,7 @@ fn material_key<'p>(f: &Obj<'p>) -> PyResult<Obj<'p>> {
 #[pyfunction]
 fn same_material<'p>(scene: &Obj<'p>, entities: &Obj<'p>) -> PyResult<Bound<'p, PyList>> {
     let py = scene.py();
-    let fc = py.import("core.mesh")?.getattr("Face")?;
+    let fc = py.import("ingetrazo_core.mesh")?.getattr("Face")?;
     let gc = py.import("core.group")?.getattr("Group")?;
     let paints = PySet::empty(py)?;
     let materials = PyList::empty(py);
@@ -220,7 +220,7 @@ fn matching_layers<'p>(
 #[pyfunction]
 fn same_layer<'p>(scene: &Obj<'p>, entities: &Obj<'p>) -> PyResult<Bound<'p, PyList>> {
     let py = scene.py();
-    let mesh = py.import("core.mesh")?;
+    let mesh = py.import("ingetrazo_core.mesh")?;
     let types = PyTuple::new(
         py,
         [

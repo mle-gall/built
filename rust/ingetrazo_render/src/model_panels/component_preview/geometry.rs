@@ -99,7 +99,7 @@ fn pieces<'p>(root: &Obj<'p>) -> PyResult<Vec<Piece<'p>>> {
         root,
         DMat4::IDENTITY,
         0,
-        &root.py().import("core.mesh")?.getattr("face_count")?,
+        &root.py().import("ingetrazo_core.mesh")?.getattr("face_count")?,
         &mut all,
     )?;
     Ok(all)
@@ -186,7 +186,7 @@ fn mesh_hash(piece: &Piece) -> PyResult<u64> {
     if plan.is_none()
         && mesh
             .get_type()
-            .is(&mesh.py().import("core.mesh")?.getattr("DeferredMesh")?)
+            .is(&mesh.py().import("ingetrazo_core.mesh")?.getattr("DeferredMesh")?)
     {
         return Ok(h.finish());
     }

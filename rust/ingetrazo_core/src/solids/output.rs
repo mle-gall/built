@@ -82,7 +82,7 @@ fn propagate(mesh: &Obj, edges: &[EdgeFlag]) -> PyResult<()> {
     }
     let py = mesh.py();
     let next = py
-        .import("core.mesh")?
+        .import("ingetrazo_core.mesh")?
         .getattr("Mesh")?
         .getattr("next_curve_id")?;
     for members in curves {
@@ -169,7 +169,7 @@ pub(super) fn group<'p>(
         });
     }
     simplify(&mut polys);
-    let mesh = py.import("core.mesh")?.call_method0("Mesh")?;
+    let mesh = py.import("ingetrazo_core.mesh")?.call_method0("Mesh")?;
     let ids = PyDict::new(py);
     for p in polys {
         let attrs = p.attrs.copy()?;

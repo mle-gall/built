@@ -157,7 +157,7 @@ fn finish(
     vp.call_method0("end_group_edit")?;
     let kwargs = [("add_plane", group)].into_py_dict(py)?;
     let command = py
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .getattr("CreatePlanCommand")?
         .call((plane, view, &page), Some(&kwargs))?;
     vp.getattr("history")?.call_method1("execute", (command,))?;

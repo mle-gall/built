@@ -12,7 +12,7 @@ fn defer(
     source: Option<&Obj<'_>>,
 ) -> PyResult<bool> {
     let py = mesh.py();
-    let api = py.import("core.store_mesh")?;
+    let api = py.import("ingetrazo_core.store_mesh")?;
     if !mesh.get_type().is(&api.getattr("StoreMesh")?)
         || mesh
             .getattr("_store")?
@@ -39,7 +39,7 @@ fn defer(
 #[pyfunction]
 fn materialize(mesh: &Obj<'_>) -> PyResult<()> {
     let py = mesh.py();
-    let api = py.import("core.store_mesh")?;
+    let api = py.import("ingetrazo_core.store_mesh")?;
     let state = mesh.getattr("__dict__")?.cast_into::<PyDict>()?;
     let source = state.as_any().get_item("_deferred_source")?;
     let mut block = !source.is_none();
@@ -79,7 +79,7 @@ fn materialize(mesh: &Obj<'_>) -> PyResult<()> {
         build.call1((mesh,))?;
     }
     let observe = py
-        .import("core.mesh")?
+        .import("ingetrazo_core.mesh")?
         .getattr("on_mesh_materialized")?
         .call_method0("get")?;
     if !observe.is_none() {

@@ -31,7 +31,7 @@ fn module(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
     py.import("core.push_pull")
 }
 fn tol(py: Python<'_>) -> PyResult<f64> {
-    py.import("core.mesh")?.getattr("_STITCH_TOL")?.extract()
+    py.import("ingetrazo_core.mesh")?.getattr("_STITCH_TOL")?.extract()
 }
 fn bump(scene: &Obj) -> PyResult<()> {
     scene.setattr("version", scene.getattr("version")?.add(1)?)
@@ -223,7 +223,7 @@ fn staged_command<'p>(op: &Obj<'p>, viewport: &Obj<'p>) -> PyResult<Obj<'p>> {
     let kw = PyDict::new(py);
     kw.set_item("mesh", target_group_mesh(op)?)?;
     let cmd = py
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .getattr("SnapshotMutation")?
         .call_method(
             "from_states",
@@ -420,7 +420,7 @@ fn commit(op: &Obj, viewport: &Obj) -> PyResult<()> {
             "_mutate_or_top_out"
         })?;
         cmd = py
-            .import("core.history")?
+            .import("ingetrazo_core.history")?
             .getattr("SnapshotMutation")?
             .call((action,), Some(&kw))?;
     }

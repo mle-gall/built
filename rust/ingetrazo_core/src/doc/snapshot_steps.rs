@@ -199,7 +199,7 @@ impl CompoundStep {
             if let Err(e) = part.call_method1("do", (scene,)) {
                 let rejected = slf
                     .py()
-                    .import("core.history")?
+                    .import("ingetrazo_core.history")?
                     .getattr("CommandRejected")?;
                 if e.value(slf.py()).is_instance(&rejected)?
                     && !slf.getattr("_journal_geometry")?.is_truthy()?

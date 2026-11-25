@@ -40,7 +40,7 @@ pub(crate) struct GroupGeometry {
 impl GroupGeometry {
     #[new]
     fn new(py: Python<'_>, faces: &Obj<'_>, edges: &Obj<'_>) -> PyResult<Self> {
-        let facade = py.import("core.mesh")?;
+        let facade = py.import("ingetrazo_core.mesh")?;
         let read = facade.getattr("edge_flags")?;
         let plain = facade.getattr("edge_is_plain")?;
         let mut captured = Vec::new();
@@ -97,7 +97,7 @@ impl GroupGeometry {
     fn build<'py>(&self, scene: &Obj<'py>, component: bool, name: &Obj<'py>) -> PyResult<Obj<'py>> {
         let py = scene.py();
         let facade = py.import("core.group")?;
-        let mesh_api = py.import("core.mesh")?;
+        let mesh_api = py.import("ingetrazo_core.mesh")?;
         let frame = scene.getattr("drawing_frame").ok();
         let mut origin = DVec3::ZERO;
         let mut axes = None;

@@ -7,6 +7,7 @@ use pyo3::{
 type Obj<'p> = Bound<'p, PyAny>;
 type Module<'p> = Bound<'p, PyModule>;
 mod feed;
+pub(crate) mod history;
 mod material;
 mod records;
 mod wrappers;

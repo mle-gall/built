@@ -225,7 +225,7 @@ fn replace_groups(
     let py = win.py();
     let vp = win.getattr("viewport")?;
     let scene = vp.getattr("scene")?;
-    let lib = py.import("core.history")?;
+    let lib = py.import("ingetrazo_core.history")?;
     let cmd = lib.call_method1("ReplaceComponentCommand", (targets, source))?;
     let affected = cmd.getattr("targets")?;
     let n = affected.len()?;

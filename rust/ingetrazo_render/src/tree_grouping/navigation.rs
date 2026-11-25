@@ -37,7 +37,7 @@ pub(crate) fn open_to(viewport: &Bound<PyAny>, path: Vec<Bound<PyAny>>) -> PyRes
 pub(crate) fn execute(viewport: &Bound<PyAny>, command: &Bound<PyAny>) -> PyResult<()> {
     let compound = viewport
         .py()
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .getattr("CompoundCommand")?;
     if command.is_instance(&compound)? && !command.getattr("commands")?.is_truthy()? {
         return Ok(());

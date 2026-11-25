@@ -71,7 +71,7 @@ pub fn place_alignment(window: &Obj<'_>, features: &Obj<'_>) -> PyResult<usize> 
     } else {
         old.clone()
     };
-    let history = py.import("core.history")?;
+    let history = py.import("ingetrazo_core.history")?;
     let path_type = py.import("georef.geopath")?.getattr("GeoPath")?;
     let commands = PyList::empty(py);
     let mut bounds = Bounds::new();
@@ -141,7 +141,7 @@ pub fn place_survey_points(
     for pt in points.try_iter()? {
         bounds.add(&pt?.getattr("position")?)?
     }
-    let command = py.import("core.history")?.call_method1(
+    let command = py.import("ingetrazo_core.history")?.call_method1(
         "AddGeoPointsCommand",
         (points, old.is_none().then_some(datum)),
     )?;

@@ -349,7 +349,7 @@ fn document_tools_leave_group_edit<'py>(a: &Args<'py>) -> Reply<'py> {
     let history = view.getattr("history")?;
     let mut updated = None;
     if share.is_none() && level.contains("session")? {
-        let occurrence = py.import("core.history")?.getattr("OccurrenceCommands")?;
+        let occurrence = py.import("ingetrazo_core.history")?.getattr("OccurrenceCommands")?;
         let session = level.get_item("session")?;
         if closing.call_method0("is_component")?.is_truthy()?
             && occurrence

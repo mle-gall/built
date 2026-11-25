@@ -29,7 +29,7 @@ fn tag(edges: &mut Vec<Obj>) -> PyResult<()> {
             Some(id) => id,
             None => id.insert(
                 e.py()
-                    .import("core.mesh")?
+                    .import("ingetrazo_core.mesh")?
                     .getattr("Mesh")?
                     .call_method0("next_curve_id")?,
             ),

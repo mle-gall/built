@@ -321,7 +321,7 @@ fn move_selection<'py>(
 ) -> Reply<'py> {
     let py = history.py();
     if let Some(plan) = _plan {
-        if !plan.is_instance(&py.import("core.history")?.getattr("Command")?)? {
+        if !plan.is_instance(&py.import("ingetrazo_core.history")?.getattr("Command")?)? {
             return Err(pyo3::exceptions::PyTypeError::new_err(
                 "a prepared move must be a history command",
             ));
@@ -354,8 +354,8 @@ fn move_selection<'py>(
         fs = PyList::empty(py);
         let classes = [
             ("core.group", "Group", &groups),
-            ("core.mesh", "Edge", &es),
-            ("core.mesh", "Face", &fs),
+            ("ingetrazo_core.mesh", "Edge", &es),
+            ("ingetrazo_core.mesh", "Face", &fs),
             ("core.dimension", "Dimension", &dims),
             ("core.section", "SectionPlane", &planes),
             ("core.textlabel", "TextLabel", &labels),
@@ -503,14 +503,14 @@ fn flip_selection<'py>(
                     crate::model::module(group.py(), "ingetrazo_core")?.call_method1("group_transformed_attrs", (face.getattr("attrs")?, &m))?,
                 ))?,
             )?;
-            cmds.append(py.import("core.history")?.call_method(
+            cmds.append(py.import("ingetrazo_core.history")?.call_method(
                 "AddFaceCommand",
                 (outer,),
                 Some(&kw),
             )?)?;
         }
         let curves = PyDict::new(py);
-        let mesh_type = py.import("core.mesh")?.getattr("Mesh")?;
+        let mesh_type = py.import("ingetrazo_core.mesh")?.getattr("Mesh")?;
         for e in edges.iter() {
             let curve = e.getattr("curve")?;
             if !curve.is_none() && !curves.contains(&curve)? {
@@ -520,7 +520,7 @@ fn flip_selection<'py>(
             kw.set_item("curve", curves.get_item(curve)?)?;
             let soft = e.getattr("soft")?;
             kw.set_item("soft", if soft.is_truthy()? { Some(soft) } else { None })?;
-            cmds.append(py.import("core.history")?.call_method(
+            cmds.append(py.import("ingetrazo_core.history")?.call_method(
                 "AddEdgeCommand",
                 (
                     m.call_method1("map", (e.getattr("a")?,))?,
@@ -547,7 +547,7 @@ fn flip_selection<'py>(
         if !positions.is_empty() {
             let kw = PyDict::new(py);
             kw.set_item("faces", faces)?;
-            cmds.append(py.import("core.history")?.call_method(
+            cmds.append(py.import("ingetrazo_core.history")?.call_method(
                 "FlipVerticesCommand",
                 (positions.values(), c, n),
                 Some(&kw),

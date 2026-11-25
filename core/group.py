@@ -22,7 +22,7 @@ import os
 import sys
 import uuid
 
-from core.mesh import Mesh
+from ingetrazo_core.mesh import Mesh
 
 _counter = itertools.count(1)
 _document_counter = ContextVar("document_group_counter", default=None)
@@ -538,7 +538,7 @@ def _local_points(mesh):
     a 5-million-face model built every one of them, past 12 GB."""
     import numpy as np
     from ingetrazo_core import deferred_weld
-    from core.mesh import DeferredMesh
+    from ingetrazo_core.mesh import DeferredMesh
     if type(mesh) is DeferredMesh:
         d = mesh.__dict__
         hit = d.get("_deferred_plan")
@@ -548,7 +548,7 @@ def _local_points(mesh):
             s = d["_deferred_source"]
             pos = deferred_weld(s["pos"], s.get("sequential", False))[0]
         return np.array(pos, dtype=np.float64) if len(pos) else None
-    from core.store_mesh import StoreMesh
+    from ingetrazo_core.store_mesh import StoreMesh
     if mesh.__class__ is StoreMesh:
         # The store's dense positions, in ``mesh.vertices`` order: walking
         # the views made a cached QVector3D per vertex, and selecting a

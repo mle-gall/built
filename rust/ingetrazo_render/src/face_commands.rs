@@ -30,7 +30,7 @@ fn face_winding(win: &Bound<'_, PyAny>, orient: bool) -> PyResult<()> {
     let vp = win.getattr("viewport")?;
     let faces = matching(
         &vp.getattr("scene")?.getattr("selection")?,
-        "core.mesh",
+        "ingetrazo_core.mesh",
         "Face",
     )?;
     let targets = if orient {
@@ -50,7 +50,7 @@ fn face_winding(win: &Bound<'_, PyAny>, orient: bool) -> PyResult<()> {
         return status(win, "The connected faces already match.", None);
     }
     let command = py
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .call_method1("FlipFacesCommand", (targets,))?;
     apply(&vp, &command)?;
     status(
@@ -68,7 +68,7 @@ fn face_winding(win: &Bound<'_, PyAny>, orient: bool) -> PyResult<()> {
 fn heal_overlaps(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let command = win
         .py()
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .call_method0("HealOverlapsCommand")?;
     apply(&win.getattr("viewport")?, &command)?;
     let count = command.getattr("healed")?.extract::<usize>()?;
@@ -90,7 +90,7 @@ fn delete_guides(vp: &Bound<'_, PyAny>) -> PyResult<()> {
         apply(
             vp,
             &vp.py()
-                .import("core.history")?
+                .import("ingetrazo_core.history")?
                 .call_method1("DeleteGuidesCommand", (guides,))?,
         )?;
     }
@@ -162,7 +162,7 @@ fn convert_geopath(win: &Bound<'_, PyAny>) -> PyResult<()> {
             cmds.append(geometry.call((&scene, segments), Some(&opts))?)?;
         }
     }
-    let history = py.import("core.history")?;
+    let history = py.import("ingetrazo_core.history")?;
     let deletion = history.call_method1("DeleteGeoPathsCommand", (paths,))?;
     if cmds.is_empty() {
         return apply(&vp, &deletion);
@@ -232,10 +232,10 @@ fn rebuild_faces(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let vp = win.getattr("viewport")?;
     let picked = matching(
         &vp.getattr("scene")?.getattr("selection")?,
-        "core.mesh",
+        "ingetrazo_core.mesh",
         "Face",
     )?;
-    let history = py.import("core.history")?;
+    let history = py.import("ingetrazo_core.history")?;
     let (cmd, message) = if picked.is_empty() {
         (
             history.call_method0("RebuildPlanarFacesCommand")?,
@@ -306,7 +306,7 @@ fn simplify_mesh(
         return Ok(());
     }
     let cmd = py
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .call_method1("SimplifyMeshCommand", (angle,))?;
     let history = vp.getattr("history")?;
     history.call_method1("execute", (&cmd,))?;

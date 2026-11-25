@@ -159,7 +159,7 @@ fn cut_selection(v: &Obj, publish: bool) -> PyResult<bool> {
     }
     let scene = v.getattr("scene")?;
     let s = Selected::read(&scene)?;
-    let history = py.import("core.history")?;
+    let history = py.import("ingetrazo_core.history")?;
     let commands = PyList::empty(py);
     if !s.edges.is_empty() || !s.faces.is_empty() {
         commands.append(host(py)?.call_method1("EraseSelectionCommand", (s.edges, s.faces))?)?

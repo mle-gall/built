@@ -9,7 +9,7 @@ pub(crate) fn paint_of<'p>(face: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
     if !attrs.is_truthy()? {
         return Ok(out);
     }
-    for key in py.import("core.mesh")?.getattr("PAINT_KEYS")?.try_iter()? {
+    for key in py.import("ingetrazo_core.mesh")?.getattr("PAINT_KEYS")?.try_iter()? {
         let key = key?;
         if attrs.contains(&key)? {
             out.set_item(&key, attrs.get_item(&key)?)?;
@@ -161,7 +161,7 @@ pub(super) fn mutate_or_top_out(op: &Obj, scene: &Obj) -> PyResult<()> {
 #[pyfunction(signature=(op,scene,preview=false))]
 pub(super) fn mutate(op: &Obj, scene: &Obj, preview: bool) -> PyResult<()> {
     let py = op.py();
-    let store = py.import("core.store_mesh")?;
+    let store = py.import("ingetrazo_core.store_mesh")?;
     op.setattr("_store_refusal", py.None())?;
     let mesh = target_mesh(op, scene)?;
     let snapshot = if mesh.get_type().is(&store.getattr("StoreMesh")?) {
@@ -220,7 +220,7 @@ pub(super) fn mutate_guarded(op: &Obj, scene: &Obj, preview: bool) -> PyResult<(
         number(op, "extrusion")?.abs() >= MIN_EXTRUDE,
         &py.import("core.orient")?.getattr("is_closed")?,
         &py.import("core.topology")?.getattr("_mesh_is_flat")?,
-        &py.import("core.store_mesh")?.getattr("_store_of")?,
+        &py.import("ingetrazo_core.store_mesh")?.getattr("_store_of")?,
     )?;
     op.setattr("_refused", refused)?;
     if refused {
@@ -256,7 +256,7 @@ pub(super) fn mutate_guarded(op: &Obj, scene: &Obj, preview: bool) -> PyResult<(
         }
         if !paint.is_empty() {
             let mut has = false;
-            for k in py.import("core.mesh")?.getattr("PAINT_KEYS")?.try_iter()? {
+            for k in py.import("ingetrazo_core.mesh")?.getattr("PAINT_KEYS")?.try_iter()? {
                 if attrs.contains(k?)? {
                     has = true;
                     break;

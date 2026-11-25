@@ -23,7 +23,7 @@ pub(crate) fn _partition_faces<'py>(
 ) -> PyResult<()> {
     let py = mesh.py();
     let scan = py.import("core.scan_index")?.getattr("scan")?;
-    let mesh_api = py.import("core.mesh")?;
+    let mesh_api = py.import("ingetrazo_core.mesh")?;
     let read_flags = mesh_api.getattr("edge_flags")?;
     let stamp_flags = mesh_api.getattr("stamp_edge_flags")?;
     let lines = PyDict::new(py);

@@ -65,7 +65,7 @@ impl ComponentRows {
                 self.placed.push(vec![]);
             }
         }
-        let faces = py.import("core.mesh")?.getattr("face_count")?;
+        let faces = py.import("ingetrazo_core.mesh")?.getattr("face_count")?;
         let mut rows = Vec::with_capacity(definitions.len());
         for (groups, definition) in self.placed.drain(..).zip(definitions) {
             let source = groups

@@ -156,7 +156,7 @@ impl PyMeshStore {
             for key in &remainder {
                 updates.set_item(key, py.get_type::<PyDict>().call1((&src,))?)?;
             }
-            for name in py.import("core.mesh")?.getattr("PAINT_KEYS")?.try_iter()? {
+            for name in py.import("ingetrazo_core.mesh")?.getattr("PAINT_KEYS")?.try_iter()? {
                 let name = name?;
                 if src.contains(&name)? && !paint.contains(&name)? {
                     let v = src.get_item(&name)?;

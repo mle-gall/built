@@ -18,7 +18,7 @@ import sys
 
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.mesh import turn_face_over  # noqa: F401  (part of what plugins see)
+from ingetrazo_core.mesh import turn_face_over  # noqa: F401  (part of what plugins see)
 
 #: Parity rays per face and their jitter (radians), as the pass was tuned.
 _RAYS = 7
@@ -80,9 +80,9 @@ def orient_outward(mesh, seed: int = 12345, only=None) -> list:
     marks, flips = mod.orient_decision(
         scan.native, None if only is None else list(only), seed, _RAYS,
         float(_JITTER), hypot, sys.version_info >= (3, 12))
-    from core.store_mesh import StoreMesh
+    from ingetrazo_core.store_mesh import StoreMesh
     if type(mesh) is StoreMesh:
-        from core.mesh import swap_orientation_paint
+        from ingetrazo_core.mesh import swap_orientation_paint
         marked = scan.faces([i for i, _ in marks]) if marks else []
         out = scan.faces(flips) if flips else []
         if marked or out:

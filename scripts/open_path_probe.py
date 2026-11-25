@@ -120,7 +120,7 @@ def pick_edit_target(scene, max_faces: int = 200):
     at least one level deep (depth first, document order) whose mesh no
     other group shares, not hidden, locked or linked. None when there is
     none. Reads face counts without building deferred meshes."""
-    from core.mesh import face_count
+    from ingetrazo_core.mesh import face_count
     from core import links
     counts: dict = {}
     stack = list(scene.groups)
@@ -160,7 +160,7 @@ def edit_face(mesh):
 
 def edit_command(face, distance: float = 0.01):
     """The Move tool's command for ``face`` moved ``distance`` along its normal."""
-    from core.history import MoveVerticesCommand
+    from ingetrazo_core.history import MoveVerticesCommand
     return MoveVerticesCommand(list(face.vertices), face.normal() * distance,
                                carry_textures=True)
 
@@ -427,7 +427,7 @@ class Probe:
             self.result["notes"].append("edit: no small unshared nested leaf group found")
             return next_step()
         path = target
-        from core.mesh import face_count
+        from ingetrazo_core.mesh import face_count
         self.result["edit_target"] = {
             "path": [g.name for g in path], "depth": len(path),
             "faces": face_count(path[-1].mesh)}
@@ -448,7 +448,7 @@ class Probe:
             self.later(500, edit)
 
         def edit():
-            from core.history import CommandRejected
+            from ingetrazo_core.history import CommandRejected
             # The open group's mesh (a component instance edits a world copy).
             face = edit_face(scene.mesh)
             if face is None:

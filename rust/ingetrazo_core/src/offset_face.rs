@@ -102,7 +102,7 @@ impl OffsetFace {
             .getattr("_store")?
             .call_method1("offset_face", (face.getattr("key")?, &self.regions))?;
         mesh.call_method0("_dirty")?;
-        let view = py.import("core.store_mesh")?.getattr("FaceView")?;
+        let view = py.import("ingetrazo_core.store_mesh")?.getattr("FaceView")?;
         for key in result.get_item(0)?.try_iter()? {
             view.call1((&mesh, key?))?
                 .getattr("attrs")?
@@ -126,7 +126,7 @@ fn build_offset_face<'p>(
         if !store.call_method1("is_live", (face,))?.is_truthy()? {
             return Err(PyKeyError::new_err(face.clone().unbind()));
         }
-        py.import("core.store_mesh")?
+        py.import("ingetrazo_core.store_mesh")?
             .call_method1("FaceView", (mesh, face))?
     } else {
         face.clone()
@@ -186,7 +186,7 @@ fn build_offset_face<'p>(
         },
     )?)?;
     if outlines.len() == 1 && source.len() == outlines[0].len() {
-        let history = py.import("core.history")?;
+        let history = py.import("ingetrazo_core.history")?;
         let mut ids = Vec::new();
         for i in 0..source.len() {
             let a = mesh.call_method1("vertex_at", (outline.get_item(i)?,))?;
