@@ -1100,7 +1100,7 @@ impl MeshToolAccess {
             (painter, s.getattr("scene")?, s.getattr("camera")?, (width / scale, height / scale)),
             Some(&kw),
         )?;
-        py.import("core.plugin_panels")?.call_method1("draw_tool_feedback", (painter, s, &layout))?;
+        crate::plugin_panels::draw_tool_feedback(painter, s.as_any(), &layout)?;
         let snap = s.getattr("last_snap")?;
         if !snap.is_none() && attr(&snap, "kind")?.is_truthy()? && snap.hasattr("color")? {
             // With its tooltip ("Endpoint", "On Edge in group"), as GL.

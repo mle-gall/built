@@ -1,17 +1,17 @@
-"""Locate Built's native file packages, including first imports by plugins."""
+"""Locate Built's native packages, including first imports by plugins."""
 import sys
 
 
 class _FilePackages:
-    names = {"formats", "georef", "ingetrazo_core.formats", "ingetrazo_core.georef"}
+    names = {"tools", "formats", "georef", "ingetrazo_core.formats", "ingetrazo_core.georef"}
 
     def find_spec(self, fullname, path=None, target=None):
         if fullname not in self.names:
             return None
         from importlib.machinery import ModuleSpec, PathFinder
         spec = ModuleSpec(fullname, self, is_package=True)
-        if fullname == "formats":
-            # Keep the source or frozen package directories containing formats.ifc.
+        if fullname in ("tools", "formats"):
+            # Keep Python extension modules alongside the native package entries.
             disk = PathFinder.find_spec(fullname)
             if disk and disk.submodule_search_locations:
                 spec.submodule_search_locations.extend(disk.submodule_search_locations)
@@ -27,6 +27,9 @@ class _FilePackages:
             sys.modules[name] = import_module(name.rsplit(".", 1)[1])
             return
         import ingetrazo_core
+        if name == "tools":
+            ingetrazo_core.install_tool_modules(module.__path__)
+            return
         if name == "formats":
             ingetrazo_core.install_codec_modules(module)
         else:

@@ -86,8 +86,7 @@ fn offer_link_source(v: &Obj, group: &Obj) -> PyResult<()> {
                 .getattr_opt("open_path")?
                 .is_some_and(|f| f.is_callable())
             {
-                py.import("views.wgpu_tabs")?
-                    .call_method1("open_link_source", (win, path, group))?;
+                super::calls::open_link_source(&win, &path, group)?;
             }
         }
     }

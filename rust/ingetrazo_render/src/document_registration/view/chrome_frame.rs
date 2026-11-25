@@ -143,7 +143,7 @@ fn keep_dock_width<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 
 /// Once the window has built its tool actions (after the first view).
-fn send_tools<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn send_tools<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, win) = (a.get_item(0)?, a.get_item(1)?);
     let module = ui(py)?;
@@ -251,7 +251,7 @@ fn listed<'py>(py: Python<'py>, value: Obj<'py>) -> PyResult<Bound<'py, PyList>>
 }
 
 /// Model / sheet and the scenes for the bottom capsule bar.
-fn tabs<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn tabs<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, win) = (a.get_item(0)?, a.get_item(1)?);
     let scene = win.getattr("viewport")?.getattr("scene")?;
@@ -309,7 +309,7 @@ fn tabs<'py>(a: &Args<'py>) -> Reply<'py> {
 
 /// The app sheet and the work in progress
 /// (rust/ingetrazo_render/src/dialogs_host.rs).
-fn sheet_and_jobs<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn sheet_and_jobs<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, win) = (a.get_item(0)?, a.get_item(1)?);
     let dialogs = render(py)?.getattr("chrome_dialogs")?;
@@ -459,7 +459,7 @@ fn before_frame<'py>(a: &Args<'py>) -> Reply<'py> {
         return Ok(none(py));
     }
     let renderer = view.getattr("renderer")?;
-    py.import("core.plugin_panels")?.call_method1("sync", (&view, &win))?;
+    crate::plugin_panels::sync(&view, &win)?;
     if let Some(menus) = own(&win, "_extension_menus")? {
         if menus.is_truthy()? {
             menus.call_method1("present", (&view,))?;
@@ -854,7 +854,7 @@ fn show_all<'py>(a: &Args<'py>) -> Reply<'py> {
 
 /// Show only the placements `uids` (at any depth: a part of a linked file
 /// shows through the file's placement) until «Show all».
-fn isolate<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn isolate<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let win = a.get_item(0)?;
     let viewport = win.getattr("viewport")?;

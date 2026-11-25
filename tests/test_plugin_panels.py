@@ -115,3 +115,50 @@ def test_plugin_entry_points_open_the_registered_native_panels(window, monkeypat
     assert len(actions) == 1
     actions[0]()
     assert opened == [(window, "python_console"), (window, "render_blender")]
+
+
+def test_failed_panel_keeps_its_last_rows_and_retries():
+    def sections():
+        if broken:
+            raise SystemExit("unavailable")
+        return [plugin_panels.section("main", "Main", plugin_panels.item("log", "ok"))]
+
+    win = SimpleNamespace(viewport=SimpleNamespace(scene=SimpleNamespace(version=0)))
+    view = MagicMock(_plugin_document="doc")
+    win._doc = SimpleNamespace(stand_in=view)
+    model = SimpleNamespace(id="test", title="Test", slot="dock", sections=sections)
+    binding = plugin_panels.Binding(win, "owner", lambda *_: model, view)
+    view._plugin_bindings = {binding.instance: binding}
+
+    broken = False
+    binding.push()
+    good = sections()
+    broken = True
+    binding.invalidate()
+    binding.push()
+    rows = json.loads(view.renderer.ui_plugin_panel.call_args.args[0])["sections"]
+    assert rows[:-1] == good
+    assert rows[-1]["items"][1] == plugin_panels.item("button", "_retry", "Retry")
+
+    broken = False
+    plugin_panels.dispatch(win, json.dumps(dict(api=1, revision=0, document="doc",
+        plugin="owner", panel="test", instance=binding.instance, event_id=1,
+        control="_retry", event="invoke", value=None)))
+    binding.push()
+    assert json.loads(view.renderer.ui_plugin_panel.call_args.args[0])["sections"] == good
+
+
+def test_releasing_the_view_collects_a_panel_that_retains_its_invalidator():
+    import gc
+    import weakref
+
+    win = SimpleNamespace(viewport=SimpleNamespace(scene=SimpleNamespace(version=0)))
+    view = SimpleNamespace(_plugin_document="doc")
+    def factory(app, invalidate):
+        return SimpleNamespace(id="p", title="Panel", slot="dock", invalidate=invalidate)
+    binding = plugin_panels.Binding(win, "owner", factory, view)
+    view._plugin_bindings = {binding.instance: binding}
+    ref = weakref.ref(binding)
+    del binding, view
+    gc.collect()
+    assert ref() is None

@@ -52,8 +52,7 @@ fn install_extensions(w: &Obj<'_>, discovery: &Obj<'_>) -> PyResult<()> {
     )?;
     let plugins = discovery.get_item(0)?;
     w.setattr("_pending_extensions", &plugins)?;
-    py.import("core.plugin_panels")?
-        .call_method1("install", (w, &plugins))?;
+    crate::plugin_panels::install(w, &plugins)?;
     let running = PySet::empty(py)?;
     for plugin in plugins.try_iter()? {
         let plugin = plugin?;

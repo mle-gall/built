@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+use crate::document_registration::view::calls;
 use pyo3::{
     prelude::*,
     types::{PyBytes, PyDict},
@@ -154,7 +155,6 @@ pub(super) fn component_thumbnail<'p>(
 }
 
 pub(crate) fn upload(ctx: &Bound<'_, PyAny>, icons: &[String]) -> PyResult<()> {
-    let py = ctx.py();
     let scene = ctx.getattr("scene")?;
     let prefix = format!(
         "component:{}:{}:",
@@ -162,9 +162,7 @@ pub(crate) fn upload(ctx: &Bound<'_, PyAny>, icons: &[String]) -> PyResult<()> {
         scene.getattr("content_version")?
     );
     let view = ctx.getattr("view")?;
-    let rows = py
-        .import("views.wgpu_ui")?
-        .call_method1("_components_in_model", (&view, ctx.getattr("win")?))?;
+    let rows = calls::components_in_model(&view, &ctx.getattr("win")?)?;
     let mut batch = Vec::new();
     for key in icons {
         let Some(i) = key

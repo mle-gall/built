@@ -92,6 +92,48 @@ where
 pub(crate) mod calls {
     use super::*;
 
+    pub(crate) fn sheet_and_jobs<'py>(view: &Obj<'py>, win: &Obj<'py>) -> Reply<'py> {
+        direct(view.py(), chrome_frame::sheet_and_jobs, (view, win,))
+    }
+    pub(crate) fn send_tools<'py>(view: &Obj<'py>, win: &Obj<'py>) -> Reply<'py> {
+        direct(view.py(), chrome_frame::send_tools, (view, win,))
+    }
+    pub(crate) fn tabs<'py>(view: &Obj<'py>, win: &Obj<'py>) -> Reply<'py> {
+        direct(view.py(), chrome_frame::tabs, (view, win,))
+    }
+    pub(crate) fn mods<'py>(event: &Obj<'py>) -> Reply<'py> {
+        direct(event.py(), chrome_input::mods, (event,))
+    }
+    pub(crate) fn isolate<'py>(win: &Obj<'py>, groups: &Obj<'py>) -> Reply<'py> {
+        direct(win.py(), chrome_frame::isolate, (win, groups,))
+    }
+    pub(crate) fn select<'py>(win: &Obj<'py>, groups: &Obj<'py>) -> Reply<'py> {
+        direct(win.py(), chrome_tree::select, (win, groups,))
+    }
+    pub(crate) fn components_in_model<'py>(view: &Obj<'py>, win: &Obj<'py>) -> Reply<'py> {
+        direct(view.py(), chrome_tree::components_in_model, (view, win,))
+    }
+    pub(crate) fn document_tabs<'py>(view: &Obj<'py>) -> Reply<'py> {
+        direct(view.py(), frame_tabs::document_tabs, (view,))
+    }
+    pub(crate) fn open_link_source<'py>(win: &Obj<'py>, path: &Obj<'py>, group: &Obj<'py>) -> Reply<'py> {
+        direct(win.py(), frame_tabs::open_link_source, (win, path, group,))
+    }
+    pub(crate) fn run_action<'py>(win: &Obj<'py>, id: &str, view: &Obj<'py>) -> Reply<'py> {
+        direct(win.py(), chrome_actions::run, (win, [format!("act:{id}")], view))
+    }
+    pub(crate) fn key_name<'py>(event: &Obj<'py>) -> Reply<'py> {
+        chrome_input::key_name(event.py(), event)
+    }
+    pub(crate) fn pointer_button<'py>(button: &Obj<'py>) -> Reply<'py> {
+        chrome_input::pointer_button(button)
+    }
+    pub(crate) fn draw_builtin_feedback<'py>(painter: &Obj<'py>, tools: &Obj<'py>, layout: &Obj<'py>) -> PyResult<()> {
+        direct(painter.py(), frame_annotations::draw_tool_feedback, (painter, tools, layout)).map(drop)
+    }
+    pub(crate) fn paint_primitives<'py>(painter: &Obj<'py>, primitives: &Bound<'py, PyList>) -> PyResult<()> {
+        direct(painter.py(), frame_lines::paint_layer, (painter, primitives, painter.py().None())).map(drop)
+    }
     /// Where the model is seen, in device coordinates; `None` without the
     /// chrome (`ui.rs` `free_ndc`).
     pub(crate) fn free_area<'py>(win: &Obj<'py>) -> Reply<'py> {
@@ -141,7 +183,7 @@ pub(crate) mod calls {
 fn install(owner: &Obj, namespace: &Bound<PyDict>, entries: &[Method]) -> PyResult<()> {
     let py = owner.py();
     let registrar = Bindings::new(py)?
-        .with_plugin_method(py.import("tools")?.getattr("_plugin_method")?)
+        .with_plugin_method(py.import("views")?.getattr("_plugin_method")?)
         .with_module_annotations(namespace)?;
     for &(name, mode, action, args, result, doc) in entries {
         registrar.define(

@@ -36,7 +36,7 @@ pub(super) fn register(cls: &Obj, module: &Bound<PyModule>) -> PyResult<()> {
         )],
     )?;
     let registrar = Bindings::new(cls.py())?
-        .with_plugin_method(cls.py().import("tools")?.getattr("_plugin_method")?)
+        .with_plugin_method(cls.py().import("views")?.getattr("_plugin_method")?)
         .with_module_annotations(&ns)?;
     registrar.install(
         cls,

@@ -1,5 +1,6 @@
 //! Commands shared by native chrome and the classic host. View flags and the
 //! camera still live on the document controller, supplied as a frame snapshot.
+use crate::document_registration::view::calls;
 use pyo3::prelude::*;
 use std::collections::{HashMap, HashSet};
 
@@ -251,7 +252,7 @@ pub fn run_view_command(win: &Bound<'_, PyAny>, id: &str, on: bool) -> PyResult<
         Method(method) => win.call_method0(method)?,
         Chrome => {
             let view = win.getattr("_doc")?.getattr("stand_in")?;
-            win.py().import("views.wgpu_ui")?.call_method1("_run", (win, [format!("act:{id}")], view))?
+            calls::run_action(win, id, &view)?
         }
     };
     Ok(true)
