@@ -205,7 +205,7 @@ fn arrays_of<'p>(mesh: &Obj<'p>) -> PyResult<Bundle<'p>> {
         a.borrow_mut().edge_face_counts = Some(counts.unbind());
         a
     } else if !store.is_none() {
-        py.import("core.store_mesh")?
+        py.import("ingetrazo_core.store_mesh")?
             .call_method1("faces_arrays", (mesh,))?
             .cast_into::<Arrays>()?
     } else {
@@ -225,7 +225,7 @@ fn arrays_of<'p>(mesh: &Obj<'p>) -> PyResult<Bundle<'p>> {
 fn face_attributes<'p>(mesh: &Obj<'p>) -> PyResult<Vec<Obj<'p>>> {
     let py = mesh.py();
     let ty = mesh.get_type();
-    let (table, keys) = if ty.is(&py.import("core.mesh")?.getattr("DeferredMesh")?) {
+    let (table, keys) = if ty.is(&py.import("ingetrazo_core.mesh")?.getattr("DeferredMesh")?) {
         let src = mesh.getattr("__dict__")?.get_item("_deferred_source")?;
         let json = py.import("formats.igz")?.getattr("_face_attrs_from_json")?;
         let attrs = src.get_item("meta")?.call_method1("get", ("face_attrs",))?;

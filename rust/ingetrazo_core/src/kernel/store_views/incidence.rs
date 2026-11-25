@@ -7,7 +7,7 @@ use pyo3::{
     types::{PyList, PySet},
 };
 fn views<'py>(mesh: &Obj<'py>, class: &str, keys: &Obj<'py>) -> PyResult<Bound<'py, PyList>> {
-    let make = mesh.py().import("core.store_mesh")?.getattr(class)?;
+    let make = mesh.py().import("ingetrazo_core.store_mesh")?.getattr(class)?;
     let elements = PyList::empty(mesh.py());
     for key in keys.try_iter()? {
         elements.append(make.call1((mesh, key?))?)?;
@@ -27,7 +27,7 @@ fn vertex_edges<'py>(view: &Obj<'py>) -> PyResult<Obj<'py>> {
     let st = mesh.getattr("_store")?;
     let keys = st.call_method1("vertex_edges", (view.getattr("key")?,))?;
     view.py()
-        .import("core.store_mesh")?
+        .import("ingetrazo_core.store_mesh")?
         .call_method1("_MutSet", (views(&mesh, "EdgeView", &keys)?,))
 }
 #[pyfunction]
@@ -45,7 +45,7 @@ fn edge_faces<'py>(view: &Obj<'py>) -> PyResult<Obj<'py>> {
     let mesh = view.getattr("_m")?;
     let st = mesh.getattr("_store")?;
     let keys = st.call_method1("edge_faces", (view.getattr("key")?,))?;
-    view.py().import("core.store_mesh")?.call_method1(
+    view.py().import("ingetrazo_core.store_mesh")?.call_method1(
         "_MutList",
         (view, ("faces",), views(&mesh, "FaceView", &keys)?),
     )
@@ -66,7 +66,7 @@ fn face_loops<'py>(holes: bool, view: &Obj<'py>) -> PyResult<Obj<'py>> {
     let mesh = view.getattr("_m")?;
     let st = mesh.getattr("_store")?;
     let rings = st.call_method1("face_rings", (view.getattr("key")?,))?;
-    let list = view.py().import("core.store_mesh")?.getattr("_MutList")?;
+    let list = view.py().import("ingetrazo_core.store_mesh")?.getattr("_MutList")?;
     if !holes {
         return list.call1((
             view,

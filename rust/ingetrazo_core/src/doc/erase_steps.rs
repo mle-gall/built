@@ -17,7 +17,7 @@ fn point(v: &Obj<'_>) -> PyResult<[f64; 3]> {
 }
 
 fn views<'py>(py: Python<'py>, class: &str, mesh: &Obj<'py>, keys: &[u128]) -> PyResult<Obj<'py>> {
-    let view = py.import("core.store_mesh")?.getattr(class)?;
+    let view = py.import("ingetrazo_core.store_mesh")?.getattr(class)?;
     Ok(PyList::new(py, keys.iter().map(|k| view.call1((mesh, *k))).collect::<PyResult<Vec<_>>>()?)?.into_any())
 }
 
@@ -80,7 +80,7 @@ fn run_delete_face(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<
     let removed = command_delete_face(&mesh, outer)?
         .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("deletion requires a store mesh"))?;
     let face = match removed.face {
-        Some(key) => py.import("core.store_mesh")?.getattr("FaceView")?.call1((&mesh, key))?,
+        Some(key) => py.import("ingetrazo_core.store_mesh")?.getattr("FaceView")?.call1((&mesh, key))?,
         None => py.None().into_bound(py),
     };
     if !face.is_none() {

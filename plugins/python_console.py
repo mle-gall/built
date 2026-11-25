@@ -46,7 +46,7 @@ class _ConsoleExecution:
         from ingetrazo_core import Vec3 as QVector3D
         from core import bim
         from core.group import Group
-        from core.mesh import Edge, Face, Mesh, Vertex
+        from ingetrazo_core.mesh import Edge, Face, Mesh, Vertex
         from core.scene import Scene
 
         vp = self._viewport

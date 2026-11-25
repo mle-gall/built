@@ -6,7 +6,7 @@ import pytest
 from core.history import History
 from core.protocol import commands, queries
 from core.scene import Scene
-from core.store_mesh import StoreMesh
+from ingetrazo_core.store_mesh import StoreMesh
 
 pytest.importorskip("ingetrazo_core")
 

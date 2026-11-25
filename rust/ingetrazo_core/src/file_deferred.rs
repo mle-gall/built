@@ -344,7 +344,7 @@ fn igz_load_mesh_json(mesh: &Obj<'_>, payload: &Obj<'_>) -> PyResult<()> {
             ),
         )?;
         if let Some(cid) = max_curve {
-            bump(&py.import("core.mesh")?, &cid)?
+            bump(&py.import("ingetrazo_core.mesh")?, &cid)?
         }
         em
     } else {
@@ -448,7 +448,7 @@ fn igz_load_mesh(mesh: &Obj<'_>, payload: &Obj<'_>, geom: Option<&Obj<'_>>) -> P
     } else {
         p = codec.call_method1("_without_nonfinite", (payload,))?
     }
-    let module = py.import("core.mesh")?;
+    let module = py.import("ingetrazo_core.mesh")?;
     if arrays
         || (py
             .import("core._native")?
@@ -457,7 +457,7 @@ fn igz_load_mesh(mesh: &Obj<'_>, payload: &Obj<'_>, geom: Option<&Obj<'_>>) -> P
             && (mesh.get_type().is(&module.getattr("Mesh")?)
                 || mesh
                     .get_type()
-                    .is(&py.import("core.store_mesh")?.getattr("StoreMesh")?)))
+                    .is(&py.import("ingetrazo_core.store_mesh")?.getattr("StoreMesh")?)))
     {
         if !arrays {
             src = codec.call_method1("_json_arrays", (&p,))?
@@ -501,7 +501,7 @@ fn igz_load_geometry<'p>(mesh: &Obj<'p>, meta: &Obj<'p>, geom: &Obj<'p>) -> PyRe
     let py = mesh.py();
     let codec = api(py)?;
     let np = py.import("numpy")?;
-    let module = py.import("core.mesh")?;
+    let module = py.import("ingetrazo_core.mesh")?;
     let a = codec.call_method1("_document_geometry_arrays", (meta, geom))?;
     let s = PyDict::new(py);
     s.set_item("meta", meta)?;
@@ -694,7 +694,7 @@ fn igz_build_geometry(
 #[pyfunction]
 fn igz_normalize_text_curve_ids(payload: &Obj<'_>, geom: &Obj<'_>) -> PyResult<()> {
     let py = payload.py();
-    let module = py.import("core.mesh")?;
+    let module = py.import("ingetrazo_core.mesh")?;
     let codec = api(py)?;
     let mut edges = vec![];
     let mut binary = vec![];

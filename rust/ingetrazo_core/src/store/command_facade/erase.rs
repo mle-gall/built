@@ -56,7 +56,7 @@ fn merge_attrs(mesh: &Bound<'_, PyAny>, store: &Bound<'_, PyAny>, merges: Merges
     }
     let py = mesh.py();
     let owner = py
-        .import("core.store_mesh")?
+        .import("ingetrazo_core.store_mesh")?
         .call_method1("_attribute_owner", (mesh,))?;
     let own = owner.get_item("_attr_own")?.cast_into::<PyDict>()?;
     for (target, sources, stacked) in merges {

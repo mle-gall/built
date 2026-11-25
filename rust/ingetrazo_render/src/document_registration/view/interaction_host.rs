@@ -355,7 +355,7 @@ fn dependencies(m: &Bound<PyModule>) -> PyResult<()> {
     m.add("weakref", py.import("weakref")?)?;
     let groups: &[(&str, &[(&str, &str)])] = &[
         (
-            "core.mesh",
+            "ingetrazo_core.mesh",
             &[
                 ("element_identity", "element_identity"),
                 ("Edge", "Edge"),

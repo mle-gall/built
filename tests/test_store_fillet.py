@@ -8,7 +8,8 @@ import numpy as np
 import pytest
 from ingetrazo_core import Vec3 as V
 
-from core import _native, mesh as M, store_mesh as S
+from core import _native
+from ingetrazo_core import mesh as M, store_mesh as S
 from ingetrazo_core import apply_fillet, plan_fillet
 from core.history import SnapshotMutation
 from ingetrazo_core import plan_vertex_bevel

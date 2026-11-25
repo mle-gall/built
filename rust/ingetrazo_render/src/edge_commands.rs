@@ -9,7 +9,7 @@ fn live_edges<'py>(
     mesh: &Bound<'py, PyAny>,
     selection: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyList>> {
-    let selected = matching(selection, "core.mesh", "Edge")?;
+    let selected = matching(selection, "ingetrazo_core.mesh", "Edge")?;
     if selected.is_empty() {
         return Ok(selected);
     }

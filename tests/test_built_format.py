@@ -6,7 +6,8 @@ import zipfile
 import numpy as np
 import pytest
 
-from core import _native, store_mesh
+from core import _native
+from ingetrazo_core import store_mesh
 from core.group import Group
 from core.scene import Scene
 from formats import built, igz

@@ -30,7 +30,7 @@ fn face_winding(win: &Bound<'_, PyAny>, orient: bool) -> PyResult<()> {
     let vp = win.getattr("viewport")?;
     let faces = matching(
         &vp.getattr("scene")?.getattr("selection")?,
-        "core.mesh",
+        "ingetrazo_core.mesh",
         "Face",
     )?;
     let targets = if orient {
@@ -232,7 +232,7 @@ fn rebuild_faces(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let vp = win.getattr("viewport")?;
     let picked = matching(
         &vp.getattr("scene")?.getattr("selection")?,
-        "core.mesh",
+        "ingetrazo_core.mesh",
         "Face",
     )?;
     let history = py.import("ingetrazo_core.history")?;

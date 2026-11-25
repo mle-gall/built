@@ -11,7 +11,7 @@ from core.intersect import WITH_CONTEXT, build_intersect_faces
 from core.mesh import Mesh
 from core.protocol.commands import run
 from core.scene import Scene
-from core.store_mesh import StoreMesh
+from ingetrazo_core.store_mesh import StoreMesh
 from tests.test_offset_regions import _VP, _offset
 from tests.test_store_mesh import fingerprint
 from tests.test_store_pieces_explode import _cube

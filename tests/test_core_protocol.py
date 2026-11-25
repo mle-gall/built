@@ -22,7 +22,7 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 import core._native as _native
 from core import mesh as M
-from core import store_mesh as S
+from ingetrazo_core import store_mesh as S
 from core.history import (AssignLayerCommand, History, InsertGroupCommand,
                           SetFaceColorCommand)
 from core.protocol import commands as C

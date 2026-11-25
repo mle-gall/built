@@ -7,10 +7,10 @@ use pyo3::{
 };
 const LOCAL: u128 = (1 << 40) - 1;
 fn module<'py>(py: Python<'py>) -> PyResult<Obj<'py>> {
-    crate::model::module(py, "core.store_mesh")
+    crate::model::module(py, "ingetrazo_core.store_mesh")
 }
 fn namespace(py: Python<'_>) -> PyResult<u64> {
-    crate::model::module(py, "core.mesh")?
+    crate::model::module(py, "ingetrazo_core.mesh")?
         .getattr("_KEY_NAMESPACES")?
         .call_method0("__next__")?
         .extract()

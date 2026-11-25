@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.store_mesh import plan_cap_plane as rebuild_plane
+from ingetrazo_core.store_mesh import plan_cap_plane as rebuild_plane
 from core.mesh import Mesh
 from core.orient import orient_outward
 from core.scene import Scene
@@ -213,7 +213,7 @@ def test_pushed_prism_cap_rebuild_matches_committed_face(perm, normal):
     kinds = [classify_push_edge(face, base[i], base[(i + 1) % count], sc.faces)
              for i in range(count)]
     attached = all(k != "free" for k, _ in kinds)
-    from core.store_mesh import _hypot
+    from ingetrazo_core.store_mesh import _hypot
     dirty, *_ = m._store.push_shell(face.key, [[p.toTuple() for p in base]],
                                     [[p.toTuple() for p in top]], (fn * d).toTuple(),
                                     attached, None, _hypot())

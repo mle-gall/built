@@ -158,7 +158,7 @@ def test_near_coincident_cloud_keeps_the_plan_vertex_order(seed):
 @pytest.mark.parametrize("dtype, vertex_count", [(np.float32, 1), (np.float64, 2)])
 def test_deferred_weld_at_the_radius(monkeypatch, dtype, vertex_count):
     from core.group import _local_points
-    from core.store_mesh import StoreMesh
+    from ingetrazo_core.store_mesh import StoreMesh
 
     mod = pytest.importorskip("ingetrazo_core")
     monkeypatch.setattr(_native, "native", mod)

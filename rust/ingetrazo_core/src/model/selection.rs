@@ -40,7 +40,7 @@ const OTHER: usize = 4;
 fn element_classes(py: Python<'_>) -> PyResult<&'static [Py<PyAny>; 3]> {
     static CLASSES: pyo3::sync::PyOnceLock<[Py<PyAny>; 3]> = pyo3::sync::PyOnceLock::new();
     CLASSES.get_or_try_init(py, || {
-        let mesh = py.import("core.mesh")?;
+        let mesh = py.import("ingetrazo_core.mesh")?;
         Ok([mesh.getattr("Vertex")?.unbind(), mesh.getattr("Edge")?.unbind(), mesh.getattr("Face")?.unbind()])
     })
 }

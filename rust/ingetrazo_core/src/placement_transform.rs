@@ -54,7 +54,7 @@ pub(crate) fn shift_group(scene: &Obj<'_>, g: &Obj<'_>, delta: &Obj<'_>) -> PyRe
 #[pyfunction]
 pub(crate) fn flip_groups(scene: &Obj<'_>, groups: Vec<Obj<'_>>, m: &Obj<'_>) -> PyResult<()> {
     let py = scene.py();
-    let store = py.import("core.store_mesh")?.getattr("StoreMesh")?;
+    let store = py.import("ingetrazo_core.store_mesh")?.getattr("StoreMesh")?;
     for g in groups {
         let pose = crate::doc::history_support::member_placement(scene,&g)?;
         if !pose.is_none() {

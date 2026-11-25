@@ -138,7 +138,7 @@ fn run_transform(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()
         .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("transform would leave unsupported topology"))?;
     version(scene)?;
     if let Some(faces) = me.getattr_opt("_faces")?.filter(|f| f.is_truthy().unwrap_or(false)) {
-        let face_type = py.import("core.mesh")?.getattr("Face")?;
+        let face_type = py.import("ingetrazo_core.mesh")?.getattr("Face")?;
         let mut picked = Vec::new();
         for f in faces.try_iter()? {
             let f = f?;

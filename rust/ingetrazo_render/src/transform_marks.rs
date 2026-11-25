@@ -9,7 +9,7 @@ pub fn edge_vertices(
     hover: Option<&Bound<'_, PyAny>>,
     keys: HashSet<u128>,
 ) -> PyResult<Vec<u8>> {
-    let edge = selection.py().import("core.mesh")?.getattr("Edge")?;
+    let edge = selection.py().import("ingetrazo_core.mesh")?.getattr("Edge")?;
     let mut bytes = Vec::new();
     let mut add = |e: &Bound<'_, PyAny>, color: [u8; 4]| -> PyResult<()> {
         if e.is_instance(&edge)? {

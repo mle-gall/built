@@ -199,7 +199,7 @@ fn repair_item(mesh: &Obj<'_>, item: &Obj<'_>) -> PyResult<HashMap<&'static str,
         }
         "reversed" => {
             mesh.py()
-                .import("core.mesh")?
+                .import("ingetrazo_core.mesh")?
                 .call_method1("turn_face_over", (ents.get_item(0)?,))?;
             winding(mesh)?;
             done.insert("reversed", 1);

@@ -22,7 +22,7 @@ fn coords(seq: &Obj) -> PyResult<Vec<[f64; 3]>> {
     Ok(points(seq)?.iter().map(DVec3::to_array).collect())
 }
 fn hypot(py: Python) -> PyResult<String> {
-    py.import("core.store_mesh")?
+    py.import("ingetrazo_core.store_mesh")?
         .call_method0("_hypot")?
         .extract()
 }
@@ -197,7 +197,7 @@ fn sweep_store(mesh: &Obj, face: &Obj, path: &Obj, closed: bool, h: &Obj) -> PyR
     }
     let typed = ss.extract::<Vec<Station>>()?;
     let before = store.call_method0("snapshot")?;
-    let adapter = py.import("core.store_mesh")?;
+    let adapter = py.import("ingetrazo_core.store_mesh")?;
     let cap = if !closed && typed.first().is_some_and(|s| s.len() > 2) {
         let mut first = typed[0][1..].to_vec();
         for ring in &mut first {
@@ -225,7 +225,7 @@ fn sweep_store(mesh: &Obj, face: &Obj, path: &Obj, closed: bool, h: &Obj) -> PyR
     mesh.call_method0("_dirty")?;
     stitch(mesh, &typed)?;
     let finished = store.call_method1("finish_sweep", (before, key, path, ss, closed, h))?;
-    let mesh_class = py.import("core.mesh")?.getattr("Mesh")?;
+    let mesh_class = py.import("ingetrazo_core.mesh")?.getattr("Mesh")?;
     for run in finished.get_item(0)?.try_iter()? {
         store.call_method1(
             "set_curve_run",
@@ -238,7 +238,7 @@ fn sweep_store(mesh: &Obj, face: &Obj, path: &Obj, closed: bool, h: &Obj) -> PyR
 #[pyfunction]
 fn sweep_profile(mesh: &Obj, face: &Obj, path: &Obj, closed: bool) -> PyResult<bool> {
     let py = mesh.py();
-    let adapter = py.import("core.store_mesh")?;
+    let adapter = py.import("ingetrazo_core.store_mesh")?;
     if !adapter.call_method1("_store_of", (mesh,))?.is_none() {
         let h = adapter.call_method0("_hypot")?;
         if h.is_truthy()? {

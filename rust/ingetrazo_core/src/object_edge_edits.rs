@@ -79,7 +79,7 @@ pub(crate) fn divide_edges(mesh: &Obj<'_>, edges: &Obj<'_>, n: usize) -> PyResul
         return Ok(0);
     }
     let py = mesh.py();
-    let api = py.import("core.mesh")?;
+    let api = py.import("ingetrazo_core.mesh")?;
     let flags = api.getattr("edge_flags")?;
     let stamp = api.getattr("stamp_edge_flags")?;
     let mut cuts = 0;
@@ -166,7 +166,7 @@ pub(crate) fn join_edges<'py>(
     verdicts: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Vec<Obj<'py>>> {
     let py = mesh.py();
-    let api = py.import("core.mesh")?;
+    let api = py.import("ingetrazo_core.mesh")?;
     let flags = api.getattr("edge_flags")?;
     let mut picked = HashSet::new();
     let mut seen = HashSet::new();

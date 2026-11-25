@@ -79,8 +79,8 @@ fn change_visibility(win: &Bound<'_, PyAny>, verb: &str) -> PyResult<()> {
             let hidden = py.import("ingetrazo_core")?.getattr("is_hidden")?;
             let out = PyList::empty(py);
             for (module, name) in [
-                ("core.mesh", "Edge"),
-                ("core.mesh", "Face"),
+                ("ingetrazo_core.mesh", "Edge"),
+                ("ingetrazo_core.mesh", "Face"),
                 ("core.group", "Group"),
             ] {
                 add_hidden(&out, matching(&selection, module, name)?.as_any(), &hidden)?;
@@ -111,7 +111,7 @@ fn change_visibility(win: &Bound<'_, PyAny>, verb: &str) -> PyResult<()> {
     let vars = PyDict::new(py);
     let (msg, ms) = if hide {
         let objs = matching(&targets, "core.group", "Group")?.len();
-        let faces = matching(&targets, "core.mesh", "Face")?.len();
+        let faces = matching(&targets, "ingetrazo_core.mesh", "Face")?.len();
         vars.set_item("objects", objs)?;
         vars.set_item("faces", faces)?;
         vars.set_item("edges", targets.len()? - objs - faces)?;

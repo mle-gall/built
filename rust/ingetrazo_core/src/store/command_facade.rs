@@ -110,7 +110,7 @@ pub(crate) fn command_add_face(
         );
     }
     let owner = py
-        .import("core.store_mesh")?
+        .import("ingetrazo_core.store_mesh")?
         .call_method1("_attribute_owner", (mesh,))?;
     let scan = divide
         && py

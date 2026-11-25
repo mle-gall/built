@@ -88,7 +88,7 @@ pub(crate) fn resolve_mesh<'py>(scene: &Obj<'py>, r#ref: Option<&Obj<'py>>) -> P
 }
 #[pyfunction]
 pub(crate) fn kind_of(element: &Obj<'_>) -> PyResult<Option<&'static str>> {
-    let module = element.py().import("core.mesh")?;
+    let module = element.py().import("ingetrazo_core.mesh")?;
     for (cls, kind) in [("Face", "face"), ("Edge", "edge"), ("Vertex", "vertex")] {
         if element.is_instance(&module.getattr(cls)?)? {
             return Ok(Some(kind));
@@ -125,7 +125,7 @@ fn from_store<'py>(
     if ((value >> 38) & 3) as usize != kind || !st.call_method1("is_live", (k,))?.is_truthy()? {
         return Ok(None);
     }
-    Ok(Some(m.py().import("core.store_mesh")?.call_method1(
+    Ok(Some(m.py().import("ingetrazo_core.store_mesh")?.call_method1(
         ["VertexView", "EdgeView", "FaceView"][kind],
         (m, k),
     )?))

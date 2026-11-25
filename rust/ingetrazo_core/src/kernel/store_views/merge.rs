@@ -9,7 +9,7 @@ use pyo3::{
     types::{PyDict, PyList},
 };
 fn api(py: Python<'_>) -> PyResult<Obj<'_>> {
-    crate::model::module(py, "core.store_mesh")
+    crate::model::module(py, "ingetrazo_core.store_mesh")
 }
 fn hypot(py: Python<'_>) -> PyResult<Obj<'_>> {
     crate::model::module(py, "core._native")?.call_method0("qt_hypot")

@@ -14,7 +14,7 @@ pub(super) fn field<'py>(
     table: &Obj<'py>,
 ) -> PyResult<Obj<'py>> {
     let py = mesh.py();
-    let views = py.import("core.store_mesh")?;
+    let views = py.import("ingetrazo_core.store_mesh")?;
     let view = |kind, slot| {
         let class = match kind {
             Kind::Vertex => "VertexView",

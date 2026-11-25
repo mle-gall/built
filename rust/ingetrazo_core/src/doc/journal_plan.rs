@@ -51,7 +51,7 @@ pub(super) fn enlist(
         return uses_transaction(cmd, scene);
     }
     let meshes = cmd.call_method1("geometry_meshes", (scene,))?;
-    let native = cmd.py().import("core.store_mesh")?.getattr("StoreMesh")?;
+    let native = cmd.py().import("ingetrazo_core.store_mesh")?.getattr("StoreMesh")?;
     let stores = PyList::empty(cmd.py());
     for mesh in meshes.try_iter()? {
         let mesh = mesh?;

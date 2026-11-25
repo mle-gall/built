@@ -114,7 +114,7 @@ pub(super) fn mesh_change<'py>(
     let backing = if let Some(st) = &store {
         kw.set_item("revision", st.getattr("revision")?)?;
         if !before.is_none() {
-            let state = py.import("core.store_mesh")?.getattr("StoreState")?;
+            let state = py.import("ingetrazo_core.store_mesh")?.getattr("StoreState")?;
             let snap = st.call_method0("snapshot")?;
             let change = if before.is_instance(&state)? {
                 let d = m.getattr("__dict__")?;

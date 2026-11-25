@@ -21,7 +21,7 @@ fn point(v: &Obj<'_>) -> PyResult<[f64; 3]> {
 }
 
 fn view<'py>(py: Python<'py>, class: &str, mesh: &Obj<'py>, key: u128) -> PyResult<Obj<'py>> {
-    py.import("core.store_mesh")?.getattr(class)?.call1((mesh, key))
+    py.import("ingetrazo_core.store_mesh")?.getattr(class)?.call1((mesh, key))
 }
 
 
@@ -112,7 +112,7 @@ fn after_face(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Option<&st
         if let Some(before) = s.remembered(py, 0).filter(|b| !b.is_none()) {
             let mesh = scene.getattr("mesh")?;
             let edges = mesh.getattr("edges")?;
-            let edge_type = py.import("core.mesh")?.getattr("Edge")?;
+            let edge_type = py.import("ingetrazo_core.mesh")?.getattr("Edge")?;
             let selected: Vec<Obj<'_>> = scene.getattr("selection")?.try_iter()?.filter_map(|e| e.ok())
                 .filter(|e| e.is_instance(&edge_type).unwrap_or(false) && edges.contains(e).unwrap_or(false))
                 .collect();

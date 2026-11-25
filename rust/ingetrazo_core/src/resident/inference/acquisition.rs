@@ -274,7 +274,7 @@ pub(super) fn face_centers_near<'p>(
             None => Ok(false),
         }
     };
-    let mesh = py.import("core.mesh")?;
+    let mesh = py.import("ingetrazo_core.mesh")?;
     let center = py.import("core.snap")?.getattr("face_center_of_face")?;
     let out = PyList::empty(py);
     let append = |c: Obj<'p>, ctx: Option<&str>| -> PyResult<()> {

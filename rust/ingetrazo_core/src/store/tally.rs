@@ -18,7 +18,7 @@ type Obj<'py> = Bound<'py, PyAny>;
 /// `(store facade, attribute table, own dicts)` of a live store-backed mesh.
 fn parts<'py>(mesh: &Obj<'py>) -> PyResult<Option<(Obj<'py>, Bound<'py, PyList>, Bound<'py, PyDict>)>> {
     let py = mesh.py();
-    let store_mesh = py.import("core.store_mesh")?.getattr("StoreMesh")?;
+    let store_mesh = py.import("ingetrazo_core.store_mesh")?.getattr("StoreMesh")?;
     if !mesh.get_type().is(&store_mesh) {
         return Ok(None);
     }

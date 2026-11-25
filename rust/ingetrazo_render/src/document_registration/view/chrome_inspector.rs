@@ -428,7 +428,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     let others = sel.len() - groups.len();
     if others != 0 {
-        let mesh = py.import("core.mesh")?;
+        let mesh = py.import("ingetrazo_core.mesh")?;
         let (edge, face) = (mesh.getattr("Edge")?, mesh.getattr("Face")?);
         let names = empty(py);
         for entity in sel.iter() {
@@ -799,7 +799,7 @@ pub(super) fn curve_of<'py>(a: &Args<'py>) -> Reply<'py> {
     if !sel.is_truthy()? || sel.len()? > 4096 {
         return Ok(none(py));
     }
-    let edge = py.import("core.mesh")?.getattr("Edge")?;
+    let edge = py.import("ingetrazo_core.mesh")?.getattr("Edge")?;
     let ids = PySet::empty(py)?;
     for entity in sel.try_iter()? {
         let entity = entity?;

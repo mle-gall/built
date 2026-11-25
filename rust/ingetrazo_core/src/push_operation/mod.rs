@@ -31,7 +31,7 @@ fn module(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
     py.import("core.push_pull")
 }
 fn tol(py: Python<'_>) -> PyResult<f64> {
-    py.import("core.mesh")?.getattr("_STITCH_TOL")?.extract()
+    py.import("ingetrazo_core.mesh")?.getattr("_STITCH_TOL")?.extract()
 }
 fn bump(scene: &Obj) -> PyResult<()> {
     scene.setattr("version", scene.getattr("version")?.add(1)?)

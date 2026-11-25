@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Registration boundary for the modelling kernel and its scripting adapters.
+pub(crate) mod mesh_api;
 pub(crate) mod object_boundary;
 pub(crate) mod object_incidence;
 pub(crate) mod object_repair;

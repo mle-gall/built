@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from ingetrazo_core import Vec3 as V
 from core import arrangement, push_scans, snap_query, topology
-from core.mesh import Mesh
+from ingetrazo_core.mesh import Mesh
 
 
 def cases():

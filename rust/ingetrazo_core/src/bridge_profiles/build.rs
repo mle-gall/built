@@ -55,7 +55,7 @@ pub(super) fn follow_neighbours<'py>(
     let new_ids = keys(new)?;
     let mut settled = HashSet::new();
     let turned = PyList::empty(py);
-    let turn = crate::model::module(py, "core.mesh")?.getattr("turn_face_over")?;
+    let turn = crate::model::module(py, "ingetrazo_core.mesh")?.getattr("turn_face_over")?;
     let spread = |queue: &mut VecDeque<Obj<'py>>, settled: &mut HashSet<u128>| -> PyResult<()> {
         while let Some(g) = queue.pop_front() {
             for edge in edges(mesh, &g)? {

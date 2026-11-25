@@ -9,7 +9,7 @@ use pyo3::{
 };
 use std::collections::{HashMap, HashSet};
 fn api(py: Python<'_>) -> PyResult<Obj<'_>> {
-    crate::model::module(py, "core.store_mesh")
+    crate::model::module(py, "ingetrazo_core.store_mesh")
 }
 fn bump(m: &Obj<'_>) -> PyResult<()> {
     m.setattr("_chunk_dirty", true)?;
@@ -79,7 +79,7 @@ fn bulk_weld<'py>(mesh: &Obj<'py>, pos: &Obj<'py>) -> PyResult<(Obj<'py>, Obj<'p
         ));
     }
     let (keys, ids) = if fresh {
-        let ns = crate::model::module(py, "core.mesh")?
+        let ns = crate::model::module(py, "ingetrazo_core.mesh")?
             .getattr("_KEY_NAMESPACES")?
             .call_method0("__next__")?;
         let kw = api(py)?.call_method0("_weld_args")?.cast_into::<PyDict>()?;

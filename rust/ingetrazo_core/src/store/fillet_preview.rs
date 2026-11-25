@@ -105,7 +105,7 @@ fn preview<'py>(
         }
         Err(e) => return Err(e),
     };
-    let view = py.import("core.store_mesh")?.getattr("FaceView")?;
+    let view = py.import("ingetrazo_core.store_mesh")?.getattr("FaceView")?;
     let attrs = |key: u128| {
         view.call1((mesh, key))?
             .getattr("attrs")?

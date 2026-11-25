@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 from ingetrazo_core import Vec3 as V
 
-import core.store_mesh as S
+import ingetrazo_core.store_mesh as S
 from core.history import AddFaceCommand, History
 from core.protocol.commands import push_pull
 from core.protocol.keys import to_json_key

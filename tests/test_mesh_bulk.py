@@ -11,7 +11,7 @@ import pytest
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
-from core.store_mesh import StoreMesh
+from ingetrazo_core.store_mesh import StoreMesh
 
 
 def _gen_faces(n, seed):

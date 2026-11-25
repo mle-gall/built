@@ -679,7 +679,7 @@ fn build<'p>(py: Python<'p>, b: &Bucket, scale: f64, offset: DVec3) -> PyResult<
         let edges = Array2::from_shape_vec((curves.len(), 2), endpoints)
             .unwrap()
             .into_pyarray(py);
-        let store_api = py.import("core.store_mesh")?;
+        let store_api = py.import("ingetrazo_core.store_mesh")?;
         if mesh.get_type().is(&store_api.getattr("StoreMesh")?)
             && mesh
                 .getattr("_store")?

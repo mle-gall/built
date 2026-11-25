@@ -232,7 +232,7 @@ impl ScanOverlay {
         let extra = self.extras(py, w)?;
         let ends = extra.iter().map(endpoints).collect::<PyResult<Vec<_>>>()?;
         let hypot = py
-            .import("core.store_mesh")?
+            .import("ingetrazo_core.store_mesh")?
             .call_method0("_hypot")?
             .extract::<Option<String>>()?
             .unwrap_or_else(|| "libstdc++".into());

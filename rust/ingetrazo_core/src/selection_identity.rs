@@ -91,7 +91,7 @@ impl Materials {
         }
         if let Ok(mesh) = obj.getattr("mesh") {
             // Selecting an imported part must not build its mesh.
-            if mesh.get_type().is(&mesh.py().import("core.mesh")?.getattr("DeferredMesh")?) {
+            if mesh.get_type().is(&mesh.py().import("ingetrazo_core.mesh")?.getattr("DeferredMesh")?) {
                 return self.deferred(&mesh, fallback);
             }
             let faces = mesh.getattr("faces")?;

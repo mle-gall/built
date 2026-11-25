@@ -13,7 +13,7 @@ fn module<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
 }
 pub(crate) fn mesh_parts<'py>(mesh: &Obj<'py>, solid: bool) -> PyResult<Option<Bound<'py, PyList>>> {
     let py = mesh.py();
-    let facade = module(py, "core.store_mesh")?;
+    let facade = module(py, "ingetrazo_core.store_mesh")?;
     if !mesh.get_type().is(facade.getattr("StoreMesh")?) {
         return Ok(None);
     }
@@ -78,7 +78,7 @@ fn column<'py>(elements: &Obj<'py>, class: &Obj<'py>) -> PyResult<Option<Column<
 }
 pub(crate) fn copy_mesh_part<'py>(faces: &Obj<'py>, edges: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
     let py = faces.py();
-    let model = module(py, "core.store_mesh")?;
+    let model = module(py, "ingetrazo_core.store_mesh")?;
     let Some(fs) = column(faces, &model.getattr("FaceView")?)? else {
         return Ok(None);
     };
@@ -126,7 +126,7 @@ pub(crate) fn copy_mesh_part<'py>(faces: &Obj<'py>, edges: &Obj<'py>) -> PyResul
             attrs[i] = super::bulk::table_index(table.as_any(), index.as_any(), &v)? as i64;
         }
     }
-    let public = module(py, "core.mesh")?;
+    let public = module(py, "ingetrazo_core.mesh")?;
     let ns = public
         .getattr("_KEY_NAMESPACES")?
         .call_method0("__next__")?;
