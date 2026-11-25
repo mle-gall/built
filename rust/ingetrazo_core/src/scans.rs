@@ -248,6 +248,33 @@ impl MeshScan {
         s
     }
 
+    /// Ordered candidate slots for the two containment tests of AddFace.
+    pub(crate) fn drawn_face_candidates(
+        &mut self, py: Python<'_>, slot: u32,
+    ) -> PyResult<(Vec<u32>, Vec<u32>)> {
+        let faces = &self.live[Kind::Face as usize];
+        let row = faces.iter().position(|&f| f == slot)
+            .ok_or_else(|| PyValueError::new_err("drawn face is absent from its scan"))?;
+        let corners = self.face_corners(row).len();
+        if corners == 0 {
+            return Ok((faces.clone(), faces.clone()));
+        }
+        let [x, y, z, xx, yy, zz] = self.fboxes()[row];
+        let pad = 0.002 + 1e-6 * [x,y,z,xx,yy,zz].into_iter().map(f64::abs).fold(0.0, f64::max);
+        let plane = self.fplanes()[row];
+        let holding = self.faces_holding(py, (x,y,z), (xx,yy,zz), pad)?;
+        let slots = |scan: &Self, rows: Vec<u32>| rows.into_iter()
+            .map(|i| scan.live[Kind::Face as usize][i as usize]).collect::<Vec<_>>();
+        let inside = if corners < 3 || plane.vague {
+            self.live[Kind::Face as usize].clone()
+        } else {
+            let g = pad + plane.reach;
+            let rows = self.faces_within(py, (x-g,y-g,z-g), (xx+g,yy+g,zz+g))?;
+            slots(self, rows)
+        };
+        Ok((slots(self, holding), inside))
+    }
+
     /// Whether the scan reads a store state (keys) or Python objects.
     pub(crate) fn store_backed(&self) -> bool {
         self.state.is_some()

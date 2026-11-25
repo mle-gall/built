@@ -136,9 +136,9 @@ def test_raw_lambert_draw_pick_snap_push_and_weld(view, monkeypatch):
 
 
 def test_metal_mouse_tools_at_raw_lambert(view):
-    from PySide6.QtCore import Qt
+    from core.input_codes import Input
     from ingetrazo_core import Vec3 as V
-    from PySide6.QtTest import QTest
+    from ingetrazo_render import KeyEvent
     from tests.test_.skp_inference_gaps import click, move, refresh, use
     from tools.rust_tools import LineTool
     from tools.pushpull import PushPullTool
@@ -165,12 +165,17 @@ def test_metal_mouse_tools_at_raw_lambert(view):
         move(view, point)
         click(view, point)
     assert mesh._store.counts() == (6, 6, 1)
-    QTest.keyClick(view, Qt.Key_Escape)
+
+    def press(code, text=""):
+        view.keyPressEvent(KeyEvent(True, code, text=text))
+
+    press(Input.Key_Escape)
     use(view, PushPullTool())
     click(view, V(.02, .03, 0.))
     assert view.tools.tool.dragging
-    QTest.keyClicks(view, '0.012345m')
-    QTest.keyClick(view, Qt.Key_Return)
+    for char in '0.012345m':
+        press(ord(char.upper()), char)
+    press(Input.Key_Return)
     assert not view.tools.tool.dragging
     assert mesh._store.counts() == (10, 14, 6)
     assert max(v.position_tuple()[2] for v in mesh.vertices) == .012345

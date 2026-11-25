@@ -8,6 +8,7 @@ collinear, sliver and degenerate faces. Skipped when the module is not
 built or this Qt's hypot is not one the module knows."""
 from __future__ import annotations
 
+import hashlib
 import math
 import random
 import sys
@@ -30,8 +31,13 @@ def _f32(v):
     return [float(np.float32(c)) for c in v]
 
 
-def test_qt_vector_arithmetic():
-    from PySide6.QtGui import QVector3D as QtVector
+@pytest.mark.parametrize("profile, expected", [
+    ("libc++-fma", "df1149ffefabcc970bc26024d27a4789ae1d42f3e5da9517dd7abe28cadce6ae"),
+    ("libstdc++", "7f159c287f48be25338ca5363d6db9d0b504874e35cbdb007e78ec3d04970d27"),
+    ("msvc", "1fb2b4e93cccbbe7d23d3a59d60b2bd479fb062a9ae1c5f8cbeea4e571b502fb"),
+])
+def test_legacy_vector_arithmetic(profile, expected):
+    """Captured from Qt on arm64 and from the established legacy probes for the other profiles."""
     rng = np.random.default_rng(3)
     rows = np.concatenate([
         rng.normal(size=(4000, 3)),
@@ -42,22 +48,12 @@ def test_qt_vector_arithmetic():
         [[1, 0, 0], [0, 0, 1], [1, 1, 0], [0, 0, 0], [1e-6, 0, 0],
          [0.70710677, 0.70710677, 0]],
     ]).astype(np.float32)
-    ln, nz, pu, pv = nat.qt_vector_probe(rows, HYPOT)
-    for i, r in enumerate(rows.tolist()):
-        q = QtVector(*r)
-        assert float(ln[i]) == q.length(), r
-        assert nz[i].tolist() == list(q.normalized().toTuple()), r
-        if q.length() > 0:
-            n = q.normalized()
-            ref = QtVector(1, 0, 0)
-            u = ref - n * QtVector.dotProduct(ref, n)
-            if u.length() < .1:
-                ref = QtVector(0, 1, 0)
-                u = ref - n * QtVector.dotProduct(ref, n)
-            u = u.normalized()
-            v = QtVector.crossProduct(n, u).normalized()
-            assert pu[i].tolist() == list(u.toTuple()), r
-            assert pv[i].tolist() == list(v.toTuple()), r
+    lengths, normals, u, v = nat.qt_vector_probe(rows, profile)
+    columns = (lengths, normals, u[lengths > 0], v[lengths > 0])
+    digest = hashlib.sha256()
+    for column in columns:
+        digest.update(np.where(column == 0, 0, column).astype("<f4").tobytes())
+    assert digest.hexdigest() == expected
 
 
 def _polygon(rng):

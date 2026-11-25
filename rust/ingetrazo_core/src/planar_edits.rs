@@ -254,7 +254,7 @@ fn install(
 }
 
 #[pyfunction]
-fn store_regions(
+pub(crate) fn store_regions(
     mesh: &Obj<'_>,
     regions: &Obj<'_>,
     keys: Vec<u128>,
@@ -346,8 +346,15 @@ fn selected<'py>(cmd: &Obj<'py>, mesh: &Obj<'py>) -> PyResult<(Vec<Obj<'py>>, Ve
 }
 #[pyfunction]
 fn rebuild_scoped(cmd: &Obj<'_>, mesh: &Obj<'_>) -> PyResult<Option<usize>> {
-    let py = mesh.py();
     let (faces, edges) = selected(cmd, mesh)?;
+    rebuild_selected(mesh, &cmd.getattr("origin")?, &cmd.getattr("normal")?, faces, edges)
+}
+
+pub(crate) fn rebuild_selected<'py>(
+    mesh: &Obj<'py>, origin: &Obj<'py>, normal: &Obj<'py>,
+    faces: Vec<Obj<'py>>, edges: Vec<Obj<'py>>,
+) -> PyResult<Option<usize>> {
+    let py = mesh.py();
     if edges.is_empty() {
         for f in faces {
             mesh.call_method1("remove_face", (f,))?;
@@ -369,10 +376,9 @@ fn rebuild_scoped(cmd: &Obj<'_>, mesh: &Obj<'_>) -> PyResult<Option<usize>> {
         }
         segs.push((a, b));
     }
-    let normal = cmd.getattr("normal")?;
     let result = py
         .import("core.arrangement")?
-        .call_method1("planar_rebuild", (segs, cmd.getattr("origin")?, &normal))?;
+        .call_method1("planar_rebuild", (segs, origin, normal))?;
     let triangulate = py.import("core.triangulate")?.getattr("triangulate")?;
     let mut outlines = HashMap::new();
     let mut openings = HashMap::<Vec<Cell>, Vec<Vec<Cell>>>::new();
@@ -407,7 +413,7 @@ fn rebuild_scoped(cmd: &Obj<'_>, mesh: &Obj<'_>) -> PyResult<Option<usize>> {
         }
         let mut largest = -1.;
         let mut probe = None;
-        for t in triangles(&triangulate.call1((&outer, &holes, &normal))?)? {
+        for t in triangles(&triangulate.call1((&outer, &holes, normal))?)? {
             let normal = t[1].sub(t[0]).cross(t[2].sub(t[0]), H);
             let size = normal.dot(normal, H);
             if size > largest {
@@ -461,7 +467,7 @@ fn welded<'py>(mesh: &Obj<'py>, ring: &Obj<'py>) -> PyResult<Option<Vec<Obj<'py>
     ))
 }
 #[pyfunction]
-fn install_flat(
+pub(crate) fn install_flat(
     mesh: &Obj<'_>,
     store: bool,
     edges: &Obj<'_>,

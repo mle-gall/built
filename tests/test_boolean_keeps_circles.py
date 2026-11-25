@@ -8,7 +8,6 @@ import math
 
 import pytest
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from core import solids
 from core.history import MakeGroupCommand
@@ -21,7 +20,6 @@ pytest.importorskip("manifold3d")
 
 @pytest.fixture(scope="module")
 def viewport():
-    QApplication.instance() or QApplication([])
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.flash_status = lambda *a, **k: None
