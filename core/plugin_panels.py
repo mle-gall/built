@@ -144,15 +144,19 @@ def sync(view, win):
         view._plugin_scene = win.viewport.scene
         view._plugin_document = uuid.uuid4().hex
         view._plugin_bindings = {}
-        for key, factory in win._panel_factories.items():
-            try:
-                binding = Binding(win, key, factory, view)
-            except (Exception, SystemExit):
-                import logging
-                logging.getLogger(__name__).exception("Plugin panel %s failed to load", key)
-                continue
-            view._plugin_bindings[binding.instance] = binding
+        view._plugin_factories_seen = set()
         view._ui_plugins_sent = False
+    for key, factory in win._panel_factories.items():
+        if key in view._plugin_factories_seen:
+            continue
+        view._plugin_factories_seen.add(key)
+        try:
+            binding = Binding(win, key, factory, view)
+        except (Exception, SystemExit):
+            import logging
+            logging.getLogger(__name__).exception("Plugin panel %s failed to load", key)
+            continue
+        view._plugin_bindings[binding.instance] = binding
     if not getattr(view, "_ui_plugins_sent", False):
         live = [scope for doc in win._documents
                 if (scope := getattr(getattr(doc, "stand_in", None), "_plugin_document", None))]

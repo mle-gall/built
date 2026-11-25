@@ -34,6 +34,10 @@ class Counter:
 create_panel = Counter
 ```
 
+To register a panel from `setup(app)`, pass its factory to
+`key = app.add_panel("Object count", Counter)`. A menu action can then call
+`app.show_panel(key)`. Each document gets its own model instance.
+
 Use `utility` for a console or other wide output. Section IDs must be unique in a panel. Control IDs are unique across all its sections. Reserve IDs beginning with an underscore for the host. A utility model can set `notify_close = True` to receive `event("_panel", "closed", None)` when its Close button is pressed. Every item accepts a plain-text label and an optional `enabled` flag.
 
 ## Controls in version 1

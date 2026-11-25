@@ -14,12 +14,8 @@ from pathlib import Path
 
 import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from PySide6.QtGui import QColor, QImage
+from tests.plugin_images import write_png
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication
-
-if QApplication.instance() is None:
-    QApplication([])
 
 from core import render_blender as rb  # noqa: E402
 from core.camera import OrbitCamera  # noqa: E402
@@ -40,9 +36,7 @@ def _box(scene):
 def _scene_with_figure(tmp_path):
     scene = Scene()
     _box(scene)
-    img = QImage(16, 32, QImage.Format_ARGB32)
-    img.fill(QColor(220, 40, 40, 255))
-    img.save(str(tmp_path / "fig.png"))
+    write_png(tmp_path / "fig.png", 16, 32)
     fig = make_billboard_group(str(tmp_path / "fig.png"), 1.7, "figure", 0.8)
     fig.xform = QMatrix4x4()
     fig.xform.translate(4, 1, 0)

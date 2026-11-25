@@ -12,13 +12,6 @@ import sys
 import threading
 from pathlib import Path, PurePosixPath
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 
@@ -34,18 +27,10 @@ def _rpc(sock, tool, args=None):
 
 
 def _ask(bridge, tool, args=None):
-    """Send a request from a worker thread while THIS (main/Qt) thread pumps
-    events — the bridge executes on the Qt main thread via a queued signal."""
+    """Drive the socket client while the host services its main-thread queue."""
     from concurrent.futures import Future
-    from PySide6.QtCore import QEventLoop, QObject, Qt, Signal
     from plugins.ai_bridge import UI_CALL_TIMEOUT
 
-    class Client(QObject):
-        finished = Signal()
-
-    client = Client()
-    loop = QEventLoop()
-    client.finished.connect(loop.quit, Qt.QueuedConnection)
     result = Future()
 
     def worker():
@@ -57,13 +42,12 @@ def _ask(bridge, tool, args=None):
                 result.set_result(_rpc(sock, tool, args))
         except BaseException as exc:
             result.set_exception(exc)
-        finally:
-            client.finished.emit()
 
     thread = threading.Thread(target=worker)
     thread.start()
-    loop.exec()
-    thread.join()
+    while thread.is_alive():
+        bridge.poll()
+        thread.join(timeout=.01)
     return result.result()
 
 
@@ -163,56 +147,23 @@ def test_a_dialog_opened_by_the_agent_is_cancelled_not_waited_for(native_host, m
     stay — over the bridge nobody answers, so exec() held the UI thread for
     good and the next call ran inside that dialog. Now the dialog is
     cancelled at once, the reply names it, and nothing was deleted."""
-    from PySide6.QtCore import QEvent, QObject
-    from PySide6.QtWidgets import QDialog
     from plugins.ai_bridge import _Bridge
-    from core.settings import settings
-    # This checks a real modal round trip. A paper preview needs a GPU
-    # surface and cannot render on the offscreen Qt platform used here.
-    settings().setValue("composer/auto_render", "0")
+    from views import chrome_forms, chrome_dialogs
+
+    monkeypatch.setattr(chrome_dialogs, "async_host", lambda parent: native_host.window)
     monkeypatch.setenv("INGETRAZO_AI_PORT", "0")
-    win = native_host.window
-    bridge = _Bridge(win.viewport)
+    bridge = _Bridge(native_host.viewport)
     try:
         bridge.start()
-        # The operation itself, not wall time (a loaded machine stretched
-        # this past a 5 s limit): every dialog the call shows is rejected by
-        # the bridge's guard, so exec() returns «Cancel» instead of waiting.
-        # A dialog left waiting would hold the call until the client's own
-        # socket timeout failed it.
-        shown = []
-
-        class Watch(QObject):
-            def eventFilter(self, obj, event):  # noqa: N802
-                if isinstance(obj, QDialog) and event.type() in (QEvent.Show, QEvent.Hide):
-                    shown.append((event.type(), obj.result()))
-                return False
-        watch = Watch()
-        app = QApplication.instance()
-        app.installEventFilter(watch)
-        try:
-            reply = _ask(bridge, "run_python", {
-                "code": "from PySide6.QtWidgets import QMessageBox\n"
-                        "answer = QMessageBox.question(None, 'Delete', 'Delete the sheet?')\n"
-                        "print(answer == QMessageBox.StandardButton.Yes)"})
-        finally:
-            app.removeEventFilter(watch)
+        reply = _ask(bridge, "run_python", {"code": (
+            "from views.chrome_forms import Form, show\n"
+            "show(viewport.window(), Form('Delete', []))")})
         assert reply["ok"]
-        shows = [r for t, r in shown if t == QEvent.Show]
-        hides = [r for t, r in shown if t == QEvent.Hide]
-        assert shows and len(hides) == len(shows)
-        assert all(r == QDialog.Rejected for r in hides)
-        result = reply["result"]
-        assert result["stdout"].strip() == "False"      # «No», not waited for
-        assert any("Delete" in t for t in result["dialogs_cancelled"])
-        assert "cancelled" in result["stderr"]
-        # The bridge answers the next call as usual.
+        assert reply["result"]["dialogs_cancelled"] == ["Delete"]
+        assert not chrome_forms.forms(native_host.window)
         assert _ask(bridge, "query_model")["ok"]
     finally:
         bridge.stop()
-        comp = getattr(win, "_composer", None)
-        if comp is not None:
-            comp.hide()
 
 
 def test_a_call_arriving_inside_a_running_one_is_refused(native_host):
@@ -370,7 +321,6 @@ def test_the_packaged_app_would_notice_a_missing_recipe_book():
 def _send_raw(bridge, payload: bytes) -> bytes:
     """Send ``payload`` as-is and read until the bridge closes or goes quiet,
     pumping Qt events on this thread so anything it dispatches can run."""
-    app = QApplication.instance()
     out: dict = {"got": b""}
 
     def worker():
@@ -392,7 +342,7 @@ def _send_raw(bridge, payload: bytes) -> bytes:
     t = threading.Thread(target=worker)
     t.start()
     while t.is_alive():
-        app.processEvents()
+        bridge.poll()
         t.join(timeout=0.01)
     return out["got"]
 
@@ -426,3 +376,55 @@ def test_a_web_page_cannot_run_code_through_the_bridge(native_host, monkeypatch)
     reply = _ask(bridge, "run_python", {"code": "1 + 1"})
     assert reply["ok"]
     bridge.stop()
+
+
+def test_private_endpoint_is_exclusive_and_reopens_after_stop(native_host):
+    import os
+    import stat
+    import pytest
+    from plugins._mcp_endpoint import connect_private
+    from plugins.ai_bridge import _Bridge
+
+    if os.name != "posix":
+        pytest.skip("POSIX filesystem socket")
+    bridge = _Bridge(native_host.viewport)
+    other = _Bridge(native_host.viewport)
+    bridge.start(private=True)
+    try:
+        with connect_private() as client:
+            path = Path(client.getpeername())
+            assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
+            assert stat.S_IMODE(path.stat().st_mode) == 0o600
+            assert bridge.port is None
+        with pytest.raises(BlockingIOError):
+            other.start(private=True)
+        assert path.exists()
+    finally:
+        bridge.stop()
+    assert not path.exists()
+    other.start(private=True)
+    try:
+        assert path.exists()
+    finally:
+        other.stop()
+
+
+def test_private_listener_removes_only_a_stale_socket(tmp_path, monkeypatch):
+    import pytest
+    from plugins._mcp_endpoint import _directory, listen
+
+    if os.name != "posix":
+        pytest.skip("POSIX filesystem socket")
+    monkeypatch.setenv("BUILT_SETTINGS_DIR", str(tmp_path))
+    path = _directory(create=True) / "bridge.sock"
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as stale:
+        stale.bind(str(path))
+    with listen() as server:
+        assert server.getsockname() == str(path)
+    path.write_text("keep")
+    try:
+        with pytest.raises(FileExistsError), listen():
+            pass
+        assert path.read_text() == "keep"
+    finally:
+        path.unlink()

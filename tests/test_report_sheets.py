@@ -4,7 +4,6 @@ import csv
 import io
 import json
 from types import SimpleNamespace
-from unittest.mock import Mock
 
 import pytest
 
@@ -12,9 +11,19 @@ from ingetrazo_render import chrome_sheet
 from ingetrazo_render import AboutSheet as About, ExtensionsSheet as Extensions, CutListSheet as CutList
 
 
-def _clipboard():
-    from PySide6.QtWidgets import QApplication
-    return QApplication.clipboard().text()
+@pytest.fixture
+def pasteboard(monkeypatch):
+    from app_shell import native
+
+    items = {}
+    def write(entries):
+        items.clear()
+        items.update(entries)
+        return True
+
+    monkeypatch.setattr(chrome_sheet, "in_shell", lambda: True)
+    monkeypatch.setattr(native, "pasteboard_write", write)
+    return items
 
 
 def build(provider, ctx):
@@ -24,8 +33,8 @@ def build(provider, ctx):
     return spec
 
 
-def test_about_and_clipboard(monkeypatch):
-    ctx = SimpleNamespace(win=Mock())
+def test_about_and_clipboard(monkeypatch, native_host, pasteboard):
+    ctx = SimpleNamespace(win=native_host.window)
     sheet = About()
     spec = build(sheet, ctx)
     assert spec.get("detail") is None
@@ -33,7 +42,7 @@ def test_about_and_clipboard(monkeypatch):
         assert label in str(spec["content"])
     sheet.act(ctx, "verb", ["copy"])
     for field in ("Built ", "Engine:", "Renderer:", "Commit:", "Language:"):
-        assert field in _clipboard()
+        assert field in pasteboard["public.utf8-plain-text"].decode()
     copied = []
     import webbrowser
     monkeypatch.setattr(webbrowser, "open", copied.append)
@@ -85,7 +94,7 @@ def test_extensions_install_update_toggle_safe_reset_remove(tmp_path, monkeypatc
     assert em.installed_info(example.id) is None
 
 
-def test_cut_list_group_copy_export(tmp_path, monkeypatch):
+def test_cut_list_group_copy_export(tmp_path, monkeypatch, pasteboard):
     from core.scene import Scene
     from tests.test_parts import _box, _part
     from core.group import Group
@@ -106,7 +115,7 @@ def test_cut_list_group_copy_export(tmp_path, monkeypatch):
     assert len(sheet.table) == 2 and sheet.table[1][0] == "2"
     assert len(sheet.table[1]) == 6
     sheet.act(ctx, "verb", ["copy"])
-    assert list(csv.reader(io.StringIO(_clipboard(), newline=""), dialect="excel-tab")) == sheet.table
+    assert list(csv.reader(io.StringIO(pasteboard["public.utf8-plain-text"].decode(), newline=""), dialect="excel-tab")) == sheet.table
     path = tmp_path / "parts.csv"
     monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *args: (str(path), "CSV"))
     sheet.act(ctx, "verb", ["csv"])

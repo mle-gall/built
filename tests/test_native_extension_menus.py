@@ -69,13 +69,11 @@ def test_nested_actions_checked_state_and_ancestor_visibility():
 
 
 def test_raw_plugin_action_tracks_live_changes():
-    from PySide6.QtGui import QAction
     from ingetrazo_render import ExtensionMenus
-    import shiboken6
-    raw = QAction("Marks")
-    raw.setCheckable(True)
     tree = ExtensionMenus()
-    tree.root("raw").addAction(raw)
+    menu = tree.root("raw")
+    raw = menu.addAction("Marks")
+    raw.setCheckable(True)
     command = tree.rows()[0][0]
     on = []
     raw.triggered.connect(lambda checked: on.append(checked))
@@ -84,11 +82,9 @@ def test_raw_plugin_action_tracks_live_changes():
     raw.setText("Highlights")
     raw.setEnabled(False)
     assert tree.rows()[0][2:] == ("Highlights", "", 1, False)
-    parent = tree.root("extra")
-    parent.addAction(raw)
-    parent.removeAction(raw)
-    assert len(tree.rows()) == 1
-    shiboken6.delete(raw)
+    menu.removeAction(raw)
+    tree.trigger(command)
+    assert on == [True]
     assert not tree.rows()
 
 
