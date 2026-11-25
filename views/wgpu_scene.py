@@ -26,7 +26,7 @@ from views.array_bake import _attrs_table
 
 
 from ingetrazo_core import (COMMAND, INSTANCE, OBJECT_HIDDEN, VERTEX, VISIBILITY_FILTERED, PackedScene,
-                            assemble_scene)
+                            assemble_scene, source_arrays as _source_arrays)
 
 
 def bake_mesh(mesh):
@@ -83,112 +83,6 @@ def _baked_paint(paint):
             return dict(paint, base=None)
         return paint
     return None
-
-
-def _source_arrays(mesh, paint=None, texture_ids=None, face_overrides=None, billboard=False, origins=None, previous_origin=(0., 0., 0.), focus=None, matrix=None):
-    """Use source topology directly; the resident renderer needs no welded Plan."""
-    if face_overrides:
-        # Resolve lazy faces before reading topology; never mutate document attrs.
-        list(mesh.faces)
-    src = mesh.__dict__.get('_deferred_source')
-    if src is None and type(mesh).__name__ == 'StoreMesh':
-        # A store-backed mesh (core/store_mesh.py): its welded arrays,
-        # vertex indices already shared by corners and edges.
-        from core.store_mesh import attr_columns
-        a = mesh.__dict__['_store'].arrays()
-        pos, corners = a['pos'], a['corners']
-        sizes, counts = a['ring_sizes'], a['ring_counts']
-        edges = a['edges']
-        flags = a['flags'] & 7
-        table, attr = attr_columns(mesh, face_overrides)
-        attr = np.asarray(attr, np.int64)
-    elif src is not None:
-        pos, corners, sizes, counts = (src[k] for k in ('pos', 'rings', 'sizes', 'counts'))
-        edges = src['edges']
-        flags = src['flags']
-        if flags is None:
-            flags = np.zeros(len(edges), np.uint8)
-        table = _attrs_table(src)
-        attr = np.asarray(src['face_attr'], np.int64)
-    else:
-        arrays = arrays_of(mesh)
-        # arrays_of stores face vertices only. Append legacy edge endpoints and
-        # unused vertices so edge-only prototypes retain their original bounds.
-        extra = np.asarray([v.position.toTuple() for v in mesh.vertices], np.float32).reshape(-1, 3)
-        lookup = {v.key: i+len(arrays.pos) for i, v in enumerate(mesh.vertices)}
-        pos = np.concatenate((arrays.pos, extra))
-        corners, sizes, counts = arrays.corners, arrays.ring_sizes, arrays.ring_counts
-        edges = np.asarray([(lookup[e.v0.key], lookup[e.v1.key]) for e in mesh.edges], np.int64).reshape(-1, 2)
-        # Face corners and edges must share indices for boundary deduplication.
-        positions = {tuple(p): i for i, p in enumerate(pos.tolist())}
-        remap = np.fromiter((positions[tuple(p)] for p in arrays.pos.tolist()),
-                            dtype=np.int64, count=len(arrays.pos))
-        corners = remap[corners]
-        flags = np.asarray([int(e.soft) | (int(e.hidden) << 1)
-                            | (int(e.soft and e.flat) << 2)
-                            for e in mesh.edges], np.uint8)
-        table = [(face_overrides or {}).get(f.key, f.attrs) for f in mesh.faces]
-        attr = np.arange(len(table))
-    origin = (0., 0., 0.)
-    if origins is not None:
-        from core.coordinate_frame import ZERO, choose_origin
-        frame = mesh._store.frame_origin if type(mesh).__name__ == 'StoreMesh' else ZERO
-        box = (np.array([pos.min(axis=0), pos.max(axis=0)], dtype=float)
-               if len(pos) else np.zeros((2, 3)))
-        from core.coordinate_frame import REBASE_DISTANCE
-        wide = np.max(box[1] - box[0]) > 2 * REBASE_DISTANCE
-        center = box.mean(axis=0) + frame
-        if wide and focus is not None:
-            local = np.asarray(focus)
-            if matrix is not None:
-                # Singular placements still draw their projected subspace.
-                local = (local - matrix[3, :3]) @ np.linalg.pinv(matrix[:3, :3])
-            center = np.clip(local, box[0] + frame, box[1] + frame)
-        origin = choose_origin(center, previous_origin)
-        origins.append((origin, box + np.subtract(frame, origin), wide))
-        if tuple(frame) != origin:
-            pos = np.asarray(pos, float) + np.subtract(frame, origin)
-    # IGZ source streams can repeat a coordinate for each face/edge. Soft fan
-    # adjacency requires common vertex IDs; weld only prototypes that need it.
-    if np.any(flags & 1):
-        native = _native.native
-        if native is not None and hasattr(native, 'pack_weld'):
-            remap = native.pack_weld(np.asarray(pos, np.float32))
-        else:
-            _, first, inverse = np.unique(np.asarray(pos, np.float32), axis=0,
-                                          return_index=True, return_inverse=True)
-            remap = first[inverse]
-        corners = remap[corners]
-        edges = remap[edges]
-    from core.materials import effective_attrs
-    table = [effective_attrs(own, paint) or {} for own in [{}] + table]
-    palette = np.full((len(table), 4), 210, np.uint8)
-    palette[:, 3] = 0
-    hidden = np.array([bool(own.get("hidden")) for own in table])
-    painted = [(k, own['color'][:3]) for k, own in enumerate(table)
-               if own.get('color') is not None]
-    if painted:
-        ids, rgb = zip(*painted)
-        ids = np.asarray(ids, np.int64)
-        palette[ids, :3] = np.clip(np.asarray(rgb)*255, 0, 255)
-        palette[ids, 3] = [_alpha(table[k]) for k in ids]
-    # Texture-only and opacity-only faces also need a nonzero opacity byte.
-    for k, own in enumerate(table):
-        if 'pbr' in own and own.get('color') is None:
-            palette[k, :3] = 255
-        if own.get('texture') or 'opacity' in own or 'pbr' in own:
-            palette[k, 3] = _alpha(own)
-    maps, paints = _material_columns(pos, corners, sizes, counts, table, attr+1,
-                                     texture_ids if texture_ids is not None else {}, origin)
-    if billboard is True:
-        from views.wgpu_billboards import fitted_maps
-        maps = fitted_maps(pos, corners, sizes, counts, maps.copy())
-        # GL's cutout uses the same image on either side.
-        paints[:, 2] = paints[:, 1]
-    return (np.asarray(pos, np.float32), np.asarray(corners, np.int64),
-            np.asarray(sizes, np.int64), np.asarray(counts, np.int64),
-            np.asarray(edges, np.int64), np.asarray(flags, np.uint8),
-            palette, hidden[attr+1], attr+1, maps, paints)
 
 
 def _placement_state(scene):
@@ -481,78 +375,6 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
         lookup, prototype_paints, origin=built["origin"], prototype_origins=built["prototype_origins"],
         model_translations=built["model_translations"], bake_focus=tuple(focus) if wide_variants else None,
         occurrence_keys=occurrence_keys, mesh_codes=mesh_codes)
-
-
-def _material_columns(pos, corners, sizes, counts, table, attributes, texture_ids, origin=(0., 0., 0.)):
-    """Use the GL mapping and side resolution, before triangulation splits corners."""
-    from ingetrazo_core import Vec3 as QVector3D
-    from core.materials import back_is_default
-    from core.texture import face_uv_axes
-    maps = np.broadcast_to(np.zeros(16, np.float32), (len(counts), 16))
-    # The common unpainted prototype has no back or texture rows to resolve.
-    # Avoid per-face palette gathers and temporary masks for this case.
-    if not any(table):
-        return maps, np.zeros((len(counts), 3), np.uint32)
-    palette = np.zeros((len(table), 3), np.uint32)
-    native_pack = getattr(_native.native, "pack_materials", None)
-    colors = []
-    textures = []
-    for k, own in enumerate(table):
-        back = own.get('back')
-        if not isinstance(back, dict):
-            back = {} if back_is_default(own) else own
-        color = back.get('color')
-        if color is None and 'pbr' in back:
-            color = (1., 1., 1.)
-        if color is None and (back.get('texture') or 'opacity' in back):
-            color = (210/255,)*3
-        if native_pack is not None:
-            colors.append(None if color is None else (*color[:3], _alpha(back)))
-        elif color is not None:
-            palette[k, 0] = np.array([*np.clip(np.array(color[:3])*255,0,255),_alpha(back)], np.uint8).view('<u4')[0]
-        sides = []
-        for side, attrs in enumerate((own, back)):
-            tex = attrs.get('texture')
-            path = (tex or {}).get('path')
-            if attrs.get('pbr') is not None:
-                path = _pbr_entry(path, attrs['pbr'])
-                tex = tex or {'sw': 1., 'sh': 1.}
-            sides.append(tex)
-            if path:
-                if path not in texture_ids:
-                    texture_ids[path] = len(texture_ids)+1
-                palette[k, side+1] = texture_ids[path]
-        textures.append(sides)
-    if native_pack is None:
-        paints = palette[attributes]
-    else:
-        paints = native_pack(colors, palette[:, 1:].tolist(), np.asarray(attributes, np.int64))
-    textured = np.flatnonzero(np.any(paints[:,1:] != 0, axis=1))
-    if len(textured):
-        maps = np.zeros((len(counts), 16), np.float32)
-        starts = np.concatenate(([0], np.cumsum(sizes)))
-        face_ring = np.concatenate(([0], np.cumsum(counts)))
-        points = np.asarray(pos)[corners]
-        following = np.roll(points, -1, axis=0)
-        following[starts[1:]-1] = points[starts[:-1]]
-        normals = np.add.reduceat(np.cross(points, following), starts[:-1])[face_ring[:-1]]
-        lengths = np.linalg.norm(normals, axis=1)
-        normals /= np.maximum(lengths[:,None], 1e-30)
-        pairs = np.column_stack((attributes[textured], normals[textured]))
-        unique, inverse = np.unique(pairs, axis=0, return_inverse=True)
-        resolved = np.zeros((len(unique),16), np.float32)
-        for j, row in enumerate(unique):
-            for side, tex in enumerate(textures[int(row[0])]):
-                if tex:
-                    gu, cu, gv, cv = face_uv_axes(tex, QVector3D(*row[1:]))
-                    if any(origin):
-                        # Tiled UV phase at prototype zero; retaining integer
-                        # tile repetitions here would lose the small local UVs.
-                        cu = (cu + np.dot(gu.toTuple(), origin)) % 1.
-                        cv = (cv + np.dot(gv.toTuple(), origin)) % 1.
-                    resolved[j,side*8:side*8+8] = [*gu.toTuple(),cu,*gv.toTuple(),cv]
-        maps[textured] = resolved[inverse]
-    return maps, paints
 
 
 class _PbrEntry(NamedTuple):

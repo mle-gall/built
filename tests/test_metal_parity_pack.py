@@ -194,27 +194,23 @@ def test_hidden_material_corners_follow_visible_edge_gap():
             assert np.all(packed.indices[first:first+count] + base < len(packed.vertices))
 
 
-def test_native_material_palette_matches_fallback(monkeypatch):
+def test_native_material_palette_matches_numpy():
     """Quantization must preserve truncation, opacity rounding and both sides."""
     native = _native.available()
-    if not hasattr(native, 'pack_materials'):
-        pytest.skip('new native palette kernel required')
-    from views.wgpu_scene import _material_columns
-    table = [{}, {'color': (-.1, .499, 1.2), 'opacity': .5},
-             {'back': {'color': (.2, .3, .4), 'opacity': .1}},
-             {'texture': {'path': 'missing.png', 'uvw': [1,0,0,0,0,1,0,0]}}]
-    pos = np.array([[0,0,0], [1,0,0], [0,1,0]], np.float32)
-    corners = np.tile(np.arange(3), 4)
-    sizes = np.full(4, 3, np.int64)
-    counts = np.ones(4, np.int64)
-    attributes = np.arange(4, dtype=np.int64)
-    monkeypatch.setattr(_native, 'native', native)
-    actual = _material_columns(pos, corners, sizes, counts, table, attributes, {})
-    monkeypatch.setattr(_native, 'native', None)
-    expected = _material_columns(pos, corners, sizes, counts, table, attributes, {})
-    for a, b in zip(actual, expected):
-        assert a.dtype == b.dtype and a.shape == b.shape
-        assert a.tobytes() == b.tobytes()
+    # (r, g, b, opacity byte) of each attribute row's back, and its front
+    # and back texture layers: what the pack hands the palette kernel.
+    colors = [None, (-.1, .499, 1.2, 128), (.2, .3, .4, 26), (210/255,)*3 + (255,)]
+    slots = [[0, 0], [0, 0], [0, 0], [1, 1]]
+    attributes = np.array([3, 0, 2, 1, 1], dtype=np.int64)
+    actual = native.pack_materials(colors, slots, attributes)
+    palette = np.zeros((len(colors), 3), np.uint32)
+    for k, color in enumerate(colors):
+        if color is not None:
+            palette[k, 0] = np.array([*np.clip(np.array(color[:3])*255, 0, 255), color[3]], np.uint8).view('<u4')[0]
+    palette[:, 1:] = slots
+    expected = palette[attributes]
+    assert actual.dtype == expected.dtype and actual.shape == expected.shape
+    assert actual.tobytes() == expected.tobytes()
     with pytest.raises(ValueError):
         native.pack_materials([None], [[0,0]], np.array([-1], np.int64))
 
