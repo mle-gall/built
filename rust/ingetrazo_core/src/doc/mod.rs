@@ -46,6 +46,8 @@ mod erase_steps;
 mod vertex_steps;
 mod plane_steps;
 mod explode_steps;
+mod mesh_steps;
+mod material_steps;
 mod file_view;
 pub(crate) mod drawing;
 pub mod occurrences;
@@ -646,7 +648,7 @@ impl Writer {
                 return Ok(Self);
             }
         }
-        let reason = py.import("core.history_commands")?.getattr("CommandRejected")?
+        let reason = py.import("core.history")?.getattr("CommandRejected")?
             .call1(("Another document transaction is active.",))?;
         Err(PyErr::from_value(reason))
     }

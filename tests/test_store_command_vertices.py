@@ -3,7 +3,7 @@ import pytest
 from ingetrazo_core import Matrix4, MeshStore, Vec3
 from core import store_mesh
 from core.history import History, MoveVerticesCommand, SnapshotMutation
-from core.history_commands import _map_selected_vertices
+from core.history import _map_selected_vertices
 from core.mesh import Mesh
 from core.scene import Scene
 from core.topology import _key

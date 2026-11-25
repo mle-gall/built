@@ -7,7 +7,7 @@ default material). Rename and edit reuse ``RestampMaterialCommand`` /
 ``EditTexturedMaterialCommand``; these sit beside them, one step each."""
 from __future__ import annotations
 
-from core.history import Command, MeshCommand, RestampMaterialCommand
+from core.history import Command, DeleteMaterialCommand, MeshCommand  # noqa: F401 -- Delete is native
 
 
 class AddMaterialCommand(Command):
@@ -27,24 +27,6 @@ class AddMaterialCommand(Command):
     def undo(self, scene) -> None:
         scene.materials.pop(self.material.name, None)
         scene.version += 1
-
-
-class DeleteMaterialCommand(RestampMaterialCommand):
-    """Remove the registry material ``name``: every face (front or back) and
-    every container painted with it loses the paint and shows the default
-    material. Undo is the restamp's: entry, faces and containers exactly as
-    they were."""
-
-    _kind = "delete"
-
-    def __init__(self, name) -> None:
-        from core.materials import Material
-        super().__init__(name, Material(name))
-
-    def do(self, scene) -> None:
-        if self._edit is None and self._name not in scene.materials:
-            raise KeyError(f"no material called {self._name!r}")
-        super().do(scene)
 
 
 # ---- one kind of resource: every paint is a named material -------------------

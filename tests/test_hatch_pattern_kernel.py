@@ -58,3 +58,14 @@ def test_frame_fill_and_serialized_pattern_settings():
     assert not any(hatches.hatch_marks(None, box, offset=[]).values())
     assert hatches.hatch_marks("grid", box, "1.5", offset=["3", "2"]) == (
         hatches.hatch_marks("grid", box, 1.5, offset=(3., 2.)))
+
+
+def test_pat_roundtrip_accepts_serialized_fields_and_portable_line_endings():
+    rows = [[0., 1., 2., 3., 4., [-5., 2.]]]
+    pattern = ["A", "Parallel lines", rows]
+    text = hatches.to_pat([pattern])
+    assert hatches.to_pat([iter(pattern)]) == text
+    for ending in ("\n", "\r\n", "\r", "\v", "\f", "\x1c", "\x1d", "\x1e",
+                   "\x85", "\u2028", "\u2029"):
+        assert hatches.parse_pat(text.replace("\n", ending)) == {
+            "A": {"label": "Parallel lines", "families": rows}}

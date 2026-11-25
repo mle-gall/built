@@ -46,7 +46,7 @@ fn after_removal(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Option<
         }
         return Ok(());
     }
-    py.import("core.history_commands")?.getattr("_discard_removed_selection")?.call1((scene,))?;
+    py.import("core.history")?.getattr("_discard_removed_selection")?.call1((scene,))?;
     version(scene)
 }
 
@@ -121,7 +121,7 @@ fn dot(a: glam::DVec3, b: glam::DVec3) -> f64 {
 /// Rebuild one plane's faces (`RebuildPlaneFacesCommand`, its own step).
 fn rebuild_plane<'py>(py: Python<'py>, scene: &Obj<'py>, origin: glam::DVec3, normal: glam::DVec3, faces: Option<Obj<'py>>) -> PyResult<()> {
     let vec = |v: glam::DVec3| -> PyResult<Obj<'py>> { Ok(Bound::new(py, crate::math::Vec3::from(v))?.into_any()) };
-    let class = py.import("core.history_commands")?.getattr("RebuildPlaneFacesCommand")?;
+    let class = py.import("core.history")?.getattr("RebuildPlaneFacesCommand")?;
     let kw = pyo3::types::PyDict::new(py);
     if let Some(faces) = faces {
         kw.set_item("faces", faces)?;

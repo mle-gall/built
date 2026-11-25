@@ -92,13 +92,6 @@ class _HoverEvent:
         return self._mods
 
 
-def _entity_owner(entities, i):
-    """The owner half of pick-index entity ``i``: a lazy piece of the index
-    answers it without building its faces (see views.array_bake)."""
-    at = getattr(entities, "owner_at", None)
-    return at(i) if at is not None else entities[i][1]
-
-
 #: Every chunk entry built (or loaded from disk) takes the next number.
 #: Keys that told entries apart by ``id(entry)`` could not: the dict a
 #: rebuild replaces is freed at once, and the new one may land at the same
@@ -184,63 +177,13 @@ _LIVE_VIEWS: "weakref.WeakSet" = weakref.WeakSet()
 _DECODED_TEXTURES: dict = {}
 
 
-def _array_bake():
-    """views.array_bake, which imports back here (its import statement ran
-    per placement, per frame pass)."""
-    return sys.modules.get("views.array_bake") or importlib.import_module(
-        "views.array_bake")
-
-
 # Existing native callers still accept the legacy rounding-mode argument.
 from core._native import qt_hypot
 _QV_HYPOT3 = qt_hypot()
 
 
-def _qv_hypot3():
-    return _QV_HYPOT3
-
-
-def _box_edge_vertices(corners):
-    from ingetrazo_core import box_edge_vertices
-    coords = array("f")
-    coords.frombytes(memoryview(box_edge_vertices(corners)).cast("B"))
-    return coords
-
-
 from ingetrazo_core import point_in_screen_hull as _point_in_screen_hull
 from ingetrazo_core import MIN_CIRCLE_DASHES as _MIN_CIRCLE_DASHES
-
-
-def _guide_vertices(guides, spacing: float, selection=(), centre=None,
-                    reach: float = 0.0, eye=None):
-    from core import axes
-    from ingetrazo_core import guide_vertices
-    coords, spans = guide_vertices(guides or (), spacing, selection or (),
-                                   centre, reach, eye,
-                                   None if axes.is_world() else axes.frame())
-    data = array("f")
-    data.frombytes(memoryview(coords).cast("B"))
-    return data, spans
-
-
-def _parse_number(tok: str):
-    """``2``, ``2.5``, ``.5``, ``3/4`` (a fraction), ``1-1/2`` (a mixed
-    number, the hyphen form) → float, else None — ``core.units`` reads it,
-    refusing a number too long for a float or too big for a model (#185)."""
-    from core.units import _number
-    return _number(tok)
-
-
-def _parse_length_field(field: str):
-    """One typed length in metres: metric or imperial, the usual forms.
-
-    ``2`` (the document's unit, issue #33) · ``30cm`` · ``1500mm`` ·
-    ``1m20`` · ``2"`` / ``2in`` · ``1'`` / ``1ft`` · ``1'6"`` · ``3/4"`` ·
-    ``1'3/4"``. A leading minus is kept. Returns None when the field is not
-    a length. The reading itself lives in ``core.units.parse``, the one
-    every length field shares."""
-    from core.units import parse_length_field
-    return parse_length_field(field)
 
 
 class _AltWatch(object if NATIVE else QObject):
@@ -354,33 +297,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             _AltWatch.watch(self)
         ingetrazo_render.init_navigation(self)
 
-    def _sync_axes(self) -> None:
-        """Make the drawing axes the current context's (issue #44) — the
-        world's at the top level, the open group's own inside it."""
-        from core import axes as _axes
-        _axes.sync(getattr(self.scene, "drawing_frame", None))
-
-    @staticmethod
-    def _format_dim_value(metres: float, style: dict) -> str:
-        """Format a length (metres) per the dimension style: unit + precision
-        (see :mod:`core.units` — metric, decimal or fractional imperial),
-        with or without the unit symbol (#374)."""
-        from core.units import format_length
-        return format_length(metres, style.get("units", "m"),
-                             int(style.get("decimals", 2)),
-                             bool(style.get("show_unit", True)))
-
     # Chunk arrays are a pure function of the mesh content; persisting them
     # turns the multi-second cold build of a big group into a disk read.
     # Lives in the app's own cache dir (like extracted textures) and is
     # keyed by a STABLE sha1 content digest — a stale entry can only miss.
-
-    @staticmethod
-    def _chunk_cache_dir():
-        from core.texture import texture_cache_root
-        d = texture_cache_root().parent / "chunks"
-        d.mkdir(parents=True, exist_ok=True)
-        return d
 
     def _offer_link_source(self, group) -> None:
         """«“Site.igz” is linked: open it to edit it?» — and open it in a
@@ -410,37 +330,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             from views.wgpu_tabs import open_link_source
             open_link_source(window, path, group)
 
-    @property
-    def edit_rest_mode(self) -> str:
-        """``normal`` / ``fade`` / ``hide`` — how the model outside the group
-        being edited reads. See :data:`EDIT_REST_MODES`."""
-        return self._edit_rest_mode
-
-    @property
-    def edit_rest_fade(self) -> float:
-        """0..1 strength of the grey wash applied outside the edit context."""
-        return float(getattr(self, "_edit_rest_fade_strength",
-                             EDIT_REST_FADE))
-
-    def _dwell_on(self, point: Optional[QVector3D]) -> None:
-        self.inference._dwell_on(point)
-
-    def _encourage_dwelt(self) -> None:
-        self.inference._encourage_dwelt()
-
-    def encourage_point(self, point: QVector3D) -> None:
-        self.inference.encourage_point(point)
-
     # The two post-processors of the search (the axis-source cue for the
     # tools that read the model axes as a source, the extension hooks) moved
     # behind ``self.inference.snap()`` too. The names stay on the viewport
     # because the extension tests and the probe call them from here.
-    def _axis_source_cue(self, snap, px_x: float, px_y: float):
-        return self.inference._axis_source_cue(snap, px_x, px_y)
-
-    def _extension_snap(self, snap, px_x: float, px_y: float):
-        return self.inference._extension_snap(snap, px_x, px_y)
-
     _MODIFIER_KEYS = frozenset({Qt.Key_Control, Qt.Key_Shift, Qt.Key_Alt,
                                 Qt.Key_Meta, Qt.Key_AltGr})
 
@@ -484,21 +377,9 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         ingetrazo_render.document_focus_out(self)
         super().focusOutEvent(ev)
 
-    def _handle_value_key(self, ev) -> bool:
-        """Route a value-box key to its document tool or the camera lens."""
-        return _value_key(self, ev)
-
-    @staticmethod
-    def _parse_value_buffer(buffer: str, comma_lists: bool = False):
-        """The value box's text → a float, a 2-tuple ``(w, h)``, a 3-tuple
-        ``(dx, dy, dz)``, an array, radius, profile, segments or slope
-        tuple, or None (``core.units.parse_value_box``: the grammar is
-        Rust's, ``rust/ingetrazo_core/src/units.rs``). Each tool's
-        ``on_value`` takes the arity it understands. ``comma_lists``: a
-        comma separates fields when the entry has no ``;`` and no space
-        (#152)."""
-        from core.units import parse_value_box
-        return parse_value_box(buffer, comma_lists)
-
-
 ingetrazo_render.register_document_host(DocumentInteraction)
+
+
+from ingetrazo_render import register_view_class, register_view_functions
+register_view_class(DocumentInteraction)
+register_view_functions(globals())

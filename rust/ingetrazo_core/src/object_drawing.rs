@@ -71,7 +71,7 @@ fn delete_edges<'py>(
     }
     let mut faces = Vec::new();
     if cascade {
-        let api = mesh.py().import("core.history_commands")?;
+        let api = mesh.py().import("core.history")?;
         for f in api
             .call_method1("_faces_by_segments", (mesh, ends))?
             .try_iter()?
@@ -98,7 +98,7 @@ fn delete_face<'py>(
     selection: &Obj<'py>,
 ) -> PyResult<Option<Obj<'py>>> {
     let target = outline_key(ring)?;
-    let api = mesh.py().import("core.history_commands")?;
+    let api = mesh.py().import("core.history")?;
     for f in api
         .call_method1("_faces_keyed_like", (mesh, ring))?
         .try_iter()?
@@ -153,7 +153,7 @@ fn split_holes<'py>(
 fn divide_face(mesh: &Obj<'_>, face: &Obj<'_>) -> PyResult<bool> {
     let py = mesh.py();
     let api = py.import("core.topology")?;
-    let cmd = py.import("core.history_commands")?;
+    let cmd = py.import("core.history")?;
     let ring = face.getattr("vertices")?;
     let holding = || cmd.call_method1("_faces_holding", (mesh, &ring));
     let mother = api.call_method1("find_containing_face", (holding()?, &ring, face))?;
@@ -250,7 +250,7 @@ fn remove_drawn_faces<'py>(
     rings: &Obj<'py>,
     selection: &Obj<'py>,
 ) -> PyResult<()> {
-    let api = mesh.py().import("core.history_commands")?;
+    let api = mesh.py().import("core.history")?;
     let scan = mesh.py().import("core.scan_index")?;
     if rings.is_empty()? {
         return Ok(());

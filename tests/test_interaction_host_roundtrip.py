@@ -39,3 +39,40 @@ def test_context_pick_preserves_an_existing_selected_loose_edge():
     view.pick_group.assert_not_called()
     view.scene.select.assert_not_called()
     view.update.assert_not_called()
+
+
+def test_host_methods_accept_a_plugin_keyword_receiver():
+    from inspect import signature
+    from views.document_controller import DocumentController
+    from views.view_host import WidgetShim
+
+    resized = []
+    display = SimpleNamespace(resize=lambda *size: resized.append(size))
+    view = SimpleNamespace(keys_stand_in=display, _host=None)
+    DocumentController.resize(view, 40, 24)
+    WidgetShim.update(self=view)
+    WidgetShim.setFocus(self=view)
+    assert view._focus and resized == [(40, 24)]
+    assert str(signature(DocumentController.resize)) == "(self, *size)"
+    assert str(signature(WidgetShim._noop)) == "(self, *args, **kwargs)"
+    assert str(signature(ndof_input.SpnavBackend._read)) == "(self, *_args) -> 'None'"
+
+
+def test_view_classes_remain_importable_and_discoverable():
+    import importlib
+    import pickle
+    import pkgutil
+    import views
+
+    modules = {item.name for item in pkgutil.iter_modules(views.__path__, "views.")}
+    for leaf, name in [
+        ("document_controller", "DocumentController"), ("document_tools", "DocumentTools"),
+        ("view_navigation", "ViewNavigation"), ("view_host", "WidgetShim"),
+        ("ndof_input", "NdofInput"),
+    ]:
+        module = f"views.{leaf}"
+        assert module in modules
+        cls = getattr(importlib.import_module(module), name)
+        assert cls.__module__ == module
+        assert pickle.loads(pickle.dumps(cls)) is cls
+    assert "views.view_commands" in modules

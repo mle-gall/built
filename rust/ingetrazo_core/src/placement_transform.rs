@@ -18,7 +18,7 @@ fn rows<'py>(items: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
 fn apply_pose(scene: &Obj<'_>, g: &Obj<'_>, m: &Obj<'_>, pose: &Obj<'_>) -> PyResult<()> {
     let local = scene
         .py()
-        .import("core.history_commands")?
+        .import("core.history")?
         .call_method1("_edit_local_transform", (scene, g, m))?;
     g.setattr("xform", local.mul(pose)?)
 }
@@ -46,7 +46,7 @@ fn finish_transform(g: &Obj<'_>, m: &Obj<'_>, texture: bool) -> PyResult<()> {
 pub(crate) fn shift_group(scene: &Obj<'_>, g: &Obj<'_>, delta: &Obj<'_>) -> PyResult<()> {
     let pose = scene
         .py()
-        .import("core.history_commands")?
+        .import("core.history")?
         .call_method1("_member_placement", (scene, g))?;
     let m = matrix(scene.py())?;
     m.call_method1("translate", (delta,))?;
@@ -60,7 +60,7 @@ pub(crate) fn shift_group(scene: &Obj<'_>, g: &Obj<'_>, delta: &Obj<'_>) -> PyRe
 #[pyfunction]
 pub(crate) fn flip_groups(scene: &Obj<'_>, groups: Vec<Obj<'_>>, m: &Obj<'_>) -> PyResult<()> {
     let py = scene.py();
-    let api = py.import("core.history_commands")?;
+    let api = py.import("core.history")?;
     let store = py.import("core.store_mesh")?.getattr("StoreMesh")?;
     for g in groups {
         let pose = api.call_method1("_member_placement", (scene, &g))?;
@@ -108,7 +108,7 @@ impl GroupTransform {
         let pose = if undo {
             g.getattr("xform")?
         } else {
-            py.import("core.history_commands")?
+            py.import("core.history")?
                 .call_method1("_member_placement", (scene, g))?
         };
         if !pose.is_none() {
