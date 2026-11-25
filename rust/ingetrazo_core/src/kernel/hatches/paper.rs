@@ -7,11 +7,40 @@ type Line = (f64, f64, f64, f64);
 type Ring = Vec<Point>;
 type Band = (Point, Point, Point, f64, f64);
 
+fn read_point(v: &Obj<'_>) -> PyResult<Point> {
+    Ok((number(&v.get_item(0)?)?, number(&v.get_item(1)?)?))
+}
+fn read_band(v: &Obj<'_>) -> PyResult<Option<Band>> {
+    if v.is_none() {
+        return Ok(None);
+    }
+    Ok(Some((
+        read_point(&v.get_item(0)?)?,
+        read_point(&v.get_item(1)?)?,
+        read_point(&v.get_item(2)?)?,
+        number(&v.get_item(3)?)?,
+        number(&v.get_item(4)?)?,
+    )))
+}
+fn read_offset(v: &Obj<'_>) -> PyResult<Option<[f64; 2]>> {
+    if v.is_truthy()? {
+        Ok(Some(read_point(v)?.into()))
+    } else {
+        Ok(None)
+    }
+}
+fn read_angle(v: &Obj<'_>) -> PyResult<f64> {
+    if v.is_truthy()? {
+        number(v)
+    } else {
+        Ok(0.)
+    }
+}
 fn ring_points(ring: &Obj<'_>) -> PyResult<Ring> {
     ring.try_iter()?
         .map(|p| {
             let p = p?;
-            Ok((number(&p.get_item(0)?)?, number(&p.get_item(1)?)?))
+            read_point(&p)
         })
         .collect()
 }
@@ -72,13 +101,13 @@ pub(super) fn bond_course(
 pub(super) fn bond_marks<'p>(
     m: &Module<'p>,
     key: Option<&str>,
-    band: Option<Band>,
+    #[pyo3(from_py_with = read_band)] band: Option<Band>,
     cut: &str,
-    scale: f64,
+    #[pyo3(from_py_with = number)] scale: f64,
     scale_n: f64,
     brick: Option<&Obj<'p>>,
     joints: &str,
-    offset: Option<[f64; 2]>,
+    #[pyo3(from_py_with = read_offset)] offset: Option<[f64; 2]>,
 ) -> PyResult<Option<Bound<'p, PyDict>>> {
     let (Some(k), Some((p, a, b, l, t))) = (key, band) else {
         return Ok(None);
@@ -101,7 +130,11 @@ pub(super) fn bond_marks<'p>(
     )
 }
 #[pyfunction(signature=(band,scale_n=100.,depth=None))]
-pub(super) fn cut_across(band: Option<Band>, scale_n: f64, depth: Option<f64>) -> bool {
+pub(super) fn cut_across(
+    #[pyo3(from_py_with = read_band)] band: Option<Band>,
+    scale_n: f64,
+    depth: Option<f64>,
+) -> bool {
     let Some((_, _, _, l, t)) = band else {
         return false;
     };
@@ -176,10 +209,10 @@ pub(super) fn hatch_marks<'p>(
     m: &Module<'p>,
     key: Option<&Obj<'p>>,
     r#box: [f64; 4],
-    scale: f64,
-    angle: f64,
+    #[pyo3(from_py_with = number)] scale: f64,
+    #[pyo3(from_py_with = read_angle)] angle: f64,
     families: Option<&Obj<'p>>,
-    offset: Option<[f64; 2]>,
+    #[pyo3(from_py_with = read_offset)] offset: Option<[f64; 2]>,
 ) -> PyResult<Bound<'p, PyDict>> {
     let k = key.and_then(|v| v.extract::<&str>().ok()).unwrap_or("");
     if let Some(f) = families {
@@ -408,7 +441,7 @@ pub(super) fn hatch_lines(
                 let brick = form.get_item("brick")?;
                 let offset = form
                     .get_item("offset")?
-                    .map(|v| v.extract())
+                    .map(|v| read_offset(&v))
                     .transpose()?
                     .flatten();
                 for r in &rings {
