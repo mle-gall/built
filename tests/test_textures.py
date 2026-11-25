@@ -4,6 +4,7 @@
 command, OBJ export with vt + map_Kd, and .igz round-trip."""
 from __future__ import annotations
 
+import ingetrazo_core
 from pathlib import Path
 
 from ingetrazo_render import SurveyRaster
@@ -12,7 +13,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History, SetFaceColorCommand, SetFaceTextureCommand
 from core.scene import Scene
-from core.texture import Texture, planar_uv
+from core.texture import Texture
 from formats import igz
 from formats import obj as obj_format
 import tests.test_fuzz_engine as F
@@ -39,8 +40,8 @@ def _checker(path, n=16):
 def test_planar_uv_scales_by_tile_size():
     # Top face (normal +Z): UVs are the X/Y world coords divided by the tile.
     pts = [V(0, 0, 3), V(4, 0, 3), V(4, 4, 3), V(0, 4, 3)]
-    uv1 = planar_uv(V(0, 0, 1), pts, 1.0, 1.0)
-    uv2 = planar_uv(V(0, 0, 1), pts, 2.0, 2.0)
+    uv1 = ingetrazo_core.texture_planar_uv(V(0, 0, 1), pts, 1.0, 1.0)
+    uv2 = ingetrazo_core.texture_planar_uv(V(0, 0, 1), pts, 2.0, 2.0)
     # A 2 m tile halves the UV span (4 m → 2 repeats instead of 4).
     span1 = max(u for u, _ in uv1) - min(u for u, _ in uv1)
     span2 = max(u for u, _ in uv2) - min(u for u, _ in uv2)
@@ -50,8 +51,8 @@ def test_planar_uv_scales_by_tile_size():
 
 def test_coplanar_faces_share_projection():
     # Two faces on the same plane project continuously (same basis → seamless).
-    a = planar_uv(V(0, 0, 1), [V(0, 0, 0)], 1.0, 1.0)[0]
-    b = planar_uv(V(0, 0, 1), [V(4, 0, 0)], 1.0, 1.0)[0]
+    a = ingetrazo_core.texture_planar_uv(V(0, 0, 1), [V(0, 0, 0)], 1.0, 1.0)[0]
+    b = ingetrazo_core.texture_planar_uv(V(0, 0, 1), [V(4, 0, 0)], 1.0, 1.0)[0]
     assert a == (0.0, 0.0)
     assert b == (4.0, 0.0)
 
@@ -301,17 +302,16 @@ def test_planar_uv_rotation_and_scale():
     # (the usual edit-material W/H/Rot).
     from ingetrazo_core import Vec3 as QVector3D
 
-    from core.texture import planar_uv
 
     n = QVector3D(0, 0, 1)
     pts = [QVector3D(1, 0, 0), QVector3D(0, 1, 0)]
     # Doubling the tile halves the UV.
-    (u1, _), _ = planar_uv(n, pts, 1.0, 1.0)
-    (u2, _), _ = planar_uv(n, pts, 2.0, 2.0)
+    (u1, _), _ = ingetrazo_core.texture_planar_uv(n, pts, 1.0, 1.0)
+    (u2, _), _ = ingetrazo_core.texture_planar_uv(n, pts, 2.0, 2.0)
     assert abs(u2 - u1 / 2.0) < 1e-9
     # 90° rotation maps the +X point onto the (former) V axis.
-    (u90, v90), (u90b, v90b) = planar_uv(n, pts, 1.0, 1.0, rot=90.0)
-    (u0, v0), (u0b, v0b) = planar_uv(n, pts, 1.0, 1.0)
+    (u90, v90), (u90b, v90b) = ingetrazo_core.texture_planar_uv(n, pts, 1.0, 1.0, rot=90.0)
+    (u0, v0), (u0b, v0b) = ingetrazo_core.texture_planar_uv(n, pts, 1.0, 1.0)
     assert abs(abs(v90) - abs(u0)) < 1e-9         # swapped axes
     assert abs(abs(u90b) - abs(v0b)) < 1e-6      # (0,1) lands on former U
     # rotation preserves scale (rigid in-plane turn)
@@ -447,7 +447,6 @@ def test_an_obj_brings_its_own_texture_coordinates(tmp_path):
     # projects the image flatly onto each little facet in turn: a car wheel
     # and a person's clothes came out as confetti. The file says where the
     # image goes; the import has to keep it.
-    from core.texture import affine_uv
     solid_raster(2, 2, (0, 0, 0)).save(str(tmp_path / "skin.jpg"))
     (tmp_path / "m.mtl").write_text("newmtl skin\nKd 1 1 1\nmap_Kd skin.jpg\n")
     obj = tmp_path / "m.obj"
@@ -459,7 +458,7 @@ def test_an_obj_brings_its_own_texture_coordinates(tmp_path):
     obj_format.load_obj(scene, obj)
     tex = scene.faces[0].attrs["texture"]
     assert "uvw" in tex, "the file's vt were thrown away"
-    got = affine_uv(tex["uvw"], scene.faces[0].vertices)
+    got = ingetrazo_core.texture_affine_uv(tex["uvw"], scene.faces[0].vertices)
     want = {(0.25, 0.5), (0.75, 0.5), (0.25, 0.9)}
     for u, v in got:
         assert min(abs(u - a) + abs(v - b) for a, b in want) < 1e-6
@@ -492,9 +491,8 @@ def _textured_group(offset=0.0):
 
 
 def _uvs(face):
-    from core.texture import affine_uv
     return [(round(u, 6), round(v, 6))
-            for u, v in affine_uv(face.attrs["texture"]["uvw"], face.vertices)]
+            for u, v in ingetrazo_core.texture_affine_uv(face.attrs["texture"]["uvw"], face.vertices)]
 
 
 def test_moving_a_group_takes_its_texture_with_it():

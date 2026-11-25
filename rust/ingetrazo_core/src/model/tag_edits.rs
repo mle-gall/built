@@ -797,9 +797,9 @@ pub fn apply_template(scene: &Obj<'_>, data: &Obj<'_>) -> PyResult<(usize, usize
     folder_identities(scene, &data, &previous)?;
     folder_labels(scene, &data, &previous)?;
     let module = layers_module(py)?;
-    module.call_method1("load_line_types", (scene, data.call_method1("get", ("line_types",))?))?;
-    module.call_method1("load_linetype_colors", (scene, data.call_method1("get", ("linetype_colors",))?))?;
-    module.call_method1("load_bricks", (scene, data.call_method1("get", ("bricks",))?))?;
+    crate::model::module(module.py(), "ingetrazo_core")?.getattr("tag_edits")?.call_method1("load_line_types", (scene, data.call_method1("get", ("line_types",))?))?;
+    crate::model::module(module.py(), "ingetrazo_core")?.getattr("tag_styles")?.call_method1("load_linetype_colors", (scene, data.call_method1("get", ("linetype_colors",))?))?;
+    crate::model::module(module.py(), "ingetrazo_core")?.getattr("tag_styles")?.call_method1("load_bricks", (scene, data.call_method1("get", ("bricks",))?))?;
     let (mut added, mut updated) = (0, 0);
     for raw in data.get_item("layers")?.try_iter()? {
         let raw = raw?;
@@ -1032,7 +1032,7 @@ pub fn load_line_types(scene: &Obj<'_>, raw: &Obj<'_>) -> PyResult<usize> {
         if !pieces.is_none() {
             e.set_item("pieces", pieces)?;
         }
-        let colour = module.call_method1("clean_line_colour", (entry.call_method1("get", ("color",))?,))?;
+        let colour = crate::model::module(module.py(), "ingetrazo_core")?.getattr("tag_styles")?.call_method1("clean_line_colour", (entry.call_method1("get", ("color",))?,))?;
         if !colour.is_none() {
             e.set_item("color", colour)?;
         }

@@ -13,6 +13,7 @@ the top of the tags tree as the host's own. One
 undo brings the live link back exactly; redo breaks it again."""
 from __future__ import annotations
 
+import ingetrazo_core
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -25,7 +26,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from core import _native, links  # noqa: E402
 from core.group import Group, copy_group, iter_placements  # noqa: E402
 from core.history import History, MakeUniqueCommand, UnlinkCommand  # noqa: E402
-from core.layers import Layer, folder_label, layer_of  # noqa: E402
+from core.layers import Layer, layer_of  # noqa: E402
 from core.materials import Material  # noqa: E402
 from core.mesh import DeferredMesh, Mesh  # noqa: E402
 from core.purge import iter_groups  # noqa: E402
@@ -524,7 +525,7 @@ def test_the_last_placement_moves_its_tags_to_the_top(tmp_path):
     assert structure == key("Structure") and steel == key("Steel")
     assert host.folder_parents.get(structure) is None
     assert host.folder_parents[steel] == structure
-    assert (folder_label(host, structure), folder_label(host, steel)) == (
+    assert (ingetrazo_core.tag_edits.folder_label(host, structure), ingetrazo_core.tag_edits.folder_label(host, steel)) == (
         "Structure", "Steel")
     # Neither «Linked files» nor the file's folder is left.
     assert links.LINKED_FOLDER not in host.layer_folders

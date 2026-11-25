@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Structured main-thread inspection and navigation for the agent bridge."""
+import ingetrazo_core
 from collections import Counter
 from fnmatch import fnmatchcase
 import math
@@ -216,11 +217,10 @@ class InspectionTools:
         rows = []
         for layer in scene.layers:
             path, folder = [], layer.folder
-            from core.layers import folder_label
             while folder and folder not in path:
                 path.insert(0, folder)
                 folder = getattr(scene, "folder_parents", {}).get(folder)
-            path = [folder_label(scene, f) for f in path]
+            path = [ingetrazo_core.tag_edits.folder_label(scene, f) for f in path]
             rows.append(dict(uid=layer.uid, key=layer.key, name=layer.name,
                              visible=layer.visible,
                              folder_path=path, groups=group_counts[layer.key],

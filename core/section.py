@@ -15,6 +15,7 @@ the whole point of the track (real plans and cross-sections on the sheets).
 """
 from __future__ import annotations
 
+import ingetrazo_core
 from core.doc_model import Record, record_fields
 
 import ingetrazo_core as _NATIVE
@@ -38,12 +39,6 @@ LAYER_HATCH_SCALE = 50.0
 LAYER_HATCH_MOST = 250000
 
 
-#: ``effective_fill(plane, style)``: ``(pattern, (r, g, b), spacing)`` the cut
-#: of ``plane`` is filled with, the plane's own settings over the style's; the
-#: style's Section Fill switch is the master (off, nothing is filled).
-effective_fill = _NATIVE.section_effective_fill
-
-
 def _take_uid(wanted: int | None) -> int:
     """A fresh uid, or ``wanted`` (from a loaded file) while keeping the
     counter ahead so later fresh uids never collide."""
@@ -55,12 +50,6 @@ def _take_uid(wanted: int | None) -> int:
     if wanted > _last_uid:
         _last_uid = wanted
     return wanted
-
-
-#: ``next_symbol(planes)``: the letter the next section plane takes, A, B, C…
-#: then AA, AB. Sections are named by letter and the mark reads «A … A» across
-#: the plan (Rafael, 2026-09-16: «no suele ser un 1, sino A-A, B-B»).
-next_symbol = _NATIVE.section_next_symbol
 
 
 @record_fields('point', 'normal', 'name', 'symbol', 'active', 'uid', 'hidden', 'fill', 'layer')
@@ -123,25 +112,6 @@ class SectionPlane(Record):
 
 
 # ---- The cut, as geometry --------------------------------------------------
-# In Rust (``rust/ingetrazo_core/src/model/section_fill.rs``):
-#
-# ``cut_chords(v0, e1, e2, normal, point, visible=None, rows=False,
-# reach=None)``: the chords the plane cuts out of triangles given as ``v0`` +
-# edge vectors ``e1``/``e2`` ((N, 3) arrays, as the pick index keeps them), an
-# (K, 2, 3) float32 array or ``None``; ``rows=True`` also gives the triangle
-# of each chord. ``PlaneReach(v0, e1, e2, normal)`` keeps how far along the
-# normal each corner stands, so a plane slid along it (a section dragged by
-# its arrow) only cuts the triangles it now crosses (``fits``, ``cut``).
-#
-# ``fill_triangles(chords, normal)``: the section fill as (T, 3, 3) float32
-# triangles, ONLY the cut geometry: chords chained into closed rings
-# (``core.hlr.section_loops``), an open chain dropped, a ring inside another
-# a hole and one inside that hole solid again, rings that merely overlap
-# both filled. ``hatch_segments(chords, normal, spacing, cross=False)``:
-# (L, 2, 3) float32 lines at 45° (and 135°) clipped to those same areas.
-PlaneReach = _NATIVE.PlaneReach
-fill_triangles = _NATIVE.section_fill_triangles
-hatch_segments = _NATIVE.section_hatch_segments
 
 
 def layer_fills(chords, tags, normal, scene, color,
@@ -159,13 +129,12 @@ def layer_fills(chords, tags, normal, scene, color,
     import numpy as np
     from core.hatches import hatch_lines
     from core.hlr import section_loops
-    from core.layers import cut_hatch_forms, cut_hatches, hatch_ground_rgb,         hatch_ink_rgb
     if chords is None or not len(chords):
         return []
     # A solid of more than one layer is filled as the layer of most of it.
     tags = np.asarray(_NATIVE.hlr_closing_tags(chords, tags), dtype=object)
-    hatches = cut_hatches(scene)
-    forms = cut_hatch_forms(scene, scale_n)
+    hatches = ingetrazo_core.tag_styles.cut_hatches(scene)
+    forms = ingetrazo_core.tag_styles.cut_hatch_forms(scene, scale_n)
     u, v = _NATIVE.section_sheet_basis(normal)
     n = np.cross(u, v)
     k = 1000.0 / float(scale_n or LAYER_HATCH_SCALE)    # paper mm per metre
@@ -185,12 +154,12 @@ def layer_fills(chords, tags, normal, scene, color,
         if not len(tris):
             continue
         ly = scene.layer(tag) if hasattr(scene, "layer") else None
-        ink = tuple((hatch_ink_rgb(ly) if ly is not None else None)
+        ink = tuple((ingetrazo_core.tag_styles.hatch_ink_rgb(ly) if ly is not None else None)
                     or color)
         if key == "solid":
             out.append((tris, ink, None, ink))
             continue
-        ground = hatch_ground_rgb(ly) if ly is not None else None
+        ground = ingetrazo_core.tag_styles.hatch_ground_rgb(ly) if ly is not None else None
         ground = tuple(ground) if ground is not None else tuple(
             c + (1.0 - c) * 0.85 for c in ink)
         form = dict(forms.get(tag, {}), cut=cut)

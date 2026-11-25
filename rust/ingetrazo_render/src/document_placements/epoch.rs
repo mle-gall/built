@@ -64,7 +64,7 @@ fn placements_epoch<'py>(v: &Obj<'py>) -> PyResult<Obj<'py>> {
     let objs = truth(&sc, "show_hidden_objects")?;
     let geo = truth(&sc, "show_hidden_geometry")?;
     let mut layers = Vec::new();
-    let visible = m.getattr("_effective_layer_visible")?;
+    let visible = crate::host_context::core_module(py)?.getattr("tag_edits")?.getattr("effective_visible")?;
     for ly in sc.getattr("layers")?.try_iter()? {
         let ly = ly?;
         layers.push((

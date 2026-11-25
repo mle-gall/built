@@ -229,7 +229,7 @@ fn dxf_cut_layers<'p>(
 ) -> PyResult<(Bound<'p, PyList>, Bound<'p, PyList>)> {
     let py = scene.py();
     let api = py.import("core.layers")?;
-    let hatches = api.call_method1("cut_hatches", (scene,))?;
+    let hatches = crate::model::module(api.py(), "ingetrazo_core")?.getattr("tag_styles")?.call_method1("cut_hatches", (scene,))?;
     let groups = PyList::empty(py);
     let solids = PyList::empty(py);
     if !hatches.is_truthy()? {
@@ -250,9 +250,9 @@ fn dxf_cut_layers<'p>(
     }
     let scale = scale_n.filter(|v| *v != 0.).unwrap_or(SCALE);
     let k = k.filter(|v| *v != 0.).unwrap_or(1000. / scale);
-    let forms = api.call_method1("cut_hatch_forms", (scene, scale))?;
+    let forms = crate::model::module(api.py(), "ingetrazo_core")?.getattr("tag_styles")?.call_method1("cut_hatch_forms", (scene, scale))?;
     let cut = api.call_method1("section_cut_kind", (scene,))?;
-    let labels = api.call_method1("export_labels", (scene,))?;
+    let labels = crate::model::module(api.py(), "ingetrazo_core")?.getattr("tag_edits")?.call_method1("export_labels", (scene,))?;
     let depth = drawing.getattr("loop_depths")?;
     let loops = drawing.getattr("loops")?;
     let by_tag = PyDict::new(py);
@@ -297,7 +297,7 @@ fn dxf_cut_layers<'p>(
             if layer.is_none() {
                 Ok(py.None().into_bound(py))
             } else {
-                api.call_method1(op, (&layer,))
+                crate::model::module(py, "ingetrazo_core")?.getattr("tag_styles")?.call_method1(op, (&layer,))
             }
         };
         let ink = style("hatch_ink_rgb")?;

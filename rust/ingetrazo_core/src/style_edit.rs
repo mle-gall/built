@@ -238,7 +238,7 @@ pub fn import_line_file(
         "line_types",
         scene.getattr("line_types")?.cast_into::<PyDict>()?.copy()?,
     )?;
-    let count = layers
+    let count = crate::model::module(layers.py(), "ingetrazo_core")?.getattr("tag_edits")?
         .call_method1("load_line_types", (&work, found))?
         .extract()?;
     let mut edit = StyleEdit::new("Import line types");
@@ -318,23 +318,23 @@ pub fn edit_tag_folder(history: &Bound<'_, PyAny>, verb: &str, draft: &str) -> P
             if d.name.trim().is_empty() {
                 return Err(PyValueError::new_err("Enter a folder name"));
             }
-            key = backend
+            key = crate::model::module(backend.py(), "ingetrazo_core")?.getattr("tag_edits")?
                 .call_method1("add_folder", (&work, "Folder", parent))?
                 .extract()?;
-            backend.call_method1("rename_folder", (&work, &key, d.name.trim()))?;
+            crate::model::module(backend.py(), "ingetrazo_core")?.getattr("tag_edits")?.call_method1("rename_folder", (&work, &key, d.name.trim()))?;
         }
         "rename" | "move" => {
             let accepted = if verb == "rename" {
-                backend.call_method1("rename_folder", (&work, &key, d.name.trim()))?
+                crate::model::module(backend.py(), "ingetrazo_core")?.getattr("tag_edits")?.call_method1("rename_folder", (&work, &key, d.name.trim()))?
             } else {
-                backend.call_method1("move_folder", (&work, &key, parent))?
+                crate::model::module(backend.py(), "ingetrazo_core")?.getattr("tag_edits")?.call_method1("move_folder", (&work, &key, parent))?
             };
             if !accepted.is_truthy()? {
                 return Err(PyValueError::new_err("Invalid folder name or destination"));
             }
         }
         "delete" => {
-            backend.call_method1("remove_folder", (&work, &key))?;
+            crate::model::module(backend.py(), "ingetrazo_core")?.getattr("tag_edits")?.call_method1("remove_folder", (&work, &key))?;
         }
         "file" | "batch" => {
             let folders: HashSet<_> = d.folders.into_iter().collect();

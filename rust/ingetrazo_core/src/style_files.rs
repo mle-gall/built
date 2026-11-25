@@ -83,7 +83,7 @@ pub fn tag_template_file(scene: &Bound<'_, PyAny>, path: PathBuf, save: bool) ->
     let backend = py.import("core.layers")?;
     let json = py.import("json")?;
     if save {
-        let data = backend.call_method1("template_of", (scene,))?;
+        let data = crate::model::module(backend.py(), "ingetrazo_core")?.getattr("tag_edits")?.call_method1("template_of", (scene,))?;
         let options = pyo3::types::PyDict::new(py);
         options.set_item("ensure_ascii", false)?;
         options.set_item("indent", 2)?;
@@ -105,12 +105,12 @@ pub fn tag_template_file(scene: &Bound<'_, PyAny>, path: PathBuf, save: bool) ->
     // The existing importer applies folders and tables before it reaches individual tags.
     // Validate the entire input on an empty document before updating the open one.
     let scratch = py.import("core.scene")?.call_method0("Scene")?;
-    backend
+    crate::model::module(backend.py(), "ingetrazo_core")?.getattr("tag_edits")?
         .call_method1("apply_template", (&scratch, &data))
         .map_err(|e| {
             pyo3::exceptions::PyValueError::new_err(format!("Invalid layer template: {e}"))
         })?;
-    let (added, updated): (usize, usize) = backend
+    let (added, updated): (usize, usize) = crate::model::module(backend.py(), "ingetrazo_core")?.getattr("tag_edits")?
         .call_method1("apply_template", (scene, data))?
         .extract()?;
     py.import("core.history")?

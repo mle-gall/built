@@ -27,6 +27,7 @@ name is then just a label with nothing behind it.
 """
 from __future__ import annotations
 
+import ingetrazo_core
 from copy import deepcopy
 from dataclasses import dataclass, replace
 import json
@@ -216,12 +217,11 @@ def effective_attrs(attrs, material):
             merged["color"] = tuple(c + (1.0 - c) * fade for c in rgb[:3])
         return merged
     if material and material.get("by_layer") is not None:
-        from core.layers import is_link_untagged
         own = (attrs or {}).get("layer")
         # A linked file's «Untagged» is the default tag renamed: the face
         # takes the object's colour, as it did in its own file.
         rgb = (material["by_layer"].get(own)
-               if own and not is_link_untagged(own) else None)
+               if own and not ingetrazo_core.tag_styles.is_link_untagged(own) else None)
         if rgb is None:
             rgb = material.get("color")
         merged = dict(attrs or {})

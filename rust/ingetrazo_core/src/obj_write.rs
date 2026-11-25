@@ -61,10 +61,10 @@ fn uv_for<'p>(
 ) -> PyResult<Obj<'p>> {
     let uvw = get(tex, "uvw")?;
     if uvw.is_truthy()? {
-        texture.call_method1("affine_uv", (uvw, pts))
+        crate::model::module(texture.py(), "ingetrazo_core")?.call_method1("texture_affine_uv", (uvw, pts))
     } else {
-        texture.call_method1(
-            "planar_uv",
+        crate::model::module(texture.py(), "ingetrazo_core")?.call_method1(
+            "texture_planar_uv",
             (
                 flat,
                 pts,

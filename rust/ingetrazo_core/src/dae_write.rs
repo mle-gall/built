@@ -213,7 +213,7 @@ impl Geometry {
                 let uvw = get(&tex, "uvw")?;
                 let texture = py.import("core.texture")?;
                 if uvw.is_truthy()? {
-                    Some(texture.call_method1("affine_uv", (uvw, &pts))?)
+                    Some(crate::model::module(texture.py(), "ingetrazo_core")?.call_method1("texture_affine_uv", (uvw, &pts))?)
                 } else {
                     let getf = |k: &str, d: f64| -> PyResult<f64> {
                         let v = tex.call_method1("get", (k, d))?;
@@ -223,8 +223,8 @@ impl Geometry {
                             Ok(d)
                         }
                     };
-                    Some(texture.call_method1(
-                        "planar_uv",
+                    Some(crate::model::module(texture.py(), "ingetrazo_core")?.call_method1(
+                        "texture_planar_uv",
                         (
                             face.call_method0("normal")?,
                             &pts,

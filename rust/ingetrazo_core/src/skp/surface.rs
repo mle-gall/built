@@ -159,10 +159,8 @@ fn bake<'py>(
     let Some(uv) = coords(face, raw, tex, source, projected && source.is_some())? else {
         return Ok(Some(entry.clone()));
     };
-    let fit = face
-        .py()
-        .import("core.texture")?
-        .call_method1("fit_uv_affine", (outer, uv))?;
+    let fit = crate::model::module(face.py(), "ingetrazo_core")?
+        .call_method1("texture_fit_uv_affine", (outer, uv))?;
     if fit.is_none() {
         return Ok(Some(entry.clone()));
     }

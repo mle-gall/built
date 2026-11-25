@@ -180,7 +180,7 @@ pub fn tree_edit_tag(
             let new = layers.getattr("Layer")?.call((&label,), Some(&kw))?;
             scene.getattr("layers")?.call_method1("append", (new,))?;
             if new_hidden(py)? {
-                layers.call_method1("hide_in_scenes", (&scene, [&label], true))?;
+                crate::host_context::core_module(layers.py())?.getattr("tag_edits")?.call_method1("hide_in_scenes", (&scene, [&label], true))?;
             }
             let mut next = folder;
             let mut seen = HashSet::new();
@@ -205,7 +205,7 @@ pub fn tree_edit_tag(
             }
         }
         "tagactive" if !tag.is_none() => {
-            layers.call_method1("set_active", (&scene, key))?;
+            crate::host_context::core_module(layers.py())?.getattr("tag_edits")?.call_method1("set_active", (&scene, key))?;
         }
         "tagassign" if !tag.is_none() => {
             let targets = layers.call_method1("taggable", (scene.getattr("selection")?,))?;

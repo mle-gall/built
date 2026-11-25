@@ -285,7 +285,7 @@ def drawing(source, frame):
     has a hatch, each ring's look (colour, pattern, ground, ink, form) as
     the composer's ``compute_hlr`` gave them. None when its view is gone."""
     from core.composition import model_height_for_frame
-    from core.layers import LINETYPES, cut_hatch_forms, cut_hatches, grain_layers, section_cut_kind
+    from core.layers import LINETYPES, grain_layers, section_cut_kind
     scene = source.scene
     view = saved_view(scene, frame)
     if view is False:
@@ -294,7 +294,7 @@ def drawing(source, frame):
     coloured = bool(getattr(frame, "layer_colours", False))
     filled = (getattr(frame, "cut_fill", "solid") or "solid") != "none"
     fill_by_layer = bool(getattr(frame, "cut_fill_by_layer", False)) and filled
-    hatches = cut_hatches(facade) if filled else {}
+    hatches = ingetrazo_core.tag_styles.cut_hatches(facade) if filled else {}
     by_layer = ingetrazo_core.tag_styles.layer_lines_wanted(facade) or coloured or fill_by_layer or bool(hatches)
     extra = {"depth_layers": grain_layers(facade)} if by_layer else {}
     got = _hlr(source, frame, tags=by_layer, profiles=bool(getattr(frame, "profiles", True)), fills=filled,
@@ -316,7 +316,7 @@ def drawing(source, frame):
         table = ingetrazo_core.tag_styles.cut_fill_colours(facade) if fill_by_layer else {}
         grounds, inks = ingetrazo_core.tag_styles.cut_hatch_grounds(facade), ingetrazo_core.tag_styles.cut_hatch_inks(facade)
         cut = section_cut_kind(facade)
-        forms = {tag: dict(f, cut=cut) for tag, f in cut_hatch_forms(facade, float(frame.scale_n or 100.0)).items()}
+        forms = {tag: dict(f, cut=cut) for tag, f in ingetrazo_core.tag_styles.cut_hatch_forms(facade, float(frame.scale_n or 100.0)).items()}
         k = frame.h_mm / model_height_for_frame(frame.h_mm, frame.scale_n)
         rgb = lambda t, tag: list(t[tag][:3]) if tag in t else None  # noqa: E731
         fill_looks = []
@@ -487,7 +487,6 @@ def _line_groups(source, frame):
     its view is gone."""
     from core.composition import frame_view_name
     from core.hlr import hlr_drawing
-    from core.layers import export_labels
     from formats.dxf_views import dxf_groups_by_class, dxf_groups_by_layer
     got = _frame_pass(source, frame, True)
     if got is None:
@@ -500,7 +499,7 @@ def _line_groups(source, frame):
     layer = frame_view_name(frame).split(" — ")[0]
     texts = []
     if d.layers is not None:
-        d.styles, d.labels = ingetrazo_core.tag_styles.line_styles(facade, True), export_labels(facade)
+        d.styles, d.labels = ingetrazo_core.tag_styles.line_styles(facade, True), ingetrazo_core.tag_edits.export_labels(facade)
         groups = dxf_groups_by_layer(d, layer, hidden, texts)
     else:
         groups = dxf_groups_by_class(d, layer, hidden)
@@ -644,7 +643,6 @@ def level_at(source, frame, x, y):
     ``frame_level_at``): in an elevation or a horizontal section the page's
     vertical is the model's Z; a plan or an axonometric cannot tell (None)."""
     from core.composition import model_height_for_frame
-    import ingetrazo_core
     if getattr(frame, "perspective", False) or frame.h_mm <= 0:
         return None
     scene = source.scene

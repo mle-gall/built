@@ -92,10 +92,10 @@ def test_a_malformed_cut_weight_loads_kept_in_range(raw, expected):
 def test_a_template_carries_the_cut_weight():
     src = Scene()
     src.layers.append(Layer("Muros", cut_weight=0.5))
-    data = json.loads(json.dumps(L.template_of(src)))
+    data = json.loads(json.dumps(ingetrazo_core.tag_edits.template_of(src)))
     dst = Scene()
     dst.layers.append(Layer("Muros"))
-    L.apply_template(dst, data)
+    ingetrazo_core.tag_edits.apply_template(dst, data)
     assert dst.layer("Muros").cut_weight == 0.5
 
 
@@ -115,7 +115,7 @@ def test_the_fill_colours_leave_the_default_layer_to_the_frame():
     table = ingetrazo_core.tag_styles.cut_fill_colours(scene)
     assert DEFAULT_LAYER not in table
     assert table["Muros"] == pytest.approx((0.8, 0.1, 0.1))
-    assert table["Auto"] == L.layer_color(scene.layer("Auto"))
+    assert table["Auto"] == ingetrazo_core.tag_styles.layer_color(scene.layer("Auto"))
 
 
 # ---- The hidden-line pass ------------------------------------------------
@@ -238,7 +238,7 @@ def test_a_template_and_the_legend_carry_the_hatch():
     src.layers.append(Layer("Aislante", hatch="insulation"))
     dst = Scene()
     dst.layers.append(Layer("Aislante"))
-    L.apply_template(dst, json.loads(json.dumps(L.template_of(src))))
+    ingetrazo_core.tag_edits.apply_template(dst, json.loads(json.dumps(ingetrazo_core.tag_edits.template_of(src))))
     assert dst.layer("Aislante").hatch == "insulation"
     _rows, swatches = L.legend_rows(src)
     assert swatches["Aislante"]["hatch"] == "insulation"
@@ -263,9 +263,9 @@ def test_the_hatch_ground_round_trips_as_a_colour_or_the_layer():
 def test_the_layer_ground_is_its_colour_made_light():
     ly = Layer("A", color=(0.8, 0.0, 0.0), hatch="brick",
                hatch_ground="layer")
-    r, g, b = L.hatch_ground_rgb(ly)
+    r, g, b = ingetrazo_core.tag_styles.hatch_ground_rgb(ly)
     assert r > g and g == pytest.approx(0.75) and r > 0.9
-    assert L.hatch_ground_rgb(Layer("B")) is None
+    assert ingetrazo_core.tag_styles.hatch_ground_rgb(Layer("B")) is None
 
 
 def test_only_hatched_layers_give_their_ground_to_the_sheet():
@@ -283,7 +283,7 @@ def test_a_template_carries_the_ground():
     src.layers.append(Layer("Muros", hatch="brick", hatch_ground="layer"))
     dst = Scene()
     dst.layers.append(Layer("Muros"))
-    L.apply_template(dst, json.loads(json.dumps(L.template_of(src))))
+    ingetrazo_core.tag_edits.apply_template(dst, json.loads(json.dumps(ingetrazo_core.tag_edits.template_of(src))))
     assert dst.layer("Muros").hatch_ground == "layer"
 
 
@@ -302,10 +302,10 @@ def test_the_hatch_ink_round_trips_by_layer_or_fixed():
 
 def test_by_layer_is_the_layer_colour_a_shade_darker():
     ly = Layer("A", color=(1.0, 0.5, 0.0), hatch="brick", hatch_color="layer")
-    assert L.hatch_ink_rgb(ly) == pytest.approx((0.7, 0.35, 0.0))
+    assert ingetrazo_core.tag_styles.hatch_ink_rgb(ly) == pytest.approx((0.7, 0.35, 0.0))
     ly.color = (0.0, 0.0, 1.0)                     # follows the layer
-    assert L.hatch_ink_rgb(ly) == pytest.approx((0.0, 0.0, 0.7))
-    assert L.hatch_ink_rgb(Layer("B")) is None
+    assert ingetrazo_core.tag_styles.hatch_ink_rgb(ly) == pytest.approx((0.0, 0.0, 0.7))
+    assert ingetrazo_core.tag_styles.hatch_ink_rgb(Layer("B")) is None
 
 
 def test_only_hatched_layers_give_their_ink_and_the_legend_shows_it():
@@ -412,8 +412,8 @@ def test_a_hatch_that_grows_with_the_drawing_follows_the_frame_scale():
     scene = Scene()
     scene.layers += [Layer("Papel", hatch="grid", hatch_scale=2.0),
                      Layer("Dibujo", hatch="grid", hatch_on_paper=False)]
-    at_50 = L.cut_hatch_forms(scene, 50.0)
-    at_200 = L.cut_hatch_forms(scene, 200.0)
+    at_50 = ingetrazo_core.tag_styles.cut_hatch_forms(scene, 50.0)
+    at_200 = ingetrazo_core.tag_styles.cut_hatch_forms(scene, 200.0)
     assert at_50["Papel"]["scale"] == at_200["Papel"]["scale"] == 2.0
     assert at_50["Dibujo"]["scale"] == pytest.approx(2.0)   # twice at 1:50
     assert at_200["Dibujo"]["scale"] == pytest.approx(0.5)  # half at 1:200
@@ -432,8 +432,8 @@ def test_a_material_is_drawn_at_its_real_size_by_itself():
     scene.layers += [Layer("Muro", hatch="brick"),
                      Layer("Losa", hatch="concrete"),
                      Layer("Muro fijo", hatch="brick", hatch_on_paper=True)]
-    at_10 = L.cut_hatch_forms(scene, 10.0)
-    at_50 = L.cut_hatch_forms(scene, 50.0)
+    at_10 = ingetrazo_core.tag_styles.cut_hatch_forms(scene, 10.0)
+    at_50 = ingetrazo_core.tag_styles.cut_hatch_forms(scene, 50.0)
     assert at_10["Muro"]["scale"] == pytest.approx(5 * at_50["Muro"]["scale"])
     assert at_10["Losa"]["scale"] == at_50["Losa"]["scale"] == 1.0
     assert at_10["Muro fijo"]["scale"] == 1.0
@@ -460,8 +460,8 @@ def test_imported_patterns_live_in_the_document(tmp_path):
     scene = Scene()
     scene.hatch_patterns = parse_pat(_PAT)
     scene.layers.append(Layer("Muro", hatch="pat:TEST-HEX"))
-    assert L.hatch_families(scene, "pat:TEST-HEX")
-    assert L.hatch_families(scene, "brick") is None
+    assert ingetrazo_core.tag_styles.hatch_families(scene, "pat:TEST-HEX")
+    assert ingetrazo_core.tag_styles.hatch_families(scene, "brick") is None
     path = tmp_path / "hex.igz"
     igz.save_scene(scene, path)
     back = Scene()
@@ -668,7 +668,7 @@ def test_the_pen_draws_dash_gap_in_turn():
 def test_a_layer_takes_a_line_type_of_the_document(tmp_path):
     from formats import igz
     scene = Scene()
-    L.load_line_types(scene, {"Borde": {"label": "Borde",
+    ingetrazo_core.tag_edits.load_line_types(scene, {"Borde": {"label": "Borde",
                                         "pattern": [6, -1.5, 0, -1.5]}})
     scene.layers.append(Layer("Lindero", linetype="lin:Borde"))
     assert Layer("X", linetype="zigzag").linetype == "continuous"
@@ -687,14 +687,14 @@ def test_a_layer_takes_a_line_type_of_the_document(tmp_path):
 
 def test_a_template_and_the_legend_carry_the_own_line_type():
     src = Scene()
-    L.load_line_types(src, {"Borde": {"label": "Borde",
+    ingetrazo_core.tag_edits.load_line_types(src, {"Borde": {"label": "Borde",
                                       "pattern": [6, -1.5, 0, -1.5]},
                             "Unused": {"label": "U", "pattern": [1, -1]}})
     src.layers.append(Layer("Lindero", linetype="lin:Borde"))
-    data = json.loads(json.dumps(L.template_of(src)))
+    data = json.loads(json.dumps(ingetrazo_core.tag_edits.template_of(src)))
     assert set(data["line_types"]) == {"Borde"}  # only the used ones
     dst = Scene()
-    L.apply_template(dst, data)
+    ingetrazo_core.tag_edits.apply_template(dst, data)
     assert dst.layer("Lindero").linetype == "lin:Borde"
     assert "Borde" in dst.line_types
     _rows, swatches = L.legend_rows(src)
@@ -822,7 +822,7 @@ def test_a_layer_keeps_its_joints_and_mortar(tmp_path):
     assert "joints" not in Layer("X", hatch="brick").to_dict()
     scene = Scene()
     scene.layers.append(ly)
-    form = L.cut_hatch_forms(scene, 10.0)["Muro"]
+    form = ingetrazo_core.tag_styles.cut_hatch_forms(scene, 10.0)["Muro"]
     assert form["joints"] == "double" and form["mortar"] is True
 
 
@@ -856,7 +856,7 @@ def test_a_layer_keeps_its_own_brick(tmp_path):
     # A taller course: the pattern grows to it, real at any scale.
     assert real_scale("brick", 10, (290, 140, 71, 10)) == pytest.approx(
         81.0 / 10.0 / 1.5)
-    forms = L.cut_hatch_forms(scene, 10.0)
+    forms = ingetrazo_core.tag_styles.cut_hatch_forms(scene, 10.0)
     assert forms["Muros"]["brick"] == (290.0, 140.0, 71.0, 10.0)
     assert forms["Muros"]["families"]                  # drawn with it
     assert forms["Muros"]["scale_n"] == 10.0
@@ -1106,7 +1106,7 @@ def test_a_document_keeps_and_draws_a_line_type_with_words(tmp_path):
     from formats import igz
     scene = Scene()
     pattern, spec = L.with_text([8.0, -2.0], "GAS", 2.0)
-    L.load_line_types(scene, {"Gas": dict({"label": "Gas",
+    ingetrazo_core.tag_edits.load_line_types(scene, {"Gas": dict({"label": "Gas",
                                            "pattern": pattern}, **spec)})
     scene.layers.append(Layer("Instalaciones", linetype="lin:Gas"))
     path = tmp_path / "gas.igz"
@@ -1116,7 +1116,7 @@ def test_a_document_keeps_and_draws_a_line_type_with_words(tmp_path):
     assert back.line_types["Gas"]["text"] == "GAS"
     words = ingetrazo_core.tag_styles.line_styles(back, False)["Instalaciones"][5]
     assert words[0] == "GAS" and words[1] == 2.0
-    assert L.linetype_text("dashed") is None
+    assert ingetrazo_core.tag_styles.linetype_text("dashed") is None
 
 
 # ---- Favourite hatches, and the line type editor -------------------------------
@@ -1127,7 +1127,7 @@ def test_drawing_edits_and_deletes_its_line_types():
     edit_line(p, "save", name="Gas", pieces=[8,-2], tags=["Gas"], text="GAS", text_size=2.0)
     entry = p.scene.line_types["Gas"]
     assert entry["pieces"] == [8., -2.] and entry["text"] == "GAS" and entry["pattern"][1] < -2.
-    assert L.linetype_text("lin:Gas", p.scene)[0] == "GAS"
+    assert ingetrazo_core.tag_styles.linetype_text("lin:Gas", p.scene)[0] == "GAS"
     edit_line(p, "save", original="Gas", name="Gas natural", pieces=[10,-2], text="GN", text_size=2.)
     assert "Gas" not in p.scene.line_types and p.scene.layer("Gas").linetype == "lin:Gas natural"
     edit_line(p, "delete", original="Gas natural")
@@ -1149,7 +1149,7 @@ def test_the_document_pieces_draw_every_layer_without_its_own(tmp_path):
     assert ingetrazo_core.tag_styles.layer_brick(scene, scene.layer("Muros")) == chile
     assert ingetrazo_core.tag_styles.layer_brick(scene, scene.layer("Tabiques"))[0] == 240.0
     assert ingetrazo_core.tag_styles.layer_brick(scene, scene.layer("Bloques")) == block
-    forms = L.cut_hatch_forms(scene, 10.0)
+    forms = ingetrazo_core.tag_styles.cut_hatch_forms(scene, 10.0)
     assert forms["Muros"]["brick"] == chile
     assert forms["Bloques"]["brick"] == block
     path = tmp_path / "brick.igz"
@@ -1160,9 +1160,9 @@ def test_the_document_pieces_draw_every_layer_without_its_own(tmp_path):
     igz.save_scene(Scene(), tmp_path / "plain.igz")
     igz.load_into(back, tmp_path / "plain.igz")
     assert back.bricks == {}                       # no leak to the next
-    data = json.loads(json.dumps(L.template_of(scene)))
+    data = json.loads(json.dumps(ingetrazo_core.tag_edits.template_of(scene)))
     other = Scene()
-    L.apply_template(other, data)
+    ingetrazo_core.tag_edits.apply_template(other, data)
     assert other.bricks == {"brick": chile, "block": block}
 
 
@@ -1288,7 +1288,6 @@ def _model_cut(scene):
     """The active plane through ``scene``: its chords and each one's layer,
     as the viewer tags them."""
     from core.hlr import collect_geometry
-    import ingetrazo_core
     tris, _h, _s, _hl, _sl, tags = collect_geometry(scene, layers=True)
     t = np.asarray(tris, dtype=np.float64)
     sp = scene.active_section()
@@ -1327,7 +1326,6 @@ def test_the_model_cut_shows_each_layers_hatch():
 
 
 def test_a_section_cut_lays_its_courses_level():
-    import ingetrazo_core
     u, v = ingetrazo_core.section_sheet_basis(V(0, 1, 0))                      # a section
     assert v == pytest.approx((0, 0, 1)) and abs(u[2]) < 1e-9
     u, v = ingetrazo_core.section_sheet_basis(V(0, 0, 1))                      # a plan
@@ -1412,27 +1410,25 @@ def test_a_pattern_of_pieces_moves_and_a_texture_does_not():
 
 
 def test_the_layer_keeps_where_its_pieces_start():
-    from core.layers import clean_offset, cut_hatch_forms
     ly = Layer("Muros", hatch="brick", hatch_offset=(115.0, -20.0))
     assert ly.has_style()
     back = Layer.from_dict(ly.to_dict())
     assert back.hatch_offset == (115.0, -20.0)
     assert Layer.from_dict(Layer("Muros").to_dict()).hatch_offset is None
-    assert clean_offset((0, 0)) is None
-    assert clean_offset(("a", 1)) is None
-    assert clean_offset((float("nan"), 1)) is None
-    assert clean_offset((1e9, 1)) == (10000.0, 1.0)
+    assert ingetrazo_core.tag_styles.clean_offset((0, 0)) is None
+    assert ingetrazo_core.tag_styles.clean_offset(("a", 1)) is None
+    assert ingetrazo_core.tag_styles.clean_offset((float("nan"), 1)) is None
+    assert ingetrazo_core.tag_styles.clean_offset((1e9, 1)) == (10000.0, 1.0)
     scene = Scene()
     scene.layers.append(ly)
-    assert cut_hatch_forms(scene, 50.0)["Muros"]["offset"] == (115.0, -20.0)
+    assert ingetrazo_core.tag_styles.cut_hatch_forms(scene, 50.0)["Muros"]["offset"] == (115.0, -20.0)
 
 
 # ---- A line type's own colour ----------------------------------------------
 
 def _gas_scene(scene):
     """A wall on «Gas», its line type yellow."""
-    from core.layers import load_line_types
-    load_line_types(scene, {"Gas": {"pattern": [6.0, -2.0],
+    ingetrazo_core.tag_edits.load_line_types(scene, {"Gas": {"pattern": [6.0, -2.0],
                                     "color": [0.85, 0.65, 0.0]}})
     scene.layers.append(Layer("Gas", linetype="lin:Gas"))
     pipe = Group(Mesh(), name="caño")
@@ -1443,7 +1439,6 @@ def _gas_scene(scene):
 
 
 def test_a_line_type_keeps_its_colour_and_inks_with_it():
-    import ingetrazo_core
     scene = _gas_scene(Scene())
     assert ingetrazo_core.tag_styles.linetype_color("lin:Gas", scene) == (0.85, 0.65, 0.0)
     assert ingetrazo_core.tag_styles.linetype_color("dashed", scene) is None
@@ -1451,8 +1446,7 @@ def test_a_line_type_keeps_its_colour_and_inks_with_it():
     assert ingetrazo_core.tag_styles.line_styles(scene, False)["Gas"][0] == (0.85, 0.65, 0.0)
     assert ingetrazo_core.tag_styles.line_styles(scene, True)["Gas"][0] == (0.85, 0.65, 0.0)
     # A bad colour is dropped, the line type kept.
-    from core.layers import load_line_types
-    load_line_types(scene, {"Agua": {"pattern": [6.0, -2.0],
+    ingetrazo_core.tag_edits.load_line_types(scene, {"Agua": {"pattern": [6.0, -2.0],
                                      "color": ["x", 1, 2]}})
     assert "color" not in scene.line_types["Agua"]
 
@@ -1492,7 +1486,6 @@ def test_a_dash_pattern_cuts_an_edge_as_a_sheet_at_1_50():
     assert len(whole) == 1 and not len(none)
 
 def test_a_built_in_line_type_takes_a_colour_of_the_document(tmp_path):
-    from core.layers import template_of
     from formats import igz
     scene = Scene()
     scene.layers.append(Layer("Ejes", linetype="dashdot"))
@@ -1505,7 +1498,7 @@ def test_a_built_in_line_type_takes_a_colour_of_the_document(tmp_path):
     back = Scene()
     igz.load_into(back, path)
     assert ingetrazo_core.tag_styles.linetype_color("dashdot", back) == (0.85, 0.10, 0.10)
-    assert template_of(scene)["linetype_colors"]["dashdot"] == [
+    assert ingetrazo_core.tag_edits.template_of(scene)["linetype_colors"]["dashdot"] == [
         0.85, 0.10, 0.10]
     assert ingetrazo_core.tag_styles.set_linetype_color(scene, "dashdot", None)          # by layer
     assert ingetrazo_core.tag_styles.linetype_color("dashdot", scene) is None
@@ -1584,7 +1577,6 @@ def test_the_model_cut_fills_a_solid_of_two_layers():
 
 
 def test_solids_each_of_one_layer_are_tagged_as_they_were():
-    import ingetrazo_core
     scene = _wall_and_door(Scene())
     chords, tags = _model_cut(scene)
     assert ingetrazo_core.hlr_closing_tags(chords, tags) == list(tags)

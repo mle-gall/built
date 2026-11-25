@@ -12,6 +12,7 @@ it. Hidden commands use the same vertex/index buffers and COMMAND dtype.
 Materials use 16-byte prototype headers followed by 32-byte corner records
 only for prototypes with textures or backs that differ from their fronts.
 """
+import ingetrazo_core
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import NamedTuple
@@ -296,7 +297,6 @@ def _source_arrays(mesh, paint=None, texture_ids=None, face_overrides=None, bill
 def _placement_state(scene):
     """Memoise layer/material work while preserving edit and navigator filters."""
     from core.group import effective_material
-    from core.layers import object_layer
     from core.materials import material_sig
     from views.document_interaction import _paint_of
     vp = SimpleNamespace(scene=scene)
@@ -318,7 +318,7 @@ def _placement_state(scene):
                 visibility[key] = scene.entity_visible(group)
             visible = visibility[key]
         material = effective_material(group)
-        key = (object_layer(group), material_sig(material))
+        key = (ingetrazo_core.tag_styles.object_layer(group), material_sig(material))
         if key not in paints:
             paint = _paint_of(vp, group) or {}
             # A style-generated Front tint is not material paint. Keep that
@@ -390,10 +390,10 @@ def _native_records(scene, roots):
     (architecture review 12)."""
     from core import doc_model
     from core.group import PlacementProxy
-    from core.layers import DEFAULT_LAYER, LINK_UNTAGGED_SUFFIX, effective_visible
+    from core.layers import DEFAULT_LAYER, LINK_UNTAGGED_SUFFIX
     invisible, blocked = set(), set()
     for ly in scene.layers:
-        if not effective_visible(scene, ly):
+        if not ingetrazo_core.tag_edits.effective_visible(scene, ly):
             invisible.add(ly.key)
             blocked.add(ly.key)
         elif ly.locked:

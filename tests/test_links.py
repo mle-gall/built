@@ -101,7 +101,6 @@ def test_a_host_override_survives_the_source_and_can_be_cleared(tmp_path):
 
 def test_any_host_switch_counts_as_an_override(tmp_path):
     """Isolate, a saved view, the panel: not through note_visibility."""
-    import ingetrazo_core
     src = _source(tmp_path / "Site.igz")
     host, _comp = _host_with_link(tmp_path, src)
     ingetrazo_core.tag_edits.set_visible(host, ["Site / Wood"], False)
@@ -216,7 +215,7 @@ def test_a_links_untagged_pieces_take_their_owners_tag_colour():
     its owner's tag, as in its own file — the facilities model came up in
     one green instead of its tags' colours (Maxence, 2026-11-09)."""
     from core.group import Group
-    from core.layers import DEFAULT_LAYER, object_layer
+    from core.layers import DEFAULT_LAYER
     from core.materials import effective_attrs
     from core.mesh import Mesh
     owner = Group(Mesh(), name="Beam")
@@ -224,14 +223,14 @@ def test_a_links_untagged_pieces_take_their_owners_tag_colour():
     piece = Group(Mesh(), name="Flange")
     piece.layer = "Site / Untagged"
     piece.owner = owner
-    assert object_layer(piece) == "Site / Steel"
+    assert ingetrazo_core.tag_styles.object_layer(piece) == "Site / Steel"
     top = Group(Mesh(), name="Loose")
     top.layer = "Site / Untagged"
-    assert object_layer(top) == DEFAULT_LAYER
+    assert ingetrazo_core.tag_styles.object_layer(top) == DEFAULT_LAYER
     tagged = Group(Mesh(), name="Rail")
     tagged.layer = "Site / Wood"
     tagged.owner = owner
-    assert object_layer(tagged) == "Site / Wood"      # its own tag still wins
+    assert ingetrazo_core.tag_styles.object_layer(tagged) == "Site / Wood"      # its own tag still wins
     paint = {"by_layer": {"Site / Steel": (1.0, 0.0, 0.0),
                           "Site / Untagged": (0.0, 1.0, 0.0)},
              "color": (1.0, 0.0, 0.0)}

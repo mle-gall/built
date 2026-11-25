@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Large saves retain the exact legacy JSON/ZIP bytes with bounded scratch reads."""
+import ingetrazo_core
 import io
 import json
 import tracemalloc
@@ -38,7 +39,7 @@ def test_streamed_save_matches_retained_document_and_round_trips(tmp_path, monke
     source = tmp_path / "source.igz"
     igz.save_scene(_scene(tmp_path), source)
     scene.groups.append(links.make_link(scene, source))
-    folder = layers.add_folder(scene, "Finishes")
+    folder = ingetrazo_core.tag_edits.add_folder(scene, "Finishes")
     scene.layers.append(layers.Layer("Wood", key="wood-key", folder=folder))
     scene.saved_views.append(SavedView("Plan", hidden_layers=["wood-key"]))
     scene.compositions.append(Composicion(name="Sheet 1"))

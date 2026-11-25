@@ -12,6 +12,7 @@ Selected as a unit and moved/exploded via the commands in :mod:`core.history`.
 """
 from __future__ import annotations
 
+import ingetrazo_core
 import copy
 from contextvars import ContextVar
 import itertools
@@ -599,15 +600,15 @@ def visible_placements(scene, group):
     instance below it on that tag, whatever its children are tagged. A
     hidden group two levels down drew in a sheet while the viewport left it
     out, because :func:`world_mesh` folds in every child."""
-    from core.layers import effective_visible   # a hidden folder hides its tags
+    import ingetrazo_core   # a hidden folder hides its tags
 
     def shown(layer):
         ly = scene.layer(layer) if layer else None
-        return ly is None or effective_visible(scene, ly)
+        return ly is None or ingetrazo_core.tag_edits.effective_visible(scene, ly)
 
     def blocking(layer):
         ly = scene.layer(layer) if layer else None
-        return ly is not None and (not effective_visible(scene, ly)
+        return ly is not None and (not ingetrazo_core.tag_edits.effective_visible(scene, ly)
                                    or ly.locked)
 
     def walk(node, world, hidden, forced, inherited):

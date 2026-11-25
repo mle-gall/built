@@ -821,11 +821,11 @@ def place_section_plane(history, point, normal, name=None, symbol=None):
     from ingetrazo_core import Vec3
     from core.i18n import tr
     from core.history import PlaceSectionPlaneCommand
-    from core.section import SectionPlane, next_symbol
+    from core.section import SectionPlane
     planes = history.scene.section_planes
     plane = SectionPlane(Vec3(*point), Vec3(*normal),
                          name=tr("Section {n}", n=len(planes) + 1) if name is None else name,
-                         symbol=next_symbol(planes) if symbol is None else symbol)
+                         symbol=ingetrazo_core.section_next_symbol(planes) if symbol is None else symbol)
     before = history.revision
     history.execute(PlaceSectionPlaneCommand(plane))
     return _answer(history, before)

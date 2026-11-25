@@ -40,6 +40,7 @@ read-only (``structure.file`` refuses linked structure anyway).
 """
 from __future__ import annotations
 
+import ingetrazo_core
 from collections import defaultdict
 import json
 
@@ -261,7 +262,6 @@ class Tree:
 
     def _tags(self, stems, path, key, base):
         """A file without a structure: its tag folders and tags as mirrored."""
-        from core.layers import folder_label
         scene = self.scene
         parents = getattr(scene, "folder_parents", {}) or {}
         nested = base + links.SEP + LINKED_NAME
@@ -286,7 +286,7 @@ class Tree:
         def under(f):
             return key if f in (base, single) else pre + "tf:" + f
         for n, (f, parent) in enumerate(folders.items()):
-            label = folder_label(scene, f) or f
+            label = ingetrazo_core.tag_edits.folder_label(scene, f) or f
             label = label[len(base) + len(links.SEP):] if label.startswith(base + links.SEP) else label
             if f == single:
                 self.alias[pre + "tf:" + f] = key

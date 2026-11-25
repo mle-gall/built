@@ -8,6 +8,7 @@ a deleted one's render because the caches are keyed on ``id(frame)``.
 """
 from __future__ import annotations
 
+import ingetrazo_core
 import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as QVector3D
@@ -69,16 +70,16 @@ def test_the_title_block_field_says_it_too():
 def test_a_new_section_takes_a_LETTER_not_a_number():
     """«Las secciones se nombran así: no suele ser un 1, sino A-A, B-B»
     (50:45). The mark draws the letter at both ends, so «A … A»."""
-    from core.section import SectionPlane, next_symbol
+    from core.section import SectionPlane
     V = QVector3D
     planes = []
     for _ in range(4):
         planes.append(SectionPlane(V(0, 0, 0), V(0, 0, 1),
-                                   symbol=next_symbol(planes)))
+                                   symbol=ingetrazo_core.section_next_symbol(planes)))
     assert [p.symbol for p in planes] == ["A", "B", "C", "D"]
     # a gap is filled, and past Z it carries
-    assert next_symbol([planes[0], planes[2]]) == "B"
-    assert next_symbol([SectionPlane(V(0, 0, 0), V(0, 0, 1), symbol=chr(65 + i))
+    assert ingetrazo_core.section_next_symbol([planes[0], planes[2]]) == "B"
+    assert ingetrazo_core.section_next_symbol([SectionPlane(V(0, 0, 0), V(0, 0, 1), symbol=chr(65 + i))
                         for i in range(26)]) == "AA"
 
 

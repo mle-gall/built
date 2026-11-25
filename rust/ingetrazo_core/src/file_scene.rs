@@ -601,7 +601,8 @@ pub fn igz_reset_scene(scene: &Obj<'_>, payload: &Dict<'_>, survey: &Obj<'_>) ->
         ("linetype_colors", "load_linetype_colors"),
         ("bricks", "load_bricks"),
     ] {
-        module.call_method1(load, (scene, data(payload, key)?))?;
+        let owner = if load == "load_line_types" { "tag_edits" } else { "tag_styles" };
+        crate::model::module(py, "ingetrazo_core")?.getattr(owner)?.call_method1(load, (scene, data(payload, key)?))?;
     }
     if let Ok(patterns) = data(payload, "hatch_patterns")?.cast::<PyDict>() {
         let clean = py.import("core.hatches")?.getattr("clean_families")?;

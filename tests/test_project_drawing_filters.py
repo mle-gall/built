@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Drawing rows of an imported file in the Project tree before bootstrap."""
+import ingetrazo_core
 import pytest
 
 from core import layers
@@ -53,23 +54,23 @@ def test_filter_hides_what_does_not_match():
 
 def test_filters_keep_the_folders_on_the_way():
     project = Project(Layer("Oculta", folder="Arq", visible=False), Layer("Vista", folder="Arq"))
-    layers.add_folder(project.scene, "Vacia")
+    ingetrazo_core.tag_edits.add_folder(project.scene, "Vacia")
     assert project.names("is:hidden") == ["Arq", "Oculta"]
 
 
 def test_a_folder_eye_reaches_layers_in_folders_inside_it():
     project = Project()
     scene = project.scene
-    outer = layers.add_folder(scene, "Arq")
-    inner = layers.add_folder(scene, "Muros", parent=outer)
+    outer = ingetrazo_core.tag_edits.add_folder(scene, "Arq")
+    inner = ingetrazo_core.tag_edits.add_folder(scene, "Muros", parent=outer)
     scene.layers.extend([Layer("Exterior", folder=inner), Layer("Suelo", folder=outer)])
     project.rows()
     project.action("eye", "preview-folder:" + outer)
     for name in ["Exterior", "Suelo"]:
-        assert scene.layer(name).visible and not layers.effective_visible(scene, scene.layer(name))
+        assert scene.layer(name).visible and not ingetrazo_core.tag_edits.effective_visible(scene, scene.layer(name))
     assert project.names("exter") == sorted([outer, inner, "Exterior"])
     assert project.win.viewport.history.undo()
-    assert layers.effective_visible(scene, scene.layer("Exterior"))
+    assert ingetrazo_core.tag_edits.effective_visible(scene, scene.layer("Exterior"))
 
 
 def test_successive_eye_actions_toggle_only_the_addressed_tag():
@@ -102,7 +103,7 @@ def test_the_filter_finds_planes_by_name():
 
 def test_first_construction_tag_keeps_existing_folder_rows():
     p = Project()
-    folder = layers.add_folder(p.scene, "Zone")
+    folder = ingetrazo_core.tag_edits.add_folder(p.scene, "Zone")
     p.scene.layers.extend(Layer(n, folder=folder) for n in ("Walls", "Floors"))
     previous = p.action("toggle", "preview-folder:" + folder)
     p.scene.layers.append(Layer("Guides"))
@@ -207,7 +208,7 @@ def test_drawing_drops_and_entity_counts_follow_the_document():
 
     p = Project(Layer("A"), Layer("B"), Layer("C", folder="Plans"))
     scene = p.scene
-    outside = layers.add_folder(scene, "Outside")
+    outside = ingetrazo_core.tag_edits.add_folder(scene, "Outside")
     p.action("lens", "1")
 
     def drop(verb, **payload):
@@ -227,9 +228,9 @@ def test_drawing_drops_and_entity_counts_follow_the_document():
     assert scene.layer("A").folder is None and scene.layer("B").folder is None
 
     p.action("eye", "preview-folder:Plans")
-    assert not layers.effective_visible(scene, scene.layer("C"))
+    assert not ingetrazo_core.tag_edits.effective_visible(scene, scene.layer("C"))
     p.action("eye", "preview-folder:Plans")
-    assert layers.effective_visible(scene, scene.layer("C"))
+    assert ingetrazo_core.tag_edits.effective_visible(scene, scene.layer("C"))
     counts = TagCounts()
     edge = scene.mesh.add_edge(Vec3(0, 0, 0), Vec3(1, 0, 0))
     edge.layer = "C"

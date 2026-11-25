@@ -262,8 +262,7 @@ pub(crate) fn structure_proposal<'py>(
             .getattr("folder_parents")?
             .call_method1("get", (f,))?
             .extract::<Option<String>>()?;
-        let label: String = py
-            .import("core.layers")?
+        let label: String = crate::model::module(py, "ingetrazo_core")?.getattr("tag_edits")?
             .call_method1("folder_label", (scene, f))?
             .extract()?;
         let label = if src.is_some() {

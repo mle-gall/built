@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Folder and tag headings in the native Project tree and Drawing lens."""
+import ingetrazo_core
 import time
 
 from core import layers as L
@@ -131,8 +132,8 @@ def test_drawing_eye_lock_and_folder_eye_leave_objects_intact():
         assert getattr(s.layer("Walls"), field) != before
         assert p.win.viewport.history.undo() and getattr(s.layer("Walls"), field) == before
     p.action("eye", "preview-folder:Building")
-    assert all(ly.visible and not L.effective_visible(s, ly) for ly in [s.layer("Walls"), s.layer("Roof")])
-    assert L.effective_visible(s, s.layer("Site"))
+    assert all(ly.visible and not ingetrazo_core.tag_edits.effective_visible(s, ly) for ly in [s.layer("Walls"), s.layer("Roof")])
+    assert ingetrazo_core.tag_edits.effective_visible(s, s.layer("Site"))
     assert all(not g.hidden and not g.locked for g in s.groups)
 
 

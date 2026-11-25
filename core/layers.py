@@ -56,23 +56,13 @@ def known_linetype(key) -> bool:
 
 
 # ---- Styles: Rust ------------------------------------------------------------
-# ``rust/ingetrazo_core/src/model/tag_styles.rs``. Line types by document:
-# ``linetype_pattern`` (the dashes as drawn, paper mm), ``linetype_text``,
-# ``clean_line_colour``, ``linetype_color`` (a gas line yellow whatever its
-# tag), ``set_linetype_color``, ``load_linetype_colors``, ``model_line_styles``.
-# Colours and looks: ``layer_color`` (picked, the default tag's white, or the
-# automatic one by key), ``light_layer_color``, ``hatch_ground_rgb``,
-# ``hatch_ink_rgb``, ``is_link_untagged``, ``object_layer`` (a linked file's
-# «Untagged» counts as none), ``layer_paint``, ``layer_fx``, ``layer_look``.
-# Sheets: ``layer_lines_wanted``, ``line_styles``, ``legend_rows``,
-# ``cut_hatches``, ``cut_hatch_grounds``, ``cut_hatch_inks``,
-# ``cut_fill_colours``, ``cut_hatch_forms`` (turned, sized with the drawing or
-# on paper, the families and brick), ``hatch_families``, ``layer_brick``,
-# ``load_bricks``, ``layer_hatch_families``, ``hatch_label``, ``hatch_grows``,
-# ``clean_offset``, ``unprinted``, ``hide_unprinted``.
-for _name in ("linetype_text", "clean_line_colour", "load_linetype_colors", "model_line_styles", "hatch_ground_rgb", "hatch_ink_rgb", "layer_color", "is_link_untagged", "object_layer", "layer_paint", "layer_fx", "layer_look", "legend_rows", "cut_hatches", "hatch_families", "load_bricks", "cut_hatch_forms", "clean_offset", "unprinted", ):
-    globals()[_name] = getattr(_rs.tag_styles, _name)
-del _name
+# The tag styles are ``ingetrazo_core.tag_styles``
+# (``rust/ingetrazo_core/src/model/tag_styles.rs``): line types by document,
+# colours and looks, sheets' line styles and hatches. Callers import them from
+# there; the two plugins call (the legend's rows, what does not print) stay
+# here by name.
+legend_rows = _rs.tag_styles.legend_rows
+unprinted = _rs.tag_styles.unprinted
 
 
 def text_width(text: str, size: float) -> float:
@@ -334,43 +324,18 @@ def selection_layers(scene) -> set[str]:
 TEMPLATE_KEY = "ingetrazo_layers"
 
 
-# ---- Folders, display state, templates: Rust ---------------------------------
-# ``rust/ingetrazo_core/src/model/tag_edits.rs``, step for step on the scene's
-# root tables (``layer_folders``, ``folder_parents``, ``layer_folder_names``,
-# ``layer_folder_uids``, ``folder_visibility``, ``active_layer``) and its tags.
-#
-# Folders: ``folders_of`` (the document's list, then any a tag names; each
-# given a uid), ``folder_parent`` (a parent that is gone or makes a loop reads
-# as the top), ``subfolders``, ``layers_in_folder``, ``folder_visible`` (its
-# own switch and its parents'), ``effective_visible``; the labels
-# ``folder_label``, ``layer_label``, ``path_label`` («Observation Deck/Steel/
-# Beams», for what has to tell tags apart by text) and ``export_labels``;
-# ``unique_name``. Edits: ``add_folder``, ``move_folder`` (refused into
-# itself or a folder inside it), ``rename_folder`` (only the label: tags and
-# subfolders name a folder by its key), ``remove_folder`` (what it held
-# moves up), ``move_to_folder`` (the default tag stays out of folders).
-#
-# Display state: ``active_layer`` (where new objects go: the active tag while
-# it shows and is unlocked, else the default one), ``set_visible``,
-# ``set_locked``, ``isolate`` (the default tag stays on), ``is_isolated``,
-# ``set_active``, ``layer_state`` / ``apply_layer_state``, ``hide_in_scenes``
-# (a tag made after the plans were set up, kept out of them).
-#
-# Templates, an office standard carried between projects: ``template_of``,
-# ``template_for`` (the tags a copy carries), ``matched_template`` (identities
-# resolved to local names), ``template_name_map``, ``apply_template`` (the
-# missing tags added, the others restyled; ``(added, updated)``),
-# ``add_missing`` / ``remove_added`` (a paste's tags and their undo), and
-# ``load_line_types``.
+# ---- Folders, display state, templates: Rust -------------------------------
+# ``ingetrazo_core.tag_edits`` (``rust/ingetrazo_core/src/model/tag_edits.rs``):
+# the folder tree and its edits, the labels, the display state (visible,
+# locked, isolated, active), templates and line type files. Callers import
+# them from there; the folder queries and the active tag, which plugins and
+# scripting use, stay here by name.
 _te = _rs.tag_edits
-for _name in ("folders_of", "folder_parent", "folder_visible", "effective_visible",
-              "folder_label", "path_label", "export_labels", "unique_name",
-              "layers_in_folder", "add_folder", "move_folder", "rename_folder",
-              "remove_folder", "active_layer", "isolate", "set_active", "hide_in_scenes", "template_of", "apply_template", "template_for", "add_missing", "load_line_types"):
-    globals()[_name] = getattr(_te, _name)
-del _name
+folders_of = _te.folders_of
+folder_parent = _te.folder_parent
+layers_in_folder = _te.layers_in_folder
+active_layer = _te.active_layer
 subfolders = _te.tag_scene_subfolders
-_release_active = _te.tag_release_active
 
 
 def object_ids(scene, *, include_groups=True) -> set:

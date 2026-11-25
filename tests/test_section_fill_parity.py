@@ -109,13 +109,13 @@ def answer(section, case):
     vis = None if visible is None else np.asarray(visible)
     chords = ingetrazo_core.section_cut_chords(v0, e1, e2, n, p, vis)
     rows = ingetrazo_core.section_cut_chords(v0, e1, e2, n, p, vis, rows=True)
-    reach = section.PlaneReach(v0, e1, e2, n)
+    reach = ingetrazo_core.PlaneReach(v0, e1, e2, n)
     slid = [reach.cut(p + n * dz, vis, rows=True) for dz in (-0.5, 0.25)]
     got = {"chords": _arr(chords), "rows": [_arr(rows[0]), _arr(rows[1])],
            "slid": [[_arr(a), _arr(b)] for a, b in slid]}
-    got["fill"] = _arr(section.fill_triangles(chords, n))
-    got["hatch"] = _arr(section.hatch_segments(chords, n, spacing))
-    got["cross"] = _arr(section.hatch_segments(chords, n, spacing * 1.5, cross=True))
+    got["fill"] = _arr(ingetrazo_core.section_fill_triangles(chords, n))
+    got["hatch"] = _arr(ingetrazo_core.section_hatch_segments(chords, n, spacing))
+    got["cross"] = _arr(ingetrazo_core.section_hatch_segments(chords, n, spacing * 1.5, cross=True))
     u, v = ingetrazo_core.section_sheet_basis(n)
     got["sheet"] = [list(map(float, u)), list(map(float, v))]
     return got

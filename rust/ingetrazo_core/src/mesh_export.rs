@@ -293,9 +293,9 @@ fn _add_face<'p>(
         let uv = if let Some((sw, sh, rot)) = &options {
             let tex = py.import("core.texture")?;
             Some(if uvw.is_truthy()? {
-                tex.call_method1("affine_uv", (&uvw, &pts))?
+                crate::model::module(tex.py(), "ingetrazo_core")?.call_method1("texture_affine_uv", (&uvw, &pts))?
             } else {
-                tex.call_method1("planar_uv", (&normal, &pts, sw, sh, rot))?
+                crate::model::module(tex.py(), "ingetrazo_core")?.call_method1("texture_planar_uv", (&normal, &pts, sw, sh, rot))?
             })
         } else {
             None

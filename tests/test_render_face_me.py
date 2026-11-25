@@ -9,6 +9,7 @@ at any depth — toward its camera, and the GLB marks cut-out images MASK
 and translucent paint BLEND."""
 from __future__ import annotations
 
+import ingetrazo_core
 import json
 import math
 import struct
@@ -107,14 +108,13 @@ def test_a_simple_figure_keeps_its_picture_corner_to_corner(tmp_path):
     planar texture stayed anchored to the world while the quad turned.
     Rebuilt like the viewport's, the image spans it exactly once, upright,
     from any side — and far from the origin too."""
-    from core.texture import affine_uv
     scene = Scene()
     scene.groups.append(make_billboard_group(
         str(_png(tmp_path / "sumari.png", True)), 1.8, "Sumari", 0.45,
         position=V(137.3, -48.9, 2.0)))
     for eye in (V(137.3, -80, 3), V(170, -40, 3), V(120, -20, 3)):
         (f,) = _figure_faces(world_faces(scene, lambda a, e=eye: e - a))
-        uvs = affine_uv(f.attrs["texture"]["uvw"], f.vertices)
+        uvs = ingetrazo_core.texture_affine_uv(f.attrs["texture"]["uvw"], f.vertices)
         us = sorted(round(u, 6) for u, _v in uvs)
         vs = sorted(round(v, 6) for _u, v in uvs)
         assert us == [0.0, 0.0, 1.0, 1.0] and vs == [0.0, 0.0, 1.0, 1.0]

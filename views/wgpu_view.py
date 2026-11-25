@@ -1,4 +1,5 @@
 """Native Metal input and presentation sharing the document camera and selection."""
+import ingetrazo_core
 from contextlib import ExitStack, contextmanager
 import math
 import time
@@ -20,10 +21,9 @@ def _paint_key(scene):
     style = getattr(scene, 'display_style', None)
     by_layer = (bool(getattr(style, 'color_by_layer', False))
                 and getattr(style, 'face_mode', None) in ('textures', 'shaded', 'xray'))
-    from core.layers import layer_color
     return (by_layer, bool(getattr(scene, 'show_hidden_geometry', False)),
             bool(getattr(scene, 'show_hidden_objects', False)), tuple(
-        (ly.key, tuple(layer_color(ly)) if by_layer else None,
+        (ly.key, tuple(ingetrazo_core.tag_styles.layer_color(ly)) if by_layer else None,
          float(getattr(ly, 'opacity', 1.0)), bool(getattr(ly, 'locked', False)))
         for ly in getattr(scene, 'layers', ())
         if by_layer or float(getattr(ly, 'opacity', 1.0)) != 1.0

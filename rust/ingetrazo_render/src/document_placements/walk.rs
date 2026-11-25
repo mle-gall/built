@@ -252,7 +252,7 @@ fn bind_placement_rows<'py>(
         proxy.setattr("source_occurrence", &child)?;
         proxy.setattr("uid", scene.call_method1("navigator_key", (&child,))?)?;
         let layer = child.getattr("layer")?;
-        let own = if module
+        let own = if crate::host_context::core_module(py)?.getattr("tag_styles")?
             .call_method1("is_link_untagged", (&layer,))?
             .is_truthy()?
         {

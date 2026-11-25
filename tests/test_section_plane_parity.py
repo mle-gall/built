@@ -10,6 +10,7 @@ Regenerate only on purpose, against the reference implementation:
 ``python tests/test_section_plane_parity.py --write``."""
 from __future__ import annotations
 
+import ingetrazo_core
 import gzip
 import json
 import random
@@ -74,11 +75,11 @@ def answers(section):
             d["given_uid"] = uid == raw["uid"]
         out["planes"].append([d, [sp.point.toTuple(), sp.normal.toTuple(), sp.name, sp.symbol,
                                   sp.active, sp.hidden, sp.layer, sp.fill]])
-        out["fills"].append([list(section.effective_fill(sp, st)) for st in styles])
+        out["fills"].append([list(ingetrazo_core.section_effective_fill(sp, st)) for st in styles])
     for taken in symbol_cases():
         planes = [SimpleNamespace(symbol=t) for t in taken] + [SimpleNamespace()]
-        out["symbols"].append(section.next_symbol(planes))
-    out["symbols"].append(section.next_symbol(None))
+        out["symbols"].append(ingetrazo_core.section_next_symbol(planes))
+    out["symbols"].append(ingetrazo_core.section_next_symbol(None))
     return out
 
 

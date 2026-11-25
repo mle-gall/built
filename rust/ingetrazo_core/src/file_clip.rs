@@ -95,7 +95,7 @@ fn clip_encode<'p>(py: Python<'p>, clip: &Obj<'p>) -> PyResult<Obj<'p>> {
             include(&registry, &mats, &f?.getattr("attrs")?)?;
         }
     }
-    py.import("core.layers")?
+    crate::model::module(py, "ingetrazo_core")?.getattr("tag_edits")?
         .call_method1("add_missing", (&scene, val(clip, "layers")?))?;
     let header = PyDict::new(py);
     header.set_item("format", 1)?;
@@ -238,7 +238,7 @@ fn clip_decode<'p>(py: Python<'p>, data: &Obj<'p>) -> PyResult<Option<Obj<'p>>> 
     )?;
     out.set_item(
         "layers",
-        py.import("core.layers")?
+        crate::model::module(py, "ingetrazo_core")?.getattr("tag_edits")?
             .call_method1("template_of", (&scene,))?,
     )?;
     out.set_item(

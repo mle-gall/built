@@ -126,14 +126,14 @@ def run(L, seed):
         op = rng.randrange(22)
         try:
             if op == 0:
-                step("add", L.add_folder(s, rng.choice(FOLDERS), rng.choice(folders)))
+                step("add", ingetrazo_core.tag_edits.add_folder(s, rng.choice(FOLDERS), rng.choice(folders)))
             elif op == 1:
-                step("move", L.move_folder(s, rng.choice(folders[:-1] or ["x"]), rng.choice(folders)))
+                step("move", ingetrazo_core.tag_edits.move_folder(s, rng.choice(folders[:-1] or ["x"]), rng.choice(folders)))
             elif op == 2:
-                step("rename", L.rename_folder(s, rng.choice(folders[:-1] or ["x"]),
+                step("rename", ingetrazo_core.tag_edits.rename_folder(s, rng.choice(folders[:-1] or ["x"]),
                                                rng.choice(("New", "", "  ", "Steel"))))
             elif op == 3 and len(folders) > 2:
-                step("remove", L.remove_folder(s, rng.choice(folders[:-2])))
+                step("remove", ingetrazo_core.tag_edits.remove_folder(s, rng.choice(folders[:-2])))
             elif op == 4:
                 step("file", ingetrazo_core.tag_edits.move_to_folder(s, [_pick(rng, s), _pick(rng, s)], rng.choice(folders)))
             elif op == 5:
@@ -141,55 +141,55 @@ def run(L, seed):
             elif op == 6:
                 step("lock", ingetrazo_core.tag_edits.set_locked(s, [_pick(rng, s)], rng.random() < 0.5))
             elif op == 7:
-                step("isolate", L.isolate(s, [_pick(rng, s)]))
+                step("isolate", ingetrazo_core.tag_edits.isolate(s, [_pick(rng, s)]))
             elif op == 8:
                 step("isolated", [ingetrazo_core.tag_edits.is_isolated(s, ly.key) for ly in s.layers])
             elif op == 9:
-                step("active", L.set_active(s, _pick(rng, s)))
+                step("active", ingetrazo_core.tag_edits.set_active(s, _pick(rng, s)))
             elif op == 10:
                 st = ingetrazo_core.tag_edits.layer_state(s)
                 ingetrazo_core.tag_edits.set_visible(s, [ly.key for ly in s.layers], False)
                 ingetrazo_core.tag_edits.apply_layer_state(s, st)
                 step("state", st)
             elif op == 11:
-                step("scenes", L.hide_in_scenes(s, [_pick(rng, s)], rng.random() < 0.7))
+                step("scenes", ingetrazo_core.tag_edits.hide_in_scenes(s, [_pick(rng, s)], rng.random() < 0.7))
             elif op == 12:
-                step("template_of", L.template_of(s))
+                step("template_of", ingetrazo_core.tag_edits.template_of(s))
             elif op == 13:
-                step("template_for", L.template_for(s, [_pick(rng, s), _pick(rng, s)]))
+                step("template_for", ingetrazo_core.tag_edits.template_for(s, [_pick(rng, s), _pick(rng, s)]))
             elif op == 14:
-                t = L.template_of(other)
+                t = ingetrazo_core.tag_edits.template_of(other)
                 step("matched", ingetrazo_core.tag_edits.matched_template(s, t))
                 step("name_map", ingetrazo_core.tag_edits.template_name_map(s, t))
             elif op == 15:
-                step("apply", L.apply_template(s, L.template_of(other)))
+                step("apply", ingetrazo_core.tag_edits.apply_template(s, ingetrazo_core.tag_edits.template_of(other)))
             elif op == 16:
-                added = L.add_missing(s, L.template_for(other, [ly.key for ly in other.layers]))
+                added = ingetrazo_core.tag_edits.add_missing(s, ingetrazo_core.tag_edits.template_for(other, [ly.key for ly in other.layers]))
                 step("add_missing", added)
                 if rng.random() < 0.6:
                     step("remove_added", ingetrazo_core.tag_edits.remove_added(s, *added))
             elif op == 17:
-                step("line_types", L.load_line_types(s, rng.choice((
+                step("line_types", ingetrazo_core.tag_edits.load_line_types(s, rng.choice((
                     None, {"a": {"pattern": [1, -1]}, "": {}, "b": {"label": 3, "pattern": "x"},
                            "c" * 70: {"label": "L" * 200, "pattern": [2, -1, 0, -1],
                                       "color": [1, 0, 0]}}))))
             elif op == 18:
-                step("labels", [L.path_label(s, _pick(rng, s)), ingetrazo_core.tag_edits.layer_label(s, _pick(rng, s)),
-                                L.export_labels(s), [L.folder_label(s, f) for f in folders],
-                                [L.folder_visible(s, f) for f in folders],
-                                [L.effective_visible(s, ly) for ly in s.layers],
-                                L.active_layer(s), L.unique_name(folders[:-1], "Folder")])
+                step("labels", [ingetrazo_core.tag_edits.path_label(s, _pick(rng, s)), ingetrazo_core.tag_edits.layer_label(s, _pick(rng, s)),
+                                ingetrazo_core.tag_edits.export_labels(s), [ingetrazo_core.tag_edits.folder_label(s, f) for f in folders],
+                                [ingetrazo_core.tag_edits.folder_visible(s, f) for f in folders],
+                                [ingetrazo_core.tag_edits.effective_visible(s, ly) for ly in s.layers],
+                                L.active_layer(s), ingetrazo_core.tag_edits.unique_name(folders[:-1], "Folder")])
             elif op == 19:
                 step("in_folder", [L.layers_in_folder(s, f) for f in folders[:-1]])
             elif op == 20:
-                raw = rng.choice((L.template_of(other)["layers"] or [{}]))
+                raw = rng.choice((ingetrazo_core.tag_edits.template_of(other)["layers"] or [{}]))
                 bad = rng.choice(({}, {"name": 3}, {"name": "X", "color": [2, "a", 0]},
                                   {"name": "Y", "lineweight": "x", "opacity": None,
                                    "hatch_on_paper": 1, "printable": 0, "key": ""}))
                 step("archive", [L.Layer.from_dict(raw).to_dict(),
                                  L.Layer.from_dict(bad).to_dict()])
             elif op == 21:
-                step("apply_bad", L.apply_template(s, rng.choice(({}, {"ingetrazo_layers": 1},
+                step("apply_bad", ingetrazo_core.tag_edits.apply_template(s, rng.choice(({}, {"ingetrazo_layers": 1},
                                                                   []))))
         except ValueError as e:
             step("ValueError", str(e))
