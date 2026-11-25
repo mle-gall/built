@@ -570,6 +570,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(visibility_sets::visibility_set_rows, m)?)?;
     m.add_function(wrap_pyfunction!(visibility_sets::visibility_set_command, m)?)?;
     m.add_function(wrap_pyfunction!(scene_commands::plan_scene_command, m)?)?;
+    m.add_function(wrap_pyfunction!(store::face_edit::resident_face_mutation, m)?)?;
+    m.add_function(wrap_pyfunction!(store::face_edit::resident_face_compound, m)?)?;
     assembly_parts::register(m)?;
     m.add_class::<assembly_inspector::AssemblyPreview>()?;
     m.add_function(wrap_pyfunction!(assembly_inspector::part_measures, m)?)?;

@@ -160,8 +160,8 @@ fn build_sweep_face<'p>(
         .call_method1("elements", (mesh, "face", PyList::new(py, [key])?))?
         .get_item(key)?;
     let cmd = if mesh.hasattr("_store")? {
-        py.import("core.store_face_edit")?
-            .getattr("StoreFaceMutation")?
+        py.import("ingetrazo_core")?
+            .getattr("resident_face_mutation")?
     } else {
         py.import("core.history")?.getattr("SnapshotMutation")?
     };
@@ -250,19 +250,13 @@ fn sweep_profile(mesh: &Obj, face: &Obj, path: &Obj, closed: bool) -> PyResult<b
                 return sweep_store(mesh, face, path, closed, &h);
             }
             let before = mesh.call_method0("capture_state")?;
-            let ctx = py
-                .import("core.store_face_edit")?
-                .call_method1("resident_edit", (mesh,))?;
-            ctx.call_method0("__enter__")?;
-            let result = sweep_store(mesh, face, path, closed, &h);
-            let restore = if result.is_err() {
-                mesh.call_method1("restore_state", (before,)).map(|_| ())
-            } else {
-                Ok(())
-            };
-            ctx.call_method1("__exit__", (py.None(), py.None(), py.None()))?;
-            restore?;
-            return result;
+            return crate::store::face_edit::scoped(mesh, || {
+                let result = sweep_store(mesh, face, path, closed, &h);
+                if result.is_err() {
+                    mesh.call_method1("restore_state", (before,))?;
+                }
+                result
+            });
         }
     }
     edit::object_sweep(mesh, face, path, closed)

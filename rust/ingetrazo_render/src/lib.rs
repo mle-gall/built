@@ -76,6 +76,7 @@ mod pane_dividers;
 mod verbs;
 mod viewport_menu;
 mod shell_commands;
+mod keyboard_bindings;
 mod report_sheets;
 mod inspector_host;
 mod shell_events;
@@ -3478,6 +3479,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(commands::shortcut_domains, m)?)?;
     m.add_function(wrap_pyfunction!(commands::shortcut_reserved, m)?)?;
     m.add_function(wrap_pyfunction!(model_menu::run_model_menu, m)?)?;
+    keyboard_bindings::register(m)?;
     m.add_function(wrap_pyfunction!(shortcut_text::shortcut_text, m)?)?;
     m.add_function(wrap_pyfunction!(shortcut_text::shortcut_alternatives, m)?)?;
     m.add_class::<SceneUpload>()?;

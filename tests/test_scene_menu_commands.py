@@ -6,7 +6,7 @@ import pytest
 
 from ingetrazo_render import ShellScenes
 from ingetrazo_render import SceneMark
-from core import scene_folders
+from ingetrazo_core import scene_tree
 from core.camera import OrbitCamera
 from core.composition import Composicion
 from core.history import History
@@ -91,9 +91,9 @@ def test_delete_is_still_undoable(menu):
 def test_updating_a_scene_keeps_its_folder(menu):
     actions, win, _ = menu
     scene = win.viewport.scene
-    scene_folders.add_folder(scene, "Plans", None)
+    scene_tree.add_folder(scene, "Plans", None)
     view = actions.add_scene()
-    scene_folders.move_rows(scene, [view], [], "Plans")
+    scene_tree.move_rows(scene, [view], [], "Plans")
     actions.update_view(view)
     assert view.folder == "Plans"
 
@@ -102,8 +102,8 @@ def test_a_tab_dragged_among_folders_lands_with_the_scene_after_it(menu):
     actions, win, _ = menu
     scene = win.viewport.scene
     a, b, c, d = (actions.add_scene() for _ in range(4))
-    scene_folders.add_folder(scene, "F", None)
-    scene_folders.move_rows(scene, [c, d], [], "F")
+    scene_tree.add_folder(scene, "F", None)
+    scene_tree.move_rows(scene, [c, d], [], "F")
     assert list(scene.saved_views) == [c, d, a, b]
     steps = len(win.viewport.history.undo_stack)
     actions.move_view(a, 1)
@@ -120,8 +120,8 @@ def test_plus_of_the_tabs_files_the_scene_with_the_one_shown(menu):
     actions, win, _ = menu
     scene = win.viewport.scene
     a, b = (actions.add_scene() for _ in range(2))
-    scene_folders.add_folder(scene, "F", None)
-    scene_folders.move_rows(scene, [a], [], "F")
+    scene_tree.add_folder(scene, "F", None)
+    scene_tree.move_rows(scene, [a], [], "F")
     win._scene_tabs.mark_view(a)
     new = actions.add_scene()
     assert list(scene.saved_views) == [a, new, b]
@@ -179,10 +179,10 @@ def test_scene_folder_menu_keeps_reference_order_history_and_document_identity(m
     with pytest.raises(ValueError):
         edit("rename", parent, name=child)
     edit("remove", parent)
-    assert not c.folder and scene_folders.folder_parent(scene, child) is None
+    assert not c.folder and scene_tree.folder_parent(scene, child) is None
     vp.history.undo()
-    assert scene_folders.folder_parent(scene, child) == parent and c.folder == parent
+    assert scene_tree.folder_parent(scene, child) == parent and c.folder == parent
     edit("rename", parent, name="Plans")
-    assert scene_folders.folder_parent(scene, child) == "Plans"
+    assert scene_tree.folder_parent(scene, child) == "Plans"
     with pytest.raises(ValueError, match="another document"):
         scene_tree.edit_menu_folder(History(Scene()), json.dumps(["remove", owner, "Plans", "", ""]))

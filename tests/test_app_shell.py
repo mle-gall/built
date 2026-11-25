@@ -49,7 +49,7 @@ def test_tool_shortcut_goes_through_shortcut_override(host):
 
 def test_tool_shortcut_restored_in_new_shell(host, tmp_path):
     from ingetrazo_render import Host
-    from core.shortcuts import save_shortcut
+    from ingetrazo_render.keyboard_bindings import save_shortcut
 
     action = host.window._tool_actions["line"]
     save_shortcut(action, ["F11"])

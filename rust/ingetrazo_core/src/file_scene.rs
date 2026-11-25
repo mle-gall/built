@@ -50,7 +50,7 @@ fn archive_folders(scene: &Obj<'_>, out: &Dict<'_>, layers: bool) -> PyResult<()
     let module = py.import(if layers {
         "core.layers"
     } else {
-        "core.scene_folders"
+        "ingetrazo_core.scene_tree"
     })?;
     let folders = module.call_method1("folders_of", (scene,))?;
     if layers {

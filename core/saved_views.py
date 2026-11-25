@@ -43,7 +43,7 @@ class SavedView(Record):
         self.navigator_view = navigator_view
         self.name = name
         #: The folder of the Scenes tab the scene is filed under, or
-        #: ``None`` at the top (core.scene_folders, #1158). Only organises
+        #: ``None`` at the top (ingetrazo_core.scene_tree, #1158). Only organises
         #: the list: nothing of the view depends on it.
         self.folder = folder or None
         self.target = tuple(target)

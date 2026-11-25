@@ -228,7 +228,7 @@ impl Mutation {
 fn mutation<'p>(mesh: &Obj<'p>, segments: &Obj) -> PyResult<Obj<'p>> {
     let py = mesh.py();
     let (module, ty) = if mesh.hasattr("_store")? {
-        ("core.store_face_edit", "StoreFaceMutation")
+        ("ingetrazo_core", "resident_face_mutation")
     } else {
         ("core.history", "SnapshotMutation")
     };
