@@ -17,9 +17,9 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 def cold_start(host, tmp_path, monkeypatch, page=False, recover=False, untitled_slot=False):
-    from core import autosave
+    from ingetrazo_core import autosave
     from core.scene import Scene
-    from core.settings import settings
+    from ingetrazo_core.settings import settings
     from formats import igz
     from ingetrazo_render import wgpu_start
     from ingetrazo_render import shell_files as files

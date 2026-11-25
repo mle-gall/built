@@ -229,7 +229,7 @@ def test_the_matte_light_is_the_viewport_s():
 
 def test_an_unpainted_box_is_ingetrazo_white_lit_as_in_the_view():
     from core.scene import Scene
-    from core.style import DEFAULT_FACE_COLOR
+    from ingetrazo_core.style import DEFAULT_FACE_COLOR
     from core.vista_caras import shade_factor, shaded, view_faces
     scene = Scene()
     _box(scene.loose_mesh)
@@ -285,7 +285,7 @@ def test_a_nearer_face_hides_what_is_behind_it():
 
 def test_glass_hides_nothing_and_a_face_seen_from_behind_is_back_colour():
     from core.scene import Scene
-    from core.style import effective_back_color
+    from ingetrazo_core.style import effective_back_color
     from core.vista_caras import view_faces
     V = QVector3D
     scene = Scene()
@@ -490,7 +490,7 @@ def test_default_colour_only_drops_every_material_and_texture(tmp_path):
     from core.group import Group
     from core.mesh import Mesh
     from core.scene import Scene
-    from core.style import DEFAULT_FACE_COLOR
+    from ingetrazo_core.style import DEFAULT_FACE_COLOR
     from core.vista_caras import shade_factor, shaded, view_faces
     from formats.svg_out import save_svg_layers
     scene = Scene()
@@ -650,7 +650,7 @@ def _sunny(scene):
     scene.shadows.enabled = True
     scene.shadows.month, scene.shadows.day = 6, 21
     scene.shadows.hour, scene.shadows.minute = 10, 0
-    from core.sun import scene_sun_direction
+    from ingetrazo_core.sun import scene_sun_direction
     return np.array(scene_sun_direction(scene))
 
 
@@ -1257,7 +1257,7 @@ def test_a_scene_is_exported_and_the_view_comes_back(native_host, tmp_path):
         assert not mob.visible
 
     from ingetrazo_render import chrome_sheet
-    from core.settings import settings as current_settings
+    from ingetrazo_core.settings import settings as current_settings
 
     settings = current_settings()
     original_mode = settings.value("export_svg/v5/advanced")

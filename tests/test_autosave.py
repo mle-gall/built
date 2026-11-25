@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
 
-import core.autosave as autosave
+import ingetrazo_core.autosave as autosave
 from core.edits import build_add_edges
 from core.history import History
 from core.scene import Scene

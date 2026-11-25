@@ -373,7 +373,7 @@ def test_opening_an_igz_leaves_the_workspace_first(native_window, tmp_path):
 
 def test_autosave_pauses_while_the_model_is_parked(native_window, monkeypatch):
     win = native_window
-    from core import autosave
+    from ingetrazo_core import autosave
     written = []
     monkeypatch.setattr(autosave, "write", lambda *a, **k: written.append(a))
     ws = FakeWorkspace()

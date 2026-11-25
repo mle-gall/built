@@ -48,7 +48,7 @@ def test_isolated_profiles(tmp_path, mode):
             os.environ.pop("BUILT_SETTINGS_DIR")
         folder = start_profile(str(root / "explicit") if mode == "directory" else None,
                                temporary=mode != "directory")
-        from core.settings import settings as product_settings
+        from ingetrazo_core.settings import settings as product_settings
         from ingetrazo_core import NativeSettings
         assert isinstance(product_settings(), NativeSettings)
         product_settings().setValue("profile_probe", mode)
@@ -70,7 +70,7 @@ def test_native_launches_share_an_isolated_profile(tmp_path):
         import sys
         from pathlib import Path
         def exchange():
-            from core import settings
+            from ingetrazo_core import settings
             from ingetrazo_core import general_settings
             from ingetrazo_core import NativeSettings
             st = settings.settings()
@@ -159,7 +159,7 @@ def test_native_processes_merge_independent_keys_without_qt(tmp_path):
     import subprocess
     script = textwrap.dedent("""
         import sys
-        from core.settings import settings, use_native
+        from ingetrazo_core.settings import settings, use_native
         use_native(None)
         st = settings()
         for i in range(30):

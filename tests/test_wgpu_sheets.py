@@ -48,7 +48,7 @@ def test_offscreen_size_and_live_camera_unchanged(monkeypatch):
 
 def test_scene_recall_updates_metal_layers_camera_style_and_filter(native_host):
     from core.layers import Layer
-    from core.style import Style
+    from ingetrazo_core.style import Style
     from tests.scene_controls import choose
     win = native_host.window
     vp = win.viewport

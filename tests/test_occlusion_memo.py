@@ -114,7 +114,7 @@ def _changes(vp):
         _set_view(vp, (75.0, 25.0, True))
 
     def xray():
-        from core.style import Style
+        from ingetrazo_core.style import Style
         vp.style_override = Style(name="x", face_mode="xray")
 
     def solid():

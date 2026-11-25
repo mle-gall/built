@@ -6,7 +6,7 @@ General ▸ «Put the scale figure in new documents»."""
 from __future__ import annotations
 
 from ingetrazo_core import scale_figure
-from core.settings import settings
+from ingetrazo_core.settings import settings
 from tests.preferences_chrome import Controls
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 

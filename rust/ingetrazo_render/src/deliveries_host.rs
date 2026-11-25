@@ -55,7 +55,7 @@ fn active_view<'py>(win: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 }
 
 /// Run `fn` on the next turn of the window's loop (its host's queue, or
-/// the headless one, `core.timers`).
+/// the headless one, `ingetrazo_core.timers`).
 fn next_turn(win: &Bound<'_, PyAny>, f: Bound<'_, PyAny>) -> PyResult<()> {
     win.py().import("ingetrazo_core.timers")?.call_method1("later", (win, 0, f))?;
     Ok(())

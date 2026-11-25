@@ -113,7 +113,7 @@ def fixed_world(view, point):
 
 
 def test_section_place_move_toggle_undo(view):
-    from core.settings import settings
+    from ingetrazo_core.settings import settings
     from tools.section import SectionPlaneTool
     from tools.move import MoveTool
     settings().setValue("section/ask_name", "0")

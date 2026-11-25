@@ -5,7 +5,7 @@ newest first, missing ones dropped, imports never listed."""
 from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from core.settings import settings
+from ingetrazo_core.settings import settings
 
 
 def _reset():

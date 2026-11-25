@@ -58,7 +58,7 @@ def test_utm_mode_hides_the_geo_rows(win):
 
 
 def test_choice_is_remembered_everywhere(win):
-    from core.settings import settings
+    from ingetrazo_core.settings import settings
     from ingetrazo_render import chrome_sheet
     open_location(win)
     act(win, "v", "site_mode", "1")

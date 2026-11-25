@@ -4,7 +4,8 @@ from contextlib import contextmanager
 
 import pytest
 
-from core import extensions, settings
+from core import extensions
+from ingetrazo_core import settings
 from ingetrazo_core import NativeSettings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_render import keyboard_bindings as shortcuts

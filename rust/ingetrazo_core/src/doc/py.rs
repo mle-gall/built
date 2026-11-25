@@ -3125,12 +3125,6 @@ fn doc_begin(py: Python<'_>, document: Option<Key>) -> PyResult<usize> {
 }
 
 #[pyfunction]
-#[pyo3(signature=(mesh, before=None))]
-fn doc_touch_mesh(mesh: &Bound<'_, PyAny>, before: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
-    super::geometry::touch(mesh, before)
-}
-
-#[pyfunction]
 fn doc_depth() -> usize {
     lock().depth()
 }
@@ -3913,7 +3907,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyTransaction>()?;
     m.add_function(wrap_pyfunction!(doc_new_root, m)?)?;
     m.add_function(wrap_pyfunction!(doc_begin, m)?)?;
-    m.add_function(wrap_pyfunction!(doc_touch_mesh, m)?)?;
     m.add_function(wrap_pyfunction!(doc_depth, m)?)?;
     m.add_function(wrap_pyfunction!(doc_commit, m)?)?;
     m.add_function(wrap_pyfunction!(doc_rollback, m)?)?;

@@ -107,7 +107,7 @@ def test_back_edges_draws_them_dashed(win):
 
 
 def test_k_is_back_edges_and_the_style_remembers_it(native_window):
-    from core.style import Style
+    from ingetrazo_core.style import Style
     s = Style(back_edges=True)
     assert Style.from_dict(s.to_dict()).back_edges is True
     assert Style.from_dict({"name": "Old"}).back_edges is False

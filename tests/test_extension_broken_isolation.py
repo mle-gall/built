@@ -157,8 +157,8 @@ def test_a_disabled_package_stays_silent(plugins):
 
 
 def test_a_load_failure_reaches_the_error_log(plugins, tmp_path, monkeypatch):
-    import core.paths
-    monkeypatch.setattr(core.paths, "user_log_dir", lambda: tmp_path)
+    import ingetrazo_core.paths
+    monkeypatch.setattr(ingetrazo_core.paths, "user_log_dir", lambda: tmp_path)
     (plugins / "broken.py").write_text("raise RuntimeError('boom 1152')\n")
     discover_plugins([plugins])
     log = (tmp_path / "ingetrazo-errors.log").read_text(encoding="utf-8")
@@ -250,7 +250,7 @@ def test_a_manager_that_fails_to_open_says_so(native_question_host, monkeypatch,
     def explode():
         raise PermissionError(13, "denied")
 
-    monkeypatch.setattr("core.paths.user_log_dir", lambda: tmp_path)
+    monkeypatch.setattr("ingetrazo_core.paths.user_log_dir", lambda: tmp_path)
     monkeypatch.setattr(ingetrazo_render, "ExtensionsSheet", explode)
     window = native_question_host.window
     native_question_host.menu("extensions")

@@ -269,33 +269,6 @@ pub(crate) fn join_edges<'py>(
 }
 
 #[pyfunction]
-pub(crate) fn interior_vertex<'py>(
-    mesh: &Obj<'py>,
-    edge: &Obj<'py>,
-    tol: f64,
-) -> PyResult<Option<Obj<'py>>> {
-    let [start, end] = ends(edge)?;
-    let a = position(&start)?;
-    let ab = position(&end)? - a;
-    let len = ab.length();
-    if len < tol {
-        return Ok(None);
-    }
-    for v in mesh.getattr("vertices")?.try_iter()? {
-        let v = v?;
-        if v.eq(&start)? || v.eq(&end)? {
-            continue;
-        }
-        let p = position(&v)?;
-        let t = (p - a).dot(ab) / (len * len);
-        if t > tol / len && t < 1. - tol / len && (p - (a + ab * t)).length() < tol {
-            return Ok(Some(v));
-        }
-    }
-    Ok(None)
-}
-
-#[pyfunction]
 pub(crate) fn collapsible(v: &Obj<'_>, tol: f64) -> PyResult<bool> {
     let disk = v.getattr("edges")?;
     if disk.len()? != 2 {
@@ -388,44 +361,6 @@ pub(crate) fn collapse_vertex<'py>(
     rec.set_item("new_edge_new", new)?;
     rec.set_item("faces", faces)?;
     Ok(rec)
-}
-
-#[pyfunction]
-pub(crate) fn revert_collapse(mesh: &Obj<'_>, rec: &Obj<'_>, cell: &Obj<'_>) -> PyResult<()> {
-    let v = rec.get_item("v")?;
-    let verts = mesh.getattr("vertices")?;
-    if !verts.contains(&v)? {
-        verts.call_method1("append", (&v,))?;
-    }
-    mesh.getattr("_registry")?
-        .call_method1("setdefault", (cell.call1((v.getattr("position")?,))?, &v))?;
-    let edge = rec.get_item("new_edge")?;
-    let faces = rows(&rec.get_item("faces")?)?;
-    if rec.get_item("new_edge_new")?.is_truthy()? {
-        mesh.call_method1("remove_edge", (&edge,))?;
-    } else {
-        let linked = edge.getattr("faces")?;
-        for face in &faces {
-            if linked.contains(face)? {
-                linked.call_method1("remove", (face,))?;
-            }
-        }
-    }
-    let old = [rec.get_item("e1")?, rec.get_item("e2")?];
-    for e in &old {
-        mesh.call_method1("relink_edge", (e,))?;
-    }
-    let (a, b) = (rec.get_item("n1")?, rec.get_item("n2")?);
-    for face in faces {
-        mesh.call_method1("_insert_into_face_loops", (&face, &a, &b, &v))?;
-        for e in &old {
-            let linked = e.getattr("faces")?;
-            if !linked.contains(&face)? {
-                linked.call_method1("append", (&face,))?;
-            }
-        }
-    }
-    Ok(())
 }
 
 #[pyfunction]

@@ -164,7 +164,7 @@ def _points_on(rng, m):
 
 
 def _rect_on(rng, m):
-    from core.triangulate import plane_axes
+    from ingetrazo_core.triangulate import plane_axes
     f = rng.choice(list(m.faces))
     n = f.normal()
     u, w = plane_axes(n)

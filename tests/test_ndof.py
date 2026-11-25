@@ -454,7 +454,7 @@ def test_preferences_ok_untouched_keeps_the_motion(native_window):
     """Opening Preferences and pressing OK without touching the 3D mouse
     page must not change how the cap moves the view, whatever the old
     inversion boxes said."""
-    from core.settings import settings
+    from ingetrazo_core.settings import settings
     from ingetrazo_render import chrome_sheet, settings_sheet
     from views import ndof_input
     st = settings()

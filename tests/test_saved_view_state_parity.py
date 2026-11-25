@@ -155,7 +155,7 @@ def _answers():
         scene, cam = _scene(rng), _camera(rng)
         style = None
         if rng.random() < 0.3:
-            from core.style import Style
+            from ingetrazo_core.style import Style
             style = Style(name="Own")
         v = S.SavedView.capture(f"V{k}", scene, cam, style)
         rec = [_view_fields(v), v.to_dict() and _jsonable(v.to_dict())]

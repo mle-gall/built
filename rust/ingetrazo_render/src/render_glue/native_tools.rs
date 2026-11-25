@@ -1507,8 +1507,8 @@ fn start_of<'py>(tool: &Obj<'py>) -> Reply<'py> {
 impl NativeTools {
     #[new]
     #[pyo3(signature = (*_args, **_kwargs))]
-    fn new(_args: &Bound<'_, PyTuple>, _kwargs: Option<&Bound<'_, PyDict>>) -> (Self, MeshToolAccess) {
-        (Self, MeshToolAccess)
+    fn new(_args: &Bound<'_, PyTuple>, _kwargs: Option<&Bound<'_, PyDict>>) -> PyClassInitializer<Self> {
+        PyClassInitializer::from(MeshToolAccess).add_subclass(Self)
     }
 
     fn __init__(slf: &Bound<'_, Self>, view: &Obj<'_>) -> PyResult<()> {

@@ -11,7 +11,7 @@ import random
 
 import pytest
 from ingetrazo_core import ScreenPoint, Input
-from core.settings import settings as native_settings
+from ingetrazo_core.settings import settings as native_settings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_render import SurveyRaster
 from ingetrazo_core import Vec3 as QVector3D

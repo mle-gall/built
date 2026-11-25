@@ -395,9 +395,6 @@ impl Host {
         })
     }
 
-    pub fn get_f64(&self, name: &str) -> Option<f64> {
-        Python::attach(|py| self.obj.bind(py).getattr(name).ok()?.extract().ok())
-    }
 }
 
 #[cfg(test)]

@@ -144,23 +144,6 @@ pub(crate) fn keep_template<'py>(
     }
 }
 #[pyfunction]
-pub(crate) fn restore_template(
-    kept: &Obj<'_>,
-    template: &Obj<'_>,
-    keep: bool,
-    index: &Obj<'_>,
-) -> PyResult<()> {
-    if !template.is_none() {
-        if keep {
-            kept.call_method1("remove", (template,))?;
-        } else {
-            kept.call_method1("insert", (index, template))?;
-        }
-    }
-    Ok(())
-}
-
-#[pyfunction]
 pub(crate) fn merge_group_geometry<'py>(groups: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = groups.py();
     let api = py.import("core.group")?;
@@ -297,17 +280,6 @@ pub(crate) fn delete_placement<'py>(scene: &Obj<'py>, g: &Obj<'py>) -> PyResult<
     Ok((owner, index))
 }
 #[pyfunction]
-pub(crate) fn restore_placement(
-    roots: &Obj<'_>,
-    owner: &Obj<'_>,
-    index: Option<usize>,
-    g: &Obj<'_>,
-) -> PyResult<()> {
-    let dest = if owner.is_none() { roots } else { owner };
-    dest.call_method1("insert", (index.unwrap_or(0).min(dest.len()?), g))?;
-    Ok(())
-}
-#[pyfunction]
 pub(crate) fn set_placement_field<'py>(g: &Obj<'py>, field: &str, value: &Obj<'py>) -> PyResult<Obj<'py>> {
     let old = if field == "material" && !g.hasattr(field)? {
         g.py().None().into_bound(g.py())
@@ -320,16 +292,6 @@ pub(crate) fn set_placement_field<'py>(g: &Obj<'py>, field: &str, value: &Obj<'p
 #[pyfunction]
 pub(crate) fn append_members(list: &Obj<'_>, items: &Obj<'_>) -> PyResult<()> {
     list.call_method1("extend", (items,))?;
-    Ok(())
-}
-#[pyfunction]
-pub(crate) fn remove_members(list: &Obj<'_>, items: &Obj<'_>) -> PyResult<()> {
-    for item in items.try_iter()? {
-        let item = item?;
-        if list.contains(&item)? {
-            list.call_method1("remove", (item,))?;
-        }
-    }
     Ok(())
 }
 #[pyfunction]
@@ -367,12 +329,6 @@ pub(crate) fn rebuild_letter_placement<'py>(
         g.setattr("name", name)?;
     }
     Ok(before)
-}
-#[pyfunction]
-pub(crate) fn restore_letter_placement(g: &Obj<'_>, before: (Obj<'_>, Obj<'_>, Obj<'_>)) -> PyResult<()> {
-    g.setattr("children", before.0)?;
-    g.setattr("text3d", before.1)?;
-    g.setattr("name", before.2)
 }
 type UnlinkPlan<'py> = (
     Vec<Bound<'py, PyDict>>,
@@ -433,18 +389,14 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "definition_edits")?;
     sub.add_function(wrap_pyfunction!(group_owner, &sub)?)?;
     sub.add_function(wrap_pyfunction!(delete_placement, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(restore_placement, &sub)?)?;
     sub.add_function(wrap_pyfunction!(set_placement_field, &sub)?)?;
     sub.add_function(wrap_pyfunction!(append_members, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(remove_members, &sub)?)?;
     sub.add_function(wrap_pyfunction!(rebuild_letter_placement, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(restore_letter_placement, &sub)?)?;
     sub.add_function(wrap_pyfunction!(unlink_placements, &sub)?)?;
     sub.add_function(wrap_pyfunction!(replacement_targets, &sub)?)?;
     sub.add_function(wrap_pyfunction!(replace_definitions, &sub)?)?;
     sub.add_function(wrap_pyfunction!(restore_definitions, &sub)?)?;
     sub.add_function(wrap_pyfunction!(keep_template, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(restore_template, &sub)?)?;
     sub.add_function(wrap_pyfunction!(merge_group_geometry, &sub)?)?;
     sub.add_function(wrap_pyfunction!(replace_roots, &sub)?)?;
     m.add_submodule(&sub)?;

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest  # noqa: E402
 from ingetrazo_core import NativeSettings
-from core.settings import settings as preferences
+from ingetrazo_core.settings import settings as preferences
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import numpy as np
 from ingetrazo_render import SurveyRaster
@@ -22,7 +22,7 @@ from core.mesh import Mesh  # noqa: E402
 @pytest.fixture
 def settings(tmp_path, monkeypatch):
     st = NativeSettings(str(tmp_path))
-    monkeypatch.setattr("core.autosave._app_data_base", lambda: tmp_path)
+    monkeypatch.setattr("ingetrazo_core.autosave._app_data_base", lambda: tmp_path)
     return st
 
 
@@ -139,7 +139,7 @@ def test_preferences_choose_my_picture_and_ok_stores_it(native_host, tmp_path, m
     copies it into the data folder and the next new document stands it."""
     from ingetrazo_render import shell_files
     from tests.preferences_chrome import Controls
-    monkeypatch.setattr("core.autosave._app_data_base", lambda: tmp_path)
+    monkeypatch.setattr("ingetrazo_core.autosave._app_data_base", lambda: tmp_path)
     src = _png(tmp_path / "Marco_Sumari.png")
     monkeypatch.setattr(shell_files.ShellFileDialog, "getOpenFileName",
                         staticmethod(lambda *a, **k: (str(src), "")))

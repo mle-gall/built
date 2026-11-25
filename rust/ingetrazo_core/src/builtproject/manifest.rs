@@ -26,10 +26,6 @@ fn has_suffix(path: &Path, suffix: &str) -> bool {
         .is_some_and(|s| s.eq_ignore_ascii_case(suffix))
 }
 
-pub fn is_manifest(path: &Path) -> bool {
-    has_suffix(path, SUFFIX)
-}
-
 pub fn is_legacy(path: &Path) -> bool {
     has_suffix(path, LEGACY_SUFFIX)
 }

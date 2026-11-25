@@ -242,13 +242,6 @@ fn igz_stream_encode(stream: &Obj<'_>, value: &Obj<'_>, mesh: bool) -> PyResult<
     let _ = mesh;
     encode(&stream.getattr("file")?, value)
 }
-#[pyfunction(signature=(value,*,mesh=false))]
-fn igz_json_chunks(value: &Obj<'_>, mesh: bool) -> PyResult<Chunks> {
-    let _ = mesh;
-    let py = value.py();
-    let file = py.import("tempfile")?.call_method0("TemporaryFile")?;
-    Ok(encode(&file, value)?.chunks(py))
-}
 #[pyfunction(signature=(stream,*,built=false,compatibility=false,destination=None))]
 fn igz_stream_start(
     stream: &Obj<'_>,
@@ -283,6 +276,5 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Fragment>()?;
     m.add_function(wrap_pyfunction!(igz_stream_start, m)?)?;
     m.add_function(wrap_pyfunction!(igz_stream_store, m)?)?;
-    m.add_function(wrap_pyfunction!(igz_stream_encode, m)?)?;
-    m.add_function(wrap_pyfunction!(igz_json_chunks, m)?)
+    m.add_function(wrap_pyfunction!(igz_stream_encode, m)?)
 }

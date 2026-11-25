@@ -52,7 +52,7 @@ def _clean_all(win):
 
 @pytest.fixture
 def win(native_host, tmp_path, monkeypatch):
-    from core import autosave
+    from ingetrazo_core import autosave
     slots = tmp_path / "autosave"
     slots.mkdir()
     monkeypatch.setattr(autosave, "autosave_dir", lambda: slots)
@@ -313,7 +313,7 @@ def test_closing_tabs_hands_their_memory_back_once(win, tmp_path, monkeypatch):
 
 # ---- auto-save and recovery ---------------------------------------------
 def test_each_untitled_project_autosaves_to_its_own_slot(win):
-    from core import autosave
+    from ingetrazo_core import autosave
     _edit(win, z=1.0)
     a = win.active_document()
     win._on_new()
@@ -349,7 +349,7 @@ def test_each_untitled_project_autosaves_to_its_own_slot(win):
 
 
 def test_every_untitled_slot_is_offered_back(win, monkeypatch, tmp_path):
-    from core import autosave
+    from ingetrazo_core import autosave
     from core.scene import Scene
     for n, z in ((1, 1.0), (2, 2.0)):
         s = Scene()
@@ -372,7 +372,7 @@ def test_every_untitled_slot_is_offered_back(win, monkeypatch, tmp_path):
 
 
 def test_the_classic_slot_names_stay(tmp_path):
-    from core import autosave
+    from ingetrazo_core import autosave
     assert autosave.slot_for(None).name == "untitled.built"
     assert autosave.slot_for(None, untitled=1).name == "untitled.built"
     assert autosave.slot_for(None, untitled=3).name == "untitled-3.built"

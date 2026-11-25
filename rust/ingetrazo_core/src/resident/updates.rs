@@ -18,7 +18,7 @@
 //! The tracker's state is the document's objects (meshes, groups, History
 //! commands), kept as the instance's attributes.
 use super::packed_scene::{dtype, COMMAND_BYTES, INSTANCE_BYTES};
-use numpy::{PyArray1, PyArrayMethods, PyReadonlyArray1};
+use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::{
     exceptions::PyValueError,
     prelude::*,
@@ -49,14 +49,6 @@ fn dict<'py>(s: &Obj<'py>, name: &str) -> PyResult<Bound<'py, PyDict>> {
 }
 fn set<'py>(s: &Obj<'py>, name: &str) -> PyResult<Bound<'py, PySet>> {
     Ok(s.getattr(name)?.cast_into::<PySet>()?)
-}
-fn is_a(object: &Obj<'_>, classes: &[&Obj<'_>]) -> PyResult<bool> {
-    for class in classes {
-        if object.is_instance(class)? {
-            return Ok(true);
-        }
-    }
-    Ok(false)
 }
 /// The array's bytes (C-contiguous arrays only: the packed buffers are).
 fn raw<'py>(py: Python<'py>, array: &Obj<'py>) -> PyResult<Vec<u8>> {

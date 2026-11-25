@@ -61,7 +61,7 @@ from tests.shell_isolation import native_window, restore_shell_patches  # noqa: 
 
 
 def test_the_name_prompt_can_be_switched_off(monkeypatch, native_window):
-    from core.settings import settings as current_settings
+    from ingetrazo_core.settings import settings as current_settings
     from ingetrazo_render import chrome_forms
     from core.history import PlaceSectionPlaneCommand
     from ingetrazo_core.section import SectionPlane

@@ -22,17 +22,6 @@ pub(crate) fn add_image(scene: &Obj<'_>, image: &Obj<'_>) -> PyResult<bool> {
     Ok(make)
 }
 #[pyfunction]
-pub(crate) fn remove_image_layer(scene: &Obj<'_>, image: &Obj<'_>) -> PyResult<()> {
-    let name = image.getattr("layer")?;
-    if name.is_truthy()? {
-        let layer = scene.call_method1("layer", (name,))?;
-        if !layer.is_none() {
-            scene.getattr("layers")?.call_method1("remove", (layer,))?;
-        }
-    }
-    Ok(())
-}
-#[pyfunction]
 pub(crate) fn set_image_frame(image: &Obj<'_>, vectors: &Obj<'_>) -> PyResult<(Vec3, Vec3, Vec3)> {
     let previous = (
         Vec3::from(xyz(&image.getattr("origin")?)?),
@@ -87,15 +76,6 @@ pub(crate) fn path_surfaces<'py>(paths: Vec<Obj<'py>>, mode: &Obj<'py>) -> PyRes
     Ok(before)
 }
 #[pyfunction]
-pub(crate) fn restore_surfaces(prior: Vec<Surface<'_>>) -> PyResult<()> {
-    for (p, surface, closed) in prior {
-        p.setattr("surface", surface)?;
-        p.setattr("closed", closed)?;
-        p.setattr("_surface_tris", p.py().None())?;
-    }
-    Ok(())
-}
-#[pyfunction]
 pub(crate) fn move_node(path: &Obj<'_>, index: &Obj<'_>, value: &Obj<'_>) -> PyResult<Vec3> {
     let points = path.getattr("points")?;
     let old = Vec3::from(xyz(&points.get_item(index)?)?);
@@ -105,12 +85,10 @@ pub(crate) fn move_node(path: &Obj<'_>, index: &Obj<'_>, value: &Obj<'_>) -> PyR
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "reference_layers")?;
     sub.add_function(wrap_pyfunction!(add_image, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(remove_image_layer, &sub)?)?;
     sub.add_function(wrap_pyfunction!(set_image_frame, &sub)?)?;
     sub.add_function(wrap_pyfunction!(transform_images, &sub)?)?;
     sub.add_function(wrap_pyfunction!(toggle_paths, &sub)?)?;
     sub.add_function(wrap_pyfunction!(path_surfaces, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(restore_surfaces, &sub)?)?;
     sub.add_function(wrap_pyfunction!(move_node, &sub)?)?;
     m.add_submodule(&sub)?;
     Ok(())

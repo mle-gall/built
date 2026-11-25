@@ -214,7 +214,7 @@ def test_an_example_extension_can_be_a_package(tmp_path, monkeypatch):
     ``__init__.py``: it is listed from its package docstring, installed as
     the whole folder (no ``__pycache__``) and removed as a whole."""
     from ingetrazo_core import extension_manager as manager
-    from core import paths
+    from ingetrazo_core import paths
     root = tmp_path / "app"
     pkg = root / "examples" / "extensions" / "demo"
     (pkg / "engine").mkdir(parents=True)

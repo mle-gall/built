@@ -288,7 +288,7 @@ def test_model_menu_uses_current_selection_history_and_tool(host):
 
 @pytest.mark.parametrize("suffix", ["obj", "stl"])
 def test_mesh_import_menu_waits_for_answer_then_imports_once(host, tmp_path, monkeypatch, suffix):
-    from core.settings import settings
+    from ingetrazo_core.settings import settings
     from tests.test_import_failure_reported import _CUBE_OBJ, _GOOD_STL
     from ingetrazo_render.shell_files import ShellFileDialog
     path = tmp_path / ("triangle." + suffix)

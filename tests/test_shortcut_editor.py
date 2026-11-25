@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from core.i18n import current_language, set_language
-from core.settings import settings
+from ingetrazo_core.settings import settings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_render import settings_sheet
 
@@ -27,7 +27,7 @@ def sheet(native_host):
 @pytest.fixture
 def reopen(tmp_path, monkeypatch, restore_shell_patches):
     from ingetrazo_render import Host
-    from core import settings as settings_module
+    from ingetrazo_core import settings as settings_module
     from ingetrazo_core import NativeSettings
     profile = str(tmp_path / "profile")
 

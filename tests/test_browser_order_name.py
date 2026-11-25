@@ -2,7 +2,7 @@
 """Saved sort choice when opening a new native Project tree."""
 import pytest
 
-from core.settings import settings
+from ingetrazo_core.settings import settings
 from tests.test_project_drawing_filters import Project
 
 

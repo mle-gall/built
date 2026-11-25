@@ -44,7 +44,7 @@ from core.history import AddFaceCommand, History
 from ingetrazo_core.orient import is_closed, orient_outward, signed_volume
 from core.scene import Scene
 from core.topology import _mesh_is_flat, _on_segment_2d, _strictly_inside_2d
-from core.triangulate import plane_axes
+from ingetrazo_core.triangulate import plane_axes
 from tools.pushpull import PushPullTool
 
 
