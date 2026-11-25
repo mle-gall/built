@@ -9,6 +9,7 @@ mod actions;
 mod defaults;
 mod helpers;
 mod host;
+mod view;
 mod plugin;
 
 struct Registrar<'py> {
@@ -63,6 +64,7 @@ pub(super) fn register(m: &Bound<PyModule>) -> PyResult<()> {
 pub(super) fn register_interaction(m: &Bound<PyModule>) -> PyResult<()> {
     crate::document_bindings::register(m)?;
     self::register(m)?;
+    view::register(m)?;
     crate::document_camera::register(m)?;
     crate::document_input::register(m)?;
     crate::document_chunks::register(m)?;

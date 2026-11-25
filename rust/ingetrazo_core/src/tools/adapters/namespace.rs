@@ -210,9 +210,19 @@ fn definition(name: &str) -> Option<&'static Module> {
     MODULES.iter().find(|m| m.name == leaf)
 }
 
+const VIEW_MODULES: &[&str] = &[
+    "document_tools",
+    "view_navigation",
+    "view_commands",
+    "view_host",
+    "document_controller",
+    "ndof_input",
+];
+
 #[pyclass(module = "ingetrazo_core", frozen)]
 struct ToolModules {
     path: String,
+    views: bool,
 }
 
 #[pymethods]
@@ -234,7 +244,14 @@ impl ToolModules {
     ) -> Reply<'py> {
         let _ = target;
         let py = slf.py();
-        if definition(fullname).is_none() {
+        let found = if slf.get().views {
+            fullname
+                .strip_prefix("views.")
+                .is_some_and(|name| VIEW_MODULES.contains(&name))
+        } else {
+            definition(fullname).is_some()
+        };
+        if !found {
             return Ok(none(py));
         }
         py.import("importlib.machinery")?.call_method(
@@ -248,6 +265,11 @@ impl ToolModules {
     fn exec_module(&self, module: &Bound<'_, PyModule>) -> PyResult<()> {
         let py = module.py();
         let full: String = module.name()?.extract()?;
+        if self.views {
+            py.import("ingetrazo_render")?
+                .call_method1("install_interaction_module", (module,))?;
+            return Ok(());
+        }
         let spec = definition(&full).ok_or_else(|| PyImportError::new_err(full.clone()))?;
         if matches!(spec.name, "flip_host" | "paste_host") {
             module.add(
@@ -264,7 +286,9 @@ impl ToolModules {
                 let (name, alias) = field.split_once(" as ").unwrap_or((field, field));
                 let value = match source.getattr(name) {
                     Ok(value) => value,
-                    Err(error) if error.is_instance_of::<pyo3::exceptions::PyAttributeError>(py) => {
+                    Err(error)
+                        if error.is_instance_of::<pyo3::exceptions::PyAttributeError>(py) =>
+                    {
                         py.import(format!("{from}.{name}"))?.into_any()
                     }
                     Err(error) => return Err(error),
@@ -280,6 +304,12 @@ impl ToolModules {
     }
     #[pyo3(signature=(prefix=""))]
     fn iter_modules(&self, prefix: &str) -> Vec<(String, bool)> {
+        if self.views {
+            return VIEW_MODULES
+                .iter()
+                .map(|name| (format!("{prefix}{name}"), false))
+                .collect();
+        }
         MODULES
             .iter()
             .map(|m| (format!("{prefix}{}", m.name), false))
@@ -291,11 +321,22 @@ impl ToolModules {
 /// path entry only recognizes this package's former adapter modules.
 #[pyfunction]
 pub(super) fn install_tool_modules(paths: &Bound<'_, PyList>) -> PyResult<()> {
+    install_modules(paths, false)
+}
+#[pyfunction]
+pub(super) fn install_view_modules(paths: &Bound<PyList>) -> PyResult<()> {
+    install_modules(paths, true)
+}
+fn install_modules(paths: &Bound<PyList>, views: bool) -> PyResult<()> {
     let py = paths.py();
     let sys = py.import("sys")?;
     let first = paths.get_item(0)?.extract::<String>()?;
     let key = std::path::Path::new(&first)
-        .join("__built_native_tools__")
+        .join(if views {
+            "__built_native_views__"
+        } else {
+            "__built_native_tools__"
+        })
         .to_string_lossy()
         .into_owned();
     let cache = sys.getattr("path_importer_cache")?;
@@ -308,7 +349,13 @@ pub(super) fn install_tool_modules(paths: &Bound<'_, PyList>) -> PyResult<()> {
         let finder = match finder {
             Some(f) => f,
             None => {
-                let f = Bound::new(py, ToolModules { path: key.clone() })?;
+                let f = Bound::new(
+                    py,
+                    ToolModules {
+                        path: key.clone(),
+                        views,
+                    },
+                )?;
                 hooks.call_method1("append", (&f,))?;
                 f
             }
