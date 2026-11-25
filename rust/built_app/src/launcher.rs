@@ -249,34 +249,6 @@ pub fn register_launcher() {
         println!("{{\"available\":{available}}}");
         std::process::exit(0);
     }
-    if args
-        .first()
-        .is_some_and(|flag| flag == "--prepare-drawing-cache")
-    {
-        if args.len() != 2 {
-            eprintln!("usage: built --prepare-drawing-cache <document>");
-            std::process::exit(2);
-        }
-        let file = absolute(Path::new(&args[1]));
-        let layout = python::Layout::find(None, None);
-        let result = python::start(&layout).and_then(|_| {
-            Python::attach(|py| {
-                let value = py
-                    .import("views.drawing_cache")?
-                    .call_method1("prepare_file", (file,))?;
-                println!(
-                    "{}",
-                    py.import("json")?.call_method1("dumps", (value,))?.str()?
-                );
-                Ok(())
-            })
-        });
-        if let Err(error) = result {
-            eprintln!("built: {error}");
-            std::process::exit(1);
-        }
-        std::process::exit(0);
-    }
     if args == ["--mcp"] {
         let layout = python::Layout::find(None, None);
         let result = python::start(&layout).and_then(|_| {

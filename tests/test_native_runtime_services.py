@@ -32,7 +32,7 @@ def setup(app):
         from georef.tiles import PRESETS, TileCache
         from georef.tile_fetcher import TileFetcher
         from ingetrazo_render import SurveyRaster, notice_text
-        from views import drawing_cache, wgpu_sheets
+        from views import wgpu_sheets
         from ingetrazo_render import about_review
         from views.ndof_input import shared_input
         from ingetrazo_render import ask_scale
@@ -47,7 +47,6 @@ def setup(app):
         view = app.window._host.view
         view._pick_frame_dirty = True
         view.hover(view.width() // 2, view.height() // 2)
-        assert drawing_cache.signature()
         assert wgpu_sheets._cajetin_template()[0]
         wgpu_sheets.to_sheets(app.window)
         assert app.window._composer.isVisible()

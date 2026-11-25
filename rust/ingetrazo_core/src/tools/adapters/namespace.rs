@@ -233,6 +233,7 @@ const VIEW_MODULES: &[&str] = &[
     "wgpu_references",
     "wgpu_tabs",
     "wgpu_annotations",
+    "array_bake",
 ];
 
 #[pyclass(module = "ingetrazo_core", frozen)]
