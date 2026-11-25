@@ -511,7 +511,7 @@ impl ExtensionsSheet {
         let exts = py.import("core.extensions")?;
         let shipped = PyDict::new(py);
         let first_dir = exts.call_method0("plugin_dirs")?.get_item(0)?;
-        for row in exts.call_method1("_candidates", (first_dir,))?.try_iter()? {
+        for row in exts.call_method1("installed_candidates", (first_dir,))?.try_iter()? {
             let row = row?;
             shipped.set_item(row.get_item(0)?, row.get_item(1)?.str()?)?;
         }

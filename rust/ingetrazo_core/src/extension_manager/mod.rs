@@ -11,6 +11,7 @@ use std::{
 };
 type Obj<'p> = Bound<'p, PyAny>;
 mod catalog;
+pub(crate) mod discovery;
 mod examples;
 mod files;
 mod install;

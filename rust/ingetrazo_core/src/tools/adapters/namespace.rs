@@ -210,7 +210,7 @@ fn definition(name: &str) -> Option<&'static Module> {
     MODULES.iter().find(|m| m.name == leaf)
 }
 
-const CORE_MODULES: &[&str] = &["composition", "push_pull", "solids", "sweep", "make_faces", "intersect", "pieces", "inference", "geometry_arrays", "outliner", "solid_analysis", "offset", "text3d", "render_blender"];
+const CORE_MODULES: &[&str] = &["composition", "push_pull", "solids", "sweep", "make_faces", "intersect", "pieces", "inference", "geometry_arrays", "outliner", "solid_analysis", "offset", "text3d", "render_blender", "extensions"];
 const VIEW_MODULES: &[&str] = &[
     "document_interaction",
     "documents",
@@ -282,6 +282,7 @@ impl ToolModules {
                 "core.intersect" => crate::store::face_intersections::install(module),
                 "core.pieces" => crate::store::piece_command::install(module),
                 "core.inference" => crate::inference::install(module),
+                "core.extensions" => crate::extension_manager::discovery::install(module),
                 "core.render_blender" => crate::blender::install(module),
                 "core.text3d" => crate::text3d::install(module),
                 "core.offset" => crate::offset_face::install(module),
