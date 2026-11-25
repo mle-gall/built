@@ -418,6 +418,11 @@ impl DocumentHistory {
     }
 
     #[staticmethod]
+    fn capture_meshes<'py>(cmd: &Bound<'py, PyAny>, scene: &Bound<'py, PyAny>, phase: &str, attrs_copy_max: isize) -> PyResult<Bound<'py, PyList>> {
+        super::feed::capture::tokens(cmd, scene, phase, attrs_copy_max)
+    }
+
+    #[staticmethod]
     fn build_step<'py>(
         py: Python<'py>,
         history: &Bound<'py, PyAny>,

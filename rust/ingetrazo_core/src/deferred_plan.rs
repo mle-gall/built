@@ -157,3 +157,68 @@ pub(crate) fn deferred_incidence<'py>(
     out.set_item("ef_face", incident.into_pyarray(py))?;
     Ok(out.into_any())
 }
+
+/// Net polygon areas without constructing a store or exposing vertex views.
+#[pyfunction]
+pub(crate) fn planned_face_areas<'py>(
+    py: Python<'py>,
+    pos: PyReadonlyArray2<'py, f64>,
+    corners: PyReadonlyArray1<'py, i64>,
+    sizes: PyReadonlyArray1<'py, i64>,
+    counts: PyReadonlyArray1<'py, i64>,
+) -> PyResult<Bound<'py, numpy::PyArray1<f64>>> {
+    let pos = pos.as_array();
+    let corners = corners.as_array();
+    let sizes = sizes.as_array();
+    let counts = counts.as_array();
+    if pos.shape()[1] != 3 {
+        return Err(PyValueError::new_err("positions require three coordinates"));
+    }
+    let mut areas = Vec::with_capacity(counts.len());
+    let mut ring = 0;
+    let mut corner = 0;
+    let mut pts = Vec::new();
+    for &count in counts.iter() {
+        let count =
+            usize::try_from(count).map_err(|_| PyValueError::new_err("negative ring count"))?;
+        let mut area = 0.;
+        let mut valid = false;
+        for j in 0..count {
+            let n = *sizes
+                .get(ring)
+                .ok_or_else(|| PyValueError::new_err("missing ring size"))?;
+            let n = usize::try_from(n).map_err(|_| PyValueError::new_err("negative ring size"))?;
+            ring += 1;
+            pts.clear();
+            for _ in 0..n {
+                let ix = *corners
+                    .get(corner)
+                    .ok_or_else(|| PyValueError::new_err("missing ring corner"))?;
+                let p = pos.row(index(ix, pos.nrows())?);
+                pts.push(glam::DVec3::new(p[0], p[1], p[2]));
+                corner += 1;
+            }
+            let value = if n >= 3 {
+                0.5 * crate::polygon::raw_newell(&pts).length()
+            } else {
+                0.
+            };
+            if j == 0 {
+                valid = n >= 3;
+                area = value
+            } else {
+                area -= value
+            }
+        }
+        areas.push(if valid {
+            if area < 0. {
+                0.
+            } else {
+                area
+            }
+        } else {
+            0.
+        });
+    }
+    Ok(areas.into_pyarray(py))
+}

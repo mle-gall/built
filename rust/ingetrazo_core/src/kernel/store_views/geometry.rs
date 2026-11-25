@@ -93,7 +93,7 @@ fn cached_normal(mesh: &Obj<'_>, key: &Obj<'_>) -> PyResult<Vec3> {
 }
 
 #[pyfunction]
-fn exchange_paint(attrs: &Obj<'_>) -> PyResult<()> {
+pub(super) fn exchange_paint(attrs: &Obj<'_>) -> PyResult<()> {
     let back = attrs.call_method1("pop", ("back",))?;
     let front = PyDict::new(attrs.py());
     for key in attrs

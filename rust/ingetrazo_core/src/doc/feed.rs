@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Assemble the public Python record at the transaction boundary. Mesh
 //! facades still supply attribute dictionaries and compatibility command hints.
+pub(super) mod capture;
+mod hints;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use std::collections::{BTreeSet, HashSet};
@@ -24,16 +26,14 @@ pub(super) fn build<'py>(
     let step = api
         .getattr("Step")?
         .call1((history.getattr("revision")?, phase, name))?;
-    let paints = api
-        .getattr("_painted")?
-        .call1((cmd, tokens.get_item(0)?.get_item(0)?))?;
+    let paints = hints::painted(cmd, &tokens.get_item(0)?.get_item(0)?)?;
     let meshes = step.getattr("meshes")?;
-    let diff = api.getattr("_mesh_change")?;
+    let change_type = api.getattr("MeshChange")?;
     for pair in tokens.try_iter()? {
         let pair = pair?;
         let mesh = pair.get_item(0)?;
         let painted = paints.call_method1("get", (&mesh,))?;
-        let change = diff.call1((&mesh, pair.get_item(1)?, &painted))?;
+        let change = capture::mesh_change(&change_type, &mesh, &pair.get_item(1)?, &painted)?;
         if painted.is_truthy()? {
             let modified = change.getattr("modified")?.get_item("face")?;
             let seen = py.import("builtins")?.getattr("set")?.call1((&modified,))?;
@@ -50,7 +50,7 @@ pub(super) fn build<'py>(
         }
     }
     if phase != "undo" {
-        step.setattr("copies", api.getattr("_copies")?.call1((cmd,))?)?;
+        step.setattr("copies", hints::copies(cmd)?)?;
     }
     let record = history.getattr("last_txn")?;
     let placements = step.getattr("placements")?;

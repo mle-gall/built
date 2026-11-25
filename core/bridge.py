@@ -24,15 +24,13 @@ from __future__ import annotations
 
 from ingetrazo_core import Vec3 as QVector3D
 
-from ingetrazo_core import run_stitch
+from ingetrazo_core import align_chain, align_loop, bridge_centre as _centre, run_stitch, strips
 from core.mesh import Edge, Face, turn_face_over
 from core.orient import orient_outward
 from core.sweep import _CURVE_FACET_COS, _wall, order_path_edges
 from core.topology import _key
 
 _EPS = 1e-9
-#: Two length fractions closer than this pair their points with a quad.
-_SAME_T = 1e-6
 #: A quad is flat when its fourth corner is off the plane of the other three
 #: by less than this fraction of its size.
 _FLAT = 1e-5
@@ -134,95 +132,6 @@ def _connected(edges, most: int | None = None) -> list[list] | None:
 
 # ---------------------------------------------------------------- pairing
 
-def _centre(points) -> QVector3D:
-    """The middle of a closed loop, each side weighing what it measures: a
-    mean of the points slides towards a curve, drawn with many of them, and
-    two arches rounded at opposite ends then matched best upside down, an
-    hourglass (issue #1050)."""
-    c, total = QVector3D(), 0.0
-    for p, q in zip(points, points[1:] + points[:1]):
-        d = (q - p).length()
-        c += (p + q) * 0.5 * d
-        total += d
-    if total < _EPS:
-        return sum(points, QVector3D()) / len(points)
-    return c / total
-
-
-def _normalised(points) -> list:
-    """The points about their centre, scaled to a unit mean radius, so two
-    profiles of different size and place can be compared by shape."""
-    c = _centre(points)
-    rel = [p - c for p in points]
-    r = sum(v.length() for v in rel) / len(rel)
-    return [v / r for v in rel] if r > _EPS else rel
-
-
-def _fractions(points, closed: bool) -> list[float]:
-    """Length walked to each point, as a fraction of the whole (the closing
-    side included for a closed loop). The list has one more entry than the
-    points for a closed loop: its return to the start, at 1."""
-    pts = list(points) + ([points[0]] if closed else [])
-    acc = [0.0]
-    for a, b in zip(pts, pts[1:]):
-        acc.append(acc[-1] + (b - a).length())
-    total = acc[-1]
-    if total < _EPS:
-        n = len(acc) - 1
-        return [i / n for i in range(len(acc))] if n else [0.0]
-    return [t / total for t in acc]
-
-
-def _resample(points, ts, targets) -> list:
-    """The points at the increasing length fractions ``targets`` along
-    ``points`` (with ``ts`` their fractions, closing point included when
-    closed) — one walk, not a search per target."""
-    n = len(points)
-    out, i = [], 0
-    for t in targets:
-        while i < len(ts) - 2 and ts[i + 1] < t:
-            i += 1
-        span = ts[i + 1] - ts[i] if i + 1 < len(ts) else 0.0
-        k = min(max((t - ts[i]) / span, 0.0), 1.0) if span > _EPS else 0.0
-        out.append(points[i] + (points[(i + 1) % n] - points[i]) * k)
-    return out
-
-
-def _params(a, b, closed: bool):
-    """The fraction of each point of ``a`` and ``b``: its index when both
-    have as many points (a quad per side), else its length walked."""
-    if len(a) == len(b):
-        n = len(a) if closed else max(len(a) - 1, 1)
-        ts = [i / n for i in range(n + 1)]
-        return ts, ts
-    return _fractions(a, closed), _fractions(b, closed)
-
-
-def _score(a, b, closed: bool) -> float:
-    """How far apart the shapes of ``a`` and ``b`` lie when walked side by
-    side: lower is a straighter bridge."""
-    na, nb = _normalised(a), _normalised(b)
-    if len(a) == len(b):
-        along = nb                               # paired one to one
-    else:
-        ta, tb = _params(a, b, closed)
-        along = _resample(nb, tb, ta[:len(a)])
-    return sum((p - q).lengthSquared() for p, q in zip(na, along))
-
-
-def align_loop(a, b) -> list:
-    """``b`` turned (and reversed, if better) so that walking it alongside
-    the closed loop ``a`` twists the least."""
-    best, best_s = list(b), None
-    for d in (list(b), list(reversed(b))):
-        for s in range(len(d)):
-            cand = d[s:] + d[:s]
-            sc = _score(a, cand, True)
-            if best_s is None or sc < best_s - 1e-12:
-                best, best_s = cand, sc
-    return best
-
-
 def _align_loops(a, b) -> tuple[list, list]:
     """``a`` and ``b`` with the one of MORE points turned to match the
     other. Turned the other way round, a square against a circle could only
@@ -232,43 +141,6 @@ def _align_loops(a, b) -> tuple[list, list]:
     if len(b) >= len(a):
         return a, align_loop(a, b)
     return align_loop(b, a), b
-
-
-def align_chain(a, b) -> list:
-    """``b`` in the direction that puts its ends by the open chain ``a``'s."""
-    fwd = (a[0] - b[0]).length() + (a[-1] - b[-1]).length()
-    rev = (a[0] - b[-1]).length() + (a[-1] - b[0]).length()
-    return list(b) if fwd <= rev + 1e-12 else list(reversed(b))
-
-
-def strips(a, b, closed: bool) -> list[list]:
-    """The side polygons between ``a`` and ``b`` (already aligned): a quad
-    wherever the two advance together, a triangle where one runs ahead.
-
-    Of the two triangles possible at each step, the one whose new edge
-    joins the closer fractions wins, so every point goes to the nearest
-    point of the other side: a circle's points fan out from the square
-    corner each is nearest to, not all from the corner a side starts at
-    (which left one long twisted face to the next corner)."""
-    ta, tb = _params(a, b, closed)
-    pa = list(a) + ([a[0]] if closed else [])
-    pb = list(b) + ([b[0]] if closed else [])
-    na, nb = len(pa) - 1, len(pb) - 1
-    i = j = 0
-    out = []
-    while i < na or j < nb:
-        if i < na and j < nb and abs(ta[i + 1] - tb[j + 1]) <= _SAME_T:
-            out.append([pa[i], pa[i + 1], pb[j + 1], pb[j]])
-            i += 1
-            j += 1
-        elif j >= nb or (i < na and
-                         abs(ta[i + 1] - tb[j]) < abs(tb[j + 1] - ta[i])):
-            out.append([pa[i], pa[i + 1], pb[j]])
-            i += 1
-        else:
-            out.append([pa[i], pb[j + 1], pb[j]])
-            j += 1
-    return out
 
 
 def _there_and_back(chain) -> list:

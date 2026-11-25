@@ -134,6 +134,8 @@ mod occlusion;
 mod parity;
 mod visible;
 mod weld;
+mod link_tree;
+mod bridge_profiles;
 mod deferred_plan;
 mod skp;
 mod snap_build;
@@ -226,7 +228,6 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(object_merge::revert_recorded_union, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::merge_seeded_edges, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::revert_seeded_merges, m)?)?;
-    m.add_function(wrap_pyfunction!(object_merge::trace_object_loops, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::dissolve_object_edge, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::dissolve_object_region, m)?)?;
     m.add_function(wrap_pyfunction!(object_weld::weld_object_mesh, m)?)?;
@@ -285,6 +286,9 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(qt_vector_probe, m)?)?;
     m.add_function(wrap_pyfunction!(qt_dot_pairs, m)?)?;
     m.add_function(wrap_pyfunction!(smooth_corner_normals, m)?)?;
+    link_tree::register(m)?;
+    m.add_function(wrap_pyfunction!(deferred_plan::planned_face_areas, m)?)?;
+    bridge_profiles::register(m)?;
     m.add_function(wrap_pyfunction!(deferred_plan::deferred_incidence, m)?)?;
     m.add_function(wrap_pyfunction!(weld_points, m)?)?;
     m.add_function(wrap_pyfunction!(store_weld_indices, m)?)?;

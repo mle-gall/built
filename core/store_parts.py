@@ -25,11 +25,6 @@ def _store_mesh(mesh):
     return mesh if type(mesh) is StoreMesh else None
 
 
-def _hypot():
-    from core.store_mesh import _hypot as h
-    return h()
-
-
 # ---------------------------------------------------------------- pieces
 
 def parts(mesh, solid: bool):
@@ -39,13 +34,9 @@ def parts(mesh, solid: bool):
     if m is None:
         return None
     snap = m._store.snapshot()
-    if not hasattr(snap, "solid_parts"):
-        return None
     if solid:
-        h = _hypot()
-        if h is None:
-            return None
-        found = snap.solid_parts(h)
+        from core._native import qt_hypot
+        found = snap.solid_parts(qt_hypot())
     else:
         found = snap.connected_parts()
     from core.store_mesh import EdgeView, FaceView
@@ -117,8 +108,6 @@ def copy_part(faces, edges):
             or _store_mesh(m) is None:
         return None
     snap = m._store.snapshot()
-    if not hasattr(snap, "extract"):
-        return None
     from core import mesh as _mesh
     d = m.__dict__
     table_src, own = d["_attr_table"], d["_attr_own"]
@@ -291,24 +280,6 @@ class CopiedKeys(Mapping):
 
     def __len__(self):
         return len(self._columns)
-
-
-# ---------------------------------------------------------------- purge
-
-def material_names(mesh):
-    """``{f.attrs.get("mat") for f in mesh.faces}`` minus empties, from the
-    store's attribute rows and the faces' own dicts (Rust: store/tally.rs);
-    None when ``mesh`` is not store-backed."""
-    from ingetrazo_core import store_material_names
-    return store_material_names(mesh)
-
-
-def layer_tally(mesh, tally) -> bool:
-    """Add every face's and edge's tag (``layer_of``) to ``tally`` (a
-    ``Counter``; None counts the default tag) from the store (Rust:
-    store/tally.rs); False when ``mesh`` is not store-backed."""
-    from ingetrazo_core import store_layer_tally
-    return store_layer_tally(mesh, tally)
 
 
 _ORIGINS = weakref.WeakKeyDictionary()

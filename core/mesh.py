@@ -39,15 +39,6 @@ _KEY_SCALE = 10.0 ** _KEY_DECIMALS
 _WELD_TOL2 = (10.0 ** -_KEY_DECIMALS) ** 2
 
 
-def _key(p: QVector3D) -> tuple[int, int, int]:
-    # Integer grid cells (same partition as rounding to _KEY_DECIMALS):
-    # neighbouring cells are ±1, so the boundary probes in _lookup and
-    # weld_coincident need no float rounding — the rounding calls dominated
-    # large imports.
-    return object_replay.mesh_key(p)
-
-
-
 class Vertex:
     """A shared point in the mesh.
 
@@ -380,19 +371,6 @@ from ingetrazo_core import store_views
 
 turn_face_over = store_views.turn_face_over
 swap_orientation_paint = store_views.swap_orientation_paint
-
-
-def _trace_loops(outline: list[tuple[Vertex, Vertex]]) -> Optional[list[list[Vertex]]]:
-    """Trace a set of undirected boundary edges into closed vertex loops. Returns
-    ``None`` if any vertex has valence ≠ 2 (a pinched / non-simple outline).
-
-    Each loop starts at the first outline segment no loop has walked yet,
-    in that segment's direction: the start was the first member of a set
-    of segments, i.e. object addresses, so the merged face's corner order
-    differed from run to run (design decision 5). Vertices are known by
-    key, so the store's views trace the same loops."""
-    from ingetrazo_core import trace_object_loops
-    return trace_object_loops(outline)
 
 
 def element_identity(item):

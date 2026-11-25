@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import weakref
 
-from core.protocol.keys import KINDS, mesh_key, store_of, to_json_key
+from core.protocol.keys import KINDS, mesh_key, to_json_key
 
 
 def _empty():
@@ -133,42 +133,6 @@ class Step:
 
 # ---------------------------------------------------------------- capture
 
-def _command_meshes(cmd, scene, phase) -> list:
-    """The meshes a step runs on, known before it runs: the mesh the
-    command was executed against (undo / redo go back to it) or the open
-    one, a snapshot mutation's own target, a soften's meshes; a compound's
-    parts' too."""
-    from core.history import CompoundCommand, MeshCommand
-    out = []
-    if phase == "execute":
-        out.append(scene.mesh)
-    else:
-        out.append(getattr(cmd, "_history_mesh", None) or scene.mesh)
-    stack = [cmd]
-    while stack:
-        c = stack.pop()
-        if phase != "execute":
-            out.append(getattr(c, "_history_mesh", None))
-        if isinstance(c, CompoundCommand):
-            stack.extend(c.commands)
-        elif isinstance(c, MeshCommand):
-            out.extend(c.geometry_meshes(scene))
-        if getattr(c, "reference_instance", False) or getattr(c, "reference_assembly", False):
-            out.append(c.proto)
-        meshes = getattr(c, "meshes", None)
-        if callable(meshes) and type(c).__name__ in (
-                "SoftenByAngleCommand", "FlipFacesCommand", "FlipGroupsCommand"):
-            out.extend(meshes())
-    seen, uniq = set(), []
-    for m in out:
-        if m is not None:
-            m = m.__dict__.get("_instance_definition", m)
-        if m is not None and id(m) not in seen:
-            seen.add(id(m))
-            uniq.append(m)
-    return uniq
-
-
 def _placements_showing(scene, mesh) -> list:
     """Uids of every placement, nested and hidden ones included, that
     draws ``mesh``."""
@@ -186,98 +150,6 @@ def _placements_showing(scene, mesh) -> list:
 #: each step would cost O(painted faces). The faces a paint command names
 #: are still reported; other attrs-only edits of existing faces are not.
 ATTRS_COPY_MAX = 50_000
-
-
-def _token(mesh):
-    """What the mesh looked like before the step: its ``capture_state()``
-    when store-backed (the store's snapshot, O(1), plus the faces' own
-    attrs dicts, copied), else its serials."""
-    st = store_of(mesh)
-    serials = (mesh._mut_serial, getattr(mesh, "revision", None))
-    if st is None:
-        return (None, serials)
-    if len(mesh.__dict__.get("_attr_own") or ()) > ATTRS_COPY_MAX:
-        return (st.snapshot(), serials)
-    return (mesh.capture_state(), serials)
-
-
-def _store_change(mesh, st, before):
-    """The store's net record since ``before`` (store/changes.rs), face
-    attrs compared when ``before`` holds them; across a namespace change
-    (a foreign snapshot adopted under fresh keys) everything removed and
-    created; None across two stores."""
-    from core.store_mesh import StoreState
-    try:
-        if isinstance(before, StoreState):
-            d = mesh.__dict__
-            # Read at once, so the live dicts need no copy.
-            now = StoreState(st.snapshot(), d["_attr_own"], d["_attr_table"], mesh)
-            return now.changes_since(before)
-        return st.snapshot().changes_since(before, [])
-    except ValueError:
-        return None         # another store's snapshot
-
-
-def _mesh_change(mesh, token, painted=()) -> MeshChange:
-    """``painted``: face keys the step's paint commands name in this mesh
-    (a Python mesh's attrs change shows in no counter that says which)."""
-    before, serials = token
-    st = store_of(mesh)
-    if before is not None and st is not None:
-        ch = _store_change(mesh, st, before)
-        if ch is not None:
-            return MeshChange(mesh, "store", created=ch.created,
-                              removed=ch.removed, modified=ch.modified,
-                              moved=ch.moved, revision=st.revision)
-        return MeshChange(mesh, "store", replaced=True, revision=st.revision)
-    now = (mesh._mut_serial, getattr(mesh, "revision", None))
-    backing = "store" if st is not None else "python"
-    # Into or out of the store during the step (a materialisation, an
-    # undo restoring a store snapshot), or a Python mesh's geometry
-    # changed: no element record, re-read it. A revision moved alone is
-    # an attrs change (paint, tags): named when a paint command says
-    # which faces, else re-read too.
-    replaced = ((before is None) != (st is None) or now[0] != serials[0]
-                or (now[1] != serials[1] and not painted))
-    return MeshChange(mesh, backing, replaced=replaced,
-                      revision=st.revision if st is not None else None)
-
-
-def _painted(cmd, default) -> dict:
-    """Face keys a paint command (``SetFace*Command``) wrote attrs on:
-    attrs are Python dicts beside the store (design decision 6), so the
-    store's record does not see them."""
-    from core.history import CompoundCommand
-    out, stack = {}, [cmd]
-    while stack:
-        c = stack.pop()
-        if isinstance(c, CompoundCommand):
-            stack.extend(c.commands)
-        elif type(c).__name__.startswith("SetFace"):
-            faces = getattr(c, "_faces", None)
-            if isinstance(faces, list):
-                for face in faces:
-                    if hasattr(face, "key"):
-                        mesh = getattr(face, "_m", None) or default
-                        owner = mesh.__dict__.get("_instance_definition", mesh)
-                        out.setdefault(owner, []).append(face.key)
-    return out
-
-
-def _copies(cmd) -> list:
-    """What a command says it copied between meshes (``cmd.copies``:
-    ``[(source mesh, target mesh, {kind: [(key, key)]})]``)."""
-    from core.history import CompoundCommand
-    out, stack = [], [cmd]
-    while stack:
-        c = stack.pop()
-        if isinstance(c, CompoundCommand):
-            stack.extend(c.commands)
-            continue
-        for src, dst, keys in getattr(c, "copies", None) or ():
-            out.append({"source": mesh_key(src), "target": mesh_key(dst),
-                        "keys": {k: list(keys[k]) for k in keys}})
-    return out
 
 
 def _geometry_only():
@@ -445,9 +317,9 @@ class ChangeFeed:
         if scene is None:
             self._pending = None
             return
-        meshes = _command_meshes(cmd, scene, phase)
         serial = self.readers.stamp()
-        self._pending = (cmd, phase, [(m, _token(m)) for m in meshes],
+        tokens = self._native.capture_meshes(cmd, scene, phase, ATTRS_COPY_MAX)
+        self._pending = (cmd, phase, tokens,
                          getattr(scene, "content_version", None), serial)
 
     def _after(self, cmd, phase, ran):

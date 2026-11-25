@@ -254,8 +254,8 @@ fn select<'py>(
     Ok(out)
 }
 #[pyfunction]
-#[pyo3(signature=(history,since_revision=0))]
-fn feed<'py>(history: &Obj<'py>, since_revision: i64) -> Reply<'py> {
+#[pyo3(signature=(history,since_revision=Python::attach(|py| 0_i64.into_pyobject(py).unwrap().into_any().unbind())))]
+fn feed<'py>(history: &Obj<'py>, since_revision: Py<PyAny>) -> Reply<'py> {
     let got = history
         .getattr("feed")?
         .call_method1("since", (since_revision,))?;

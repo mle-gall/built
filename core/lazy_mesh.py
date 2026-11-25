@@ -116,34 +116,11 @@ def plan_of(mesh) -> Plan | None:
 
 
 def face_net_areas(plan) -> np.ndarray:
-    """Face.net_area over planned vertices, including holes, without topology.
-
-    Accumulate each ring in corner order in doubles, then use Qt's float
-    vector length just as Face does. All rings advance together in NumPy.
-    """
-    from ingetrazo_core import Vec3 as QVector3D
-    sizes = plan.ring_sizes
-    if not len(sizes):
-        return np.zeros(plan.nfaces)
-    starts = np.concatenate([[0], np.cumsum(sizes[:-1])])
-    normal = np.zeros((len(sizes), 3), dtype=np.float64)
-    for i in range(int(sizes.max(initial=0))):
-        active = np.flatnonzero((sizes > i) & (sizes >= 3))
-        a = plan.pos[plan.corners[starts[active] + i]]
-        b = plan.pos[plan.corners[starts[active] + (i + 1) % sizes[active]]]
-        normal[active, 0] += (a[:, 1] - b[:, 1]) * (a[:, 2] + b[:, 2])
-        normal[active, 1] += (a[:, 2] - b[:, 2]) * (a[:, 0] + b[:, 0])
-        normal[active, 2] += (a[:, 0] - b[:, 0]) * (a[:, 1] + b[:, 1])
-    areas = np.fromiter((0.5 * QVector3D(*map(float, n)).length()
-                         for n in normal), dtype=np.float64, count=len(sizes))
-    counts = plan.ring_counts
-    first = np.concatenate([[0], np.cumsum(counts[:-1])])
-    result = areas[first].copy()
-    for i in range(1, int(counts.max(initial=0))):
-        active = np.flatnonzero(counts > i)
-        result[active] -= areas[first[active] + i]
-    result[sizes[first] < 3] = 0
-    return np.maximum(result, 0)
+    """Net areas of planned faces, including holes, in face order."""
+    from ingetrazo_core import planned_face_areas
+    return planned_face_areas(plan.pos, plan.corners,
+                              np.asarray(plan.ring_sizes, dtype=np.int64),
+                              np.asarray(plan.ring_counts, dtype=np.int64))
 
 
 def entity_count(mesh) -> int:

@@ -102,25 +102,6 @@ def _subtable(table, stem):
     return out
 
 
-def walk(scene):
-    """Every placement once: ``(group, chain, inner, file_root)`` where
-    ``chain`` is the ``(stem, path)`` links above it, ``inner`` the same
-    with the group itself when it is a link, and ``file_root`` whether it
-    is a top placement of the file it is in (the host or a linked file)."""
-    seen = set()
-    stack = [(g, (), True) for g in reversed(getattr(scene, "groups", None) or ())]
-    while stack:
-        g, chain, root = stack.pop()
-        if id(g) in seen:
-            continue
-        seen.add(id(g))
-        link = links.link_of(g)
-        inner = chain + ((ingetrazo_core.link_stem(link["path"]), ingetrazo_core.link_norm(link["path"])),) if link else chain
-        yield g, chain, inner, root
-        kids = getattr(g, "children", None) or ()
-        stack.extend((c, inner, bool(link)) for c in reversed(kids))
-
-
 class Tree:
     """``nodes``: display key → {name, parent, order, kind ("host",
     "link", "node", "tag", "tagfolder"), path, stems, recipe,
@@ -143,7 +124,7 @@ class Tree:
         #: file row; a second chain to a file already shown → its row.
         self.alias = {}
         self._host(registry)
-        placements = list(walk(scene))
+        placements = ingetrazo_core.link_placements(scene)
         self._qualified = scene.repeated_uids()
 
         files = {}
@@ -329,20 +310,10 @@ class Tree:
     # -- reads -------------------------------------------------------------
     def order(self):
         """``(key, depth)`` in display order."""
-        out, stack = [], [(k, 0) for k in reversed(self.children[None])]
-        while stack:
-            k, d = stack.pop()
-            out.append((k, d))
-            stack.extend((c, d + 1) for c in reversed(self.children.get(k, ())))
-        return out
+        return ingetrazo_core.tree_order(self.children)
 
     def subtree(self, key):
-        out, stack = [], [key]
-        while stack:
-            k = stack.pop()
-            out.append(k)
-            stack.extend(self.children.get(k, ()))
-        return out
+        return ingetrazo_core.tree_subtree(self.children, key)
 
     def members(self, key):
         return [g for k in self.subtree(key) for g in self.direct.get(k, ())]

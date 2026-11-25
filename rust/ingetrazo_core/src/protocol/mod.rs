@@ -16,8 +16,9 @@ mod mesh_tools;
 mod document;
 mod drawing;
 mod materials;
-mod keys;
+pub(crate) mod keys;
 mod queries;
+mod reference;
 mod annotations;
 
 type Obj<'py> = Bound<'py, PyAny>;
@@ -150,6 +151,7 @@ pub(crate) fn register(root: &Bound<'_, PyModule>) -> PyResult<()> {
     drawing::register(&m)?;
     keys::register(&m)?;
     queries::register(&m)?;
+    reference::register(&m)?;
     annotations::register(&m)?;
     materials::register(&m)?;
     document::register(&m)?;

@@ -3,6 +3,8 @@
 pub(crate) mod properties;
 pub(crate) mod block;
 mod deferred;
+mod edits;
+mod paint_classes;
 mod geometry;
 mod incidence;
 pub(crate) mod attributes;
@@ -125,6 +127,8 @@ pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     s.add_function(wrap_pyfunction!(face_area, &s)?)?;
     s.add_function(wrap_pyfunction!(vertices_in_cells, &s)?)?;
     s.add_function(wrap_pyfunction!(cells_of, &s)?)?;
+    s.add_function(wrap_pyfunction!(paint_classes::paint_classes, &s)?)?;
+    edits::register(&s)?;
     block::register(&s)?;
     attributes::register(&s)?;
     incidence::register(&s)?;

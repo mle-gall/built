@@ -32,65 +32,6 @@ def _weld_args():
                 fused=False)
 
 
-def _frozen(x):
-    """A hashable stand-in for an attrs value: equal values freeze equal."""
-    if isinstance(x, dict):
-        return ("d", tuple(sorted((k, _frozen(v)) for k, v in x.items())))
-    if isinstance(x, list):
-        return ("l", tuple(_frozen(v) for v in x))
-    if isinstance(x, tuple):
-        return ("t", tuple(_frozen(v) for v in x))
-    hash(x)
-    return x
-
-
-def paint_classes(mesh, *, push=False):
-    """``(own, rows, reps)`` for the native rebuild: the paint class of each
-    face's own attrs dict and of each attribute-table row (equal dicts, one
-    class; 0 for none) and a dict per class."""
-    owner = _attribute_owner(mesh)
-    reps = [{}]
-    index: dict = {}
-
-    def cls(d):
-        if not d:
-            return 0
-        try:
-            key = _frozen(d)
-        except TypeError:
-            key = None
-        if key is not None:
-            c = index.get(key)
-            if c is None:
-                c = index[key] = len(reps)
-                reps.append(d)
-            return c
-        for c, r in enumerate(reps):
-            if c and r == d:
-                return c
-        reps.append(d)
-        return len(reps) - 1
-
-    rows = [cls(r) for r in owner["_attr_table"]]
-    own = {k: cls(d) for k, d in owner["_attr_own"].items()}
-    if push:
-        from core.mesh import PAINT_KEYS
-        # Entry orientation and free-sheet winding can each exchange the sides.
-        # The store also needs the paint-only class inherited by a divided cap.
-        swaps = []
-        for _ in range(2):
-            for d in reps[len(swaps):]:
-                copy = dict(d)
-                if isinstance(copy.get("back"), dict):
-                    store_views.exchange_paint(copy)
-                swaps.append(cls(copy))
-        surface = [cls({k: d[k] for k in PAINT_KEYS if k in d}) for d in list(reps)]
-        swaps.extend(range(len(swaps), len(reps)))
-        surface.extend(range(len(surface), len(reps)))
-        return own, rows, reps, swaps, surface
-    return own, rows, reps
-
-
 # ---- Views ----------------------------------------------------------------
 
 def _attribute_owner(mesh):
@@ -601,12 +542,7 @@ class StoreMesh(_mesh._MeshState):
     # changed), runs the Python kernel instead (`_py`).
 
     def _dirty(self, n=1) -> None:
-        d = self.__dict__
-        d.pop("_bulk", None)
-        if n:
-            d["_chunk_dirty_value"] = True
-            d["_revision"] = d.get("_revision", 0) + n
-            d["_mut_serial"] = d.get("_mut_serial", 0) + n
+        return store_views.dirty(self, n)
 
     def _inherit_face_attrs(self, dirty, replacements):
         """Transfer editor attributes to native replacement pieces and return their source faces."""
@@ -621,12 +557,7 @@ class StoreMesh(_mesh._MeshState):
         return sources
 
     def _own(self, x, kind):
-        """``x``'s key when it names an element of this store of ``kind``
-        (0 vertex, 1 edge, 2 face), listed or removed; else None."""
-        k = getattr(x, "key", None)
-        if type(k) is not int or k < 0 or (k >> 38) & 3 != kind:
-            return None
-        return k if self._store.knows(k) else None
+        return store_views.owned(self, x, kind)
 
     def _incidence_key(self, element, kind):
         expected = (VertexView, EdgeView, FaceView)[kind]
@@ -660,92 +591,29 @@ class StoreMesh(_mesh._MeshState):
         return EdgeView(self, k)
 
     def add_face(self, loop_positions, hole_loops=None):
-        self._dirty(1)
-        loop = list(loop_positions)
-        raw = [list(h) for h in (hole_loops or [])]
-        if len(raw) > 1:
-            try:
-                mask = _hole_filter(raw)
-                raw = [ring for ring, keep in zip(raw, mask) if keep]
-            except Exception:
-                # Python welds the outer loop before filtering the holes.
-                for p in loop:
-                    self.vertex(p)
-                raise
-        rings = [[self._input_point(p) for p in loop]] + [[self._input_point(p) for p in h]
-                                             for h in raw]
-        k, _ch = self._store.add_face(rings)
-        self._dirty(sum(len(r) for r in rings))
-        return FaceView(self, k)
+        return store_views.add_face(self, loop_positions, hole_loops)
 
     def remove_edge(self, e) -> None:
-        k = self._own(e, 1)
-        if k is None:
-            raise StoreRefusal("remove_edge requires live, representable incidence in this mesh")
-        self._dirty(1)
-        self._store.remove_edge(k)
+        return store_views.remove_element(self, e, 1)
 
     def remove_face(self, face) -> None:
-        k = self._own(face, 2)
-        if k is None:
-            raise StoreRefusal("remove_face requires live, representable incidence in this mesh")
-        try:
-            self._store.remove_face(k)
-        except _fallback():
-            raise StoreRefusal("remove_face requires live, representable incidence in this mesh")
-        self._dirty(1)
+        return store_views.remove_element(self, face, 2)
 
     def relink_edge(self, edge) -> None:
-        k = self._own(edge, 1)
-        if k is None:
-            raise StoreRefusal("relink_edge requires live, representable incidence in this mesh")
-        try:
-            done, _ch = self._store.relink_edge(k)
-        except _fallback():
-            raise StoreRefusal("relink_edge requires live, representable incidence in this mesh")
-        self.__dict__.pop("_bulk", None)
-        if done:
-            self.mark_modified()
+        return store_views.relink_element(self, edge, 1)
 
     def relink_face(self, face) -> None:
-        k = self._own(face, 2)
-        if k is None:
-            raise StoreRefusal("relink_face requires live, representable incidence in this mesh")
-        st = self._store
-        try:
-            done, _ch = st.relink_face(k)
-        except _fallback():
-            raise StoreRefusal("relink_face requires live, representable incidence in this mesh")
-        self.__dict__.pop("_bulk", None)
-        if done:
-            self._dirty(sum(len(r) for r in st.face_rings(k)))
-            self.mark_modified()
+        return store_views.relink_element(self, face, 2)
 
     def add_hole(self, face, loop_positions):
-        k = self._own(face, 2)
-        loop = list(loop_positions)
-        if k is None or not self._store.is_live(k):
-            raise StoreRefusal("add_hole requires live, representable incidence in this mesh")
-        try:
-            keys, _ch = self._store.add_hole(k, [self._input_point(p) for p in loop])
-        except _fallback():
-            raise StoreRefusal("add_hole requires live, representable incidence in this mesh")
-        self._dirty(len(loop))
-        self.__dict__.pop("_bulk", None)
-        return [VertexView(self, v) for v in keys]
+        return store_views.add_hole(self, face, loop_positions)
 
     def relink_hole(self, face, ring) -> None:
         self._store.relink_hole(face.key, [v.key for v in ring])
         self.__dict__.pop("_bulk", None)
 
     def remove_hole(self, face, loop) -> None:
-        k = self._own(face, 2)
-        loop = list(loop)
-        vk = [self._own(v, 0) for v in loop]
-        if k is None or None in vk:
-            raise StoreRefusal("remove_hole requires live, representable incidence in this mesh")
-        self.__dict__.pop("_bulk", None)
-        self._store.remove_hole(k, vk)          # Python bumps nothing
+        return store_views.remove_hole(self, face, loop)
 
     def purge_debris(self):
         """:meth:`Mesh.purge_debris` in the store. A store has no ghost
@@ -787,9 +655,7 @@ class StoreMesh(_mesh._MeshState):
     # (``_native.qt_hypot()``); without one, they run on views here.
 
     def _live(self, x, kind):
-        """``x``'s key when it names a LIVE element of this store."""
-        k = self._own(x, kind)
-        return k if k is not None and self._store.is_live(k) else None
+        return store_views.owned(self, x, kind, True)
 
     def _undo_state(self):
         """What ``revert_stitch`` restores for a record made here: the
@@ -913,7 +779,7 @@ class StoreMesh(_mesh._MeshState):
     def rebuild_cap_plane(self, origin, normal):
         """Publish the native single-plane edit and the donors of its replacement caps."""
         import sys
-        own, rows, reps = paint_classes(self)
+        own, rows, reps = store_views.paint_classes(self)
         bumps, painted = self._store.rebuild_single_plane(
             origin.toTuple(), normal.toTuple(), own, rows, _hypot(), sys.version_info >= (3, 12))
         if bumps:
@@ -926,7 +792,7 @@ class StoreMesh(_mesh._MeshState):
         """Publish one store extrusion's paint, selection and editor counters."""
         import sys
         from core.mesh import swap_orientation_paint
-        own, rows, reps, swapped, surface = paint_classes(self, push=True)
+        own, rows, reps, swapped, surface = store_views.paint_classes(self, push=True)
         try:
             dirty, steps, painted, flips, faces, edges = self._store.push_extrude(
                 face.key, distance, normal, keep, oriented, preview, own, rows,
@@ -949,7 +815,7 @@ class StoreMesh(_mesh._MeshState):
         """Run the prism translation and publish the store's paint transfers."""
         import sys
         from core.mesh import swap_orientation_paint
-        own, rows, reps = paint_classes(self)
+        own, rows, reps = store_views.paint_classes(self)
         try:
             bumps, next_id, before, painted, after, replaced, flipped = self._store.push_translate(
                 [p.toTuple() for p in cap], delta, removing, preview, _mesh._CURVE_COUNTER,

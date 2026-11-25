@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """World-copy edit sessions for object meshes and singular store placements."""
-from ingetrazo_core import Matrix4, Vec3
+from ingetrazo_core import Matrix4, Vec3, command_protocol
 
 from core.history import Command, MeshCommand, CompoundCommand, OccurrenceCommands
 
@@ -17,8 +17,8 @@ def enter(scene, group, frame):
                     and _mesh_placed_elsewhere(scene, group))
         proto, xform = group.mesh, group.xform
         if instance:
-            parts = parts_record(group)
-        _bake_container_xform(group)
+            parts = command_protocol.parts_record(group)
+        command_protocol.bake_container_xform(group)
         if instance:
             # An assembly is a component too: its own geometry is the
             # definition its copies share. The session edits a world
@@ -46,36 +46,6 @@ def enter(scene, group, frame):
     return share, parts
 
 
-def _bake_container_xform(group) -> None:
-    """Push a container's own matrix down into its children and its mesh.
-
-    A group that owns placements is always an instance (``Group.adopt``),
-    so moving it composes into ``xform``. Inside it the tools speak world
-    coordinates, so the matrix has to come down one level: every child
-    matrix takes it on the left, the group's own geometry moves to world,
-    and the group is left at identity. Nothing moves in the world.
-
-    Its own geometry moves as a COPY, never in place: a container's mesh
-    can be the very prototype its children share (an imported component
-    tree is exactly that), and walking those vertices would drag every
-    placement with it.
-    """
-    xform = getattr(group, "xform", None)
-    if xform is None or xform == Matrix4():
-        return
-    from core.explode import rotate_offsets
-    from core.group import transformed_mesh
-    for child in group.children:
-        child.xform = xform * (child.xform if child.xform is not None
-                               else Matrix4())
-    # An exploded view's offsets live in the container's frame, which
-    # has just become the world's.
-    rotate_offsets(group, xform)
-    if group.mesh.vertices:
-        group.mesh = transformed_mesh(group.mesh, xform)
-    group.xform = Matrix4()
-
-
 def _mesh_placed_elsewhere(scene, group) -> bool:
     """Whether another placement, at any depth, draws ``group``'s mesh:
     an assembly placed once has no copies to share an edit with."""
@@ -83,24 +53,6 @@ def _mesh_placed_elsewhere(scene, group) -> bool:
     mesh = group.mesh
     return any(g is not group and g.mesh is mesh
                for g in iter_groups(scene.groups))
-
-def parts_record(group) -> tuple:
-    """An assembly's axes and its parts' matrices and offsets, copied,
-    to put back bit for bit: a round trip through the inverse matrix
-    drifts in the last digits."""
-    axes = getattr(group, "axes", None)
-    return (None if axes is None else Matrix4(axes),
-            [(c, None if c.xform is None else Matrix4(c.xform),
-              c.explode_offset) for c in group.children])
-
-def put_parts(group, record) -> None:
-    """Put back what :meth:`parts_record` copied. The list of parts is
-    not touched: the commands that changed it undo that themselves."""
-    axes, parts = record
-    for child, xform, offset in parts:
-        child.xform = None if xform is None else Matrix4(xform)
-        child.explode_offset = offset
-    group.axes = None if axes is None else Matrix4(axes)
 
 def _unbake_container_xform(group, xform, parts=None) -> None:
     """Undo :meth:`_bake_container_xform` on leaving an assembly: its
@@ -280,19 +232,19 @@ class ReshareAssemblyCommand(Command):
         self.edited.restore_state(state)
         self.group.mesh = self.edited
         self.group.xform = Matrix4()
-        put_parts(self.group, record)
+        command_protocol.put_parts(self.group, record)
 
     def _unframe(self, record) -> None:
         self.group.mesh = self.proto
         self.group.xform = Matrix4(self.xform)
-        put_parts(self.group, record)
+        command_protocol.put_parts(self.group, record)
 
     def do(self, scene) -> None:
         refresh = getattr(scene, "_refresh_dimension_holds", None)
         if refresh is not None:
             refresh()
         if self._framed is None:                 # leaving, the first time
-            self._framed = parts_record(self.group)
+            self._framed = command_protocol.parts_record(self.group)
             self._edited = self.edited.capture_state()
             self._before = self.proto.capture_state()
             self.shared = self._edited != self.state0
@@ -303,7 +255,7 @@ class ReshareAssemblyCommand(Command):
                 restore_sharing(self.group, self.proto, self.xform,
                                 parts=self.parts)
             self._after = self.proto.capture_state()
-            self._left = parts_record(self.group)
+            self._left = command_protocol.parts_record(self.group)
         else:
             self._frame(self._entered, self.state0)
             for cmd in self.inner:
@@ -322,7 +274,7 @@ class ReshareAssemblyCommand(Command):
         self.proto.note_rewound()
         for cmd in reversed(self.inner):
             self._in_mesh(scene, cmd, lambda cmd=cmd: cmd.undo(scene))
-        self._entered = parts_record(self.group)
+        self._entered = command_protocol.parts_record(self.group)
         self._unframe(self.parts)
         scene.version += 1
 
