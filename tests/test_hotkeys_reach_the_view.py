@@ -1,7 +1,7 @@
 """Tools retain their gesture and measurement input across native chrome actions."""
 import pytest
 
-from core.input_types import QPointF, Qt
+from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
 from ingetrazo_core import Vec3 as V
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from tools.base import ToolContext

@@ -210,15 +210,22 @@ def _stats_to_text(stats: dict) -> str:
 
 class ModelInfoPanel:
     id, title, slot = "statistics", tr("Model Info"), "utility"
+    sections_on_show = True
 
     def __init__(self, app, invalidate):
         self.app = app
         self.invalidate = invalidate
+        self._revision = None
+        self._stats = None
 
     def sections(self):
         from core.plugin_panels import field, item, section
 
-        s = _collect_stats(self.app.scene)
+        scene = self.app.scene
+        if self._revision != scene.version:
+            self._stats = _collect_stats(scene)
+            self._revision = scene.version
+        s = self._stats
         style = s["style"]
 
         def table(key, columns, data):
@@ -277,7 +284,7 @@ class ModelInfoPanel:
     def event(self, control, event, value):
         if (control, event) == ("copy", "invoke"):
             from app_shell.native import pasteboard_write
-            text = _stats_to_text(_collect_stats(self.app.scene))
+            text = _stats_to_text(self._stats)
             if not pasteboard_write([("public.utf8-plain-text", text.encode())]):
                 raise RuntimeError(tr("Could not copy to clipboard"))
 

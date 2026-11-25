@@ -69,9 +69,6 @@ def test_a_group_exploded_out_of_a_copy_is_its_own_when_opened(native_window):
     """Explode frees the groups of one copy; opening one of them must not
     edit the groups still inside the other copies."""
     import sys
-    from PySide6.QtWidgets import QApplication
-    if QApplication.instance() is None:
-        QApplication(sys.argv[:1])
     from core.history import ExplodeGroupCommand
     win = native_window
     vp = win.viewport
@@ -111,9 +108,6 @@ def test_the_sharing_survives_the_igz(tmp_path):
 
 def test_through_the_viewport_the_edit_reaches_the_other_copy_and_undoes(native_window):
     import sys
-    from PySide6.QtWidgets import QApplication
-    if QApplication.instance() is None:
-        QApplication(sys.argv[:1])
     win = native_window
     vp = win.viewport
     scene = vp.scene

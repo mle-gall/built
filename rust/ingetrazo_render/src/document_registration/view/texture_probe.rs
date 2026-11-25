@@ -33,16 +33,19 @@ pub(super) fn measure_texture_position(py: Python<'_>, path: &Obj) -> PyResult<(
         .getattr("TexturePositionTool")?;
     let (group, face) = first_textured(&scene, &tool)?;
     scene.call_method1("begin_group_edit", (&group,))?;
-    let [app, view] = unpack(
-        &py.import("tools._classic")?
-            .call_method1("measure_view", (&scene,))?,
-    )?;
+    let folder = py.import("tempfile")?.call_method0("TemporaryDirectory")?;
+    let isolation = py.import("tests.shell_isolation")?;
+    let context = isolation.call_method("open_test_host", (folder.getattr("name")?,),
+        Some(&fields!(py; "width"=>1000, "height"=>700)))?;
+    let host = context.call_method0("__enter__")?;
     let measure = || -> PyResult<()> {
+        isolation.call_method1("attach_test_renderer", (&host,))?;
+        let view = host.getattr("view")?;
+        view.call_method1("set_scene", (&scene,))?;
         let camera = view.getattr("camera")?;
         camera.setattr("target", face.call_method0("centroid")?)?;
         camera.setattr("distance", 5)?;
-        view.call_method0("show")?;
-        app.call_method0("processEvents")?;
+        view.call_method("_upload", (), Some(&fields!(py; "force"=>true)))?;
         let tool = tool.call0()?;
         tool.call_method1("begin", (&view, &face, face.call_method0("centroid")?))?;
         let preview = py
@@ -76,6 +79,7 @@ pub(super) fn measure_texture_position(py: Python<'_>, path: &Obj) -> PyResult<(
         result
     };
     let result = measure();
-    view.call_method0("close")?;
+    context.call_method1("__exit__", (py.None(), py.None(), py.None()))?;
+    folder.call_method0("cleanup")?;
     result
 }

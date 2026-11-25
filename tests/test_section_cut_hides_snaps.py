@@ -12,15 +12,9 @@ candidate the snap engine weighs — endpoint, midpoint, on-edge — follows it.
 """
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-if QApplication.instance() is None:
-    QApplication([])
 
 from core.section import SectionPlane  # noqa: E402
 from core.snap import compute_snap  # noqa: E402

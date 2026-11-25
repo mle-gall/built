@@ -7,14 +7,10 @@ from __future__ import annotations
 
 import ingetrazo_render as native
 
-import sys
 
-from core.input_types import NATIVE, QEvent, Qt
-if not NATIVE:
-    from PySide6.QtCore import QObject
+from ingetrazo_core import Type as QEvent, Input as Qt
 
 from ingetrazo_render import shell_action as ShellAction
-from views.view_host import MISSING
 from ingetrazo_render.document_commands import WindowDocumentCommands
 
 
@@ -301,22 +297,13 @@ def discover_window_plugins():
 
 
 def new_shell_window(host):
-    plugins = discover_window_plugins()
-    if NATIVE and "PySide6.QtGui" in sys.modules:
-        from app_shell.qt_host import enable_plugin_widgets
-        enable_plugin_widgets()
-        from PySide6.QtCore import QObject
-
-        class PluginWindow(ShellWindow, QObject):
-            """Parent for raw widget actions contributed by a loaded Qt plugin."""
-        return PluginWindow(host, plugins)
-    return ShellWindow(host, plugins)
+    return ShellWindow(host, discover_window_plugins())
 
 
 from core.host_callbacks import Signal
 
 
-class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
+class ShellWindow(WindowDocumentCommands):
     _extension_closed = Signal()
 
     def __init__(self, host, plugins=None):
@@ -412,7 +399,6 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
             raise AttributeError(name)
         if name in _QUIET:
             return lambda *a, **k: None
-        MISSING["window." + name] += 1
         raise AttributeError(name)
 
     # ---- the documents' state, as MainWindow keeps it --------------------

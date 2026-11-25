@@ -1,26 +1,19 @@
 """Verify overlay pixels independently of native presentation and GPU access."""
-import os
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
-from PySide6.QtWidgets import QApplication
 from views.wgpu_overlay import Primitive, axes, pixels, rasterize, snap_glyph
 
 
-@pytest.fixture(scope="module")
-def app():
-    return QApplication.instance() or QApplication([])
-
-
-def test_rgba_scale_and_transparent_background(app):
+def test_rgba_scale_and_transparent_background():
     image = rasterize([Primitive("rectangle", ((10, 10), (30, 30)),
                                  "#ff0000", fill="#ff0000")], 100, 80, 2)
-    assert (image.width(), image.height()) == (200, 160)
-    assert image.pixelColor(40, 40).getRgb() == (255, 0, 0, 255)
-    assert image.pixelColor(150, 100).alpha() == 0
+    from tests.headless_gpu import pixel
+    assert (image.width, image.height) == (200, 160)
+    assert pixel(image, 40, 40) == (255, 0, 0, 255)
+    assert pixel(image, 150, 100)[3] == 0
     assert pixels(image).size == 200 * 160 * 4
 
 
-def test_all_primitives_and_glyphs(app):
+def test_all_primitives_and_glyphs():
     items = [snap_glyph((20, 20), "endpoint"), snap_glyph((40, 40), "midpoint"),
              snap_glyph((60, 60), "on_edge"),
              Primitive("text", ((20, 80),), text="12.5 m"),
@@ -36,7 +29,7 @@ PRIMITIVE_DIGESTS = {1: "eb3d8c013fc4eb6f12298a9a", 2: "f482445fab1a60937c3510a4
 
 
 def _primitive_set():
-    from PySide6.QtCore import Qt
+    from core.input_codes import Input as Qt
     return [
         Primitive("polyline", ((10, 10), (90.3, 40.7), (30, 80)), "#5a6e8c", 1 / 3),
         Primitive("polyline", ((5, 95), (195, 95)), "#f2732a", 1.5, dash=(6, 3)),

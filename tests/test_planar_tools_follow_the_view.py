@@ -13,20 +13,14 @@ from __future__ import annotations
 import math
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from tools.base import ToolContext
 
 
 @pytest.fixture(scope="module")
 def viewport():
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    elif not isinstance(app, QApplication):
-        pytest.skip("another Qt application flavour is already running")
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1000, 600)
@@ -364,7 +358,7 @@ def test_a_first_click_on_a_components_face_captures_its_world_plane(viewport):
     atasca». The click captured the face's plane in the component's OWN
     coordinates; the second corner then fell on a plane nowhere near the
     post. The captured plane must be the world one."""
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
     from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
@@ -412,7 +406,7 @@ def test_a_nested_components_face_plane_comes_through_its_placement(viewport):
     local coordinates — and the rectangle drew off the face (Marco's
     video, 2026-09-14). pick_face_placement returns the placement whose
     composed matrix puts the face in the world."""
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
     from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh

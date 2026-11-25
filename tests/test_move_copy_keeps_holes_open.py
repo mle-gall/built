@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from PySide6.QtCore import Qt
+from ingetrazo_core import Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.scene import Scene
@@ -48,7 +48,7 @@ def _copy(scene, step):
     vp = _Vp(scene)
     tool = MoveTool()
     tool.on_click(_ctx(vp, 0, 0))
-    tool.on_key(vp, Qt.Key_Control, Qt.NoModifier)
+    tool.on_key(vp, Input.Key_Control, Input.NoModifier)
     tool.on_click(_ctx(vp, step, 0))
     return vp, tool
 

@@ -1,15 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Host attachment, daemon reads and device-event dispatch for 3D mice.
-use super::modules::{class, classic, method, py_super};
+use super::modules::{class, method, py_super};
 use super::*;
 use pyo3::exceptions::{PyBlockingIOError, PyOSError};
 use pyo3::types::PyBytes;
 
-fn native(py: Python) -> PyResult<bool> {
-    py.import("views.ndof_input")?
-        .getattr("NATIVE")?
-        .is_truthy()
-}
+
 fn init_input<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let hub = a.get_item(0)?;
@@ -23,18 +19,14 @@ fn init_input<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn shared<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let shell = native(py)?;
     let module = py.import("views.ndof_input")?;
     let mut hub = module.getattr("_shared")?;
-    let mut window = a.get_item(0)?;
+    let window = a.get_item(0)?;
     if hub.is_none() {
-        if !shell {
-            window = classic(py)?.call_method0("application")?;
-        }
         hub = module.call_method1("NdofInput", (&window,))?;
         module.setattr("_shared", &hub)?;
     }
-    if shell && !window.is_none() {
+    if !window.is_none() {
         let host = window.getattr("_host")?;
         let old = hub.getattr("_host")?;
         if !old.is_none() && !old.is(&host) {
@@ -43,7 +35,7 @@ fn shared<'py>(a: &Args<'py>) -> Reply<'py> {
         }
         hub.setattr("_host", host)?;
     }
-    if !hub.getattr("_driver_checked")?.is_truthy()? && (!shell || !hub.getattr("_host")?.is_none())
+    if !hub.getattr("_driver_checked")?.is_truthy()? && !hub.getattr("_host")?.is_none()
     {
         hub.setattr("_driver_checked", true)?;
         hub.call_method0("start")?;
@@ -91,17 +83,10 @@ fn spnav_open<'py>(a: &Args<'py>) -> Reply<'py> {
     device.setattr("sock", &sock)?;
     let owner = device.getattr("owner")?;
     let read = device.getattr("_read")?;
-    let notifier = if native(py)? {
-        let timer = py.import("core.timers")?.call_method(
-            "timer",
-            (owner, read, 12),
-            Some(&fields!(py;"repeat"=>true)),
-        )?;
-        timer.call_method0("start")?;
-        timer
-    } else {
-        classic(py)?.call_method1("socket_notifier", (sock, owner, read))?
-    };
+    let notifier = py.import("core.timers")?.call_method(
+        "timer", (owner, read, 12), Some(&fields!(py;"repeat"=>true)),
+    )?;
+    notifier.call_method0("start")?;
     device.setattr("notifier", notifier)?;
     true.into_bound_py_any(py)
 }
@@ -110,12 +95,7 @@ fn spnav_close<'py>(a: &Args<'py>) -> Reply<'py> {
     let device = a.get_item(0)?;
     let notifier = device.getattr("notifier")?;
     if !notifier.is_none() {
-        if native(py)? {
-            notifier.call_method0("stop")?;
-        } else {
-            notifier.call_method1("setEnabled", (false,))?;
-            notifier.call_method0("deleteLater")?;
-        }
+        notifier.call_method0("stop")?;
         device.setattr("notifier", py.None())?;
     }
     let sock = device.getattr("sock")?;
@@ -146,7 +126,6 @@ fn raw_init<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let device = a.get_item(0)?;
     device.setattr("owner", a.get_item(1)?)?;
-    device.setattr("filter", py.None())?;
     device.setattr("state", PyDict::new(py))?;
     Ok(none(py))
 }
@@ -156,34 +135,18 @@ fn raw_open<'py>(a: &Args<'py>) -> Reply<'py> {
         return false.into_bound_py_any(py);
     }
     let device = a.get_item(0)?;
-    if native(py)? {
-        py.import("app_shell.native")?
-            .getattr("_shell")?
-            .call_method1("set_raw_input_handler", (device.getattr("_on_msg")?,))?;
-    } else {
-        device.setattr(
-            "filter",
-            classic(py)?.call_method1("raw_filter", (&device,))?,
-        )?;
+    let shell = py.import("app_shell.native")?.getattr("_shell")?;
+    if shell.is_none() {
+        return false.into_bound_py_any(py);
     }
+    shell.call_method1("set_raw_input_handler", (device.getattr("_on_msg")?,))?;
     true.into_bound_py_any(py)
 }
 fn raw_close<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let device = a.get_item(0)?;
-    if native(py)? {
-        py.import("app_shell.native")?
-            .getattr("_shell")?
-            .call_method1("set_raw_input_handler", (py.None(),))?;
-    } else {
-        let filter = device.getattr("filter")?;
-        if !filter.is_none() {
-            let app = classic(py)?.call_method0("application")?;
-            if !app.is_none() {
-                app.call_method1("removeNativeEventFilter", (filter,))?;
-            }
-            device.setattr("filter", py.None())?;
-        }
+    let shell = py.import("app_shell.native")?.getattr("_shell")?;
+    if !shell.is_none() {
+        shell.call_method1("set_raw_input_handler", (py.None(),))?;
     }
     Ok(none(py))
 }
@@ -217,7 +180,7 @@ fn raw_message<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let device = a.get_item(0)?;
     let ptr = a.get_item(1)?.extract::<usize>()? as *const MSG;
-    // The shell and the Classic native-event filter lend their MSG for this callback.
+    // The shell lends its MSG for this callback.
     if ptr.is_null() {
         return Ok(none(py));
     }

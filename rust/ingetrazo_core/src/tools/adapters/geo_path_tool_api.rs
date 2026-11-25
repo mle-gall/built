@@ -43,7 +43,7 @@ fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let key = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
-    let qt = imported(py, "core.input_types")?.getattr("Qt")?;
+    let qt = imported(py, "ingetrazo_core")?.getattr("Input")?;
     if !(qt.getattr("Key_Enter")?, qt.getattr("Key_Return")?)
         .into_bound_py_any(py)?
         .contains(&key)?

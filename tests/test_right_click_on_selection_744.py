@@ -9,14 +9,6 @@ group; where the two are coplanar (a face drawn on the group's surface, the
 foot of the block, its bottom edges) the group still won."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-if QApplication.instance() is None:
-    QApplication([])
 
 from tests.test_pick_loose_in_front_of_group import (  # noqa: E402
     V, _floor_group, _loose_lid, _vp)

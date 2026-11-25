@@ -1,4 +1,13 @@
 {
+ "No": "아니요",
+ "Discard": "무시",
+ "Abort": "중단",
+ "Ignore": "무시",
+ "Retry": "다시 시도",
+ "Restore Defaults": "기본값 복원",
+ "Open": "열기",
+ "Yes": "예",
+ "OK": "확인",
  "Map": "지도",
  "Model origin (0,0)": "모델 원점 (0,0)",
  "Place or address": "장소 또는 주소",

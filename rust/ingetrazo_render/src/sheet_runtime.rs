@@ -31,8 +31,6 @@ use pyo3::{
 };
 
 pub const SEP: &str = "\x1f";
-/// Asked for and not drawn this long after: close the sheet.
-pub const WATCHDOG_MS: u32 = 2000;
 
 fn opt<'py>(o: &Bound<'py, PyAny>, name: &str) -> Option<Bound<'py, PyAny>> {
     o.getattr(name).ok().filter(|v| !v.is_none())
@@ -580,12 +578,6 @@ impl Provider {
         ""
     }
 
-    /// Close the sheet if no frame draws it in time.
-    #[classattr]
-    fn watchdog() -> bool {
-        true
-    }
-
     fn build(&self, _ctx: &Bound<'_, PyAny>) -> PyResult<()> {
         Err(pyo3::exceptions::PyNotImplementedError::new_err(()))
     }
@@ -690,10 +682,6 @@ fn in_shell(py: Python<'_>) -> PyResult<bool> {
     py.import("sys")?.getattr("builtin_module_names")?.contains("built_shell")
 }
 
-fn shell(py: Python<'_>) -> PyResult<bool> {
-    this(py)?.call_method0("in_shell")?.is_truthy()
-}
-
 #[pyfunction]
 pub fn shown(win: &Bound<'_, PyAny>) -> PyResult<bool> {
     Ok(state_of(win)?.is_some_and(|st| !st.borrow().closing))
@@ -721,50 +709,6 @@ fn closed_now(win: &Bound<'_, PyAny>, st: &Bound<'_, SheetState>, replaced: bool
     if let Err(e) = provider.bind(py).call_method1("closed", (ctx,)) {
         e.print(py);
     }
-    Ok(())
-}
-
-/// The watchdog: a sheet asked for and never drawn closes, and says so.
-#[pyclass(module = "ingetrazo_render.chrome_sheet")]
-struct Watchdog {
-    win: Py<PyAny>,
-    st: Py<SheetState>,
-}
-
-#[pymethods]
-impl Watchdog {
-    fn __call__(&self, py: Python<'_>) -> PyResult<()> {
-        let win = self.win.bind(py);
-        let st = self.st.bind(py);
-        let same = state_of(win)?.is_some_and(|s| s.is(st));
-        if !same || st.borrow().drawn || st.borrow().closing {
-            return Ok(());
-        }
-        win.getattr("__dict__")?.call_method1("pop", ("_chrome_sheet", py.None()))?;
-        closed_now(win, st, false)?;
-        let id = st.borrow().provider.bind(py).getattr("id")?;
-        win.getattr("viewport")?.call_method1("flash_status", (format!("Built could not draw the {} sheet.", id.str()?),))?;
-        Ok(())
-    }
-}
-
-/// Arm the watchdog for a sheet just asked for (not in the shell, not
-/// offscreen).
-#[pyfunction]
-#[pyo3(name = "_arm_watchdog")]
-fn arm_watchdog(win: &Bound<'_, PyAny>, st: &Bound<'_, SheetState>) -> PyResult<()> {
-    let py = win.py();
-    let provider = st.borrow().provider.clone_ref(py);
-    let watched = provider.bind(py).getattr("watchdog").map_or(Ok(true), |w| w.is_truthy())?;
-    if shell(py)? || !watched {
-        return Ok(());
-    }
-    let platform: String = py.import("PySide6.QtGui")?.getattr("QGuiApplication")?.call_method0("platformName")?.extract()?;
-    if platform == "offscreen" || platform == "minimal" {
-        return Ok(());
-    }
-    let dog = Py::new(py, Watchdog { win: win.clone().unbind(), st: st.clone().unbind() })?;
-    py.import("PySide6.QtCore")?.getattr("QTimer")?.call_method1("singleShot", (WATCHDOG_MS, dog))?;
     Ok(())
 }
 
@@ -809,29 +753,13 @@ pub fn open<'py>(win: &Bound<'py, PyAny>, provider: &Bound<'py, PyAny>, search: 
         closing: false,
     })?;
     win.setattr("_chrome_sheet", &st)?;
-    this(py)?.call_method1("_arm_watchdog", (win, &st))?;
     repaint(win);
     Ok(true)
-}
-
-/// Give the model's view the keys back, after the sheet went (Qt host).
-#[pyclass(module = "ingetrazo_render.chrome_sheet")]
-struct FocusView {
-    view: Py<PyAny>,
-}
-
-#[pymethods]
-impl FocusView {
-    fn __call__(&self, py: Python<'_>) {
-        // A view already gone (RuntimeError) needs no focus.
-        let _ = self.view.bind(py).call_method0("setFocus");
-    }
 }
 
 /// Take the sheet down (animated); the model's view gets the keys back.
 #[pyfunction]
 pub fn close(win: &Bound<'_, PyAny>) -> PyResult<()> {
-    let py = win.py();
     let Some(st) = state_of(win)? else { return Ok(()) };
     if st.borrow().closing {
         return Ok(());
@@ -843,12 +771,6 @@ pub fn close(win: &Bound<'_, PyAny>) -> PyResult<()> {
         s.dirty = true;
     }
     repaint(win);
-    if let Some(view) = view_of(win) {
-        if !shell(py)? {
-            let focus = Py::new(py, FocusView { view: view.unbind() })?;
-            py.import("PySide6.QtCore")?.getattr("QTimer")?.call_method1("singleShot", (0, focus))?;
-        }
-    }
     Ok(())
 }
 
@@ -1044,7 +966,7 @@ fn search_text(win: &Bound<'_, PyAny>) -> PyResult<String> {
 /// a text field uses and ⌘F (the sheet's search).
 fn window_key(event: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = event.py();
-    let qt = py.import("core.input_types")?.getattr("Qt")?;
+    let qt = py.import("ingetrazo_core")?.getattr("Input")?;
     let mask = qt.getattr("ControlModifier")?.bitor(qt.getattr("MetaModifier")?)?;
     if !event.call_method0("modifiers")?.bitand(mask)?.is_truthy()? {
         return Ok(false);
@@ -1073,7 +995,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
     let sub = PyModule::new(py, "chrome_sheet")?;
     sub.add("SEP", SEP)?;
-    sub.add("WATCHDOG_MS", WATCHDOG_MS)?;
     sub.add_class::<Pane>()?;
     sub.add_class::<Sheet>()?;
     sub.add_class::<Spec>()?;
@@ -1095,7 +1016,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         wrap_pyfunction!(search_text, &sub)?,
         wrap_pyfunction!(claims_key, &sub)?,
         wrap_pyfunction!(view_in_front, &sub)?,
-        wrap_pyfunction!(arm_watchdog, &sub)?,
     ] {
         sub.add_function(f)?;
     }

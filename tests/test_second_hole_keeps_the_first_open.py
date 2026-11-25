@@ -13,15 +13,9 @@ import math
 
 import pytest
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from core.topology import _point_in_face_solid
 from tools.circle import CircleTool
-
-
-@pytest.fixture(scope="module")
-def app():
-    return QApplication.instance() or QApplication([])
 
 
 def _hole(vp, cx, cy, r, z):
@@ -36,7 +30,7 @@ def _hole(vp, cx, cy, r, z):
     T._push(vp.scene, disc, -z)
 
 
-def test_the_entrance_stays_open_after_the_perch_hole(app):
+def test_the_entrance_stays_open_after_the_perch_hole():
     from tests import test_pushpull_ux as T
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)

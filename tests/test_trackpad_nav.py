@@ -16,28 +16,17 @@ import math
 from ingetrazo_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import (QInputDevice, QNativeGestureEvent,
-                           QPointingDevice, QWheelEvent)
-from PySide6.QtWidgets import QApplication
+from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
+from core.input_codes import DeviceType
+from ingetrazo_render import WheelEvent, NativeGestureEvent
+from types import SimpleNamespace
 
 from ingetrazo_render import trackpad_nav
 
-_app = QApplication.instance() or QApplication([])
-
 CENTRE = QPointF(200, 150)
-
-# Raw contacts and verified emulated screen events share this explicit type.
-SCREEN = QPointingDevice(
-    "trackpad or magic mouse", 1, QInputDevice.DeviceType.TouchScreen,
-    QPointingDevice.PointerType.Finger, QInputDevice.Capability.Position, 2, 3)
-# A real trackpad carries its own device id.
-REAL_TRACKPAD = QPointingDevice(
-    "trackpad or magic mouse", 504403158265495724, QInputDevice.DeviceType.TouchPad,
-    QPointingDevice.PointerType.Finger, QInputDevice.Capability.Position, 2, 3)
-MOUSE = QPointingDevice(
-    "mouse", 2, QInputDevice.DeviceType.Mouse,
-    QPointingDevice.PointerType.Generic, QInputDevice.Capability.Position, 1, 3)
+SCREEN = DeviceType.TouchScreen
+REAL_TRACKPAD = DeviceType.TouchPad
+MOUSE = DeviceType.Mouse
 
 
 @pytest.fixture
@@ -52,41 +41,35 @@ def vp():
     return view
 
 
-def slide_event(dx, dy, phase=Qt.ScrollUpdate, mods=Qt.NoModifier,
+def slide_event(dx, dy, phase="move", mods=Qt.NoModifier,
                 inverted=True, at=CENTRE, device=None):
     # Natural scrolling (the Mac default): the deltas follow the fingers.
-    return QWheelEvent(at, at, QPoint(dx, dy), QPoint(dx * 8, dy * 8),
-                       Qt.NoButton, mods, phase, inverted,
-                       Qt.MouseEventSynthesizedBySystem,
-                       device if device is not None else SCREEN)
+    return WheelEvent(at.x(), at.y(), dx, dy, dx * 8, dy * 8, phase,
+                      mods.value, inverted=inverted, touch_screen=device in (None, SCREEN))
 
 
 def slide(vp, dx, dy, **kw):
-    QApplication.sendEvent(vp, slide_event(dx, dy, **kw))
+    vp.wheelEvent(slide_event(dx, dy, **kw))
 
 
 def finger_slide(vp, dx, dy, steps=5, **kw):
     """A whole slide: begin, ``steps`` updates of (dx, dy), end."""
-    slide(vp, 0, 0, phase=Qt.ScrollBegin, **kw)
+    slide(vp, 0, 0, phase="start", **kw)
     for _ in range(steps):
         slide(vp, dx, dy, **kw)
-    slide(vp, 0, 0, phase=Qt.ScrollEnd, **kw)
+    slide(vp, 0, 0, phase="end", **kw)
 
 
 def notch(vp, dy, at=CENTRE):
-    QApplication.sendEvent(vp, QWheelEvent(
-        at, at, QPoint(), QPoint(0, dy), Qt.NoButton, Qt.NoModifier,
-        Qt.NoScrollPhase, False, Qt.MouseEventNotSynthesized, MOUSE))
+    vp.wheelEvent(WheelEvent(at.x(), at.y(), 0, 0, 0, dy))
 
 
 def pinch(vp, value, at=CENTRE):
-    QApplication.sendEvent(vp, QNativeGestureEvent(
-        Qt.ZoomNativeGesture, SCREEN, 2, at, at, at, value, QPointF(), 0))
+    vp.event(NativeGestureEvent("zoom", value, at.x(), at.y(), touch_screen=True))
 
 
 def gesture(vp, kind, value=0.0):
-    QApplication.sendEvent(vp, QNativeGestureEvent(
-        kind, SCREEN, 2, CENTRE, CENTRE, CENTRE, value, QPointF(), 0))
+    vp.event(NativeGestureEvent(kind, value, CENTRE.x(), CENTRE.y(), touch_screen=True))
 
 
 def pose(vp):
@@ -105,16 +88,12 @@ def test_slide_pixels_are_a_wheels_without_natural_scrolling():
 
 
 def test_slide_pixels_fall_back_to_the_angle_without_pixel_deltas():
-    ev = QWheelEvent(CENTRE, CENTRE, QPoint(), QPoint(0, 120), Qt.NoButton,
-                     Qt.NoModifier, Qt.ScrollUpdate, True,
-                     Qt.MouseEventNotSynthesized, SCREEN)
+    ev = WheelEvent(200, 150, 0, 0, 0, 120, "move", inverted=True, touch_screen=True)
     assert trackpad_nav.slide_pixels(ev) == (0, 15)
 
 
 def test_a_mouse_notch_is_not_a_slide():
-    ev = QWheelEvent(CENTRE, CENTRE, QPoint(), QPoint(0, 120), Qt.NoButton,
-                     Qt.NoModifier, Qt.NoScrollPhase, False,
-                     Qt.MouseEventNotSynthesized, MOUSE)
+    ev = WheelEvent(200, 150, 0, 0, 0, 120)
     assert not trackpad_nav.is_slide(ev)
     assert trackpad_nav.is_slide(slide_event(0, 1))
 
@@ -137,9 +116,8 @@ def test_the_screen_and_the_trackpad_are_told_apart_by_the_device():
 
 
 def test_primary_pointer_id_alone_does_not_identify_a_screen():
-    unknown = QPointingDevice("primary", 1, QInputDevice.DeviceType.TouchPad,
-                              QPointingDevice.PointerType.Finger, QInputDevice.Capability.Position, 2, 3)
-    assert not trackpad_nav.is_touch_screen(slide_event(0, 1, device=unknown))
+    device = SimpleNamespace(type=lambda: DeviceType.TouchPad, systemId=lambda: 1)
+    assert not trackpad_nav.is_touch_screen(SimpleNamespace(device=lambda: device))
 
 
 def test_a_pinch_of_one_notchs_scale_is_one_step():
@@ -161,7 +139,7 @@ def test_the_first_pixels_are_not_lost(vp):
     # Below the lock threshold nothing moves yet; once it is crossed the
     # whole slide so far is applied in one go.
     yaw0 = vp.camera.yaw
-    slide(vp, 0, 0, phase=Qt.ScrollBegin)
+    slide(vp, 0, 0, phase="start")
     slide(vp, 2, 0)
     assert vp.camera.yaw == yaw0
     slide(vp, 2, 0)
@@ -249,18 +227,18 @@ def test_the_pan_preference_pans(vp):
 def test_momentum_keeps_turning_with_inertia_on(vp):
     finger_slide(vp, 10, 0)
     yaw1 = vp.camera.yaw
-    slide(vp, 6, 0, phase=Qt.ScrollMomentum)
+    slide(vp, 6, 0, phase="momentum")
     assert vp.camera.yaw != yaw1
 
 
 def test_inertia_off_drops_momentum(vp):
-    from PySide6.QtCore import QSettings
-    settings = QSettings()
+    from core.settings import settings as preferences
+    settings = preferences()
     settings.setValue("nav/trackpad_inertia", "0")
     try:
         finger_slide(vp, 10, 0)
         yaw = vp.camera.yaw
-        slide(vp, 6, 0, phase=Qt.ScrollMomentum)
+        slide(vp, 6, 0, phase="momentum")
         assert vp.camera.yaw == yaw
     finally:
         settings.remove("nav/trackpad_inertia")
@@ -270,7 +248,7 @@ def test_a_new_slide_picks_its_pivot_again(vp):
     finger_slide(vp, 10, 0)
     first = trackpad_nav.gesture(vp).pivot
     assert first is not None
-    slide(vp, 0, 0, phase=Qt.ScrollBegin)
+    slide(vp, 0, 0, phase="start")
     assert trackpad_nav.gesture(vp).pivot is None
 
 
@@ -288,7 +266,7 @@ def test_spreading_the_fingers_zooms_in_and_pinching_zooms_out(vp):
     pinch(vp, 0.1)
     assert vp.camera.distance < d0
     d1 = vp.camera.distance
-    gesture(vp, Qt.EndNativeGesture)
+    gesture(vp, "end")
     pinch(vp, -0.1)
     assert vp.camera.distance > d1
 
@@ -346,7 +324,7 @@ def test_a_pinch_in_progress_drops_the_slide_underneath(vp):
 
 def test_a_slide_in_progress_drops_the_pinch_underneath(vp):
     finger_slide(vp, 10, 0)
-    slide(vp, 0, 0, phase=Qt.ScrollBegin)
+    slide(vp, 0, 0, phase="start")
     slide(vp, 10, 0)
     d1 = vp.camera.distance
     pinch(vp, 0.2)                         # the fingers spread a little
@@ -355,7 +333,7 @@ def test_a_slide_in_progress_drops_the_pinch_underneath(vp):
 
 def test_lifting_the_fingers_frees_the_gesture(vp):
     pinch(vp, 0.1)
-    gesture(vp, Qt.EndNativeGesture)
+    gesture(vp, "end")
     yaw0 = vp.camera.yaw
     finger_slide(vp, 10, 0)
     assert vp.camera.yaw != yaw0
@@ -363,7 +341,7 @@ def test_lifting_the_fingers_frees_the_gesture(vp):
 
 def test_a_rotation_orbits(vp):
     p0 = pose(vp)
-    gesture(vp, Qt.RotateNativeGesture, 15.0)
+    gesture(vp, "rotate", 15.0)
     assert vp.camera.yaw != p0[0]
     assert vp.camera.distance == pytest.approx(p0[2])
 
@@ -371,12 +349,12 @@ def test_a_rotation_orbits(vp):
 # ---- smart zoom (two-finger double tap) ------------------------------------
 
 def smart_zoom(vp):
-    gesture(vp, Qt.SmartZoomNativeGesture, 1.0)
+    gesture(vp, "smart_zoom", 1.0)
 
 
 def test_a_smart_zoom_asks_the_window(vp):
     seen = []
-    vp.smartZoomRequested.connect(lambda: seen.append(1))
+    vp._host.window = SimpleNamespace(_on_smart_zoom=lambda: seen.append(1))
     smart_zoom(vp)
     assert seen == [1]
 
@@ -414,7 +392,7 @@ def test_after_moving_the_view_a_double_tap_frames_again(native_host):
 
 # ---- the Metal view -------------------------------------------------------
 
-def test_the_metal_view_orbits_and_pinches_too():
+def test_the_metal_view_orbits_and_pinches_too(native_host, monkeypatch):
     from types import SimpleNamespace
 
     from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
@@ -424,7 +402,6 @@ def test_the_metal_view_orbits_and_pinches_too():
     from tests.controller_surface import ControllerSurface as Viewport
     from views.wgpu_inference import prepare
     from views.wgpu_scene import pack_scene
-    from views.wgpu_view import WgpuView
 
     scene = Scene()
     mesh = Mesh()
@@ -436,8 +413,8 @@ def test_the_metal_view_orbits_and_pinches_too():
     source = Viewport(None)
     source.resize(400, 300)
     source._touch_slide = "orbit"
-    v = WgpuView()
-    v.resize(400, 300)
+    v = native_host.view
+    native_host.resize(400, 300, 1.)
     v.source_viewport = source
     v.camera = source.camera
     v.scene = scene
@@ -455,16 +432,15 @@ def test_the_metal_view_orbits_and_pinches_too():
         finger_slide(v, 10, 0)
         assert v.camera.yaw != yaw0
         assert v.camera.distance == pytest.approx(d0)
-        gesture(v, Qt.EndNativeGesture)
+        gesture(v, "end")
         pinch(v, 0.1)
         assert v.camera.distance < d0
         seen = []
-        source.smartZoomRequested.connect(lambda: seen.append(1))
+        monkeypatch.setattr(native_host.window, "_on_smart_zoom", lambda: seen.append(1))
         smart_zoom(v)
         assert seen == [1]
     finally:
         v.renderer = None
-        v.close()
 
 
 def test_off_centre_navigation_pose_sequence(vp):
@@ -482,7 +458,7 @@ def test_off_centre_navigation_pose_sequence(vp):
     actual.append(pose(vp))
     finger_slide(vp, 0, -1, steps=8, device=REAL_TRACKPAD, at=at)
     actual.append(pose(vp))
-    slide(vp, 0, -2, phase=Qt.ScrollMomentum, device=REAL_TRACKPAD, at=at)
+    slide(vp, 0, -2, phase="momentum", device=REAL_TRACKPAD, at=at)
     actual.append(pose(vp))
     pinch(vp, 0.14, at=at)
     actual.append(pose(vp))

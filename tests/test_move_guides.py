@@ -19,7 +19,7 @@ import math
 from types import SimpleNamespace
 
 
-from PySide6.QtCore import QPointF, Qt
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 
@@ -307,8 +307,8 @@ def test_viewport_snap_scene_skips_the_dragged_guide():
 # ---- Rotate -----------------------------------------------------------------------------
 
 def _rctx(vp, x, y):
-    return ToolContext(viewport=vp, world=V(x, y), screen=QPointF(0, 0),
-                       modifiers=Qt.NoModifier, snap=None)
+    return ToolContext(viewport=vp, world=V(x, y), screen=ScreenPoint(0, 0),
+                       modifiers=Input.NoModifier, snap=None)
 
 
 def _turn(vp, tool, deg, copy=False):
@@ -316,7 +316,7 @@ def _turn(vp, tool, deg, copy=False):
     tool.on_click(_rctx(vp, 0, 0))
     tool.on_click(_rctx(vp, 2, 0))
     if copy:
-        tool.on_key(vp, Qt.Key_Control, Qt.NoModifier)
+        tool.on_key(vp, Input.Key_Control, Input.NoModifier)
     a = math.radians(deg)
     tool.on_hover(_rctx(vp, 2 * math.cos(a), 2 * math.sin(a)))
     tool.on_click(_rctx(vp, 2 * math.cos(a), 2 * math.sin(a)))

@@ -21,8 +21,8 @@ from __future__ import annotations
 
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMouseEvent
+from ingetrazo_core import Input
+from ingetrazo_render import MouseEvent
 from ingetrazo_core import Vec3 as QVector3D
 
 
@@ -32,9 +32,9 @@ def _viewport(native_host):
 
 
 def _click(vp, x=5.0, y=5.0):
-    vp._dispatch_tool_click(QMouseEvent(
-        QMouseEvent.MouseButtonPress, QPointF(x, y), Qt.LeftButton,
-        Qt.LeftButton, Qt.NoModifier))
+    vp._dispatch_tool_click(MouseEvent(
+        "press", x, y, Input.LeftButton,
+        Input.LeftButton, Input.NoModifier))
 
 
 def test_the_lock_goes_the_moment_the_SEGMENT_exists(native_host):
@@ -116,8 +116,7 @@ def test_a_typed_length_actually_drops_the_lock(native_host):
     committed flag, the busy-tool guard ate it, and the hard lock survived a
     typed length while the second CLICK dropped it. Same commit signal as
     the click path: did this input make geometry?"""
-    from PySide6.QtCore import QEvent
-    from PySide6.QtGui import QKeyEvent
+    from ingetrazo_render import KeyEvent
     win, vp = _viewport(native_host)
     win._activate_tool("line")
     tool = vp.active_tool
@@ -127,9 +126,9 @@ def test_a_typed_length_actually_drops_the_lock(native_host):
     before = len(vp.history.undo_stack)
     for ch in "1500":
         vp._handle_value_key(
-            QKeyEvent(QEvent.KeyPress, Qt.Key_0, Qt.NoModifier, ch))
+            KeyEvent(True, Input.Key_0, Input.NoModifier, ch))
     vp._handle_value_key(
-        QKeyEvent(QEvent.KeyPress, Qt.Key_Return, Qt.NoModifier, "\r"))
+        KeyEvent(True, Input.Key_Return, Input.NoModifier, "\r"))
     assert len(vp.history.undo_stack) == before + 1, "the segment exists"
     assert vp.axis_lock is None
 

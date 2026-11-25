@@ -3,10 +3,10 @@ from contextlib import ExitStack, contextmanager
 import math
 import time
 import numpy as np
-from core.input_types import NATIVE, QEvent, Qt
+from core.input_codes import Input as Qt, Type as QEvent
 from core.host_callbacks import Signal
 from core.timers import later
-from views.paint_types import QColor
+from ingetrazo_render import PaintColor as QColor
 from ingetrazo_core import Vec3 as QVector3D
 from core.camera import OrbitCamera
 from views.wgpu_scene import pack_scene
@@ -42,8 +42,7 @@ def _ui_claims(view, name, event):
     if name == 'mouseReleaseEvent':
         return wgpu_ui.pointer(view, 'release', event)
     if name == 'mouseDoubleClickEvent':
-        return (wgpu_ui.title_double_click(view, event)
-                or wgpu_ui.pointer(view, 'press', event))
+        return wgpu_ui.pointer(view, 'press', event)
     if name == 'keyPressEvent':
         return wgpu_ui.key(view, event, True)
     if name == 'keyReleaseEvent':
@@ -78,6 +77,8 @@ def _tool_frame(method):
 
 
 import ingetrazo_render
+
+
 from views.view_navigation import ViewNavigation
 
 
@@ -128,12 +129,12 @@ class MetalView(ViewNavigation):
         """Winit already owns the surface. Widget hosts configure theirs here."""
 
     def _view_timer(self, callback, interval=0):
-        if self._timer_queue is not None:
-            return self._timer_queue.timer(callback, interval)
-        from PySide6.QtCore import QTimer
-        timer = QTimer(self, singleShot=True, interval=interval)
-        timer.timeout.connect(callback)
-        return timer
+        if self._timer_queue is None:
+            # A view without a host (tests, probes) keeps its own queue;
+            # whoever drives it runs ``_timer_queue.run_due()``.
+            from ingetrazo_render import WindowTimers
+            self._timer_queue = WindowTimers()
+        return self._timer_queue.timer(callback, interval)
 
     def __init__(self, parent=None, *, timers=None):
         super().__init__(parent)
@@ -190,8 +191,9 @@ class MetalView(ViewNavigation):
         return True
 
     def _window_handles(self):
-        from views.wgpu_surface import window_handles
-        return window_handles(self)
+        """``(window, handles)`` for ``Renderer``: the host's surface. The
+        shell's view hands over its NSView; a headless view a layer."""
+        raise NotImplementedError("a MetalView host supplies its surface")
 
     def _wrap_renderer(self):
         from views.resident_peer import TargetRenderer
@@ -954,8 +956,8 @@ class MetalView(ViewNavigation):
         if frame is None:
             return None
         w, h, pixels = frame
-        from PySide6.QtGui import QImage
-        return QImage(pixels, w, h, w * 4, QImage.Format_RGBA8888).copy()
+        from ingetrazo_render import SurveyRaster
+        return SurveyRaster(w, h, bytes(pixels))
 
     def render_pixels(self, width_px, height_px=None, *, overlays=False, annotations_only=False, **frame_options):
         """RGBA of the requested frame, including any document marks for that camera."""
@@ -1353,8 +1355,8 @@ class MetalView(ViewNavigation):
         if self.tools.mode != 'mesh' and hasattr(self.renderer, 'set_preview_mesh'):
             return
         from core.mesh import Edge
-        from core.input_types import QPointF
-        from views.paint_types import QPen
+        from ingetrazo_core import ScreenPoint as QPointF
+        from ingetrazo_render import PaintPen as QPen
         entities = [(e, False) for e in self.scene.selection if isinstance(e, Edge)]
         hovered = getattr(self.tools, '_mesh_hover', getattr(self.source_viewport, '_hover_entity', None))
         if isinstance(hovered, Edge) and hovered not in self.scene.selection:
@@ -1820,26 +1822,10 @@ class MetalView(ViewNavigation):
         self.renderer = None
         if hasattr(self, '_inference_worker'):
             self._inference_worker.shutdown(wait=False, cancel_futures=True)
-        super().closeEvent(event)
+        # A host's own close, when its base has one (a widget shim has none).
+        close = getattr(super(), 'closeEvent', None)
+        if close is not None:
+            close(event)
         self._instance_updates = self._inference_future = self.inference_index = None
         self.source_viewport = self._tool_source = self.scene = self.packed = None
         self._billboards = self._reference_cache = None
-
-
-if not NATIVE:
-    from PySide6.QtWidgets import QWidget
-
-    class WgpuView(MetalView, QWidget):
-        """Qt presentation surface for a document."""
-
-        def _prepare_surface(self):
-            from PySide6.QtCore import QCoreApplication
-            from PySide6.QtWidgets import QApplication
-            if QApplication.platformName() == 'cocoa':
-                QCoreApplication.setAttribute(Qt.AA_DontCreateNativeWidgetSiblings)
-            if QApplication.platformName() not in ('offscreen', 'minimal'):
-                for attr in (Qt.WA_NativeWindow, Qt.WA_PaintOnScreen, Qt.WA_NoSystemBackground):
-                    self.setAttribute(attr)
-
-        def _can_create_surface(self):
-            return self.testAttribute(Qt.WA_PaintOnScreen)

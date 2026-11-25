@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import time
 
-from app_shell import native, qt_host
+from app_shell import native
 
 _HOST = None
 #: How deep the waits are nested (a question asked while one waits).
@@ -127,13 +127,12 @@ def tick(min_interval: float = 1 / 30) -> None:
 def _turn(h, timeout_ms):
     for ev in native.pump(h.ns_view, timeout_ms):
         dispatch(h, ev)
-    qt_host.pump()
     h.modal_frame()
 
 
 def dispatch(h, ev) -> None:
     """One input event during a wait: the chrome only."""
-    from core.input_types import Qt
+    from ingetrazo_core import Input as Qt
     from views import wgpu_ui
     from ingetrazo_render import chrome_dialogs
     from ingetrazo_render import KeyEvent, MouseEvent

@@ -12,16 +12,12 @@ editing.
 from __future__ import annotations
 
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
-import os
 
 import pytest
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtGui import QGuiApplication
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-_app = QGuiApplication.instance() or QGuiApplication([])
 
 from core.group import Group, copy_group
 from core.history import HideCommand, HideEdgesCommand, History
@@ -42,10 +38,10 @@ def _box(mesh, x0=0.0, y0=0.0, s=1.0, h=1.0):
 
 def _paints(vp) -> None:
     """Render the document on platforms that can create a native surface."""
-    if not vp.keys_stand_in._can_create_surface():
+    if vp.keys_stand_in.renderer is None:
         return
-    img = vp.render_image(160, 120, overlays=False)
-    assert img is not None and not img.isNull()
+    img = vp.render_raster(160, 120, overlays=False)
+    assert img is not None and (img.width, img.height) == (160, 120)
 
 
 def _group(name="caja", x0=0.0):
@@ -105,7 +101,6 @@ def test_a_hidden_face_round_trips_through_igz(tmp_path):
 
 def test_hidden_faces_leave_a_groups_chunk_but_keep_their_edges(native_host):
     win = native_host.window
-    _app.processEvents()
     vp = win.viewport
     g = _group("caja")
     vp.scene.groups.append(g)
@@ -159,7 +154,6 @@ def test_hidden_view_flags_travel_in_the_document_and_in_scenes(tmp_path):
 
 def test_ghost_pass_draws_and_unhide_selected_brings_them_back(native_gpu_host):
     win = native_gpu_host.window
-    _app.processEvents()
     vp = win.viewport
     g = _group("caja")
     vp.scene.groups.append(g)
@@ -169,7 +163,7 @@ def test_ghost_pass_draws_and_unhide_selected_brings_them_back(native_gpu_host):
     vp.scene.select([g, face])
     win._on_hide()
     assert g.hidden and face.attrs.get("hidden")
-    if not vp.keys_stand_in._can_create_surface():
+    if vp.keys_stand_in.renderer is None:
         pytest.skip("the Qt platform has no native GPU surface")
     from tests.controller_surface import live_image
     from views.wgpu_scene import OBJECT_HIDDEN
@@ -254,7 +248,6 @@ def test_a_scene_from_before_this_field_leaves_hidden_objects_alone():
 
 def test_hiding_a_container_hides_its_nested_placements_in_the_viewport(native_host):
     win = native_host.window
-    _app.processEvents()
     vp = win.viewport
     letter = _group("hoja")
     letter.xform = QMatrix4x4()
@@ -281,7 +274,6 @@ def test_hiding_a_container_hides_its_nested_placements_in_the_viewport(native_h
 
 def test_edit_menu_hide_unhide_last_and_all(native_host):
     win = native_host.window
-    _app.processEvents()
     vp = win.viewport
     a, b = _group("a"), _group("b", x0=3.0)
     vp.scene.groups += [a, b]

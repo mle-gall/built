@@ -24,7 +24,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 from ingetrazo_render import MouseEvent
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
@@ -50,12 +50,12 @@ def _ground_level_pull(native_host, pitch):
 
 
 def _hover(vp, px, py):
-    vp._last_mouse_pos = QPointF(px, py)
-    vp._process_hover(QPointF(px, py), Qt.NoModifier)
+    vp._last_mouse_pos = ScreenPoint(px, py)
+    vp._process_hover(ScreenPoint(px, py), Input.NoModifier)
 
 
 def _click(vp, px, py):
-    vp._last_mouse_pos = QPointF(px, py)
+    vp._last_mouse_pos = ScreenPoint(px, py)
     vp._dispatch_tool_click(MouseEvent("press", px, py, button=1, held=1))
 
 

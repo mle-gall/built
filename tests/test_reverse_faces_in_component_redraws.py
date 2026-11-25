@@ -17,15 +17,12 @@ outside, this time for real.
 from __future__ import annotations
 
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core.group import Group, transformed_mesh, world_mesh
 from core.history import FlipFacesCommand, History
@@ -34,8 +31,6 @@ from core.scene import Scene
 from tests.test_chunk_stale_materials import _stub
 from views.document_interaction import _proto_wrapper
 from tests.controller_surface import ControllerSurface as Viewport
-
-_app = QApplication.instance() or QApplication([])
 
 
 def V(x, y, z=0.0):
@@ -389,13 +384,11 @@ def test_a_mirrored_placement_in_a_mirrored_parent_cancels_out():
 
 def _pixel(vp, p):
     vp.update()
-    for _ in range(6):
-        _app.processEvents()
     img = live_image(vp)
-    dpr = img.width() / max(vp.width(), 1)
+    dpr = img.width / max(vp.width(), 1)
     x, y = vp._world_to_pixel(p)
-    c = img.pixelColor(int(x * dpr), int(y * dpr))
-    return (c.redF(), c.greenF(), c.blueF())
+    from tests.raster_samples import pixels
+    return pixels(img)[int(y * dpr), int(x * dpr), :3] / 255.
 
 
 def _same_colour(a, b):
@@ -408,8 +401,6 @@ def _same_colour(a, b):
 def test_inside_and_outside_show_the_same_colour(native_gpu_host, xform, centre):
     """Requires a native wgpu surface for pixel readback."""
     win = native_gpu_host.window
-    for _ in range(10):
-        _app.processEvents()
     vp = win.viewport
     scene = vp.scene
     scene.guides.clear()

@@ -1,7 +1,8 @@
 """Scene commands share the native Camera menu, Keyboard table and document history."""
 import pytest
 
-from core.input_types import Qt
+from ingetrazo_core import Input
+from ingetrazo_render import shortcut_text
 from tests.scene_controls import choose, prompt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_render.settings_sheet import SettingsSheet
@@ -58,9 +59,10 @@ def test_without_a_selected_scene_the_status_explains(win):
 def test_a_key_given_to_add_scene_adds_one(win):
     sheet = keyboard(win)
     sheet._assign(sheet._action("sc:menu:scene_add"), ["Ctrl+Alt+Shift+F11"])
-    modifiers = (Qt.ControlModifier | Qt.AltModifier | Qt.ShiftModifier).value
-    win._host.key(True, Qt.Key_F11, modifiers)
-    win._host.key(False, Qt.Key_F11, modifiers)
+    f11 = shortcut_text("F11")[2]
+    modifiers = Input.ControlModifier | Input.AltModifier | Input.ShiftModifier
+    win._host.key(True, f11, modifiers)
+    win._host.key(False, f11, modifiers)
     assert len(win.viewport.scene.saved_views) == 1
 
 

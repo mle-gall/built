@@ -1,6 +1,5 @@
 """Bind the Rust document worker to the activity capsule and UI timer."""
-from core.input_types import NATIVE
-from core.timers import later
+from core.timers import later, timer as window_timer
 
 from core.i18n import tr
 from ingetrazo_render import chrome_dialogs as cd
@@ -81,8 +80,6 @@ def start(win, path, install, *, target=None):
                 callback(why)
         bar.close()
         bar.poll = None
-        if not NATIVE:
-            bar.deleteLater()
         win._pending_open = None
         win._open_in_progress = win._opening_document = False
         if win._open_aborted:
@@ -100,14 +97,13 @@ def start(win, path, install, *, target=None):
     callbacks = (win.__dict__.setdefault("_open_callbacks", {}).setdefault(path, [])
                  if target is None else [])
     timer = None
-    if NATIVE or (hasattr(win, "_host") and getattr(win._host, "ns_view", 0)):
-        bar.poll = poll
+    host = getattr(win, "_host", None)
+    if host is not None:
+        bar.poll = poll             # Host.idle polls it
         bar.next_poll = 0.
-        win._host.request_frame()
-    else:
-        from PySide6.QtCore import QTimer
-        timer = QTimer(bar)
-        timer.timeout.connect(poll)
+        host.request_frame()
+    else:                           # a window with no host: the process-wide queue
+        timer = window_timer(win, poll, 32, repeat=True)
         timer.start(32)
     return True
 

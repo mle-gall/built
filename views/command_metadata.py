@@ -4,7 +4,7 @@
 from __future__ import annotations
 import re
 
-from core.settings import settings as QSettings
+from core.settings import settings as native_settings
 from ingetrazo_render import shortcut_text
 
 from core import string_search
@@ -19,7 +19,7 @@ _RECENT_MAX = 100
 _SEP = " ▸ "
 
 
-def _label(action: QAction) -> str:
+def _label(action: ShellAction) -> str:
     """The menu text without its mnemonic «&» — the «…» stays: it says
     the command asks something before doing it."""
     return action.text().replace("&&", "\0").replace("&", "") \
@@ -48,87 +48,26 @@ def _without_keys(text: str) -> str:
     return _TRAILING.sub("", text).strip()
 
 
-def _menubar(window):
-    """The window's menu bar, or ``None`` — never made by asking (the
-    composer has none, and ``menuBar()`` would give it an empty one), and
-    none either for a window that is not a main window."""
-    from PySide6.QtWidgets import QMainWindow, QMenuBar
-    bar = window.menuWidget() if isinstance(window, QMainWindow) else None
-    return bar if isinstance(bar, QMenuBar) else None
-
-
-def _submenus(window) -> dict:
-    """``{action: menu}`` for every menu of the window, found from the
-    menus (``menuAction``) rather than asked of each action: with PySide
-    6.11.1, ``QAction.menu()`` on a menu whose wrapper did not exist yet
-    handed back a dead wrapper for the Help menu (seen on one machine;
-    every window then failed to build)."""
-    from PySide6.QtWidgets import QMenu
-    return {m.menuAction(): m for m in window.findChildren(QMenu)}
-
-
-def _top_menus(window, subs: dict | None = None) -> list:
-    bar = _menubar(window)
-    if bar is None:
-        return []
-    if subs is None:
-        subs = _submenus(window)
-    return [subs[a] for a in bar.actions() if a in subs]
-
-
 def menu_paths(window) -> dict:
-    """``{action_key: "Edit ▸ Unhide"}`` for the actions in the menu bar;
-    an action found only on a toolbar gets the toolbar's name («Draw»)."""
-    paths = dict(vars(window).get("_command_paths", {}))
-    if "_command_store" in vars(window):
-        return paths
-    from PySide6.QtWidgets import QToolBar
-    subs = _submenus(window)
-
-    def walk(menu: QMenu, trail: list) -> None:
-        for act in menu.actions():
-            sub = subs.get(act)
-            if sub is not None:
-                walk(sub, trail + [_plain(sub.title())])
-            elif not act.isSeparator() and _plain(act.text()):
-                paths.setdefault(action_key(act), _SEP.join(trail))
-
-    for menu in _top_menus(window, subs):
-        walk(menu, [_plain(menu.title())])
-    for bar in window.findChildren(QToolBar):
-        if bar.window() is not window:
-            continue
-        paths.setdefault(action_key(bar.toggleViewAction()), tr("Toolbars"))
-        for act in bar.actions():
-            if not act.isSeparator() and _plain(act.text()):
-                paths.setdefault(action_key(act), _plain(bar.windowTitle()))
-    return paths
+    """``{action_key: "Edit ▸ Unhide"}``: where each command sits in the
+    window's menus, as the window recorded them (``_command_paths``)."""
+    return dict(vars(window).get("_command_paths", {}))
 
 
-def _belongs(action: QAction, window) -> bool:
-    """Is ``action`` the window's own? The sheet composer is a child of
-    the main window: its commands must not show in the main window's F3
-    (nor the main window's in the composer's)."""
-    obj = action.parent()
-    while obj is not None:
-        if obj is window:
-            return True
-        from PySide6.QtWidgets import QMainWindow
-        if isinstance(obj, QMainWindow):
-            return False                       # another window's
-        obj = obj.parent()
-    return False
+def _belongs(action, window) -> bool:
+    """Is ``action`` the window's own (not another window's)?"""
+    return action.parent() is window
 
 
 def recent_keys() -> list:
-    value = QSettings().value(_RECENT_KEY) or []
+    value = native_settings().value(_RECENT_KEY) or []
     return [str(v) for v in ([value] if isinstance(value, str) else value)]
 
 
-def remember(act: QAction) -> None:
+def remember(act: ShellAction) -> None:
     key = action_key(act)
     keys = [key] + [k for k in recent_keys() if k != key]
-    QSettings().setValue(_RECENT_KEY, keys[:_RECENT_MAX])
+    native_settings().setValue(_RECENT_KEY, keys[:_RECENT_MAX])
 
 
 class Command:
@@ -137,7 +76,7 @@ class Command:
 
     __slots__ = ("action", "key", "name", "path", "keys", "tip", "items")
 
-    def __init__(self, action: QAction, path: str) -> None:
+    def __init__(self, action: ShellAction, path: str) -> None:
         self.action = action
         self.key = action_key(action)
         english = _plain(source_of(action.text()))
@@ -164,10 +103,7 @@ class Command:
 
 
 def visible(action):
-    if hasattr(action, "portable_keys"):
-        return action.isVisible()
-    from shiboken6 import isValid
-    return isValid(action) and action.isVisible()
+    return action.isVisible()
 
 
 def run(action):
@@ -176,7 +112,7 @@ def run(action):
         action.trigger()
 
 
-def _description(action: QAction, name: str) -> str:
+def _description(action: ShellAction, name: str) -> str:
     """What the command does, from its tooltip or status tip — without
     the name and the keys a tooltip often repeats («Line  (L)», «3D Text
     — build extruded text as a solid»). Empty when that is all it says."""
@@ -200,7 +136,7 @@ def _description(action: QAction, name: str) -> str:
 _LEAD = re.compile(r"\s*(\([^()]*\))?\s*([—–:\-]\s*|$)")
 
 
-def _signature(action: QAction, path: str) -> tuple:
+def _signature(action: ShellAction, path: str) -> tuple:
     """What a Command is worked out from: when none of it changed, the
     one made at the last opening still holds."""
     return (action.objectName(), action.text(), action.toolTip(),

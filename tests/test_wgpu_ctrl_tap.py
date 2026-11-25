@@ -3,22 +3,25 @@
 that toggle on a Ctrl tap (Move's copy, Rectangle's centre) ask
 ``ctrl_tapped`` on the release. Only the controller's own key handler
 recorded it, so on this view every tap read as a chord and was taken back."""
-from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QKeyEvent
+from ingetrazo_render import KeyEvent, ShortcutOverride
 
+from core.input_codes import Key, KeyboardModifier
+from tests.headless_gpu import _code
 from tests.test_.skp_inference_gaps import view  # noqa: F401  (fixture)
 
+CTRL = KeyboardModifier.ControlModifier
 
-def _key(kind, key, mods=Qt.NoModifier):
-    return QKeyEvent(kind, key, mods)
+
+def _press(key, mods=0):
+    return KeyEvent(True, _code(key), _code(mods))
 
 
 def test_a_lone_ctrl_is_a_tap_and_a_chord_is_not(view):  # noqa: F811
     source = view.source_viewport
-    view.keyPressEvent(_key(QEvent.KeyPress, Qt.Key_Control))
+    view.keyPressEvent(_press(Key.Key_Control))
     assert source.ctrl_tapped()
-    view.keyPressEvent(_key(QEvent.KeyPress, Qt.Key_Z, Qt.ControlModifier))
+    view.keyPressEvent(_press(Key.Key_Z, CTRL))
     assert not source.ctrl_tapped()
-    view.keyPressEvent(_key(QEvent.KeyPress, Qt.Key_Control))
-    view.event(_key(QEvent.ShortcutOverride, Qt.Key_C, Qt.ControlModifier))
+    view.keyPressEvent(_press(Key.Key_Control))
+    view.event(ShortcutOverride(_code(Key.Key_C), _code(CTRL)))
     assert not source.ctrl_tapped()

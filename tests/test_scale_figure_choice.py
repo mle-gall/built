@@ -5,15 +5,13 @@ picture (#655) — and whatever the app placed stays out of a document
 inserted into another, which only recognised Sumari until now."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
 from ingetrazo_core import NativeSettings
 from core.settings import settings as preferences
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from PySide6.QtGui import QColor, QImage
+import numpy as np
+from ingetrazo_render import SurveyRaster
 from ingetrazo_core import Vec3 as V
 
 from core import scale_figure as sf  # noqa: E402
@@ -29,12 +27,9 @@ def settings(tmp_path, monkeypatch):
 
 
 def _png(path, alpha=True, w=40, h=120):
-    img = QImage(w, h, QImage.Format_ARGB32 if alpha else QImage.Format_RGB32)
-    img.fill(QColor(0, 0, 0, 0) if alpha else QColor("white"))
-    for y in range(10, h):
-        for x in range(10, w - 10):
-            img.setPixelColor(x, y, QColor("navy"))
-    assert img.save(str(path))
+    data = np.full((h, w, 4), 0 if alpha else 255, np.uint8)
+    data[10:, 10:w-10] = (0, 0, 128, 255)
+    assert SurveyRaster(w, h, data.tobytes()).save(path)
     return path
 
 

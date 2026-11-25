@@ -91,14 +91,14 @@ def test_every_library_image_is_actually_readable():
     import json
     from pathlib import Path
 
-    from PySide6.QtGui import QImage
+    from ingetrazo_render import SurveyRaster
     root = Path(__file__).resolve().parent.parent / "resources" / "textures"
     lib = json.loads((root / "library.json").read_text())
     bad = []
     for cat in lib["categories"]:
         for it in cat["items"]:
-            img = QImage(str(root / "library" / it["file"]))
-            if img.isNull() or img.width() == 0:
+            img = SurveyRaster.open(root / "library" / it["file"])
+            if img is None or img.width == 0:
                 bad.append(it["file"])
     assert not bad, bad[:8]
 

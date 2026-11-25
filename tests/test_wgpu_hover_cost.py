@@ -21,21 +21,17 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from core.mesh import Face, Mesh
+from tests.headless_gpu import mouse
 from tests.test_.skp_inference_gaps import refresh, view  # noqa: F401
 from tests.test_wgpu_inference_parity import _box, _component, _look
 
 
 def _hover(view, world):
     x, y = view._world_to_pixel(world)
-    q = QPointF(x, y)
-    QApplication.sendEvent(view, QMouseEvent(
-        QMouseEvent.MouseMove, q, q, Qt.NoButton, Qt.NoButton, Qt.NoModifier))
+    mouse(view, "move", x, y)
     return view.last_snap
 
 

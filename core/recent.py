@@ -10,7 +10,7 @@ that has no rich list yet reads it, and the first write drops it, so the
 user's recents survive and a cleared list stays cleared."""
 import json
 from pathlib import Path
-from core.settings import settings as QSettings
+from core.settings import settings as native_settings
 
 from ingetrazo_core import recent_forget, recent_menu, recent_remember, recent_rows
 
@@ -40,16 +40,16 @@ def _store(kind, st, rows_json):
 
 
 def entries(kind='files', settings=None):
-    return json.loads(_rows_json(kind, settings or QSettings()))
+    return json.loads(_rows_json(kind, settings or native_settings()))
 
 
 def menu(settings=None, limit=MENU):
     """File ▸ Open Recent: the recent documents still on disk."""
-    return recent_menu(_rows_json('files', settings or QSettings()), limit)
+    return recent_menu(_rows_json('files', settings or native_settings()), limit)
 
 
 def remember(path, pinned=None, settings=None, replace=None):
-    st = settings or QSettings()
+    st = settings or native_settings()
     path = str(Path(path).resolve())
     kind = 'projects' if Path(path).suffix.lower() in ('.builtproject', '.igzproj') else 'files'
     _store(kind, st, recent_remember(_rows_json(kind, st), path, None if pinned is None else bool(pinned),
@@ -63,7 +63,7 @@ def forget(paths, settings=None):
     """Take ``paths`` (one or several) off the recent lists: the files
     themselves are left alone. The start page's «Continue» and what it
     remembered of them go too."""
-    st = settings or QSettings()
+    st = settings or native_settings()
     if isinstance(paths, (str, Path)):
         paths = [paths]
     gone = {str(p) for p in paths}
@@ -86,7 +86,7 @@ def forget(paths, settings=None):
 def clear(settings=None):
     """File ▸ Open Recent ▸ Clear list: the documents' rows go, the ones
     pinned on the start page stay."""
-    st = settings or QSettings()
+    st = settings or native_settings()
     forget([r['path'] for r in entries('files', st) if not r.get('pinned')], st)
     _store('files', st, _rows_json('files', st))
 
@@ -99,7 +99,7 @@ def meta(path, settings=None):
     """What the start page remembers of a document from when it was open
     (``ingetrazo_render.wgpu_start.note``): project, links, origin, unfiled, problems,
     workspace. Empty when never noted."""
-    st = settings or QSettings()
+    st = settings or native_settings()
     try:
         table = json.loads(st.value('home/meta', '{}'))
     except (TypeError, ValueError):
@@ -111,7 +111,7 @@ def meta(path, settings=None):
 def note(path, data, settings=None):
     """Merge ``data`` into what is remembered of ``path`` (bounded like the
     recent lists, the newest kept)."""
-    st = settings or QSettings()
+    st = settings or native_settings()
     try:
         table = json.loads(st.value('home/meta', '{}'))
     except (TypeError, ValueError):

@@ -9,13 +9,6 @@ fronts and two inner partitions. Erasing it must reunite the fronts, the
 way it does when the line has only them."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
 
 from core.edits import build_add_edges  # noqa: E402
 from core.history import (AddFaceCommand, EraseSelectionCommand,  # noqa: E402
@@ -105,7 +98,7 @@ def test_erasing_the_line_under_a_fin_reunites_the_floor():
     hist.execute(EraseSelectionCommand([edge]))
     floors = [f for f in scene.mesh.faces if abs(f.normal().z()) > 0.99]
     assert len(floors) == 1 and abs(floors[0].area() - 2.0) < 1e-6
-    # The fin lost its foot: it no longer closes, so it goes, like SketchUp.
+    # The fin lost its foot: it no longer closes, so it goes, like .skp.
     assert len(scene.mesh.faces) == 1
 
 

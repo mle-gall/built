@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from core.input_types import Qt
+from core.input_codes import Input as Qt
 from core.timers import later
 from ingetrazo_render import shortcut_text
 from core.shortcuts import action_keys
@@ -36,9 +36,9 @@ def attach(view) -> None:
     from ingetrazo_render import wgpu_library
     wgpu_library.install(win)
     if hasattr(renderer, "ui_set_dock_width"):
-        from core.settings import settings as QSettings
+        from core.settings import settings as native_settings
         try:
-            renderer.ui_set_dock_width(float(QSettings().value("ui/dock_width", 300.0)))
+            renderer.ui_set_dock_width(float(native_settings().value("ui/dock_width", 300.0)))
         except (TypeError, ValueError):
             pass
     view._ui_tools_sent = False
@@ -57,8 +57,8 @@ def dock_width(lens, settings=None) -> float:
     """The dock width for lens ``lens``: the user's width for
     Filing; for the wide sets the width last dragged there, at least
     ``WIDE_DOCK`` and never narrower than the user's own."""
-    from core.settings import settings as QSettings
-    st = settings if settings is not None else QSettings()
+    from core.settings import settings as native_settings
+    st = settings if settings is not None else native_settings()
     try:
         own = float(st.value("ui/dock_width", 300.0))
     except (TypeError, ValueError):
@@ -82,8 +82,8 @@ def apply_dock_width(view, settings=None) -> None:
 def keep_dock_width(view, arg, settings=None) -> None:
     """The grip let go (or double-clicked): keep the width for the column
     set it was dragged in, so Filing comes back to the user's width."""
-    from core.settings import settings as QSettings
-    st = settings if settings is not None else QSettings()
+    from core.settings import settings as native_settings
+    st = settings if settings is not None else native_settings()
     try:
         w = float(arg or 300)
     except ValueError:
@@ -122,8 +122,6 @@ def _send_tools(view, win) -> None:
         view.renderer.ui_set_tools(groups, disabled)
     else:
         view.renderer.ui_set_tools(groups)
-    if "_host" not in vars(win):
-        _hide_widget_chrome(view, win)
     icons = []
     from views.view_commands import entries
     for group, _, _, _, key in entries():
@@ -144,63 +142,6 @@ LIGHTS_ROOM = 86.0
 TOP_H = 40.0
 
 
-def _hide_widget_chrome(view, win):
-    # Full bleed: the palette replaces every tool bar.
-    from PySide6.QtWidgets import QToolBar
-    for bar in win.findChildren(QToolBar):
-        bar.hide()
-    _merge_title_row(win)
-    _one_theme(win)
-    # Full bleed: the right column stands in for the docks; they stay
-    # reachable from the Window menu until it covers all they do.
-    from PySide6.QtWidgets import QDockWidget
-    for dock in win.findChildren(QDockWidget):
-        # Only the side panels; never a dock that holds the view itself.
-        if dock.isAncestorOf(view) or win.dockWidgetArea(dock) not in (
-                Qt.RightDockWidgetArea, Qt.LeftDockWidgetArea):
-            continue
-        dock.hide()
-    # The hint and the measurements now live in the chrome: their Qt
-    # copies keep their state but take no room.
-    status = win.statusBar()
-    for w in (getattr(status, "_msg", None), getattr(win, "_vcb_name", None),
-              getattr(win, "_vcb_value", None)):
-        if w is not None:
-            w.setMaximumWidth(0)
-
-
-def _merge_title_row(win) -> None:
-    """No title row at all (Maxence 2026-11-22: "can't we get rid of it?"):
-    the model reaches the window's top edge; the project tabs are a glass
-    capsule after the window buttons, on the top row of the chrome; the
-    buttons sit centred on that row."""
-    chrome = getattr(win, "_mac_chrome", None)
-    bar = getattr(win, "_project_tabs", None)
-    if bar is not None:
-        bar.hide()
-        bar.setMaximumHeight(0)
-    area = getattr(win, "_doc_area", None)
-    if area is not None and area.layout() is not None:
-        area.layout().setContentsMargins(0, 0, 0, 0)
-    if chrome is None:
-        return
-    from PySide6.QtCore import QPoint
-
-    def fit():
-        from views.mac_glass import _window_alive
-        if not _window_alive(win):
-            return
-        if win.windowState() & Qt.WindowFullScreen:
-            chrome._glass.place_lights(None)
-            return
-        view = getattr(getattr(win, "_doc", None), "stand_in", None)
-        top = view.mapTo(win, QPoint(0, 0)).y() if view is not None else 0
-        chrome._glass.place_lights(top + TOP_H / 2)     # the top bar's centre
-    chrome.fit_lights = fit
-    later(win, 0, fit)
-    later(win, 400, fit)
-
-
 def _project_action(win, arg) -> None:
     bar = getattr(win, "_project_tabs", None)
     if bar is None:
@@ -217,36 +158,6 @@ def _project_action(win, arg) -> None:
         doc = bar.tabs.tabData(int(arg))
         if doc is not None:
             bar.activated.emit(doc)
-
-
-#: The title row in the chrome's graphite (tokens in ui.rs): Maxence
-#: 2026-11-22, "3 different themes: black top/bottom bar, blue bottom bar,
-#: grey UI". The bottom Qt rows go; this row stays (it holds the window
-#: buttons) and takes the same colours and capsule tabs.
-_TITLE_SHEET = """
-#document_area { background: #16191D; }
-#project_tab_bar::tab { background: transparent; color: #C9CFD6; border: none;
-    border-radius: 14px; padding: 5px 14px; margin: 0 2px; min-height: 18px; }
-#project_tab_bar::tab:hover { background: rgba(255,255,255,18); color: #EEF1F4; }
-#project_tab_bar::tab:selected { background: rgba(106,165,255,61); color: #FFFFFF; }
-#project_views, #project_tab_new { border: none; border-radius: 14px; }
-#project_views:hover, #project_tab_new:hover { background: rgba(255,255,255,18); }
-"""
-
-
-def _one_theme(win) -> None:
-    area = getattr(win, "_doc_area", None)
-    if area is not None:
-        area.setStyleSheet(_TITLE_SHEET)
-    status = win.statusBar()
-    if status is not None:
-        status.hide()
-    # The side panels' pull handles: nothing to pull with the docks hidden.
-    from PySide6.QtWidgets import QWidget
-    for name in ("sidebar_handle", "left_sidebar_handle"):
-        for w in win.findChildren(QWidget, name):
-            w.hide()
-            w.setMaximumSize(0, 0)
 
 
 def _tabs(view, win) -> None:
@@ -550,10 +461,18 @@ def _lens_value(view, tools, revision) -> None:
                                       float(pos.x()) + dx, float(pos.y()) + dy - 40.0, None, lens)
 
 
-def _summary(sel) -> str:
-    from core.group import Group
-    groups = sum(1 for e in sel if isinstance(e, Group))
-    rest = len(sel) - groups
+def _sel_key(sel):
+    """The selection as the providers' signatures see it: its native
+    revision (core/element_set.py), taken on every change of content and
+    for every new set. Every empty selection is one and the same."""
+    return sel.revision if len(sel) else 0
+
+
+def _summary(snapshot) -> str:
+    """"2 groups · 3 items" from ``selection.snapshot()``: placements are
+    the groups, the rest are items."""
+    count, groups = snapshot[0], snapshot[1]
+    rest = count - groups
     parts = []
     if groups:
         parts.append(f"{groups} group" + ("s" if groups != 1 else ""))
@@ -565,19 +484,19 @@ def _summary(sel) -> str:
 def _selection(view, win, active) -> None:
     """The selection bar: with Select active, something selected, no drag."""
     scene = getattr(view, "scene", None)
-    sel = list(getattr(scene, "selection", ()) or ())
+    sel = getattr(scene, "selection", None)
     dragging = getattr(view, "last", None) is not None
-    if active != "select" or not sel or dragging:
+    if active != "select" or sel is None or not len(sel) or dragging:
         if getattr(view, "_ui_sel_sig", None) is not None:
             view.renderer.ui_set_selection("", [])
             view._ui_sel_sig = None
         return
-    sig = (id(scene), len(sel), id(sel[0]), id(sel[-1]))
+    sig = (id(scene), _sel_key(sel))
     if sig == getattr(view, "_ui_sel_sig", None):
         return
     view._ui_sel_sig = sig
-    view.renderer.ui_set_selection(_summary(sel), [(k, label, key, enabled, more)
-                                                   for k, label, key, run, enabled, more in _commands(win, sel)])
+    view.renderer.ui_set_selection(_summary(sel.snapshot()), [(k, label, key, enabled, more)
+                                                              for k, label, key, run, enabled, more in _commands(win, sel)])
 
 
 def _commands(win, sel):
@@ -768,7 +687,6 @@ def _tree(view, win, *, discover=False):
         flt = ""
     lens = 0 if discover else view.__dict__.get("_ui_lens", 0)
     from ingetrazo_render import browser_selection
-    sel_ids = {id(e) for e in scene.selection} if discover or lens != 0 else browser_selection(scene)
     from ingetrazo_core import ProjectSheets
     catalog = view.__dict__.get("_ui_sheet_catalog")
     if catalog is None:
@@ -777,13 +695,14 @@ def _tree(view, win, *, discover=False):
     # Watertight checks in Export must follow mesh edits.
     geometric = lens == 2
     cv = scene.content_version if geometric else _tree_version(win, scene)
-    sig = (id(scene), id(scene.edit_group), scene.mesh.revision, cv, tuple(sorted(exp)), tuple(sorted(pages.items())), flt, scene.content_version if flt else None, len(sel_ids),
-           hash(frozenset(sel_ids)), lens, getattr(view, "_ui_layer_rev", 0), scene.show_section_planes, sheet_revision, tuple(map(id, getattr(win, "_outliner_kinds", ()))))
+    sig = (id(scene), id(scene.edit_group), scene.mesh.revision, cv, tuple(sorted(exp)), tuple(sorted(pages.items())), flt, scene.content_version if flt else None, _sel_key(scene.selection), lens, getattr(view, "_ui_layer_rev", 0), scene.show_section_planes, sheet_revision, tuple(map(id, getattr(win, "_outliner_kinds", ()))))
     if not discover and sig == getattr(view, "_ui_tree_sig", None):
         return
     first = not hasattr(view, "_ui_tree")
     if not discover:
         view._ui_tree_sig = sig
+    # The selected ids only once the signature (the selection's revision) moved.
+    sel_ids = {id(e) for e in scene.selection} if discover or lens != 0 else browser_selection(scene)
     mode = "" if discover else view.__dict__.get("_ui_mode", "")
     from core import structure
     from core import layers as L
@@ -845,8 +764,8 @@ def _tree(view, win, *, discover=False):
     if hasattr(view.renderer, "ui_set_proposal_available"):
         view.renderer.ui_set_proposal_available(not mode and tree._host_roots < 0)
     if not view.__dict__.get("_ui_sort_loaded") and hasattr(view.renderer, "ui_set_tree_sort"):
-        from core.settings import settings as QSettings
-        view.renderer.ui_set_tree_sort(max(0, QSettings().value("ui/project_tree_sort", 0, type=int)))
+        from core.settings import settings as native_settings
+        view.renderer.ui_set_tree_sort(max(0, native_settings().value("ui/project_tree_sort", 0, type=int)))
         view._ui_sort_loaded = True
     view.renderer.ui_set_style_catalog(id(scene), [*L.LINETYPES, *(L.CUSTOM_LINETYPE + key for key in scene.line_types)], scene.hatch_patterns, scene if lens == 1 else None)
     view.renderer.ui_set_lens(lens)
@@ -1064,21 +983,13 @@ from contextlib import contextmanager
 
 @contextmanager
 def _wait_cursor(viewport):
-    from core.input_types import NATIVE, Qt
-    if NATIVE:
-        previous = viewport.cursor()
-        viewport.setCursor(Qt.WaitCursor)
-        try:
-            yield
-        finally:
-            viewport.setCursor(previous)
-    else:
-        from PySide6.QtWidgets import QApplication
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            yield
-        finally:
-            QApplication.restoreOverrideCursor()
+    from core.input_codes import Input as Qt
+    previous = viewport.cursor()
+    viewport.setCursor(Qt.WaitCursor)
+    try:
+        yield
+    finally:
+        viewport.setCursor(previous)
 
 
 def _measure(view, win, auto=False) -> None:
@@ -1432,7 +1343,7 @@ def _tree_action(win, view, action) -> None:
                 vp.flash_status("This selection has no occurrence in the Project tree")
         elif verb == "item" and kind in ("sheet-page", "sheet-frame", "saved-scene", "sheet-pages", "saved-scenes"):
             _select(win, [])
-            view._ui_insp_node = (rk, (0, 0, 0))
+            view._ui_insp_node = (rk, _sel_key(scene.selection))
         elif kind == "project-file" and verb in ("item", "open", "edit", "linkrelink"):
             # A project file row: one click shows its tab (opening it);
             # Locate… on a missing one finds where it went.
@@ -1494,8 +1405,7 @@ def _tree_action(win, view, action) -> None:
             rebuild()
         elif verb == "item" and kind in ("section", "sections"):
             _select(win, [p for p in scene.section_planes if str(p.uid) == ident])
-            sel = list(scene.selection)
-            view._ui_insp_node = (rk, (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0))
+            view._ui_insp_node = (rk, _sel_key(scene.selection))
         elif verb == "toggle":
             if rk.startswith(("r:", "c:inmodel", "c:compmodel")):
                 # Rules start open when short: remember a collapse explicitly.
@@ -1521,14 +1431,14 @@ def _tree_action(win, view, action) -> None:
             wgpu_library.set_mode(view, win, rk)
         elif verb == "item" and rk == "solid:active":
             _select(win, [])
-            view._ui_insp_node = (rk, (0, 0, 0))
+            view._ui_insp_node = (rk, _sel_key(scene.selection))
             rebuild()
         elif verb == "filter":
             view._ui_filter = rk
             rebuild()
         elif verb == "sort":
-            from core.settings import settings as QSettings
-            QSettings().setValue("ui/project_tree_sort", int(rk))
+            from core.settings import settings as native_settings
+            native_settings().setValue("ui/project_tree_sort", int(rk))
         elif verb == "item" and kind == "exportitem":
             group = item()
             if group is not None:
@@ -1661,8 +1571,7 @@ def _tree_action(win, view, action) -> None:
             # it is. Its parts come with "Select contents".
             view._ui_insp_node = None
             _select(win, placements() if tnode.get("kind") in ("link", "linked") else [])
-            sel = list(scene.selection)
-            view._ui_insp_node = (node, (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0))
+            view._ui_insp_node = (node, _sel_key(scene.selection))
         elif verb == "contents":
             _select(win, members())
         elif verb == "linkfinder" and linked:
@@ -1696,8 +1605,7 @@ def _tree_action(win, view, action) -> None:
                 view._ui_insp_node = None   # set after the selection lands
             _select(win, members())
             if verb == "node" and node:
-                sel = list(scene.selection)
-                view._ui_insp_node = (node, (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0))
+                view._ui_insp_node = (node, _sel_key(scene.selection))
         elif verb == "reveal":
             g = item()
             where = data.get("node_of", {}).get(id(g)) if g is not None else None
@@ -1970,9 +1878,8 @@ def _inspector(view, win) -> None:
     picked in the tree, one item, several, or loose geometry. Fields edit in
     place; IFC stays under Export details."""
     scene = win.viewport.scene
-    sel = list(scene.selection)
     focus = getattr(view, "_ui_insp_node", None)
-    sel_sig = (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0)
+    sel_sig = _sel_key(scene.selection)
     node_focus = focus[0] if focus and focus[1] == sel_sig else None
     filename = str(getattr(win, "_current_path", "") or "")
     tool = _active_tool_id(win)
@@ -1984,11 +1891,12 @@ def _inspector(view, win) -> None:
                  tex.get("sw"), tex.get("sh"), tex.get("rot"))
     sig = (id(scene), scene.content_version, sel_sig, node_focus, getattr(view, "_ui_tree_sig", None) is not None,
            view.__dict__.get("_ui_mat_focus"), view.__dict__.get("_ui_mode"), view.__dict__.get("_ui_lens"),
-           filename, frozenset(map(id, sel)),
+           filename,
            _current_material_name(), tool, brush, scene.show_section_planes, scene.show_section_cuts,
            scene.display_style.section_fill, view.__dict__.get("_ui_sheet_revision"))
     if sig == getattr(view, "_ui_insp_sig", None):
         return
+    sel = list(scene.selection)
     _measure(view, win, auto=True)
     takeoff = scene.__dict__.get("_inspector_takeoff")
     view._ui_insp_sig = sig
@@ -2400,15 +2308,6 @@ def _set_status(win, groups, value) -> None:
     if commands:
         execute(win.viewport, CompoundCommand(commands))
         win.viewport.flash_status(f"Status {value.capitalize()} on {len(commands)} item" + ("s" if len(commands) != 1 else ""))
-
-
-def _dock(win, names) -> None:
-    from PySide6.QtWidgets import QDockWidget
-    for dock in win.findChildren(QDockWidget):
-        if any(n in dock.windowTitle() for n in names):
-            dock.show()
-            dock.raise_()
-            return
 
 
 def _file_to(win, n: int) -> None:
@@ -3004,20 +2903,6 @@ def _mods(event) -> int:
 
 
 _BUTTONS = {Qt.LeftButton: 1, Qt.RightButton: 2, Qt.MiddleButton: 3}
-
-
-def title_double_click(view, event) -> bool:
-    """A double-click on the top strip zooms the window, as on a title bar."""
-    if not getattr(view, "_ui_attached", False):
-        return False
-    if not view.renderer.ui_top_empty(float(event.position().x()), float(event.position().y())):
-        return False
-    chrome = getattr(view.window(), "_mac_chrome", None)
-    glass = getattr(chrome, "_glass", None)
-    if glass is not None:
-        glass.zoom()
-        return True
-    return False
 
 
 def wheel(view, event) -> bool:

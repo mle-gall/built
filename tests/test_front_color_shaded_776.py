@@ -11,26 +11,19 @@ The rendering cases need a GL context; skipped where there is none."""
 from __future__ import annotations
 
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QImage
+from tests.raster_samples import pixels
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
-_app = QApplication.instance() or QApplication([])
 
 V = QVector3D
 
 
-def _rgb(img: QImage) -> np.ndarray:
-    img = img.convertToFormat(QImage.Format_RGBA8888)
-    buf = np.frombuffer(img.constBits(), np.uint8)
-    px = buf.reshape(img.height(), img.bytesPerLine())[:, :img.width() * 4]
-    return px.reshape(img.height(), img.width(), 4)[..., :3].astype(np.int32)
+def _rgb(img) -> np.ndarray:
+    return pixels(img)[..., :3].astype(np.int32)
 
 
 def _box(mesh, x0=0.0, color=None):
@@ -57,7 +50,7 @@ def _frame(vp, lo, hi):
 
 
 def _shot(vp):
-    return _rgb(vp.render_image(320, 240, overlays=False))
+    return _rgb(vp.render_raster(320, 240, overlays=False))
 
 
 @pytest.mark.parametrize("mode", ["textures", "shaded", "xray"])

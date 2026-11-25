@@ -6,8 +6,6 @@ from __future__ import annotations
 import math
 
 import pytest
-from PySide6.QtCore import QEvent, QPointF, Qt
-from PySide6.QtGui import QImage, QKeyEvent, QMouseEvent, QPainter
 
 from core.composition import (AddItemCommand, Composicion, CotaAngularItem,
                               RemoveItemCommand)
@@ -41,13 +39,3 @@ def test_angular_cota_lives_in_the_composition_and_round_trips():
     assert (back.cotas_ang[0].radius_mm, back.cotas_ang[0].text) == (12.5, "<> aprox.")
     RemoveItemCommand(c, ca).do()
     assert c.cotas_ang == []
-
-
-def _press(view, x, y, button=Qt.LeftButton):
-    pos = QPointF(x, y)
-    view.mousePressEvent(QMouseEvent(QEvent.MouseButtonPress, pos, pos,
-                                     button, button, Qt.NoModifier))
-    view.mouseReleaseEvent(QMouseEvent(QEvent.MouseButtonRelease, pos, pos,
-                                       button, Qt.NoButton, Qt.NoModifier))
-
-

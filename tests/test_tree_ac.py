@@ -218,8 +218,8 @@ def test_mark_selection_counts_paged_out_items_on_the_node():
 
 @pytest.fixture
 def settings(tmp_path):
-    from PySide6.QtCore import QSettings
-    st = QSettings(str(tmp_path / "dock.ini"), QSettings.IniFormat)
+    from ingetrazo_core import NativeSettings
+    st = NativeSettings(tmp_path)
     yield st
     st.sync()
 
@@ -540,7 +540,6 @@ def test_imported_hatch_angle_and_scale_are_undoable_in_drawing(ui, tmp_path, mo
     assert tag.hatch is None
 
 
-
 @pytest.mark.parametrize("operation", ["group", "insert", "paste", "link", "group_selection"])
 def test_created_placement_inherits_the_active_node_in_its_creation_step(ui, site, operation):
     from core import bim_registry, links, structure
@@ -577,9 +576,9 @@ def test_created_placement_inherits_the_active_node_in_its_creation_step(ui, sit
 
 
 def test_sort_choice_is_restored_on_a_new_project_view(ui):
-    from PySide6.QtCore import QSettings
+    from ingetrazo_core import NativeSettings
     scene, win, _, _, act = ui
-    settings = QSettings()
+    settings = NativeSettings()
     key = "ui/project_tree_sort"
     old = settings.value(key)
     try:

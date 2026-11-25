@@ -111,8 +111,5 @@ def prune_handled_com_errors(path) -> None:
 
 def cache_directory() -> Path:
     """Platform cache root for regenerable drawing and render files."""
-    from app_shell.native import _shell
-    if _shell is not None:
-        return Path(_shell.cache_directory(os.environ.get("BUILT_SETTINGS_DIR")))
-    from PySide6.QtCore import QStandardPaths
-    return Path(QStandardPaths.writableLocation(QStandardPaths.GenericCacheLocation))
+    from ingetrazo_render import cache_directory as native_cache
+    return Path(native_cache(os.environ.get("BUILT_SETTINGS_DIR") or None))

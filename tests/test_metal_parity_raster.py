@@ -1,7 +1,5 @@
-"""wgpu frame checks on an unshown native window.
-
-Use a native Qt platform (for example QT_QPA_PLATFORM=cocoa on macOS).
-"""
+"""wgpu frame checks on a headless Core Animation layer
+(tests/headless_gpu.py): the release renderer, no window and no toolkit."""
 import importlib.util
 import os
 import numpy as np
@@ -10,6 +8,19 @@ from core.scene import Scene
 from views.wgpu_style import style_payload, sun_payload
 
 HAS_RENDERER = importlib.util.find_spec("ingetrazo_render") is not None
+
+
+def raster(rgb):
+    """A ``SurveyRaster`` of an H×W×3 (opaque) or H×W×4 array."""
+    from ingetrazo_render import SurveyRaster
+    rgb = np.asarray(rgb, np.uint8)
+    if rgb.shape[2] == 3:
+        rgb = np.concatenate([rgb, np.full(rgb.shape[:2] + (1,), 255, np.uint8)], axis=2)
+    return SurveyRaster(rgb.shape[1], rgb.shape[0], np.ascontiguousarray(rgb).tobytes())
+
+
+def filled(w, h, colour):
+    return raster(np.broadcast_to(np.array(colour, np.uint8), (h, w, len(colour))))
 
 
 def test_payload_defaults_and_hidden_controls():
@@ -55,24 +66,17 @@ def test_native_api_available():
 
 @pytest.fixture
 def native():
-    from PySide6.QtWidgets import QApplication
-    if not HAS_RENDERER or QApplication.platformName() in ('offscreen', 'minimal'):
-        pytest.skip('requires the render crate and a native Qt surface')
-    from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QWidget
+    if not HAS_RENDERER:
+        pytest.skip('requires the render crate')
     from ingetrazo_core import Matrix4 as QMatrix4x4
-    from ingetrazo_render import Renderer
-    host = QWidget(); host.setAttribute(Qt.WA_DontShowOnScreen); host.resize(64,64)
-    from views.wgpu_surface import window_handles
-    window, handles = window_handles(host)
-    renderer = Renderer(window, 64, 64, 1., **handles)
+    from tests.headless_gpu import renderer as headless
+    renderer = headless(64, 64, 1.)
     view=QMatrix4x4(); view.translate(0,0,-3)
     proj=QMatrix4x4(); proj.ortho(-1,1,-1,1,.1,10)
     renderer.set_camera(list(view.data()),list(proj.data()))
     renderer.set_antialias(False); renderer.set_edges(False)
     yield renderer
     del renderer
-    host.close()
 
 
 def synthetic_pack(alpha=64):
@@ -108,9 +112,8 @@ def test_material_alpha_blends_without_hiding_opaque_background(native,aa):
     mixed=rgba[32,32,:3].astype(int)
     if os.environ.get('P2_RASTER_OUTPUT'):
         from pathlib import Path
-        from PySide6.QtGui import QImage
         path=Path(os.environ['P2_RASTER_OUTPUT']); path.mkdir(parents=True,exist_ok=True)
-        QImage(rgba.data,64,64,QImage.Format_RGBA8888).copy().save(str(path/f'synthetic-alpha64-msaa-{aa}.png'))
+        raster(rgba).save(str(path/f'synthetic-alpha64-msaa-{aa}.png'))
     np.testing.assert_allclose(mixed, [62, 0, 185], atol=3)  # 64/255 coverage in display space
     upload(native,255)
     opaque=capture(native)[32,32,:3].astype(int)
@@ -192,18 +195,15 @@ def test_loose_transform_preview_restores_resident_faces(native):
 
 def test_texture_tool_updates_only_one_faces_uv_rows(native, tmp_path):
     from types import SimpleNamespace
-    from PySide6.QtGui import QColor, QImage
     from ingetrazo_core import Vec3
     from tools.texture_position import TexturePositionTool
     from tools.texture_position_metal import TexturePreview
     from views.wgpu_scene import pack_scene
 
     path = tmp_path / "tile.png"
-    image = QImage(16, 16, QImage.Format_RGBA8888)
-    for y in range(16):
-        for x in range(16):
-            image.setPixelColor(x, y, QColor("red") if x < 8 else QColor("blue"))
-    assert image.save(str(path))
+    tile = np.zeros((16, 16, 3), np.uint8)
+    tile[:, :8, 0] = tile[:, 8:, 2] = 255                    # red, then blue
+    assert raster(tile).save(str(path))
     scene = Scene()
     for x in (-.85, .1):
         face = scene.mesh.add_face([Vec3(x+u, v, 0) for u, v in
@@ -324,7 +324,6 @@ def test_shadow_toggle_and_invalid_payload(native):
 def test_paste_preview_repeats_the_image_and_clears(native, aa, tmp_path):
     from ingetrazo_core import Vec3
     from ingetrazo_render import preview_materials
-    from PySide6.QtGui import QColor, QImage
     from tools.paste import PasteTool
     from tests.controller_surface import ControllerSurface
 
@@ -333,10 +332,7 @@ def test_paste_preview_repeats_the_image_and_clears(native, aa, tmp_path):
     native.set_style(dict(sky=False, edges=False))
     original = capture(native)
     path = str(tmp_path / "strip.png")
-    strip = QImage(2, 1, QImage.Format_RGBA8888)
-    strip.setPixelColor(0, 0, QColor(255, 255, 0))
-    strip.setPixelColor(1, 0, QColor(0, 255, 255))
-    assert strip.save(path)
+    assert raster([[(255, 255, 0), (0, 255, 255)]]).save(path)
     tool = PasteTool()
     points = [Vec3(x, y, 0) for x, y in [(-.8, -.8), (.8, -.8), (.8, .8), (-.8, .8)]]
     texture = dict(path=path, uvw=[1.25, 0., 0., 1., 0., 1.25, 0., 1.])
@@ -455,7 +451,6 @@ if __name__ == '__main__':
 
 
 def test_pbr_shading_changes_pixels_and_keeps_picks(native, tmp_path):
-    from PySide6.QtGui import QImage, QColor
     from ingetrazo_core import Vec3 as QVector3D
     from views.wgpu_scene import pack_scene
     scene = Scene()
@@ -469,9 +464,7 @@ def test_pbr_shading_changes_pixels_and_keeps_picks(native, tmp_path):
     picks = [native.pick(x, y) for x, y in points]
     assert picks == [0, 0, -1]
     path = tmp_path / 'normal.png'
-    normal = QImage(2, 2, QImage.Format_RGB32)
-    normal.fill(QColor(200, 110, 236))
-    assert normal.save(str(path))
+    assert filled(2, 2, (200, 110, 236)).save(str(path))
     face.attrs['pbr'] = {'metallic': .75, 'normal_map': {'path': str(path)}}
     pack_scene(scene).upload(native)
     after = capture(native)
@@ -652,7 +645,6 @@ def test_export_shadow_map_resolves_the_ground_shadow_edge(native):
 @pytest.mark.parametrize('aa', [False, True])
 def test_reference_imagery_in_live_and_export_frames(native, layer, aa, tmp_path):
     from types import SimpleNamespace
-    from PySide6.QtGui import QColor, QImage
     from ingetrazo_core import Vec3, Matrix4
     from core.image_plane import ImagePlane
     from georef.datum import SceneDatum
@@ -673,17 +665,16 @@ def test_reference_imagery_in_live_and_export_frames(native, layer, aa, tmp_path
     adapter = SimpleNamespace(scene=scene, renderer=native, source_viewport=None,
                               packed=SimpleNamespace(origin=(0., 0., 0.)))
     adapter._shared = adapter
-    image = QImage(8, 8, QImage.Format_RGBA8888)
-    image.fill(QColor(20, 225, 60))
+    green = np.empty((8, 8, 3), np.uint8)
+    green[:] = (20, 225, 60)
+    image = raster(green)
     positions = [(-.8, -.8, 0.), (.8, -.8, 0.), (.8, .8, .1), (-.8, .8, .1)]
     uvs = [(0, 1), (1, 1), (1, 0), (0, 0)]
     triangles = [(0, 1, 2), (0, 2, 3)]
     if layer == 'image':
-        for y in range(4):
-            for x in range(8):
-                image.setPixelColor(x, y, QColor(230, 55, 10))
+        green[:4] = (230, 55, 10)                        # the top half
         path = tmp_path / 'plan.png'
-        assert image.save(str(path))
+        assert raster(green).save(str(path))
         scene.image_planes.append(ImagePlane(str(path), Vec3(-.8, -.8, 0.),
                                              Vec3(1.6, 0, 0), Vec3(0, 1.6, 0)))
     elif layer == 'map':
@@ -789,7 +780,6 @@ def test_selection_marks_follow_the_grab_and_leave_hover_marks_in_place(native):
 @pytest.mark.parametrize('aa', [False, True])
 def test_clipboard_group_preview_moves_nested_texture_and_preserves_scene(native, tmp_path, aa):
     from types import SimpleNamespace
-    from PySide6.QtGui import QColor, QImage
     from ingetrazo_core import Vec3, Matrix4
     from core.scene import Scene
     from core.group import Group
@@ -801,9 +791,7 @@ def test_clipboard_group_preview_moves_nested_texture_and_preserves_scene(native
     native.set_style(dict(sky=False, edges=False))
     original = capture(native)
     path = str(tmp_path / 'clipboard.png')
-    img = QImage(2, 1, QImage.Format_RGBA8888)
-    img.fill(QColor(0, 255, 100))
-    assert img.save(path)
+    assert filled(2, 1, (0, 255, 100)).save(path)
     mesh = Mesh()
     face = mesh.add_face([Vec3(x, y, .3) for x, y in
                           [(-.3, -.3), (.3, -.3), (.3, .3), (-.3, .3)]])

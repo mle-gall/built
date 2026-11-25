@@ -11,19 +11,14 @@ snap index was being rebuilt on its worker, such a face took no click."""
 import math
 
 import pytest
-from PySide6.QtCore import QEvent, QPointF, Qt
-from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core.group import Group
 from core.mesh import Edge, Face, Mesh
 from core.scene import Scene
 from views.wgpu_inference import prepare
 from views.wgpu_scene import pack_scene
-from views.wgpu_view import WgpuView
-
-app = QApplication.instance() or QApplication([])
+from tests.headless_gpu import HeadlessView, mouse
 
 
 class _Renderer:
@@ -67,7 +62,7 @@ def view():
     gl.resize(800, 600)
     gl.scene = scene
     gl.active_tool = SelectTool()
-    view = WgpuView()
+    view = HeadlessView()
     view.resize(800, 600)
     view.scene = scene
     view.source_viewport = gl
@@ -99,13 +94,7 @@ _T = [10_000]
 
 def _send(view, kind, pos):
     _T[0] += 50
-    typ = {'press': QEvent.MouseButtonPress, 'release': QEvent.MouseButtonRelease,
-           'double': QEvent.MouseButtonDblClick}[kind]
-    buttons = Qt.NoButton if kind == 'release' else Qt.LeftButton
-    ev = QMouseEvent(typ, pos, pos, Qt.LeftButton, buttons, Qt.NoModifier)
-    ev.setTimestamp(_T[0])
-    {'press': view.mousePressEvent, 'release': view.mouseReleaseEvent,
-     'double': view.mouseDoubleClickEvent}[kind](ev)
+    mouse(view, kind, *pos, button=1, held=0 if kind == 'release' else 1, timestamp=_T[0])
 
 
 def _clicks(view, pos, n):
@@ -128,7 +117,7 @@ def _counts(scene):
 def _first_face_pixel(view):
     # The first quad's centre, in world coordinates (x 4..6, y 3..5).
     x, y = view._world_to_pixel(QVector3D(5, 4, 0))
-    return QPointF(x, y)
+    return x, y
 
 
 def test_one_click_takes_the_face(view):
@@ -184,5 +173,5 @@ def test_a_click_past_the_open_group_still_takes_nothing_while_the_index_builds(
     view.inference_index = None
     x, y = view._world_to_pixel(QVector3D(14, 4, .5))
     view.scene.select([view.scene.mesh.faces[0]])
-    _clicks(view, QPointF(x, y), 1)
+    _clicks(view, (x, y), 1)
     assert not [e for e in view.scene.selection if isinstance(e, (Face, Edge))]

@@ -4,8 +4,7 @@
 tiled NumPy one) matches the original full-image encoded output."""
 import numpy as np
 import pytest
-from PySide6.QtCore import QBuffer
-from PySide6.QtGui import QImage
+from ingetrazo_render import SurveyRaster
 
 from core import texture
 from core.texture import rgb_to_hls, hls_to_rgb, COLORIZE_SHIFT
@@ -23,16 +22,11 @@ def _whole_image_colorize(data, target_rgb, ctype=COLORIZE_SHIFT):
     survive). Returns PNG bytes, or ``data`` unchanged on any failure."""
     try:
         import numpy as np
-        from PySide6.QtCore import QBuffer
-        from PySide6.QtGui import QImage
-        img = QImage.fromData(data)
-        if img.isNull():
+        img = SurveyRaster.decode(data)
+        if img is None:
             return data
-        img = img.convertToFormat(QImage.Format.Format_RGBA8888)
-        w, h = img.width(), img.height()
-        buf = np.frombuffer(img.constBits(), dtype=np.uint8,
-                            count=h * img.bytesPerLine())
-        px = buf.reshape(h, img.bytesPerLine())[:, : w * 4].reshape(h, w, 4)
+        w, h = img.width, img.height
+        px = np.frombuffer(img.rgba(), np.uint8).reshape(h, w, 4)
         rgb = px[..., :3].astype(np.float64) / 255.0
         alpha = px[..., 3]
         vis = alpha > 0
@@ -51,12 +45,7 @@ def _whole_image_colorize(data, target_rgb, ctype=COLORIZE_SHIFT):
         out = np.clip(hls_to_rgb(hue, lum, sat) * 255.0 + 0.5,
                       0, 255).astype(np.uint8)
         result = np.dstack([out, alpha])
-        tinted = QImage(result.tobytes(), w, h, w * 4,
-                        QImage.Format.Format_RGBA8888)
-        qbuf = QBuffer()
-        qbuf.open(QBuffer.OpenModeFlag.WriteOnly)
-        tinted.save(qbuf, "PNG")
-        return bytes(qbuf.data())
+        return SurveyRaster(w, h, result.tobytes()).material_png(data)
     except Exception:
         return data
 
@@ -69,11 +58,7 @@ def test_colorize_keeps_exact_png_bytes(alpha, mode, color):
     pixels = rng.integers(0, 256, (37, 29, 4), dtype=np.uint8)
     if alpha != "mixed":
         pixels[:, :, 3] = 0 if alpha == "transparent" else 255
-    image = QImage(pixels.tobytes(), 29, 37, 29 * 4, QImage.Format_RGBA8888)
-    buffer = QBuffer()
-    buffer.open(QBuffer.WriteOnly)
-    image.save(buffer, "PNG")
-    data = bytes(buffer.data())
+    data = SurveyRaster(29, 37, pixels.tobytes()).png()
     expected = _whole_image_colorize(data, color, mode)
     assert expected is not data
     assert texture.colorize_image(data, color, mode) == expected

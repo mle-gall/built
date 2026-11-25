@@ -653,6 +653,10 @@ impl Ui {
     pub fn extension_menu(&mut self, rows: Vec<crate::extension_menu::Row>) { self.plugins.commands = rows; }
     pub fn plugin_panel(&mut self, raw: &str) -> Result<(), String> { self.plugins.set(raw) }
     pub fn plugin_open(&mut self, id: &str) { self.plugins.open(id); }
+    pub fn plugin_visible(&self, instance: &str) -> bool {
+        self.gallery.is_none() && !self.review && !self.lsheet.open && !self.sheets.shown
+            && self.plugins.visible(instance)
+    }
     pub fn plugin_document(&mut self, document: String, live: &[String]) {
         if self.plugin_document != document {
             let next = self.background_plugins.remove(&document).unwrap_or_default();

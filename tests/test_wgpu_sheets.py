@@ -3,12 +3,9 @@ import os
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from types import SimpleNamespace
 import pytest
-from PySide6.QtWidgets import QApplication
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from core.composition import MarcoVista
 from core.saved_views import SavedView
-
-_app = QApplication.instance() or QApplication([])
 
 
 def test_offscreen_size_and_live_camera_unchanged(monkeypatch):
@@ -31,7 +28,8 @@ def test_offscreen_size_and_live_camera_unchanged(monkeypatch):
                              style_override=None, _horizon_ndc_y=lambda m: 2.)
     source._effective_style = lambda: Viewport._effective_style(source)
     source._view_style = lambda: None    # no view of its own: the scene's
-    view = module.WgpuView()
+    from tests.headless_gpu import HeadlessView
+    view = HeadlessView()
     view.source_viewport = source
     view.renderer = Renderer()
     view._scene_dirty = False
@@ -42,8 +40,8 @@ def test_offscreen_size_and_live_camera_unchanged(monkeypatch):
     view.packed = pack_scene(source.scene)
     before = dict(source.camera.__dict__)
     image = view.render_image(123, 47)
-    assert (image.width(), image.height()) == (123, 47)
-    assert view.render_pixels(123, 47) == (123, 47, bytes(image.constBits()))
+    assert (image.width, image.height) == (123, 47)
+    assert view.render_pixels(123, 47) == (123, 47, bytes(image.rgba()))
     assert source.camera.__dict__ == before
     view.close()
 

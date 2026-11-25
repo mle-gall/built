@@ -33,7 +33,7 @@ def test_style_edge_switch_and_menu_checks_follow_clicks(grid):
 
 
 def test_projection_and_standard_shortcuts_change_the_clicked_pane(grid):
-    from core.input_types import Qt
+    from ingetrazo_core import Input as Qt
     win = grid.win
     top = grid.click("Top")
     main = win._doc.viewport

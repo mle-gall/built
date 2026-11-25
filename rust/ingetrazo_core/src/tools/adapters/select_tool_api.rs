@@ -157,7 +157,7 @@ fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let modifiers = a.get_item(3)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
-    let qt = imported(py, "core.input_types")?.getattr("Qt")?;
+    let qt = imported(py, "ingetrazo_core")?.getattr("Input")?;
     let name = fields!(py; qt.getattr("Key_Delete")? => "Delete", qt.getattr("Key_Backspace")? => "Backspace").into_any().call_method1("get", (&key,))?;
     if name.is_none() {
         return false.into_bound_py_any(py);

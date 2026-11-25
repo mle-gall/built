@@ -382,12 +382,12 @@ def test_each_kind_gets_the_rows_docs_context_menu_lists(host, kinds, kind):
     assert not any(r.label == "More" or r.text().startswith("More") for r in menu.rows)
 
 
-def test_the_menus_carry_the_expected_verbs(host, kinds):
+def test_the_menus_carry_the_expected_verbs(host, kinds, monkeypatch):
     from ingetrazo_render import context_menu_build, context_menu_action, verbs_constants
-    from PySide6.QtWidgets import QApplication
+    from app_shell import native
     scene = host.viewport.scene
     # A model copied by an earlier test would add "Paste here" to empty space.
-    QApplication.clipboard().clear()
+    monkeypatch.setattr(native, "pasteboard_types", lambda: ([], 0))
     host.viewport.clipboard = None
 
     def rows(kind):
@@ -588,7 +588,7 @@ def test_replacing_the_viewport_history_detaches_the_old_feed(host):
 def test_input_and_modal_buttons_stay_in_the_owning_window(host, second):
     from app_shell import modal
     from views import input_state
-    from PySide6.QtCore import Qt, QPoint
+    from ingetrazo_core import Input as Qt, PixelPoint as QPoint
 
     other = second()
     host.pointer("move", 17, 23, held=1, modifiers=Qt.ShiftModifier.value)

@@ -58,7 +58,7 @@ fn nav_cursor(v: &Obj) -> PyResult<()> {
 fn look_move(v: &Obj, event: &Obj) -> PyResult<()> {
     let drag = v.getattr("_look_drag")?;
     let last = drag.get_item(1)?;
-    let mut pos = event.call_method0("position")?.call_method0("toPoint")?;
+    let pos = event.call_method0("position")?.call_method0("toPoint")?;
     let (x, y): (i64, i64) = (
         pos.call_method0("x")?.extract()?,
         pos.call_method0("y")?.extract()?,
@@ -68,13 +68,6 @@ fn look_move(v: &Obj, event: &Obj) -> PyResult<()> {
     if dx != 0 || dy != 0 {
         v.getattr("active_tool")?
             .call_method1("on_look", (v, dx, dy))?;
-        if v.call_method0("_can_warp_pointer")?.is_truthy()? {
-            v.py()
-                .import("PySide6.QtGui")?
-                .getattr("QCursor")?
-                .call_method1("setPos", (v.call_method1("mapToGlobal", (&last,))?,))?;
-            pos = last;
-        }
     }
     v.setattr("_look_drag", (drag.get_item(0)?, pos))
 }

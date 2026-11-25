@@ -9,21 +9,11 @@ container the click paints the face, and the face is what the hover
 marks; the eyedropper samples one face and marks that face."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
 
 from core.group import Group                                      # noqa: E402
 from core.history import History                                  # noqa: E402
@@ -62,8 +52,8 @@ class _FakeViewport:
         pass
 
 
-def _ctx(vp, modifiers=Qt.NoModifier):
-    return ToolContext(viewport=vp, world=QVector3D(), screen=QPointF(0, 0),
+def _ctx(vp, modifiers=Input.NoModifier):
+    return ToolContext(viewport=vp, world=QVector3D(), screen=ScreenPoint(0, 0),
                        modifiers=modifiers, snap=None)
 
 
@@ -121,9 +111,9 @@ def test_hover_on_loose_geometry_marks_the_face():
 def test_the_eyedropper_marks_the_face_it_samples(boxed, how):
     face, group = boxed
     vp = _FakeViewport(face, group, group)
-    mods = Qt.NoModifier
+    mods = Input.NoModifier
     if how == "alt":
-        mods = Qt.AltModifier
+        mods = Input.AltModifier
     else:
         PaintTool.sample_armed = True
     PaintTool().on_hover(_ctx(vp, mods))

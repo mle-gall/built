@@ -11,7 +11,7 @@ from ingetrazo_render import blender_availability
 
 from core import render_blender as rb
 from core.desktop_open import open_url
-from core.settings import settings as QSettings
+from core.settings import settings as native_settings
 
 _SETTINGS = "render/"
 
@@ -139,7 +139,7 @@ class BlenderPanel:
 
     def __init__(self, app, invalidate):
         self.app, self.invalidate = app, invalidate
-        settings = QSettings()
+        settings = native_settings()
         engine = settings.value(_SETTINGS + "engine", "eevee")
         quality = settings.value(_SETTINGS + "quality", 1, type=int)
         width = settings.value(_SETTINGS + "width", 1920, type=int)
@@ -292,7 +292,7 @@ class BlenderPanel:
         if event == "commit" and control in self.opts:
             self.opts[control] = int(value) if control in ("width", "height") else value
             if control == "binary":
-                QSettings().setValue(rb.SETTINGS_KEY, value)
+                native_settings().setValue(rb.SETTINGS_KEY, value)
                 self.found, self.status = blender_availability(value)
         elif event == "commit" and control in ("sun_scale", "ambience"):
             _store(self.app, {**_state(self.app), control: value})
@@ -300,7 +300,7 @@ class BlenderPanel:
             self.app.window.run_command("view:form-shadows")
         elif control == "lights_open":
             self.lights_open = bool(value)
-            QSettings().setValue(_SETTINGS + "open_lights", int(self.lights_open))
+            native_settings().setValue(_SETTINGS + "open_lights", int(self.lights_open))
         elif control == "sync":
             if value:
                 self.observed_camera = None
@@ -417,7 +417,7 @@ class BlenderPanel:
             self.job.end(failed=True, detail=str(exc))
             self.job = None
             raise
-        settings = QSettings()
+        settings = native_settings()
         for key in ("engine", "width", "quality"):
             settings.setValue(_SETTINGS + key, ["Draft", "Preview", "Final"].index(self.opts[key])
                               if key == "quality" else self.opts[key])

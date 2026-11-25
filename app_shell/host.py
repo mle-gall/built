@@ -19,7 +19,7 @@ import time
 import traceback
 from pathlib import Path
 
-from app_shell import qt_host
+from app_shell import profile
 
 #: Qt cursor shape → winit CursorIcon name (rust/built_app/src/main.rs).
 _CURSORS = {
@@ -30,7 +30,6 @@ _CURSORS = {
     17: "grab", 18: "grabbing", 20: "copy", 21: "alias",
 }
 #: Qt.BitmapCursor: a pixmap cursor (the tools' icons).
-_BITMAP = 24
 
 #: The repository and venv the interpreter was started on (bootstrap).
 ROOT = None
@@ -52,7 +51,7 @@ class Host:
                  settings: str | None = None, temporary: bool = False,
                  display: int = 0, platform: str = ""):
         t0 = time.perf_counter()
-        self.settings_dir = qt_host.start(settings, temporary=temporary)
+        self.settings_dir = profile.start(settings, temporary=temporary)
         self.ns_view = int(ns_view)
         self.surface_handles = dict(display=display, platform=platform) if platform else {}
         self.width = max(1, int(round(width)))
@@ -109,9 +108,6 @@ class Host:
         self.window._extension_menus.refresh(self.window)
         from app_shell import windows
         windows.register(self)
-        guard = qt_host.widget_guard()
-        if guard is not None:
-            guard.on_blocked = lambda title: self.not_here(f"“{title}”")
         try:
             self.window._autosave_timer = self.timers.timer(self.window._on_autosave_tick, repeat=True)
             self.window._setup_autosave()
@@ -210,35 +206,10 @@ class Host:
         try:
             shape = cursor.shape() if hasattr(cursor, "shape") else cursor
             value = int(getattr(shape, "value", shape))
-            if value == _BITMAP and hasattr(cursor, "pixmap"):
-                name = self._bitmap_cursor(cursor)
-            else:
-                name = _CURSORS.get(value, "crosshair")
+            name = _CURSORS.get(value, "crosshair")
         except Exception:
             name = "default"
         self._cursor = name
-
-    def _bitmap_cursor(self, cursor):
-        """A tool's pixmap cursor as a native one: its picture at the
-        cursor's logical size (winit sizes a custom cursor by its pixels)."""
-        from PySide6.QtCore import Qt
-        from PySide6.QtGui import QImage
-        pm = cursor.pixmap()
-        if pm.isNull():
-            return "crosshair"
-        key = str(pm.cacheKey())
-        if key not in self._custom_cursors:
-            dpr = pm.devicePixelRatio() or 1.0
-            w = max(1, int(round(pm.width() / dpr)))
-            h = max(1, int(round(pm.height() / dpr)))
-            img = pm.toImage().scaled(w, h, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
-            img = img.convertToFormat(QImage.Format_RGBA8888)
-            data = bytes(img.constBits())[: w * h * 4]
-            hot = cursor.hotSpot()
-            hx = min(w - 1, max(0, int(hot.x())))
-            hy = min(h - 1, max(0, int(hot.y())))
-            self._custom_cursors[key] = (w, h, hx, hy, data)
-        return "custom:" + key
 
     def custom_cursor(self, key):
         return self._custom_cursors.get(key)
@@ -268,8 +239,9 @@ class Host:
     def idle(self):
         """Qt's posted events and timers; then what the window should do:
         ``(frame_wanted, wake_in_ms or None, cursor or None, title or None)``."""
-        qt_host.pump()
         self._guard("window timers", self.timers.run_due)
+        from core import timers as core_timers
+        self._guard("hostless timers", core_timers.run_due)
         self.window._extension_menus.refresh(self.window)
         pending = self.window.__dict__.get("_pending_open")
         if pending and time.monotonic() >= pending.next_poll:
@@ -291,8 +263,6 @@ class Host:
             if ms is not None:
                 delay = ms if delay is None else min(delay, ms)
 
-        # Remaining plugin/tool Qt callbacks still need their event pump.
-        sooner(qt_host.next_timer_ms())
         if getattr(view, "_inference_future", None) is not None or getattr(view, "_inference_queued", False):
             sooner(33)
         watch = self.window.__dict__.get("_links_watch")
@@ -306,6 +276,7 @@ class Host:
         title, self._title = self._title, None
         wanted, self._frame_wanted = self._frame_wanted, False
         sooner(self.timers.next_ms())
+        sooner(core_timers.next_ms())
         return wanted, delay, cursor, title
 
     def extras(self):
@@ -369,6 +340,8 @@ class Host:
     def modal_frame(self):
         """A frame while a question or a job holds the loop (app_shell.modal)."""
         self._guard("window timers", self.timers.run_due)
+        from core import timers as core_timers
+        self._guard("hostless timers", core_timers.run_due)
         if self._frame_wanted:
             self._frame_wanted = False
             self.frame()
@@ -440,6 +413,7 @@ class Host:
         from ingetrazo_render import ContextMenuEvent, MouseEvent
         self.input_state.pointer(x, y, held, modifiers)
         if kind in ("press", "double"):
+            self.window.viewport._clean_alt_press = False
             self.window.scene_player.stop()
             self._front()
         view = self.view
@@ -488,8 +462,8 @@ class Host:
         value box and the tool may claim it), then the window's shortcuts
         (the tools' letters), else the view's key handler. While a sheet
         or an exclusive job holds the window, only they hear keys."""
-        from core.input_types import Qt
-        from ingetrazo_render import KeyEvent, ShortcutOverride
+        from ingetrazo_core import Input as Qt
+        from ingetrazo_render import KeyEvent, ShortcutOverride, observe_alt_key
         from ingetrazo_render import chrome_dialogs as cd
         self.input_state.modifiers = modifiers
         view = self.view
@@ -516,6 +490,7 @@ class Host:
                     self._guard("job key", cd.job_key, self.window, ev)
             self.request_frame()
             return True
+        observe_alt_key(self.window.viewport, pressed, key, repeat)
         doc = self.window._doc
         if pressed and key == Qt.Key_Escape and doc.model_views.cancel_divider():
             self.request_frame()
@@ -548,9 +523,6 @@ class Host:
         if slot is not None:
             win._command_actions[slot].trigger()
             return True
-        if vars(win).get("_action_tree_changed"):
-            from app_shell.legacy_actions import sync
-            sync(win)
         action = win._command_store.plugin_action(int(key), int(modifiers))
         if action is None:
             return False
@@ -615,6 +587,8 @@ class Host:
         self.request_frame()
 
     def focus(self, on):
+        if not on:
+            self.window.viewport._clean_alt_press = False
         if on:
             self._front()
             from views.ndof_input import shared_input
@@ -679,9 +653,6 @@ class Host:
         chrome_forms.close_all(self.window)
         self.window._release_check = None
         windows.unregister(self)
-        if vars(self.window).get("_action_observer") is not None:
-            from app_shell.legacy_actions import close
-            close(self.window)
         self.window.scene_player.cancel()
         self.window._extension_menus.clear()
         self.window._extension_closed.emit()
@@ -702,7 +673,6 @@ class Host:
         mesh = scene.mesh
         tool = self.viewport.active_tool
         win = self.window
-        guard = qt_host.widget_guard()
         return {
             "opening": [(j.label, j.fraction, j.phase) for j in win.__dict__.get("_chrome_jobs", ())],
             "instances": len(self.view.packed.instances) if self.view.packed is not None else 0,
@@ -742,9 +712,8 @@ class Host:
             "form_open": self.renderer.ui_dialog_open() if self.renderer is not None else False,
             "start_page": bool(getattr(win.__dict__.get("_start_page"), "wanted", False)),
             "errors": len(self.errors),
-            "widget_gaps": self.missing(),
             "classic_window_loaded": "views.main_window" in sys.modules,
-            "blocked_widgets": list(guard.blocked) if guard is not None else [],
+            "blocked_widgets": [],
             "not_here": list(self.not_here_log),
             "custom_cursors": len(self._custom_cursors),
             "preedit": self._preedit,
@@ -773,20 +742,6 @@ class Host:
     def _pasteboard_types():
         from app_shell import native
         return [t for t in native.pasteboard_types()[0] if "ingetrazo" in t]
-
-    def missing(self):
-        """Widget/window API the document or extension asked for and the shell
-        lacks (probes of the code's own lazily set attributes left out)."""
-        widgets = sys.modules.get("PySide6.QtWidgets")
-        if widgets is None:
-            return {}
-        from views.view_host import MISSING
-        out = {}
-        for name, n in MISSING.most_common():
-            bare = name.split(".", 1)[-1]
-            if hasattr(widgets.QWidget, bare) or hasattr(widgets.QMainWindow, bare):
-                out[name] = n
-        return out
 
 
 def bootstrap(root: str, venv: str | None):

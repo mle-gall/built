@@ -10,9 +10,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 import pytest
 
-from PySide6.QtCore import Qt
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from core.group import Group
 from core.mesh import Mesh
@@ -74,13 +72,14 @@ def test_nested_lazy_thumbnail_matches_eager_without_materialization(monkeypatch
     eager = _open(monkeypatch, path, False).groups[0]
     lazy = _open(monkeypatch, path, True).groups[0]
     assert type(lazy.children[0].mesh) is DeferredMesh
-    expected = component_thumbs._draw(eager, 80).toImage()
+    from ingetrazo_render import component_raster
+    expected = component_raster(eager, 80).rgba()
     monkeypatch.setattr(DeferredMesh, "_materialize", lambda self: pytest.fail(
         "a thumbnail built editable mesh topology"))
     assert lazy.children[0].mesh is lazy.children[-1].mesh
     assert [row[1:] for row in component_thumbs._signature(lazy)] == [
         row[1:] for row in component_thumbs._signature(eager)]
-    actual = component_thumbs.thumbnail(lazy, 80).toImage()
+    actual = component_thumbs.thumbnail(lazy, 80).rgba()
     assert actual == expected
     # Signature validation and a second picture must remain lazy too.
-    assert component_thumbs.thumbnail(lazy, 80).toImage() == expected
+    assert component_thumbs.thumbnail(lazy, 80).rgba() == expected

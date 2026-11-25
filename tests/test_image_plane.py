@@ -5,9 +5,10 @@ document. The invariant under all of it — an image is reference, never
 geometry, so it must never reach the topology mesh."""
 from __future__ import annotations
 
+from tests.raster_samples import solid_raster
 from pathlib import Path
 
-from PySide6.QtGui import QColor, QImage
+from ingetrazo_render import SurveyRaster
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import (
@@ -26,8 +27,7 @@ def V(x: float, y: float, z: float = 0.0) -> QVector3D:
 
 
 def _png(tmp_path: Path, w: int = 200, h: int = 100) -> Path:
-    img = QImage(w, h, QImage.Format_RGB888)
-    img.fill(QColor(220, 40, 40))
+    img = solid_raster(w, h, (220, 40, 40))
     out = tmp_path / "plan.png"
     img.save(str(out))
     return out
@@ -189,7 +189,7 @@ def test_document_carries_the_picture_inside_it(tmp_path):
     assert (im.width(), im.height()) == (8.0, 4.0)
     assert im.aspect == aspect
     assert Path(im.path).exists()                # restored from the document
-    assert not QImage(im.path).isNull()
+    assert SurveyRaster.open(im.path) is not None
 
 
 def test_a_document_without_images_loads_clean(tmp_path):

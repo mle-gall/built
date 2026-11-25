@@ -9,16 +9,11 @@ cursor is now dropped onto the line as the screen shows it first."""
 from __future__ import annotations
 
 import math
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-if QApplication.instance() is None:
-    QApplication([])
 
 from tests.controller_surface import ControllerSurface as Viewport
 

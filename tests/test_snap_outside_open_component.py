@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from PySide6.QtCore import Qt
+from ingetrazo_core import Input
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group
@@ -63,7 +63,7 @@ def _window(native_host):
 def _snap(vp, world):
     px = vp._world_to_pixel(world)
     assert px is not None
-    return vp._snap_at(px[0], px[1], Qt.NoModifier)
+    return vp._snap_at(px[0], px[1], Input.NoModifier)
 
 
 def test_a_corner_of_the_root_loose_mesh_snaps_from_inside_a_component(native_host):
@@ -212,7 +212,7 @@ def test_a_shape_started_on_the_rest_keeps_the_rests_plane(native_host):
                             V(6, 5, 2)])
     sc.version += 1
     vp.begin_group_edit(a)
-    from PySide6.QtCore import QPointF
+    from ingetrazo_core import ScreenPoint
     from tools.rust_tools import RectangleTool
 
     tool = RectangleTool()
@@ -221,13 +221,13 @@ def test_a_shape_started_on_the_rest_keeps_the_rests_plane(native_host):
 
     class _Ev:
         def position(self):
-            return QPointF(*px)
+            return ScreenPoint(*px)
 
         def modifiers(self):
-            return Qt.NoModifier
+            return Input.NoModifier
 
         def button(self):
-            return Qt.LeftButton
+            return Input.LeftButton
     vp._dispatch_tool_click(_Ev())
     assert tool.start_point is not None
     assert abs(tool.start_point.z() - 2.0) < 1e-4

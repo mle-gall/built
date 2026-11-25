@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import pytest
-from PySide6.QtCore import Qt
+from ingetrazo_core import Input
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group
@@ -68,7 +68,7 @@ def test_lock_keeps_the_same_snap_and_undo_redo_keeps_it(box, point, kind):
     history = History(vp.scene)
 
     def check():
-        snap = vp._snap_at(*px, Qt.NoModifier)
+        snap = vp._snap_at(*px, Input.NoModifier)
         assert snap.kind == kind
         assert (snap.point - target).length() < 1e-5
 
@@ -104,7 +104,7 @@ def test_locked_tag_is_a_reference_until_its_folder_is_hidden(box):
     assign_layer(group, tag.key)
     vp.scene.version += 1
     px = vp._world_to_pixel(transform.map(V(1, 0, 1)))
-    assert vp._snap_at(*px, Qt.NoModifier).kind == "endpoint"
+    assert vp._snap_at(*px, Input.NoModifier).kind == "endpoint"
     assert vp.pick_group(*px) is None
     vp.begin_group_edit(group)
     assert vp.scene.edit_group is None

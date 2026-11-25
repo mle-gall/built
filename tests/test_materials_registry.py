@@ -11,21 +11,13 @@ from __future__ import annotations
 
 import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import zipfile
 from types import SimpleNamespace as NS
 
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
 
 from core.materials import Material, register                     # noqa: E402
 from core.scene import Scene                                      # noqa: E402
@@ -92,8 +84,8 @@ def test_igz_embeds_registry_texture(tmp_path):
     ZIP container and the path comes back real on load — the same
     treatment face textures always had."""
     img = tmp_path / "ladrillo.png"
-    from PySide6.QtGui import QImage
-    QImage(4, 4, QImage.Format.Format_RGB32).save(str(img))
+    from tests.raster_samples import solid_raster
+    solid_raster(4, 4, (0, 0, 0)).save(str(img))
 
     scene = Scene()
     tex = {"path": str(img), "sw": 1.0, "sh": 1.0}

@@ -6,17 +6,12 @@ so none of this needs GL."""
 from __future__ import annotations
 
 import math
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtGui import QGuiApplication
 from ingetrazo_core import Vec3 as QVector3D
 
 from tools.geopath import GeoPathTool
-
-_app = QGuiApplication.instance() or QGuiApplication([])
 
 
 class StubCamera:

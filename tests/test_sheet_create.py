@@ -10,11 +10,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
 import ingetrazo_core as NATIVE  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
 
 
 def test_a_title_block_starts_from_its_template(tmp_path):
