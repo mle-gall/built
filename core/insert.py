@@ -82,14 +82,14 @@ def merge_materials(src_materials: dict, dst_materials: dict, comp, *, reused=()
     every placement renamed a shared mesh's faces again, and a name moved
     twice when the new name of one was the old name of another. A mesh
     still deferred is restamped in its tables, not built
-    (:func:`core.links.restamp_materials`)."""
+    (``ingetrazo_core.link_restamp_materials``)."""
     renamed: dict = {}
     for old, mat in list(src_materials.items()):
         final = register(dst_materials, mat)
         if final != old:
             renamed[old] = final
     if renamed:
-        from core.links import _renamed_paint, restamp_materials
+        from ingetrazo_core import link_renamed_paint as _renamed_paint, link_restamp_materials as restamp_materials
         seen: set = set()
         for g, _m in iter_placements(comp):
             if g.material:

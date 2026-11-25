@@ -114,7 +114,7 @@ def document_name_scope(names):
 
 from core import doc_model as _dm
 
-#: Every attribute a group has, in one tuple (``links._clone_shell`` copies
+#: Every attribute a group has, in one tuple (``ingetrazo_core.link_clone_shell`` copies
 #: them). With the Rust document (core/doc_model.py) the ``DOC_FIELDS`` live
 #: in the document and the rest stay Python slots.
 GROUP_FIELDS = ("mesh", "name", "layer", "ifc", "billboard", "xform",
@@ -803,7 +803,7 @@ def copy_group(group, delta=None, _in_definition=False, _ifc_copy_context=None,
     share = _in_definition or (group.xform is not None
                                and bool(getattr(group, "component", True)))
     # A linked file's placement: its parts are the source's, read-only,
-    # and the copy is a live link of the same file (links.copy_parts).
+    # and the copy is a live link of the same file (``ingetrazo_core.link_copy_parts``).
     linked = _is_link(group)
     if share and not linked and not _project_occurrence:
         for child in group.children or ():
@@ -857,8 +857,7 @@ def copy_group(group, delta=None, _in_definition=False, _ifc_copy_context=None,
     # Nested placements ride along untranslated: ``delta`` already moved the
     # parent, and a child's transform is relative to it.
     if linked:
-        from core.links import copy_parts
-        g.children = copy_parts(group, g)
+        g.children = ingetrazo_core.link_copy_parts(group, g)
     else:
         g.children = [copy_group(c, _in_definition=share,
                                  _ifc_copy_context=_ifc_copy_context,

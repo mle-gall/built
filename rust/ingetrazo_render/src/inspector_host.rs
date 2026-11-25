@@ -109,10 +109,10 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
             let profiles = registry.call_method1("get", ("export_profiles", PyDict::new(py)))?;
             schema = profiles.call_method1("get", (profile, PyDict::new(py)))?.call_method1("get", ("schema", &schema))?;
         }
-        let links = py.import("core.links")?;
+        let links = crate::host_context::core_module(py)?;
         let occurrence = py.import("core.protocol.records")?.getattr("occurrence")?;
         for g in &groups {
-            let linked = links.call_method1("linked_ancestor", (g,))?.is_truthy()?;
+            let linked = links.call_method1("link_linked_ancestor", (g,))?.is_truthy()?;
             let record = occurrence.call1((g, &registry, linked))?;
             if scene.call_method1("entity_locked",(g,))?.is_truthy()? || scene.call_method1("_layer_state",(g,))?.get_item(1)?.is_truthy()? || scene.getattr_opt("worksession_read_only")?.is_some_and(|s|s.is_truthy().unwrap_or(false)) {
                 record.set_item("editable",false)?;
@@ -514,7 +514,7 @@ fn parts_edit(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, vp: &Bound<'_, Py
     let uid = if verb == "split" { v.clone() } else { v.get_item(0)? };
     let (Some(g), Some(address)) = (g, address) else { return Ok(()) };
     if !address.eq(&uid)?
-        || py.import("core.links")?.call_method1("linked_ancestor", (&g,))?.is_truthy()?
+        || crate::host_context::core_module(py)?.call_method1("link_linked_ancestor", (&g,))?.is_truthy()?
         || scene.call_method1("entity_locked", (&g,))?.is_truthy()?
     {
         return Ok(());

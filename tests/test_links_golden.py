@@ -37,11 +37,23 @@ FOLDERS = ["Structure", "Steel", "Envelope", "Annex", "Linked files"]
 MATS = ["Oak", "Brick", "Glass", "Concrete"]
 
 
+def _fn(name):
+    """A links operation by its Python name: the native ``link_*`` function
+    when there is one (after the move), else ``core.links``'s."""
+    import ingetrazo_core
+    from core import links
+    for cand in ("link_" + name, name):
+        f = getattr(ingetrazo_core, cand, None)
+        if f is not None and cand.startswith("link"):
+            return f
+    return getattr(links, name)
+
+
 def _registry(scene):
     import ingetrazo_core
     from core import links
     read = getattr(ingetrazo_core, "link_registry_view", None)
-    return read(scene) if read is not None else links.registry_view(scene)
+    return read(scene) if read is not None else _fn("registry_view")(scene)
 
 
 class _Canon:
@@ -151,7 +163,7 @@ def fingerprint(scene, tmp, *, build=False):
             "uid": uids(g.uid), "name": g.name, "layer": g.layer,
             "source_uid": uids(src_uid),
             "stable": (src_uid is not None and link_uid is not None
-                       and g.uid == links.stable_uid(link_uid, src_uid)),
+                       and g.uid == _fn("stable_uid")(link_uid, src_uid)),
             "owner": ("parent" if owner is parent and owner is not None
                       else None if owner is None else "other"),
             "component": bool(g.component), "hidden": bool(g.hidden),
@@ -163,7 +175,7 @@ def fingerprint(scene, tmp, *, build=False):
         }
         if id(g.mesh) not in mesh_rows:
             mesh_rows[id(g.mesh)] = (_built_rows if build else _mesh_rows)(g.mesh)
-        inner = g.uid if links.is_linked(g) else link_uid
+        inner = g.uid if _fn("is_linked")(g) else link_uid
         rec["children"] = [node(c, g, inner) for c in g.children or ()]
         return rec
     out["tree"] = [node(g, None, None) for g in scene.groups]
@@ -171,18 +183,18 @@ def fingerprint(scene, tmp, *, build=False):
     # The queries.
     from core.purge import iter_groups
     q = {}
-    q["sources"] = _clean(links.sources(scene), tmp)
-    q["linked"] = [uids(g.uid) for g in links.linked_groups(scene)]
-    q["by_path"] = {_clean(p, tmp): [uids(g.uid) for g in links.linked_groups(scene, p)]
-                    for p in links.sources(scene)}
-    q["ancestor"] = [uids(getattr(links.linked_ancestor(g), "uid", None))
+    q["sources"] = _clean(_fn("sources")(scene), tmp)
+    q["linked"] = [uids(g.uid) for g in _fn("linked_groups")(scene)]
+    q["by_path"] = {_clean(p, tmp): [uids(g.uid) for g in _fn("linked_groups")(scene, p)]
+                    for p in _fn("sources")(scene)}
+    q["ancestor"] = [uids(getattr(_fn("linked_ancestor")(g), "uid", None))
                      for g in iter_groups(scene.groups)]
-    q["placeholder"] = [links.save_as_placeholder(g, scene) for g in iter_groups(scene.groups)]
-    q["tag_source"] = [_clean(links.source_of_tag(scene, ly.key), tmp) for ly in scene.layers]
-    q["packed"] = [links.is_packed(scene, p) for p in links.sources(scene)]
-    q["state"] = [links.link_state(scene, p) for p in links.sources(scene)]
+    q["placeholder"] = [_fn("save_as_placeholder")(g, scene) for g in iter_groups(scene.groups)]
+    q["tag_source"] = [_clean(_fn("source_of_tag")(scene, ly.key), tmp) for ly in scene.layers]
+    q["packed"] = [_fn("is_packed")(scene, p) for p in _fn("sources")(scene)]
+    q["state"] = [_fn("link_state")(scene, p) for p in _fn("sources")(scene)]
     rows = []
-    for r in links.query(scene):
+    for r in _fn("query")(scene):
         r = dict(r)
         r["uid"] = uids(r["uid"])
         rows.append(_clean(r, tmp))
@@ -300,7 +312,7 @@ def _write_source(path, rng, *, nested=None, generation=0):
                 f.attrs["layer"] = t
             _paint(f, rng, mats)
     if nested is not None:
-        s.groups.append(links.make_link(s, nested, host_path=path))
+        s.groups.append(_fn("make_link")(s, nested, host_path=path))
     igz.save_scene(s, path)
     return path
 
@@ -334,7 +346,7 @@ class _Run:
 
 def _top_links(host):
     from core import links
-    return [g for g in host.groups if links.is_linked(g)]
+    return [g for g in host.groups if _fn("is_linked")(g)]
 
 
 def run_case(seed, tmp):
@@ -366,7 +378,7 @@ def run_case(seed, tmp):
             sel = {"uids": [g.uid for g in _src_groups(src)[:1]]}
         elif r < 0.2:
             nested = False
-        g = links.make_link(host, src, host_path=host_path, select=sel,
+        g = _fn("make_link")(host, src, host_path=host_path, select=sel,
                             include_nested=nested)
         host.groups.append(g)
         host.version += 1
@@ -391,21 +403,21 @@ def run_case(seed, tmp):
                 src = rng.choice(srcs)
                 _write_source(src, rng, nested=leaf if src == srcs[0] else None,
                               generation=step)
-                links.reload(host, src, host_path)
+                _fn("reload")(host, src, host_path)
             elif op == "switch" and host.layers:
                 ly = rng.choice(list(host.layers))
                 ingetrazo_core.tag_edits.set_visible(host, [ly.key], not ly.visible)
             elif op == "note" and host.layers:
                 ly = rng.choice(list(host.layers))
-                run.steps.append(["note-answer", links.note_visibility(host, ly.key, False)])
-            elif op == "clear" and links.sources(host):
-                links.clear_overrides(host, rng.choice(links.sources(host)), host_path)
-            elif op == "pack" and links.sources(host):
-                p = rng.choice(links.sources(host))
-                links.set_packed(host, p, not links.is_packed(host, p))
+                run.steps.append(["note-answer", _fn("note_visibility")(host, ly.key, False)])
+            elif op == "clear" and _fn("sources")(host):
+                _fn("clear_overrides")(host, rng.choice(_fn("sources")(host)), host_path)
+            elif op == "pack" and _fn("sources")(host):
+                p = rng.choice(_fn("sources")(host))
+                _fn("set_packed")(host, p, not _fn("is_packed")(host, p))
             elif op == "nested" and tops:
                 g = rng.choice(tops)
-                links.set_include_nested(host, g, not links.link_of(g).get("include_nested", True))
+                _fn("set_include_nested")(host, g, not _fn("link_of")(g).get("include_nested", True))
             elif op == "unlink" and tops:
                 history.execute(UnlinkCommand([rng.choice(tops)]))
             elif op == "undo":
@@ -447,17 +459,17 @@ def pure_cases():
     """The path and name helpers, on fixed inputs."""
     from core import links
     out = {}
-    out["stable_uid"] = [links.stable_uid(a, b) for a, b in
+    out["stable_uid"] = [_fn("stable_uid")(a, b) for a, b in
                          [("a", "b"), ("", ""), ("0123456789abcdef", "fedcba9876543210"),
                           ("Ü", "日本"), ("x" * 200, "y:z")]]
-    out["tag_name"] = [links.tag_name(p, t) for p in ("/a/Site.igz", "Site", "/a/b.c.igz", "/a/.hidden")
+    out["tag_name"] = [_fn("tag_name")(p, t) for p in ("/a/Site.igz", "Site", "/a/b.c.igz", "/a/.hidden")
                        for t in (None, "", "Layer 0", "Wood", "Mid / Steel")]
     errors = []
     for sel in (None, {}, {"uids": []}, {"uids": ["a"]}, {"uids": [["a", "b"]]},
                 {"uids": [[]]}, {"uids": "a"}, {"uids": [1]}, {"uids": ["a"], "filter": {}},
                 {"other": 1}, [1]):
         try:
-            links.validate_select(sel)
+            _fn("validate_select")(sel)
             errors.append(None)
         except Exception as exc:  # noqa: BLE001
             errors.append([type(exc).__name__, str(exc)])

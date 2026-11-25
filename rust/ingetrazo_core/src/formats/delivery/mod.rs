@@ -192,9 +192,7 @@ impl<'p> Scope<'p> {
         if !inside && kids.is_empty() && !editing {
             return Ok(None);
         }
-        let item = py
-            .import("core.links")?
-            .call_method1("_clone_shell", (g,))?;
+        let item = crate::model::links::clone_shell_of(g)?;
         let mesh = g.getattr("mesh")?;
         if editing {
             let test = self.wanted.as_ref().unwrap().getattr("__contains__")?;

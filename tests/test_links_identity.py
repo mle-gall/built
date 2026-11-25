@@ -1,3 +1,4 @@
+import ingetrazo_core
 """Link identities belong to source placements, independent of labels and reloads."""
 import pytest
 from core import links
@@ -22,7 +23,7 @@ def test_stable_hosts_subset_and_rename(tmp_path):
     group = links.make_link(host, path, select={'uids': selected})
     host.groups.append(group)
     expected = [c.uid for c in group.children]
-    assert expected == [links.stable_uid(group.uid, uid) for uid in selected]
+    assert expected == [ingetrazo_core.link_stable_uid(group.uid, uid) for uid in selected]
     for name in ('one', 'two'):
         file = tmp_path / (name + '.igz')
         igz.save_scene(host, file)
@@ -119,7 +120,7 @@ def test_nested_link_policy_per_placement(tmp_path):
     parent = Group(name='local assembly')
     parent.adopt([Group(name='local part'), links.make_link(middle, leaf_path)])
     middle.groups = [parent]
-    links.set_packed(middle, leaf_path, True)
+    ingetrazo_core.link_set_packed(middle, leaf_path, True)
     middle_path = tmp_path / 'middle.igz'
     igz.save_scene(middle, middle_path)
 
@@ -210,7 +211,12 @@ def test_bridge_source_save_updates_one_binary_mesh_in_resident_scene(tmp_path, 
         return got
 
     monkeypatch.setattr(igz, "_read_geometry_members", track)
-    monkeypatch.setattr(links, "_apply_tags", lambda *a: pytest.fail("unchanged tags"))
+    sync = ingetrazo_core.link_sync_tags
+
+    def unchanged(*a):
+        assert not sync(*a), "unchanged tags"
+        return False
+    monkeypatch.setattr(ingetrazo_core, "link_sync_tags", unchanged)
     links.reload(host, path)
     assert len(inflated) == 1
     assert placed.children == old_groups
@@ -246,7 +252,7 @@ def test_nested_source_notification_keeps_outer_ids_tags_and_pack_policy(tmp_pat
     assert outer.children[0].children == parts
     assert parts[1].layer == tag and len(parts[1].mesh.faces) == 2
     assert [i for i, part in enumerate(parts) if part.mesh is not original[i]] == [1]
-    links.set_packed(host, middle_path, True)
+    ingetrazo_core.link_set_packed(host, middle_path, True)
     leaf.groups[1].mesh.clear()
     igz.save_scene(leaf, path)
     links.reload(host, path)

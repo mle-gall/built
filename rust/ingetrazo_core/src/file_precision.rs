@@ -158,7 +158,7 @@ fn built_export_placements<'py>(scene: &Obj<'py>) -> PyResult<Bound<'py, PyDict>
         Ok(())
     };
     placements(&mesh, identity, identity)?;
-    let placeholder = py.import("core.links")?.getattr("save_as_placeholder")?;
+    let placeholder = crate::model::module(py, "ingetrazo_core")?.getattr("link_save_as_placeholder")?;
     for key in ["groups", "kept_components"] {
         let Ok(groups) = scene.getattr(key) else {
             continue;

@@ -1299,7 +1299,7 @@ class SetTagStateCommand(Command):
     flags."""
     keeps_paint = True
     keeps_rows = True
-    #: Tag flags, folder visibility and the links' overrides (plugin data)
+    #: Tag flags, folder visibility and the links' overrides (the registry)
     #: are all document state: the step's transaction undoes it.
     doc_undo = True
 
@@ -1316,16 +1316,16 @@ class SetTagStateCommand(Command):
 
     def do(self, scene):
         from copy import deepcopy
-        from core import layers as L, links
+        from core import layers as L
         self.before = ingetrazo_core.tag_edits.layer_state(scene)
-        self.links_before = deepcopy({k: e.get("overrides") for k, e in links.registry_view(scene).items()
+        self.links_before = deepcopy({k: e.get("overrides") for k, e in ingetrazo_core.link_registry_view(scene).items()
                                       if isinstance(e, dict)})
         if self.visible is not None:
             for key in self.folders:
                 scene.folder_visibility[key] = bool(self.visible)
             ingetrazo_core.tag_edits.set_visible(scene, self.tags, self.visible)
             for key in self.tags:
-                links.note_visibility(scene, key, bool(self.visible))
+                ingetrazo_core.link_note_visibility(scene, key, bool(self.visible))
             for entity in list(scene.selection):
                 if not scene.entity_visible(entity):
                     scene.selection.discard(entity)
@@ -1334,9 +1334,9 @@ class SetTagStateCommand(Command):
         scene.version += 1
 
     def undo(self, scene):
-        from core import layers as L, links
+        from core import layers as L
         ingetrazo_core.tag_edits.apply_layer_state(scene, self.before)
-        for key, entry in links.registry_view(scene).items():
+        for key, entry in ingetrazo_core.link_registry_view(scene).items():
             if isinstance(entry, dict) and key in self.links_before:
                 entry["overrides"] = dict(self.links_before[key] or {})
         scene.version += 1
@@ -1346,7 +1346,7 @@ def set_tag_state(history, tags=(), folders=(), visible=None, locked=None):
     """Show or hide (``visible``) and lock or unlock (``locked``) tags
     (keys) and tag folders (keys; visibility only) as one undoable step.
     A linked file's tag (``"A / Rails"``) records the host's override in
-    ``plugin_data["links"][path]["overrides"]`` (§1). Unknown keys raise
+    ``scene.link_registry[path]["overrides"]`` (§1). Unknown keys raise
     ``KeyError`` before anything runs."""
     scene = history.scene
     tags, folders = list(dict.fromkeys(tags)), list(dict.fromkeys(folders))

@@ -257,13 +257,10 @@ impl GroupGeometry {
 }
 
 fn copy_tree<'py>(api: &Obj<'py>, group: &Obj<'py>) -> PyResult<Obj<'py>> {
-    let py = group.py();
     let copy = api.call_method1("copy_group", (group,))?;
     copy.setattr("uid", group.getattr("uid")?)?;
     if api.call_method1("_is_link", (group,))?.is_truthy()? {
-        let children = py
-            .import("core.links")?
-            .call_method1("copy_parts", (group, &copy))?;
+        let children = crate::model::links::copy_parts(group, &copy)?;
         copy.setattr("children", children)?;
     } else {
         if !group.getattr("xform")?.is_none() {

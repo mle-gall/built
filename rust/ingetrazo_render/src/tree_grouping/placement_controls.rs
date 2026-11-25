@@ -157,9 +157,7 @@ pub(super) fn act(win: &Bound<'_, PyAny>, clicked: &Bound<'_, PyAny>, verb: &str
             if !g.is(clicked) && !(multi && picked.contains(&(g.as_ptr() as usize))) {
                 continue;
             }
-            let holder = py
-                .import("core.links")?
-                .call_method1("linked_ancestor", (g,))?;
+            let holder = crate::host_context::core_module(py)?.call_method1("link_linked_ancestor", (g,))?;
             if !holder.is_none() && !holder.is(g) {
                 continue;
             }

@@ -82,7 +82,7 @@ def _host(tmp_path, packed=False):
     other = copy_group(link, V(20, 0, 0))
     host.groups.append(other)
     if packed:
-        links.set_packed(host, src, True)
+        ingetrazo_core.link_set_packed(host, src, True)
     host.version += 1
     return host, link, other, src
 
@@ -128,9 +128,9 @@ def assert_live(g, src):
     assert links.is_linked(g)
     assert links.link_of(g)["path"] == str(src)
     for p in _parts(g):
-        assert links.linked_ancestor(p) is g
+        assert ingetrazo_core.link_linked_ancestor(p) is g
         if hasattr(p, "source_uid"):      # not on a packed link read back
-            assert p.uid == links.stable_uid(g.uid, p.source_uid)
+            assert p.uid == ingetrazo_core.link_stable_uid(g.uid, p.source_uid)
 
 
 def assert_own(g, others):
@@ -139,7 +139,7 @@ def assert_own(g, others):
     assert not links.is_linked(g)
     assert g.is_component()
     for p in _parts(g):
-        assert links.linked_ancestor(p) is None
+        assert ingetrazo_core.link_linked_ancestor(p) is None
         assert p.owner is None
         assert not hasattr(p, "source_uid")
         assert not links.is_linked(p)
@@ -181,8 +181,8 @@ def test_unlink_keeps_the_look_and_owns_its_geometry(tmp_path, packed):
     assert_live(other, src)
     assert _look(other) == other_look
     # The source still linked by ``other``: still registered, still watched.
-    assert links.sources(host) == [links._norm(src)]
-    assert links.is_packed(host, src) == packed
+    assert links.sources(host) == [ingetrazo_core.link_norm(src)]
+    assert ingetrazo_core.link_is_packed(host, src) == packed
     after_parts = _parts(link)
 
     history.undo()
@@ -226,7 +226,7 @@ def test_unlinking_both_placements_in_one_step(tmp_path):
     history.undo()
     assert_live(link, src)
     assert_live(other, src)
-    assert links.sources(host) == [links._norm(src)]
+    assert links.sources(host) == [ingetrazo_core.link_norm(src)]
 
 
 def test_a_part_or_a_host_component_is_not_unlinked(tmp_path):
@@ -316,7 +316,7 @@ def _shape(g):
 
 def _tags_and_registry(scene):
     from copy import deepcopy
-    return _tag_state(scene), deepcopy(links.registry(scene)), \
+    return _tag_state(scene), deepcopy(scene.link_registry), \
         dict(scene.layer_folder_names), sorted(scene.materials)
 
 
@@ -334,33 +334,33 @@ def test_a_file_linked_inside_the_source_stays_a_live_link(tmp_path):
     # under the uids a reload of Leaf gives them.
     (nested,) = [p for p in _parts(link) if links.is_linked(p)]
     assert links.link_of(nested)["path"] == str(leaf_path)
-    assert links.linked_ancestor(nested.owner) is None
+    assert ingetrazo_core.link_linked_ancestor(nested.owner) is None
     assert nested.uid == inner.uid
     leaf_parts = _parts(nested)
     for p in _parts(link):
         if p is nested or p in leaf_parts:
             continue
-        assert links.linked_ancestor(p) is None and p.owner is None
+        assert ingetrazo_core.link_linked_ancestor(p) is None and p.owner is None
     for p, _m in iter_placements(nested):
         if p is not nested:
-            assert links.linked_ancestor(p) is nested
-            assert p.uid == links.stable_uid(nested.uid, p.source_uid)
+            assert ingetrazo_core.link_linked_ancestor(p) is nested
+            assert p.uid == ingetrazo_core.link_stable_uid(nested.uid, p.source_uid)
     assert _shape(link) == shape                        # looks as it did
     # Leaf's tags are the host's link of Leaf now: its own folder in
     # «Linked files», the switch made on Mid's copy kept as an override.
-    steel = host.layer_by_key(links.tag_name(leaf_path, "Steel"))
+    steel = host.layer_by_key(ingetrazo_core.link_tag_name(leaf_path, "Steel"))
     assert steel is not None and steel.folder == "Leaf"
     assert host.folder_parents["Leaf"] == links.LINKED_FOLDER
     assert steel.visible is False
-    entry = links.registry(host)[links._norm(leaf_path)]
+    entry = host.link_registry[ingetrazo_core.link_norm(leaf_path)]
     assert entry["overrides"] == {steel.key: False}
     face_tags = {layer_of(f) for p, _m in iter_placements(nested)
                  for f in p.mesh.faces}
     assert face_tags == {steel.key}
     # Still watched (and listed): both files are linked.
     assert sorted(links.sources(host)) == sorted(
-        [links._norm(mid_path), links._norm(leaf_path)])
-    rows = [r for r in links.query(host) if r["uid"] == nested.uid]
+        [ingetrazo_core.link_norm(mid_path), ingetrazo_core.link_norm(leaf_path)])
+    rows = [r for r in ingetrazo_core.link_query(host) if r["uid"] == nested.uid]
     assert rows and rows[0]["status"] == "resolved"
     # It follows its file.
     n, n_other = _faces(nested), _faces(other)
@@ -383,12 +383,12 @@ def test_undo_and_redo_around_a_nested_link_are_exact(tmp_path):
     history.undo()
     assert link.children == before and _parts(link) == parts
     assert links.is_linked(link)
-    assert all(links.linked_ancestor(p.owner) is link for p in link.children)
+    assert all(ingetrazo_core.link_linked_ancestor(p.owner) is link for p in link.children)
     assert _tags_and_registry(host) == state
     history.redo()
     assert _parts(link) == after                 # the very same objects
     (nested,) = [p for p in _parts(link) if links.is_linked(p)]
-    assert links.linked_ancestor(nested.owner) is None
+    assert ingetrazo_core.link_linked_ancestor(nested.owner) is None
     assert _tags_and_registry(host) == after_state
     history.undo()
     assert _tags_and_registry(host) == state
@@ -402,8 +402,8 @@ def test_a_nested_file_that_cannot_be_read_keeps_what_it_showed(tmp_path):
     history = History(host)
     history.execute(UnlinkCommand([link]))
     (nested,) = [p for p in _parts(link) if links.is_linked(p)]
-    assert links.linked_ancestor(nested.owner) is None
-    assert all(links.linked_ancestor(p) is nested for p in _parts(nested))
+    assert ingetrazo_core.link_linked_ancestor(nested.owner) is None
+    assert all(ingetrazo_core.link_linked_ancestor(p) is nested for p in _parts(nested))
     assert _shape(link) == shape
     assert set(_meshes(nested)) <= set(inner_meshes) | {id(nested.mesh)}
     history.undo()
@@ -420,11 +420,11 @@ def test_a_nested_link_in_the_window_is_watched_and_listed(native_host, tmp_path
     watcher = win._link_watcher()
     watcher.refresh()
     watched = lambda: sorted(os.path.normcase(p) for p in watcher.paths)
-    both = sorted([links._norm(mid_path), links._norm(leaf_path)])
+    both = sorted([ingetrazo_core.link_norm(mid_path), ingetrazo_core.link_norm(leaf_path)])
     assert watched() == both
     host_scene.select([link])
     win._on_make_unique()
-    assert watched() == [links._norm(leaf_path)]
+    assert watched() == [ingetrazo_core.link_norm(leaf_path)]
     from tests.test_tree_links import _View
     from views import wgpu_ui
     view = _View()
@@ -433,7 +433,7 @@ def test_a_nested_link_in_the_window_is_watched_and_listed(native_host, tmp_path
     win._on_undo()
     assert watched() == both
     win._on_redo()
-    assert watched() == [links._norm(leaf_path)]
+    assert watched() == [ingetrazo_core.link_norm(leaf_path)]
 
 
 # ---- 2. tags and the registry ------------------------------------------------
@@ -449,7 +449,7 @@ def _released(look, src):
     """``look`` with the file's «Untagged» read as the host's Untagged:
     what a last unlinked placement wears (they draw the same)."""
     from core.layers import DEFAULT_LAYER
-    u = links.tag_name(src, None)
+    u = ingetrazo_core.link_tag_name(src, None)
     swap = {u: DEFAULT_LAYER, repr(u): repr(DEFAULT_LAYER)}
     who = {u: ""}                       # a placement's own tag: none
     return sorted(tuple(swap.get(x, x) if isinstance(x, str) else
@@ -461,7 +461,7 @@ def _released(look, src):
 def _full_tag_state(scene):
     from copy import deepcopy
     return (_tag_state(scene), dict(scene.layer_folder_names),
-            dict(scene.layer_folder_uids), deepcopy(links.registry(scene)))
+            dict(scene.layer_folder_uids), deepcopy(scene.link_registry))
 
 
 def _foldered_source(path):
@@ -501,17 +501,17 @@ def _faces_on(g, key):
 
 def test_the_last_placement_moves_its_tags_to_the_top(tmp_path):
     host, link, src = _one_link(tmp_path)
-    key = lambda tag: links.tag_name(src, tag)
+    key = lambda tag: ingetrazo_core.link_tag_name(src, tag)
     host.layer_by_key(key("Wood")).visible = False      # switched in the host
-    assert links.note_visibility(host, key("Wood"), False)
+    assert ingetrazo_core.link_note_visibility(host, key("Wood"), False)
     before = _full_tag_state(host)
-    entry = dict(links.registry(host)[links._norm(src)])
+    entry = dict(host.link_registry[ingetrazo_core.link_norm(src)])
     shown = {ly.key: (ly.name, ly.visible, repr(ly.color)) for ly in host.layers}
     look = _look(link)
     history = History(host)
     history.execute(UnlinkCommand([link]))
-    assert links.registry(host) == {}
-    assert links.source_of_tag(host, key("Wood")) is None     # the host's own
+    assert host.link_registry == {}
+    assert ingetrazo_core.link_source_of_tag(host, key("Wood")) is None     # the host's own
     # The same tags, by key, label, colour and visibility; out at the top.
     for tag in ("Wood", "Beams", "Columns"):
         ly = host.layer_by_key(key(tag))
@@ -531,13 +531,13 @@ def test_the_last_placement_moves_its_tags_to_the_top(tmp_path):
     # The file's Untagged is the host's Untagged; the rest looks the same.
     assert host.layer_by_key(key(None)) is None
     assert _look(link) == _released(look, src)
-    assert not links.note_visibility(host, key("Wood"), True)
+    assert not ingetrazo_core.link_note_visibility(host, key("Wood"), True)
     after = _full_tag_state(host)
 
     history.undo()
     assert _full_tag_state(host) == before
-    assert links.registry(host)[links._norm(src)] == entry
-    assert links.source_of_tag(host, key("Wood")) == links._norm(src)
+    assert host.link_registry[ingetrazo_core.link_norm(src)] == entry
+    assert ingetrazo_core.link_source_of_tag(host, key("Wood")) == ingetrazo_core.link_norm(src)
     assert _look(link) == look
     history.redo()
     assert _full_tag_state(host) == after
@@ -552,9 +552,9 @@ def test_tags_stay_in_their_folder_while_another_placement_links_the_file(tmp_pa
     history = History(host)
     history.execute(UnlinkCommand([link]))
     assert _tag_state(host) == before[0]
-    assert host.layer_by_key(links.tag_name(src, "Beams")).folder != None
+    assert host.layer_by_key(ingetrazo_core.link_tag_name(src, "Beams")).folder != None
     history.execute(UnlinkCommand([other]))                   # the last one
-    assert host.layer_by_key(links.tag_name(src, "Wood")).folder is None
+    assert host.layer_by_key(ingetrazo_core.link_tag_name(src, "Wood")).folder is None
     assert links.LINKED_FOLDER not in host.layer_folders
     history.undo()
     history.undo()
@@ -572,7 +572,7 @@ def test_a_tag_and_folder_named_as_the_hosts_merge_into_them(
     host.layers.append(Layer("Beams", folder="Structure", color=(0.0, 1.0, 0.0)))
     folders_of(host)
     host, link, src = _one_link(tmp_path, host=host)
-    key = lambda tag: links.tag_name(src, tag)
+    key = lambda tag: ingetrazo_core.link_tag_name(src, tag)
     before = _full_tag_state(host)
     old_parts = _parts(link)
     history = History(host)
@@ -607,10 +607,10 @@ def test_a_tag_worn_outside_the_link_is_not_merged_away(tmp_path):
     host, link, src = _one_link(tmp_path, host=host)
     mine = Group(_square(x=50), name="mine")
     mine.xform = QMatrix4x4()
-    mine.layer = links.tag_name(src, "Wood")       # the host's own, on it
+    mine.layer = ingetrazo_core.link_tag_name(src, "Wood")       # the host's own, on it
     host.groups.append(mine)
     History(host).execute(UnlinkCommand([link]))
-    ly = host.layer_by_key(links.tag_name(src, "Wood"))
+    ly = host.layer_by_key(ingetrazo_core.link_tag_name(src, "Wood"))
     assert ly is not None and ly.folder is None
     assert _faces_on(link, ly.key)
 
@@ -621,9 +621,9 @@ def test_a_hidden_file_folder_leaves_its_tags_hidden(tmp_path):
     look = _look(link)
     History(host).execute(UnlinkCommand([link]))
     # What came out to the top is hidden: a tag itself, a folder as a folder.
-    assert host.layer_by_key(links.tag_name(src, "Wood")).visible is False
-    assert host.folder_visibility[links.tag_name(src, "Structure")] is False
-    assert host.layer_by_key(links.tag_name(src, "Beams")).visible is True
+    assert host.layer_by_key(ingetrazo_core.link_tag_name(src, "Wood")).visible is False
+    assert host.folder_visibility[ingetrazo_core.link_tag_name(src, "Structure")] is False
+    assert host.layer_by_key(ingetrazo_core.link_tag_name(src, "Beams")).visible is True
     assert _look(link) == _released(look, src)
 
 
@@ -638,7 +638,7 @@ def test_the_nested_files_copies_of_their_tags_go(tmp_path):
     assert host.layer_by_key("Mid / Leaf / Steel") is None
     assert not [f for f in folders_of(host) if f.startswith("Mid")]
     # Leaf's own tags, as a link of the host's, stay where links' tags go.
-    steel = host.layer_by_key(links.tag_name(leaf_path, "Steel"))
+    steel = host.layer_by_key(ingetrazo_core.link_tag_name(leaf_path, "Steel"))
     assert steel.folder == "Leaf"
     assert host.folder_parents["Leaf"] == links.LINKED_FOLDER
 
@@ -688,12 +688,12 @@ def test_the_last_placement_is_no_longer_watched(native_host, tmp_path):
     scene.version += 1
     watcher = win._link_watcher()
     watcher.refresh()
-    assert [os.path.normcase(p) for p in watcher.paths] == [links._norm(src)]
+    assert [os.path.normcase(p) for p in watcher.paths] == [ingetrazo_core.link_norm(src)]
     scene.select([link])
     win._on_make_unique()
     assert watcher.paths == []
     win._on_undo()
-    assert [os.path.normcase(p) for p in watcher.paths] == [links._norm(src)]
+    assert [os.path.normcase(p) for p in watcher.paths] == [ingetrazo_core.link_norm(src)]
     win._on_redo()
     assert watcher.paths == []
 
@@ -792,14 +792,14 @@ def test_save_reopen_and_the_source_no_longer_reaches_it(tmp_path, packed):
     (mine,) = [g for g in back.groups if g.uid == link.uid]
     (theirs,) = [g for g in back.groups if g.uid == other.uid]
     assert not links.is_linked(mine)
-    assert all(links.linked_ancestor(p) is None for p in _parts(mine))
+    assert all(ingetrazo_core.link_linked_ancestor(p) is None for p in _parts(mine))
     assert [p.uid for p in _parts(mine)] == uids
     assert _look(mine) == look
     assert_live(theirs, src)
     n_mine, n_theirs = _faces(mine), _faces(theirs)
     _edit_source(src)
     if packed:
-        links.set_packed(back, src, False)
+        ingetrazo_core.link_set_packed(back, src, False)
     links.reload(back, src)
     assert _faces(mine) == n_mine                    # no longer follows
     assert _faces(theirs) == n_theirs + 2            # still follows
