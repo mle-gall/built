@@ -405,7 +405,7 @@ def test_the_list_rows_carry_a_thumbnail(win):
 
 def test_a_long_list_offers_a_name_filter_that_survives_a_refresh(win, monkeypatch):
     from tests.test_library_sheet import act, frame, tiles
-    from core import library
+    from ingetrazo_core import component_library as library
     monkeypatch.setattr(library, "index", lambda refresh: [])
     names = ["Silla", "Sillón", "Mesa", "Lámpara", "Puerta P1", "Puerta P2", "Ventana V1", "Árbol"]
     scene = win.viewport.scene

@@ -62,7 +62,7 @@ impl CatalogueSession {
                 .bind(py)
                 .call_method1(
                     "submit",
-                    (py.import("core.library")?.getattr("index")?, refresh),
+                    (py.import("ingetrazo_core")?.getattr("component_library")?.getattr("index")?, refresh),
                 )?
                 .unbind(),
         );
@@ -107,7 +107,7 @@ impl CatalogueSession {
     }
     fn act(&mut self, py: Python, verb: &str, args: Vec<String>) -> PyResult<bool> {
         let key = args.first().map(String::as_str).unwrap_or("");
-        let library = py.import("core.library")?;
+        let library = py.import("ingetrazo_core")?.getattr("component_library")?;
         match verb {
             "visible" => {
                 library.call_method1("prefetch_thumbnails", (self.model.visible(args),))?;
@@ -142,7 +142,7 @@ impl CatalogueSession {
     }
     fn poll(slf: &Bound<Self>) -> PyResult<()> {
         let py = slf.py();
-        let library = py.import("core.library")?;
+        let library = py.import("ingetrazo_core")?.getattr("component_library")?;
         let mut s = slf.borrow_mut();
         if s.timer.is_none() {
             return Ok(());
