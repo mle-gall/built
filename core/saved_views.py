@@ -237,42 +237,9 @@ class SavedView(Record):
 
     # ---- Serialisation (.igz) ------------------------------------------------
     def to_dict(self) -> dict:
-        entry: dict = {
-            "name": self.name,
-            "target": [self.target[0], self.target[1], self.target[2]],
-            "distance": self.distance,
-            "yaw": self.yaw,
-            "pitch": self.pitch,
-        }
-        if self.fov_deg != 45.0:
-            entry["fov"] = self.fov_deg
-        if not self.perspective:
-            entry["parallel"] = True
-        if self.two_point:
-            entry["two_point"] = True
-        if self.lens:
-            entry["lens"] = dict(self.lens)
-        if self.hidden_layers:
-            entry["hidden_layers"] = list(self.hidden_layers)
-        if self.hidden_folders is not None:
-            entry["hidden_folders"] = list(self.hidden_folders)
-        if self.style:
-            entry["style"] = dict(self.style)
-        if self.section is not None:
-            entry["section"] = dict(self.section)
-        if self.georef is not None:
-            entry["georef"] = dict(self.georef)
-        if self.shadows is not None:
-            entry["shadows"] = dict(self.shadows)
-        if self.hidden_objects is not None:
-            entry["hidden_objects"] = list(self.hidden_objects)
-        if self.hidden_shown is not None:
-            entry["hidden_shown"] = dict(self.hidden_shown)
-        if self.navigator_view is not None:
-            entry['navigator_view'] = self.navigator_view
-        if self.folder:
-            entry["folder"] = self.folder
-        return entry
+        """The .igz entry: defaults left out, ``parallel`` for the inverse
+        of ``perspective`` (the document's own archive, ``doc/file_view.rs``)."""
+        return self._file_view()
 
     @classmethod
     def from_dict(cls, raw: dict) -> "SavedView":
@@ -371,29 +338,12 @@ def from_lookat(name: str, eye, target, up, fov_deg: float = 45.0,
     survives the conversion exactly; for a straight-down view (plan), the
     stored ``up`` becomes the yaw (screen rotation) instead — that keeps
     "north up" plans north-up. For a parallel view, ``ortho_height``
-    (visible height in metres) sets the framing distance.
+    (visible height in metres) sets the framing distance
+    (``rust/ingetrazo_core/src/model/saved_view.rs``).
     """
-    import math
-    dx = eye[0] - target[0]
-    dy = eye[1] - target[1]
-    dz = eye[2] - target[2]
-    distance = math.sqrt(dx * dx + dy * dy + dz * dz) or 1.0
-    pitch = math.asin(max(-1.0, min(1.0, dz / distance)))
-    limit = math.radians(89.0)
-    if abs(pitch) < limit - 1e-6:
-        yaw = math.atan2(dy, dx)
-    else:
-        # Looking straight up/down: the horizontal direction is degenerate —
-        # recover the screen rotation from the stored up vector (at the pole
-        # the orbit camera's screen-up is −(cos yaw, sin yaw)).
-        yaw = math.atan2(-up[1], -up[0]) if (up[0] or up[1]) \
-            else math.radians(-90.0)
-    pitch = max(-limit, min(limit, pitch))
-    if not perspective and ortho_height and ortho_height > 0:
-        # The orbit camera sizes its parallel frustum from distance·tan(fov/2):
-        # pick the distance that reproduces the stored visible height.
-        distance = (ortho_height / 2.0) / math.tan(math.radians(fov_deg) / 2.0)
+    from ingetrazo_core import saved_view_lookat
+    distance, yaw, pitch = saved_view_lookat(eye, target, (-up[0], -up[1]), fov_deg, bool(perspective),
+                                             ortho_height or None)
     return SavedView(name, target=tuple(target), distance=distance, yaw=yaw,
                      pitch=pitch, fov_deg=fov_deg, perspective=perspective,
                      hidden_layers=hidden_layers)
-

@@ -31,7 +31,7 @@ def _touch(win) -> None:
 def open_project(win, path) -> bool:
     from ingetrazo_core import ProjectSession
     from core import recent
-    from views import chrome_dialogs as cd
+    from ingetrazo_render import chrome_dialogs as cd
     profile = getattr(win._host, "settings_dir", None)
     try:
         # The session lives in this profile (--settings, BUILT_SETTINGS_DIR),
@@ -130,7 +130,7 @@ def _finish(win, s) -> None:
     refresh(win)
     problems = s.problems()
     if problems:
-        from views import chrome_dialogs as cd
+        from ingetrazo_render import chrome_dialogs as cd
         text = problems[0][1] if len(problems) == 1 else tr("{n} project files did not open", n=len(problems))
         cd.notify(win, tr("Project {name}", name=Path(s.path).stem), text, tone="warning")
     persist(win)

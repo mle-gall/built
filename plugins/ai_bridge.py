@@ -1,29 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""AI Bridge plugin — let an AI coding agent drive the live document (MCP).
+"""Execute MCP requests on the main thread of the active document.
 
-The realisation of invariant #5 (AI-native): the agent generates RECIPES of
-actions over the deterministic engine, never raw meshes. The «AI» tab of
-the side tray (section "AI bridge (MCP)", or Extensions ▸ AI Bridge (MCP))
-starts a localhost-only TCP server; the companion
-``scripts/ingetrazo_mcp.py`` bridges it to Claude Code / Claude Desktop as
-an MCP server. The usual pattern for app MCP bridges (a TCP server inside
-the app + an MCP process outside), with three legs up:
-
-- ``run_python`` executes through the Python Console's transactional
-  machinery: every AI action is ONE undo step, and a script that raises is
-  rolled back whole — the agent can never leave the document half-mutated.
-- ``screenshot`` renders the real viewport (``render_image``), closing the
-  "the agent can't see what it built" gap: describe → build → LOOK → fix.
-- The hermeticity guard stays in the loop: recipes that would commit a
-  broken solid are refused by the engine itself.
-
-Protocol (framed for the bridge, not for humans): newline-delimited JSON on
-127.0.0.1:4763 (``INGETRAZO_AI_PORT`` overrides). Request
-``{"id": n, "tool": name, "args": {...}}`` → reply ``{"id": n, "ok": bool,
-"result": ... | "error": str}``. One client at a time; everything the tools
-touch runs on the Qt MAIN thread (queued-signal relay to a bound method —
-the documented PySide6 threading gotcha).
+Native POSIX panels open a user-private Unix socket on explicit request.
+The legacy client protocol uses newline-delimited JSON over loopback TCP.
 """
 from __future__ import annotations
 
@@ -35,12 +15,9 @@ import tempfile
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QObject, Qt, QTimer, Signal
-from PySide6.QtWidgets import (QHBoxLayout, QLabel, QPlainTextEdit,
-                               QPushButton, QVBoxLayout, QWidget)
+from queue import Empty, Queue
 
 from core.i18n import tr
-from views.fold_section import FoldSection, narrow
 
 DEFAULT_PORT = 4763
 _REFUSED = b'{"id": null, "ok": false, "error": "not a bridge request; closing"}\n'
@@ -52,33 +29,6 @@ _REFUSED = b'{"id": null, "ok": false, "error": "not a bridge request; closing"}
 UI_CALL_TIMEOUT = 1800.0
 
 
-class _NoDialogs(QObject):
-    """While an agent's code runs, nobody is at the screen to answer a
-    dialog it opens (#694): «Delete sheet» asks Yes/No, a sheet the
-    document cannot lose says so in a box. ``exec()`` then waited on the UI
-    thread for good — the agent got «timed out», the app looked hung, and
-    the next call ran INSIDE that dialog's event loop, nested in the first
-    call's undo step. Every dialog shown meanwhile is answered «Cancel» at
-    once (as Escape would) and named in the reply, so the agent knows."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.refused: list[str] = []
-
-    def eventFilter(self, obj, event):  # noqa: N802 — Qt override
-        if event.type() == QEvent.Show:
-            from PySide6.QtWidgets import QDialog, QMessageBox
-            if isinstance(obj, QDialog):
-                text = obj.windowTitle()
-                if isinstance(obj, QMessageBox) and obj.text():
-                    text = f"{text}: {obj.text()}" if text else obj.text()
-                self.refused.append(text or type(obj).__name__)
-                # Not from inside the Show: exec() only enters its loop
-                # after show() returns, and a reject before that is lost.
-                QTimer.singleShot(0, obj, obj.reject)
-        return False
-
-
 from core.agent_inspection import InspectionTools
 from core.agent_records import RecordTools
 from core.agent_facets import FacetTools
@@ -86,16 +36,10 @@ from core.agent_structure import StructureTools
 from core.agent_protocol import ProtocolTools
 
 
-class _Bridge(QObject, InspectionTools, RecordTools, FacetTools, StructureTools,
+class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
               ProtocolTools):
     """The in-app half: accepts one agent connection and executes its tool
-    calls on the Qt main thread."""
-
-    # Signal(object), NOT Signal(dict): a dict payload on a queued
-    # connection may be marshalled into a QVariantMap — the slot then gets a
-    # COPY, sets the copied Event, and the worker times out forever. object
-    # passes the PyObject by reference. (Cost us a hunt; now documented.)
-    _dispatch = Signal(object)
+    calls on the document host thread."""
 
     @property
     def _viewport(self):
@@ -106,7 +50,9 @@ class _Bridge(QObject, InspectionTools, RecordTools, FacetTools, StructureTools,
     def __init__(self, viewport) -> None:
         # The window's, not the viewport's: a project tab closed must not
         # take the bridge with it (#1066).
-        super().__init__(viewport.window() or viewport)
+        self._endpoint = None
+        self._jobs = Queue()
+        self._timer = None
         from views.documents import live_viewport
         self._live_viewport = live_viewport(viewport)
         self._server: socket.socket | None = None
@@ -124,34 +70,65 @@ class _Bridge(QObject, InspectionTools, RecordTools, FacetTools, StructureTools,
                      mutates=spec.get("mutates", spec["name"] in {"run_python", "undo", "redo"}))
         register(self.registry, "list_tools", self._tool_list_tools,
                  description="List currently available agent tools.")
-        # Queued to a BOUND method of this main-thread QObject — connecting a
-        # lambda would run the slot on the worker thread (CLAUDE.md gotcha).
-        self._dispatch.connect(self._run_on_main, Qt.QueuedConnection)
+
+    def poll(self):
+        try:
+            job = self._jobs.get_nowait()
+        except Empty:
+            return
+        self._run_on_main(job)
 
     # ---- Lifecycle ----------------------------------------------------------
-    def start(self) -> int:
-        port = int(os.environ.get("INGETRAZO_AI_PORT", DEFAULT_PORT))
-        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        srv.bind(("127.0.0.1", port))
-        srv.listen(1)
+    def start(self, *, private=False):
+        if self.running:
+            return self.port
+        if private:
+            from plugins._mcp_endpoint import listen
+            endpoint = listen()
+            srv = endpoint.__enter__()
+            self._endpoint = endpoint
+        else:
+            port = int(os.environ.get("INGETRAZO_AI_PORT", DEFAULT_PORT))
+            srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                srv.bind(("127.0.0.1", port))
+                srv.listen(1)
+            except OSError:
+                srv.close()
+                raise
         srv.settimeout(0.5)
         self._server = srv
-        self.port = srv.getsockname()[1]
-        self._stop.clear()
+        self.port = None if private else srv.getsockname()[1]
+        self._stop = threading.Event()
+        self._jobs = Queue()
         self._thread = threading.Thread(
-            target=self._serve, name="ingetrazo-ai-bridge", daemon=True)
-        self._thread.start()
+            target=self._serve, args=(srv, self._stop), name="ingetrazo-ai-bridge", daemon=True)
+        try:
+            self._timer = self._viewport.window()._host.timers.timer(self.poll, 20, True)
+            self._timer.start()
+            self._thread.start()
+        except Exception:
+            self.stop()
+            raise
         return self.port
 
     def stop(self) -> None:
         self._stop.set()
+        if self._timer is not None:
+            self._timer.stop()
         if self._server is not None:
             try:
                 self._server.close()
             except OSError:
                 pass
             self._server = None
+        if self._thread is not None and self._thread.is_alive():
+            self._thread.join(timeout=1.5)
+            self._thread = None
+        if self._endpoint is not None:
+            self._endpoint.__exit__(None, None, None)
+            self._endpoint = None
         self.port = None
 
     @property
@@ -159,9 +136,8 @@ class _Bridge(QObject, InspectionTools, RecordTools, FacetTools, StructureTools,
         return self._server is not None
 
     # ---- Worker side ---------------------------------------------------------
-    def _serve(self) -> None:
-        srv = self._server
-        while not self._stop.is_set() and srv is not None:
+    def _serve(self, srv, stop) -> None:
+        while not stop.is_set():
             try:
                 conn, _addr = srv.accept()
             except socket.timeout:
@@ -171,7 +147,7 @@ class _Bridge(QObject, InspectionTools, RecordTools, FacetTools, StructureTools,
             with conn:
                 conn.settimeout(0.5)
                 buf = b""
-                while not self._stop.is_set():
+                while not stop.is_set():
                     try:
                         chunk = conn.recv(65536)
                     except socket.timeout:
@@ -220,8 +196,12 @@ class _Bridge(QObject, InspectionTools, RecordTools, FacetTools, StructureTools,
         if not isinstance(req, dict):
             return None
         job = {"req": req, "done": threading.Event(), "reply": None}
-        self._dispatch.emit(job)
-        job["done"].wait(timeout=UI_CALL_TIMEOUT)
+        self._jobs.put(job)
+        import time
+        deadline = time.monotonic() + UI_CALL_TIMEOUT
+        while not job["done"].wait(.1):
+            if self._stop.is_set() or time.monotonic() >= deadline:
+                break
         reply = job["reply"] or {"id": req.get("id"), "ok": False,
                                  "error": f"timed out on the UI thread after "
                                           f"{UI_CALL_TIMEOUT:.0f} s (the call may "
@@ -241,10 +221,34 @@ class _Bridge(QObject, InspectionTools, RecordTools, FacetTools, StructureTools,
             job["done"].set()
             return
         self._busy = True
-        from PySide6.QtWidgets import QApplication
-        guard = _NoDialogs()
-        QApplication.instance().installEventFilter(guard)
+        from ingetrazo_render import chrome_dialogs, chrome_forms
+        win = self._viewport.window()
+        previous_forms = tuple(chrome_forms.forms(win))
+        previous_sheets = tuple(chrome_dialogs._sheets(win))
+        refused = []
+
+        def cancel_new_dialogs():
+            for form in reversed(tuple(chrome_forms.forms(win))):
+                if form not in previous_forms:
+                    refused.append(form.title)
+                    form.close()
+            sheet = chrome_dialogs.current_sheet(win)
+            if sheet is not None and sheet not in previous_sheets:
+                refused.append(sheet.title)
+                if sheet.cancel is not None:
+                    chrome_dialogs.answer(win, sheet.cancel)
+                elif sheet.blocking:
+                    sheet.event_loop.quit()
+                else:
+                    chrome_dialogs._pop(win, sheet)
+                    if sheet.done:
+                        sheet.done(None)
+
+        # Synchronous questions pump native window timers while their caller
+        # waits. Cancel them inside that loop so the request can return.
+        guard = win._host.timers.timer(cancel_new_dialogs, 20, True)
         try:
+            guard.start()
             entry = self.registry.get(tool) or self._extension_tools.get(tool)
             if entry is None:
                 raise ValueError(f"unknown tool {tool!r}")
@@ -258,17 +262,17 @@ class _Bridge(QObject, InspectionTools, RecordTools, FacetTools, StructureTools,
                 result = run_callable_transactional(self._viewport, lambda: entry["fn"](**args))
             else:
                 result = json_value(entry["fn"](**args))
-            if guard.refused and isinstance(result, dict):
-                result["dialogs_cancelled"] = list(guard.refused)
+            cancel_new_dialogs()
+            if refused and isinstance(result, dict):
+                result["dialogs_cancelled"] = refused
                 result["stderr"] = (result.get("stderr") or "") + "".join(
-                    f"A dialog nobody can answer over the bridge was "
-                    f"cancelled: {t!r}\n" for t in guard.refused)
+                    f"Dialog cancelled: {title}\n" for title in refused)
             job["reply"] = {"id": req.get("id"), "ok": True, "result": result}
         except Exception as exc:  # noqa: BLE001 — reported to the agent
             job["reply"] = {"id": req.get("id"), "ok": False,
                             "error": f"{type(exc).__name__}: {exc}"}
         finally:
-            QApplication.instance().removeEventFilter(guard)
+            guard.stop()
             self._busy = False
             job["done"].set()
 
@@ -386,10 +390,16 @@ class _Bridge(QObject, InspectionTools, RecordTools, FacetTools, StructureTools,
         window = self._viewport.window()
         shown = getattr(window, "_shown_viewport", None)
         view = shown() if shown is not None else self._viewport
-        image = view.render_image(width, height)
-        out_dir = Path(tempfile.gettempdir()) / "ingetrazo-ai"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out = out_dir / "viewport.png"
+        from app_shell import native
+        if native.available():
+            from ingetrazo_render import SurveyRaster
+            frame = window.view.render_pixels(width, height)
+            image = SurveyRaster(*frame) if frame else None
+        else:
+            image = view.render_image(width, height)
+        if not hasattr(self, "_captures"):
+            self._captures = tempfile.TemporaryDirectory(prefix="built-mcp-capture-")
+        out = Path(self._captures.name) / "viewport.png"
         if image is None or not image.save(str(out)):
             raise RuntimeError("Could not save the viewport screenshot")
         return {"path": str(out), "width": width, "height": height,
@@ -502,122 +512,51 @@ def _bridge_of(viewport) -> _Bridge:
     if bridge is None:
         bridge = _Bridge(viewport)
         window._ai_bridge = bridge
+        window._extension_closed.connect(bridge.stop)
     return bridge
 
 
-class BridgeSection(QWidget):
-    """The bridge's part of the «AI» tab: on/off, where it listens, and
-    the exact lines to paste into the MCP client — the user who reached
-    this is rarely the one who knows them by heart."""
+class BridgeSection:
+    """Native descriptor for the window's MCP listener."""
+    id, title, slot = "bridge", tr("AI Bridge (MCP)"), "dock"
+
+    def __init__(self, viewport, invalidate=lambda: None):
+        from views.documents import live_viewport
+        self._live_viewport = live_viewport(viewport)
+        self.invalidate = invalidate
 
     @property
     def _viewport(self):
-        """The viewport of the project in front (projects in tabs, #1066):
-        the one handed in at setup may be a tab in the back, or closed."""
         return self._live_viewport()
 
-    def __init__(self, viewport, parent=None) -> None:
-        super().__init__(parent)
-        from views.documents import live_viewport
-        self._live_viewport = live_viewport(viewport)
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(4, 0, 4, 4)
-        self.section = FoldSection(tr("AI bridge (MCP)"), "ia/open_bridge",
-                                   default_open=False)
-        lay.addWidget(self.section)
-        body = QVBoxLayout(self.section.body)
-        self._status = QLabel()
-        self._status.setWordWrap(True)
-        body.addWidget(self._status)
-        row = QHBoxLayout()
-        self._toggle = QPushButton()
-        self._toggle.clicked.connect(self.toggle)
-        row.addWidget(self._toggle)
-        self._copy = QPushButton(tr("Copy"))
-        self._copy.setToolTip(tr("Copy the connection instructions"))
-        self._copy.clicked.connect(self._on_copy)
-        row.addWidget(self._copy)
-        body.addLayout(row)
-        self._text = QPlainTextEdit()
-        self._text.setReadOnly(True)
-        self._text.setLineWrapMode(QPlainTextEdit.WidgetWidth)
-        self._text.setMinimumHeight(140)
-        body.addWidget(self._text)
-        narrow(self._toggle, self._copy)
-        self._refresh()
-
     @property
-    def running(self) -> bool:
+    def running(self):
         bridge = getattr(self._viewport.window(), "_ai_bridge", None)
         return bridge is not None and bridge.running
 
-    def start(self) -> bool:
-        bridge = _bridge_of(self._viewport)
-        if bridge.running:
-            return True
-        try:
-            port = bridge.start()
-        except OSError as exc:
-            self._viewport.flash_status(tr(
-                "AI bridge could not start: {err}", err=str(exc)))
-            self._refresh(error=str(exc))
-            return False
-        self._port = port
-        self._viewport.flash_status(tr(
-            "AI bridge listening on 127.0.0.1:{port}", port=port), 8000)
-        self._refresh()
-        return True
-
-    def stop(self) -> None:
-        bridge = getattr(self._viewport.window(), "_ai_bridge", None)
-        if bridge is not None and bridge.running:
-            bridge.stop()
-            self._viewport.flash_status(tr("AI bridge stopped"))
-        self._refresh()
-
-    def toggle(self) -> None:
+    def stop(self):
         if self.running:
-            self.stop()
-        else:
-            self.start()
+            _bridge_of(self._viewport).stop()
+        self.invalidate()
 
-    def _refresh(self, error: str | None = None) -> None:
-        on = self.running
-        self._toggle.setText(tr("Stop bridge") if on else tr("Start bridge"))
-        self._copy.setVisible(on)
-        self._text.setVisible(on)
-        if on:
-            port = getattr(self, "_port", DEFAULT_PORT)
-            self._status.setText(tr(
-                "Listening on 127.0.0.1:{port} — connect your MCP client "
-                "with the lines below.", port=port))
-            self._text.setPlainText(connect_instructions(port))
-        elif error:
-            self._status.setText(tr(
-                "AI bridge could not start: {err}", err=error))
-        else:
-            self._status.setText(tr(
-                "Off. Start it to let an AI agent (Claude, Cursor, "
-                "Antigravity…) model in this document over MCP."))
+    def sections(self):
+        from core.plugin_panels import item, section
+        controls = [item("button", "toggle", tr("Stop bridge") if self.running else tr("Start bridge"))]
+        if self.running:
+            controls.append(item("log", "instructions", lines=[
+                tr("The private bridge is listening. Configure your MCP client to run:"),
+                f'"{sys.executable}" --mcp',
+            ]))
+        return [section("connection", self.title, *controls)]
 
-    def _on_copy(self) -> None:
-        from PySide6.QtWidgets import QApplication
-        QApplication.clipboard().setText(self._text.toPlainText())
-        self._viewport.flash_status(tr("Copied"))
+    def event(self, control, event, value):
+        if (control, event) == ("toggle", "invoke"):
+            if self.running:
+                self.stop()
+            else:
+                _bridge_of(self._viewport).start(private=True)
+                self.invalidate()
 
 
-def setup(app) -> None:
-    """The bridge joins the assistant in the side tray's «AI» tab; the
-    Extensions entry opens that section and starts the bridge."""
-    section = BridgeSection(app.viewport)
-    dock = app.add_panel(tr("AI"), section, panel="ai", icon="panel_ai")
-    app.window._ai_bridge_section = section
-
-    def summon() -> None:
-        app.show_panel(dock)
-        section.section.set_open(True)
-        section.start()
-
-    app.add_menu_action(tr("AI Bridge (MCP)"), summon, tip=tr(
-        "Start the local bridge through which an AI agent (MCP) drives "
-        "the open document."))
+def create_panel(app, invalidate):
+    return BridgeSection(app.viewport, invalidate)

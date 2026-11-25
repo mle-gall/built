@@ -10,12 +10,13 @@ use pyo3::{
     prelude::*,
     types::{PyDict, PySet},
 };
+use std::cell::OnceCell;
 
 struct Search<'py> {
     view: Bound<'py, PyAny>,
     hidden: Bound<'py, PyAny>,
-    key: Bound<'py, PyAny>,
-    excluded: Bound<'py, PySet>,
+    cap: Bound<'py, PyAny>,
+    excluded: OnceCell<(Bound<'py, PyAny>, Bound<'py, PySet>)>,
     staged: Bound<'py, PyAny>,
     camera: Projection<'py>,
     px: [f64; 2],
@@ -26,7 +27,21 @@ struct Search<'py> {
 }
 impl Search<'_> {
     fn excluded(&self, p: &Bound<'_, PyAny>) -> PyResult<bool> {
-        self.excluded.contains(self.key.call1((p,))?)
+        // Many drag samples miss every candidate. Quantize the cap only
+        // on the first actual exclusion check in this sample.
+        if self.excluded.get().is_none() {
+            let py = self.cap.py();
+            let key = super::adapters::imported(py, "core.topology")?.getattr("_key")?;
+            let keys = PySet::empty(py)?;
+            for point in self.cap.try_iter()? {
+                keys.add(key.call1((point?,))?)?;
+            }
+            self.excluded
+                .set((key, keys))
+                .expect("first exclusion check");
+        }
+        let (key, keys) = self.excluded.get().unwrap();
+        keys.contains(key.call1((p,))?)
     }
     fn is_staged(&self, item: &Bound<'_, PyAny>) -> PyResult<bool> {
         Ok(!item.get_type().getattr("__hash__")?.is_none() && self.staged.contains(item)?)
@@ -200,18 +215,13 @@ pub fn push_reference_target(
         .map(|v| v.extract())
         .transpose()?
         .unwrap_or(9.);
-    let key = py.import("core.topology")?.getattr("_key")?;
-    let excluded = PySet::empty(py)?;
-    for p in tool.getattr("_cap_positions")?.try_iter()? {
-        excluded.add(key.call1((p?,))?)?;
-    }
     let anchor = tool.getattr("_anchor")?;
     let normal = tool.getattr("_normal")?;
     let s = Search {
         view: view.clone(),
         hidden: tool.getattr("_reference_hidden")?,
-        key,
-        excluded,
+        cap: tool.getattr("_cap_positions")?,
+        excluded: OnceCell::new(),
         staged: tool.getattr("_stage_new")?,
         camera: Projection::from_view(view)?,
         px,
@@ -234,10 +244,9 @@ pub fn push_reference_target(
     };
     let mut best = refs
         .try_borrow_mut()?
-        .nearest(view, px, radius, s.excluded.as_any(), &s.hidden)?
+        .nearest_where(view, px, radius, &s.hidden, |p| s.excluded(p))?
         .map(|(dd, p)| (dd, DVec3::from(p.coords()), "vertex"));
-    let guides = py
-        .import("views.document_interaction")?
+    let guides = super::adapters::imported(py, "views.document_interaction")?
         .call_method1("shown_guides", (view.getattr("scene")?,))?;
     let mut consider = |p: DVec3, kind: &'static str| -> PyResult<()> {
         if let Some(dd) = s.distance2(p)? {

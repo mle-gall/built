@@ -394,7 +394,7 @@ class BlenderPanel:
             self._finished(self.proc.wait())
 
     def _render(self):
-        from views.chrome_dialogs import Job
+        from ingetrazo_render.chrome_dialogs import Job
         rb.work_base().mkdir(parents=True, exist_ok=True)
         self.work = Path(tempfile.mkdtemp(prefix="built-render-", dir=rb.work_base()))
         args = {k: self.opts[k] for k in ("engine", "width", "height", "ground", "keep_blend")}

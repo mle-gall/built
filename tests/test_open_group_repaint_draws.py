@@ -18,15 +18,12 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from core.group import Group
 from core.history import (SetFaceBackCommand, SetFaceColorCommand,
                           SetFaceOpacityCommand, SetFaceTextureCommand,
                           SetFaceMaterialTagCommand)
 from core.mesh import Mesh
-
-_app = QApplication.instance() or QApplication([])
 
 
 def _box_mesh(x0=-1, y0=-1, z0=0, x1=1, y1=1, z1=2):
@@ -98,10 +95,22 @@ def win(native_gpu_host):
     return window
 
 
+def _size(img):
+    """A capture's size: a SurveyRaster's properties, or a QImage's calls."""
+    return (img.width, img.height) if isinstance(img.width, int) else (img.width(), img.height())
+
+
 def _pixel(vp):
+    """The colour a little off the view's centre (the capture is a
+    SurveyRaster: RGBA bytes)."""
+    import numpy as np
     img = live_image(vp)
-    c = img.pixelColor(img.width() // 2 + 15, img.height() // 2 + 15)
-    return (c.red(), c.green(), c.blue())
+    w, h = _size(img)
+    if not hasattr(img, "rgba"):                 # a QImage, before the native capture
+        c = img.pixelColor(w // 2 + 15, h // 2 + 15)
+        return (c.red(), c.green(), c.blue())
+    px = np.frombuffer(img.rgba(), np.uint8).reshape(h, w, 4)
+    return tuple(int(v) for v in px[h // 2 + 15, w // 2 + 15, :3])
 
 
 def _red(rgb):
@@ -130,17 +139,14 @@ def _open(vp, layout):
     _pixel(vp)
 
 
-
 def _blue(rgb):
     return rgb[2] > 120 and rgb[0] < 90 and rgb[1] < 90
 
 
 def _red_image(tmp_path):
-    from PySide6.QtGui import QColor, QImage
-    img = QImage(8, 8, QImage.Format_RGB32)
-    img.fill(QColor(255, 0, 0))
+    from ingetrazo_render import SurveyRaster
     path = str(tmp_path / "red.png")
-    img.save(path)
+    assert SurveyRaster(8, 8, bytes((255, 0, 0, 255)) * 64).save(path)
     return {"path": path, "sw": 1.0, "sh": 1.0}
 
 
@@ -184,9 +190,9 @@ def test_a_paint_stays_on_screen_after_leaving_the_groups(win, layout):
     old material (the letters of the plaza, 04-11)."""
     vp = win.viewport
     _open(vp, layout)
-    img = live_image(vp)
-    x = (img.width() // 2 + 15) * vp.width() // img.width()
-    y = (img.height() // 2 + 15) * vp.height() // img.height()
+    w, h = _size(live_image(vp))
+    x = (w // 2 + 15) * vp.width() // w
+    y = (h // 2 + 15) * vp.height() // h
     face = vp.pick_face_any(x, y)[0]
     assert face is not None
     vp.history.execute(SetFaceColorCommand([face], (1.0, 0.0, 0.0)))

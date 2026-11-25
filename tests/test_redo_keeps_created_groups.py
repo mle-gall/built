@@ -173,10 +173,6 @@ def _snapshot(scene):
 def test_window_loose_geometry_and_one_group_then_explode_redoes_both(native_window):
     """The menu's way: a loose box and ONE group selected, Make Group,
     Explode, then Edit ▸ Undo twice and Edit ▸ Redo twice."""
-    import sys
-    from PySide6.QtWidgets import QApplication
-    if QApplication.instance() is None:
-        QApplication(sys.argv[:1])
     win = native_window
     vp = win.viewport
     scene, hist = vp.scene, vp.history

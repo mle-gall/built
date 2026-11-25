@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Tiled pixel transforms match the original full-image encoded output."""
+"""The native colourize pass (``texture_colorize_pixels``, which replaced the
+tiled NumPy one) matches the original full-image encoded output."""
 import numpy as np
 import pytest
 from PySide6.QtCore import QBuffer
@@ -63,7 +64,7 @@ def _whole_image_colorize(data, target_rgb, ctype=COLORIZE_SHIFT):
 @pytest.mark.parametrize("alpha", ["transparent", "opaque", "mixed"])
 @pytest.mark.parametrize("mode", [0, 1])
 @pytest.mark.parametrize("color", [(12, 190, 71), (0, 0, 0), (255, 255, 255)])
-def test_tiled_transforms_keep_exact_png_bytes(monkeypatch, alpha, mode, color):
+def test_colorize_keeps_exact_png_bytes(alpha, mode, color):
     rng = np.random.default_rng(24)
     pixels = rng.integers(0, 256, (37, 29, 4), dtype=np.uint8)
     if alpha != "mixed":
@@ -75,16 +76,4 @@ def test_tiled_transforms_keep_exact_png_bytes(monkeypatch, alpha, mode, color):
     data = bytes(buffer.data())
     expected = _whole_image_colorize(data, color, mode)
     assert expected is not data
-    calls = []
-    original = texture.rgb_to_hls
-
-    def counted(rgb):
-        calls.append(rgb.shape)
-        return original(rgb)
-
-    monkeypatch.setattr(texture, "_COLORIZE_TILE_PIXELS", 64)
-    monkeypatch.setattr(texture, "rgb_to_hls", counted)
     assert texture.colorize_image(data, color, mode) == expected
-    tiles = calls[2:]
-    assert len(tiles) > 1
-    assert all(shape[0] <= 64 and shape[1] == 3 for shape in tiles)

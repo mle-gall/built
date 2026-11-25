@@ -34,30 +34,12 @@ import ingetrazo_core as NATIVE
 from core import progress as _progress
 
 # ── Camera basis ────────────────────────────────────────────────────────────
-
-def camera_basis(camera):
-    """Right/up/forward unit vectors + eye, as NumPy rows, from an
-    OrbitCamera (same derivation as its lookAt)."""
-    eye = camera.eye()
-    e = np.array([eye.x(), eye.y(), eye.z()], dtype=np.float64)
-    t = np.array([camera.target.x(), camera.target.y(),
-                  camera.target.z()], dtype=np.float64)
-    up_v = camera.up_vector() if hasattr(camera, "up_vector") else camera.up
-    up = np.array([up_v.x(), up_v.y(), up_v.z()],
-                  dtype=np.float64)
-    f = t - e
-    f /= max(np.linalg.norm(f), 1e-12)
-    r = np.cross(f, up)
-    r /= max(np.linalg.norm(r), 1e-12)
-    u = np.cross(r, f)
-    return e, r, u, f
-
-
-def _to_cam(points: np.ndarray, eye, right, up, fwd) -> np.ndarray:
-    """World (N,3) → camera space (N,3): x right, y up, z = depth AWAY
-    from the camera (bigger = farther)."""
-    d = points - eye
-    return np.stack([d @ right, d @ up, d @ fwd], axis=1)
+# Rust (``rust/ingetrazo_core/src/model/hlr_view.rs``): ``camera_basis(camera)``
+# gives the right/up/forward unit vectors and the eye as NumPy rows (the
+# orbit camera's lookAt); ``_to_cam(points, eye, right, up, fwd)`` takes
+# world (N, 3) to camera space: x right, y up, z the depth AWAY from the eye.
+camera_basis = NATIVE.hlr_camera_basis
+_to_cam = NATIVE.hlr_to_cam
 
 
 # ── Scene collection ────────────────────────────────────────────────────────
@@ -199,43 +181,11 @@ def clip_to_section(tris, hard, soft, plane, split_cuts: bool = False):
     return tuple(out)
 
 
-def solid_depth(ring, tris, normal) -> float | None:
-    """How far the solid around section ring ``ring`` ((M, 3) world) runs
-    through the plane, square to it: from a point inside the ring, the
-    nearest of ``tris`` ((T, 3, 3), the solid's triangles) along
-    ``normal`` and the nearest against it, added. ``None`` when a ray finds
-    nothing (no point inside, an open solid)."""
-    ring = np.asarray(ring, dtype=np.float64)
-    T = np.asarray(tris, dtype=np.float64).reshape(-1, 3, 3)
-    if len(ring) < 3 or not len(T):
-        return None
-    n = np.asarray(normal, dtype=np.float64)
-    n = n / (np.linalg.norm(n) or 1.0)
-    # A point inside: the middle of the ring's longest chord through its
-    # centre would do for a convex ring; the centre itself for the usual
-    # rectangle of a beam or a stud.
-    origin = ring.mean(axis=0)
-    v0 = T[:, 0]
-    e1 = T[:, 1] - v0
-    e2 = T[:, 2] - v0
-    reach = []
-    for d in (n, -n):
-        # Moller-Trumbore, every triangle at once.
-        pv = np.cross(d, e2)
-        det = np.einsum("ij,ij->i", e1, pv)
-        ok = np.abs(det) > 1e-12
-        inv = np.where(ok, 1.0 / np.where(ok, det, 1.0), 0.0)
-        tv = origin - v0
-        u = np.einsum("ij,ij->i", tv, pv) * inv
-        qv = np.cross(tv, e1)
-        v = (qv @ d) * inv
-        t = np.einsum("ij,ij->i", e2, qv) * inv
-        hit = ok & (u >= -1e-9) & (v >= -1e-9) & (u + v <= 1 + 1e-9) \
-            & (t > 1e-9)
-        if not hit.any():
-            return None
-        reach.append(float(t[hit].min()))
-    return reach[0] + reach[1]
+#: ``solid_depth(ring, tris, normal)``: how far the solid around section ring
+#: ``ring`` ((M, 3) world) runs through the plane, square to it — from the
+#: ring's centre, the nearest of ``tris`` ((T, 3, 3)) along ``normal`` and the
+#: nearest against it, added; ``None`` when a ray finds nothing. In Rust.
+solid_depth = NATIVE.hlr_solid_depth
 
 
 def section_loops(cut_edges, tol: float | None = None,
@@ -262,44 +212,14 @@ def section_loops(cut_edges, tol: float | None = None,
     return native(cut_edges, None if tol is None else float(tol), members)
 
 
-def closing_tags(cut_edges, cut_tags) -> list:
-    """``cut_tags`` with each chord given the layer of the ring it closes.
-
-    Rings are chained one layer at a time, so that a wall's cut takes the
-    wall's fill and the door's beside it its own. But a solid is not always
-    of one layer — a wall with one face moved to another — and then neither
-    layer's chords close by themselves: the wall lost its fill altogether.
-    The chords that close no ring within their own layer are chained
-    together, whatever their layers, and each ring found that way goes to
-    the layer most of its outline belongs to."""
-    tags = list(cut_tags)
-    if len(set(tags)) < 2:
-        return tags
-    E = np.asarray(cut_edges, dtype=np.float64).reshape(-1, 2, 3)
-    by_tag: dict = {}
-    for k, tag in enumerate(tags):
-        by_tag.setdefault(tag, []).append(k)
-    loose: list = []
-    for tag, idx in by_tag.items():
-        closed: list = []
-        section_loops(E[idx], members=closed)
-        inside = {j for ring in closed for j in ring}
-        loose.extend(k for j, k in enumerate(idx) if j not in inside)
-    if not loose or len({tags[k] for k in loose}) < 2:
-        return tags
-    mixed: list = []
-    section_loops(E[loose], members=mixed)
-    for ring in mixed:
-        length: dict = {}
-        for j in ring:
-            k = loose[j]
-            length[tags[k]] = length.get(tags[k], 0.0) + float(
-                np.linalg.norm(E[k, 1] - E[k, 0]))
-        # The most outline; names break a tie so the answer is one.
-        winner = max(sorted(length, key=str), key=lambda t: length[t])
-        for j in ring:
-            tags[loose[j]] = winner
-    return tags
+#: ``closing_tags(cut_edges, cut_tags)``: ``cut_tags`` with each chord given
+#: the layer of the ring it closes. Rings are chained one layer at a time, so
+#: a wall's cut takes the wall's fill and the door's beside it its own; but a
+#: solid of more than one layer (a wall with one face moved to another) closes
+#: in neither, and lost its fill. The chords that close no ring within their
+#: own layer are chained together, and each ring found that way goes to the
+#: layer most of its outline belongs to (names break a tie). In Rust.
+closing_tags = NATIVE.hlr_closing_tags
 
 
 # ── The section cap: the poché covers ───────────────────────────────────────
@@ -318,55 +238,16 @@ def closing_tags(cut_edges, cut_tags) -> list:
 # plane, so they are never their own victims and the outline always survives.
 
 
-def cap_depth_affine(plane, eye, right, up, fwd):
-    """``(alpha, beta, gamma)`` with the cut plane's camera depth given by
-    ``alpha·x + beta·y + gamma`` over the camera plane — a parallel camera
-    maps a plane to a plane. ``None`` when the cut is seen edge-on: its cap
-    projects to a line and covers nothing."""
-    from core.triangulate import plane_axes
-    u, v = plane_axes(plane.normal)
-    p = plane.point
-    pts = np.array([[p.x(), p.y(), p.z()],
-                    [p.x() + u.x(), p.y() + u.y(), p.z() + u.z()],
-                    [p.x() + v.x(), p.y() + v.y(), p.z() + v.z()]],
-                   dtype=np.float64)
-    c = _to_cam(pts, eye, right, up, fwd)
-    area2 = ((c[1, 0] - c[0, 0]) * (c[2, 1] - c[0, 1])
-             - (c[1, 1] - c[0, 1]) * (c[2, 0] - c[0, 0]))
-    if abs(area2) < 1e-9:
-        return None
-    m = np.array([[c[0, 0], c[0, 1], 1.0],
-                  [c[1, 0], c[1, 1], 1.0],
-                  [c[2, 0], c[2, 1], 1.0]])
-    try:
-        return np.linalg.solve(m, c[:, 2])
-    except np.linalg.LinAlgError:
-        return None
-
-
-def cap_ring_edges(loops):
-    """Every ring of the cap as one pair of (K, 2) endpoint arrays ``P→Q``.
-    Stacking all the rings together IS the even-odd rule: a hollow wall's
-    inner ring flips the parity back, so its hole stays see-through."""
-    if not loops:
-        return None, None
-    P = np.concatenate([np.asarray(r, dtype=np.float64)[:, :2] for r in loops])
-    Q = np.concatenate([np.roll(np.asarray(r, dtype=np.float64)[:, :2], -1,
-                                axis=0) for r in loops])
-    return P, Q
-
-
-def _geometry_as_lists(tris, hard, soft, soft_n):
-    """Array geometry → the tuple lists ``clip_to_section`` walks."""
-    t = [tuple(map(tuple, tri)) for tri in np.asarray(tris).tolist()]
-    h = [(tuple(a), tuple(b)) for a, b in np.asarray(hard).tolist()]
-    s = []
-    for (p0, p1), (na, nb) in zip(np.asarray(soft).tolist(),
-                                  np.asarray(soft_n).tolist()):
-        open_edge = any(x != x for x in nb)            # NaN = no 2nd face
-        s.append((tuple(p0), tuple(p1), tuple(na),
-                  None if open_edge else tuple(nb)))
-    return t, h, s
+#: ``cap_depth_affine(plane, eye, right, up, fwd)``: ``(alpha, beta, gamma)``
+#: with the cut plane's camera depth ``alpha·x + beta·y + gamma`` over the
+#: camera plane (a parallel camera maps a plane to a plane), ``None`` when the
+#: cut is seen edge-on. ``cap_ring_edges(loops)``: every ring of the cap as one
+#: pair of (K, 2) endpoint arrays ``P→Q``; stacking all the rings together IS
+#: the even-odd rule. ``_geometry_as_lists``: array geometry to the tuple lists
+#: ``clip_to_section`` walks. In Rust.
+cap_depth_affine = NATIVE.hlr_cap_depth_affine
+cap_ring_edges = NATIVE.hlr_cap_ring_edges
+_geometry_as_lists = NATIVE.hlr_geometry_lists
 
 
 #: Line classes of a drawing, per segment (``HlrDrawing.kinds``).
@@ -677,63 +558,12 @@ def hlr_view(scene, camera, return_world: bool = False, geometry=None):
 # and planes stay planes, and 1/w orders the depth. Clipped to the view
 # pyramid first — a point beside or behind the eye has no picture.
 
-#: The view pyramid in clip space, as rows ``a`` with the kept side a·p ≥ 0:
-#: left, right, bottom, top, near.
-_PYRAMID = np.array([[1, 0, 0, 1], [-1, 0, 0, 1], [0, 1, 0, 1],
-                     [0, -1, 0, 1], [0, 0, 1, 1]], dtype=np.float64)
-
-
-def _clip_polygon(poly):
-    """Sutherland–Hodgman against the view pyramid, in clip space."""
-    for a in _PYRAMID:
-        out = []
-        n = len(poly)
-        for i in range(n):
-            p, q = poly[i], poly[(i + 1) % n]
-            dp, dq = float(a @ p), float(a @ q)
-            if dp >= 0.0:
-                out.append(p)
-            if (dp >= 0.0) != (dq >= 0.0):
-                out.append(p + (q - p) * (dp / (dp - dq)))
-        poly = out
-        if len(poly) < 3:
-            return []
-    return poly
-
-
-def _clip_triangles(C):
-    """(T,3,4) clip-space triangles → the parts inside the pyramid."""
-    if not len(C):
-        return C
-    D = C @ _PYRAMID.T                                  # (T,3,5)
-    inside = (D >= 0.0).all(axis=(1, 2))
-    outside = (D < 0.0).all(axis=1).any(axis=1)
-    parts = [C[inside]]
-    for tri in C[~inside & ~outside]:
-        poly = _clip_polygon(list(tri))
-        for i in range(1, len(poly) - 1):
-            parts.append(np.stack([poly[0], poly[i], poly[i + 1]])[None])
-    return np.concatenate(parts)
-
-
-def _clip_segments(A, B):
-    """Clip-space segments (E,4) → the parts inside the pyramid."""
-    if not len(A):
-        return A, B
-    t0 = np.zeros(len(A))
-    t1 = np.ones(len(A))
-    keep = np.ones(len(A), dtype=bool)
-    for a in _PYRAMID:
-        da, db = A @ a, B @ a
-        keep &= ~((da < 0.0) & (db < 0.0))
-        with np.errstate(divide="ignore", invalid="ignore"):
-            t = da / (da - db)
-        t0 = np.where(da < 0.0, np.maximum(t0, t), t0)
-        t1 = np.where(db < 0.0, np.minimum(t1, t), t1)
-    keep &= t0 < t1
-    A, B, t0, t1 = A[keep], B[keep], t0[keep, None], t1[keep, None]
-    d = B - A
-    return A + d * t0, A + d * t1
+# The pyramid's sides (left, right, bottom, top, near) and the clips against
+# it, Sutherland–Hodgman for polygons, in Rust: ``_clip_polygon(poly)``,
+# ``_clip_triangles((T, 3, 4))``, ``_clip_segments(A, B)``.
+_clip_polygon = NATIVE.hlr_clip_polygon
+_clip_triangles = NATIVE.hlr_clip_triangles
+_clip_segments = NATIVE.hlr_clip_segments
 
 
 def hlr_perspective(scene, camera, geometry=None) -> np.ndarray:
@@ -762,61 +592,17 @@ def hlr_perspective(scene, camera, geometry=None) -> np.ndarray:
             soft_n = None
         tris, hard, soft, cut = clip_to_section(tris, hard, soft, sp,
                                                 split_cuts=True)
-    if soft_n is None:                  # tuple lists → arrays
-        soft_n = np.array([[na, nb if nb is not None else (np.nan,) * 3]
-                           for _p0, _p1, na, nb in soft],
-                          dtype=np.float64).reshape(-1, 2, 3)
-        soft = np.array([[p0, p1] for p0, p1, _na, _nb in soft],
-                        dtype=np.float64).reshape(-1, 2, 3)
-    tris = np.asarray(tris, dtype=np.float64).reshape(-1, 3, 3)
-    soft = np.asarray(soft, dtype=np.float64).reshape(-1, 2, 3)
-    soft_n = np.asarray(soft_n, dtype=np.float64).reshape(-1, 2, 3)
-    lines = [np.asarray(hard, dtype=np.float64).reshape(-1, 2, 3),
-             np.asarray(cut, dtype=np.float64).reshape(-1, 2, 3)]
-    if len(soft):
-        # A soft edge is a profile where its two faces turn opposite ways
-        # to the EYE — in perspective the sight line differs per edge.
-        eye = camera.eye()
-        e = np.array([eye.x(), eye.y(), eye.z()], dtype=np.float64)
-        v = soft.mean(axis=1) - e
-        fa = np.einsum("ij,ij->i", soft_n[:, 0], v)
-        fb = np.einsum("ij,ij->i", soft_n[:, 1], v)
-        lines.append(soft[np.isnan(fb) | ((fa < 0.0) != (fb < 0.0))])
-    E = np.concatenate(lines)
-
-    m = camera.projection_matrix() * camera.view_matrix()
-    M = np.array(m.data(), dtype=np.float64).reshape(4, 4, order="F")
-
-    def to_clip(p):
-        return p @ M[:, :3].T + M[:, 3]
-
-    t = camera.target
-    w_t = float(to_clip(np.array([t.x(), t.y(), t.z()]))[3])
-    if w_t <= 1e-9:
+    parts = NATIVE.hlr_perspective_parts(tris, hard, cut, soft, soft_n, camera)
+    if parts is None:
         return np.empty((0, 4))
-    half_h = w_t * math.tan(math.radians(camera.fov_deg) / 2.0)
-    scale = np.array([half_h * camera.aspect, half_h, w_t])
-
-    def to_parallel(c):
-        # (x/w, y/w) scaled to metres at the target's depth; w_t/w for the
-        # depth, which grows toward the eye.
-        w = c[..., 3:4]
-        return np.concatenate([c[..., :2] / w, 1.0 / w], axis=-1) * scale
-
-    T = _clip_triangles(to_clip(tris.reshape(-1, 3)).reshape(-1, 3, 4))
-    A, B = _clip_segments(to_clip(E[:, 0]), to_clip(E[:, 1]))
-    if not len(A):
-        return np.empty((0, 4))
-    T = to_parallel(T)
-    L = np.stack([to_parallel(A), to_parallel(B)], axis=1)
+    T, L, depth = parts
     # A parallel camera looking down −Z onto that space: x right, y up, and
     # the depth growing away from it.
     top = OrbitCamera()
     top.perspective = False
     top.target = type(camera.target)(0.0, 0.0, 0.0)
     top.yaw, top.pitch = -math.pi / 2.0, math.pi / 2.0
-    top.distance = float(max(T[..., 2].max() if len(T) else 0.0,
-                             L[..., 2].max())) + 1.0
+    top.distance = float(depth) + 1.0
 
     class _NoSection:
         pass

@@ -30,7 +30,7 @@ fn json_loads<'py>(py: Python<'py>, s: &str) -> PyResult<Bound<'py, PyAny>> {
 }
 
 fn dialogs(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("views.chrome_dialogs")
+    py.import("ingetrazo_render.chrome_dialogs")
 }
 
 fn deliveries(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
@@ -559,7 +559,7 @@ pub fn export_form<'py>(win: &Bound<'py, PyAny>, key: Option<String>, one_off: b
         (297.0, 210.0)
     };
     let svg = py.import("ingetrazo_render")?.getattr("SvgOptions")?.call1((json_dumps(py, &options)?, screen))?;
-    let forms = py.import("views.chrome_forms")?;
+    let forms = py.import("ingetrazo_render.chrome_forms")?;
     let field_cls = forms.getattr("Field")?;
     let field = |fid: &str, kind: &str, label: &str, value: Bound<'py, PyAny>, extra: Vec<(&str, Bound<'py, PyAny>)>| -> PyResult<Bound<'py, PyAny>> {
         let kwargs = PyDict::new(py);

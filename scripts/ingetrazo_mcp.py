@@ -42,6 +42,7 @@ PROTOCOL = "2024-11-05"
 _APP_ROOT = str(Path(__file__).resolve().parents[1])
 sys.path.insert(0, _APP_ROOT)
 from core.agent_tools import BUILTIN_TOOLS as TOOLS
+from plugins._mcp_endpoint import connect_client, native_private_transport
 try:
     from core.ai_recipes import reference as _reference
     REFERENCE = _reference("llamada")
@@ -74,10 +75,7 @@ def _bridge(tool: str, args: dict) -> dict:
     global _sock, _req_id
     for attempt in (0, 1):
         if _sock is None:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(1900.0)   # above the bridge's UI_CALL_TIMEOUT
-            s.connect((HOST, PORT))
-            _sock = s
+            _sock = connect_client(HOST, PORT)
         _req_id += 1
         try:
             _sock.sendall((json.dumps(
@@ -108,6 +106,10 @@ def _call(name: str, args: dict) -> dict:
     try:
         reply = _bridge(name, args)
     except OSError as exc:
+        if native_private_transport():
+            return _tool_result(
+                f"Cannot reach Built's private AI bridge ({exc}). Open Plugins > AI Bridge (MCP), "
+                "start the bridge, and use the same settings profile.", is_error=True)
         return _tool_result(
             "Cannot reach Built's AI bridge on %s:%d (%s). "
             "In Built: the AI tab of the side tray > Start bridge (or Extensions > AI Bridge (MCP))."

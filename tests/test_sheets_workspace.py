@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_codes import Input
 from tests.shell_isolation import restore_shell_patches  # noqa: F401  (autouse)
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -130,19 +130,17 @@ def host(tmp_path, monkeypatch):
     from app_shell.host import Host
     from views import wgpu_sheets
     monkeypatch.setattr(wgpu_sheets, "FORCE", True)
-    import sys
-    sys.path.insert(0, str(ROOT / "scripts"))
+    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
     import sheets_fixture
     doc = tmp_path / "sheet.igz"
     sheets_fixture.build(doc)
     h = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
     assert h.open(doc)
-    from PySide6.QtCore import QTimer
     view = h.view
     view.renderer = Recorder()
     view._ui_attached = True
     view._ui_tools_sent = True
-    view._ui_timer = QTimer(view, singleShot=True)
+    view._ui_timer = view._view_timer(view.update)
     yield h
     comp = getattr(h.window, "_composer", None)
     if comp is not None:
@@ -193,8 +191,7 @@ def test_the_workspace_switch_swaps_the_frame_not_the_window(host):
     tabs = rec.last("ui_set_tabs")[0]
     assert [t[1] for t in tabs[0]] == ["Model", "Sheets"] and tabs[0][1][4] == 1
     assert tabs[1] == []                                            # no scene stepper on sheets
-    from PySide6.QtWidgets import QWidget
-    assert not isinstance(ws.composer, QWidget)                      # no window of its own
+    assert ws.composer is host.window._composer
     _run_actions(host, "tab:model")
     assert _ws(host) is None
     assert ("ui_show_sheets", (False,)) in rec.calls and "page_clear" in rec.names()
@@ -220,8 +217,7 @@ def test_repeated_switches_never_break(host):
 def test_the_page_follows_the_document_and_only_then(host):
     ws = _sheets(host)
     rec = host.view.renderer
-    from PySide6.QtWidgets import QApplication
-    QApplication.processEvents()                 # the composer's deferred rebuilds
+    host.timers.run_due()
     host.view.draw_frame()
     rec.calls.clear()
     host.view.draw_frame()
@@ -450,19 +446,19 @@ def test_delete_duplicate_and_lock_on_the_selection(host):
     comp = ws.composer.comp
     text = comp.texts[0]
     host.view.renderer.page_select([text._doc_key])
-    host.key(True, Qt.Key_D.value, Qt.ControlModifier.value, "d")
+    host.key(True, Input.Key_D, Input.ControlModifier, "d")
     assert len(comp.texts) == 2
     copy = comp.texts[1]
     assert (copy.x_mm, copy.y_mm, copy.text) == (text.x_mm + 5.0, text.y_mm + 5.0, text.text)
     assert host.view.renderer.page_selection() == [copy._doc_key]   # the copy is the selection
-    host.key(True, Qt.Key_L.value, Qt.ControlModifier.value, "l")
+    host.key(True, Input.Key_L, Input.ControlModifier, "l")
     assert copy.locked
-    host.key(True, Qt.Key_Backspace.value, 0)
+    host.key(True, Input.Key_Backspace, 0)
     assert len(comp.texts) == 2                                       # a locked item stays
-    host.key(True, Qt.Key_L.value, Qt.ControlModifier.value, "l")
-    host.key(True, Qt.Key_Backspace.value, 0)
+    host.key(True, Input.Key_L, Input.ControlModifier, "l")
+    host.key(True, Input.Key_Backspace, 0)
     assert len(comp.texts) == 1
-    host.key(True, Qt.Key_Z.value, Qt.ControlModifier.value, "z")
+    host.key(True, Input.Key_Z, Input.ControlModifier, "z")
     assert len(comp.texts) == 2
     assert host.errors == []
 
@@ -484,20 +480,20 @@ def test_keys_go_to_the_page_and_window_keys_stay_the_window_s(host):
     item = _texts(host, ws)
     before = len(comp.comp.texts)
     host.view.renderer.page_select([item._doc_key])
-    host.key(True, Qt.Key_Backspace.value, 0)
-    host.key(False, Qt.Key_Backspace.value, 0)
+    host.key(True, Input.Key_Backspace, 0)
+    host.key(False, Input.Key_Backspace, 0)
     assert len(comp.comp.texts) == before - 1
-    host.key(True, Qt.Key_Z.value, Qt.ControlModifier.value, "z")     # the document's undo
+    host.key(True, Input.Key_Z, Input.ControlModifier, "z")     # the document's undo
     assert len(comp.comp.texts) == before
     # A tool letter is not the model's tool any more.
     tool = type(host.viewport.active_tool).__name__
-    host.key(True, Qt.Key_L.value, 0, "l")
+    host.key(True, Input.Key_L, 0, "l")
     assert type(host.viewport.active_tool).__name__ == tool
     from views import wgpu_sheets
     from ingetrazo_render import ShortcutOverride
-    assert not wgpu_sheets.claims_key(host.view, ShortcutOverride(Qt.Key_S.value, Qt.ControlModifier.value, "s"))
+    assert not wgpu_sheets.claims_key(host.view, ShortcutOverride(Input.Key_S, Input.ControlModifier, "s"))
     # ⌃Tab: back to the model.
-    host.key(True, Qt.Key_Tab.value, Qt.MetaModifier.value)
+    host.key(True, Input.Key_Tab, Input.MetaModifier)
     assert _ws(host) is None
     assert host.errors == []
 
@@ -792,7 +788,7 @@ def test_every_tool_of_the_rail_runs_on_the_page(host, monkeypatch):
 
 def test_labels_levels_polygons_and_images_from_the_page(host, monkeypatch, tmp_path):
     import numpy as np
-    from PySide6.QtGui import QImage
+    from tests.plugin_images import write_png
     from views import filedialogs, wgpu_sheet_frames
     ws = _sheets(host)
     comp = ws.composer
@@ -822,9 +818,7 @@ def test_labels_levels_polygons_and_images_from_the_page(host, monkeypatch, tmp_
     assert comp.comp.shapes[-1].kind == "poligono"
     # An image: the file, then the item at the margins, in its proportions.
     pic = tmp_path / "logo.png"
-    img = QImage(200, 100, QImage.Format_RGB32)
-    img.fill(0xff3366aa)
-    img.save(str(pic))
+    write_png(pic, 200, 100)
     monkeypatch.setattr(filedialogs.file_dialogs, "getOpenFileName",
                         staticmethod(lambda *a, **k: (str(pic), "")))
     _run_actions(host, "sheets:tool\x1fimagen")
@@ -834,14 +828,13 @@ def test_labels_levels_polygons_and_images_from_the_page(host, monkeypatch, tmp_
 
 
 def test_pan_and_zoom(host):
-    from PySide6.QtCore import QPointF
     ws = _sheets(host)
     rec = host.view.renderer
     _act(host, "zoom\x1f200 %")
     assert rec.last("page_zoom_to") == (200.0,)
     host.wheel(640, 400, 0, -120, 0, -120)                          # scroll pans
     assert rec.last("page_wheel") == (640.0, 400.0, 0.0, -120.0, False)
-    host.wheel(640, 400, 0, 0, 0, 120, modifiers=Qt.ControlModifier.value)
+    host.wheel(640, 400, 0, 0, 0, 120, modifiers=Input.ControlModifier)
     assert rec.last("page_wheel")[4] is True                         # ⌘-wheel zooms
     host.gesture("zoom", 0.5, 640, 400)
     assert rec.last("page_zoom_by") == (640.0, 400.0, 1.5)

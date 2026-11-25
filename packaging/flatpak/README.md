@@ -10,8 +10,7 @@ bundle rides each GitHub release.
     packaging/flatpak/build-flatpak.sh            # build + install (user)
     packaging/flatpak/build-flatpak.sh --bundle   # + .staging/IngeTrazo.flatpak
 
-The app module lets pip reach the network for wheels (PySide6, numpy,
-openskp), which is exactly what Flathub forbids: if this ever goes there,
+The app module lets pip reach the network for wheels (numpy, openskp), which is exactly what Flathub forbids: if this ever goes there,
 that module becomes generated offline sources (flatpak-pip-generator) and
 this file is the reminder.
 

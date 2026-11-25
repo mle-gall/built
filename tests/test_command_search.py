@@ -123,20 +123,20 @@ def test_model_search_lists_menu_commands_and_tools_and_prioritizes_recent_actio
 
 
 def test_a_plugin_can_hide_its_action_after_the_native_search_opens(win):
-    from PySide6.QtGui import QAction
-    action = QAction("Frobnicate the active sheet", win)
+    from views.extension_api import ExtensionApp
     ran = Mock()
-    action.triggered.connect(ran)
-    try:
-        assert query(win, "frobnic")[0][0][0] == action.text()
-        action.setVisible(False)
-        wgpu_ui.command_action(win.view, win, "cmdrun", "0")
-        ran.assert_not_called()
-        assert not query(win, "frobnic")[0]
-        action.setVisible(True)
-        assert query(win, "frobnic")[0]
-    finally:
-        action.setParent(None)
+    menu = ExtensionApp(win, "sheet_tools").add_menu("Sheet tools")
+    action = menu.addAction("Frobnicate the active sheet", ran)
+    win._extension_menus.refresh(win)
+    assert query(win, "frobnic")[0][0][0] == action.text()
+    action.setVisible(False)
+    win._extension_menus.refresh(win)
+    wgpu_ui.command_action(win.view, win, "cmdrun", "0")
+    ran.assert_not_called()
+    assert not query(win, "frobnic")[0]
+    action.setVisible(True)
+    win._extension_menus.refresh(win)
+    assert query(win, "frobnic")[0]
 
 
 def test_search_finds_translated_names_and_paths_by_either_language(tmp_path):
@@ -290,9 +290,8 @@ def setup(app):
 
 
 def test_sheet_binding_shares_the_keyboard_table_and_follows_the_active_document(win, monkeypatch):
-    from core.input_types import Qt
     from core.shortcuts import export_shortcuts, import_shortcuts
-    from ingetrazo_render import KeyEvent
+    from ingetrazo_render import KeyEvent, shortcut_text
     from tests.scene_controls import chrome
     from views import wgpu_sheets
     from ingetrazo_render.settings_sheet import SettingsSheet
@@ -309,12 +308,13 @@ def test_sheet_binding_shares_the_keyboard_table_and_follows_the_active_document
     assert data["shortcuts"]["tool:line"] == data["shortcuts"]["sheet:cota_cadena"] == "L"
     assert import_shortcuts(win, {"format": data["format"], "shortcuts": {
         "sheet:cota_cadena": "F8", "tool:line": "L"}})[:2] == (2, 0)
+    _, _, f8, _ = shortcut_text("F8")
     for _ in range(2):
         ws = wgpu_sheets.composer_for(win)._ws
         ws.shown, ws.view = True, win.view
         monkeypatch.setattr(win.view, "_sheets_ws", ws, raising=False)
         with chrome(win):
-            ws.key(KeyEvent(True, Qt.Key_F8, 0, "", False), True)
+            ws.key(KeyEvent(True, f8, 0, "", False), True)
             assert ws.composer.tool_mode == "cota_cadena"
             query(win, "chain dimension")
             wgpu_ui.command_action(win.view, win, "cmdshortcut", "0")

@@ -154,7 +154,7 @@ def test_menu_dispatch_and_report(native_window, monkeypatch, tmp_path):
     path = tmp_path / "test.rfa"
     path.touch()
     monkeypatch.setattr(rfa, "read_rfa", lambda path: payload())
-    monkeypatch.setattr("views.chrome_dialogs.information", lambda parent, title, text: reports.append(text))
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.information", lambda parent, title, text: reports.append(text))
     monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *args, **kwargs: (str(path), ""))
     assert ".rfa" in IMPORTS
     win._host.menu("import:rfa")

@@ -7,10 +7,8 @@ import re
 def registry(root):
     from ingetrazo_render import window_tool_types
     result = dict(window_tool_types())
-    solids = ast.parse((root / 'tools/solid_host.py').read_text())
-    for node in solids.body:
-        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'SOLID_TOOLS' for t in node.targets):
-            result.update((pair.elts[0].value, pair.elts[1].id) for pair in node.value.elts)
+    from tools.solid_host import SOLID_TOOLS
+    result.update((key, cls.__name__) for key, cls in SOLID_TOOLS)
     return result
 
 
@@ -18,7 +16,7 @@ def table(root=None):
     from ingetrazo_core import tool_module_classes, tool_preview_hooks
     from views.wgpu_tools import TOOL_DISPATCH
     root = Path(root) if root else Path(__file__).resolve().parents[1]
-    classes = {name: (module, [base], "") for module, name, base in tool_module_classes()}
+    classes = {name: (module, base.split(","), "") for module, name, base in tool_module_classes()}
     for file in (root / 'tools').glob('*.py'):
         source = file.read_text()
         lines = source.splitlines()

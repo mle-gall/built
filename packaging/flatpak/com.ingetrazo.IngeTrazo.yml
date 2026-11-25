@@ -1,7 +1,7 @@
 # IngeTrazo's Flatpak, for self-distribution (bundle on each GitHub
 # release), NOT Flathub — Flathub forbids network during build, and the app
 # module below lets pip download wheels. The shape follows IngeCAD's proven
-# manifest (packaging/flatpak/ in that repo), krb5 lesson included.
+# manifest (packaging/flatpak/ in that repo).
 app-id: com.ingetrazo.IngeTrazo
 runtime: org.gnome.Platform
 runtime-version: '49'
@@ -13,7 +13,6 @@ sdk-extensions:
 command: ingetrazo
 
 finish-args:
-  # Qt can use XWayland when its binding cannot expose a Wayland surface.
   - --socket=wayland
   - --socket=x11
   - --share=ipc
@@ -28,35 +27,6 @@ finish-args:
   - --filesystem=/run/spnav.sock:ro
 
 modules:
-  # PySide6's Qt links QtNetwork against GSSAPI; the Freedesktop runtime
-  # carries no libgssapi_krb5.so.2. Without this, importing QtNetwork (the
-  # tile fetcher) dies at load time. Verbatim from the IngeCAD manifest,
-  # C23 workaround included.
-  - name: krb5
-    subdir: src
-    build-options:
-      cflags: -std=gnu17 -Wno-implicit-function-declaration -Wno-implicit-int -Wno-int-conversion -Wno-incompatible-pointer-types
-    config-opts:
-      - --disable-static
-      - --without-ldap
-      - --without-tcl
-      - --without-libedit
-      - --without-readline
-      - --disable-rpath
-    cleanup:
-      - /bin
-      - /sbin
-      - /share
-      - /include
-      - /etc
-      - '*.la'
-    sources:
-      - type: archive
-        url: https://kerberos.org/dist/krb5/1.21/krb5-1.21.3.tar.gz
-        sha256: b7a4cd5ead67fb08b980b21abd150ff7217e85ea320c9ed0c6dadd304840ad35
-        mirror-urls:
-          - https://web.mit.edu/kerberos/dist/krb5/1.21/krb5-1.21.3.tar.gz
-
   - name: ingetrazo
     buildsystem: simple
     build-options:
@@ -102,10 +72,8 @@ modules:
       # (import 1.2 → 0.26 s on his laptop). «unchecked-hash» because ostree
       # sets every file's mtime to 0, which makes timestamp-checked .pyc
       # files stale — these are trusted as built. site-packages too, for the
-      # same mtime reason (pip wrote timestamp .pyc there). PySide6's
-      # deploy templates (*.tmpl.py, Jinja, not Python) are skipped: they
-      # failed the v0.5.8 tag build.
-      - python3 -m compileall -q -j0 --invalidation-mode unchecked-hash -x '\.tmpl\.py$' ${FLATPAK_DEST}/ingetrazo ${FLATPAK_DEST}/lib
+      # same mtime reason (pip wrote timestamp .pyc there).
+      - python3 -m compileall -q -j0 --invalidation-mode unchecked-hash ${FLATPAK_DEST}/ingetrazo ${FLATPAK_DEST}/lib
       # 3. Launcher + desktop integration (exports must carry the app id).
       - install -Dm755 packaging/flatpak/flatpak-launcher.sh ${FLATPAK_DEST}/bin/ingetrazo
       - install -Dm644 packaging/flatpak/${FLATPAK_ID}.desktop ${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop
@@ -128,34 +96,6 @@ modules:
             install -Dm644 "$f" "${FLATPAK_DEST}/share/icons/hicolor/${size}/mimetypes/${FLATPAK_ID}.$(basename "$f")"
           done
         done
-      # 5. Trim PySide6 to the Qt modules IngeTrazo imports (QtCore, QtGui,
-      #    QtWidgets, QtNetwork — tiles/DEM). The full
-      #    wheel installs 771 MB, 195 of them a WebEngine no line of this
-      #    program touches. Blocklist, not allowlist: an unknown library
-      #    stays, so a Qt upgrade can add deps without blanking the app.
-      #
-      #    ⚠️ QtPrintSupport is NOT on the list, and must not go back on it:
-      #    the sheet composer's «Print preview» imports it, and with the
-      #    module gone the import failed inside the slot, silently — the
-      #    button simply did nothing, which is exactly what Rafael reported
-      #    on 2026-09-16 (30:20) while PDF export, which goes through
-      #    QPdfWriter in QtGui, worked perfectly for him. QtPdf IS still
-      #    trimmed: that is the PDF *viewer*, which we do not use.
-      - |
-        set -e
-        PYVER=$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')
-        PS=${FLATPAK_DEST}/lib/python${PYVER}/site-packages/PySide6
-        cd "$PS"
-        rm -rf Qt/qml Qt/resources Qt/libexec Qt/metatypes examples typesystems glue include
-        rm -f  assistant designer linguist lupdate lrelease qmlformat qmllint qmlls qsb balsam* svgtoqml
-        for stem in WebEngine Pdf Quick Qml 3D Quick3D SpatialAudio                     Location Positioning Sensors SerialPort SerialBus Bluetooth                     Nfc WebSockets WebChannel WebView RemoteObjects Scxml                     TextToSpeech Charts DataVisualization Graphs Sql Help                     UiTools Designer NetworkAuth HttpServer VirtualKeyboard                     LabsAnimation LabsFolderListModel LabsPlatform LabsQmlModels                     LabsSettings LabsSharedImage LabsWavefrontMesh Test; do
-          rm -f  Qt${stem}*.abi3.so Qt${stem}*.pyi
-          rm -f  Qt/lib/libQt6${stem}*.so*
-        done
-        # Quick/Qml family again by lib name (Quick3D matches Quick prefix)
-        rm -f Qt/lib/libQt6Quick*.so* Qt/lib/libQt6Qml*.so*
-        rm -rf Qt/plugins/webview Qt/plugins/qmltooling                Qt/plugins/scenegraph Qt/plugins/designer Qt/plugins/assetimporters                Qt/plugins/sceneparsers Qt/plugins/renderers Qt/plugins/geometryloaders                Qt/plugins/sqldrivers Qt/plugins/position Qt/plugins/sensors                Qt/plugins/canbus Qt/plugins/virtualkeyboard Qt/plugins/texttospeech
-        du -sh "$PS"
     sources:
       - type: dir
         path: ../../

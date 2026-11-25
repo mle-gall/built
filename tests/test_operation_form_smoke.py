@@ -269,7 +269,7 @@ def test_native_location_coordinates_map_apply_and_cancel(tmp_path):
         "from georef.tile_fetcher import TileFetcher\nfrom pathlib import Path\n"
         f"TileFetcher.request = lambda self, src, x, y, z: Path({str(requested)!r}).touch()\n")
     steps = tmp_path / "commands"
-    steps.write_text("wait 600\nkey escape\nmenu prefs\nwait 350\nclick 116 485\nwait 150\n"
+    steps.write_text("wait 600\nkey escape\nmenu prefs\nwait 350\nclick 116 510\nwait 150\n"
                      "click 552 328\nwait 200\nclick 550 282\nkey a cmd\ntype 48.85\n"
                      "click 550 311\nkey a cmd\ntype 2.35\nclick 340 351\nwait 450\n"
                      "drag 590 585 625 585 left 7\nwait 250\nstate\nclick 492 747\nwait 250\n"
@@ -763,7 +763,7 @@ def dispatch(self, command):
             scene.version+=1
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("mergetag","preview-tag:Merge me")))
     elif command=="fixture-finish-merge":
-        from views import chrome_forms
+        from ingetrazo_render import chrome_forms
         form=chrome_forms.current(self.window)
         options=form.field("item").keys()
         form.receive("item",str(next(i for i, label in enumerate(options) if label.endswith("Paths"))))
@@ -807,8 +807,8 @@ def dispatch(self, command):
     self.request_frame()
 def facts(self):
     scene=self.viewport.scene
-    from views.chrome_dialogs import current_sheet
-    from views import chrome_forms
+    from ingetrazo_render.chrome_dialogs import current_sheet
+    from ingetrazo_render import chrome_forms
     choice=chrome_forms.current(self.window)
     question=current_sheet(self.window)
     paths=scene.layer("Paths")

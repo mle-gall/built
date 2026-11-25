@@ -45,3 +45,15 @@ def test_startup_direction_follows_the_language(lang, rtl, tmp_path, monkeypatch
     finally:
         host.close()
         i18n.set_language(before)
+
+
+@pytest.mark.parametrize("lang, rtl", [("ar", True), ("es", False), ("en", False), ("de", False)])
+def test_plugin_language_uses_the_document_host_locale(native_host, lang, rtl):
+    from plugins._widget_language import apply_widget_language
+    before = i18n.current_language()
+    try:
+        apply_widget_language(native_host, lang)
+        assert i18n.current_language() == lang
+        assert i18n.is_rtl(i18n.current_language()) == rtl
+    finally:
+        i18n.set_language(before)

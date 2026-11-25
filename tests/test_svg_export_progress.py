@@ -25,7 +25,7 @@ from core import vista_caras as VC                      # noqa: E402
 from core.vista_caras import FaceFill                   # noqa: E402
 from tests.vista_caras_reference import _scene        # noqa: E402
 import ingetrazo_render as wgpu_deliveries              # noqa: E402
-from views import chrome_dialogs                        # noqa: E402
+from ingetrazo_render import chrome_dialogs                        # noqa: E402
 from tests.test_export_view_svg import _export_sheet
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
@@ -97,21 +97,25 @@ def test_every_stretch_of_the_work_is_heard(monkeypatch):
 
 
 def _bars(monkeypatch, cancel_after=None, original=chrome_dialogs.Job):
+    """Every Job made, its reported fractions in ``values``; with
+    ``cancel_after``, cancelled once it has reported more than that."""
     made = []
 
-    class ObservedJob(original):
-        def __init__(self, *a, **kw):
-            super().__init__(*a, **kw)
-            self.values = []
-            made.append(self)
+    def observed_job(*a, **kw):
+        job = original(*a, **kw)
+        job.values = []
+        reported = job.update
 
-        def update(self, fraction, phase=None):
-            self.values.append(fraction)
-            super().update(fraction, phase)
-            if cancel_after is not None and len(self.values) > cancel_after:
-                self.cancel()
+        def update(fraction=None, phase=None):
+            job.values.append(fraction)
+            reported(fraction, phase)
+            if cancel_after is not None and len(job.values) > cancel_after:
+                job.cancel()
+        job.update = update
+        made.append(job)
+        return job
 
-    monkeypatch.setattr(chrome_dialogs, "Job", ObservedJob)
+    monkeypatch.setattr(chrome_dialogs, "Job", observed_job)
     return made
 
 

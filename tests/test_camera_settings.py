@@ -14,10 +14,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest  # noqa: E402
 from core.input_types import Qt  # noqa: E402
 from ingetrazo_core import Vec3 as QVector3D, Vec4 as QVector4D
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-if QApplication.instance() is None:
-    QApplication([])
 
 from core.camera import (OrbitCamera, focal_from_fov,  # noqa: E402
                          fov_from_focal, frame_rect)
@@ -266,10 +263,11 @@ def test_every_language_names_the_window():
 # ---- Export image keeps to the frame ------------------------------------------------
 
 def _fake_view(monkeypatch, w=1000, h=500):
-    """A viewport whose GL render is a synthetic picture: grey all over and
+    """A viewport whose render is a synthetic picture: grey all over and
     red exactly where the camera frame lies, so a crop can be checked
     without a graphics card."""
-    from PySide6.QtGui import QColor, QImage, QPainter
+    import numpy as np
+    from ingetrazo_render import SurveyRaster
     from views.document_controller import DocumentController
     cls = DocumentController
     vp = cls.__new__(cls)
@@ -277,7 +275,7 @@ def _fake_view(monkeypatch, w=1000, h=500):
     monkeypatch.setattr(cls, "height", lambda self: h)
     monkeypatch.setattr(cls, "update", lambda self: None)
     vp.camera = OrbitCamera()
-    real = cls.render_image
+    real = cls.render_raster
     rendered = []
 
     def render(self, width_px, height_px=None, overlays=True,
@@ -288,49 +286,52 @@ def _fake_view(monkeypatch, w=1000, h=500):
                         annotations_only, sharp_shadows, transparent, True)
         hh = round(width_px * h / w)
         rendered.append((width_px, hh))
-        img = QImage(width_px, hh, QImage.Format_RGB32)
-        img.fill(QColor(128, 128, 128))
+        px = np.full((hh, width_px, 4), 128, np.uint8)
+        px[..., 3] = 255
         rect = frame_rect(w, h, self.camera.frame_aspect)
         if rect is not None:
             k = width_px / w
-            p = QPainter(img)
-            p.fillRect(round(rect[0] * k), round(rect[1] * k),
-                       round(rect[2] * k), round(rect[3] * k),
-                       QColor(255, 0, 0))
-            p.end()
-        return img
+            x, y = round(rect[0] * k), round(rect[1] * k)
+            px[y:y + round(rect[3] * k), x:x + round(rect[2] * k)] = (255, 0, 0, 255)
+        return SurveyRaster(width_px, hh, px.tobytes())
 
-    monkeypatch.setattr(cls, "render_image", render)
+    monkeypatch.setattr(cls, "render_raster", render)
     return vp, rendered
+
+
+def _pixel(img, x, y):
+    import numpy as np
+    return np.frombuffer(img.rgba(), np.uint8).reshape(img.height, img.width, 4)[y, x]
 
 
 def test_export_image_is_the_framed_shot(monkeypatch):
     vp, rendered = _fake_view(monkeypatch)          # a 2:1 view
     vp.camera.frame_aspect = 1.0                    # a square frame
-    img = vp.render_image(800, crop_to_frame=True)
+    img = vp.render_raster(800, crop_to_frame=True)
     # 800 px wide AND square: the frame, not the view.
-    assert (img.width(), img.height()) == (800, 800)
+    assert (img.width, img.height) == (800, 800)
     # Rendered twice as wide (the frame is half the view) and cut to it:
     # nothing outside the frame (grey) is left in the picture.
     assert rendered == [(1600, 800)]
     for x, y in ((0, 0), (799, 0), (0, 799), (799, 799), (400, 400)):
-        assert img.pixelColor(x, y).red() == 255, (x, y)
-        assert img.pixelColor(x, y).green() == 0, (x, y)
+        assert _pixel(img, x, y)[0] == 255, (x, y)
+        assert _pixel(img, x, y)[1] == 0, (x, y)
 
 
 def test_export_image_tall_frame(monkeypatch):
     vp, rendered = _fake_view(monkeypatch, 800, 800)
     vp.camera.frame_aspect = 16 / 9                 # bands top and bottom
-    img = vp.render_image(1920, crop_to_frame=True)
-    assert (img.width(), img.height()) == (1920, 1080)
-    assert img.pixelColor(960, 2).red() == 255
-    assert img.pixelColor(960, 1077).red() == 255
+    img = vp.render_raster(1920, crop_to_frame=True)
+    assert (img.width, img.height) == (1920, 1080)
+    assert _pixel(img, 960, 2)[0] == 255
+    assert _pixel(img, 960, 1077)[0] == 255
 
 
 def test_export_image_menu_crops_to_the_frame(monkeypatch, tmp_path, native_host):
     from unittest.mock import Mock
+    # The menu's save still takes a QImage (shell lane, views/document_commands).
     from PySide6.QtGui import QImage
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     from views.filedialogs import file_dialogs
     win = native_host.window
     image = QImage(16, 9, QImage.Format_RGB32)

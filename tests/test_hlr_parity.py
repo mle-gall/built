@@ -14,11 +14,9 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from tests.hlr_parity_cases import canonical, cases  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
 GOLDENS = json.loads(gzip.decompress(
     (Path(__file__).parent / "fixtures" / "hlr_parity" / "goldens.json.gz").read_bytes()))
 CASES = cases()

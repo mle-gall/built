@@ -41,7 +41,7 @@ fn swatch_pattern(py: Python<'_>, f: &Fields, name: &str) -> PyResult<Vec<f64>> 
     }
     let Some(Value::Str(lt)) = get("linetype") else { return Ok(Vec::new()) };
     let _ = py;
-    Ok(crate::linetypes::builtin(&lt).map(<[f64]>::to_vec).unwrap_or_default())
+    Ok(crate::model::linetypes::builtin(&lt).map(<[f64]>::to_vec).unwrap_or_default())
 }
 
 /// Record the chip with the same layer-look painter as a cut ring in a frame.
@@ -433,7 +433,7 @@ pub fn frame_content(d: Option<&Bound<'_, pyo3::types::PyDict>>, key: crate::doc
                 }
                 let Some((_, st)) = c.styles.iter().find(|(n, _)| *n == tags[i]) else { continue };
                 let Some(words) = &st.words else { continue };
-                let marks = crate::linetypes::text_marks((s[0], s[1]), (s[2], s[3]), &words.0, words.1, words.2, words.3);
+                let marks = crate::model::linetypes::text_marks((s[0], s[1]), (s[2], s[3]), &words.0, words.1, words.2, words.3);
                 if marks.is_empty() {
                     continue;
                 }

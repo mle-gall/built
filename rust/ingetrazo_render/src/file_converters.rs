@@ -15,7 +15,7 @@ fn label(win: &Bound<'_, PyAny>, text: &str) -> PyResult<String> {
 fn import_dwg(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = win.py();
     let backend = py.import("formats.dwg_bridge")?;
-    let dialogs = py.import("views.chrome_dialogs")?;
+    let dialogs = py.import("ingetrazo_render.chrome_dialogs")?;
     let title = label(win, "Import DWG failed")?;
     let help = label(win, DXF_HELP)?;
     if !backend.call_method0("have_dwg_support")?.is_truthy()? {
@@ -105,7 +105,7 @@ fn import_skp(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<bool>
             .is_truthy();
     }
     let skp = py.import("formats.skp")?;
-    let dialogs = py.import("views.chrome_dialogs")?;
+    let dialogs = py.import("ingetrazo_render.chrome_dialogs")?;
     let name = path.getattr("name")?;
     let args = PyDict::new(py);
     args.set_item("name", &name)?;
@@ -178,7 +178,7 @@ fn import_skp(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<bool>
 fn clear_texture_cache(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
     let backend = py.import("core.texture")?;
-    let dialogs = py.import("views.chrome_dialogs")?;
+    let dialogs = py.import("ingetrazo_render.chrome_dialogs")?;
     let (count, size): (u64, u64) = backend.call_method0("texture_cache_stats")?.extract()?;
     let args = PyDict::new(py);
     args.set_item("path", backend.call_method0("texture_cache_root")?.str()?)?;

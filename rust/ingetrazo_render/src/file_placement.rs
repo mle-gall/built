@@ -122,7 +122,7 @@ fn place_text(win: &Bound<'_, PyAny>, params: &Bound<'_, PyAny>) -> PyResult<()>
         .import("core.text3d")?
         .call_method1("make_text_group", (params,))?;
     if group.is_none() {
-        py.import("views.chrome_dialogs")?.call_method1(
+        py.import("ingetrazo_render.chrome_dialogs")?.call_method1(
             "warning",
             (
                 win,
@@ -154,7 +154,7 @@ fn import_picture(win: &Bound<'_, PyAny>) -> PyResult<()> {
         .import("core.image_plane")?
         .call_method1("image_aspect", (&path,))?
         .extract()?;
-    let dialogs = py.import("views.chrome_dialogs")?;
+    let dialogs = py.import("ingetrazo_render.chrome_dialogs")?;
     let vars = PyDict::new(py);
     vars.set_item("name", path.getattr("name")?)?;
     if w <= 0 || h <= 0 {
@@ -262,7 +262,7 @@ fn ask_mesh_units(
             open_tab,
         ),
     )?;
-    let forms = py.import("views.chrome_forms")?;
+    let forms = py.import("ingetrazo_render.chrome_forms")?;
     let form = forms.call_method1(
         "OperationForm",
         (
@@ -361,7 +361,7 @@ fn image_export_form(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResul
             path,
         ),
     )?;
-    let forms = py.import("views.chrome_forms")?;
+    let forms = py.import("ingetrazo_render.chrome_forms")?;
     forms.call_method1(
         "show",
         (
@@ -402,7 +402,7 @@ fn save_export_image(
     let image = view.call_method(method, (width,), Some(&kw))?;
     let ready = !image.is_none() && (native || !image.call_method0("isNull")?.is_truthy()?);
     if !ready || !image.call_method1("save", (path.str()?,))?.is_truthy()? {
-        py.import("views.chrome_dialogs")?.call_method1(
+        py.import("ingetrazo_render.chrome_dialogs")?.call_method1(
             "critical",
             (
                 win,
@@ -440,7 +440,7 @@ fn place_figure(
     if group.is_none() {
         let args = PyDict::new(py);
         args.set_item("p", image)?;
-        py.import("views.chrome_dialogs")?.call_method1(
+        py.import("ingetrazo_render.chrome_dialogs")?.call_method1(
             "warning",
             (
                 win,
@@ -471,7 +471,7 @@ fn choose_billboard(win: &Bound<'_, PyAny>) -> PyResult<()> {
         return Ok(());
     };
     let caption = translated(py, "Face-me image", None)?;
-    let dialogs = py.import("views.chrome_dialogs")?;
+    let dialogs = py.import("ingetrazo_render.chrome_dialogs")?;
     let Some((w, h, alpha)) =
         super::image_assets::billboard_image(py, &path.extract::<PathBuf>()?)?
     else {
@@ -503,7 +503,7 @@ fn choose_billboard(win: &Bound<'_, PyAny>) -> PyResult<()> {
             ),
         )?,
     )?;
-    py.import("views.chrome_forms")?
+    py.import("ingetrazo_render.chrome_forms")?
         .getattr("ask_number")?
         .call(
             (

@@ -5,20 +5,9 @@ triangle (sections) or a quartered circle (plans), anchored to a model
 point whose height they read and follow."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import pytest
-from PySide6.QtGui import QColor, QImage, QPainter
-from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication, QWidget
 
 from core.composition import Composicion, NivelItem
-from tests.test_composer_canvas import _FakeViewport
-
-_app = QApplication.instance() or QApplication([])
-V = QVector3D
 
 
 def test_the_value_reads_signed_with_a_datum_and_plus_minus_zero():

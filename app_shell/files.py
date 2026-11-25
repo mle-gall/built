@@ -287,7 +287,7 @@ def open_path(win, path: Path) -> bool:
         other.request_frame()
         return True
     if not path.is_file():
-        from views import chrome_dialogs as cd
+        from ingetrazo_render import chrome_dialogs as cd
         cd.warning(win, tr("Open"), tr("{name} is no longer there.", name=path.name))
         return False
     if suffix in (".obj", ".stl"):
@@ -331,7 +331,7 @@ def open_document(win, path: Path) -> bool:
     (MainWindow._open_path_here's steps that are not about Qt panels)."""
     from core import autosave
     from formats import igz as igz_format
-    from views import chrome_dialogs as cd
+    from ingetrazo_render import chrome_dialogs as cd
     host = win._host
     doc = win._doc
     vp = doc.viewport
@@ -396,7 +396,7 @@ def _install_open(win, path, bar, result, *, initial_frame=None):
 
 
 def _finish_open(win, path, recovered, slot, bar, cb, prepared=None, initial_aspect=None):
-    from views import chrome_dialogs as cd
+    from ingetrazo_render import chrome_dialogs as cd
     win._doc.model_views.restore(win._doc)
     host, vp, view = win._host, win._doc.viewport, win.view
     import gc
@@ -531,7 +531,7 @@ class NullBar:
 def import_progress(win, title, *, monotonic=False):
     """MainWindow._import_progress: the capsule in the top bar, whose
     callback turns the modal pump so it moves and Cancel works."""
-    from views import chrome_dialogs as cd
+    from ingetrazo_render import chrome_dialogs as cd
     from app_shell import modal
     if cd.live(win) is None:
         return NullBar(), (lambda frac, text: None)
@@ -709,7 +709,7 @@ def do_save(win, path: Path, copy: bool = False) -> bool:
     from core import autosave
     from core import links as _links
     from formats import igz as igz_format
-    from views import chrome_dialogs as cd
+    from ingetrazo_render import chrome_dialogs as cd
     from app_shell import project
     if win._workspace is not None:
         return False
@@ -772,9 +772,9 @@ def export_igz(win, path=None) -> bool:
     """File ▸ Save a Copy as IngeTrazo (.igz): float32 geometry, after
     saying how far that rounding moves points."""
     import copy as _copy
-    from views.chrome_dialogs import QMessageBox
+    from ingetrazo_render.chrome_dialogs import QMessageBox
     from formats import igz as igz_format
-    from views import chrome_dialogs as cd
+    from ingetrazo_render import chrome_dialogs as cd
     from views.filedialogs import file_dialogs
     win._end_group_edits()
     doc = win._doc
@@ -828,7 +828,7 @@ def close_document(win, doc=None, ask=True) -> bool:
     doc = doc or win._doc
     if doc not in win._documents:
         return True
-    from views import chrome_dialogs as cd
+    from ingetrazo_render import chrome_dialogs as cd
     if cd.current_sheet(win) is not None or cd.modal(win):
         return False
     from ingetrazo_render import confirm_close_tab

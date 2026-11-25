@@ -30,7 +30,7 @@ def test_stl_simplification_defaults_to_principal_planes(native_host, monkeypatc
     path.write_bytes(_GOOD_STL)
     monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *args: (str(path), ""))
     forms = []
-    monkeypatch.setattr("views.chrome_forms.show", lambda _w, form: forms.append(form))
+    monkeypatch.setattr("ingetrazo_render.chrome_forms.show", lambda _w, form: forms.append(form))
     native_host.menu("import:stl")
     assert forms[0].values()["simplify"] == "principal"
     forms[0].press("cancel")
