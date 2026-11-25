@@ -1,0 +1,2 @@
+# Patches applied by CI must keep LF endings and blank context lines on every runner.
+*.patch -text
