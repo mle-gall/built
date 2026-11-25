@@ -120,6 +120,7 @@ mod image_assets;
 mod survey_raster;
 mod text_outlines;
 mod svg_texture;
+mod view_export;
 mod material_png;
 mod survey_import;
 mod material_textures;
@@ -3456,6 +3457,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(render_result::blender_availability, m)?)?;
     m.add_class::<render_result::RenderResult>()?;
     m.add_function(wrap_pyfunction!(font_lengths::font_length, m)?)?;
+    view_export::register(m)?;
     m.add_class::<svg_options::SvgOptions>()?;
     m.add_class::<tag_counts::TagCounts>()?;
     m.add_function(wrap_pyfunction!(commands::command_registry, m)?)?;

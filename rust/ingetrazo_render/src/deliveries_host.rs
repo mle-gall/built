@@ -257,7 +257,7 @@ struct SvgPicture {
 #[pymethods]
 impl SvgPicture {
     fn __call__<'py>(&self, py: Python<'py>, axes: bool, frame: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-        let svg = py.import("views.svg_export")?;
+        let svg = py.import("ingetrazo_render.view_export")?;
         let win = self.win.bind(py);
         let active = self.active.bind(py);
         let scene = self.scene.bind(py);
@@ -510,7 +510,7 @@ impl FormPreview {
                 return Err(e);
             }
         };
-        py.import("views.svg_export")?.call_method1("preview_pixels", (text,))
+        py.import("ingetrazo_render")?.call_method1("svg_preview", (text,))
     }
 }
 

@@ -527,9 +527,9 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
         // ---- export, import, links -----------------------------------------------------------
         "export_video" => done!(crate::shell_window::video::run_export(win)),
         "ask_animation" => done!(crate::shell_window::playback::edit_animation(win)),
-        "_on_export_view_svg" => py.import("views.svg_export")?.call_method1("open_view_export", (win,)),
-        "_view_line_groups" => py.import("views.svg_export")?.call_method1("view_line_groups", (win.call_method0("_active_view")?, a.or(0, "fast", true)?)),
-        "view_svg_builder" => py.import("views.svg_export")?.call_method1("active_view_builder", (win,)),
+        "_on_export_view_svg" => py.import("ingetrazo_render.view_export")?.call_method1("open_view_export", (win,)),
+        "_view_line_groups" => py.import("ingetrazo_render.view_export")?.call_method1("view_line_groups", (win.call_method0("_active_view")?, a.or(0, "fast", true)?)),
+        "view_svg_builder" => py.import("ingetrazo_render.view_export")?.call_method1("active_view_builder", (win,)),
         "_run_import" => call!("run_import", (win, a.req(0, "load")?, a.req(1, "dlg")?, a.req(2, "title")?, a.or_none(3, "describe")?, a.or_none(4, "command_type")?)),
         "_prepare_import_display" => done!(call!("prepare_import", (viewport(win)?, a.req(0, "cmd")?, a.req(1, "cb")?))),
         "_report_import" => done!(call!("report_import", (win, a.req(0, "name")?, a.or_none(1, "offset")?))),
