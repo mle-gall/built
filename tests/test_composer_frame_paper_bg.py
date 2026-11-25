@@ -2,7 +2,6 @@
 """The frame's «Paper background»: render on white with no sky whatever
 the style says (Marco, 2026-09-08, the rebar in X-ray: «no me gusta que
 tenga el fondo gris del model»)."""
-from PySide6.QtWidgets import QWidget
 
 from core.composition import Composicion, MarcoVista
 from tests.test_composer_canvas import _FakeViewport

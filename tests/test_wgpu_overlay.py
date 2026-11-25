@@ -1,17 +1,9 @@
 """Verify overlay pixels independently of native presentation and GPU access."""
-import os
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
-from PySide6.QtWidgets import QApplication
 from views.wgpu_overlay import Primitive, axes, pixels, rasterize, snap_glyph
 
 
-@pytest.fixture(scope="module")
-def app():
-    return QApplication.instance() or QApplication([])
-
-
-def test_rgba_scale_and_transparent_background(app):
+def test_rgba_scale_and_transparent_background():
     image = rasterize([Primitive("rectangle", ((10, 10), (30, 30)),
                                  "#ff0000", fill="#ff0000")], 100, 80, 2)
     from tests.headless_gpu import pixel
@@ -21,7 +13,7 @@ def test_rgba_scale_and_transparent_background(app):
     assert pixels(image).size == 200 * 160 * 4
 
 
-def test_all_primitives_and_glyphs(app):
+def test_all_primitives_and_glyphs():
     items = [snap_glyph((20, 20), "endpoint"), snap_glyph((40, 40), "midpoint"),
              snap_glyph((60, 60), "on_edge"),
              Primitive("text", ((20, 80),), text="12.5 m"),

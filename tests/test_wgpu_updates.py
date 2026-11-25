@@ -446,11 +446,10 @@ def test_prototype_bake_does_not_consume_document_group_names(monkeypatch):
 
 
 def test_replacement_preserves_full_material_rows_and_resident_texture_ids(tmp_path):
-    from PySide6.QtGui import QImage, QColor
+    from ingetrazo_render import SurveyRaster
     meshes = []
-    for name in ('red', 'blue'):
-        image = QImage(2, 2, QImage.Format_RGBA8888)
-        image.fill(QColor(name))
+    for name, rgba in (('red', (255, 0, 0, 255)), ('blue', (0, 0, 255, 255))):
+        image = SurveyRaster(2, 2, bytes(rgba) * 4)
         path = tmp_path / (name + '.png')
         assert image.save(str(path))
         mesh = Mesh()

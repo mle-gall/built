@@ -20,7 +20,6 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QWidget
 
 from core.camera import OrbitCamera
 from core.composition import (Composicion, MarcoVista, apply_frame_camera,

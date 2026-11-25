@@ -4,14 +4,8 @@
 presets, and user title-block templates."""
 from __future__ import annotations
 
-from PySide6.QtGui import QImage, QPainter
-
 from core.composition import (CAJETIN_DESIGN_BASE, CAJETIN_DESIGNS, Cajetin,
                               Composicion)
-
-
-def _rgb(img: QImage, x: int, y: int) -> int:
-    return img.pixel(x, y) & 0xFFFFFF
 
 
 def test_look_fields_round_trip_and_old_documents_default():

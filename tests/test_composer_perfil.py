@@ -11,9 +11,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from core.input_types import QRectF
-from PySide6.QtGui import QImage, QPainter
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QWidget
 
 from core.composition import AddItemCommand, Composicion, PerfilTerreno
 from georef.datum import SceneDatum
@@ -35,16 +33,6 @@ class StubSampler:
 
     def elevation_at_local(self, p):
         return 2500.0 + 0.10 * p.x() + 0.02 * p.y()
-
-
-def _paint(item):
-    img = QImage(800, 400, QImage.Format_ARGB32)
-    img.fill(0xFFFFFFFF)
-    painter = QPainter(img)
-    painter.scale(4.0, 4.0)
-    item.paint(painter, None, None)
-    painter.end()
-    return img
 
 
 def test_the_profile_travels_with_the_sheet():

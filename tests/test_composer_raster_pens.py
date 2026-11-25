@@ -7,7 +7,6 @@ vanishes on paper and on the composer's scaled preview (Marco, 2026-09-14:
 lines to the pen by redrawing them at sub-pixel offsets."""
 from types import SimpleNamespace
 
-from PySide6.QtWidgets import QWidget
 
 from core.composition import RENDER_DPI, pen_px
 from tests.test_composer_canvas import _FakeViewport

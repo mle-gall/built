@@ -3,22 +3,15 @@ the native payload as GL's penumbra spread, the receiver shader compiles and
 softens with it, and a level set from Preferences asks the Metal view of
 every project for a frame.
 
-Default pytest runs Qt offscreen and skips the raster check; run this file
-with QT_QPA_PLATFORM=cocoa on macOS to execute it (no widget is shown).
+The raster check draws on a headless layer (tests/headless_gpu.py).
 """
 import importlib.util
 from types import SimpleNamespace
-import os
-import sys
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
 from tests.preferences_chrome import Controls, settings_file
-from PySide6.QtCore import QSettings
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QWidget
 
 from core.scene import Scene  # noqa: E402
 from views.document_interaction import SOFT_SHADOW_SPREAD
@@ -112,9 +105,8 @@ class _Doc:
         self.viewport, self.stand_in = viewport, stand_in
 
 
-class _Win(QWidget):
+class _Win:
     def __init__(self):
-        super().__init__()
         self.viewport = _VP()
         self.metal = _VP()                  # its Metal stand-in
         self._documents = [_Doc(self.viewport, self.metal),
@@ -139,20 +131,14 @@ def test_a_new_level_asks_the_metal_view_for_a_frame(settings_file):
 
 @pytest.fixture
 def native():
-    if (not HAS_RENDERER or sys.platform != "darwin"
-            or os.environ.get("QT_QPA_PLATFORM") != "cocoa"):
-        pytest.skip("Metal raster checks require the crate and an unshown Cocoa NSView")
-    from core.input_types import Qt
-    from ingetrazo_render import Renderer
-    host = QWidget()
-    host.setAttribute(Qt.WA_DontShowOnScreen)
-    host.resize(256, 256)
-    renderer = Renderer(int(host.winId()), 256, 256, 1.)
+    if not HAS_RENDERER:
+        pytest.skip("Metal raster checks require the render crate")
+    from tests.headless_gpu import renderer as headless
+    renderer = headless(256, 256, 1.)
     renderer.set_antialias(False)
     renderer.set_edges(False)
     yield renderer
     del renderer
-    host.close()
 
 
 def test_a_level_widens_the_penumbra_on_metal(native):
