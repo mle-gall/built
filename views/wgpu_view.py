@@ -42,8 +42,7 @@ def _ui_claims(view, name, event):
     if name == 'mouseReleaseEvent':
         return wgpu_ui.pointer(view, 'release', event)
     if name == 'mouseDoubleClickEvent':
-        return (wgpu_ui.title_double_click(view, event)
-                or wgpu_ui.pointer(view, 'press', event))
+        return wgpu_ui.pointer(view, 'press', event)
     if name == 'keyPressEvent':
         return wgpu_ui.key(view, event, True)
     if name == 'keyReleaseEvent':
@@ -78,6 +77,13 @@ def _tool_frame(method):
 
 
 import ingetrazo_render
+
+
+def _bits(value) -> int:
+    """Modifiers or buttons as an int, whichever enum carries them (wgpu_ui.bits)."""
+    return int(getattr(value, "value", value) or 0)
+
+
 from views.view_navigation import ViewNavigation
 
 
@@ -128,12 +134,12 @@ class MetalView(ViewNavigation):
         """Winit already owns the surface. Widget hosts configure theirs here."""
 
     def _view_timer(self, callback, interval=0):
-        if self._timer_queue is not None:
-            return self._timer_queue.timer(callback, interval)
-        from PySide6.QtCore import QTimer
-        timer = QTimer(self, singleShot=True, interval=interval)
-        timer.timeout.connect(callback)
-        return timer
+        if self._timer_queue is None:
+            # A view without a host (tests, probes) keeps its own queue;
+            # whoever drives it runs ``_timer_queue.run_due()``.
+            from ingetrazo_render import WindowTimers
+            self._timer_queue = WindowTimers()
+        return self._timer_queue.timer(callback, interval)
 
     def __init__(self, parent=None, *, timers=None):
         super().__init__(parent)
@@ -190,8 +196,9 @@ class MetalView(ViewNavigation):
         return True
 
     def _window_handles(self):
-        from views.wgpu_surface import window_handles
-        return window_handles(self)
+        """``(window, handles)`` for ``Renderer``: the host's surface. The
+        shell's view hands over its NSView; a headless view a layer."""
+        raise NotImplementedError("a MetalView host supplies its surface")
 
     def _wrap_renderer(self):
         from views.resident_peer import TargetRenderer
@@ -954,8 +961,8 @@ class MetalView(ViewNavigation):
         if frame is None:
             return None
         w, h, pixels = frame
-        from PySide6.QtGui import QImage
-        return QImage(pixels, w, h, w * 4, QImage.Format_RGBA8888).copy()
+        from ingetrazo_render import SurveyRaster
+        return SurveyRaster(w, h, bytes(pixels))
 
     def render_pixels(self, width_px, height_px=None, *, overlays=False, annotations_only=False, **frame_options):
         """RGBA of the requested frame, including any document marks for that camera."""
@@ -1160,7 +1167,7 @@ class MetalView(ViewNavigation):
                            acquired_point=getattr(inference, '_acquired_point', None),
                            acquired_points=getattr(inference, '_encouraged', None),
                            axis_lock=getattr(inference, 'axis_lock', None),
-                           shift_held=bool(modifiers & Qt.ShiftModifier),
+                           shift_held=bool(_bits(modifiers) & _bits(Qt.ShiftModifier)),
                            reference_edge=getattr(inference, 'reference_edge', None),
                            reference_mode=getattr(inference, 'reference_mode', None),
                            magnetic_axis_deg=getattr(tool, 'magnetic_axis_deg', None),
@@ -1277,7 +1284,7 @@ class MetalView(ViewNavigation):
 
     def _leave_edit_on_empty_click(self, x, y, modifiers):
         if (self.scene.edit_group is not None and not self.scene.selection
-                and not modifiers & (Qt.ControlModifier | Qt.MetaModifier | Qt.ShiftModifier)
+                and not _bits(modifiers) & (_bits(Qt.ControlModifier) | _bits(Qt.MetaModifier) | _bits(Qt.ShiftModifier))
                 and not self.edit_group_box_contains_pixel(x, y)):
             self.source_viewport.end_one_group_edit()
             self.update()
@@ -1501,15 +1508,15 @@ class MetalView(ViewNavigation):
         self.last = event.position()
         mode = getattr(self.source_viewport, 'nav_mode', None)
         if self._drag_nav and mode != 'zoom_window':
-            ingetrazo_render.camera_drag(self, mode, delta, bool(event.modifiers() & Qt.ShiftModifier))
+            ingetrazo_render.camera_drag(self, mode, delta, bool(_bits(event.modifiers()) & _bits(Qt.ShiftModifier)))
         elif self.tools.sync() in ('tape', 'move', 'mesh'):
             self.hover(event.position().x(), event.position().y(), event.modifiers())
             self.tools.hover(event)
-        elif event.buttons() & Qt.LeftButton and mode == 'zoom_window':
+        elif _bits(event.buttons()) & _bits(Qt.LeftButton) and mode == 'zoom_window':
             from views import wgpu_overlay
             self.overlay_primitives = [wgpu_overlay.selection_rectangle(
                 (self.press.x(), self.press.y()), (self.last.x(), self.last.y()), zoom=True)]
-        elif event.buttons() & Qt.LeftButton and self.tools.mode == 'select':
+        elif _bits(event.buttons()) & _bits(Qt.LeftButton) and self.tools.mode == 'select':
             from views import wgpu_overlay
             # The machine shows a box only past its drag threshold (a click
             # that jitters a pixel is no box).
@@ -1820,26 +1827,10 @@ class MetalView(ViewNavigation):
         self.renderer = None
         if hasattr(self, '_inference_worker'):
             self._inference_worker.shutdown(wait=False, cancel_futures=True)
-        super().closeEvent(event)
+        # A host's own close, when its base has one (a widget shim has none).
+        close = getattr(super(), 'closeEvent', None)
+        if close is not None:
+            close(event)
         self._instance_updates = self._inference_future = self.inference_index = None
         self.source_viewport = self._tool_source = self.scene = self.packed = None
         self._billboards = self._reference_cache = None
-
-
-if not NATIVE:
-    from PySide6.QtWidgets import QWidget
-
-    class WgpuView(MetalView, QWidget):
-        """Qt presentation surface for a document."""
-
-        def _prepare_surface(self):
-            from PySide6.QtCore import QCoreApplication
-            from PySide6.QtWidgets import QApplication
-            if QApplication.platformName() == 'cocoa':
-                QCoreApplication.setAttribute(Qt.AA_DontCreateNativeWidgetSiblings)
-            if QApplication.platformName() not in ('offscreen', 'minimal'):
-                for attr in (Qt.WA_NativeWindow, Qt.WA_PaintOnScreen, Qt.WA_NoSystemBackground):
-                    self.setAttribute(attr)
-
-        def _can_create_surface(self):
-            return self.testAttribute(Qt.WA_PaintOnScreen)

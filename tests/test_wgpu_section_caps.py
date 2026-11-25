@@ -45,7 +45,7 @@ def test_hatch_master_switch_and_hidden_capture_rows():
 
 
 def test_offscreen_supplies_cap_and_restores_after_failure():
-    from views.wgpu_view import WgpuView
+    from tests.headless_gpu import HeadlessView as WgpuView
     scene, model, camera = fixture()
     view = WgpuView()
     view.packed = model.packed

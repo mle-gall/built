@@ -145,13 +145,9 @@ fn pick_text_label<'py>(v: &Obj<'py>, x: f64, y: f64, rect_only: bool) -> PyResu
     ] {
         font.call_method1(method, (style.call_method1("get", (key, default))?,))?;
     }
-    let fm = if styles.getattr("NATIVE")?.is_truthy()? {
-        font
-    } else if v.is_instance(&py.import("PySide6.QtGui")?.getattr("QPaintDevice")?)? {
-        styles.call_method1("QFontMetrics", (font, v))?
-    } else {
-        styles.call_method1("QFontMetrics", (font,))?
-    };
+    // views.paint_types' fonts are the Rust AnnotationFont, which answers
+    // its own metrics.
+    let fm = font;
     for lab in labels.try_iter()? {
         let lab = lab?;
         if !selectable(&scene, &lab)? {

@@ -2,19 +2,16 @@
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from PySide6.QtWidgets import QApplication
 from ingetrazo_core import Vec3 as QVector3D
 from core.scene import Scene
 from core.group import Group
 from core.mesh import Mesh
 from views.document_interaction import edit_fade_color
 from tests.controller_surface import ControllerSurface as Viewport
-from views.wgpu_view import WgpuView
+from tests.headless_gpu import HeadlessView as WgpuView
 from views.wgpu_scene import pack_scene
 from views.wgpu_edit_context import rest_rows
 from views.wgpu_style import style_payload
-
-app = QApplication.instance() or QApplication([])
 
 
 def group(name):
@@ -128,7 +125,7 @@ def test_hidden_row_never_reaches_inference(context):
 
 
 def test_empty_click_uses_box_to_leave_one_level(context):
-    from PySide6.QtCore import Qt
+    from core.input_types import Qt
     view, source, a, b, _, _, _ = context
     view.scene.begin_group_edit(a)
     view.scene.begin_group_edit(b)

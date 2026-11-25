@@ -8,7 +8,7 @@ texture, say the flagstone, I should be able to change the colour too".
 from __future__ import annotations
 
 import pytest
-from PySide6.QtGui import QColor, QImage
+from ingetrazo_render import SurveyRaster
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group
@@ -21,24 +21,23 @@ def V(x, y, z=0.0):
     return QVector3D(x, y, z)
 
 
+@pytest.fixture(autouse=True)
+def _texture_cache(tmp_path, monkeypatch):
+    """Tinted textures go to this test's own texture cache."""
+    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "textures"))
+
+
 def _png(pixels) -> bytes:
     """A tiny RGBA PNG from a list of rows of (r, g, b, a) tuples."""
-    from PySide6.QtCore import QBuffer
     h, w = len(pixels), len(pixels[0])
-    img = QImage(w, h, QImage.Format.Format_RGBA8888)
-    for y, row in enumerate(pixels):
-        for x, (r, g, b, a) in enumerate(row):
-            img.setPixelColor(x, y, QColor(r, g, b, a))
-    buf = QBuffer()
-    buf.open(QBuffer.OpenModeFlag.WriteOnly)
-    img.save(buf, "PNG")
-    return bytes(buf.data())
+    return SurveyRaster(w, h, bytes(v for row in pixels for px in row for v in px)).png()
 
 
 def _read(data: bytes):
-    img = QImage.fromData(data).convertToFormat(QImage.Format.Format_RGBA8888)
-    return [[img.pixelColor(x, y).getRgb() for x in range(img.width())]
-            for y in range(img.height())]
+    img = SurveyRaster.decode(data)
+    rgba = img.rgba()
+    return [[tuple(rgba[(y * img.width + x) * 4:(y * img.width + x) * 4 + 4]) for x in range(img.width)]
+            for y in range(img.height)]
 
 
 @pytest.fixture

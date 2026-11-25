@@ -16,12 +16,9 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
 import ingetrazo_core as NATIVE  # noqa: E402
 from tests.sheet_camera_cases import frames, scene  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
 GOLDENS = json.loads(gzip.decompress(
     (Path(__file__).parent / "fixtures" / "sheet_camera" / "goldens.json.gz").read_bytes()))
 FRAMES = frames()

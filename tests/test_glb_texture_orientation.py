@@ -17,12 +17,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
-from PySide6.QtGui import QColor, QImage
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-if QApplication.instance() is None:
-    QApplication([])
+from ingetrazo_render import SurveyRaster  # noqa: E402
 
 from core.scene import Scene  # noqa: E402
 from core.texture import affine_uv, fit_uv_affine  # noqa: E402
@@ -30,11 +26,15 @@ from formats.glb import load_glb, read_triangles  # noqa: E402
 from formats.gltf import save_glb  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _texture_cache(tmp_path, monkeypatch):
+    """Imported pictures go to this test's own texture cache."""
+    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "textures"))
+
+
 def _png_bytes(tmp_path) -> bytes:
     path = tmp_path / "picture.png"
-    img = QImage(4, 4, QImage.Format.Format_RGB32)
-    img.fill(QColor(200, 30, 30))
-    assert img.save(str(path))
+    assert SurveyRaster(4, 4, bytes((200, 30, 30, 255)) * 16).save(str(path))
     return path.read_bytes()
 
 

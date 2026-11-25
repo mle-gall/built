@@ -14,12 +14,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 import ingetrazo_core as NATIVE  # noqa: E402
+from ingetrazo_render import SurveyRaster  # noqa: E402
+from tests.headless_gpu import pixel  # noqa: E402
 
 pymupdf = pytest.importorskip("pymupdf")
-_app = QApplication.instance() or QApplication([])
 PT = 72.0 / 25.4
 
 
@@ -135,18 +136,28 @@ def test_the_texts_are_inter_extractable_and_where_qt_puts_them(written):
     box = op["rect"]
     left = box[0][0] + item.x_mm
     top = box[0][1] + item.y_mm
-    from PySide6.QtGui import QFont, QFontMetricsF
-    import sys
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
-    from sheet_font import use_inter
-    use_inter()
-    f = QFont("Sans Serif")
-    f.setPixelSize(100)
-    f.setBold(True)
-    ascent = QFontMetricsF(f).ascent() * op["size"] / 100.0
+    ascent = _inter_ascent("Inter-SemiBold.ttf") * op["size"]
     assert origin[0] / PT == pytest.approx(left, abs=0.05)
     assert origin[1] / PT == pytest.approx(top + ascent, abs=0.05)
     assert "SemiBold" in spans[0]["font"]
+
+
+def _lightness(rgba):
+    """HSL lightness, 0-255, as QColor.lightness() answers it."""
+    return (max(rgba[:3]) + min(rgba[:3])) // 2
+
+
+def _inter_ascent(name):
+    """The bundled Inter's ascent per unit of size, from its hhea table:
+    what the sheet font metrics (sheets::metrics) lay text out with."""
+    import struct
+    data = (Path(__file__).resolve().parents[1] / "resources" / "fonts" / "inter" / name).read_bytes()
+    tables = {}
+    for i in range(struct.unpack(">H", data[4:6])[0]):
+        tag, _, off, _ = struct.unpack(">4sIII", data[12 + 16 * i:28 + 16 * i])
+        tables[tag] = off
+    upm = struct.unpack(">H", data[tables[b"head"] + 18:tables[b"head"] + 20])[0]
+    return struct.unpack(">h", data[tables[b"hhea"] + 4:tables[b"hhea"] + 6])[0] / upm
 
 
 def test_a_frame_s_render_is_an_image_of_its_pixels(written):
@@ -170,7 +181,6 @@ def test_the_image_export_draws_the_same_page(tmp_path):
     """sheets::raster: the page the PDF writer writes, on white paper at
     the dpi asked: the frame's render where the frame is, ink where the
     lines and the text are, paper elsewhere."""
-    from PySide6.QtGui import QImage
     a, _b = _sheets()
     vector, shaded = a.frames
     w, h = 400, 300
@@ -182,14 +192,14 @@ def test_the_image_export_draws_the_same_page(tmp_path):
     size = NATIVE.sheet_image(str(out), a, 100.0, contents, {f"frame:{shaded._doc_key}": (w, h, rgba.tobytes())})
     pw, ph = a.page_size_mm()
     assert size == (round(pw * 100 / 25.4), round(ph * 100 / 25.4))
-    img = QImage(str(out))
-    assert (img.width(), img.height()) == size
-    px = lambda x_mm, y_mm: img.pixelColor(int(x_mm * 100 / 25.4), int(y_mm * 100 / 25.4))  # noqa: E731
-    assert px(shaded.x_mm + 5, shaded.y_mm + 5).red() == 200 and px(shaded.x_mm + 5, shaded.y_mm + 5).green() == 0
-    assert px(200, 180).lightness() == 255                          # paper
+    img = SurveyRaster.open(str(out))
+    assert (img.width, img.height) == size
+    px = lambda x_mm, y_mm: pixel(img, int(x_mm * 100 / 25.4), int(y_mm * 100 / 25.4))  # noqa: E731
+    assert px(shaded.x_mm + 5, shaded.y_mm + 5)[:2] == (200, 0)
+    assert _lightness(px(200, 180)) == 255                          # paper
     # The bold text's ink, inside its box.
     t = a.texts[0]
-    inked = [px(t.x_mm + dx * 0.25, t.y_mm + dy * 0.25).lightness()
+    inked = [_lightness(px(t.x_mm + dx * 0.25, t.y_mm + dy * 0.25))
              for dx in range(0, 200) for dy in range(0, 24)]
     assert min(inked) < 80
     jpg = tmp_path / "sheet.jpg"
@@ -200,21 +210,20 @@ def test_the_image_export_draws_the_same_page(tmp_path):
 def test_an_image_item_shows_its_shape_and_opacity_in_the_files(tmp_path):
     """sheets::picture: an image item cut to an ellipse at half opacity
     leaves its box's corners paper and blends its middle with the paper."""
-    from PySide6.QtGui import QImage
     from core.composition import Composicion, ImagenItem
     pic = tmp_path / "red.png"
-    img = QImage(400, 200, QImage.Format_RGB32)
-    img.fill(0xffff0000)
-    img.save(str(pic))
+    red = np.zeros((200, 400, 4), np.uint8)
+    red[..., 0] = red[..., 3] = 255
+    assert SurveyRaster(400, 200, red.tobytes()).save(str(pic))
     comp = Composicion(name="I", paper="A4", landscape=True)
     comp.images.append(ImagenItem(x_mm=20, y_mm=20, w_mm=80, h_mm=40, path=str(pic), shape="ellipse", opacity=0.5))
     out = tmp_path / "i.png"
     NATIVE.sheet_image(str(out), comp, 100.0)
-    got = QImage(str(out))
-    px = lambda x, y: got.pixelColor(int(x * 100 / 25.4), int(y * 100 / 25.4))  # noqa: E731
-    assert px(21, 21).name() == "#ffffff"                           # a corner: cut away
+    got = SurveyRaster.open(str(out))
+    px = lambda x, y: pixel(got, int(x * 100 / 25.4), int(y * 100 / 25.4))  # noqa: E731
+    assert px(21, 21)[:3] == (255, 255, 255)                        # a corner: cut away
     mid = px(60, 40)
-    assert mid.red() == 255 and 120 <= mid.green() <= 135          # half red on white
+    assert mid[0] == 255 and 120 <= mid[1] <= 135                  # half red on white
     NATIVE.sheet_pdf(str(tmp_path / "i.pdf"), [comp])
     doc = pymupdf.open(str(tmp_path / "i.pdf"))
     assert len(doc[0].get_images(full=True)) == 1
