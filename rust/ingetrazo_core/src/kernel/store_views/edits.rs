@@ -16,13 +16,13 @@ fn refusal(py: Python<'_>, op: &str) -> PyResult<PyErr> {
         ),),
     )?))
 }
-fn checked<T>(v: PyResult<T>, py: Python<'_>, op: &str) -> PyResult<T> {
+pub(super) fn checked<T>(v: PyResult<T>, py: Python<'_>, op: &str) -> PyResult<T> {
     match v {
         Err(e) if e.is_instance_of::<StoreFallback>(py) => Err(refusal(py, op)?),
         v => v,
     }
 }
-fn view<'py>(mesh: &Obj<'py>, kind: usize, key: &Obj<'py>) -> PyResult<Obj<'py>> {
+pub(super) fn view<'py>(mesh: &Obj<'py>, kind: usize, key: &Obj<'py>) -> PyResult<Obj<'py>> {
     api(mesh.py())?.call_method1(["VertexView", "EdgeView", "FaceView"][kind], (mesh, key))
 }
 fn clear_bulk(mesh: &Obj<'_>) -> PyResult<()> {
@@ -32,7 +32,7 @@ fn clear_bulk(mesh: &Obj<'_>) -> PyResult<()> {
 }
 #[pyfunction]
 #[pyo3(signature=(mesh,n=1))]
-fn dirty(mesh: &Obj<'_>, n: i64) -> PyResult<()> {
+pub(super) fn dirty(mesh: &Obj<'_>, n: i64) -> PyResult<()> {
     clear_bulk(mesh)?;
     if n != 0 {
         let d = mesh.getattr("__dict__")?;
@@ -45,7 +45,7 @@ fn dirty(mesh: &Obj<'_>, n: i64) -> PyResult<()> {
 }
 #[pyfunction]
 #[pyo3(signature=(mesh,element,kind,live=false))]
-fn owned<'py>(
+pub(super) fn owned<'py>(
     mesh: &Obj<'py>,
     element: &Obj<'py>,
     kind: u8,
@@ -75,7 +75,7 @@ fn owned<'py>(
         },
     )
 }
-fn key<'py>(
+pub(super) fn key<'py>(
     mesh: &Obj<'py>,
     element: &Obj<'py>,
     kind: u8,

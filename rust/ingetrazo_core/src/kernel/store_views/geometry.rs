@@ -114,7 +114,7 @@ pub(super) fn exchange_paint(attrs: &Obj<'_>) -> PyResult<()> {
     Ok(())
 }
 #[pyfunction]
-fn swap_orientation_paint(face: &Obj<'_>) -> PyResult<()> {
+pub(super) fn swap_orientation_paint(face: &Obj<'_>) -> PyResult<()> {
     let attrs = face.getattr("attrs")?;
     if !attrs.is_none()
         && attrs

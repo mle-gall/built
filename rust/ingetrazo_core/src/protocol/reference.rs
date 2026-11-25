@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Entry placement frames for world-coordinate reference edits.
 use super::*;
+mod session;
 fn copy_matrix<'py>(py: Python<'py>, m: &Obj<'py>) -> PyResult<Obj<'py>> {
     if m.is_none() {
         return Ok(m.clone());
@@ -68,6 +69,8 @@ fn bake_container_xform(group: &Obj<'_>) -> PyResult<()> {
     group.setattr("xform", identity)
 }
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<session::StoreSessionStep>()?;
+    m.add_function(wrap_pyfunction!(session::record_leave, m)?)?;
     m.add_class::<ReshareStep>()?;
     m.add_function(wrap_pyfunction!(enter_reference, m)?)?;
     m.add_function(wrap_pyfunction!(finish_reference, m)?)?;

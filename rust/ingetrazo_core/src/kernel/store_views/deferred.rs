@@ -52,7 +52,7 @@ fn materialize(mesh: &Obj<'_>) -> PyResult<()> {
         }
     }
     let built = if block {
-        Some(super::block::store_from_source(&source,false)?)
+        Some(super::block::store_from_source(&source, false)?)
     } else {
         None
     };
@@ -72,10 +72,10 @@ fn materialize(mesh: &Obj<'_>) -> PyResult<()> {
         }
     }
     if let Some((st, table)) = built {
-        api.call_method1("become_store", (mesh, st, table))?;
+        super::lifecycle::become_store(mesh, &st, table.as_any(), None)?;
     } else {
         mesh.setattr("__class__", api.getattr("StoreMesh")?)?;
-        api.call_method1("initialise_store", (mesh,))?;
+        super::lifecycle::initialise_store(mesh)?;
         build.call1((mesh,))?;
     }
     let observe = py

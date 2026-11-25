@@ -222,7 +222,6 @@ pub fn skp_definition<'py>(
         Store::empty(s.inner.state.ns, s.inner.weld)
     };
     let table = mesh.getattr("_attr_table")?;
-    let table_index = py.import("core.store_mesh")?.getattr("_table_index")?;
     let index = PyDict::new(py);
     let mut rows = Vec::new();
     let mut single = true;
@@ -251,7 +250,8 @@ pub fn skp_definition<'py>(
             single = false;
         }
         let attribute = if attr.is_truthy()? {
-            table_index.call1((&table, &index, attr))?.extract()?
+            crate::kernel::store_views::bulk::table_index(table.as_any(), index.as_any(), &attr)?
+                as i64
         } else {
             -1
         };

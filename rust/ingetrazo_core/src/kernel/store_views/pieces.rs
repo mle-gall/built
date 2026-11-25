@@ -108,13 +108,11 @@ fn copy_mesh_part<'py>(faces: &Obj<'py>, edges: &Obj<'py>) -> PyResult<Option<Ob
         .extract()?;
     let table = PyList::empty(py);
     let index = PyDict::new(py);
-    let intern = model.getattr("_table_index")?;
     let mut map: BTreeMap<i64, i64> = rows.iter().map(|r| (*r, -1)).collect();
     for (r, v) in &mut map {
         if *r >= 0 {
-            *v = intern
-                .call1((&table, &index, src_table.get_item(*r)?))?
-                .extract()?;
+            *v = super::bulk::table_index(table.as_any(), index.as_any(), &src_table.get_item(*r)?)?
+                as i64;
         }
     }
     let mut attrs: Vec<i64> = rows.iter().map(|r| map[r]).collect();
@@ -127,7 +125,7 @@ fn copy_mesh_part<'py>(faces: &Obj<'py>, edges: &Obj<'py>) -> PyResult<Option<Ob
             }
         }
         for (i, v) in overrides {
-            attrs[i] = intern.call1((&table, &index, v))?.extract()?;
+            attrs[i] = super::bulk::table_index(table.as_any(), index.as_any(), &v)? as i64;
         }
     }
     let public = module(py, "core.mesh")?;
@@ -147,7 +145,7 @@ fn copy_mesh_part<'py>(faces: &Obj<'py>, edges: &Obj<'py>) -> PyResult<Option<Ob
         Some(&kw),
     )?;
     let new = public.call_method0("Mesh")?;
-    model.call_method1("become_store", (&new, &store, table))?;
+    super::lifecycle::become_store(&new, &store, table.as_any(), None)?;
     new.call_method0("resplit_curves")?;
     let cols = PyDict::new(py);
     cols.set_item("face", (fs.keys, store.call_method1("keys", ("face",))?))?;

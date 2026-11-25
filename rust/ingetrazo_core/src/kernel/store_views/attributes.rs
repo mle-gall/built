@@ -26,7 +26,7 @@ fn rows(mesh: &Obj<'_>) -> PyResult<Vec<(u128, i64)>> {
 }
 
 #[pyclass(module = "ingetrazo_core")]
-struct FaceAttributes {
+pub(super) struct FaceAttributes {
     entries: std::vec::IntoIter<(u128, i64)>,
     seen: HashSet<i64>,
     own: Py<PyDict>,
@@ -55,7 +55,7 @@ impl FaceAttributes {
     }
 }
 #[pyfunction]
-fn attribute_rows(mesh: &Obj<'_>) -> PyResult<FaceAttributes> {
+pub(super) fn attribute_rows(mesh: &Obj<'_>) -> PyResult<FaceAttributes> {
     let owner = super::properties::attribute_owner(mesh)?;
     Ok(FaceAttributes {
         entries: rows(mesh)?.into_iter(),

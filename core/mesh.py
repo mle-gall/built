@@ -12,7 +12,7 @@ from contextvars import ContextVar
 from typing import Iterable, Optional
 from itertools import count
 
-from ingetrazo_core import object_drawing, object_replay, Vec3 as QVector3D, polygon_centroid, polygon_net_area, polygon_newell
+from ingetrazo_core import store_views, object_drawing, object_replay, Vec3 as QVector3D, polygon_centroid, polygon_net_area, polygon_newell
 
 
 # Weld tolerance — two positions within this many decimals (~0.1 mm at metric
@@ -253,10 +253,7 @@ on_mesh_materialized = ContextVar("on_mesh_materialized", default=None)
 
 
 class _MeshState:
-    @property
-    def revision(self) -> int:
-        """Session-local change token; reading never builds a deferred mesh."""
-        return self.__dict__.get("_revision", 0) + self._mut_serial
+    revision = property(store_views.mesh_revision)
 
     @property
     def _chunk_dirty(self):
@@ -284,24 +281,10 @@ class _MeshState:
         self.__dict__["_attrs_dirty_value"] = True
 
     def bump_revision(self) -> None:
-        """Advance :attr:`revision` alone: a change readers of the revision
-        must see that touched no coordinate — an attribute, a tag, a
-        material. The mutation serial and the winding count stay put, so
-        the viewport's geometry caches (keyed on those) are not thrown
-        away for a paint; see :meth:`mark_modified` for raw edits."""
-        self.__dict__["_revision"] = self.__dict__.get("_revision", 0) + 1
-        definition = self.__dict__.get("_instance_definition")
-        if definition is not None:
-            definition.mark_modified()
+        return store_views.bump_revision(self)
 
     def mark_modified(self) -> None:
-        """Publish a batch of direct element edits, including attributes."""
-        self._chunk_dirty = True
-        self._attrs_dirty = True
-        # Raw position and winding edits must invalidate readers that key
-        # on geometry alone, not just the renderer's material dirty flag.
-        self._mut_serial += 1
-        self._winding_rev = getattr(self, "_winding_rev", 0) + 1
+        return store_views.mark_modified(self)
 
     @staticmethod
     def next_curve_id() -> int:
@@ -313,13 +296,7 @@ class _MeshState:
         return cid
 
     def note_rewound(self) -> None:
-        """Say that faces may have changed winding (#197): no count,
-        coordinate or paint shows it, so the drawing's chunk has to be told.
-        Marked dirty too, or a move in the same breath would carry the old
-        triangles along on the translation fast path."""
-        self._winding_rev = getattr(self, "_winding_rev", 0) + 1
-        self._chunk_dirty = True
-        self.__dict__["_attrs_dirty_value"] = True   # one revision bump
+        return store_views.note_rewound(self)
 
     def add_faces_bulk(self, pos, ring_sizes, face_ring_counts, attrs=None):
         """Convenience: :meth:`bulk_weld` + :meth:`add_faces_welded`."""
@@ -336,38 +313,12 @@ def __getattr__(name):
     raise AttributeError(name)
 
 
-def face_count(mesh) -> int:
-    """``len(mesh.faces)``, without building a deferred mesh to learn it."""
-    from core.store_mesh import DeferredMesh
-    if type(mesh) is DeferredMesh:
-        return mesh.__dict__["_deferred_nfaces"]
-    return len(mesh.faces)
+face_count = store_views.face_count
 
 
 def face_attrs(mesh):
-    """Each face's own attrs, in face order — for a deferred or store-backed
-    mesh only the first face of each distinct set (what a first-wins tally
-    of materials needs), read without building Python objects."""
-    from core.store_mesh import DeferredMesh
-    if type(mesh) is DeferredMesh:
-        import numpy as np
-        from formats.igz import _face_attrs_from_json
-        src = mesh.__dict__["_deferred_source"]
-        table = src["meta"].get("face_attrs") or []
-        fa = np.asarray(src["face_attr"], dtype=np.int64)
-        _u, first = np.unique(fa, return_index=True)
-        for k in fa[np.sort(first)].tolist():
-            yield (_face_attrs_from_json(table[k]) or {}) if k >= 0 else {}
-        return
-    from core.store_mesh import StoreMesh
-    if isinstance(mesh, StoreMesh):
-        yield from store_views.attribute_rows(mesh)
-        return
-    for f in mesh.faces:
-        yield f.attrs
+    yield from store_views.face_attribute_rows(mesh)
 
-
-from ingetrazo_core import store_views
 
 turn_face_over = store_views.turn_face_over
 swap_orientation_paint = store_views.swap_orientation_paint

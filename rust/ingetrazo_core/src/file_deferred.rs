@@ -385,7 +385,6 @@ impl Builder {
                 (mesh, codec.call_method1("_payload_from_arrays", (s,))?),
             )?;
         } else {
-            let store = py.import("core.store_mesh")?;
             let empty = || -> PyResult<bool> {
                 for k in ["vertices", "edges", "faces"] {
                     if mesh.getattr(k)?.is_truthy()? {
@@ -395,8 +394,14 @@ impl Builder {
                 Ok(true)
             };
             if self.precise || empty()? {
-                let (st, table) = crate::kernel::store_views::block::store_from_source(s, self.precise)?;
-                store.call_method1("become_store", (mesh, st, table))?;
+                let (st, table) =
+                    crate::kernel::store_views::block::store_from_source(s, self.precise)?;
+                crate::kernel::store_views::lifecycle::become_store(
+                    mesh,
+                    &st,
+                    table.as_any(),
+                    None,
+                )?;
             } else if get(s, "sequential")?.is_truthy()? {
                 codec.call_method1(
                     "_load_mesh_small",

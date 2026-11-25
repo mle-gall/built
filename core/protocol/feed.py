@@ -27,7 +27,7 @@ alive: :attr:`MeshChange.mesh` is a weak reference."""
 from __future__ import annotations
 
 import weakref
-from ingetrazo_core import FeedMeshRecord, FeedStepRecord
+from ingetrazo_core import FeedMeshRecord, FeedStepRecord, HistoryFeed
 
 from core.protocol.keys import KINDS, mesh_key
 
@@ -96,7 +96,7 @@ ATTRS_COPY_MAX = 50_000
 
 # ---------------------------------------------------------------- the feed
 
-class ChangeFeed:
+class ChangeFeed(HistoryFeed):
     """The per-step change records of one History (see the module doc)."""
 
     #: Steps kept for :meth:`since` (History keeps 256 journal entries).
@@ -114,31 +114,6 @@ class ChangeFeed:
         self.unsubscribe = history.add_listener(before=self._before,
                                                 after=self._after)
 
-    # -- reading
-    @property
-    def revision(self) -> int:
-        h = self._history()
-        return h.revision if h is not None else 0
-
-    def current(self, reader, version):
-        return self.readers.revision == self.revision and self.readers.current(reader, version)
-
-    @property
-    def last(self) -> Step | None:
-        return self._native.feed_step(None)
-
-    def step(self, revision) -> Step | None:
-        return self._native.feed_step(revision) if 0 <= revision <= self.revision else None
-
-    def since(self, revision=0) -> dict:
-        """``{revision, complete, steps}``: the steps after ``revision``
-        (``complete`` False when older ones fell out of the ring; the
-        consumer re-reads what it follows)."""
-        now = self.revision
-        if type(revision) is not int or revision < 0 or revision > now:
-            raise ValueError("revision must be between zero and the current revision")
-        return self._native.feed_since(revision)
-
     def subscribe(self, fn):
         """Call ``fn(step)`` after every published step; returns an
         unsubscribe function."""
@@ -149,34 +124,3 @@ class ChangeFeed:
             if entry in self._subscribers:
                 self._subscribers.remove(entry)
         return unsubscribe
-
-    # -- History's listener callbacks
-    def _before(self, cmd, phase, ran):
-        self._depth += 1
-        if self._depth > 1:
-            return          # a command run inside another: the outer step covers it
-        h = self._history()
-        scene = h.scene if h is not None else None
-        if scene is None:
-            self._pending = None
-            return
-        serial = self.readers.stamp()
-        tokens = self._native.capture_meshes(cmd, scene, phase, ATTRS_COPY_MAX)
-        self._pending = (cmd, phase, tokens,
-                         getattr(scene, "content_version", None), serial)
-
-    def _after(self, cmd, phase, ran):
-        self._depth = max(0, self._depth - 1)
-        if self._depth:
-            return
-        pending, self._pending = self._pending, None
-        if not ran or pending is None or pending[0] is not cmd:
-            return
-        h = self._history()
-        if h is None:
-            return
-        step = self._native.build_step(h, cmd, phase, pending[2])
-        step._reader_context = (pending[3], getattr(h.scene, "content_version", None), pending[4],
-                                getattr(cmd, "keeps_paint", False), getattr(cmd, "keeps_rows", False),
-                                getattr(cmd, "keeps_groups", False))
-        return self._native.publish(step)

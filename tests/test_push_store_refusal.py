@@ -42,7 +42,7 @@ def test_a_store_refusal_leaves_the_model_and_writes_a_repro(monkeypatch, logs, 
 
     def refused(self, *args):
         calls.append(1)
-        raise S._fallback()(f"test: {where} refused")
+        raise S.StoreFallback(f"test: {where} refused")
 
     monkeypatch.setattr(MeshStore, "push_" + where, refused)
     flashes = []

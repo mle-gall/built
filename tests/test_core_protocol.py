@@ -9,6 +9,7 @@ oracle read through the mesh itself before and after each step (keys,
 positions, ends, faces, rings, edge sets): created / removed / moved /
 modified must be exactly what changed, and an undo exactly the inverse."""
 from __future__ import annotations
+from ingetrazo_core import store_views
 
 import json
 import random
@@ -346,7 +347,7 @@ def test_renderer_reads_the_feed_for_a_store_mesh():
     from views.wgpu_scene import pack_scene
     from views.wgpu_updates import InstanceUpdates
     mesh = M.Mesh()
-    S.become_store(mesh, mod.MeshStore(next(M._KEY_NAMESPACES), **S._weld_args()), [])
+    store_views.become_store(mesh, mod.MeshStore(next(M._KEY_NAMESPACES), **S._weld_args()), [])
     mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(0, 3, 0)])
     # A classic group: its own mesh is edited in place (a component
     # instance would be edited through a world copy).

@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""World-copy edit sessions for object meshes and singular store placements."""
+"""History command constructors for singular placement edit sessions."""
 from ingetrazo_core import Matrix4, command_protocol
-from ingetrazo_core.command_protocol import restore_sharing, share_back
+from ingetrazo_core.command_protocol import record_leave
 
-from core.history import Command, MeshCommand, CompoundCommand, OccurrenceCommands
+from core.history import Command, MeshCommand
 
 
 class ReshareInstanceCommand(command_protocol.ReshareStep, Command):
@@ -58,7 +58,7 @@ class ReshareAssemblyCommand(command_protocol.ReshareStep, Command):
         self._after = None
         self.shared = False
 
-class _StoreSession(MeshCommand):
+class _StoreSession(command_protocol.StoreSessionStep, MeshCommand):
     """Close a singular placement's world copy. History journals the writes
     to the canonical store and placements. Replay uses the entry and exit
     transactions around the commands that actually ran inside."""
@@ -74,63 +74,3 @@ class _StoreSession(MeshCommand):
         self.history_name = ("ReshareAssemblyCommand" if self.reference_assembly
                              else "ReshareInstanceCommand")
         self.replay = None
-
-    def geometry_meshes(self, scene):
-        return (self.proto,)
-
-    def do(self, scene):
-        if self.replay is not None:
-            self.replay.do(scene)
-        elif self.shared:
-            share_back(self.group, self.proto, self.xform, self.edited, self.parts)
-        else:
-            restore_sharing(self.group, self.proto, self.xform, self.parts)
-        scene.version += 1
-
-    def undo(self, scene):
-        self.replay.undo(scene)
-        scene.version += 1
-
-    def doc_after(self, scene, phase):
-        OccurrenceCommands(self.inner).doc_after(scene, phase)
-        scene.version += 1
-
-    def bind_transaction(self, txn):
-        edits = [getattr(c, "_doc_txn", None) for c in self.inner]
-        if all(edit is not None for edit in edits):
-            self._doc_txn = txn.compose([self.entry, *edits, txn])
-            return
-        # A compatibility tool changed Python-owned state, e.g. annotations.
-        # Keep its own inverse between the native entry and exit transactions.
-        opening, closing = CompoundCommand([]), CompoundCommand([])
-        opening._doc_txn = self.entry
-        closing._doc_txn = txn
-        self.replay = OccurrenceCommands([opening, *self.inner, closing])
-        self._doc_txn = None
-
-
-def record_leave(history, level, share):
-    """Close the compatibility session as one undoable step."""
-    parts = level.get("parts")
-    group, proto, xform, state0 = share
-    edited = group.mesh
-    mark = level.get("undo_mark", len(history.undo_stack))
-    mark = min(mark, len(history.undo_stack))
-    if "session" in level:
-        mark = OccurrenceCommands.group_start(history, level["session"])
-    shared = edited.capture_state() != state0
-    entry = level.get("entry_transaction")
-    from core import doc_model
-    changed_parts = parts is not None and len(history.undo_stack) > mark
-    if not (shared or changed_parts):
-        restore_sharing(group, proto, xform, parts=parts)
-        return shared
-    inner = history.undo_stack[mark:]
-    if entry is not None and not doc_model.NATIVE.doc_depth():
-        step = _StoreSession(share, parts, inner, shared, entry)
-    elif parts is not None:
-        step = ReshareAssemblyCommand(group, proto, xform, edited, state0, parts, inner)
-    else:
-        step = ReshareInstanceCommand(group, proto, xform, edited, inner)
-    history._native.close_group(history, mark, step)
-    return shared

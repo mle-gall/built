@@ -3,6 +3,7 @@
 //! facades still supply attribute dictionaries and compatibility command hints.
 pub(super) mod capture;
 mod hints;
+pub(super) mod history;
 mod placements;
 pub(super) mod records;
 use pyo3::prelude::*;
@@ -97,10 +98,7 @@ pub(super) fn build<'py>(
         )?;
     }
     let known = placements::known(cmd, phase, &step, &scene, !record.is_none())?;
-    step.setattr(
-        "complete",
-        known && step.getattr("complete")?.is_truthy()?,
-    )?;
+    step.setattr("complete", known && step.getattr("complete")?.is_truthy()?)?;
     placements
         .get_item("modified")?
         .call_method1("extend", (history.getattr("_moved_signs")?,))?;
@@ -225,7 +223,8 @@ impl FeedReaders {
     ) -> PyResult<()> {
         let now = self.stamp(py)?;
         for (reader, stamp) in &mut self.scans {
-            if *stamp == (before, serial) && matches!(reader.as_str(), "mesh_paint" | "library_paint" | "filing")
+            if *stamp == (before, serial)
+                && matches!(reader.as_str(), "mesh_paint" | "library_paint" | "filing")
             {
                 *stamp = (after, now);
             }
@@ -275,8 +274,10 @@ impl FeedReaders {
                     .unwrap_or(false)
             });
         if keyed_paint {
-            for (reader, pending) in [("mesh_paint", &mut self.dirty_paint),
-                                       ("library_paint", &mut self.dirty_library_paint)] {
+            for (reader, pending) in [
+                ("mesh_paint", &mut self.dirty_paint),
+                ("library_paint", &mut self.dirty_library_paint),
+            ] {
                 if self.scans.get(reader) == Some(&(before, serial)) {
                     for change in changes.try_iter()? {
                         pending.insert(change?.getattr("key")?.extract()?);
@@ -292,19 +293,37 @@ impl FeedReaders {
         }
         self.scans.retain(|reader, version| {
             let keep = match reader.as_str() {
-                "paint" | "bim" | "library_paint_totals" => paint && !registry && !membership && !tag_changes,
+                "paint" | "bim" | "library_paint_totals" => {
+                    paint && !registry && !membership && !tag_changes
+                }
                 "rows" => (paint || rows) && !membership && !tag_changes && !registry,
                 "mesh_paint" | "library_paint" => (paint || groups || keyed_paint) && !registry,
-                "filing" => !registry && !tag_changes && (
-                    matches!(command.as_str(), "DeleteGroupCommand" | "InsertGroupCommand")
-                    || (command == "MoveGroupCommand" && paint)),
-                "browser" => !membership && !tag_changes && !registry && (
-                    (command == "MoveGroupCommand" && paint) ||
-                    (!modified && matches!(command.as_str(),
-                        "SnapshotMutation" | "SnapshotCompound" | "MoveVerticesCommand"
-                        | "AddEdgeCommand" | "AddFaceCommand" | "EraseSelectionCommand"
-                        | "DeleteEdgesCommand" | "DeleteFaceCommand"))
-                ),
+                "filing" => {
+                    !registry
+                        && !tag_changes
+                        && (matches!(
+                            command.as_str(),
+                            "DeleteGroupCommand" | "InsertGroupCommand"
+                        ) || (command == "MoveGroupCommand" && paint))
+                }
+                "browser" => {
+                    !membership
+                        && !tag_changes
+                        && !registry
+                        && ((command == "MoveGroupCommand" && paint)
+                            || (!modified
+                                && matches!(
+                                    command.as_str(),
+                                    "SnapshotMutation"
+                                        | "SnapshotCompound"
+                                        | "MoveVerticesCommand"
+                                        | "AddEdgeCommand"
+                                        | "AddFaceCommand"
+                                        | "EraseSelectionCommand"
+                                        | "DeleteEdgesCommand"
+                                        | "DeleteFaceCommand"
+                                )))
+                }
                 "structure" => {
                     !modified
                         && !tag_changes

@@ -26,6 +26,7 @@ that is the oracle here.
   store on and off: the same model at the end.
 """
 from __future__ import annotations
+from ingetrazo_core import store_views
 
 import os
 import random
@@ -57,7 +58,7 @@ def V(x, y, z=0.0):
 def _mesh(store: bool):
     m = M.Mesh()
     if store:
-        S.become_store(m, mod.MeshStore(next(M._KEY_NAMESPACES),
+        store_views.become_store(m, mod.MeshStore(next(M._KEY_NAMESPACES),
                                         **S._weld_args()), [])
     return m
 
@@ -517,7 +518,7 @@ def _push_state(store, oracle, off, build, pick, dist):
     oracle(off)
     scene = Scene()
     if store:
-        S.become_store(scene.mesh, mod.MeshStore(
+        store_views.become_store(scene.mesh, mod.MeshStore(
             next(M._KEY_NAMESPACES), **S._weld_args()), [])
     hist = History(scene)
     build(scene.mesh)
@@ -583,7 +584,7 @@ def _certifier_run(monkeypatch, scenario, seed, store):
         def __init__(self, *a, **k):
             super().__init__(*a, **k)
             if store:
-                S.become_store(self.mesh, mod.MeshStore(
+                store_views.become_store(self.mesh, mod.MeshStore(
                     next(M._KEY_NAMESPACES), **S._weld_args()), [])
             made.append(self)
     monkeypatch.setattr(FE, "Scene", _Scene)

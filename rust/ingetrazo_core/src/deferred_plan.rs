@@ -6,6 +6,7 @@ use pyo3::{
     prelude::*,
     types::{PyDict, PyList},
 };
+pub(crate) mod api;
 use std::collections::HashMap;
 type Obj<'py> = Bound<'py, PyAny>;
 fn index(i: i64, len: usize) -> PyResult<usize> {
