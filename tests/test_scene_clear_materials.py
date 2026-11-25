@@ -15,16 +15,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import zipfile
 
 import pytest
-from PySide6.QtGui import QImage
+from ingetrazo_render import SurveyRaster
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
 
 from core.materials import Material                                  # noqa: E402
 from core.scene import Scene                                         # noqa: E402
@@ -55,7 +48,7 @@ def test_a_new_document_does_not_save_the_previous_materials(tmp_path):
     Save. The new file must carry none of the old materials, and none
     of their textures may be embedded in the container."""
     img = tmp_path / "marble.png"
-    QImage(4, 4, QImage.Format.Format_RGB32).save(str(img))
+    assert SurveyRaster(4, 4, bytes((0, 0, 0, 255)) * 16).save(str(img))
 
     scene = Scene()
     tex = {"path": str(img), "sw": 1.0, "sh": 1.0}

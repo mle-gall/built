@@ -1,10 +1,9 @@
-"""Binary64 model arithmetic before storage, after copying and at Qt edges."""
+"""Binary64 model arithmetic before storage, after copying and at the API's edges."""
 import copy
 import pickle
 
 import pytest
 from ingetrazo_core import Matrix4, Quaternion, Vec3
-from PySide6.QtGui import QMatrix4x4, QVector3D
 
 
 def test_survey_coordinates_keep_millimetres_across_matrix_operations():
@@ -46,9 +45,9 @@ def test_hashed_coordinates_stay_valid_dict_keys():
 
 
 def test_boundary_constructors_and_axis_angle():
-    qt_matrix = QMatrix4x4()
-    qt_matrix.translate(1, 2, 3)
-    v = QVector3D(1, 0, 0)
-    assert Matrix4(qt_matrix).map(v) == Vec3(2, 2, 3)
+    source = Matrix4()
+    source.translate(1, 2, 3)
+    v = (1.0, 0.0, 0.0)                  # a plain triple is a point too
+    assert Matrix4(source).map(v) == Vec3(2, 2, 3)
     rotation = Quaternion.fromAxisAndAngle(Vec3(0, 0, 1), 90)
     assert rotation.rotatedVector(v).toTuple() == pytest.approx((0, 1, 0))

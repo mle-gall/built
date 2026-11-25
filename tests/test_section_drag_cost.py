@@ -16,7 +16,6 @@ from __future__ import annotations
 import numpy as np
 from ingetrazo_core import Vec3 as QVector3D
 
-from core import section
 from core.section import PlaneReach, cut_chords
 
 
@@ -94,27 +93,18 @@ def test_the_kept_heights_cut_what_the_plain_cut_cuts():
     assert cut > 10000           # the comparison did see chords
 
 
-def test_a_slid_plane_works_only_the_triangles_it_crosses(monkeypatch):
+def test_a_slid_plane_works_only_the_triangles_it_crosses():
     rng = np.random.default_rng(7)
     v0, e1, e2 = _triangles(rng, 20000)
     # Small triangles, as a model's are next to its size.
     e1, e2 = e1 * 0.1, e2 * 0.1
     normal = QVector3D(0, 0, 1)
     reach = PlaneReach(v0, e1, e2, normal)
-    worked = []
-    real = np.divide
-
-    def counted(a, b, *args, **kw):
-        worked.append(len(a))
-        return real(a, b, *args, **kw)
-
-    monkeypatch.setattr(section.np if hasattr(section, "np") else np,
-                        "divide", counted)
     reach.cut(QVector3D(0, 0, 4.5))
-    # Only triangles reaching above and below z = 4.5 are cut, three edges
-    # each: a few hundred of twenty thousand. Measuring every triangle
-    # again was 3 × 20 000 per move.
-    assert 0 < sum(worked) < 0.1 * 3 * len(v0)
+    # Only triangles reaching above and below z = 4.5 are cut: a few hundred
+    # of twenty thousand (``worked``, the triangles the last cut measured).
+    # Measuring every triangle again was 20 000 per move.
+    assert 0 < reach.worked < 0.1 * len(v0)
 
 
 def test_the_heights_are_kept_only_for_the_same_arrays_and_normal():

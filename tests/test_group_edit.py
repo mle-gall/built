@@ -358,7 +358,8 @@ def test_every_scale_figure_has_its_cutout_and_a_real_height():
     import json
     from pathlib import Path
 
-    from PySide6.QtGui import QImage
+    import numpy as np
+    from ingetrazo_render import SurveyRaster
 
     comp_dir = Path(__file__).resolve().parent.parent / "resources" / "components"
     people = json.loads((comp_dir / "people.json").read_text())
@@ -368,17 +369,16 @@ def test_every_scale_figure_has_its_cutout_and_a_real_height():
         assert png.exists(), entry["key"]
         h = entry["height"]
         assert 0.5 <= h <= 2.5, entry["key"]      # a person, not a tower
-        img = QImage(str(png))
-        assert not img.isNull() and img.height() > 0, entry["key"]
-        assert img.hasAlphaChannel(), entry["key"]
+        img = SurveyRaster.open(png)
+        assert img is not None and img.height > 0, entry["key"]
+        alpha = np.frombuffer(img.rgba(), np.uint8).reshape(img.height, img.width, 4)[..., 3]
+        assert (alpha < 255).any(), entry["key"]     # a cutout, not a box
         # The figure must fill the frame: the billboard maps the WHOLE image
         # to `height`, so blank pixels above the head shorten the person by
         # exactly their share of it.
-        rows = [y for y in range(img.height())
-                if any(img.pixelColor(x, y).alpha() > 8
-                       for x in range(0, img.width(), 3))]
+        rows = np.flatnonzero((alpha[:, ::3] > 8).any(axis=1)).tolist()
         assert rows, entry["key"]
-        filled = (rows[-1] - rows[0] + 1) / img.height()
+        filled = (rows[-1] - rows[0] + 1) / img.height
         assert filled > 0.99, \
             "%s: the figure fills %.1f%% of its image, so it stands %.2f m " \
             "instead of %.2f" % (entry["key"], filled * 100, h * filled, h)
