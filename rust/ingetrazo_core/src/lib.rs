@@ -169,6 +169,7 @@ mod push_command;
 mod push_operation;
 mod solids;
 mod sweep_operation;
+mod make_faces;
 pub mod pyset;
 mod push_guard;
 mod object_weld;

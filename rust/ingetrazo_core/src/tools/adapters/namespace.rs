@@ -210,7 +210,7 @@ fn definition(name: &str) -> Option<&'static Module> {
     MODULES.iter().find(|m| m.name == leaf)
 }
 
-const CORE_MODULES: &[&str] = &["composition", "push_pull", "solids", "sweep"];
+const CORE_MODULES: &[&str] = &["composition", "push_pull", "solids", "sweep", "make_faces"];
 const VIEW_MODULES: &[&str] = &[
     "document_interaction",
     "documents",
@@ -276,6 +276,7 @@ impl ToolModules {
                 "core.push_pull" => crate::push_operation::install(module),
                 "core.solids" => crate::solids::install(module),
                 "core.sweep" => crate::sweep_operation::install(module),
+                "core.make_faces" => crate::make_faces::install(module),
                 _ => Err(PyImportError::new_err(full)),
             };
         }

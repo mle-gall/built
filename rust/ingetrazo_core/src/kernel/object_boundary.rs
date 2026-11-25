@@ -129,7 +129,7 @@ pub(super) fn segment_contains(p: [f64; 2], a: [f64; 2], b: [f64; 2], tol: f64) 
 }
 
 #[pyfunction]
-fn face_winding<'py>(ring: &Obj<'py>, eye: Option<&Obj<'py>>) -> PyResult<Ring<'py>> {
+pub(crate) fn face_winding<'py>(ring: &Obj<'py>, eye: Option<&Obj<'py>>) -> PyResult<Ring<'py>> {
     let mut corners = ring.try_iter()?.collect::<PyResult<Ring>>()?;
     if corners.len() >= 3 {
         let points = corners.iter().map(xyz).collect::<PyResult<Vec<_>>>()?;
