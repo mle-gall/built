@@ -317,6 +317,44 @@ def test_doc_tree_composes_as_model_placements():
             assert defined[i] and np.array_equal(world[i], m)   # bit for bit
 
 
+def test_doc_tree_composes_turned_and_scaled_chains_as_model_placements():
+    """Every element of every world matrix, where no zero hides the order
+    of the product: chains four deep, each placement turned about its own
+    axis, scaled unevenly and moved (``resident/pack.rs`` ``compose``)."""
+    import random
+    from ingetrazo_core import doc_worlds
+    rng = random.Random(20261125)
+
+    def placed(name):
+        group = Group(Mesh(), name=name)
+        m = QMatrix4x4()
+        m.translate(QVector3D(rng.uniform(-900, 900), rng.uniform(-900, 900), rng.uniform(-40, 40)))
+        m.rotate(rng.uniform(-179, 179), QVector3D(rng.uniform(-1, 1), rng.uniform(-1, 1), rng.uniform(.1, 1)))
+        m.scale(QVector3D(rng.uniform(.2, 3), rng.uniform(.2, 3), rng.uniform(.2, 3)))
+        group.xform = m
+        return group
+
+    roots = []
+    for r in range(12):
+        root = placed(f"r{r}")
+        level = [root]
+        for depth in range(3):
+            below = []
+            for parent in level:
+                for k in range(3):
+                    child = placed(f"{parent.name}.{k}")
+                    parent.children.append(child)
+                    below.append(child)
+            level = below
+        roots.append(root)
+    handles, parent, local, has, hidden = N.doc_tree(roots)
+    world, defined = doc_worlds(local, has, parent)
+    ref = [p for r in roots for p in model_placements(r)]
+    assert [g for g, _m in ref] == list(handles) and len(ref) == 12 * 40
+    different = [g.name for i, (g, m) in enumerate(ref) if not (defined[i] and np.array_equal(world[i], m))]
+    assert not different, (len(different), different[:5])
+
+
 def test_doc_walk_is_iter_groups():
     from core import purge
     roots = _tree()

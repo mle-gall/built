@@ -167,8 +167,8 @@ impl PlacementState {
 }
 
 /// World matrices of a `doc_tree` walk, as `model_placements` composes them
-/// (`local @ parent`, f64, undefined while the chain has no matrix). Parents
-/// come before their children.
+/// (`local @ parent`, f64, through the same product; undefined while the
+/// chain has no matrix). Parents come before their children.
 pub fn compose(local: &[f64], has: &[bool], parent: &[i64]) -> PyResult<(Vec<World>, Vec<bool>)> {
     let n = parent.len();
     if local.len() != n * 16 || has.len() != n {
@@ -186,8 +186,11 @@ pub fn compose(local: &[f64], has: &[bool], parent: &[i64]) -> PyResult<(Vec<Wor
             None => (own, has[i]),
             Some(p) => match (has[i], defined[p]) {
                 (true, true) => {
-                    let above: &World = &world[p];
-                    (std::array::from_fn(|r| std::array::from_fn(|c| (0..4).fold(0., |sum, k| sum + own[r][k] * above[k][c]))), true)
+                    // The model's own product, in NumPy's order: a plain
+                    // sum agrees with it only where zeros line up.
+                    let flat = |m: &World| -> [f64; 16] { std::array::from_fn(|at| m[at / 4][at % 4]) };
+                    let product = crate::model::placement_walks::numpy_matmul4(&flat(&own), &flat(&world[p]));
+                    (std::array::from_fn(|r| std::array::from_fn(|c| product[r * 4 + c])), true)
                 }
                 (true, false) => (own, true),
                 (false, true) => (world[p], true),
