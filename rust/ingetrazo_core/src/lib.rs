@@ -134,6 +134,7 @@ mod occlusion;
 mod parity;
 mod visible;
 mod weld;
+mod deferred_plan;
 mod skp;
 mod snap_build;
 mod snap;
@@ -284,6 +285,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(qt_vector_probe, m)?)?;
     m.add_function(wrap_pyfunction!(qt_dot_pairs, m)?)?;
     m.add_function(wrap_pyfunction!(smooth_corner_normals, m)?)?;
+    m.add_function(wrap_pyfunction!(deferred_plan::deferred_incidence, m)?)?;
     m.add_function(wrap_pyfunction!(weld_points, m)?)?;
     m.add_function(wrap_pyfunction!(store_weld_indices, m)?)?;
     m.add_function(wrap_pyfunction!(json_mesh_blocks, m)?)?;

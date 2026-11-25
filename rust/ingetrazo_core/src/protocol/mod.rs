@@ -16,6 +16,8 @@ mod mesh_tools;
 mod document;
 mod drawing;
 mod materials;
+mod keys;
+mod queries;
 mod annotations;
 
 type Obj<'py> = Bound<'py, PyAny>;
@@ -61,11 +63,10 @@ fn need<'py>(mesh: &Obj<'py>, kind: &str, keys: &Obj<'py>) -> PyResult<Bound<'py
     let py = mesh.py();
     let kind_enum =
         Kind::parse(kind).ok_or_else(|| PyValueError::new_err("expected vertex, edge or face"))?;
-    let parse = py.import("core.protocol.keys")?.getattr("from_json_key")?;
     // Parse the complete request before resolving it, including a later malformed key.
     let keys = keys
         .try_iter()?
-        .map(|k| parse.call1((k?,)))
+        .map(|k| keys::from_json_key(&k?))
         .collect::<PyResult<Vec<_>>>()?;
     let result = PyList::empty(py);
     let store = mesh.getattr("_store")?;
@@ -147,6 +148,8 @@ pub(crate) fn register(root: &Bound<'_, PyModule>) -> PyResult<()> {
     mesh_tools::register(&m)?;
     transforms::register(&m)?;
     drawing::register(&m)?;
+    keys::register(&m)?;
+    queries::register(&m)?;
     annotations::register(&m)?;
     materials::register(&m)?;
     document::register(&m)?;
