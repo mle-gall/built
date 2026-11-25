@@ -16,6 +16,50 @@ fn none(py: Python<'_>) -> Obj<'_> {
 fn optional<'p>(obj: &Obj<'p>, name: &str) -> PyResult<Obj<'p>> {
     Ok(obj.getattr_opt(name)?.unwrap_or_else(|| none(obj.py())))
 }
+#[pyfunction(signature=(directory=None, *, temporary=false))]
+pub(crate) fn start_profile<'p>(
+    py: Python<'p>,
+    directory: Option<Obj<'p>>,
+    temporary: bool,
+) -> PyResult<Obj<'p>> {
+    let env = py.import("os")?.getattr("environ")?;
+    let mut profile = directory.unwrap_or_else(|| none(py));
+    if !profile.is_truthy()? {
+        profile = env.call_method1("get", ("BUILT_SETTINGS_DIR",))?;
+    }
+    if !profile.is_truthy()? && temporary {
+        let options = PyDict::new(py);
+        options.set_item("prefix", "built-shell-settings-")?;
+        profile = py
+            .import("tempfile")?
+            .call_method("mkdtemp", (), Some(&options))?;
+    }
+    if profile.is_truthy()? {
+        let data = profile.extract::<std::path::PathBuf>()?.join("data");
+        std::fs::create_dir_all(&data)?;
+        env.set_item(
+            "XDG_DATA_HOME",
+            py.import("os")?.call_method1("fsdecode", (data,))?,
+        )?;
+    } else if py.import("sys")?.getattr("modules")?.contains("pytest")?
+        || env.contains("PYTEST_CURRENT_TEST")?
+    {
+        return Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "pytest must supply an isolated shell profile",
+        ));
+    }
+    let settings = py.import("core.settings")?;
+    settings.call_method1("use_native", (&profile,))?;
+    let language = settings
+        .call_method0("settings")?
+        .call_method1("value", ("language",))?;
+    let i18n = py.import("core.i18n")?;
+    i18n.call_method1(
+        "set_language",
+        (i18n.call_method1("resolve_language", (language,))?,),
+    )?;
+    Ok(profile)
+}
 fn front(host: &Obj<'_>) -> PyResult<()> {
     host.py().import("app_shell.modal")?.setattr("_HOST", host)
 }
@@ -139,11 +183,7 @@ impl Host {
         platform: &str,
     ) -> PyResult<Py<Self>> {
         let start = Instant::now();
-        let kw = PyDict::new(py);
-        kw.set_item("temporary", temporary)?;
-        let profile =
-            py.import("app_shell.profile")?
-                .call_method("start", (settings,), Some(&kw))?;
+        let profile = start_profile(py, settings, temporary)?;
         let host = Bound::new(
             py,
             Self {
