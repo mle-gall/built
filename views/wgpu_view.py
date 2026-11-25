@@ -159,7 +159,7 @@ class MetalView(ViewNavigation):
         self.overlay_ms = 0.
         self.last = None
         self.build_seconds = self.upload_seconds = 0.
-        from views.wgpu_tools import NativeTools
+        from ingetrazo_render import NativeTools
         self.tools = NativeTools(self)
 
     def paintEngine(self):

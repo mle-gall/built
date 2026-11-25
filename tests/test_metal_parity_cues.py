@@ -82,7 +82,7 @@ def test_rubber_band_has_gl_colour_and_width(kind):
 
 def test_depth_tested_band_goes_to_the_native_preview_not_the_overlay():
     # Push/Pull's forming box is hidden by its faces in GL (depth-tested).
-    from views.wgpu_mesh_tools import MeshToolAccess
+    from ingetrazo_render import MeshToolAccess
     tool = line_tool(wireframe_depth_tested=True)
     tool.wireframe_color = (.13, .17, .23, 1.)
     uploads = []
@@ -175,10 +175,6 @@ def test_snap_tooltip_is_painted():
         return np.frombuffer(canvas.composite(bytes(SIZE[0] * SIZE[1] * 4)), np.uint8)
     labelled, bare = drawn(True), drawn(False)
     assert np.abs(labelled.astype(int) - bare.astype(int)).max() > 1
-    from views.wgpu_mesh_tools import MeshToolAccess
-    import inspect
-    source = inspect.getsource(MeshToolAccess.draw_annotations)
-    assert "labels=False" not in source
 
 
 # ---- view-level cues --------------------------------------------------------

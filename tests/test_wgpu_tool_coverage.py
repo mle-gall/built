@@ -1,7 +1,7 @@
 """The published coverage includes every built-in registry entry."""
 from pathlib import Path
 from tools.metal_coverage import registry, table
-from views.wgpu_tools import TOOL_DISPATCH
+from ingetrazo_render import TOOL_DISPATCH
 
 
 def test_registry_and_published_coverage_agree():

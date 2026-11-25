@@ -240,7 +240,7 @@ def test_a_plain_move_still_moves():
 
 def test_native_move_hover_uses_the_displayed_placements_box():
     from types import SimpleNamespace
-    from views.wgpu_mesh_tools import MeshToolAccess
+    from ingetrazo_render import MeshToolAccess
 
     scene, group, vp, tool = _setup()
     access = MeshToolAccess()

@@ -13,7 +13,7 @@ from tools.base import ToolContext
 from tools.tape import TapeMeasureTool
 from views.wgpu_scene import pack_scene
 from views.wgpu_updates import InstanceUpdates
-from views.wgpu_tools import TOOL_DISPATCH, move_command
+from ingetrazo_render import TOOL_DISPATCH, move_command
 
 
 def fixture_scene():
@@ -163,7 +163,7 @@ def test_move_command_matches_gl_and_undo():
 
 
 def test_tape_matches_gl_measurement():
-    from views.wgpu_tools import NativeTools
+    from ingetrazo_render import NativeTools
     tool = TapeMeasureTool()
     source = SimpleNamespace(active_tool=tool, flash_status=lambda *a: None,
                              measurementChanged=SimpleNamespace(emit=lambda *a: None),
@@ -244,7 +244,7 @@ def test_prototype_reassignment_preserves_row():
 def test_native_move_preview_then_history_commit(completion):
     from core.history import History
     from tools.move import MoveTool
-    from views.wgpu_tools import NativeTools
+    from ingetrazo_render import NativeTools
     scene, updates = fixture_scene()
     scene.select([scene.groups[0]])
     history = History(scene)
@@ -469,7 +469,7 @@ def test_replacement_preserves_full_material_rows_and_resident_texture_ids(tmp_p
 
 
 def test_drag_preview_batches_rows_without_rendering_ids():
-    from views.wgpu_tools import NativeTools
+    from ingetrazo_render import NativeTools
     from views.wgpu_scene import INSTANCE
     renderer = Renderer()
     packed = SimpleNamespace(instances=np.zeros(2000, dtype=INSTANCE))
