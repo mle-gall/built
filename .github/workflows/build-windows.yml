@@ -124,7 +124,7 @@ jobs:
         run: |
           # El exe existe y los recursos críticos quedaron dentro.
           test -f dist/ingetrazo/built.exe
-          test -f dist/ingetrazo/_internal/resources/shaders/basic.vert
+          test -f dist/ingetrazo/_internal/resources/textures/library.json
           test -f dist/ingetrazo/_internal/i18n/es.json
           test -f dist/ingetrazo/_internal/resources/components/components.json
           # La plantilla .skp en blanco de openskp la generó una herramienta
