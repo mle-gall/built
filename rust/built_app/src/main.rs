@@ -280,6 +280,9 @@ struct Win {
     second_contact: Option<(u64, (f64, f64))>,
     /// The part of the finger slide not yet handed over (gestures::carry).
     slide_carry: (f64, f64),
+    /// The newest pointer move not yet handed over: position and modifiers
+    /// (`App::motion`, `App::pointer`).
+    pending_move: Option<(f64, f64, u32)>,
 }
 
 /// `BUILT_PERF=1`: pointer-move, wheel (slide, notch) and gesture (pinch,
@@ -427,7 +430,47 @@ impl App {
     }
 
     // ---- dispatch: real and scripted input both come through here -------
+    /// The cursor moved. The window gets the newest position once per turn
+    /// of the event loop (`flush_move`), not once per event: a hover picks
+    /// and snaps, and the events of one turn all precede the same frame.
+    fn motion(&mut self, id: WindowId, x: f64, y: f64, mods: u32) {
+        if let Some(w) = self.win_mut(id) {
+            w.cursor = (x, y);
+            w.pending_move = Some((x, y, mods));
+        }
+    }
+
+    /// Hand over the waiting pointer move. Without `force` a hover waits for
+    /// the end of a wheel, slide or pinch (`Host::navigating`); a drag and
+    /// anything that reads the hover (a press, a key, a scripted step) do not.
+    fn flush_move(&mut self, id: WindowId, force: bool) {
+        let Some(w) = self.win_mut(id) else { return };
+        let Some((x, y, mods)) = w.pending_move else { return };
+        if !force && w.held == 0 && w.host.navigating().is_some() {
+            return;
+        }
+        w.pending_move = None;
+        self.deliver(id, "move", x, y, 0, mods);
+    }
+
     fn pointer(&mut self, id: WindowId, kind: &str, x: f64, y: f64, button: u32, mods: u32) {
+        if kind == "move" {
+            let Some(w) = self.win_mut(id) else { return };
+            // macOS sends a pointer move with every scroll event, so a zoom
+            // hovered once per event.
+            if w.held == 0 && w.host.navigating().is_some() {
+                w.cursor = (x, y);
+                w.pending_move = Some((x, y, mods));
+                return;
+            }
+            w.pending_move = None;
+        } else {
+            self.flush_move(id, true);
+        }
+        self.deliver(id, kind, x, y, button, mods);
+    }
+
+    fn deliver(&mut self, id: WindowId, kind: &str, x: f64, y: f64, button: u32, mods: u32) {
         let Some(w) = self.win_mut(id) else { return };
         w.cursor = (x, y);
         let mut kind = kind;
@@ -462,6 +505,7 @@ impl App {
     fn key(&mut self, id: WindowId, pressed: bool, code: u32, text: &str, repeat: bool, mods: u32) {
         // A held Escape is one unwind, including while the key repeats.
         if repeat && code == 0x0100_0000 { return; }
+        self.flush_move(id, true);
         if let Some(w) = self.win(id) {
             w.host.call("key", (pressed, code, mods, text, repeat));
         }
@@ -618,6 +662,11 @@ impl App {
         }
         let Some(step) = self.steps.pop_front() else { return };
         let Some(id) = self.front() else { return };
+        // A step that is not part of a gesture sees the pointer where the
+        // script last put it.
+        if !matches!(step, Step::Move(..) | Step::Wait(_) | Step::Wheel(..) | Step::Notch(..) | Step::Pinch(..) | Step::Pan2(..)) {
+            self.flush_move(id, true);
+        }
         match step {
             Step::Open(p) => {
                 self.open(&absolute(Path::new(&p)));
@@ -859,6 +908,7 @@ impl App {
             pointer_input: linux_pointer::Pointer::attach(window_id, display, platform),
             window, host, ns_view, cursor: (0.0, 0.0), held: 0, last_press: None, last_key_text: None,
             contact: None, second_contact: None, slide_carry: (0., 0.), open_frame: None, after_open: None,
+            pending_move: None,
         }));
         self.focused = Some(id);
         Ok(id)
@@ -1193,11 +1243,20 @@ impl ApplicationHandler<UserEvent> for App {
             }
         }
         let wake = pyo3::Python::attach(|_| {
+            let ids: Vec<WindowId> = self.wins.iter().map(|(id, _)| *id).collect();
+            for id in &ids {
+                self.flush_move(*id, false);
+            }
             if !self.steps.is_empty() || self.resume_at.is_some() {
                 self.run_script(event_loop);
             }
             let ids: Vec<WindowId> = self.wins.iter().map(|(id, _)| *id).collect();
-            ids.into_iter().filter_map(|id| self.turn(event_loop, id)).min()
+            // A move kept back by a zoom goes out when the zoom is over.
+            let held_back = self.wins.iter()
+                .filter(|(_, w)| w.pending_move.is_some())
+                .filter_map(|(_, w)| w.host.navigating())
+                .min();
+            ids.into_iter().filter_map(|id| self.turn(event_loop, id)).chain(held_back).min()
         });
         let scripted = !self.steps.is_empty() && self.resume_at.is_none();
         let flow = if scripted {
@@ -1597,10 +1656,11 @@ impl App {
             WindowEvent::CursorMoved { position, .. } => {
                 let (x, y) = self.logical(id, position);
                 let m = self.mods();
-                self.pointer(id, "move", x, y, 0, m);
+                self.motion(id, x, y, m);
             }
             WindowEvent::CursorLeft { .. } => {
-                if let Some(w) = self.win(id) {
+                if let Some(w) = self.win_mut(id) {
+                    w.pending_move = None;
                     w.host.call("pointer", ("leave", -1.0, -1.0, 0u32, 0u32, 0u32));
                 }
             }
