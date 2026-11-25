@@ -227,7 +227,7 @@ impl Store {
     }
 
     /// `_is_solid(faces)`.
-    fn is_solid(&self, faces: &[u32]) -> bool {
+    pub(super) fn is_solid(&self, faces: &[u32]) -> bool {
         if faces.len() < 4 {
             return false;
         }

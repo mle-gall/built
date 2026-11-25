@@ -358,3 +358,4 @@ impl Iterator for DiskIter<'_> {
 }
 
 pub(crate) mod face_intersections;
+pub(crate) mod piece_command;
