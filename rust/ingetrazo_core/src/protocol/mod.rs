@@ -11,6 +11,7 @@ mod inspectors;
 mod solids;
 mod paint_place;
 mod guides;
+mod paste;
 mod profile_tools;
 mod mesh_tools;
 mod document;
