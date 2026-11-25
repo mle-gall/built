@@ -83,8 +83,10 @@ def run(seed):
         elif op == "component":
             g.component = not g.component
         elif op == "axes":
+            # A new value each time: the Python compared the matrix's
+            # repr, its address, not its values (see the test below).
             a = Matrix4()
-            a.rotate(rng.choice([0.0, 30.0]), 0, 0, 1)
+            a.rotate(float(n + 1), 0, 0, 1)
             g.axes = a
         elif op == "xform":
             m = Matrix4()
@@ -127,6 +129,24 @@ def generate():
 def test_revision_moves_as_the_python_did(seed):
     want = json.loads(GOLDEN.read_text())[seed]
     assert run(seed) == want
+
+
+def test_axes_are_compared_by_value():
+    """Changed on purpose: the Python walk compared ``repr(g.axes)``, the
+    matrix object's address, so an equal matrix assigned moved the revision,
+    an edit in place did not, and a reused address could hide a change."""
+    from ingetrazo_core import Matrix4
+    from core.group import Group
+    from core.scene import Scene
+    s = Scene()
+    g = Group(name="g")
+    g.axes = Matrix4()
+    s.groups.append(g)
+    r = s.revision
+    g.axes = Matrix4()
+    assert s.revision == r
+    g.axes.rotate(10.0, 0, 0, 1)
+    assert s.revision == r + 1
 
 
 if __name__ == "__main__":

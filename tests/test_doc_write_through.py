@@ -21,12 +21,17 @@ def doc(handle, name):
     return ingetrazo_core.doc_attr_value(handle, name)
 
 
+def suspect(value) -> bool:
+    """Whether ``value`` waits to be written back (other tests' may too)."""
+    return any(entry[3] is value for entry in dm._SUSPECT.values())
+
+
 def test_a_nested_edit_is_in_the_document_at_once():
     g = Group(name="g")
     g.ext = {"a": {"b": 1, "l": [1, 2]}}
     ext = g.ext
     ext["a"]["b"] = 2
-    assert not dm._SUSPECT
+    assert not suspect(ext["a"])
     assert doc(g, "ext") == {"a": {"b": 2, "l": [1, 2]}}
     ext["a"]["l"].append(3)
     ext["a"]["l"][0] = 9
@@ -63,10 +68,13 @@ def test_a_plain_container_stored_keeps_its_identity_while_held():
 def test_one_nothing_else_holds_is_tracked_from_the_next_flush():
     s = Scene()
     reg = s.link_registry
-    reg["/a.igz"] = {"inner": {}}
+    value = {"inner": {}}
+    reg["/a.igz"] = value
+    assert suspect(value)
+    del value
     gc.collect()
     dm.flush()
-    assert not dm._SUSPECT
+    assert type(reg["/a.igz"]) is dm.TrackedDict
     inner = reg["/a.igz"]["inner"]
     assert type(inner) is dm.TrackedDict
     inner["z"] = 3
@@ -81,13 +89,13 @@ def test_a_container_held_inside_keeps_the_whole_value_suspect():
     reg["/a.igz"] = outer
     del outer
     dm.flush()
-    assert dm._SUSPECT                   # inner is still held
+    assert suspect(dict.__getitem__(reg, "/a.igz"))   # inner is still held
     inner["z"] = 1
     assert doc(s._root, "link_registry") == {"/a.igz": {"inner": {"z": 1}}}
     assert reg["/a.igz"]["inner"] is inner
     del inner
     dm.flush()
-    assert not dm._SUSPECT
+    assert type(reg["/a.igz"]) is dm.TrackedDict
 
 
 def test_rust_reads_a_link_path_edited_in_place():
