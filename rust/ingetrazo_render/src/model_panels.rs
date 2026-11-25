@@ -16,6 +16,9 @@ pub(super) fn register_qt_host(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     module.add_function(wrap_pyfunction!(component_preview::component_raster, module)?)?;
+    module.add("_component_previews",pyo3::types::PyDict::new(module.py()))?;
+    module.add_function(wrap_pyfunction!(component_preview::component_thumbnail,module)?)?;
+    module.add_function(wrap_pyfunction!(component_preview::component_signature,module)?)?;
     Ok(())
 }
 

@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-use pyo3::{prelude::*, types::PyBytes};
+use pyo3::{
+    prelude::*,
+    types::{PyBytes, PyDict},
+};
+mod geometry;
+pub(super) use geometry::component_signature;
 use resvg::tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Stroke, Transform};
 
 type Polygon = (f32, Vec<(f32, f32)>, [f32; 3], f32);
@@ -9,7 +14,7 @@ pub(crate) fn component_pixels<'py>(
     definition: &Bound<'py, PyAny>,
     size: u32,
 ) -> PyResult<Bound<'py, PyBytes>> {
-    let image = preview(definition, size)?;
+    let image = preview(definition, size, 3000)?;
     Ok(PyBytes::new(definition.py(), image.data()))
 }
 
@@ -19,7 +24,14 @@ pub(crate) fn component_raster(
     definition: &Bound<'_, PyAny>,
     size: u32,
 ) -> PyResult<crate::survey_raster::SurveyRaster> {
-    let image = preview(definition, size)?;
+    raster(definition, size, 3000)
+}
+fn raster(
+    definition: &Bound<PyAny>,
+    size: u32,
+    budget: usize,
+) -> PyResult<crate::survey_raster::SurveyRaster> {
+    let image = preview(definition, size, budget)?;
     let mut pixels = image::RgbaImage::new(size, size);
     for (target, source) in pixels.pixels_mut().zip(image.pixels()) {
         let color = source.demultiply();
@@ -28,7 +40,7 @@ pub(crate) fn component_raster(
     Ok(crate::survey_raster::SurveyRaster { pixels })
 }
 
-fn preview(definition: &Bound<'_, PyAny>, size: u32) -> PyResult<Pixmap> {
+fn preview(definition: &Bound<'_, PyAny>, size: u32, budget: usize) -> PyResult<Pixmap> {
     let py = definition.py();
     let mut image = Pixmap::new(size.min(1024), size.min(1024))
         .filter(|_| size <= 1024)
@@ -58,10 +70,7 @@ fn preview(definition: &Bound<'_, PyAny>, size: u32) -> PyResult<Pixmap> {
             }
         }
     }
-    let mut polys: Vec<Polygon> = py
-        .import("views.component_thumbs")?
-        .call_method1("_polygons", (definition,))?
-        .extract()?;
+    let mut polys = geometry::polygons(definition, budget)?;
     polys.sort_by(|a, b| a.0.total_cmp(&b.0));
     let mut lo = [f32::INFINITY; 2];
     let mut hi = [f32::NEG_INFINITY; 2];
@@ -109,6 +118,39 @@ fn preview(definition: &Bound<'_, PyAny>, size: u32) -> PyResult<Pixmap> {
         );
     }
     Ok(image)
+}
+
+/// Cache by mesh identity and drawing inputs, without holding document references.
+#[pyfunction]
+#[pyo3(signature=(definition,size=40,*,max_faces=3000))]
+pub(super) fn component_thumbnail<'p>(
+    definition: &Bound<'p, PyAny>,
+    size: u32,
+    max_faces: usize,
+) -> PyResult<Bound<'p, PyAny>> {
+    let py = definition.py();
+    let cache = py
+        .import("ingetrazo_render")?
+        .getattr("_component_previews")?
+        .cast_into::<PyDict>()?;
+    let sig = component_signature(definition)?;
+    let image = definition
+        .getattr_opt("ext")?
+        .and_then(|v| v.get_item("rfa").ok())
+        .and_then(|r| r.get_item("preview_png_base64").ok());
+    let key = (sig[0].0, size, max_faces);
+    let signature = (sig, image).into_pyobject(py)?;
+    if let Some(hit) = cache.get_item(key)? {
+        if hit.get_item(0)?.eq(&signature)? {
+            return hit.get_item(1);
+        }
+    }
+    let pic = Bound::new(py, raster(definition, size, max_faces)?)?;
+    if cache.len() >= 4096 {
+        cache.clear();
+    }
+    cache.set_item(key, (signature, &pic))?;
+    Ok(pic.into_any())
 }
 
 pub(crate) fn upload(ctx: &Bound<'_, PyAny>, icons: &[String]) -> PyResult<()> {
