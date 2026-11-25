@@ -5,9 +5,7 @@
 //! binds the command registry ([`crate::commands::command_registry`]) to the
 //! window's tool actions and to the installed menu bar (`built_shell`).
 //!
-//! Python only supplies the handlers (tools, window slots, extension menus)
-//! and the remembered keys (`core.shortcuts`, which the Classic window
-//! shares).
+//! The keyboard bindings persist factory and user shortcuts for these actions.
 use pyo3::{prelude::*, types::PyDict};
 
 fn opt<'py>(o: &Bound<'py, PyAny>, name: &str) -> Option<Bound<'py, PyAny>> {
@@ -81,7 +79,7 @@ impl ShellAction {
 
     #[allow(non_snake_case)]
     fn setShortcuts(&self, py: Python<'_>, sequences: &Bound<'_, PyAny>) -> PyResult<()> {
-        let texts: Vec<String> = py.import("core.shortcuts")?.call_method1("portable_keys", (sequences,))?.extract()?;
+        let texts: Vec<String> = crate::keyboard_bindings::portable_keys(sequences)?;
         let keys: Vec<(String, Option<u32>)> = texts
             .iter()
             .filter_map(|t| crate::shortcut_text::shortcut_text(t))
@@ -270,8 +268,8 @@ fn reflect(win: &Bound<'_, PyAny>, key: &str) -> PyResult<()> {
 fn bind_window_commands(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
     let tr = py.import("core.i18n")?.getattr("tr")?;
-    let shortcuts = py.import("core.shortcuts")?;
-    let defaults_key: String = shortcuts.getattr("_DEFAULTS")?.extract()?;
+    let shortcuts = py.import("ingetrazo_render.keyboard_bindings")?;
+    let defaults_key = crate::keyboard_bindings::DEFAULTS;
     // The installed menu bar's items (the `built` binary), not extensions'.
     let native_items = PyDict::new(py);
     if let Ok(shell) = py.import("built_shell") {
@@ -328,12 +326,12 @@ fn bind_window_commands(win: &Bound<'_, PyAny>) -> PyResult<()> {
             act.setattr("changed", Py::new(py, RegistryReflect { win: win.clone().unbind(), key: key.clone() })?)?;
         }
         let act = actions.get_item(&key)?.ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(key.clone()))?;
-        let old = act.call_method1("property", (&defaults_key,))?;
+        let old = act.call_method1("property", (defaults_key,))?;
         let sequences: Vec<String> = defaults.iter().filter_map(|s| crate::shortcut_text::shortcut_text(s)).map(|s| s.0).collect();
         let portable = sequences.join("; ");
         if old.is_none() || old.extract::<String>().ok().as_deref() != Some(portable.as_str()) {
             let current: Vec<String> = act.call_method0("portable_keys")?.extract()?;
-            act.call_method1("setProperty", (&defaults_key, &portable))?;
+            act.call_method1("setProperty", (defaults_key, &portable))?;
             if old.is_none() || old.extract::<String>().ok() == Some(current.join("; ")) {
                 act.call_method1("setShortcuts", (sequences,))?;
             }

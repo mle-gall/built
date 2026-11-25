@@ -152,7 +152,7 @@ def test_right_click_disables_repeat_until_a_command_runs(win):
 
 
 def test_keyboard_settings_identify_repeat_independently_of_its_label(win):
-    from core.shortcuts import action_key
+    from ingetrazo_render.keyboard_bindings import action_key
     action = win._registry_actions["menu:repeat_last_command"]
     before = action_key(action)
     win._activate_tool("line")

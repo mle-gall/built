@@ -213,8 +213,8 @@ fn build_offset_face<'p>(
         }
     }
     Ok(Some(
-        py.import("core.store_face_edit")?
-            .call_method1("StoreFaceCompound", (cmds,))?,
+        py.import("ingetrazo_core")?
+            .call_method1("resident_face_compound", (cmds,))?,
     ))
 }
 pub(crate) fn install(m: &Bound<PyModule>) -> PyResult<()> {

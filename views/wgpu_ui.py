@@ -13,7 +13,7 @@ from pathlib import Path
 from core.input_codes import Input as Qt
 from core.timers import later
 from ingetrazo_render import shortcut_text
-from core.shortcuts import action_keys
+from ingetrazo_render.keyboard_bindings import action_keys
 
 from plugins._widget_language import FONT
 from ingetrazo_render import rail_icon as _icon_rgba

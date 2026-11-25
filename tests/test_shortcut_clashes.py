@@ -15,7 +15,7 @@ from core.i18n import tr
 from core.settings import settings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_shortcuts_transfer import _keys, ventana  # noqa: F401
-from core import shortcuts as sc
+from ingetrazo_render import keyboard_bindings as sc
 
 
 def test_redo_answers_both_keys(ventana):  # noqa: F811
@@ -46,7 +46,7 @@ def test_no_factory_key_is_held_twice(ventana):  # noqa: F811
 
 def _zoom_selection(win):
     return next(a for a in sc.collect_actions(win)
-                if sc._plain(a.text()) == sc._plain(tr("Zoom Selection")))
+                if sc.action_label(a.text()) == sc.action_label(tr("Zoom Selection")))
 
 
 def test_a_file_giving_one_key_to_two_commands_leaves_it_working(
@@ -67,7 +67,7 @@ def test_a_file_giving_one_key_to_two_commands_leaves_it_working(
 def test_a_key_saved_twice_on_one_command_is_loaded_once(
         ventana):  # noqa: F811
     redo = ventana._registry_actions["menu:redo"]
-    settings().setValue(f"shortcuts/{sc._store_key(sc.action_key(redo))}",
+    settings().setValue(f"shortcuts/{sc.settings_key(sc.action_key(redo))}",
                          "Ctrl+Shift+Z; Ctrl+Shift+Z")
     sc.apply_user_shortcuts(ventana)
     assert _keys(redo) == ["Ctrl+Shift+Z"]

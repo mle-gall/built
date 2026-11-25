@@ -338,7 +338,7 @@ pub(crate) fn insert_scene(scene: &Obj<'_>, item: &Obj<'_>, at: &Obj<'_>) -> PyR
     views.call_method1("insert", (index, item))?;
     scene
         .py()
-        .import("core.scene_folders")?
+        .import("ingetrazo_core.scene_tree")?
         .call_method1("sync_order", (scene,))?;
     Ok(())
 }

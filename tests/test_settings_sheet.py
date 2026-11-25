@@ -306,7 +306,7 @@ def test_the_3d_mouse_section_holds_the_axis_table(win):
 def test_keyboard_lists_commands_and_changes_their_keys(win, monkeypatch):
     shown = []
     monkeypatch.setattr(ss.cf, "show", lambda parent, form: shown.append(form) or "chrome")
-    from core.shortcuts import action_key, collect_actions
+    from ingetrazo_render.keyboard_bindings import action_key, collect_actions
     from ingetrazo_render import sheet_command_scope
     acts = collect_actions(win)
     target = next(a for a in acts if a.text() and not a.shortcuts())

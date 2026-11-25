@@ -471,7 +471,7 @@ def test_play_without_scenes_says_why(win):
 
 
 def test_page_up_and_down_are_no_other_commands_shortcut(win):
-    from core.shortcuts import action_keys
+    from ingetrazo_render.keyboard_bindings import action_keys
     from ingetrazo_render.settings_sheet import SettingsSheet
     sheet = SettingsSheet("keyboard")
     sheet._win = win

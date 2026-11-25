@@ -137,7 +137,7 @@ class Scene:
     saved_views: list = field(default_factory=list)
     # Folder names of the Scenes tab, in order — empty folders included (a
     # scene names its own folder in ``SavedView.folder``), and folder → the
-    # folder it sits in (absent: at the top). See core.scene_folders.
+    # folder it sits in (absent: at the top). See ingetrazo_core.scene_tree.
     scene_folders: list = field(default_factory=list)
     scene_folder_parents: dict = field(default_factory=dict)
     # Sheet compositions (core.composition.Composicion) — the print layouts.

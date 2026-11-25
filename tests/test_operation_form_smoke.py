@@ -361,7 +361,7 @@ def test_native_menu_search_and_persisted_keyboard_binding(tmp_path):
     from ingetrazo_core import NativeSettings
     from core.scene import Scene
     from formats.igz import save_scene
-    from core.shortcuts import _store_key
+    from ingetrazo_render.keyboard_bindings import settings_key
     model = tmp_path / "empty.built"
     save_scene(Scene(), model)
     profile, home = tmp_path / "profile", tmp_path / "home"
@@ -369,7 +369,7 @@ def test_native_menu_search_and_persisted_keyboard_binding(tmp_path):
     config.mkdir(parents=True)
     home.mkdir()
     settings = NativeSettings(profile)
-    settings.setValue("shortcuts/" + _store_key("menu:cutlist"), "Ctrl+Shift+F9")
+    settings.setValue("shortcuts/" + settings_key("menu:cutlist"), "Ctrl+Shift+F9")
     settings.sync()
     steps = tmp_path / "menu-commands"
     steps.write_text("wait 800\nkey escape\nkey f9 cmd+shift\nwait 350\nstate\nkey escape\n"

@@ -2,7 +2,7 @@
 """Saved scene commands, history and navigation in the native chooser."""
 import pytest
 
-from core import scene_folders as SF
+from ingetrazo_core import scene_tree as SF
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
