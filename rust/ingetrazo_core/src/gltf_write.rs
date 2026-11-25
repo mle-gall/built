@@ -191,10 +191,7 @@ impl<'py> Writer<'py> {
                 recipe.call_method1("get", ("roughness", 1.))?,
             )?;
             if embed {
-                let (normal, packed, ao): (Obj<'_>, Obj<'_>, Obj<'_>) = py
-                    .import("formats.pbr_maps")?
-                    .call_method1("export_maps", (&recipe,))?
-                    .extract()?;
+                let (normal, packed, ao) = crate::gltf_maps::gltf_export_maps(py, &recipe)?;
                 for (target, k, path, field) in [
                     (&mr, "metallicRoughnessTexture", packed, None),
                     (

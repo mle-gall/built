@@ -416,7 +416,7 @@ fn igz_prepare_scene_steps(
             if state.capture.is_some() {
                 let it = Python::attach(|py| -> PyResult<_> {
                     Ok(py
-                        .import("formats.igz_snapshot")?
+                        .import("ingetrazo_core")?
                         .call_method1("survey_steps", (s,))?
                         .unbind())
                 })?;

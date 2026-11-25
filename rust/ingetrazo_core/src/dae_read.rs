@@ -636,9 +636,7 @@ impl<'a> Dae<'a> {
     }
     fn survey<'p>(&mut self, py: Python<'p>) -> PyResult<(Obj<'p>, DVec3)> {
         let (lo, hi) = py.detach(|| self.world_bounds())?;
-        let offset = py
-            .import("formats.recenter")?
-            .call_method1("survey_offset", (lo.to_array(), hi.to_array()))?;
+        let offset = crate::file_bounds::survey_offset(py, lo.to_array(), hi.to_array())?;
         let shift = if offset.is_none() {
             DVec3::ZERO
         } else {

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """.skp 2021+ tag folders: the folder manager (9B3A) openskp leaves
-unread is decoded by ``formats.openskp_compat`` and rebuilt by the importer
+unread is decoded by ``ingetrazo_core.reader_compat`` and rebuilt by the importer
 as nested tag folders. The bytes here are written in the layout read from
 real production files (see the notes above ``parse_tag_folders``)."""
 from __future__ import annotations
@@ -10,7 +10,7 @@ import struct
 
 from core.layers import folder_parent, folders_of
 from core.scene import Scene
-from formats.openskp_compat import parse_tag_folders
+from ingetrazo_core import skp_tag_folders as parse_tag_folders
 from formats.skp import _import_tag_folders
 
 

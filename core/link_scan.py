@@ -47,7 +47,7 @@ def records(path) -> list[tuple[str, str]] | None:
                 if len(data) > MAX_DOC_BYTES:
                     return None
         if zipped:
-            from formats.native_io import DocumentArchive
+            from ingetrazo_core import DocumentArchive
             with DocumentArchive(path) as archive:
                 info = archive.getinfo("document.json")
                 if info.file_size > MAX_DOC_BYTES:

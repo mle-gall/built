@@ -3,7 +3,6 @@
 """Built and IGZ document codecs, schema constants and script-facing exceptions."""
 from __future__ import annotations
 from contextvars import ContextVar
-from functools import partialmethod
 
 import json
 import math
@@ -11,11 +10,11 @@ from pathlib import Path
 
 from core.version import __version__
 from formats import built
-from formats.igz_stream import Fragment, SaveStream
-from formats.native_io import DocumentArchive, native_io
+from ingetrazo_core import Fragment, SaveStream, DocumentArchive, document_native_io as native_io
 
 from ingetrazo_core import (
-    igz_members_init, igz_empty_mesh as _empty_mesh, igz_note_constant as _note_constant,
+    NonFiniteDocumentError,
+    igz_empty_mesh as _empty_mesh, igz_note_constant as _note_constant,
     igz_mesh_blocks as _mesh_blocks,
     DocumentOutput as _atomic_output,
     igz_backup_previous as _backup_previous,
@@ -157,20 +156,6 @@ def _group_ifc_record(group):
 _attrs_key = json.JSONEncoder(sort_keys=True, separators=(",", ":")).encode
 
 
-class NonFiniteDocumentError(ValueError):
-    """The document holds a coordinate that is not a number; it is not
-    written, so the file on disk keeps its last good version."""
-
-    def __init__(self, where: str) -> None:
-        from core.i18n import tr
-        self.where = where
-        super().__init__(tr(
-            "The model has a point with invalid coordinates (not a number), "
-            "so it was not saved and the file on disk keeps its last good "
-            "version. Undo the last step and save again. Where: {where}",
-            where=where))
-
-
 _EMPTY = []
 
 
@@ -183,16 +168,6 @@ _dropped_nonfinite = [0]
 _saw_nonfinite = [False]
 _finite_flag = ContextVar("file_nonfinite", default=_saw_nonfinite)
 _repair_count = ContextVar("file_repairs", default=_dropped_nonfinite)
-
-
-class _GeomMembers(dict):
-    """A document's ``geom/`` members (name → bytes), and in ``checked``
-    the block (its JSON ``meta`` dict, by identity) each one was already
-    validated for by the Rust engine — :func:`_geometry_arrays` then
-    builds its arrays without scanning them again."""
-    __slots__ = ("checked", "built_format")
-
-    __init__ = partialmethod(igz_members_init)
 
 
 #: ZipInfo flag bits the native reader handles like ``zipfile``: the

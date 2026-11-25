@@ -196,8 +196,8 @@ fn faces<'p>(mesh: &Obj<'p>, input: &Obj<'p>, soft: &Obj<'p>, tick: &Obj<'p>) ->
     }
     if !soft.is_none() && corners >= 1024 {
         let coords = py
-            .import("formats.skp_coordinates")?
-            .call_method1("flatten_rings", (flat, corners))?;
+            .import("ingetrazo_core")?
+            .call_method1("skp_flatten_rings", (flat, corners))?;
         let (v, inv) = mesh
             .call_method1("bulk_weld", (coords,))?
             .extract::<(Obj, Obj)>()?;

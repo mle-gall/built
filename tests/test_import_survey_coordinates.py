@@ -25,7 +25,7 @@ from formats import glb as glb_format                             # noqa: E402
 from formats import gltf as gltf_format                           # noqa: E402
 from formats import obj as obj_format                             # noqa: E402
 from formats import stl as stl_format                             # noqa: E402
-from formats.recenter import RECENTER_BEYOND_M, survey_offset     # noqa: E402
+from ingetrazo_core import RECENTER_BEYOND_M, survey_offset     # noqa: E402
 
 E, N = 500000.3, 8500000.5          # a UTM easting / northing, off-metre
 SIDE = 0.5

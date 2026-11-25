@@ -8,6 +8,7 @@ import sys
 import tempfile
 
 from ingetrazo_render import DwgConverter
+from ingetrazo_core import DwgBridgeError
 
 from core.paths import app_root
 
@@ -16,17 +17,6 @@ _VENDOR_BIN = app_root() / "vendor" / "libredwg" / "bin"
 _SIBLING_BIN = (app_root().parent.parent / "ingecad" / "vendor"
                 / "libredwg" / "bin")
 _TIMEOUT = 300  # seconds; big real-world DWGs convert in well under this
-
-
-class DwgBridgeError(Exception):
-    """A DWG conversion failed or no converter is available.
-
-    ``kind`` tells the caller what to say to the user: ``"unavailable"`` (no
-    converter), ``"failed"``, ``"timeout"`` or ``"cancelled"``."""
-
-    def __init__(self, message: str, kind: str = "failed") -> None:
-        super().__init__(message)
-        self.kind = kind
 
 
 from ingetrazo_core import (

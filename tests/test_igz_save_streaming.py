@@ -9,7 +9,9 @@ import zipfile
 import pytest
 
 from core.scene import Scene
-from formats import igz, igz_stream
+from formats import igz
+from ingetrazo_core import SaveStream
+import tempfile
 from tests.test_igz_format3 import _scene
 
 
@@ -76,7 +78,7 @@ def test_streamed_save_matches_retained_document_and_round_trips(tmp_path, monke
 
 def test_json_fragments_match_stdlib_and_can_read_their_own_spool():
     leaf = {7: [None, True, False, -0.0, 1e-200, "é\\\"\n"], None: "null key"}
-    with igz_stream.SaveStream() as stream:
+    with SaveStream() as stream:
         fragment = stream.json(leaf)
         actual = stream.document({"nested": [fragment, {"again": fragment}]})
         expected = {"nested": [leaf, {"again": leaf}]}
@@ -87,12 +89,12 @@ def test_json_fragments_match_stdlib_and_can_read_their_own_spool():
 def test_many_completed_meshes_do_not_accumulate_encoded_bytes():
     tracemalloc.start()
     try:
-        with igz_stream.SaveStream() as stream:
+        with SaveStream() as stream:
             fragments = [stream.json(["x" * 1024] * 1024) for _ in range(20)]
             assert sum(f.size for f in fragments) > 20_000_000
             _current, peak = tracemalloc.get_traced_memory()
             assert peak < 5_000_000
-            assert all(len(chunk) <= igz_stream._CHUNK
+            assert all(len(chunk) <= 1024 * 1024
                        for chunk in fragments[0].chunks())
     finally:
         tracemalloc.stop()
@@ -107,7 +109,7 @@ def test_write_failure_preserves_old_file_and_closes_scratch(native, tmp_path, m
     path = tmp_path / "old.igz"
     path.write_bytes(b"original document")
     opened = []
-    original = igz_stream.tempfile.TemporaryFile
+    original = tempfile.TemporaryFile
 
     def temporary_file(*args, **kwargs):
         result = original(*args, **kwargs)
@@ -117,7 +119,7 @@ def test_write_failure_preserves_old_file_and_closes_scratch(native, tmp_path, m
     def fail(*args, **kwargs):
         raise error("injected write failure")
 
-    monkeypatch.setattr(igz_stream.tempfile, "TemporaryFile", temporary_file)
+    monkeypatch.setattr(tempfile, "TemporaryFile", temporary_file)
     monkeypatch.setattr(zipfile._ZipWriteFile, "write", fail)
     if native and hasattr(igz.native_io(), "igz_write_zip"):
         original_writer = igz.native_io().igz_write_zip

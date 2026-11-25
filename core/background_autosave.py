@@ -13,7 +13,7 @@ from ingetrazo_core import Input as Qt
 from views import input_state
 
 from core import autosave
-from formats.igz_snapshot import snapshot_steps
+from ingetrazo_core import snapshot_steps
 
 
 class BackgroundAutosave(HostService):

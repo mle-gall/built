@@ -339,11 +339,11 @@ def test_an_empty_legacy_file_still_falls_back(tmp_path):
 def test_parse_skp_accepts_an_empty_payload(tmp_path, monkeypatch):
     p = tmp_path / "m.skp"
     p.write_bytes(_skp_header_bytes() + b"\x00" * 40)
-    monkeypatch.setattr(skp_format._OpenSkpBackend, "parse",
+    monkeypatch.setattr(skp_format.ModelImportBackend, "parse",
                         lambda self, path, progress=None: {
                             "backend": "openskp", "groups": [], "protos": [],
                             "empty": True})
-    monkeypatch.setattr(skp_format._OpenSkpBackend, "available",
+    monkeypatch.setattr(skp_format.ModelImportBackend, "available",
                         lambda self: True)
     payload = skp_format.parse_skp(p)
     scene = Scene()
@@ -939,15 +939,15 @@ def test_a_faces_own_tag_arrives_by_name_not_by_its_id(tmp_path):
 
 
 def test_resolve_face_layers_leaves_names_and_drops_the_default_tag():
-    from formats import openskp_compat
+    from ingetrazo_core import reader_compat
     faces = {1: NS(layer=11), 2: NS(layer=1), 3: NS(layer="Muros"),
              4: NS(layer=None), 5: NS(layer=99)}
-    openskp_compat._parse_tables.layers = {1: "Layer0", 11: "Roof"}
+    reader_compat._parse_tables.layers = {1: "Layer0", 11: "Roof"}
     try:
-        n = openskp_compat.resolve_face_layers(
+        n = reader_compat.resolve_face_layers(
             NS(definitions={0: NS(faces=faces)}))
     finally:
-        openskp_compat._parse_tables.layers = {}
+        reader_compat._parse_tables.layers = {}
     assert n == 3
     assert [faces[i].layer for i in range(1, 6)] == \
         ["Roof", "", "Muros", None, ""]

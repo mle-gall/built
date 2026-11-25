@@ -267,7 +267,7 @@ fn igz_write_prepared_inner<'p>(
         kw.set_item("resolved", stream.getattr("resolved")?)?;
         if background {
             geom = stream.clone();
-            let snapshot = py.import("formats.igz_snapshot")?;
+            let snapshot = py.import("ingetrazo_core")?;
             let opt = PyDict::new(py);
             opt.set_item("stream", stream)?;
             let spool = py.import("functools")?.call_method(

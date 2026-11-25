@@ -9,11 +9,9 @@ type Obj<'p> = Bound<'p, PyAny>;
 fn list<'p>(o: &Obj<'p>) -> PyResult<Obj<'p>> {
     o.py().get_type::<PyList>().call1((o,))
 }
-#[pyfunction]
 fn skp_packed_repr<'p>(owner: &Obj<'p>) -> PyResult<String> {
     Ok(list(owner)?.repr()?.to_string())
 }
-#[pyfunction]
 fn skp_packed_eq<'p>(owner: &Obj<'p>, other: &Obj<'p>) -> PyResult<Obj<'p>> {
     let py = owner.py();
     if !other.is_instance_of::<PyList>() && !other.is_instance(&owner.get_type())? {
@@ -25,24 +23,6 @@ fn skp_packed_eq<'p>(owner: &Obj<'p>, other: &Obj<'p>) -> PyResult<Obj<'p>> {
         .to_owned()
         .into_any())
 }
-#[pyfunction]
-fn skp_rows_get<'p>(owner: &Obj<'p>, key: &Obj<'p>) -> PyResult<Obj<'p>> {
-    let py = owner.py();
-    let indices = owner.getattr("_indices")?.get_item(key)?;
-    let array = owner.getattr("_array")?;
-    if key.is_instance_of::<PySlice>() {
-        let result = py
-            .import("builtins")?
-            .getattr("object")?
-            .call_method1("__new__", (owner.get_type(),))?;
-        result.setattr("_array", array)?;
-        result.setattr("_indices", indices)?;
-        Ok(result)
-    } else {
-        array.get_item(indices)?.call_method0("tolist")
-    }
-}
-#[pyfunction]
 fn skp_rows_iter<'p>(owner: &Obj<'p>) -> PyResult<Obj<'p>> {
     let b = owner.py().import("builtins")?;
     b.call_method1(
@@ -65,7 +45,6 @@ fn pair<'p>(value: &Obj<'p>) -> PyResult<Obj<'p>> {
 fn skp_segment_pair<'p>(value: &Obj<'p>) -> PyResult<Obj<'p>> {
     pair(value)
 }
-#[pyfunction]
 fn skp_segments_iter<'p>(owner: &Obj<'p>) -> PyResult<Obj<'p>> {
     let py = owner.py();
     let raw = py
@@ -75,7 +54,6 @@ fn skp_segments_iter<'p>(owner: &Obj<'p>) -> PyResult<Obj<'p>> {
     py.import("builtins")?
         .call_method1("map", (wrap_pyfunction!(skp_segment_pair, py)?, raw))
 }
-#[pyfunction]
 fn skp_segments_get<'p>(owner: &Obj<'p>, key: &Obj<'p>) -> PyResult<Obj<'p>> {
     let py = owner.py();
     let size = owner.len()?;
@@ -116,7 +94,7 @@ struct Span<'p> {
 fn skp_flatten_rings<'p>(py: Python<'p>, rings: &Obj<'p>, size: usize) -> PyResult<Obj<'p>> {
     let rings = rings.try_iter()?.collect::<PyResult<Vec<_>>>()?;
     let np = py.import("numpy")?;
-    let kind = py.import("formats.skp_coordinates")?.getattr("PointRows")?;
+    let kind = py.get_type::<PointRows>();
     let f32 = np.getattr("float32")?;
     let mut narrow = true;
     for ring in &rings {
@@ -275,7 +253,7 @@ fn skp_remember(
         };
     }
     let cache = py
-        .import("formats.skp_consumption")?
+        .import("formats.skp_reader")?
         .getattr("_geometry_cache")?
         .call_method0("get")?;
     if !cache.is_none() {
@@ -302,7 +280,9 @@ fn skp_adapt<'p>(
     consume: bool,
 ) -> PyResult<Obj<'p>> {
     let api = py.import("formats.skp_reader")?;
-    let cache = api.call_method1("_GeometryCache", (api.getattr("_GEOMETRY_CACHE_BYTES")?,))?;
+    let cache = py
+        .get_type::<GeometryCache>()
+        .call1((api.getattr("_GEOMETRY_CACHE_BYTES")?,))?;
     let context = api.getattr("_geometry_cache")?;
     let token = context.call_method1("set", (&cache,))?;
     let kw = PyDict::new(py);
@@ -331,50 +311,135 @@ fn skp_parse_raw<'p>(
         Ok(model)
     })
 }
-#[pyfunction(signature=(owner,array,indices=None))]
-fn skp_rows_init(owner: &Obj<'_>, array: &Obj<'_>, indices: Option<&Obj<'_>>) -> PyResult<()> {
-    let py = owner.py();
-    let view = array.call_method0("view")?;
-    let kw = PyDict::new(py);
-    kw.set_item("write", false)?;
-    view.call_method("setflags", (), Some(&kw))?;
-    owner.setattr("_array", view)?;
-    let indices = match indices {
-        Some(r) => r.clone(),
-        None => py
-            .import("builtins")?
-            .call_method1("range", (array.len()?,))?,
-    };
-    owner.setattr("_indices", indices)
+/// Rows share their read-only coordinates. A slice only replaces the index range.
+#[pyclass(module = "ingetrazo_core")]
+struct PointRows {
+    #[pyo3(get)]
+    _array: Py<PyAny>,
+    #[pyo3(get)]
+    _indices: Py<PyAny>,
 }
-#[pyfunction]
-fn skp_segments_add(owner: &Obj<'_>, points: &Obj<'_>) -> PyResult<()> {
-    let py = owner.py();
-    let points = points.call_method1("reshape", (-1, 2, 3))?;
-    let kw = PyDict::new(py);
-    kw.set_item("write", false)?;
-    points.call_method("setflags", (), Some(&kw))?;
-    owner
-        .getattr("chunks")?
-        .call_method1("append", (&points,))?;
-    owner.setattr("size", owner.getattr("size")?.add(points.len()?)?)
+#[pymethods]
+impl PointRows {
+    #[new]
+    #[pyo3(signature=(array,indices=None))]
+    fn new(array: &Obj<'_>, indices: Option<Obj<'_>>) -> PyResult<Self> {
+        let py = array.py();
+        let view = array.call_method0("view")?;
+        let kw = PyDict::new(py);
+        kw.set_item("write", false)?;
+        view.call_method("setflags", (), Some(&kw))?;
+        let indices = match indices {
+            Some(indices) => indices,
+            None => py
+                .import("builtins")?
+                .call_method1("range", (array.len()?,))?,
+        };
+        Ok(Self {
+            _array: view.unbind(),
+            _indices: indices.unbind(),
+        })
+    }
+    fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
+        self._indices.bind(py).len()
+    }
+    fn _coordinate_span<'p>(&self, py: Python<'p>) -> (Obj<'p>, Obj<'p>) {
+        (self._array.bind(py).clone(), self._indices.bind(py).clone())
+    }
+    fn __reduce__<'p>(
+        &self,
+        py: Python<'p>,
+    ) -> (Bound<'p, pyo3::types::PyType>, (Obj<'p>, Obj<'p>)) {
+        (py.get_type::<Self>(), self._coordinate_span(py))
+    }
+    fn __getitem__<'p>(&self, key: &Obj<'p>) -> PyResult<Obj<'p>> {
+        let py = key.py();
+        let indices = self._indices.bind(py).get_item(key)?;
+        if key.is_instance_of::<PySlice>() {
+            Ok(Bound::new(
+                py,
+                Self {
+                    _array: self._array.clone_ref(py),
+                    _indices: indices.unbind(),
+                },
+            )?
+            .into_any())
+        } else {
+            self._array
+                .bind(py)
+                .get_item(indices)?
+                .call_method0("tolist")
+        }
+    }
+    fn __iter__<'p>(slf: &Bound<'p, Self>) -> PyResult<Obj<'p>> {
+        skp_rows_iter(slf.as_any())
+    }
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        skp_packed_repr(slf.as_any())
+    }
+    fn __eq__<'p>(slf: &Bound<'p, Self>, other: &Obj<'p>) -> PyResult<Obj<'p>> {
+        skp_packed_eq(slf.as_any(), other)
+    }
+}
+
+/// Soft edges remain in packed, read-only arrays until a consumer requests a pair.
+#[pyclass(module = "ingetrazo_core")]
+struct SoftSegments {
+    #[pyo3(get)]
+    chunks: Py<PyList>,
+    #[pyo3(get)]
+    size: usize,
+}
+#[pymethods]
+impl SoftSegments {
+    #[new]
+    fn new(py: Python<'_>) -> Self {
+        Self {
+            chunks: PyList::empty(py).unbind(),
+            size: 0,
+        }
+    }
+    fn add(&mut self, points: &Obj<'_>) -> PyResult<()> {
+        let points = points.call_method1("reshape", (-1, 2, 3))?;
+        let kw = PyDict::new(points.py());
+        kw.set_item("write", false)?;
+        points.call_method("setflags", (), Some(&kw))?;
+        let count = points.len()?;
+        self.chunks.bind(points.py()).append(points)?;
+        self.size += count;
+        Ok(())
+    }
+    fn __len__(&self) -> usize {
+        self.size
+    }
+    fn __getitem__<'p>(slf: &Bound<'p, Self>, key: &Obj<'p>) -> PyResult<Obj<'p>> {
+        skp_segments_get(slf.as_any(), key)
+    }
+    fn __iter__<'p>(slf: &Bound<'p, Self>) -> PyResult<Obj<'p>> {
+        skp_segments_iter(slf.as_any())
+    }
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        skp_packed_repr(slf.as_any())
+    }
+    fn __eq__<'p>(slf: &Bound<'p, Self>, other: &Obj<'p>) -> PyResult<Obj<'p>> {
+        skp_packed_eq(slf.as_any(), other)
+    }
+    fn __getstate__<'p>(&self, py: Python<'p>) -> Bound<'p, PyList> {
+        self.chunks.bind(py).clone()
+    }
+    fn __setstate__(&mut self, state: &Bound<'_, PyList>) -> PyResult<()> {
+        // Restoring an array from pickle can make it writable again.
+        for chunk in state.iter() {
+            self.add(&chunk)?;
+        }
+        Ok(())
+    }
 }
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<PointRows>()?;
+    m.add_class::<SoftSegments>()?;
     macro_rules! add{($($f:ident),*)=>{$(m.add_function(wrap_pyfunction!($f,m)?)?;)*}}
     m.add_class::<GeometryCache>()?;
-    add!(
-        skp_rows_init,
-        skp_segments_add,
-        skp_remember,
-        skp_packed_repr,
-        skp_packed_eq,
-        skp_rows_get,
-        skp_rows_iter,
-        skp_segments_iter,
-        skp_segments_get,
-        skp_flatten_rings,
-        skp_adapt,
-        skp_parse_raw
-    );
+    add!(skp_remember, skp_flatten_rings, skp_adapt, skp_parse_raw);
     Ok(())
 }

@@ -18,6 +18,7 @@ fn path_obj<'p>(py: Python<'p>, p: &std::path::Path) -> PyResult<Obj<'p>> {
     py.import("pathlib")?.call_method1("Path", (p,))
 }
 mod datum;
+mod document_types;
 mod delivery;
 mod geotiff;
 mod ground;
@@ -158,6 +159,7 @@ pub(super) fn register_formats(m: &Bound<'_, PyModule>) -> PyResult<()> {
     ground::register(m)?;
     services::register(m)?;
     delivery::register(m)?;
+    document_types::register(m)?;
     m.add_function(wrap_pyfunction!(survey_api::register_survey, m)?)?;
     Ok(())
 }

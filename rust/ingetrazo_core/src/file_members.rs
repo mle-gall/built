@@ -79,7 +79,7 @@ fn igz_read_geometry_members<'p>(
             names.append(n)?
         }
     }
-    let out = codec.call_method0("_GeomMembers")?;
+    let out = py.import("ingetrazo_core")?.call_method0("GeometryMembers")?;
     out.setattr("built_format", built_format)?;
     if !names.is_empty() {
         let module = py.import("core._native")?.getattr("native")?;

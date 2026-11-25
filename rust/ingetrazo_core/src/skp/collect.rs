@@ -17,8 +17,8 @@ fn array<'p>(py: Python<'p>, coords: Vec<f64>) -> Obj<'p> {
 }
 fn cache<'p>(d: &Obj<'p>, key: &str, v: &Obj<'p>, bytes: usize) -> PyResult<()> {
     d.py()
-        .import("formats.skp_consumption")?
-        .call_method1("_remember_geometry", (d, key, v, bytes))?;
+        .import("ingetrazo_core")?
+        .call_method1("skp_remember", (d, key, v, bytes))?;
     Ok(())
 }
 #[pyfunction]
@@ -93,7 +93,7 @@ fn mapped<'p>(arr: &Obj<'p>, xf: &Obj<'p>) -> PyResult<Obj<'p>> {
 #[pyfunction]
 pub fn skp_world_points<'p>(arr: &Obj<'p>, xf: &Obj<'p>) -> PyResult<Obj<'p>> {
     arr.py()
-        .import("formats.skp_coordinates")?
+        .import("ingetrazo_core")?
         .call_method1("PointRows", (mapped(arr, xf)?,))
 }
 fn ends(edge: &Obj<'_>, verts: &Bound<'_, PyDict>) -> PyResult<Option<[[f64; 3]; 2]>> {
@@ -136,7 +136,7 @@ fn segments(d: &Obj<'_>, xf: &Obj<'_>, out: &Obj<'_>, soft: bool) -> PyResult<()
         let mut hidden = none(py);
         if !soft {
             let cache = py
-                .import("formats.skp_consumption")?
+                .import("formats.skp_reader")?
                 .getattr("_geometry_cache")?
                 .call_method0("get")?;
             hidden = attr(&cache, "hidden_tags")?;

@@ -455,9 +455,7 @@ fn obj_load<'p>(
         {
             return Err(PyValueError::new_err(e.clone()));
         }
-        let offset = py
-            .import("formats.recenter")?
-            .call_method1("survey_offset", (model.lo.to_array(), model.hi.to_array()))?;
+        let offset = crate::file_bounds::survey_offset(py, model.lo.to_array(), model.hi.to_array())?;
         let shift = if offset.is_none() {
             DVec3::ZERO
         } else {

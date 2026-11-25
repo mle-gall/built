@@ -2485,7 +2485,7 @@ def store_from_source(src, hooks=(), *, precise=False):
     table = [_face_attrs_from_json(row) or {} for row in raw]
     names = list(meta.get("edge_layers") or [])
     n_e = len(src["edges"]) if src.get("edges") is not None else 0
-    from formats.native_io import native_io
+    from ingetrazo_core import document_native_io as native_io
     direct = native_io() is not None
     def indices(data):
         a = np.asarray(data)

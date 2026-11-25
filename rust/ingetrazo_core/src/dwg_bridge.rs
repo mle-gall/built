@@ -291,7 +291,16 @@ fn dwg_convert(py: Python<'_>, dwg_path: PathBuf) -> PyResult<Obj<'_>> {
     }
     Ok(out)
 }
+#[pyfunction(signature=(owner, message, kind=Python::attach(|py| pyo3::intern!(py, "failed").clone().into_any().unbind())))]
+fn dwg_bridge_error(owner: &Obj<'_>, message: &Obj<'_>, kind: Py<PyAny>) -> PyResult<()> {
+    owner
+        .py()
+        .get_type::<pyo3::exceptions::PyException>()
+        .call_method1("__init__", (owner, message))?;
+    owner.setattr("kind", kind)
+}
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(dwg_bridge_error, m)?)?;
     macro_rules! add{($($f:ident),*)=>{$(m.add_function(wrap_pyfunction!($f,m)?)?;)*}}
     add!(
         dwg_native_executable,

@@ -10,7 +10,7 @@ from ingetrazo_core import Vec3 as QVector3D
 from core.mesh import Mesh
 from core.scene import Scene
 from formats import igz, skp
-from formats.skp_coordinates import PointRows, flatten_rings
+from ingetrazo_core import PointRows, skp_flatten_rings as flatten_rings
 
 
 @pytest.mark.parametrize('section', [slice(None), slice(None, None, -1),
@@ -68,9 +68,9 @@ def test_mixed_payload_matches_legacy_weld_order_and_archive(count, tmp_path, mo
             (plain(r) if expand else r, h, a) for r, h, a in faces], 'soft_edges': []}]}
     expected, actual = Scene(), Scene()
     # Reference the old flattening operation, retaining the same threshold.
-    import formats.skp_coordinates as coordinates
+    import ingetrazo_core as coordinates
     with monkeypatch.context() as mp:
-        mp.setattr(coordinates, 'flatten_rings', lambda rr, size:
+        mp.setattr(coordinates, 'skp_flatten_rings', lambda rr, size:
             np.array([p.toTuple() if hasattr(p, 'x') else p for r in rr for p in r],
                      dtype=np.float64).reshape(-1, 3))
         skp.apply_payload(expected, payload(True))

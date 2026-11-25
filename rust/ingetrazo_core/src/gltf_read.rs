@@ -502,9 +502,8 @@ pub(crate) fn gltf_read_triangles<'py>(
                     && mat["extensions"]["KHR_materials_pbrSpecularGlossiness"].is_null()
                 {
                     let module = py.import("core.materials")?;
-                    let pbr = py.import("formats.pbr_maps")?.call_method1(
-                        "import_recipe",
-                        (pyvalue(py, mat)?, pyvalue(py, &js["textures"])?, &paths),
+                    let pbr = crate::gltf_maps::gltf_import_recipe(
+                        py, &pyvalue(py, mat)?, &pyvalue(py, &js["textures"])?, PyList::new(py, &paths)?.as_any(),
                     )?;
                     let kw = PyDict::new(py);
                     kw.set_item("pbr", &pbr)?;
