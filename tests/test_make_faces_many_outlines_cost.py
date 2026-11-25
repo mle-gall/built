@@ -126,27 +126,9 @@ def test_an_opening_is_measured_once_not_once_per_face(monkeypatch):
     assert len(asked) <= 2 * len(loops)
 
 
-def test_corners_inside_a_box_are_the_ones_a_plain_walk_finds():
-    rng = random.Random(20261110)
-    pts = [QVector3D(rng.randrange(40), rng.randrange(40),
-                     rng.choice((0.0, 0.0, 0.0, 3.0)))
-           for _ in range(1500)]
-    index = make_faces._Sorted(pts)
-    weld = make_faces._WELD
-    for _ in range(200):
-        a, b = rng.choice(pts), rng.choice(pts)
-        lo = (min(a.x(), b.x()), min(a.y(), b.y()), min(a.z(), b.z()))
-        hi = (max(a.x(), b.x()), max(a.y(), b.y()), max(a.z(), b.z()))
-        want = {id(p) for p in pts
-                if all(lo[k] - weld <= (p.x(), p.y(), p.z())[k] <= hi[k] + weld
-                       for k in range(3))}
-        assert {id(p) for p in index.inside(lo, hi)} == want
-
-
-def test_a_flat_plan_does_not_walk_every_corner_for_each_edge(monkeypatch):
-    """On a plan every corner has the edge's height, and for an edge that
-    runs askew the height is where its box is thinnest: the search goes
-    along the edge instead."""
+def test_a_flat_plan_builds_all_four_hundred_faces():
+    # The native CornerIndex tests compare candidates with a full scan and
+    # check the number examined. Exercise the whole operation on the same plan.
     mesh = Mesh()
     for i in range(20):
         for j in range(20):
@@ -155,24 +137,4 @@ def test_a_flat_plan_does_not_walk_every_corner_for_each_edge(monkeypatch):
                  QVector3D(x + 1, y + 2, 0), QVector3D(x, y + 1, 0)]
             for a, b in zip(c, c[1:] + c[:1]):
                 mesh.add_edge(a, b)
-    looked = []
-
-    class Counted(list):
-        def __getitem__(self, key):
-            got = list.__getitem__(self, key)
-            if isinstance(key, slice):
-                looked.append(len(got))
-            return got
-
-    real = make_faces._Sorted.__init__
-
-    def init(self, points):
-        real(self, points)
-        self._by = [(keys, Counted(ordered)) for keys, ordered in self._by]
-
-    monkeypatch.setattr(make_faces._Sorted, "__init__", init)
     assert make_faces.faces_from_linework(mesh) == 400
-    edges, corners = 1600, 1600
-    # Each edge looks at the corners of its own row or column of diamonds;
-    # walking them all was edges x corners.
-    assert 0 < sum(looked) < 0.1 * edges * corners

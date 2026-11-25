@@ -41,6 +41,39 @@ pub(super) fn ring_key(r: &Ring) -> RingKey {
 pub(super) fn holes_key(h: &[Ring]) -> BTreeSet<RingKey> {
     h.iter().map(ring_key).collect()
 }
+/// Choose the axis with the fewest candidates even for a horizontal plan.
+struct CornerIndex<'a> {
+    points: &'a [DVec3],
+    sorted: [Vec<usize>; 3],
+}
+impl<'a> CornerIndex<'a> {
+    fn new(points: &'a [DVec3]) -> Self {
+        let sorted = std::array::from_fn(|axis| {
+            let mut order = (0..points.len()).collect::<Vec<_>>();
+            order.sort_by(|&a, &b| points[a][axis].total_cmp(&points[b][axis]));
+            order
+        });
+        Self { points, sorted }
+    }
+    fn slab(&self, lo: DVec3, hi: DVec3) -> &[usize] {
+        (0..3)
+            .map(|axis| {
+                let order = &self.sorted[axis];
+                let start = order.partition_point(|&i| self.points[i][axis] < lo[axis]);
+                let end = order.partition_point(|&i| self.points[i][axis] <= hi[axis]);
+                &order[start..end]
+            })
+            .min_by_key(|slab| slab.len())
+            .unwrap()
+    }
+    fn inside(&self, lo: DVec3, hi: DVec3) -> impl Iterator<Item = DVec3> + '_ {
+        self.slab(lo, hi)
+            .iter()
+            .map(|&i| self.points[i])
+            .filter(move |p| p.cmpge(lo).all() && p.cmple(hi).all())
+    }
+}
+
 pub(super) fn snap_and_split(mesh: &Obj, c: &Cluster, regions: &mut [Region]) -> PyResult<()> {
     let mut grid = HashMap::<_, Vec<DVec3>>::new();
     for v in vertices(c)? {
@@ -75,13 +108,7 @@ pub(super) fn snap_and_split(mesh: &Obj, c: &Cluster, regions: &mut [Region]) ->
             corners[i] = best;
         }
     }
-    // Search only the narrowest coordinate slab. Preserve its order when two
-    // split candidates lie on the same edge, as each split rekeys the edge.
-    let sorted: [Vec<usize>; 3] = std::array::from_fn(|i| {
-        let mut v = (0..corners.len()).collect::<Vec<_>>();
-        v.sort_by(|a, b| corners[*a][i].total_cmp(&corners[*b][i]));
-        v
-    });
+    let index = CornerIndex::new(&corners);
     let mut work = c.edges.clone();
     while let Some(e) = work.pop() {
         let [a, b] = ends(&e)?;
@@ -92,20 +119,7 @@ pub(super) fn snap_and_split(mesh: &Obj, c: &Cluster, regions: &mut [Region]) ->
         }
         let lo = a.min(b) - WELD;
         let hi = a.max(b) + WELD;
-        let near = (0..3)
-            .map(|i| {
-                let v = &sorted[i];
-                let l = v.partition_point(|j| corners[*j][i] < lo[i]);
-                let h = v.partition_point(|j| corners[*j][i] <= hi[i]);
-                &v[l..h]
-            })
-            .min_by_key(|s| s.len())
-            .unwrap();
-        for &idx in near {
-            let p = corners[idx];
-            if !p.cmpge(lo).all() || !p.cmple(hi).all() {
-                continue;
-            }
+        for p in index.inside(lo, hi) {
             let t = (p - a).dot(d) / l2;
             if t <= 0.
                 || t >= 1.
@@ -231,4 +245,65 @@ pub(super) fn covered(existing: &[Existing], p: DVec3) -> PyResult<bool> {
         }
     }
     Ok(false)
+}
+
+#[cfg(test)]
+mod corner_tests {
+    use super::*;
+    #[test]
+    fn boxes_match_a_linear_scan_including_duplicate_corners() {
+        let mut state = 20261110_u32;
+        let mut next = |n| {
+            state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+            (state >> 8) % n
+        };
+        let points = (0..1500)
+            .map(|_| {
+                DVec3::new(
+                    next(40) as f64,
+                    next(40) as f64,
+                    if next(4) == 0 { 3. } else { 0. },
+                )
+            })
+            .collect::<Vec<_>>();
+        let index = CornerIndex::new(&points);
+        for _ in 0..200 {
+            let (a, b) = (points[next(1500) as usize], points[next(1500) as usize]);
+            let (lo, hi) = (a.min(b) - WELD, a.max(b) + WELD);
+            let mut expected = points
+                .iter()
+                .filter(|p| p.cmpge(lo).all() && p.cmple(hi).all())
+                .map(|p| key(*p))
+                .collect::<Vec<_>>();
+            let mut actual = index.inside(lo, hi).map(key).collect::<Vec<_>>();
+            expected.sort_unstable();
+            actual.sort_unstable();
+            assert_eq!(actual, expected);
+        }
+    }
+    #[test]
+    fn flat_diamonds_examine_less_than_a_tenth_of_the_plan() {
+        let mut points = Vec::new();
+        for i in 0..20 {
+            for j in 0..20 {
+                let base = DVec3::new(3. * f64::from(i), 3. * f64::from(j), 0.);
+                points.extend(
+                    [(1., 0.), (2., 1.), (1., 2.), (0., 1.)]
+                        .map(|(x, y)| base + DVec3::new(x, y, 0.)),
+                );
+            }
+        }
+        let index = CornerIndex::new(&points);
+        let mut examined = 0;
+        for ring in points.chunks_exact(4) {
+            for i in 0..4 {
+                let (a, b) = (ring[i], ring[(i + 1) % 4]);
+                examined += index.slab(a.min(b) - WELD, a.max(b) + WELD).len();
+            }
+        }
+        assert!(
+            examined > 0 && examined < points.len() * points.len() / 10,
+            "{examined} candidates"
+        );
+    }
 }
