@@ -46,21 +46,6 @@ def raw_filter(backend):
     return result
 
 
-def bind(win, action, key, *, toggle=False):
-    """Connect a classic host action before its shortcut customizations load."""
-    from views import view_commands
+def shortcut_type():
     from PySide6.QtGui import QKeySequence
-    entry = next(row for row in view_commands.entries() if row[1] == key)
-    action.setShortcuts([QKeySequence(shortcut) for shortcut in entry[3]])
-    signal = action.toggled if toggle else action.triggered
-    signal.connect(lambda on=False: view_commands.run_view_command(win, key, on))
-    bindings = win.__dict__.setdefault("_view_bindings", {})
-
-    def reflect():
-        value = (action.shortcut().toString(QKeySequence.NativeText), action.isEnabled())
-        if bindings.get(key) != value:
-            bindings[key] = value
-            win._view_binding_version = vars(win).get("_view_binding_version", 0) + 1
-
-    action.changed.connect(reflect)
-    reflect()
+    return QKeySequence

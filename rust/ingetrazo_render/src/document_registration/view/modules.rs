@@ -248,6 +248,86 @@ fn labels<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     Ok(result.into_any())
 }
+#[pyfunction(signature=(window,key,on=false))]
+fn trigger_view_action(window: &Obj, key: &str, on: bool) -> PyResult<()> {
+    window
+        .py()
+        .import("views.view_commands")?
+        .call_method1("run_view_command", (window, key, on))?;
+    Ok(())
+}
+#[pyfunction]
+fn reflect_view_action(
+    window: &Obj,
+    action: &Obj,
+    key: &str,
+    bindings: &Bound<PyDict>,
+    native_text: &Obj,
+) -> PyResult<()> {
+    let shortcut = action
+        .call_method0("shortcut")?
+        .call_method1("toString", (native_text,))?;
+    let value = (shortcut, action.call_method0("isEnabled")?).into_bound_py_any(window.py())?;
+    if let Some(current) = bindings.get_item(key)? {
+        if current.eq(&value)? {
+            return Ok(());
+        }
+    }
+    bindings.set_item(key, value)?;
+    let attrs = window.getattr("__dict__")?;
+    let version = attrs
+        .call_method1("get", ("_view_binding_version", 0))?
+        .add(1)?;
+    window.setattr("_view_binding_version", version)
+}
+fn bind_view_action<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let window = a.get_item(0)?;
+    let action = a.get_item(1)?;
+    let key = a.get_item(2)?;
+    let sequence = classic(py)?.call_method0("shortcut_type")?;
+    let entries = py.import("views.view_commands")?.call_method0("entries")?;
+    let mut row = None;
+    for entry in entries.try_iter()? {
+        let entry = entry?;
+        if entry.get_item(1)?.eq(&key)? {
+            row = Some(entry);
+            break;
+        }
+    }
+    let row = row.ok_or_else(|| pyo3::exceptions::PyStopIteration::new_err(()))?;
+    let shortcuts = PyList::empty(py);
+    for shortcut in row.get_item(3)?.try_iter()? {
+        shortcuts.append(sequence.call1((shortcut?,))?)?;
+    }
+    action.call_method1("setShortcuts", (shortcuts,))?;
+    let signal = if a.get_item(3)?.is_truthy()? {
+        "toggled"
+    } else {
+        "triggered"
+    };
+    let partial = py.import("functools")?.getattr("partial")?;
+    let trigger = partial.call1((wrap_pyfunction!(trigger_view_action, py)?, &window, &key))?;
+    action
+        .getattr(signal)?
+        .call_method1("connect", (trigger,))?;
+    let bindings = window
+        .getattr("__dict__")?
+        .call_method1("setdefault", ("_view_bindings", PyDict::new(py)))?;
+    let reflect = partial.call1((
+        wrap_pyfunction!(reflect_view_action, py)?,
+        &window,
+        &action,
+        &key,
+        bindings,
+        sequence.getattr("NativeText")?,
+    ))?;
+    action
+        .getattr("changed")?
+        .call_method1("connect", (&reflect,))?;
+    reflect.call0()?;
+    Ok(none(py))
+}
 fn view_commands(module: &Bound<PyModule>) -> PyResult<()> {
     register_view_functions(&module.dict())?;
     install(
@@ -255,6 +335,14 @@ fn view_commands(module: &Bound<PyModule>) -> PyResult<()> {
         &module.dict(),
         &[
             ("entries", Mode::Function, entries, &[], "", ""),
+            (
+                "bind",
+                Mode::Function,
+                bind_view_action,
+                &["win", "action", "key", "*", "toggle=False"],
+                "",
+                "Connect a classic host action before its shortcut customizations load.",
+            ),
             ("_labels", Mode::Function, labels, &["language"], "", ""),
         ],
     )?;
@@ -265,9 +353,7 @@ fn view_commands(module: &Bound<PyModule>) -> PyResult<()> {
             .call1((module.getattr(name)?,))?;
         module.setattr(name, cached)?;
     }
-    let bind = classic(module.py())?.getattr("bind")?;
-    bind.setattr("__module__", module.name()?)?;
-    module.add("bind", bind)
+    Ok(())
 }
 fn shim_init<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
