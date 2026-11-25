@@ -21,7 +21,7 @@ from core.history import AddEdgeCommand
 from core.scene import Scene
 from formats import igz as igz_format
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from views.filedialogs import file_dialogs
+from ingetrazo_render.shell_files import ShellFileDialog
 
 
 def _autosave_now(win, timeout=10.0):
@@ -94,7 +94,7 @@ def test_save_as_writes_the_tab_and_not_the_view_in_front(win, tmp_path,
     path = tmp_path / "named.built"
     doc = _new_tab(win, 3)
     win.viewport = _pane(win)
-    monkeypatch.setattr(file_dialogs, "getSaveFileName",
+    monkeypatch.setattr(ShellFileDialog, "getSaveFileName",
                         lambda *a, **k: (str(path), ""))
     win._on_save_as()
     assert _edges_in_file(path) == 3
@@ -371,7 +371,7 @@ def test_cancelling_a_save_as_on_quit_stays_and_writes_nothing_wrong(
     a = _new_tab(win, 3, tmp_path / "a.built")
     _new_tab(win, 2)                                # untitled: Save As
     monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", lambda *a, **kw: "save")
-    monkeypatch.setattr(file_dialogs, "getSaveFileName",
+    monkeypatch.setattr(ShellFileDialog, "getSaveFileName",
                         lambda *a, **k: ("", ""))
     assert not win._confirm_quit()
     assert _edges_in_file(a.path) == 3
@@ -400,7 +400,7 @@ def test_save_as_retires_the_recovery_copy_of_the_old_name(win, tmp_path,
     _new_tab(win, 3, old)
     _autosave_now(win)
     assert autosave.pending(old) is not None
-    monkeypatch.setattr(file_dialogs, "getSaveFileName",
+    monkeypatch.setattr(ShellFileDialog, "getSaveFileName",
                         lambda *a, **k: (str(new), ""))
     win._on_save_as()
     assert autosave.pending(old) is None
@@ -442,13 +442,13 @@ def test_saving_legacy_document_offers_built_and_export_keeps_active_path(win, t
         assert Path(suggested) == native
         assert "*.built" in filters
         return str(native), filters
-    monkeypatch.setattr(file_dialogs, "getSaveFileName", choose_built)
+    monkeypatch.setattr(ShellFileDialog, "getSaveFileName", choose_built)
     win._on_save()
     assert win._current_path == native
     assert legacy.read_bytes() == original
     _edges(win.viewport, 1)
     target = tmp_path / "compat.igz"
-    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *args: (str(target), ""))
+    monkeypatch.setattr(ShellFileDialog, "getSaveFileName", lambda *args: (str(target), ""))
     win._on_export_igz()
     assert win._current_path == native and win._is_dirty()
     with zipfile.ZipFile(target) as archive:

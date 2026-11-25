@@ -212,14 +212,14 @@ def test_tag_menu_changes_saved_scene_visibility_and_restores_it(native_host):
 
 def test_template_export_and_import_in_drawing(native_host, tmp_path, monkeypatch):
     from tests.native_tree import action
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     scene = native_host.viewport.scene
     folder = ingetrazo_core.tag_edits.add_folder(scene, "Oficina")
     tag = Layer("Ejes", folder=folder, linetype="dashdot")
     scene.layers.append(tag)
     path = tmp_path / "plantilla.json"
     for picker in ("getSaveFileName", "getOpenFileName"):
-        monkeypatch.setattr(file_dialogs, picker, lambda *a: (str(path), ""))
+        monkeypatch.setattr(ShellFileDialog, picker, lambda *a: (str(path), ""))
     action(native_host, "exporttags", "")
     scene.layers[:] = [Layer(DEFAULT_LAYER)]
     action(native_host, "importtags", "")

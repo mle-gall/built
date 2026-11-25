@@ -20,7 +20,7 @@ numpy = "0.29"
 # No `extension-module` here: maturin builds the wheel as an extension
 # (PYO3_BUILD_EXTENSION_MODULE) and `cargo test` links libpython. The
 # feature stays for builds that ask for it explicitly.
-pyo3 = { version = "0.29", features = ["abi3-py310"] }
+pyo3 = { version = "0.29", features = ["abi3-py311"] }
 zune-jpeg = "0.5"
 zune-core = "0.5"
 rayon = "1.12.0"

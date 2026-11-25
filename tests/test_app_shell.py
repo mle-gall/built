@@ -98,13 +98,13 @@ def test_events_answer_the_qt_calls_the_handlers_make():
 
 
 def test_window_input_answers_from_winit(host):
-    from views import input_state
+    from ingetrazo_core import window_input
     from ingetrazo_core import PixelPoint as QPoint
     host.pointer("move", 30, 40, 0, 0, Qt.ControlModifier.value)
-    assert input_state.modifiers(host.viewport, query=True) & Qt.ControlModifier
-    assert input_state.cursor_position(host.viewport) == QPoint(30, 40)
+    assert window_input.modifiers(host.viewport) & Qt.ControlModifier
+    assert window_input.cursor_position(host.viewport) == QPoint(30, 40)
     host.key(True, Qt.Key_Shift.value, Qt.ShiftModifier.value)
-    assert input_state.modifiers(host.viewport) == Qt.ShiftModifier
+    assert window_input.modifiers(host.viewport) == Qt.ShiftModifier
 
 
 def test_rail_matches_classic_groups_and_dispatches(host):
@@ -290,10 +290,10 @@ def test_model_menu_uses_current_selection_history_and_tool(host):
 def test_mesh_import_menu_waits_for_answer_then_imports_once(host, tmp_path, monkeypatch, suffix):
     from core.settings import settings
     from tests.test_import_failure_reported import _CUBE_OBJ, _GOOD_STL
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     path = tmp_path / ("triangle." + suffix)
     path.write_bytes(_CUBE_OBJ if suffix == "obj" else _GOOD_STL)
-    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *a: (str(path), ""))
+    monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *a: (str(path), ""))
     forms = []
     monkeypatch.setattr("ingetrazo_render.chrome_forms.show", lambda _, form: forms.append(form))
     win = host.window

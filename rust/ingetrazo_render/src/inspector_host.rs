@@ -8,6 +8,7 @@
 //! record, the filing rule, the IFC vocabulary and their protocol commands
 //! (`core.protocol.records`, `core.bim_registry`, `core.structure`). The
 //! document, camera and tools are reached through their attributes.
+mod terrain;
 use pyo3::{
     prelude::*,
     types::{IntoPyDict, PyDict, PyList, PyTuple},
@@ -32,11 +33,6 @@ pub fn send(view: &Bound<'_, PyAny>, key: &str, value: &Bound<'_, PyAny>) -> PyR
     let text = py.import("json")?.getattr("dumps")?.call((value,), Some(&kwargs))?;
     view.getattr("renderer")?.call_method1("ui_panel_set", (key, text))?;
     Ok(())
-}
-
-#[pyfunction]
-fn panel_send(view: &Bound<'_, PyAny>, key: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
-    send(view, key, value)
 }
 
 /// The saved view marked in the scene tabs, if any.
@@ -622,7 +618,7 @@ fn inspector_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, payload: &s
             bevel_edit(&tools, &tools.getattr("tool")?, verb, &v)
         }
         "camera" => camera_edit(win, view, verb, &v),
-        "terrain" => py.import("views.terrain_binding")?.call_method1("action", (view, &vp, verb)).map(|_| ()),
+        "terrain" => terrain::action(view,&vp,verb),
         _ => Ok(()),
     };
     if let Err(e) = result {
@@ -640,7 +636,6 @@ fn inspector_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, payload: &s
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     for f in [
-        wrap_pyfunction!(panel_send, m)?,
         wrap_pyfunction!(marked_view, m)?,
         wrap_pyfunction!(inspector_selection, m)?,
         wrap_pyfunction!(inspector_sync, m)?,

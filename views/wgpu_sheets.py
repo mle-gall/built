@@ -766,9 +766,9 @@ class Workspace:
         import ingetrazo_core as NATIVE
         from core.composition import AddItemCommand
         from core.i18n import tr
-        from views.filedialogs import file_dialogs
+        from ingetrazo_render.shell_files import ShellFileDialog
         parent = None                     # the shell's panels have no Qt parent
-        path, _ = file_dialogs.getOpenFileName(parent, tr("Choose image…"), "", tr("Images (*.png *.jpg *.jpeg)"))
+        path, _ = ShellFileDialog.getOpenFileName(parent, tr("Choose image…"), "", tr("Images (*.png *.jpg *.jpeg)"))
         self._tool("select")
         if not path:
             return
@@ -789,7 +789,7 @@ class Workspace:
         """The font picker for a sheet text; the choice is one history step."""
         if model is None:
             return
-        from views.font_picker import show
+        from ingetrazo_render.font_picker import show
 
         def apply(p):
             self._edit([(model, dict(family=p["font"], bold=p["bold"], italic=p["italic"],
@@ -1161,10 +1161,10 @@ class Workspace:
             self.flash("Select a model view on the sheet first")
             return
         title, ext, filters = self._EXPORTS[kind]
-        from views.filedialogs import file_dialogs
+        from ingetrazo_render.shell_files import ShellFileDialog
         # The native save panel in both apps (the shell uses ingetrazo_render.shell_files).
         parent = None                     # the shell's panels have no Qt parent
-        path, _ = file_dialogs.getSaveFileName(parent, title, self._default_path(kind), filters)
+        path, _ = ShellFileDialog.getSaveFileName(parent, title, self._default_path(kind), filters)
         if path:
             if not Path(path).suffix:
                 path += ext

@@ -27,6 +27,7 @@ mod earcut;
 mod polygon;
 mod facegeom;
 mod render_bake;
+mod resident;
 mod scene_bake;
 mod smooth;
 mod facesview;
@@ -191,7 +192,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     builtproject::register(m)?;
     m.add_class::<settings::NativeSettings>()?;
     m.add_class::<document_watch::DocumentWatch>()?;
-    m.add_class::<window_input::WindowInput>()?;
+    window_input::register(m)?;
     m.add_class::<window_commands::WindowCommands>()?;
     m.add_class::<window_commands::WindowCommand>()?;
     m.add_class::<command_search::SearchItem>()?;
@@ -548,6 +549,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(not(test))]
     store::py::register(m)?;
     doc::py::register(m)?;
+    resident::register(m)?;
     m.add_class::<scans::MeshScan>()?;
     kernel::register_kernel(m)?;
     Ok(())

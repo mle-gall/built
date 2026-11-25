@@ -126,7 +126,7 @@ pub fn isolate_tags(vp: &Bound<'_, PyAny>, rows: Vec<String>) -> PyResult<()> {
     let cmd = py
         .import("core.history")?
         .call_method1("CompoundCommand", (steps,))?;
-    py.import("views.tree_navigation")?
+    py.import("ingetrazo_render.tree_navigation")?
         .call_method1("execute", (vp, cmd))?;
     Ok(())
 }
@@ -211,7 +211,7 @@ fn merge_answer(
     let cmd = py
         .import("core.history")?
         .call_method1("DeleteLayerCommand", (key, into))?;
-    py.import("views.tree_navigation")?
+    py.import("ingetrazo_render.tree_navigation")?
         .call_method1("execute", (vp, cmd))?;
     Ok(())
 }

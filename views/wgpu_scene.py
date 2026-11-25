@@ -22,14 +22,11 @@ from core.purge import iter_groups
 from core.lazy_mesh import plan_of
 from views.array_bake import _attrs_table
 
-VERTEX = np.dtype([('pos', '<f4', 3), ('normal', '<f4', 3), ('color', 'u1', 4)])
-INSTANCE = np.dtype([('world', '<f4', (4, 4)), ('info', '<u4', 4)])
-
-COMMAND = np.dtype([('count', '<u4'), ('instances', '<u4'), ('first', '<u4'),
-                    ('base', '<i4'), ('start', '<u4')])
 
 
-from ingetrazo_render import OBJECT_HIDDEN, VISIBILITY_FILTERED, PackedScene
+
+from ingetrazo_core import (COMMAND, INSTANCE, OBJECT_HIDDEN, VERTEX, VISIBILITY_FILTERED, PackedScene,
+                            assemble_scene)
 
 
 def bake_mesh(mesh):
@@ -361,15 +358,6 @@ def _proxy_records(scene, roots, vp, state):
         yield g, (world[i] if defined[i] else None), proxy, flags
 
 
-def _profile_endpoints(mesh):
-    """Keep sequence semantics for incremental edits without boxing every float."""
-    from array import array
-    points = mesh[0][mesh[4][(mesh[5] & 3) != 0]]
-    result = array('f')
-    result.frombytes(np.asarray(points, np.float32).tobytes())
-    return result
-
-
 def open_focus(scene):
     home = scene.camera_home
     if isinstance(home, dict) and home.get("target") is not None:
@@ -385,12 +373,6 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
     changed prototype variant (views.wgpu_updates). ``progress(fraction,
     text)`` is called as the placements are read (the native bake that
     follows reports at 0.9)."""
-    from time import perf_counter
-    try:
-        import resource
-    except ImportError:
-        resource = None
-    begin = perf_counter()
     state = _placement_state(scene)
     from views.document_interaction import _paint_of, DocumentInteraction
     vp = SimpleNamespace(scene=scene)
@@ -474,96 +456,31 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
         for i, group in enumerate(groups):
             if group is not None and (group.uid in repeated or group.uid.startswith('@[')):
                 uids[i] = occurrence_keys[group] = row_id(scene.occurrence_path(group))
-    offsets = np.zeros((len(meshes)+1, 5), np.int64)
-    for i, arrays in enumerate(meshes):
-        offsets[i+1] = [len(a) for a in arrays[:5]]
-    np.cumsum(offsets, axis=0, out=offsets)
-    empty = (np.empty((0,3), np.float32), np.empty(0, np.int64),
-             np.empty(0, np.int64), np.empty(0, np.int64),
-             np.empty((0,2), np.int64), np.empty(0, np.uint8),
-             np.empty((0,4), np.uint8), np.empty(0, bool), np.empty(0, np.int64))
-    palette_offsets = np.cumsum([0]+[len(m[6]) for m in meshes])
-    attributes = (np.concatenate([m[8]+offset for m, offset in zip(meshes, palette_offsets)])
-                  if meshes else empty[8])
-    arrays = [np.concatenate([m[k] for m in meshes]) if meshes else empty[k] for k in range(8)]
-    profile_exclusions = tuple((code, _profile_endpoints(m))
-                               for code, m in enumerate(meshes) if np.any(m[5] & 3))
     prototype_count = len(meshes)
-    maps = (np.concatenate([m[9] for m in meshes]) if texture_ids or billboard_codes
-            else np.broadcast_to(np.zeros(16, np.float32), (int(offsets[-1,3]), 16)))
-    paints_array = np.concatenate([m[10] for m in meshes]) if meshes else np.empty((0,3), np.uint32)
-    # Drop the per-prototype copies BEFORE native output allocation, not just
-    # before decoding textures. Deferred source arrays remain owned by meshes.
-    del meshes
     if progress is not None:
         progress(0.9, "Packing geometry for the GPU…")
-    handoff = perf_counter()
-    raw, indices, bounds, table, materials = _native.available().bake_scene(
-        *arrays[:4], arrays[6], arrays[7], arrays[4], arrays[5], offsets, attributes, _native.qt_hypot(),
-        maps, paints_array, True)
-    del arrays, attributes, maps, paints_array
+    matrices = np.empty((len(rows), 4, 4), dtype=np.float64)
+    for begin_row in range(0, len(rows), 2048):
+        block = rows[begin_row:begin_row + 2048]
+        matrices[begin_row:begin_row + len(block)] = [r[1] for r in block]
+    tints = [(view_tint or {}).get(uid) for uid in uids] if view_tint else [None] * len(uids)
+    # The bake, the command tables, the rows in the view frame and the
+    # frame origin: rust/ingetrazo_core/src/resident/assemble.rs.
+    built = assemble_scene(meshes, [r[0] for r in rows], matrices, [r[2] for r in rows], paints, tints,
+                           coordinates, sorted(billboard_codes), bool(texture_ids or billboard_codes),
+                           previous_origin, bool(wide_variants), _native.qt_hypot())
+    # Drop the per-prototype copies before decoding textures. Deferred
+    # source arrays remain owned by meshes.
+    del meshes, matrices
     textures = _texture_array(texture_ids) if texture_images else None
-    baked = perf_counter()
-    vertices = raw.view(VERTEX)
-    bounds = bounds.reshape(-1, 2, 4)
-    table = table.reshape(-1, 5)
-    commands = np.zeros(prototype_count, COMMAND)
-    edge_commands = np.zeros(prototype_count, COMMAND)
-    hidden_commands = np.zeros(prototype_count, COMMAND)
-    hidden_edge_commands = np.zeros(prototype_count, COMMAND)
-    instances = np.zeros(len(rows), INSTANCE)
-    origins = tuple(c[0] for c in coordinates)
-    origin = previous_origin
-    model_translations = None
-    world_bounds = np.zeros((2, 3))
-    if rows:
-        from core.coordinate_frame import choose_origin
-        codes = np.asarray([r[0] for r in rows])
-        matrices = np.empty((len(rows), 4, 4), dtype=np.float64)
-        for begin_row in range(0, len(rows), 2048):
-            block = rows[begin_row:begin_row + 2048]
-            matrices[begin_row:begin_row + len(block)] = [r[1] for r in block]
-        linear = matrices[:, :3, :3]
-        matrices[:, 3, :3] += np.einsum('ni,nij->nj', np.asarray(origins)[codes], linear)
-        boxes = np.array([c[1] for c in coordinates])[codes]
-        centers = np.einsum('ni,nij->nj', boxes.mean(axis=1), linear) + matrices[:, 3, :3]
-        radii = np.einsum('ni,nij->nj', (boxes[:, 1] - boxes[:, 0]) * .5, abs(linear))
-        visible = np.array([not r[2] & 1 for r in rows])
-        if visible.any():
-            world_bounds = np.stack(((centers-radii)[visible].min(axis=0),
-                                     (centers+radii)[visible].max(axis=0)))
-            origin = choose_origin(world_bounds.mean(axis=0), previous_origin)
-            world_bounds -= origin
-        from core.coordinate_frame import REBASE_DISTANCE
-        if wide_variants or any(origin) or np.any(np.abs(matrices[:, 3, :3]) > REBASE_DISTANCE) or any(map(any, origins)):
-            model_translations = matrices[:, 3, :3].copy()
-        matrices[:, 3, :3] -= origin
-        instances['world'] = matrices
-        instances['info'][:, 0] = [r[0] for r in rows]
-        instances['info'][:, 1] = paints
-        instances['info'][:, 2] = [r[2] for r in rows]
-        for i, uid in enumerate(uids):
-            tint = (view_tint or {}).get(uid)
-            if tint is not None:
-                instances['info'][i, 3] = np.array([*np.clip(np.array(tint[:3])*255, 0, 255), 255], np.uint8).view('<u4')[0]
-    counts = np.bincount(instances['info'][:, 0], minlength=prototype_count)
-    commands['count'] = table[:, 1]
-    edge_commands['count'] = table[:, 2]
-    if billboard_codes:
-        edge_commands['count'][list(billboard_codes)] = 0
-    commands['first'] = commands['base'] = edge_commands['base'] = table[:, 0]
-    edge_commands['first'] = table[:, 0]+table[:, 1]
-    commands['start'] = edge_commands['start'] = np.cumsum(counts)-counts
-    hidden_commands['count'] = table[:, 3]
-    hidden_edge_commands['count'] = table[:, 4]
-    hidden_commands['base'] = hidden_edge_commands['base'] = table[:, 0]
-    hidden_commands['first'] = table[:, 0]+table[:, 1]+table[:, 2]
-    hidden_edge_commands['first'] = hidden_commands['first']+table[:, 3]
-    hidden_commands['start'] = hidden_edge_commands['start'] = commands['start']
-    return PackedScene(vertices, indices, bounds, commands, edge_commands, instances, uids, world_bounds, dict(handoff=handoff-begin, native=baked-handoff, finish=perf_counter()-baked, peak_build_rss_bytes=(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss if resource is not None else None)), groups, materials, textures, tuple(texture_ids), hidden_commands, hidden_edge_commands, profile_exclusions,
-                               (bool(getattr(scene, 'show_hidden_geometry', False)), bool(getattr(scene, 'show_hidden_objects', False))), lookup, prototype_paints, origin=origin, prototype_origins=tuple(origins), model_translations=model_translations,
-                               bake_focus=tuple(focus) if wide_variants else None, occurrence_keys=occurrence_keys,
-                               mesh_codes=mesh_codes)
+    return PackedScene(
+        built["vertices"], built["indices"], built["bounds"], built["commands"], built["edge_commands"],
+        built["instances"], uids, built["world_bounds"], None, groups, built["materials"], textures,
+        tuple(texture_ids), built["hidden_commands"], built["hidden_edge_commands"], built["profile_exclusions"],
+        (bool(getattr(scene, 'show_hidden_geometry', False)), bool(getattr(scene, 'show_hidden_objects', False))),
+        lookup, prototype_paints, origin=built["origin"], prototype_origins=built["prototype_origins"],
+        model_translations=built["model_translations"], bake_focus=tuple(focus) if wide_variants else None,
+        occurrence_keys=occurrence_keys, mesh_codes=mesh_codes)
 
 
 def _material_columns(pos, corners, sizes, counts, table, attributes, texture_ids, origin=(0., 0., 0.)):

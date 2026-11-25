@@ -183,7 +183,7 @@ checks the originating document and discards cancelled requests. See
 
 A plugin that needs more than a menu entry defines a module-level
 `setup(app)`. It is called once, when the main window is built, with an
-`ExtensionApp` (`views/extension_api.py`, `API_VERSION` 2). A plugin may
+`ExtensionApp` (imported from `views.extension_api`, `API_VERSION` 2). A plugin may
 have tools, a `setup`, or both; if `setup` raises, the plugin shows as a
 load error and the application opens regardless.
 

@@ -991,7 +991,7 @@ fn new_model(py: Python<'_>, win: &Bound<'_, PyAny>, ask_units: bool) -> PyResul
 
 fn new_project(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
-    let dialogs = py.import("views.filedialogs")?.getattr("file_dialogs")?;
+    let dialogs = py.import("ingetrazo_render.shell_files")?.getattr("ShellFileDialog")?;
     let name = dialogs.call_method1("getSaveFileName", (win, "New project", "", "Built project (*.builtproject)"))?.get_item(0)?;
     if !name.is_truthy()? {
         return Ok(());
@@ -1016,7 +1016,7 @@ fn new_project(win: &Bound<'_, PyAny>) -> PyResult<()> {
 fn open_dialog(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
     let suffix: String = py.import("formats.built")?.getattr("BUILT_SUFFIX")?.extract()?;
-    let dialogs = py.import("views.filedialogs")?.getattr("file_dialogs")?;
+    let dialogs = py.import("ingetrazo_render.shell_files")?.getattr("ShellFileDialog")?;
     let name = dialogs.call_method1("getOpenFileName", (win, "Open", "", format!("Documents (*{suffix} *.igz *.builtproject *.igzproj)")))?.get_item(0)?;
     if name.is_truthy()? {
         start(py)?.call_method1("open_recent", (win, name))?;
@@ -1048,7 +1048,7 @@ fn open_recent(py: Python<'_>, win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) 
         } else {
             "IngeTrazo"
         };
-        let dialogs = py.import("views.filedialogs")?.getattr("file_dialogs")?;
+        let dialogs = py.import("ingetrazo_render.shell_files")?.getattr("ShellFileDialog")?;
         let located = dialogs.call_method1("getOpenFileName", (win, format!("Locate {}", path.getattr("name")?.str()?), "", format!("{kind} (*{})", path.getattr("suffix")?.str()?)))?.get_item(0)?;
         if !located.is_truthy()? {
             return Ok(false);
@@ -1074,7 +1074,7 @@ fn open_recent(py: Python<'_>, win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) 
             recent(py)?.getattr("remember")?.call((p.bind(py),), Some(&[("replace", &o)].into_py_dict(py)?))?;
             Ok(none(py))
         })?;
-        py.import("views.document_open")?.call_method1("after_open", (win, &path, then))?;
+        py.import("ingetrazo_render.document_open")?.call_method1("after_open", (win, &path, then))?;
         return Ok(true);
     }
     rec.getattr("remember")?.call((&path,), Some(&[("replace", &original)].into_py_dict(py)?))?;

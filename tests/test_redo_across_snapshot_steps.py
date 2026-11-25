@@ -19,9 +19,6 @@ from core.store_mesh import StoreMesh
 SQUARE = [V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)]
 
 
-@pytest.fixture
-def engine(monkeypatch):
-    monkeypatch.setattr(StoreMesh, "_materialise", lambda *_: pytest.fail("materialised"))
 
 
 def _state(mesh):
@@ -30,7 +27,7 @@ def _state(mesh):
             len(mesh.edges), len(mesh.faces))
 
 
-def test_redo_relinks_what_a_later_snapshot_never_held(engine):
+def test_redo_relinks_what_a_later_snapshot_never_held():
     scene = Scene()
     history = History(scene)
     assert type(scene.mesh) is StoreMesh

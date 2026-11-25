@@ -234,11 +234,7 @@ class _KeyHashes:
     already disagree. By key, both scenes number their elements alike
     and iterate alike, so any difference left is the scans'."""
 
-    # The materialised objects and the store's views hash by their full
-    # key, whose namespace part (another per scene) steers set probing on
-    # collisions: same treatment, so a view and its object still meet.
-    _CLASSES = (M.Vertex, M.Edge, M.Face, S._MVertex, S._MEdge, S._MFace,
-                S._ViewMixin)
+    _CLASSES = (M.Vertex, M.Edge, M.Face, S._ViewMixin)
 
     def __enter__(self):
         self._old = [c.__dict__.get("__hash__") for c in self._CLASSES]

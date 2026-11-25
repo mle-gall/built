@@ -4,7 +4,7 @@ from core.group_scale import group_scale
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from tests.native_tree import action
 from tests.test_project_drawing_filters import Project
-from views import scale_editor
+from ingetrazo_render import ask_scale
 from ingetrazo_render import chrome_forms
 from ingetrazo_render import context_menu_build, context_menu_run
 
@@ -49,7 +49,7 @@ def test_shared_menus_and_dock_selection(native_question_host, monkeypatch):
 
     from ingetrazo_render import chrome_dialogs
     monkeypatch.setattr(chrome_dialogs, "in_shell", lambda: True)
-    scale_editor.ask_scale(win, group)
+    ask_scale(win, group)
     form = chrome_forms.current(win)
     form.receive("x", "2")
     assert group_scale(group)[0] == 2

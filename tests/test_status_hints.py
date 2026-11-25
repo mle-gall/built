@@ -10,7 +10,7 @@ from tools.arc import ArcTool
 from tools.fillet import FilletTool
 from tools.rust_tools import LineTool
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
-from views.status_hints import HINTS, NAV_HINTS, hint_for, phase_of
+from ingetrazo_render.status_hints import HINTS, NAV_HINTS, hint_for, phase_of
 
 
 def test_the_hint_follows_the_tools_step():

@@ -88,7 +88,7 @@ fn refresh_snap(v: &Obj) -> PyResult<()> {
     }
     let mods = v
         .py()
-        .import("views.input_state")?
+        .import("ingetrazo_core.window_input")?
         .call_method1("modifiers", (v,))?;
     let p = screen.call_method0("toPoint")?;
     let snap = v.call_method1(

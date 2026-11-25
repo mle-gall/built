@@ -151,14 +151,11 @@ fn tool_hint(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let vp = win.getattr("viewport")?;
     let tool = vp.getattr("active_tool")?;
     let nav = vp.getattr("nav_mode")?;
-    let mode = vp.getattr("linear_inference_mode").ok();
-    let hint = py
-        .import("views.status_hints")?
-        .call_method1(
-            "hint_for",
-            (win.call_method1("_tool_key", (&tool,))?, &tool, &nav, mode),
-        )?
-        .extract::<String>()?;
+    let key: Option<String> = win.call_method1("_tool_key", (&tool,))?.extract()?;
+    let nav_mode: Option<String> = nav.extract()?;
+    let mode = vp.getattr_opt("linear_inference_mode")?
+        .map(|v| v.extract::<Option<String>>()).transpose()?.flatten();
+    let hint = crate::status_hints::hint_for(py, key.as_deref(), &tool, nav_mode.as_deref(), mode.as_deref())?;
     let name = if !nav.is_none() {
         nav.call_method1("replace", ("_", " "))?
             .call_method0("capitalize")?

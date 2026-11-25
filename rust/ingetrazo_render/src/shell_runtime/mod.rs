@@ -4,6 +4,7 @@ use pyo3::types::{PyDict, PyTuple};
 
 pub(crate) mod modal;
 mod project;
+mod resident;
 pub(crate) mod services;
 mod views;
 pub(crate) mod windows;

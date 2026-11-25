@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from views.status_hints import HINTS
+from ingetrazo_render.status_hints import HINTS
 
 _I18N = Path(__file__).resolve().parent.parent / "i18n"
 

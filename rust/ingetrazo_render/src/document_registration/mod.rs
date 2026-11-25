@@ -27,7 +27,6 @@ impl<'py> Registrar<'py> {
         })
     }
 }
-#[pyfunction]
 fn register_document_host(cls: &Obj) -> PyResult<()> {
     let r = Registrar::new(cls.py())?;
     defaults::controller(&r, cls)?;
@@ -47,23 +46,15 @@ fn register_document_host(cls: &Obj) -> PyResult<()> {
     Ok(())
 }
 
-#[pyfunction]
 fn register_document_module(ns: &Bound<PyDict>) -> PyResult<()> {
     let r = Registrar::new(ns.py())?;
     defaults::module(&r, ns)?;
     helpers::install(&r, ns)
 }
 
-pub(super) fn register(m: &Bound<PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(register_document_module, m)?)?;
-    m.add_function(wrap_pyfunction!(register_document_host, m)?)?;
-    Ok(())
-}
-
 /// Document and view bindings owned by the interaction lane.
 pub(super) fn register_interaction(m: &Bound<PyModule>) -> PyResult<()> {
     crate::document_bindings::register(m)?;
-    self::register(m)?;
     view::register(m)?;
     crate::document_camera::register(m)?;
     crate::document_input::register(m)?;

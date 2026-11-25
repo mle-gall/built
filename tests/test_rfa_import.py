@@ -108,14 +108,14 @@ def test_reader_contract(monkeypatch):
 
 
 def test_thumbnail():
-    from views.component_thumbs import thumbnail
+    from ingetrazo_render import component_thumbnail
     from ingetrazo_render import SurveyRaster
     image = SurveyRaster(16, 16, bytes([255, 0, 0, 255]) * 256)
     p = payload()
     p['preview_png_base64'] = base64.b64encode(image.png()).decode()
     scene = Scene()
     apply_payload(scene, p)
-    pm = thumbnail(scene.kept_components[0])
+    pm = component_thumbnail(scene.kept_components[0])
     i = (pm.width * 20 + 20) * 4
     assert pm.rgba()[i:i + 4] == bytes([255, 0, 0, 255])
 
@@ -147,7 +147,7 @@ def test_persistence(tmp_path):
 
 def test_menu_dispatch_and_report(native_window, monkeypatch, tmp_path):
     from ingetrazo_render.shell_files import IMPORTS
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     from formats import rfa
 
     win = native_window
@@ -156,7 +156,7 @@ def test_menu_dispatch_and_report(native_window, monkeypatch, tmp_path):
     path.touch()
     monkeypatch.setattr(rfa, "read_rfa", lambda path: payload())
     monkeypatch.setattr("ingetrazo_render.chrome_dialogs.information", lambda parent, title, text: reports.append(text))
-    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *args, **kwargs: (str(path), ""))
+    monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *args, **kwargs: (str(path), ""))
     assert ".rfa" in IMPORTS
     win._host.menu("import:rfa")
     assert len(win.viewport.scene.kept_components) == 2

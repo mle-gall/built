@@ -168,11 +168,6 @@ fn host_begin<'py>(a: &Args<'py>) -> Reply<'py> {
     t.setattr("base_face", &face)?;
     let scene = vp.getattr("scene")?;
     t.call_method1("_take_extras", (&face, &scene))?;
-    if !t.call_method1("_ensure_store", (&scene,))?.is_truthy()? {
-        t.call_method1("_refuse_python_mesh", (vp,))?;
-        return false.into_bound_py_any(py);
-    }
-    let face = t.getattr("base_face")?;
     t.setattr("extrusion", 0.)?;
     t.setattr("dragging", true)?;
     t.setattr("_group", group)?;
@@ -617,11 +612,7 @@ fn on_release<'py>(a: &Args<'py>) -> Reply<'py> {
     let mods = if tool.getattr("dragging")?.is_truthy()? {
         module.call_method1(
             "_mods",
-            (module.getattr("input_state")?.call_method(
-                "modifiers",
-                (&viewport,),
-                Some(&fields!(py; "query" => true)),
-            )?,),
+            (module.getattr("window_input")?.call_method1("modifiers", (&viewport,))?,),
         )?
     } else {
         0.into_bound_py_any(py)?
@@ -661,17 +652,6 @@ fn host_tiny_push<'py>(a: &Args<'py>) -> Reply<'py> {
             4000,
         ),
     )?;
-    Ok(none(py))
-}
-fn refuse_python_mesh<'py>(a: &Args<'py>) -> Reply<'py> {
-    let py = a.py();
-    let module = imported(py, "tools.pushpull")?;
-    let tool = a.get_item(0)?;
-    let viewport = a.get_item(1)?;
-    tool.setattr("base_face", none(py))?;
-    tool.setattr("_extra_faces", PyList::empty(py).into_any())?;
-    tool.setattr("_extra_normals", PyList::empty(py).into_any())?;
-    viewport.call_method1("flash_status", (module.call_method1("tr", ("Push refused: the geometry kernel could not take this mesh (left it unchanged)",))?, 6000,))?;
     Ok(none(py))
 }
 fn rubber_band_lines<'py>(a: &Args<'py>) -> Reply<'py> {
@@ -821,7 +801,6 @@ pub(super) const METHODS: &[Method] = &[
     ("host_tiny_push", Mode::Method, host_tiny_push, &["self", "viewport", "args"], "", ""),
     ("host_commit", Mode::Method, host_commit, &["self", "viewport", "distance"], "", ""),
     ("_grab_point", Mode::Method, grab_point, &["self", "viewport", "ctx:ToolContext"], "QVector3D | None", "The clicked spot on the face's plane, or ``None`` (the centroid\nthen stands in).\n\nThe drag is measured along the line through this point: the cursor\nstays on it. Through the centroid instead, a click near a corner of\na 12 m slab read -3.39 m for a 0.3 m pull, and a ring's centroid lies\nin its hole -- 1 m of cursor gave 0.13 m walls (tutorial hunt 2,\nA13/B5)."),
-    ("_refuse_python_mesh", Mode::Method, refuse_python_mesh, &["self", "viewport"], "None", ""),
     ("host_restore_retype", Mode::Method, host_restore_retype, &["self", "viewport", "args"], "", "Recover the last push's handles only while its undo entry is still on top."),
     ("host_cancel", Mode::Method, host_cancel, &["self", "viewport", "args"], "", ""),
     ("on_redo", Mode::Method, on_redo, &["self", "viewport"], "bool", "Redo mid-drag abandons the push first, then lets the redo run (False)\n— on the clean model. Run under a staged preview, it would land on the\nstaged result and leave that in the model with no undo entry."),

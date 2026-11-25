@@ -161,8 +161,8 @@ fn recover_discarded(win: &Bound<'_, PyAny>) -> PyResult<()> {
         return Ok(());
     }
     let chosen: String = py
-        .import("views.filedialogs")?
-        .getattr("file_dialogs")?
+        .import("ingetrazo_render.shell_files")?
+        .getattr("ShellFileDialog")?
         .call_method1(
             "getOpenFileName",
             (
@@ -188,7 +188,7 @@ fn open_recovery_copy(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResu
             "partial",
             (wrap_pyfunction!(discarded_opened, py)?, win, path),
         )?;
-        py.import("views.document_open")?
+        py.import("ingetrazo_render.document_open")?
             .call_method1("after_open", (win, path, done))?;
     }
     Ok(())

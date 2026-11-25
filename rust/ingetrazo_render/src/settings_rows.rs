@@ -6,9 +6,10 @@
 //! defaults: `PreferencePage`), the 3D mouse model (`DevicePreferences`) and
 //! the Settings state (`PreferencesView`). Here each row is bound to where
 //! its value lives: the native preference store (`env.st`), the window's
-//! appliers in `views/settings_apply.py`, or the document (units, dimension
+//! appliers in `settings_rows/live.rs`, or the document (units, dimension
 //! style, north and location, through the protocol and its history).
 mod appearance;
+pub(crate) mod live;
 
 use pyo3::{
     prelude::*,
@@ -58,9 +59,9 @@ pub fn s<'py>(py: Python<'py>, v: &str) -> Bound<'py, PyAny> {
     pyo3::types::PyString::new(py, v).into_any()
 }
 
-/// `views.settings_apply`, the window's appliers.
+/// Live appliers on the native settings sheet.
 pub fn apply(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("views.settings_apply")
+    py.import("ingetrazo_render.settings_sheet")
 }
 
 /// The sentinel for "no default" (`settings_sheet._NO`).
@@ -601,7 +602,7 @@ fn figure_rows(py: Python<'_>) -> PyResult<Vec<Binding>> {
             let saved = st.call_method1("value", (figure_key(py, "KEY_IMAGE")?, ""))?;
             let saved = if saved.is_truthy()? { saved.str()?.to_string() } else { String::new() };
             if saved.is_empty() || !std::path::Path::new(&saved).is_file() {
-                let dialogs = py.import("views.filedialogs")?.getattr("file_dialogs")?;
+                let dialogs = py.import("ingetrazo_render.shell_files")?.getattr("ShellFileDialog")?;
                 let filter = format!("{} (*.png *.webp)", tr(py, "Images")?);
                 let path = dialogs.call_method1("getOpenFileName", (env.getattr("win")?, tr(py, "My own picture…")?, "", filter))?.get_item(0)?;
                 if path.is_truthy()? {
@@ -857,7 +858,7 @@ pub fn _scene_changed(env: &Bound<'_, PyAny>) -> PyResult<()> {
 
 fn units_draft<'py>(env: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py = env.py();
-    let key: String = apply(py)?.getattr("_UNITS_FOR_NEW_KEY")?.extract()?;
+    let key = live::NEW_UNITS;
     let model = py.import("ingetrazo_render.units_question")?.call_method1("draft", (env.getattr("scene")?,))?;
     let for_new = truth(&env.getattr("st")?.call_method1("value", (key, "1"))?, "1")?;
     model.call_method1("edit_document", (for_new, py.import("core.units")?.call_method0("ask_at_start")?))?;
@@ -883,7 +884,7 @@ pub fn _units<'py>(env: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
             let apply = apply(py)?;
             if key.eq("for_new")? {
                 let st = env.getattr("st")?;
-                st.call_method1("setValue", (apply.getattr("_UNITS_FOR_NEW_KEY")?, if model.getattr("for_new")?.is_truthy()? { "1" } else { "0" }))?;
+                st.call_method1("setValue", (live::NEW_UNITS, if model.getattr("for_new")?.is_truthy()? { "1" } else { "0" }))?;
                 st.call_method0("sync")?;
             } else if !apply.call_method1("apply_document_units", (env.getattr("win")?, &chosen))?.is_truthy()? {
                 return Ok(none(py));
@@ -993,7 +994,7 @@ fn dimensions<'py>(py: Python<'py>, _env: &Bound<'py, PyAny>) -> PyResult<Bound<
             &[("press", func(py, |py, a| {
                 let env = a.get_item(0)?;
                 crate::sheet_runtime::close(&env.getattr("win")?)?;
-                py.import("views.font_picker")?.call_method1("annotation", (env.getattr("win")?,))?;
+                py.import("ingetrazo_render.font_picker")?.call_method1("annotation", (env.getattr("win")?,))?;
                 Ok(none(py))
             })?)])?,
         row(py, "dim_font", "number", &tr(py, "Font size")?, Some(typed("font_size", obj(py, 9)?, "int")?), Some(put("font_size", "int")?),
@@ -1121,6 +1122,7 @@ pub fn section_groups<'py>(py: Python<'py>, env: &Bound<'py, PyAny>, section: &s
 }
 
 pub fn register(sub: &Bound<'_, PyModule>) -> PyResult<()> {
+    live::register(sub)?;
     sub.add_class::<Row>()?;
     sub.add_class::<Env>()?;
     sub.add_function(wrap_pyfunction!(_scene_changed, sub)?)?;

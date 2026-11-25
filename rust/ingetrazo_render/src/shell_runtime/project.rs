@@ -144,7 +144,7 @@ fn open_member(
         }
         Err(e) => return Err(e),
     };
-    let opens = py.import("views.document_open")?;
+    let opens = py.import("ingetrazo_render.document_open")?;
     if opens.call_method1("pending", (win, p))?.is_truthy()? {
         let api = module(py, "shell_project")?;
         let kw = PyDict::new(py);
@@ -506,8 +506,8 @@ fn tree_action(win: &Obj<'_>, verb: &str, path: &Obj<'_>) -> PyResult<bool> {
             let filter = format!("{} (*{ext})", ext.trim_start_matches('.'));
             let label = trf(py, "Locate {name}", &[("name", p.getattr("name")?)])?;
             let found = py
-                .import("views.filedialogs")?
-                .getattr("file_dialogs")?
+                .import("ingetrazo_render.shell_files")?
+                .getattr("ShellFileDialog")?
                 .call_method1("getOpenFileName", (win, label, "", filter))?
                 .get_item(0)?;
             if found.is_truthy()? {

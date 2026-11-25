@@ -514,20 +514,20 @@ def test_drawing_lens_sends_native_style_fields_and_catalog(ui):
 
 def test_imported_hatch_angle_and_scale_are_undoable_in_drawing(ui, tmp_path, monkeypatch):
     import json
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     scene, win, view, rows, act = ui
     path = tmp_path / "survey.pat"
     path.write_text("*SURVEY,Site survey\n45,0,0,0,2,3,-1")
-    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *_: (str(path), "PAT"))
+    monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *_: (str(path), "PAT"))
     act("lens", "1")
     original = dict(scene.hatch_patterns)
     for invalid in (tmp_path / "missing.pat", tmp_path / "invalid.pat"):
         if invalid.name == "invalid.pat":
             invalid.write_bytes(b"\xff\xfe not a pattern")
-        monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *_, p=invalid: (str(p), "PAT"))
+        monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *_, p=invalid: (str(p), "PAT"))
         act("importpat", "")
         assert scene.hatch_patterns == original
-    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *_: (str(path), "PAT"))
+    monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *_: (str(path), "PAT"))
     act("importpat", "")
     assert view.renderer.calls["ui_set_style_catalog"][2]["SURVEY"]["label"] == "Site survey"
     tag = scene.layer("Paths")
@@ -732,7 +732,7 @@ def test_locate_repairs_the_source_and_its_problem_entry(tmp_path, monkeypatch):
     from core import links
     from core.scene import Scene
     from tests.composite_fixture import _file
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     source = _file(tmp_path / "Source.built", {}, {"Steel": None}, 2)
     scene = Scene()
     host = tmp_path / "Host.built"
@@ -748,7 +748,7 @@ def test_locate_repairs_the_source_and_its_problem_entry(tmp_path, monkeypatch):
     wu._tree_action(win, view, wu.SEP.join(("filter", "has:problem")))
     wu._tree(view, win)
     assert any(t[1] == source.name for t, _ in view.renderer.calls["ui_set_tree"][0])
-    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *a: (str(moved), ""))
+    monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *a: (str(moved), ""))
     wu._tree_action(win, view, wu.SEP.join(("linkrelink", "n:" + key)))
     assert [links.link_of(group)["path"] for group in copies] == [str(moved)] * 2
     assert links.link_state(scene, moved) == "resolved"
@@ -855,7 +855,7 @@ def test_promoting_one_tag_files_only_its_members_and_undoes():
 def test_drawing_line_types_and_file_round_trip(ui, tmp_path, monkeypatch):
     import json
     from core.layers import parse_lin
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     scene, win, view, _, act = ui
     tag = scene.layer("Paths")
     act("lens", "1")
@@ -866,13 +866,13 @@ def test_drawing_line_types_and_file_round_trip(ui, tmp_path, monkeypatch):
     assert tag.linetype == "lin:Grid" and "Survey" not in scene.line_types
     assert win.viewport.history.undo() and tag.linetype == "lin:Survey"
     path = tmp_path / "styles.lin"
-    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *args: (str(path), "LIN"))
+    monkeypatch.setattr(ShellFileDialog, "getSaveFileName", lambda *args: (str(path), "LIN"))
     act("exportlin", "")
     entries, _ = parse_lin(path.read_text())
     assert entries["Survey"]["text"] == "SUR"
     act("editline", "delete", json.dumps(dict(original="Survey")))
     assert tag.linetype == "continuous" and "Survey" not in scene.line_types
-    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *args: (str(path), "LIN"))
+    monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *args: (str(path), "LIN"))
     act("importlin", "")
     assert scene.line_types["Survey"]["text"] == "SUR"
     assert win.viewport.history.undo() and "Survey" not in scene.line_types
@@ -910,7 +910,7 @@ def test_drawing_folders_keep_keys_and_undo_as_one_step(ui):
 def test_drawing_detailed_hatch_and_atomic_pat_export(ui, tmp_path, monkeypatch):
     import json
     from core.hatches import parse_pat
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     scene, win, _, _, act = ui
     tag = scene.layer("Paths")
     act("lens", "1")
@@ -930,7 +930,7 @@ def test_drawing_detailed_hatch_and_atomic_pat_export(ui, tmp_path, monkeypatch)
     assert tag.hatch=="block" and tag.brick == (390.,190.,190.,10.)
     assert win.viewport.history.undo() and tag.brick == (215.,100.,65.,10.,8.)
     path=tmp_path/"out.pat"
-    monkeypatch.setattr(file_dialogs,"getSaveFileName",lambda *args:(str(path),"PAT"))
+    monkeypatch.setattr(ShellFileDialog,"getSaveFileName",lambda *args:(str(path),"PAT"))
     act("exportpat","")
     entries=parse_pat(path.read_text())
     assert "IT-BRICK" in entries and "IT-CONC" not in entries

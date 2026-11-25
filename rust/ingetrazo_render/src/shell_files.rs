@@ -10,6 +10,7 @@
 //! the start page and the chrome's document ▾. The functions call each
 //! other through the module, so a test replacing `open_path` or `save`
 //! replaces it for the commands too.
+mod directories;
 use crate::settings_rows::{func, none, obj, opt, s, tr, trf};
 use pyo3::{
     create_exception,
@@ -80,21 +81,21 @@ fn status(win: &Any<'_>, text: String) -> PyResult<()> {
 }
 
 fn file_dialogs(py: Python<'_>) -> PyResult<Any<'_>> {
-    py.import("views.filedialogs")?.getattr("file_dialogs")
+    py.import("ingetrazo_render.shell_files")?.getattr("ShellFileDialog")
 }
 
 // ---- the file dialogs: NSOpenPanel / NSSavePanel ------------------------------------
 
-/// `QFileDialog`'s static pickers, as `views.filedialogs.file_dialogs`
-/// calls them, answered by the native panels (rfd).
+/// Document-aware native open, save and folder panels.
 #[pyclass(module = "ingetrazo_render.shell_files")]
 struct ShellFileDialog;
 
-fn split_dir(py: Python<'_>, directory: &Any<'_>) -> PyResult<(String, String)> {
+fn split_dir(_py: Python<'_>, directory: &Any<'_>) -> PyResult<(String, String)> {
     let directory = if truthy(directory) { directory.str()?.to_string() } else { String::new() };
-    let p = path_of(py, &s(py, &directory))?;
-    if !directory.is_empty() && !p.call_method0("is_dir")?.is_truthy()? && p.getattr("suffix")?.is_truthy()? {
-        return Ok((p.getattr("parent")?.str()?.to_string(), p.getattr("name")?.str()?.to_string()));
+    let p = std::path::Path::new(&directory);
+    if !p.is_dir() && p.extension().is_some() {
+        let folder=p.parent().unwrap_or_else(||std::path::Path::new(""));
+        return Ok((folder.to_string_lossy().into_owned(),p.file_name().unwrap_or_default().to_string_lossy().into_owned()));
     }
     Ok((directory, String::new()))
 }
@@ -128,21 +129,26 @@ impl ShellFileDialog {
     #[pyo3(signature = (parent=None, caption=None, dir=None, filter=None, *_args, **_kwargs))]
     #[allow(non_snake_case, clippy::too_many_arguments)]
     fn getOpenFileName<'py>(py: Python<'py>, parent: Option<Any<'py>>, caption: Option<Any<'py>>, dir: Option<Any<'py>>, filter: Option<Any<'py>>, _args: &Bound<'py, PyTuple>, _kwargs: Option<&Bound<'py, PyDict>>) -> PyResult<(Any<'py>, Any<'py>)> {
-        let _ = parent;
-        let (caption, dir, filter) = (caption.unwrap_or_else(|| s(py, "")), dir.unwrap_or_else(|| s(py, "")), filter.unwrap_or_else(|| s(py, "")));
+        let dir = s(py, &directories::initial(py,dir.as_ref(),parent.as_ref())?);
+        let caption=caption.unwrap_or_else(||s(py,""));
+        let filter=filter.unwrap_or_else(||s(py,""));
         let (folder, _) = split_dir(py, &dir)?;
         let got = native_panels(py)?.call_method1("open_files", (text_or(py, &caption, "Open"), &filter, folder_or_none(py, &folder)))?;
-        Ok((if truthy(&got) { got.get_item(0)? } else { s(py, "") }, filter))
+        let first = if truthy(&got) { got.get_item(0)? } else { s(py, "") };
+        directories::selected(&first)?;
+        Ok((first,filter))
     }
 
     #[staticmethod]
     #[pyo3(signature = (parent=None, caption=None, dir=None, filter=None, *_args, **_kwargs))]
     #[allow(non_snake_case, clippy::too_many_arguments)]
     fn getOpenFileNames<'py>(py: Python<'py>, parent: Option<Any<'py>>, caption: Option<Any<'py>>, dir: Option<Any<'py>>, filter: Option<Any<'py>>, _args: &Bound<'py, PyTuple>, _kwargs: Option<&Bound<'py, PyDict>>) -> PyResult<(Any<'py>, Any<'py>)> {
-        let _ = parent;
-        let (caption, dir, filter) = (caption.unwrap_or_else(|| s(py, "")), dir.unwrap_or_else(|| s(py, "")), filter.unwrap_or_else(|| s(py, "")));
+        let dir = s(py, &directories::initial(py,dir.as_ref(),parent.as_ref())?);
+        let caption=caption.unwrap_or_else(||s(py,""));
+        let filter=filter.unwrap_or_else(||s(py,""));
         let (folder, _) = split_dir(py, &dir)?;
         let got = native_panels(py)?.getattr("open_files")?.call((text_or(py, &caption, "Open"), &filter, folder_or_none(py, &folder)), Some(&kw(py, &[("multiple", b(py, true))])?))?;
+        if truthy(&got) {directories::selected(&got.get_item(0)?)?;}
         Ok((got, filter))
     }
 
@@ -150,10 +156,12 @@ impl ShellFileDialog {
     #[pyo3(signature = (parent=None, caption=None, dir=None, filter=None, *_args, **_kwargs))]
     #[allow(non_snake_case, clippy::too_many_arguments)]
     fn getSaveFileName<'py>(py: Python<'py>, parent: Option<Any<'py>>, caption: Option<Any<'py>>, dir: Option<Any<'py>>, filter: Option<Any<'py>>, _args: &Bound<'py, PyTuple>, _kwargs: Option<&Bound<'py, PyDict>>) -> PyResult<(Any<'py>, Any<'py>)> {
-        let _ = parent;
-        let (caption, dir, filter) = (caption.unwrap_or_else(|| s(py, "")), dir.unwrap_or_else(|| s(py, "")), filter.unwrap_or_else(|| s(py, "")));
+        let dir = s(py, &directories::initial(py,dir.as_ref(),parent.as_ref())?);
+        let caption=caption.unwrap_or_else(||s(py,""));
+        let filter=filter.unwrap_or_else(||s(py,""));
         let (folder, name) = split_dir(py, &dir)?;
         let got = native_panels(py)?.call_method1("save_file", (text_or(py, &caption, "Save"), name, &filter, folder_or_none(py, &folder)))?;
+        directories::selected(&got)?;
         Ok((if truthy(&got) { got } else { s(py, "") }, filter))
     }
 
@@ -161,10 +169,10 @@ impl ShellFileDialog {
     #[pyo3(signature = (parent=None, caption=None, dir=None, *_args, **_kwargs))]
     #[allow(non_snake_case)]
     fn getExistingDirectory<'py>(py: Python<'py>, parent: Option<Any<'py>>, caption: Option<Any<'py>>, dir: Option<Any<'py>>, _args: &Bound<'py, PyTuple>, _kwargs: Option<&Bound<'py, PyDict>>) -> PyResult<Any<'py>> {
-        let _ = parent;
         let caption = caption.unwrap_or_else(|| s(py, ""));
-        let folder = dir.filter(truthy).map(|d| d.str().map(|t| t.to_string())).transpose()?.unwrap_or_default();
+        let folder = directories::initial(py,dir.as_ref(),parent.as_ref())?;
         let got = native_panels(py)?.call_method1("pick_folder", (text_or(py, &caption, "Choose a folder"), folder_or_none(py, &folder)))?;
+        directories::selected(&got)?;
         Ok(if truthy(&got) { got } else { s(py, "") })
     }
 }
@@ -429,7 +437,7 @@ fn open_path<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>) -> PyResult<
     }
     let windowed = host.getattr("ns_view")?.is_truthy()?;
     let is_import = IMPORTS.contains(&suffix.as_str());
-    let open = py.import("views.document_open");
+    let open = py.import("ingetrazo_render.document_open");
     if suffix == ".skp" && windowed {
         let open = open?;
         return open.call_method1("start", (win, &path, open.getattr("install_skp")?));
@@ -1216,6 +1224,9 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_class::<ShellFileDialog>()?;
     sub.add_class::<NullBar>()?;
     for f in [
+        wrap_pyfunction!(directories::remember, &sub)?,
+        wrap_pyfunction!(directories::last_dir, &sub)?,
+        wrap_pyfunction!(directories::start_in, &sub)?,
         wrap_pyfunction!(install, &sub)?,
         wrap_pyfunction!(command, &sub)?,
         wrap_pyfunction!(open_library, &sub)?,

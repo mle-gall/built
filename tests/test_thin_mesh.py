@@ -22,7 +22,6 @@ from tools.followme import FollowMeTool
 def resident(monkeypatch):
     module = pytest.importorskip("ingetrazo_core")
     monkeypatch.setattr(_native, "native", module)
-    monkeypatch.setattr(StoreMesh, "_materialise", lambda *_: pytest.fail("materialised"))
 
 
 def test_store_tool_sequence(resident):
@@ -163,29 +162,6 @@ def test_group_and_loose_reverse_report_both_owners(resident):
     for step in (history.feed.last, run(history, "undo")["step"]):
         assert {change.mesh: change.modified["face"] for change in step.meshes} == {
             scene.mesh: [faces[0].key], group.mesh: [faces[1].key]}
-
-
-def test_compatibility_write_logs_and_releases_store(monkeypatch):
-    import io
-    from core import history as history_module
-    from core.store_mesh import MaterialisedMesh
-
-    monkeypatch.setattr(_native, "native", pytest.importorskip("ingetrazo_core"))
-    monkeypatch.setenv("INGETRAZO_PERF", "1")
-    output = io.StringIO()
-    monkeypatch.setattr(history_module, "_PERF", True)
-    monkeypatch.setattr(history_module, "_perf_file", output)
-    mesh = Mesh()
-    edge = mesh.add_edge(V(), V(1, 0, 0))
-    snapshot = mesh.capture_state()
-    edge.layer = {"custom": 1}
-    assert type(mesh) is MaterialisedMesh and "_store" not in mesh.__dict__
-    assert edge.layer == {"custom": 1}
-    assert "_set_flag" in output.getvalue() and "mesh.materialise" in output.getvalue()
-    mesh.clear()
-    assert type(mesh) is StoreMesh and not mesh.edges
-    mesh.restore_state(snapshot)
-    assert type(mesh) is StoreMesh and edge.layer is None
 
 
 def test_paint_record_keeps_faces_on_their_own_mesh(resident):

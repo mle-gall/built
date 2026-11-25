@@ -59,7 +59,7 @@ def test_recent_bounded_pin_and_relocation(tmp_path):
 
 def test_home_lists_opens_and_locates(win, tmp_path, monkeypatch):
     from ingetrazo_render import wgpu_start
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     a = tmp_path / 'moved.igz'
     igz.save_scene(Scene(), a)
     old = tmp_path / 'old.igz'
@@ -69,7 +69,7 @@ def test_home_lists_opens_and_locates(win, tmp_path, monkeypatch):
     rows = wgpu_start.page(win).sheet.items(False)
     assert any(row[2] == str(old) for key in ("cont", "recent") for row in rows[key])
     assert any(row[2] == str(tmp_path / "job.builtproject") for row in rows["projects"])
-    monkeypatch.setattr(file_dialogs, 'getOpenFileName', lambda *a: (str(tmp_path / 'moved.igz'), ''))
+    monkeypatch.setattr(ShellFileDialog, 'getOpenFileName', lambda *a: (str(tmp_path / 'moved.igz'), ''))
     assert wgpu_start.open_recent(win, old)
     assert win._doc.path == a
     assert str(old) not in [r['path'] for r in recent.entries()]

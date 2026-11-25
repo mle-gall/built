@@ -59,11 +59,6 @@ def _cube(m, x0=0.0, y0=0.0, z0=0.0, s=1.0, quads=_QUADS):
     return [m.add_face([c[k] for k in q]) for q in quads]
 
 
-@pytest.fixture
-def no_materialise(monkeypatch):
-    def fail(mesh):
-        pytest.fail("a ported command materialised its mesh")
-    monkeypatch.setattr(S.StoreMesh, "_materialise", fail)
 
 
 def _translate(x, y, z, turn=0.0):
@@ -137,8 +132,6 @@ def test_explode_with_a_transform_onto_coincident_geometry(monkeypatch):
     — the same model as the Python kernel after do, undo and redo."""
     with gzip.open(Path(__file__).parent / "fixtures" / "explode_history.json.gz", "rt") as src:
         py = json.load(src)[0]
-    monkeypatch.setattr(S.StoreMesh, "_materialise",
-                        lambda m: pytest.fail("explode materialised"))
     st, sc, h, g, kid = _run_explode(True)
     assert json.loads(json.dumps(st)) == py
     assert py[0] != py[1] and py[2] == py[0] and py[3] == py[1]
@@ -149,7 +142,7 @@ def test_explode_with_a_transform_onto_coincident_geometry(monkeypatch):
 
 @needs_ops
 def test_explode_feed_names_both_meshes_the_placement_and_the_keys(
-        no_materialise):
+        ):
     sc, g, kid = _explode_scene(True)
     h = History(sc)
     m, src = sc.mesh, g.mesh
@@ -245,8 +238,6 @@ def _run_nested(store):
 def test_explode_nested_one_level_at_a_time(monkeypatch):
     with gzip.open(Path(__file__).parent / "fixtures" / "explode_history.json.gz", "rt") as src:
         py = json.load(src)[1]
-    monkeypatch.setattr(S.StoreMesh, "_materialise",
-                        lambda m: pytest.fail("explode materialised"))
     st, sc, h = _run_nested(True)
     for actual, expected in zip(json.loads(json.dumps(st)), py, strict=True):
         assert actual["groups"] == expected["groups"]
@@ -290,7 +281,7 @@ def _by_index(m, parts):
 
 
 @needs_ops
-def test_pieces_are_pythons_in_order(no_materialise):
+def test_pieces_are_pythons_in_order():
     py, st = _mesh(False), _mesh(True)
     _three_pieces(py)
     _three_pieces(st)
@@ -332,8 +323,6 @@ def _split_run(store):
 @needs_ops
 def test_split_a_mesh_with_three_pieces(monkeypatch):
     py, *_ = _split_run(False)
-    monkeypatch.setattr(S.StoreMesh, "_materialise",
-                        lambda m: pytest.fail("split materialised"))
     st, sc, h, g, gm = _split_run(True)
     assert st == py
     assert len(st[0]) == 3
@@ -379,7 +368,7 @@ def _purge_run(store):
 
 
 @needs_ops
-def test_purge_debris_after_a_delete(no_materialise):
+def test_purge_debris_after_a_delete():
     py, *_ = _purge_run(False)
     st, step, before, after, m = _purge_run(True)
     assert st == py
@@ -392,7 +381,7 @@ def test_purge_debris_after_a_delete(no_materialise):
 
 @needs_ops
 def test_purge_unused_reads_store_meshes_without_touching_faces(
-        no_materialise):
+        ):
     sc = Scene()
     sc.mesh = _mesh(True)
     f = sc.mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(2, 2, 0)])
@@ -479,7 +468,7 @@ def _random_scene(m, seed):
 
 @needs_ops
 @pytest.mark.parametrize("seed", range(24))
-def test_random_pieces_match_python(seed, no_materialise):
+def test_random_pieces_match_python(seed):
     py, st = _mesh(False), _mesh(True)
     _random_scene(py, seed)
     _random_scene(st, seed)

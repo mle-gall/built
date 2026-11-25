@@ -128,8 +128,8 @@ def test_terrain_path_projects_cursor_samples_and_exports(host, tmp_path, monkey
     from georef.datum import SceneDatum
     from georef.geopath import GeoPath
     from tests.test_profile import V, StubSampler
-    from views import terrain_binding
-    from views.filedialogs import file_dialogs
+    from georef import photomesh
+    from ingetrazo_render.shell_files import ShellFileDialog
 
     vp, view = host.viewport, host.view
     s = vp.scene
@@ -141,19 +141,20 @@ def test_terrain_path_projects_cursor_samples_and_exports(host, tmp_path, monkey
 
     s.photo_mesh = SimpleNamespace(visible=True)
     monkeypatch.setattr(
-        terrain_binding,
+        photomesh,
         "PhotoMeshSampler",
         lambda survey, datum: StubSampler(datum, lambda x, y: 100 + x),
     )
     sent = {}
-    monkeypatch.setattr(terrain_binding, "_send", lambda view, key, val: sent.update({key: val}))
+    renderer = SimpleNamespace(ui_panel_set=lambda key, val: sent.update({key: json.loads(val)}))
+    monkeypatch.setattr(view, "renderer", renderer)
     monkeypatch.setattr(vp, "drape", lambda v: v)
     run(host, "terrain.open")
     assert sent["terrain"]["samples"][-1] == [10.0, 110.0]
     assert len(sent["projected"]) == len(sent["terrain"]["samples"])
     assert sent["projected"][4] != sent["projected"][5]
     csv = tmp_path / "route.csv"
-    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *a: (str(csv), ""))
+    monkeypatch.setattr(ShellFileDialog, "getSaveFileName", lambda *a: (str(csv), ""))
     run(host, "terrain.csv")
     assert "photogrammetric survey" in csv.read_text() and "110.0" in csv.read_text()
     run(host, "terrain.close")

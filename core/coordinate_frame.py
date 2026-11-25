@@ -63,7 +63,6 @@ def mesh_frame(mesh, origin, *, matrix=...):
     else:
         local = (st._in_model_frame(origin) if matrix is None
                  else st._in_instance_frame(matrix, origin))
-    entry = local
     start = local.revision
     active = tuple(m for m in _active.get() if m is not mesh)
     token = _active.set(active + (mesh,) if any(origin) or matrix is not None else active)
@@ -73,35 +72,15 @@ def mesh_frame(mesh, origin, *, matrix=...):
         yield
     finally:
         _active.reset(token)
-        local = d.get('_store')
-        if local is None:
-            # A compatibility command explicitly requested Python objects.
-            # Its graph and tombstones leave the tool in the caller's frame.
-            from core.mesh import Vertex, _key
-            from ingetrazo_core import Vec3 as QVector3D
-            holders = list(d["_registry"].values())
-            vertices = {v.key: v for v in d.get("_objmap", {}).values() if isinstance(v, Vertex)}
-            vertices.update((v.key, v) for v in mesh.vertices)
-            for v in vertices.values():
-                v.position = QVector3D(*entry._convert_point(st, v.position.toTuple()))
-            d["_registry"] = {_key(v.position): v for v in holders}
-            d["_displaced"] = {}
-            for v in mesh.vertices:
-                cell = _key(v.position)
-                if d["_registry"].setdefault(cell, v).key != v.key:
-                    d["_displaced"].setdefault(cell, []).append(v)
-        else:
-            if local.revision != start and st.revision != local.revision:
-                st._publish_frame(local)
-            d['_store'] = st
+        local = d['_store']
+        if local.revision != start and st.revision != local.revision:
+            st._publish_frame(local)
+        d['_store'] = st
         if parent is None:
             d.pop('_frame_parent', None)
         else:
             d['_frame_parent'] = parent
-        if local is not None:
-            d['_tool_frame_cache'] = (st, st.revision, frame, local)
-        else:
-            d.pop('_tool_frame_cache', None)
+        d['_tool_frame_cache'] = (st, st.revision, frame, local)
 
 
 @contextmanager
