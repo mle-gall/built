@@ -442,12 +442,12 @@ def test_face_rules_ask_only_the_placements_under_the_cursor(view, monkeypatch):
     assert view.last_snap is not None
     # The test's own ID-pass stand-in (_pick) asks one row at a time; the
     # occlusion rays ask all rows through the native BVH. Neither is new.
-    from views import wgpu_inference
+    import ingetrazo_core
     asked.clear()
     # Observe the rows that actually reach every BVH ray, including side probes.
-    wgpu_inference.face_crossing(
+    ingetrazo_core.face_crossing(
         index, view, x, y, view.hovered_row, view.last_snap.point, V(0, 0, 1),
-        wgpu_inference.eligible_rows(index, view.packed),
+        ingetrazo_core.eligible_rows(index, view.packed),
         view._world_to_pixel, view.scene.edit_group)
     assert asked and max(asked) <= 8, asked
 

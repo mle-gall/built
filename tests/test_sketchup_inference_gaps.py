@@ -38,7 +38,7 @@ from core.snap import compute_snap
 from tools.rust_tools import LineTool
 from tools.rust_tools import RectangleTool
 from tests.controller_surface import ControllerSurface as Viewport
-from views.wgpu_inference import prepare, surface
+from ingetrazo_core import resident_prepare as prepare, surface
 
 
 # ---- An unshown Metal view driving the real tools --------------------------

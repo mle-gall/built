@@ -181,7 +181,7 @@ def test_snap_tooltip_is_painted():
 
 @pytest.fixture
 def view(native_host):
-    from views.wgpu_inference import prepare
+    from ingetrazo_core import resident_prepare as prepare
     scene = Scene()
     mesh = Mesh()
     mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(2, 2, 0), V(0, 2, 0)])

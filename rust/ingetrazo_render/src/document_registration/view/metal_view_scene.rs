@@ -528,7 +528,6 @@ fn prepare_inference<'py>(a: &Args<'py>) -> Reply<'py> {
     if truthy(&view, "_closed")? {
         return Ok(none(py));
     }
-    let inference = py.import("views.wgpu_inference")?;
     if !view.hasattr("_inference_worker")? {
         view.setattr("_inference_worker", index_worker(py)?)?;
     }
@@ -549,9 +548,9 @@ fn prepare_inference<'py>(a: &Args<'py>) -> Reply<'py> {
     let (packed, lease, mvp, width, height) = (packed.unbind(), lease.unbind(), mvp.unbind(), width.unbind(), height.unbind());
     let build = PyCFunction::new_closure(py, None, None, move |args: &Bound<'_, PyTuple>, _: Option<&Bound<'_, PyDict>>| -> PyResult<Py<PyAny>> {
         let py = args.py();
-        let inference = py.import("views.wgpu_inference")?;
+        let inference = py.import("ingetrazo_core")?;
         let packed = packed.bind(py);
-        let index = inference.call_method1("prepare", (packed, lease.bind(py)))?;
+        let index = inference.call_method1("resident_prepare", (packed, lease.bind(py)))?;
         if !index.is_none() && packed.getattr("instances")?.len()? != 0 {
             // Use the immutable placement and camera snapshots. A resize,
             // orbit or edit before publication invalidates the usual key.
@@ -866,7 +865,7 @@ fn sync_scene_camera<'py>(a: &Args<'py>) -> Reply<'py> {
         view.setattr("_pick_frame_dirty", true)?;
         let index = view.getattr("inference_index")?;
         if !index.is_none() {
-            view.setattr("inference_index", py.import("views.wgpu_inference")?.call_method1("rebase", (index, &packed))?)?;
+            view.setattr("inference_index", py.import("ingetrazo_core")?.call_method1("resident_rebase", (index, &packed))?)?;
         }
     }
     Ok(none(py))
