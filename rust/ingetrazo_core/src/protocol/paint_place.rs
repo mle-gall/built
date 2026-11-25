@@ -232,7 +232,7 @@ fn place_group<'py>(
                     mesh.call_method1("move_vertex", (v, delta))?;
                 }
             }
-            groups.call_method1("_remap_uvws", (&mesh, &m))?;
+            crate::model::module(groups.py(), "ingetrazo_core")?.call_method1("group_remap_uvws", (&mesh, &m))?;
             groups.call_method1("carry_axes", (&g, &m))?;
         }
         let kw = PyDict::new(py);

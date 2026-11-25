@@ -64,9 +64,8 @@ impl LinkSubset {
         let materials = py
             .get_type::<PyDict>()
             .call1((scene.getattr("materials")?,))?;
-        let source = py.import("core.links")?.call_method1(
-            "_read_definition",
-            (&materials, &path, &subset, nested, group),
+        let source = crate::model::link_io::read_definition(
+            materials.as_any(), &pyo3::types::PyString::new(py, &path), &subset, &nested, Some(group), None,
         )?;
         let temporary = crate::model::links::clone_shell_of(group)?;
         crate::model::links::populate(&temporary, &source.get_item(0)?, false, None)?;

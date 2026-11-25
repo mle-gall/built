@@ -94,7 +94,7 @@ def _save_ifc(scene, path, project_name, profile, stream):
                    if (obj.get('group') or obj.get('owner')) in allowed]
     if not objects:
         raise ValueError('No tagged BIM objects to export')
-    from core.project import read as read_project
+    from ingetrazo_core.project import read as read_project
     project = read_project(scene)
     if project:
         scene.plugin_data['ifc_identity'] = project['ifc_identity']

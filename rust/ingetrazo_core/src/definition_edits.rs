@@ -171,7 +171,7 @@ pub(crate) fn merge_group_geometry<'py>(groups: &Obj<'py>) -> PyResult<Obj<'py>>
     let flags = PyList::empty(py);
     let attrs = PyList::empty(py);
     for group in groups.try_iter()? {
-        let src = api.call_method1("world_mesh", (group?,))?;
+        let src = crate::model::module(api.py(), "ingetrazo_core")?.call_method1("group_world_mesh", (group?,))?;
         for face in src.getattr("faces")?.try_iter()? {
             let face = face?;
             let mut rings = vec![face.getattr("vertices")?];

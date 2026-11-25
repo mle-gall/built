@@ -63,7 +63,7 @@ pub(super) fn paste<'py>(
     let snap = sst.call_method0("snapshot")?;
     let positions = sst.call_method0("positions")?;
     let mapped = if let Some(m) = matrix {
-        let pair = group.call_method1("np_affine", (m,))?;
+        let pair = crate::model::module(group.py(), "ingetrazo_core")?.call_method1("group_np_affine", (m,))?;
         positions
             .call_method1("__matmul__", (pair.get_item(0)?.getattr("T")?,))?
             .add(pair.get_item(1)?)?
@@ -101,7 +101,7 @@ pub(super) fn paste<'py>(
         }
     }
     let effective = crate::model::module(py, "core.materials")?.getattr("effective_attrs")?;
-    let placed = group.getattr("placed_face_paint")?;
+    let placed = crate::model::module(group.py(), "ingetrazo_core")?.getattr("group_placed_face_paint")?;
     let face = model.getattr("FaceView")?;
     let inverse = inverse.map(|m| Py::new(py, m)).transpose()?;
     let draw = |base: &Obj<'py>| -> PyResult<Obj<'py>> {

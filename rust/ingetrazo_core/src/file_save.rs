@@ -65,8 +65,7 @@ fn igz_save_scene_inner<'p>(
         let project = py.import("ingetrazo_core.project")?;
         project.call_method1("refresh_reference", (scene, path))?;
         project.call_method1("sync_files", (scene, path))?;
-        py.import("core.links")?
-            .call_method1("refresh_paths", (scene, path))?;
+        crate::model::link_io::refresh_paths(scene, path)?;
     }
     let native = api
         .getattr("built")?

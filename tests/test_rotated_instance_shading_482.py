@@ -16,7 +16,8 @@ import numpy as np  # noqa: E402
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 
-from core.group import Group, transformed_mesh  # noqa: E402
+from core.group import Group  # noqa: E402
+from ingetrazo_core import group_transformed_mesh as transformed_mesh
 from core.mesh import Mesh  # noqa: E402
 
 

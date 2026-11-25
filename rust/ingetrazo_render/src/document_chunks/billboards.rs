@@ -60,8 +60,8 @@ fn billboard_mesh<'py>(v: &Obj<'py>, group: &Obj<'py>) -> PyResult<Obj<'py>> {
     }
     let placed = v
         .py()
-        .import("core.group")?
-        .call_method1("transformed_mesh", (mesh, xf))?;
+        .import("ingetrazo_core")?
+        .call_method1("group_transformed_mesh", (mesh, xf))?;
     if map.len()? > 256 {
         map.call_method0("clear")?;
     }

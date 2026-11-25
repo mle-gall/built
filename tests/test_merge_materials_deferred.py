@@ -56,7 +56,7 @@ def _host_materials():
 
 
 def _component(src):
-    """The definition a link makes of a loaded file (core.links.load_source;
+    """The definition a link makes of a loaded file (``ingetrazo_core.link_load_source``;
     component_from_scene would build the loose mesh to see if it is empty)."""
     comp = Group(src.mesh, name="file")
     comp.adopt(src.groups)

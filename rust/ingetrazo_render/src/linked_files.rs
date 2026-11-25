@@ -104,7 +104,7 @@ fn reload_links(win: &Bound<'_, PyAny>, path: Option<PathBuf>) -> PyResult<()> {
     } else {
         let caption = translated(py, "Reloading linked documents…", None)?;
         let errors = busy(win, &caption, || {
-            backend.call_method1("resolve", (scene, current))
+            crate::host_context::core_module(py)?.call_method1("link_resolve", (scene, current))
         })?;
         win.call_method1(
             "_relink_done",
@@ -129,8 +129,8 @@ fn set_link_nested(
 ) -> PyResult<bool> {
     let py = win.py();
     let backend = py.import("core.links")?;
-    if let Err(e) = backend.call_method1(
-        "set_include_nested",
+    if let Err(e) = crate::host_context::core_module(py)?.call_method1(
+        "link_set_include_nested",
         (win.getattr("viewport")?.getattr("scene")?, group, enabled),
     ) {
         if !e.is_instance_of::<pyo3::exceptions::PyOSError>(py)
@@ -148,8 +148,8 @@ fn set_link_nested(
 fn reset_link_tags(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
     let backend = py.import("core.links")?;
-    if let Err(e) = backend.call_method1(
-        "clear_overrides",
+    if let Err(e) = crate::host_context::core_module(py)?.call_method1(
+        "link_clear_overrides",
         (
             win.getattr("viewport")?.getattr("scene")?,
             path,

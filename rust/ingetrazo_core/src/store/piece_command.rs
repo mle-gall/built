@@ -286,7 +286,7 @@ fn split_into_pieces<'p>(group: &Obj<'p>) -> PyResult<Vec<Obj<'p>>> {
     let children = items(&group.getattr("children")?)?;
     let frame = api.call_method1("PlacementProxy", (&mesh,))?;
     frame.setattr("children", &children)?;
-    let local = api.call_method1("world_mesh", (frame,))?;
+    let local = crate::model::module(api.py(), "ingetrazo_core")?.call_method1("group_world_mesh", (frame,))?;
     let parts = solid_parts(&local)?.extract::<Vec<(Obj, Obj)>>()?;
     if parts.len() <= 1 && children.is_empty() {
         return Ok(vec![]);

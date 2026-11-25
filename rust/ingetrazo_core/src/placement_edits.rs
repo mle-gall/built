@@ -56,8 +56,8 @@ pub(crate) fn insert_placement<'py>(
                     let facade = py.import("core.group")?;
                     group.setattr(
                         "mesh",
-                        facade
-                            .call_method1("transformed_mesh", (group.getattr("mesh")?, &inverse))?,
+                        crate::model::module(py, "ingetrazo_core")?
+                            .call_method1("group_transformed_mesh", (group.getattr("mesh")?, &inverse))?,
                     )?;
                     facade.call_method1("carry_axes", (group, inverse))?;
                     baked = true;
@@ -175,8 +175,8 @@ pub(crate) fn reparent<'py>(
             if xform.is_none() {
                 g.setattr(
                     "mesh",
-                    py.import("core.group")?
-                        .call_method1("transformed_mesh", (&mesh, delta))?,
+                    py.import("ingetrazo_core")?
+                        .call_method1("group_transformed_mesh", (&mesh, delta))?,
                 )?;
             } else {
                 g.setattr("xform", delta.mul(&xform)?)?;
