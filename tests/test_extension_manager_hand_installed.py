@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from core import extension_manager as manager
+from ingetrazo_core import extension_manager as manager
 from core.extensions import discover_plugins
 from tests.test_extension_manager import TOOL_SOURCE, _extension
 from tests.extensions_chrome import Browser
@@ -32,7 +32,7 @@ def _loaded(root):
 
 def test_hand_installed_plugins_are_the_ones_the_manager_did_not_install(
         tmp_path, monkeypatch):
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     _hand_package(tmp_path, "aberturas")
     (tmp_path / "niveles.py").write_text(TOOL_SOURCE)
     managed = _hand_package(tmp_path, "kitchen")
@@ -47,7 +47,7 @@ def test_hand_installed_plugins_are_the_ones_the_manager_did_not_install(
 
 def test_uninstalling_a_hand_copy_sets_it_aside_and_keeps_its_files(
         tmp_path, monkeypatch):
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     folder = _hand_package(tmp_path, "aberturas")
     assert _loaded(tmp_path) == ["aberturas"]
 
@@ -62,7 +62,7 @@ def test_uninstalling_a_hand_copy_sets_it_aside_and_keeps_its_files(
 
 def test_a_managed_or_outside_folder_is_never_set_aside_as_hand_installed(
         tmp_path, monkeypatch):
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     managed = _hand_package(tmp_path, "kitchen")
     (managed / "extension.json").write_text('{"id": "kitchen"}')
     outside = tmp_path.parent / "elsewhere.py"
@@ -74,10 +74,10 @@ def test_a_managed_or_outside_folder_is_never_set_aside_as_hand_installed(
 
 
 def test_a_hand_copy_is_replaced_by_the_catalog_version(tmp_path, monkeypatch):
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     (tmp_path / "sample.py").write_text("# the 0.5.7 copy\n")
     source = TOOL_SOURCE.encode()
-    monkeypatch.setattr(manager, "_get", lambda *_args: source)
+    monkeypatch.setattr(manager, "download", lambda *_args: source)
 
     moved = manager.replace_hand_installed(_extension(source))
 
@@ -90,9 +90,9 @@ def test_a_hand_copy_is_replaced_by_the_catalog_version(tmp_path, monkeypatch):
 
 
 def test_a_failed_replacement_puts_the_hand_copy_back(tmp_path, monkeypatch):
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     folder = _hand_package(tmp_path, "sample", "# mine\n")
-    monkeypatch.setattr(manager, "_get", lambda *_args: b"tampered")
+    monkeypatch.setattr(manager, "download", lambda *_args: b"tampered")
     with pytest.raises(manager.ExtensionManagerError, match="Checksum"):
         manager.replace_hand_installed(_extension(b"expected"))
     assert (folder / "__init__.py").read_text() == "# mine\n"
@@ -109,11 +109,11 @@ def test_a_catalog_extension_installed_by_hand_offers_replace_and_uninstall(tmp_
     assert {"remove", "folder"} <= browser.buttons.keys() and "install" not in browser.buttons
     assert browser.facts["Source"] == "Installed by hand"
     questions = browser.confirm(monkeypatch)
-    monkeypatch.setattr(manager, "_get", lambda *_: b"corrupt")
+    monkeypatch.setattr(manager, "download", lambda *_: b"corrupt")
     browser.act("verb", "replace")
     assert "Checksum mismatch" in browser.spec["footer"]["hint"]
     assert path.read_text() == "# the 0.5.7 copy"
-    monkeypatch.setattr(manager, "_get", lambda *_: TOOL_SOURCE.encode())
+    monkeypatch.setattr(manager, "download", lambda *_: TOOL_SOURCE.encode())
     browser.act("verb", "replace")
     assert manager.installed_info(ext.id)["sha256"] == ext.sha256
     assert [q[0] for q in questions] == ["Install an unreviewed extension?", "Replace extension"] * 2
@@ -166,3 +166,31 @@ def test_an_included_extension_shows_its_own_preview_and_a_translated_line(
     assert demo.summary["en"] == "Parametric windows from selected faces."
     lang = current_language().split("-")[0]
     assert lang in demo.summary            # what the card shows, via tr()
+
+
+def test_ids_supplied_to_management_actions_stay_inside_the_plugin_root(tmp_path, monkeypatch):
+    plugins = tmp_path / "plugins"
+    plugins.mkdir()
+    outside = tmp_path / "old"
+    outside.mkdir()
+    (outside / "extension.json").write_text('{"id":"../old"}')
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: plugins)
+    with pytest.raises(manager.ExtensionManagerError, match="ID"):
+        manager.uninstall_extension("../old")
+    assert (outside / "extension.json").is_file()
+
+
+def test_a_second_install_cannot_change_the_folder_inside_confirmation(tmp_path, monkeypatch):
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr(manager, "download", lambda *_: b"x = 1\n")
+    (tmp_path / "local_copy.py").write_bytes(b"x = 1\n")
+    ext = _extension(b"x = 1\n")
+
+    def confirm(copies):
+        assert copies == [tmp_path / "local_copy.py"]
+        with pytest.raises(manager.ExtensionManagerError, match="another extension operation"):
+            manager.install_extension(ext)
+        return True
+
+    manager.install_extension(ext, confirm)
+    assert manager.installed_info(ext.id)["sha256"] == ext.sha256

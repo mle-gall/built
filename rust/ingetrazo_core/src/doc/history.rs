@@ -327,11 +327,10 @@ impl DocumentHistory {
     fn push_sheet(&self, py: Python<'_>, cmd: &Bound<'_, PyAny>, coalesce: bool) -> PyResult<()> {
         let stack = self.undo.bind(py);
         if coalesce && !stack.is_empty() {
-            let api = py.import("core.composition")?;
-            let signature = api.getattr("_edit_signature")?;
+            use crate::sheets::composition::{edit_signature, edits_of};
             let top = stack.get_item(stack.len() - 1)?;
-            let fields = signature.call1((&top,))?;
-            if !fields.is_none() && fields.eq(signature.call1((cmd,))?)? {
+            let fields = edit_signature(&top)?;
+            if !fields.is_empty() && fields == edit_signature(cmd)? {
                 let old = top.getattr("_txn")?;
                 let new = cmd.getattr("_txn")?;
                 let combined = if old.is_none() || new.is_none() {
@@ -343,13 +342,8 @@ impl DocumentHistory {
                     )?
                     .into_any()
                 };
-                let edits = api.getattr("_edits_of")?;
-                for (first, last) in edits
-                    .call1((&top,))?
-                    .try_iter()?
-                    .zip(edits.call1((cmd,))?.try_iter()?)
-                {
-                    first?.setattr("after", last?.getattr("after")?.call_method0("copy")?)?;
+                for (first,last) in edits_of(&top)?.into_iter().zip(edits_of(cmd)?) {
+                    first.setattr("after", last.getattr("after")?.call_method0("copy")?)?;
                 }
                 top.setattr("_txn", combined)?;
                 return self.redo.bind(py).call_method0("clear").map(|_| ());

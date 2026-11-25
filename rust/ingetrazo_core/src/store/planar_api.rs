@@ -233,7 +233,7 @@ fn rebuild(
     )
 }
 #[pyfunction]
-fn planar_arrangement(
+pub(crate) fn planar_arrangement(
     segments_3d: &Obj<'_>,
     origin: &Obj<'_>,
     normal: &Obj<'_>,

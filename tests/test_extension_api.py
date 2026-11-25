@@ -187,7 +187,7 @@ def test_the_example_extensions_ship_but_install_only_on_request(tmp_path,
     someone installs it. Since 0.5.8 they install from Manage extensions…
     (the Extensions menu no longer has a submenu of its own for them), as
     managed extensions: disable and uninstall work on them like on any."""
-    from core import extension_manager as manager
+    from ingetrazo_core import extension_manager as manager
     from core import extensions
     examples = manager.example_extension_files()
     assert any(p.name == "niveles.py" and title == "Niveles"
@@ -195,7 +195,7 @@ def test_the_example_extensions_ship_but_install_only_on_request(tmp_path,
     user = tmp_path / "plugins"
     monkeypatch.setattr(extensions, "user_plugins_dir", lambda: user)
     monkeypatch.setattr(extensions, "plugin_dirs", lambda: [user])
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: user)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: user)
     assert not extensions.discover_plugins([user])[0]
     niveles = next(e for e in manager.bundled_extensions()
                    if e.id == "niveles")
@@ -213,7 +213,7 @@ def test_an_example_extension_can_be_a_package(tmp_path, monkeypatch):
     """A bigger example extension (CAM, PR #132) is a folder with an
     ``__init__.py``: it is listed from its package docstring, installed as
     the whole folder (no ``__pycache__``) and removed as a whole."""
-    from core import extension_manager as manager
+    from ingetrazo_core import extension_manager as manager
     from core import paths
     root = tmp_path / "app"
     pkg = root / "examples" / "extensions" / "demo"
@@ -226,7 +226,7 @@ def test_an_example_extension_can_be_a_package(tmp_path, monkeypatch):
     (pkg / "__pycache__" / "junk.pyc").write_bytes(b"x")
     monkeypatch.setattr(paths, "app_root", lambda: root)
     user = tmp_path / "plugins"
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: user)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: user)
     assert [(p.name, t, b) for p, t, b in manager.example_extension_files()] \
         == [("demo", "Demo", "Two files and a subfolder.")]
     demo, = manager.bundled_extensions()

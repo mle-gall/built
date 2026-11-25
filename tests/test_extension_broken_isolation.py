@@ -27,7 +27,7 @@ from pathlib import Path
 import pytest
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 
-import core.extension_manager as manager                 # noqa: E402
+from ingetrazo_core import extension_manager as manager   # noqa: E402
 import core.extensions as extensions                     # noqa: E402
 from core.extensions import discover_plugins             # noqa: E402
 
@@ -59,7 +59,6 @@ def py312_paths(monkeypatch):
 def plugins(tmp_path, monkeypatch):
     root = tmp_path / "plugins"
     root.mkdir()
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: root)
     monkeypatch.setattr(extensions, "user_plugins_dir", lambda: root)
     locked = []
     yield root
@@ -186,7 +185,7 @@ def test_an_unreadable_folder_can_be_replaced_without_rights_on_it(
         plugins, py312_paths, monkeypatch):
     payload = b"def setup(app):\n    pass\n"
     extension = _extension("locked", payload)
-    monkeypatch.setattr(manager, "_get", lambda *_args: payload)
+    monkeypatch.setattr(manager, "download", lambda *_args: payload)
     _package(plugins, "locked", managed=True).chmod(0)
     asides = manager.replace_hand_installed(extension)
     assert manager.installed_info("locked")["version"] == "1.0"
@@ -213,7 +212,7 @@ def test_an_installed_folder_keeps_the_folders_normal_permissions(
     # The mode is what can be seen from here; the Windows side is on the
     # round's checklist.
     payload = b"def setup(app):\n    pass\n"
-    monkeypatch.setattr(manager, "_get", lambda *_args: payload)
+    monkeypatch.setattr(manager, "download", lambda *_args: payload)
     old = os.umask(0o022)
     try:
         manager.install_extension(_extension("sample", payload))

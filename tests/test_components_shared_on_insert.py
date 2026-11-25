@@ -109,7 +109,7 @@ def test_editing_inside_one_copy_reaches_the_others(win, monkeypatch):
 
 
 def test_library_models_are_shared_too_and_save_once(win, tmp_path, monkeypatch):
-    from core import library
+    from ingetrazo_core import component_library as library
     from formats import igz
     from core.scene import Scene
     obj = tmp_path / "caja.obj"

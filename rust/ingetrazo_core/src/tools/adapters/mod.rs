@@ -458,6 +458,7 @@ pub fn register_interaction(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pick_index::document_pick_index, m)?)?;
     input_codes::register(m)?;
     m.add_function(wrap_pyfunction!(namespace::install_tool_modules, m)?)?;
+    m.add_function(wrap_pyfunction!(namespace::install_core_modules, m)?)?;
     m.add_function(wrap_pyfunction!(namespace::install_view_modules, m)?)?;
     m.add_function(wrap_pyfunction!(namespace::tool_module_classes, m)?)?;
     m.add_function(wrap_pyfunction!(tool_preview_hooks, m)?)?;

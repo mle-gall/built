@@ -206,7 +206,7 @@ def test_report_sheet_commands_and_parts_inspector(host, monkeypatch):
     from ingetrazo_render import chrome_sheet
     from views import wgpu_ui
     from tests.test_parts import _stool
-    from core import extension_manager
+    from ingetrazo_core import extension_manager
     monkeypatch.setattr(extension_manager, "load_cached_catalog", lambda: None)
     win = host.window
     commands = {name: action for name, _, _, action in wgpu_ui._all_commands(win)}

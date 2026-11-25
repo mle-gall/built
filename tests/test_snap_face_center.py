@@ -221,7 +221,11 @@ def test_face_center_is_named_everywhere_it_must_be():
     import pathlib
     assert "face_center" in Viewport._SNAP_LABELS
     assert "face_center" in Viewport._ENCOURAGING_KINDS
-    assert "face_center" in InferenceEngine._NAMED_SNAPS
+    from types import SimpleNamespace
+    viewport = SimpleNamespace(_ext_snap_providers=[lambda *_: "extension candidate"])
+    engine = InferenceEngine(viewport)
+    face_center = SimpleNamespace(kind="face_center")
+    assert engine._extension_snap(face_center, 10, 20) is face_center
     assert "face_center" in ScaleTool._TARGET_KINDS
     root = pathlib.Path(__file__).resolve().parent.parent / "i18n"
     for p in root.glob("*.json"):

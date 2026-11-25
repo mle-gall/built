@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from core import extension_manager as manager
+from ingetrazo_core import extension_manager as manager
 from tests.extensions_chrome import Browser
 from tests.test_extension_manager import _extension
 
@@ -17,7 +17,7 @@ SOURCE = b"def setup(app):\n    pass\n"
 def _open(monkeypatch, root, reviewed=False):
     ext = _extension(SOURCE)
     browser = Browser(monkeypatch, root, [ext], reviewed={"sample": {"sha256": ext.sha256}} if reviewed else {})
-    monkeypatch.setattr(manager, "_get", lambda *_: SOURCE)
+    monkeypatch.setattr(manager, "download", lambda *_: SOURCE)
     return browser.act("tab", "Browse")
 
 
