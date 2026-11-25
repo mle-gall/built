@@ -30,7 +30,7 @@ def host(tmp_path):
 @pytest.fixture
 def answers(monkeypatch):
     """Answer the sheet: ``answers.append("discard")`` for the next ask."""
-    from views import chrome_dialogs as cd
+    from ingetrazo_render import chrome_dialogs as cd
 
     class Answers(list):
         asked: list
@@ -297,7 +297,7 @@ def test_menu_edit_commands(host, tmp_path):
 
 
 def test_selection_commands_have_a_native_owner(host):
-    from views.document_commands import WindowDocumentCommands
+    from ingetrazo_render.document_commands import WindowDocumentCommands
     for verb in ("select_all", "invert_selection", "select_none"):
         host.menu(verb)
     assert host.window._on_select_all.__func__ is WindowDocumentCommands._on_select_all
@@ -412,7 +412,7 @@ def test_cancelling_named_recovery_keeps_the_slot_and_active_tab(host, tmp_path,
 
 
 def test_a_bad_untitled_slot_preserves_the_open_drawing(host, tmp_path, answers, monkeypatch):
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     win = host.window
     _draw(host)
     original = win.active_document()
@@ -429,7 +429,7 @@ def test_a_bad_untitled_slot_preserves_the_open_drawing(host, tmp_path, answers,
 
 
 def test_a_read_only_project_rejects_an_import_before_reading_the_file(host, tmp_path, monkeypatch):
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     from formats import dae
     win = host.window
     vp = win.viewport

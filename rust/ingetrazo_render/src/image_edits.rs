@@ -114,7 +114,7 @@ fn image_measure(win: &Bound<'_, PyAny>, width: bool) -> PyResult<()> {
             ),
         )?,
     )?;
-    py.import("views.chrome_forms")?
+    py.import("ingetrazo_render.chrome_forms")?
         .getattr("ask_number")?
         .call(
             (

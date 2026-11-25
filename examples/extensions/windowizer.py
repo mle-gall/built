@@ -1441,7 +1441,7 @@ class WindowizerDialog:
 
     @classmethod
     def ask(cls, viewport, params, materials, *, done, title="Windowizer", current=None):
-        from views.chrome_forms import Field, Form, show
+        from ingetrazo_render.chrome_forms import Field, Form, show
 
         fields = [Field(key, "edit", _tr(label), str(params[key]))
                   for key, label in (("rows", "Rows"), ("cols", "Columns"))]

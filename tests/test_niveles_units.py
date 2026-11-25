@@ -8,14 +8,10 @@ from __future__ import annotations
 import importlib.util
 import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import pytest  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from core import units  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
 
 EXAMPLE = os.path.join(os.path.dirname(__file__), os.pardir, "examples",
                        "extensions", "niveles.py")
@@ -61,19 +57,27 @@ def test_feet_and_inches_read_as_feet_and_inches(document_units):
     assert niveles._fmt_listed(ten_feet) == niveles._fmt(ten_feet)
 
 
-def test_the_height_is_typed_in_the_document_units(document_units):
+def height_form(niveles, monkeypatch, metres):
+    from types import SimpleNamespace
+    from ingetrazo_render import chrome_forms
+    state = dict(levels=[dict(name="Level", z=metres)], guides=True)
+    app = SimpleNamespace(window=object(), scene=SimpleNamespace(version=0),
+                          document_data=lambda default: state, set_document_data=state.update)
+    posted = []
+    monkeypatch.setattr(chrome_forms, "show", lambda win, form: posted.append(form))
+    panel = niveles.LevelsPanel(app, lambda: None)
+    panel.event("list", "selection", "0")
+    panel.event("edit", "invoke", None)
+    return posted[0], state
+
+
+def test_the_height_is_typed_in_the_document_units(document_units, monkeypatch):
     document_units("ft-in-frac", 2)
-    niveles = _niveles()
-    dlg = niveles._LevelDialog(None, "Level", "Level 2", 10 * units.FT_M)
-    try:
-        assert "'" in dlg.z.text()
-        assert dlg.z.value() == pytest.approx(10 * units.FT_M)
-        dlg.z.lineEdit().setText("9'-1 1/8\"")
-        dlg.z.interpretText()
-        assert dlg.z.value() == pytest.approx(
-            9 * units.FT_M + 1.125 * units.IN_M, abs=1e-6)
-    finally:
-        dlg.deleteLater()
+    form, state = height_form(_niveles(), monkeypatch, 10 * units.FT_M)
+    assert "'" in form.value("height")
+    form.receive("height", '9\'-1 1/8"')
+    form.press("ok")
+    assert state["levels"][0]["z"] == pytest.approx(9 * units.FT_M + 1.125 * units.IN_M)
 
 
 @pytest.mark.parametrize("unit, precision, step", [
@@ -85,30 +89,22 @@ def test_the_height_is_typed_in_the_document_units(document_units):
     ("ft-in-frac", 2, 4 * units.IN_M),
 ])
 def test_the_arrows_move_the_height_by_ten_centimetres(
-        document_units, unit, precision, step):
+        document_units, unit, precision, step, monkeypatch):
     document_units(unit, precision)
-    niveles = _niveles()
-    dlg = niveles._LevelDialog(None, "Level", "Level 2", 3.0)
-    try:
-        dlg.z.stepUp()
-        assert dlg.z.value() == pytest.approx(3.0 + step, abs=1e-6)
-        dlg.z.stepDown()
-        assert dlg.z.value() == pytest.approx(3.0, abs=1e-6)
-    finally:
-        dlg.deleteLater()
+    form, state = height_form(_niveles(), monkeypatch, 3.0)
+    initial = units.parse(form.value("height"), "length", unit).value
+    form.press("up")
+    assert units.parse(form.value("height"), "length", unit).value == pytest.approx(initial + step, abs=.001)
+    form.press("down")
+    form.press("ok")
+    assert state["levels"][0]["z"] == pytest.approx(initial, abs=.001)
 
 
-def test_ten_feet_and_one_arrow_read_ten_feet_four(document_units):
+def test_ten_feet_and_one_arrow_read_ten_feet_four(document_units, monkeypatch):
     document_units("ft-in-frac", 2)
-    niveles = _niveles()
-    dlg = niveles._LevelDialog(None, "Level", "Level 2", 10 * units.FT_M)
-    try:
-        dlg.z.stepUp()
-        assert dlg.z.text() == units.format_length(
-            10 * units.FT_M + 4 * units.IN_M, "ft-in-frac", dlg.z._shown)
-        assert dlg.z.text().startswith("10'") and "4" in dlg.z.text()
-    finally:
-        dlg.deleteLater()
+    form, _ = height_form(_niveles(), monkeypatch, 10 * units.FT_M)
+    form.press("up")
+    assert form.value("height").startswith("10'4")
 
 
 def test_a_new_level_repeats_the_last_floor_to_floor():

@@ -124,7 +124,7 @@ pub fn edit_line_type(history: &Bound<'_, PyAny>, verb: &str, draft: &str) -> Py
     let py = history.py();
     let scene = history.getattr("scene")?;
     if verb == "ink" {
-        if crate::linetypes::builtin(&d.name).is_none() {
+        if crate::model::linetypes::builtin(&d.name).is_none() {
             return Err(PyValueError::new_err("Unknown standard line type"));
         }
         let colors = scene
@@ -175,13 +175,13 @@ pub fn edit_line_type(history: &Bound<'_, PyAny>, verb: &str, draft: &str) -> Py
                     "Invalid line type pattern or text size",
                 ));
             }
-            let Some(pieces) = crate::linetypes::clean_values(&d.pieces) else {
+            let Some(pieces) = crate::model::linetypes::clean_values(&d.pieces) else {
                 return Err(PyValueError::new_err(
                     "Enter a dash and a negative gap in millimetres",
                 ));
             };
-            let (drawn, spec) = crate::linetypes::with_text(py, &pieces, &d.text, d.text_size)?;
-            let Some(drawn) = crate::linetypes::clean_values(&drawn) else {
+            let (drawn, spec) = crate::model::linetypes::with_text(py, &pieces, &d.text, d.text_size)?;
+            let Some(drawn) = crate::model::linetypes::clean_values(&drawn) else {
                 return Err(PyValueError::new_err("The text gap is too large"));
             };
             let entry = PyDict::new(py);
@@ -189,7 +189,7 @@ pub fn edit_line_type(history: &Bound<'_, PyAny>, verb: &str, draft: &str) -> Py
             entry.set_item("pieces", pieces)?;
             entry.set_item("pattern", drawn)?;
             if let Some(spec) = spec {
-                entry.update(crate::linetypes::spec_dict(py, &spec)?.as_mapping())?;
+                entry.update(crate::model::linetypes::spec_dict(py, &spec)?.as_mapping())?;
             }
             if let Some(rgb) = d.color {
                 if !rgb.iter().all(|v| (0.0..=1.0).contains(v)) {
@@ -231,7 +231,7 @@ pub fn import_line_file(
     let py = history.py();
     let text = crate::hatch_file::read_pattern(path)?;
     let layers = py.import("core.layers")?;
-    let (found, skipped) = crate::linetypes::py_parse_lin(py, &text)?;
+    let (found, skipped) = crate::model::linetypes::py_parse_lin(py, &text)?;
     let scene = history.getattr("scene")?;
     let work = py.import("types")?.getattr("SimpleNamespace")?.call0()?;
     work.setattr(

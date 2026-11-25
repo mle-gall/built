@@ -34,6 +34,10 @@ class Counter:
 create_panel = Counter
 ```
 
+To register a panel from `setup(app)`, pass its factory to
+`key = app.add_panel("Object count", Counter)`. A menu action can then call
+`app.show_panel(key)`. Each document gets its own model instance.
+
 Use `utility` for a console or other wide output. Section IDs must be unique in a panel. Control IDs are unique across all its sections. Reserve IDs beginning with an underscore for the host. A utility model can set `notify_close = True` to receive `event("_panel", "closed", None)` when its Close button is pressed. Every item accepts a plain-text label and an optional `enabled` flag.
 
 ## Controls in version 1
@@ -58,7 +62,7 @@ Keep transcripts and history bounded. The renderer caches the preview texture by
 
 The bridge adds `api`, `plugin` (the extension filename stem), `panel`, `instance`, `document`, `revision`, `slot` and `title` to the sections for Rust. Events return the same identity and revision with a monotonic `event_id`, `control`, `event` and JSON `value`. The bridge checks the active document, instance, revision and event ID before invoking the handler. A file picker result is checked again after the picker returns. Schema errors and unsupported versions appear in the panel with Retry.
 
-Built refreshes a descriptor after an event or a scene revision change. Call `invalidate()` on the application thread when asynchronous progress or results change. Use `views.chrome_dialogs.Job(app.window, label, on_cancel=...)` for long-running work. Snapshot the active scene and camera before starting a worker. Update and end the job on the application thread. Closing the panel leaves the job in the activity capsule.
+Built refreshes a descriptor after an event or a scene revision change. Call `invalidate()` on the application thread when asynchronous progress or results change. Use `ingetrazo_render.chrome_dialogs.Job(app.window, label, on_cancel=...)` for long-running work. Snapshot the active scene and camera before starting a worker. Update and end the job on the application thread. Closing the panel leaves the job in the activity capsule.
 
 For a snapped point, call `app.pick_point(prompt, done)`. The host routes the next viewport click to `done(point, on_face)` for the original scene revision. Escape cancels and restores the Select tool.
 

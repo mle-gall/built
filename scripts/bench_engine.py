@@ -28,20 +28,12 @@ import tempfile
 import time
 from pathlib import Path
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # Never the user's own settings (see bench_session.py).
 _tmp = tempfile.mkdtemp(prefix="ingetrazo-bench-engine-")
 os.environ["XDG_DATA_HOME"] = _tmp
-
-from PySide6.QtCore import QSettings  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-QSettings.setDefaultFormat(QSettings.IniFormat)
-for _scope in (QSettings.UserScope, QSettings.SystemScope):
-    QSettings.setPath(QSettings.IniFormat, _scope, _tmp)
-_app = QApplication.instance() or QApplication([])
+os.environ["BUILT_SETTINGS_DIR"] = _tmp
 
 from core._native import engine  # noqa: E402
 from core.scene import Scene  # noqa: E402

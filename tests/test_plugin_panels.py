@@ -58,10 +58,8 @@ def test_render_job(window, monkeypatch, tmp_path, cancel):
         panel.job.cancel()
         proc.kill.assert_called_once()
     else:
-        from PySide6.QtGui import QImage
-        image = QImage(8, 8, QImage.Format_RGB32)
-        image.fill(0x557788)
-        assert image.save(str(panel.work / "render.png"))
+        from tests.plugin_images import write_png
+        write_png(panel.work / "render.png", 8, 8)
     proc.poll.return_value = 0
     panel._poll_process()
     assert not window._chrome_jobs

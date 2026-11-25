@@ -20,29 +20,30 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as QVector3D
 
 import pytest  # noqa: E402
-from PySide6.QtWidgets import QMessageBox  # noqa: E402
 
 from core.history import AddFaceCommand, MakeGroupCommand  # noqa: E402
 
 
 @pytest.fixture
 def cancels(monkeypatch):
-    """Answer Make Group's dialog with Cancel, and report whether it
-    was actually shown — a silent refusal would pass these asserts too,
+    """Answer any question the chrome asks with Cancel, and report whether
+    one was actually asked — a silent refusal would pass these asserts too,
     and silence is the bug they exist to prevent."""
-    shown = {"count": 0, "labels": []}
+    from ingetrazo_render import chrome_dialogs
+    shown = {"count": 0, "titles": []}
 
-    def fake_exec(self):
+    def ask(parent, title, text, buttons, *args, cancel=None, **kw):
         shown["count"] += 1
-        shown["labels"] = [b.text() for b in self.buttons()]
-        shown["button"] = next(
-            b for b in self.buttons()
-            if self.buttonRole(b) == QMessageBox.ButtonRole.RejectRole)
+        shown["titles"].append(title)
+        return cancel
+
+    def standard(parent, tone, title, text, buttons, default):
+        shown["count"] += 1
+        shown["titles"].append(title)
         return 0
 
-    monkeypatch.setattr(QMessageBox, "exec", fake_exec)
-    monkeypatch.setattr(QMessageBox, "clickedButton",
-                        lambda self: shown.get("button"))
+    monkeypatch.setattr(chrome_dialogs, "ask", ask)
+    monkeypatch.setattr(chrome_dialogs, "_standard", standard)
     return shown
 
 
@@ -93,7 +94,7 @@ def test_grouping_only_loose_geometry_still_works(native_host):
 def test_component_from_loose_geometry_plus_a_group_holds_both(native_host, monkeypatch):
     """It used to refuse; since issue #90 it makes ONE component holding the
     loose geometry and the group, still a group inside."""
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     win, scene = _win_with_a_group_and_loose_geometry(native_host)
     # the scale figure (a face-me billboard) never goes inside
     inner = [g for g in scene.groups

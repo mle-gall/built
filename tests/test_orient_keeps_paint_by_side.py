@@ -20,11 +20,10 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QGuiApplication
+from core.input_codes import Input as Qt
+from ingetrazo_core import ScreenPoint as QPointF
 from ingetrazo_core import Vec3 as QVector3D
 
-_app = QGuiApplication.instance() or QGuiApplication([])
 
 from core.history import FlipFacesCommand, History
 from core.mesh import Mesh, turn_face_over

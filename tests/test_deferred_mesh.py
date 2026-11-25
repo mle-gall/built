@@ -198,13 +198,11 @@ def _painted_scene(seed, tmp_path):
     """A random scene with every attribute the writer keeps: paint,
     textures, layers, IFC, two sides, hidden faces and edges, curves,
     edge layers, holes (some nested)."""
-    from PySide6.QtGui import QImage
+    from ingetrazo_render import SurveyRaster
     rng = random.Random(seed)
     scene = _random_scene(rng)
     png = tmp_path / "w.png"
-    img = QImage(4, 4, QImage.Format_RGB32)
-    img.fill(0x336699)
-    img.save(str(png))
+    assert SurveyRaster(4, 4, bytes((51, 102, 153, 255)) * 16).save(png)
     for m in _meshes(scene):
         for f in m.faces:
             r = rng.random()

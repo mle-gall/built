@@ -14,11 +14,7 @@ from core.timers import later
 from ingetrazo_render import shortcut_text
 from core.shortcuts import action_keys
 
-# Inter 400/500/600 (SIL OFL, resources/fonts/inter); the system font if missing.
-FONT = str(Path(__file__).resolve().parents[1] / "resources" / "fonts" / "inter")
-if not os.path.isdir(FONT):
-    FONT = "/System/Library/Fonts/SFNS.ttf"
-
+from plugins._widget_language import FONT
 from ingetrazo_render import rail_icon as _icon_rgba
 
 
@@ -198,8 +194,8 @@ def _tabs(view, win) -> None:
 
 
 def _sheet_and_jobs(view, win) -> None:
-    """The app sheet and the work in progress (views/chrome_dialogs.py)."""
-    from views import chrome_dialogs
+    """The app sheet and the work in progress (rust/ingetrazo_render/src/dialogs_host.rs)."""
+    from ingetrazo_render import chrome_dialogs
     sheet = chrome_dialogs.current_sheet(win)
     sig = None if sheet is None else (id(sheet), sheet.title, sheet.text, tuple(chrome_dialogs.sheet_buttons(sheet)))
     if sig != view.__dict__.get("_ui_sheet_sig", False):
@@ -235,10 +231,10 @@ def _sheet_and_jobs(view, win) -> None:
 
 
 def _chrome_form(view, win) -> None:
-    """The form on top, if any (views/chrome_forms.py)."""
+    """The form on top, if any (rust/ingetrazo_render/src/forms_host.rs)."""
     if not hasattr(view.renderer, "ui_set_dialog"):
         return
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     chrome_forms.before_frame(view, win)
 
 
@@ -250,7 +246,7 @@ def chrome_only(view) -> bool:
     win = _window(view)
     if win is None:
         return False
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     return chrome_dialogs.exclusive(win)
 
 
@@ -657,7 +653,7 @@ def prepare_tree_model(scene):
 
 
 def open_line_type(win, name, tags):
-    from views.chrome_dialogs import view_of
+    from ingetrazo_render.chrome_dialogs import view_of
     view = view_of(win)
     if not getattr(view, "_ui_attached", False):
         win.viewport.flash_status("Line type editing requires the native Drawing lens.")
@@ -1274,7 +1270,7 @@ def _tree_action(win, view, action) -> None:
             rebuild()
         elif verb == "batchrename":
             from ingetrazo_core import browser_rename
-            from views import chrome_forms
+            from ingetrazo_render import chrome_forms
             model = browser_rename(scene, rk)
             if model is not None:
                 single = model.single_row()
@@ -1365,7 +1361,7 @@ def _tree_action(win, view, action) -> None:
                     win.tray.scenes.activate_view(scene.saved_views[index])
         elif verb == "linkselection":
             from ingetrazo_core import link_selection_sources
-            from views.chrome_forms import ask_choice
+            from ingetrazo_render.chrome_forms import ask_choice
             sources = link_selection_sources(win)
             if sources:
                 def choose(path):
@@ -2206,7 +2202,7 @@ def _link_action(win, view, g, key) -> None:
             return
         if key == "linksubset":
             import json
-            from views.chrome_forms import ask_text
+            from ingetrazo_render.chrome_forms import ask_text
             address = scene.occurrence_path(g)
             def accept(text):
                 if text is None or win.viewport.scene is not scene:
@@ -2367,7 +2363,7 @@ def _review_camera(win, on: bool) -> None:
 def _run(win, actions, source_view=None) -> None:
     if win is None:
         return
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     for action in actions:
         kind, _, arg = action.partition(":")
         if kind == "extension":
@@ -2407,7 +2403,7 @@ def _run(win, actions, source_view=None) -> None:
             continue
         if kind == "dlg":
             if chrome_dialogs.current_sheet(win) is None:
-                from views import chrome_forms
+                from ingetrazo_render import chrome_forms
                 chrome_forms.action(win, arg)
             continue
         if chrome_dialogs.modal(win):
@@ -2918,7 +2914,7 @@ _BUTTONS = {Qt.LeftButton: 1, Qt.RightButton: 2, Qt.MiddleButton: 3}
 def wheel(view, event) -> bool:
     if not getattr(view, "_ui_attached", False):
         return False
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     if chrome_dialogs.modal(_window(view)):
         return True
     p = event.position()
@@ -2940,7 +2936,7 @@ def _held(view, kind, event) -> bool:
     """Exclusive work holds the window: only its chip (Cancel) and the
     window's own drag take the pointer; the model and the rest of the
     chrome see nothing until it ends."""
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     win = _window(view)
     if win is None or not chrome_dialogs.exclusive(win) or chrome_dialogs.current_sheet(win) is not None:
         return False

@@ -1,8 +1,6 @@
 #!/bin/sh
 # IngeTrazo's launcher inside the Flatpak sandbox.
 #
-# The app selects its Qt platform from the available native GPU surfaces.
-#
 # pip installed the dependencies under /app's prefix; the runtime's python
 # does not look there on its own, whatever its version happens to be.
 PYVER=$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')

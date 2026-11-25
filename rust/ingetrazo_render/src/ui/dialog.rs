@@ -1,4 +1,4 @@
-//! A modal form drawn by the chrome (views/chrome_forms.py): name and number
+//! A modal form drawn by the chrome (rust/ingetrazo_render/src/forms_host.rs): name and number
 //! prompts, Preferences, export options, Location, Scale, Soften, About.
 //!
 //! Python owns the values. It sends the fields with `set_dialog`; each edit

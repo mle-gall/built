@@ -212,7 +212,7 @@ def test_metal_rebakes_the_smoothed_definition_without_a_repack(monkeypatch):
 
 
 def test_dialog_cancel_and_accept_use_one_undo_step(native_window, monkeypatch):
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     win = native_window
     forms = []
     monkeypatch.setattr(chrome_forms, "show", lambda _, form: forms.append(form))
@@ -238,7 +238,7 @@ def test_dialog_cancel_and_accept_use_one_undo_step(native_window, monkeypatch):
 def test_smoothing_inside_a_component_reaches_its_copies(native_window, monkeypatch):
     """Inside an open component the command runs on its world copy; the
     share-back carries the soft flags to every copy, one undo step."""
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     mesh = _cylinder(Mesh(), soft=False)
     a, b = Group(mesh, name="a"), Group(mesh, name="b")
     a.xform, b.xform = QMatrix4x4(), QMatrix4x4()
@@ -368,7 +368,7 @@ def test_the_dialog_has_smooth_normals_ticked_as_.skp():
 
 def test_the_dialog_passes_smooth_normals_to_the_command(native_window, monkeypatch, tmp_path):
     monkeypatch.setenv("INGETRAZO_AUTOSAVE_DIR", str(tmp_path / "autosave"))
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     win = native_window
     forms = []
     monkeypatch.setattr(chrome_forms, "show", lambda _, form: forms.append(form))

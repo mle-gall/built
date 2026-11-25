@@ -95,7 +95,7 @@ def test_the_box_stays_on_screen(win, native_gpu_host):
 
     sc.selection.clear()
     sc.selection.add(g)
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(chrome_forms, "ask_text", lambda *a, done, **kw: done("Caja"))
         win._on_make_component()

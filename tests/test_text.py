@@ -153,7 +153,7 @@ def test_select_double_click_edits_label(monkeypatch):
     """Double-clicking a leader text with Select opens the edit dialog
     (the usual convention) and commits the new text as one undoable command."""
     from types import SimpleNamespace
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     from tools.rust_tools import SelectTool
 
     scene = Scene()

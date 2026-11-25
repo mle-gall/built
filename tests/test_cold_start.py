@@ -59,7 +59,7 @@ def cold_start(host, tmp_path, monkeypatch, page=False, recover=False, untitled_
         return "yes" if recover else "no"
 
     monkeypatch.setattr(files, "open_path", open_path)
-    monkeypatch.setattr("views.chrome_dialogs.ask", question)
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", question)
     host.cold_start()
     assert not host.errors
     docs = [dict(path=d.path, names=[g.name for g in d.viewport.scene.groups])

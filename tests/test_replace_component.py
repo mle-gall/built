@@ -523,7 +523,7 @@ def test_no_question_while_a_copy_remains(native_components, monkeypatch):
 
 
 def test_rename_reaches_every_copy_and_the_kept_template(native_components, monkeypatch):
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     from core.history import KeepComponentCommand
     win, scene, sillas, mesas = native_components
     box = Group(Mesh(), name="Comedor")
@@ -576,7 +576,7 @@ def test_components_from_another_file_arrive_kept_and_placeable(tmp_path, native
     from tests.test_library_sheet import Renderer, act, frame
     from core.i18n import tr
     from views.filedialogs import file_dialogs
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     monkeypatch.setattr(chrome_dialogs, "warning", lambda _, title, msg: pytest.fail(f"{title}: {msg}"))
     monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *_: (str(path), ""))
     monkeypatch.setattr(win.view, "renderer", Renderer())

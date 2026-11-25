@@ -277,7 +277,7 @@ impl Row {
         if self.get.is_none(py) { Ok(none(py)) } else { self.call_env(py, &self.get, env) }
     }
 
-    /// The row as a `views.chrome_forms.Field`.
+    /// The row as a `ingetrazo_render.chrome_forms.Field`.
     fn field<'py>(&self, py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         let kind: String = self.kind.extract(py)?;
         let mut value = self.value(py, env)?.into_bound(py);
@@ -300,7 +300,7 @@ impl Row {
         kw.set_item("fmt", &self.fmt)?;
         let note = if kind == "button" && !self.get.is_none(py) { self.value(py, env)?.into_bound(py) } else { s(py, "") };
         kw.set_item("note", note)?;
-        py.import("views.chrome_forms")?.getattr("Field")?.call((&self.id, &self.kind, label, value), Some(&kw))
+        py.import("ingetrazo_render.chrome_forms")?.getattr("Field")?.call((&self.id, &self.kind, label, value), Some(&kw))
     }
 
     /// The words a search matches the row on.
@@ -858,7 +858,7 @@ pub fn _scene_changed(env: &Bound<'_, PyAny>) -> PyResult<()> {
 fn units_draft<'py>(env: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py = env.py();
     let key: String = apply(py)?.getattr("_UNITS_FOR_NEW_KEY")?.extract()?;
-    let model = py.import("views.units_question")?.call_method1("draft", (env.getattr("scene")?,))?;
+    let model = py.import("ingetrazo_render.units_question")?.call_method1("draft", (env.getattr("scene")?,))?;
     let for_new = truth(&env.getattr("st")?.call_method1("value", (key, "1"))?, "1")?;
     model.call_method1("edit_document", (for_new, py.import("core.units")?.call_method0("ask_at_start")?))?;
     Ok(model)
@@ -894,9 +894,9 @@ pub fn _units<'py>(env: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
             Ok(none(py))
         })
     };
-    let disabled: i64 = py.import("views.chrome_forms")?.getattr("DISABLED")?.extract()?;
+    let disabled: i64 = py.import("ingetrazo_render.chrome_forms")?.getattr("DISABLED")?.extract()?;
     let (shown, beyond) = (PyList::empty(py), PyList::empty(py));
-    for r in py.import("views.units_question")?.call_method1("model_rows", (units_draft(env)?,))?.try_iter()? {
+    for r in py.import("ingetrazo_render.units_question")?.call_method1("model_rows", (units_draft(env)?,))?.try_iter()? {
         let r = r?;
         let (key, kind, label, text, value) = (r.get_item(0)?, r.get_item(1)?, r.get_item(2)?, r.get_item(3)?, r.get_item(4)?);
         let (options, flags, tip) = (r.get_item(7)?, r.get_item(8)?.extract::<i64>()?, r.get_item(9)?);

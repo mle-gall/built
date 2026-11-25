@@ -21,7 +21,7 @@
 //! | `pick` | a row of the detail pane |
 //! | `headmenu` | menu, option |
 //!
-//! A `fields` block holds a `views.chrome_forms.Form`: its edits apply
+//! A `fields` block holds a `ingetrazo_render.chrome_forms.Form`: its edits apply
 //! through the form's `on_change`, its inline buttons through `on_button`.
 //! Providers written in Python subclass [`Provider`]; Rust ones (Export,
 //! About…) answer the same calls.
@@ -265,7 +265,7 @@ impl Pane {
         Pane::add(slf, "rows", vec![("items", list.into_any()), ("id", id.unwrap_or_else(|| s(py, ""))), ("tone", s(py, if thumbs { "thumbs" } else { "" }))])
     }
 
-    /// A `views.chrome_forms.Form`'s fields, drawn as in a form. Field ids
+    /// A `ingetrazo_render.chrome_forms.Form`'s fields, drawn as in a form. Field ids
     /// must be unique in the sheet.
     #[pyo3(signature = (form, id=None))]
     fn fields<'py>(slf: &Bound<'py, Self>, form: &Bound<'py, PyAny>, id: Option<Bound<'py, PyAny>>) -> PyResult<Bound<'py, Self>> {

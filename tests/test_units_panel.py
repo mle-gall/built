@@ -10,15 +10,12 @@ import random
 
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
-if QApplication.instance() is None:
-    QApplication([])
 
 from core import units  # noqa: E402
 from core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402
-from views import units_question  # noqa: E402
+from ingetrazo_render import units_question  # noqa: E402
 from types import SimpleNamespace
 import json
 

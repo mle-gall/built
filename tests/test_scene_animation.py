@@ -483,7 +483,7 @@ def test_page_up_and_down_are_no_other_commands_shortcut(win):
 
 def test_the_settings_change_the_document(win, monkeypatch):
     forms = []
-    monkeypatch.setattr("views.chrome_forms.show", lambda _, form: forms.append(form))
+    monkeypatch.setattr("ingetrazo_render.chrome_forms.show", lambda _, form: forms.append(form))
     before = win.viewport.scene.version
     win.ask_animation()
     form = forms.pop()
@@ -499,7 +499,7 @@ def test_the_settings_change_the_document(win, monkeypatch):
 
 def test_the_settings_dialog_reads_and_returns_the_times(win, monkeypatch):
     forms = []
-    monkeypatch.setattr("views.chrome_forms.show", lambda _, form: forms.append(form))
+    monkeypatch.setattr("ingetrazo_render.chrome_forms.show", lambda _, form: forms.append(form))
     win.ask_animation()
     form = forms.pop()
     form.receive("transition", "3")
@@ -604,19 +604,25 @@ def test_cancel_after_first_frame_keeps_existing_destination(tmp_path):
     assert list(tmp_path.iterdir()) == [path]
 
 
+def _no_qt(monkeypatch):
+    """Any import of Qt fails: the writer must not reach for its event loop
+    or its version probe."""
+    import sys
+    for name in ("PySide6", "PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets"):
+        monkeypatch.setitem(sys.modules, name, None)
+
+
 def test_finishing_a_video_does_not_pump_the_ui_thread(tmp_path, monkeypatch):
     from ingetrazo_core import MkvWriter
-    from PySide6.QtWidgets import QApplication
-    monkeypatch.setattr(QApplication, "processEvents", lambda *a: pytest.fail("reentrant finalization"))
+    _no_qt(monkeypatch)
     writer = MkvWriter(tmp_path / "complete.mkv", 2, 2, 24)
     writer.write(bytes(16))
     writer.close()
 
 
 def test_writer_finalization_needs_no_qt_version_probe(tmp_path, monkeypatch):
-    from PySide6.QtCore import QLibraryInfo
     from ingetrazo_core import MkvWriter
-    monkeypatch.setattr(QLibraryInfo, "version", lambda: pytest.fail("Qt version probe"))
+    _no_qt(monkeypatch)
     writer = MkvWriter(tmp_path / "one.mkv", 2, 2, 30)
     writer.write(bytes(16))
     writer.close()
@@ -626,15 +632,34 @@ def test_writer_finalization_needs_no_qt_version_probe(tmp_path, monkeypatch):
 def _fake_render(win, log):
     """The tests' window is never shown, so it has no GL: each frame is
     a plain picture, and the log keeps what the camera and layers were."""
-    from PySide6.QtGui import QImage
+    class _Picture:
+        """Grey all over, with the image calls the export makes."""
+        class Format:
+            Format_RGBA8888 = "rgba8888"
+
+        def __init__(self, w, h):
+            self.w, self.h = w, h
+
+        def isNull(self):
+            return False
+
+        def convertToFormat(self, _format):
+            return self
+
+        def width(self):
+            return self.w
+
+        def height(self):
+            return self.h
+
+        def constBits(self):
+            return bytes((128, 128, 128, 255)) * (self.w * self.h)
 
     def render(width, height=None, overlays=True, annotations_only=False):
         cam = win.viewport.camera
         log.append((round(cam.pitch, 3), cam.perspective, cam.aspect,
                     tuple(ly.visible for ly in win.viewport.scene.layers)))
-        img = QImage(width, height, QImage.Format_ARGB32)
-        img.fill(0xFF808080)
-        return img
+        return _Picture(width, height)
     win.viewport.render_image = render
 
 
@@ -791,7 +816,7 @@ def test_mp4_discard_preserves_existing_destination(tmp_path):
                                           (".mkv", "Motion JPEG / Matroska (*.mkv)")])
 def test_video_picker_and_sheet_agree_on_encoder_format(win, monkeypatch, tmp_path, suffix, label):
     import views.video_export as ve
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     from views.filedialogs import file_dialogs
     _scenes(win, ("A", "iso", set()))
     monkeypatch.setattr(ve, "video_format", lambda: (suffix, label))
@@ -807,7 +832,8 @@ def test_video_picker_and_sheet_agree_on_encoder_format(win, monkeypatch, tmp_pa
 
 def test_normalizing_the_movie_suffix_preserves_an_unconfirmed_file(win, monkeypatch, tmp_path):
     import views.video_export as ve
-    from views import chrome_dialogs, chrome_forms
+    from ingetrazo_render import chrome_dialogs
+    from ingetrazo_render import chrome_forms
     from views.filedialogs import file_dialogs
     _scenes(win, ("A", "iso", set()))
     existing = tmp_path / "site.mp4"

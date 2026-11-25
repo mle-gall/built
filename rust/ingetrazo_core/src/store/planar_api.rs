@@ -241,7 +241,7 @@ fn planar_arrangement(
     Ok(rebuild(segments_3d, origin, normal, false)?.1)
 }
 #[pyfunction]
-fn planar_rebuild(segments_3d: &Obj<'_>, origin: &Obj<'_>, normal: &Obj<'_>) -> PyResult<Rebuild> {
+pub(crate) fn planar_rebuild(segments_3d: &Obj<'_>, origin: &Obj<'_>, normal: &Obj<'_>) -> PyResult<Rebuild> {
     rebuild(segments_3d, origin, normal, true)
 }
 #[pyfunction]

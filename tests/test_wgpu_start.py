@@ -344,7 +344,7 @@ def test_pin_toggles_and_pinned_come_first(win, monkeypatch, tmp_path):
 
 
 def test_new_model_and_templates(win, monkeypatch):
-    monkeypatch.setattr("views.units_question.offer_at_start", lambda w: None)
+    monkeypatch.setattr("ingetrazo_render.units_question.offer_at_start", lambda w: None)
     ws.show(win)
     sheet(win)
     act(win, "verb", "new")

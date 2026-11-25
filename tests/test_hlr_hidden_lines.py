@@ -10,13 +10,10 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
-from PySide6.QtWidgets import QApplication
 
 from core.hlr import KIND_HIDDEN, hlr_drawing
 from core.scene import Scene
 from tests.test_hlr_line_classes import _box, _camera
-
-_app = QApplication.instance() or QApplication([])
 
 
 def _scene_with_a_box_behind_a_wall():

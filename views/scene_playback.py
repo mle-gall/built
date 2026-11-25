@@ -105,7 +105,7 @@ def edit_animation(win):
     from ingetrazo_render import OperationForm
     from core.i18n import tr
     from core.scene_animation import SceneAnimation
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
 
     scene = win.viewport.scene
     current = scene.animation

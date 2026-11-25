@@ -167,7 +167,7 @@ from tools.text import TextTool
 ])
 def test_annotation_history_and_cancel(tool_type, points, collection, monkeypatch):
     forms = []
-    monkeypatch.setattr("views.chrome_forms.show", lambda parent, form: forms.append(form))
+    monkeypatch.setattr("ingetrazo_render.chrome_forms.show", lambda parent, form: forms.append(form))
     scene, history, native, _ = prepare(tool_type())
     native.window = lambda: None
     for point in points:

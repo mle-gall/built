@@ -88,7 +88,7 @@ def setup(app):
 
 
 def test_cancelling_the_job_during_the_load_keeps_the_window(native_host, doc, monkeypatch):
-    from views.chrome_dialogs import ChromeBar
+    from ingetrazo_render.chrome_dialogs import ChromeBar
     win = native_host.window
     bar = ChromeBar(win, "Opening")
     monkeypatch.setattr(win, "_import_progress", lambda *a, **kw: (bar, lambda *a: None))
@@ -110,7 +110,7 @@ def test_cancelling_the_job_during_the_load_keeps_the_window(native_host, doc, m
 
 
 def test_the_bar_closing_after_the_load_leaves_the_window_open(native_host, doc, monkeypatch):
-    from views.chrome_dialogs import ChromeBar
+    from ingetrazo_render.chrome_dialogs import ChromeBar
     win = native_host.window
     bar = ChromeBar(win, "Opening")
     monkeypatch.setattr(win, "_import_progress", lambda *a, **kw: (bar, lambda *a: None))
@@ -121,7 +121,7 @@ def test_the_bar_closing_after_the_load_leaves_the_window_open(native_host, doc,
 
 def test_a_failed_open_does_not_cut_the_next_one(native_host, doc, monkeypatch):
     with monkeypatch.context() as patch:
-        patch.setattr("views.chrome_dialogs.critical", lambda *a, **kw: None)
+        patch.setattr("ingetrazo_render.chrome_dialogs.critical", lambda *a, **kw: None)
         def broken(scene, path, progress):
             progress(0.5, "Loading")
             raise ValueError("corrupt")

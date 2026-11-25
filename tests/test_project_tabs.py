@@ -113,7 +113,7 @@ def test_a_failed_open_leaves_no_empty_tab_behind(win, tmp_path, monkeypatch):
     mine = win.active_document()
     bad = tmp_path / "bad.igz"
     bad.write_text("not a document")
-    monkeypatch.setattr("views.chrome_dialogs.critical", lambda *a, **k: None)
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.critical", lambda *a, **k: None)
     assert not win.open_path(bad)
     assert win.documents() == [mine]
     assert win.active_document() is mine
@@ -340,7 +340,7 @@ def test_every_untitled_slot_is_offered_back(win, monkeypatch, tmp_path):
         _face(s, z)
         igz_format.save_scene(s, autosave.slot_for(None, untitled=n))
     try:
-        monkeypatch.setattr("views.chrome_dialogs.ask",
+        monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask",
                             lambda *a, **k: "yes")
         win._offer_untitled_recovery()
         docs = win.documents()
@@ -474,7 +474,7 @@ def test_open_progress_is_one_monotonic_lifecycle(win, tmp_path, monkeypatch):
     path = _igz(tmp_path, "progress.igz")
     progress = []
     bars = []
-    monkeypatch.setattr("views.chrome_dialogs.live", lambda *_: win.view)
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.live", lambda *_: win.view)
     original = win._import_progress
 
     def dialog(title, **kwargs):

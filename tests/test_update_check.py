@@ -5,12 +5,12 @@ the window does. No test here touches the network."""
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import QEventLoop, QTimer
-from PySide6.QtWidgets import QApplication, QMainWindow
+import time
+from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 
 from core import update_check as uc
-from ingetrazo_render import chrome_sheet
-from views import chrome_dialogs, release_check as ud
+from ingetrazo_render import chrome_dialogs, chrome_sheet
+from views import release_check as ud
 
 
 class Store:
@@ -27,11 +27,6 @@ class Store:
 
 
 @pytest.fixture
-def app():
-    return QApplication.instance() or QApplication([])
-
-
-@pytest.fixture
 def settings(monkeypatch):
     store = Store()
     monkeypatch.setattr(ud, "QSettings", lambda: store)
@@ -39,32 +34,21 @@ def settings(monkeypatch):
     return store
 
 
-def _wait(ms=120, until=None):
-    """Run the event loop *ms*; with *until*, until it holds (5 s at most):
-    a thread's answer comes when it comes, and a fixed 120 ms ran out with
-    the machine busy (full suite with the Rust engine, 2026-11-12)."""
-    if until is None:
-        loop = QEventLoop()
-        QTimer.singleShot(ms, loop.quit)
-        loop.exec()
-        return
-    import time
-    end = time.monotonic() + 5.0
-    while not until() and time.monotonic() < end:
-        loop = QEventLoop()
-        QTimer.singleShot(20, loop.quit)
-        loop.exec()
+@pytest.fixture
+def app(native_question_host, monkeypatch):
+    monkeypatch.setattr(chrome_sheet, "in_shell", lambda: True)
+    return native_question_host
 
 
-#: Windows stay alive to the end: a thread's answer may still be on its way.
-_WINDOWS = []
-
-
-def _window():
-    win = QMainWindow()
-    win._tool_actions, win._documents = {}, []
-    _WINDOWS.append(win)
-    return win
+def _wait(app, ms=120, until=None):
+    deadline = time.monotonic() + (5 if until else ms / 1000)
+    while time.monotonic() < deadline:
+        app.timers.run_due()
+        if until and until():
+            return
+        time.sleep(.005)
+    if until:
+        assert until()
 
 
 RELEASE = uc.Release("0.6.2", "2026-11-17", "## Fixed\n- **a thing**",
@@ -126,9 +110,9 @@ def test_when_it_looks_at_start(store, frozen, env, looks):
 
 
 def test_a_newer_version_opens_the_window_without_blocking(app, settings):
-    win = _window()
+    win = app.window
     ud.start_check(win, True, lambda: RELEASE, "0.6.1")
-    _wait(until=lambda: chrome_dialogs.history(win))
+    _wait(app, until=lambda: chrome_dialogs.history(win))
     assert not chrome_dialogs.modal(win) and not chrome_sheet.shown(win)
     chrome_dialogs.history(win)[0].action()
     sheet = chrome_sheet.current(win).build(None)
@@ -139,9 +123,9 @@ def test_a_newer_version_opens_the_window_without_blocking(app, settings):
 
 @pytest.mark.parametrize("current", ["0.6.2", "0.6.3"])
 def test_quiet_and_up_to_date_says_nothing(app, settings, current):
-    win = _window()
+    win = app.window
     ud.start_check(win, True, lambda: RELEASE, current)
-    _wait(until=lambda: uc.KEY_LAST in settings.values)
+    _wait(app, until=lambda: uc.KEY_LAST in settings.values)
     assert uc.KEY_LAST in settings.values
     assert not chrome_sheet.shown(win) and not chrome_dialogs.history(win)
 
@@ -151,32 +135,32 @@ def offline():
 
 
 def test_quiet_and_offline_says_nothing_and_tries_again(app, settings):
-    win = _window()
+    win = app.window
     ud.start_check(win, True, offline, "0.6.1")
-    _wait()
+    _wait(app)
     assert not chrome_sheet.shown(win) and not chrome_dialogs.history(win)
     assert uc.KEY_LAST not in settings.values
 
 
 def test_a_skipped_version_stays_quiet_but_the_menu_still_shows_it(app, settings):
-    win = _window()
+    win = app.window
     uc.skip_version(settings, RELEASE.version)
     ud.start_check(win, True, lambda: RELEASE, "0.6.1")
-    _wait(until=lambda: uc.KEY_LAST in settings.values)
+    _wait(app, until=lambda: uc.KEY_LAST in settings.values)
     assert not chrome_dialogs.history(win) and not chrome_sheet.shown(win)
     ud.start_check(win, False, lambda: RELEASE, "0.6.1")
-    _wait(until=lambda: chrome_sheet.shown(win))
+    _wait(app, until=lambda: chrome_sheet.shown(win))
     assert chrome_sheet.current(win).id == "update"
 
 
 def test_the_menu_says_when_up_to_date_and_when_offline(app, settings):
-    win = _window()
+    win = app.window
     ud.start_check(win, False, lambda: RELEASE, "0.6.2")
-    _wait(until=lambda: chrome_dialogs.history(win))
+    _wait(app, until=lambda: chrome_dialogs.history(win))
     row = chrome_dialogs.history(win)[0]
     assert row.tone == "info" and "0.6.2" in row.detail
     ud.start_check(win, False, offline, "0.6.2")
-    _wait(until=lambda: len(chrome_dialogs.history(win)) == 2)
+    _wait(app, until=lambda: len(chrome_dialogs.history(win)) == 2)
     assert chrome_dialogs.history(win)[0].tone == "warning"
 
 
@@ -184,10 +168,10 @@ def test_skip_and_download_buttons(app, settings, monkeypatch):
     from types import SimpleNamespace
     opened = []
     monkeypatch.setattr(ud.desktop_open, "open_url", opened.append)
-    win = _window()
+    win = app.window
     for action in ("later", "download", "skip"):
         ud.start_check(win, False, lambda: RELEASE, "0.6.1")
-        _wait(until=lambda: chrome_sheet.shown(win))
+        _wait(app, until=lambda: chrome_sheet.shown(win))
         chrome_sheet.current(win).act(SimpleNamespace(win=win), "verb", [action])
         assert not chrome_sheet.shown(win)
         assert uc.is_skipped(settings, RELEASE.version) == (action == "skip")
@@ -195,20 +179,20 @@ def test_skip_and_download_buttons(app, settings, monkeypatch):
 
 
 def test_a_quiet_notice_waits_for_a_modal_question(app, settings, monkeypatch):
-    win = _window()
+    win = app.window
     monkeypatch.setattr(ud, "_RETRY_MS", 30)
-    monkeypatch.setattr(QApplication, "activeModalWidget", lambda: win)
+    monkeypatch.setattr(chrome_dialogs, "modal", lambda parent: parent is win)
     ud.start_check(win, True, lambda: RELEASE, "0.6.1")
-    _wait(until=lambda: uc.KEY_LAST in settings.values)
+    _wait(app, until=lambda: uc.KEY_LAST in settings.values)
     assert not chrome_dialogs.history(win)
-    monkeypatch.setattr(QApplication, "activeModalWidget", lambda: None)
-    _wait(until=lambda: chrome_dialogs.history(win))
+    monkeypatch.setattr(chrome_dialogs, "modal", lambda parent: False)
+    _wait(app, until=lambda: chrome_dialogs.history(win))
     assert chrome_dialogs.history(win)[0].action
 
 
 def test_start_check_respects_should_check(app, settings, monkeypatch):
     monkeypatch.setattr(uc, "should_check_at_start", lambda *a, **kw: False)
     called = []
-    ud.start_check(_window(), True, fetch=lambda: called.append(1))
-    _wait(40)
+    ud.start_check(app.window, True, fetch=lambda: called.append(1))
+    _wait(app, 40)
     assert not called

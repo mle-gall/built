@@ -21,9 +21,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication
 
-_app = QApplication.instance() or QApplication([])
 
 from core.group import Group
 from core.history import HideCommand, History
@@ -151,21 +149,21 @@ def test_collect_geometry_agrees_with_the_viewport(native_host):
     """The two ways a sheet gets the model see the same thing."""
     win = native_host.window
     native_host.resize(800, 600, 1.)
-    _app.processEvents()
+    native_host.idle()
     vp = win.viewport
     top = _box(0, "top")
     child = _nest(top, _box(5, "child"))
     vp.scene.groups.append(top)
     vp.notify_scene_changed()
-    _app.processEvents()
+    native_host.idle()
 
     def both():
         return len(vp.hlr_geometry()[0]), _tris(vp.scene)
 
     assert both() == (2 * BOX, 2 * BOX)
     vp.history.execute(HideCommand([child], hidden=True))
-    _app.processEvents()
+    native_host.idle()
     assert both() == (BOX, BOX)
     vp.history.undo()
-    _app.processEvents()
+    native_host.idle()
     assert both() == (2 * BOX, 2 * BOX)

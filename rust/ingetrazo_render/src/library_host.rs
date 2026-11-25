@@ -437,7 +437,7 @@ fn ask(view: &Bound<'_, PyAny>, pending: (&str, &str, String), title: &str, body
         Ok(none(py))
     })?;
     let kw = [("default", "yes"), ("cancel", "cancel"), ("tone", "warning")].into_py_dict(py)?;
-    py.import("views.chrome_dialogs")?.getattr("ask_later")?.call((win, title, body, vec![("cancel", "Cancel"), ("yes", yes)], done), Some(&kw))?;
+    py.import("ingetrazo_render.chrome_dialogs")?.getattr("ask_later")?.call((win, title, body, vec![("cancel", "Cancel"), ("yes", yes)], done), Some(&kw))?;
     Ok(())
 }
 
@@ -1742,7 +1742,7 @@ impl LibrarySheet {
         let kw = PyDict::new(py);
         kw.set_item("text", e.get_item("name")?)?;
         kw.set_item("done", done)?;
-        py.import("views.chrome_forms")?.getattr("ask_text")?.call((ctx.getattr("win")?, title, "Name:"), Some(&kw))?;
+        py.import("ingetrazo_render.chrome_forms")?.getattr("ask_text")?.call((ctx.getattr("win")?, title, "Name:"), Some(&kw))?;
         Ok(())
     }
 

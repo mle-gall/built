@@ -3,7 +3,8 @@ import math
 
 from ingetrazo_core import Vec3
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
-from views import chrome_forms, view_commands
+from views import view_commands
+from ingetrazo_render import chrome_forms
 from ingetrazo_render import context_menu_build, context_menu_run
 
 

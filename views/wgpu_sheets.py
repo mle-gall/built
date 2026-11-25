@@ -1175,7 +1175,7 @@ class Workspace:
 
     def _export_to(self, kind: str, path: str) -> None:
         comp = self.composer
-        from views import chrome_dialogs
+        from ingetrazo_render import chrome_dialogs
         parent = comp._window
         labels = {"pdf": "Exporting PDF", "pdf_all": "Exporting the sheets", "png": "Exporting image",
                   "dxf": "Exporting DXF", "svg": "Exporting SVG"}

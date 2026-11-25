@@ -17,6 +17,8 @@
 mod clipboard;
 mod keys;
 mod launcher;
+#[cfg(windows)]
+mod windows_instance;
 mod gestures;
 #[cfg(target_os = "linux")]
 mod linux_pointer;
@@ -135,46 +137,111 @@ enum UserEvent {
 
 // ---- single instance ------------------------------------------------------
 
+/// The socket a running shell listens on for files a second launch hands
+/// over: `BUILT_INSTANCE_SOCKET` when set (tests use a private one, never
+/// the owner's running app), else one per user in the temporary folder.
 #[cfg(unix)]
 fn instance_socket() -> PathBuf {
+    if let Some(path) = std::env::var_os("BUILT_INSTANCE_SOCKET").filter(|p| !p.is_empty()) {
+        return PathBuf::from(path);
+    }
     let user = std::env::var("USER").unwrap_or_else(|_| "user".into());
     std::env::temp_dir().join(format!("built-shell-{user}.sock"))
 }
 
-/// Hand `file` to a running shell; true when one took it.
+/// What the running shell answers once it has taken a request.
+#[cfg(unix)]
+const INSTANCE_ACK: &str = "ok";
+
+/// How long a second launch waits for that answer before it opens the
+/// file itself (and takes the socket over from an unresponsive shell).
+#[cfg(unix)]
+const INSTANCE_WAIT: Duration = Duration::from_secs(2);
+
+/// The socket file this process bound, by device and inode: only that one
+/// is removed at exit (another shell may have replaced it since).
+#[cfg(unix)]
+static INSTANCE_OWNED: std::sync::OnceLock<(u64, u64)> = std::sync::OnceLock::new();
+
+#[cfg(unix)]
+fn socket_identity(path: &Path) -> Option<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::symlink_metadata(path).ok().map(|m| (m.dev(), m.ino()))
+}
+
+/// Hand `file` to a running shell; true only when it answered that it
+/// took it.
 #[cfg(unix)]
 fn forward_to_running(file: Option<&Path>) -> bool {
-    let Ok(mut stream) = UnixStream::connect(instance_socket()) else {
-        return false;
-    };
-    let line = file.map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
-    stream.write_all(format!("{line}\n").as_bytes()).is_ok()
+    forward_to(&instance_socket(), file)
 }
 
 #[cfg(unix)]
+fn forward_to(socket: &Path, file: Option<&Path>) -> bool {
+    let Ok(mut stream) = UnixStream::connect(socket) else {
+        return false;
+    };
+    let _ = stream.set_write_timeout(Some(INSTANCE_WAIT));
+    let _ = stream.set_read_timeout(Some(INSTANCE_WAIT));
+    let line = file.map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
+    if stream.write_all(format!("{line}\n").as_bytes()).is_err() {
+        return false;
+    }
+    let mut answer = String::new();
+    BufReader::new(stream).read_line(&mut answer).is_ok() && answer.trim() == INSTANCE_ACK
+}
+
+/// Listen for second launches. Called when none answered, so whatever
+/// socket file is there is stale: it is replaced.
+#[cfg(unix)]
 fn listen_for_instances(proxy: EventLoopProxy<UserEvent>) {
-    let path = instance_socket();
+    listen_on(&instance_socket(), move |event| proxy.send_event(event).is_ok());
+}
+
+/// Listen on `path`, giving each request to `take`; it answers only when
+/// `take` accepted it.
+#[cfg(unix)]
+fn listen_on(path: &Path, take: impl Fn(UserEvent) -> bool + Send + 'static) {
+    let path = path.to_path_buf();
     let _ = std::fs::remove_file(&path);
     let Ok(listener) = UnixListener::bind(&path) else {
         eprintln!("[built] single instance: cannot listen on {}", path.display());
         return;
     };
+    if let Some(id) = socket_identity(&path) {
+        let _ = INSTANCE_OWNED.set(id);
+    }
     std::thread::spawn(move || {
-        for stream in listener.incoming().flatten() {
+        for mut stream in listener.incoming().flatten() {
+            let _ = stream.set_read_timeout(Some(INSTANCE_WAIT));
             let mut line = String::new();
-            if BufReader::new(stream).read_line(&mut line).is_ok() {
-                let line = line.trim();
-                let event = if line.is_empty() {
-                    UserEvent::Menu("activate".into())
-                } else {
-                    UserEvent::Open(PathBuf::from(line))
-                };
-                if proxy.send_event(event).is_err() {
-                    break;
-                }
+            let Ok(reader) = stream.try_clone() else { continue };
+            if BufReader::new(reader).read_line(&mut line).is_err() {
+                continue;
             }
+            let line = line.trim();
+            let event = if line.is_empty() { UserEvent::Menu("activate".into()) } else { UserEvent::Open(PathBuf::from(line)) };
+            if !take(event) {
+                break; // the event loop is gone: no answer, so the launch opens it itself
+            }
+            let _ = stream.write_all(format!("{INSTANCE_ACK}\n").as_bytes());
         }
     });
+}
+
+/// Remove the socket at exit, only if it is still the one this process bound.
+#[cfg(unix)]
+fn release_instance_socket() {
+    release_socket(&instance_socket());
+}
+
+#[cfg(unix)]
+fn release_socket(path: &Path) {
+    if let Some(owned) = INSTANCE_OWNED.get() {
+        if socket_identity(path) == Some(*owned) {
+            let _ = std::fs::remove_file(path);
+        }
+    }
 }
 
 // ---- the app ----------------------------------------------------------------
@@ -1065,6 +1132,14 @@ impl ApplicationHandler<UserEvent> for App {
     }
 
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
+        #[cfg(windows)]
+        if matches!(&event, UserEvent::Open(_)) || matches!(&event, UserEvent::Menu(cmd) if cmd == "activate") {
+            if let Some(front) = self.front().and_then(|id| self.win(id)) {
+                if front.window.is_minimized() == Some(true) {
+                    front.window.set_minimized(false);
+                }
+            }
+        }
         match event {
             UserEvent::Menu(cmd) => self.command(event_loop, &cmd),
             UserEvent::Open(path) => self.open(&path),
@@ -1173,14 +1248,25 @@ fn main() {
         }
     };
     if args.gallery { std::env::set_var("BUILT_GALLERY", "1"); }
-    #[cfg(unix)]
-    let shared_instance = !args.temporary_profile() && args.settings.is_none()
-        && std::env::var_os("BUILT_SETTINGS_DIR").is_none() && !args.new_instance;
+    // One shell per user profile; a private BUILT_INSTANCE_SOCKET opts a
+    // test run in whatever its profile.
+    #[cfg(any(unix, windows))]
+    let shared_instance = !args.new_instance
+        && (std::env::var_os("BUILT_INSTANCE_SOCKET").is_some_and(|p| !p.is_empty())
+            || (!args.temporary_profile() && args.settings.is_none() && std::env::var_os("BUILT_SETTINGS_DIR").is_none()));
     #[cfg(unix)]
     if shared_instance && forward_to_running(args.file.as_deref()) {
         eprintln!("[built] handed over to the running shell");
         return;
     }
+    #[cfg(windows)]
+    let primary_pipe = if shared_instance {
+        match windows_instance::acquire(args.file.as_deref()) {
+            Ok(windows_instance::Instance::Primary(pipe)) => Some(pipe),
+            Ok(windows_instance::Instance::Forwarded) => return,
+            Err(e) => { eprintln!("[built] single instance unavailable: {e}"); None }
+        }
+    } else { None };
     let steps = match &args.script {
         Some(p) => match std::fs::read_to_string(p).map_err(|e| e.to_string()).and_then(|t| script::parse(&t)) {
             Ok(s) => s,
@@ -1268,6 +1354,8 @@ fn main() {
     if shared_instance {
         listen_for_instances(proxy);
     }
+    #[cfg(windows)]
+    if let Some(pipe) = primary_pipe { windows_instance::listen(pipe, proxy); }
     let mut app = App {
         args,
         wins: Vec::new(),
@@ -1305,7 +1393,7 @@ fn main() {
     }
     #[cfg(unix)]
     if shared_instance {
-        let _ = std::fs::remove_file(instance_socket());
+        release_instance_socket();
     }
     // Drop each renderer (and its CAMetalLayer) before its window goes.
     for (_, w) in app.wins.drain(..) {
@@ -1353,6 +1441,65 @@ mod profile_tests {
         assert!(!files.is_argv_replay(Path::new("other.built")));
         assert!(files.is_argv_replay(&path));
         assert!(!files.is_argv_replay(&path));
+    }
+
+    #[cfg(unix)]
+    fn private_socket(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("built-instance-test-{}-{name}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        dir.join("s.sock")
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_running_shell_answers_and_receives_the_file() {
+        let path = private_socket("answers");
+        let _ = std::fs::remove_file(&path);
+        assert!(!forward_to(&path, None)); // no shell listening: nothing is handed over
+        let (tx, rx) = std::sync::mpsc::channel();
+        listen_on(&path, move |e| tx.send(format!("{e:?}")).is_ok());
+        assert!(forward_to(&path, Some(Path::new("/tmp/a.built"))));
+        assert!(rx.recv_timeout(Duration::from_secs(2)).unwrap().contains("/tmp/a.built"));
+        assert!(forward_to(&path, None));
+        assert!(rx.recv_timeout(Duration::from_secs(2)).unwrap().contains("activate"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_shell_that_never_answers_does_not_take_the_file() {
+        let path = private_socket("silent");
+        let _ = std::fs::remove_file(&path);
+        let _held = UnixListener::bind(&path).unwrap(); // accepts in the backlog, never reads or answers
+        let started = Instant::now();
+        assert!(!forward_to(&path, Some(Path::new("/tmp/b.built"))));
+        assert!(started.elapsed() < INSTANCE_WAIT + Duration::from_secs(2));
+        // The launch then listens itself, replacing the stale socket.
+        let (tx, rx) = std::sync::mpsc::channel();
+        listen_on(&path, move |e| tx.send(format!("{e:?}")).is_ok());
+        assert!(forward_to(&path, Some(Path::new("/tmp/c.built"))));
+        assert!(rx.recv_timeout(Duration::from_secs(2)).unwrap().contains("/tmp/c.built"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_closed_event_loop_gives_no_answer() {
+        let path = private_socket("closed");
+        listen_on(&path, |_| false);
+        assert!(!forward_to(&path, Some(Path::new("/tmp/d.built"))));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn exit_removes_only_a_socket_this_process_bound() {
+        let path = private_socket("release");
+        let _ = std::fs::remove_file(&path);
+        let _other = UnixListener::bind(&path).unwrap(); // another shell's socket
+        let foreign = socket_identity(&path).unwrap();
+        // This process owns some other socket (or none): the file stays.
+        if INSTANCE_OWNED.get().is_none_or(|owned| *owned != foreign) {
+            release_socket(&path);
+            assert!(path.exists());
+        }
     }
 
     #[test]
