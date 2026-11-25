@@ -1,4 +1,5 @@
 //! Sheet editing, page synchronization and input for one document.
+use crate::document_registration::view::calls;
 use super::tools::{mode, ANNOT_FIELDS, CONTENT_FIELDS, RAIL, SNAP_TOOLS, WINDOW_KEYS};
 use super::Obj;
 use pyo3::{
@@ -1254,16 +1255,14 @@ impl Workspace {
                 kind
             };
         let p = event.call_method0("position")?;
-        let ui = py.import("views.wgpu_ui")?;
         let shape = r.call_method1(
             "page_pointer",
             (
                 kind,
                 p.call_method0("x")?,
                 p.call_method0("y")?,
-                ui.getattr("_BUTTONS")?
-                    .call_method1("get", (event.call_method0("button")?, 1))?,
-                ui.call_method1("_mods", (event,))?,
+                calls::pointer_button(&event.call_method0("button")?)?,
+                calls::mods(event)?,
             ),
         )?;
         let name = match shape.extract::<String>()?.as_str() {
@@ -1465,14 +1464,11 @@ impl Workspace {
                 return Self::_touch(s);
             }
         }
-        let ui = py.import("views.wgpu_ui")?;
-        let name = ui
-            .getattr("_KEYS")?
-            .call_method1("get", (event.call_method0("key")?, ""))?;
+        let name = calls::key_name(event)?;
         if name.is_truthy()?
             && s.getattr("view")?
                 .getattr("renderer")?
-                .call_method1("page_key", (name, ui.call_method1("_mods", (event,))?))?
+                .call_method1("page_key", (name, calls::mods(event)?))?
                 .is_truthy()?
         {
             Self::_touch(s)?;

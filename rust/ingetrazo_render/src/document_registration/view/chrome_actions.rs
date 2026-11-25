@@ -62,7 +62,7 @@ pub(super) fn review_camera<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(none(py))
 }
 
-fn run<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn run<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (win, source_view) = (a.get_item(0)?, a.get_item(2)?);
     if win.is_none() {

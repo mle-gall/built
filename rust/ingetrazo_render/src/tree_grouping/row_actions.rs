@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+use crate::document_registration::view::calls;
 use super::{translated, Occurrences, READ_ONLY};
 use pyo3::{prelude::*, types::PyList};
 use std::collections::HashSet;
@@ -11,7 +12,6 @@ pub fn tree_tag_action(win: &Bound<'_, PyAny>, tag: &str, isolate: bool) -> PyRe
     if scene.call_method1("layer_by_key", (tag,))?.is_none() {
         return Ok(());
     }
-    let ui = win.py().import("views.wgpu_ui")?;
     if !isolate {
         win.py()
             .import("ingetrazo_render.tree_navigation")?
@@ -20,7 +20,7 @@ pub fn tree_tag_action(win: &Bound<'_, PyAny>, tag: &str, isolate: bool) -> PyRe
             .py()
             .import("ingetrazo_core")?
             .call_method1("on_layers", (&scene, [tag]))?;
-        ui.call_method1("_select", (win, entities))?;
+        calls::select(win, &entities)?;
         return Ok(());
     }
     super::tag_visibility::isolate_tags(&vp, vec![format!("preview-tag:{tag}")])
