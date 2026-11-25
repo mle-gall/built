@@ -42,8 +42,8 @@ modules:
       # 1b. The Rust engine, the same wheel the other builds make (cargo
       #     fetches the crates: network, as for pip). maturin is a build
       #     tool and stays out of /app.
-      - pip3 install --prefix=/run/build/ingetrazo/tools --no-warn-script-location maturin
-      - PYTHONPATH=$(echo /run/build/ingetrazo/tools/lib/python3*/site-packages) /run/build/ingetrazo/tools/bin/maturin build --release -m rust/ingetrazo_core/Cargo.toml -o wheels
+      - pip3 install --prefix=/run/build/ingetrazo/build-tools --no-warn-script-location maturin
+      - PYTHONPATH=$(echo /run/build/ingetrazo/build-tools/lib/python3*/site-packages) /run/build/ingetrazo/build-tools/bin/maturin build --release -m rust/ingetrazo_core/Cargo.toml -o wheels
       - pip3 install --prefix=${FLATPAK_DEST} --no-deps --no-warn-script-location wheels/ingetrazo_core-*.whl
       - python3 -c "import sys; sys.path.insert(0, [p for p in __import__('glob').glob('${FLATPAK_DEST}/lib/python3*/site-packages')][0]); import ingetrazo_core"
       # openskp's blank writer template is not distributed (no .skp export).
@@ -55,7 +55,7 @@ modules:
       - mkdir -p ${FLATPAK_DEST}/ingetrazo
       - PYO3_PYTHON=$(command -v python3) cargo build --locked --release --manifest-path rust/built_app/Cargo.toml
       - install -Dm755 rust/built_app/target/release/built ${FLATPAK_DEST}/bin/built
-      - cp -a core views tools formats georef materials styles plugins resources i18n scripts LICENSE ${FLATPAK_DEST}/ingetrazo/
+      - cp -a core views tools formats materials styles plugins resources i18n scripts LICENSE ${FLATPAK_DEST}/ingetrazo/
       # The example extensions (Extensions ▸ Example extensions installs one
       # into the user's plugins folder): shipped, never loaded by default.
       # DWG import (#101): LibreDWG's dwg2dxf, the same binary the AppImage
