@@ -3,6 +3,7 @@
 """COLLADA (.dae) import — documents as .skp modellers export them."""
 from __future__ import annotations
 
+import ingetrazo_core
 from pathlib import Path
 
 from core.orient import is_closed, signed_volume
@@ -264,7 +265,6 @@ def test_textured_import_carries_real_uvs(tmp_path):
     triangles fuse back into one quad, and evaluating the map at the corners
     reproduces the original texture coordinates."""
     from ingetrazo_core import Vec3 as QVector3D
-    from core.texture import affine_uv
 
     def V(x, y, z=0.0):
         return QVector3D(float(x), float(y), float(z))
@@ -276,7 +276,7 @@ def test_textured_import_carries_real_uvs(tmp_path):
     assert len(faces) == 1                          # triangles fused
     tex = faces[0].attrs.get("texture")
     assert tex is not None and tex["path"] == img
-    uvs = affine_uv(tex["uvw"], [V(0, 0), V(2, 0), V(2, 3), V(0, 3)])
+    uvs = ingetrazo_core.texture_affine_uv(tex["uvw"], [V(0, 0), V(2, 0), V(2, 3), V(0, 3)])
     expect = [(0, 0), (1, 0), (1, 1), (0, 1)]
     for (u, v), (eu, ev) in zip(uvs, expect):
         assert abs(u - eu) < 1e-5 and abs(v - ev) < 1e-5

@@ -81,8 +81,8 @@ fn _facing_quad<'p>(mesh: &Obj<'p>, toward: &Obj<'p>) -> PyResult<Obj<'p>> {
     let uv = [(0., 0.), (1., 0.), (1., 1.), (0., 1.)];
     tex.set_item(
         "uvw",
-        py.import("core.texture")?
-            .call_method1("fit_uv_affine", (&pts, uv.to_vec()))?,
+        crate::model::module(py, "ingetrazo_core")?
+            .call_method1("texture_fit_uv_affine", (&pts, uv.to_vec()))?,
     )?;
     let out = crate::file_model::new_mesh(py)?;
     let attrs = out.call_method1("add_face", (pts,))?.getattr("attrs")?;
@@ -288,7 +288,7 @@ impl Faces {
             self.orient = self.camera.is_some() && has_billboard(&group)?;
             if self.orient {
                 self.pieces = Some(
-                    api.call_method1("iter_painted_placements", (&group,))?
+                    crate::model::module(py, "ingetrazo_core")?.call_method1("group_iter_painted_placements", (&group,))?
                         .try_iter()?
                         .unbind(),
                 );
@@ -297,8 +297,8 @@ impl Faces {
             if self.camera.is_none() && billboard(&group)?.is_truthy()? {
                 continue;
             }
-            let pieces = api
-                .call_method1("iter_painted_placements", (&group,))?
+            let pieces = crate::model::module(py, "ingetrazo_core")?
+                .call_method1("group_iter_painted_placements", (&group,))?
                 .try_iter()?
                 .collect::<PyResult<Vec<_>>>()?;
             let mut painted = false;

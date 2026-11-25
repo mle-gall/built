@@ -71,9 +71,8 @@ pub fn skp_image_faces<'py>(
         if let Some(ref a) = attrs {
             let row = a.cast::<PyDict>()?;
             if let Some(tex) = row.get_item("texture")? {
-                let fit = py
-                    .import("core.texture")?
-                    .call_method1("fit_uv_affine", (&outer, uv))?;
+                let fit = crate::model::module(py, "ingetrazo_core")?
+                    .call_method1("texture_fit_uv_affine", (&outer, uv))?;
                 if !fit.is_none() {
                     let tex = tex.cast::<PyDict>()?.copy()?;
                     tex.set_item("uvw", fit)?;

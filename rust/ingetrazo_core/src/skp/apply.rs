@@ -126,7 +126,7 @@ pub fn skp_apply_folders<'py>(
             list.append(name)?;
             scene.setattr("layer_folders", list)?;
             if parent.is_truthy()? {
-                layers.call_method1("move_folder", (scene, name, &parent))?;
+                crate::model::module(layers.py(), "ingetrazo_core")?.getattr("tag_edits")?.call_method1("move_folder", (scene, name, &parent))?;
             }
             name.to_owned()
         } else if layers
@@ -135,7 +135,7 @@ pub fn skp_apply_folders<'py>(
         {
             name.to_owned()
         } else {
-            layers
+            crate::model::module(layers.py(), "ingetrazo_core")?.getattr("tag_edits")?
                 .call_method1("add_folder", (scene, name, &parent))?
                 .extract()?
         };

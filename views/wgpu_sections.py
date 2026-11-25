@@ -2,7 +2,7 @@
 import ingetrazo_core
 import math
 import numpy as np
-from core.section import fill_triangles, hatch_segments, effective_fill
+import ingetrazo_core
 
 
 def capture_rows(packed, scene, tint):
@@ -53,10 +53,10 @@ def geometry(view, scene, style, camera, height, rows=None):
             if segs is not None and len(segs):
                 chunks.append(segs)
         segs = np.concatenate(chunks) if chunks else np.empty((0, 2, 3))
-        cache = (key, segs, fill_triangles(segs, sp.normal), {})
+        cache = (key, segs, ingetrazo_core.section_fill_triangles(segs, sp.normal), {})
         view._section_geometry_cache = cache
     _, segs, fill, hatches = cache
-    pattern, color, spacing = effective_fill(sp, style)
+    pattern, color, spacing = ingetrazo_core.section_effective_fill(sp, style)
     render_key = (key, pattern, color, spacing, style.face_mode, tuple(style.edge_color),
                   tuple(camera.eye().toTuple()), camera.fov_deg, height)
     if getattr(view, '_section_render_key', None) == render_key:
@@ -87,7 +87,7 @@ def geometry(view, scene, style, camera, height, rows=None):
         if pattern in ('hatch', 'cross'):
             hatch_key = (spacing, pattern == 'cross')
             if hatch_key not in hatches:
-                hatches[hatch_key] = hatch_segments(segs, sp.normal, *hatch_key)
+                hatches[hatch_key] = ingetrazo_core.section_hatch_segments(segs, sp.normal, *hatch_key)
             lines(hatches[hatch_key], color, .5, .01)
     lines(segs, style.edge_color, 1.25, .6)
     result = np.concatenate(chunks).astype('<f4').view(np.uint8).reshape(-1) if chunks else empty

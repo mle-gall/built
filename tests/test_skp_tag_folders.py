@@ -6,6 +6,7 @@ as nested tag folders. The bytes here are written in the layout read from
 real production files (see the notes above ``parse_tag_folders``)."""
 from __future__ import annotations
 
+import ingetrazo_core
 import struct
 
 from core.layers import folder_parent, folders_of
@@ -112,6 +113,5 @@ def test_load_creates_the_tags_in_their_folders(monkeypatch):
                               folder=folder_of.get(raw["name"])))
     assert scene.layer("Dome - Roof").folder == "Dome"
     assert scene.layer("Old mesh").visible
-    from core.layers import effective_visible
-    assert not effective_visible(scene, scene.layer("Old mesh"))
+    assert not ingetrazo_core.tag_edits.effective_visible(scene, scene.layer("Old mesh"))
     assert scene.layer("Loose").folder is None

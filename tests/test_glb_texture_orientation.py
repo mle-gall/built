@@ -9,6 +9,7 @@ file IngeTrazo itself had written, and the textures of anybody else's.
 """
 from __future__ import annotations
 
+import ingetrazo_core
 import json
 import os
 import struct
@@ -21,7 +22,7 @@ from ingetrazo_core import Vec3 as V
 from ingetrazo_render import SurveyRaster  # noqa: E402
 
 from core.scene import Scene  # noqa: E402
-from core.texture import affine_uv, fit_uv_affine  # noqa: E402
+import ingetrazo_core  # noqa: E402
 from formats.glb import load_glb, read_triangles  # noqa: E402
 from formats.gltf import save_glb  # noqa: E402
 
@@ -43,7 +44,7 @@ def _corners_uv(scene):
     out = {}
     for face in scene.groups[-1].mesh.faces:
         points = [v.position for v in face.loop]
-        uvs = affine_uv(face.attrs["texture"]["uvw"], points)
+        uvs = ingetrazo_core.texture_affine_uv(face.attrs["texture"]["uvw"], points)
         for p, uv in zip(points, uvs):
             out[(round(p.x(), 4), round(p.z(), 4))] = uv
     return out
@@ -101,7 +102,7 @@ def test_a_picture_comes_back_from_our_own_glb_the_right_way_up(tmp_path):
     face = scene.loose_mesh.add_face(corners)
     face.attrs["texture"] = {
         "path": str(tmp_path / "picture.png"), "sw": 1.0, "sh": 2.0,
-        "uvw": fit_uv_affine(corners, [(0, 0), (1, 0), (1, 1), (0, 1)])}
+        "uvw": ingetrazo_core.texture_fit_uv_affine(corners, [(0, 0), (1, 0), (1, 1), (0, 1)])}
     path = tmp_path / "ours.glb"
     save_glb(scene, path)
 

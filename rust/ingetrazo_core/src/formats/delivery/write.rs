@@ -132,7 +132,7 @@ impl<'p> View<'p> {
             let draw = hlr.call_method("hlr_drawing", (model, cam), Some(&kw))?;
             let layers = py.import("core.layers")?;
             draw.setattr("styles", crate::model::tag_styles::line_styles(py, model, true)?)?;
-            draw.setattr("labels", layers.call_method1("export_labels", (model,))?)?;
+            draw.setattr("labels", crate::model::module(layers.py(), "ingetrazo_core")?.getattr("tag_edits")?.call_method1("export_labels", (model,))?)?;
             let ls = model.getattr("layers")?;
             if !svg && ls.len()? == 1 {
                 draw.getattr("labels")?

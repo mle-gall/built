@@ -41,7 +41,7 @@ fn finish(
         return Ok(());
     }
     let py = vp.py();
-    let vector = py.import("ingetrazo_core")?.getattr("Vec3")?;
+    let vector = crate::host_context::core_module(py)?.getattr("Vec3")?;
     let vec = |p: Point| vector.call1((p[0], p[1], p[2]));
     let title_args = PyDict::new(py);
     let sections = scene.getattr("section_planes")?;
@@ -78,7 +78,7 @@ fn finish(
         let module = py.import("core.section")?;
         let kw = PyDict::new(py);
         kw.set_item("name", &title)?;
-        kw.set_item("symbol", module.call_method1("next_symbol", (&sections,))?)?;
+        kw.set_item("symbol", crate::host_context::core_module(module.py())?.call_method1("section_next_symbol", (&sections,))?)?;
         let plane = module
             .getattr("SectionPlane")?
             .call((vec(centre)?, vec([0., 0., 1.])?), Some(&kw))?;

@@ -13,6 +13,7 @@ camera (GL pads it by a screen gutter), which re-sends twelve segments.
 Guides keep GL's world-space dashes (``_guide_vertices``), which GL
 itself rebuilds when the camera changes; they are sent as solid pieces.
 """
+import ingetrazo_core
 import math
 
 import numpy as np
@@ -123,8 +124,7 @@ def selected_hidden(view):
     moving = {id(g) for g in (getattr(source, '_preview_groups', None) or ())}
     tools = view.__dict__.get('tools')
     moving.update(id(g) for g in (getattr(tools, '_moving_groups', None) or ()))
-    from core.layers import effective_visible
-    layers = tuple((layer.key, effective_visible(scene, layer)) for layer in getattr(scene, 'layers', ()))
+    layers = tuple((layer.key, ingetrazo_core.tag_edits.effective_visible(scene, layer)) for layer in getattr(scene, 'layers', ()))
     version = scene.version - scene.view_version
     key = (version, id(packed), frozenset(map(id, groups)), frozenset(moving), layers)
     cache = view.__dict__.get('_hidden_lines')

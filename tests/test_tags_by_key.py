@@ -33,10 +33,10 @@ def _two_parts():
     """Two folders, each holding a tag labelled «Beams», each tag carried
     by one group."""
     scene = Scene()
-    deck = L.add_folder(scene, "Deck")
-    hall = L.add_folder(scene, "Hall")
-    L.rename_folder(scene, deck, "Deck")
-    L.rename_folder(scene, hall, "Hall")
+    deck = ingetrazo_core.tag_edits.add_folder(scene, "Deck")
+    hall = ingetrazo_core.tag_edits.add_folder(scene, "Hall")
+    ingetrazo_core.tag_edits.rename_folder(scene, deck, "Deck")
+    ingetrazo_core.tag_edits.rename_folder(scene, hall, "Hall")
     scene.layers += [Layer("Deck - Steel - Beams", folder=deck),
                      Layer("Hall - Steel - Beams", folder=hall)]
     a, b = Group(_square(), name="a"), Group(_square(), name="b")
@@ -51,8 +51,8 @@ def test_labels_repeat_and_entities_keep_their_key():
     scene, a, b, deck, hall = _two_parts()
     assert [ly.name for ly in scene.layers[1:]] == ["Beams", "Beams"]
     assert a.layer == "Deck - Steel - Beams" and b.layer == "Hall - Steel - Beams"
-    assert L.path_label(scene, a.layer) == "Deck/Beams"
-    assert L.path_label(scene, b.layer) == "Hall/Beams"
+    assert ingetrazo_core.tag_edits.path_label(scene, a.layer) == "Deck/Beams"
+    assert ingetrazo_core.tag_edits.path_label(scene, b.layer) == "Hall/Beams"
 
 
 def test_hiding_one_beams_tag_leaves_the_other_shown():
@@ -64,7 +64,7 @@ def test_hiding_one_beams_tag_leaves_the_other_shown():
 def test_keys_and_labels_survive_the_file(tmp_path):
     from formats import igz
     scene, a, b, deck, hall = _two_parts()
-    L.rename_folder(scene, deck, "Observation Deck")
+    ingetrazo_core.tag_edits.rename_folder(scene, deck, "Observation Deck")
     path = tmp_path / "tags.igz"
     igz.save_scene(scene, path)
     back = Scene()
@@ -72,8 +72,8 @@ def test_keys_and_labels_survive_the_file(tmp_path):
     by_name = {g.name: g for g in back.groups}
     assert by_name["a"].layer == "Deck - Steel - Beams"
     assert back.layer_by_key("Deck - Steel - Beams").name == "Beams"
-    assert L.folder_label(back, deck) == "Observation Deck"
-    assert L.path_label(back, by_name["a"].layer) == "Observation Deck/Beams"
+    assert ingetrazo_core.tag_edits.folder_label(back, deck) == "Observation Deck"
+    assert ingetrazo_core.tag_edits.path_label(back, by_name["a"].layer) == "Observation Deck/Beams"
 
 
 def test_a_file_from_before_keys_reads_names_as_keys(tmp_path):
@@ -85,7 +85,7 @@ def test_a_file_from_before_keys_reads_names_as_keys(tmp_path):
 
 def test_exports_name_tags_by_their_folder_path():
     scene, a, b, *_ = _two_parts()
-    labels = L.export_labels(scene)
+    labels = ingetrazo_core.tag_edits.export_labels(scene)
     assert labels[a.layer] == "Deck/Beams" and labels[b.layer] == "Hall/Beams"
     assert labels[DEFAULT_LAYER] == DEFAULT_LAYER
     rows, swatches = L.legend_rows(scene)
@@ -108,6 +108,6 @@ def test_renaming_does_not_recolour():
     scene = Scene()
     ly = Layer("Muros")
     scene.layers.append(ly)
-    before = L.layer_color(ly)
+    before = ingetrazo_core.tag_styles.layer_color(ly)
     L.rename_layer(scene, "Muros", "Walls")
-    assert L.layer_color(ly) == before
+    assert ingetrazo_core.tag_styles.layer_color(ly) == before

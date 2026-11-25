@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 IngeTrazo contributors.
 """Document identities survive edits and saves; placements remain distinct."""
+import ingetrazo_core
 import re
 import uuid
 
@@ -108,19 +109,19 @@ def test_face_copy_remaps_whole_objects():
 
 def test_layer_folder_rename_save_and_template(tmp_path):
     s = Scene()
-    f = L.add_folder(s, 'Folder')
+    f = ingetrazo_core.tag_edits.add_folder(s, 'Folder')
     s.layers.append(L.Layer('Wall', folder=f))
-    data = L.template_of(s)
+    data = ingetrazo_core.tag_edits.template_of(s)
     uid = s.layer('Wall').uid
     fuid = s.layer_folder_uids[f]
     assert L.rename_layer(s, 'Wall', 'Walls')
-    assert L.rename_folder(s, f, 'Architecture')
+    assert ingetrazo_core.tag_edits.rename_folder(s, f, 'Architecture')
     assert s.layer('Walls').uid == uid
     # A rename relabels: the folder keeps its key, so its uid stays put.
-    assert s.layer_folder_uids[f] == fuid and L.folder_label(s, f) == 'Architecture'
-    assert L.apply_template(s, data)[0] == 0
+    assert s.layer_folder_uids[f] == fuid and ingetrazo_core.tag_edits.folder_label(s, f) == 'Architecture'
+    assert ingetrazo_core.tag_edits.apply_template(s, data)[0] == 0
     assert s.layer('Walls').folder == f
-    assert L.add_missing(s, data) == ([], [])
+    assert ingetrazo_core.tag_edits.add_missing(s, data) == ([], [])
     igz.save_scene(s, tmp_path / 'layers.igz')
     other = Scene()
     igz.load_into(other, tmp_path / 'layers.igz')
@@ -129,7 +130,7 @@ def test_layer_folder_rename_save_and_template(tmp_path):
     collision = Scene()
     collision.layers.append(L.Layer('Wall'))
     target_uid = collision.layer('Wall').uid
-    L.add_missing(collision, data)
+    ingetrazo_core.tag_edits.add_missing(collision, data)
     assert collision.layer('Wall').uid == target_uid
 
 
@@ -141,7 +142,7 @@ def test_clipboard_keeps_tag_identity_and_paste_resolves_renames():
     source.layers.append(L.Layer('Old'))
     face = mesh().faces[0]
     payload = {'faces': [(face.vertices, [], {'layer': 'Old'})], 'edges': [],
-               'groups': [], 'ref': QVector3D(), 'layers': L.template_for(source, ['Old'])}
+               'groups': [], 'ref': QVector3D(), 'layers': ingetrazo_core.tag_edits.template_for(source, ['Old'])}
     payload = clip.decode(clip.encode(payload))
     target = Scene()
     target.layers.append(L.Layer('New', uid=source.layer('Old').uid))
@@ -171,12 +172,12 @@ def test_legacy_file_gets_identities_on_export(tmp_path):
 def test_undo_added_tags_uses_identity_after_rename():
     from core.history import EnsureLayersCommand
     src, dst = Scene(), Scene()
-    folder = L.add_folder(src, 'Folder')
+    folder = ingetrazo_core.tag_edits.add_folder(src, 'Folder')
     src.layers.append(L.Layer('Wall', folder=folder))
-    command = EnsureLayersCommand(L.template_of(src))
+    command = EnsureLayersCommand(ingetrazo_core.tag_edits.template_of(src))
     command.do(dst)
     L.rename_layer(dst, 'Wall', 'Walls')
-    L.rename_folder(dst, folder, 'Building')
+    ingetrazo_core.tag_edits.rename_folder(dst, folder, 'Building')
     command.undo(dst)
     assert dst.layer('Walls') is None
     assert not L.folders_of(dst)

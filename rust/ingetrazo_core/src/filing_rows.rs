@@ -449,7 +449,7 @@ fn controls<'py>(
         let folders = node.get_item("folders")?;
         let mut eye = true;
         for f in folders.try_iter()? {
-            eye &= layers
+            eye &= crate::model::module(layers.py(), "ingetrazo_core")?.getattr("tag_edits")?
                 .call_method1("folder_visible", (&c.scene, f?))?
                 .is_truthy()?;
         }
@@ -504,13 +504,13 @@ fn controls<'py>(
         ly.getattr("locked")?.is_truthy()? as i64
     };
     let eye = if kind == "tagfolder" {
-        layers
+        crate::model::module(layers.py(), "ingetrazo_core")?.getattr("tag_edits")?
             .call_method1("folder_visible", (&c.scene, node.get_item("folder")?))?
             .is_truthy()? as i64
     } else if ly.is_none() {
         -1
     } else {
-        layers
+        crate::model::module(layers.py(), "ingetrazo_core")?.getattr("tag_edits")?
             .call_method1("effective_visible", (&c.scene, &ly))?
             .is_truthy()? as i64
     };

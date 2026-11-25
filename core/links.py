@@ -37,6 +37,7 @@ that tag no longer reach it. Overrides are cleared per file
 
 from __future__ import annotations
 
+import ingetrazo_core
 import os
 import threading
 from pathlib import Path
@@ -492,8 +493,7 @@ def _apply_tags(scene, path, tags) -> None:
     this file the source no longer has are dropped when nothing uses
     them. The ride-model agent (2026-11-09) also found empty mirror
     folders left behind when the source reorganised its tags."""
-    from core.layers import (DEFAULT_LAYER, Layer, folders_of, move_folder,
-                             remove_folder)
+    from core.layers import DEFAULT_LAYER, Layer, folders_of
     entry = _entry(scene, path)
     if tags.get('structure'):
         entry['structure'] = tags['structure']
@@ -508,7 +508,7 @@ def _apply_tags(scene, path, tags) -> None:
     def folder(name, parent):
         if name not in folders_of(scene):
             scene.layer_folders = folders_of(scene) + [name]
-        move_folder(scene, name, parent)
+        ingetrazo_core.tag_edits.move_folder(scene, name, parent)
         return name
 
     top = folder(LINKED_FOLDER, None)
@@ -546,7 +546,7 @@ def _apply_tags(scene, path, tags) -> None:
             scene.folder_visibility[name] = incoming
         previous[name] = incoming
         parent = tags.get("parents", {}).get(f)
-        move_folder(scene, name, src_folders.get(parent, own))
+        ingetrazo_core.tag_edits.move_folder(scene, name, src_folders.get(parent, own))
         label = src_labels.get(f) or f
         if label != name:
             labels[name] = label
@@ -596,7 +596,7 @@ def _apply_tags(scene, path, tags) -> None:
         if not leaves:
             break
         for f in leaves:
-            remove_folder(scene, f)
+            ingetrazo_core.tag_edits.remove_folder(scene, f)
         candidates -= leaves
     entry["folder_uids"] = sorted(owned.intersection(scene.layer_folder_uids.values()))
 
@@ -1011,9 +1011,7 @@ def release_tags(scene, path, used, outside) -> dict:
     Returns ``{file tag key: host tag key}``, what the copies are to be
     relabelled with (:func:`relabel`; the host's Untagged as
     :data:`DEFAULT_LAYER`)."""
-    from core.layers import (DEFAULT_LAYER, folder_label, folder_parent,
-                             folder_visible, folders_of, move_folder,
-                             remove_folder, subfolders)
+    from core.layers import DEFAULT_LAYER, folder_parent, folders_of, subfolders
     entry = registry(scene).get(_norm(path))
     if not isinstance(entry, dict):
         return {}
@@ -1021,7 +1019,7 @@ def release_tags(scene, path, used, outside) -> dict:
     if own not in folders_of(scene) or folder_parent(scene, own) != LINKED_FOLDER:
         return {}
     mine = set(entry.get("tags") or ())
-    hidden = not folder_visible(scene, own)
+    hidden = not ingetrazo_core.tag_edits.folder_visible(scene, own)
     renames: dict = {}
 
     def empty(f) -> bool:
@@ -1037,7 +1035,7 @@ def release_tags(scene, path, used, outside) -> dict:
                                    and not used.get(ly.key))]
         for f in reversed(below):                   # the deepest first
             if empty(f):
-                remove_folder(scene, f)
+                ingetrazo_core.tag_edits.remove_folder(scene, f)
 
     # 2. The rest out to the top, merged by label.
     moving = {own, *subfolders(scene, own, deep=True)}
@@ -1064,22 +1062,22 @@ def release_tags(scene, path, used, outside) -> dict:
         level: dict = {}
         for f in subfolders(scene, target):
             if f not in moving and f != LINKED_FOLDER:
-                level.setdefault(folder_label(scene, f), f)
+                level.setdefault(ingetrazo_core.tag_edits.folder_label(scene, f), f)
         for f in subfolders(scene, src):
-            twin = level.get(folder_label(scene, f))
+            twin = level.get(ingetrazo_core.tag_edits.folder_label(scene, f))
             if twin is not None:
                 merge(f, twin)
-                remove_folder(scene, f)
+                ingetrazo_core.tag_edits.remove_folder(scene, f)
             else:
-                move_folder(scene, f, target)
+                ingetrazo_core.tag_edits.move_folder(scene, f, target)
                 if hidden:
                     scene.folder_visibility[f] = False
 
     merge(own, None)
     if empty(own):
-        remove_folder(scene, own)
+        ingetrazo_core.tag_edits.remove_folder(scene, own)
     if LINKED_FOLDER in folders_of(scene) and empty(LINKED_FOLDER):
-        remove_folder(scene, LINKED_FOLDER)
+        ingetrazo_core.tag_edits.remove_folder(scene, LINKED_FOLDER)
     return renames
 
 

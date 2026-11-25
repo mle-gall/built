@@ -165,7 +165,7 @@ fn paint_of<'py>(v: &Obj<'py>, group: &Obj<'py>) -> PyResult<Obj<'py>> {
         slot = (
             rev,
             PyDict::new(py),
-            layers.call_method1("layer_fx", (&scene,))?,
+            crate::host_context::core_module(layers.py())?.getattr("tag_styles")?.call_method1("layer_fx", (&scene,))?,
         )
             .into_pyobject(py)?
             .into_any();
@@ -183,7 +183,7 @@ fn paint_of<'py>(v: &Obj<'py>, group: &Obj<'py>) -> PyResult<Obj<'py>> {
     let d = slot.get_item(1)?;
     let key = (
         by,
-        layers.call_method1("object_layer", (group,))?,
+        crate::host_context::core_module(layers.py())?.getattr("tag_styles")?.call_method1("object_layer", (group,))?,
         m.call_method1("_material_sig", (&own,))?,
     )
         .into_pyobject(py)?;
@@ -192,11 +192,11 @@ fn paint_of<'py>(v: &Obj<'py>, group: &Obj<'py>) -> PyResult<Obj<'py>> {
         return Ok(hit);
     }
     let base = if by {
-        layers.call_method1("layer_paint", (&scene, group))?
+        crate::host_context::core_module(layers.py())?.getattr("tag_styles")?.call_method1("layer_paint", (&scene, group))?
     } else {
         own
     };
-    let p = layers.call_method1("layer_look", (&scene, group, base, fx))?;
+    let p = crate::host_context::core_module(layers.py())?.getattr("tag_styles")?.call_method1("layer_look", (&scene, group, base, fx))?;
     d.set_item(key, &p)?;
     Ok(p)
 }

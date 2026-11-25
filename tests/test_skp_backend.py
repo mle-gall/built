@@ -6,6 +6,7 @@ NeedsConverter fallback, and OpenSKP model → payload adaptation (fake model, s
 no ``openskp`` package or ``.skp`` file is needed)."""
 from __future__ import annotations
 
+import ingetrazo_core
 from pathlib import Path
 from types import SimpleNamespace as NS
 
@@ -534,7 +535,6 @@ def test_openskp_adapter_bakes_positioned_texture_uvs(tmp_path):
     # per-face UVs baked as the "uvw" affine. Ground truth from the
     # controlled .skp file: 1x1 m square, texture rotated 90 deg,
     # 48x48 in tile — stored matrix maps texture->plane (invert to use).
-    from core.texture import affine_uv
 
     root = _fake_definition(
         id=0, name="ROOT_MODEL",
@@ -558,7 +558,7 @@ def test_openskp_adapter_bakes_positioned_texture_uvs(tmp_path):
     payload = skp_reader._adapt(model, "m", skp_path=skp)
     outer, holes, attrs = payload["groups"][0]["faces"][0]
     uvw = attrs["texture"]["uvw"]
-    uvs = affine_uv(uvw, outer)
+    uvs = ingetrazo_core.texture_affine_uv(uvw, outer)
     expect = [(2.0, 0.2784), (2.0, -0.5418), (2.8202, -0.5418),
               (2.8202, 0.2784)]
     for (u, v), (ue, ve) in zip(uvs, expect):
@@ -665,7 +665,6 @@ def test_openskp_adapter_default_mapping_is_local(tmp_path, monkeypatch):
     # The .skp format's default texture mapping runs in the component's LOCAL frame:
     # two copies of the same textured component must sample the same patch of
     # the tile (identical UVs), regardless of where each copy sits in world.
-    from core.texture import affine_uv
     from ingetrazo_render import SurveyRaster
 
     png = tmp_path / "wood.png"
@@ -694,7 +693,7 @@ def test_openskp_adapter_default_mapping_is_local(tmp_path, monkeypatch):
         outer, holes, attrs = gp["faces"][0]
         uvw = attrs["texture"]["uvw"]
         uv_sets.append([(round(u, 5), round(v, 5))
-                        for u, v in affine_uv(uvw, outer)])
+                        for u, v in ingetrazo_core.texture_affine_uv(uvw, outer)])
     assert len(uv_sets) == 2
     assert uv_sets[0] == uv_sets[1]     # both copies sample identically
 

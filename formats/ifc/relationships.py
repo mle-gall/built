@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Shared material/style identities and presentation layers for each export."""
+import ingetrazo_core
 from collections import defaultdict
 from .step import _s, _f
 
@@ -66,12 +67,11 @@ class Appearance:
             names = {a.get('layer') or getattr(group, 'layer', None) or DEFAULT_LAYER for a in attributes}
             if group is not None:
                 names.add(group.layer or DEFAULT_LAYER)
-            from core.layers import path_label
             for layer in self.scene.layers:
                 if layer.key in names:
                     # The folder path: unique and readable, where a bare
                     # label may repeat and a key may be a uid.
-                    self.layers[(path_label(self.scene, layer.key),
+                    self.layers[(ingetrazo_core.tag_edits.path_label(self.scene, layer.key),
                                  layer.uid)].add(representation)
 
     def finish(self):

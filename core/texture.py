@@ -234,7 +234,6 @@ VERTICAL_TOLERANCE = 1e-3
 # positions, sw, sh, rot=0.0)``: .skp-style planar ``(u, v)`` of world points,
 # scaled by the tile size (``sw``/``sh`` near 0 count as 1).
 projection_basis = _NATIVE.texture_projection_basis
-planar_uv = _NATIVE.texture_planar_uv
 
 
 # ``fit_uv_affine(points, uvs)``: the world→UV affine map ``[gu.xyz, u0,
@@ -252,8 +251,6 @@ planar_uv = _NATIVE.texture_planar_uv
 # ``placement_of(tex, normal)``: ``(sw, sh, rot)``, the tile size and in-plane
 # turn a fitted map shows on the face of ``normal`` (what the eyedropper hands
 # to a face on another plane; shear and mirror dropped), or ``None``.
-fit_uv_affine = _NATIVE.texture_fit_uv_affine
-affine_uv = _NATIVE.texture_affine_uv
 face_uv_axes = _NATIVE.texture_face_uv_axes
 
 

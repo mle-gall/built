@@ -99,7 +99,7 @@ pub fn snapshot(
         }
     }
     let mut tags = Vec::new();
-    let visible = py.import("core.layers")?.getattr("effective_visible")?;
+    let visible = crate::host_context::core_module(py)?.getattr("tag_edits")?.getattr("effective_visible")?;
     for tag in scene.getattr("layers")?.try_iter()? {
         let tag = tag?;
         let key: String = tag.getattr("key")?.extract()?;
@@ -110,4 +110,12 @@ pub fn snapshot(
         ));
     }
     Ok((edges, tags))
+}
+
+/// `ingetrazo_core` from `sys.modules`: `import` runs the import hooks on
+/// every call (over a microsecond under PySide's), and the model rules this
+/// reaches run per placement (`tests/test_no_import_in_hot_calls.py`).
+pub(crate) fn core_module(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
+    static CORE: pyo3::sync::PyOnceLock<Py<PyAny>> = pyo3::sync::PyOnceLock::new();
+    Ok(CORE.get_or_try_init(py, || py.import("ingetrazo_core").map(|m| m.into_any().unbind()))?.bind(py).clone())
 }

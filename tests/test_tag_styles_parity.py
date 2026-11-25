@@ -107,29 +107,29 @@ def answers(L):
         a = {}
         per = []
         for ly in s.layers:
-            per.append([L.hatch_ground_rgb(ly), L.hatch_ink_rgb(ly), ingetrazo_core.tag_styles.light_layer_color(ly),
-                        L.layer_color(ly), L.is_link_untagged(ly.name), ingetrazo_core.tag_styles.layer_brick(s, ly),
+            per.append([ingetrazo_core.tag_styles.hatch_ground_rgb(ly), ingetrazo_core.tag_styles.hatch_ink_rgb(ly), ingetrazo_core.tag_styles.light_layer_color(ly),
+                        ingetrazo_core.tag_styles.layer_color(ly), ingetrazo_core.tag_styles.is_link_untagged(ly.name), ingetrazo_core.tag_styles.layer_brick(s, ly),
                         ingetrazo_core.tag_styles.layer_hatch_families(s, ly), ingetrazo_core.tag_styles.hatch_label(s, ly.hatch),
-                        ingetrazo_core.tag_styles.hatch_grows(ly), L.hatch_families(s, ly.hatch),
-                        ingetrazo_core.tag_styles.linetype_pattern(ly.linetype, s), L.linetype_text(ly.linetype, s),
+                        ingetrazo_core.tag_styles.hatch_grows(ly), ingetrazo_core.tag_styles.hatch_families(s, ly.hatch),
+                        ingetrazo_core.tag_styles.linetype_pattern(ly.linetype, s), ingetrazo_core.tag_styles.linetype_text(ly.linetype, s),
                         ingetrazo_core.tag_styles.linetype_color(ly.linetype, s)])
         a["per"] = per
-        a["none_color"] = L.layer_color(None)
-        a["object"] = [L.object_layer(g), L.object_layer(None)]
-        a["paint"] = L.layer_paint(s, g)
-        a["fx"] = L.layer_fx(s)
-        a["look"] = L.layer_look(s, g, {"color": (1, 0, 0)})
+        a["none_color"] = ingetrazo_core.tag_styles.layer_color(None)
+        a["object"] = [ingetrazo_core.tag_styles.object_layer(g), ingetrazo_core.tag_styles.object_layer(None)]
+        a["paint"] = ingetrazo_core.tag_styles.layer_paint(s, g)
+        a["fx"] = ingetrazo_core.tag_styles.layer_fx(s)
+        a["look"] = ingetrazo_core.tag_styles.layer_look(s, g, {"color": (1, 0, 0)})
         a["wanted"] = [ingetrazo_core.tag_styles.layer_lines_wanted(s), ingetrazo_core.tag_styles.layer_lines_wanted(s, s.display_style)]
         a["styles"] = [ingetrazo_core.tag_styles.line_styles(s, True), ingetrazo_core.tag_styles.line_styles(s, False)]
-        a["model_styles"] = L.model_line_styles(s)
+        a["model_styles"] = ingetrazo_core.tag_styles.model_line_styles(s)
         a["legend"] = L.legend_rows(s)
-        a["cut"] = [L.cut_hatches(s), ingetrazo_core.tag_styles.cut_hatch_grounds(s), ingetrazo_core.tag_styles.cut_hatch_inks(s),
-                    ingetrazo_core.tag_styles.cut_fill_colours(s), L.cut_hatch_forms(s), L.cut_hatch_forms(s, 50.0),
-                    L.cut_hatch_forms(s, 0)]
+        a["cut"] = [ingetrazo_core.tag_styles.cut_hatches(s), ingetrazo_core.tag_styles.cut_hatch_grounds(s), ingetrazo_core.tag_styles.cut_hatch_inks(s),
+                    ingetrazo_core.tag_styles.cut_fill_colours(s), ingetrazo_core.tag_styles.cut_hatch_forms(s), ingetrazo_core.tag_styles.cut_hatch_forms(s, 50.0),
+                    ingetrazo_core.tag_styles.cut_hatch_forms(s, 0)]
         a["unprinted"] = [ly.key for ly in L.unprinted(s)]
-        a["offsets"] = [L.clean_offset(v) for v in
+        a["offsets"] = [ingetrazo_core.tag_styles.clean_offset(v) for v in
                         (None, (1, 2), (0, 0), (2e5, -3e5), ("a", 1), (1, 2, 3), (math.nan, 1), [5, 0])]
-        a["colours"] = [L.clean_line_colour(v) for v in
+        a["colours"] = [ingetrazo_core.tag_styles.clean_line_colour(v) for v in
                         (None, (2, -1, 0.5), (1, 2), ("x", 0, 0), (math.nan, 0, 0), [0.1, 0.2, 0.3])]
         changed = []
         for key, rgb in (("dashed", (0, 1, 0)), ("dashed", None), ("lin:mine", (1, 1, 0)),
@@ -138,10 +138,10 @@ def answers(L):
             changed.append([ingetrazo_core.tag_styles.set_linetype_color(s, key, rgb), dict(s.linetype_colors),
                             dict(s.line_types)])
         a["set_colour"] = changed
-        L.load_linetype_colors(s, {"dashed": [0.2, 0.2, 0.2], "nope": [1, 1, 1], "dot": "x"})
-        L.load_linetype_colors(s, None)
-        L.load_bricks(s, {"brick": (230, 110, 50, 10), "block": "x", "nope": (1, 2, 3, 4)})
-        L.load_bricks(s, [1])
+        ingetrazo_core.tag_styles.load_linetype_colors(s, {"dashed": [0.2, 0.2, 0.2], "nope": [1, 1, 1], "dot": "x"})
+        ingetrazo_core.tag_styles.load_linetype_colors(s, None)
+        ingetrazo_core.tag_styles.load_bricks(s, {"brick": (230, 110, 50, 10), "block": "x", "nope": (1, 2, 3, 4)})
+        ingetrazo_core.tag_styles.load_bricks(s, [1])
         a["loaded"] = [dict(s.linetype_colors), dict(s.bricks)]
         ingetrazo_core.tag_styles.hide_unprinted(s)
         a["hidden"] = [ly.visible for ly in s.layers]

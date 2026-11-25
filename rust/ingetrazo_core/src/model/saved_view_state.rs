@@ -312,7 +312,7 @@ fn saved_view_shown_state<'py>(py: Python<'py>, scene: &Bound<'py, PyAny>) -> Py
 /// recalls a scene for a moment.
 #[pyfunction]
 fn saved_view_visibility_sig<'py>(py: Python<'py>, scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
-    let effective = super::module(py, "core.layers")?.getattr("effective_visible")?;
+    let effective = crate::model::module(py, "ingetrazo_core")?.getattr("tag_edits")?.getattr("effective_visible")?;
     let allowed = attr_or(scene, "_navigator_allowed", none(py))?;
     let layers = scene.getattr("layers")?.try_iter()?
         .map(|ly| { let ly = ly?; Ok(PyTuple::new(py, [ly.getattr("key")?, effective.call1((scene, &ly))?])?) })

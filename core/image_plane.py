@@ -24,6 +24,7 @@ keep the picture undistorted while the user drags.
 """
 from __future__ import annotations
 
+import ingetrazo_core
 from core.doc_model import Record, record_fields
 from ingetrazo_core import Vec3 as QVector3D
 
@@ -108,9 +109,8 @@ class ImagePlane(Record):
         image sits: the whole picture once over the rectangle, mapped the
         way the image draws it, with ``sw``/``sh`` its real size — what a
         face on another plane projects (the eyedropper's rule)."""
-        from core.texture import fit_uv_affine
         tex = {"path": self.path, "sw": self.width(), "sh": self.height()}
-        uvw = fit_uv_affine(self.corners(),
+        uvw = ingetrazo_core.texture_fit_uv_affine(self.corners(),
                             [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
         if uvw is not None:
             tex["uvw"] = uvw

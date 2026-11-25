@@ -12,6 +12,7 @@ position-matching to rediscover topology.
 to rebuild its dynamic VBOs.
 """
 from __future__ import annotations
+import ingetrazo_core
 from core.mesh import element_identity
 from core.element_set import ElementSet
 
@@ -332,7 +333,7 @@ class Scene:
         ly = self.layer_by_key(name)
         if ly is None:
             return True, False
-        return _layers.effective_visible(self, ly), ly.locked
+        return ingetrazo_core.tag_edits.effective_visible(self, ly), ly.locked
 
     def _open_group_layer(self, entity):
         """The layer a face or edge with none of its own follows while its
@@ -957,7 +958,7 @@ class Scene:
         return (self.content_version,
                 tuple(id(level["group"]) for level in self._edit_stack),
                 id(self.mesh), bool(self.hide_similar_components),
-                tuple((ly.key, _layers.effective_visible(self, ly)) for ly in self.layers))
+                tuple((ly.key, ingetrazo_core.tag_edits.effective_visible(self, ly)) for ly in self.layers))
 
     def bounds(self) -> tuple[QVector3D, QVector3D] | tuple[None, None]:
         """Axis-aligned bounding box of all geometry. ``(None, None)`` if empty.

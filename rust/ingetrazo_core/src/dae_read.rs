@@ -850,9 +850,8 @@ fn key(p: DVec3, d: usize) -> [u64; 3] {
 fn attr<'p>(py: Python<'p>, f: &Face, points: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
     let attrs = PyDict::new(py);
     if let (Some(path), Some(uv)) = (&f.paint.image, &f.uv) {
-        let map = py
-            .import("core.texture")?
-            .call_method1("fit_uv_affine", (points, uv))?;
+        let map = crate::model::module(py, "ingetrazo_core")?
+            .call_method1("texture_fit_uv_affine", (points, uv))?;
         if !map.is_none() {
             let a: [f64; 8] = map.extract()?;
             let t = PyDict::new(py);

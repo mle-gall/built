@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Saved visibility sets in the Scenes menu act on the live Project eyes."""
+import ingetrazo_core
 import pytest
 
 from core import layers
@@ -29,7 +30,7 @@ def test_apply_restores_across_branches_after_reopening_in_one_undo(tmp_path):
         parent.children.append(child)
         scene.groups.append(parent)
     west.children[0].hidden = True
-    folder = layers.add_folder(scene, "Plans")
+    folder = ingetrazo_core.tag_edits.add_folder(scene, "Plans")
     scene.folder_visibility[folder] = False
     scene.layers.append(layers.Layer("Walls", visible=False))
     assert command(history, "save", name="Print")

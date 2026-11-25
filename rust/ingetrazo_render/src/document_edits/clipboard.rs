@@ -93,7 +93,7 @@ fn copy_selection(v: &Obj, publish: bool) -> PyResult<bool> {
         if g.getattr("xform")?.is_none() {
             g.setattr(
                 "xform",
-                py.import("ingetrazo_core")?.call_method0("Matrix4")?,
+                crate::host_context::core_module(py)?.call_method0("Matrix4")?,
             )?;
             g.setattr("component", false)?;
             if seed.is_callable() {
@@ -133,7 +133,7 @@ fn copy_selection(v: &Obj, publish: bool) -> PyResult<bool> {
     data.set_item("edge_layers", edge_layers)?;
     data.set_item(
         "layers",
-        layers.call_method1("template_for", (&scene, names))?,
+        crate::host_context::core_module(layers.py())?.getattr("tag_edits")?.call_method1("template_for", (&scene, names))?,
     )?;
     data.set_item("groups", groups)?;
     data.set_item("ref", vec3(py, lo)?)?;

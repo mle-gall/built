@@ -107,17 +107,17 @@ def answers(texture):
     out["axes"] = [_r(ingetrazo_core.texture_projection_axes(QV(*n), rot))
                    for n in normals for rot in (0.0, 30.0, -122.5)]
     pts0 = [QV(1.5, -2.25, 3.0), QV(0, 0, 0), QV(-10.1, 4.4, 0.7)]
-    out["planar"] = [_r(texture.planar_uv(QV(*n), pts0, sw, sh, rot))
+    out["planar"] = [_r(ingetrazo_core.texture_planar_uv(QV(*n), pts0, sw, sh, rot))
                      for n in normals[:40] for sw, sh, rot in ((1.0, 1.0, 0.0), (0.3, 2.0, 45.0),
                                                                (0.0, 1e-12, -10.0))]
     fits, fits_big = [], []
     for pts, uvs, _n in polys:
-        f = texture.fit_uv_affine(pts, uvs)
+        f = ingetrazo_core.texture_fit_uv_affine(pts, uvs)
         (fits_big if len(pts) > 13 else fits).append(_r(f))
-        fits.append(_r(texture.fit_uv_affine([QV(*p) for p in pts[:5]], uvs[:5])))
+        fits.append(_r(ingetrazo_core.texture_fit_uv_affine([QV(*p) for p in pts[:5]], uvs[:5])))
     out["fit"] = fits
     out["fit_big"] = fits_big
-    out["affine"] = [_r(texture.affine_uv(texture.fit_uv_affine(p, u) or [1, 2, 3, 4, 5, 6, 7, 8],
+    out["affine"] = [_r(ingetrazo_core.texture_affine_uv(ingetrazo_core.texture_fit_uv_affine(p, u) or [1, 2, 3, 4, 5, 6, 7, 8],
                                           p + [QV(*p[0])]))
                      for p, u, _n in polys]
     maps = []
@@ -126,7 +126,7 @@ def answers(texture):
         t = {k: v for k, v in tex.items() if v is not None}
         maps.append(_r(texture.face_uv_axes(t, QV(*n))))
         pts, uvs, nrm = polys[i]
-        uvw = texture.fit_uv_affine(pts, uvs)
+        uvw = ingetrazo_core.texture_fit_uv_affine(pts, uvs)
         if uvw:
             maps.append(_r(texture.face_uv_axes({"uvw": uvw}, QV(*nrm))))
             maps.append(_r(ingetrazo_core.texture_placement_of({"uvw": uvw}, QV(*nrm))))

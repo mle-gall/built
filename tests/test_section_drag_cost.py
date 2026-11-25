@@ -17,7 +17,7 @@ import ingetrazo_core
 import numpy as np
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.section import PlaneReach
+import ingetrazo_core
 
 
 def _cut_plain(v0, e1, e2, normal, point, visible=None, rows=False):
@@ -80,7 +80,7 @@ def test_the_kept_heights_cut_what_the_plain_cut_cuts():
     cut = 0
     for normal in (QVector3D(0, 0, -1), QVector3D(1, 0, 0),
                    QVector3D(0.3, -0.5, 0.8).normalized()):
-        reach = PlaneReach(v0, e1, e2, normal)
+        reach = ingetrazo_core.PlaneReach(v0, e1, e2, normal)
         for z in (-6.0, -1.0, 0.0, 0.5, 1.0, 2.25, 3.0, 7.0):
             point = QVector3D(0.1, -0.2, 0.0) + normal * z
             for vis in (None, visible):
@@ -100,7 +100,7 @@ def test_a_slid_plane_works_only_the_triangles_it_crosses():
     # Small triangles, as a model's are next to its size.
     e1, e2 = e1 * 0.1, e2 * 0.1
     normal = QVector3D(0, 0, 1)
-    reach = PlaneReach(v0, e1, e2, normal)
+    reach = ingetrazo_core.PlaneReach(v0, e1, e2, normal)
     reach.cut(QVector3D(0, 0, 4.5))
     # Only triangles reaching above and below z = 4.5 are cut: a few hundred
     # of twenty thousand (``worked``, the triangles the last cut measured).
@@ -112,7 +112,7 @@ def test_the_heights_are_kept_only_for_the_same_arrays_and_normal():
     rng = np.random.default_rng(3)
     v0, e1, e2 = _triangles(rng, 50)
     n = QVector3D(0, 0, 1)
-    reach = PlaneReach(v0, e1, e2, n)
+    reach = ingetrazo_core.PlaneReach(v0, e1, e2, n)
     assert reach.fits(v0, n, e1, e2)
     assert not reach.fits(v0.copy(), n, e1, e2)
     assert not reach.fits(v0, n, e1.copy(), e2)

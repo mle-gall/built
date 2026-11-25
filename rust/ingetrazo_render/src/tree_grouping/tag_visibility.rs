@@ -151,7 +151,7 @@ pub fn choose_merge_tag(win: &Bound<'_, PyAny>, key: &str) -> PyResult<()> {
             continue;
         }
         let key = tag.getattr("key")?;
-        let label = layers.call_method1("path_label", (&scene, &key))?;
+        let label = crate::host_context::core_module(layers.py())?.getattr("tag_edits")?.call_method1("path_label", (&scene, &key))?;
         let mut label: String = label.extract()?;
         while choices.contains(&label)? {
             label = format!("{label} ({key})");
@@ -254,7 +254,7 @@ pub fn viewport_tag_menu(win: &Bound<'_, PyAny>, selection: &Bound<'_, PyAny>) -
     for layer in scene.getattr("layers")?.try_iter()? {
         let layer = layer?;
         let key: String = layer.getattr("key")?.extract()?;
-        let label: String = layers
+        let label: String = crate::host_context::core_module(layers.py())?.getattr("tag_edits")?
             .call_method1("path_label", (&scene, &key))?
             .extract()?;
         if current.len() == 1 && current.contains(&key) {
@@ -352,7 +352,7 @@ fn viewport_tag_answer(
             )?;
         }
         "active" => {
-            py.import("core.layers")?
+            crate::host_context::core_module(py)?.getattr("tag_edits")?
                 .call_method1("set_active", (scene, current.first()))?;
             scene.setattr("version", scene.getattr("version")?.extract::<u64>()? + 1)?;
         }

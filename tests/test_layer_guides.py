@@ -20,6 +20,7 @@ wins.
 """
 from __future__ import annotations
 
+import ingetrazo_core
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import json
 from types import SimpleNamespace
@@ -181,13 +182,13 @@ def test_guides_and_reference_images_can_be_moved_to_a_layer():
 def test_a_guide_drawn_with_a_layer_active_goes_onto_it():
     scene = _scene_with("Guías")
     history = History(scene)
-    L.set_active(scene, "Guías")
+    ingetrazo_core.tag_edits.set_active(scene, "Guías")
     history.execute(AddGuideCommand(Guide(V(0, 0, 0), V(0, 1, 0))))
     assert layer_of(scene.guides[-1]) == "Guías"
     history.undo()
     history.redo()
     assert layer_of(scene.guides[-1]) == "Guías"
-    L.set_active(scene, DEFAULT_LAYER)
+    ingetrazo_core.tag_edits.set_active(scene, DEFAULT_LAYER)
     history.execute(AddGuideCommand(Guide(V(5, 0, 0))))
     assert layer_of(scene.guides[-1]) == "Guides"     # its automatic layer
 
@@ -293,7 +294,7 @@ def test_groups_and_loose_lines_stay_on_layer_0():
 def test_the_active_layer_wins_over_the_automatic_ones():
     scene = _scene_with("Planta")
     history = History(scene)
-    L.set_active(scene, "Planta")
+    ingetrazo_core.tag_edits.set_active(scene, "Planta")
     history.execute(AddGuideCommand(Guide(V(0, 0, 0))))
     history.execute(AddDimensionCommand(_dimension()))
     assert layer_of(scene.guides[-1]) == "Planta"
@@ -358,7 +359,7 @@ def test_the_automatic_layers_take_the_interface_language():
 def test_active_layer_small_edits_never_walk_existing_groups(monkeypatch):
     from core.history import AddEdgeCommand, SnapshotCompound
     scene = _scene_with('Work')
-    L.set_active(scene, 'Work')
+    ingetrazo_core.tag_edits.set_active(scene, 'Work')
     history = History(scene)
     from core.purge import iter_groups
     def bounded(groups):

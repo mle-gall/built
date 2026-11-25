@@ -6,6 +6,7 @@ Both hosts bind the Rust view registry to their document controller.
 """
 from __future__ import annotations
 
+import ingetrazo_core
 import os
 from pathlib import Path
 
@@ -1387,7 +1388,7 @@ def _tree_action(win, view, action) -> None:
                 vp.notify_scene_changed()
                 rebuild()
         elif verb == "eye" and kind == "preview-folder":
-            _core(vp, "set_tag_state", folders=[ident], visible=not L.folder_visible(scene, ident, ancestors=False))
+            _core(vp, "set_tag_state", folders=[ident], visible=not ingetrazo_core.tag_edits.folder_visible(scene, ident, ancestors=False))
             vp.notify_scene_changed()
             rebuild()
         elif verb == "item" and rk == "geometry:loose":
@@ -1632,13 +1633,13 @@ def _tree_action(win, view, action) -> None:
             if folders:
                 # A linked file (or one of its tag folders): its folder in
                 # the host, so its nested files follow.
-                on = not all(L.folder_visible(scene, f) for f in folders)
+                on = not all(ingetrazo_core.tag_edits.folder_visible(scene, f) for f in folders)
                 _core(vp, "set_tag_state", folders=folders, visible=on)
             elif node:
                 ts = tags(node)
                 if ts:
                     layer = scene.layer(ts[0])
-                    shown_now = (L.effective_visible(scene, layer) if linked else bool(layer.visible)) \
+                    shown_now = (ingetrazo_core.tag_edits.effective_visible(scene, layer) if linked else bool(layer.visible)) \
                         if layer is not None else False
                     _core(vp, "set_tag_state", tags=ts, visible=not shown_now)
             else:
@@ -2117,7 +2118,7 @@ def _linked_inspector(view, win, data, key):
     if kind == "link":
         copies = tree.links.get(key, [])
         top = len(stems) == 1
-        visible = all(L.folder_visible(scene, f) for f in node.get("folders") or [node["folder"]])
+        visible = all(ingetrazo_core.tag_edits.folder_visible(scene, f) for f in node.get("folders") or [node["folder"]])
         entry = links.registry(scene).get(path) or {}
         overrides = len(entry.get("overrides") or {})
         parent = Path(path).parent
@@ -2157,7 +2158,7 @@ def _linked_inspector(view, win, data, key):
     if node["tag"]:
         ts.append(node["tag"])
     layer = scene.layer(ts[0]) if ts else None
-    visible = L.effective_visible(scene, layer) if layer is not None else True
+    visible = ingetrazo_core.tag_edits.effective_visible(scene, layer) if layer is not None else True
     cls = node["recipe"].get("class")
     rows = [("Name", node["name"]), ("Kind", "Drawing only" if kind == "tag" else "Tag folder" if kind == "tagfolder"
                                        else kind_of(cls) if cls or not tree.children.get(key) else "Group of nodes"),

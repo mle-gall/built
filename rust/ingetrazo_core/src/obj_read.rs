@@ -341,9 +341,8 @@ fn raw<'p>(py: Python<'p>, faces: &[Poly], shift: DVec3) -> PyResult<Bound<'p, P
                 t.set_item("sw", 1.)?;
                 t.set_item("sh", 1.)?;
                 if let Some(uv) = &f.uv {
-                    let map = py
-                        .import("core.texture")?
-                        .call_method1("fit_uv_affine", (&pts, uv))?;
+                    let map = crate::model::module(py, "ingetrazo_core")?
+                        .call_method1("texture_fit_uv_affine", (&pts, uv))?;
                     if !map.is_none() {
                         let a: [f64; 8] = map.extract()?;
                         t.set_item("uvw", map)?;

@@ -10,6 +10,7 @@ mounted nodes and undo; Isolate works on host groups, link rows, mounted
 nodes and mixed selections, and Show all restores what was there."""
 from __future__ import annotations
 
+import ingetrazo_core
 import time
 from pathlib import Path
 
@@ -218,10 +219,10 @@ def test_eye_and_lock_on_mounted_nodes_write_overrides_and_undo(ui):
     assert tag.locked is False
     # The link row hides the whole file through its folder, nested files included.
     act("eye", "n:link:A")
-    assert not L.folder_visible(scene, "A") and not L.effective_visible(scene, scene.layer("A / C / Flights"))
+    assert not ingetrazo_core.tag_edits.folder_visible(scene, "A") and not ingetrazo_core.tag_edits.effective_visible(scene, scene.layer("A / C / Flights"))
     assert next(r for r in rows() if r["key"] == "n:link:A")["eye"] == 0
     win.viewport.history.undo()
-    assert L.folder_visible(scene, "A")
+    assert ingetrazo_core.tag_edits.folder_visible(scene, "A")
     # A nested file's node too.
     flights = _key(view, "Flights")
     act("eye", "n:" + flights)

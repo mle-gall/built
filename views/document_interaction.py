@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Document editing, picking and painter annotations shared by the presentation hosts."""
 from __future__ import annotations
-from core.layers import effective_visible as _effective_layer_visible
+import ingetrazo_core
 from core.mesh import element_identity
 from core.element_set import ElementSet
 
@@ -63,7 +63,7 @@ from core.style import (DEFAULT_BACK_COLOR, DEFAULT_FACE_COLOR,
 from core.materials import effective_attrs, material_sig as _material_sig
 from core.snap import SnapResult, _AXIS_VECTORS
 from core.texture import face_uv_axes
-from core.layers import is_link_untagged
+import ingetrazo_core
 from core.triangulate import plane_axes
 from tools.base import Tool, ToolContext
 from core.inference import InferenceEngine

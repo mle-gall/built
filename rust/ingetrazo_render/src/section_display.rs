@@ -95,7 +95,7 @@ fn section_cut<'py>(view: &Obj<'py>) -> PyResult<Obj<'py>> {
         let reach = match cached(view, "_section_reach")? {
             Some(r) if r.call_method1("fits", (&v0, &n, &e1, &e2))?.is_truthy()? => r,
             _ => {
-                let r = sec.getattr("PlaneReach")?.call1((&v0, &e1, &e2, &n))?;
+                let r = crate::host_context::core_module(sec.py())?.getattr("PlaneReach")?.call1((&v0, &e1, &e2, &n))?;
                 view.setattr("_section_reach", &r)?;
                 r
             }
@@ -147,9 +147,8 @@ fn section_fill<'py>(view: &Obj<'py>) -> PyResult<Obj<'py>> {
             .call_method1("later", (view, 200, view.getattr("update")?))?;
         return Ok(none(py));
     }
-    let tris = py
-        .import("core.section")?
-        .call_method1("fill_triangles", (&segs, normal(view)?))?;
+    let tris = crate::host_context::core_module(py)?
+        .call_method1("section_fill_triangles", (&segs, normal(view)?))?;
     view.setattr("_section_fill_cache", (segs, &tris))?;
     view.setattr("_section_hatch_cache", PyDict::new(py))?;
     Ok(tris)
@@ -214,8 +213,8 @@ fn section_hatch<'py>(view: &Obj<'py>, spacing: &Obj<'py>, cross: bool) -> PyRes
     if memo.contains(key.clone())? {
         return memo.get_item(key);
     }
-    let lines = py.import("core.section")?.call_method1(
-        "hatch_segments",
+    let lines = crate::host_context::core_module(py)?.call_method1(
+        "section_hatch_segments",
         (cache.get_item(0)?, normal(view)?, spacing, cross),
     )?;
     memo.set_item(key, &lines)?;
@@ -226,9 +225,8 @@ fn section_hatch<'py>(view: &Obj<'py>, spacing: &Obj<'py>, cross: bool) -> PyRes
 fn cut_weights<'py>(view: &Obj<'py>, plane: &Obj<'py>, keep: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = view.py();
     let n: usize = keep.call_method0("sum")?.extract()?;
-    let style = py
-        .import("core.section")?
-        .call_method1("effective_fill", (plane, view.getattr("_frame_style")?))?;
+    let style = crate::host_context::core_module(py)?
+        .call_method1("section_effective_fill", (plane, view.getattr("_frame_style")?))?;
     let mut output = vec![1.; n];
     if style.get_item(0)?.eq("layers")? {
         if let Some(cut) = cached(view, "_section_cut_cache")? {
@@ -332,7 +330,7 @@ fn model_layer_lines<'py>(view: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = view.py();
     let layers = py.import("core.layers")?;
     let scene = view.getattr("scene")?;
-    let styles = layers.call_method1("model_line_styles", (&scene,))?;
+    let styles = crate::host_context::core_module(layers.py())?.getattr("tag_styles")?.call_method1("model_line_styles", (&scene,))?;
     if styles.len()? == 0 {
         return Ok(PyList::empty(py).into_any());
     }
@@ -384,7 +382,7 @@ fn model_layer_lines<'py>(view: &Obj<'py>) -> PyResult<Obj<'py>> {
         let (dash, gap): (Obj, Obj) = layers
             .call_method1("dash_segments", (&segs, pattern))?
             .extract()?;
-        let spec = layers.call_method1("linetype_text", (names.get_item(tag)?, &scene))?;
+        let spec = crate::host_context::core_module(layers.py())?.getattr("tag_styles")?.call_method1("linetype_text", (names.get_item(tag)?, &scene))?;
         lines.append((color, dash, gap, model_line_words(py, &segs, &spec)?))?;
     }
     view.setattr("_model_lines_cache", (key, &lines))?;

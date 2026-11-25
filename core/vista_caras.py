@@ -109,7 +109,6 @@ def texture_average(path, cache={}) -> tuple | None:
 
 class _Parallel:
     def __init__(self, camera):
-        import ingetrazo_core
         self.eye, self.right, self.up, self.fwd = ingetrazo_core.hlr_camera_basis(camera)
 
     def facing_back(self, normal, centre) -> bool:
@@ -149,7 +148,6 @@ class _Perspective:
         return float(np.asarray(normal) @ (centre - self.eye_pt)) > 0.0
 
     def ring(self, pts):
-        import ingetrazo_core
         poly = ingetrazo_core.hlr_clip_polygon(list(self._clip(pts)))
         if len(poly) < 3:
             return np.empty((0, 2)), np.empty((0,))
@@ -170,20 +168,20 @@ def _faces_of(scene):
     """``(face, matrix, paint, layer)`` for every face the line drawing
     sees: the loose model's visible faces and every visible object's
     placements, each with the paint its default faces wear."""
-    from core.group import iter_painted_placements
-    from core.layers import DEFAULT_LAYER, layer_of, object_layer, layer_paint
+    import ingetrazo_core
+    from core.layers import DEFAULT_LAYER, layer_of
     style = getattr(scene, "display_style", None)
     by_layer = bool(getattr(style, "color_by_layer", False))
-    loose_paint = layer_paint(scene, None) if by_layer else None
+    loose_paint = ingetrazo_core.tag_styles.layer_paint(scene, None) if by_layer else None
     for f in scene.loose_mesh.faces:
         if scene.entity_visible(f):
             yield f, None, loose_paint, layer_of(f)
     for g in scene.groups:
         if not scene.entity_visible(g) or getattr(g, "billboard", False):
             continue
-        owner = object_layer(g)
-        top = layer_paint(scene, g) if by_layer else None
-        for pg, m, paint in iter_painted_placements(g):
+        owner = ingetrazo_core.tag_styles.object_layer(g)
+        top = ingetrazo_core.tag_styles.layer_paint(scene, g) if by_layer else None
+        for pg, m, paint in ingetrazo_core.group_iter_painted_placements(g):
             for f in pg.mesh.faces:
                 own = layer_of(f)
                 yield (f, m, top if by_layer else paint,

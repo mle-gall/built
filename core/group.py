@@ -12,6 +12,9 @@ Selected as a unit and moved/exploded via the commands in :mod:`core.history`.
 """
 from __future__ import annotations
 
+import ingetrazo_core as _NATIVE
+
+import ingetrazo_core
 import copy
 from contextvars import ContextVar
 import itertools
@@ -552,40 +555,17 @@ def _merged_placements(group, placements=None) -> Mesh:
     return new
 
 
-def iter_placements(group, base=None):
-    """Yield ``(group, world_matrix)`` for ``group`` and every nested
-    placement below it, depth first, each matrix already composed from the
-    root down.
-
-    One call is all a consumer needs to walk a component that keeps its
-    internal sharing: the geometry lives in ``g.mesh`` (prototype, local
-    coordinates) and the matrix puts it in the world. Consumers that want a
-    single merged mesh instead should use :func:`world_mesh`; consumers that
-    draw or pick per prototype want this, because it does NOT copy anything.
-    ``world_matrix`` is ``None`` only when the whole chain is untransformed,
-    i.e. a classic group whose mesh already sits in world coordinates."""
-    m = getattr(group, "xform", None)
-    if base is not None:
-        m = base if m is None else base * m
-    yield group, m
-    for child in getattr(group, "children", None) or ():
-        yield from iter_placements(child, m)
-
-
-def iter_painted_placements(group, base=None, paint=None):
-    """:func:`iter_placements` with the paint each placement's default faces
-    show: ``(group, world_matrix, paint)``. A placement with no paint of its
-    own wears the nearest painted container above it, at any depth — the
-    .skp rule the import already follows (#1101: a plain piece two levels
-    down showed the top-level object's paint, or none). ``paint`` is what
-    ``group`` itself sits in."""
-    m = getattr(group, "xform", None)
-    if base is not None:
-        m = base if m is None else base * m
-    paint = getattr(group, "material", None) or paint
-    yield group, m, paint
-    for child in getattr(group, "children", None) or ():
-        yield from iter_painted_placements(child, m, paint)
+#: ``iter_placements(group, base=None)``: ``(group, world_matrix)`` for
+#: ``group`` and every nested placement below it, depth first, each matrix
+#: already composed from the root down (``None`` only while the whole chain is
+#: untransformed: a classic group whose mesh already sits in world
+#: coordinates). The geometry lives in ``g.mesh`` (prototype, local
+#: coordinates) and the matrix puts it in the world; nothing is copied. A
+#: native iterator over the Rust document
+#: (``rust/ingetrazo_core/src/model/placement_walks.rs``), lazy as a
+#: generator; ``ingetrazo_core.group_iter_painted_placements`` adds the paint
+#: each placement's default faces show.
+iter_placements = _NATIVE.group_iter_placements
 
 
 def visible_placements(scene, group):
@@ -599,15 +579,15 @@ def visible_placements(scene, group):
     instance below it on that tag, whatever its children are tagged. A
     hidden group two levels down drew in a sheet while the viewport left it
     out, because :func:`world_mesh` folds in every child."""
-    from core.layers import effective_visible   # a hidden folder hides its tags
+    import ingetrazo_core   # a hidden folder hides its tags
 
     def shown(layer):
         ly = scene.layer(layer) if layer else None
-        return ly is None or effective_visible(scene, ly)
+        return ly is None or ingetrazo_core.tag_edits.effective_visible(scene, ly)
 
     def blocking(layer):
         ly = scene.layer(layer) if layer else None
-        return ly is not None and (not effective_visible(scene, ly)
+        return ly is not None and (not ingetrazo_core.tag_edits.effective_visible(scene, ly)
                                    or ly.locked)
 
     def walk(node, world, hidden, forced, inherited):

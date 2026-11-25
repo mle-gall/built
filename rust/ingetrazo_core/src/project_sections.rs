@@ -150,10 +150,8 @@ pub(crate) fn section_inspector(
         (format!("section:{uid}:cut"), "Switch cut".into()),
     ];
     if p.getattr("active")?.is_truthy()? {
-        let values = scene
-            .py()
-            .import("core.section")?
-            .call_method1("effective_fill", (&p, scene.getattr("display_style")?))?;
+        let values = crate::model::module(scene.py(), "ingetrazo_core")?
+            .call_method1("section_effective_fill", (&p, scene.getattr("display_style")?))?;
         let colour: Vec<f64> = values.get_item(1)?.extract()?;
         let rgb = colour
             .iter()

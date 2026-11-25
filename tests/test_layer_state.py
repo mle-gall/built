@@ -48,7 +48,7 @@ def marked(project):
 def test_drawing_marks_selection_tags_without_changing_the_active_tag():
     project, a, b = drawing()
     scene = project.scene
-    L.set_active(scene, "B")
+    ingetrazo_core.tag_edits.set_active(scene, "B")
     scene.select([a])
     assert marked(project) == {"preview-tag:A": 1}
     assert L.active_layer(scene) == "B"
@@ -98,7 +98,7 @@ def test_layer_state_round_trips(seed):
     names = [ly.name for ly in scene.layers]
     for ly in scene.layers:
         ly.visible, ly.locked = rng.random() < 0.7, rng.random() < 0.3
-    L.set_active(scene, rng.choice(names[1:]))
+    ingetrazo_core.tag_edits.set_active(scene, rng.choice(names[1:]))
     saved = ingetrazo_core.tag_edits.layer_state(scene)
     before = [(ly.name, ly.visible, ly.locked) for ly in scene.layers]
     active = scene.active_layer
@@ -113,7 +113,7 @@ def test_layer_state_round_trips(seed):
 def test_layer_state_skips_layers_made_or_deleted_since():
     scene = Scene()
     scene.layers += [Layer("A", visible=False), Layer("B")]
-    L.set_active(scene, "B")
+    ingetrazo_core.tag_edits.set_active(scene, "B")
     saved = ingetrazo_core.tag_edits.layer_state(scene)
     scene.layers.remove(scene.layer("B"))
     scene.layers.append(Layer("C", visible=False))

@@ -405,7 +405,7 @@ fn drawing_value(py: Python<'_>, field: &str, input: &str) -> PyResult<(Field, F
                 (field, Value::from_py(&clean)?)
             } else {
                 if nums.len() != 2 || nums.iter().any(|v| v.abs() > 10000.) { return Err(PyValueError::new_err("Start X and Y must be within 10000 mm")); }
-                let value=py.import("core.layers")?.call_method1("clean_offset",(nums,))?;
+                let value=crate::model::module(py, "ingetrazo_core")?.getattr("tag_styles")?.call_method1("clean_offset",(nums,))?;
                 (field, Value::from_py(&value)?)
             }
         }

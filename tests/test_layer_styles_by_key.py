@@ -27,8 +27,8 @@ def scene():
     sc.layers.append(walls)
     assert L.rename_layer(sc, "Muros", "Paredes")
     # Two tags with one label, in two folders.
-    north = L.add_folder(sc, "Norte")
-    south = L.add_folder(sc, "Sur")
+    north = ingetrazo_core.tag_edits.add_folder(sc, "Norte")
+    south = ingetrazo_core.tag_edits.add_folder(sc, "Sur")
     a = Layer("Corte", key="corte-norte", folder=north, hatch="concrete",
               cut_weight=0.35, linetype="dotted", color=(0.1, 0.6, 0.2))
     b = Layer("Corte", key="corte-sur", folder=south, hatch="insulation",
@@ -50,10 +50,10 @@ def test_the_setup_is_what_it_says(scene):
 
 
 def test_cut_hatches_and_their_looks_are_keyed_by_key(scene):
-    assert L.cut_hatches(scene) == {"Muros": "brick",
+    assert ingetrazo_core.tag_styles.cut_hatches(scene) == {"Muros": "brick",
                                     "corte-norte": "concrete",
                                     "corte-sur": "insulation"}
-    forms = L.cut_hatch_forms(scene, 50.0)
+    forms = ingetrazo_core.tag_styles.cut_hatch_forms(scene, 50.0)
     assert set(forms) == set(KEYS)
     assert forms["corte-sur"]["angle"] == 45.0
     assert forms["corte-norte"]["angle"] == 0.0
@@ -63,7 +63,7 @@ def test_cut_hatches_and_their_looks_are_keyed_by_key(scene):
     assert {"Muros", "corte-norte", "corte-sur"} <= set(fills)
     assert fills["corte-norte"] != fills["corte-sur"]
     for name in ("Paredes", "Corte"):            # no label leaks in as a key
-        for table in (L.cut_hatches(scene), forms, fills):
+        for table in (ingetrazo_core.tag_styles.cut_hatches(scene), forms, fills):
             assert name not in table
 
 
@@ -75,7 +75,7 @@ def test_line_styles_carry_each_tags_own_pen_and_line(scene):
     assert styles["corte-sur"][1] == "center"
     assert styles["corte-sur"][3] == 0.18
     assert "Paredes" not in styles and "Corte" not in styles
-    model = L.model_line_styles(scene)
+    model = ingetrazo_core.tag_styles.model_line_styles(scene)
     assert set(model) == set(KEYS)
     assert model["corte-norte"][1] != model["corte-sur"][1]
 
@@ -96,15 +96,15 @@ def test_the_view_inks_each_cut_with_its_tags_weight(scene):
 def test_the_legend_and_the_dxf_names_tell_shared_labels_apart(scene):
     rows, swatches = L.legend_rows(scene)
     assert "Paredes" in rows
-    north = L.path_label(scene, "corte-norte")
-    south = L.path_label(scene, "corte-sur")
+    north = ingetrazo_core.tag_edits.path_label(scene, "corte-norte")
+    south = ingetrazo_core.tag_edits.path_label(scene, "corte-sur")
     assert north != south and north in rows and south in rows
     assert swatches[north]["hatch"] == "concrete"
     assert swatches[south]["hatch"] == "insulation"
     assert swatches[south]["hatch_angle"] == 45.0
     assert swatches[north]["linetype"] == "dotted"
     assert swatches[south]["linetype"] == "center"
-    labels = L.export_labels(scene)
+    labels = ingetrazo_core.tag_edits.export_labels(scene)
     assert labels["corte-norte"] != labels["corte-sur"]
     assert labels["Muros"] == "Paredes"
 
