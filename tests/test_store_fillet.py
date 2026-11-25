@@ -11,7 +11,7 @@ from ingetrazo_core import Vec3 as V
 from core import _native, mesh as M, store_mesh as S
 from core.fillet import apply_fillet, plan_fillet
 from core.history import SnapshotMutation
-from core.vertex_bevel import plan_vertex_bevel
+from ingetrazo_core import plan_vertex_bevel
 from tests.test_fillet import box, edge_at
 from tests.test_vertex_bevel import pyramid
 

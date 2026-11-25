@@ -13,7 +13,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from core import _native, progress as P
+from core import _native
+from ingetrazo_core import progress as P
 from core import vista_caras as VC
 from core.vista_caras import FaceFill
 from tests import vista_caras_reference as R

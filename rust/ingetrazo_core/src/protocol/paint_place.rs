@@ -160,7 +160,7 @@ fn paint_material<'py>(
     let plane = plane
         .map(|p| -> PyResult<_> { Ok((vec3(&p.get_item(0)?)?, p.get_item(1)?.extract::<f64>()?)) })
         .transpose()?;
-    let cmd = py.import("core.paint_ops")?.call_method1(
+    let cmd = py.import("ingetrazo_core")?.call_method1(
         "build_paint",
         (
             target, targets, clicked, group, back, default, color, texture, opacity, mat, plane,

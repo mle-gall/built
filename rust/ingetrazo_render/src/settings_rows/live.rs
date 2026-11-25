@@ -218,12 +218,10 @@ fn read_named_ndof_profiles(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
         let table = py.import("json")?.call_method1("loads", (raw.str()?,))?;
         let profiles = PyDict::new(py);
         if let Ok(table) = table.cast::<PyDict>() {
-            let convert = py
-                .import("core.ndof_profiles")?
-                .getattr("profile_from_dict")?;
+            let convert = crate::preferences::device_profile::profile_from_dict;
             for (name, data) in table.iter() {
                 if (1..=80).contains(&name.len()?) {
-                    profiles.set_item(name, convert.call1((data,))?)?;
+                    profiles.set_item(name, convert(&data)?)?;
                 }
             }
         }
@@ -266,11 +264,9 @@ fn save_ndof(nd: &Obj, named: &Bound<PyDict>, selected: &str, st: &Obj) -> PyRes
         },
     )?;
     let profiles = PyDict::new(py);
-    let convert = py
-        .import("core.ndof_profiles")?
-        .getattr("profile_to_dict")?;
+    let convert = crate::preferences::device_profile::profile_to_dict;
     for (name, profile) in named.iter() {
-        profiles.set_item(name, convert.call1((profile,))?)?;
+        profiles.set_item(name, convert(&profile)?)?;
     }
     st.call_method1(
         "setValue",

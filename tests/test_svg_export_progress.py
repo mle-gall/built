@@ -16,7 +16,7 @@ import pytest
 pytest.importorskip("manifold3d")
 
 
-from core import progress as P                         # noqa: E402
+from ingetrazo_core import progress as P                         # noqa: E402
 from core import vista_caras as VC                      # noqa: E402
 from core.vista_caras import FaceFill                   # noqa: E402
 from tests.vista_caras_reference import _scene        # noqa: E402
@@ -40,7 +40,7 @@ def test_the_visible_faces_tell_how_far_they_have_come(monkeypatch):
     plain = VC._visible_parts(_faces())
     with P.reporting(told.append):
         reported = VC._visible_parts(_faces())
-    assert P._report is None
+    assert not P.reporting_active()
     assert len(told) >= 4
     assert told == sorted(told)
     assert 0.0 <= told[0] and told[-1] < 1.0
@@ -158,7 +158,7 @@ def test_cancel_on_the_bar_raises_and_puts_everything_back(monkeypatch):
     assert len(made) == 1
     assert len(made[0].values) == 4 and made[0].values == sorted(made[0].values)
     assert made[0].cancelled and not win._chrome_jobs
-    assert P._report is None
+    assert not P.reporting_active()
 
 
 def _window_with_faces(host):
@@ -255,3 +255,22 @@ def test_a_preview_does_not_start_inside_another(tmp_path, monkeypatch):
     assert model.begin_preview(next_ticket) and model.finish_preview(next_ticket, "")
 
 
+
+
+def test_nested_and_concurrent_exports_keep_their_own_reporter(monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+
+    monkeypatch.setattr(P, "REPORT_EVERY", 0.0)
+    outer, inner = [], []
+    with P.reporting(outer.append):
+        P.tick(0.1)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            assert not pool.submit(P.reporting_active).result()
+        with pytest.raises(ValueError):
+            with P.reporting(inner.append):
+                P.tick(0.5)
+                raise ValueError("cancelled")
+        P.tick(0.8)
+    assert outer == [0.1, 0.8]
+    assert inner == [0.5]
+    assert not P.reporting_active()

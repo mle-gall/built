@@ -107,7 +107,6 @@ for _plat, _names in _DWG_FILES.items():
 # ── Hidden imports ───────────────────────────────────────────────────────────
 hiddenimports = [
     # Lazily imported project modules (inside functions) — listed for safety.
-    'core.text3d',
     'core.textlabel',
 ]
 
@@ -133,7 +132,6 @@ hiddenimports += ['formats.rfa']
 omit_rfa = sys.platform == 'darwin' and os.environ.get('BUILT_PACKAGE_RFA') == '0'
 if not omit_rfa and _ilu.find_spec('ingetrazo_rfa') is not None:
     hiddenimports += collect_submodules('ingetrazo_rfa')
-hiddenimports += ['core.renderer_settings']
 if _ilu.find_spec('ingetrazo_render') is None:
     raise RuntimeError('Build ingetrazo_render with scripts/build_native.sh first')
 hiddenimports += collect_submodules('ingetrazo_render')
@@ -151,7 +149,6 @@ hiddenimports += [
     'core.ai_recipes',
     'core.bim',
     # Render with Blender (#181): the plugin's logic and the GLB it sends.
-    'core.render_blender',
     'formats.gltf',
     'tools.place_group',
     'tools.paste',

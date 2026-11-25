@@ -255,7 +255,7 @@ impl TreePaint {
                 if color.is_none() {
                     color = (1., 1., 1.).into_pyobject(py)?.into_any();
                 }
-                py.import("core.paint_ops")?.call_method1(
+                py.import("ingetrazo_core")?.call_method1(
                     "paint_stamp",
                     (color, mat.getattr("texture")?, mat.getattr("opacity")?, mat),
                 )?

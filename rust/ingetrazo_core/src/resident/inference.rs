@@ -2,6 +2,7 @@
 //! Screen-space bounds of resident instances for cursor queries.
 mod edges;
 mod lease;
+mod prepare;
 use numpy::{ndarray::Array2, IntoPyArray, PyArray2, PyReadonlyArray2};
 use pyo3::{exceptions::PyValueError, prelude::*};
 #[pyfunction]
@@ -69,6 +70,7 @@ fn project_boxes<'py>(
     Ok((lo.into_pyarray(py), hi.into_pyarray(py)))
 }
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    prepare::register(m)?;
     m.add_class::<edges::ResidentEdges>()?;
     m.add_class::<lease::SceneLease>()?;
     m.add_function(wrap_pyfunction!(nearest_inference_triangle, m)?)?;

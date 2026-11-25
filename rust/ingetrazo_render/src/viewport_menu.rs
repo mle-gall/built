@@ -675,7 +675,7 @@ fn glue(
         "grow" => {
             let scene = vp.getattr("scene")?;
             let current = scene.getattr("selection")?;
-            let ops = py.import("core.select_ops")?;
+            let ops = py.import("ingetrazo_core")?;
             let found = match arg {
                 "all_connected" | "bounding_edges" => ops.call_method1(arg, (current,))?,
                 "same_material" | "same_layer" | "same_definition" =>

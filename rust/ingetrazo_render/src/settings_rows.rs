@@ -773,9 +773,8 @@ fn display<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
 /// The 3D mouse model with the saved profiles, and those profiles.
 pub fn device_preferences<'py>(env: &Bound<'py, PyAny>, named: Option<Bound<'py, PyAny>>) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py = env.py();
-    let profiles = py.import("core.ndof_profiles")?;
     let nd = py.import("views.ndof_input")?.call_method0("load_settings")?;
-    let profile = profiles.call_method1("profile_to_dict", (&nd,))?;
+    let profile = crate::preferences::device_profile::profile_to_dict(&nd)?;
     if nd.getattr("mapping_preset")?.eq("original")? {
         profile.set_item("inversion", apply(py)?.call_method1("legacy_ndof_inversion", (&nd,))?)?;
     }
@@ -785,7 +784,7 @@ pub fn device_preferences<'py>(env: &Bound<'py, PyAny>, named: Option<Bound<'py,
     };
     let dicts = PyDict::new(py);
     for (k, v) in named.cast::<PyDict>()?.iter() {
-        dicts.set_item(k, profiles.call_method1("profile_to_dict", (v,))?)?;
+        dicts.set_item(k, crate::preferences::device_profile::profile_to_dict(&v)?)?;
     }
     let json = py.import("json")?;
     let selected = env.getattr("st")?.call_method1("value", ("ndof/selected_profile", ""))?;
@@ -809,7 +808,7 @@ pub fn device_edit<'py>(env: &Bound<'py, PyAny>, edits: &Bound<'py, PyDict>, nam
     for (k, v) in edits.iter() {
         model.call_method1("edit", (k, json.call_method1("dumps", (v,))?))?;
     }
-    let nd = py.import("core.ndof_profiles")?.call_method1("profile_from_dict", (json.call_method1("loads", (model.call_method0("profile")?,))?,))?;
+    let nd = crate::preferences::device_profile::profile_from_dict(&json.call_method1("loads", (model.call_method0("profile")?,))?)?;
     nd.setattr("enabled", model.getattr("enabled")?)?;
     nd.setattr("lock_rotation", model.getattr("locked")?)?;
     let st = env.getattr("st")?;

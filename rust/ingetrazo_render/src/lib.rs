@@ -3441,6 +3441,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<preferences::RestartPreferences>()?;
     m.add_class::<preferences::PreferencePage>()?;
     m.add_function(wrap_pyfunction!(preferences::edit_ai_connection, m)?)?;
+    preferences::device_profile::register(m)?;
     m.add_class::<preferences::DevicePreferences>()?;
     m.add_class::<preferences::DeviceReadings>()?;
     m.add_class::<about::AboutReview>()?;

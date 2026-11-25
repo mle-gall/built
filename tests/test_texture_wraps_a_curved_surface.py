@@ -16,7 +16,7 @@ from ingetrazo_core import Vec3 as QVector3D
 from core.mesh import Mesh
 from core.texture import face_uv_axes
 from ingetrazo_core import texture_continuous_maps as continuous_maps
-from core.paint_ops import _face_plane, _surface_commands
+from ingetrazo_core import paint_face_plane, surface_commands
 
 TEX = {"path": "brick.png", "sw": 0.5, "sh": 0.5}
 
@@ -83,13 +83,13 @@ def test_the_paint_tool_wraps_the_surface_from_the_clicked_facet():
         version = 0
         materials = {}
         groups = []
-    cmds = _surface_commands(m, faces, faces[3], TEX, None)
+    cmds = surface_commands(m, faces, faces[3], TEX, None)
     assert cmds is not None and len(cmds) == len(faces)
     for c in cmds:
         c.do(_Scene())
     assert all(f.attrs["texture"].get("uvw") for f in faces)
     # A single flat face is not a surface: the ordinary rule applies.
-    assert _surface_commands(m, [faces[0]], faces[0], TEX, None) is None
+    assert surface_commands(m, [faces[0]], faces[0], TEX, None) is None
     # A positioned sample from another plane wraps with its LOOK.
     from tools.texture_position import TextureMap
     tex = {"path": "brick.png", "sw": 0.5, "sh": 0.5,
@@ -97,7 +97,7 @@ def test_the_paint_tool_wraps_the_surface_from_the_clicked_facet():
                              QVector3D(0, 1, 0)).uvw()}
     floor = m.add_face([QVector3D(5, 5, 0), QVector3D(6, 5, 0),
                         QVector3D(6, 6, 0), QVector3D(5, 6, 0)])
-    cmds = _surface_commands(m, faces, faces[0], tex, _face_plane(floor))
+    cmds = surface_commands(m, faces, faces[0], tex, paint_face_plane(floor))
     for c in cmds:
         c.do(_Scene())
     gu, _cu, gv, _cv = face_uv_axes(faces[0].attrs["texture"], faces[0].normal())
@@ -117,7 +117,7 @@ def test_a_selected_surface_wraps_too_and_the_rest_of_the_selection_does_not():
         version = 0
         materials = {}
         groups = []
-    cmds = _surface_commands(m, faces + [flat], faces[2], TEX, None)
+    cmds = surface_commands(m, faces + [flat], faces[2], TEX, None)
     assert cmds is not None
     for c in cmds:
         c.do(_Scene())

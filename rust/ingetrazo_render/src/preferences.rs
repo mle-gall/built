@@ -1,5 +1,6 @@
 //! Device preferences shown in the Settings sheet. Python supplies the driver
-//! and persists its existing portable profile format.
+//! settings. The portable profile uses the same axes and actions as the editor.
+pub(crate) mod device_profile;
 use pyo3::{exceptions::PyValueError, prelude::*};
 use serde_json::{json, Value};
 

@@ -436,7 +436,7 @@ fn apply<'py>(a: &Args<'py>) -> Reply<'py> {
             }
         }
         if grow.eq("connected")? {
-            let all_connected = imported(py, "core.select_ops")?.getattr("all_connected")?;
+            let all_connected = imported(py, "ingetrazo_core")?.getattr("all_connected")?;
             picked.call_method1(
                 "extend",
                 (all_connected.call1((PyList::new(py, [entity.clone()])?.into_any(),))?,),
