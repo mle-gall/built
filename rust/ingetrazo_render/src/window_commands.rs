@@ -250,7 +250,7 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
             }
             let vp = viewport(win)?;
             let settings = py.import("views.ndof_input")?.call_method0("current_settings")?;
-            let moved = py.import("core.ndof")?.call_method1("apply_ndof", (vp.getattr("camera")?, a.req(0, "sample")?, a.req(1, "dt")?, vp.call_method0("height")?, settings))?;
+            let moved = py.import("ingetrazo_render.ndof")?.call_method1("apply_ndof", (vp.getattr("camera")?, a.req(0, "sample")?, a.req(1, "dt")?, vp.call_method0("height")?, settings))?;
             if moved.is_truthy()? {
                 vp.call_method0("update")?;
             }
@@ -272,7 +272,7 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
         }
         // Back to Select once a picture is placed, so the next click doesn't stamp a copy.
         "activate_select_tool" => done!(win.call_method1("_activate_tool", ("select",))),
-        "_ensure_composer" => py.import("views.wgpu_sheets")?.call_method1("composer_for", (win,)),
+        "_ensure_composer" => py.import("ingetrazo_render.sheet_workspace")?.call_method1("composer_for", (win,)),
         "_on_open_composer" => done!(win.call_method0("_ensure_composer")?.call_method0("show")),
         "_show_sheet" => {
             let index = a.req(0, "index")?;
@@ -778,7 +778,7 @@ fn commands_class<'py>(m: &Bound<'py, PyModule>) -> PyResult<Bound<'py, PyAny>> 
     let staticmethod = py.import("builtins")?.getattr("staticmethod")?;
     ns.set_item("_survey_note", staticmethod.call1((n.getattr("survey_note")?,))?)?;
     ns.set_item("_dxf_failure_text", staticmethod.call1((n.getattr("dxf_failure")?,))?)?;
-    let recent = func(py, |py, _| Ok(py.import("core.recent")?.getattr("menu")?.call((), Some(&kwargs(py, &[("limit", obj(py, 10)?.into_bound(py))])?))?.unbind()))?;
+    let recent = func(py, |py, _| Ok(py.import("ingetrazo_core.recent")?.getattr("menu")?.call((), Some(&kwargs(py, &[("limit", obj(py, 10)?.into_bound(py))])?))?.unbind()))?;
     ns.set_item("_recent_paths", staticmethod.call1((recent,))?)?;
     let makes_faces = func(py, |py, a| Ok(native(py)?.call_method1("makes_faces", (a.get_item(0)?,))?.unbind()))?;
     ns.set_item("_makes_faces", staticmethod.call1((makes_faces,))?)?;

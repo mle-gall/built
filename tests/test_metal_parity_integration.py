@@ -116,7 +116,7 @@ def test_soft_pairs_and_opacity_survive_pack():
 
 def test_tape_and_eraser_reference_pickers(view):
     from core.guide import Guide
-    from views.wgpu_inference import prepare
+    from ingetrazo_core import resident_prepare as prepare
     f = face(view)
     view.scene.guides.append(Guide(QVector3D(0,1,0), QVector3D(1,0,0)))
     view.inference_index = prepare(view.packed, view.scene)
@@ -199,7 +199,7 @@ def test_eraser_guide_click_and_undo(view):
 
 def test_arc_uses_resident_tangent_without_gl_placement_scan(view):
     from tools.arc import ArcTool
-    from views.wgpu_inference import prepare
+    from ingetrazo_core import resident_prepare as prepare
     points=[QVector3D(np.cos(t),np.sin(t),0) for t in np.linspace(0,np.pi/2,9)]
     for a,b in zip(points,points[1:]):
         view.scene.mesh.add_edge(a,b).curve=42

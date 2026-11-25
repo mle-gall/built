@@ -293,7 +293,7 @@ def test_native_move_preview_then_history_commit(completion):
 
 
 def test_inference_move_reuses_prototype_and_hits_updated_row():
-    from views.wgpu_inference import prepare, surface
+    from ingetrazo_core import resident_prepare as prepare, surface
     scene, updates = fixture_scene()
     index = prepare(updates.packed)
     base, prototype = index.base, index.protos[0]
@@ -311,7 +311,7 @@ def test_inference_move_reuses_prototype_and_hits_updated_row():
 def test_inference_reads_committed_rows_from_the_native_index():
     """No copy of the instance table: a row not updated since prepare
     reads from the native placements, an updated one from the update."""
-    from views.wgpu_inference import prepare
+    from ingetrazo_core import resident_prepare as prepare
     scene, updates = fixture_scene()
     index = prepare(updates.packed)
     assert not hasattr(index, 'initial')
@@ -326,7 +326,7 @@ def test_inference_reads_committed_rows_from_the_native_index():
 
 
 def test_moving_geometry_leaves_the_snap_candidates_as_columns():
-    from views.wgpu_inference import ResidentEdges
+    from ingetrazo_core import ResidentEdges
     a = np.array([[0., 0, 0], [1, 0, 0], [5, 5, 5]])
     b = np.array([[1., 0, 0], [1, 1, 0], [6, 5, 5]])
     context = object()
@@ -339,7 +339,7 @@ def test_moving_geometry_leaves_the_snap_candidates_as_columns():
 
 
 def test_inference_shared_mesh_change_invalidates_only_its_prototype():
-    from views.wgpu_inference import prepare, surface
+    from ingetrazo_core import resident_prepare as prepare, surface
     scene, updates = fixture_scene()
     index = prepare(updates.packed)
     mesh = scene.groups[0].mesh
@@ -624,7 +624,7 @@ def test_a_rebake_the_size_of_the_scene_falls_back_to_a_full_pack():
 
 
 def test_native_incremental_matches_full_rebuild():
-    from views.wgpu_inference import prepare
+    from ingetrazo_core import resident_prepare as prepare
     scene, updates = fixture_scene()
     index = prepare(updates.packed, scene)
     base = index.base
@@ -1012,3 +1012,21 @@ def test_retyped_line_updates_resident_face_split():
     check(1)
     assert history.undo()
     check(1)
+
+
+def test_incremental_edge_distance_ties_use_row_then_edge():
+    from ingetrazo_core import resident_prepare as prepare
+    scene, updates = fixture_scene()
+    scene.groups.append(Group(scene.groups[0].mesh))
+    packed = pack_scene(scene)
+    index = prepare(packed)
+    # An edit to a third placement still puts a two-row query in incremental
+    # mode. The untouched BVH orders ties by the supplied candidate order.
+    index.update([2], packed)
+    for edited in ([], [0]):
+        index.update(edited, packed)
+        rows, edges, _, _, distances = index.edges_near(
+            [1, 0], QMatrix4x4().data(), 100., 100., 50., 50., 300., 32)
+        ranked = list(zip(distances.tolist(), rows.tolist(), edges.tolist()))
+        assert set(rows) == {0, 1}
+        assert ranked == sorted(ranked)

@@ -93,7 +93,7 @@ fn cached_normal(mesh: &Obj<'_>, key: &Obj<'_>) -> PyResult<Vec3> {
 }
 
 #[pyfunction]
-fn exchange_paint(attrs: &Obj<'_>) -> PyResult<()> {
+pub(super) fn exchange_paint(attrs: &Obj<'_>) -> PyResult<()> {
     let back = attrs.call_method1("pop", ("back",))?;
     let front = PyDict::new(attrs.py());
     for key in attrs
@@ -114,7 +114,7 @@ fn exchange_paint(attrs: &Obj<'_>) -> PyResult<()> {
     Ok(())
 }
 #[pyfunction]
-fn swap_orientation_paint(face: &Obj<'_>) -> PyResult<()> {
+pub(super) fn swap_orientation_paint(face: &Obj<'_>) -> PyResult<()> {
     let attrs = face.getattr("attrs")?;
     if !attrs.is_none()
         && attrs

@@ -289,9 +289,9 @@ def test_closing_the_first_tab_lets_it_go_too(win, tmp_path):
 
 
 def test_closing_tabs_hands_their_memory_back_once(win, tmp_path, monkeypatch):
-    from core import malloc_arenas
+    import ingetrazo_core
     trims = []
-    monkeypatch.setattr(malloc_arenas, "trim", lambda: trims.append(1))
+    monkeypatch.setattr(ingetrazo_core, "trim_heap", lambda: trims.append(1))
     scenes = []
     for name in ("a.igz", "b.igz"):
         assert win.open_path(_igz(tmp_path, name))

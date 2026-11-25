@@ -93,9 +93,10 @@ def test_native_release_review(tmp_path):
     opened = tmp_path / "download-url"
     release_url = "https://example.invalid/releases/test"
     venv = fixture_venv(tmp_path,
-        "from core import desktop_open, update_check\n"
+        "from core import desktop_open\n"
+        "from ingetrazo_render import release_check\n"
         "from pathlib import Path\n"
-        f"update_check.fetch_latest = lambda: update_check.Release('999', '2026-01-01', '## Fixed', {release_url!r})\n"
+        f"release_check.fetch_latest = lambda: release_check.Release('999', '2026-01-01', '## Fixed', {release_url!r})\n"
         f"desktop_open.open_url = lambda url: Path({str(opened)!r}).write_text(url)\n")
     model = tmp_path / "blank.igz"
     save_scene(Scene(), model)
@@ -184,7 +185,7 @@ def test_native_about_copies_diagnostics(tmp_path):
     copied = tmp_path / "copied.txt"
     venv = fixture_venv(tmp_path,
         "import built_shell\nfrom pathlib import Path\n"
-        f"built_shell.pasteboard_write = lambda items: Path({str(copied)!r}).write_bytes(items[0][1])\n")
+        f"built_shell.pasteboard_write = lambda items: Path({str(copied)!r}).write_bytes(items[0][1]) == len(items[0][1])\n")
     home = tmp_path / "home"
     home.mkdir()
     steps = tmp_path / "steps"
@@ -233,8 +234,8 @@ def test_native_extensions_open_painted_and_apply(tmp_path):
     home.mkdir()
     plugins = tmp_path / "plugins"
     venv = fixture_venv(tmp_path,
-        "from pathlib import Path\nfrom core import extension_manager as em\n"
-        f"em.user_plugins_dir = lambda: Path({str(plugins)!r})\n"
+        "from pathlib import Path\nfrom ingetrazo_core import extension_manager as em\n"
+        f"from core import extensions\nextensions.user_plugins_dir = lambda: Path({str(plugins)!r})\n"
         "em.load_cached_catalog = lambda: None\n"
         "em.refresh_catalog = lambda: em.CatalogSnapshot([], {}, '', False)\n")
     steps = tmp_path / "commands"
@@ -360,7 +361,7 @@ def test_native_menu_search_and_persisted_keyboard_binding(tmp_path):
     from ingetrazo_core import NativeSettings
     from core.scene import Scene
     from formats.igz import save_scene
-    from core.shortcuts import _store_key
+    from ingetrazo_render.keyboard_bindings import settings_key
     model = tmp_path / "empty.built"
     save_scene(Scene(), model)
     profile, home = tmp_path / "profile", tmp_path / "home"
@@ -368,7 +369,7 @@ def test_native_menu_search_and_persisted_keyboard_binding(tmp_path):
     config.mkdir(parents=True)
     home.mkdir()
     settings = NativeSettings(profile)
-    settings.setValue("shortcuts/" + _store_key("menu:cutlist"), "Ctrl+Shift+F9")
+    settings.setValue("shortcuts/" + settings_key("menu:cutlist"), "Ctrl+Shift+F9")
     settings.sync()
     steps = tmp_path / "menu-commands"
     steps.write_text("wait 800\nkey escape\nkey f9 cmd+shift\nwait 350\nstate\nkey escape\n"
@@ -726,7 +727,7 @@ def dispatch(self, command):
         act("tagfolder","batch",dict(owner=id(scene),parent=folder,folders=[detail],tags=["Paths"]))
         self.fixture_mixed_folder=scene.folder_parents.get(detail)==folder
     elif command=="fixture-tag-controls":
-        from core.layers import add_folder
+        from ingetrazo_core import tag_edits
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("tagcolours","1")))
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("modellines","0")))
         template={str(tmp_path / "drawing.json")!r}
@@ -734,7 +735,7 @@ def dispatch(self, command):
         ShellFileDialog.getOpenFileName=lambda *args: (template,"")
         for verb in ("exporttags","importtags"):
             wgpu_ui._tree_action(self.window,self.view,verb+wgpu_ui.SEP)
-        folder=add_folder(scene,"Temporary tags")
+        folder=tag_edits.add_folder(scene,"Temporary tags")
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("newtag","preview-folder:"+folder)))
         tag=scene.layers[-1]
         self.fixture_tag=tag.key
@@ -966,7 +967,7 @@ def test_native_animation_forms_and_video_file(tmp_path):
     from core.camera import OrbitCamera
     from core.saved_views import SavedView
     from core.scene import Scene
-    from core.scene_animation import SceneAnimation
+    from ingetrazo_core import SceneAnimation
     from formats.igz import save_scene
 
     from ingetrazo_core import video_format

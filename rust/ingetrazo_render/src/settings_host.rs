@@ -40,7 +40,7 @@ fn sections(py: Python<'_>) -> PyResult<Vec<(String, String, String)>> {
 }
 
 fn shortcuts(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("core.shortcuts")
+    py.import("ingetrazo_render.keyboard_bindings")
 }
 
 fn str_of(v: &Bound<'_, PyAny>) -> PyResult<String> {
@@ -747,7 +747,7 @@ impl SettingsSheet {
             let key = sc.call_method1("action_key", (&act,))?;
             let keys = _keys_text(&sc.call_method1("action_keys", (&act,))?)?;
             let defaults = _keys_text(&sc.call_method1("default_keys", (&act,))?)?;
-            rows.append((&key, sc.call_method1("_plain", (act.call_method0("text")?,))?, paths.call_method1("get", (&key, ""))?, keys, defaults))?;
+            rows.append((&key, sc.call_method1("action_label", (act.call_method0("text")?,))?, paths.call_method1("get", (&key, ""))?, keys, defaults))?;
         }
         let tr_fn = py.import("core.i18n")?.getattr("tr")?;
         let text = state(slf)?.call_method1("keyboard", (rows, tr_fn))?;
@@ -778,7 +778,7 @@ impl SettingsSheet {
             let a = a?;
             actions.set_item(sc.call_method1("action_key", (&a,))?, a)?;
         }
-        let seqs: Vec<String> = sc.call_method1("portable_keys", (seqs,))?.extract()?;
+        let seqs: Vec<String> = crate::keyboard_bindings::portable_keys(seqs)?;
         let mut current = Vec::new();
         for (k, a) in actions.iter() {
             current.push((k.extract::<String>()?, sc.call_method1("action_keys", (a,))?.extract::<Vec<String>>()?));
@@ -792,10 +792,10 @@ impl SettingsSheet {
             let actions = actions_ref.bind(py);
             for (key, remaining) in &clash_go {
                 let a = actions.get_item(key)?.ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(key.clone()))?;
-                sc.call_method1("set_action_keys", (&a, remaining.clone()))?;
+                a.call_method1("setShortcuts", (remaining.clone(),))?;
                 sc.call_method1("save_shortcut", (&a, remaining.clone()))?;
             }
-            sc.call_method1("set_action_keys", (act_ref.bind(py), seqs_go.clone()))?;
+            act_ref.bind(py).call_method1("setShortcuts", (seqs_go.clone(),))?;
             sc.call_method1("save_shortcut", (act_ref.bind(py), seqs_go.clone()))?;
             let me = me.bind(py);
             state(me)?.setattr("note", py.None())?;
@@ -806,13 +806,13 @@ impl SettingsSheet {
             let mut names = Vec::new();
             for (k, _) in &clash {
                 let a = actions.get_item(k)?.ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(k.clone()))?;
-                names.push(sc.call_method1("_plain", (a.call_method0("text")?,))?.extract::<String>()?);
+                names.push(sc.call_method1("action_label", (a.call_method0("text")?,))?.extract::<String>()?);
             }
             let keys_list = PyList::new(py, &seqs)?;
             let text = trf(py, "«{keys}» is already used by: {names}. Give it to «{action}» instead?", &[
                 ("keys", s(py, &_keys_text(keys_list.as_any())?)),
                 ("names", s(py, &names.join(", "))),
-                ("action", sc.call_method1("_plain", (act.call_method0("text")?,))?),
+                ("action", sc.call_method1("action_label", (act.call_method0("text")?,))?),
             ])?;
             return confirm(slf, &tr(py, "Keyboard shortcuts")?, &text, &tr(py, "Give it")?, go);
         }
@@ -852,7 +852,7 @@ impl SettingsSheet {
         kw.set_item("validate", check)?;
         kw.set_item("on_done", done)?;
         kw.set_item("width", 420)?;
-        let title = trf(py, "Keys for «{action}»", &[("action", sc.call_method1("_plain", (act.call_method0("text")?,))?)])?;
+        let title = trf(py, "Keys for «{action}»", &[("action", sc.call_method1("action_label", (act.call_method0("text")?,))?)])?;
         let form = cf.getattr("Form")?.call((title, vec![field]), Some(&kw))?;
         cf.getattr("show")?.call1((win(slf)?, form))?;
         Ok(())
@@ -936,11 +936,11 @@ impl SettingsSheet {
                     let me = me.bind(py);
                     let sc = shortcuts(py)?;
                     let st = py.import("core.settings")?.call_method0("settings")?;
-                    st.call_method1("remove", (sc.getattr("_GROUP")?,))?;
+                    st.call_method1("remove", (crate::keyboard_bindings::GROUP,))?;
                     st.call_method0("sync")?;
                     for a in me.call_method0("actions")?.try_iter()? {
                         let a = a?;
-                        sc.call_method1("set_action_keys", (&a, sc.call_method1("default_keys", (&a,))?))?;
+                        a.call_method1("setShortcuts", (sc.call_method1("default_keys", (&a,))?,))?;
                     }
                     let w = win(me)?;
                     for host in py.import("ingetrazo_render.shell_windows")?.call_method0("hosts")?.try_iter()? {
@@ -949,7 +949,7 @@ impl SettingsSheet {
                             for scope in sc.call_method1("keyboard_scopes", (host.getattr("window")?,))?.try_iter()? {
                                 for a in scope?.getattr("_registry_actions")?.call_method0("values")?.try_iter()? {
                                     let a = a?;
-                                    sc.call_method1("set_action_keys", (&a, sc.call_method1("default_keys", (&a,))?))?;
+                                    a.call_method1("setShortcuts", (sc.call_method1("default_keys", (&a,))?,))?;
                                 }
                             }
                         }
@@ -1022,8 +1022,8 @@ impl SettingsSheet {
                 let keys = PyList::new(py, [c.get_item(0)?])?;
                 parts.push(trf(py, "{key}: kept for «{kept}», taken from «{dropped}»", &[
                     ("key", s(py, &_keys_text(keys.as_any())?)),
-                    ("kept", sc.call_method1("_plain", (c.get_item(1)?.call_method0("text")?,))?),
-                    ("dropped", sc.call_method1("_plain", (c.get_item(2)?.call_method0("text")?,))?),
+                    ("kept", sc.call_method1("action_label", (c.get_item(1)?.call_method0("text")?,))?),
+                    ("dropped", sc.call_method1("action_label", (c.get_item(2)?.call_method0("text")?,))?),
                 ])?);
             }
             msg.push(' ');
@@ -1050,7 +1050,7 @@ impl SettingsSheet {
                 if !path.is_truthy()? {
                     return Ok(());
                 }
-                let profile = match py.import("core.ndof_profiles")?.call_method1("load_profile", (&path,)) {
+                let profile = match crate::preferences::device_profile::load_profile(py, path.extract()?) {
                     Ok(p) => p,
                     Err(e) if e.is_instance_of::<pyo3::exceptions::PyOSError>(py) || e.is_instance_of::<pyo3::exceptions::PyValueError>(py) || e.is_instance_of::<pyo3::exceptions::PyUnicodeError>(py) => {
                         return note(slf, &format!("{}: {}", tr(py, "Invalid SpaceMouse profile")?, e.value(py).str()?), "error");
@@ -1081,7 +1081,7 @@ impl SettingsSheet {
                     let envb = env(&win(me)?)?;
                     let (model, _) = crate::settings_rows::device_preferences(&envb, None)?;
                     let json = py.import("json")?.call_method1("loads", (model.call_method0("profile")?,))?;
-                    let profile = py.import("core.ndof_profiles")?.call_method1("profile_from_dict", (json,))?;
+                    let profile = crate::preferences::device_profile::profile_from_dict(&json)?;
                     if crate::settings_rows::apply(py)?.call_method0("read_named_ndof_profiles")?.contains(&name)? {
                         let (me2, name2, profile2) = (me.clone().unbind(), name.clone(), profile.clone().unbind());
                         let replace = func(py, move |py, _a| {

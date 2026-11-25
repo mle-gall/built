@@ -49,7 +49,7 @@ def test_tool_shortcut_goes_through_shortcut_override(host):
 
 def test_tool_shortcut_restored_in_new_shell(host, tmp_path):
     from ingetrazo_render import Host
-    from core.shortcuts import save_shortcut
+    from ingetrazo_render.keyboard_bindings import save_shortcut
 
     action = host.window._tool_actions["line"]
     save_shortcut(action, ["F11"])
@@ -366,7 +366,7 @@ def test_scene_menu_acts_on_marked_scene_and_export_uses_chosen_format(host, mon
 
 
 def test_native_scene_playback_stops_on_input_and_switches_documents_safely(host):
-    from core.scene_animation import SceneAnimation
+    from ingetrazo_core import SceneAnimation
 
     assert host.open(FIXTURE)
     win, viewport = host.window, host.viewport

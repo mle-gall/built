@@ -105,7 +105,7 @@ impl SheetRun {
         }
         let view = doc.getattr("stand_in")?;
         let ws = py
-            .import("views.wgpu_sheets")?
+            .import("ingetrazo_render.sheet_workspace")?
             .call_method1("workspace_of", (view,))?;
         if !ws.is_none() {
             if self.tool {
@@ -128,9 +128,6 @@ pub fn sheet_command_scope<'py>(win: &Bound<'py, PyAny>) -> PyResult<Bound<'py, 
         return attrs.get_item("_sheet_command_scope");
     }
     let window_ref = py.import("weakref")?.call_method1("ref", (win,))?.unbind();
-    let sheet = py.import("views.wgpu_sheets")?;
-    let rail: Vec<Vec<String>> = sheet.getattr("RAIL")?.extract()?;
-    let names = sheet.getattr("TOOL_NAMES")?;
     let owner = py.import("types")?.call_method0("SimpleNamespace")?;
     let store = py
         .import("ingetrazo_core")?
@@ -165,21 +162,20 @@ pub fn sheet_command_scope<'py>(win: &Bound<'py, PyAny>) -> PyResult<Bound<'py, 
             paths.set_item(key, tr.call1((path,))?)
         };
     let mut page = crate::sheet_page::Page::default();
-    for (group, tools) in rail.iter().enumerate() {
+    for (group, tools) in crate::sheet_workspace::RAIL.iter().enumerate() {
         let path = ["Navigation", "Sheet items", "Draw", "Dimensions"]
             .get(group)
             .copied()
             .unwrap_or("Sheets");
-        for tool in tools {
-            page.tool.clone_from(tool);
-            let name: String = names.get_item(tool)?.extract()?;
-            bind(tool, &name, path, page.hint(), &[], true)?;
+        for &(tool, name, _) in *tools {
+            tool.clone_into(&mut page.tool);
+            bind(tool, name, path, page.hint(), &[], true)?;
         }
     }
     for &(id, name, tip, keys) in EDITS {
         bind(id, name, "Sheet", tip, keys, false)?;
     }
-    let shortcuts = py.import("core.shortcuts")?;
+    let shortcuts = py.import("ingetrazo_render.keyboard_bindings")?;
     shortcuts.call_method1("remember_defaults", (&owner,))?;
     shortcuts.call_method1("apply_user_shortcuts", (&owner,))?;
     win.setattr("_sheet_command_scope", &owner)?;

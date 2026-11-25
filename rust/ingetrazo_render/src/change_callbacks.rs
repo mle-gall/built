@@ -49,3 +49,39 @@ impl ChangeCallbacks {
         self.0.borrow().iter().map(|f| f.clone_ref(py)).collect()
     }
 }
+
+/// A non-data descriptor. Its first lookup installs a per-instance subscriber list.
+#[pyclass(module = "ingetrazo_render")]
+pub struct CallbackSlot {
+    name: Option<String>,
+}
+
+#[pymethods]
+impl CallbackSlot {
+    #[new]
+    fn new() -> Self {
+        Self { name: None }
+    }
+
+    fn __set_name__(&mut self, _owner: &Bound<'_, PyAny>, name: String) {
+        self.name = Some(name);
+    }
+
+    fn __get__<'py>(
+        slf: &Bound<'py, Self>,
+        instance: Option<&Bound<'py, PyAny>>,
+        _owner: Option<&Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let Some(instance) = instance else {
+            return Ok(slf.clone().into_any());
+        };
+        let callbacks = Bound::new(slf.py(), ChangeCallbacks::default())?;
+        let slot = slf.borrow();
+        let name = slot
+            .name
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyAttributeError::new_err("unnamed callback slot"))?;
+        instance.getattr("__dict__")?.set_item(name, &callbacks)?;
+        Ok(callbacks.into_any())
+    }
+}

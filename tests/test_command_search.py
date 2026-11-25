@@ -9,7 +9,7 @@ from unittest.mock import Mock
 import pytest
 
 from ingetrazo_render import shell_action as ShellAction
-from core import string_search as ss
+import ingetrazo_core as ss
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_render import command_metadata as cs
 from views import wgpu_ui
@@ -21,20 +21,24 @@ def win(native_host):
 
 
 # ---- the matching (Blender's), without a window ------------------------------
-def _rank(query, *labels):
-    entries = [(label, [ss.Item(label.split(" ▸ "))]) for label in labels]
-    return ss.rank(query, entries)
+def _rank(query, *labels, recent=None):
+    entries = [(label, [ss.SearchItem(label.split(" ▸ "))]) for label in labels]
+    short = len(query.strip()) <= 1
+    ranked = ss.rank_commands(ss.command_fold(query), short, [
+        (items, recent.get(label, -1) if short and recent else -1)
+        for label, items in entries])
+    return [entries[index][0] for index in ranked]
 
 
 def test_command_index_preserves_group_boundaries_and_scores():
-    item = ss.Item(["Módelo", "", "Reverse-Faces"])
-    assert ss.words_of("Módelo ▸ Reverse-Faces") == list(item.words)
+    item = ss.SearchItem(["Módelo", "", "Reverse-Faces"])
+    assert ss.SearchItem(["Módelo ▸ Reverse-Faces"]).words == item.words
     assert item.words == ("modelo", "reverse", "faces")
     assert item.main == (False, True, True)
     assert (item.main_length, item.total_length) == (12, 19)
-    assert ss.score(["rev"], item) == 1010
-    assert ss.score(["mod"], item) == 1009
-    assert ss.score(["missing"], item) is None
+    assert ss.command_score(["rev"], item) == 1010
+    assert ss.command_score(["mod"], item) == 1009
+    assert ss.command_score(["missing"], item) is None
     assert ss.fuzzy_errors("revs", "revs") == 0
     assert ss.fuzzy_errors("os", "") == -1
 
@@ -80,11 +84,9 @@ def test_words_out_of_order_rank_lower():
 
 
 def test_recent_ones_lead_only_with_one_letter_or_none():
-    entries = [(n, [ss.Item([n])]) for n in ("Copy", "Cut", "Cutter")]
-    recent = {"Cutter": 2}.get
-    assert ss.rank("", entries, lambda n: recent(n, -1))[0] == "Cutter"
-    assert ss.rank("c", entries, lambda n: recent(n, -1))[0] == "Cutter"
-    assert ss.rank("cut", entries, lambda n: recent(n, -1))[0] == "Cut"
+    labels = ("Copy", "Cut", "Cutter")
+    for query, first in (("", "Cutter"), ("c", "Cutter"), ("cut", "Cut")):
+        assert _rank(query, *labels, recent={"Cutter": 2})[0] == first
 
 
 def test_damerau_levenshtein():
@@ -199,9 +201,9 @@ def test_shortcut_editor_opens_on_the_searched_command(win):
 
 
 def test_sheet_search_lists_and_runs_only_the_current_workspaces_commands(win, monkeypatch):
-    from views import wgpu_sheets
+    from ingetrazo_render import sheet_workspace
     from tests.scene_controls import chrome
-    host = wgpu_sheets.composer_for(win)
+    host = sheet_workspace.composer_for(win)
     ws = host._ws
     ws.shown, ws.view = True, win.view
     monkeypatch.setattr(win.view, "_sheets_ws", ws, raising=False)
@@ -263,14 +265,14 @@ def test_f3_runs_a_sheet_tool_and_returns_to_modelling_in_a_release_window(tmp_p
 from pathlib import Path
 
 def setup(app):
-    from views import wgpu_sheets
+    from ingetrazo_render import sheet_workspace
     def record():
         win = app.window
-        ws = wgpu_sheets.workspace_of(win.view)
+        ws = sheet_workspace.workspace_of(win.view)
         with Path(__file__).with_suffix(".jsonl").open("a") as out:
             print(json.dumps([ws.composer.tool_mode if ws else "model",
                               win.view.renderer.ui_claims_key("F5", 0)]), file=out)
-    app.add_menu_action("Open Sheets", lambda: wgpu_sheets.to_sheets(app.window))
+    app.add_menu_action("Open Sheets", lambda: sheet_workspace.to_sheets(app.window))
     app.add_menu_action("Read current workspace", record)
 """)
     actions = ["menu extension:sheet_search_probe:0", "key f3", "type chain dimension",
@@ -291,10 +293,10 @@ def setup(app):
 
 
 def test_sheet_binding_shares_the_keyboard_table_and_follows_the_active_document(win, monkeypatch):
-    from core.shortcuts import export_shortcuts, import_shortcuts
+    from ingetrazo_render.keyboard_bindings import export_shortcuts, import_shortcuts
     from ingetrazo_render import KeyEvent, shortcut_text
     from tests.scene_controls import chrome
-    from views import wgpu_sheets
+    from ingetrazo_render import sheet_workspace
     from ingetrazo_render.settings_sheet import SettingsSheet
 
     sheet = SettingsSheet("keyboard")
@@ -311,7 +313,7 @@ def test_sheet_binding_shares_the_keyboard_table_and_follows_the_active_document
         "sheet:cota_cadena": "F8", "tool:line": "L"}})[:2] == (2, 0)
     _, _, f8, _ = shortcut_text("F8")
     for _ in range(2):
-        ws = wgpu_sheets.composer_for(win)._ws
+        ws = sheet_workspace.composer_for(win)._ws
         ws.shown, ws.view = True, win.view
         monkeypatch.setattr(win.view, "_sheets_ws", ws, raising=False)
         with chrome(win):

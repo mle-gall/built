@@ -47,7 +47,7 @@ fn install_extensions(w: &Obj<'_>, discovery: &Obj<'_>) -> PyResult<()> {
     w.setattr("_extension_menus", render.call_method0("ExtensionMenus")?)?;
     w.setattr(
         "_extension_startup_state",
-        py.import("core.extension_manager")?
+        py.import("ingetrazo_core.extension_manager")?
             .call_method0("extension_startup_state")?,
     )?;
     let plugins = discovery.get_item(0)?;
@@ -624,12 +624,12 @@ impl ShellWindow {
     }
     fn _show_model<'p>(slf: &Bound<'p, Self>) -> PyResult<Obj<'p>> {
         slf.py()
-            .import("views.wgpu_sheets")?
+            .import("ingetrazo_render.sheet_workspace")?
             .call_method1("to_model", (slf,))
     }
     fn _to_sheets<'p>(slf: &Bound<'p, Self>) -> PyResult<Obj<'p>> {
         slf.py()
-            .import("views.wgpu_sheets")?
+            .import("ingetrazo_render.sheet_workspace")?
             .call_method1("to_sheets", (slf,))
     }
     fn _pick_view_layout<'p>(slf: &Bound<'p, Self>) -> PyResult<Obj<'p>> {

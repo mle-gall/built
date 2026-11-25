@@ -4,8 +4,8 @@
 //! (`about.rs`, `extensions.rs`, `surfaces.rs`).
 //!
 //! What stays Python is what each one reports on or acts through: the
-//! extension installer and discovery (`core.extension_manager`,
-//! `core.extensions`), the parts of an assembly (`core.parts`) and the
+//! extension installer and discovery (`ingetrazo_core.extension_manager`,
+//! `core.extensions`), the parts of an assembly (`ingetrazo_core.parts`) and the
 //! document's units, history and selection.
 use pyo3::{
     exceptions::PyValueError,
@@ -302,7 +302,7 @@ impl CutListSheet {
         self.built_for = Some(sig);
         let fine = py.import("core.units")?.getattr("fmt_len_fine")?;
         let parts = PyList::empty(py);
-        let rows = py.import("core.parts")?.call_method1("part_rows", (assembly.as_ref().map_or_else(|| py.None().into_bound(py), |a| a.clone()),))?;
+        let rows = py.import("ingetrazo_core.parts")?.call_method1("part_rows", (assembly.as_ref().map_or_else(|| py.None().into_bound(py), |a| a.clone()),))?;
         for r in rows.try_iter()? {
             let r = r?;
             let part = PyDict::new(py);
@@ -453,7 +453,7 @@ fn need<'py>(d: &Bound<'py, PyDict>, key: &str) -> PyResult<Bound<'py, PyAny>> {
 }
 
 fn manager(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("core.extension_manager")
+    py.import("ingetrazo_core.extension_manager")
 }
 
 fn now_ms(py: Python<'_>) -> PyResult<u64> {
@@ -511,7 +511,7 @@ impl ExtensionsSheet {
         let exts = py.import("core.extensions")?;
         let shipped = PyDict::new(py);
         let first_dir = exts.call_method0("plugin_dirs")?.get_item(0)?;
-        for row in exts.call_method1("_candidates", (first_dir,))?.try_iter()? {
+        for row in exts.call_method1("installed_candidates", (first_dir,))?.try_iter()? {
             let row = row?;
             shipped.set_item(row.get_item(0)?, row.get_item(1)?.str()?)?;
         }
@@ -617,7 +617,7 @@ impl ExtensionsSheet {
         }
         for job in model.call_method1("jobs", (now,))?.try_iter()? {
             let job = job?;
-            let fut = self.pool.bind(py).call_method1("submit", (job.getattr("run")?, em.getattr("_get")?))?;
+            let fut = self.pool.bind(py).call_method1("submit", (job.getattr("run")?, em.getattr("download")?))?;
             requests.set_item(job.getattr("icon")?, fut)?;
         }
         if model.call_method0("pending")?.is_truthy()? || self.refreshing.is_some() {
@@ -773,7 +773,7 @@ impl ExtensionsSheet {
                         "folder" => {
                             let folder = match hands.get_item(&ident)? {
                                 Some(f) => f,
-                                None => em.call_method0("user_plugins_dir")?.div(&ident)?,
+                                None => py.import("core.extensions")?.call_method0("user_plugins_dir")?.div(&ident)?,
                             };
                             let target = if folder.call_method0("is_dir")?.is_truthy()? { folder } else { folder.getattr("parent")? };
                             open_url(target)?;

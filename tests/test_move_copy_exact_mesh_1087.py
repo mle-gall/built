@@ -9,7 +9,7 @@ import pytest
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
-from core.mesh import _key
+from ingetrazo_core import object_replay
 from core.scene import Scene
 from tools.move import MoveTool
 
@@ -20,7 +20,7 @@ def V(x, y, z=0):
 
 def _loop(points, delta):
     """Ignore the starting vertex, but retain the face's winding."""
-    keys = tuple(_key(p + delta) for p in points)
+    keys = tuple(object_replay.mesh_key(p + delta) for p in points)
     return min(keys[i:] + keys[:i] for i in range(len(keys)))
 
 

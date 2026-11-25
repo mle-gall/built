@@ -110,10 +110,70 @@ fn close(view: &Obj<'_>, event: Option<&Obj<'_>>) -> PyResult<()> {
 #[pyfunction]
 fn document_init(doc: &Obj<'_>) -> PyResult<()> {
     let py = doc.py();
-    py.import("core.document_host")?
-        .getattr("Document")?
-        .call_method1("__init__", (doc,))?;
+    doc.setattr("tab_id", py.import("core.group")?.call_method0("new_uid")?)?;
+    for key in ["viewport", "path", "import_name", "autosaved_version", "composer", "stand_in", "front_view"] {
+        doc.setattr(key, py.None())?;
+    }
+    doc.setattr("saved_content", 0)?;
+    doc.setattr("untitled_no", 1)?;
+    doc.setattr("composer_shown", false)?;
+    doc.setattr("last_sheet", 0)?;
+    doc.setattr("scene_mark", core(py)?.call_method0("SceneMark")?)?;
     doc.setattr("model_views", core(py)?.call_method0("DocumentViews")?)
+}
+#[pyfunction]
+fn slot_widget<'p>(doc: &Obj<'p>) -> PyResult<Obj<'p>> {
+    let stand = doc.getattr("stand_in")?;
+    if !stand.is_none() { return Ok(stand); }
+    let view = doc.getattr("viewport")?;
+    let display = attr(&view, "keys_stand_in")?;
+    Ok(if display.is_truthy()? { display } else { view })
+}
+#[pyfunction]
+fn display_name<'p>(doc: &Obj<'p>) -> PyResult<Obj<'p>> {
+    let py = doc.py();
+    let path = doc.getattr("path")?;
+    if !path.is_none() {
+        return py.import("pathlib")?.call_method1("Path", (path,))?.getattr("name");
+    }
+    let name = doc.getattr("import_name")?;
+    if name.is_truthy()? {return Ok(name.str()?.into_any());}
+    py.import("core.i18n")?.call_method1("tr", ("Untitled",))
+}
+#[pyfunction]
+fn same_file(doc: &Obj<'_>, path: &Obj<'_>) -> PyResult<bool> {
+    let py = doc.py();
+    let own = doc.getattr("path")?;
+    if own.is_none() || path.is_none() { return Ok(false); }
+    let constructor = py.import("pathlib")?.getattr("Path")?;
+    let own = constructor.call1((own,))?;
+    let other = constructor.call1((path,))?;
+    let compare = |method: &str| own.call_method0(method)?.eq(other.call_method0(method)?);
+    match compare("resolve") {
+        Err(e) if e.is_instance_of::<pyo3::exceptions::PyOSError>(py) => compare("absolute"),
+        other => other,
+    }
+}
+
+// A compositor retains its own document when another tab becomes active.
+#[pyfunction]
+fn sheet_host_init(host: &Obj<'_>, win: &Obj<'_>, doc: &Obj<'_>) -> PyResult<()> {
+    let attrs = host.getattr("__dict__")?;
+    attrs.set_item("_host_window",win)?;
+    attrs.set_item("_host_doc",doc)
+}
+#[pyfunction]
+fn sheet_host_attr<'p>(host: &Obj<'p>, name: &str) -> PyResult<Obj<'p>> {
+    let attrs = host.getattr("__dict__")?;
+    match name {
+        "viewport" => attrs.get_item("_host_doc")?.getattr("viewport"),
+        "_current_path" => attrs.get_item("_host_doc")?.getattr("path"),
+        _ => attrs.get_item("_host_window")?.getattr(name),
+    }
+}
+#[pyfunction]
+fn sheet_host_set(host: &Obj<'_>, name: &str, value: &Obj<'_>) -> PyResult<()> {
+    host.getattr("_host_window")?.setattr(name,value)
 }
 #[pyfunction]
 fn layout<'p>(doc: &Obj<'p>) -> PyResult<Obj<'p>> {
@@ -345,9 +405,13 @@ fn resolve<'p>(py: Python<'p>, name: &str) -> PyResult<Obj<'p>> {
             vec![m.getattr("ShellView")?]
         }
         "ShellDocument" => {
-            methods!("__init__"=>document_init);
+            methods!("__init__"=>document_init, "slot_widget"=>slot_widget, "display_name"=>display_name, "same_file"=>same_file);
             members.set_item("view_layout", prop.call1((wrap_pyfunction!(layout, py)?,))?)?;
-            vec![py.import("core.document_host")?.getattr("Document")?]
+            vec![]
+        }
+        "SheetDocumentHost" => {
+            methods!("__init__"=>sheet_host_init, "__getattr__"=>sheet_host_attr, "__setattr__"=>sheet_host_set);
+            vec![]
         }
         _ => return Err(PyAttributeError::new_err(name.to_owned())),
     };

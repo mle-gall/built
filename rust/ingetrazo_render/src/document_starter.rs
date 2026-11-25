@@ -69,7 +69,7 @@ fn billboard_person(
 #[pyfunction]
 fn insert_scale_figure(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
-    let figures = py.import("core.scale_figure")?;
+    let figures = py.import("ingetrazo_core.scale_figure")?;
     let figure = figures.call_method0("chosen")?;
     let scene = win.getattr("viewport")?.getattr("scene")?;
     if !figure.is_none() {
@@ -235,7 +235,7 @@ fn reclaim_closed_documents(py: Python<'_>) -> PyResult<()> {
     let gc = py.import("gc")?;
     gc.call_method0("unfreeze")?;
     gc.call_method0("collect")?;
-    py.import("core.malloc_arenas")?.call_method0("trim")?;
+    py.import("ingetrazo_core")?.call_method0("trim_heap")?;
     Ok(())
 }
 

@@ -15,8 +15,7 @@ import pytest
 from tests.scene_controls import choose, interrupt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
-from core.scene_animation import (DEFAULT_PAUSE, DEFAULT_TRANSITION,  # noqa: E402
-                                  MAX_SECONDS, Pose, Run, SceneAnimation,
+from ingetrazo_core import (Pose, SceneRun, SceneAnimation,
                                   between, ease, glide, turn)
 
 
@@ -97,7 +96,7 @@ def test_close_to_ignores_a_full_turn_and_rounding():
 def test_a_run_glides_pauses_and_goes_round():
     start = _pose(x=-1)
     poses = [_pose(x=0), _pose(x=10), _pose(x=20)]
-    run = Run(start, poses, transition=2.0, pause=1.0)
+    run = SceneRun(start, poses, transition=2.0, pause=1.0)
     assert run.duration() == pytest.approx(9.0)
     pose, reached = run.at(0.0)
     assert pose == start and reached == -1
@@ -115,18 +114,18 @@ def test_a_run_glides_pauses_and_goes_round():
 
 
 def test_a_run_with_no_time_shows_the_first_scene():
-    run = Run(_pose(x=-1), [_pose(x=0), _pose(x=1)], 0.0, 0.0)
+    run = SceneRun(_pose(x=-1), [_pose(x=0), _pose(x=1)], 0.0, 0.0)
     assert run.at(5.0) == (run.poses[0], 0)
-    assert Run(_pose(), [], 1.0, 1.0).at(3.0)[1] == -1
+    assert SceneRun(_pose(), [], 1.0, 1.0).at(3.0)[1] == -1
 
 
 # ---- The settings -------------------------------------------------------------
 def test_settings_default_and_write_nothing_when_untouched():
     anim = SceneAnimation()
     assert (anim.enabled, anim.transition, anim.pause) == \
-        (True, DEFAULT_TRANSITION, DEFAULT_PAUSE)
+        (True, 2.0, 1.0)
     assert anim.to_dict() == {}
-    assert anim.glide_seconds() == DEFAULT_TRANSITION
+    assert anim.glide_seconds() == 2.0
     assert SceneAnimation(enabled=False).glide_seconds() == 0.0
 
 
@@ -134,10 +133,10 @@ def test_settings_round_trip_and_refuse_nonsense():
     anim = SceneAnimation(enabled=False, transition=3.5, pause=0.0)
     assert SceneAnimation.from_dict(anim.to_dict()) == anim
     odd = SceneAnimation.from_dict({"transition": "x", "pause": -4})
-    assert odd.transition == DEFAULT_TRANSITION and odd.pause == 0.0
-    assert SceneAnimation(transition=2000).transition == MAX_SECONDS
+    assert odd.transition == 2.0 and odd.pause == 0.0
+    assert SceneAnimation(transition=2000).transition == 60.0
     assert SceneAnimation(transition=float("nan")).transition == \
-        DEFAULT_TRANSITION
+        2.0
     assert SceneAnimation.from_dict(None) == SceneAnimation()
 
 
@@ -472,7 +471,7 @@ def test_play_without_scenes_says_why(win):
 
 
 def test_page_up_and_down_are_no_other_commands_shortcut(win):
-    from core.shortcuts import action_keys
+    from ingetrazo_render.keyboard_bindings import action_keys
     from ingetrazo_render.settings_sheet import SettingsSheet
     sheet = SettingsSheet("keyboard")
     sheet._win = win
@@ -552,7 +551,7 @@ def test_the_toggle_shows_the_choice_of_the_project_in_front(win):
 
 # ---- The video ---------------------------------------------------------------
 def test_a_video_shows_the_first_scene_glides_and_ends_on_the_last():
-    from core.scene_animation import video_at, video_frame_count, video_seconds
+    from ingetrazo_core import video_at, video_frame_count, video_seconds
     poses = [_pose(x=0), _pose(x=10), _pose(x=20)]
     assert video_seconds(3, 2.0, 1.0) == pytest.approx(7.0)   # 1 + 2·(2+1)
     assert video_frame_count(3, 2.0, 1.0, 10) == 71
@@ -686,7 +685,7 @@ def test_no_scenes_no_video(win, tmp_path):
 
 def test_the_video_options_offer_sizes_fps_and_the_length(win):
     from ingetrazo_render import OperationForm
-    from core.scene_animation import video_seconds
+    from ingetrazo_core import video_seconds
     model = OperationForm.video(1001, 601, 3, video_seconds(3, 2., 1.))
     assert model.values() == dict(width=1920, height=1080, fps=30)
     model.receive("size", "4")

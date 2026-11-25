@@ -57,7 +57,7 @@ fn description(py: Python, action: &Obj, name: &str) -> PyResult<String> {
             tip = bare.to_owned();
         }
     }
-    let fold = py.import("core.string_search")?.getattr("fold")?;
+    let fold = py.import("ingetrazo_core")?.getattr("command_fold")?;
     let bare = plain(name);
     let folded: String = fold.call1((&bare,))?.extract()?;
     if fold
@@ -105,14 +105,14 @@ struct Command {
 fn action_key(action: &Obj) -> PyResult<String> {
     action
         .py()
-        .import("core.shortcuts")?
+        .import("ingetrazo_render.keyboard_bindings")?
         .call_method1("action_key", (action,))?
         .extract()
 }
 fn binding(action: &Obj) -> PyResult<String> {
     let keys = action
         .py()
-        .import("core.shortcuts")?
+        .import("ingetrazo_render.keyboard_bindings")?
         .call_method1("action_keys", (action,))?;
     Ok(keys
         .try_iter()?
@@ -151,7 +151,7 @@ impl Command {
             }
         }
         let trail: Vec<_> = path.split(SEP).filter(|s| !s.is_empty()).collect();
-        let item = py.import("core.string_search")?.getattr("Item")?;
+        let item = py.import("ingetrazo_core")?.getattr("SearchItem")?;
         let mut translated = trail.clone();
         translated.push(&name);
         let mut originals = trail
@@ -239,7 +239,7 @@ fn commands<'p>(window: &Obj<'p>, scope: &str) -> PyResult<Vec<Obj<'p>>> {
     let fresh = PyDict::new(py);
     let mut pool = Vec::new();
     for a in py
-        .import("core.shortcuts")?
+        .import("ingetrazo_render.keyboard_bindings")?
         .call_method1("collect_actions", (window,))?
         .try_iter()?
     {
@@ -304,8 +304,8 @@ fn search<'p>(window: &Obj<'p>, query: &str, pool: Option<Vec<Obj<'p>>>) -> PyRe
         entries.append((row.getattr("items")?, rank))?;
     }
     let folded = py
-        .import("core.string_search")?
-        .call_method1("fold", (query,))?;
+        .import("ingetrazo_core")?
+        .call_method1("command_fold", (query,))?;
     let ranked: Vec<usize> = py
         .import("ingetrazo_core")?
         .call_method1("rank_commands", (folded, short, entries))?

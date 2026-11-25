@@ -113,7 +113,7 @@ def test_bulk_weld_reuses_preexisting_vertices():
 
 def _reference_bulk_weld(mesh, points):
     """Scalar oracle: isolated cells first, then candidate points in order."""
-    from core.mesh import _key
+    from ingetrazo_core import object_replay
 
     if isinstance(mesh, StoreMesh):
         from core.mesh import _KEY_SCALE
@@ -122,7 +122,7 @@ def _reference_bulk_weld(mesh, points):
         registry = set(map(tuple, mesh._store.registry()[0].tolist()))
     else:
         points = [QVector3D(*p) for p in np.asarray(points, dtype=np.float64).tolist()]
-        keys = [_key(p) for p in points]
+        keys = [object_replay.mesh_key(p) for p in points]
         registry = mesh._registry
     first = {}
     for i, key in enumerate(keys):

@@ -320,7 +320,8 @@ fn compute_plane_levels<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     let unit = normal.call_method0("normalized")?;
     let m = module(py)?;
-    let project = m.getattr("_project_loop_2d")?;
+    let arrangement=py.import("core.arrangement")?;
+    let project = arrangement.getattr("project_loop")?;
     let footprint = project.call1((base.getattr("vertices")?, &unit))?;
     let near = m.getattr("push_scans")?.call_method1(
         "parallel_overlapping",
@@ -347,8 +348,8 @@ fn compute_plane_levels<'py>(a: &Args<'py>) -> Reply<'py> {
         }
         let level = (xyz(&face.call_method0("centroid")?)? - anchor).dot(direction);
         if level.abs() > eps
-            && m.call_method1(
-                "_loops_overlap_2d",
+            && arrangement.call_method1(
+                "loops_overlap",
                 (
                     &footprint,
                     project.call1((face.getattr("vertices")?, &unit))?,

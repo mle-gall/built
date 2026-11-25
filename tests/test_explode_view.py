@@ -6,12 +6,12 @@ from __future__ import annotations
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core import explode
+from ingetrazo_core import placement_transform
 from core.group import Group, copy_group, world_mesh
 from core.history import (ExplodeGroupCommand, ExplodeViewCommand,
                           MoveGroupCommand, SplitIntoPiecesCommand)
 from core.mesh import Mesh
-from core.parts import part_points
+from ingetrazo_core.parts import part_points
 from core.scene import Scene
 
 
@@ -170,7 +170,7 @@ def test_offsets_turn_with_a_pushed_down_matrix():
     holder.adopt([part])
     turn = QMatrix4x4()
     turn.rotate(90, 0, 0, 1)
-    explode.rotate_offsets(holder, turn)
+    placement_transform.rotate_offsets(holder, turn)
     assert part.explode_offset == pytest.approx((0.0, 1.0, 0.0), abs=1e-6)
 
 

@@ -13,7 +13,7 @@ mod widgets;
 /// The chrome's modal forms (rust/ingetrazo_render/src/forms_host.rs).
 pub mod dialog;
 pub mod operation_form;
-/// Sheets, a workspace of the window (views/wgpu_sheets.py).
+/// Sheets, a workspace of the window (sheet_workspace).
 mod sheets;
 mod activity;
 mod plugins;
@@ -26,6 +26,7 @@ mod context_menu;
 mod lens;
 use lens::Lens;
 mod tree_order;
+pub(crate) use tree_order::natural as natural_name_order;
 mod tree_filter;
 mod tree_keys;
 mod tree_rows;

@@ -32,7 +32,7 @@ fn cs(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 }
 
 fn recent(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("core.recent")
+    py.import("ingetrazo_core.recent")
 }
 
 fn store(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
@@ -660,8 +660,7 @@ fn last_file_py(py: Python<'_>) -> PyResult<String> {
 fn footer(py: Python<'_>) -> String {
     let text = || -> PyResult<String> {
         let engine: String = py.import("core._native")?.call_method0("engine")?.extract()?;
-        let renderer: String = py.import("core.renderer_settings")?.call_method0("status_text")?.extract()?;
-        Ok(format!("Engine: {engine} · Renderer: {renderer}"))
+        Ok(format!("Engine: {engine} · Renderer: wgpu (native app)"))
     };
     text().unwrap_or_default()
 }
@@ -791,7 +790,7 @@ fn _load_one<'py>(py: Python<'py>, path: &str) -> PyResult<Bound<'py, PyDict>> {
         return Ok(entry);
     }
     entry.set_item("thumb", _thumbnail(py, &p, &st)?)?;
-    let links = py.import("core.link_scan").and_then(|m| m.call_method1("scan", (&p,)));
+    let links = py.import("ingetrazo_core").and_then(|m| m.call_method1("scan_document_links", (&p,)));
     entry.set_item("links", links.unwrap_or_else(|_| PyList::empty(py).into_any()))?; // the preview only loses its links
     let newer = (|| -> PyResult<bool> {
         let slot = py.import("core.autosave")?.call_method1("pending", (&p,))?;

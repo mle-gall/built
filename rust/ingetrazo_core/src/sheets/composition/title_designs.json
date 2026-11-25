@@ -1,0 +1,60 @@
+[
+  [
+    "classic",
+    "Classic",
+    {}
+  ],
+  [
+    "rounded",
+    "Rounded corners",
+    {
+      "corner": "rounded",
+      "radius_mm": 3.0
+    }
+  ],
+  [
+    "chamfer",
+    "Chamfered corners",
+    {
+      "corner": "chamfer",
+      "radius_mm": 2.5
+    }
+  ],
+  [
+    "shaded",
+    "Shaded labels",
+    {
+      "fill_color": "#e9ecf0"
+    }
+  ],
+  [
+    "banded",
+    "Header band",
+    {
+      "layout": "banded",
+      "fill_color": "#dfe4ea",
+      "label_color": "#40474f"
+    }
+  ],
+  [
+    "minimal",
+    "Minimal",
+    {
+      "layout": "minimal",
+      "corner": "rounded",
+      "radius_mm": 2.0,
+      "line_mm": 0.15,
+      "label_color": "#7a828c"
+    }
+  ],
+  [
+    "double",
+    "Double border",
+    {
+      "double_border": true,
+      "border_mm": 0.7,
+      "corner": "chamfer",
+      "radius_mm": 3.0
+    }
+  ]
+]

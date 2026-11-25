@@ -54,30 +54,20 @@ def test_draw_split_erase_preserves_normal_and_paint(plane, reversed_face, diago
 
 @pytest.mark.parametrize("method,opposite_fragment", [
     ("region", False), ("pair", False), ("region", True)])
-@pytest.mark.parametrize("trace_sign", [-1, 1])
+@pytest.mark.parametrize("reverse_hole", [False, True])
 def test_merge_orients_outer_and_hole_independently(
-    monkeypatch, method, opposite_fragment, trace_sign
+    method, opposite_fragment, reverse_hole
 ):
     import core.mesh as mesh_module
 
     m = Mesh()
+    hole = [V(.5, 1, 0), V(.5, 2, 0), V(1.5, 2, 0), V(1.5, 1, 0)]
     left = m.add_face([V(0, 0, 0), V(2, 0, 0), V(2, 4, 0), V(0, 4, 0)],
-                      [[V(.5, 1, 0), V(.5, 2, 0), V(1.5, 2, 0), V(1.5, 1, 0)]])
+                      [hole[::-1] if reverse_hole else hole])
     right = m.add_face([V(2, 0, 0), V(4, 0, 0), V(4, 4, 0), V(2, 4, 0)])
     normal = left.normal()
     if opposite_fragment:
         right.loop.reverse()
-    trace = mesh_module._trace_loops
-
-    def trace_backwards(outline):
-        # The undirected tracer may return either winding for EACH loop.
-        loops = trace(outline)
-        for loop in loops:
-            if mesh_module.Face(loop).normal().z() * trace_sign < 0:
-                loop.reverse()
-        return loops
-
-    monkeypatch.setattr(mesh_module, "_trace_loops", trace_backwards)
     if method == "region":
         merged = m.dissolve_coplanar_region([left, right])
     else:

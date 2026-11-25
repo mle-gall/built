@@ -366,7 +366,7 @@ impl MeshToolAccess {
         if origin.is_none() || direction.is_none() {
             return Ok(none(py));
         }
-        let hit = py.import("views.wgpu_inference")?.call_method1("surface_hit", (index, row, origin, direction))?;
+        let hit = py.import("ingetrazo_core")?.call_method1("surface_hit", (index, row, origin, direction))?;
         if hit.is_none() || hit.get_item(1)?.is_none() {
             return Ok(none(py));
         }
@@ -601,7 +601,7 @@ impl MeshToolAccess {
                 // Fade retains depth. GL picks only the editable subtree,
                 // even when another placement covers it in the ID pass.
                 row = if indexed {
-                    py.import("views.wgpu_inference")?.call_method1("context_hit", (&view, &context, x, y))?
+                    py.import("ingetrazo_core")?.call_method1("context_hit", (&view, &context, x, y))?
                 } else {
                     s.call_method1("_context_mesh_row", (&context, x, y))?
                 };
@@ -652,7 +652,7 @@ impl MeshToolAccess {
     fn _face_row_under<'py>(slf: &Bound<'py, Self>, x: &Obj<'py>, y: &Obj<'py>, default: &Obj<'py>) -> Reply<'py> {
         let py = slf.py();
         let s = slf.as_any();
-        let inference = py.import("views.wgpu_inference")?;
+        let inference = py.import("ingetrazo_core")?;
         let view = s.getattr("view")?;
         let index = view.getattr("inference_index")?;
         let rows = inference.call_method1("eligible_rows", (&index, view.getattr("packed")?))?;
@@ -661,7 +661,7 @@ impl MeshToolAccess {
         if rows.len()? == 0 {
             return Ok(default.clone());
         }
-        let hit = inference.call_method1("_front_at", (&index, &view, x, y, rows, mvp(&view)?))?;
+        let hit = inference.call_method1("front_at", (&index, &view, x, y, rows, mvp(&view)?))?;
         if hit.is_none() { Ok(default.clone()) } else { hit.get_item(2) }
     }
 
@@ -849,7 +849,7 @@ impl MeshToolAccess {
         kw.set_item("cap", 48)?;
         kw.set_item("rows", numpy(py)?.call_method1("flatnonzero", (wire,))?)?;
         kw.set_item("edit_group", scene.getattr("edit_group")?)?;
-        let edges = py.import("views.wgpu_inference")?.call_method(
+        let edges = py.import("ingetrazo_core")?.call_method(
             "nearby_edges",
             (index, packed, view.getattr("camera")?, view.call_method0("width")?, view.call_method0("height")?, x, y),
             Some(&kw),
@@ -892,7 +892,7 @@ impl MeshToolAccess {
         if !wire.call_method0("any")?.is_truthy()? {
             return empty();
         }
-        let inference = py.import("views.wgpu_inference")?;
+        let inference = py.import("ingetrazo_core")?;
         let np = numpy(py)?;
         let boxes = inference.call_method1(
             "screen_boxes",
@@ -969,8 +969,8 @@ impl MeshToolAccess {
         if radius > 128. || !(0. <= x && x <= width && 0. <= y && y <= height) {
             return Ok(false);
         }
-        let rows = py.import("views.wgpu_inference")?.call_method1(
-            "_screen_rows",
+        let rows = py.import("ingetrazo_core")?.call_method1(
+            "screen_rows",
             (&index, view.getattr("packed")?, mvp(&view)?, width, height, x, y, radius, py.None()),
         )?;
         if rows.len()? == 0 {
@@ -1014,7 +1014,7 @@ impl MeshToolAccess {
             return Ok(false);
         }
         let (origin, direction) = pair(&s.call_method1("_pixel_to_ray", (px, py_))?)?;
-        let hit = py.import("views.wgpu_inference")?.call_method1("surface", (index, row, &origin, direction))?;
+        let hit = py.import("ingetrazo_core")?.call_method1("surface", (index, row, &origin, direction))?;
         if hit.is_none() {
             return Ok(false);
         }
@@ -1416,7 +1416,7 @@ impl MeshToolAccess {
         kw.set_item("radius_px", 12.)?;
         kw.set_item("cap", 48)?;
         let edges = s.call_method("_resident_nearby_edges", (pixel.get_item(0)?, pixel.get_item(1)?), Some(&kw))?;
-        let inference = py.import("views.wgpu_inference")?;
+        let inference = py.import("ingetrazo_core")?;
         let packed = view.getattr("packed")?;
         let mut seen = Vec::new();
         for edge in edges.try_iter()? {
@@ -1456,7 +1456,7 @@ fn nearby_edges<'py>(s: &Obj<'py>, px: &Obj<'py>, py_: &Obj<'py>, radius_px: f64
     kw.set_item("radius_px", radius_px)?;
     kw.set_item("cap", cap)?;
     kw.set_item("edit_group", s.getattr("scene")?.getattr("edit_group")?)?;
-    py.import("views.wgpu_inference")?.call_method(
+    py.import("ingetrazo_core")?.call_method(
         "nearby_edges",
         (index, view.getattr("packed")?, view.getattr("camera")?, view.call_method0("width")?, view.call_method0("height")?, px, py_),
         Some(&kw),
@@ -2032,7 +2032,7 @@ impl NativeTools {
         }
         let kw = PyDict::new(py);
         kw.set_item("radius_px", s.getattr("pick_threshold_px")?)?;
-        py.import("views.wgpu_inference")?.call_method("reference_edge", (index, view, x, y), Some(&kw))
+        py.import("ingetrazo_core")?.call_method("reference_edge", (index, view, x, y), Some(&kw))
     }
 
     /// These shared projection-only pickers never read GL caches.

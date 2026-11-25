@@ -33,17 +33,16 @@ fn snapshot_shape(snap: &Bound<'_, PyAny>) -> PyResult<Shape> {
 
 /// A closed volume may flatten, but may not open. Save through the facade:
 /// IFC data and detached Python handles must survive restoration as well.
-#[pyfunction]
-pub fn guarded_push(
+pub(crate) fn guarded_push(
     mesh: &Bound<'_, PyAny>,
-    apply: &Bound<'_, PyAny>,
+    apply: impl FnOnce() -> PyResult<()>,
     check_motion: bool,
     closed: &Bound<'_, PyAny>,
     flat: &Bound<'_, PyAny>,
     store_of: &Bound<'_, PyAny>,
 ) -> PyResult<bool> {
     if !closed.call1((mesh,))?.is_truthy()? || flat.call1((mesh,))?.is_truthy()? {
-        apply.call0()?;
+        apply()?;
         return Ok(false);
     }
     let before = mesh.call_method0("capture_state")?;
@@ -53,7 +52,7 @@ pub fn guarded_push(
     } else {
         None
     };
-    apply.call0()?;
+    apply()?;
     if !closed.call1((mesh,))?.is_truthy()? && !flat.call1((mesh,))?.is_truthy()? {
         mesh.call_method1("restore_state", (before,))?;
         return Ok(true);
@@ -69,9 +68,4 @@ pub fn guarded_push(
         return Ok(snapshot_shape(&snap)? == object_shape(mesh)?);
     }
     Ok(shape == Some(object_shape(mesh)?))
-}
-
-#[pyfunction]
-pub fn translate_prism_cap(prism: bool, keep: bool, crosses: &Bound<'_, PyAny>) -> PyResult<bool> {
-    Ok(prism && !keep && !crosses.call0()?.is_truthy()?)
 }

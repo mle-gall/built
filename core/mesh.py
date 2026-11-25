@@ -12,7 +12,7 @@ from contextvars import ContextVar
 from typing import Iterable, Optional
 from itertools import count
 
-from ingetrazo_core import object_drawing, object_replay, Vec3 as QVector3D, polygon_centroid, polygon_net_area, polygon_newell
+from ingetrazo_core import store_views, object_drawing, object_replay, Vec3 as QVector3D, polygon_centroid, polygon_net_area, polygon_newell
 
 
 # Weld tolerance — two positions within this many decimals (~0.1 mm at metric
@@ -37,15 +37,6 @@ _STITCH_TOL = 1e-4
 
 _KEY_SCALE = 10.0 ** _KEY_DECIMALS
 _WELD_TOL2 = (10.0 ** -_KEY_DECIMALS) ** 2
-
-
-def _key(p: QVector3D) -> tuple[int, int, int]:
-    # Integer grid cells (same partition as rounding to _KEY_DECIMALS):
-    # neighbouring cells are ±1, so the boundary probes in _lookup and
-    # weld_coincident need no float rounding — the rounding calls dominated
-    # large imports.
-    return object_replay.mesh_key(p)
-
 
 
 class Vertex:
@@ -145,40 +136,12 @@ class Edge:
 #: out of another, an extrusion's walls — keys on these.
 PAINT_KEYS = ("color", "mat", "texture", "opacity", "pbr")
 
-#: Everything an edge carries besides its two ends, in the order
-#: :meth:`Mesh.add_edges_welded` reads them.
-#:
-#: Any code that rebuilds a mesh from bare coordinates has to carry these
-#: across, and forgetting one is invisible until a user hits it. Grouping a
-#: cylinder once showed every facet seam because ``soft`` was dropped; then
-#: Marco hid an edge, grouped the drawing, and the edge came back (2026-09-10)
-#: because ``hidden`` was added to ``Edge`` later and only some of the copies
-#: learned about it. Adding a flag here now teaches every one of them at once.
-EDGE_FLAG_NAMES = ("soft", "curve", "layer", "hidden", "flat")
-EDGE_FLAG_DEFAULTS = (False, None, None, False, False)
-
-
-def smooths(edge) -> bool:
-    """Whether the shading runs smooth across ``edge``: a soft edge not
-    marked ``flat`` (Soften Edges' «Smooth normals»)."""
-    return bool(getattr(edge, "soft", False)) and not getattr(edge, "flat", False)
-
-
-def edge_flags(edge) -> tuple:
-    """The edge's flags as a tuple, ready to travel with its coordinates."""
-    return tuple(getattr(edge, name, default)
-                 for name, default in zip(EDGE_FLAG_NAMES, EDGE_FLAG_DEFAULTS))
-
-
-def edge_is_plain(edge) -> bool:
-    """True when there is nothing to carry: a bare, visible, untagged edge."""
-    return edge_flags(edge) == EDGE_FLAG_DEFAULTS
-
-
-def stamp_edge_flags(edge, flags) -> None:
-    """Put back what :func:`edge_flags` took."""
-    for name, value in zip(EDGE_FLAG_NAMES, flags):
-        setattr(edge, name, value)
+EDGE_FLAG_NAMES = store_views.EDGE_FLAG_NAMES
+EDGE_FLAG_DEFAULTS = store_views.EDGE_FLAG_DEFAULTS
+smooths = store_views.smooths
+edge_flags = store_views.edge_flags
+edge_is_plain = store_views.edge_is_plain
+stamp_edge_flags = store_views.stamp_edge_flags
 
 
 class Face:
@@ -262,10 +225,7 @@ on_mesh_materialized = ContextVar("on_mesh_materialized", default=None)
 
 
 class _MeshState:
-    @property
-    def revision(self) -> int:
-        """Session-local change token; reading never builds a deferred mesh."""
-        return self.__dict__.get("_revision", 0) + self._mut_serial
+    revision = property(store_views.mesh_revision)
 
     @property
     def _chunk_dirty(self):
@@ -293,24 +253,10 @@ class _MeshState:
         self.__dict__["_attrs_dirty_value"] = True
 
     def bump_revision(self) -> None:
-        """Advance :attr:`revision` alone: a change readers of the revision
-        must see that touched no coordinate — an attribute, a tag, a
-        material. The mutation serial and the winding count stay put, so
-        the viewport's geometry caches (keyed on those) are not thrown
-        away for a paint; see :meth:`mark_modified` for raw edits."""
-        self.__dict__["_revision"] = self.__dict__.get("_revision", 0) + 1
-        definition = self.__dict__.get("_instance_definition")
-        if definition is not None:
-            definition.mark_modified()
+        return store_views.bump_revision(self)
 
     def mark_modified(self) -> None:
-        """Publish a batch of direct element edits, including attributes."""
-        self._chunk_dirty = True
-        self._attrs_dirty = True
-        # Raw position and winding edits must invalidate readers that key
-        # on geometry alone, not just the renderer's material dirty flag.
-        self._mut_serial += 1
-        self._winding_rev = getattr(self, "_winding_rev", 0) + 1
+        return store_views.mark_modified(self)
 
     @staticmethod
     def next_curve_id() -> int:
@@ -322,13 +268,7 @@ class _MeshState:
         return cid
 
     def note_rewound(self) -> None:
-        """Say that faces may have changed winding (#197): no count,
-        coordinate or paint shows it, so the drawing's chunk has to be told.
-        Marked dirty too, or a move in the same breath would carry the old
-        triangles along on the translation fast path."""
-        self._winding_rev = getattr(self, "_winding_rev", 0) + 1
-        self._chunk_dirty = True
-        self.__dict__["_attrs_dirty_value"] = True   # one revision bump
+        return store_views.note_rewound(self)
 
     def add_faces_bulk(self, pos, ring_sizes, face_ring_counts, attrs=None):
         """Convenience: :meth:`bulk_weld` + :meth:`add_faces_welded`."""
@@ -345,54 +285,15 @@ def __getattr__(name):
     raise AttributeError(name)
 
 
-def face_count(mesh) -> int:
-    """``len(mesh.faces)``, without building a deferred mesh to learn it."""
-    from core.store_mesh import DeferredMesh
-    if type(mesh) is DeferredMesh:
-        return mesh.__dict__["_deferred_nfaces"]
-    return len(mesh.faces)
+face_count = store_views.face_count
 
 
 def face_attrs(mesh):
-    """Each face's own attrs, in face order — for a deferred or store-backed
-    mesh only the first face of each distinct set (what a first-wins tally
-    of materials needs), read without building Python objects."""
-    from core.store_mesh import DeferredMesh
-    if type(mesh) is DeferredMesh:
-        import numpy as np
-        from formats.igz import _face_attrs_from_json
-        src = mesh.__dict__["_deferred_source"]
-        table = src["meta"].get("face_attrs") or []
-        fa = np.asarray(src["face_attr"], dtype=np.int64)
-        _u, first = np.unique(fa, return_index=True)
-        for k in fa[np.sort(first)].tolist():
-            yield (_face_attrs_from_json(table[k]) or {}) if k >= 0 else {}
-        return
-    from core.store_mesh import StoreMesh
-    if isinstance(mesh, StoreMesh):
-        yield from store_views.attribute_rows(mesh)
-        return
-    for f in mesh.faces:
-        yield f.attrs
+    yield from store_views.face_attribute_rows(mesh)
 
-
-from ingetrazo_core import store_views
 
 turn_face_over = store_views.turn_face_over
 swap_orientation_paint = store_views.swap_orientation_paint
-
-
-def _trace_loops(outline: list[tuple[Vertex, Vertex]]) -> Optional[list[list[Vertex]]]:
-    """Trace a set of undirected boundary edges into closed vertex loops. Returns
-    ``None`` if any vertex has valence ≠ 2 (a pinched / non-simple outline).
-
-    Each loop starts at the first outline segment no loop has walked yet,
-    in that segment's direction: the start was the first member of a set
-    of segments, i.e. object addresses, so the merged face's corner order
-    differed from run to run (design decision 5). Vertices are known by
-    key, so the store's views trace the same loops."""
-    from ingetrazo_core import trace_object_loops
-    return trace_object_loops(outline)
 
 
 def element_identity(item):

@@ -13,7 +13,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
 from core.texture import face_uv_axes
-from core.paint_ops import _face_plane, _texture_commands
+from ingetrazo_core import paint_face_plane, texture_commands
 
 
 def _floor_and_wall():
@@ -57,7 +57,7 @@ def test_painting_another_plane_keeps_the_look_and_the_same_plane_the_map():
     m, floor, wall = _floor_and_wall()
     tex = _positioned()
     floor.attrs["texture"] = dict(tex)
-    plane = _face_plane(floor)
+    plane = paint_face_plane(floor)
 
     class _Scene:
         mesh = m
@@ -65,7 +65,7 @@ def test_painting_another_plane_keeps_the_look_and_the_same_plane_the_map():
         materials = {}
         groups = []
     scene = _Scene()
-    for cmd in _texture_commands([wall], tex, plane):
+    for cmd in texture_commands([wall], tex, plane):
         cmd.do(scene)
     got = wall.attrs["texture"]
     assert "uvw" not in got
@@ -79,6 +79,6 @@ def test_painting_another_plane_keeps_the_look_and_the_same_plane_the_map():
                         QVector3D(4, 2, 0), QVector3D(2, 2, 0)])
     if other.normal().z() < 0:
         other.loop.reverse()
-    for cmd in _texture_commands([other], tex, plane):
+    for cmd in texture_commands([other], tex, plane):
         cmd.do(scene)
     assert other.attrs["texture"]["uvw"] == tex["uvw"]

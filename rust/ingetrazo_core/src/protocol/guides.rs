@@ -54,14 +54,9 @@ fn set_group_axes<'py>(
 #[pyfunction]
 #[pyo3(signature=(history,offset,*,clipboard))]
 fn paste_clipboard<'py>(history: &Obj<'py>, offset: &Obj<'py>, clipboard: &Obj<'py>) -> Reply<'py> {
-    let py = history.py();
     let d = finite(offset, "paste offset must be a finite vector")?;
     let before = history.getattr("revision")?;
-    let ok = clipboard.is_truthy()?
-        && py
-            .import("core.paste_ops")?
-            .call_method1("stamp_clipboard", (history, clipboard, vector(py, d)?))?
-            .is_truthy()?;
+    let ok = clipboard.is_truthy()? && super::paste::stamp(history, clipboard, d)?;
     answer(history, &before, ok)
 }
 #[pyfunction]

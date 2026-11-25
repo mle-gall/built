@@ -1,0 +1,594 @@
+{
+ "hidden": {
+  "all": [
+   7771,
+   "32f6dd857ea4091295a4d243785118b0b729d8fec22f80a0528b631f25c0d7b4"
+  ],
+  "every third": [
+   2104,
+   "5bf62fc2d7315044ce62e8bbe36f56ef41d7a406daab1ecc8626fa2735abb014"
+  ],
+  "one": [
+   256,
+   "d804fb683ee061f8ebbf597fcfda166743f38b3004a4af13011de0a2140b6846"
+  ]
+ },
+ "sections": {
+  "across/cross/shaded/camera0/1440": [
+   72720,
+   "12ced31fbc1494ad1758a8d7252eea59037880aa26369190db8c1a3337712515"
+  ],
+  "across/cross/shaded/camera0/600": [
+   72720,
+   "cbdba0db83c36870c499c1e2d7ad1417b704dd224d59ccfcfe8cf5f1e9158440"
+  ],
+  "across/cross/shaded/camera1/1440": [
+   72720,
+   "7ea654c2cba3b2d1d68e7dba04e55e347ca3fe740e93685f564f859b73c27e99"
+  ],
+  "across/cross/shaded/camera1/600": [
+   72720,
+   "4e80ed26563cab5f917c93c8d44fe7d6cc2b20c644d7d7218b8cee2aa368d09c"
+  ],
+  "across/cross/shaded/camera2/1440": [
+   72720,
+   "a51e786b85bf30955cc25075d6bf10118b8f1c53db6f9175d5742fb90cc0f95a"
+  ],
+  "across/cross/shaded/camera2/600": [
+   72720,
+   "7e13ab7512f34ce76fa28be7a84d08bfcfd3ab73c53412e060d63c292c75f0bb"
+  ],
+  "across/cross/xray/camera0/1440": [
+   31104,
+   "a6a2ffcc072a55e4e67fcdca946e7c2c0c56cf8c5228d96c26d7765358ee5a37"
+  ],
+  "across/cross/xray/camera0/600": [
+   31104,
+   "132d5befe3ca8a6efefe8a07157f860ac1448aea3dc68fbf96843347a73ddb8b"
+  ],
+  "across/cross/xray/camera1/1440": [
+   31104,
+   "503a0e878325a130de049dbe409ca14fea5dcaa6c761f8abbde57689cfdcd18f"
+  ],
+  "across/cross/xray/camera1/600": [
+   31104,
+   "f0e1725289257f7a105db60084cb0c209b2b9ecec94c2648c42755a7f267849b"
+  ],
+  "across/cross/xray/camera2/1440": [
+   31104,
+   "58bc32a0d2f674ac6252b53ad01d5f4d8dc9d5d4da4c5cd3b90c40987da9674f"
+  ],
+  "across/cross/xray/camera2/600": [
+   31104,
+   "816ca2d6cc19482215564d9b1799c5ed2a998b6fe771e8916319f330bc572922"
+  ],
+  "across/hatch/shaded/camera0/1440": [
+   54720,
+   "87eea6df3736c09a9b4ccaa66c45f612ec3e4914770e2e25f3eaad0279f94d73"
+  ],
+  "across/hatch/shaded/camera0/600": [
+   54720,
+   "1d5f3cb5ff6c6bd8fdff679e707a74ead182e3fd20b3315c7843bf8a544d5898"
+  ],
+  "across/hatch/shaded/camera1/1440": [
+   54720,
+   "86dbc373216196c964a9dc80dd9cec8ebfd6bb599f9c454676aec878aaf655df"
+  ],
+  "across/hatch/shaded/camera1/600": [
+   54720,
+   "7aea4b2ccc2bc9a92cbafca45068a2294a10dc8f17dd15c5852c7f3c62f356d5"
+  ],
+  "across/hatch/shaded/camera2/1440": [
+   54720,
+   "02d4cc5b13572bf8587a9efa2ebbbe23543614c211d8b5951aa05beea5fb7573"
+  ],
+  "across/hatch/shaded/camera2/600": [
+   54720,
+   "031c84b178beba9126edf926962fa7a35dc00ddb37ce8e433cb287e603608cba"
+  ],
+  "across/hatch/xray/camera0/1440": [
+   31104,
+   "a6a2ffcc072a55e4e67fcdca946e7c2c0c56cf8c5228d96c26d7765358ee5a37"
+  ],
+  "across/hatch/xray/camera0/600": [
+   31104,
+   "132d5befe3ca8a6efefe8a07157f860ac1448aea3dc68fbf96843347a73ddb8b"
+  ],
+  "across/hatch/xray/camera1/1440": [
+   31104,
+   "503a0e878325a130de049dbe409ca14fea5dcaa6c761f8abbde57689cfdcd18f"
+  ],
+  "across/hatch/xray/camera1/600": [
+   31104,
+   "f0e1725289257f7a105db60084cb0c209b2b9ecec94c2648c42755a7f267849b"
+  ],
+  "across/hatch/xray/camera2/1440": [
+   31104,
+   "58bc32a0d2f674ac6252b53ad01d5f4d8dc9d5d4da4c5cd3b90c40987da9674f"
+  ],
+  "across/hatch/xray/camera2/600": [
+   31104,
+   "816ca2d6cc19482215564d9b1799c5ed2a998b6fe771e8916319f330bc572922"
+  ],
+  "across/none/shaded/camera0/1440": [
+   31104,
+   "a6a2ffcc072a55e4e67fcdca946e7c2c0c56cf8c5228d96c26d7765358ee5a37"
+  ],
+  "across/none/shaded/camera0/600": [
+   31104,
+   "132d5befe3ca8a6efefe8a07157f860ac1448aea3dc68fbf96843347a73ddb8b"
+  ],
+  "across/none/shaded/camera1/1440": [
+   31104,
+   "503a0e878325a130de049dbe409ca14fea5dcaa6c761f8abbde57689cfdcd18f"
+  ],
+  "across/none/shaded/camera1/600": [
+   31104,
+   "f0e1725289257f7a105db60084cb0c209b2b9ecec94c2648c42755a7f267849b"
+  ],
+  "across/none/shaded/camera2/1440": [
+   31104,
+   "58bc32a0d2f674ac6252b53ad01d5f4d8dc9d5d4da4c5cd3b90c40987da9674f"
+  ],
+  "across/none/shaded/camera2/600": [
+   31104,
+   "816ca2d6cc19482215564d9b1799c5ed2a998b6fe771e8916319f330bc572922"
+  ],
+  "across/none/xray/camera0/1440": [
+   31104,
+   "a6a2ffcc072a55e4e67fcdca946e7c2c0c56cf8c5228d96c26d7765358ee5a37"
+  ],
+  "across/none/xray/camera0/600": [
+   31104,
+   "132d5befe3ca8a6efefe8a07157f860ac1448aea3dc68fbf96843347a73ddb8b"
+  ],
+  "across/none/xray/camera1/1440": [
+   31104,
+   "503a0e878325a130de049dbe409ca14fea5dcaa6c761f8abbde57689cfdcd18f"
+  ],
+  "across/none/xray/camera1/600": [
+   31104,
+   "f0e1725289257f7a105db60084cb0c209b2b9ecec94c2648c42755a7f267849b"
+  ],
+  "across/none/xray/camera2/1440": [
+   31104,
+   "58bc32a0d2f674ac6252b53ad01d5f4d8dc9d5d4da4c5cd3b90c40987da9674f"
+  ],
+  "across/none/xray/camera2/600": [
+   31104,
+   "816ca2d6cc19482215564d9b1799c5ed2a998b6fe771e8916319f330bc572922"
+  ],
+  "across/solid/shaded/camera0/1440": [
+   46368,
+   "c112c3fecae77f37e15cb42c0361a2944f92b4dbdd8988590e13fa57ae1e0ee2"
+  ],
+  "across/solid/shaded/camera0/600": [
+   46368,
+   "38d59495c7b9731244b3e7afd2a92e97c971085d3faef3f5057c687232835ab1"
+  ],
+  "across/solid/shaded/camera1/1440": [
+   46368,
+   "6c7af978b14e6f503504fa81855146609fbfb5774eabdd15b242e2db071da07e"
+  ],
+  "across/solid/shaded/camera1/600": [
+   46368,
+   "0dbbb7ff45ad606930a167a049f756d0ab7760491842fc200ccf9ab814d574c1"
+  ],
+  "across/solid/shaded/camera2/1440": [
+   46368,
+   "5134f6e06cd5d9bcafb1982a4592cc454f336e1edf72144bfddcb992301363e5"
+  ],
+  "across/solid/shaded/camera2/600": [
+   46368,
+   "793d90c54471a296b184d55cbb2ef2db99a91a2a39fc4ee91a650e5ca4e8f23b"
+  ],
+  "across/solid/xray/camera0/1440": [
+   31104,
+   "a6a2ffcc072a55e4e67fcdca946e7c2c0c56cf8c5228d96c26d7765358ee5a37"
+  ],
+  "across/solid/xray/camera0/600": [
+   31104,
+   "132d5befe3ca8a6efefe8a07157f860ac1448aea3dc68fbf96843347a73ddb8b"
+  ],
+  "across/solid/xray/camera1/1440": [
+   31104,
+   "503a0e878325a130de049dbe409ca14fea5dcaa6c761f8abbde57689cfdcd18f"
+  ],
+  "across/solid/xray/camera1/600": [
+   31104,
+   "f0e1725289257f7a105db60084cb0c209b2b9ecec94c2648c42755a7f267849b"
+  ],
+  "across/solid/xray/camera2/1440": [
+   31104,
+   "58bc32a0d2f674ac6252b53ad01d5f4d8dc9d5d4da4c5cd3b90c40987da9674f"
+  ],
+  "across/solid/xray/camera2/600": [
+   31104,
+   "816ca2d6cc19482215564d9b1799c5ed2a998b6fe771e8916319f330bc572922"
+  ],
+  "low/cross/shaded/camera0/1440": [
+   267552,
+   "dc17d6dcf41122f0fb3c6bbb8e80733c14c912950ec38f416d9e32effef76ace"
+  ],
+  "low/cross/shaded/camera0/600": [
+   267552,
+   "1c6b200b9d35078d8896148776ce54678bd89527acfa4224e49b0592f6785b4d"
+  ],
+  "low/cross/shaded/camera1/1440": [
+   267552,
+   "c79a61ddbbd301f18981eda4e8ac6760419819a60682e02ca70b2f89caf071e5"
+  ],
+  "low/cross/shaded/camera1/600": [
+   267552,
+   "7869fbb8910739fae8acf1663246d96b12e4a3a9805788160f32f2b358318105"
+  ],
+  "low/cross/shaded/camera2/1440": [
+   267552,
+   "1f4a9a2dbeb05d736bdedf126a050481a77d60390337fded5dfc31de74585616"
+  ],
+  "low/cross/shaded/camera2/600": [
+   267552,
+   "9b1a82cff5e6fb973a1b06f68adab745806265a644a7a44dff67db7f6d04aacc"
+  ],
+  "low/cross/xray/camera0/1440": [
+   104832,
+   "7647581826516a756d1ef2b102d21a97d7e02e125fe593af1fd1bf88f6210796"
+  ],
+  "low/cross/xray/camera0/600": [
+   104832,
+   "77ce910fc8a4ca3825de956027d49699150f6917d44a47c9d650984dfe836b6c"
+  ],
+  "low/cross/xray/camera1/1440": [
+   104832,
+   "b341015351edcddfca52dd95f3ab08582366b73893eee53a2cc374f963ef14b5"
+  ],
+  "low/cross/xray/camera1/600": [
+   104832,
+   "0ac02c2fd2555d30c2b95fcf3665767857d7dbd5ff356e4378097a35d9408ca3"
+  ],
+  "low/cross/xray/camera2/1440": [
+   104832,
+   "b8394e80e45fdaf24b6828ba4b5584e2571c20f60641606bc9eade4f92eb87d3"
+  ],
+  "low/cross/xray/camera2/600": [
+   104832,
+   "58b6f9aca0aac9a8b6cf558c82820444def727d766a2f0e9ad11f7ccb647e154"
+  ],
+  "low/hatch/shaded/camera0/1440": [
+   191376,
+   "9f0257b7724ea18dc05b9ebcc8380847f8d56f0aae13212be0c73473498b577d"
+  ],
+  "low/hatch/shaded/camera0/600": [
+   191376,
+   "1e4bd9c177f1c5403a69a661ccea9d632d734dce12a40429bbbcb604e0541a96"
+  ],
+  "low/hatch/shaded/camera1/1440": [
+   191376,
+   "51722a08a05e5799859662677ab14881387b81dcc1ff44a08f5cb8d3c2d05844"
+  ],
+  "low/hatch/shaded/camera1/600": [
+   191376,
+   "1c6758d529a96f659cb959bc63d70ae056e2bf4da2af249079de6ee0f7738f4b"
+  ],
+  "low/hatch/shaded/camera2/1440": [
+   191376,
+   "85ab8a31025820a44e955a2647670aed304fa05dcdb4367f0b2a84b3cc2855b8"
+  ],
+  "low/hatch/shaded/camera2/600": [
+   191376,
+   "494531be6d6da71addb899aae808e2838920eefb7740d877b4648782ceb3c40e"
+  ],
+  "low/hatch/xray/camera0/1440": [
+   104832,
+   "7647581826516a756d1ef2b102d21a97d7e02e125fe593af1fd1bf88f6210796"
+  ],
+  "low/hatch/xray/camera0/600": [
+   104832,
+   "77ce910fc8a4ca3825de956027d49699150f6917d44a47c9d650984dfe836b6c"
+  ],
+  "low/hatch/xray/camera1/1440": [
+   104832,
+   "b341015351edcddfca52dd95f3ab08582366b73893eee53a2cc374f963ef14b5"
+  ],
+  "low/hatch/xray/camera1/600": [
+   104832,
+   "0ac02c2fd2555d30c2b95fcf3665767857d7dbd5ff356e4378097a35d9408ca3"
+  ],
+  "low/hatch/xray/camera2/1440": [
+   104832,
+   "b8394e80e45fdaf24b6828ba4b5584e2571c20f60641606bc9eade4f92eb87d3"
+  ],
+  "low/hatch/xray/camera2/600": [
+   104832,
+   "58b6f9aca0aac9a8b6cf558c82820444def727d766a2f0e9ad11f7ccb647e154"
+  ],
+  "low/none/shaded/camera0/1440": [
+   104832,
+   "7647581826516a756d1ef2b102d21a97d7e02e125fe593af1fd1bf88f6210796"
+  ],
+  "low/none/shaded/camera0/600": [
+   104832,
+   "77ce910fc8a4ca3825de956027d49699150f6917d44a47c9d650984dfe836b6c"
+  ],
+  "low/none/shaded/camera1/1440": [
+   104832,
+   "b341015351edcddfca52dd95f3ab08582366b73893eee53a2cc374f963ef14b5"
+  ],
+  "low/none/shaded/camera1/600": [
+   104832,
+   "0ac02c2fd2555d30c2b95fcf3665767857d7dbd5ff356e4378097a35d9408ca3"
+  ],
+  "low/none/shaded/camera2/1440": [
+   104832,
+   "b8394e80e45fdaf24b6828ba4b5584e2571c20f60641606bc9eade4f92eb87d3"
+  ],
+  "low/none/shaded/camera2/600": [
+   104832,
+   "58b6f9aca0aac9a8b6cf558c82820444def727d766a2f0e9ad11f7ccb647e154"
+  ],
+  "low/none/xray/camera0/1440": [
+   104832,
+   "7647581826516a756d1ef2b102d21a97d7e02e125fe593af1fd1bf88f6210796"
+  ],
+  "low/none/xray/camera0/600": [
+   104832,
+   "77ce910fc8a4ca3825de956027d49699150f6917d44a47c9d650984dfe836b6c"
+  ],
+  "low/none/xray/camera1/1440": [
+   104832,
+   "b341015351edcddfca52dd95f3ab08582366b73893eee53a2cc374f963ef14b5"
+  ],
+  "low/none/xray/camera1/600": [
+   104832,
+   "0ac02c2fd2555d30c2b95fcf3665767857d7dbd5ff356e4378097a35d9408ca3"
+  ],
+  "low/none/xray/camera2/1440": [
+   104832,
+   "b8394e80e45fdaf24b6828ba4b5584e2571c20f60641606bc9eade4f92eb87d3"
+  ],
+  "low/none/xray/camera2/600": [
+   104832,
+   "58b6f9aca0aac9a8b6cf558c82820444def727d766a2f0e9ad11f7ccb647e154"
+  ],
+  "low/solid/shaded/camera0/1440": [
+   156528,
+   "93b4cceac52f193b134c23c3df11f29ada9b28b6d520a6e812cf89ad2ab93d6e"
+  ],
+  "low/solid/shaded/camera0/600": [
+   156528,
+   "d5983d4670f24d62e04a1b95063575d224021e5fc6e757f6863b05a79100b269"
+  ],
+  "low/solid/shaded/camera1/1440": [
+   156528,
+   "3ea88db16c2b7957fced858937437f9a536326833b955efebc4d11f365caf81b"
+  ],
+  "low/solid/shaded/camera1/600": [
+   156528,
+   "89110ed6b98eda64f70c6c7613d3bf1fc451feacae4bcec109fec8d3eeb9628f"
+  ],
+  "low/solid/shaded/camera2/1440": [
+   156528,
+   "2f070a8887f457b8e0eaf75d78cc2446c9d049572d6f8f36464b76b008c11c0e"
+  ],
+  "low/solid/shaded/camera2/600": [
+   156528,
+   "e24434ec1978645307d54c72c647066acaa80a17cb682e757ad1618bbe0d723c"
+  ],
+  "low/solid/xray/camera0/1440": [
+   104832,
+   "7647581826516a756d1ef2b102d21a97d7e02e125fe593af1fd1bf88f6210796"
+  ],
+  "low/solid/xray/camera0/600": [
+   104832,
+   "77ce910fc8a4ca3825de956027d49699150f6917d44a47c9d650984dfe836b6c"
+  ],
+  "low/solid/xray/camera1/1440": [
+   104832,
+   "b341015351edcddfca52dd95f3ab08582366b73893eee53a2cc374f963ef14b5"
+  ],
+  "low/solid/xray/camera1/600": [
+   104832,
+   "0ac02c2fd2555d30c2b95fcf3665767857d7dbd5ff356e4378097a35d9408ca3"
+  ],
+  "low/solid/xray/camera2/1440": [
+   104832,
+   "b8394e80e45fdaf24b6828ba4b5584e2571c20f60641606bc9eade4f92eb87d3"
+  ],
+  "low/solid/xray/camera2/600": [
+   104832,
+   "58b6f9aca0aac9a8b6cf558c82820444def727d766a2f0e9ad11f7ccb647e154"
+  ],
+  "oblique/cross/shaded/camera0/1440": [
+   209592,
+   "38fdfb189ccd66563a061aba9500a146c1a49a96ec930cfca690ebfa612c0c14"
+  ],
+  "oblique/cross/shaded/camera0/600": [
+   209592,
+   "a3a94f055c05c80163534b09420f08d102a6a25200640492f209c4de0fc30420"
+  ],
+  "oblique/cross/shaded/camera1/1440": [
+   209592,
+   "058a9972a97aa83478f0e43b5b3bc65dbda9063349b5a4700452a63ca7823aed"
+  ],
+  "oblique/cross/shaded/camera1/600": [
+   209592,
+   "dd243f2db03abde028a719e77804b0f258a561d2eee02228e7c9880cd2724a1e"
+  ],
+  "oblique/cross/shaded/camera2/1440": [
+   209592,
+   "1ef2271f775d1c40ec8cd8e9ff016f6f73066aa02da659b1c37752f40cec3233"
+  ],
+  "oblique/cross/shaded/camera2/600": [
+   209592,
+   "92539a27c556c796ed3f8128e3dc246f887da3822efbab33a20334c2c66a4f35"
+  ],
+  "oblique/cross/xray/camera0/1440": [
+   73296,
+   "4c5441d281b6948255bc6fa59af0508cd409df003549438142c6a50e72fca13a"
+  ],
+  "oblique/cross/xray/camera0/600": [
+   73296,
+   "a4537956867f767d64c56f96d4ecf83bdc74f19a45992c8bd33b4031a8157212"
+  ],
+  "oblique/cross/xray/camera1/1440": [
+   73296,
+   "609401b3f67038b565e861e1fed17939c4269ede9fb5a7e2ca4dea6073dd21df"
+  ],
+  "oblique/cross/xray/camera1/600": [
+   73296,
+   "6d516eabc9d9908c4a989477de080b7e0a66e539b75dbbc81e6d5cecba538ea0"
+  ],
+  "oblique/cross/xray/camera2/1440": [
+   73296,
+   "9b25deaa9d3bb31d326dd515eb1162c213c428171ad89c0dfe66f0f89e606c1b"
+  ],
+  "oblique/cross/xray/camera2/600": [
+   73296,
+   "a49c62850bb1a882ef712f2e825a1635f4d270b60f7cec89c37d79d5cba16fbd"
+  ],
+  "oblique/hatch/shaded/camera0/1440": [
+   142920,
+   "6145418177c733eaf021411a2c69ec068d23c1e1fa1bc61503b719df82d285f7"
+  ],
+  "oblique/hatch/shaded/camera0/600": [
+   142920,
+   "964b265d5bc20d97521f95a408b3ff54e8e3b535211ce31882ebecd4979846b4"
+  ],
+  "oblique/hatch/shaded/camera1/1440": [
+   142920,
+   "303e362235265dfe70091fdea46ce4b228f2e470b96058298fa31af20f0fc99e"
+  ],
+  "oblique/hatch/shaded/camera1/600": [
+   142920,
+   "d8cd3b25c158fe185270fac8cc88dd45da7f268e8001f541309db1499d958905"
+  ],
+  "oblique/hatch/shaded/camera2/1440": [
+   142920,
+   "14df0589073aa090bc714e6cd493f3a9f14265bc6432133848037302aa3d2894"
+  ],
+  "oblique/hatch/shaded/camera2/600": [
+   142920,
+   "898102bf86800c852edbf0c2a08494be2b61af88ff5822153e258ee24719414c"
+  ],
+  "oblique/hatch/xray/camera0/1440": [
+   73296,
+   "4c5441d281b6948255bc6fa59af0508cd409df003549438142c6a50e72fca13a"
+  ],
+  "oblique/hatch/xray/camera0/600": [
+   73296,
+   "a4537956867f767d64c56f96d4ecf83bdc74f19a45992c8bd33b4031a8157212"
+  ],
+  "oblique/hatch/xray/camera1/1440": [
+   73296,
+   "609401b3f67038b565e861e1fed17939c4269ede9fb5a7e2ca4dea6073dd21df"
+  ],
+  "oblique/hatch/xray/camera1/600": [
+   73296,
+   "6d516eabc9d9908c4a989477de080b7e0a66e539b75dbbc81e6d5cecba538ea0"
+  ],
+  "oblique/hatch/xray/camera2/1440": [
+   73296,
+   "9b25deaa9d3bb31d326dd515eb1162c213c428171ad89c0dfe66f0f89e606c1b"
+  ],
+  "oblique/hatch/xray/camera2/600": [
+   73296,
+   "a49c62850bb1a882ef712f2e825a1635f4d270b60f7cec89c37d79d5cba16fbd"
+  ],
+  "oblique/none/shaded/camera0/1440": [
+   73296,
+   "4c5441d281b6948255bc6fa59af0508cd409df003549438142c6a50e72fca13a"
+  ],
+  "oblique/none/shaded/camera0/600": [
+   73296,
+   "a4537956867f767d64c56f96d4ecf83bdc74f19a45992c8bd33b4031a8157212"
+  ],
+  "oblique/none/shaded/camera1/1440": [
+   73296,
+   "609401b3f67038b565e861e1fed17939c4269ede9fb5a7e2ca4dea6073dd21df"
+  ],
+  "oblique/none/shaded/camera1/600": [
+   73296,
+   "6d516eabc9d9908c4a989477de080b7e0a66e539b75dbbc81e6d5cecba538ea0"
+  ],
+  "oblique/none/shaded/camera2/1440": [
+   73296,
+   "9b25deaa9d3bb31d326dd515eb1162c213c428171ad89c0dfe66f0f89e606c1b"
+  ],
+  "oblique/none/shaded/camera2/600": [
+   73296,
+   "a49c62850bb1a882ef712f2e825a1635f4d270b60f7cec89c37d79d5cba16fbd"
+  ],
+  "oblique/none/xray/camera0/1440": [
+   73296,
+   "4c5441d281b6948255bc6fa59af0508cd409df003549438142c6a50e72fca13a"
+  ],
+  "oblique/none/xray/camera0/600": [
+   73296,
+   "a4537956867f767d64c56f96d4ecf83bdc74f19a45992c8bd33b4031a8157212"
+  ],
+  "oblique/none/xray/camera1/1440": [
+   73296,
+   "609401b3f67038b565e861e1fed17939c4269ede9fb5a7e2ca4dea6073dd21df"
+  ],
+  "oblique/none/xray/camera1/600": [
+   73296,
+   "6d516eabc9d9908c4a989477de080b7e0a66e539b75dbbc81e6d5cecba538ea0"
+  ],
+  "oblique/none/xray/camera2/1440": [
+   73296,
+   "9b25deaa9d3bb31d326dd515eb1162c213c428171ad89c0dfe66f0f89e606c1b"
+  ],
+  "oblique/none/xray/camera2/600": [
+   73296,
+   "a49c62850bb1a882ef712f2e825a1635f4d270b60f7cec89c37d79d5cba16fbd"
+  ],
+  "oblique/solid/shaded/camera0/1440": [
+   109512,
+   "60f9049225311fd7b2f729192126979a50900755fe0ede86a2726cd16769b209"
+  ],
+  "oblique/solid/shaded/camera0/600": [
+   109512,
+   "dac10841c472ec8709a6e091441e9dde14cff959ee75d256847a0fce2f06be0b"
+  ],
+  "oblique/solid/shaded/camera1/1440": [
+   109512,
+   "bcf7f059e99a204062fe5d19dd3d0b1a8779dec05552729d04432c7d548e2c4d"
+  ],
+  "oblique/solid/shaded/camera1/600": [
+   109512,
+   "2ab5a1a49a04194199d6dbc9ae0e7852e07197d2b3617fc989862e458a8011e0"
+  ],
+  "oblique/solid/shaded/camera2/1440": [
+   109512,
+   "4ccd004baea9cd9c1cfc959cabaeca2420e70e65508cf376537218dac7262117"
+  ],
+  "oblique/solid/shaded/camera2/600": [
+   109512,
+   "1e81523b0584b6100fd92db821589f366896c02a3553b3e361bfbf1ac95d68f9"
+  ],
+  "oblique/solid/xray/camera0/1440": [
+   73296,
+   "4c5441d281b6948255bc6fa59af0508cd409df003549438142c6a50e72fca13a"
+  ],
+  "oblique/solid/xray/camera0/600": [
+   73296,
+   "a4537956867f767d64c56f96d4ecf83bdc74f19a45992c8bd33b4031a8157212"
+  ],
+  "oblique/solid/xray/camera1/1440": [
+   73296,
+   "609401b3f67038b565e861e1fed17939c4269ede9fb5a7e2ca4dea6073dd21df"
+  ],
+  "oblique/solid/xray/camera1/600": [
+   73296,
+   "6d516eabc9d9908c4a989477de080b7e0a66e539b75dbbc81e6d5cecba538ea0"
+  ],
+  "oblique/solid/xray/camera2/1440": [
+   73296,
+   "9b25deaa9d3bb31d326dd515eb1162c213c428171ad89c0dfe66f0f89e606c1b"
+  ],
+  "oblique/solid/xray/camera2/600": [
+   73296,
+   "a49c62850bb1a882ef712f2e825a1635f4d270b60f7cec89c37d79d5cba16fbd"
+  ]
+ }
+}

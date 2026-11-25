@@ -1,21 +1,21 @@
 // The module carries a fingerprint of the sources it was built from, so a
 // test can tell an installed module that no longer matches rust/ (a stale
 // build would measure yesterday's kernels). FNV-1a 64 over Cargo.toml,
-// Cargo.lock and src/**/*.rs by path, CR dropped; tests/test_rust_engine_switch
+// Cargo.lock, Rust sources and embedded JSON by path, CR dropped; tests/test_rust_engine_switch
 // computes the same.
 use std::fs;
 use std::path::Path;
 
 fn main() {
     let mut files = vec!["Cargo.toml".to_string(), "Cargo.lock".to_string()];
-    // Every .rs under src/, sub-modules included (src/store/ was missed:
+    // Include modules and their embedded records (src/store/ was once missed:
     // a wheel with a stale store passed the check).
     fn walk(dir: &str, out: &mut Vec<String>) {
         for e in fs::read_dir(dir).unwrap().filter_map(|e| e.ok()) {
             let name = format!("{dir}/{}", e.file_name().to_string_lossy());
             if e.path().is_dir() {
                 walk(&name, out);
-            } else if name.ends_with(".rs") {
+            } else if name.ends_with(".rs") || name.ends_with(".json") {
                 out.push(name);
             }
         }

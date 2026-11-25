@@ -459,7 +459,7 @@ def test_edges_near_are_the_baked_edges_at_their_distances(seed, big):
     """``edges_near`` gives the hard edges of the bakes within the radius at
     the distance ``segment_distances`` measures on ``_project_px``'s pixels,
     bit for bit, the nearest ``cap`` of them, nearest first."""
-    from core.edge_grid import segment_distances
+    from ingetrazo_core import segment_distances
     from tests.controller_surface import ControllerSurface as Viewport
     rng, bakes, iset = _scene(300 + seed, 40 if big else 120, big)
     P = len(bakes)
@@ -502,7 +502,7 @@ def test_edges_near_breaks_ties_like_the_walk_over_many_twins(seed):
     corner of the plant of #158, the edges tie at the same distance, and
     the parallel batches must keep the ones the walk nearest first kept:
     the first by candidate, then by edge."""
-    from core.edge_grid import segment_distances
+    from ingetrazo_core import segment_distances
     from tests.controller_surface import ControllerSurface as Viewport
     rng = np.random.default_rng(900 + seed)
     protos = [_proto(rng, False) for _ in range(3)]

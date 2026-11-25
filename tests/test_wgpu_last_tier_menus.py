@@ -1,6 +1,6 @@
 """Modelling commands and Browser selection in one native document."""
 from ingetrazo_core import Vec3
-from core.group_scale import group_scale
+from ingetrazo_core import group_scale
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from tests.native_tree import action
 from tests.test_project_drawing_filters import Project

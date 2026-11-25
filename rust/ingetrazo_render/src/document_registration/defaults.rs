@@ -479,7 +479,7 @@ pub(super) fn controller(r: &Registrar, cls: &Obj) -> PyResult<()> {
     // same event are read off (see _nearby_edges_unbaked).
     cls.setattr("GEDGE_SHARED_PX", 48.0)?;
     // From this many group edges up, the distances come through a screen
-    // grid (core.edge_grid) instead of one pass over all of them.
+    // grid (ingetrazo_core) instead of one pass over all of them.
     cls.setattr("GEDGE_GRID_MIN", 20000)?;
     // How close (px) the cursor must come to a component's origin or an
     // arc's midpoint for it to enter the snap scene at all.

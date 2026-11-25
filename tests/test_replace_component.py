@@ -13,7 +13,7 @@ from core.group import Group, copy_group, world_mesh
 from core.history import History, ReplaceComponentCommand
 from core.mesh import Mesh
 from core.scene import Scene
-from core.select_ops import same_definition
+from ingetrazo_core import same_definition
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 
 
@@ -405,7 +405,7 @@ def test_the_list_rows_carry_a_thumbnail(win):
 
 def test_a_long_list_offers_a_name_filter_that_survives_a_refresh(win, monkeypatch):
     from tests.test_library_sheet import act, frame, tiles
-    from core import library
+    from ingetrazo_core import component_library as library
     monkeypatch.setattr(library, "index", lambda refresh: [])
     names = ["Silla", "Sillón", "Mesa", "Lámpara", "Puerta P1", "Puerta P2", "Ventana V1", "Árbol"]
     scene = win.viewport.scene

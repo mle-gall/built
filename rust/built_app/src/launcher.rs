@@ -190,7 +190,7 @@ fn write_pdf(job: &PdfExport, host: &python::Host) -> PyResult<i32> {
             return Ok(1);
         }
         let composer = py
-            .import("views.wgpu_sheets")?
+            .import("ingetrazo_render.sheet_workspace")?
             .call_method1("composer_for", (window,))?;
         let troubled = composer.call_method1("export_all_pdf", (&job.output, sheets))?;
         if !job.output.is_file() {
@@ -201,15 +201,27 @@ fn write_pdf(job: &PdfExport, host: &python::Host) -> PyResult<i32> {
     })
 }
 
-pub fn register_launcher() {
+// Apply before startup allocates worker threads and their glibc arenas.
+fn limit_allocator_arenas() -> bool {
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     unsafe {
         extern "C" {
             fn mallopt(param: i32, value: i32) -> i32;
         }
         const M_ARENA_MAX: i32 = -8;
-        mallopt(M_ARENA_MAX, 2);
+        mallopt(M_ARENA_MAX, 2) != 0
     }
+    #[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+    { false }
+}
+
+#[test]
+fn arena_limit_applies_only_to_glibc() {
+    assert_eq!(limit_allocator_arenas(), cfg!(all(target_os = "linux", target_env = "gnu")));
+}
+
+pub fn register_launcher() {
+    limit_allocator_arenas();
     let args: Vec<_> = std::env::args().skip(1).collect();
     #[cfg(windows)]
     if args.iter().any(|a| a.starts_with('-')) {
@@ -235,34 +247,6 @@ pub fn register_launcher() {
     if args == ["--probe-gpu"] {
         let available = matches!(run_batch(Batch::Probe), Ok(0));
         println!("{{\"available\":{available}}}");
-        std::process::exit(0);
-    }
-    if args
-        .first()
-        .is_some_and(|flag| flag == "--prepare-drawing-cache")
-    {
-        if args.len() != 2 {
-            eprintln!("usage: built --prepare-drawing-cache <document>");
-            std::process::exit(2);
-        }
-        let file = absolute(Path::new(&args[1]));
-        let layout = python::Layout::find(None, None);
-        let result = python::start(&layout).and_then(|_| {
-            Python::attach(|py| {
-                let value = py
-                    .import("views.drawing_cache")?
-                    .call_method1("prepare_file", (file,))?;
-                println!(
-                    "{}",
-                    py.import("json")?.call_method1("dumps", (value,))?.str()?
-                );
-                Ok(())
-            })
-        });
-        if let Err(error) = result {
-            eprintln!("built: {error}");
-            std::process::exit(1);
-        }
         std::process::exit(0);
     }
     if args == ["--mcp"] {
@@ -303,21 +287,26 @@ pub fn register_launcher() {
 }
 
 pub fn initialize(py: Python<'_>) -> PyResult<()> {
-    py.import("core.tls")?.call_method0("ensure_once")?;
-    py.import("core.worker_gc")?.call_method0("install")?;
+    py.import("ingetrazo_core.python_tls")?.call_method0("ensure_once")?;
+    let core = py.import("ingetrazo_core")?;
+    core.call_method0("install_main_thread_collector")?;
     let log = py.import("core.paths")?.call_method0("open_crash_log")?;
     if !log.is_none() {
         let faults = py.import("faulthandler")?;
         faults.call_method1("enable", (&log,))?;
-        let black_box = py.import("core.black_box")?;
-        black_box.call_method1("attach", (&log,))?;
-        black_box.call_method1("install_panic_log", (py.import("ingetrazo_core")?,))?;
+        let path = log.getattr("name")?;
+        for module in [core, py.import("ingetrazo_render")?] {
+            module.call_method1("install_panic_log", (&path,))?;
+        }
+        // Keep the descriptor valid as long as faulthandler may write to it.
+        static CRASH_LOG: std::sync::OnceLock<Py<PyAny>> = std::sync::OnceLock::new();
+        let _ = CRASH_LOG.set(log.clone().unbind());
         #[cfg(unix)]
         faults.call_method1("register", (py.import("signal")?.getattr("SIGUSR1")?, &log))?;
     }
     #[cfg(windows)]
     if std::env::var_os("BUILT_SETTINGS_DIR").is_none() {
-        py.import("core.gpu_prefs")?
+        py.import("ingetrazo_core")?
             .call_method0("ensure_high_performance_gpu")?;
     }
     Ok(())

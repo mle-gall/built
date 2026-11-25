@@ -13,7 +13,7 @@ from ingetrazo_render import KeyEvent, SurveyRaster, blank_picture
 from tests.raster_samples import pixels, solid_raster
 
 from core.settings import settings
-from core import recent
+from ingetrazo_core import recent
 from core.scene import Scene
 from formats import igz
 from ingetrazo_render import chrome_sheet as cs
@@ -161,6 +161,7 @@ def test_show_home_puts_the_page_on_the_sheet(win, monkeypatch, tmp_path):
     tpl = section(sh, "templates")
     assert [t["id"] for t in tpl] == ["tpl:survey", "tpl:steel", "tpl:arch_mm", "tpl:blank"]
     assert sh["footer"]["hint"].count("Engine:") == 1
+    assert "Renderer: wgpu (native app)" in sh["footer"]["hint"]
     assert [l["id"] for l in sh["footer"]["links"]] == ["libraries", "prefs", "extensions", "help"]
     # The first row is focused; its preview is on the right.
     assert sh["focus"] == "cont"
@@ -576,3 +577,23 @@ def test_native_save_picture_roundtrips_rgba_without_a_widget():
     encoded = archive_picture_png(2, 2, row * 2)
     assert archive_thumbnail(encoded, 16) == (2, 2, row * 2)
     assert archive_thumbnail(b"broken", 16) is None
+
+
+def test_link_preview_follows_moved_sources_and_stops_at_a_cycle(tmp_path):
+    import json
+    import zipfile
+
+    from ingetrazo_core import scan_document_links
+
+    root = tmp_path / "host.igz"
+    child = tmp_path / "moved.igz"
+    stale = str(tmp_path / "old" / child.name)
+    first = {"link": {"path": stale, "rel": child.name}}
+    with zipfile.ZipFile(root, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("document.json", json.dumps({"groups": [first, first]}))
+    child.write_text(json.dumps({"groups": [{"link": {"path": str(root)}}]}))
+
+    assert scan_document_links(root) == [
+        {"path": stale, "found": str(child.resolve()), "depth": 0, "via": str(root)},
+        {"path": str(root), "found": str(root), "depth": 1, "via": str(child.resolve())},
+    ]

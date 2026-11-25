@@ -442,24 +442,14 @@ def test_face_rules_ask_only_the_placements_under_the_cursor(view, monkeypatch):
     assert view.last_snap is not None
     # The test's own ID-pass stand-in (_pick) asks one row at a time; the
     # occlusion rays ask all rows through the native BVH. Neither is new.
-    from views import wgpu_inference
-    calls = []
-    real = wgpu_inference._screen_rows
-
-    def rows_spy(*args):
-        out = real(*args)
-        calls.append(len(out))
-        return out
-
-    monkeypatch.setattr(wgpu_inference, "_screen_rows", rows_spy)
+    import ingetrazo_core
     asked.clear()
-    p = wgpu_inference.face_crossing(
+    # Observe the rows that actually reach every BVH ray, including side probes.
+    ingetrazo_core.face_crossing(
         index, view, x, y, view.hovered_row, view.last_snap.point, V(0, 0, 1),
-        wgpu_inference.eligible_rows(index, view.packed),
+        ingetrazo_core.eligible_rows(index, view.packed),
         view._world_to_pixel, view.scene.edit_group)
-    assert calls and max(calls) <= 8, calls
     assert asked and max(asked) <= 8, asked
-    del p
 
 
 def test_acquired_arc_center_survives_crossing_the_empty_interior(view):

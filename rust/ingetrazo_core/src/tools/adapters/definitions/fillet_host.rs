@@ -24,7 +24,7 @@ pub(super) fn install(module: &Bound<PyModule>) -> PyResult<()> {
         attrs.set_item("wireframe_depth_tested", true)?;
         attrs.set_item("radius", 0.1)?;
         attrs.set_item("segments", 8)?;
-        attrs.set_item("profile", module.getattr("CIRCULAR")?)?;
+        attrs.set_item("profile", 0.5)?;
         attrs.set_item("measure", "radius")?;
         attrs.set_item(
             "_MEASURES",

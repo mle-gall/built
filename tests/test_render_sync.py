@@ -7,7 +7,6 @@ face-me figures turned in Blender instead of exporting again."""
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -21,9 +20,6 @@ from core import render_blender as rb  # noqa: E402
 from core.camera import OrbitCamera  # noqa: E402
 from core.group import make_billboard_group  # noqa: E402
 from core.scene import Scene  # noqa: E402
-
-HAS_BLENDER = shutil.which("blender") is not None
-
 
 def _box(scene):
     pts = [V(0, 0, 0), V(2, 0, 0), V(2, 2, 0), V(0, 2, 0),
@@ -157,7 +153,7 @@ def _run(window, seconds, until=None):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(not HAS_BLENDER, reason="no Blender on this machine")
+@pytest.mark.blender
 def test_a_real_blender_follows_the_camera_when_it_rests(window, monkeypatch):
     from tests.test_render_lights import attach_render_surface
     attach_render_surface(window, monkeypatch)
@@ -182,7 +178,7 @@ def test_a_real_blender_follows_the_camera_when_it_rests(window, monkeypatch):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(not HAS_BLENDER, reason="no Blender on this machine")
+@pytest.mark.blender
 def test_a_serving_blender_renders_each_camera_and_quits(tmp_path):
     scene = _scene_with_figure(tmp_path)
     cam = _camera(scene)

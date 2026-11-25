@@ -2,14 +2,15 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Issue #198: the macOS package's Python looked for its CA bundle at the
 build machine's path, and the AI assistant failed with
-CERTIFICATE_VERIFY_FAILED. core.tls points OpenSSL at a bundle that exists,
+CERTIFICATE_VERIFY_FAILED. ingetrazo_core.python_tls points OpenSSL at a bundle that exists,
 and leaves a working setup — and verification — alone."""
 from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
 
-from core import tls
+from ingetrazo_core import python_tls as tls
+import sys
 
 
 def _paths(cafile=None, capath=None, openssl_cafile=None, openssl_capath=None):
@@ -26,7 +27,7 @@ MAC_FRAMEWORK = _paths(
 
 
 def test_the_mac_package_gets_the_system_bundle(tmp_path, monkeypatch):
-    monkeypatch.setattr(tls, "_certifi", lambda: None)
+    monkeypatch.setitem(sys.modules, "certifi", None)
     system = tmp_path / "cert.pem"
     system.write_text("-----BEGIN CERTIFICATE-----\n")
     env: dict = {}
@@ -39,14 +40,14 @@ def test_the_mac_package_gets_the_system_bundle(tmp_path, monkeypatch):
 def test_certifi_wins_when_it_is_bundled(tmp_path, monkeypatch):
     bundled = tmp_path / "cacert.pem"
     bundled.write_text("x")
-    monkeypatch.setattr(tls, "_certifi", lambda: str(bundled))
+    monkeypatch.setitem(sys.modules, "certifi", SimpleNamespace(where=lambda: str(bundled)))
     env: dict = {}
     assert tls.ensure_ca_bundle(MAC_FRAMEWORK, ["/etc/ssl/cert.pem"],
                                 environ=env, platform="darwin") == str(bundled)
 
 
 def test_a_working_setup_is_left_alone(tmp_path, monkeypatch):
-    monkeypatch.setattr(tls, "_certifi", lambda: None)
+    monkeypatch.setitem(sys.modules, "certifi", None)
     ok = tmp_path / "ok.pem"
     ok.write_text("x")
     env: dict = {}
@@ -69,7 +70,7 @@ def test_windows_reads_its_own_store(monkeypatch):
 
 
 def test_nothing_found_changes_nothing(monkeypatch, tmp_path):
-    monkeypatch.setattr(tls, "_certifi", lambda: None)
+    monkeypatch.setitem(sys.modules, "certifi", None)
     env: dict = {}
     assert tls.ensure_ca_bundle(MAC_FRAMEWORK, [str(tmp_path / "none")],
                                 environ=env, platform="darwin") is None
@@ -88,7 +89,7 @@ def test_the_bundle_it_sets_is_what_ssl_then_uses(tmp_path, monkeypatch):
 
 
 def test_a_bundle_variable_pointing_nowhere_is_replaced(tmp_path, monkeypatch):
-    monkeypatch.setattr(tls, "_certifi", lambda: None)
+    monkeypatch.setitem(sys.modules, "certifi", None)
     ok = tmp_path / "ok.pem"
     ok.write_text("x")
     env = {"SSL_CERT_FILE": str(tmp_path / "gone.pem")}
@@ -167,14 +168,36 @@ def test_windows_without_truststore_still_verifies(monkeypatch):
     assert ctx.verify_mode == ssl.CERT_REQUIRED and ctx.check_hostname
 
 
-def test_every_python_https_call_uses_the_context():
+def test_every_python_https_call_uses_the_context(monkeypatch, tmp_path):
+    import io
     import re
-    from pathlib import Path
-    root = Path(tls.__file__).resolve().parent
-    for name in ("extension_manager.py", "library.py", "ai.py"):
-        text = (root / name).read_text(encoding="utf-8")
-        calls = re.findall(r"request\.urlopen\((?:[^()]|\([^()]*\))*\)", text)
-        assert calls and all("context=" in c for c in calls), name
+    import urllib.request
+    from ingetrazo_core import component_library, extension_manager
+
+    # The AI client owns its own urllib calls. Both catalogues obtain the
+    # same context at request time, including when the mirror is overridden.
+    text = (Path(__file__).resolve().parents[1] / "core" / "ai.py").read_text(encoding="utf-8")
+    calls = re.findall(r"request\.urlopen\((?:[^()]|\([^()]*\))*\)", text)
+    assert calls and all("context=" in c for c in calls)
+
+    context = object()
+    seen = []
+
+    class Response(io.BytesIO):
+        def geturl(self):
+            return "https://example.invalid/catalog"
+
+    def open_request(request, *, timeout, context):
+        seen.append(context)
+        return Response(b'{"modelos": []}')
+
+    monkeypatch.setattr(tls, "https_context", lambda: context)
+    monkeypatch.setattr(urllib.request, "urlopen", open_request)
+    monkeypatch.setenv("INGETRAZO_LIBRARY", "https://example.invalid")
+    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "textures"))
+    assert component_library.index(refresh=True) == []
+    assert extension_manager.download("https://example.invalid/extensions", 100)
+    assert seen == [context, context]
 
 
 def test_the_windows_build_ships_truststore():

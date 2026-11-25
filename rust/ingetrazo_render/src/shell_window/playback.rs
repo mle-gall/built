@@ -207,7 +207,7 @@ impl WindowPlayback {
 fn apply_animation(win: &Obj, scene: &Obj, values: &Bound<PyDict>) -> PyResult<()> {
     let fresh = win
         .py()
-        .import("core.scene_animation")?
+        .import("ingetrazo_core")?
         .getattr("SceneAnimation")?
         .call((), Some(values))?;
     if win.getattr("viewport")?.getattr("scene")?.is(scene)

@@ -4,7 +4,7 @@
 recorded from the composer (scripts/sheet_frame_goldens.py) before it went
 and the workspace tests that hold the native path to them
 (tests/test_sheets_workspace.py): the scene each case sets up, what the
-workspace answers (views/wgpu_sheet_frames.py) and what the composer
+workspace answers (ingetrazo_render.sheet_frames) and what the composer
 answered, in one canonical, JSON-able form."""
 from __future__ import annotations
 
@@ -119,7 +119,7 @@ def _canon_rings(rings):
 def native(case, source, plan, tmp_path, window=None) -> dict:
     """What the workspace answers for ``case`` (``window``: the one holding
     the extensions' sheet providers)."""
-    from views import wgpu_sheet_frames as w
+    from ingetrazo_render import sheet_frames as w
     if case == "snaps":
         pts, wpts, edges, _ew, _c = w.snaps(source, plan)
         return {"points": _canon_points(pts, wpts), "edges": len(edges)}

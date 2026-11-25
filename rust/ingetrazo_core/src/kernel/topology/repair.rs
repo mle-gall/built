@@ -85,7 +85,12 @@ fn orient_coplanar_faces<'py>(
                     .getattr("native")?
                     .call_method1("MeshStore", (&ns,))?;
                 store.call_method1("restore", (footprint, ns))?;
-                api.call_method1("become_store", (&old, store, PyList::empty(py)))?;
+                crate::kernel::store_views::lifecycle::become_store(
+                    &old,
+                    &store,
+                    PyList::empty(py).as_any(),
+                    None,
+                )?;
                 Some(object_outline::winding_footprint(&old.getattr("faces")?)?.into_any())
             } else {
                 None

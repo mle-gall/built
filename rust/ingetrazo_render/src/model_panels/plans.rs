@@ -181,7 +181,7 @@ fn finish(
         let index = scene
             .getattr("compositions")?
             .call_method1("index", (&page,))?;
-        py.import("views.wgpu_sheets")?
+        py.import("ingetrazo_render.sheet_workspace")?
             .call_method1("to_sheets", (win, index))?;
     }
     Ok(())

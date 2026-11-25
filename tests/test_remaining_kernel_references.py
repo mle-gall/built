@@ -140,7 +140,7 @@ def test_store_repair_reference(monkeypatch):
 
 
 def view_rows():
-    from core.mesh import _key as weld_key
+    from ingetrazo_core import object_replay
     rows = []
     for seed in range(16):
         mesh = Mesh()
@@ -148,7 +148,7 @@ def view_rows():
         base = (0, 650000)[seed % 2]
         pts = [V(base+x,y,z) for x,y,z in ((0,0,0),(2,0,.001),(2,3,0),(0,3,0))]
         face = mesh.add_face(pts)
-        for quant in (top._key, lambda p: weld_key(V(*p))):
+        for quant in (top._key, lambda p: object_replay.mesh_key(V(*p))):
             cells = {quant(p.toTuple()) for p in pts[:1+seed%4]}
             hits = mesh.vertices_in_cells(cells, quant)
             keys = [v.key for v in hits]

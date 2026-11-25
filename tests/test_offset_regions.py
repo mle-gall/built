@@ -108,8 +108,8 @@ def test_interior_point_of_a_concave_loop_is_really_inside():
     ell = [V(0, 0), V(10, 0), V(10, 4), V(6, 4), V(6, 8), V(0, 8)]
     p = interior_point(ell, N)
     assert p is not None
-    from core.offset import _inside
-    assert _inside(p, ell, N)
+    from core.arrangement import _point_in_polygon
+    assert _point_in_polygon((p.x(), p.y()), [(v.x(), v.y()) for v in ell])
 
 
 # ---- through the tool -------------------------------------------------------

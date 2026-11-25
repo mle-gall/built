@@ -1,4 +1,5 @@
 """Built v1 precision through the store, both archive readers and recovery."""
+from ingetrazo_core import store_views
 import json
 import zipfile
 
@@ -24,7 +25,7 @@ def precise_scene():
                sizes=empty, rings=empty)
     with patch.object(_native, "native", _native.available()):
         store, table = store_views.store_from_source(src, precise=True)
-    store_mesh.become_store(scene.mesh, store, table)
+    store_views.become_store(scene.mesh, store, table)
     return scene
 
 

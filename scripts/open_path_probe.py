@@ -209,7 +209,6 @@ class Probe:
     def install(self):
         from formats import igz
         import views.wgpu_view as wv
-        import views.wgpu_inference as wi
         from ingetrazo_render import Host
         from ingetrazo_render.shell_views import ShellView
         import ingetrazo_core
@@ -280,7 +279,7 @@ class Probe:
             return out
         ShellView._present_frame = counted_present
 
-        prepare = wi.prepare
+        prepare = ingetrazo_core.resident_prepare
 
         def timed_prepare(*a, **k):
             start = time.perf_counter()
@@ -293,7 +292,7 @@ class Probe:
                         probe.result["snap_index_build"] = end - start
                         probe.result["events"]["snap_index_build_start"] = round(
                             start - probe.t_open, 4)
-        wi.prepare = timed_prepare
+        ingetrazo_core.resident_prepare = timed_prepare
 
         open_path = Host.open_path
         def timed_open(host, path):

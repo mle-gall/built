@@ -66,7 +66,7 @@ def test_ok_stays_the_highlighted_button_after_restoring(native_host):
 
 
 def test_restore_puts_every_control_back_to_its_default(native_host):
-    from core.ndof import AXES
+    from ingetrazo_render.ndof import AXES
     _customised()
     ui = Controls(native_host.window, "import")
     assert ui.value("dxf_unit") == "in"

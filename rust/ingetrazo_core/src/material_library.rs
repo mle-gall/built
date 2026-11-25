@@ -351,19 +351,17 @@ pub(crate) fn material_inspector(
         }
     }
     let opacity = (data["opacity"].as_f64().unwrap_or(1.) * 100.).round();
-    let finish = mat.py().import("core.finish")?;
+    use crate::material_finish::{guess_finish, lookup, FINISHES};
     let tr = mat.py().import("core.i18n")?.getattr("tr")?;
-    let labels = finish.getattr("LABELS")?;
     let filename = image.and_then(|p| p.rsplit(['/', '\\']).next());
-    let guess = finish.call_method1("guess", (&name, filename, attr("opacity")?))?;
+    let guess = guess_finish(Some(&name), filename, data["opacity"].as_f64());
     let kwargs = PyDict::new(mat.py());
-    kwargs.set_item("finish", tr.call1((labels.get_item(guess)?,))?)?;
+    kwargs.set_item("finish", tr.call1((lookup(guess).unwrap().label,))?)?;
     let automatic: String = tr.call(("Automatic: {finish}",), Some(&kwargs))?.extract()?;
     let mut options = vec![("auto".to_owned(), automatic)];
-    for option in finish.getattr("FINISHES")?.try_iter()? {
-        let id: String = option?.extract()?;
-        let label = tr.call1((labels.get_item(&id)?,))?.extract()?;
-        options.push((id, label));
+    for finish in FINISHES {
+        let label = tr.call1((finish.label,))?.extract()?;
+        options.push((finish.id.to_owned(), label));
     }
     let selected = options.iter().position(|(id, _)| Some(id.as_str()) == data["finish"].as_str()).unwrap_or(0);
     let mut sections = vec![

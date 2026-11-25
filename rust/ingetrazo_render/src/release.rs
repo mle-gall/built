@@ -1,5 +1,6 @@
 //! Release review and the non-interrupting startup notice.
 pub(crate) mod service;
+pub(crate) mod check;
 use crate::ui::kit::ProseSpan;
 use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 use pyo3::prelude::*;

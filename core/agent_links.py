@@ -39,5 +39,5 @@ class LinkTools:
         return window.query_worksession()
 
     def _tool_query_recent(self):
-        from core.recent import query
+        from ingetrazo_core.recent import query
         return query()

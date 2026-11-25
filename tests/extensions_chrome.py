@@ -1,7 +1,8 @@
 """Drive the real Extensions provider against a private plugin folder and catalogue."""
 from types import SimpleNamespace
 
-from core import extension_manager as manager, extensions
+from core import extensions
+from ingetrazo_core import extension_manager as manager
 from ingetrazo_render import chrome_sheet
 from ingetrazo_render import ExtensionsSheet as Extensions
 
@@ -11,8 +12,8 @@ class Browser:
         def unexpected(url, *_):
             raise AssertionError(f"Unexpected fixture download {url}")
 
-        monkeypatch.setattr(manager, "_get", unexpected)
-        monkeypatch.setattr(manager, "user_plugins_dir", lambda: root)
+        monkeypatch.setattr(manager, "download", unexpected)
+        monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: root)
         monkeypatch.setattr(extensions, "plugin_dirs", lambda: [root / ".shipped", root])
         snapshot = manager.CatalogSnapshot(list(entries), reviewed or {}, "2026-10-07", True)
         monkeypatch.setattr(manager, "load_cached_catalog", lambda: snapshot)

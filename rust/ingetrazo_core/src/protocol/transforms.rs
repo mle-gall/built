@@ -152,11 +152,9 @@ fn set_group_scale<'py>(
     let py = history.py();
     let v = finite(factors, "expected three finite scale factors")?;
     let g = resolve_placements(history, PyList::new(py, [placement])?.as_any())?.get_item(0)?;
-    execute(
-        history,
-        &py.import("core.group_scale")?
-            .call_method1("scale_command", (g, PyTuple::new(py, v.to_array())?))?,
-    )
+    let change = crate::group_scale::group_scale_command(&g, v.to_array())?;
+    let command = change.unwrap_or_else(|| py.None().into_bound(py));
+    execute(history, &command)
 }
 #[pyfunction]
 #[pyo3(signature=(history,anchor,factors,vertices=None,placements=None,images=None,axes=None))]

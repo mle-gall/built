@@ -1,0 +1,101 @@
+pub(crate) const RAIL: &[&[(&str, &str, &str)]] = &[
+    &[
+        ("select", "Select", "select"),
+        ("pan", "Pan", "pan"),
+        ("zoom", "Zoom", "zoom"),
+        ("zoom_ventana", "Zoom window", "zoom_window"),
+        ("estilo", "Format painter", "eyedropper"),
+    ],
+    &[
+        ("vista", "Model view", "comp_vista"),
+        ("texto", "Text", "text"),
+        ("etiqueta", "Label", "comp_etiqueta"),
+        ("nivel", "Level mark", "comp_nivel"),
+        ("llamada", "Detail callout", "comp_llamada"),
+        ("imagen", "Image", "image"),
+        ("cajetin", "Title block", "comp_cajetin"),
+        ("escala", "Scale bar", "comp_escala"),
+        ("norte", "North arrow", "comp_norte"),
+        ("leyenda", "Layer legend", "comp_leyenda"),
+        ("perfil", "Terrain profile", "comp_perfil"),
+    ],
+    &[
+        ("linea", "Line", "line"),
+        ("flecha", "Arrow", "comp_flecha"),
+        ("terreno", "Ground line", "comp_terreno"),
+        ("rect", "Rectangle", "rectangle"),
+        ("elipse", "Ellipse", "circle"),
+        ("poligono", "Polygon", "polygon"),
+    ],
+    &[
+        ("cota", "Dimension", "dimension"),
+        ("cota_cadena", "Chain dimension", "dimension_chain"),
+        ("cota_base", "Baseline dimension", "dimension_baseline"),
+        ("cota_ang", "Angular dimension", "dimension_angular"),
+        ("cota_radio", "Radius dimension", "dimension_radius"),
+    ],
+];
+pub(super) const SNAP_TOOLS: &[&str] = &[
+    "cota",
+    "cota_ang",
+    "cota_base",
+    "cota_cadena",
+    "cota_radio",
+    "elipse",
+    "etiqueta",
+    "flecha",
+    "linea",
+    "nivel",
+    "poligono",
+    "rect",
+    "terreno",
+];
+pub(super) const CONTENT_FIELDS: &[&str] = &[
+    "w_mm",
+    "h_mm",
+    "scale_n",
+    "view_key",
+    "style",
+    "paper_bg",
+    "cam_target",
+    "cam_yaw",
+    "cam_pitch",
+    "perspective",
+    "cam_distance",
+    "cam_fov",
+    "shadows",
+    "sun_hour",
+    "rot_deg",
+    "pen_cut_mm",
+    "pen_profile_mm",
+    "pen_edge_mm",
+    "profiles",
+    "hidden_lines",
+    "layer_colours",
+    "cut_fill",
+    "cut_fill_color",
+    "cut_fill_by_layer",
+];
+pub(super) const ANNOT_FIELDS: &[&str] = &[
+    "annotations",
+    "annot_text_mm",
+    "km_marks",
+    "km_step_m",
+    "section_marks",
+];
+pub(super) const WINDOW_KEYS: &[&str] = &[
+    "Ctrl+S",
+    "Ctrl+Shift+S",
+    "Ctrl+O",
+    "Ctrl+N",
+    "Ctrl+W",
+    "Ctrl+Q",
+    "Ctrl+,",
+    "Ctrl+M",
+    "Ctrl+H",
+];
+pub(super) fn mode(key: &str) -> Option<&'static (&'static str, &'static str, &'static str)> {
+    RAIL.iter()
+        .flat_map(|row| row.iter())
+        .find(|(k, _, _)| *k == key)
+}

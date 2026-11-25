@@ -8,7 +8,6 @@ PBR plus extras, and made into a real material inside Blender."""
 from __future__ import annotations
 
 import json
-import shutil
 import struct
 import subprocess
 from pathlib import Path
@@ -17,7 +16,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from ingetrazo_core import Vec3 as V
 
-from core import finish as fin  # noqa: E402
+from ingetrazo_core import guess_finish, resolve_finish  # noqa: E402
 from core import render_blender as rb  # noqa: E402
 from core.history import History, SetMaterialFinishCommand  # noqa: E402
 from core.materials import Material  # noqa: E402
@@ -46,14 +45,14 @@ from formats.gltf import save_glb  # noqa: E402
     ("mat3", "piscina_azul.png", "water"),
 ])
 def test_the_finish_is_guessed_from_the_name(name, picture, expected):
-    assert fin.guess(name, picture) == expected
+    assert guess_finish(name, picture) == expected
 
 
 def test_translucent_paint_reads_as_glass_and_a_choice_wins():
-    assert fin.guess("mat7", None, opacity=0.35) == "glass"
-    assert fin.resolve("gloss", "water_calm") == "gloss"
-    assert fin.resolve(None, "water_calm") == "water"
-    assert fin.resolve("nonsense", "Concrete") == "matte"
+    assert guess_finish("mat7", None, opacity=0.35) == "glass"
+    assert resolve_finish("gloss", "water_calm") == "gloss"
+    assert resolve_finish(None, "water_calm") == "water"
+    assert resolve_finish("nonsense", "Concrete") == "matte"
 
 
 def test_choosing_a_finish_is_undoable_and_saved(tmp_path):
@@ -131,8 +130,7 @@ def test_the_flatpak_asks_for_the_permission_only_when_missing():
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(shutil.which("blender") is None,
-                    reason="no Blender on this machine")
+@pytest.mark.blender
 def test_blender_turns_the_finishes_into_materials(tmp_path):
     from core.camera import OrbitCamera
     scene = _scene_with([("water_calm", {"color": (0.1, 0.3, 0.8)}),
@@ -171,8 +169,8 @@ def test_the_material_inspector_sets_and_clears_the_finish(native_host):
         return json.loads(data)
 
     at, options = picker()
-    assert [key for key, _ in options] == ["auto", *fin.FINISHES]
-    assert options[at][0] == "auto" and fin.LABELS["gloss"] in options[at][1]
+    assert [key for key, _ in options] == ["auto", "matte", "satin", "gloss", "metal", "glass", "water"]
+    assert options[at][0] == "auto" and "Gloss" in options[at][1]
     before = win.viewport.history.revision
     wgpu_library.edit_field(win, win.view, "finish:" + name, "auto")
     with pytest.raises(ValueError, match="Unknown render finish"):
@@ -184,4 +182,4 @@ def test_the_material_inspector_sets_and_clears_the_finish(native_host):
         assert options[picker()[0]][0] == key
     assert win.viewport.history.undo() and scene.materials[name].finish == "water"
     assert win.viewport.history.undo() and scene.materials[name].finish is None
-    assert fin.resolve(None, mat.name) == "gloss"
+    assert resolve_finish(None, mat.name) == "gloss"

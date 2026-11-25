@@ -64,10 +64,7 @@ fn request_recovery(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let manager = match d.get_item("_background_autosave")?.filter(|v| !v.is_none()) {
         Some(manager) => manager,
         None => {
-            let manager = py
-                .import("core.background_autosave")?
-                .getattr("BackgroundAutosave")?
-                .call1((win,))?;
+            let manager = crate::background_autosave::background_autosave(win)?;
             let result = py
                 .import("ingetrazo_render.chrome_dialogs")?
                 .getattr("autosave_result")?;
@@ -109,7 +106,7 @@ fn remember_document(
         .getattr("DOCUMENT_SUFFIXES")?
         .contains(suffix)?
     {
-        py.import("core.recent")?
+        py.import("ingetrazo_core.recent")?
             .call_method1("remember", (path,))?;
         let kw = PyDict::new(py);
         kw.set_item("doc", doc)?;

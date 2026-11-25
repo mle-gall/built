@@ -10,7 +10,6 @@ _ENV = ("XDG_DATA_HOME", "BUILT_ANSWERS", "BUILT_SETTINGS_DIR")
 
 _PATCHED = {
     "core.settings": ("_store",),
-    "core.renderer_settings": ("capability", "status_text", "_shell_installed"),
 }
 _MISSING = object()
 

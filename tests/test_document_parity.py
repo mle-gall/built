@@ -138,7 +138,7 @@ def test_geometry_history_agrees(runs):
 
 
 def test_scene_folder_edits_match_archived_replay():
-    from core import scene_folders
+    from ingetrazo_core import scene_tree
     from core.history import History, SceneTreeCommand
     from core.saved_views import SavedView
     from core.scene import Scene
@@ -153,13 +153,13 @@ def test_scene_folder_edits_match_archived_replay():
     history = History(scene)
 
     def snapshot():
-        names = scene_folders.folders_of(scene)
-        return [names, [scene_folders.folder_parent(scene, f) for f in [*names, "missing"]],
-                scene_folders.subfolders(scene, None, deep=True),
-                [v.name for v in scene_folders.tree_order(scene)],
+        names = scene_tree.folders_of(scene)
+        return [names, [scene_tree.folder_parent(scene, f) for f in [*names, "missing"]],
+                scene_tree.subfolders(scene, None, deep=True),
+                [v.name for v in scene_tree.tree_order(scene)],
                 [[v.name, v.folder] for v in scene.saved_views], dict(scene.scene_folder_parents)]
 
-    edit = scene_folders.FolderEdit
+    edit = scene_tree.FolderEdit
     states = [snapshot()]
     for op in (edit.add("A", "B"), edit.rename("B", "\x1cPlan\x1c"),
                edit.move_rows([c, a], ["C"], "Plan", a), edit.delete_rows([b], ["A"])):

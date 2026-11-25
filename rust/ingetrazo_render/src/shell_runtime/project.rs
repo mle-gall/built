@@ -98,7 +98,7 @@ fn open_project(win: &Obj<'_>, path: &Obj<'_>) -> PyResult<bool> {
             None
         },
     )?;
-    py.import("core.recent")?
+    py.import("ingetrazo_core.recent")?
         .call_method("remember", (s.getattr("path")?,), Some(&kw))?;
     h.call_method0("recent_changed")?;
     win.setattr("_opening_session", true)?;

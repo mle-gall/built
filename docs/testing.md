@@ -23,7 +23,7 @@ python -m pytest tests/test_x.py::test_y      # one test, serially (no -n)
 |---|---|---|
 | Delegate subset, `-m "not slow and not window"` | about 7 500 of 14 200; 2.5 min at `-n 4` with the machine loaded, under 3 min quiet | the `window` files and the `slow` tests |
 | Fast suite, `-m "not slow"` | about 12 000 | the `slow` tests |
-| Full suite | all | nothing |
+| Full suite | all enabled tests | opt-in cases unless enabled |
 
 The delegate subset covers the document and its kernels (store, topology,
 booleans, push/pull, snapping, inference), file formats (IGZ/Built, SKP,
@@ -37,6 +37,14 @@ windows, docks, menus or dialogs needs the fast suite.
 
 Use at most `-n 8`: other agents share the machine. Without `-n` nothing
 changes from a plain serial pytest run.
+
+## Rendering with Blender
+
+The default suite checks Blender job generation, render scripts, camera updates
+and plugin controls. To run the five tests that launch Blender, put its
+executable on `PATH` and run `BUILT_BLENDER_TESTS=1 python -m pytest -m blender`.
+These tests are also marked `slow`. An opted-in run reports renderer crashes
+as failures.
 
 ## The `slow` marker
 

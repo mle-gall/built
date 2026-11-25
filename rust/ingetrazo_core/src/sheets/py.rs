@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 //! The Python face of `sheets`: what `core/hlr.py`, `formats/svg_out.py`
-//! and the Sheets workspace adapter (`views/wgpu_sheets.py`) call.
+//! and the Sheets workspace adapter (`sheet_workspace`) call.
 
 use super::{drawing, model, page, svg};
 use numpy::{PyArray1, PyArray2, PyArray3, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};

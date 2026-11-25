@@ -1,4 +1,4 @@
-//! Sheets: a workspace of the main window (views/wgpu_sheets.py owns the
+//! Sheets: a workspace of the main window (sheet_workspace owns the
 //! composer, its data and its actions). While it is on, the frame shows the
 //! page layer Python renders (lib.rs `render_page`) instead of the model,
 //! and the chrome around it is the sheet's: the sheet tools on the left
@@ -278,7 +278,7 @@ impl Ui {
 
     /// The chrome keeps a key in the workspace only while one of its fields
     /// has focus, or Escape while one of its popups is open; everything else
-    /// is the page's (views/wgpu_sheets.py hands it to the composer).
+    /// is the page's (sheet_workspace hands it to the composer).
     pub(super) fn sheets_claims_key(&self, name: &str) -> bool {
         self.sheet.is_some() || self.cmd_open || self.ctx.wants_keyboard_input() || self.page.editing.is_some()
             || (name == "Escape" && (self.view_open || self.menu.is_some() || self.form.is_some() || self.sheets.popup_open()))

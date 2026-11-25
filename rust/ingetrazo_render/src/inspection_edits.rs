@@ -148,7 +148,7 @@ fn soften_selection(view: &Bound<'_, PyAny>, values: &Bound<'_, PyAny>) -> PyRes
     if let Some(angle) = angle {
         settings(py)?.call_method1("setValue", ("tools/soften_angle", angle))?;
     }
-    let backend = py.import("core.soften")?;
+    let backend = py.import("ingetrazo_core.soften")?;
     let edges = backend.call_method1("selected_edges", (view.getattr("scene")?,))?;
     let kw = PyDict::new(py);
     for key in ["coplanar", "harden", "materials", "smooth"] {

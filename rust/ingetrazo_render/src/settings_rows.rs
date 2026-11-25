@@ -538,7 +538,7 @@ fn general<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
         Binding::new("backup", gkey_get(py, "backup", obj(py, "1")?, Kind::Bool)?, autosave_put(py, "backup")?),
         Binding::new("undo_steps", gkey_get(py, "undo_steps", obj(py, 200)?, Kind::Int)?, applier(py, "apply_undo_steps")?),
     ];
-    let update = py.import("core.update_check")?;
+    let update = py.import("ingetrazo_render.release_check")?;
     if !update.call_method0("store_managed")?.is_truthy()? {
         let key: String = update.getattr("KEY_AUTO")?.extract()?;
         let key: &'static str = Box::leak(key.into_boxed_str());
@@ -549,7 +549,7 @@ fn general<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
 }
 
 fn figure_key(py: Python<'_>, name: &str) -> PyResult<String> {
-    py.import("core.scale_figure")?.getattr(name)?.extract()
+    py.import("ingetrazo_core.scale_figure")?.getattr(name)?.extract()
 }
 
 fn put_image(env: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -557,7 +557,7 @@ fn put_image(env: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<()> {
     if !path.is_truthy()? {
         return Ok(());
     }
-    let sf = py.import("core.scale_figure")?;
+    let sf = py.import("ingetrazo_core.scale_figure")?;
     let readable = py.import("ingetrazo_render")?.call_method1("raster_dimensions", (path,))?;
     if !readable.is_truthy()? {
         return Err(pyo3::exceptions::PyValueError::new_err(tr(py, "That file is not a picture Built can read.")?));
@@ -596,7 +596,7 @@ fn put_image(env: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<()> {
 fn figure_rows(py: Python<'_>) -> PyResult<Vec<Binding>> {
     let put_pick = func(py, |py, a| {
         let (env, v) = (a.get_item(0)?, a.get_item(1)?);
-        let sf = py.import("core.scale_figure")?;
+        let sf = py.import("ingetrazo_core.scale_figure")?;
         let st = env.getattr("st")?;
         if v.eq(sf.getattr("CUSTOM")?)? {
             let saved = st.call_method1("value", (figure_key(py, "KEY_IMAGE")?, ""))?;
@@ -616,7 +616,7 @@ fn figure_rows(py: Python<'_>) -> PyResult<Vec<Binding>> {
         Ok(none(py))
     })?;
     let options = func(py, |py, _a| {
-        let sf = py.import("core.scale_figure")?;
+        let sf = py.import("ingetrazo_core.scale_figure")?;
         let out = PyList::empty(py);
         for p in sf.call_method0("people")?.try_iter()? {
             let p = p?;
@@ -641,7 +641,7 @@ fn figure_rows(py: Python<'_>) -> PyResult<Vec<Binding>> {
     Ok(vec![
         Binding::new("scale_figure", key_get(py, "new_document/scale_figure", obj(py, "1")?, Kind::Bool)?, key_set(py, "new_document/scale_figure", Kind::Bool)?),
         Binding::new("figure", func(py, |py, a| {
-            let sf = py.import("core.scale_figure")?;
+            let sf = py.import("ingetrazo_core.scale_figure")?;
             let default = sf.getattr("DEFAULT_PICK")?;
             let v = a.get_item(0)?.getattr("st")?.call_method1("value", (figure_key(py, "KEY_PICK")?, &default))?;
             Ok((if v.is_truthy()? { v.str()? } else { default.str()? }).into_any().unbind())
@@ -773,9 +773,8 @@ fn display<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
 /// The 3D mouse model with the saved profiles, and those profiles.
 pub fn device_preferences<'py>(env: &Bound<'py, PyAny>, named: Option<Bound<'py, PyAny>>) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py = env.py();
-    let profiles = py.import("core.ndof_profiles")?;
     let nd = py.import("views.ndof_input")?.call_method0("load_settings")?;
-    let profile = profiles.call_method1("profile_to_dict", (&nd,))?;
+    let profile = crate::preferences::device_profile::profile_to_dict(&nd)?;
     if nd.getattr("mapping_preset")?.eq("original")? {
         profile.set_item("inversion", apply(py)?.call_method1("legacy_ndof_inversion", (&nd,))?)?;
     }
@@ -785,7 +784,7 @@ pub fn device_preferences<'py>(env: &Bound<'py, PyAny>, named: Option<Bound<'py,
     };
     let dicts = PyDict::new(py);
     for (k, v) in named.cast::<PyDict>()?.iter() {
-        dicts.set_item(k, profiles.call_method1("profile_to_dict", (v,))?)?;
+        dicts.set_item(k, crate::preferences::device_profile::profile_to_dict(&v)?)?;
     }
     let json = py.import("json")?;
     let selected = env.getattr("st")?.call_method1("value", ("ndof/selected_profile", ""))?;
@@ -809,7 +808,7 @@ pub fn device_edit<'py>(env: &Bound<'py, PyAny>, edits: &Bound<'py, PyDict>, nam
     for (k, v) in edits.iter() {
         model.call_method1("edit", (k, json.call_method1("dumps", (v,))?))?;
     }
-    let nd = py.import("core.ndof_profiles")?.call_method1("profile_from_dict", (json.call_method1("loads", (model.call_method0("profile")?,))?,))?;
+    let nd = crate::preferences::device_profile::profile_from_dict(&json.call_method1("loads", (model.call_method0("profile")?,))?)?;
     nd.setattr("enabled", model.getattr("enabled")?)?;
     nd.setattr("lock_rotation", model.getattr("locked")?)?;
     let st = env.getattr("st")?;

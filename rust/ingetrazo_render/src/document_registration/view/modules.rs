@@ -75,6 +75,20 @@ pub(super) fn install_interaction_module(module: &Bound<PyModule>) -> PyResult<(
         "extension_api" => crate::extension_api::register(module)?,
         "documents" => crate::extension_api::register_documents(module)?,
         "document_interaction" => super::interaction_host::install(module)?,
+        "array_bake" => super::array_bake::install_module(module)?,
+        "wgpu_view" => super::metal_view::install_module(module)?,
+        "wgpu_ui" => super::chrome_input::install_module(module)?,
+        "wgpu_axes" => super::frame_scene::install_axes(module)?,
+        "wgpu_billboards" => super::frame_scene::install_billboards(module)?,
+        "wgpu_style" => super::frame_scene::install_style(module)?,
+        "wgpu_sections" => super::frame_scene::install_sections(module)?,
+        "wgpu_lines" => super::frame_lines::install_lines(module)?,
+        "wgpu_overlay" => super::frame_lines::install_overlay(module)?,
+        "wgpu_edit_context" => super::frame_lines::install_edit_context(module)?,
+        "wgpu_parity" => super::frame_marks::install_parity(module)?,
+        "wgpu_references" => super::frame_marks::install_references(module)?,
+        "wgpu_tabs" => super::frame_tabs::install_tabs(module)?,
+        "wgpu_annotations" => super::frame_annotations::install_annotations(module)?,
         "document_tools" => {
             import_names(module, "__future__", &[("annotations", "annotations")])?;
             import_names(module, "typing", &[("Optional", "Optional")])?;
@@ -169,19 +183,19 @@ pub(super) fn install_interaction_module(module: &Bound<PyModule>) -> PyResult<(
             module.add("time", py.import("time")?)?;
             import_names(
                 module,
-                "core.host_callbacks",
-                &[("HostService", "HostService"), ("Signal", "Signal")],
+                "ingetrazo_render",
+                &[("CallbackSlot", "CallbackSlot")],
             )?;
             import_names(
                 module,
-                "core.ndof",
+                "ingetrazo_render.ndof",
                 &[
                     ("NdofSample", "NdofSample"),
                     ("from_hid", "from_hid"),
                     ("from_spacenavd", "from_spacenavd"),
                 ],
             )?;
-            module.add("__doc__","3D mouse input — the drivers that feed :mod:`core.ndof` (issue #108).\n\nNo SDK, no new dependency: each platform already has a plain way to read\nthe device.\n\n* **Linux — spacenavd.** The free driver every distribution packages\n  (``spacenavd``). It serves the device on a Unix socket in a fixed binary\n  protocol: 32-byte packets of eight native ints, ``type`` first — 0 motion\n  (x y z rx ry rz period), 1 button press, 2 release. Read with a\n  ``QSocketNotifier``, so it never blocks the UI.\n* **Windows — Raw Input.** A 3D mouse is a USB HID «multi-axis controller»\n  (usage page 1, usage 8); registering for it makes Windows send\n  ``WM_INPUT`` with the device's own reports, next to (not instead of) the\n  3Dconnexion driver. Report 1 is translation (three int16) — or all six\n  axes on the newer models, report 2 rotation, report 3 the buttons. This is\n  what FreeCAD does.\n* **macOS** has no such road (only 3Dconnexion's framework): not yet.\n\n:class:`NdofInput` picks the backend for the platform and emits\n``motion(sample, dt)`` in the user's frame (see :mod:`core.ndof`).")?;
+            module.add("__doc__","3D mouse input — the drivers that feed :mod:`ingetrazo_render.ndof` (issue #108).\n\nNo SDK, no new dependency: each platform already has a plain way to read\nthe device.\n\n* **Linux — spacenavd.** The free driver every distribution packages\n  (``spacenavd``). It serves the device on a Unix socket in a fixed binary\n  protocol: 32-byte packets of eight native ints, ``type`` first — 0 motion\n  (x y z rx ry rz period), 1 button press, 2 release. Read with a\n  ``QSocketNotifier``, so it never blocks the UI.\n* **Windows — Raw Input.** A 3D mouse is a USB HID «multi-axis controller»\n  (usage page 1, usage 8); registering for it makes Windows send\n  ``WM_INPUT`` with the device's own reports, next to (not instead of) the\n  3Dconnexion driver. Report 1 is translation (three int16) — or all six\n  axes on the newer models, report 2 rotation, report 3 the buttons. This is\n  what FreeCAD does.\n* **macOS** has no such road (only 3Dconnexion's framework): not yet.\n\n:class:`NdofInput` picks the backend for the platform and emits\n``motion(sample, dt)`` in the user's frame (see :mod:`ingetrazo_render.ndof`).")?;
             ndof_input(module)?;
         }
         _ => return Err(pyo3::exceptions::PyImportError::new_err(full)),

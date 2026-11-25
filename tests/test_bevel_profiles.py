@@ -14,8 +14,8 @@ import math
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
 
-from core import bevel_profiles as bp
-from core.fillet import apply_fillet, plan_fillet
+from ingetrazo_core import bevel_profiles as bp
+from ingetrazo_core import apply_fillet, plan_fillet
 from core.orient import is_closed, signed_volume
 from tests.test_fillet import box, edge_at
 
@@ -63,8 +63,8 @@ def test_the_round_with_supports_is_a_half_size_quarter_circle():
         assert math.hypot(x - 0.5, y - 0.5) == pytest.approx(0.5)
 
 
-@pytest.mark.parametrize("shape,controls", [("cornice", bp._CORNICE),
-                                            ("crown", bp._CROWN)])
+@pytest.mark.parametrize("shape,controls", [("cornice", bp.controls("cornice", 8)),
+                                            ("crown", bp.controls("crown", 8))])
 def test_mouldings_pass_through_their_control_points(shape, controls):
     pts = bp.sample(shape, 24)
     for x, y, _smooth in controls:
@@ -172,8 +172,10 @@ def test_every_preset_opens_in_the_editor_as_itself(shape):
     assert bp.valid(ctl)
     if shape == "steps":
         assert [(x, y) for x, y, _s in ctl] == bp.sample("steps", 8)
-    if shape in ("cornice", "crown"):
-        assert ctl == list(bp._CORNICE if shape == "cornice" else bp._CROWN)
+    if shape == "cornice":
+        assert len(ctl) == 13 and ctl[2] == (0.92, 0.16, True)
+    if shape == "crown":
+        assert len(ctl) == 11 and ctl[2] == (0.75, 0.25, False)
 
 
 

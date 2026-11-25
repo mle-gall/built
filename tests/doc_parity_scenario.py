@@ -545,7 +545,7 @@ def geometry_steps(work):
     out.append(state())
     assert h.redo()
     out.append(state())
-    from core.soften import SoftenByAngleCommand
+    from ingetrazo_core.soften import SoftenByAngleCommand
     p, q = QVector3D(930, 0, 0), QVector3D(932, 0, 0)
     mesh.add_face([p, q, QVector3D(930, 1, 0)])
     mesh.add_face([q, p, QVector3D(930, -1, .5)])

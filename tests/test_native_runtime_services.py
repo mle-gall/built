@@ -23,8 +23,8 @@ def setup(app):
         import threading
         import numpy as np
         from core.protocol.commands import add_image_plane
-        from core.background_autosave import BackgroundAutosave
-        from core.scale_figure import store_picture
+        from ingetrazo_render import background_autosave
+        from ingetrazo_core.scale_figure import store_picture
         from core.text3d import build_text_letters
         from core.paths import cache_directory
         from core.texture import texture_cache_root
@@ -32,7 +32,7 @@ def setup(app):
         from georef.tiles import PRESETS, TileCache
         from georef.tile_fetcher import TileFetcher
         from ingetrazo_render import SurveyRaster, notice_text
-        from views import drawing_cache, wgpu_sheets
+        from ingetrazo_render import sheet_workspace
         from ingetrazo_render import about_review
         from views.ndof_input import shared_input
         from ingetrazo_render import ask_scale
@@ -47,16 +47,15 @@ def setup(app):
         view = app.window._host.view
         view._pick_frame_dirty = True
         view.hover(view.width() // 2, view.height() // 2)
-        assert drawing_cache.signature()
-        assert wgpu_sheets._cajetin_template()[0]
-        wgpu_sheets.to_sheets(app.window)
+        assert sheet_workspace._cajetin_template()[0]
+        sheet_workspace.to_sheets(app.window)
         assert app.window._composer.isVisible()
-        wgpu_sheets.to_model(app.window)
+        sheet_workspace.to_model(app.window)
         assert not app.window._composer.isVisible()
         assert about_review("smoke", host=app.window._host).sheet(str)
         assert notice_text("<b>A</b><br>B") == "A\\nB"
         shared_input(app.window)
-        manager = BackgroundAutosave(app.window)
+        manager = background_autosave(app.window)
         manager.request([])
         manager.cancel()
         assert len(build_text_letters("AV")) == 2

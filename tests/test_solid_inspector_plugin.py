@@ -5,6 +5,7 @@
 The verdicts and volumes come from the same primitives the BIM layer
 uses, so whatever this dialog says must match what the takeoff would do."""
 from __future__ import annotations
+from ingetrazo_core import store_views
 
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
@@ -832,7 +833,7 @@ def test_same_count_group_edit_invalidates_inspection(win, monkeypatch, backend,
         from core._native import available
         native = available()
         assert native is not None and hasattr(native, "MeshStore")
-        store_mesh.become_store(mesh, native.MeshStore(
+        store_views.become_store(mesh, native.MeshStore(
             next(meshes._KEY_NAMESPACES), **store_mesh._weld_args()), [])
     _box(mesh)
     # Nested meshes matter too, even when the loose mesh never changes.
@@ -890,3 +891,30 @@ def test_hidden_panel_defers_construction_and_explicit_refresh(win, monkeypatch)
     panel.show()
     assert len(calls) == 2
     panel.close()
+
+
+def test_failed_custom_repair_restores_every_mesh_and_can_be_retried():
+    from core.solid_analysis import RepairSolidsCommand, repair_mesh
+    from core.scene import Scene
+
+    scene = Scene()
+    meshes = [scene.mesh, Mesh()]
+    for mesh in meshes:
+        mesh.add_edge(QVector3D(), QVector3D(1, 0, 0))
+    calls = []
+
+    def fail_on_second(mesh):
+        counts = repair_mesh(mesh)
+        calls.append(mesh)
+        if len(calls) == 2:
+            raise ValueError("interrupted")
+        return counts
+
+    cmd = RepairSolidsCommand(meshes, fix=fail_on_second)
+    with pytest.raises(ValueError, match="interrupted"):
+        cmd.do(scene)
+    assert [len(mesh.edges) for mesh in meshes] == [1, 1]
+    cmd.do(scene)
+    assert cmd.done["stray"] == 2
+    cmd.undo(scene)
+    assert [len(mesh.edges) for mesh in meshes] == [1, 1]

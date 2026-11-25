@@ -43,7 +43,7 @@ from core.mesh import Mesh
 from core.group import Group
 from core.guide import Guide
 from ingetrazo_core import pack_scene
-from views.wgpu_inference import (prepare, snap, nearby_edges, reference_edge,
+from ingetrazo_core import (resident_prepare as prepare, resident_snap as snap, nearby_edges, reference_edge,
                                   tangent_direction, eligible_rows, surface)
 
 
@@ -212,8 +212,7 @@ def test_explicit_axis_lock_without_geometry():
     assert result.point == QVector3D(2, 0, 0)
 
 
-def test_interleaved_deferred_arcs_fit_once_in_source_order(monkeypatch):
-    import views.wgpu_inference as inference
+def test_interleaved_deferred_arcs_fit_once_in_source_order():
     scene = Scene()
     mesh = Mesh()
     pts = np.array([(1, 0, 0), (0, 1, 0), (-1, 0, 0),
@@ -226,17 +225,13 @@ def test_interleaved_deferred_arcs_fit_once_in_source_order(monkeypatch):
     mesh.__dict__['_deferred_source'] = dict(
         pos=pts, edges=pairs, curves=np.array([9, 2, 9, 2]),
         flags=None, layers=None)
-    calls = []
-    original = inference._curve_features
-    def fit(curves):
-        calls.append(1)
-        return original(curves)
-    monkeypatch.setattr(inference, '_curve_features', fit)
     index = prepare(packed, scene)
-    assert not calls
     code = int(packed.instances['info'][0, 0])
-    centers, tangents, _mids = index.features[code]
+    assert index.features.fitted[code] is None
+    fit = index.features[code]
+    centers, tangents, _mids = fit
     np.testing.assert_allclose(centers, [[0, 0, 0], [4, 0, 0]], atol=1e-6)
     assert len(tangents) == 4
     assert tangent_direction(index, packed, 1, QVector3D(*pts[0])) is not None
-    assert calls == [1]
+    assert index.features[code] is fit
+    assert index.features.pending[code] is None

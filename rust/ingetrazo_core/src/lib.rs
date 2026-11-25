@@ -17,8 +17,16 @@ mod screen;
 mod texture_position;
 mod navigation;
 mod recents;
+mod python_tls;
+mod material_finish;
+mod edge_grid;
 mod builtproject;
 mod delivery_form;
+mod appimage;
+mod worker_gc;
+mod gpu_prefs;
+mod heap;
+mod link_scan;
 mod command_search;
 mod location;
 mod boxes;
@@ -119,6 +127,22 @@ mod material_library;
 mod material_survey;
 mod swatch;
 mod assembly_inspector;
+mod assembly_parts;
+mod export_progress;
+mod archive_limits;
+mod scale_figure;
+mod bevel_editor;
+
+mod selection_growth;
+mod paint_stroke;
+mod offset_face;
+mod text3d;
+mod blender;
+mod solid_analysis;
+mod soften;
+mod seed_orientation;
+mod group_scale;
+mod curve_segments;
 mod solid_inspector;
 mod scene_tree;
 mod structure_bootstrap;
@@ -150,7 +174,7 @@ mod view_culling;
 mod units;
 mod model;
 mod value_field;
-mod inference_state;
+mod inference;
 mod snap_boundary;
 mod snap_curve;
 mod snap_planes;
@@ -163,6 +187,14 @@ mod scans;
 mod orient;
 mod pushscan;
 mod push_command;
+mod push_operation;
+mod solids;
+mod sweep_operation;
+mod make_faces;
+mod geometry_arrays;
+mod component_library;
+mod extension_manager;
+mod outliner;
 pub mod pyset;
 mod push_guard;
 mod object_weld;
@@ -172,16 +204,47 @@ mod sheets;
 mod stl;
 mod alignment;
 mod formats;
+mod bridge_profiles;
+mod link_tree;
+mod deferred_plan;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    link_tree::register(m)?;
+    m.add_function(wrap_pyfunction!(deferred_plan::deferred_weld, m)?)?;
+    m.add_function(wrap_pyfunction!(deferred_plan::planned_face_areas, m)?)?;
+    deferred_plan::api::register(m)?;
+    bridge_profiles::register(m)?;
+    m.add_function(wrap_pyfunction!(deferred_plan::deferred_incidence, m)?)?;
     formats::register_formats(m)?;
+    export_progress::register(m)?;
+    archive_limits::register(m)?;
+    scale_figure::register(m)?;
+    bevel_editor::register(m)?;
+    selection_growth::register(m)?;
+    paint_stroke::register(m)?;
+    store::py::fillet_preview::register(m)?;
+    m.add_function(wrap_pyfunction!(store::bevel::bevel_exponent, m)?)?;
     m.add_class::<takeoff::InspectorTakeoff>()?;
     m.add("TAG_PALETTE", pyo3::types::PyTuple::new(m.py(), doc::drawing::PALETTE)?)?;
     m.add_function(wrap_pyfunction!(doc::drawing::automatic_tag_color, m)?)?;
     m.add_function(wrap_pyfunction!(browser_rename::browser_rename, m)?)?;
     screen::register(m)?;
     scene_animation::register(m)?;
+    component_library::register(m)?;
+    m.add_function(wrap_pyfunction!(seed_orientation::edge_between, m)?)?;
+    m.add_function(wrap_pyfunction!(seed_orientation::faces_to_flip, m)?)?;
+    m.add_function(wrap_pyfunction!(seed_orientation::connected_count, m)?)?;
+    m.add_function(wrap_pyfunction!(group_scale::group_scale, m)?)?;
+    m.add_function(wrap_pyfunction!(group_scale::group_scale_command, m)?)?;
+    m.add_function(wrap_pyfunction!(heap::trim_heap, m)?)?;
+    curve_segments::register(m)?;
+    soften::register(m)?;
+    appimage::register(m)?;
+    m.add_function(wrap_pyfunction!(worker_gc::install_main_thread_collector, m)?)?;
+    m.add_function(wrap_pyfunction!(gpu_prefs::ensure_high_performance_gpu, m)?)?;
+    m.add_function(wrap_pyfunction!(link_scan::scan_document_links, m)?)?;
+    extension_manager::register(m)?;
     m.add_class::<scene_video::MkvWriter>()?;
     m.add_class::<mp4::Mp4Writer>()?;
     m.add_function(wrap_pyfunction!(scene_video::video_writer, m)?)?;
@@ -192,6 +255,9 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     window_input::register(m)?;
     m.add_class::<window_commands::WindowCommands>()?;
     m.add_class::<window_commands::WindowCommand>()?;
+    let fold = wrap_pyfunction!(command_search::command_fold, m)?;
+    let cache = m.py().import("functools")?.call_method1("lru_cache", (8192,))?;
+    m.add("command_fold", cache.call1((fold,))?)?;
     m.add_class::<command_search::SearchItem>()?;
     m.add_function(wrap_pyfunction!(command_search::damerau_levenshtein, m)?)?;
     m.add_function(wrap_pyfunction!(command_search::rank_commands, m)?)?;
@@ -221,11 +287,9 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(store::plane_repair::plane_cycle, m)?)?;
     m.add_function(wrap_pyfunction!(store::plane_repair::install_rebuilt_plane, m)?)?;
     m.add_function(wrap_pyfunction!(store::plane_repair::prune_object_plane, m)?)?;
-    m.add_function(wrap_pyfunction!(store::intersection_edit::partition_intersections, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::revert_recorded_union, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::merge_seeded_edges, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::revert_seeded_merges, m)?)?;
-    m.add_function(wrap_pyfunction!(object_merge::trace_object_loops, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::dissolve_object_edge, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::dissolve_object_region, m)?)?;
     m.add_function(wrap_pyfunction!(object_weld::weld_object_mesh, m)?)?;
@@ -233,13 +297,13 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(object_weld::split_object_at_position, m)?)?;
     m.add_function(wrap_pyfunction!(object_weld::split_object_edge, m)?)?;
     m.add_function(wrap_pyfunction!(object_weld::revert_object_split, m)?)?;
-    m.add_function(wrap_pyfunction!(push_guard::guarded_push, m)?)?;
-    m.add_function(wrap_pyfunction!(push_guard::translate_prism_cap, m)?)?;
-    m.add_function(wrap_pyfunction!(push_command::push_top_out, m)?)?;
-    m.add_function(wrap_pyfunction!(push_command::push_secondary_faces, m)?)?;
     m.add_function(wrap_pyfunction!(push_command::outline_curve_runs, m)?)?;
     navigation::register(m)?;
+    m.add_class::<edge_grid::EdgeGrid>()?;
     recents::register(m)?;
+    python_tls::register(m)?;
+    m.add_function(wrap_pyfunction!(material_finish::guess_finish, m)?)?;
+    m.add_function(wrap_pyfunction!(material_finish::resolve_finish, m)?)?;
     delivery_form::register(m)?;
     m.add_class::<math::Vec3>()?;
     m.add_class::<texture_position::TextureMap>()?;
@@ -319,7 +383,6 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(snap::face_center, m)?)?;
     m.add_function(wrap_pyfunction!(snap_curve::circle_tangents, m)?)?;
     m.add_function(wrap_pyfunction!(snap_curve::snap_circle, m)?)?;
-    m.add_class::<inference_state::InferenceMemory>()?;
     m.add_class::<tools::py::ToolMachine>()?;
     m.add_class::<tools::py::ScaleGripSpec>()?;
     m.add_function(wrap_pyfunction!(tools::host_geometry::protractor_metrics, m)?)?;
@@ -515,6 +578,9 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(visibility_sets::visibility_set_rows, m)?)?;
     m.add_function(wrap_pyfunction!(visibility_sets::visibility_set_command, m)?)?;
     m.add_function(wrap_pyfunction!(scene_commands::plan_scene_command, m)?)?;
+    m.add_function(wrap_pyfunction!(store::face_edit::resident_face_mutation, m)?)?;
+    m.add_function(wrap_pyfunction!(store::face_edit::resident_face_compound, m)?)?;
+    assembly_parts::register(m)?;
     m.add_class::<assembly_inspector::AssemblyPreview>()?;
     m.add_function(wrap_pyfunction!(assembly_inspector::part_measures, m)?)?;
     m.add_function(wrap_pyfunction!(assembly_inspector::assembly_selection, m)?)?;
@@ -905,20 +971,14 @@ fn nearest_within<'py>(py: Python<'py>, d: PyReadonlyArray1<'py, f64>, radius: f
     Ok(PyArray1::from_vec(py, all.into_iter().map(|t| t.1 as i64).collect()))
 }
 
-/// ``core.edge_grid.segment_distances``: the pixel distance from ``(px,
-/// py)`` to each segment ``(ax, ay)–(bx, by)`` (inf where ``ok`` is
-/// False), for all of them or only the indices ``which`` — the same
-/// operations in the same order, so the same bits (``hypot`` is the C
-/// library's; the caller checks it is NumPy's). Zoomed out over the plant
-/// of #158 some 475 000 edges lay within 8 px of the cursor: ~11 ms of
-/// NumPy a pointer move.
+/// Pixel distances for all visible segments or an indexed subset.
 #[pyfunction]
 #[pyo3(signature = (ax, ay, bx, by, ok, px, py_, which=None))]
 #[allow(clippy::too_many_arguments)]
-fn segment_distances<'py>(py: Python<'py>, ax: PyReadonlyArray1<'py, f64>,
-                          ay: PyReadonlyArray1<'py, f64>, bx: PyReadonlyArray1<'py, f64>,
-                          by: PyReadonlyArray1<'py, f64>, ok: PyReadonlyArray1<'py, bool>,
-                          px: f64, py_: f64, which: Option<PyReadonlyArray1<'py, i64>>)
+fn segment_distances<'py>(py: Python<'py>, ax: numpy::PyArrayLike1<'py, f64, numpy::AllowTypeChange>,
+                          ay: numpy::PyArrayLike1<'py, f64, numpy::AllowTypeChange>, bx: numpy::PyArrayLike1<'py, f64, numpy::AllowTypeChange>,
+                          by: numpy::PyArrayLike1<'py, f64, numpy::AllowTypeChange>, ok: numpy::PyArrayLike1<'py, bool, numpy::AllowTypeChange>,
+                          px: f64, py_: f64, which: Option<numpy::PyArrayLike1<'py, i64, numpy::AllowTypeChange>>)
     -> PyResult<Bound<'py, PyArray1<f64>>> {
     use rayon::prelude::*;
     let (ax, ay, bx, by, ok) = (ax.as_array(), ay.as_array(), bx.as_array(), by.as_array(),
@@ -1505,14 +1565,31 @@ impl InstanceSet {
         // The candidates by how near their boxes come on screen, nearest
         // first: once the heap holds ``cap`` edges, a box farther than the
         // worst of them holds none that could enter, nor do the rest.
-        let mut gaps: Vec<(f64, usize, i64)> = py.detach(|| c.par_iter().enumerate()
-            .filter_map(|(k, &i)| {
-                let g = self.places[i as usize].screen_gap(&a, w, h, px, py_);
-                if g < radius { Some((g, k, i)) } else { None }
-            }).collect());
+        let planes = instances::CursorPlanes::new(&a, w, h, px, py_, radius);
+        let gap = |(k, &i): (usize, &i64)| {
+            let placement = &self.places[i as usize];
+            if planes.as_ref().is_some_and(|planes| planes.excludes(placement)) { return None; }
+            let g = placement.screen_gap(&a, w, h, px, py_);
+            (g < radius).then_some((g, k, i))
+        };
+        let mut gaps: Vec<_> = if c.len() <= 128 {
+            c.iter().enumerate().filter_map(gap).collect()
+        } else {
+            py.detach(|| c.par_iter().enumerate().filter_map(gap).collect())
+        };
         gaps.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));
         let all = py.detach(|| {
             let mut heap = instances::NearHeap::new(cap, radius);
+            // The normal hover query has only a handful of placements. Share
+            // one heap directly; avoid parallel jobs and their temporary heaps.
+            if gaps.len() <= 4 {
+                for &(gap, order, row) in &gaps {
+                    if !heap.may_take(gap) { break; }
+                    let p = &self.places[row as usize];
+                    self.protos[p.proto].edges_near(&p.m, &a, w, h, px, py_, order, row, &mut heap);
+                }
+                return heap.into_sorted();
+            }
             // In batches, nearest first, each placement of a batch on its
             // own heap in parallel, bounded by the shared heap's worst: a
             // dense corner of the plant of #158 kept ~4 000 placements
@@ -1546,22 +1623,15 @@ impl InstanceSet {
         });
         let n = all.len();
         let (mut pl, mut ed, mut d) = (Vec::with_capacity(n), Vec::with_capacity(n), Vec::with_capacity(n));
-        let (mut av, mut bv) = (Vec::with_capacity(n), Vec::with_capacity(n));
+        let (mut av, mut bv) = (Vec::with_capacity(3 * n), Vec::with_capacity(3 * n));
         for e in all {
             pl.push(e.place);
             ed.push(e.edge as i64);
             d.push(e.d);
-            av.push(e.a.to_vec());
-            bv.push(e.b.to_vec());
+            av.extend(e.a);
+            bv.extend(e.b);
         }
-        let arr = |v: Vec<Vec<f64>>| -> PyResult<Bound<'py, PyArray2<f64>>> {
-            if v.is_empty() {
-                Ok(PyArray2::zeros(py, [0, 3], false))
-            } else {
-                PyArray2::from_vec2(py, &v).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
-            }
-        };
-        Ok((PyArray1::from_vec(py, pl), PyArray1::from_vec(py, ed), arr(av)?, arr(bv)?,
+        Ok((PyArray1::from_vec(py, pl), PyArray1::from_vec(py, ed), flat3(py, av)?, flat3(py, bv)?,
             PyArray1::from_vec(py, d)))
     }
 
@@ -1739,17 +1809,20 @@ impl InstanceSet {
         let c = cand.as_array().to_vec();
         self.check(&c)?;
         let (o, d) = ([origin.0, origin.1, origin.2], [d.0, d.1, d.2]);
-        let mut mask = vec![false; self.places.len()];
-        for &i in &c {
-            mask[i as usize] = true;
+        // Hover usually already names one placement. For short candidate lists,
+        // test those boxes directly instead of allocating a scene-wide bit mask.
+        let mut met = Vec::new();
+        if c.len() <= 8 {
+            met.extend(c.iter().map(|&row| row as usize)
+                .filter(|&i| self.places[i].ray_meets_box(o, d, limit)));
+        } else {
+            let mut mask = vec![false; self.places.len()];
+            for &i in &c { mask[i as usize] = true; }
+            self.bvh.on_ray(o, d, limit, |i| {
+                if mask[i] && self.places[i].ray_meets_box(o, d, limit) { met.push(i); }
+                true
+            });
         }
-        let mut met: Vec<usize> = Vec::new();
-        self.bvh.on_ray(o, d, limit, |i| {
-            if mask[i] && self.places[i].ray_meets_box(o, d, limit) {
-                met.push(i);
-            }
-            true
-        });
         met.sort_unstable();
         met.dedup();
         let (mut pl, mut tr) = (Vec::new(), Vec::new());
@@ -1771,19 +1844,12 @@ impl InstanceSet {
                 let (x, y, z) = pr.world_tri(&p.m, r);
                 pl.push(i as i64);
                 tr.push(r as i64);
-                a.push(x.to_vec());
-                b.push(y.to_vec());
-                e.push(z.to_vec());
+                a.extend(x);
+                b.extend(y);
+                e.extend(z);
             }
         }
-        let arr = |v: Vec<Vec<f64>>| -> PyResult<Bound<'py, PyArray2<f64>>> {
-            if v.is_empty() {
-                Ok(PyArray2::zeros(py, [0, 3], false))
-            } else {
-                PyArray2::from_vec2(py, &v).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
-            }
-        };
-        Ok((PyArray1::from_vec(py, pl), PyArray1::from_vec(py, tr), arr(a)?, arr(b)?, arr(e)?))
+        Ok((PyArray1::from_vec(py, pl), PyArray1::from_vec(py, tr), flat3(py, a)?, flat3(py, b)?, flat3(py, e)?))
     }
 }
 
@@ -1792,10 +1858,14 @@ impl InstanceSet {
     /// the ray: ``(hidden, doubt)``. Any one that hides it settles it, so
     /// the order they are met in does not matter.
     fn occluded_ray(&self, mask: &[bool], o: [f64; 3], d: [f64; 3], limit: f64) -> (bool, bool) {
+        self.occluded_where(|i| mask[i], o, d, limit)
+    }
+
+    fn occluded_where(&self, eligible: impl Fn(usize) -> bool, o: [f64; 3], d: [f64; 3], limit: f64) -> (bool, bool) {
         let mut doubt = false;
         let mut found = false;
         self.bvh.on_ray(o, d, limit, |i| {
-            if !mask[i] {
+            if !eligible(i) {
                 return true;
             }
             let p = &self.places[i];

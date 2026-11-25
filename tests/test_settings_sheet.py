@@ -279,7 +279,7 @@ def test_dimension_style_and_north_are_the_documents(win, tmp_path):
 
 # ---- 3D mouse and keyboard --------------------------------------------------------
 def test_the_3d_mouse_section_holds_the_axis_table(win):
-    from core.ndof import AXES
+    from ingetrazo_render.ndof import AXES
     win.open_preferences(page="ndof")
     sheet = frame(win)
     got = fields(sheet)
@@ -297,7 +297,7 @@ def test_the_3d_mouse_section_holds_the_axis_table(win):
     assert preset[7][int(preset[4])] == "Custom"
     # A preset loads its values.
     sheet = act(win, "v", "ndof_preset", preset[7].index("FreeCAD-style"))
-    from core.ndof import FREECAD_MAPPING
+    from ingetrazo_render.ndof import FREECAD_MAPPING
     assert load_settings().axis_mapping == FREECAD_MAPPING
     act(win, "verb", "ndof_reset")
     assert load_settings().axis_inversion["up"] is False
@@ -306,7 +306,7 @@ def test_the_3d_mouse_section_holds_the_axis_table(win):
 def test_keyboard_lists_commands_and_changes_their_keys(win, monkeypatch):
     shown = []
     monkeypatch.setattr(ss.cf, "show", lambda parent, form: shown.append(form) or "chrome")
-    from core.shortcuts import action_key, collect_actions
+    from ingetrazo_render.keyboard_bindings import action_key, collect_actions
     from ingetrazo_render import sheet_command_scope
     acts = collect_actions(win)
     target = next(a for a in acts if a.text() and not a.shortcuts())

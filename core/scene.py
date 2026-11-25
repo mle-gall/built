@@ -38,7 +38,7 @@ def _make_shadows():
 
 
 def _make_animation():
-    from core.scene_animation import SceneAnimation
+    from ingetrazo_core import SceneAnimation
     return SceneAnimation()
 
 
@@ -137,7 +137,7 @@ class Scene:
     saved_views: list = field(default_factory=list)
     # Folder names of the Scenes tab, in order — empty folders included (a
     # scene names its own folder in ``SavedView.folder``), and folder → the
-    # folder it sits in (absent: at the top). See core.scene_folders.
+    # folder it sits in (absent: at the top). See ingetrazo_core.scene_tree.
     scene_folders: list = field(default_factory=list)
     scene_folder_parents: dict = field(default_factory=dict)
     # Sheet compositions (core.composition.Composicion) — the print layouts.
@@ -205,7 +205,7 @@ class Scene:
     # Sun shadows (core/sun.py): whether they draw, and the local date/time
     # the sun stands at. Document data — the shadow study is a deliverable.
     shadows: object = field(default_factory=lambda: _make_shadows())
-    # Scene transitions (core/scene_animation.py): whether showing a scene
+    # Scene transitions: whether showing a scene
     # glides there, and how long the glide and a run's pause on each take.
     animation: object = field(default_factory=lambda: _make_animation())
     # Section planes (core/section.py). At most ONE is
@@ -588,13 +588,13 @@ class Scene:
         share = entry_transaction = None
         if active_mesh is None and (group.children or group.xform is not None):
             attachments = self._attachment_swap()
-            from core.reference_edit import enter
+            from ingetrazo_core.command_protocol import enter_reference
             from core.store_mesh import StoreMesh
             # A singular placement needs the compatibility world copy. Keep
             # the placement swaps on entry so its History step can replay them.
             depth = _dm.begin() if type(entry_mesh) is StoreMesh else 0
             try:
-                share, parts = enter(self, group, frame)
+                share, parts = enter_reference(self, group, frame)
                 if depth:
                     entry_transaction = _dm.commit()
             except Exception:
@@ -674,8 +674,8 @@ class Scene:
         unchanged = True
         share = nivel.pop("share", None)
         if share is not None:
-            from core.reference_edit import finish
-            unchanged = finish(share, nivel.get("parts"))
+            from ingetrazo_core.command_protocol import finish_reference
+            unchanged = finish_reference(share, nivel.get("parts"))
         if unchanged:
             self._placement_context_bumps += 1
         self.mesh = nivel["mesh"]
