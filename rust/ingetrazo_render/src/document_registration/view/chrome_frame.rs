@@ -123,7 +123,7 @@ fn apply_dock_width<'py>(a: &Args<'py>) -> Reply<'py> {
     if renderer.is_none() || !renderer.hasattr("ui_set_dock_width")? {
         return Ok(none(py));
     }
-    renderer.call_method1("ui_set_dock_width", (direct(py, dock_width, (lens_of(&view)?, a.get_item(1)?))?,))?;
+    renderer.call_method1("ui_set_dock_width", (ui(py)?.call_method1("dock_width", (lens_of(&view)?, a.get_item(1)?))?,))?;
     Ok(none(py))
 }
 
@@ -910,6 +910,7 @@ fn isolate<'py>(a: &Args<'py>) -> Reply<'py> {
 pub(super) const FUNCTIONS: &[Method] = &[
     ("_window", Mode::Function, window, &["view"], "", ""),
     ("attach", Mode::Function, attach, &["view"], "", ""),
+    ("dock_width", Mode::Function, dock_width, &["lens", "settings=None"], "", ""),
     ("apply_dock_width", Mode::Function, apply_dock_width, &["view", "settings=None"], "", ""),
     ("keep_dock_width", Mode::Function, keep_dock_width, &["view", "arg", "settings=None"], "", ""),
     ("_send_tools", Mode::Function, send_tools, &["view", "win"], "", ""),
@@ -922,6 +923,7 @@ pub(super) const FUNCTIONS: &[Method] = &[
     ("before_frame", Mode::Function, before_frame, &["view"], "", ""),
     ("_options", Mode::Function, options, &["view"], "", ""),
     ("_cursor_value", Mode::Function, cursor_value, &["view", "win"], "", ""),
+    ("_commands", Mode::Function, commands, &["win", "sel"], "", ""),
     ("_summary", Mode::Function, summary, &["snapshot"], "", ""),
     ("_selection", Mode::Function, selection, &["view", "win", "active"], "", ""),
     ("_show_all", Mode::Function, show_all, &["vp"], "", ""),
