@@ -23,6 +23,59 @@ impl HistoryFeed {
     fn new(_args: &Bound<'_, PyTuple>, _kw: Option<&Bound<'_, PyDict>>) -> Self {
         Self
     }
+    fn _connect(slf: &Bound<'_, Self>, history: &Obj<'_>) -> PyResult<()> {
+        let py = slf.py();
+        let native = history.getattr("_native")?;
+        let reference = py.import("weakref")?.call_method1("ref", (history,))?;
+        slf.setattr("_history", reference)?;
+        slf.setattr("_subscribers", native.getattr("subscribers")?)?;
+        slf.setattr("_native", native)?;
+        let root = history.getattr("scene")?.getattr_opt("_root")?;
+        let key = root
+            .map(|r| r.getattr_opt("_doc_key"))
+            .transpose()?
+            .flatten();
+        let readers = py
+            .import("ingetrazo_core")?
+            .call_method1("FeedReaders", (key,))?;
+        slf.setattr("readers", &readers)?;
+        slf.call_method1("subscribe", (readers,))?;
+        slf.setattr("_pending", py.None())?;
+        slf.setattr("_depth", 0)?;
+        let kw = PyDict::new(py);
+        kw.set_item("before", slf.getattr("_before")?)?;
+        kw.set_item("after", slf.getattr("_after")?)?;
+        slf.setattr(
+            "unsubscribe",
+            history.call_method("add_listener", (), Some(&kw))?,
+        )
+    }
+    fn subscribe<'py>(slf: &Bound<'py, Self>, r#fn: &Obj<'py>) -> PyResult<Obj<'py>> {
+        let py = slf.py();
+        let subscribers = slf.getattr("_subscribers")?;
+        let entry = pyo3::types::PyList::new(py, [r#fn])?;
+        subscribers.call_method1("append", (&entry,))?;
+        let owner = slf.clone().unbind();
+        let entry = entry.unbind();
+        let unsubscribe = pyo3::types::PyCFunction::new_closure(
+            py,
+            None,
+            None,
+            move |args, kwargs| -> PyResult<()> {
+                if !args.is_empty() || kwargs.is_some_and(|kw| !kw.is_empty()) {
+                    return Err(pyo3::exceptions::PyTypeError::new_err(
+                        "unsubscribe takes no arguments",
+                    ));
+                }
+                let list = owner.bind(args.py()).getattr("_subscribers")?;
+                if list.contains(entry.bind(args.py()))? {
+                    list.call_method1("remove", (entry.bind(args.py()),))?;
+                }
+                Ok(())
+            },
+        )?;
+        Ok(unsubscribe.into_any())
+    }
     #[getter]
     fn revision(slf: &Bound<'_, Self>) -> PyResult<u64> {
         revision(slf.as_any())
