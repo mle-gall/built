@@ -38,7 +38,7 @@ import math
 import threading
 import weakref
 import numpy as np
-from ingetrazo_core import Vec3 as QVector3D
+from ingetrazo_core import Vec3 as QVector3D, project_boxes, nearest_inference_triangle, resident_curve_features as _curve_features
 from core import _native
 from core.snap import SurfacePatch, compute_snap, face_crossing_near_ray
 
@@ -119,41 +119,6 @@ def _prototype(packed, code, scene, first_row):
         [_prototype_arrays(packed, code, scene, first_row, {})],
         np.empty(0, np.int64), np.empty((0, 16)), np.empty((0, 3)), np.empty((0, 3)))
     return protos[0], protos[0]
-
-
-def _curve_features(curves):
-    """Fit only a queried prototype's named curves from its visibility
-    snapshot: ``(centres, tangents, arc midpoints)`` in prototype space.
-    The arc midpoint is GL's «Arc midpoint» (``core.snap.
-    arc_sweep_midpoint``), for an open chain only: two ends, three or more
-    vertices — a circle has none."""
-    from core.snap import fit_circle, arc_sweep_midpoint
-    if hasattr(curves, 'curve_segments'):
-        curves = curves.curve_segments()
-    centers, tangents, mids = [], [], []
-    for segments in curves:
-        ends = np.asarray(segments, float).reshape(-1, 3)
-        points, counts = np.unique(ends, axis=0, return_counts=True)
-        vertices = [QVector3D(*p) for p in points]
-        fit = fit_circle(vertices) if len(points) >= 3 else None
-        if fit is None:
-            continue
-        if int((counts == 1).sum()) == 2:
-            mid = arc_sweep_midpoint(vertices, fit)
-            if mid is not None:
-                mids.append(np.array(mid.toTuple()))
-        center = np.array(fit[0].toTuple())
-        centers.append(center)
-        for point in points[counts == 1]:
-            at = np.flatnonzero(np.all(ends == point, axis=1))[0]
-            leaving = point - ends[at ^ 1]
-            radial = point-center
-            radial /= np.linalg.norm(radial)
-            tangent = leaving-radial*np.dot(leaving, radial)
-            length = np.linalg.norm(tangent)
-            if length > 1e-9:
-                tangents.append((point, tangent/length))
-    return centers, tangents, mids
 
 
 def tangent_direction(index, packed, row, point):
@@ -386,21 +351,15 @@ def surface(index, row, origin, direction, limit=float('inf')):
 def surface_hit(index, row, origin, direction, limit=float('inf')):
     """:func:`surface` and the unit normal of the triangle it hit, from the
     same candidates: ``(point, normal)`` or ``None``."""
-    from views.document_interaction import _moller_trumbore
     rows = np.asarray(row, np.int64).reshape(-1)
     rows = rows[(rows >= 0) & (rows < len(index.packed.instances))]
     rows = rows[(index.packed.instances['info'][rows, 2] & 129) == 0]
     _, _, v0, e1, e2 = index.ray_cands(rows, origin.toTuple(), direction.toTuple(), limit)
-    if not len(v0):
+    hit = nearest_inference_triangle(origin.toTuple(), direction.toTuple(), v0, e1, e2)
+    if hit is None:
         return None
-    t, hit = _moller_trumbore(np.array(origin.toTuple()), np.array(direction.toTuple()), v0, e1, e2)
-    if not hit.any():
-        return None
-    k = int(np.argmin(np.where(hit, t, np.inf)))
-    n = np.cross(e1[k], e2[k])
-    length = float(np.linalg.norm(n))
-    normal = QVector3D(*(n / length)) if length > 1e-30 else None
-    return origin + direction * float(t[k]), normal
+    _, distance, normal = hit
+    return origin + direction * distance, QVector3D(*normal) if normal is not None else None
 
 
 def packed_surface(packed, row, origin, direction):
@@ -452,7 +411,7 @@ def screen_boxes(index, packed, mvp, width, height):
         changed = np.fromiter(index.screen_dirty, np.int64)
     if len(changed):
         wc, we = _world_boxes(index, packed)
-        low, high = _project_boxes(wc[changed], we[changed], mvp, width, height)
+        low, high = project_boxes(wc[changed], we[changed], mvp, width, height)
         lo[changed], hi[changed] = low, high
         index.screen_dirty.clear()
         if grid is None:
@@ -493,43 +452,6 @@ def _world_boxes(index, packed):
         we[rows] = np.einsum('nij,nj->ni', abs(matrices[:, :3, :3]), extent)
     index.world_box_cache = (wc, we)
     return wc, we
-
-
-def _project_boxes(wc, we, mvp, width, height):
-    """Conservative screen boxes ``(low, high)`` of the world boxes: the
-    eight corners projected, ``±inf`` for a box crossing the eye plane,
-    ``+inf`` for one wholly behind it. The clip transform is linear, so
-    each corner is the clip centre plus signed clip extents — eight passes
-    over contiguous rows, not reductions over a short middle axis (half of
-    the first hover's 17 ms over 30 000 placements)."""
-    matrix = np.asarray(mvp.data()).reshape(4, 4).T
-    centre = wc @ matrix[:, :3].T + matrix[:, 3]
-    axes = [we[:, k, None] * matrix[:, k] for k in range(3)]
-    n = len(wc)
-    low = np.full((n, 2), np.inf)
-    high = np.full((n, 2), -np.inf)
-    any_front = np.zeros(n, bool)
-    all_front = np.ones(n, bool)
-    half_w, half_h = width / 2, height / 2
-    for sx in (-1., 1.):
-        for sy in (-1., 1.):
-            for sz in (-1., 1.):
-                clip = centre + sx * axes[0] + sy * axes[1] + sz * axes[2]
-                w = clip[:, 3]
-                front = w > 1e-3
-                denom = np.where(front, w, 1.)
-                px = (clip[:, 0] / denom + 1.) * half_w
-                py = (1. - clip[:, 1] / denom) * half_h
-                np.minimum(low[:, 0], px, out=low[:, 0])
-                np.minimum(low[:, 1], py, out=low[:, 1])
-                np.maximum(high[:, 0], px, out=high[:, 0])
-                np.maximum(high[:, 1], py, out=high[:, 1])
-                any_front |= front
-                all_front &= front
-    crossing = any_front & ~all_front
-    low[crossing], high[crossing] = -np.inf, np.inf
-    low[~any_front], high[~any_front] = np.inf, np.inf
-    return low, high
 
 
 def _screen_rows(index, packed, mvp, width, height, x, y, radius, rows):
@@ -1016,7 +938,6 @@ def on_surface(index, view, row, point, project=None):
 def _front_at(index, view, x, y, rows, mvp):
     """``(point, unit normal, row)`` of the front surface at pixel
     ``(x, y)``, asked of the placements whose screen box holds the pixel."""
-    from views.document_interaction import _moller_trumbore
     origin, direction = view._pixel_to_ray(x, y)
     if origin is None or direction is None:
         return None
@@ -1026,18 +947,13 @@ def _front_at(index, view, x, y, rows, mvp):
         return None
     pl, _, v0, e1, e2 = index.ray_cands(near, origin.toTuple(), direction.toTuple(),
                                         float('inf'))
-    if not len(v0):
+    hit = nearest_inference_triangle(origin.toTuple(), direction.toTuple(), v0, e1, e2)
+    if hit is None:
         return None
-    t, hit = _moller_trumbore(np.array(origin.toTuple()), np.array(direction.toTuple()),
-                              v0, e1, e2)
-    if not hit.any():
+    k, distance, normal = hit
+    if normal is None:
         return None
-    k = int(np.argmin(np.where(hit, t, np.inf)))
-    n = np.cross(e1[k], e2[k])
-    length = float(np.linalg.norm(n))
-    if length < 1e-30:
-        return None
-    return origin + direction * float(t[k]), QVector3D(*(n / length)), int(pl[k])
+    return origin + direction * distance, QVector3D(*normal), int(pl[k])
 
 
 def _on_plane(hit, plane, depth):
