@@ -94,3 +94,19 @@ def test_add_face_refusal_precedes_edit(monkeypatch):
     monkeypatch.setattr(store_mesh, "_hypot", lambda: None)
     assert MeshStore.command_add_face(mesh, rectangle(0,0,1,1)) is None
     assert not mesh.vertices and not mesh.faces and mesh._mut_serial == 0
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf")])
+def test_plain_face_refusal_keeps_allocator_and_revision(monkeypatch, bad):
+    monkeypatch.setenv("INGETRAZO_STORE", "1")
+    mesh = Mesh()
+    before = (mesh._store.revision, mesh._mut_serial)
+    with pytest.raises((ValueError, OverflowError)):
+        MeshStore.command_add_face(mesh, [(0., 0., 0.), (1., 0., 0.), (bad, 0., 0.)],
+                                   divide=False)
+    assert not mesh.vertices and not mesh.edges and not mesh.faces
+    assert (mesh._store.revision, mesh._mut_serial) == before
+    key, dirty, *_ = MeshStore.command_add_face(mesh, rectangle(0, 0, 1, 1), divide=False)
+    other = Mesh()
+    expected, *_ = MeshStore.command_add_face(other, rectangle(0, 0, 1, 1), divide=False)
+    assert (key & ((1 << 40) - 1), dirty) == (expected & ((1 << 40) - 1), 5)
