@@ -7,19 +7,19 @@ use pyo3::{
 };
 pub const BEYOND: f64 = 100_000.;
 #[pyfunction]
-fn survey_offset(
+pub(crate) fn survey_offset(
     py: Python<'_>,
     lo: [f64; 3],
     hi: [f64; 3],
-) -> PyResult<Option<Bound<'_, PyTuple>>> {
+) -> PyResult<Bound<'_, PyAny>> {
     if lo[0] > hi[0]
         || !lo.iter().chain(&hi).all(|n| n.is_finite())
         || !lo.iter().chain(&hi).any(|n| n.abs() > BEYOND)
     {
-        return Ok(None);
+        return Ok(py.None().into_bound(py));
     }
     let offset = lo.map(|n| if n.abs() < 1. { 0. } else { n.trunc() });
-    Ok(Some(PyTuple::new(py, offset)?))
+    Ok(PyTuple::new(py, offset)?.into_any())
 }
 #[pyclass(name = "SurveyBounds", module = "ingetrazo_core")]
 struct Bounds {
@@ -79,7 +79,7 @@ impl Bounds {
         }
         self.absorb(py, lo, hi)
     }
-    fn offset<'p>(&self, py: Python<'p>) -> PyResult<Option<Bound<'p, PyTuple>>> {
+    fn offset<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         survey_offset(py, self.lo.bind(py).extract()?, self.hi.bind(py).extract()?)
     }
 }

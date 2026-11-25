@@ -797,8 +797,7 @@ fn prepare<'p>(
         point(p.m.w_axis.truncate());
     }
     let offset = if lo.x < hi.x {
-        py.import("formats.recenter")?
-            .call_method1("survey_offset", (lo.to_array(), hi.to_array()))?
+        crate::file_bounds::survey_offset(py, lo.to_array(), hi.to_array())?
     } else {
         py.None().into_bound(py)
     };
@@ -1046,7 +1045,25 @@ fn dxf_save_lines(path: PathBuf, segments: &Obj<'_>, layer: &str) -> PyResult<us
     let g = (layer, segments).into_pyobject(segments.py())?.into_any();
     crate::sheets::dxf::sheet_dxf(path, vec![g], None, None)
 }
+#[pyfunction(signature=(owner, skipped=None))]
+fn dxf_empty_error(owner: &Obj<'_>, skipped: Option<&Obj<'_>>) -> PyResult<()> {
+    let message = concat!(
+        "no importable geometry (lines, polylines, arcs, ",
+        "circles, ellipses, splines or faces) in the model space"
+    );
+    owner
+        .py()
+        .get_type::<pyo3::exceptions::PyValueError>()
+        .call_method1("__init__", (owner, message))?;
+    let py = owner.py();
+    let counts = match skipped {
+        Some(value) if value.is_truthy()? => py.get_type::<PyDict>().call1((value,))?,
+        _ => PyDict::new(py).into_any(),
+    };
+    owner.setattr("skipped", counts)
+}
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(dxf_empty_error, m)?)?;
     dwg::register(m)?;
     m.add_function(wrap_pyfunction!(dxf_prepare_import, m)?)?;
     m.add_function(wrap_pyfunction!(dxf_open_document, m)?)?;

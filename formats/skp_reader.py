@@ -4,10 +4,10 @@ import ingetrazo_core
 from collections import OrderedDict
 
 from core.texture import (colorize_image as _colorize_image, image_has_cutout as _image_has_cutout, projection_basis as _plane_basis)
-from formats.skp_consumption import (
-    SoftSegments, _GeometryCache, _geometry_cache, _remember_geometry,
-)
-from formats.skp_coordinates import PointRows as _PointRows
+from contextvars import ContextVar
+from ingetrazo_core import SoftSegments
+
+_geometry_cache = ContextVar("skp_geometry_cache", default=None)
 from ingetrazo_core import (
     Matrix4 as QMatrix4x4, Vec3 as QVector3D,
     skp_adapt as _adapt, skp_parse_raw as _parse_raw,

@@ -93,10 +93,13 @@ def test_a_tile_on_disk_is_read_at_once_without_the_network(tmp_path):
 
 
 def test_the_tile_cache_location_needs_no_network_module():
-    """The viewport reads the cache location inside paintGL: the module
-    that answers must not pull in QtNetwork (#327)."""
-    from pathlib import Path
-    import georef.tiles as tiles
-    assert "PySide6.QtNetwork" not in Path(tiles.__file__).read_text(
-        encoding="utf-8")
-    assert tiles.default_cache_dir().name == "tiles"
+    """Asking for the disk cache path must not initialize the HTTP workers."""
+    import subprocess
+    import sys
+    subprocess.run([sys.executable, "-c", """
+import sys
+from georef import tiles, transport
+assert tiles.default_cache_dir().name == "tiles"
+assert not hasattr(transport, "_workers")
+assert "urllib.request" not in sys.modules
+"""], check=True, timeout=30)

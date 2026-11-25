@@ -55,7 +55,8 @@ def test_section_and_view_commands_change_the_camera(native_window):
 
 
 def test_surface_rebuild_uses_its_own_datum(native_window, monkeypatch):
-    from georef import dem, surface
+    import ingetrazo_core
+    from georef import dem
     from georef.datum import SceneDatum
     from georef.geopath import GeoPath
 
@@ -77,7 +78,7 @@ def test_surface_rebuild_uses_its_own_datum(native_window, monkeypatch):
     vp = win.viewport
     scene = vp.scene
     calls = []
-    monkeypatch.setattr(surface, "build_surface", lambda path, sampler, datum: calls.append(datum) or [1])
+    monkeypatch.setattr(ingetrazo_core, "build_surface", lambda path, sampler, datum: calls.append(datum) or [1])
     scene.georef = SceneDatum(45, 2)
     path = GeoPath([Vec3(), Vec3(2, 0, 0), Vec3(2, 2, 0)])
     scene.geo_paths.append(path)

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """The run-time fix for legacy dimensions anchored inside groups
-(formats/openskp_compat.py; upstream iamahsanmehmood/openskp#384).
+(ingetrazo_core.reader_compat; upstream iamahsanmehmood/openskp#384).
 
 A user's .skp house (2018 version) opened with 2 of its 72 root entities: a
 dimension anchored to a vertex inside nested groups was read with a fixed
@@ -17,9 +17,9 @@ def big(slot: int) -> bytes:
 
 
 def test_the_patch_is_installed_and_reads_instance_paths():
-    from formats import openskp_compat
+    from ingetrazo_core import reader_compat
     from openskp import legacy as L
-    openskp_compat.apply()
+    reader_compat.apply()
     assert hasattr(L, "_connection_paths")
     assert L._READERS['CDimensionLinear'] is L._read_dimlinear
     data = (big(0x0F69CA) + struct.pack('<I', 2) + big(0x166157)
@@ -33,20 +33,20 @@ def test_the_patch_is_installed_and_reads_instance_paths():
 def test_an_empty_path_is_the_old_fixed_layout():
     """Loose-geometry dimensions — every one that already parsed — keep
     their exact length: a null ref and two empty lists are 10 bytes."""
-    from formats import openskp_compat
+    from ingetrazo_core import reader_compat
     from openskp import legacy as L
-    openskp_compat.apply()
+    reader_compat.apply()
     r = L._R(b'\x00' * 10 + b'TAIL', 0)
     assert L._connection_paths(None, r) == (None, [], [])
     assert r.pos == 10
 
 
 def test_apply_is_idempotent_and_leaves_a_fixed_upstream_alone(monkeypatch):
-    from formats import openskp_compat
-    openskp_compat.apply()
-    assert openskp_compat.apply() is False          # second call: no-op
-    monkeypatch.setattr(openskp_compat, "_applied", False)
-    assert openskp_compat.apply() is False          # upstream has it now
+    from ingetrazo_core import reader_compat
+    reader_compat.apply()
+    assert reader_compat.apply() is False          # second call: no-op
+    monkeypatch.setattr(reader_compat, "_applied", False)
+    assert reader_compat.apply() is False          # upstream has it now
 
 
 class _Archive:
@@ -84,9 +84,9 @@ def test_a_2019_layer_record_reads_its_two_extra_bytes():
     """#157: from the 2019 version on the layer record ends 23 bytes after
     its last string; reading 21 left the first definition's entity count
     two bytes early, and the castle did not open."""
-    from formats import openskp_compat
+    from ingetrazo_core import reader_compat
     from openskp import legacy as L
-    openskp_compat.apply()
+    reader_compat.apply()
     data = _layer_record(23) + b'TAIL'
     r = L._R(data, 0)
     rec = L._READERS['CLayer'](_Archive(19), r)
@@ -97,9 +97,9 @@ def test_a_2019_layer_record_reads_its_two_extra_bytes():
 def test_older_layer_records_keep_their_length():
     """A 2018 record is 21 bytes long, and two zero bytes after it belong to
     whatever follows — they are not eaten."""
-    from formats import openskp_compat
+    from ingetrazo_core import reader_compat
     from openskp import legacy as L
-    openskp_compat.apply()
+    reader_compat.apply()
     for ver in (17, 18, 20):
         data = _layer_record(21) + b'\x00\x00TAIL'
         r = L._R(data, 0)
@@ -152,14 +152,14 @@ def _model_dat_with_definition(*records):
 
 
 def test_vff_scans_read_the_axis_and_the_texts():
-    from formats import openskp_compat as C
+    from ingetrazo_core import skp_annotations
     dat = _dim_record((0, 0, 0), (100, 0, 0), axis=2) \
         + _text_record('9 steps', (50, 50, 50), (-5, 0, 0))
-    dims = C._scan_vff_dimensions(dat, {}, {})
+    dims = skp_annotations(True, dat, {}, {})
     assert len(dims) == 1
     assert dims[0]['axis'] == 2
     assert dims[0]['a'] == (0, 0, 0) and dims[0]['b'] == (100, 0, 0)
-    texts = C._scan_vff_texts(dat, {}, {})
+    texts = skp_annotations(False, dat, {}, {})
     assert len(texts) == 1
     assert texts[0]['text'] == '9 steps'
     assert texts[0]['point'] == (50, 50, 50)
@@ -171,7 +171,7 @@ def test_resolve_moves_owned_annotations_onto_the_definition():
 
     from openskp.model import Dimension
 
-    from formats import openskp_compat as C
+    from ingetrazo_core import reader_compat as C
     dat = _model_dat_with_definition(
         _dim_record((0, 0, 0), (100, 0, 0), axis=1),
         _text_record('9 steps', (50, 50, 50), (-5, 0, 0)))
@@ -200,10 +200,10 @@ def test_resolve_moves_owned_annotations_onto_the_definition():
 
 def test_legacy_scene_camera_and_hidden_layer_record():
     from types import SimpleNamespace
-    from formats import openskp_compat
+    from ingetrazo_core import reader_compat
     from openskp import legacy
 
-    openskp_compat.apply()
+    reader_compat.apply()
     # Schema 15 has an optional inline camera, then the hidden-layer list.
     record = struct.pack("<HHH", 0xffff, 15, 9) + b"CViewPage"
     record += struct.pack("<HB", 0, 0) + _utf16("Balcony") + _utf16("")
@@ -223,10 +223,10 @@ def test_legacy_scene_camera_and_hidden_layer_record():
 
 
 def test_legacy_file_with_one_layer_and_no_definitions(tmp_path):
-    from formats import openskp_compat
+    from ingetrazo_core import reader_compat
     from openskp import legacy
 
-    openskp_compat.apply()
+    reader_compat.apply()
     header = _utf16("SketchUp Model") + _utf16("{17.0.0}") + b"CVersionMap"
     # No material table. An absolute back-reference to the active layer
     # establishes the first class slot. A root count follows the definitions.

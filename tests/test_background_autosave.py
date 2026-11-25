@@ -7,7 +7,7 @@ from ingetrazo_core import Vec3 as V
 from core import autosave
 from core.scene import Scene
 from formats import igz
-from formats.igz_snapshot import snapshot_steps
+from ingetrazo_core import snapshot_steps
 from tests.test_project_tabs import win, _edit
 
 

@@ -81,3 +81,20 @@ def test_geojson_multilinestring():
 
 def test_geojson_malformed_returns_empty():
     assert parse_geojson("{ not json") == []
+
+
+def test_public_survey_records_keep_pickle_identity_and_independent_defaults():
+    from dataclasses import asdict
+    from importlib import reload
+    import pickle
+    import georef
+    from georef.geoimport import GeoFeature
+
+    route = GeoFeature(name="trail")
+    route.points.append((45., 2.))
+    saved = pickle.dumps(route)
+    reload(georef)
+    assert georef.geoimport.GeoFeature is GeoFeature
+    assert pickle.loads(saved) == route
+    assert GeoFeature().points == []
+    assert asdict(route) == {"points": [(45., 2.)], "closed": False, "name": "trail"}

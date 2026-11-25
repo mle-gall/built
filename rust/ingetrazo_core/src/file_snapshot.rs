@@ -516,7 +516,7 @@ fn survey_steps(source: Owned) -> Steps {
         }
         Python::attach(|py| {
             let images = PyDict::new(py);
-            let raster = py.import("georef.raster")?.getattr("as_raster")?;
+            let raster = py.import("ingetrazo_core")?.getattr("as_raster")?;
             for (k, v) in source.bind(py).getattr("images")?.cast::<PyDict>()?.iter() {
                 images.set_item(k, raster.call1((v,))?)?
             }

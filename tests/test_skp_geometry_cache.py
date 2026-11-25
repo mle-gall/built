@@ -6,20 +6,21 @@ from types import SimpleNamespace as NS
 import numpy as np
 import pytest
 
+from ingetrazo_core import GeometryCache, skp_remember
 from formats import skp_reader as adapter
 
 
 def test_cache_eviction_keeps_active_geometry_and_source():
     first = NS(faces={1: "source face"})
     second = NS(faces={2: "another source face"})
-    cache = adapter._GeometryCache(16)
+    cache = GeometryCache(16)
     token = adapter._geometry_cache.set(cache)
     try:
         a = np.arange(2, dtype=np.float64)
         b = np.arange(3, dtype=np.float64)
-        adapter._remember_geometry(first, "_geom", a, a.nbytes)
+        skp_remember(first, "_geom", a, a.nbytes)
         assert first._geom is a
-        adapter._remember_geometry(second, "_geom", b, b.nbytes)
+        skp_remember(second, "_geom", b, b.nbytes)
         assert not hasattr(first, "_geom")
         assert not hasattr(second, "_geom")  # Oversize entries stay uncached.
         np.testing.assert_array_equal(a, [0, 1])
@@ -34,10 +35,10 @@ def test_cache_eviction_keeps_active_geometry_and_source():
 
 def test_adaptation_cleans_cache_on_failure_and_restores_outer_context(monkeypatch):
     source = NS(faces={1: "source face"})
-    outer = adapter._GeometryCache(100)
+    outer = GeometryCache(100)
     token = adapter._geometry_cache.set(outer)
     def fail(*args, **kwargs):
-        adapter._remember_geometry(source, "_geom", [1, 2], 16)
+        skp_remember(source, "_geom", [1, 2], 16)
         raise RuntimeError("injected adaptation failure")
     monkeypatch.setattr(adapter, "_adapt_inner", fail)
     try:
@@ -52,7 +53,7 @@ def test_adaptation_cleans_cache_on_failure_and_restores_outer_context(monkeypat
 
 def test_cleanup_does_not_remove_replaced_cache_value():
     source = NS()
-    cache = adapter._GeometryCache(100)
+    cache = GeometryCache(100)
     original = [1]
     source._geom = original
     cache.remember(source, "_geom", original, 8)

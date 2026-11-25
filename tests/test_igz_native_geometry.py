@@ -285,7 +285,7 @@ def test_an_engine_failure_falls_back_to_python(tmp_path, binary, engine,
 
 def test_open_geometry_uses_original_archive_after_atomic_replace(tmp_path, binary):
     import os
-    from formats.native_io import DocumentArchive, native_io
+    from ingetrazo_core import DocumentArchive, document_native_io as native_io
 
     if not hasattr(native_io(), "igz_read_member"):
         pytest.skip("native descriptor reader unavailable")

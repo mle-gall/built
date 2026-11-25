@@ -128,7 +128,13 @@ enum Token<'p> {
 // surrogates. An explicit stack also handles deeply nested fragment references.
 fn compatibility(file: &Obj<'_>, value: &Obj<'_>) -> PyResult<()> {
     let py = file.py();
-    let encoder = py.import("formats.igz_stream")?.getattr("_encoder")?;
+    static ENCODER: pyo3::sync::PyOnceLock<Py<PyAny>> = pyo3::sync::PyOnceLock::new();
+    let encoder=ENCODER.get_or_try_init(py,||->PyResult<_>{
+        let kw=PyDict::new(py);
+        kw.set_item("separators",(",",":"))?;
+        kw.set_item("allow_nan",false)?;
+        Ok(py.import("json")?.call_method("JSONEncoder",(),Some(&kw))?.unbind())
+    })?.bind(py);
     let mut buffer = vec![];
     let mut pending = vec![Token::Data(value.clone())];
     let mut visiting = std::collections::HashSet::new();
@@ -266,7 +272,14 @@ fn igz_stream_start(
     stream.setattr("resolved", PyDict::new(py))?;
     stream.setattr("missing", 0)
 }
+#[pyfunction(signature=(stream, *exc))]
+fn igz_stream_close(stream: &Obj<'_>, exc: &Bound<'_, PyTuple>) -> PyResult<()> {
+    let _ = exc;
+    stream.getattr("file")?.call_method0("close")?;
+    Ok(())
+}
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(igz_stream_close, m)?)?;
     m.add_class::<Fragment>()?;
     m.add_function(wrap_pyfunction!(igz_stream_start, m)?)?;
     m.add_function(wrap_pyfunction!(igz_stream_store, m)?)?;

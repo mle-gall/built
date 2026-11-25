@@ -737,7 +737,7 @@ def _tree(view, win, *, discover=False):
         from ingetrazo_core import reveal_selection
         return reveal_selection(rows)
     if lens == 2:
-        from core import deliveries
+        from ingetrazo_core import deliveries
         from ingetrazo_core import export_readiness
         records = deliveries.records(scene)
         delivery = records.get(getattr(view, "_delivery_key", None)) or next(iter(records.values()), {})

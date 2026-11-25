@@ -485,7 +485,7 @@ impl<'p> Builder<'p> {
         let uses = PyDict::new(py);
         let layers = PyList::empty(py);
         let empty = PyTuple::empty(py).into_any();
-        let lifetime = py.import("formats.skp_consumption")?;
+        let lifetime = py.import("ingetrazo_core")?;
         let keep = lifetime.call_method1("image_stage_geometry", (&self.plan.by_id,))?;
         if consume
             && !self
@@ -709,7 +709,7 @@ pub fn skp_adapt_inner<'p>(
 ) -> PyResult<Obj<'p>> {
     let py = model.py();
     let glue = py.import("formats.skp_reader")?.into_any();
-    let compat = py.import("formats.openskp_compat")?;
+    let compat = py.import("ingetrazo_core.reader_compat")?;
     let version = attr(model, "version")?.str()?.to_string();
     let major = version
         .trim_start_matches('{')
@@ -899,7 +899,7 @@ pub fn skp_adapt_inner<'p>(
 pub fn skp_parse<'p>(path: &Obj<'p>, progress: Option<&Obj<'p>>) -> PyResult<Obj<'p>> {
     let py = path.py();
     let glue = py.import("formats.skp_reader")?;
-    let compat = py.import("formats.openskp_compat")?;
+    let compat = py.import("ingetrazo_core.reader_compat")?;
     compat.call_method0("reset_group_definitions")?;
     if let Some(callback) = progress {
         callback.call1((0.1, "Reading .skp model…"))?;

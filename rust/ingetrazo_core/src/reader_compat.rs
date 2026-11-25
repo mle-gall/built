@@ -7,7 +7,7 @@ use pyo3::{
 };
 type Obj<'p> = Bound<'p, PyAny>;
 fn facade(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("formats.openskp_compat")
+    py.import("ingetrazo_core.reader_compat")
 }
 fn tables(py: Python<'_>) -> PyResult<Obj<'_>> {
     facade(py)?.getattr("_parse_tables")
@@ -346,7 +346,7 @@ impl FolderRecords {
             if payload.is_truthy()? {
                 let recipes = (|| -> PyResult<_> {
                     let bytes = py.get_type::<pyo3::types::PyBytes>().call1((payload,))?;
-                    facade(py)?.call_method1("parse_tag_folders", (bytes,))
+                    native(py)?.call_method1("skp_tag_folders", (bytes,))
                 })();
                 let recipes = match recipes {
                     Ok(v) => v,
@@ -437,7 +437,7 @@ impl Hook {
             }
             Event::Layers => remember_layers(&rec)?,
             Event::Material => {
-                let recipe = facade(py)?.getattr("read_pbr")?.call(args, kwargs);
+                let recipe = native(py)?.getattr("skp_read_pbr")?.call(args, kwargs);
                 match recipe {
                     Ok(recipe) if !recipe.is_none() => {
                         let t = tables(py)?;
@@ -604,7 +604,10 @@ fn apply(py: Python<'_>) -> PyResult<bool> {
     Ok(installed.contains(&true))
 }
 pub fn register(parent: &Bound<'_, PyModule>) -> PyResult<()> {
-    let m = PyModule::new(parent.py(), "reader_compat")?;
+    let py = parent.py();
+    let m = PyModule::new(py, "ingetrazo_core.reader_compat")?;
+    m.add("_applied", false)?;
+    m.add("_parse_tables", py.import("threading")?.call_method0("local")?)?;
     macro_rules! add {($($f:ident),*)=>{$(m.add_function(wrap_pyfunction!($f,&m)?)?;)*};}
     add!(
         apply,
@@ -625,5 +628,6 @@ pub fn register(parent: &Bound<'_, PyModule>) -> PyResult<()> {
         _keep_tag_folders,
         _keep_vff_annotation_inputs
     );
-    parent.add_submodule(&m)
+    py.import("sys")?.getattr("modules")?.set_item(m.name()?, &m)?;
+    parent.add("reader_compat", m)
 }

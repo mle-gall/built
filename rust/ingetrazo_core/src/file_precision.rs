@@ -192,7 +192,29 @@ fn built_export_placements<'py>(scene: &Obj<'py>) -> PyResult<Bound<'py, PyDict>
 
 #[path = "file_facade.rs"]
 mod facade;
+#[pyfunction]
+fn igz_nonfinite_error(owner: &Obj<'_>, r#where: &Obj<'_>) -> PyResult<()> {
+    let py = owner.py();
+    owner.setattr("where", r#where)?;
+    let kwargs = PyDict::new(py);
+    kwargs.set_item("where", r#where)?;
+    let message = py.import("core.i18n")?.call_method(
+        "tr",
+        (concat!(
+            "The model has a point with invalid coordinates (not a number), ",
+            "so it was not saved and the file on disk keeps its last good ",
+            "version. Undo the last step and save again. Where: {where}"
+        ),),
+        Some(&kwargs),
+    )?;
+    owner
+        .py()
+        .get_type::<pyo3::exceptions::PyValueError>()
+        .call_method1("__init__", (owner, message))?;
+    Ok(())
+}
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(igz_nonfinite_error, m)?)?;
     facade::register(m)?;
     m.add_function(wrap_pyfunction!(built_position, m)?)?;
     m.add_function(wrap_pyfunction!(built_placement, m)?)?;

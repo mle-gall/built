@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from core import deliveries
+from ingetrazo_core import deliveries
 from core.camera import OrbitCamera
 from core.group import Group
 from core.history import History

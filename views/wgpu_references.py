@@ -12,7 +12,7 @@ def _vertices(positions, uvs, origin, triangles=None):
 
 
 def _texture(image, fallback, limit):
-    from georef.raster import as_raster
+    from ingetrazo_core import as_raster
     image = as_raster(image)
     if image is None:
         return 1, 1, np.array((*fallback, 255), np.uint8)

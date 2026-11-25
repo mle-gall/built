@@ -3,7 +3,7 @@
 use pyo3::{
     exceptions::PyValueError,
     prelude::*,
-    types::{PyDict, PyTuple},
+    types::PyDict,
 };
 use std::path::PathBuf;
 type Obj<'p> = Bound<'p, PyAny>;
@@ -59,43 +59,6 @@ fn built_displacement<'p>(
     }
     Ok(maximum * 1000.)
 }
-#[pyfunction(signature=(vertex,point,*,key))]
-fn built_vertex_init(vertex: &Obj<'_>, point: &Obj<'_>, key: &Obj<'_>) -> PyResult<()> {
-    let py = vertex.py();
-    let coords = py.get_type::<PyTuple>().call1((point,))?;
-    let position = py
-        .get_type::<crate::math::Vec3>()
-        .call(coords.cast::<PyTuple>()?, None)?;
-    let kw = PyDict::new(py);
-    kw.set_item("key", key)?;
-    py.import("core.mesh")?.getattr("Vertex")?.call_method(
-        "__init__",
-        (vertex, position),
-        Some(&kw),
-    )?;
-    vertex.setattr("_source", coords)?;
-    vertex.setattr(
-        "_projection",
-        vertex.getattr("position")?.call_method0("toTuple")?,
-    )
-}
-#[pyfunction]
-fn built_vertex_tuple<'p>(vertex: &Obj<'p>) -> PyResult<Obj<'p>> {
-    let py = vertex.py();
-    let source = vertex.getattr("_source")?;
-    let old = vertex.getattr("_projection")?;
-    let now = vertex.getattr("position")?.call_method0("toTuple")?;
-    let mut coords = vec![];
-    for i in 0..source.len()?.min(old.len()?).min(now.len()?) {
-        let n = now.get_item(i)?;
-        coords.push(if old.get_item(i)?.eq(&n)? {
-            source.get_item(i)?
-        } else {
-            n
-        });
-    }
-    Ok(PyTuple::new(py, coords)?.into_any())
-}
 #[pyfunction]
 fn document_native_io(py: Python<'_>) -> PyResult<Option<Obj<'_>>> {
     if std::env::var_os("INGETRAZO_RUST_IO").as_deref() == Some(std::ffi::OsStr::new("0")) {
@@ -116,7 +79,7 @@ fn document_archive_read<'p>(
     pwd: Option<&Obj<'p>>,
 ) -> PyResult<Obj<'p>> {
     let zip = py.import("zipfile")?;
-    let native = py.import("formats.native_io")?.call_method0("native_io")?;
+    let native = document_native_io(py)?.unwrap_or_else(||py.None().into_bound(py));
     let Some(reader) = native.getattr_opt("igz_read_member")? else {
         return zip
             .getattr("ZipFile")?
@@ -159,8 +122,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     add!(
         is_built,
         built_displacement,
-        built_vertex_init,
-        built_vertex_tuple,
         igz_members_init,
         document_archive_read,
         document_native_io

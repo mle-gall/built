@@ -9,27 +9,11 @@ separate document transaction, so a failed read cannot partially change a scene.
 """
 from __future__ import annotations
 
-from pathlib import Path
-
-
-class NeedsConverter(Exception):
-    """No backend can read this ``.skp``; the caller reports it. (The name is
-    historical: it once meant "use the external converter".) Carries the
-    path and detected format."""
-
-    def __init__(self, path, fmt: str, reason: str = "") -> None:
-        msg = f"No pure SKP backend for {path} (format={fmt})"
-        super().__init__(f"{msg}: {reason}" if reason else msg)
-        self.path = Path(path)
-        self.format = fmt
-        self.reason = reason
-
-
-from ingetrazo_core import ModelImportBackend as _OpenSkpBackend
+from ingetrazo_core import ModelImportBackend, NeedsConverter
 
 
 #: Reader order for import and capability queries.
-_BACKENDS: list = [_OpenSkpBackend()]
+_BACKENDS: list = [ModelImportBackend()]
 
 
 from ingetrazo_core import (

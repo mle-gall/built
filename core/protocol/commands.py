@@ -1706,7 +1706,7 @@ def redo(history):
     return _answer(history, before)
 
 
-from core.deliveries import create_delivery, edit_delivery, delete_delivery, run_delivery
+from ingetrazo_core.deliveries import create_delivery, edit_delivery, delete_delivery, run_delivery
 
 
 class _DocumentSettingsCommand(Command):

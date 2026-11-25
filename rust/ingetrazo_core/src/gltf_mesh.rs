@@ -300,10 +300,7 @@ fn stage<'py>(
     } else {
         scale_for((hi - lo).max_element())
     };
-    let offset = py.import("formats.recenter")?.call_method1(
-        "survey_offset",
-        ((lo * scale).to_array(), (hi * scale).to_array()),
-    )?;
+    let offset = crate::file_bounds::survey_offset(py, (lo * scale).to_array(), (hi * scale).to_array())?;
     let adjusted = PyList::empty(py);
     for b in batches.try_iter()? {
         let b = b?;

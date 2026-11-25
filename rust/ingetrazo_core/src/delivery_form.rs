@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! A delivery's rules (core/deliveries.py, ingetrazo_render deliveries_host.rs): the
+//! A delivery's rules (formats/delivery, ingetrazo_render deliveries_host.rs): the
 //! formats, the scopes each format takes, which fields of the form a
 //! format and a scope show, how the form's values become a record (the
 //! format's own options), and what makes a record valid. The form, the

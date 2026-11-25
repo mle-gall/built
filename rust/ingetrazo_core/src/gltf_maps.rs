@@ -46,7 +46,7 @@ fn cache<'py>(
         .into_any())
 }
 #[pyfunction]
-fn gltf_import_recipe<'py>(
+pub(crate) fn gltf_import_recipe<'py>(
     py: Python<'py>,
     mat: &Obj<'py>,
     textures: &Obj<'py>,
@@ -114,7 +114,7 @@ fn gltf_import_recipe<'py>(
     Ok(recipe)
 }
 #[pyfunction]
-fn gltf_export_maps<'py>(
+pub(crate) fn gltf_export_maps<'py>(
     py: Python<'py>,
     recipe: &Obj<'py>,
 ) -> PyResult<(Obj<'py>, Obj<'py>, Obj<'py>)> {

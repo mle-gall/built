@@ -16,7 +16,8 @@ import pytest
 
 pytest.importorskip("openskp")
 
-from formats import openskp_compat, skp_reader  # noqa: E402
+from ingetrazo_core import reader_compat
+from formats import skp_reader  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -56,11 +57,11 @@ def _empty(did, name, instances=()):
 def kinds():
     """The state a parse leaves: which definitions were groups."""
     def note(groups):
-        openskp_compat.reset_group_definitions()
-        openskp_compat._parse_tables.kinds = True
-        openskp_compat._parse_tables.groups = set(groups)
+        reader_compat.reset_group_definitions()
+        reader_compat._parse_tables.kinds = True
+        reader_compat._parse_tables.groups = set(groups)
     yield note
-    openskp_compat.reset_group_definitions()
+    reader_compat.reset_group_definitions()
 
 
 def _model():
@@ -99,7 +100,7 @@ def test_a_small_component_copied_at_the_top_level_is_shared(kinds):
 
 
 def test_without_the_kinds_nothing_changes(kinds):
-    openskp_compat.reset_group_definitions()        # kinds unknown
+    reader_compat.reset_group_definitions()        # kinds unknown
     protos = _protos_by_name(skp_reader._adapt(_model(), "m"))
     assert "panela_prateleira" not in protos
     assert protos["Agrupar#1"]["component"] is True
@@ -107,8 +108,8 @@ def test_without_the_kinds_nothing_changes(kinds):
 
 def test_the_definition_kind_is_noted_during_the_parse():
     from openskp import _core
-    openskp_compat.apply()
-    openskp_compat.reset_group_definitions()
+    reader_compat.apply()
+    reader_compat.reset_group_definitions()
     try:
         def rec(tag, payload):
             return {"tag": tag, "payload": payload, "children": []}
@@ -118,10 +119,10 @@ def test_the_definition_kind_is_noted_during_the_parse():
             [rec("DE05", b"\x2a"), rec("8315", b"\x01\x00\x00\x00")], builder)
         _core._extract_geometry_from_nodes(
             [rec("DE05", b"\x2b"), rec("8315", b"\x00\x00\x00\x00")], builder)
-        assert openskp_compat.group_definitions() == {0x2a}
-        assert openskp_compat.kinds_known(False)
+        assert reader_compat.group_definitions() == {0x2a}
+        assert reader_compat.kinds_known(False)
     finally:
-        openskp_compat.reset_group_definitions()
+        reader_compat.reset_group_definitions()
 
 
 def test_lines_on_a_hidden_tag_stay_out():

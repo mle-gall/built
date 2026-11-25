@@ -19,7 +19,7 @@ from types import SimpleNamespace as NS
 
 import pytest
 
-from formats import openskp_compat
+from ingetrazo_core import reader_compat
 from formats import skp_reader
 
 DATA = Path(__file__).parent / "data"
@@ -236,7 +236,7 @@ def test_classic_files_import_unchanged(cache, name):
 
 def test_an_upstream_material_pbr_is_used_as_is(tmp_path, monkeypatch):
     # Once OpenSKP's Material carries `pbr` itself, the importer reads that
-    # (same field names as openskp_compat.read_pbr).
+    # (same field names as reader_compat.read_pbr).
     monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "c"))
     rough = NS(filename="r.png", data=b"\x89PNGrough", width=1.0, height=1.0)
     pbr = NS(workflow=1, metalness_enabled=True, metallic_factor=1.5,
@@ -257,4 +257,4 @@ def test_an_upstream_material_pbr_is_used_as_is(tmp_path, monkeypatch):
     assert Path(got["roughness_map"]["path"]).read_bytes() == b"\x89PNGrough"
     assert registry[0]["pbr"] == got
     # attach_pbr leaves a material that already has one alone.
-    assert openskp_compat.attach_pbr(model) == 0 and mat.pbr is pbr
+    assert reader_compat.attach_pbr(model) == 0 and mat.pbr is pbr

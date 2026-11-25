@@ -207,7 +207,7 @@ def test_the_bar_left_alone_writes_the_svg_as_before(native_host, tmp_path, monk
 
 def test_cancel_on_a_slow_preview_turns_the_preview_off(native_host, monkeypatch):
     import time
-    from core import deliveries
+    from ingetrazo_core import deliveries
     from ingetrazo_render import chrome_sheet
     from app_shell import modal
 

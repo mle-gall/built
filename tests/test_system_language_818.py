@@ -107,7 +107,7 @@ def test_pinning_another_language_over_the_system_one_asks_a_restart(prefs):
 @pytest.mark.parametrize("saved", [None, i18n.SYSTEM, "de"])
 def test_startup_resolves_the_saved_choice(saved, tmp_path, monkeypatch,
                                            system_is_french):
-    from app_shell import profile
+    from ingetrazo_render import start_profile
     from core import settings
 
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
@@ -119,7 +119,7 @@ def test_startup_resolves_the_saved_choice(saved, tmp_path, monkeypatch,
         prefs.sync()
     before = i18n.current_language()
     try:
-        profile.start(str(tmp_path))
+        start_profile(str(tmp_path))
         assert i18n.current_language() == ("de" if saved == "de" else "fr")
     finally:
         i18n.set_language(before)

@@ -10,10 +10,10 @@ import pytest
 
 
 def test_pytest_requires_isolation(monkeypatch):
-    from app_shell import profile
+    from ingetrazo_render import start_profile
     monkeypatch.delenv("BUILT_SETTINGS_DIR", raising=False)
     with pytest.raises(RuntimeError, match="isolated shell profile"):
-        profile.start()
+        start_profile()
 
 
 def test_offscreen_document_fixture_keeps_a_cold_process_qt_free(tmp_path):
@@ -40,13 +40,13 @@ def test_isolated_profiles(tmp_path, mode):
     script = """
         import sys
         from pathlib import Path
-        from app_shell import profile
+        from ingetrazo_render import start_profile
         mode, root = sys.argv[1], Path(sys.argv[2])
         if mode == "temporary":
             # Exercise the offscreen host's automatic temporary profile in isolation.
             import os
             os.environ.pop("BUILT_SETTINGS_DIR")
-        folder = profile.start(str(root / "explicit") if mode == "directory" else None,
+        folder = start_profile(str(root / "explicit") if mode == "directory" else None,
                                temporary=mode != "directory")
         from core.settings import settings as product_settings
         from ingetrazo_core import NativeSettings

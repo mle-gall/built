@@ -9,7 +9,7 @@ from core import _native, store_mesh
 from core.group import Group
 from core.scene import Scene
 from formats import built, igz
-from formats.igz_snapshot import snapshot_steps
+from ingetrazo_core import snapshot_steps
 
 POINTS = np.array([[650000.01, 6860000.02, 0], [650000.02, 6860001.02, 0]])
 
@@ -164,7 +164,7 @@ def test_legacy_float32_weld_threshold_is_preserved(monkeypatch):
 @pytest.mark.parametrize("precise", [False, True])
 def test_native_point_columns_match_reference_and_world_displacement(precise, monkeypatch):
     from types import SimpleNamespace
-    from formats.native_io import native_io
+    from ingetrazo_core import document_native_io as native_io
 
     if not hasattr(native_io(), "igz_points"):
         pytest.skip("native point codec unavailable")

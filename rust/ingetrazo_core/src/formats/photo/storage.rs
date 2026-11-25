@@ -26,7 +26,7 @@ fn photo_pack<'p>(
     blobs.set_item(GEOMETRY, b.call_method0("getvalue")?)?;
     let mats = PyList::empty(py);
     let images = mesh.getattr("images")?;
-    let convert = py.import("georef.raster")?.getattr("as_raster")?;
+    let convert = py.import("ingetrazo_core")?.getattr("as_raster")?;
     for (i, m) in mesh.getattr("materials")?.try_iter()?.enumerate() {
         let m = m?;
         let d = PyDict::new(py);

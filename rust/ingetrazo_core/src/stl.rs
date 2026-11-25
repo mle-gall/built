@@ -236,9 +236,7 @@ fn parse_stl<'py>(
         }
         Ok((rows, lo, hi))
     })?;
-    let offset = py
-        .import("formats.recenter")?
-        .call_method1("survey_offset", (lo, hi))?;
+    let offset = crate::file_bounds::survey_offset(py, lo, hi)?;
     if let Some(report) = report {
         report.set_item("offset", &offset)?;
     }

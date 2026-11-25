@@ -151,7 +151,32 @@ impl Backend {
             .call_method("parse", (path,), Some(&kw))
     }
 }
+#[pyfunction(signature=(owner, path, fmt, reason=Python::attach(|py| pyo3::intern!(py, "").clone().into_any().unbind())))]
+fn skp_converter_error(
+    owner: &Obj<'_>,
+    path: &Obj<'_>,
+    fmt: &Obj<'_>,
+    reason: Py<PyAny>,
+) -> PyResult<()> {
+    let py = owner.py();
+    let reason = reason.bind(py);
+    let message = pyo3::intern!(py, "No pure SKP backend for {} (format={})")
+        .call_method1("format", (path, fmt))?;
+    let message = if reason.is_truthy()? {
+        pyo3::intern!(py, "{}: {}").call_method1("format", (message, reason))?
+    } else {
+        message
+    };
+    owner
+        .py()
+        .get_type::<pyo3::exceptions::PyException>()
+        .call_method1("__init__", (owner, message))?;
+    owner.setattr("path", py.import("pathlib")?.call_method1("Path", (path,))?)?;
+    owner.setattr("format", fmt)?;
+    owner.setattr("reason", reason)
+}
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(skp_converter_error, m)?)?;
     super::packed::register(m)?;
     m.add_class::<Backend>()?;
     m.add_function(wrap_pyfunction!(skp_detect_format, m)?)?;

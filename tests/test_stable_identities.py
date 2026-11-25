@@ -77,7 +77,7 @@ def test_shared_face_tags_are_scoped_to_placements(tmp_path):
 
 
 def test_nested_equal_uids_give_shared_face_tags_distinct_ifc_ids(tmp_path):
-    from core.deliveries import scoped
+    from ingetrazo_core.deliveries import scoped
     scene = Scene()
     part = mesh()
     tag_faces(part.faces, 'IfcWall', 'Wall', 1)

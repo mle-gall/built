@@ -251,7 +251,48 @@ fn photo_geodetic(s: &Obj<'_>, lat: f64, lon: f64) -> PyResult<Option<f64>> {
             .call_method1("geodetic_to_local", (lat, lon))?,
     )
 }
+#[pyfunction]
+fn photo_hemisphere(anchor: &Obj<'_>) -> PyResult<&'static str> {
+    Ok(if anchor.getattr("northern")?.is_truthy()? {
+        "N"
+    } else {
+        "S"
+    })
+}
+#[pyfunction]
+fn photo_invalidate_index(mesh: &Obj<'_>) -> PyResult<()> {
+    mesh.setattr("_index", mesh.py().None())
+}
+#[pyfunction]
+fn photo_vertex_count<'p>(mesh: &Obj<'p>) -> PyResult<Obj<'p>> {
+    mesh.getattr("vertices")?.getattr("shape")?.get_item(0)
+}
+#[pyfunction]
+fn photo_triangle_count<'p>(mesh: &Obj<'p>) -> PyResult<Obj<'p>> {
+    mesh.getattr("triangles")?.getattr("shape")?.get_item(0)
+}
+#[pyfunction]
+fn photo_is_placed(mesh: &Obj<'_>) -> PyResult<bool> {
+    Ok(!mesh.getattr("anchor")?.is_none())
+}
+/// An imported survey is already resident for every requested area.
+#[pyfunction]
+fn photo_ensure_area(
+    sampler: &Obj<'_>,
+    lat_s: &Obj<'_>,
+    lon_w: &Obj<'_>,
+    lat_n: &Obj<'_>,
+    lon_e: &Obj<'_>,
+) {
+    let _ = (sampler, lat_s, lon_w, lat_n, lon_e);
+}
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(photo_hemisphere, m)?)?;
+    m.add_function(wrap_pyfunction!(photo_invalidate_index, m)?)?;
+    m.add_function(wrap_pyfunction!(photo_vertex_count, m)?)?;
+    m.add_function(wrap_pyfunction!(photo_triangle_count, m)?)?;
+    m.add_function(wrap_pyfunction!(photo_is_placed, m)?)?;
+    m.add_function(wrap_pyfunction!(photo_ensure_area, m)?)?;
     m.add_function(wrap_pyfunction!(photo_index, m)?)?;
     m.add_function(wrap_pyfunction!(photo_height, m)?)?;
     m.add_function(wrap_pyfunction!(photo_bounds, m)?)?;
