@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 
-from core.input_types import ScreenPoint, Input
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from tools.base import ToolContext

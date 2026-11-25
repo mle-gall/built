@@ -9,7 +9,7 @@ it. Rotate already worked this way; Move did not (reported by @pacaeiro).
 """
 from __future__ import annotations
 
-from core.input_types import ScreenPoint, Input
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.group import Group

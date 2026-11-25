@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from core.input_types import Input
+from ingetrazo_core import Input
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group
@@ -212,7 +212,7 @@ def test_a_shape_started_on_the_rest_keeps_the_rests_plane(native_host):
                             V(6, 5, 2)])
     sc.version += 1
     vp.begin_group_edit(a)
-    from core.input_types import ScreenPoint
+    from ingetrazo_core import ScreenPoint
     from tools.rust_tools import RectangleTool
 
     tool = RectangleTool()

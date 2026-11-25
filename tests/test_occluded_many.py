@@ -220,7 +220,7 @@ def test_the_kill_switch_keeps_the_rays_one_by_one(native_window, monkeypatch):
     vp.scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
     vp.scene.version += 1
     win._activate_tool("line")
-    from core.input_types import QPointF, Qt
+    from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
     vp._process_hover(QPointF(vp.width() / 2, vp.height() / 2), Qt.NoModifier)
     assert "are_occluded" in seen and seen["are_occluded"] is None
 

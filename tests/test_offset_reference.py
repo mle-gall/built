@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from core.input_types import ScreenPoint, Input
+from ingetrazo_core import ScreenPoint, Input
 import numpy as np
 from ingetrazo_render import AnnotationCanvas
 from ingetrazo_core import Vec3 as V

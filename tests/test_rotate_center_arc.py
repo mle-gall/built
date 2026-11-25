@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import math
 
-from core.input_types import ScreenPoint, Input
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
@@ -534,7 +534,7 @@ def test_rotate_mixed_selection_groups_and_loose():
 
 
 def test_move_mixed_selection_groups_and_loose():
-    from core.input_types import ScreenPoint
+    from ingetrazo_core import ScreenPoint
     from core.group import Group
     from core.mesh import Mesh
     from tools.move import MoveTool

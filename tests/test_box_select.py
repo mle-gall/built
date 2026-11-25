@@ -175,7 +175,7 @@ def test_crossing_box_selects_guides_window_does_not():
 
 
 def test_delete_key_erases_selected_guides():
-    from core.input_types import Qt
+    from ingetrazo_core import Input as Qt
     from core.guide import Guide
     from core.history import History
     scene = Scene()

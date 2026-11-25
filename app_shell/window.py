@@ -8,7 +8,7 @@ from __future__ import annotations
 import ingetrazo_render as native
 
 
-from core.input_types import QEvent, Qt
+from ingetrazo_core import Type as QEvent, Input as Qt
 
 from ingetrazo_render import shell_action as ShellAction
 from ingetrazo_render.document_commands import WindowDocumentCommands

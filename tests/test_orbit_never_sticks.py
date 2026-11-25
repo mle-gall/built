@@ -6,7 +6,7 @@ orbited the view, whatever tool was picked."""
 from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from core.input_types import PixelPoint
+from ingetrazo_core import PixelPoint
 
 
 def _window(native_host):

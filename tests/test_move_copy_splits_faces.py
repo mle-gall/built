@@ -7,7 +7,7 @@ now plain copied edges go through the Line tool's planner, so a copy laid
 across a face splits it — and a face copied with its edges is not doubled."""
 from __future__ import annotations
 
-from core.input_types import ScreenPoint, Input
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History

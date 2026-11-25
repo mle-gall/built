@@ -8,7 +8,7 @@ or left) turns the head.
 from __future__ import annotations
 
 import pytest
-from core.input_types import QPoint, Qt
+from ingetrazo_core import PixelPoint as QPoint, Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 

@@ -1,7 +1,7 @@
 """Scene commands share the native Camera menu, Keyboard table and document history."""
 import pytest
 
-from core.input_types import Input
+from ingetrazo_core import Input
 from ingetrazo_render import shortcut_text
 from tests.scene_controls import choose, prompt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401

@@ -4,7 +4,7 @@ from copy import copy
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from core.input_types import QPointF, Qt
+from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
 from ingetrazo_render import AnnotationCanvas, PaintColor, PaintPen, SurveyRaster
 from tests.raster_samples import pixels
 from ingetrazo_core import Vec3 as V
@@ -246,7 +246,7 @@ def test_clear_dimension_stroke_covers_arrows_and_label_for_this_frame():
 
 def test_capture_marks_composite_over_straight_alpha_and_escape_label_text():
     from ingetrazo_render import AnnotationCanvas
-    from core.input_types import QPointF
+    from ingetrazo_core import ScreenPoint as QPointF
     target = AnnotationCanvas(96, 36, 96)
     base = bytes([0, 0, 255, 128]) * (96 * 36)
     assert target.composite(base) is base

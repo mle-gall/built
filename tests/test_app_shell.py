@@ -5,7 +5,7 @@ docs/rust-app-shell.md)."""
 from pathlib import Path
 
 import pytest
-from core.input_types import Qt
+from ingetrazo_core import Input as Qt
 from ingetrazo_render import shortcut_text
 from tests.shell_isolation import restore_shell_patches  # noqa: F401  (autouse)
 
@@ -99,7 +99,7 @@ def test_events_answer_the_qt_calls_the_handlers_make():
 
 def test_window_input_answers_from_winit(host):
     from views import input_state
-    from core.input_types import QPoint
+    from ingetrazo_core import PixelPoint as QPoint
     host.pointer("move", 30, 40, 0, 0, Qt.ControlModifier.value)
     assert input_state.modifiers(host.viewport, query=True) & Qt.ControlModifier
     assert input_state.cursor_position(host.viewport) == QPoint(30, 40)

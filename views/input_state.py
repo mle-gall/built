@@ -1,5 +1,5 @@
 """Live input for a tool's own window, including during timer callbacks."""
-from core.input_types import Input, PixelPoint
+from ingetrazo_core import Input, PixelPoint
 
 
 def _window_input(owner):

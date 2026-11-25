@@ -1,7 +1,7 @@
 """Empty-space zoom stays at view depth; high-resolution ticks stay fractional."""
 from types import SimpleNamespace
 import pytest
-from core.input_types import QPoint, QPointF, Qt
+from ingetrazo_core import PixelPoint as QPoint, ScreenPoint as QPointF, Input as Qt
 from ingetrazo_render import WheelEvent
 from ingetrazo_core import Vec3 as V
 from core.camera import OrbitCamera

@@ -43,7 +43,7 @@ def test_plus_brings_a_project_and_its_scene_commands_back(win):
 
 
 def test_start_claims_modelling_shortcuts_until_a_document_opens(win):
-    from core.input_types import Qt
+    from ingetrazo_core import Input as Qt
     from ingetrazo_render import chrome_sheet
 
     win.close_document()

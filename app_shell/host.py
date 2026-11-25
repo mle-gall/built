@@ -462,7 +462,7 @@ class Host:
         value box and the tool may claim it), then the window's shortcuts
         (the tools' letters), else the view's key handler. While a sheet
         or an exclusive job holds the window, only they hear keys."""
-        from core.input_types import Qt
+        from ingetrazo_core import Input as Qt
         from ingetrazo_render import KeyEvent, ShortcutOverride, observe_alt_key
         from ingetrazo_render import chrome_dialogs as cd
         self.input_state.modifiers = modifiers

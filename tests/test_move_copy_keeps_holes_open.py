@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from core.input_types import Input
+from ingetrazo_core import Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.scene import Scene

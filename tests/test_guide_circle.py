@@ -255,7 +255,7 @@ def test_a_line_started_at_one_crossing_detects_the_other():
 
 
 def test_circle_tool_ctrl_toggles_guide_mode_and_draws_a_guide():
-    from core.input_types import QPointF, Qt
+    from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
     from tools.base import ToolContext
     from tools.circle import CircleTool
     from core.scene import Scene

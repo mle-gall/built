@@ -10,7 +10,7 @@ from __future__ import annotations
 
 
 import pytest  # noqa: E402
-from core.input_types import Qt
+from ingetrazo_core import Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
 
 

@@ -231,7 +231,7 @@ def test_select_delete_key_removes_label():
     DeleteTextLabelsCommand was missing and only NameError'd at press
     time — regression guard)."""
     from types import SimpleNamespace
-    from core.input_types import Qt
+    from ingetrazo_core import Input as Qt
     from tools.rust_tools import SelectTool
 
     scene = Scene()

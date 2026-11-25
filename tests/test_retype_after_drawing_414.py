@@ -15,7 +15,7 @@ import math
 
 
 import pytest  # noqa: E402
-from core.input_types import QPointF, Qt
+from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
 from ingetrazo_render import KeyEvent
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as V

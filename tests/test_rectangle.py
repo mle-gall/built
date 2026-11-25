@@ -95,7 +95,7 @@ def test_typed_single_dimension_builds_square_when_locked():
 
 
 def _hover(t, vp, x, y):
-    from core.input_types import ScreenPoint, Input
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
     t.on_hover(ToolContext(viewport=vp, world=V(x, y), screen=ScreenPoint(0, 0),
                            modifiers=Input.NoModifier, snap=None))
@@ -128,7 +128,7 @@ def test_lone_number_sets_the_width_when_the_width_moves():
 
 
 def test_lone_number_from_the_centre_keeps_the_whole_other_side():
-    from core.input_types import Input
+    from ingetrazo_core import Input
     vp = _Stub()
     t = RectangleTool()
     t._set_from_center(vp, True)
@@ -155,7 +155,7 @@ def test_lone_number_needs_the_other_side():
 # ---- Ctrl: from the centre (issue #39, @pacaeiro) ------------------------
 
 def test_ctrl_toggles_centre_mode_and_the_badge():
-    from core.input_types import Input
+    from ingetrazo_core import Input
     vp = _Stub()
     vp.flashed = []
     vp.flash_status = lambda t, *a, **k: vp.flashed.append(t)
@@ -171,7 +171,7 @@ def test_ctrl_toggles_centre_mode_and_the_badge():
 
 
 def test_from_the_centre_the_second_click_is_a_corner():
-    from core.input_types import ScreenPoint, Input
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
     vp = _Stub()
     t = RectangleTool()
@@ -191,7 +191,7 @@ def test_from_the_centre_the_second_click_is_a_corner():
 
 
 def test_typed_sizes_from_the_centre_are_the_whole_width_and_height():
-    from core.input_types import Input
+    from ingetrazo_core import Input
     vp = _Stub()
     t = RectangleTool()
     t.on_activate(vp)
@@ -204,7 +204,7 @@ def test_typed_sizes_from_the_centre_are_the_whole_width_and_height():
 
 
 def test_picking_the_tool_up_again_starts_corner_wise():
-    from core.input_types import Input
+    from ingetrazo_core import Input
     vp = _Stub()
     t = RectangleTool()
     t.on_activate(vp)
@@ -257,7 +257,7 @@ def test_committing_a_square_from_the_centre_builds_real_square_corners():
 
 
 def test_shift_locks_square_inference_while_held():
-    from core.input_types import ScreenPoint, Input
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
 
     vp = _Stub()
@@ -281,7 +281,7 @@ def test_shift_locks_square_inference_while_held():
 
 
 def test_down_toggles_square_lock_after_square_inference():
-    from core.input_types import ScreenPoint, Input
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
 
     vp = _Stub()

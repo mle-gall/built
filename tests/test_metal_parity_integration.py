@@ -4,7 +4,7 @@ from tests.native_view_input import click, key
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from core.input_types import QPointF
+from ingetrazo_core import ScreenPoint as QPointF
 from core.input_codes import Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
 from core.scene import Scene

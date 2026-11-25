@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 
 import pytest  # noqa: E402
-from core.input_types import ScreenPoint, Input # noqa: E402
+from ingetrazo_core import ScreenPoint, Input # noqa: E402
 from ingetrazo_render import MouseEvent  # noqa: E402
 
 from core import mesh as M  # noqa: E402

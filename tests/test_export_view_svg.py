@@ -586,7 +586,7 @@ def test_in_perspective_the_texture_lands_where_the_camera_puts_it():
     projective: any point of the wall, taken through its texture
     coordinates, must land where the camera projects it — an affine guess
     from three points broke the brick courses at every piece of wall."""
-    from core.input_types import QPointF
+    from ingetrazo_core import ScreenPoint as QPointF
     from core.scene import Scene
     from core.texture import face_uv_axes
     from core.vista_caras import _Perspective, view_faces

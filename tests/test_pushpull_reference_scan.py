@@ -8,7 +8,7 @@ import random
 
 
 import numpy as np  # noqa: E402
-from core.input_types import ScreenPoint  # noqa: E402
+from ingetrazo_core import ScreenPoint  # noqa: E402
 from ingetrazo_core import Vec3 as V
 
 

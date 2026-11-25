@@ -5,7 +5,7 @@ import json
 import threading
 from tests.shell_isolation import native_host, restore_shell_patches  # noqa: F401
 import pytest
-from core.input_types import Qt
+from ingetrazo_core import Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
 from core import project, recent
 from core.scene import Scene

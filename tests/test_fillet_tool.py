@@ -6,7 +6,7 @@ are rounded together; refusals only speak."""
 from __future__ import annotations
 
 import pytest
-from core.input_types import ScreenPoint, Input
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.orient import is_closed

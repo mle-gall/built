@@ -74,7 +74,7 @@ def _make_pick_tool(prompt: str, done, cancelled):
     a ceiling, an endpoint), ``cancelled()`` on Esc. Built here and not at
     module level: a module-level Tool would get its own Extensions-menu
     entry (core/extensions.py), and the panel is the only way in."""
-    from core.input_types import Qt
+    from ingetrazo_core import Input as Qt
     from tools.base import Tool
 
     class _PickPoint(Tool):

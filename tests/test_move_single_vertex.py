@@ -11,7 +11,7 @@ from __future__ import annotations
 
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from core.input_types import ScreenPoint, Input
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_render import MouseEvent
 from ingetrazo_core import Vec3 as V
 

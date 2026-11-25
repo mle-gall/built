@@ -16,7 +16,7 @@ from types import SimpleNamespace
 
 
 import pytest  # noqa: E402
-from core.input_types import PixelPoint, Input  # noqa: E402
+from ingetrazo_core import PixelPoint, Input  # noqa: E402
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 

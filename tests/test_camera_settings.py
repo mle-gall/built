@@ -12,7 +12,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest  # noqa: E402
-from core.input_types import Qt  # noqa: E402
+from ingetrazo_core import Input as Qt  # noqa: E402
 from ingetrazo_core import Vec3 as QVector3D, Vec4 as QVector4D
 
 

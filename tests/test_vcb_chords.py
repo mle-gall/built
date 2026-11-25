@@ -7,7 +7,7 @@ the geometry's float32 coordinates to inf, and NaN followed."""
 from __future__ import annotations
 
 import pytest
-from core.input_types import Qt
+from ingetrazo_core import Input as Qt
 
 from ingetrazo_render import KeyEvent, ShortcutOverride
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401

@@ -9,7 +9,7 @@ own (moving) corners — "self inference", as @pacaeiro named it.
 from __future__ import annotations
 
 
-from core.input_types import ScreenPoint, Input
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History

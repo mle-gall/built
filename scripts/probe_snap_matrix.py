@@ -40,7 +40,7 @@ from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from core.input_types import ScreenPoint                         # noqa: E402
+from ingetrazo_core import ScreenPoint                         # noqa: E402
 from ingetrazo_core import Vec3 as QVector3D                        # noqa: E402
 
 #: Every standard view plus four obliques. The obliques matter: pacaeiro's

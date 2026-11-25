@@ -9,7 +9,7 @@ edge IS the endpoint, which its own snap had already turned down."""
 from __future__ import annotations
 
 
-from core.input_types import Qt
+from ingetrazo_core import Input as Qt
 from ingetrazo_core import Vec3 as V
 
 

@@ -108,7 +108,7 @@ LINE_SCENARIOS = {
 
 def run_line(steps, far=False):
     from ingetrazo_core import Vec3
-    from core.input_types import ScreenPoint, Input
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
     from tools.rust_tools import LineTool
     view = LineView(far=far)
@@ -269,7 +269,7 @@ _MODS = {"none": 0, "shift": 0x02000000, "ctrl": 0x04000000, "shift+ctrl": 0x060
 
 def run_select(steps):
     from ingetrazo_core import Vec3
-    from core.input_types import ScreenPoint, Input
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
     from tools.rust_tools import SelectTool
     view = SelectView()
@@ -369,7 +369,7 @@ _KEYS = {"down": "Key_Down", "right": "Key_Right", "ctrl": "Key_Control"}
 
 def run_rect(steps, far=False):
     from ingetrazo_core import Vec3
-    from core.input_types import ScreenPoint, Input
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
     from tools.rust_tools import RectangleTool
     view = RectView(far=far)
@@ -468,7 +468,7 @@ CIRCLE_SCENARIOS = {
 
 def run_circle(steps, polygon=False, far=False):
     from ingetrazo_core import Vec3
-    from core.input_types import ScreenPoint, Input
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
     from tools.circle import CircleTool, PolygonTool
     view = RectView(far=far)
@@ -608,7 +608,7 @@ ROT_SCENARIOS = {
 
 def run_rot(steps):
     from ingetrazo_core import Vec3
-    from core.input_types import ScreenPoint, Input
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
     from tools.rotated_rectangle import RotatedRectangleTool
     view = RotView()
@@ -741,7 +741,7 @@ ARC_SCENARIOS = {
 
 def run_arc(name, steps):
     from ingetrazo_core import Vec3
-    from core.input_types import ScreenPoint, Input
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
     from tools.arc import ArcTool, CenterArcTool, PieTool, ThreePointArcTool
     kind = name.split(":")[0]
@@ -857,7 +857,7 @@ MOVE_SCENARIOS = {
 
 def run_move(steps):
     from ingetrazo_core import Vec3
-    from core.input_types import ScreenPoint, Input
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
     from tools.move import MoveTool
     view = MoveView()
@@ -912,7 +912,7 @@ SCALE_SCENARIOS = {
 
 def run_scale(steps):
     from ingetrazo_core import Vec3
-    from core.input_types import ScreenPoint, Input
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
     from tools.scale import ScaleTool
 
@@ -965,7 +965,7 @@ ROTATE_SCENARIOS = {
 
 
 def run_rotate(steps):
-    from core.input_types import ScreenPoint, Input
+    from ingetrazo_core import ScreenPoint, Input
     from ingetrazo_core import Vec3
     from tools.base import ToolContext
     from tools.rotate import RotateTool
@@ -1047,7 +1047,7 @@ FOLLOWME_SCENARIOS = {
 
 
 def run_followme(steps):
-    from core.input_types import Input
+    from ingetrazo_core import Input
     from core.scene import Scene
     from tests.test_followme import _Vp2, _ctx, V
     from tools.followme import FollowMeTool
@@ -1124,7 +1124,7 @@ FLIP_SCENARIOS = {
 
 def run_flip(steps):
     from types import SimpleNamespace
-    from core.input_types import Input
+    from ingetrazo_core import Input
     from core.scene import Scene
     from core.group import placement_points
     from tests.test_flip_nested_groups import _vp, _cabinet, V
@@ -1171,7 +1171,7 @@ PASTE_SCENARIOS = {
 
 
 def run_paste(steps):
-    from core.input_types import ScreenPoint, Input
+    from ingetrazo_core import ScreenPoint, Input
     from core.history import History
     from core.scene import Scene
     from tests.test_paste import _PreviewVP, _make_group, V
@@ -1220,7 +1220,7 @@ TAPE_SCENARIOS = {
 
 
 def run_tape(steps):
-    from core.input_types import Input
+    from ingetrazo_core import Input
     from core.guide import Guide
     from core.scene import Scene
     from tests.test_tape_axis_source_and_guide_segment import _Vp, _ctx, V
@@ -1322,7 +1322,7 @@ PROTRACTOR_SCENARIOS = {
 
 
 def run_protractor(steps):
-    from core.input_types import Input
+    from ingetrazo_core import Input
     from core.scene import Scene
     from tests.test_protractor import _VpScreen, _ctx
     from tools.protractor import ProtractorTool
@@ -1364,7 +1364,7 @@ PAINT_SCENARIOS = {
 def run_paint(steps):
     from contextlib import ExitStack
     from unittest.mock import patch
-    from core.input_types import Input, ScreenPoint
+    from ingetrazo_core import Input, ScreenPoint
     from ingetrazo_core import Vec3
     from core.group import Group
     from core.mesh import Mesh
@@ -1482,7 +1482,7 @@ WALKTHROUGH_SCENARIOS = {
 
 def run_walkthrough(tool_name, steps):
     from unittest.mock import patch
-    from core.input_types import ScreenPoint, Input
+    from ingetrazo_core import ScreenPoint, Input
     from ingetrazo_core import Vec3
     from core.camera import OrbitCamera
     from tools.base import ToolContext

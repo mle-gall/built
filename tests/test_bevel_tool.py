@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from ingetrazo_render import KeyEvent
 import pytest
-from core.input_types import QPointF, Qt
+from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.orient import is_closed, signed_volume

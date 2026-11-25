@@ -22,7 +22,7 @@ import math
 
 
 import pytest
-from core.input_types import QPointF
+from ingetrazo_core import ScreenPoint as QPointF
 
 from core.composition import CotaItem
 

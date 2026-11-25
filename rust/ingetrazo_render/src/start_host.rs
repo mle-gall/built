@@ -56,7 +56,7 @@ fn view_of<'py>(win: &Bound<'py, PyAny>) -> Option<Bound<'py, PyAny>> {
 
 /// Give a view the keys; a view already gone needs none.
 fn focus_view(py: Python<'_>, view: &Bound<'_, PyAny>) {
-    if let Ok(reason) = py.import("core.input_types").and_then(|m| m.getattr("Qt")?.getattr("OtherFocusReason")) {
+    if let Ok(reason) = py.import("ingetrazo_core").and_then(|m| m.getattr("Input")?.getattr("OtherFocusReason")) {
         let _ = view.call_method1("setFocus", (reason,));
     }
 }

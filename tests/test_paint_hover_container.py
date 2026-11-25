@@ -11,7 +11,7 @@ from __future__ import annotations
 
 
 import pytest
-from core.input_types import ScreenPoint, Input
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 

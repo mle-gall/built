@@ -12,7 +12,7 @@ import pytest  # noqa: E402
 from tests.native_tree import action, inspector
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from views.wgpu_ui import _edit
-from core.input_types import QPointF, Qt
+from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
 from ingetrazo_core import Vec3 as V
 
 from core.curve_segments import ResegmentCurveCommand, read_curve  # noqa: E402

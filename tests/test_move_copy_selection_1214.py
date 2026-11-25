@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import pytest
-from core.input_types import Input
+from ingetrazo_core import Input
 from ingetrazo_core import Matrix4 as QMatrix4x4
 
 from core.group import Group

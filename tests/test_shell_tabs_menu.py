@@ -588,7 +588,7 @@ def test_replacing_the_viewport_history_detaches_the_old_feed(host):
 def test_input_and_modal_buttons_stay_in_the_owning_window(host, second):
     from app_shell import modal
     from views import input_state
-    from core.input_types import Qt, QPoint
+    from ingetrazo_core import Input as Qt, PixelPoint as QPoint
 
     other = second()
     host.pointer("move", 17, 23, held=1, modifiers=Qt.ShiftModifier.value)

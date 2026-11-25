@@ -18,7 +18,7 @@ def test_the_tool_is_in_the_tools_menu_and_the_annotate_bar(native_host):
 
 
 def test_shift_n_picks_up_the_tool(native_host):
-    from core.input_types import Qt
+    from ingetrazo_core import Input as Qt
     from tools.north import NorthTool
     native_host.key(True, ord("N"), Qt.ShiftModifier.value, "N")
     assert isinstance(native_host.viewport.active_tool, NorthTool)

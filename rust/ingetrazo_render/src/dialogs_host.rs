@@ -567,7 +567,7 @@ fn sheet_key(py: Python<'_>, win: &Bound<'_, PyAny>, event: &Bound<'_, PyAny>) -
     if sheet.is_none() {
         return Ok(false);
     }
-    let qt = py.import("core.input_types")?.getattr("Qt")?;
+    let qt = py.import("ingetrazo_core")?.getattr("Input")?;
     let (key, mods) = (event.call_method0("key")?, event.call_method0("modifiers")?);
     let (default, cancel, discard) = (sheet.getattr("default")?, sheet.getattr("cancel")?, sheet.getattr("discard")?);
     if (key.eq(qt.getattr("Key_Return")?)? || key.eq(qt.getattr("Key_Enter")?)?) && default.is_truthy()? {
@@ -1038,7 +1038,7 @@ fn find_job<'py>(py: Python<'py>, win: &Bound<'py, PyAny>, jid: &Bound<'py, PyAn
 /// Esc cancels the exclusive job, when it can stop.
 #[pyfunction]
 fn job_key(py: Python<'_>, win: &Bound<'_, PyAny>, event: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let escape = py.import("core.input_types")?.getattr("Qt")?.getattr("Key_Escape")?;
+    let escape = py.import("ingetrazo_core")?.getattr("Input")?.getattr("Key_Escape")?;
     if event.call_method0("key")?.eq(escape)? {
         for j in running_jobs(win)?.into_iter().rev() {
             if j.getattr("exclusive")?.is_truthy()? && j.getattr("cancellable")?.is_truthy()? {

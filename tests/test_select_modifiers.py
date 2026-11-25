@@ -11,7 +11,7 @@ wipe the selection you are building.
 """
 from __future__ import annotations
 
-from core.input_types import ScreenPoint, Input
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.geometry import Edge, Face

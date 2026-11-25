@@ -966,7 +966,7 @@ fn search_text(win: &Bound<'_, PyAny>) -> PyResult<String> {
 /// a text field uses and ⌘F (the sheet's search).
 fn window_key(event: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = event.py();
-    let qt = py.import("core.input_types")?.getattr("Qt")?;
+    let qt = py.import("ingetrazo_core")?.getattr("Input")?;
     let mask = qt.getattr("ControlModifier")?.bitor(qt.getattr("MetaModifier")?)?;
     if !event.call_method0("modifiers")?.bitand(mask)?.is_truthy()? {
         return Ok(false);

@@ -159,7 +159,7 @@ def _offscreen_vp():
 
 
 def _hover(vp, world):
-    from core.input_types import ScreenPoint, Input
+    from ingetrazo_core import ScreenPoint, Input
     px = vp._world_to_pixel(world)
     vp._process_hover(ScreenPoint(*px), Input.NoModifier)
     return vp.last_snap
@@ -304,7 +304,7 @@ def test_too_many_selected_faces_offer_no_dots():
 def _marker_box(vp, kind):
     """Width and height in pixels of the marker drawn for a snap of
     ``kind`` (its tip left out)."""
-    from core.input_types import Input
+    from ingetrazo_core import Input
     from ingetrazo_render import AnnotationCanvas
     from core.snap import SnapResult
     vp._SNAP_LABELS = {}                               # no tip text
@@ -329,7 +329,7 @@ def test_the_marker_is_the_size_of_the_endpoints():
 
 
 def test_a_selected_faces_dot_is_as_big_as_a_snap_marker():
-    from core.input_types import Input
+    from ingetrazo_core import Input
     from ingetrazo_render import AnnotationCanvas
     vp = _offscreen_vp()
     vp.camera.target = V(1, 1, 0)

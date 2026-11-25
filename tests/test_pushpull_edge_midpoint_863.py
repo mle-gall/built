@@ -12,7 +12,7 @@ points are no reference but whose middle is.
 from __future__ import annotations
 
 
-from core.input_types import ScreenPoint  # noqa: E402
+from ingetrazo_core import ScreenPoint  # noqa: E402
 from ingetrazo_core import Vec3 as V
 
 

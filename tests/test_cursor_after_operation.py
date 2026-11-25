@@ -13,7 +13,7 @@ from tests.shell_isolation import native_window, restore_shell_patches  # noqa: 
 
 
 import pytest  # noqa: E402
-from core.input_types import Qt
+from ingetrazo_core import Input as Qt
 
 
 def _spy(vp, monkeypatch):

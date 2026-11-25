@@ -8,7 +8,7 @@ Headless: stub viewport + direct tool calls.
 """
 from __future__ import annotations
 
-from core.input_types import Input, ScreenPoint
+from ingetrazo_core import Input, ScreenPoint
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
@@ -365,7 +365,7 @@ class _InferViewport(_StubViewport):
 
 
 def test_hovering_vertex_infers_distance():
-    from core.input_types import ScreenPoint
+    from ingetrazo_core import ScreenPoint
     from tools.base import ToolContext
 
     scene = Scene()
@@ -431,7 +431,7 @@ class _FaceInferViewport(_StubViewport):
 
 
 def test_hovering_face_infers_distance_and_marks_it():
-    from core.input_types import ScreenPoint
+    from ingetrazo_core import ScreenPoint
     from tools.base import ToolContext
 
     scene = Scene()
@@ -1212,7 +1212,7 @@ def test_hovering_an_edge_infers_distance_and_says_on_edge():
     """The usual "On edge" while pushing (Marco's capture, 2026-09-14):
     the cursor on another block's top edge — away from its corners — sets
     the push level with that edge, red marker and «On edge» label."""
-    from core.input_types import ScreenPoint
+    from ingetrazo_core import ScreenPoint
     from tools.base import ToolContext
 
     scene = Scene()
@@ -2106,7 +2106,7 @@ def test_activate_with_no_selection_unchanged():
 def test_hovering_the_origin_pushes_level_with_it():  # #407
     """A box standing away from the origin, its top pushed down: hovering
     the origin (nothing drawn there) brings the top level with z = 0."""
-    from core.input_types import ScreenPoint
+    from ingetrazo_core import ScreenPoint
     from tools.base import ToolContext
 
     scene = Scene()

@@ -121,7 +121,7 @@ def test_pushing_an_offset_ring_raises_walls_with_thickness():
 def test_offset_value_label_and_vcb():
     from tools.offset import OffsetTool
     from tools.base import ToolContext
-    from core.input_types import ScreenPoint, Input
+    from ingetrazo_core import ScreenPoint, Input
 
     class _MockVP:
         def __init__(self, scene, history):
@@ -200,7 +200,7 @@ def test_offset_drag_snaps_to_endpoint_and_midpoint():
     """The drag distance aligns perpendicular to a snapped endpoint or
     midpoint — the offset stays in the face's plane, it only takes its
     distance from the point."""
-    from core.input_types import ScreenPoint, Input
+    from ingetrazo_core import ScreenPoint, Input
     from core.snap import SnapResult
     from tools.base import ToolContext
     from tools.offset import OffsetTool
@@ -277,7 +277,7 @@ def test_offset_snaps_only_during_the_drag():
     cursor, and no Alt clause for inferences the tool does not take."""
     import math
 
-    from core.input_types import ScreenPoint, Input
+    from ingetrazo_core import ScreenPoint, Input
     from views.status_hints import hint_for
     from tools.offset import OffsetTool
     from views.document_interaction import _HoverEvent
@@ -315,7 +315,7 @@ def test_a_refused_hot_retype_keeps_the_offset_already_made():
     the 1 m offset must stay (it vanished: the retype undid it first)."""
     from tools.offset import OffsetTool
     from tools.base import ToolContext
-    from core.input_types import ScreenPoint, Input
+    from ingetrazo_core import ScreenPoint, Input
 
     class _MockVP:
         def __init__(self, scene, history):

@@ -11,7 +11,7 @@ box as projected on screen (GRIP_PX of margin around it), as in
 .skp — retention only: appearing still takes the pick."""
 from __future__ import annotations
 
-from core.input_types import ScreenPoint, Input
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.group import Group

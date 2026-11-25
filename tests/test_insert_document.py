@@ -10,7 +10,7 @@ componente que se coloca con un clic, con sus grupos, materiales y capas.
 from __future__ import annotations
 
 
-from core.input_types import QPointF, Qt
+from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, iter_placements, placement_points

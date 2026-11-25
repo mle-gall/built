@@ -29,7 +29,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from core.input_types import ScreenPoint, Input
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401

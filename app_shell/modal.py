@@ -132,7 +132,7 @@ def _turn(h, timeout_ms):
 
 def dispatch(h, ev) -> None:
     """One input event during a wait: the chrome only."""
-    from core.input_types import Qt
+    from ingetrazo_core import Input as Qt
     from views import wgpu_ui
     from ingetrazo_render import chrome_dialogs
     from ingetrazo_render import KeyEvent, MouseEvent

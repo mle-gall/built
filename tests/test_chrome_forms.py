@@ -12,7 +12,7 @@ import sys
 import types
 
 import pytest
-from core.input_types import Qt
+from ingetrazo_core import Input as Qt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from ingetrazo_render import chrome_dialogs as cd

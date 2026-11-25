@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from core.input_types import QPoint, QPointF
+from ingetrazo_core import PixelPoint as QPoint, ScreenPoint as QPointF
 from core.input_codes import Input as Qt
 from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 from core.scene import Scene

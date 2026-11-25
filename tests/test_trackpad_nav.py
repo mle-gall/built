@@ -16,7 +16,7 @@ import math
 from ingetrazo_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from core.input_types import QPointF, Qt
+from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
 from core.input_codes import DeviceType
 from ingetrazo_render import WheelEvent, NativeGestureEvent
 from types import SimpleNamespace

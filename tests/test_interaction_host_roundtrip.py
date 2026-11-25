@@ -80,11 +80,11 @@ def test_view_classes_remain_importable_and_discoverable():
 
 def test_coalesced_hover_uses_the_native_shell_event_and_plugin_codes():
     import pickle
-    from core.input_types import Input, Qt, ScreenPoint, Type
+    from ingetrazo_core import Input, ScreenPoint, Type
     from ingetrazo_render import MouseEvent
     from views.document_interaction import _HoverEvent
 
-    flags = Qt.ShiftModifier | Qt.ControlModifier
+    flags = Input.ShiftModifier | Input.ControlModifier
     event = _HoverEvent(ScreenPoint(-4.25, 17.75), flags)
     assert isinstance(event, MouseEvent)
     assert event.type() is Type.MouseMove

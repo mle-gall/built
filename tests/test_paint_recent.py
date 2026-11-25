@@ -10,7 +10,7 @@ import random
 
 
 import pytest
-from core.input_types import ScreenPoint, Input
+from ingetrazo_core import ScreenPoint, Input
 from core.settings import settings as QSettings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_render import SurveyRaster

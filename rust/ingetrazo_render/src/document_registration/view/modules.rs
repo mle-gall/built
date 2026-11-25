@@ -97,8 +97,8 @@ pub(super) fn install_interaction_module(module: &Bound<PyModule>) -> PyResult<(
             import_names(module, "typing", &[("Optional", "Optional")])?;
             import_names(
                 module,
-                "core.input_types",
-                &[("QPointF", "QPointF"), ("Qt", "Qt")],
+                "ingetrazo_core",
+                &[("ScreenPoint", "QPointF"), ("Input", "Qt")],
             )?;
             import_names(module, "ingetrazo_core", &[("Vec3", "QVector3D")])?;
             module.add(
@@ -129,13 +129,13 @@ pub(super) fn install_interaction_module(module: &Bound<PyModule>) -> PyResult<(
             import_names(module, "__future__", &[("annotations", "annotations")])?;
             import_names(
                 module,
-                "core.input_types",
+                "ingetrazo_core",
                 &[
-                    ("QPoint", "QPoint"),
-                    ("QPointF", "QPointF"),
-                    ("QRect", "QRect"),
-                    ("QSize", "QSize"),
-                    ("Qt", "Qt"),
+                    ("PixelPoint", "QPoint"),
+                    ("ScreenPoint", "QPointF"),
+                    ("ScreenRect", "QRect"),
+                    ("ScreenSize", "QSize"),
+                    ("Input", "Qt"),
                 ],
             )?;
             module.add(

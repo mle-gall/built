@@ -5,7 +5,7 @@ takes its sides: before the first click a plain number is the count (the
 VCB reads «Segments»), and «Ns» sets it at any moment."""
 from __future__ import annotations
 
-from core.input_types import ScreenPoint, Input
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History

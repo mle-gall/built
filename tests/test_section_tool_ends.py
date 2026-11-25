@@ -5,7 +5,7 @@ the name prompt can be switched off."""
 from __future__ import annotations
 
 
-from core.input_types import QPointF, Qt
+from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
 
 

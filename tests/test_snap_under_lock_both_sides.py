@@ -28,7 +28,7 @@ from types import SimpleNamespace
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from core.input_types import ScreenPoint, Input
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_render import MouseEvent
 from ingetrazo_core import Vec3 as QVector3D
 
