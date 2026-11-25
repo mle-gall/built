@@ -114,7 +114,7 @@ fn reject(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, reason: &Obj<'_>) -> 
     }
     version(scene)?;
     running(py).expect("a running step").setattr("welded", false)?;
-    let defect = host(py, "defect_names")?.call0()?.get_item(reason)?;
+    let defect = super::transform_math::defect_name(py, &reason.extract::<String>()?)?;
     let kw = pyo3::types::PyDict::new(py);
     kw.set_item("defect", defect)?;
     let message = py
@@ -311,7 +311,7 @@ impl FlipVertices {
     fn matrix<'py>(slf: PyRef<'py, Self>) -> PyResult<Obj<'py>> {
         let py = slf.py();
         let step: &RecordStep = &*slf.as_super();
-        host(py, "mirror_matrix")?.call1((step.arg(py, 1), step.arg(py, 2)))
+        super::transform_math::mirror_matrix(py, &step.arg(py, 1), &step.arg(py, 2))
     }
 }
 
@@ -335,7 +335,7 @@ impl RotateVertices {
     fn matrix<'py>(slf: PyRef<'py, Self>) -> PyResult<Obj<'py>> {
         let py = slf.py();
         let step: &RecordStep = &*slf.as_super();
-        host(py, "rotation_matrix")?.call1((step.arg(py, 1), step.arg(py, 2), step.arg(py, 3)))
+        super::transform_math::rotation_matrix(py, &step.arg(py, 1), &step.arg(py, 2), step.arg(py, 3).extract()?)
     }
 }
 
@@ -359,6 +359,6 @@ impl ScaleVertices {
     fn matrix<'py>(slf: PyRef<'py, Self>) -> PyResult<Obj<'py>> {
         let py = slf.py();
         let step: &RecordStep = &*slf.as_super();
-        host(py, "scale_matrix")?.call1((step.arg(py, 1), step.arg(py, 2), step.arg(py, 3)))
+        super::transform_math::scale_matrix(py, &step.arg(py, 1), &step.arg(py, 2), Some(&step.arg(py, 3)))
     }
 }

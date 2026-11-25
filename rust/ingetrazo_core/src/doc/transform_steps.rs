@@ -247,9 +247,9 @@ impl ScaleGroup {
     fn new(py: Python<'_>, group: Obj<'_>, center: Obj<'_>, factor: Obj<'_>, axes: Option<Obj<'_>>) -> PyResult<PyClassInitializer<Self>> {
         let center = vector(py, &center)?;
         let axes = axes.unwrap_or_else(|| py.None().into_bound(py));
-        let api = py.import("core.history")?;
-        let forward = api.call_method1("scale_matrix", (&center, &factor, &axes))?;
-        let back = api.call_method1("scale_matrix", (&center, api.call_method1("invert_scale_factor", (&factor,))?, &axes))?;
+        use super::transform_math::{invert_scale_factor, scale_matrix};
+        let forward = scale_matrix(py, &center, &factor, Some(&axes))?;
+        let back = scale_matrix(py, &center, &invert_scale_factor(py, &factor)?, Some(&axes))?;
         let extra = vec![("center", center), ("factor", factor), ("axes", axes)];
         Ok(PyClassInitializer::from(pose_step("ScaleGroupCommand", group, matrices(py, forward, back)?, extra)?).add_subclass(Self))
     }
