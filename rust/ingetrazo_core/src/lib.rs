@@ -170,6 +170,7 @@ mod push_operation;
 mod solids;
 mod sweep_operation;
 mod make_faces;
+mod geometry_arrays;
 pub mod pyset;
 mod push_guard;
 mod object_weld;

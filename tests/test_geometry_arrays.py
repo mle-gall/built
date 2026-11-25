@@ -245,7 +245,7 @@ def test_separately_closed_placements_skip_weld(monkeypatch):
         child.xform.translate(i * 3, 0, 0)
     def fail(*args):
         raise AssertionError('closed placements must not weld')
-    monkeypatch.setattr(ga, 'merged', fail)
+    monkeypatch.setattr('core.lazy_mesh.weld', fail)
     assert ga.quantities(ga.world_arrays(root))[2:4] == (2., True)
 
 
@@ -389,7 +389,7 @@ def test_direct_source_preserves_distinct_coincident_points(monkeypatch):
     assert '_deferred_plan' not in mesh.__dict__
 
 
-def test_collect_reuses_prototype_measurements_and_split_closure(monkeypatch):
+def test_collect_reuses_prototype_measurements_and_split_closure():
     import core.geometry_arrays as ga
     prototype = cube()
     scene = Scene()
@@ -399,14 +399,12 @@ def test_collect_reuses_prototype_measurements_and_split_closure(monkeypatch):
         g.xform = QMatrix4x4()
         g.xform.translate(i * 3, 0, 0)
         scene.groups.append(g)
-    calls = []
-    original = ga.ring_data
-    def counted(a):
-        calls.append(a)
-        return original(a)
-    monkeypatch.setattr(ga, 'ring_data', counted)
+    prototype_arrays = ga.arrays_of(prototype.mesh)
+    cached = ga.measurements(prototype_arrays)
     assert [o['volume'] for o in collect_objects(scene)] == [1.] * 5
-    assert len(calls) == 1
+    for group in scene.groups:
+        assert ga.arrays_of(group.mesh) is prototype_arrays
+        assert ga.measurements(ga.arrays_of(group.mesh)) is cached
     scene.groups = [cube(True)]
     assert collect_objects(scene)[0]['volume'] == pytest.approx(1.)
 
