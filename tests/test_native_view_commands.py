@@ -81,9 +81,9 @@ def test_review_exit_and_modelling_keys(tmp_path):
     plugin.parent.mkdir(parents=True)
     plugin.write_text("""def setup(app):
     def measure():
-        from ingetrazo_render.shell_modal import _HOST
+        from ingetrazo_render.shell_modal import host
         from pathlib import Path
-        Path(__file__).with_suffix(".txt").write_text(_HOST.view.tools.value_buffer)
+        Path(__file__).with_suffix(".txt").write_text(host().view.tools.value_buffer)
     app.add_menu_action("Read measurements", measure)
 """)
     modifier = "cmd" if sys.platform == "darwin" else "ctrl"
@@ -107,6 +107,9 @@ quit
     before, after, *_ = [json.loads(line.removeprefix("[built] state ")) for line in result.stdout.splitlines()
                      if line.startswith("[built] state ")]
     assert before["input"]["review"] and "exit_review" in before["cluster"]
-    assert before["tool"] == "RectangleTool" and plugin.with_suffix(".txt").read_text() == "3;4"
+    assert before["tool"] == "RectangleTool"
+    measurement = plugin.with_suffix(".txt")
+    assert measurement.is_file(), result.stderr
+    assert measurement.read_text() == "3;4"
     assert not after["input"]["review"] and "exit_review" not in after["cluster"]
     assert after["tool"] == "LineTool" and before["errors"] == after["errors"] == 0
