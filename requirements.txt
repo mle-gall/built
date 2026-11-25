@@ -20,5 +20,6 @@ pytest-xdist>=3.8
 
 # --- Planned (NOT yet required; do not install on Python 3.14 — no wheels) ---
 # ifcopenshell   # IFC import/export (BIM bridge with IngePresupuestos)
+# ifctester      # optional: IDS checks, together with ifcopenshell
 # pyassimp       # COLLADA/glTF import
 # Survey imagery uses the native image codecs, and NumPy samples DEM data.

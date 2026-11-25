@@ -1,44 +1,163 @@
-# Built
+<h1 align="center">Built</h1>
 
-Built is a native 3D modeller for as-built and construction work, written in Rust. You model by drawing and push/pull, file every element once in a project tree, and export IFC from that tree. It runs on macOS (Apple Silicon); Linux and Windows builds are in progress.
+<p align="center"><strong>Push/pull modelling at native speed, with BIM built in.</strong></p>
 
-![The whole model in the Built window: tool rail on the left, project dock on the right](docs/images/built/overview.png)
+<p align="center">
+  <img src="docs/images/built/overview.png" alt="A large model in the Built window: tools on the left, the project tree on the right" width="100%">
+</p>
 
-Built is pre-release. There is no public download yet; you build it from source.
+Built is a native 3D modeller: draw faces, push and pull them into shape with inference guiding every click, and file each element for BIM and IFC as you go. It stays fast on models of millions of faces.
 
-## Screenshots
+## Highlights
 
-| | |
-|---|---|
-| ![The Line tool snapping to an endpoint, with the length shown beside the cursor](docs/images/built/line-tool.png) | ![An element selected in the model, with the project tree and its record in the dock](docs/images/built/tree-and-record.png) |
-| **Drawing with inference.** The Line tool snaps to an endpoint and shows the length as you move. | **Project tree and record.** A selected element shows where it is filed, its tag, material and file. |
-| ![The Drawing columns of the project tree: line weight, hatch, line and colour per node](docs/images/built/drawing-columns.png) | ![The Export columns of the project tree with a readiness count per node and a fix checklist](docs/images/built/export-checks.png) |
-| **Drawing columns.** The same tree sets line weight, hatch and colour per node. | **Export checks.** Each node shows how many of its items are ready for IFC, with a checklist of what to fix. |
+### Draw, push, pull
 
-![The model from the front](docs/images/built/front-view.png)
+<img src="docs/images/built/line-tool.png" alt="The Line tool snapping to an endpoint inside a large model, with the length shown beside the cursor" width="100%">
 
-## What works today
+Draw a face and pull it into a solid. The cursor snaps to endpoints, edges and faces, and the arrow keys lock a line to an axis.
+Offset, follow-me, fillet and solid operations work the same direct way, with the length typed or read as you go.
+Groups and components keep a model organised, and a component edited once changes in every copy.
 
-- **Modelling.** Line, arc, rectangle, circle, polygon, push/pull, offset, follow-me, move, rotate, scale, fillet, solid operations, tape, protractor, dimensions and text, with point, edge, face and axis inference.
-- **Large models.** The renderer (wgpu, Metal on macOS) culls on the GPU and draws the interface in the same frame. Models of several million faces at survey coordinates stay workable.
-- **Project tree.** One tree with three column sets: Filing, Drawing and Export. A node carries a recipe (IFC class and type, tag, classification, default properties), and the elements filed under it follow.
-- **Records and checks.** Each object has a record stored in the file. Problems are listed per node before export.
-- **Linked files.** A project can link other documents, nested links included, and reloads them when the source changes.
-- **Sections and sheets.** Section planes with fills and hatches, scenes, and a sheet composer for drawings.
-- **Scripting.** Python plugins and an agent bridge (MCP) work on the same documents.
+### Fast on very large models
+
+A model of several million faces stays interactive while you orbit, zoom and draw: only what is in view is drawn.
+Edits stay local: changing one part does not rebuild the rest of the model.
+The interface is drawn in the same frame as the model, and you navigate with trackpad gestures: slide and pinch to orbit, pan and zoom.
+
+### BIM built in
+
+<img src="docs/images/built/tree-and-record.png" alt="An element selected in the model, with the project tree and its record beside it" width="100%">
+
+One project tree files every element. A node carries the IFC class and type, tag, classification and default properties, and each element's record travels in the file.
+
+<img src="docs/images/built/export-checks.png" alt="The Export columns of the project tree: a readiness count per node and a list of what to fix" width="100%">
+
+Before export, the same tree shows node by node how many items are ready for IFC and what is missing.
+Several models can share one project (`.builtproject`) and link each other, nested links included.
+
+### Your AI, inside your model
+
+<img src="docs/images/built/ai-assistant.png" alt="The AI Assistant panel in the dock beside the model, with a request typed in" width="100%">
+
+Bring the assistant or agent you already use. Connect it through the built-in MCP bridge, or pick your provider in the assistant panel: Anthropic, OpenAI, Google Gemini, Groq, OpenRouter, DeepSeek, OpenCode Go, or a local server such as Ollama or LM Studio, with your own key.
+Your AI works on the open document: it reads groups, tags, records and the project tree, looks at the viewport, draws and edits geometry, files elements, fills in records and classification, and exports IFC.
+Each of its actions is one undo step, and code that fails is rolled back whole. The bridge listens on your machine only.
+
+### Drawings and sheets
+
+<img src="docs/images/built/sheets.png" alt="The Sheets workspace: an A4 landscape sheet with a view of the model at 1:100, and export to PDF, SVG and DXF" width="100%">
+
+Section planes cut the model with fills and hatches. Scenes save views of the model to come back to.
+The Sheets workspace places views of the model on paper at a scale, with dimensions, text and annotations. Sheets export to PDF, SVG and DXF.
+
+### Works with your files
+
+Opens `.built` and `.igz`. Imports `.skp` files with their materials, COLLADA, DXF, glTF/GLB, OBJ and STL.
+Exports IFC (IFC4 and IFC4X3), glTF/GLB, COLLADA, OBJ, STL, and the current view as DXF, SVG or an image.
+`.dwg` import needs an external converter and `.rfa` import needs its reader built; neither is in a default source build.
+
+### Extend it with Python
+
+Plugins are Python files or ZIP packages: they add tools, panels, menu entries and tools for your AI. See [`docs/plugins.md`](docs/plugins.md).
+A Python console runs on the open document, with each run as one undo step.
+The bundled plugins are the AI assistant, the MCP bridge, the console, a model summary, a solid inspector and rendering through Blender.
+
+## Everything else
+
+<table>
+<tr>
+<td valign="top" width="33%">
+
+**Modelling**
+
+- Line, freehand, arcs, rectangle, circle, polygon
+- Push/pull, offset, follow-me, fillet
+- Move, rotate, scale, flip
+- Union, subtract, intersect, trim, split, outer shell
+- Tape, protractor, dimensions, text
+- Groups and components
+- Paint with colour or image materials (PBR)
+
+</td>
+<td valign="top" width="33%">
+
+**BIM and projects**
+
+- Project tree with Filing, Drawing and Export columns
+- A record per object, stored in the file
+- Classification systems, types and systems
+- IDS checks (need IfcOpenShell and IfcTester)
+- IFC4 and IFC4X3 export
+- Linked files that reload when the source changes
+- `.builtproject` shared projects
+
+</td>
+<td valign="top" width="33%">
+
+**Views and output**
+
+- Section planes, fills and hatches
+- Scenes
+- Styles: shaded, hidden line, wireframe, X-ray, monochrome
+- Parallel, perspective and two-point projection
+- Shadows and north
+- Sheets export to PDF, SVG and DXF
+- Rendering through Blender (needs Blender)
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**AI**
+
+- Assistant panel with your provider and key
+- MCP bridge for your own agent
+- Reads and edits records, structure and geometry
+- Viewport screenshots for the model to look at
+- Every action is one undo step
+
+</td>
+<td valign="top">
+
+**Extending**
+
+- Python plugins and a plugin API
+- Python console on the open document
+- Plugins can add panels, tools and agent tools
+- Command palette (⌘K or F3)
+
+</td>
+<td valign="top">
+
+**Platform**
+
+- Native, written in Rust
+- Trackpad and touch-screen navigation
+- 64-bit coordinates in `.built`
+- Interface in 19 languages
+- Terrain profile and georeferenced paths
+
+</td>
+</tr>
+</table>
+
+More detail in [`docs/features.md`](docs/features.md).
+
+## Status
+
+Pre-release, with no public download yet; build it from source.
 
 ## Formats
 
-| Format | Support |
-|---|---|
-| `.built` | Built's own format: a ZIP with JSON and binary geometry, 64-bit coordinates. See [`docs/built-format.md`](docs/built-format.md). |
-| `.igz` | Opens. These are the files of the modeller Built grew from. |
-| `.skp` | Imports `.skp` files, with their materials. |
-| IFC | Exports IFC4 (and IFC4X3) from the object records. IDS checks need `ifcopenshell`, which `requirements.txt` does not install. See [`docs/ifc-export.md`](docs/ifc-export.md). |
+Saves `.built` ([format](docs/built-format.md)), opens `.igz`, imports `.skp` files, and exports [IFC](docs/ifc-export.md) (IFC4 and IFC4X3). The full list is under [Works with your files](#works-with-your-files).
 
-## Building from source
+## Build from source
 
-You need Python 3.13 and a Rust toolchain (rustup).
+<details>
+<summary>Commands (Python 3.13 and a Rust toolchain)</summary>
+
+The build scripts below are for macOS today. Linux and Windows builds are being set up.
 
 ```bash
 python3.13 -m venv .venv
@@ -48,27 +167,24 @@ cargo build --release --manifest-path rust/built_app/Cargo.toml     # the applic
 rust/built_app/target/release/built --root . --venv .venv           # run it from the checkout
 ```
 
-To build the macOS application bundle, with PyInstaller and ifcopenshell installed in the same environment:
+For the application bundle, with PyInstaller and ifcopenshell installed in the same environment:
 
 ```bash
 packaging/build-macos-native.sh dist    # writes dist/Built.app
 ```
 
+IDS checks need both IfcOpenShell and IfcTester (`ifcopenshell`, `ifctester`), which `requirements.txt` does not install.
+
+</details>
+
 ## Tests
 
-```bash
-export HOME=$(mktemp -d) BUILT_SETTINGS_DIR=$(mktemp -d)    # never the real profile
-.venv/bin/python -m pytest -n 8 -m "not slow" tests
-```
-
-[`docs/testing.md`](docs/testing.md) describes the selections, the window tests and what each one needs.
+See [`docs/testing.md`](docs/testing.md) for the test selections and what each one needs.
 
 ## Extensions
 
 Built will have its own extension repository and website; neither is open yet. IngeTrazo extensions are not supported.
 
-## Licence and credits
+## License and credits
 
-Built is free software under the GNU General Public License, version 3 or later. See [`LICENSE`](LICENSE).
-
-Built began as a fork of IngeTrazo and contains its code and history. Credit for the upstream project goes to Marco Sumari Tellez and IngeTrazo contributors. All authors are listed in [`AUTHORS`](AUTHORS) and keep their copyright.
+Built is free software under the GNU General Public License, version 3 or later ([`LICENSE`](LICENSE)). It began as a fork of IngeTrazo and contains its code and history: credit for the upstream project goes to Marco Sumari Tellez and IngeTrazo contributors. All authors are listed in [`AUTHORS`](AUTHORS) and keep their copyright.
