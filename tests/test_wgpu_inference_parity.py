@@ -27,13 +27,14 @@ import math
 
 import numpy as np
 import pytest
-from core.input_codes import Input
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from PySide6.QtWidgets import QApplication
 
 from core.group import Group
 from core.mesh import Mesh
 from core.snap import SnapResult
-from tests.headless_gpu import mouse
 from tests.test_.skp_inference_gaps import (  # noqa: F401
     click, move, refresh, use, view)
 from tools.rust_tools import RectangleTool
@@ -93,10 +94,12 @@ def _open(view, group):
     refresh(view)
 
 
-def _both(view, world, dx=0.0, dy=0.0, modifiers=Input.NoModifier):
+def _both(view, world, dx=0.0, dy=0.0, modifiers=Qt.NoModifier):
     """The Metal hover's snap and GL's InferenceEngine.snap at one pixel."""
     x, y = view._world_to_pixel(world)
-    mouse(view, "move", x + dx, y + dy, modifiers=modifiers)
+    q = QPointF(x + dx, y + dy)
+    QApplication.sendEvent(view, QMouseEvent(
+        QMouseEvent.MouseMove, q, q, Qt.NoButton, Qt.NoButton, modifiers))
     metal = view.last_snap
     gl = view.source_viewport.inference.snap(x + dx, y + dy, modifiers)
     return metal, gl
@@ -438,7 +441,9 @@ def test_face_rules_ask_only_the_placements_under_the_cursor(view, monkeypatch):
 
     monkeypatch.setattr(type(index), "ray_cands", spy)
     x, y = view._world_to_pixel(V(10.3, 10.3, 0.6))   # a box's top face
-    mouse(view, "move", x, y)
+    q = QPointF(x, y)
+    QApplication.sendEvent(view, QMouseEvent(
+        QMouseEvent.MouseMove, q, q, Qt.NoButton, Qt.NoButton, Qt.NoModifier))
     assert view.last_snap is not None
     # The test's own ID-pass stand-in (_pick) asks one row at a time; the
     # occlusion rays ask all rows through the native BVH. Neither is new.
