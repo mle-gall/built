@@ -155,9 +155,12 @@ fn document_snap_scene<'py>(
     let meshes = optional_call(view, "_outer_loose_meshes")?;
     if !meshes.is_none() {
         for om in meshes.try_iter()? {
-            for e in om?.getattr("edges")?.try_iter()? {
-                let e = e?;
-                if scene.call_method1("edge_snappable", (&e,))?.is_truthy()? {
+            let om = om?;
+            let edges = PyList::new(py, om.getattr("edges")?.try_iter()?.collect::<PyResult<Vec<_>>>()?)?;
+            let (_, (_, snaps, _)) = crate::model::scene_mesh_states::scene_mesh_states(
+                py, &scene, &om, PyList::empty(py).as_any(), edges.as_any())?;
+            for (e, snappable) in edges.iter().zip(snaps) {
+                if snappable {
                     outer.append(e)?
                 }
             }
