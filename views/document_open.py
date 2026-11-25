@@ -54,7 +54,7 @@ def start(win, path, install, *, target=None):
                     if win._doc is not target:
                         win.activate_document(target)
                 elif not win._doc_is_blank():
-                    win._new_document()
+                    win.new_document()
                 win._opening_document = True
                 if install(win, path, bar, staged):
                     win._dismiss_home()

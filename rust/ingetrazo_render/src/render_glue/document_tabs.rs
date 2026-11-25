@@ -48,18 +48,12 @@ fn attr<'py>(obj: &Bound<'py, PyAny>, name: &str) -> Option<Bound<'py, PyAny>> {
     obj.getattr(name).ok().filter(|v| !v.is_none())
 }
 
-/// The window's documents in tab order: the tab bar's list, else the
-/// window's own (as `wgpu_tabs._docs`).
+/// The open documents in tab order; standalone views have no document strip.
 fn documents<'py>(win: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    let Some(bar) = attr(win, "_project_tabs") else { return Ok(Vec::new()) };
-    let list = match bar.call_method0("documents") {
-        Ok(list) => list,
-        Err(_) => match attr(win, "_documents") {
-            Some(list) => list,
-            None => return Ok(Vec::new()),
-        },
-    };
-    list.try_iter()?.collect()
+    match attr(win, "documents") {
+        Some(documents) => documents.call0()?.try_iter()?.collect(),
+        None => Ok(Vec::new()),
+    }
 }
 
 fn dirty(win: &Bound<'_, PyAny>, doc: &Bound<'_, PyAny>) -> bool {
@@ -109,8 +103,7 @@ impl DocumentTabs {
             .collect::<PyResult<Vec<_>>>()?;
         let flags: Vec<bool> = docs.iter().map(|d| dirty(win, d)).collect();
         // The document ▾: the tab bar's current document is in front.
-        if let Some(bar) = attr(win, "_project_tabs") {
-            let current = bar.call_method0("current")?;
+        if let Some(current) = attr(win, "_doc") {
             let rows: Vec<Project> = docs
                 .iter()
                 .zip(&names)

@@ -141,7 +141,6 @@ fn toggle_edit_visibility(win: &Bound<'_, PyAny>, similar: bool) -> PyResult<()>
             vp.call_method1("set_edit_rest_mode", ("hide",))?;
         }
     }
-    win.call_method0("_sync_component_edit_menu")?;
     Ok(())
 }
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

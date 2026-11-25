@@ -53,9 +53,7 @@ fn activate(
     }
     let vars = PyDict::new(py);
     vars.set_item("name", translated(py, label, None)?)?;
-    win.getattr("_tool_label")?
-        .call_method1("setText", (translated(py, "Tool: {name}", Some(&vars))?,))?;
-    win.call_method0("_refresh_vcb")?;
+    win.setattr("tool_label", translated(py, "Tool: {name}", Some(&vars))?)?;
     vp.call_method1("flash_status", (translated(py, hint, None)?, ms))?;
     vp.call_method0("update")?;
     Ok(())

@@ -62,10 +62,10 @@ def win(native_host, tmp_path, monkeypatch):
 # ---- opening -------------------------------------------------------------
 def test_one_tab_at_start_and_the_bar_is_shown(win):
     assert len(win.documents()) == 1
-    assert win._project_tabs.count() == 1
+    assert len(win.documents()) == 1
     assert wgpu_tabs.tabs(win)[0][2]
     assert win.viewport is win.active_document().viewport
-    assert win._project_tabs.tabs.tabText(0) == "Untitled"
+    assert win.tab_title(0) == "Untitled"
 
 
 def test_an_untouched_tab_is_reused_by_open(win, tmp_path):
@@ -73,7 +73,7 @@ def test_an_untouched_tab_is_reused_by_open(win, tmp_path):
     assert win.open_path(_igz(tmp_path, "a.igz"))
     assert len(win.documents()) == 1
     assert win.viewport is first
-    assert win._project_tabs.tabs.tabText(0) == "a.igz"
+    assert win.tab_title(0) == "a.igz"
 
 
 def test_open_comes_in_a_new_tab_when_the_front_one_has_work(win, tmp_path):
@@ -125,7 +125,7 @@ def test_file_new_opens_a_tab_and_reuses_an_untouched_one(win):
     _edit(win)
     win._on_new()
     assert len(win.documents()) == 2
-    assert win._project_tabs.tabs.tabText(1) == "Untitled"
+    assert win.tab_title(1) == "Untitled"
     assert not win._is_dirty()
     # A new project starts with its own scale figure, clean.
     assert win.viewport.scene.groups
@@ -184,11 +184,11 @@ def test_the_title_and_the_tab_mark_follow_the_front(win, tmp_path):
     assert win._host.idle()[3] == "casa.igz — Built"
     _edit(win)
     assert win._host.idle()[3] == "casa.igz * — Built"
-    assert win._project_tabs.tabs.tabText(0) == "casa.igz •"
+    assert win.tab_title(0) == "casa.igz •"
     win._on_new()
     assert win._host.idle()[3] == "Untitled — Built"
     # The background tab still says it has unsaved changes.
-    assert win._project_tabs.tabs.tabText(0) == "casa.igz •"
+    assert win.tab_title(0) == "casa.igz •"
 
 
 def test_ctrl_tab_walks_the_projects(win):

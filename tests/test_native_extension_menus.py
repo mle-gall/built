@@ -89,7 +89,7 @@ def test_raw_plugin_action_tracks_live_changes():
 
 
 def test_window_registry_isolation_and_setup_rollback(tmp_path, monkeypatch):
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     from core import extensions
     from core.extensions import LoadedPlugin
 

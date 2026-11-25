@@ -3,10 +3,7 @@
 
 The tab strip sits beside the window buttons, as in Figma. Python sends the
 tabs, and ``rust/ingetrazo_render/src/ui/tabs.rs`` draws them and reports
-clicks. The same code runs in the native `built` shell and in the Qt app
-with the chrome. Both expose ``window._project_tabs`` and
-``window._documents``, which the document ▾ already read (S1.1), so
-switching, closing and New reuse that machinery.
+clicks. Document switching, closing and creation use the window commands.
 
 - A tab is one open project. ``•`` means unsaved. The tab in front has the
   accent line.
@@ -24,13 +21,8 @@ import time
 from pathlib import Path
 
 def _docs(win):
-    bar = getattr(win, "_project_tabs", None)
-    if bar is None:
-        return []
-    try:
-        return list(bar.documents())
-    except Exception:  # noqa: BLE001
-        return list(getattr(win, "_documents", []) or [])
+    documents = getattr(win, "documents", None)
+    return documents() if documents is not None else []
 
 
 def _dirty(win, doc) -> bool:
@@ -150,12 +142,7 @@ def _close(win, doc) -> bool:
 
 
 def _activate(win, doc) -> None:
-    bar = getattr(win, "_project_tabs", None)
-    if doc is getattr(win, "_doc", None):
-        return
-    if bar is not None and hasattr(bar, "activated"):
-        bar.activated.emit(doc)
-    else:
+    if doc is not getattr(win, "_doc", None):
         win.activate_document(doc)
 
 
@@ -180,9 +167,7 @@ def action(win, view, arg) -> None:
         if doc is not None:
             _close(win, doc)
     elif verb == "new":
-        bar = getattr(win, "_project_tabs", None)
-        if bar is not None and hasattr(bar, "newRequested"):
-            bar.newRequested.emit()
+        win._on_new_tab()
     elif verb == "goto":
         try:
             from app_shell import windows

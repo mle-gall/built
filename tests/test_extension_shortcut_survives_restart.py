@@ -12,7 +12,7 @@ from core import shortcuts
 
 @pytest.mark.parametrize("factory,rebound", [(None, "Ctrl+Alt+U"), ("Ctrl+Alt+J", "Ctrl+Alt+K")])
 def test_extension_keeps_its_user_and_factory_bindings_across_restart(tmp_path, monkeypatch, factory, rebound):
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     (tmp_path / "unfold.py").write_text(
         f"def setup(app):\n    app.add_menu_action('Unfold Faces', lambda: None, {factory!r})\n")
     monkeypatch.setattr(extensions, "plugin_dirs", lambda: [tmp_path])

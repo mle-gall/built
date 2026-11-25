@@ -72,7 +72,7 @@ _WINDOW_KEYS = ("Ctrl+S", "Ctrl+Shift+S", "Ctrl+O", "Ctrl+N", "Ctrl+W", "Ctrl+Q"
 
 # ---- Where the workspace can be ----------------------------------------------
 def is_shell(win) -> bool:
-    """The native ``built`` shell's window (app_shell/window.py): the only
+    """The native ``built`` shell's window: the only
     host since the Classic window left."""
     return win is not None
 
@@ -208,9 +208,6 @@ class SheetHost:
         if self.comp in comps:
             win = getattr(self._window, "_host_window", self._window)
             win._last_sheet = comps.index(self.comp)
-        sync = getattr(self._window, "_refresh_sheet_tabs", None)
-        if sync is not None:
-            sync()
 
     def _on_comp_add(self) -> None:
         self._ws._add_sheet()

@@ -14,7 +14,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "shell" / "slab-and-cube.igz"
 
 @pytest.fixture
 def host(tmp_path):
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     h = Host(0, 1280, 800, 2.0, settings=str(tmp_path))
     yield h
     h.close()
@@ -48,7 +48,7 @@ def test_tool_shortcut_goes_through_shortcut_override(host):
 
 
 def test_tool_shortcut_restored_in_new_shell(host, tmp_path):
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     from core.shortcuts import save_shortcut
 
     action = host.window._tool_actions["line"]

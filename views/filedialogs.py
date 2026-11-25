@@ -19,7 +19,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from app_shell.files import ShellFileDialog
+from ingetrazo_render.shell_files import ShellFileDialog
 from core.settings import settings
 
 

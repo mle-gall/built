@@ -6,10 +6,10 @@
 //! the view, so a value typed into the measurements box never collides
 //! with them. The egui chrome stays the place for tools and panels; the
 //! tools' single-letter shortcuts are not menu accelerators (Qt's
-//! ShortcutOverride order, see app_shell.host.Host.key).
+//! ShortcutOverride order, see ingetrazo_render.Host.key).
 //!
 //! Each item's id is the command string the host understands
-//! (`app_shell.host.Host.menu`), or one the shell handles itself (`close`,
+//! (`ingetrazo_render.Host.menu`), or one the shell handles itself (`close`,
 //! `quit`: both ask about unsaved work first). Quit is our own item, not
 //! muda's predefined one: that one calls `[NSApp terminate:]`, which ends
 //! the process without asking.

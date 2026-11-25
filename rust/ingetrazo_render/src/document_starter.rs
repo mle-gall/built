@@ -132,9 +132,7 @@ fn start_blank_document(win: &Bound<'_, PyAny>) -> PyResult<()> {
         win.call_method0(command)?;
     }
     vp.call_method0("notify_scene_changed")?;
-    for command in ["_sync_style_menu", "_sync_section_menu", "_update_title"] {
-        win.call_method0(command)?;
-    }
+    win.call_method0("_update_title")?;
     let session = win.getattr("__dict__")?.call_method1("get", ("_project",))?;
     if !session.is_none() {
         session.call_method1("set_editable", (win.py().None(),))?;
@@ -163,14 +161,13 @@ fn new_document_command(win: &Bound<'_, PyAny>, add_tab: bool) -> PyResult<()> {
         }
     }
     let empty_area = add_tab && win.getattr("_empty_on")?.is_truthy()?;
-    win.call_method0("_leave_empty_area")?;
     let vp = win.getattr("viewport")?;
     vp.call_method0("end_group_edit")?;
     if empty_area {
         return start_blank_document(win);
     }
     if add_tab || !win.call_method0("_doc_is_blank")?.is_truthy()? {
-        win.call_method0("_new_document")?;
+        win.call_method0("new_document")?;
         win.call_method0("_start_blank_document")?;
         return Ok(());
     }

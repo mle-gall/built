@@ -102,7 +102,7 @@ _MOUSE = {"press": "mousePressEvent", "release": "mouseReleaseEvent",
 
 
 def mouse(view, kind, x, y, button=0, held=0, modifiers=0, timestamp=0):
-    """A pointer event as the shell delivers it (app_shell.host.pointer):
+    """A pointer event as the shell delivers it (ingetrazo_render.Host.pointer):
     ``kind`` press, release, move or double, in logical pixels, at
     ``timestamp`` ms. Returns the handler's answer."""
     from ingetrazo_render import MouseEvent

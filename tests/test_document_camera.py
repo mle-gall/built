@@ -31,7 +31,7 @@ def test_the_camera_travels_in_the_igz(tmp_path):
 
 
 def test_open_restores_the_authors_view_and_new_resets_it(native_host, tmp_path):
-    from app_shell.files import do_save
+    from ingetrazo_render.shell_files import do_save
     win = native_host.window
     cam = win.viewport.camera
     cam.target = QVector3D(12.0, -4.0, 1.5)
@@ -94,7 +94,7 @@ def test_a_broken_camera_never_blocks_the_save(native_host, tmp_path):
     # #383: a NaN in the live camera made the save refuse the whole
     # document («invalid coordinates»), so the user's work could not be
     # saved. The geometry is what matters; the file keeps its last view.
-    from app_shell.files import do_save
+    from ingetrazo_render.shell_files import do_save
     win = native_host.window
     cam = win.viewport.camera
     path = tmp_path / "doc.igz"

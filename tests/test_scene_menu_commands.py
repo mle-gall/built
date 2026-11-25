@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app_shell.window import ShellScenes
+from ingetrazo_render import ShellScenes
 from ingetrazo_render import SceneMark
 from core import scene_folders
 from core.camera import OrbitCamera

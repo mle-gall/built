@@ -140,7 +140,7 @@ def test_import_places_the_orthomosaic_on_the_datum(monkeypatch, tmp_path):
     """File ▸ Import ▸ Orthomosaic: the picture lands on the datum plane at
     its true size and place, locked, on the Images layer; a scene without
     a datum gets one at the picture's centre and the base map follows."""
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     from core.image_plane import IMAGE_LAYER
     from views.filedialogs import file_dialogs
 
@@ -183,7 +183,7 @@ def test_import_places_the_orthomosaic_on_the_datum(monkeypatch, tmp_path):
 
 
 def test_failed_survey_cache_write_preserves_the_document(tmp_path, monkeypatch):
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     from views.filedialogs import file_dialogs
     tile = tmp_path / "survey.tif"
     write_geotiff(tile, _picture())

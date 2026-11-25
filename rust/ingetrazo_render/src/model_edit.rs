@@ -184,9 +184,7 @@ pub(super) fn paste_model(win: &Bound<'_, PyAny>, in_place: bool) -> PyResult<()
         }
         let args = PyDict::new(py);
         args.set_item("name", translated(py, "Paste", None)?)?;
-        win.getattr("_tool_label")?
-            .call_method1("setText", (translated(py, "Tool: {name}", Some(&args))?,))?;
-        win.call_method0("_refresh_vcb")?;
+        win.setattr("tool_label", translated(py, "Tool: {name}", Some(&args))?)?;
     }
     Ok(())
 }
