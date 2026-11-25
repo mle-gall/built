@@ -240,6 +240,9 @@ def test_scripted_view_coerces_camera_numbers_and_switches():
     from ingetrazo_core.saved_views import SavedView
 
     view = SavedView("Scripted", (n for n in (2, 3, 4)), distance="7.5",
-                     fov_deg="60", perspective=0, two_point=1)
+                     fov_deg="60", perspective=0, two_point=1, hidden_layers=False)
+    assert view.hidden_layers == []
     assert view.target == (2, 3, 4)
     assert (view.distance, view.fov_deg, view.perspective, view.two_point) == (7.5, 60., False, True)
+    converted = from_lookat("Imported", (3, 4, 5), (0, 0, 0), (0, 0, 1), perspective=0)
+    assert converted.perspective is False

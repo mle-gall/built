@@ -96,14 +96,17 @@ fn init(
     }
     view.setattr("perspective", perspective)?;
     view.setattr("two_point", two_point)?;
+    let layers = match hidden_layers {
+        Some(v) if v.is_truthy()? => py.get_type::<PyList>().call1((v,))?,
+        _ => PyList::empty(py).into_any(),
+    };
+    view.setattr("hidden_layers", layers)?;
     for (key, v) in [
-        ("hidden_layers", hidden_layers),
         ("hidden_folders", hidden_folders),
         ("hidden_objects", hidden_objects),
     ] {
         match v {
             Some(v) => view.setattr(key, py.get_type::<PyList>().call1((v,))?)?,
-            None if key == "hidden_layers" => view.setattr(key, PyList::empty(py))?,
             None => view.setattr(key, py.None())?,
         }
     }
@@ -139,7 +142,7 @@ fn from_lookat<'p>(
     target: &Obj<'p>,
     up: &Obj<'p>,
     fov_deg: f64,
-    perspective: bool,
+    #[pyo3(from_py_with = Bound::is_truthy)] perspective: bool,
     ortho_height: Option<f64>,
     hidden_layers: Option<&Obj<'p>>,
 ) -> PyResult<Obj<'p>> {
