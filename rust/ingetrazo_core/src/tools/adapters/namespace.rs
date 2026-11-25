@@ -87,91 +87,116 @@ const HOST_CLASSES: &[(&str, &str, &str)] = &[
 pub(super) fn tool_module_classes() -> Vec<(&'static str, &'static str, &'static str)> {
     let mut classes = HOST_CLASSES.to_vec();
     classes.extend_from_slice(&[
-
-    ("tools.texture_position","TexturePositionTool","Tool"),
-
-
-
-    ("tools.scale_manager_host","ScaleManagerTool","RustTool"),
-
-    ("tools.annotation_host","_AnnotationTool","AxisMagnet,RustTool"),
-    ("tools.annotation_host","TextTool","_AnnotationTool"),
-    ("tools.annotation_host","DimensionTool","_AnnotationTool"),
-
-    ("tools.walkthrough_host","EyeHost","object"),
-    ("tools.walkthrough_host","PositionCameraHost","EyeHost"),
-    ("tools.walkthrough_host","WalkHost","EyeHost"),
-    ("tools.walkthrough_host","FirstPersonHost","EyeHost"),
-
-    ("tools.protractor_host","ProtractorBase","ToolDisc,Tool"),
-    ("tools.protractor_host","ProtractorHost","ProtractorBase"),
-
-    ("tools.offset_host","OffsetHost","object"),
-
-    ("tools.rust_tool_base","_Host","ViewportToolHost"),
-    ("tools.rust_tool_base","RustTool","Tool"),
-
-    ("tools.base","AxisMagnet","object"),
-    ("tools.base","PlaneLock","object"),
-    ("tools.base","ToolContext","object"),
-    ("tools.base","Tool","ABC"),
-
-    ("tools.pushpull","PushPullTool","PushPullOperation,RustTool"),
-    ("tools.scale_host","_Grip","object"),
-    ("tools.scale_host","ScaleHost","object"),
-    ("tools.fillet_host","FilletHost","Tool"),
-    ("tools.move_host","CopyPreview","object"),
-    ("tools.move_host","MoveHost","CopyPreview,RustTool"),
-    ("tools.rotate_host","RotateHost","CopyPreview,ProtractorBase"),
-    ("tools.solid_host","SolidTool","RustTool"),
-    ("tools.solid_host","OuterShellTool","SolidTool"),
-    ("tools.solid_host","UnionTool","SolidTool"),
-    ("tools.solid_host","SubtractTool","SolidTool"),
-    ("tools.solid_host","TrimTool","SolidTool"),
-    ("tools.solid_host","IntersectTool","SolidTool"),
-    ("tools.solid_host","SplitTool","SolidTool"),
-    ("tools.followme_host","FollowMeHost","object"),
-    ("tools.tape_host","TapeHost","Tool"),
-    ("tools.paint_host","PaintHost","object"),
-    ("tools.eraser_host","EraserHost","object"),
-    ("tools.north_host","NorthTool","RustTool"),
-    ("tools.section_host","SectionPlaneTool","RustTool"),
-    ("tools.image_host","ImageTool","RustTool"),
-    ("tools.geopath_host","GeoPathTool","RustTool"),
-    ("tools.place_group_host","PlaceGroupHost","object"),
-    ("tools.rust_tools","LineTool","RustTool"),
-    ("tools.rust_tools","SelectTool","RustTool"),
-    ("tools.rust_tools","_PlanarMachine","PlaneLock,RustTool"),
-    ("tools.rust_tools","RectangleTool","_PlanarMachine"),
-    ("tools.rust_tools","_RadialTool","AxisMagnet,_PlanarMachine"),
-    ("tools.rust_tools","CircleTool","_RadialTool"),
-    ("tools.rust_tools","PolygonTool","_RadialTool"),
-    ("tools.rust_tools","RotatedRectangleTool","AxisMagnet,_PlanarMachine"),
-    ("tools.rust_tools","_ArcBase","AxisMagnet,_PlanarMachine"),
-    ("tools.rust_tools","_LastFillet","type(RustTool)"),
-    ("tools.rust_tools","ArcTool","_ArcBase"),
-    ("tools.rust_tools","ThreePointArcTool","_ArcBase"),
-    ("tools.rust_tools","CenterArcTool","_ArcBase"),
-    ("tools.rust_tools","PieTool","CenterArcTool"),
-    ("tools.rust_tools","ScaleTool","ScaleHost,RustTool"),
-    ("tools.rust_tools","RotateTool","RotateHost,RustTool"),
-    ("tools.rust_tools","PositionCameraTool","PositionCameraHost,RustTool"),
-    ("tools.rust_tools","LookAroundTool","EyeHost,RustTool"),
-    ("tools.rust_tools","WalkTool","WalkHost,RustTool"),
-    ("tools.rust_tools","FirstPersonTool","FirstPersonHost,RustTool"),
-    ("tools.rust_tools","OffsetTool","OffsetHost,RustTool"),
-    ("tools.rust_tools","PaintTool","PaintHost,RustTool"),
-    ("tools.rust_tools","ProtractorTool","ProtractorHost,RustTool"),
-    ("tools.rust_tools","FilletTool","FilletHost,RustTool"),
-    ("tools.rust_tools","TapeMeasureTool","TapeHost,RustTool"),
-    ("tools.rust_tools","PasteTool","PasteHost,RustTool"),
-    ("tools.rust_tools","FlipTool","FlipHost,RustTool"),
-    ("tools.rust_tools","FreehandTool","RustTool"),
-    ("tools.rust_tools","ChangeAxesTool","RustTool"),
-    ("tools.rust_tools","FollowMeTool","FollowMeHost,RustTool"),
-    ("tools.rust_tools","EraserTool","EraserHost,RustTool"),
-    ("tools.rust_tools","PlaceGroupTool","PlaceGroupHost,RustTool"),
-    ("tools.rust_tools","MoveTool","MoveHost"),
+        ("tools.texture_position", "TexturePositionTool", "Tool"),
+        ("tools.scale_manager_host", "ScaleManagerTool", "RustTool"),
+        (
+            "tools.annotation_host",
+            "_AnnotationTool",
+            "AxisMagnet,RustTool",
+        ),
+        ("tools.annotation_host", "TextTool", "_AnnotationTool"),
+        ("tools.annotation_host", "DimensionTool", "_AnnotationTool"),
+        ("tools.walkthrough_host", "EyeHost", "object"),
+        ("tools.walkthrough_host", "PositionCameraHost", "EyeHost"),
+        ("tools.walkthrough_host", "WalkHost", "EyeHost"),
+        ("tools.walkthrough_host", "FirstPersonHost", "EyeHost"),
+        ("tools.protractor_host", "ProtractorBase", "ToolDisc,Tool"),
+        ("tools.protractor_host", "ProtractorHost", "ProtractorBase"),
+        ("tools.offset_host", "OffsetHost", "object"),
+        ("tools.rust_tool_base", "_Host", "ViewportToolHost"),
+        ("tools.rust_tool_base", "RustTool", "Tool"),
+        ("tools.base", "AxisMagnet", "object"),
+        ("tools.base", "PlaneLock", "object"),
+        ("tools.base", "ToolContext", "object"),
+        ("tools.base", "Tool", "ABC"),
+        (
+            "tools.pushpull",
+            "PushPullTool",
+            "PushPullOperation,RustTool",
+        ),
+        ("tools.scale_host", "_Grip", "object"),
+        ("tools.scale_host", "ScaleHost", "object"),
+        ("tools.fillet_host", "FilletHost", "Tool"),
+        ("tools.move_host", "CopyPreview", "object"),
+        ("tools.move_host", "MoveHost", "CopyPreview,RustTool"),
+        (
+            "tools.rotate_host",
+            "RotateHost",
+            "CopyPreview,ProtractorBase",
+        ),
+        ("tools.solid_host", "SolidTool", "RustTool"),
+        ("tools.solid_host", "OuterShellTool", "SolidTool"),
+        ("tools.solid_host", "UnionTool", "SolidTool"),
+        ("tools.solid_host", "SubtractTool", "SolidTool"),
+        ("tools.solid_host", "TrimTool", "SolidTool"),
+        ("tools.solid_host", "IntersectTool", "SolidTool"),
+        ("tools.solid_host", "SplitTool", "SolidTool"),
+        ("tools.followme_host", "FollowMeHost", "object"),
+        ("tools.tape_host", "TapeHost", "Tool"),
+        ("tools.paint_host", "PaintHost", "object"),
+        ("tools.eraser_host", "EraserHost", "object"),
+        ("tools.north_host", "NorthTool", "RustTool"),
+        ("tools.section_host", "SectionPlaneTool", "RustTool"),
+        ("tools.image_host", "ImageTool", "RustTool"),
+        ("tools.geopath_host", "GeoPathTool", "RustTool"),
+        ("tools.place_group_host", "PlaceGroupHost", "object"),
+        ("tools.rust_tools", "LineTool", "RustTool"),
+        ("tools.rust_tools", "SelectTool", "RustTool"),
+        ("tools.rust_tools", "_PlanarMachine", "PlaneLock,RustTool"),
+        ("tools.rust_tools", "RectangleTool", "_PlanarMachine"),
+        (
+            "tools.rust_tools",
+            "_RadialTool",
+            "AxisMagnet,_PlanarMachine",
+        ),
+        ("tools.rust_tools", "CircleTool", "_RadialTool"),
+        ("tools.rust_tools", "PolygonTool", "_RadialTool"),
+        (
+            "tools.rust_tools",
+            "RotatedRectangleTool",
+            "AxisMagnet,_PlanarMachine",
+        ),
+        ("tools.rust_tools", "_ArcBase", "AxisMagnet,_PlanarMachine"),
+        ("tools.rust_tools", "_LastFillet", "type(RustTool)"),
+        ("tools.rust_tools", "ArcTool", "_ArcBase"),
+        ("tools.rust_tools", "ThreePointArcTool", "_ArcBase"),
+        ("tools.rust_tools", "CenterArcTool", "_ArcBase"),
+        ("tools.rust_tools", "PieTool", "CenterArcTool"),
+        ("tools.rust_tools", "ScaleTool", "ScaleHost,RustTool"),
+        ("tools.rust_tools", "RotateTool", "RotateHost,RustTool"),
+        (
+            "tools.rust_tools",
+            "PositionCameraTool",
+            "PositionCameraHost,RustTool",
+        ),
+        ("tools.rust_tools", "LookAroundTool", "EyeHost,RustTool"),
+        ("tools.rust_tools", "WalkTool", "WalkHost,RustTool"),
+        (
+            "tools.rust_tools",
+            "FirstPersonTool",
+            "FirstPersonHost,RustTool",
+        ),
+        ("tools.rust_tools", "OffsetTool", "OffsetHost,RustTool"),
+        ("tools.rust_tools", "PaintTool", "PaintHost,RustTool"),
+        (
+            "tools.rust_tools",
+            "ProtractorTool",
+            "ProtractorHost,RustTool",
+        ),
+        ("tools.rust_tools", "FilletTool", "FilletHost,RustTool"),
+        ("tools.rust_tools", "TapeMeasureTool", "TapeHost,RustTool"),
+        ("tools.rust_tools", "PasteTool", "PasteHost,RustTool"),
+        ("tools.rust_tools", "FlipTool", "FlipHost,RustTool"),
+        ("tools.rust_tools", "FreehandTool", "RustTool"),
+        ("tools.rust_tools", "ChangeAxesTool", "RustTool"),
+        ("tools.rust_tools", "FollowMeTool", "FollowMeHost,RustTool"),
+        ("tools.rust_tools", "EraserTool", "EraserHost,RustTool"),
+        (
+            "tools.rust_tools",
+            "PlaceGroupTool",
+            "PlaceGroupHost,RustTool",
+        ),
+        ("tools.rust_tools", "MoveTool", "MoveHost"),
     ]);
     classes
 }
@@ -224,7 +249,7 @@ const VIEW_MODULES: &[&str] = &[
 #[pyclass(module = "ingetrazo_core", frozen)]
 struct ToolModules {
     path: String,
-    views: bool,
+    package: &'static str,
 }
 
 #[pymethods]
@@ -246,7 +271,9 @@ impl ToolModules {
     ) -> Reply<'py> {
         let _ = target;
         let py = slf.py();
-        let found = if slf.get().views {
+        let found = if slf.get().package == "core" {
+            fullname == "core.composition"
+        } else if slf.get().package == "views" {
             fullname
                 .strip_prefix("views.")
                 .is_some_and(|name| VIEW_MODULES.contains(&name))
@@ -267,7 +294,10 @@ impl ToolModules {
     fn exec_module(&self, module: &Bound<'_, PyModule>) -> PyResult<()> {
         let py = module.py();
         let full: String = module.name()?.extract()?;
-        if self.views {
+        if self.package == "core" {
+            return crate::sheets::composition::install(module);
+        }
+        if self.package == "views" {
             py.import("ingetrazo_render")?
                 .call_method1("install_interaction_module", (module,))?;
             return Ok(());
@@ -306,7 +336,10 @@ impl ToolModules {
     }
     #[pyo3(signature=(prefix=""))]
     fn iter_modules(&self, prefix: &str) -> Vec<(String, bool)> {
-        if self.views {
+        if self.package == "core" {
+            return vec![(format!("{prefix}composition"), false)];
+        }
+        if self.package == "views" {
             return VIEW_MODULES
                 .iter()
                 .map(|name| (format!("{prefix}{name}"), false))
@@ -323,22 +356,22 @@ impl ToolModules {
 /// path entry only recognizes this package's former adapter modules.
 #[pyfunction]
 pub(super) fn install_tool_modules(paths: &Bound<'_, PyList>) -> PyResult<()> {
-    install_modules(paths, false)
+    install_modules(paths, "tools")
 }
 #[pyfunction]
 pub(super) fn install_view_modules(paths: &Bound<PyList>) -> PyResult<()> {
-    install_modules(paths, true)
+    install_modules(paths, "views")
 }
-fn install_modules(paths: &Bound<PyList>, views: bool) -> PyResult<()> {
+#[pyfunction]
+pub(super) fn install_core_modules(paths: &Bound<PyList>) -> PyResult<()> {
+    install_modules(paths, "core")
+}
+fn install_modules(paths: &Bound<PyList>, package: &'static str) -> PyResult<()> {
     let py = paths.py();
     let sys = py.import("sys")?;
     let first = paths.get_item(0)?.extract::<String>()?;
     let key = std::path::Path::new(&first)
-        .join(if views {
-            "__built_native_views__"
-        } else {
-            "__built_native_tools__"
-        })
+        .join(format!("__built_native_{package}__"))
         .to_string_lossy()
         .into_owned();
     let cache = sys.getattr("path_importer_cache")?;
@@ -355,7 +388,7 @@ fn install_modules(paths: &Bound<PyList>, views: bool) -> PyResult<()> {
                     py,
                     ToolModules {
                         path: key.clone(),
-                        views,
+                        package,
                     },
                 )?;
                 hooks.call_method1("append", (&f,))?;
