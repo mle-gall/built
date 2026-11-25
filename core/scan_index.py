@@ -55,7 +55,7 @@ def enabled() -> bool:
 
 def _token(mesh):
     from core import store_mesh
-    if type(mesh) is store_mesh.StoreMesh:
+    if isinstance(mesh, store_mesh.StoreMesh):
         st = mesh.__dict__["_store"]
         return (store_mesh.StoreMesh, id(st), st.lineage, st.revision)
     return (type(mesh), mesh.revision, len(mesh.vertices), len(mesh.edges),
@@ -66,7 +66,7 @@ def store_backed(mesh) -> bool:
     """Whether ``mesh`` lives in the Rust store (its scans read the store's
     columns, and its revision moves with every change)."""
     from core import store_mesh
-    return type(mesh) is store_mesh.StoreMesh
+    return isinstance(mesh, store_mesh.StoreMesh)
 
 
 def scan(mesh, fresh: bool = False) -> "Scan | None":
@@ -137,7 +137,7 @@ class Scan:
     def __init__(self, mesh) -> None:
         from core import store_mesh
         self._mesh = weakref.ref(mesh)
-        self.store_backed = type(mesh) is store_mesh.StoreMesh
+        self.store_backed = isinstance(mesh, store_mesh.StoreMesh)
         if self.store_backed:
             self.native = kernel.MeshScan.from_store(mesh.__dict__["_store"])
         else:

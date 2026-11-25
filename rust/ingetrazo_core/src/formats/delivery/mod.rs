@@ -37,8 +37,8 @@ fn store<'p>(history: &Obj<'p>, key: &Obj<'p>, values: &Obj<'p>) -> PyResult<Obj
         .call_method1("SetPluginDataCommand", ("deliveries", values))?;
     history.call_method1("execute", (cmd,))?;
     let out = py.get_type::<PyDict>().call1((py
-        .import("core.protocol.commands")?
-        .call_method1("_answer", (history, before))?,))?;
+        .import("ingetrazo_core.command_protocol")?
+        .call_method1("answer", (history, before))?,))?;
     out.set_item("key", key)?;
     Ok(out)
 }

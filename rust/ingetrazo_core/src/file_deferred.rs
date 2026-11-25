@@ -401,7 +401,7 @@ impl Builder {
                     .call_method("store_from_source", (s,), Some(&kw))?
                     .extract()?;
                 store.call_method1("become_store", (mesh, st, table))?;
-            } else if !self.precise && get(s, "sequential")?.is_truthy()? {
+            } else if get(s, "sequential")?.is_truthy()? {
                 codec.call_method1(
                     "_load_mesh_small",
                     (mesh, codec.call_method1("_payload_from_arrays", (s,))?),
@@ -422,7 +422,7 @@ impl Builder {
                         s.get_item("counts")?,
                         s.get_item("face_attr")?,
                     ),
-                    Some(&kw),
+                    None,
                 )?;
             }
         }
@@ -609,7 +609,7 @@ fn igz_load_geometry<'p>(mesh: &Obj<'p>, meta: &Obj<'p>, geom: &Obj<'p>) -> PyRe
 }
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
-#[pyo3(signature=(mesh,meta,pos,edges,flags,curves,layers,rings,sizes,counts,face_attr,*,precise=false))]
+#[pyo3(signature=(mesh,meta,pos,edges,flags,curves,layers,rings,sizes,counts,face_attr))]
 fn igz_build_geometry(
     mesh: &Obj<'_>,
     meta: &Obj<'_>,
@@ -622,23 +622,10 @@ fn igz_build_geometry(
     sizes: &Obj<'_>,
     counts: &Obj<'_>,
     face_attr: &Obj<'_>,
-    precise: bool,
 ) -> PyResult<()> {
     let py = mesh.py();
     let codec = api(py)?;
-    let (vs, ids): (Obj<'_>, Obj<'_>) = if precise {
-        py.import("formats.built")?.call_method1(
-            "python_vertices",
-            (
-                mesh,
-                pos,
-                get(meta, "sequential")?.is(&true.into_pyobject(py)?),
-            ),
-        )?
-    } else {
-        mesh.call_method1("bulk_weld", (pos,))?
-    }
-    .extract()?;
+    let (vs, ids): (Obj<'_>, Obj<'_>) = mesh.call_method1("bulk_weld", (pos,))?.extract()?;
     let mut emap = py.None().into_bound(py);
     if edges.len()? > 0 {
         let ef =

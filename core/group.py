@@ -687,17 +687,13 @@ def transformed_mesh(src: Mesh, m) -> Mesh:
 
 def _transformed_mesh_walk(src: Mesh, m) -> Mesh:
     """Sequential per-entity copy — exact semantics for small meshes."""
-    from core.store_mesh import StoreMesh, empty_store_mesh
-    new = empty_store_mesh() if isinstance(src, StoreMesh) else Mesh()
+    new = Mesh()
     mirror = _is_mirror(m)
 
-    if isinstance(src, StoreMesh):
-        rot, trans = np_affine(m)
-        def mapped(v):
-            return rot @ v.position_tuple() + trans
-    else:
-        def mapped(v):
-            return m.map(v.position)
+    rot, trans = np_affine(m)
+
+    def mapped(v):
+        return rot @ v.position_tuple() + trans
 
     for f in src.faces:
         try:

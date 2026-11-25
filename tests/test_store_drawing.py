@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Differential drawing through History, including exact stable-key feed records."""
 import pytest
-from ingetrazo_core import Vec3 as V
+from ingetrazo_core import MeshElements, Vec3 as V
 from core import store_mesh as S, scan_index
 from core.history import History, SnapshotMutation
 from core.protocol.commands import run
@@ -98,11 +98,11 @@ def test_store_rectangle_never_enumerates_face_views(monkeypatch, curved):
         sc.mesh.faces[0].attrs["color"] = "red"
     hist = History(sc)
     rect = [V(n+1,0,0), V(n+2,0,0), V(n+2,1,0), V(n+1,1,0)]
-    iterate = S._Seq.__iter__
+    iterate = MeshElements.__iter__
     def guarded(seq):
         assert seq._kind != "face", "Rectangle walked the mesh face list"
         return iterate(seq)
-    monkeypatch.setattr(S._Seq, "__iter__", guarded)
+    monkeypatch.setattr(MeshElements, "__iter__", guarded)
     cmd = build_add_edges(sc, list(zip(rect, rect[1:] + rect[:1])), detect_faces=False,
                           extra=[AddFaceCommand(rect)], plane_rebuild=True)
     hist.execute(cmd)
