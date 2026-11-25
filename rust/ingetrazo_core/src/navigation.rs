@@ -95,11 +95,25 @@ pub(crate) fn zoom_focus(
     if steps < 0.0 && distance > 0.0 {
         factor = factor.min(next_distance / distance);
     }
-    let next_target = focus + (target - focus) * factor;
+    let mut next_target = focus + (target - focus) * factor;
     if steps < 0.0 && retreat > 0.0 && next_distance < maximum {
         let moved = (next_target + eye_offset(yaw, pitch, next_distance)).distance(eye);
         if moved < retreat {
-            next_distance = (next_distance + (retreat - moved)).min(maximum);
+            // The floor is a longer step of the same zoom: the eye and the
+            // target scale about the focus together, so the focus keeps its
+            // pixel. Adding the shortfall to the distance alone pulled the
+            // eye back along the view axis and slid a focus beside the
+            // centre of the window toward the centre at every step.
+            let reach = eye.distance(focus);
+            let longer = 1.0 + retreat / reach;
+            if distance > 0.0 && longer.is_finite() {
+                let scale = longer.min(maximum / distance);
+                next_distance = (distance * scale).min(maximum).max(minimum);
+                next_target = focus + (target - focus) * scale;
+            } else {
+                // The eye is on the focus: there is no direction to scale along.
+                next_distance = (next_distance + (retreat - moved)).min(maximum);
+            }
         }
     }
     Ok((next_target.into(), next_distance))
