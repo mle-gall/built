@@ -504,7 +504,7 @@ def _store_built(parts, *, uv) -> Mesh:
     one is showing (:func:`_remap_uvws`), face by face."""
     import numpy as np
     from core import mesh as _mesh_mod
-    from core.store_mesh import _weld_args, become_store
+    from core.store_mesh import _weld_args
     import ingetrazo_core as native
     pos_parts, edge_parts, flag_parts, curve_parts = [], [], [], []
     corner_parts, size_parts, count_parts, fa_parts = [], [], [], []
@@ -576,7 +576,7 @@ def _store_built(parts, *, uv) -> Mesh:
         np.ascontiguousarray(np.concatenate(corner_parts)), np.ascontiguousarray(np.concatenate(size_parts)),
         np.ascontiguousarray(np.concatenate(count_parts)), np.ascontiguousarray(np.concatenate(fa_parts)),
         sequential=False, **_weld_args())
-    become_store(new, store, table)
+    native.store_views.become_store(new, store, table)
     new.resplit_curves()
     if implicit:
         faces = new.faces
