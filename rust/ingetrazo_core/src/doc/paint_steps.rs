@@ -32,7 +32,7 @@ fn face_meshes<'py>(s: &RecordStep, py: Python<'py>, _scene: &Obj<'py>) -> PyRes
 }
 
 fn dirty_chunks(py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
-    py.import("core.history_commands")?.getattr("_dirty_group_chunks")?.call1((scene,))?;
+    py.import("core.history")?.getattr("_dirty_group_chunks")?.call1((scene,))?;
     Ok(())
 }
 

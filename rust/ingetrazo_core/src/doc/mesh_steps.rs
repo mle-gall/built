@@ -17,7 +17,7 @@ fn none(py: Python<'_>) -> Obj<'_> {
 }
 
 fn host<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
-    py.import("core.history_commands")?.getattr(name)
+    py.import("core.history")?.getattr(name)
 }
 
 fn is_store(py: Python<'_>, mesh: &Obj<'_>) -> PyResult<bool> {

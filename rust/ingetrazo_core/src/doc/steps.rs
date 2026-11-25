@@ -295,7 +295,7 @@ fn sections(scene: &Obj<'_>) -> PyResult<()> {
 
 fn rejected(py: Python<'_>, why: &Obj<'_>) -> PyErr {
     match py
-        .import("core.history_commands")
+        .import("core.history")
         .and_then(|m| m.getattr("CommandRejected"))
         .and_then(|c| c.call1((why,)))
     {
@@ -746,7 +746,7 @@ fn run_scale_images(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult
     // The grip box's frame comes from `core.axes`; the matrix is the
     // Python helper's, as the tools' previews build it.
     let m = py
-        .import("core.history_commands")?
+        .import("core.history")?
         .call_method1("scale_matrix", (s.arg(py, 1), s.arg(py, 2), s.arg(py, 3)))?;
     refs::transform_images(s.items(py, 0)?, &m)?;
     version(scene)

@@ -21,7 +21,7 @@ fn none(py: Python<'_>) -> Obj<'_> {
 }
 
 fn host<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
-    py.import("core.history_commands")?.getattr(name)
+    py.import("core.history")?.getattr(name)
 }
 
 fn optional<'py>(o: &Obj<'py>, name: &str) -> PyResult<Option<Obj<'py>>> {

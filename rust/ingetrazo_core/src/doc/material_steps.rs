@@ -29,7 +29,7 @@ fn tuple_of<'py>(py: Python<'py>, o: Option<Obj<'py>>) -> PyResult<Obj<'py>> {
 }
 
 fn dirty_chunks(py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
-    py.import("core.history_commands")?.getattr("_dirty_group_chunks")?.call1((scene,))?;
+    py.import("core.history")?.getattr("_dirty_group_chunks")?.call1((scene,))?;
     Ok(())
 }
 

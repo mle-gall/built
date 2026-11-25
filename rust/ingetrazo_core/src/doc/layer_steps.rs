@@ -21,7 +21,7 @@ fn none(py: Python<'_>) -> Obj<'_> {
 
 fn rejected(py: Python<'_>, why: &str) -> PyErr {
     match py
-        .import("core.history_commands")
+        .import("core.history")
         .and_then(|m| m.getattr("CommandRejected"))
         .and_then(|c| c.call1((why,)))
     {
@@ -31,7 +31,7 @@ fn rejected(py: Python<'_>, why: &str) -> PyErr {
 }
 
 fn dirty_chunks(py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
-    py.import("core.history_commands")?.getattr("_dirty_group_chunks")?.call1((scene,))?;
+    py.import("core.history")?.getattr("_dirty_group_chunks")?.call1((scene,))?;
     Ok(())
 }
 

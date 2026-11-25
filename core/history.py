@@ -15,7 +15,6 @@ from ingetrazo_core import DocumentHistory
 # The undoable commands are native ingetrazo_core steps (docs/commands-port.md).
 # What stays here is the plugin command API (docs/plugins.md), the snapshot
 # and compound wrappers, and the helpers other modules share.
-# core/history_commands.py re-exports this module for older imports.
 
 from ingetrazo_core import planar_edits as _planar
 from ingetrazo_core import object_replay as _replay, object_drawing as _drawing

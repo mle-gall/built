@@ -29,7 +29,7 @@ fn kernel<'py>(py: Python<'py>, module: &str, name: &str) -> PyResult<Obj<'py>> 
 }
 
 fn host<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
-    py.import("core.history_commands")?.getattr(name)
+    py.import("core.history")?.getattr(name)
 }
 
 // ------------------------------------------------------------ edge

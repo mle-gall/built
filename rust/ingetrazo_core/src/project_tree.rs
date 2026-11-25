@@ -154,7 +154,7 @@ pub(crate) fn placement_controls(row: &mut Row, group: &Bound<'_, PyAny>) -> PyR
 fn loose_visible(mesh: &Bound<'_, PyAny>) -> PyResult<bool> {
     let hidden = mesh
         .py()
-        .import("core.history_commands")?
+        .import("core.history")?
         .getattr("_is_hidden")?;
     for field in ["faces", "edges"] {
         for entity in mesh.getattr(field)?.try_iter()? {

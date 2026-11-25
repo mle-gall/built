@@ -90,7 +90,7 @@ fn run_straighten(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<(
     }
     let matrix4 = py.import("ingetrazo_core")?.getattr("Matrix4")?;
     if s.remembered(py, 0).is_none() {
-        let api = py.import("core.history_commands")?;
+        let api = py.import("core.history")?;
         let degrees: f64 = api.call_method1("placement_rotation_deg", (group.getattr("xform")?,))?.extract()?;
         let placement = matrix4.call1((group.getattr("xform")?,))?;
         let t = placement.call_method1("column", (3,))?;

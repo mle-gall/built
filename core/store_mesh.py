@@ -2172,7 +2172,7 @@ def _log_refusal(path, step, err, **extra) -> None:
     f = sys._getframe(2)
     while f is not None:
         name = os.path.basename(f.f_code.co_filename)
-        if name in ("push_pull.py", "pushpull.py", "cap_rebuild.py", "history_commands.py",
+        if name in ("push_pull.py", "pushpull.py", "cap_rebuild.py", "history.py",
                     "topology.py", "commands.py") and f.f_code.co_name not in ops:
             ops.append(f"{name[:-3]}.{f.f_code.co_name}")
         f = f.f_back
