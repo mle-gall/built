@@ -114,7 +114,7 @@ fn present_frame<'py>(a: &Args<'py>) -> Reply<'py> {
         let mut index = future.call_method0("result")?;
         view.setattr("inference_index", &index)?;
         if !index.getattr("packed")?.getattr("origin")?.eq(packed.getattr("origin")?)? {
-            index = py.import("views.wgpu_inference")?.call_method1("rebase", (index, &packed))?;
+            index = py.import("ingetrazo_core")?.call_method1("resident_rebase", (index, &packed))?;
             view.setattr("inference_index", index)?;
         }
         let sprites = attr(&view, "_billboards")?;

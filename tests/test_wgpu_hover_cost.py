@@ -113,7 +113,7 @@ def test_the_vectorised_face_pick_is_the_walk(view):
 def test_screen_boxes_are_the_eight_projected_corners(view):
     """The cached world boxes projected corner by corner give the boxes
     the old one-shot projection gave, eye-plane crossings included."""
-    from views import wgpu_inference as W
+    import ingetrazo_core as W
     proto = Mesh()
     _box(proto, (0, 0, 0), (1, 1, 1))
     for i in range(300):
@@ -187,7 +187,7 @@ def test_edge_grid_near_is_unique_sorted():
 
 
 def test_nearby_edges_filters_visibility_after_grid_lookup(view, monkeypatch):
-    from views import wgpu_inference as W
+    import ingetrazo_core as W
     _box(view.scene.mesh, (0, 0, 0), (1, 1, 1))
     _look(view, V(), distance=6.0, pitch=45.)
     refresh(view)
@@ -218,7 +218,7 @@ def test_empty_canvas_work_plane_reuses_the_hover_pick(view, monkeypatch):
 
 
 def test_screen_rows_preserve_subset_order_outside_grid_and_follow_moved_rows(view):
-    from views import wgpu_inference as W
+    import ingetrazo_core as W
 
     proto = Mesh()
     _box(proto, (0, 0, 0), (1, 1, 1))
@@ -232,7 +232,7 @@ def test_screen_rows_preserve_subset_order_outside_grid_and_follow_moved_rows(vi
     rows = np.array([far, b, a, b], dtype=np.int64)
 
     def near(radius):
-        return W._screen_rows(index, packed, mvp, view.width(), view.height(),
+        return W.screen_rows(index, packed, mvp, view.width(), view.height(),
                               x, y, radius, rows).tolist()
 
     assert near(8.) == sorted([a, b])

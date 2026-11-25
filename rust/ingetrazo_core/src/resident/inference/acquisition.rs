@@ -13,7 +13,7 @@ pub(super) fn record<'p>(py: Python<'p>, fields: &Bound<'p, PyDict>) -> PyResult
         .call((), Some(fields))
 }
 #[pyfunction]
-fn acquire_rim<'p>(view: &Obj<'p>, index: &Obj<'p>, x: f64, y: f64) -> PyResult<Option<Obj<'p>>> {
+pub(super) fn acquire_rim<'p>(view: &Obj<'p>, index: &Obj<'p>, x: f64, y: f64) -> PyResult<Option<Obj<'p>>> {
     let py = view.py();
     let Some(edge) = reference_edge(index, view, x, y, None)? else {
         return Ok(None);
@@ -71,7 +71,7 @@ fn acquire_rim<'p>(view: &Obj<'p>, index: &Obj<'p>, x: f64, y: f64) -> PyResult<
 }
 
 #[pyfunction(signature=(index,view,start,rows))]
-fn start_edges<'p>(
+pub(super) fn start_edges<'p>(
     index: &Obj<'p>,
     view: &Obj<'p>,
     start: &Obj<'p>,
@@ -129,7 +129,7 @@ fn start_edges<'p>(
     Ok(out.into_any())
 }
 #[pyfunction(signature=(engine,view,edges,on_face,point,face_normal,options,x,y,modifiers=None))]
-fn acquire(
+pub(super) fn acquire(
     engine: &Obj<'_>,
     view: &Obj<'_>,
     edges: &Obj<'_>,
@@ -248,7 +248,7 @@ fn acquire(
 }
 
 #[pyfunction(signature=(view,x,y,on_face,project,*,acquire=false))]
-fn face_centers_near<'p>(
+pub(super) fn face_centers_near<'p>(
     view: &Obj<'p>,
     x: f64,
     y: f64,

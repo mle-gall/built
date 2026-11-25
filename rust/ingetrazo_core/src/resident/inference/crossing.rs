@@ -53,7 +53,7 @@ fn on_plane(hit: Hit, plane: Plane, depth: f64) -> bool {
     hit.1.dot(plane.1).abs() > 0.999 && (hit.0 - plane.0).dot(plane.1).abs() <= 1e-6 + 1e-5 * depth
 }
 #[pyfunction(signature=(index,view,x,y,row,point,normal,rows,project,context))]
-fn face_crossing<'p>(
+pub(super) fn face_crossing<'p>(
     index: &Obj<'p>,
     view: &Obj<'p>,
     x: f64,

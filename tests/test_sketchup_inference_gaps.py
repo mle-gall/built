@@ -38,7 +38,7 @@ from core.snap import compute_snap
 from tools.rust_tools import LineTool
 from tools.rust_tools import RectangleTool
 from tests.controller_surface import ControllerSurface as Viewport
-from views.wgpu_inference import prepare, surface
+from ingetrazo_core import resident_prepare as prepare, surface
 
 
 # ---- An unshown Metal view driving the real tools --------------------------
@@ -212,15 +212,15 @@ def test_shift_holds_a_magenta_lock_on_metal(view):
 
 
 def test_metal_hands_compute_snap_every_engine_keyword(view, monkeypatch):
-    import views.wgpu_inference as wi
+    import core.snap as snap_rules
     seen = {}
-    real = wi.compute_snap
+    real = snap_rules.compute_snap
 
     def spy(*a, **k):
         seen.update(k)
         return real(*a, **k)
 
-    monkeypatch.setattr(wi, "compute_snap", spy)
+    monkeypatch.setattr(snap_rules, "compute_snap", spy)
     view.scene.mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(2, 2, 0), V(0, 2, 0)])
     refresh(view)
     use(view, RectangleTool())

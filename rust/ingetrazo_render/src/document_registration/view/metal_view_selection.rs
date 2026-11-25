@@ -122,7 +122,7 @@ fn hover_frame<'py>(view: &Obj<'py>, x: &Obj<'py>, y: &Obj<'py>, modifiers: &Obj
         if mesh_mode {
             options.set_item("work_point", &work_point)?;
         }
-        let snap = py.import("views.wgpu_inference")?.getattr("snap")?.call((view.getattr("inference_index")?, view.getattr("hovered_row")?, view, x, y), Some(&options))?;
+        let snap = py.import("ingetrazo_core")?.getattr("resident_snap")?.call((view.getattr("inference_index")?, view.getattr("hovered_row")?, view, x, y), Some(&options))?;
         view.setattr("last_snap", &snap)?;
         if inference.hasattr("finish_snap")? && !snap.is_none() {
             // The axis-source cue picks through this view's tools (the snap
