@@ -90,7 +90,7 @@ impl<'p> View<'p> {
             return self.drawing(model, path, &cam, &label, record, None);
         }
         let scope = py
-            .import("views.svg_export")?
+            .import("ingetrazo_render.view_export")?
             .call_method1("framed", (&cam, frame))?;
         scope.call_method0("__enter__")?;
         let result = self.drawing(model, path, &cam, &label, record, None);

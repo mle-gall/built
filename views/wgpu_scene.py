@@ -37,8 +37,8 @@ def bake_mesh(mesh):
         arrays = arrays_of(mesh)
         pos = arrays.pos
         if type(mesh).__name__ == 'StoreMesh':
-            from core.store_mesh import attr_columns
-            table, attr = attr_columns(mesh)
+            from ingetrazo_core import store_views
+            table, attr = store_views.attr_columns(mesh)
             attr = np.asarray(attr, np.int64)
         else:
             table = [f.attrs for f in mesh.faces]

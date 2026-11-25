@@ -361,7 +361,7 @@ fn source_arrays<'py>(
         None if stored => {
             let arrays = own.get_item("_store")?.ok_or_else(|| PyTypeError::new_err("a store mesh has a store"))?.call_method0("arrays")?;
             let field = |key: &str| arrays.get_item(key);
-            let columns = py.import("core.store_mesh")?.call_method1("attr_columns", (mesh, overrides.as_ref()))?;
+            let columns = py.import("ingetrazo_core")?.getattr("store_views")?.call_method1("attr_columns", (mesh, overrides.as_ref()))?;
             (field("pos")?, field("corners")?, field("ring_sizes")?, field("ring_counts")?, field("edges")?,
              field("flags")?.bitand(7)?, columns.get_item(0)?, columns.get_item(1)?)
         }

@@ -10,6 +10,7 @@
 //! Python command did. The run's records stay on the step as attributes:
 //! `copies` (where the group's elements went, for the change feed),
 //! `_lifted` (the children lifted), `index`, `snapshot`.
+use super::unlink::{self,tags::TagState};
 use super::steps::{running, version, After, Obj, RecordStep};
 use crate::store::command_facade::command_explode_geometry;
 use pyo3::prelude::*;
@@ -198,10 +199,6 @@ impl ExplodeGroup {
 
 // ------------------------------------------------------------ unlink
 
-fn links<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
-    py.import("core.links")?.getattr(name)
-}
-
 /// `{id(a): b}` for the pairs copied (`forward`), or `{id(b): a}`.
 fn moved_map<'py>(py: Python<'py>, pairs: &Obj<'py>, forward: bool) -> PyResult<Bound<'py, PyDict>> {
     let map = PyDict::new(py);
@@ -226,21 +223,16 @@ fn unlink_first(py: Python<'_>, me: &Obj<'_>, scene: &Obj<'_>, groups: &Obj<'_>)
     me.setattr("_before", result.get_item(0)?)?;
     me.setattr("_after", result.get_item(1)?)?;
     let host_path = scene.getattr_opt("_project_host_path")?.unwrap_or_else(|| none(py));
-    let fill = links(py, "fill_link")?;
-    let nested_pairs = host(py, "_nested_pairs")?;
     for row in result.get_item(2)?.try_iter()? {
         let row = row?;
         let outer = row.get_item(0)?;
         for inner in row.get_item(1)?.try_iter()? {
             let inner = inner?;
             let (old, new, part_pairs) = (inner.get_item(0)?, inner.get_item(1)?, inner.get_item(2)?);
-            let kw = PyDict::new(py);
-            kw.set_item("mirror", &outer)?;
-            kw.set_item("host_path", &host_path)?;
-            if fill.call((scene, &new), Some(&kw))?.is_truthy()? {
+            if unlink::fill(scene,&new,Some(&outer),Some(&host_path))?.is_some_and(|message|!message.is_empty()) {
                 pairs.call_method1("extend", (part_pairs,))?; // kept as it showed
             } else {
-                pairs.call_method1("extend", (nested_pairs.call1((old, new))?,))?;
+                pairs.call_method1("extend", (crate::model::links::nested_pairs(&old, &new)?,))?;
             }
         }
     }
@@ -250,7 +242,6 @@ fn unlink_first(py: Python<'_>, me: &Obj<'_>, scene: &Obj<'_>, groups: &Obj<'_>)
 /// The groups and meshes the copies hold, the files linked inside them
 /// aside (theirs are their links').
 fn copied<'py>(py: Python<'py>, after: &Obj<'py>) -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>)> {
-    let is_linked = links(py, "is_linked")?;
     let groups = PyList::empty(py);
     let meshes = PyList::empty(py);
     let mut stack = Vec::new();
@@ -263,7 +254,7 @@ fn copied<'py>(py: Python<'py>, after: &Obj<'py>) -> PyResult<(Bound<'py, PyList
         }
     }
     while let Some(g) = stack.pop() {
-        if is_linked.call1((&g,))?.is_truthy()? {
+        if crate::model::links::is_linked(&g)? {
             continue;
         }
         groups.append(&g)?;
@@ -303,19 +294,18 @@ fn release(py: Python<'_>, me: &Obj<'_>, scene: &Obj<'_>, gone: &Bound<'_, PySet
         outside.set_item(k, n.extract::<i64>()? - c)?;
     }
     let renames = PyDict::new(py);
-    let release_tags = links(py, "release_tags")?;
     for path in gone.iter() {
-        renames.call_method1("update", (release_tags.call1((scene, path, &used, &outside))?,))?;
+        renames.update(crate::model::links::release_tags(scene, &path, used.as_any(), outside.as_any())?.as_mapping())?;
     }
     if renames.len() > 0 {
         let (groups, meshes) = copied(py, &after)?;
-        links(py, "relabel")?.call1((groups, meshes, renames))?;
+        crate::model::links::relabel(groups.as_any(), meshes.as_any(), &renames)?;
     }
     Ok(())
 }
 
 fn sources<'py>(py: Python<'py>, scene: &Obj<'py>) -> PyResult<Bound<'py, PySet>> {
-    PySet::new(py, links(py, "sources")?.call1((scene,))?.try_iter()?.collect::<PyResult<Vec<_>>>()?)
+    PySet::new(py, crate::model::links::sources(scene)?)
 }
 
 fn run_unlink(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
@@ -344,21 +334,20 @@ fn run_unlink(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
         me.setattr("tops", PyList::new(py, tops)?)?;
     }
     let live = sources(py, scene)?;
-    let tag_state = host(py, "_TagState")?;
     if optional(&me, "_before")?.is_none() {
-        me.setattr("_tags_before", tag_state.call1((scene,))?)?;
+        me.setattr("_tags_before", TagState::capture(scene)?)?;
         unlink_first(py, &me, scene, &groups)?;
     } else {
         py.import("ingetrazo_core")?.getattr("definition_edits")?.getattr("restore_definitions")?.call1((&groups, me.getattr("_after")?))?;
         me.getattr("_tags_before")?.call_method1("go", (scene, me.getattr("_tags_after")?))?;
     }
-    host(py, "_move_holds")?.call1((scene, &groups, moved_map(py, &me.getattr("_pairs")?, true)?))?;
+    unlink::move_holds(scene, &groups, &moved_map(py,&me.getattr("_pairs")?,true)?)?;
     let gone = live.call_method1("difference", (sources(py, scene)?,))?.cast_into::<PySet>()?;
     if optional(&me, "_tags_after")?.is_none() {
         if gone.len() > 0 {
             release(py, &me, scene, &gone)?;
         }
-        let registry = links(py, "registry")?.call1((scene,))?;
+        let registry = crate::model::links::registry(scene)?;
         let cache = scene.getattr("__dict__")?.get_item("_link_tag_tables").ok().filter(|c| c.is_truthy().unwrap_or(false));
         for p in gone.iter() {
             registry.call_method1("pop", (&p, py.None()))?;
@@ -366,13 +355,12 @@ fn run_unlink(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
                 cache.call_method1("pop", (&p, py.None()))?;
             }
         }
-        me.setattr("_tags_after", tag_state.call1((scene,))?)?;
+        me.setattr("_tags_after", TagState::capture(scene)?)?;
     }
     if let Some(errors) = scene.getattr_opt("link_errors")?.filter(|e| e.is_instance_of::<PyDict>()) {
-        let norm = links(py, "_norm")?;
         let kept = PyDict::new(py);
         for p in errors.call_method0("keys")?.try_iter()?.collect::<PyResult<Vec<_>>>()? {
-            if gone.contains(norm.call1((&p,))?)? {
+            if gone.contains(crate::model::links::norm(&p)?)? {
                 kept.set_item(&p, errors.call_method1("pop", (&p,))?)?;
             }
         }
@@ -387,7 +375,7 @@ fn unlink_by_hand(py: Python<'_>, me: &Obj<'_>, scene: &Obj<'_>, groups: &Obj<'_
         return Ok(());
     };
     py.import("ingetrazo_core")?.getattr("definition_edits")?.getattr("restore_definitions")?.call1((groups, before))?;
-    host(py, "_move_holds")?.call1((scene, groups, moved_map(py, &me.getattr("_pairs")?, false)?))?;
+    unlink::move_holds(scene, groups, &moved_map(py,&me.getattr("_pairs")?,false)?)?;
     me.getattr("_tags_after")?.call_method1("go", (scene, me.getattr("_tags_before")?))?;
     let errors = me.getattr("_errors")?;
     if errors.is_truthy()? {
@@ -408,13 +396,13 @@ fn after_unlink(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Option<&
     if optional(&me, "_tags_before")?.is_none() {
         return version(scene); // the run refused: nothing to replay
     }
-    host(py, "_move_holds")?.call1((scene, &groups, moved_map(py, &me.getattr("_pairs")?, !undo)?))?;
+    unlink::move_holds(scene, &groups, &moved_map(py,&me.getattr("_pairs")?,!undo)?)?;
     let before = me.getattr("_tags_before")?.getattr("cache")?;
     let after = me.getattr("_tags_after")?.getattr("cache")?;
     let dict = scene.getattr("__dict__")?;
     let cache = dict.call_method1("setdefault", ("_link_tag_tables", PyDict::new(py)))?;
     let (from, to) = if undo { (after, before) } else { (before, after) };
-    tag_state_sync(py, &cache, &from, &to)?;
+    unlink::tags::sync(&cache,from.cast::<PyDict>()?,to.cast::<PyDict>()?,false)?;
     if let Some(errors) = scene.getattr_opt("link_errors")?.filter(|e| e.is_instance_of::<PyDict>()) {
         let mine = me.getattr("_errors")?;
         if undo {
@@ -426,11 +414,6 @@ fn after_unlink(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Option<&
         }
     }
     version(scene)
-}
-
-fn tag_state_sync(py: Python<'_>, now: &Obj<'_>, old: &Obj<'_>, new: &Obj<'_>) -> PyResult<()> {
-    host(py, "_TagState")?.getattr("_sync")?.call1((now, old, new))?;
-    Ok(())
 }
 
 #[pyclass(module = "ingetrazo_core", name = "UnlinkCommand", extends = RecordStep, frozen)]
@@ -446,20 +429,18 @@ impl Unlink {
     /// links back exactly, and redo the very same copies.
     #[new]
     fn new(py: Python<'_>, groups: Obj<'_>) -> PyResult<PyClassInitializer<Self>> {
-        let is_linked = links(py, "is_linked")?;
-        let ancestor = links(py, "linked_ancestor")?;
-        let link_of = links(py, "link_of")?;
+        use crate::model::links;
         let mut kept = Vec::new();
         for g in groups.try_iter()? {
             let g = g?;
             let owner = g.getattr_opt("owner")?.unwrap_or_else(|| none(py));
-            if is_linked.call1((&g,))?.is_truthy()? && ancestor.call1((owner,))?.is_none() {
+            if links::is_linked(&g)? && links::linked_ancestor(&owner)?.is_none() {
                 kept.push(g);
             }
         }
         let mut paths: Vec<Obj<'_>> = Vec::new();
         for g in &kept {
-            let path = link_of.call1((g,))?.get_item("path")?;
+            let path = links::link_of(g)?.expect("a linked placement").get_item("path")?;
             if !paths.iter().any(|p| p.eq(&path).unwrap_or(false)) {
                 paths.push(path);
             }

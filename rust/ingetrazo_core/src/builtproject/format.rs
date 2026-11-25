@@ -20,9 +20,8 @@ fn is_project(path: PathBuf) -> bool {
 #[pyfunction]
 fn project_check<'p>(value: &Obj<'p>) -> PyResult<Obj<'p>> {
     let py = value.py();
-    let verify = py.import("core.links")?.getattr("validate_select")?;
     for e in value.get_item("links")?.try_iter()? {
-        verify.call1((e?.call_method1("get", ("select",))?,))?;
+        crate::model::links::validate_select(&e?.call_method1("get", ("select",))?)?;
     }
     let errors = py
         .import("core.bim_registry")?

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.geometry import Edge, Face
 from core.scene import Scene
 from tools.rust_tools import SelectTool
 
@@ -34,11 +33,11 @@ class _StubViewport:
 
 def _scene():
     s = Scene()
-    s.edges.append(Edge(V(1, 1), V(2, 2)))      # fully inside (0,0,5,5)
-    s.edges.append(Edge(V(4, 4), V(10, 10)))    # one end inside, crosses out
-    s.edges.append(Edge(V(20, 20), V(30, 30)))  # fully outside
-    s.faces.append(Face([V(1, 1), V(2, 1), V(2, 2), V(1, 2)]))      # fully inside
-    s.faces.append(Face([V(4, 4), V(10, 4), V(10, 10), V(4, 10)]))  # partly inside
+    s.mesh.add_edge(V(1, 1), V(2, 2))      # fully inside (0,0,5,5)
+    s.mesh.add_edge(V(4, 4), V(10, 10))    # one end inside, crosses out
+    s.mesh.add_edge(V(20, 20), V(30, 30))  # fully outside
+    s.mesh.add_face([V(1, 1), V(2, 1), V(2, 2), V(1, 2)])      # fully inside
+    s.mesh.add_face([V(4, 4), V(10, 4), V(10, 10), V(4, 10)])  # partly inside
     return s
 
 

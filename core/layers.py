@@ -274,7 +274,7 @@ GROUND_LAYER = "layer"
 
 
 #: The tag a linked file's untagged content wears in the host
-#: (``core.links.tag_name``): «<file> / Untagged». It stands for the
+#: (``ingetrazo_core.link_tag_name``): «<file> / Untagged». It stands for the
 #: source's default tag, so for colour it reads as none — the piece takes
 #: its owner's tag, as it did in its own file.
 LINK_UNTAGGED_SUFFIX = " / Untagged"

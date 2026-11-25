@@ -80,7 +80,7 @@ def occurrence(group, registry, linked=False):
 
 def patch_record_field(history, placements, path, value, schema="IFC4", property_kind=None):
     """Validate all proposed effective records before creating one history step."""
-    from core.protocol.commands import _answer
+    from ingetrazo_core.command_protocol import answer
 
     groups = structure._targets(history.scene, placements)
     registry = bim_registry.get(history.scene)
@@ -133,7 +133,7 @@ def patch_record_field(history, placements, path, value, schema="IFC4", property
         commands.append(SetRecordCommand([g], patch))
     before = history.revision
     history.execute(CompoundCommand(commands) if len(commands) > 1 else commands[0])
-    return _answer(history, before)
+    return answer(history, before)
 
 
 def filing_rule(scene, key, recipe, *, commit_history=None, expected=None):
@@ -157,8 +157,8 @@ def filing_rule(scene, key, recipe, *, commit_history=None, expected=None):
 
 
 def set_filing_rule(history, node, recipe, expected):
-    from core.protocol.commands import _answer
+    from ingetrazo_core.command_protocol import answer
 
     before = history.revision
     filing_rule(history.scene, node, recipe, commit_history=history, expected=expected)
-    return _answer(history, before)
+    return answer(history, before)

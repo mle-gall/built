@@ -8,6 +8,7 @@
 //! record, the filing rule, the IFC vocabulary and their protocol commands
 //! (`core.protocol.records`, `core.bim_registry`, `core.structure`). The
 //! document, camera and tools are reached through their attributes.
+mod terrain;
 use pyo3::{
     prelude::*,
     types::{IntoPyDict, PyDict, PyList, PyTuple},
@@ -32,11 +33,6 @@ pub fn send(view: &Bound<'_, PyAny>, key: &str, value: &Bound<'_, PyAny>) -> PyR
     let text = py.import("json")?.getattr("dumps")?.call((value,), Some(&kwargs))?;
     view.getattr("renderer")?.call_method1("ui_panel_set", (key, text))?;
     Ok(())
-}
-
-#[pyfunction]
-fn panel_send(view: &Bound<'_, PyAny>, key: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
-    send(view, key, value)
 }
 
 /// The saved view marked in the scene tabs, if any.
@@ -109,10 +105,10 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
             let profiles = registry.call_method1("get", ("export_profiles", PyDict::new(py)))?;
             schema = profiles.call_method1("get", (profile, PyDict::new(py)))?.call_method1("get", ("schema", &schema))?;
         }
-        let links = py.import("core.links")?;
+        let links = crate::host_context::core_module(py)?;
         let occurrence = py.import("core.protocol.records")?.getattr("occurrence")?;
         for g in &groups {
-            let linked = links.call_method1("linked_ancestor", (g,))?.is_truthy()?;
+            let linked = links.call_method1("link_linked_ancestor", (g,))?.is_truthy()?;
             let record = occurrence.call1((g, &registry, linked))?;
             if scene.call_method1("entity_locked",(g,))?.is_truthy()? || scene.call_method1("_layer_state",(g,))?.get_item(1)?.is_truthy()? || scene.getattr_opt("worksession_read_only")?.is_some_and(|s|s.is_truthy().unwrap_or(false)) {
                 record.set_item("editable",false)?;
@@ -514,7 +510,7 @@ fn parts_edit(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, vp: &Bound<'_, Py
     let uid = if verb == "split" { v.clone() } else { v.get_item(0)? };
     let (Some(g), Some(address)) = (g, address) else { return Ok(()) };
     if !address.eq(&uid)?
-        || py.import("core.links")?.call_method1("linked_ancestor", (&g,))?.is_truthy()?
+        || crate::host_context::core_module(py)?.call_method1("link_linked_ancestor", (&g,))?.is_truthy()?
         || scene.call_method1("entity_locked", (&g,))?.is_truthy()?
     {
         return Ok(());
@@ -622,7 +618,7 @@ fn inspector_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, payload: &s
             bevel_edit(&tools, &tools.getattr("tool")?, verb, &v)
         }
         "camera" => camera_edit(win, view, verb, &v),
-        "terrain" => py.import("views.terrain_binding")?.call_method1("action", (view, &vp, verb)).map(|_| ()),
+        "terrain" => terrain::action(view,&vp,verb),
         _ => Ok(()),
     };
     if let Err(e) = result {
@@ -640,7 +636,6 @@ fn inspector_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, payload: &s
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     for f in [
-        wrap_pyfunction!(panel_send, m)?,
         wrap_pyfunction!(marked_view, m)?,
         wrap_pyfunction!(inspector_selection, m)?,
         wrap_pyfunction!(inspector_sync, m)?,

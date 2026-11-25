@@ -10,7 +10,8 @@ from tests.shell_isolation import native_question_host, restore_shell_patches  #
 
 from core import update_check as uc
 from ingetrazo_render import chrome_dialogs, chrome_sheet
-from views import release_check as ud
+from ingetrazo_render import start_check
+from core import settings as settings_module, desktop_open, timers
 
 
 class Store:
@@ -29,7 +30,7 @@ class Store:
 @pytest.fixture
 def settings(monkeypatch):
     store = Store()
-    monkeypatch.setattr(ud, "native_settings", lambda: store)
+    monkeypatch.setattr(settings_module, "settings", lambda: store)
     monkeypatch.setattr(uc, "should_check_at_start", lambda *a, **kw: True)
     return store
 
@@ -111,7 +112,7 @@ def test_when_it_looks_at_start(store, frozen, env, looks):
 
 def test_a_newer_version_opens_the_window_without_blocking(app, settings):
     win = app.window
-    ud.start_check(win, True, lambda: RELEASE, "0.6.1")
+    start_check(win, True, lambda: RELEASE, "0.6.1")
     _wait(app, until=lambda: chrome_dialogs.history(win))
     assert not chrome_dialogs.modal(win) and not chrome_sheet.shown(win)
     chrome_dialogs.history(win)[0].action()
@@ -124,7 +125,7 @@ def test_a_newer_version_opens_the_window_without_blocking(app, settings):
 @pytest.mark.parametrize("current", ["0.6.2", "0.6.3"])
 def test_quiet_and_up_to_date_says_nothing(app, settings, current):
     win = app.window
-    ud.start_check(win, True, lambda: RELEASE, current)
+    start_check(win, True, lambda: RELEASE, current)
     _wait(app, until=lambda: uc.KEY_LAST in settings.values)
     assert uc.KEY_LAST in settings.values
     assert not chrome_sheet.shown(win) and not chrome_dialogs.history(win)
@@ -136,7 +137,7 @@ def offline():
 
 def test_quiet_and_offline_says_nothing_and_tries_again(app, settings):
     win = app.window
-    ud.start_check(win, True, offline, "0.6.1")
+    start_check(win, True, offline, "0.6.1")
     _wait(app)
     assert not chrome_sheet.shown(win) and not chrome_dialogs.history(win)
     assert uc.KEY_LAST not in settings.values
@@ -145,21 +146,21 @@ def test_quiet_and_offline_says_nothing_and_tries_again(app, settings):
 def test_a_skipped_version_stays_quiet_but_the_menu_still_shows_it(app, settings):
     win = app.window
     uc.skip_version(settings, RELEASE.version)
-    ud.start_check(win, True, lambda: RELEASE, "0.6.1")
+    start_check(win, True, lambda: RELEASE, "0.6.1")
     _wait(app, until=lambda: uc.KEY_LAST in settings.values)
     assert not chrome_dialogs.history(win) and not chrome_sheet.shown(win)
-    ud.start_check(win, False, lambda: RELEASE, "0.6.1")
+    start_check(win, False, lambda: RELEASE, "0.6.1")
     _wait(app, until=lambda: chrome_sheet.shown(win))
     assert chrome_sheet.current(win).id == "update"
 
 
 def test_the_menu_says_when_up_to_date_and_when_offline(app, settings):
     win = app.window
-    ud.start_check(win, False, lambda: RELEASE, "0.6.2")
+    start_check(win, False, lambda: RELEASE, "0.6.2")
     _wait(app, until=lambda: chrome_dialogs.history(win))
     row = chrome_dialogs.history(win)[0]
     assert row.tone == "info" and "0.6.2" in row.detail
-    ud.start_check(win, False, offline, "0.6.2")
+    start_check(win, False, offline, "0.6.2")
     _wait(app, until=lambda: len(chrome_dialogs.history(win)) == 2)
     assert chrome_dialogs.history(win)[0].tone == "warning"
 
@@ -167,10 +168,10 @@ def test_the_menu_says_when_up_to_date_and_when_offline(app, settings):
 def test_skip_and_download_buttons(app, settings, monkeypatch):
     from types import SimpleNamespace
     opened = []
-    monkeypatch.setattr(ud.desktop_open, "open_url", opened.append)
+    monkeypatch.setattr(desktop_open, "open_url", opened.append)
     win = app.window
     for action in ("later", "download", "skip"):
-        ud.start_check(win, False, lambda: RELEASE, "0.6.1")
+        start_check(win, False, lambda: RELEASE, "0.6.1")
         _wait(app, until=lambda: chrome_sheet.shown(win))
         chrome_sheet.current(win).act(SimpleNamespace(win=win), "verb", [action])
         assert not chrome_sheet.shown(win)
@@ -180,9 +181,10 @@ def test_skip_and_download_buttons(app, settings, monkeypatch):
 
 def test_a_quiet_notice_waits_for_a_modal_question(app, settings, monkeypatch):
     win = app.window
-    monkeypatch.setattr(ud, "_RETRY_MS", 30)
+    later = timers.later
+    monkeypatch.setattr(timers, "later", lambda owner, delay, fn: later(owner, min(30, delay), fn))
     monkeypatch.setattr(chrome_dialogs, "modal", lambda parent: parent is win)
-    ud.start_check(win, True, lambda: RELEASE, "0.6.1")
+    start_check(win, True, lambda: RELEASE, "0.6.1")
     _wait(app, until=lambda: uc.KEY_LAST in settings.values)
     assert not chrome_dialogs.history(win)
     monkeypatch.setattr(chrome_dialogs, "modal", lambda parent: False)
@@ -193,6 +195,6 @@ def test_a_quiet_notice_waits_for_a_modal_question(app, settings, monkeypatch):
 def test_start_check_respects_should_check(app, settings, monkeypatch):
     monkeypatch.setattr(uc, "should_check_at_start", lambda *a, **kw: False)
     called = []
-    ud.start_check(app.window, True, fetch=lambda: called.append(1))
+    start_check(app.window, True, fetch=lambda: called.append(1))
     _wait(app, 40)
     assert not called

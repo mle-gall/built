@@ -202,7 +202,7 @@ def test_bulk_weld_resave_matches_scalar_oracle(tmp_path, monkeypatch):
 
 def test_weld_candidate_padding_and_integer_overflow_fallback(monkeypatch):
     from types import SimpleNamespace
-    from core.mesh import _weld_candidates
+    from ingetrazo_core import weld_candidates
 
     # Sparse gaps and axis boundaries must not turn a packed carry into a
     # neighbouring cell. Compare against literal 26-neighbour membership.
@@ -212,7 +212,7 @@ def test_weld_candidate_padding_and_integer_overflow_fallback(monkeypatch):
     expected = [any((x + dx, y + dy, z + dz) in cells
                     for dx in (-1, 0, 1) for dy in (-1, 0, 1) for dz in (-1, 0, 1)
                     if dx or dy or dz) for x, y, z in keys.tolist()]
-    assert _weld_candidates(keys).tolist() == expected
+    assert weld_candidates(keys).tolist() == expected
     # Force the unbounded-integer branch without allocating millions of cells.
     monkeypatch.setattr(np, "iinfo", lambda dtype: SimpleNamespace(max=31))
-    assert _weld_candidates(keys).tolist() == expected
+    assert weld_candidates(keys).tolist() == expected

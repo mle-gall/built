@@ -2,7 +2,7 @@
 //! what `core/units`, `layers`, `element_set`, `camera`, `hlr` (the section
 //! cut, the rest of the
 //! hidden-line maths), `section`, `dimension`, `saved_views`, `texture`,
-//! `group` and the tag-folder tree moved here. `lib.rs` calls
+//! `group`, `links` and the tag-folder tree moved here. `lib.rs` calls
 //! `register_model` once; new model modules register below, never there.
 
 use pyo3::prelude::*;
@@ -13,6 +13,7 @@ pub mod dimension_frame;
 pub mod group_frame;
 pub mod hlr_view;
 pub mod linetypes;
+pub mod links;
 pub mod placement_walks;
 pub mod pyfloat;
 pub mod saved_view;
@@ -64,5 +65,6 @@ pub fn register_model(m: &Bound<'_, PyModule>) -> PyResult<()> {
     scene_mesh_states::register(m)?;
     solid_checks::register(m)?;
     placement_walks::register(m)?;
+    links::register(m)?;
     Ok(())
 }

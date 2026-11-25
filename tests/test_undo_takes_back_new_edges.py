@@ -23,7 +23,7 @@ def _counts(m):
 
 
 def _registry_ok(m):
-    return {id(v) for v in m._registry.values()} <= {id(v) for v in m.vertices}
+    return {v.key for v in m._registry.values()} <= {v.key for v in m.vertices}
 
 
 def test_undoing_a_rotated_copy_leaves_nothing_behind():

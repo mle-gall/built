@@ -227,7 +227,7 @@ def open_link_source(win, path, mount=None) -> bool:
         if getattr(win, "view", None) is not None:
             win.view._ui_host_sig = None
     if ok:
-        from views.document_open import after_open
+        from ingetrazo_render.document_open import after_open
         after_open(win, Path(path), bind)
     return bool(ok)
 

@@ -44,8 +44,7 @@ fn face_attrs<'py>(
         PyDict::new(py).into_any()
     } else {
         let entry = owner.get_item("_attr_table")?.get_item(row)?;
-        py.import("core.store_mesh")?
-            .call_method1("_copy_attrs", (entry,))?
+        crate::kernel::store_views::properties::copy_attrs(&entry)?.into_any()
     };
     own.set_item(key, &value)?;
     Ok(value)

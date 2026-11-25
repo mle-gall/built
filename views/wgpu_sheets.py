@@ -789,7 +789,7 @@ class Workspace:
         """The font picker for a sheet text; the choice is one history step."""
         if model is None:
             return
-        from views.font_picker import show
+        from ingetrazo_render.font_picker import show
 
         def apply(p):
             self._edit([(model, dict(family=p["font"], bold=p["bold"], italic=p["italic"],

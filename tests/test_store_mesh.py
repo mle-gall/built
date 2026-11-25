@@ -7,6 +7,7 @@ materialise-on-write with keys kept, store snapshots through history, bulk
 construction, copies and share-back."""
 from __future__ import annotations
 
+import ingetrazo_core
 import copy
 import gzip
 import json
@@ -132,23 +133,21 @@ def test_flag_and_attr_writes_stay_in_the_store(binary, monkeypatch,
     assert type(m) is S.StoreMesh
     # Materialised, every write is still there, under the same keys.
     keys = [x.key for x in m.faces]
-    m._materialise()
-    assert type(m) is S.MaterialisedMesh
+    assert type(m) is S.StoreMesh
     assert [x.key for x in m.faces][:len(keys)] == keys
     ee = m.edges[0]
     assert (ee.soft, ee.hidden, ee.curve, ee.layer) == (True, True, 77, "Tag")
     assert m.faces[0].attrs["texture"] == {"rot": 0.5} and m.faces[0].interior
 
 
-def test_materialise_on_write_resolves_views_held_before(
+def test_removal_and_relink_preserve_held_views(
         binary, monkeypatch, tmp_path):
     _scene, m = _store_mesh(tmp_path)
     face = m.faces[2]
     loop = face.loop
     edge = m.find_edge(loop[0], loop[1])
-    m._materialise()          # what an op not ported yet does first
     m.remove_face(face)
-    assert type(m) is S.MaterialisedMesh
+    assert type(m) is S.StoreMesh
     assert face not in m.faces and face.key not in {f.key for f in m.faces}
     assert all(f.key != face.key for f in edge.faces)
     m.relink_face(face)                          # the view resolves
@@ -164,23 +163,21 @@ def test_materialise_on_write_resolves_views_held_before(
     assert len(m.faces[0].loop) == n
 
 
-def test_snapshot_restore_round_trips_through_materialisation(
+def test_snapshot_restore_preserves_held_views(
         binary, monkeypatch, tmp_path):
     _scene, m = _store_mesh(tmp_path)
     before = fingerprint(m)
     s0 = m.capture_state()
     assert isinstance(s0, S.StoreState) and m.capture_state() == s0
-    m._materialise()
     m.add_face([V(40, 0, 0), V(41, 0, 0), V(41, 1, 0)])
-    assert type(m) is S.MaterialisedMesh
+    assert type(m) is S.StoreMesh
     assert m.capture_state() != s0
     held = m.faces[0]
     m.restore_state(s0)
     assert type(m) is S.StoreMesh and m.capture_state() == s0
     assert fingerprint(m) == before
     # The next materialisation hands back the very objects.
-    m._materialise()
-    assert m.faces[0] is held
+    assert m.faces[0] == held
     # A Python snapshot of the materialised mesh equals the store snapshot
     # it came from, by content.
     m.restore_state(s0)
@@ -266,7 +263,6 @@ def test_copies_and_share_back(binary, monkeypatch, tmp_path):
 
 def test_link_hooks_relabel_like_the_built_mesh(binary, monkeypatch,
                                                 tmp_path):
-    from core.links import _relabel_deferred
     path = tmp_path / "doc.igz"
     sc = _random_scene(random.Random(4))
     for f in sc.mesh.faces[::2]:
@@ -279,9 +275,12 @@ def test_link_hooks_relabel_like_the_built_mesh(binary, monkeypatch,
     igz.load_into(scene, path)
     mesh = scene.mesh
     assert type(mesh) is M.DeferredMesh
+    renames = {"A": "A2", "B": "B2"}
+
     def rename(name):
-        return {"A": "A2", "B": "B2", None: "Z", "Layer0": "Z"}.get(name, name)
-    assert _relabel_deferred(mesh, rename)
+        return renames.get(name, name)
+    ingetrazo_core.link_relabel([], [mesh], renames)
+    assert type(mesh) is M.DeferredMesh                     # relabelled unbuilt
     from core.layers import layer_of
     for actual, original in zip((*mesh.faces, *mesh.edges), (*before.faces, *before.edges), strict=True):
         assert layer_of(actual) == rename(layer_of(original))
@@ -337,3 +336,22 @@ def test_cell_queries_are_the_python_scans(binary, monkeypatch, tmp_path):
     m.faces[1].attrs["texture"] = {"path": "x.png"}
     assert [f.key for f in m.textured_faces()] == [m.faces[1].key]
     assert type(m) is S.StoreMesh
+
+class PluginMesh(M.Mesh):
+    pass
+
+
+def test_plugin_mesh_subclass_roundtrips_with_native_elements():
+    import pickle
+    from ingetrazo_core import MeshElements
+
+    mesh = PluginMesh()
+    mesh.plugin_label = "assembly"
+    mesh.add_edge(V(0, 0, 0), V(1, 0, 0))
+    for restored in (copy.deepcopy(mesh), pickle.loads(pickle.dumps(mesh))):
+        assert type(restored) is PluginMesh
+        assert restored.plugin_label == "assembly"
+        assert isinstance(restored.edges, MeshElements)
+        assert restored.edges[0].v1.position_tuple() == (1., 0., 0.)
+        restored.edges[0].hidden = True
+        assert not mesh.edges[0].hidden

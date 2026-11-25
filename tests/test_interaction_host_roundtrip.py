@@ -67,6 +67,7 @@ def test_view_classes_remain_importable_and_discoverable():
     modules = {item.name for item in pkgutil.iter_modules(views.__path__, "views.")}
     for leaf, name in [
         ("document_controller", "DocumentController"), ("document_tools", "DocumentTools"),
+        ("document_interaction", "DocumentInteraction"),
         ("view_navigation", "ViewNavigation"), ("view_host", "WidgetShim"),
         ("ndof_input", "NdofInput"),
     ]:

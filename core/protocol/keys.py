@@ -82,8 +82,7 @@ def kind_of(element) -> str | None:
 
 def store_of(mesh):
     """The ``MeshStore`` behind a store-backed mesh, else None."""
-    from core.store_mesh import StoreMesh
-    return mesh.__dict__["_store"] if mesh.__class__ is StoreMesh else None
+    return mesh.__dict__.get("_store")
 
 
 def element(mesh, kind: str, key: int):

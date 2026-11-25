@@ -11,7 +11,6 @@ type Obj<'py> = Bound<'py, PyAny>;
 /// Resolve locks and source ownership on the persisted occurrence. The
 /// viewport's transient owner is only populated for some display proxies.
 pub(crate) fn writable(scene: &Obj<'_>, group: &Obj<'_>) -> PyResult<bool> {
-    let links = scene.py().import("core.links")?;
     let group_type = scene.py().import("core.group")?.getattr("Group")?;
     let mut at = group.clone();
     while at.is_instance(&group_type)? {
@@ -20,7 +19,7 @@ pub(crate) fn writable(scene: &Obj<'_>, group: &Obj<'_>) -> PyResult<bool> {
                 .call_method1("_layer_state", (&at,))?
                 .get_item(1)?
                 .is_truthy()?
-            || !links.call_method1("linked_ancestor", (&at,))?.is_none()
+            || crate::model::links::linked_ancestor(&at)?.is_some()
         {
             return Ok(false);
         }

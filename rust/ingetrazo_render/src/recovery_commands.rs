@@ -188,7 +188,7 @@ fn open_recovery_copy(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResu
             "partial",
             (wrap_pyfunction!(discarded_opened, py)?, win, path),
         )?;
-        py.import("views.document_open")?
+        py.import("ingetrazo_render.document_open")?
             .call_method1("after_open", (win, path, done))?;
     }
     Ok(())

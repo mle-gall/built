@@ -1,7 +1,10 @@
 //! Transfer document ownership between live winit windows without reloading a model.
 use super::*;
 use pyo3::types::{PyList, PyWeakrefMethods, PyWeakrefReference};
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    thread::{self, ThreadId},
+};
 
 struct Pending {
     origin: usize,
@@ -13,7 +16,7 @@ struct Pending {
 #[pyclass]
 struct Windows {
     open: Vec<Py<PyWeakrefReference>>,
-    front: Option<Py<PyWeakrefReference>>,
+    front: Option<(ThreadId, Py<PyWeakrefReference>)>,
     next: u64,
     pending: HashMap<String, Pending>,
 }
@@ -28,7 +31,9 @@ pub(super) fn front(py: Python<'_>) -> PyResult<Obj<'_>> {
         .borrow()
         .front
         .as_ref()
-        .and_then(|w| w.bind(py).upgrade())
+        // Window events and drawing belong to the thread that activated the host.
+        .filter(|(owner, _)| *owner == thread::current().id())
+        .and_then(|(_, w)| w.bind(py).upgrade())
         .unwrap_or_else(|| none(py)))
 }
 #[pyfunction(name="set_host",signature=(host))]
@@ -37,7 +42,7 @@ pub(crate) fn activate(py: Python<'_>, host: Option<&Obj<'_>>) -> PyResult<()> {
         .filter(|h| !h.is_none())
         .map(PyWeakrefReference::new)
         .transpose()?
-        .map(Bound::unbind);
+        .map(|w| (thread::current().id(), w.unbind()));
     Ok(())
 }
 #[pyfunction(name = "register")]

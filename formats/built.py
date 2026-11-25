@@ -7,7 +7,6 @@ from ingetrazo_core import (
     built_placement_values as placement_values,
     built_point_array as point_array,
     built_compact_values as compact_values,
-    built_python_vertices as python_vertices,
     built_export_placements as export_placements,
 )
 

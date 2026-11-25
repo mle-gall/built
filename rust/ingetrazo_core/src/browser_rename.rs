@@ -200,13 +200,12 @@ impl BrowserRename {
             return Ok(false);
         }
         let root = scene.getattr("_root")?;
-        let linked = py.import("core.links")?.getattr("linked_ancestor")?;
         let groups = PyList::empty(py);
         let names = PyList::empty(py);
         for (t, (_, new)) in self.targets.iter().zip(self.preview()) {
             let group = t.group.bind(py);
             if root.call_method1("_occurrence_path", (group,))?.is_none()
-                || !linked.call1((group,))?.is_none()
+                || crate::model::links::linked_ancestor(group)?.is_some()
                 || name(group)? != t.old
             {
                 vp.call_method1(

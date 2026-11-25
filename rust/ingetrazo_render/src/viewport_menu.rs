@@ -152,7 +152,8 @@ pub fn read_facts(
     let (groups, faces, edges) = (pick(&group_cls), pick(&face_cls), pick(&edge_cls));
     let linked = |g: &Bound<'_, PyAny>| links.call_method1("is_linked", (g,)).and_then(|v| v.is_truthy()).unwrap_or(false);
     fn ancestor<'py>(links: &Bound<'py, PyModule>, g: &Bound<'py, PyAny>) -> Option<Bound<'py, PyAny>> {
-        links.call_method1("linked_ancestor", (g,)).ok().filter(|v| !v.is_none())
+        let _ = links;
+        crate::host_context::core_module(g.py()).ok()?.call_method1("link_linked_ancestor", (g,)).ok().filter(|v| !v.is_none())
     }
     let all = |f: &dyn Fn(&Bound<'_, PyAny>) -> bool| !sel.is_empty() && sel.iter().all(f);
     let types: Vec<String> = sel.iter().map(type_name).collect();
@@ -616,7 +617,7 @@ fn link_host<'py>(sel: &[Bound<'py, PyAny>]) -> PyResult<Option<Bound<'py, PyAny
     if links.call_method1("is_linked", (&part,))?.is_truthy()? {
         return Ok(Some(part));
     }
-    Ok(Some(links.call_method1("linked_ancestor", (&part,))?).filter(|h| !h.is_none()))
+    Ok(Some(crate::host_context::core_module(part.py())?.call_method1("link_linked_ancestor", (&part,))?).filter(|h| !h.is_none()))
 }
 
 /// Rename… : the chrome's name prompt, answered into the tree's own rename

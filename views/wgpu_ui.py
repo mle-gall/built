@@ -370,15 +370,15 @@ def _options(view):
             group = next(iter(selected))
             if getattr(group, "text3d", None) and not getattr(group, "locked", False):
                 from core import links
-                if links.linked_ancestor(group) is None:
+                if ingetrazo_core.link_linked_ancestor(group) is None:
                     out.append(("edittext3d", "Edit 3D Text…", "", 0, lambda: _window(view)._on_edit_3d_text(group)))
     elif name == "PlaceGroupTool" and getattr(tool._group, "text3d", None):
-        from views.font_picker import text3d
+        from ingetrazo_render.font_picker import text3d
         win = _window(view)
         out.append(("textfont", "Text and font…", "", 0,
                     lambda: text3d(win, tool._group.text3d, win._place_text3d)))
     elif name in ("DimensionTool", "TextTool"):
-        from views.font_picker import annotation
+        from ingetrazo_render.font_picker import annotation
         out.append(("font", "Font…", "", 0, lambda: annotation(_window(view))))
     if name == "DimensionTool":
         out.append(("dimstyle", "Dimension style…", "", 0, lambda: _open_form(view, "dimstyle")))
@@ -1138,12 +1138,12 @@ def _tree_action(win, view, action) -> None:
             _tree_action(win, view, f"{'eye' if what == 'eye' else what}{SEP}n:{nk}")
         elif verb == "insp" and key == "linkfile" and groups:
             from core import links as _links
-            holder = _links.linked_ancestor(groups[0])
+            holder = ingetrazo_core.link_linked_ancestor(groups[0])
             if holder is not None:
                 _select(win, [holder])
         elif verb == "insp" and key.startswith("link") and groups:
             from core import links as _links
-            holder = _links.linked_ancestor(groups[0])
+            holder = ingetrazo_core.link_linked_ancestor(groups[0])
             _link_action(win, view, holder if holder is not None else groups[0], key)
         elif verb == "unfiled":
             _select(win, (getattr(view, "_ui_tree", None) or {}).get("unfiled", []))
@@ -2038,7 +2038,7 @@ def _inspector(view, win) -> None:
             sections.append(("Actions", [("linkrelink", "Relink…"),
                                          ("linkpack", "Unpack" if state == "packed" else "Pack into this file"),
                                          ("linknested", "Source only" if nested else "Include nested links")]))
-            if links.linked_ancestor(g.owner) is None:
+            if ingetrazo_core.link_linked_ancestor(g.owner) is None:
                 sections.append(("Actions", [("linksubset", "Edit linked subset…")]))
         if takeoff:
             if quantities := takeoff.quantities(g):
@@ -2119,7 +2119,7 @@ def _linked_inspector(view, win, data, key):
         copies = tree.links.get(key, [])
         top = len(stems) == 1
         visible = all(ingetrazo_core.tag_edits.folder_visible(scene, f) for f in node.get("folders") or [node["folder"]])
-        entry = links.registry(scene).get(path) or {}
+        entry = scene.link_registry.get(path) or {}
         overrides = len(entry.get("overrides") or {})
         parent = Path(path).parent
         where = str(parent) if len(parent.parts) <= 3 else "…/" + "/".join(parent.parts[-2:])
@@ -2225,10 +2225,10 @@ def _link_action(win, view, g, key) -> None:
             wgpu_tabs.open_link_source(win, Path(rec["path"]), g)
             return
         elif key == "linkpack":
-            packed = not links.is_packed(scene, rec["path"])
+            packed = not ingetrazo_core.link_is_packed(scene, rec["path"])
             if not packed:
                 links.reload(scene, rec["path"])
-            links.set_packed(scene, rec["path"], packed)
+            ingetrazo_core.link_set_packed(scene, rec["path"], packed)
         elif key == "linknested":
             win._set_link_nested(g, not rec.get("include_nested", True))
         elif key == "linkrelink":
@@ -2385,7 +2385,7 @@ def _run(win, actions, source_view=None) -> None:
             save_thumbnail_mode(arg == "1")
             continue
         if kind == "font":
-            from views.font_picker import answer
+            from ingetrazo_render.font_picker import answer
             answer(win, arg, source_view)
             continue
         if kind == "review":
@@ -2740,7 +2740,7 @@ def _form_apply(win, view, arg) -> None:
     entry = FORMS[name][2][int(fid)]
     kind, attr = entry[0], entry[1]
     if name == "dimstyle" and kind == "button" and attr is None:
-        from views.font_picker import annotation
+        from ingetrazo_render.font_picker import annotation
         annotation(win)
     elif kind == "button":
         getattr(panel, attr)()

@@ -18,11 +18,6 @@ from core.scene import Scene
 from tests.test_core_protocol import _expected, _got, _inverse, _read
 from tests.test_store_mesh import fingerprint, pytestmark  # noqa: F401
 
-@pytest.fixture
-def guard(monkeypatch):
-    """No ported path materialises a store mesh."""
-    monkeypatch.setattr(S.StoreMesh, "_materialise",
-                        lambda m: pytest.fail("materialised a store mesh"))
 
 
 # ------------------------------------------------- 1. leaving an instance
@@ -61,7 +56,7 @@ def _edit_and_leave(sc, h, group):
     h.execute(ReshareInstanceCommand(g, proto, xform, edited, inner))
 
 
-def test_leaving_an_instance_names_the_definition_and_its_copies(guard):
+def test_leaving_an_instance_names_the_definition_and_its_copies():
     sc, proto, copies = _instances()
     h = History(sc)
     before = _read(proto)
@@ -134,7 +129,7 @@ def _draw_beside():
     return seen, records, sc
 
 
-def test_drawing_beside_small_plates_keeps_their_faces(guard):
+def test_drawing_beside_small_plates_keeps_their_faces():
     seen, records, sc = _draw_beside()
     assert type(sc.mesh) is S.StoreMesh
     for change, want in records:
@@ -165,7 +160,7 @@ def test_a_plate_whose_ring_changes_is_still_rebuilt():
 
 # --------------------------------------------------- 3. split into pieces
 
-def test_split_empties_the_group_into_a_store_mesh(guard):
+def test_split_empties_the_group_into_a_store_mesh():
     m = M.Mesh()
     m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
     m.add_face([V(4, 0, 0), V(5, 0, 0), V(5, 1, 0), V(4, 1, 0)])

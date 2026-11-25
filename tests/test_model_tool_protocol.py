@@ -53,7 +53,7 @@ def test_scale_form_keeps_other_axes_and_allows_undo_past_the_placement(monkeypa
     from core.group_scale import group_scale
     from core.history import InsertGroupCommand
     from ingetrazo_render import chrome_forms
-    from views.scale_editor import ask_scale
+    from ingetrazo_render import ask_scale
 
     vp = _Vp(Scene())
     group, _ = _pair()

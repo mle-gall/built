@@ -173,7 +173,7 @@ fn edit_text(win: &Bound<'_, PyAny>, group: Option<Bound<'_, PyAny>>) -> PyResul
         "partial",
         (wrap_pyfunction!(apply_text, py)?, win, scene, group),
     )?;
-    py.import("views.font_picker")?
+    py.import("ingetrazo_render.font_picker")?
         .call_method1("text3d", (win, params, done))?;
     Ok(())
 }

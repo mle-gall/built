@@ -129,7 +129,7 @@ def test_no_active_layer_walks_no_group_and_tags_no_group():
     scene = Scene()
     scene.groups.append(Group(Mesh(), name="g"))
     history = History(scene)
-    assert history._objects_before() == set()
+    assert history._native.objects_before(history.scene) == set()
     f = _square(scene.mesh)
     history.execute(MakeGroupCommand([f], list(scene.mesh.edges)))
     assert layer_of(scene.groups[-1]) == DEFAULT_LAYER

@@ -14,7 +14,7 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group
 from core.mesh import Mesh
-from views import component_thumbs
+from ingetrazo_render import component_thumbnail, component_signature
 
 
 def _component(i):
@@ -32,8 +32,9 @@ def test_only_rows_on_screen_are_drawn(win, monkeypatch):
     from tests.test_replace_component import _component_sheet
     from tests.test_library_sheet import act
     drawn = []
-    real = component_thumbs._polygons
-    monkeypatch.setattr(component_thumbs, "_polygons", lambda g: (drawn.append(g.name), real(g))[1])
+    from core import lazy_mesh
+    plan = lazy_mesh.plan_of
+    monkeypatch.setattr(lazy_mesh, "plan_of", lambda mesh: (drawn.append(id(mesh)), plan(mesh))[1])
     scene = win.viewport.scene
     scene.groups.extend(_component(i) for i in range(120))
     scene.version += 1
@@ -41,7 +42,8 @@ def test_only_rows_on_screen_are_drawn(win, monkeypatch):
     assert len(tiles) == 120 and drawn == []
     for visible in (tiles[:8], tiles[-4:]):
         act(win, "component-previews", *(t["icon"] for t in visible))
-        assert drawn[-len(visible):] == [t["label"] for t in visible]
+        by_name = {g.name: id(g.mesh) for g in scene.groups}
+        assert drawn[-len(visible):] == [by_name[t["label"]] for t in visible]
     assert len(drawn) == 12
 
 
@@ -53,7 +55,6 @@ def test_nested_lazy_thumbnail_matches_eager_without_materialization(monkeypatch
     from tests.test_deferred_mesh import _open
     monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)
     monkeypatch.setattr(igz, "_BULK_MIN", 1)
-    monkeypatch.setattr(component_thumbs, "MAX_FACES", 5)
     proto = _component(0).mesh
     proto.faces[0].attrs["color"] = [0.8, 0.2, 0.4]
     children = []
@@ -72,14 +73,13 @@ def test_nested_lazy_thumbnail_matches_eager_without_materialization(monkeypatch
     eager = _open(monkeypatch, path, False).groups[0]
     lazy = _open(monkeypatch, path, True).groups[0]
     assert type(lazy.children[0].mesh) is DeferredMesh
-    from ingetrazo_render import component_raster
-    expected = component_raster(eager, 80).rgba()
+    expected = component_thumbnail(eager, 80, max_faces=5).rgba()
     monkeypatch.setattr(DeferredMesh, "_materialize", lambda self: pytest.fail(
         "a thumbnail built editable mesh topology"))
     assert lazy.children[0].mesh is lazy.children[-1].mesh
-    assert [row[1:] for row in component_thumbs._signature(lazy)] == [
-        row[1:] for row in component_thumbs._signature(eager)]
-    actual = component_thumbs.thumbnail(lazy, 80).rgba()
+    assert [row[1:] for row in component_signature(lazy)] == [
+        row[1:] for row in component_signature(eager)]
+    actual = component_thumbnail(lazy, 80, max_faces=5).rgba()
     assert actual == expected
     # Signature validation and a second picture must remain lazy too.
-    assert component_thumbs.thumbnail(lazy, 80).rgba() == expected
+    assert component_thumbnail(lazy, 80, max_faces=5).rgba() == expected

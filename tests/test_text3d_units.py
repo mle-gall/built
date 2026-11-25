@@ -14,7 +14,7 @@ import pytest
 from core import units
 from core.scene import Scene
 from ingetrazo_render import font_length
-from views import font_picker
+from ingetrazo_render import font_picker
 
 
 def exercise_picker(unit, typed, params=None, precision=2, changes=None, cancel=False):

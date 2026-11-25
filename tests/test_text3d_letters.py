@@ -173,7 +173,7 @@ def test_edit_3d_text_reaches_the_container_from_a_letter_inside(native_host, mo
     text = make_text_group(text_params("Ab", "Sans"))
     scene.groups.append(text)
     opened = []
-    monkeypatch.setattr("views.font_picker.text3d", lambda win, params, done: opened.append(params))
+    monkeypatch.setattr("ingetrazo_render.font_picker.text3d", lambda win, params, done: opened.append(params))
     for parent, picked in [(text, text.children[1]), (None, text)]:
         scene.edit_group = parent
         scene.select([picked])
@@ -368,7 +368,7 @@ def test_edit_3d_text_refuses_a_text_edited_by_hand(native_host, monkeypatch):
     scene.select([group])
     flashed, opened = [], []
     monkeypatch.setattr(native_host.viewport, "flash_status", lambda msg, ms: flashed.append(msg))
-    monkeypatch.setattr("views.font_picker.text3d", lambda *args: opened.append(args))
+    monkeypatch.setattr("ingetrazo_render.font_picker.text3d", lambda *args: opened.append(args))
     menu = context_menu_build(native_host.window, native_host.view)
     edit = menu.find("edittext3d")
     assert edit and not edit.enabled and "edited by hand" in edit.label

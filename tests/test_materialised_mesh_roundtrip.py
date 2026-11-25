@@ -6,11 +6,11 @@ import random
 import numpy as np
 from ingetrazo_core import Vec3
 
-from core.store_mesh import empty_store_mesh
+from core.store_mesh import StoreMesh
 from core.topology import heal_overlapping_faces
 
 
-def test_seeded_materialisation_relink_weld_and_face_recovery():
+def test_seeded_store_relink_weld_and_face_recovery():
     rng = random.Random(932740)
     digest = hashlib.sha256()
 
@@ -21,7 +21,7 @@ def test_seeded_materialisation_relink_weld_and_face_recovery():
         return v.key & ((1 << 40) - 1)
 
     for i in range(48):
-        mesh = empty_store_mesh()
+        mesh = StoreMesh()
         x, y = rng.randint(-100, 100), rng.randint(-100, 100)
 
         def square(left, bottom, right, top):
@@ -39,11 +39,7 @@ def test_seeded_materialisation_relink_weld_and_face_recovery():
         mesh.remove_face(g)
         mesh.remove_edge(loose)
         saved = mesh.capture_state()
-        mesh._materialise()
-        handles = dict(mesh._objmap)
         mesh.restore_state(saved)
-        mesh._materialise()
-        assert all(mesh._objmap[k] is obj for k, obj in handles.items())
         mesh.relink_edge(loose)
         mesh.relink_face(g)
         points = np.asarray([(x+j*.000051, y, 0.) for j in rng.sample(range(25), 25)]
@@ -59,7 +55,8 @@ def test_seeded_materialisation_relink_weld_and_face_recovery():
         record([[key(f), [[key(v) for v in r] for r in [f.loop,*f.hole_loops]], f.attrs]
                 for f in mesh.faces])
 
-    assert digest.hexdigest() == "b9856a05e4efedbe2af0b5a51a669b0bb343a8b455620a414502271c3ec5aeaf"
+    # Store-local keys and ordered incidence recorded at integration commit 1a75bd48.
+    assert digest.hexdigest() == "0c1b2eb2397f662f744bb3eccaf01f9dfc28bf55d829ff8f68c7f1dcbdee173f"
 
 
 def test_seeded_fold_keeps_winding_attributes_and_soft_edges():
@@ -71,14 +68,13 @@ def test_seeded_fold_keeps_winding_attributes_and_soft_edges():
     digest = hashlib.sha256()
     for seed in range(48):
         n = rng.randint(4, 10)
-        mesh = empty_store_mesh()
+        mesh = StoreMesh()
         points = [Vec3(*outline[i * len(outline) // n], rng.randrange(-128, 128) / 256)
                   for i in range(n)]
         face = mesh.add_face(points)
         face.attrs["seed"] = seed
         for edge in mesh.edges:
             edge.curve = 17
-        mesh._materialise()
         moved = {_key(p) for p in points[:n // 2]} if seed % 2 else set()
         assert fold_nonplanar_faces(mesh, moved=moved) == [face]
         def ring(f):
@@ -96,7 +92,7 @@ def test_seeded_orphan_trim_and_displaced_registry():
     rng = random.Random(19654)
     digest = hashlib.sha256()
     for seed in range(32):
-        mesh = empty_store_mesh()
+        mesh = StoreMesh()
         intervals = [(0, 12), (3, 6), (8, 10), (11, 16)]
         rng.shuffle(intervals)
         for a, b in intervals:
@@ -104,7 +100,6 @@ def test_seeded_orphan_trim_and_displaced_registry():
             e.layer = str(a)
             e.soft = a % 2 == 0
         ends = [mesh.add_edge(Vec3(i, 4, 0), Vec3(i, 6, 0)).v0 for i in range(4)]
-        mesh._materialise()
         for v in ends[1:]:
             mesh.place_vertex(v, ends[0].position)
         mesh.move_vertex(ends[0], Vec3(2, 2, 0))

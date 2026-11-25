@@ -20,7 +20,6 @@ def test_store_coordinates_moves_weld_and_snapshots(origin, monkeypatch):
     scene = Scene()
     mesh = scene.mesh
     assert isinstance(mesh, StoreMesh)
-    monkeypatch.setattr(StoreMesh, "_materialise", lambda *_: pytest.fail("materialised"))
     x, y = origin
     ring = [(x + .012, y + .02, 0.), (x + .042, y + .02, 0.),
             (x + .042, y + .06, 0.), (x + .012, y + .06, 0.)]
@@ -101,7 +100,6 @@ def test_raw_lambert_draw_pick_snap_push_and_weld(view, monkeypatch):
 
     mesh = view.scene.mesh
     assert isinstance(mesh, StoreMesh)
-    monkeypatch.setattr(StoreMesh, "_materialise", lambda *_: pytest.fail("materialised"))
     history = view.source_viewport.history
     ring = [(650000.+dx, 6860000.+dy, 0.) for dx, dy in
             [(.01, .02), (.03, .02), (.03, .04), (.01, .04)]]
@@ -265,11 +263,11 @@ def test_raw_lambert_metal_raster_and_id_buffer(native):
 
 @pytest.mark.parametrize("dtype,counts", [("f4",(1,0,0)), ("f8",(2,1,0))])
 def test_bulk_weld_uses_source_precision_at_the_radius(dtype, counts):
-    from core.store_mesh import store_from_source
+    from ingetrazo_core import store_views
     points = np.array([[0.,0.,0.], [3.0003e-8,1e-4,0.]], dtype='f4').astype(dtype)
     empty = np.empty(0, dtype=np.int64)
     source = dict(pos=points, edges=[[0,1]], counts=empty, sizes=empty, rings=empty)
-    store, _ = store_from_source(source)
+    store, _ = store_views.store_from_source(source)
     assert store.counts() == counts
     mesh = Scene().mesh
     vertices, ids = mesh.bulk_weld(points)

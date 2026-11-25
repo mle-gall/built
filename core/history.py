@@ -219,40 +219,6 @@ class SetPluginDataCommand(Command):
         scene.version += 1
 
 
-def _geometry_plan(cmd, scene, targets):
-    """Enlist all known stores for rollback. Use transaction replay only
-    when it also covers the other commands in the step."""
-    if isinstance(cmd, CompoundCommand):
-        coverage = [_geometry_plan(c, scene, targets) for c in cmd.commands]
-        return all(coverage) and (type(cmd) is CompoundCommand or cmd.journal_parts)
-    if isinstance(cmd, GroupInContextCommand):
-        return _geometry_plan(cmd.inner, scene, targets)
-    if isinstance(cmd, MakeComponentOfCommand):
-        return _geometry_plan(cmd._nest, scene, targets)
-    if isinstance(cmd, MakeNestedGroupCommand) and cmd._inner is not None:
-        return _geometry_plan(cmd._inner, scene, targets)
-    if isinstance(cmd, MeshCommand):
-        from core.store_mesh import StoreMesh
-        meshes = cmd.geometry_meshes(scene)
-        stores = [m for m in meshes if type(m) is StoreMesh]
-        if stores:
-            targets.append((cmd, stores))
-        return len(stores) == len(meshes)
-    return _uses_doc_undo(cmd, scene)
-
-
-def _uses_doc_undo(cmd, scene) -> bool:
-    if getattr(cmd, "_journal_geometry", False):
-        return True
-    flag = getattr(cmd, "doc_undo", False)
-    if callable(flag):
-        try:
-            return bool(flag(scene))
-        except Exception:  # noqa: BLE001 — undecided: its own undo
-            return False
-    return bool(flag)
-
-
 # ---- Concrete commands ------------------------------------------------------
 
 def _dirty_group_chunks(scene) -> None:
@@ -293,10 +259,6 @@ def _dirty_placements(groups) -> None:
         mesh = getattr(g, "mesh", None)
         if mesh is not None:
             mesh.invalidate_placement_chunks()
-
-
-#: The placement fields a viewport chunk depends on (see _dirty_placements).
-_RENDER_FIELDS = ["layer", "hidden", "material"]
 
 
 def _unselect(scene, items) -> None:
@@ -667,150 +629,6 @@ class MeshSnapshotCommand(MeshCommand):
             scene.version += 1
 
 
-def _move_holds(scene, placements, moved) -> None:
-    """The dimensions held on a vertex inside ``placements`` hold the
-    same vertex in its copy now: ``moved`` maps ``id`` of each part and
-    mesh replaced to its replacement (UnlinkCommand, either way). Their
-    holds would otherwise stay on the parts no longer placed — still
-    reading as alive through the placement at the top of their chain."""
-    dims = getattr(scene, "dimensions", None) or ()
-    if not dims or not moved:
-        return
-    from core.dimension import VertexAnchor
-    roots = {id(g) for g in placements}
-
-    def remap(h):
-        if h is None or not any(id(g) in roots or id(g) in moved
-                                for g in h.chain):
-            return h
-        mesh = moved.get(id(h.mesh), h.mesh)
-        chain = tuple(moved.get(id(g), g) for g in h.chain)
-        if mesh is h.mesh:
-            return VertexAnchor(h.vertex, mesh, chain)
-        try:
-            v = mesh.vertex_at(QVector3D(h.vertex.position))
-        except Exception:  # noqa: BLE001 — a mesh that cannot answer
-            v = None
-        return VertexAnchor(v, mesh, chain) if v is not None else None
-
-    for dim in dims:
-        for which in ("a", "b"):
-            name = "anchor_" + which
-            if getattr(dim, name, None) is not None:
-                setattr(dim, name, remap(getattr(dim, name)))
-            holds = getattr(dim, "_holds", None)
-            if holds and holds.get(which):
-                holds[which] = [h for h in map(remap, holds[which])
-                                if h is not None]
-
-
-class _TagState:
-    """What the tags tree, the link registry and the materials were at one
-    moment (UnlinkCommand): undo and redo go from one such state to the
-    other by changing only what differs between them, so a tag made or
-    renamed in the Layers panel in between (not on the undo stack) is
-    left alone."""
-
-    _MAPS = ("folder_parents", "folder_visibility", "layer_folder_names",
-             "layer_folder_uids")
-
-    def __init__(self, scene) -> None:
-        from copy import deepcopy
-        from core import links
-        from core.layers import folders_of, layer_values
-        self.layers = list(scene.layers)
-        self.attrs = {id(ly): layer_values(ly) for ly in self.layers}
-        self.folders = list(folders_of(scene))
-        self.maps = {name: dict(getattr(scene, name, None) or {})
-                     for name in self._MAPS}
-        self.registry = deepcopy(links.registry(scene))
-        self.cache = dict(scene.__dict__.get("_link_tag_tables") or {})
-        self.materials = dict(scene.materials)
-        self.active = getattr(scene, "active_layer", None)
-
-    @staticmethod
-    def _sync(now: dict, old: dict, new: dict, copy=lambda v: v) -> None:
-        for key in old.keys() | new.keys():
-            a, b = old.get(key, _MISSING), new.get(key, _MISSING)
-            if a is b or (a is not _MISSING and b is not _MISSING and a == b):
-                continue
-            if b is _MISSING:
-                now.pop(key, None)
-            else:
-                now[key] = copy(b)
-
-    def go(self, scene, to: "_TagState") -> None:
-        """Change ``scene`` from this state to ``to``."""
-        from copy import deepcopy
-        from core import links
-        old_ids = {id(ly) for ly in self.layers}
-        new_ids = {id(ly) for ly in to.layers}
-        scene.layers[:] = [ly for ly in scene.layers
-                           if id(ly) in new_ids or id(ly) not in old_ids]
-        have = {id(ly) for ly in scene.layers}
-        for i, ly in enumerate(to.layers):
-            if id(ly) not in have:
-                scene.layers.insert(min(i, len(scene.layers)), ly)
-        for ly in to.layers:
-            a, b = self.attrs.get(id(ly), {}), to.attrs[id(ly)]
-            for k, v in b.items():
-                if a.get(k, _MISSING) != v:
-                    setattr(ly, k, v)
-        folders = [f for f in (scene.layer_folders or ())
-                   if f in to.folders or f not in self.folders]
-        for i, f in enumerate(to.folders):
-            if f not in folders:
-                folders.insert(min(i, len(folders)), f)
-        maps = {}
-        for name in self._MAPS:
-            now = dict(getattr(scene, name, None) or {})
-            self._sync(now, self.maps[name], to.maps[name])
-            maps[name] = now
-        for name, now in maps.items():
-            setattr(scene, name, now)
-        scene.layer_folders = folders
-        self._sync(links.registry(scene), self.registry, to.registry, deepcopy)
-        self._sync(scene.__dict__.setdefault("_link_tag_tables", {}),
-                   self.cache, to.cache)
-        self._sync(scene.materials, self.materials, to.materials)
-        if self.active != to.active:
-            scene.active_layer = to.active
-
-
-_MISSING = object()
-
-
-def _nested_pairs(old, new) -> list:
-    """``(old, new)`` for the parts and meshes of a file linked inside a
-    link just unlinked, now read again as the host's own link (``new``):
-    the part read again for each one ``old`` held. ``old``'s parts came
-    through the outer file, under the uids it gave them — its copy of
-    this file named by ``old.source_uid`` (``links.stable_uid``)."""
-    from core import links
-    from core.purge import iter_groups
-    origin = getattr(old, "source_uid", None)
-    out = []
-    if old.mesh is not None and new.mesh is not None:
-        out.append((old.mesh, new.mesh))
-    if not origin:
-        return out
-    fresh = {}
-    for part in iter_groups(new.children or ()):
-        src = getattr(part, "source_uid", None)
-        if src:
-            fresh[links.stable_uid(origin, src)] = part
-    meshes = {id(old.mesh)}
-    for part in iter_groups(old.children or ()):
-        twin = fresh.get(getattr(part, "source_uid", None))
-        if twin is None:
-            continue
-        out.append((part, twin))
-        if id(part.mesh) not in meshes:
-            meshes.add(id(part.mesh))
-            out.append((part.mesh, twin.mesh))
-    return out
-
-
 def _discard_removed_selection(scene):
     for element in tuple(scene.selection):
         owner = getattr(element, "_m", None)
@@ -824,146 +642,6 @@ def _drop_dead_elements(scene, mesh) -> None:
     (answered by the store for a store-backed mesh: no view per face)."""
     scene.selection = {s for s in ElementSet(scene.selection)
                        if not isinstance(s, (Face, Edge)) or mesh._store.is_live(s.key)}
-
-
-def _merge_overlapping_planes(scene, before, added, *, on_rebuild=None,
-                              others=False) -> int:
-    """Rebuild, plane by plane, where faces just ``added`` to the mesh
-    overlap faces it already had (``before``): each region of the plane
-    ends up covered by ONE face, as when a face is drawn or pasted there
-    (:class:`RebuildPlaneFacesCommand`, scoped to the faces involved).
-    Faces that only share an edge or a corner are left alone, and so is
-    every plane no older face overlaps. Runs inside a command that already
-    holds a snapshot of the mesh, so it takes none. Returns how many planes
-    were rebuilt. ``on_rebuild`` lets a caller take its snapshot lazily,
-    immediately before the first mutation, only if a rebuild is needed.
-
-    ``others=True``: ``before`` is every face of the mesh but ``added``
-    (pass None). A store-backed mesh then finds the face pairs whose boxes
-    overlap natively (``MeshStore.plane_merge_candidates``) and the plane
-    tests below run on those pairs only, in the same order.
-    """
-    if not added:
-        return 0
-    mesh = scene.mesh
-    tol = RebuildPlaneFacesCommand._TOL
-    found = None
-    if others:
-        from core.store_parts import merge_candidates
-        found = merge_candidates(mesh, added, tol)
-        if found is None:
-            ids = set(map(element_identity, added))
-            before = [f for f in mesh.faces if f.key not in ids]
-    if found is None:
-        if not before:
-            return 0
-        live = set(map(element_identity, mesh.faces))
-        added = [f for f in added if f.key in live]
-        if not added:
-            return 0
-
-    def box(f):
-        ps = f.vertices
-        xs = [p.x() for p in ps]
-        ys = [p.y() for p in ps]
-        zs = [p.z() for p in ps]
-        return (min(xs), min(ys), min(zs)), (max(xs), max(ys), max(zs))
-
-    def unit_normal(f):
-        n = f._newell()
-        length = n.length()
-        return n / length if length > 1e-9 else None
-
-    def overlap(alo, ahi, blo, bhi) -> bool:
-        # The _plane_merges test of Paste: the boxes overlap with some area
-        # along each axis, or are both flat along it.
-        return all(alo[i] < bhi[i] - tol and blo[i] < ahi[i] - tol
-                   or abs(ahi[i] - alo[i]) < tol and abs(bhi[i] - blo[i]) < tol
-                   for i in range(3))
-
-    if found is not None:
-        new_faces, pairs = found
-        entries: dict = {}
-
-        def entry(j):
-            e = entries.get(j)
-            if e is None:
-                nf = new_faces[j]
-                e = entries[j] = (nf, unit_normal(nf), *box(nf))
-            return e
-
-        def candidates():
-            for f, hits in pairs:
-                yield f, (entry(j) for j in hits)
-    else:
-        new = []
-        glo = [float("inf")] * 3
-        ghi = [float("-inf")] * 3
-        for f in added:
-            n = unit_normal(f)
-            if n is None:
-                continue
-            lo, hi = box(f)
-            new.append((f, n, lo, hi))
-            glo = [min(a, b) for a, b in zip(glo, lo)]
-            ghi = [max(a, b) for a, b in zip(ghi, hi)]
-        if not new:
-            return 0
-        added_ids = set(map(element_identity, added))
-
-        def candidates():
-            for f in before:
-                if f.key not in live or f.key in added_ids:
-                    continue
-                lo, hi = box(f)
-                if not all(lo[i] <= ghi[i] + tol and glo[i] <= hi[i] + tol
-                           for i in range(3)):
-                    continue
-                yield f, (e for e in new if overlap(lo, hi, e[2], e[3]))
-
-    planes: list = []          # [origin, normal, [old faces], [new faces]]
-    for f, near in candidates():
-        n = None
-        for nf, nn, nlo, nhi in near:
-            if nn is None:
-                continue
-            if n is None:
-                n = unit_normal(f)
-                if n is None:
-                    break
-            if abs(QVector3D.dotProduct(n, nn)) < 1.0 - 1e-6:
-                continue
-            o = nf.vertices[0]
-            if any(abs(QVector3D.dotProduct(p - o, nn)) > tol
-                   for p in f.vertices):
-                continue
-            for entry_ in planes:
-                if (abs(QVector3D.dotProduct(entry_[1], nn)) > 1.0 - 1e-6
-                        and abs(QVector3D.dotProduct(o - entry_[0],
-                                                     entry_[1])) < tol):
-                    break
-            else:
-                entry_ = [QVector3D(o), QVector3D(nn), [], []]
-                planes.append(entry_)
-            if f not in entry_[2]:
-                entry_[2].append(f)
-            if nf not in entry_[3]:
-                entry_[3].append(nf)
-    if not planes:
-        return 0
-    if on_rebuild is not None:
-        on_rebuild()
-    keep = ElementSet(scene.selection)
-    for origin, n, old_faces, new_faces in planes:
-        # The new faces on that plane that overlap NO older face stay as
-        # they are; the rest rebuild with the older faces they cover.
-        cmd = RebuildPlaneFacesCommand(origin, n,
-                                       faces=old_faces + new_faces)
-        cmd.take_snapshot = False
-        cmd.do(scene)
-    scene.selection = set(keep)
-    _drop_dead_elements(scene, mesh)
-    return len(planes)
 
 
 def placement_is_identity(xform, tol: float = 1e-6) -> bool:
@@ -1047,8 +725,7 @@ class CompoundCommand(Command):
 
     def doc_undo(self, scene) -> bool:
         """By its transaction when every part would be."""
-        return bool(self.commands) and all(
-            _uses_doc_undo(c, scene) for c in self.commands)
+        return DocumentHistory.transaction_covers(self.commands, scene)
 
     def doc_after(self, scene, phase) -> None:
         parts = reversed(self.commands) if phase == "undo" else self.commands
@@ -1373,72 +1050,18 @@ class History:
             raise ValueError("revision must be between zero and the current revision")
         return self._native.changes_since(revision)
 
-    def _run(self, cmd, phase, operation):
-        if getattr(self.scene, 'worksession_read_only', False):
-            self.last_rejected = 'This project file is read-only here: make it the file you edit first.'
-            return False
-        target = getattr(cmd, "_history_mesh", None) or self.scene.mesh
-        st = target.__dict__.get("_store")
-        if st is not None:
-            matrix = st.frame_matrix
-            current = (tuple(st.frame_origin), tuple(matrix) if matrix is not None else None)
-            if phase == "execute" and not st._model_frame:
-                cmd._tool_frame = current
-            frame = getattr(cmd, "_tool_frame", None)
-            if frame is not None and current != frame:
-                from core.coordinate_frame import mesh_frame
-                with mesh_frame(target, frame[0], matrix=frame[1]):
-                    return self._run(cmd, phase, operation)
-        nested = self._running
-        if not nested:
-            self._moved_signs = []
-        listeners = tuple(self._listeners)
-        self._notify(listeners, 0, cmd, phase, False)
-        self._running = True
-        ran = False
-        try:
-            result = operation(nested)
-            ran = (not self.last_error and not self.last_rejected
-                   if phase == "execute" else bool(result))
-            if ran and not nested:
-                name = getattr(cmd, "history_name", type(cmd).__name__)
-                self._native.advance(phase, name)
-            return result
-        finally:
-            self._running = nested
-            self._notify(listeners, 1, cmd, phase, ran)
-
     def execute(self, cmd: Command) -> None:
-        return self._run(cmd, "execute", lambda nested: self._execute(cmd, nested))
+        return self._native.run(self, cmd, "execute")
 
     def undo(self) -> bool:
         if not self.undo_stack:
             return False
-        return self._run(self.undo_stack[-1], "undo", self._undo)
+        return self._native.run(self, self.undo_stack[-1], "undo")
 
     def redo(self) -> bool:
         if not self.redo_stack:
             return False
-        return self._run(self.redo_stack[-1], "redo", self._redo)
-
-    def _keep_geometry_caches(self, cmd, before) -> None:
-        cv = getattr(self.scene, "content_version", None)
-        # Layer counts and dimension anchors can reuse their placement scans
-        # after edits confined to the active mesh or construction annotations.
-        if isinstance(cmd, (
-                SnapshotMutation, SnapshotCompound, AddEdgeCommand, AddFaceCommand,
-                AddDimensionCommand, AddTextLabelCommand, AddGuideCommand)):
-            rest = getattr(self, "layer_count_rest", None)
-            if (rest and rest[0] == (id(self.scene), before, id(self.scene.mesh))
-                    and getattr(cmd, "_history_mesh", None) is self.scene.mesh
-                    and (not isinstance(cmd, SnapshotMutation) or cmd._target(self.scene) is self.scene.mesh)):
-                self.layer_count_rest = (id(self.scene), cv, id(self.scene.mesh)), rest[1]
-            # Placement transforms did not change. Prototype bounds in the
-            # dimension broad phase are checked by mesh revision on lookup.
-            anchors = self.scene.__dict__.get("_anchor_placements")
-            if anchors and anchors[0] == (before, len(self.scene.groups),
-                                          id(self.scene.edit_group), id(self.scene.mesh)):
-                self.scene._anchor_placements = (cv, *anchors[0][1:]), anchors[1]
+        return self._native.run(self, self.redo_stack[-1], "redo")
 
     def context_changed(self, before) -> None:
         if not isinstance(before, tuple):
@@ -1446,69 +1069,6 @@ class History:
         version, serial = before
         if version is not None:
             self.feed.readers.context_changed(version, serial, self.scene.content_version)
-
-    def _execute(self, cmd: Command, nested=False) -> None:
-        _t0 = _time_mod.perf_counter() if _PERF else 0.0
-        self.last_rejected = None
-        before = getattr(self.scene, "content_version", None)
-        # Geometry-only commands cannot create groups, even on an active tag.
-        include_groups = not cmd.keeps_rows
-        objs_before = self._objects_before(include_groups=include_groups)
-        self.last_txn = None
-
-        def tag_objects():
-            self._tag_new_objects(objs_before, include_groups=include_groups)
-
-        try:
-            self._native.execute(self, cmd, tag_objects)
-        except Exception as exc:
-            self.scene.version += 1
-            if isinstance(exc, CommandRejected):
-                self.last_error = None
-                self.last_rejected = str(exc)
-            else:
-                self.scene.selection.clear()
-                self.last_error = f"{type(cmd).__name__}: {exc}"
-                self._log_failure(cmd, exc)
-            return
-        self._dirty_from_txn()
-        self.last_error = None
-        if _PERF:
-            _plog("command", (_time_mod.perf_counter() - _t0) * 1000.0,
-                  extra=type(cmd).__name__)
-        # Remember which mesh was active (the loose one, or a group being
-        # edited): undo/redo re-enter that context so a snapshot restore never
-        # lands on the wrong mesh after the user exits the group.
-        cmd._history_mesh = self.scene.mesh
-        if self.scene.edit_group is not None:
-            cmd._occurrences = tuple(level["session"] for level in self.scene._edit_stack)
-        self._keep_geometry_caches(cmd, before)
-        if nested:
-            return
-        cap = max(0, int(self.max_steps or 0))
-        self._native.push(cmd, cap)
-        self._rebind_dimensions()
-
-    def _follow_text_placements(self):
-        anchors = getattr(self.scene, "text_placement_anchors", None)
-        if anchors:
-            from core.coordinate_frame import model_frame
-            with model_frame():
-                for anchor in anchors:
-                    if anchor.follow(self.scene):
-                        self._moved_signs.append(anchor.path[-1])
-
-    def _rebind_dimensions(self) -> None:
-        """After every command, undo and redo: a dimension whose vertex
-        changed meshes (Make Group, Explode, a component conversion) takes
-        the vertex now standing where its endpoint was — BEFORE anything
-        else moves it. Leaving it to the next read was too late when a
-        scale followed in the same breath. Cheap: a hold that is alive is
-        a dictionary lookup and an identity test."""
-        for dim in getattr(self.scene, "dimensions", None) or ():
-            refresh = getattr(dim, "refresh_anchors", None)
-            if refresh is not None:
-                refresh(self.scene)
 
     def _log_failure(self, cmd: Command, exc: Exception) -> None:
         import datetime
@@ -1531,83 +1091,6 @@ class History:
                 fh.write(text)
         except OSError:
             pass
-
-    def _undo(self, nested=False):
-        return self._replay(True)
-
-    def _redo(self, nested=False):
-        return self._replay(False)
-
-    def _replay(self, undo):
-        source = self.undo_stack if undo else self.redo_stack
-        before = getattr(self.scene, "content_version", None)
-        cmd = source[-1]
-        self._native.replay(self, undo, False)
-        self._dirty_from_txn()
-        self._keep_geometry_caches(cmd, before)
-        self._rebind_dimensions()
-        return True
-
-    def _dirty_from_txn(self) -> None:
-        """The renderer's dirtiness from the step's transaction: the meshes
-        of the placements whose tag, Hide or paint it changed, and of their
-        subtrees, re-validate their chunks (docs/rust-document-model.md
-        §5). Commands that touch only placements no longer flag every mesh
-        themselves."""
-        rec = self.last_txn
-        if rec is None or rec[0] is None:
-            return
-        touched = rec[0].placements(_RENDER_FIELDS)
-        if touched:
-            _dirty_placements(touched)
-
-    def _objects_before(self, *, include_groups=True):
-        """The objects in the document before a command runs. With no
-        layer active only the guides, dimensions and texts (they go to
-        their automatic layers), so the default case never walks the
-        groups."""
-        from core.layers import (DEFAULT_LAYER, active_layer, auto_ids,
-                                 object_ids)
-        if active_layer(self.scene) == DEFAULT_LAYER:
-            return auto_ids(self.scene)
-        return object_ids(self.scene, include_groups=include_groups)
-
-    def _tag_new_objects(self, before, *, include_groups=True) -> None:
-        """The objects a command made go onto the active layer
-        (core.layers) — groups, components, dimensions and texts; loose
-        lines and faces stay on the default layer, so hiding a layer never
-        leaves half a solid. Done here, after the command, so every tool
-        gets it without knowing about layers."""
-        if before is None:
-            return
-        from core.layers import tag_new_objects
-        from core.purge import iter_groups
-        tagged = []
-        if tag_new_objects(self.scene, before, include_groups=include_groups, tagged_groups=tagged):
-            # Only these new placements now inherit a different tag. Dirtying
-            # all meshes turns adding one part into a full Metal scene bake.
-            for group in iter_groups(tagged):
-                group.mesh._chunk_dirty = True
-                group.mesh._attrs_dirty = True
-            self.scene.version += 1
-
-    def _in_command_mesh(self, cmd, fn, *args) -> None:
-        """Run ``fn`` with ``scene.mesh`` pointing at the mesh the command was
-        executed against (group-edit context correctness)."""
-        target = getattr(cmd, "_history_mesh", None)
-        if target is None or target is self.scene.mesh:
-            fn(*args)
-            return
-        # A closed mesh changes: an attrs swap (a paint undone after leaving
-        # its group) bumps no serial by itself, and the viewport's placement
-        # caches would keep drawing the old bake.
-        target._mut_serial += 1
-        current = self.scene.mesh
-        self.scene.mesh = target
-        try:
-            fn(*args)
-        finally:
-            self.scene.mesh = current
 
     def clear(self) -> None:
         self._native.clear_stacks()

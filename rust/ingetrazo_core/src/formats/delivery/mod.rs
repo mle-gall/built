@@ -37,8 +37,8 @@ fn store<'p>(history: &Obj<'p>, key: &Obj<'p>, values: &Obj<'p>) -> PyResult<Obj
         .call_method1("SetPluginDataCommand", ("deliveries", values))?;
     history.call_method1("execute", (cmd,))?;
     let out = py.get_type::<PyDict>().call1((py
-        .import("core.protocol.commands")?
-        .call_method1("_answer", (history, before))?,))?;
+        .import("ingetrazo_core.command_protocol")?
+        .call_method1("answer", (history, before))?,))?;
     out.set_item("key", key)?;
     Ok(out)
 }
@@ -192,9 +192,7 @@ impl<'p> Scope<'p> {
         if !inside && kids.is_empty() && !editing {
             return Ok(None);
         }
-        let item = py
-            .import("core.links")?
-            .call_method1("_clone_shell", (g,))?;
+        let item = crate::model::links::clone_shell_of(g)?;
         let mesh = g.getattr("mesh")?;
         if editing {
             let test = self.wanted.as_ref().unwrap().getattr("__contains__")?;

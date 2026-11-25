@@ -168,8 +168,7 @@ fn reset_link_tags(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<
 fn pack_link(win: &Bound<'_, PyAny>, path: PathBuf, on: bool) -> PyResult<()> {
     let py = win.py();
     let scene = win.getattr("viewport")?.getattr("scene")?;
-    py.import("core.links")?
-        .call_method1("set_packed", (&scene, &path, on))?;
+    crate::host_context::core_module(py)?.call_method1("link_set_packed", (&scene, &path, on))?;
     scene.setattr("version", scene.getattr("version")?.extract::<u64>()? + 1)?;
     if !on && path.is_file() {
         return reload_links(win, Some(path));

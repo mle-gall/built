@@ -17,7 +17,7 @@ The tree therefore mounts every linked file from what is current:
   placed through two parents (or by the host and by a linked file) is one
   row, the shortest chain's; the other chains' parts are counted there;
 * under a file's row, that file's own structure as the file has it (the
-  host's ``plugin_data["links"][path]["structure"]``, refreshed on every
+  host's ``scene.link_registry[path]["structure"]``, refreshed on every
   reload). A nested file's structure is the one its parent file mounted
   (``link:C/…`` nodes in the parent's structure). When that structure has
   one top node («Ride» in Ride.igz), the node is merged into the file row:
@@ -115,7 +115,7 @@ def walk(scene):
             continue
         seen.add(id(g))
         link = links.link_of(g)
-        inner = chain + ((links.stem(link["path"]), links._norm(link["path"])),) if link else chain
+        inner = chain + ((ingetrazo_core.link_stem(link["path"]), ingetrazo_core.link_norm(link["path"])),) if link else chain
         yield g, chain, inner, root
         kids = getattr(g, "children", None) or ()
         stack.extend((c, inner, bool(link)) for c in reversed(kids))
@@ -232,7 +232,7 @@ class Tree:
                                kind="link", path=path, stems=stems, recipe={}, tag=None, folder=base,
                                via=stems[-2] if len(stems) > 1 else None, folders=[base], merged=None)
         if len(stems) == 1:
-            entry = links.registry(self.scene).get(path)
+            entry = self.scene.link_registry.get(path)
             table = (entry or {}).get("structure") or {}
         else:
             table = _subtable(self.tables.get(stems[:-1], {}), stems[-1])

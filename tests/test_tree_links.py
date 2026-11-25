@@ -206,7 +206,7 @@ def test_eye_and_lock_on_mounted_nodes_write_overrides_and_undo(ui):
     rails = _key(view, "Rails")
     view._ui_exp.update({"n:link:A", "n:" + _key(view, "Track")})
     tag = scene.layer("A / Rails")
-    entry = links.registry(scene)[next(p for p in links.registry(scene) if p.endswith("A.igz"))]
+    entry = scene.link_registry[next(p for p in scene.link_registry if p.endswith("A.igz"))]
     assert next(r for r in rows() if r["key"] == "n:" + rails)["eye"] == 1
     act("eye", "n:" + rails)
     assert tag.visible is False and entry["overrides"]["A / Rails"] is False
