@@ -33,7 +33,9 @@ pub(super) struct Cuts {
 
 impl CutSpec {
     fn read(&self, py: Python<'_>, vertical: bool) -> PyResult<Band> {
-        let h = py.import("core.hatches")?;
+        // The native module itself: `core.hatches` is the name the `core`
+        // package gives it, and only exists once that package is imported.
+        let h = py.import("ingetrazo_core")?.getattr("hatches")?;
         let brick = h.call_method1("clean_brick", (&self.size,))?;
         let dims: [f64; 5] = h
             .call_method1("brick_dims", (&brick, &self.kind))?
@@ -262,13 +264,14 @@ mod tests {
     fn cut_previews_use_the_document_bond_and_insulation_geometry() {
         Python::initialize();
         Python::attach(|py| {
-            let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
-            py.import("sys")
-                .unwrap()
-                .getattr("path")
-                .unwrap()
-                .call_method1("insert", (0, path))
-                .unwrap();
+            // The native core is an extension module of the project's
+            // environment; the test interpreter starts without it.
+            let lib = concat!(env!("CARGO_MANIFEST_DIR"), "/../../.venv/lib");
+            let site = py.import("site").unwrap();
+            for python in std::fs::read_dir(lib).unwrap() {
+                let packages = python.unwrap().path().join("site-packages");
+                site.call_method1("addsitedir", (packages.to_str().unwrap(),)).unwrap();
+            }
             let mut spec = CutSpec {
                 hatch: "brick_bond".into(),
                 kind: "brick".into(),
