@@ -95,7 +95,7 @@ class AssistantPanel:
         elif control == "remove_photo":
             self.clear_photo()
         elif control == "view_photo" and self.last_photo:
-            from core.desktop_open import open_url
+            from ingetrazo_core.desktop_open import open_url
             open_url(self.last_photo)
         elif control == "provider":
             self.provider = value

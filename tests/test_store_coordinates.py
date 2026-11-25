@@ -131,7 +131,7 @@ def test_raw_lambert_draw_pick_snap_push_and_weld(view, monkeypatch):
 
 
 def test_metal_mouse_tools_at_raw_lambert(view):
-    from core.input_codes import Input
+    from ingetrazo_core import Input
     from ingetrazo_core import Vec3 as V
     from ingetrazo_render import KeyEvent
     from tests.test_.skp_inference_gaps import click, move, refresh, use

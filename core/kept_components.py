@@ -81,7 +81,7 @@ def definitions_of(scene) -> list:
     """One template per component definition ``scene`` holds — placed or
     kept — leaving out face-me cutouts and the app's own scale figure.
     What «Components from File…» brings in from another document."""
-    from core.insert import is_scale_figure
+    from ingetrazo_core.document_insert import is_scale_figure
     out: list = []
     seen: set = set()
     for g in (list(getattr(scene, "groups", None) or ())

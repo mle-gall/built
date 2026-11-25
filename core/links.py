@@ -121,14 +121,14 @@ def load_source(path, select=None, *, include_nested=True, link_meshes=None, pro
                                  for key, node in nodes.items()}
         materials = dict(getattr(src, "materials", {}) or {})
         from core.group import Group
-        from core.insert import is_scale_figure
+        from ingetrazo_core.document_insert import is_scale_figure
         from ingetrazo_core.mesh import Mesh
         from ingetrazo_core import Matrix4 as QMatrix4x4
         _rs.link_validate_select(select)
         groups = [g for g in src.groups if not is_scale_figure(g)]
         mesh = src.mesh
         if select is not None:
-            from core.facets import build, evaluate
+            from ingetrazo_core.facets import build, evaluate
             from collections import Counter
             from core.link_structure import row_id
             refs = select.get('uids')

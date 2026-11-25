@@ -112,7 +112,7 @@ fn document_tool_pointer<'py>(v: &Obj<'py>, key: &Obj<'py>, plus: bool) -> PyRes
     // No factory of the host's own: the pointer by its name, in the
     // preferred style.
     let py = v.py();
-    let style = py.import("core.general_settings")?.call_method1("value", ("cursor_style", "tool"))?.str()?;
+    let style = py.import("ingetrazo_core.general_settings")?.call_method1("value", ("cursor_style", "tool"))?.str()?;
     let key: Option<String> = key.extract()?;
     let name = crate::tool_cursors::tool_cursor_name(key.as_deref(), plus, style.to_str()?);
     Ok(pyo3::IntoPyObjectExt::into_bound_py_any(name, py)?)

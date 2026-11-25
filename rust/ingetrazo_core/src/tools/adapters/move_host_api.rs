@@ -387,7 +387,7 @@ fn make_copy_builder<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let scene = a.get_item(1)?;
     let tool = a.get_item(0)?;
-    let copy_builder = imported(py, "core.move_ops")?.getattr("copy_builder")?;
+    let copy_builder = imported(py, "ingetrazo_core")?.getattr("MoveCopies")?;
     copy_builder.call1((
         &scene,
         tool.getattr("_groups")?,
@@ -546,7 +546,7 @@ pub(super) const METHODS: &[Method] = &[
     ("_track_grips", Mode::Method, track_grips, &["self", "ctx"], "", ""),
     ("_grip_under", Mode::Method, grip_under, &["self", "viewport", "x", "y"], "", ""),
     ("_hovered_vertex", Mode::Static, hovered_vertex, &["ctx"], "", ""),
-    ("_make_copy_builder", Mode::Method, make_copy_builder, &["self", "scene=None"], "", "The copy command for a list of offsets, kept by the array window\nso ``3x`` / ``/3`` re-lay the copies (``core.move_ops.copy_builder``,\nthe implementation the protocol's ``move_selection`` runs too)."),
+    ("_make_copy_builder", Mode::Method, make_copy_builder, &["self", "scene=None"], "", "The copy command for a list of offsets, kept by the array window\nso ``3x`` / ``/3`` re-lay the copies (``ingetrazo_core.move_ops.copy_builder``,\nthe implementation the protocol's ``move_selection`` runs too)."),
     ("_shift", Mode::Method, shift, &["self", "viewport", "step:QVector3D"], "None", ""),
     ("_commit", Mode::Method, commit, &["self", "viewport", "delta"], "None", "Commit what is grabbed by ``delta`` (as a typed delta would)."),
     ("_tell_join", Mode::Static, tell_join, &["viewport", "commands"], "None", "Say what became of a landing on other vertices: joined, or\nrefused (and the move undone) because the join would break a\nface."),

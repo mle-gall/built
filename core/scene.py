@@ -14,7 +14,7 @@ to rebuild its dynamic VBOs.
 from __future__ import annotations
 import ingetrazo_core
 from ingetrazo_core.mesh import element_identity
-from core.element_set import ElementSet
+from ingetrazo_core import ElementSet
 
 from dataclasses import InitVar, dataclass, field
 from typing import Iterable

@@ -41,7 +41,7 @@ def test_activating_tools_swaps_the_viewport_cursor(native_host):
 
 
 def test_tool_cursor_respects_cursor_style_preference(native_host):
-    from core import general_settings
+    from ingetrazo_core import general_settings
     for style, expected in (("tool", "tool:line"), ("crosshair", "crosshair"), ("arrow", None)):
         general_settings.set_value("cursor_style", style)
         assert native_host.tool_cursor("line") == expected

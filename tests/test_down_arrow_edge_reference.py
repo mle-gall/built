@@ -14,7 +14,7 @@ from ingetrazo_render import KeyEvent
 import math
 
 import pytest
-from core.input_codes import Input as Qt
+from ingetrazo_core import Input as Qt
 from ingetrazo_core import Vec3 as V
 
 from tests.test_.skp_inference_gaps import (  # noqa: F401 (fixture)

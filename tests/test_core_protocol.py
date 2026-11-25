@@ -477,7 +477,7 @@ def test_placement_commands_reach_nested_placements():
 
 
 def test_resegment_curve_and_repair_solid():
-    from core.input_codes import Input
+    from ingetrazo_core import Input
     from ingetrazo_core import ScreenPoint
     from tools.base import ToolContext
     from tools.circle import CircleTool

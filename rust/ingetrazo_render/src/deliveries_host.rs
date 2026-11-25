@@ -688,7 +688,7 @@ struct OpenUrl {
 #[pymethods]
 impl OpenUrl {
     fn __call__(&self, py: Python<'_>) -> PyResult<()> {
-        py.import("core.desktop_open")?.call_method1("open_url", (self.target.bind(py),))?;
+        py.import("ingetrazo_core.desktop_open")?.call_method1("open_url", (self.target.bind(py),))?;
         Ok(())
     }
 }
@@ -854,7 +854,7 @@ fn delivery_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, arg: &str) -
     } else if verb == "folder" {
         let result = win.getattr("__dict__")?.call_method1("pop", ("_delivery_result", py.None()))?;
         if result.is_truthy()? {
-            py.import("core.desktop_open")?.call_method1("open_url", (result.get_item(1)?,))?;
+            py.import("ingetrazo_core.desktop_open")?.call_method1("open_url", (result.get_item(1)?,))?;
         }
     } else if let Some(key) = key.filter(|k| deliveries(py).and_then(|d| d.call_method1("records", (vp.getattr("scene")?,))?.contains(k)).unwrap_or(false)) {
         let history = vp.getattr("history")?;

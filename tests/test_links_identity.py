@@ -97,7 +97,7 @@ def test_ride_read_only():
         scene = Scene()
         igz.load_into(scene, path)
         assert not scene.link_errors
-        rows.append([row['uid'] for row in __import__('core.facets', fromlist=['build']).build(scene).values() if row['linked']])
+        rows.append([row['uid'] for row in __import__('ingetrazo_core.facets', fromlist=['build']).build(scene).values() if row['linked']])
     assert rows[0] and rows[0] == rows[1]
     assert path.stat().st_mtime_ns == before
 

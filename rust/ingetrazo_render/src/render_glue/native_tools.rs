@@ -1769,7 +1769,7 @@ impl NativeTools {
         let tool = s.getattr("tool")?;
         if mode.eq("mesh")? {
             if class_name(&tool)? == "MoveTool" && tool.getattr("start_point")?.is_none() {
-                let control = py.import("core.input_codes")?.getattr("Input")?.getattr("ControlModifier")?;
+                let control = py.import("ingetrazo_core")?.getattr("Input")?.getattr("ControlModifier")?;
                 if ctx.getattr("modifiers")?.bitand(control)?.is_truthy()? && !tool.getattr("_copy")?.is_truthy()? {
                     let kw = PyDict::new(py);
                     kw.set_item("say", false)?;

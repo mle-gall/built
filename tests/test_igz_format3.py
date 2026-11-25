@@ -256,7 +256,7 @@ def test_small_component_binary_roundtrip(tmp_path, monkeypatch):
 
 
 def test_explicit_save_backs_up_previous_geometry_and_respects_preference(tmp_path, binary, monkeypatch):
-    from core import general_settings
+    from ingetrazo_core import general_settings
     from core.layers import Layer
 
     path = tmp_path / "ride.igz"

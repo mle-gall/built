@@ -87,7 +87,7 @@ def _save_ifc(scene, path, project_name, profile, stream):
                 kept.append(obj)
         objects = kept
     if config.get('filter') is not None:
-        from core.facets import build, evaluate
+        from ingetrazo_core.facets import build, evaluate
         index = build(scene)
         allowed = {index.groups[key] for key in evaluate(index, config['filter'])}
         objects = [obj for obj in objects

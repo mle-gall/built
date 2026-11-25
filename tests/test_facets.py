@@ -2,7 +2,8 @@
 import pytest
 from core.scene import Scene
 from core.group import Group
-from core import facets, bim_registry
+from core import bim_registry
+from ingetrazo_core import facets
 from core.history import History
 
 

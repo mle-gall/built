@@ -10,7 +10,7 @@ from ingetrazo_render import KeyEvent
 import json
 
 import pytest
-from core.input_codes import Input as Qt
+from ingetrazo_core import Input as Qt
 
 from ingetrazo_render import chrome_forms
 from ingetrazo_render import chrome_sheet as cs

@@ -627,7 +627,7 @@ fn state(sheet: &Bound<'_, StartSheet>, back: bool) -> PyResult<String> {
 
 /// Show the file in the Finder (both apps).
 fn reveal(py: Python<'_>, path: &str) -> PyResult<()> {
-    py.import("core.desktop_open")?.call_method1("reveal", (path,))?;
+    py.import("ingetrazo_core.desktop_open")?.call_method1("reveal", (path,))?;
     Ok(())
 }
 

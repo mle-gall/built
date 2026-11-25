@@ -27,7 +27,7 @@ import math
 
 import numpy as np
 import pytest
-from core.input_codes import Input
+from ingetrazo_core import Input
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group

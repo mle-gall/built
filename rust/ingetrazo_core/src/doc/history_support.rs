@@ -144,7 +144,7 @@ pub(crate) fn discard_removed_selection(scene: &Obj<'_>) -> PyResult<()> {
 pub(crate) fn drop_dead_elements(scene: &Obj<'_>, mesh: &Obj<'_>) -> PyResult<()> {
     let py = scene.py();
     let sel = py
-        .import("core.element_set")?
+        .import("ingetrazo_core")?
         .call_method1("ElementSet", (scene.getattr("selection")?,))?;
     let classes = py.import("ingetrazo_core.mesh")?;
     let kinds = (classes.getattr("Face")?, classes.getattr("Edge")?).into_pyobject(py)?;

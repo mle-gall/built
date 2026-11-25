@@ -8,7 +8,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 def test_develop_an_extension_opens_the_guide(native_host, monkeypatch):
     opened = []
-    monkeypatch.setattr("core.desktop_open.open_url", opened.append)
+    monkeypatch.setattr("ingetrazo_core.desktop_open.open_url", opened.append)
     action = native_host.window._registry_actions["menu:develop_plugin"]
     action.trigger()
     assert opened == ["https://github.com/ingelibre/ingetrazo/blob/main/docs/plugins.md"]

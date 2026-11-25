@@ -135,7 +135,7 @@ pub(super) fn ctrl_tap(view: &Obj<'_>, event: &Obj<'_>) -> PyResult<()> {
     if source.is_none() || (repeat.is_callable() && repeat.call0()?.is_truthy()?) {
         return Ok(());
     }
-    let codes = py.import("core.input_codes")?;
+    let codes = py.import("ingetrazo_core")?;
     let key = event.call_method0("key")?;
     if key.eq(codes.getattr("Input")?.getattr("Key_Control")?)? {
         let kind = attr(event, "type")?;
@@ -276,7 +276,7 @@ fn init<'py>(a: &Args<'py>) -> Reply<'py> {
     view.call_method0("_prepare_surface")?;
     view.setattr("camera", py.import("core.camera")?.getattr("OrbitCamera")?.call0()?)?;
     view.setattr("source_viewport", py.None())?;
-    view.call_method1("setFocusPolicy", (py.import("core.input_codes")?.getattr("Input")?.getattr("StrongFocus")?,))?;
+    view.call_method1("setFocusPolicy", (py.import("ingetrazo_core")?.getattr("Input")?.getattr("StrongFocus")?,))?;
     view.call_method1("setMouseTracking", (true,))?;
     view.setattr("hovered_row", py.None())?;
     view.setattr("inference_index", py.None())?;

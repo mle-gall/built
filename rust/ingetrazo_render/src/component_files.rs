@@ -324,7 +324,7 @@ fn import_kept_components(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> Py
     root.setattr("xform", py.None())?;
     root.setattr("material", py.None())?;
     root.setattr("children", &templates)?;
-    let insert = py.import("core.insert")?;
+    let insert = py.import("ingetrazo_core.document_insert")?;
     insert.call_method1("merge_materials", (src.getattr("materials")?, &recipes, root))?;
     let additions = PyDict::new(py);
     for (name, recipe) in recipes.cast::<PyDict>()?.iter() {

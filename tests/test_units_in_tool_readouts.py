@@ -13,7 +13,7 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from core.input_codes import Input as Qt  # noqa: E402
+from ingetrazo_core import Input as Qt  # noqa: E402
 from ingetrazo_core import ScreenPoint as QPointF
 from ingetrazo_core import Vec3 as QVector3D
 

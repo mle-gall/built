@@ -189,7 +189,7 @@ def test_a_built_setting_applies_at_once(win):
     act(win, "side", "general")
     act(win, "v", "undo_steps", "37")
     assert win.viewport.history.max_steps == 37
-    from core import general_settings as gs
+    from ingetrazo_core import general_settings as gs
     assert int(gs.value("undo_steps")) == 37
 
 

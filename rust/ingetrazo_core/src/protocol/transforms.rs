@@ -382,15 +382,15 @@ fn move_selection<'py>(
     }
     let ctor = py.import("ingetrazo_core")?.getattr("Vec3")?;
     let d = ctor.call(PyTuple::new(py, floats(delta)?)?, None)?;
-    let ops = py.import("core.move_ops")?;
+    let ops = py.import("ingetrazo_core.move_ops")?;
     if copy {
         let n = match count {
             Some(c) => py.get_type::<PyInt>().call1((c,))?.extract()?,
             None => 1i64,
         };
         let steps = copy_offsets(&d, n, mode)?;
-        let cmd = ops
-            .call_method1("copy_builder", (&scene, groups, fs, es, guides))?
+        let cmd = py.import("ingetrazo_core")?
+            .call_method1("MoveCopies", (&scene, groups, fs, es, guides))?
             .call1((steps,))?;
         return execute(history, &cmd);
     }

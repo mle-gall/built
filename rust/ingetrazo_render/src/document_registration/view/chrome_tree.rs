@@ -40,7 +40,7 @@ fn current_path(win: &Obj<'_>) -> PyResult<String> {
 pub(super) fn waiting<'py, T>(viewport: &Obj<'py>, body: impl FnOnce() -> PyResult<T>) -> PyResult<T> {
     let py = viewport.py();
     let previous = viewport.call_method0("cursor")?;
-    viewport.call_method1("setCursor", (py.import("core.input_codes")?.getattr("Input")?.getattr("WaitCursor")?,))?;
+    viewport.call_method1("setCursor", (py.import("ingetrazo_core")?.getattr("Input")?.getattr("WaitCursor")?,))?;
     let result = body();
     viewport.call_method1("setCursor", (previous,))?;
     result

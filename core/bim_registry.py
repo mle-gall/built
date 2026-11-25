@@ -177,7 +177,7 @@ def validate(registry):
                     for code, entry in codes.items():
                         if not isinstance(entry, dict) or not isinstance(entry.get('name'), str) or ('parent' in entry and not isinstance(entry['parent'], str)):
                             errors.append(f'{key}.{code}: invalid code entry')
-    from core.facets import validate_filter
+    from ingetrazo_core.facets import validate_filter
     for section in ('views', 'rules', 'export_profiles'):
         for key, value in registry.get(section, {}).items():
             if not isinstance(value, dict):

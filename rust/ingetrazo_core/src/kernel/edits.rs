@@ -18,7 +18,7 @@ type Plane<'p> = (Obj<'p>, Obj<'p>);
 fn scan<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
     scene
         .py()
-        .import("core.scan_index")?
+        .import("ingetrazo_core.scan_index")?
         .call_method1("scan", (scene.getattr("mesh")?,))
 }
 fn objects<'p>(py: Python<'p>) -> PyResult<Obj<'p>> {

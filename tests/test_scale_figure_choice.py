@@ -117,7 +117,7 @@ def test_the_mark_travels_in_the_igz(tmp_path):
 
 
 def test_inserting_a_document_leaves_out_whatever_figure_the_app_placed(tmp_path):
-    from core.insert import is_scale_figure
+    from ingetrazo_core.document_insert import is_scale_figure
     mine = make_billboard_group(str(_png(tmp_path / "yo.png")), 1.6, "Marco", 0.33)
     sf.mark(mine)
     engineer_old = make_billboard_group("/x/c1-ingeniero.png", 1.7, "Ingeniero", 0.4)

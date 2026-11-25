@@ -76,7 +76,7 @@ fn run_explode(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> 
     let groups = scene.getattr("groups")?;
     let index = groups.call_method1("index", (&group,))?;
     me.setattr("index", &index)?;
-    let element_set = py.import("core.element_set")?.getattr("ElementSet")?;
+    let element_set = py.import("ingetrazo_core")?.getattr("ElementSet")?;
     me.setattr("_selection", element_set.call1((scene.getattr("selection")?,))?)?;
     let placement = group.getattr_opt("xform")?.unwrap_or_else(|| none(py));
     let paint = group.getattr_opt("material")?.unwrap_or_else(|| none(py));

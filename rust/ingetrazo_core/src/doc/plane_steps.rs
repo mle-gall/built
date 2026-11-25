@@ -192,7 +192,7 @@ impl RebuildPlaneFaces {
     fn _near_plane<'py>(slf: PyRef<'py, Self>, mesh: Obj<'py>, kind: &str) -> PyResult<Obj<'py>> {
         let py = slf.py();
         let step: &RecordStep = &*slf.as_super();
-        let scan = py.import("core.scan_index")?.call_method1("scan", (&mesh,))?;
+        let scan = py.import("ingetrazo_core.scan_index")?.call_method1("scan", (&mesh,))?;
         if scan.is_none() {
             return mesh.getattr(if kind == "edge" { "edges" } else { "faces" });
         }

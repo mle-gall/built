@@ -14,7 +14,7 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core import _native
 from core.group import Group, iter_placements
-from core.insert import merge_materials
+from ingetrazo_core.document_insert import merge_materials
 from core.materials import Material
 from core.mesh import DeferredMesh, Mesh, face_attrs
 from core.scene import Scene

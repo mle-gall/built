@@ -134,7 +134,7 @@ pub(super) fn merge<'py>(
     }
     checkpoint()?;
     let keep = py
-        .import("core.element_set")?
+        .import("ingetrazo_core")?
         .call_method1("ElementSet", (scene.getattr("selection")?,))?;
     let view = py.import("core.store_mesh")?.getattr("FaceView")?;
     for plane in planes {

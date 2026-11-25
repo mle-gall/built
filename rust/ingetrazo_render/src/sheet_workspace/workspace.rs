@@ -1245,7 +1245,7 @@ impl Workspace {
             r.call_method1("page_pointer", ("leave", -1., -1., 0, 0))?;
             return Ok(());
         }
-        let codes = py.import("core.input_codes")?;
+        let codes = py.import("ingetrazo_core")?;
         let double = codes.getattr("Type")?.getattr("MouseButtonDblClick")?;
         let kind =
             if kind == "press" && enum_int(&event.call_method0("type")?)? == enum_int(&double)? {
@@ -1308,7 +1308,7 @@ impl Workspace {
         };
         let control = s
             .py()
-            .import("core.input_codes")?
+            .import("ingetrazo_core")?
             .getattr("Input")?
             .getattr("ControlModifier")?;
         let zoom = enum_int(&event.call_method0("modifiers")?)? & enum_int(&control)? != 0;
@@ -1325,7 +1325,7 @@ impl Workspace {
         Self::_touch(s)
     }
     fn gesture(s: &Bound<'_, Self>, event: &Obj<'_>) -> PyResult<bool> {
-        let qt = s.py().import("core.input_codes")?.getattr("Input")?;
+        let qt = s.py().import("ingetrazo_core")?.getattr("Input")?;
         let kind = event.call_method0("gestureType")?;
         if kind.eq(qt.getattr("ZoomNativeGesture")?)? {
             let p = event.call_method0("position")?;

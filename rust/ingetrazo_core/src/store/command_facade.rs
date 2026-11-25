@@ -114,7 +114,7 @@ pub(crate) fn command_add_face(
         .call_method1("_attribute_owner", (mesh,))?;
     let scan = divide
         && py
-            .import("core.scan_index")?
+            .import("ingetrazo_core.scan_index")?
             .call_method0("enabled")?
             .is_truthy()?;
     let store = mesh.getattr("_store")?;
@@ -170,7 +170,7 @@ fn candidate_keys(mesh: &Bound<'_, PyAny>, selection: Candidates<'_>) -> PyResul
     if use_scan {
         let scan = mesh
             .py()
-            .import("core.scan_index")?
+            .import("ingetrazo_core.scan_index")?
             .call_method1("scan", (mesh,))?;
         if !scan.is_none() {
             let native = scan.getattr("native")?;
