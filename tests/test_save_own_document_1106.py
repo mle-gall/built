@@ -518,7 +518,7 @@ def test_quitting_asks_once_for_every_modified_project(win, monkeypatch):
 
 def test_cancelling_quit_in_a_later_window_keeps_the_first_window_recoverable(
         native_host, win, tmp_path, monkeypatch):
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     first = _new_tab(win, 3, tmp_path / "first.built")
     _autosave_now(win)
     slot = autosave.pending(first.path)

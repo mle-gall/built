@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from app_shell.files import do_save
+from ingetrazo_render.shell_files import do_save
 from core.settings import settings as preferences
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
@@ -26,7 +26,6 @@ SEP = cs.SEP
 
 @pytest.fixture(autouse=True)
 def _throwaway_settings(monkeypatch):
-    monkeypatch.setenv("INGETRAZO_STORE", "0")
     ss._PENDING.clear()
     yield
     ss._PENDING.clear()
@@ -366,7 +365,7 @@ def test_offscreen_units_command_opens_settings(win):
 
 
 def test_the_shell_prefs_command_opens_the_sheet(win):
-    from app_shell import files
+    from ingetrazo_render import shell_files as files
     assert files.open_settings(win)
     assert isinstance(cs.current(win), ss.SettingsSheet)
 

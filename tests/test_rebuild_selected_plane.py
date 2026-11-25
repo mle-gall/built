@@ -30,7 +30,7 @@ def _ground(mesh):
 
 @pytest.fixture
 def drawing(tmp_path):
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     host = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
     sc = host.window.viewport.scene
     _raised_box(sc.mesh)

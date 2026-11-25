@@ -54,9 +54,8 @@ def arrays_of(mesh):
         if source is not None:
             # Saved indexed topology is authoritative: coincident distinct
             # points stay distinct. JSON sources instead repeat coordinates.
-            from core.store_mesh import enabled
             pos = np.asarray(source['pos'])
-            model_f64 = enabled() and pos.dtype != np.float32
+            model_f64 = pos.dtype != np.float32
             corners = np.asarray(source['rings'], dtype=np.int64)
             if 'sequential' in source and 'arrays' not in source.get('meta', {}):
                 from core.lazy_mesh import weld

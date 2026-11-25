@@ -227,7 +227,6 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(object_merge::revert_recorded_union, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::merge_seeded_edges, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::revert_seeded_merges, m)?)?;
-    m.add_function(wrap_pyfunction!(object_merge::merge_materialised_regions, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::trace_object_loops, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::dissolve_object_edge, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::dissolve_object_region, m)?)?;
@@ -544,7 +543,6 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(group_geometry::restore_unique_placement, m)?)?;
     m.add_function(wrap_pyfunction!(group_geometry::lift_placements, m)?)?;
     m.add_function(wrap_pyfunction!(group_geometry::lower_placements, m)?)?;
-    m.add_function(wrap_pyfunction!(group_geometry::explode_object_geometry, m)?)?;
     // Unit tests link without libpython; this line made the test binary
     // keep the store's PyO3 glue (and its Python symbols) alive.
     #[cfg(not(test))]

@@ -17,7 +17,7 @@ pub struct Dense {
     pub pos: Vec<[f64; 3]>,
     pub edges: Vec<[i64; 2]>,
     pub flags: Vec<u8>,
-    pub curve: Vec<i64>,
+    pub curve: Vec<i128>,
     pub layer: Vec<i64>,
     pub corners: Vec<i64>,
     pub ring_sizes: Vec<i64>,

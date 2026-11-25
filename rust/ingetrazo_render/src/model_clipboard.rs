@@ -1,14 +1,24 @@
-//! One clipboard for the process, shared across windows and project tabs.
-//! The existing document snapshot codec supplies the inter-process payload.
-use pyo3::{prelude::*, types::PyDict, PyTraverseError, PyVisit};
+//! The model clipboard: one for the process, shared across windows and
+//! project tabs, and the only reader and writer of the platform pasteboard's
+//! model type. The document snapshot codec (`formats.clip_payload`) supplies
+//! the bytes. Without a shell (a headless host) the board is this object's
+//! own, so a copy still reaches the other documents of the process.
+use pyo3::{prelude::*, types::{PyBytes, PyDict}, PyTraverseError, PyVisit};
 use std::cell::RefCell;
 
-const MIME: &str = "com.trolltech.anymime.application--x-ingetrazo-clipboard";
+/// The type a copy is written as.
+const MIME: &str = "application/x-ingetrazo-clipboard";
+/// What builds with the Qt window wrote on macOS (Qt's name for a custom
+/// MIME type): still read, so a copy made in an older build pastes here.
+const QT_ERA_MIME: &str = "com.trolltech.anymime.application--x-ingetrazo-clipboard";
 
 #[pyclass(unsendable)]
 #[derive(Default)]
 pub struct ModelClipboard {
+    /// The pasteboard change a copy of this process answers, and that copy.
     source: RefCell<Option<(i64, Py<PyAny>)>>,
+    /// The board when no shell is attached: its bytes and change count.
+    local: RefCell<(Option<Py<PyBytes>>, i64)>,
 }
 fn install(
     vp: &Bound<'_, PyAny>,
@@ -30,33 +40,46 @@ fn install(
     Ok(())
 }
 
-// The widget host uses the platform offer supplied by its Qt application. Reuse
-// its identity for repeated pastes, but decode new offers into the receiving
-// document's own groups, materials and meshes.
-fn adopt_platform_offer(vp: &Bound<'_, PyAny>) -> PyResult<()> {
-    let py = vp.py();
-    let adapter = py.import("formats.clip")?;
-    let offer = adapter.call_method0("current_offer")?;
-    let mime = adapter.getattr("MIME")?;
-    if offer.is_none() || !offer.call_method1("hasFormat", (&mime,))?.is_truthy()? {
-        return Ok(());
+/// The shell's pasteboard, when a shell is attached.
+fn shell(py: Python<'_>) -> PyResult<Option<Bound<'_, PyModule>>> {
+    let native = py.import("app_shell.native")?;
+    Ok(native.call_method0("available")?.is_truthy()?.then_some(native))
+}
+
+impl ModelClipboard {
+    /// The model type on the board (ours first, then the Qt-era one) and
+    /// the board's change count.
+    fn offered(&self, py: Python<'_>) -> PyResult<(Option<&'static str>, i64)> {
+        let Some(native) = shell(py)? else {
+            let local = self.local.borrow();
+            return Ok((local.0.is_some().then_some(MIME), local.1));
+        };
+        let (types, count): (Vec<String>, i64) = native.call_method0("pasteboard_types")?.extract()?;
+        Ok(([MIME, QT_ERA_MIME].into_iter().find(|m| types.iter().any(|t| t == m)), count))
     }
-    let source = py
-        .import("builtins")?
-        .call_method1("getattr", (&offer, "clip", &offer))?;
-    if vp.getattr("clipboard")?.is(&source)
-        || vp
-            .getattr("_clip_adopted_from")
-            .is_ok_and(|v| v.is(&source))
-    {
-        return Ok(());
+    fn read<'py>(&self, py: Python<'py>, mime: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
+        let data = match shell(py)? {
+            Some(native) => native.call_method1("pasteboard_read", (mime,))?,
+            None => match &self.local.borrow().0 {
+                Some(bytes) => bytes.bind(py).clone().into_any(),
+                None => return Ok(None),
+            },
+        };
+        Ok(data.is_truthy()?.then_some(data))
     }
-    let data = offer.call_method1("data", (mime,))?.call_method0("data")?;
-    let other = adapter.call_method1("decode", (data,))?;
-    if !other.is_none() {
-        install(vp, &source, &other)?;
+    /// Replace the board's contents; the new change count when it took them.
+    fn write(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<Option<i64>> {
+        let Some(native) = shell(py)? else {
+            let mut local = self.local.borrow_mut();
+            local.0 = Some(data.clone().cast_into::<PyBytes>()?.unbind());
+            local.1 += 1;
+            return Ok(Some(local.1));
+        };
+        if !native.call_method1("pasteboard_write", (vec![(MIME, data)],))?.is_truthy()? {
+            return Ok(None);
+        }
+        Ok(Some(native.call_method0("pasteboard_types")?.get_item(1)?.extract()?))
     }
-    Ok(())
 }
 
 #[pymethods]
@@ -65,33 +88,19 @@ impl ModelClipboard {
     fn new() -> Self {
         Self::default()
     }
-    #[staticmethod]
-    fn available(py: Python<'_>) -> PyResult<bool> {
-        let native = py.import("app_shell.native")?;
-        if native.call_method0("available")?.is_truthy()? {
-            let (types, _): (Vec<String>, i64) =
-                native.call_method0("pasteboard_types")?.extract()?;
-            return Ok(types.iter().any(|t| t == MIME));
-        }
-        py.import("formats.clip")?
-            .call_method0("available")?
-            .is_truthy()
+    /// Whether the board holds a model copy (of this or another process).
+    fn available(&self, py: Python<'_>) -> PyResult<bool> {
+        Ok(self.offered(py)?.0.is_some())
     }
 
     /// Copy once, even when the other tab's adopted payload was decoded into
     /// distinct objects. Replacing it also releases any cached preview mesh.
     fn adopt(&self, win: &Bound<'_, PyAny>) -> PyResult<()> {
         let py = win.py();
-        let native = py.import("app_shell.native")?;
         let vp = win.getattr("viewport")?;
-        if !native.call_method0("available")?.is_truthy()? {
-            return adopt_platform_offer(&vp);
-        }
-        let (types, count): (Vec<String>, i64) =
-            native.call_method0("pasteboard_types")?.extract()?;
-        if !types.iter().any(|t| t == MIME) {
+        let (Some(mime), count) = self.offered(py)? else {
             return Ok(());
-        }
+        };
         let old = vp.getattr("clipboard")?;
         let source = self
             .source
@@ -106,10 +115,9 @@ impl ModelClipboard {
         }) {
             return Ok(());
         }
-        let data = native.call_method1("pasteboard_read", (MIME,))?;
-        if !data.is_truthy()? {
+        let Some(data) = self.read(py, mime)? else {
             return Ok(());
-        }
+        };
         let other = py
             .import("formats.clip_payload")?
             .call_method1("decode", (data,))?;
@@ -127,28 +135,16 @@ impl ModelClipboard {
     /// Publish an existing document snapshot from either a native command or a script.
     fn publish(&self, win: &Bound<'_, PyAny>, clip: &Bound<'_, PyAny>) -> PyResult<()> {
         let py = win.py();
-        let native = py.import("app_shell.native")?;
-        if !native.call_method0("available")?.is_truthy()? {
-            // No shell (a headless host): the copy is offered in this
-            // process, where `adopt` reads it for the other documents.
-            py.import("formats.clip")?.call_method1("publish", (clip,))?;
-            return Ok(());
-        }
         let encode = py.import("formats.clip_payload")?.getattr("encode")?;
-        let data = win
-            .getattr("_host")?
-            .call_method1("_guard", ("clipboard encode", encode, clip))?;
+        // A window's host reports a failed encode; a bare document has none.
+        let data = match win.getattr_opt("_host")?.filter(|h| !h.is_none()) {
+            Some(host) => host.call_method1("_guard", ("clipboard encode", encode, clip))?,
+            None => encode.call1((clip,))?,
+        };
         if data.is_none() {
             return Ok(());
         }
-        if native
-            .call_method1("pasteboard_write", (vec![(MIME, data)],))?
-            .is_truthy()?
-        {
-            let count = native
-                .call_method0("pasteboard_types")?
-                .get_item(1)?
-                .extract()?;
+        if let Some(count) = self.write(py, &data)? {
             self.source.replace(Some((count, clip.clone().unbind())));
         }
         Ok(())
@@ -187,16 +183,9 @@ impl ModelClipboard {
                 } else {
                     "cut_selection"
                 };
-                let native_board =
-                    native.call_method0("available")?.is_truthy()?;
-                let copied = if native_board {
-                    let options = PyDict::new(py);
-                    options.set_item("publish", false)?;
-                    vp.call_method(method, (), Some(&options))?
-                } else {
-                    vp.call_method0(method)?
-                };
-                if !copied.is_truthy()? || !native_board {
+                let options = PyDict::new(py);
+                options.set_item("publish", false)?;
+                if !vp.call_method(method, (), Some(&options))?.is_truthy()? {
                     return Ok(());
                 }
                 let clip = vp.getattr("clipboard")?;
@@ -228,5 +217,6 @@ impl ModelClipboard {
     }
     fn __clear__(&mut self) {
         self.source.get_mut().take();
+        self.local.get_mut().0.take();
     }
 }

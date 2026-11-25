@@ -9,7 +9,6 @@ from core.mesh import Mesh
 
 
 def scalar_results(monkeypatch):
-    monkeypatch.setenv("INGETRAZO_STORE", "0")
     rows = []
     for seed in range(32):
         rng = random.Random(seed)

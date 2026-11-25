@@ -10,7 +10,7 @@ from pathlib import Path
 
 from core.settings import settings as preferences
 from app_shell import native
-from app_shell.files import ShellFileDialog
+from ingetrazo_render.shell_files import ShellFileDialog
 
 from views import filedialogs
 from views.filedialogs import file_dialogs, last_dir, remember, start_in

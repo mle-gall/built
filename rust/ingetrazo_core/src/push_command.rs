@@ -72,7 +72,7 @@ pub fn push_secondary_faces(
 /// Indices of each uninterrupted curve along a cyclic outline. Offset
 /// enumerates run starts in corner order; push starts at the first break.
 #[pyfunction]
-pub fn outline_curve_runs(ids: Vec<Option<i64>>, from_break: bool) -> Vec<(Vec<usize>, bool)> {
+pub fn outline_curve_runs(ids: Vec<Option<i128>>, from_break: bool) -> Vec<(Vec<usize>, bool)> {
     let n = ids.len();
     if n < 2 {
         return vec![];

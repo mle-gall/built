@@ -34,7 +34,7 @@ class ControllerSurface(DocumentInteraction, _InputSurface):
         host = SimpleNamespace(width=640, height=480, scale=1., ns_view=0,
                                timers=WindowTimers(), input_state=WindowInput(), window=proxy(self),
                                request_frame=lambda: None, cursor_changed=lambda cursor: None)
-        from app_shell.host import Host
+        from ingetrazo_render import Host
         host.tool_cursor = Host.tool_cursor
         super().__init__(parent, host=host)
 

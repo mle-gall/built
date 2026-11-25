@@ -8,6 +8,9 @@ construction, copies and share-back."""
 from __future__ import annotations
 
 import copy
+import gzip
+import json
+from pathlib import Path
 import random
 
 import numpy as np
@@ -36,10 +39,6 @@ def binary(monkeypatch):
     monkeypatch.setattr(_native, "wanted", lambda: True)
 
 
-def _store(monkeypatch, on: bool):
-    monkeypatch.setenv("INGETRAZO_STORE", "1" if on else "0")
-
-
 def fingerprint(m) -> dict:
     """Everything observable, by list index (keys differ between engines)."""
     vid = {v.key: i for i, v in enumerate(m.vertices)}
@@ -58,8 +57,8 @@ def fingerprint(m) -> dict:
     }
 
 
-def _open(path, monkeypatch, store):
-    _store(monkeypatch, store)
+def _open(path):
+
     scene = Scene()
     igz.load_into(scene, path)
     for m in _meshes(scene):
@@ -75,20 +74,18 @@ def test_first_touch_is_a_store_reading_like_the_built_mesh(
         binary, monkeypatch, tmp_path, seed):
     path = tmp_path / "doc.igz"
     igz.save_scene(_random_scene(random.Random(seed)), path)
-    py = _open(path, monkeypatch, False)
-    st = _open(path, monkeypatch, True)
-    pm, sm = list(_meshes(py)), list(_meshes(st))
-    assert any(type(m) is S.StoreMesh for m in sm)
-    assert not any(type(m) is S.StoreMesh for m in pm)
-    for a, b in zip(pm, sm):
-        assert fingerprint(b) == fingerprint(a)
-        if type(b) is S.StoreMesh:
-            # Reading never built Python objects.
-            assert type(b) is S.StoreMesh
+    scene = _open(path)
+    meshes = list(_meshes(scene))
+    with gzip.open(Path(__file__).parent / "fixtures" / "deferred_first_touch.json.gz", "rt") as src:
+        expected = json.load(src)[seed]
+    assert len(meshes) == len(expected)
+    for mesh, state in zip(meshes, expected):
+        assert json.loads(json.dumps(fingerprint(mesh))) == state
+        assert type(mesh) is S.StoreMesh
 
 
-def _store_mesh(monkeypatch, tmp_path, seed=3):
-    _store(monkeypatch, True)
+def _store_mesh(tmp_path, seed=3):
+
     path = tmp_path / "one.igz"
     scene = _random_scene(random.Random(seed))
     igz.save_scene(scene, path)
@@ -101,7 +98,7 @@ def _store_mesh(monkeypatch, tmp_path, seed=3):
 
 
 def test_views_are_elements_compared_by_key(binary, monkeypatch, tmp_path):
-    _scene, m = _store_mesh(monkeypatch, tmp_path)
+    _scene, m = _store_mesh(tmp_path)
     f1, f2 = m.faces[0], m.faces[0]
     assert f1 is not f2 and f1 == f2 and hash(f1) == hash(f2)
     assert isinstance(f1, M.Face) and isinstance(m.edges[0], M.Edge)
@@ -117,7 +114,7 @@ def test_views_are_elements_compared_by_key(binary, monkeypatch, tmp_path):
 
 def test_flag_and_attr_writes_stay_in_the_store(binary, monkeypatch,
                                                 tmp_path):
-    _scene, m = _store_mesh(monkeypatch, tmp_path)
+    _scene, m = _store_mesh(tmp_path)
     e, f = m.edges[0], m.faces[0]
     e.soft, e.hidden, e.curve, e.layer = True, True, 77, "Tag"
     f.interior = True
@@ -145,7 +142,7 @@ def test_flag_and_attr_writes_stay_in_the_store(binary, monkeypatch,
 
 def test_materialise_on_write_resolves_views_held_before(
         binary, monkeypatch, tmp_path):
-    _scene, m = _store_mesh(monkeypatch, tmp_path)
+    _scene, m = _store_mesh(tmp_path)
     face = m.faces[2]
     loop = face.loop
     edge = m.find_edge(loop[0], loop[1])
@@ -169,7 +166,7 @@ def test_materialise_on_write_resolves_views_held_before(
 
 def test_snapshot_restore_round_trips_through_materialisation(
         binary, monkeypatch, tmp_path):
-    _scene, m = _store_mesh(monkeypatch, tmp_path)
+    _scene, m = _store_mesh(tmp_path)
     before = fingerprint(m)
     s0 = m.capture_state()
     assert isinstance(s0, S.StoreState) and m.capture_state() == s0
@@ -192,33 +189,27 @@ def test_snapshot_restore_round_trips_through_materialisation(
 
 
 def test_history_on_a_store_mesh(binary, monkeypatch, tmp_path):
-    results = []
-    for on in (False, True):
-        _store(monkeypatch, on)
-        path = tmp_path / f"h{on}.igz"
-        igz.save_scene(_random_scene(random.Random(7)), path)
-        scene = Scene()
-        igz.load_into(scene, path)
-        h = History(scene)
-        e0 = scene.mesh.edges[0]
-        a, b = V(e0.a), V(e0.b)
-        h.execute(AddEdgeCommand(V(70, 0, 0), V(71, 0, 0)))
-        h.execute(DeleteEdgesCommand([scene.mesh.edges[1]]))
-        h.execute(MoveVerticesCommand([a], V(0, 0, 0.5)))
-        steps = [fingerprint(scene.mesh)]
-        for _ in range(3):
-            h.undo()
-            steps.append(fingerprint(scene.mesh))
-        for _ in range(3):
-            h.redo()
-            steps.append(fingerprint(scene.mesh))
-        results.append(steps)
-    assert results[0] == results[1]
+    path = tmp_path / "history.igz"
+    igz.save_scene(_random_scene(random.Random(7)), path)
+    scene = _open(path)
+    h = History(scene)
+    start = V(scene.mesh.edges[0].a)
+    states = [fingerprint(scene.mesh)]
+    for command in (AddEdgeCommand(V(70, 0, 0), V(71, 0, 0)),
+                    DeleteEdgesCommand([scene.mesh.edges[1]]),
+                    MoveVerticesCommand([start], V(0, 0, 0.5))):
+        h.execute(command)
+        assert h.last_error is None
+        states.append(fingerprint(scene.mesh))
+    for prior in reversed(states[:-1]):
+        assert h.undo() and fingerprint(scene.mesh) == prior
+    for next_state in states[1:]:
+        assert h.redo() and fingerprint(scene.mesh) == next_state
 
 
 def test_a_move_command_never_builds_python_objects(binary, monkeypatch,
                                                      tmp_path):
-    scene, m = _store_mesh(monkeypatch, tmp_path, seed=1)
+    scene, m = _store_mesh(tmp_path, seed=1)
     h = History(scene)
     corner = V(m.faces[0].loop[0].position)
     h.execute(MoveVerticesCommand([corner], V(0, 0, 0.001)))
@@ -228,7 +219,7 @@ def test_a_move_command_never_builds_python_objects(binary, monkeypatch,
 
 
 @pytest.mark.parametrize("seed", range(3))
-def test_bulk_construction_into_the_store(monkeypatch, seed):
+def test_bulk_construction_into_the_store(seed):
     rng = random.Random(seed)
     faces = []
     for _ in range(60):
@@ -239,27 +230,25 @@ def test_bulk_construction_into_the_store(monkeypatch, seed):
     attrs = [({"color": [0.5, 0.5, 0.5]} if i % 3 else None)
              for i in range(len(faces))]
     epts = np.array([[0, 0, 0], [3, 0, 0], [3, 0, 0], [3, 3, 0]], float)
-    out = []
-    for on in (False, True):
-        _store(monkeypatch, on)
-        m = M.Mesh()
-        vobjs, inv = m.bulk_weld(np.concatenate([epts, flat]))
-        emap = m.add_edges_welded(vobjs, inv[0:4:2], inv[1:4:2],
-                                  [(True, 5, "T"), (False, None, None, True)])
-        u = len(vobjs)
-        a, b = int(inv[0]), int(inv[1])
-        e = emap.get(a * u + b if a <= b else b * u + a)
-        e.layer = "U"                    # stamped between edges and faces
-        m.add_faces_welded(vobjs, inv[4:], np.full(len(faces), 4),
-                           np.ones(len(faces), dtype=int), attrs,
-                           edge_map=emap)
-        assert (type(m) is S.StoreMesh) == on
-        out.append(fingerprint(m))
-    assert out[0] == out[1]
+    m = M.Mesh()
+    vobjs, inv = m.bulk_weld(np.concatenate([epts, flat]))
+    emap = m.add_edges_welded(vobjs, inv[0:4:2], inv[1:4:2],
+                              [(True, 5, "T"), (False, None, None, True)])
+    u = len(vobjs)
+    a, b = int(inv[0]), int(inv[1])
+    e = emap.get(a * u + b if a <= b else b * u + a)
+    e.layer = "U"                    # stamped between edges and faces
+    m.add_faces_welded(vobjs, inv[4:], np.full(len(faces), 4),
+                       np.ones(len(faces), dtype=int), attrs,
+                       edge_map=emap)
+    with gzip.open(Path(__file__).parent / "fixtures" / "bulk_mesh_construction.json.gz", "rt") as src:
+        expected = json.load(src)[seed]
+    assert json.loads(json.dumps(fingerprint(m))) == expected
+    assert type(m) is S.StoreMesh
 
 
 def test_copies_and_share_back(binary, monkeypatch, tmp_path):
-    _scene, m = _store_mesh(monkeypatch, tmp_path)
+    _scene, m = _store_mesh(tmp_path)
     c = copy.deepcopy(m)
     assert type(c) is S.StoreMesh and fingerprint(c) == fingerprint(m)
     assert not {f.key for f in c.faces} & {f.key for f in m.faces}
@@ -285,17 +274,17 @@ def test_link_hooks_relabel_like_the_built_mesh(binary, monkeypatch,
     for e in sc.mesh.edges[::3]:
         e.layer = "B"
     igz.save_scene(sc, path)
-    out = []
-    for on in (False, True):
-        _store(monkeypatch, on)
-        scene = Scene()
-        igz.load_into(scene, path)
-        m = scene.mesh
-        assert type(m) is M.DeferredMesh
-        _relabel_deferred(m, lambda n: {"A": "A2", "B": "B2", None: "Z",
-                                        "Layer0": "Z"}.get(n, n))
-        out.append(fingerprint(m))
-    assert out[0] == out[1]
+    before = _open(path).mesh
+    scene = Scene()
+    igz.load_into(scene, path)
+    mesh = scene.mesh
+    assert type(mesh) is M.DeferredMesh
+    def rename(name):
+        return {"A": "A2", "B": "B2", None: "Z", "Layer0": "Z"}.get(name, name)
+    assert _relabel_deferred(mesh, rename)
+    from core.layers import layer_of
+    for actual, original in zip((*mesh.faces, *mesh.edges), (*before.faces, *before.edges), strict=True):
+        assert layer_of(actual) == rename(layer_of(original))
 
 
 @pytest.mark.parametrize("seed", range(3))
@@ -320,7 +309,7 @@ def test_the_stores_warped_faces_are_is_planars(monkeypatch, seed):
             sizes.append(3)
             rings = 2
         counts.append(rings)
-    _store(monkeypatch, True)
+
     m = M.Mesh()
     m.add_faces_bulk(np.array(flat), sizes, counts)
     assert type(m) is S.StoreMesh
@@ -334,17 +323,16 @@ def test_the_stores_warped_faces_are_is_planars(monkeypatch, seed):
 
 
 def test_cell_queries_are_the_python_scans(binary, monkeypatch, tmp_path):
-    from core.history import _cells_of, _vertices_at
     from core.topology import _key
-    _scene, m = _store_mesh(monkeypatch, tmp_path)
+    _scene, m = _store_mesh(tmp_path)
     vs = list(m.vertices)
     for cells in ({_key(vs[0].position)},
                   {_key(v.position) for v in vs[::3]},
                   {_key(v.position + V(0, 0, 4.9e-5)) for v in vs[::2]}):
-        assert [v.key for v in _vertices_at(m, cells)] == [
+        assert [v.key for v in m.vertices_in_cells(cells, _key)] == [
             v.key for v in vs if _key(v.position) in cells]
     keys = {v.key for v in vs[::5]}
-    assert _cells_of(m, keys) == {_key(v.position) for v in vs
+    assert m.cells_of(keys, _key) == {_key(v.position) for v in vs
                                   if v.key in keys}
     m.faces[1].attrs["texture"] = {"path": "x.png"}
     assert [f.key for f in m.textured_faces()] == [m.faces[1].key]

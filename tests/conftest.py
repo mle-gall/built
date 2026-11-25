@@ -275,9 +275,3 @@ def pytest_sessionfinish(session, exitstatus):
     if not hasattr(session.config, "workerinput") and preferences_mtime() != _real_preferences_before:
         pytest.exit("The real Built preferences plist changed during the test session",
                     returncode=pytest.ExitCode.TESTS_FAILED)
-
-
-@pytest.fixture
-def explicit_store_meshes(monkeypatch):
-    """Differential suites build their store operands explicitly."""
-    monkeypatch.setenv("INGETRAZO_STORE", "0")

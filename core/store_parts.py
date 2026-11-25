@@ -186,11 +186,7 @@ def explode_geometry(m, src, xform, inverse, invertible, paint):
     from core.group import np_affine, placed_face_paint
     from core.materials import effective_attrs
     from core.store_mesh import FaceView, _hole_filter
-    if _store_mesh(m) is None or _store_mesh(src) is None:
-        return None
     st = m._store
-    if not hasattr(st, "paste_from"):
-        return None
     sst = src._store
     snap = sst.snapshot()
     pos = sst.positions()

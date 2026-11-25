@@ -144,21 +144,19 @@ TOP_H = 40.0
 
 
 def _project_action(win, arg) -> None:
-    bar = getattr(win, "_project_tabs", None)
-    if bar is None:
-        return
     if arg == "views":
-        bar.viewsRequested.emit()
+        win._pick_view_layout()
     elif arg == "new":
-        bar.newRequested.emit()
-    elif arg.startswith("close:"):
-        doc = bar.tabs.tabData(int(arg.partition(":")[2]))
-        if doc is not None:
-            bar.closeRequested.emit(doc)
+        win._on_new_tab()
     else:
-        doc = bar.tabs.tabData(int(arg))
-        if doc is not None:
-            bar.activated.emit(doc)
+        close = arg.startswith("close:")
+        index = int(arg.removeprefix("close:"))
+        docs = win.documents()
+        if 0 <= index < len(docs):
+            if close:
+                win.run_command("close_tab", docs[index])
+            else:
+                win.activate_document(docs[index])
 
 
 def _tabs(view, win) -> None:
@@ -310,7 +308,7 @@ def before_frame(view) -> None:
     name, _, hint = base.partition(" — ")
     timer = getattr(bar, "_timer", None)
     if timer is not None and timer.isActive():
-        hint = getattr(bar, "_msg", None).text() if getattr(bar, "_msg", None) is not None else hint
+        hint = bar.flash
     from ingetrazo_render import sync_status_readout
     sync_status_readout(view, name, hint)
     _sync_units(view, win.viewport.history)
@@ -1359,7 +1357,7 @@ def _tree_action(win, view, action) -> None:
                 if family == "sheet":
                     win._show_sheet(index)
                 else:
-                    win.tray.scenes.activate_view(scene.saved_views[index])
+                    win.tray.scenes.finish_view(scene.saved_views[index])
         elif verb == "linkselection":
             from ingetrazo_core import link_selection_sources
             from ingetrazo_render.chrome_forms import ask_choice
@@ -2963,9 +2961,7 @@ def pointer(view, kind: str, event=None) -> bool:
     elif kind == "press" and event.button() == Qt.LeftButton \
             and view.renderer.ui_top_empty(float(event.position().x()), float(event.position().y())):
         # The empty top strip is the window's title bar: drag moves it.
-        handle = view.window().windowHandle()
-        if handle is not None:
-            handle.startSystemMove()
+        view.window().start_system_move()
         return True
     else:
         p = event.position()

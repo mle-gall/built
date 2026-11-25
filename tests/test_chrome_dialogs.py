@@ -125,7 +125,7 @@ def test_no_frame_drawn_cancels_close_and_reports_failure(win, monkeypatch):
 
 
 def test_the_window_is_modal_while_the_sheet_waits(win):
-    from app_shell import files
+    from ingetrazo_render import shell_files as files
     dirty(win)
     calls = []
     from unittest.mock import patch

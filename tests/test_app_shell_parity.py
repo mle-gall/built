@@ -20,7 +20,7 @@ DATA = Path(__file__).parent / "data"
 
 @pytest.fixture
 def host(tmp_path):
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     h = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
     yield h
     h.close()
@@ -74,7 +74,7 @@ def test_save_as_built_clears_dirty_and_names_the_window(host, tmp_path):
     st = host.state()
     assert target.is_file() and st["path"] == str(target) and not st["dirty"]
     assert st["documents"] == ["saved.built"]
-    from app_shell import files
+    from ingetrazo_render import shell_files as files
     from formats import built
     assert built.is_built(target)
     assert str(target.resolve()) in [str(Path(p).resolve()) for p in host.window._recent_paths()]
@@ -185,8 +185,8 @@ def test_documents_open_side_by_side_and_switch(host, tmp_path):
     host.open_path(b)
     st = host.state()
     assert st["documents"] == ["a.igz", "b.igz"] and st["active"] == 1
-    tabs = host.window._project_tabs
-    assert tabs.tabs.tabText(0).endswith(tabs.DIRTY_MARK) and not tabs.tabs.tabText(1).endswith(tabs.DIRTY_MARK)
+    assert host.window.tab_title(0).endswith(" •")
+    assert not host.window.tab_title(1).endswith(" •")
     host.open_path(a)                                # already open: shown, not read again
     assert host.state()["active"] == 0 and len(host.window._documents) == 2
     assert host.view is host.window._doc.stand_in and host.viewport is host.window._doc.viewport
@@ -280,10 +280,10 @@ def test_menu_edit_commands(host, tmp_path):
 
 
 def test_selection_commands_have_a_native_owner(host):
-    from ingetrazo_render.document_commands import WindowDocumentCommands
+    from ingetrazo_render import ShellWindow
     for verb in ("select_all", "invert_selection", "select_none"):
         host.menu(verb)
-    assert host.window._on_select_all.__func__ is WindowDocumentCommands._on_select_all
+    assert host.window._on_select_all.__func__ is ShellWindow._on_select_all
     with pytest.raises(AttributeError):
         host.window.no_such_member_anywhere  # noqa: B018
 

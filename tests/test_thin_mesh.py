@@ -22,7 +22,6 @@ from tools.followme import FollowMeTool
 def resident(monkeypatch):
     module = pytest.importorskip("ingetrazo_core")
     monkeypatch.setattr(_native, "native", module)
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     monkeypatch.setattr(StoreMesh, "_materialise", lambda *_: pytest.fail("materialised"))
 
 
@@ -101,13 +100,9 @@ def test_bulk_reverse_feed_and_ownership(resident, monkeypatch):
         assert set(change.modified["face"]) == set(keys)
         assert not any(change.created.values()) and not any(change.removed.values())
     after = fingerprint(mesh)
-    monkeypatch.setenv("INGETRAZO_STORE", "0")
-    python = Mesh()
-    assert type(python) is Mesh
-    for outer, holes in inputs:
-        copied = python.add_face(outer, holes)
-        copied.reverse_rings()
-    assert fingerprint(python) == after
+    for face, (outer, holes) in zip(mesh.faces, inputs, strict=True):
+        assert list(face.vertices) == list(reversed(outer))
+        assert list(face.holes) == [list(reversed(ring)) for ring in holes]
     clone = deepcopy(mesh)
     assert type(clone) is StoreMesh and fingerprint(clone) == after
     assert set(keys).isdisjoint(clone._store.keys("face"))
@@ -130,7 +125,6 @@ def test_incremental_welded_import_and_snapshot_keys(resident, monkeypatch):
     mesh = Mesh()
     snap = mesh.capture_state()
     result = build(mesh)
-    monkeypatch.setenv("INGETRAZO_STORE", "0")
     assert build(Mesh()) == result
     mesh.restore_state(snap)
     mesh.add_faces_bulk([(2,0,0), (3,0,0), (2,1,0)], [3], [1])
@@ -177,7 +171,6 @@ def test_compatibility_write_logs_and_releases_store(monkeypatch):
     from core.store_mesh import MaterialisedMesh
 
     monkeypatch.setattr(_native, "native", pytest.importorskip("ingetrazo_core"))
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     monkeypatch.setenv("INGETRAZO_PERF", "1")
     output = io.StringIO()
     monkeypatch.setattr(history_module, "_PERF", True)

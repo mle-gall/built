@@ -18,7 +18,6 @@ def rectangle(x, y, w, h):
 @pytest.mark.parametrize("scans", ["0", "1"])
 @pytest.mark.parametrize("case", ["independent", "mother", "swap", "carve", "enclosed", "preset", "far"])
 def test_keyed_add_face_matches_command(monkeypatch, case, scans):
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     monkeypatch.setenv("INGETRAZO_SCANS", scans)
     mesh, reference = Mesh(), Mesh()
     offset = 6_860_000 if case == "far" else 0
@@ -64,7 +63,6 @@ def test_keyed_add_face_matches_command(monkeypatch, case, scans):
 
 
 def test_add_face_occurrence_undo_redo_reuses_key_and_paint(monkeypatch):
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     scene = Scene()
     mesh = scene.mesh
     frame = Matrix4()
@@ -85,20 +83,16 @@ def test_add_face_occurrence_undo_redo_reuses_key_and_paint(monkeypatch):
     assert occurrence.faces[0].attrs["mat"] == "bronze"
 
 
-def test_add_face_refusal_precedes_edit(monkeypatch):
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
+def test_face_uses_planned_binary64_corner():
     mesh = Mesh()
-    mesh._planned_points = {}
-    assert MeshStore.command_add_face(mesh, rectangle(0,0,1,1)) is None
-    del mesh._planned_points
-    monkeypatch.setattr(store_mesh, "_hypot", lambda: None)
-    assert MeshStore.command_add_face(mesh, rectangle(0,0,1,1)) is None
-    assert not mesh.vertices and not mesh.faces and mesh._mut_serial == 0
+    planned = (1.000000000000001, 0., 0.)
+    mesh._planned_points = {(1., 0., 0.): planned}
+    MeshStore.command_add_face(mesh, rectangle(0, 0, 1, 1))
+    assert planned in [tuple(v.position_tuple()) for v in mesh.vertices]
 
 
 @pytest.mark.parametrize("bad", [float("nan"), float("inf")])
 def test_plain_face_refusal_keeps_allocator_and_revision(monkeypatch, bad):
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     mesh = Mesh()
     before = (mesh._store.revision, mesh._mut_serial)
     with pytest.raises((ValueError, OverflowError)):

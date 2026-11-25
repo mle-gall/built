@@ -107,7 +107,7 @@ def test_add_missing_never_moves_an_existing_folder():
 
 
 def test_the_tags_survive_the_system_clipboard():
-    from formats import clip as transfer
+    from formats import clip_payload as transfer
     back = transfer.decode(transfer.encode(_clip(_source())))
     assert back is not None
     assert back["edge_layers"] == ["Axes"]

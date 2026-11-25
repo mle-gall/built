@@ -2,6 +2,10 @@
 """Command history on the store must never convert geometry to Python lists."""
 from types import SimpleNamespace
 
+import gzip
+import json
+from pathlib import Path
+
 import pytest
 
 from core.group import Group
@@ -26,9 +30,9 @@ def forbid_materialisation(monkeypatch):
     monkeypatch.setattr(StoreMesh, "_materialise", fail)
 
 
-def exercise(kind, store):
+def exercise(kind):
     scene = Scene()
-    m = _mesh(store)
+    m = Scene().mesh
     group = Group(m)
     if kind == "mirror group":
         scene.groups.append(group)
@@ -87,14 +91,16 @@ def exercise(kind, store):
     assert m.capture_state() == snapshot
     m.restore_state(snapshot)
     assert fingerprint(m) == after
-    assert isinstance(m, StoreMesh) == store
+    assert isinstance(m, StoreMesh)
     return before, after, undone
 
 
 @pytest.mark.parametrize("command", ["reverse", "mirror group", "mirror vertices",
                                      "enlarge hole", "paste", "cap", "stitch"])
-def test_command_history_matches_python(command):
-    assert exercise(command, True) == exercise(command, False)
+def test_command_history_matches_recorded_states(command):
+    with gzip.open(Path(__file__).parent / "fixtures" / "store_writer_history.json.gz", "rt") as fixture:
+        states = json.load(fixture)
+    assert json.loads(json.dumps(exercise(command))) == states[command]
 
 
 def test_stitch_snapshot_is_required_and_restores_keys():

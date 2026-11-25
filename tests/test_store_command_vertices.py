@@ -3,7 +3,7 @@ import pytest
 from ingetrazo_core import Matrix4, MeshStore, Vec3
 from core import store_mesh
 from core.history import History, MoveVerticesCommand, SnapshotMutation
-from core.history import _map_selected_vertices
+from core.group import _remap_uvws
 from core.mesh import Mesh
 from core.scene import Scene
 from core.topology import _key
@@ -20,7 +20,6 @@ def quad():
 
 @pytest.mark.parametrize("partial,carry", [(True,False),(True,True),(False,True),(False,False)])
 def test_command_move_matches_fold_and_texture_results(monkeypatch, partial, carry):
-    monkeypatch.setenv("INGETRAZO_STORE","1")
     a,b = quad(),quad()
     mesh,ref = a.mesh,b.mesh
     original = mesh.faces[0]
@@ -45,7 +44,6 @@ def test_command_move_matches_fold_and_texture_results(monkeypatch, partial, car
 
 @pytest.mark.parametrize("carry", [False,True])
 def test_command_transform_matches_affine_map(monkeypatch,carry):
-    monkeypatch.setenv("INGETRAZO_STORE","1")
     a,b = quad(),quad()
     mesh = a.mesh
     positions = mesh.faces[0].vertices
@@ -56,14 +54,16 @@ def test_command_transform_matches_affine_map(monkeypatch,carry):
     keys = [v.key for v in mesh.vertices]
     moved,landed,folded,defects,dirty = MeshStore.command_transform_vertices(
         mesh,[p.toTuple() for p in positions],matrix.data(),carry)
-    _map_selected_vertices(b,{_key(p) for p in positions},matrix,carry)
+    for vertex in b.mesh.vertices:
+        b.mesh.move_vertex(vertex, matrix.map(vertex.position) - vertex.position)
+    if carry:
+        _remap_uvws(b.mesh, matrix, list(b.mesh.textured_faces()))
     assert (moved,landed,folded,defects,dirty) == (keys,[],[],[],len(keys))
     assert fingerprint(mesh) == fingerprint(b.mesh)
 
 
 def test_defective_landing_changes_neither_store_nor_owned_paint(monkeypatch):
     from tests.test_move_curved_edge_down_1294 import _curved_front_box, H,L,W
-    monkeypatch.setenv("INGETRAZO_STORE","1")
     scene,_,_ = _curved_front_box(1,0.)
     mesh = scene.mesh
     top=[(x,y,H) for x,y in ((0.,0.),(L,0.),(L,W),(0.,W))]
@@ -77,7 +77,6 @@ def test_defective_landing_changes_neither_store_nor_owned_paint(monkeypatch):
 
 
 def test_receiver_keys_and_occurrence_replay(monkeypatch):
-    monkeypatch.setenv("INGETRAZO_STORE","1")
     scene=Scene()
     mesh=scene.mesh
     receiver=mesh.add_edge((2.,0.,0.),(3.,0.,0.)).v0.key
@@ -96,12 +95,7 @@ def test_receiver_keys_and_occurrence_replay(monkeypatch):
 
 
 def test_vertex_refusal_precedes_writes(monkeypatch):
-    monkeypatch.setenv("INGETRAZO_STORE","1")
     mesh=quad().mesh
     before=fingerprint(mesh),mesh.revision
-    assert MeshStore.command_move_vertices(mesh,[(0,0,0)],(10.,0.,0.)) is None
     assert MeshStore.command_move_vertices(mesh,[(1e12,0.,0.)],(10.,0.,0.)) == ([],[],[],[],0)
-    mesh._planned_points={}
-    assert MeshStore.command_move_vertices(mesh,[(0.,0.,0.)],(10.,0.,0.)) is None
-    assert MeshStore.command_transform_vertices(mesh,[(0.,0.,0.)],Matrix4().data()) is None
     assert (fingerprint(mesh),mesh.revision)==before

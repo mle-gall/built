@@ -10,7 +10,7 @@ from ingetrazo_render import inspector_action as action
 
 @pytest.fixture
 def host(tmp_path):
-    from app_shell.host import Host
+    from ingetrazo_render import Host
 
     h = Host(0, 1280, 800, 1.0, settings=str(tmp_path))
     yield h

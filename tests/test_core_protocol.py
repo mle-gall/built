@@ -11,6 +11,7 @@ modified must be exactly what changed, and an undo exactly the inverse."""
 from __future__ import annotations
 
 import json
+import random
 import threading
 
 import numpy as np
@@ -34,13 +35,9 @@ needs_store = pytest.mark.skipif(
     reason="native module without StoreSnapshot.changes_since")
 
 
-pytestmark = pytest.mark.usefixtures("explicit_store_meshes")
 
-def _scene(store):
+def _scene():
     sc = Scene()
-    if store:
-        S.become_store(sc.mesh, mod.MeshStore(next(M._KEY_NAMESPACES),
-                                              **S._weld_args()), [])
     sc.mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(2, 2, 0), V(0, 2, 0)])
     return sc
 
@@ -90,7 +87,7 @@ def test_store_steps_report_exactly_what_changed_and_undo_the_inverse():
     store-backed mesh, each undone and redone: every step's record is the
     oracle's difference, undo its inverse, redo the step again; the mesh
     never leaves the store."""
-    sc = _scene(True)
+    sc = _scene()
     h = History(sc)
     m = sc.mesh
     face = m.faces[0]
@@ -135,49 +132,48 @@ def test_store_steps_report_exactly_what_changed_and_undo_the_inverse():
 @needs_store
 @pytest.mark.parametrize("seed", range(8))
 def test_store_changes_since_matches_the_oracle_over_random_ops(seed):
-    """The store's ``changes_since`` (snapshot to snapshot) after every op of the store-op fuzz
-    (tests/test_store_topology_ops: draws, removals, relinks, holes,
-    purges, moves, snapshot restores) is exactly what the mesh shows
-    changed. (Undo as the inverse: the command tests above.)"""
-    from tests.test_store_topology_ops import Run
-    r = Run(700 + seed)
-    checked = 0
-    for _ in range(140):
-        sm = r.sm
+    rng = random.Random(seed)
+    sm = M.Mesh()
+    snapshots = []
+    removed = []
+    def point():
+        return V(rng.randrange(5), rng.randrange(5), rng.randrange(2))
+    for step in range(140):
         snap = sm._store.snapshot()
         before = _read(sm)
-        r.step()
-        if type(r.sm) is not S.StoreMesh:
-            break
+        op = rng.randrange(8)
+        if op == 0 and sm.faces:
+            face = rng.choice(list(sm.faces))
+            sm.remove_face(face)
+            removed.append(face)
+        elif op == 1 and removed:
+            sm.relink_face(removed.pop())
+        elif op == 2 and sm.vertices:
+            sm.move_vertex(rng.choice(list(sm.vertices)), V(0, 0, 0.25))
+        elif op == 3 and sm.edges:
+            rng.choice(list(sm.edges)).soft = bool(step % 2)
+        elif op == 4:
+            snapshots.append(sm.capture_state())
+        elif op == 5 and snapshots:
+            sm.restore_state(rng.choice(snapshots))
+            removed.clear()
+        elif op == 6:
+            sm.add_face([point(), point(), point()])
+        else:
+            a, b = point(), point()
+            if a == b:
+                with pytest.raises(ValueError, match="degenerate edge"):
+                    sm.add_edge(a, b)
+            else:
+                sm.add_edge(a, b)
         after = _read(sm)
         ch = sm._store.snapshot().changes_since(snap, [])
-        assert _got(ch) == _expected(before, after), (seed, r.ops)
-        checked += 1
-    assert checked > 30
-
-
-def test_python_steps_report_the_mesh_replaced():
-    sc = _scene(False)
-    h = History(sc)
-    r = C.run(h, "move_vertices", vertices=[str(sc.mesh.vertices[0].key)],
-              delta=[0, 0, 0.25])
-    for got in (r, C.run(h, "undo"), C.run(h, "redo"),
-                C.run(h, "erase", edges=[str(sc.mesh.edges[0].key)])):
-        assert got["ok"]
-        (change,) = got["step"].meshes
-        assert (change.backing, change.replaced) == ("python", True)
-        assert change.key == mesh_key(sc.mesh)
-        assert not any(change.created.values()) and not change.moved
-    assert [s.phase for s in h.feed.since(0)["steps"]] == [
-        "execute", "undo", "redo", "execute"]
+        assert _got(ch) == _expected(before, after), (seed, step)
 
 
 @needs_store
-def test_a_push_on_a_python_mesh_reports_a_store():
-    """A push makes a Python mesh store-backed first (docs/rust-tools.md
-    §24), outside the step: the step reports the store, and so does its
-    undo (it restores the store state the push started from)."""
-    sc = _scene(False)
+def test_push_and_undo_report_the_store():
+    sc = _scene()
     h = History(sc)
     face = sc.mesh.faces[0]
     got = C.run(h, "push_pull", face=str(face.key), distance=1.0)
@@ -190,9 +186,9 @@ def test_a_push_on_a_python_mesh_reports_a_store():
     assert change.backing == "store" and not change.replaced
 
 
-@pytest.mark.parametrize("store", [False, pytest.param(True, marks=needs_store)])
-def test_paint_reports_the_faces_and_nothing_else(store):
-    sc = _scene(store)
+@needs_store
+def test_paint_reports_the_faces_and_nothing_else():
+    sc = _scene()
     h = History(sc)
     f = sc.mesh.faces[0]
     h.execute(SetFaceColorCommand([f], [1.0, 0.0, 0.0]))
@@ -210,7 +206,7 @@ def test_store_attrs_edits_are_face_modifications(monkeypatch):
     feed no longer copies them, and paint commands still name theirs."""
     from core.history import SnapshotMutation
     from core.protocol import feed as F
-    sc = _scene(True)
+    sc = _scene()
     h = History(sc)
     f = sc.mesh.faces[0]
 
@@ -227,7 +223,7 @@ def test_store_attrs_edits_are_face_modifications(monkeypatch):
 
 def test_document_changes_by_key():
     from core.layers import Layer
-    sc = _scene(False)
+    sc = _scene()
     h = History(sc)
     g = M.Mesh()
     g.add_face([V(5, 0, 0), V(6, 0, 0), V(6, 1, 0)])
@@ -257,7 +253,7 @@ def test_document_changes_by_key():
 
 
 def test_since_and_the_ring():
-    sc = _scene(False)
+    sc = _scene()
     h = History(sc)
     for i in range(3):
         C.run(h, "move_vertices", vertices=[str(sc.mesh.vertices[0].key)],
@@ -279,7 +275,7 @@ def test_since_and_the_ring():
 
 def test_a_failed_or_rejected_step_publishes_nothing():
     from core.history import SnapshotMutation
-    sc = _scene(False)
+    sc = _scene()
     h = History(sc)
 
     def boom(scene):
@@ -291,7 +287,7 @@ def test_a_failed_or_rejected_step_publishes_nothing():
 
 
 def test_feed_subscribers_and_a_failing_one():
-    sc = _scene(False)
+    sc = _scene()
     h = History(sc)
     seen = []
 
@@ -306,14 +302,14 @@ def test_feed_subscribers_and_a_failing_one():
     assert len(seen) == 1
 
 
-@pytest.mark.parametrize("store", [False, pytest.param(True, marks=needs_store)])
-def test_queries_name_faces_by_key(store):
-    sc = _scene(store)
+@needs_store
+def test_queries_name_faces_by_key():
+    sc = _scene()
     m = sc.mesh
     f = m.faces[0]
     info = Q.mesh_info(sc)
     assert info["mesh"] == mesh_key(m) and (info["faces"], info["edges"]) == (1, 4)
-    assert info["backing"] == ("store" if store else "python")
+    assert info["backing"] == "store"
     got = Q.faces(sc, [str(f.key), "12345"])
     (face,) = got["faces"]
     assert face["rings"][0][1] == [2.0, 0.0, 0.0]
@@ -327,12 +323,11 @@ def test_queries_name_faces_by_key(store):
     assert Q.selection(sc)["mesh"] == mesh_key(m)
     assert Q.select(sc, mode="clear")["face"] == []
     assert resolve_mesh(sc, mesh_key(m)) is m and resolve_mesh(sc, "active") is m
-    if store:
-        assert type(m) is S.StoreMesh       # no query materialised it
+    assert type(m) is S.StoreMesh
 
 
 def test_unknown_keys_refuse_before_running():
-    sc = _scene(False)
+    sc = _scene()
     h = History(sc)
     with pytest.raises(KeyError):
         C.run(h, "erase", edges=["1"])
@@ -376,8 +371,8 @@ def test_renderer_reads_the_feed_for_a_store_mesh():
     assert list(updates.changed_records.values())[0][-1].moved == [v.key]
 
 
-@pytest.mark.parametrize("store", [False, pytest.param(True, marks=needs_store)])
-def test_renderer_undo_after_leaving_the_group_rebakes_it(store):
+@needs_store
+def test_renderer_undo_after_leaving_the_group_rebakes_it():
     """Edit inside a group, leave it, undo: the undo ran on the group's
     mesh, which the feed names. Derived from the command class (the open
     mesh, now the loose one) the resident pack kept the edit drawn."""
@@ -387,8 +382,6 @@ def test_renderer_undo_after_leaving_the_group_rebakes_it(store):
     from views.wgpu_scene import pack_scene
     from views.wgpu_updates import InstanceUpdates
     mesh = M.Mesh()
-    if store:
-        S.become_store(mesh, mod.MeshStore(next(M._KEY_NAMESPACES), **S._weld_args()), [])
     mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(0, 3, 0)])
     scene = Scene(groups=[Group(mesh), Group(M.Mesh())])
     updates = InstanceUpdates(scene, pack_scene(scene))
@@ -453,7 +446,7 @@ def test_placement_commands_reach_nested_placements():
     egui UI) take uids at any depth and answer with the feed's step."""
     from core.group import Group
     from core.layers import Layer
-    sc = _scene(False)
+    sc = _scene()
     h = History(sc)
     inner_mesh = M.Mesh()
     inner_mesh.add_face([V(5, 0, 0), V(6, 0, 0), V(6, 1, 0)])

@@ -26,7 +26,6 @@ def patch(kind):
 
 @pytest.mark.parametrize("kind", ["seam", "orphan", "merge", "nothing"])
 def test_erase_stages_match_command(monkeypatch, kind):
-    monkeypatch.setenv("INGETRAZO_STORE","1")
     m, ref = patch(kind), patch(kind)
     def targets(mesh):
         if kind == "seam":
@@ -57,18 +56,8 @@ def test_erase_stages_match_command(monkeypatch, kind):
     assert fingerprint(m) == fingerprint(ref)
 
 
-def test_erase_refuses_before_capturing_footprint(monkeypatch):
-    monkeypatch.setenv("INGETRAZO_STORE","1")
-    m = patch("merge")
-    before = fingerprint(m), m.revision
-    m._planned_points = {}
-    assert MeshStore.command_erase_selection(m, [], []) is None
-    assert MeshStore.command_erase_cleanup(m,None) is None
-    assert (fingerprint(m), m.revision) == before
-
 
 def test_erase_returns_plane_and_across_keys_for_rebuild(monkeypatch):
-    monkeypatch.setenv("INGETRAZO_STORE","1")
     m = Mesh()
     m.add_face([(0,0,0), (4,0,0), (4,4,0), (2,4,0), (2,2,0), (2,4,0), (0,4,0)])
     slit = [(2.,4.,0.), (2.,2.,0.)]

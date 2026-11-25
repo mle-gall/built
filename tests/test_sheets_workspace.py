@@ -127,7 +127,7 @@ class Recorder:
 
 @pytest.fixture
 def host(tmp_path, monkeypatch):
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     from views import wgpu_sheets
     monkeypatch.setattr(wgpu_sheets, "FORCE", True)
     monkeypatch.syspath_prepend(str(ROOT / "scripts"))

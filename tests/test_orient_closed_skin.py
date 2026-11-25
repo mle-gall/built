@@ -17,7 +17,7 @@ from __future__ import annotations
 from ingetrazo_core import Vec3 as QVector3D
 
 from core import orient
-from core.history import History, translate_points
+from core.history import History, MoveVerticesCommand
 from core.mesh import Mesh
 from core.orient import orient_outward, signed_volume
 from core.scene import Scene
@@ -214,7 +214,7 @@ def test_a_moved_corner_is_triangulated_again():
     assert all(again[f] is before[f] for f in mesh.faces)
     top = {_key(v.position) for v in mesh.vertices
            if abs(v.position.z() - 3.0) < 1e-6}
-    translate_points(scene, top, V(0, 0, 1.0))
+    hist.execute(MoveVerticesCommand(top, V(0, 0, 1.0)))
     after = orient._face_triangles(mesh)
     moved = [f for f in mesh.faces if after[f] is not before[f]]
     assert len(moved) == 5              # all but the floor

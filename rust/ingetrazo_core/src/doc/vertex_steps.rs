@@ -9,9 +9,9 @@
 //! the mesh's before and after snapshots (when History does not journal it),
 //! as the Python commands did.
 use super::steps::{running, version, After, Obj, RecordStep};
-use crate::store::command_facade::{command_move_vertices, command_transform_vertices, MovedVertices};
+use crate::store::command_facade::{command_move_vertices, command_transform_vertices};
 use pyo3::prelude::*;
-use pyo3::types::{PyFloat, PyList, PySet, PyTuple};
+use pyo3::types::{PyList, PyTuple};
 use pyo3::PyClassInitializer;
 
 fn none(py: Python<'_>) -> Obj<'_> {
@@ -26,12 +26,6 @@ fn topology<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
     py.import("core.topology")?.getattr(name)
 }
 
-fn is_store(py: Python<'_>, mesh: &Obj<'_>) -> PyResult<bool> {
-    Ok(mesh.get_type().is(&py.import("core.store_mesh")?.getattr("StoreMesh")?))
-}
-
-/// A position as given: a Vec3 is copied, a tuple kept (its integer
-/// coordinates decide the store path, as `_key` keeps them integers).
 fn position<'py>(py: Python<'py>, p: Obj<'py>) -> PyResult<Obj<'py>> {
     if p.hasattr("toTuple")? {
         super::steps::vector(py, &p)
@@ -45,29 +39,8 @@ fn positions<'py>(py: Python<'py>, src: Obj<'py>) -> PyResult<Obj<'py>> {
     Ok(PyList::new(py, items)?.into_any())
 }
 
-/// The raw points, or None when one has a coordinate that is not a float:
-/// the store facade reads integer cells as already scaled, so those edits
-/// keep the object way.
-fn float_points(src: &Obj<'_>) -> PyResult<Option<Vec<[f64; 3]>>> {
-    let mut out = Vec::new();
-    for p in src.try_iter()? {
-        let p = p?;
-        let row = match p.getattr_opt("toTuple")? {
-            Some(f) => f.call0()?,
-            None => p,
-        };
-        let coords: Vec<Obj<'_>> = row.extract()?;
-        if coords.iter().any(|n| !n.is_exact_instance_of::<PyFloat>()) {
-            return Ok(None);
-        }
-        out.push(row.extract()?);
-    }
-    Ok(Some(out))
-}
-
-fn keys_of<'py>(py: Python<'py>, points: &[Obj<'py>]) -> PyResult<Bound<'py, PySet>> {
-    let key = topology(py, "_key")?;
-    PySet::new(py, points.iter().map(|p| key.call1((p,))).collect::<PyResult<Vec<_>>>()?)
+fn coordinates(src: &Obj<'_>) -> PyResult<Vec<[f64; 3]>> {
+    src.try_iter()?.map(|p| Ok(crate::math::xyz(&p?)?.to_array())).collect()
 }
 
 /// The mesh before (None when journalled), remembered at memory slot 0.
@@ -136,67 +109,14 @@ fn run_move(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     snapshot_before(s, py, &mesh)?;
     me.setattr("welded", false)?;
     let d: [f64; 3] = crate::math::xyz(&super::steps::vector(py, &delta)?)?.into();
-    let moved = match float_points(&src)? {
-        Some(points) => command_move_vertices(&mesh, points, d, carry)?,
-        None => None,
-    };
-    match moved {
-        Some(MovedVertices { landed, defects, .. }) => {
-            version(scene)?;
-            if let Some(reason) = defects.first() {
-                return reject(s, py, scene, &pyo3::types::PyString::new(py, reason).into_any());
-            }
-            me.setattr("welded", !landed.is_empty())?;
-        }
-        None => move_objects(s, py, scene, &mesh, &src, &delta, carry)?,
-    }
-    snapshot_after(s, py, &mesh)
-}
-
-/// The object way, as the Python command ran it.
-fn move_objects(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, mesh: &Obj<'_>, src: &Obj<'_>, delta: &Obj<'_>, carry: bool) -> PyResult<()> {
-    let me = running(py).expect("a running step");
-    let delta = super::steps::vector(py, delta)?;
-    let points: Vec<Obj<'_>> = src.try_iter()?.map(|p| super::steps::vector(py, &p?)).collect::<PyResult<_>>()?;
-    let landing_points = points.iter().map(|p| p.add(&delta)).collect::<PyResult<Vec<_>>>()?;
-    let keys = keys_of(py, &points)?;
-    let landing = keys_of(py, &landing_points)?;
-    let at = host(py, "_vertices_at")?;
-    let vertices = at.call1((mesh, &keys))?;
-    let moving = PySet::new(py, vertices.try_iter()?.map(|v| v?.getattr("key")).collect::<PyResult<Vec<_>>>()?)?;
-    let mut receiving = false;
-    for v in at.call1((mesh, &landing))?.try_iter()? {
-        if !moving.contains(v?.getattr("key")?)? {
-            receiving = true;
-            break;
-        }
-    }
-    let defects_near = topology(py, "defects_near")?;
-    let before = if receiving { defects_near.call1((at.call1((mesh, keys.call_method1("union", (&landing,))?))?,))? } else { none(py) };
-    for v in vertices.try_iter()? {
-        mesh.call_method1("move_vertex", (v?, &delta))?;
-    }
+    let moved = command_move_vertices(&mesh, coordinates(&src)?, d, carry)?
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("move would leave unsupported topology"))?;
     version(scene)?;
-    if carry && moving.len() > 0 {
-        let carried = host(py, "_carried_faces")?.call1((mesh, &moving))?;
-        if carried.is_truthy()? {
-            let transform = py.import("ingetrazo_core")?.getattr("Matrix4")?.call0()?;
-            transform.call_method1("translate", (&delta,))?;
-            py.import("core.group")?.getattr("_remap_uvws")?.call1((mesh, transform, carried))?;
-        }
+    if let Some(reason) = moved.defects.first() {
+        return reject(s, py, scene, &pyo3::types::PyString::new(py, reason).into_any());
     }
-    let welded = host(py, "_weld_landed")?.call1((mesh, moving.call_method0("copy")?))?.is_truthy()?;
-    me.setattr("welded", welded)?;
-    let kw = pyo3::types::PyDict::new(py);
-    kw.set_item("moved", &landing)?;
-    topology(py, "fold_nonplanar_faces")?.call((mesh,), Some(&kw))?;
-    if welded && !before.is_none() {
-        let worse = topology(py, "new_defects")?.call1((&before, defects_near.call1((at.call1((mesh, &landing))?,))?))?;
-        if worse.is_truthy()? {
-            return reject(s, py, scene, &worse.get_item(0)?);
-        }
-    }
-    Ok(())
+    me.setattr("welded", !moved.landed.is_empty())?;
+    snapshot_after(s, py, &mesh)
 }
 
 // ------------------------------------------------------------ transforms
@@ -213,21 +133,10 @@ fn run_transform(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()
     let src = s.arg(py, 0);
     let carry = me.getattr("carry_textures")?.is_truthy()?;
     let matrix = me.call_method0("matrix")?;
-    let matrix4 = py.import("ingetrazo_core")?.getattr("Matrix4")?;
-    let mut done = false;
-    if is_store(py, &mesh)? && matrix.get_type().is(&matrix4) {
-        if let Some(points) = float_points(&src)? {
-            let data: [f64; 16] = matrix.call_method0("data")?.extract()?;
-            done = command_transform_vertices(&mesh, points, data, carry)?.is_some();
-            if done {
-                version(scene)?;
-            }
-        }
-    }
-    if !done {
-        let points: Vec<Obj<'_>> = src.try_iter()?.map(|p| p).collect::<PyResult<_>>()?;
-        host(py, "_map_selected_vertices")?.call1((scene, keys_of(py, &points)?, &matrix, carry))?;
-    }
+    let data = matrix.call_method0("data")?.extract()?;
+    command_transform_vertices(&mesh, coordinates(&src)?, data, carry)?
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("transform would leave unsupported topology"))?;
+    version(scene)?;
     if let Some(faces) = me.getattr_opt("_faces")?.filter(|f| f.is_truthy().unwrap_or(false)) {
         let face_type = py.import("core.mesh")?.getattr("Face")?;
         let mut picked = Vec::new();

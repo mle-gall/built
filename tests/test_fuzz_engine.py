@@ -28,7 +28,12 @@ certification) carries ``@pytest.mark.slow`` so CI can deselect it with
 """
 from __future__ import annotations
 
+import gzip
+import hashlib
 import random
+import sys
+from functools import cache
+from pathlib import Path
 
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
@@ -210,6 +215,17 @@ def _mesh_fingerprint(mesh) -> tuple:
 def _scene_fingerprint(scene) -> tuple:
     return (_mesh_fingerprint(scene.mesh),
             tuple(_mesh_fingerprint(g.mesh) for g in scene.groups))
+
+
+@cache
+def _golden_rows(name):
+    path = Path(__file__).parent / "fixtures" / f"command_{name}.tsv.gz"
+    with gzip.open(path, "rt") as rows:
+        return [row.rstrip().rsplit("\t", 1) for row in rows]
+
+
+def _scene_digest(scene):
+    return hashlib.sha256(repr(_scene_fingerprint(scene)).encode()).hexdigest()
 
 
 def _on_segment_3d(p, a, b, tol: float = 1e-6) -> bool:
@@ -467,6 +483,22 @@ def _run_or_xfail(scenario: str, seed: int) -> None:
             pytest.xfail(f"known engine gap: {e}")
         return  # started passing — prune it from KNOWN_BAD
     run_sequence(scenario, seed)
+
+
+@pytest.fixture(autouse=True)
+def compare_recorded_states(monkeypatch, scenario, seed):
+    prefix = f"{scenario} seed={seed} "
+    expected = {label: digest for label, digest in _golden_rows("fuzz")
+                if label.startswith(prefix)}
+    check = _check_all
+
+    def compare(scene, pre, user, ctx):
+        check(scene, pre, user, ctx)
+        assert _scene_digest(scene) == expected.pop(ctx), ctx
+
+    monkeypatch.setattr(sys.modules[__name__], "_check_all", compare)
+    yield
+    assert not expected
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS)

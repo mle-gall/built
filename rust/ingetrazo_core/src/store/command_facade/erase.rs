@@ -89,9 +89,7 @@ pub(crate) fn command_erase_selection(
     loops: Vec<Vec<Point>>,
     segments: Vec<Segment>,
 ) -> PyResult<Option<ErasedSelection>> {
-    let Some(hypot) = store_hypot(mesh)? else {
-        return Ok(None);
-    };
+    let hypot = store_hypot(mesh.py())?;
     let py = mesh.py();
     let footprint = py
         .import("core.topology")?
@@ -149,9 +147,6 @@ pub(crate) struct Healed {
 }
 
 pub(crate) fn command_heal_overlaps(mesh: &Bound<'_, PyAny>) -> PyResult<Option<Healed>> {
-    if store_hypot(mesh)?.is_none() {
-        return Ok(None);
-    }
     let before: usize = mesh.getattr("_mut_serial")?.extract()?;
     let footprint = mesh
         .py()
@@ -169,9 +164,6 @@ pub(crate) fn command_erase_cleanup(
     mesh: &Bound<'_, PyAny>,
     footprint: &Bound<'_, PyAny>,
 ) -> PyResult<Option<ErasedCleanup>> {
-    if store_hypot(mesh)?.is_none() {
-        return Ok(None);
-    }
     let serial: u64 = mesh.getattr("_mut_serial")?.extract()?;
     let seams: u32 = mesh
         .getattr("_store")?

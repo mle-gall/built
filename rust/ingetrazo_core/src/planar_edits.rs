@@ -282,74 +282,6 @@ pub(crate) fn store_regions(
     mesh.call_method1("_dirty", (count,))?;
     install(mesh, keep, flags, same.len())
 }
-fn selected<'py>(cmd: &Obj<'py>, mesh: &Obj<'py>) -> PyResult<(Vec<Obj<'py>>, Vec<Obj<'py>>)> {
-    let scope = cmd.getattr("faces")?;
-    if !scope.is_none() {
-        let live: HashSet<u128> = mesh
-            .getattr("faces")?
-            .try_iter()?
-            .map(|f| f?.getattr("key")?.extract())
-            .collect::<PyResult<_>>()?;
-        let mut faces = Vec::new();
-        let mut edges = Vec::new();
-        let mut seen = HashSet::<u128>::new();
-        for f in scope.try_iter()? {
-            let f = f?;
-            if !live.contains(&f.getattr("key")?.extract::<u128>()?) {
-                continue;
-            }
-            for r in face_loops(&f)? {
-                let r = rows(&r)?;
-                for (a, b) in r.iter().zip(r.iter().cycle().skip(1)) {
-                    let e = mesh.call_method1("find_edge", (a, b))?;
-                    if !e.is_none() && seen.insert(e.getattr("key")?.extract()?) {
-                        edges.push(e);
-                    }
-                }
-            }
-            faces.push(f);
-        }
-        return Ok((faces, edges));
-    }
-    let o = xyz(&cmd.getattr("origin")?)?;
-    let n = xyz(&cmd.getattr("normal")?)?;
-    let tol = cmd.getattr("_TOL")?.extract::<f64>()?;
-    let on = |p: &Obj| -> PyResult<bool> { Ok((xyz(p)? - o).dot(n).abs() < tol) };
-    let mut edges = Vec::new();
-    let mut faces = Vec::new();
-    for e in cmd
-        .call_method1("_near_plane", (mesh, "edge"))?
-        .try_iter()?
-    {
-        let e = e?;
-        if on(&e.getattr("a")?)? && on(&e.getattr("b")?)? {
-            edges.push(e);
-        }
-    }
-    if !edges.is_empty() {
-        'face: for f in cmd
-            .call_method1("_near_plane", (mesh, "face"))?
-            .try_iter()?
-        {
-            let f = f?;
-            for r in face_loops(&f)? {
-                for v in r.try_iter()? {
-                    if !on(&v?.getattr("position")?)? {
-                        continue 'face;
-                    }
-                }
-            }
-            faces.push(f);
-        }
-    }
-    Ok((faces, edges))
-}
-#[pyfunction]
-fn rebuild_scoped(cmd: &Obj<'_>, mesh: &Obj<'_>) -> PyResult<Option<usize>> {
-    let (faces, edges) = selected(cmd, mesh)?;
-    rebuild_selected(mesh, &cmd.getattr("origin")?, &cmd.getattr("normal")?, faces, edges)
-}
-
 pub(crate) fn rebuild_selected<'py>(
     mesh: &Obj<'py>, origin: &Obj<'py>, normal: &Obj<'py>,
     faces: Vec<Obj<'py>>, edges: Vec<Obj<'py>>,
@@ -466,28 +398,16 @@ fn welded<'py>(mesh: &Obj<'py>, ring: &Obj<'py>) -> PyResult<Option<Vec<Obj<'py>
             .collect::<PyResult<_>>()?,
     ))
 }
-#[pyfunction]
 pub(crate) fn install_flat(
     mesh: &Obj<'_>,
-    store: bool,
     edges: &Obj<'_>,
     faces: &Obj<'_>,
     flags: &Obj<'_>,
-    paint: &Obj<'_>,
 ) -> PyResult<()> {
     let flags = Flags::new(mesh.py(), flags)?;
-    let mut donors = Vec::new();
-    for r in paint.try_iter()? {
-        let r = r?;
-        donors.push((triangles(&r.get_item(0)?)?, r.get_item(1)?));
-    }
-    if store {
-        mesh.getattr("_store")?.call_method0("drawing_clear")?;
-        mesh.getattr("_attr_own")?.call_method0("clear")?;
-        mesh.call_method0("_bump")?;
-    } else {
-        mesh.call_method0("clear")?;
-    }
+    mesh.getattr("_store")?.call_method0("drawing_clear")?;
+    mesh.getattr("_attr_own")?.call_method0("clear")?;
+    mesh.call_method0("_bump")?;
     for row in edges.try_iter()? {
         let row = row?;
         let a = row.get_item(0)?;
@@ -512,7 +432,7 @@ pub(crate) fn install_flat(
                 holes.append(r)?;
             }
         }
-        let f = mesh.call_method1(
+        mesh.call_method1(
             "add_face",
             (
                 outer,
@@ -523,18 +443,6 @@ pub(crate) fn install_flat(
                 },
             ),
         )?;
-        if f.is_none() || donors.is_empty() {
-            continue;
-        }
-        if let Some(t) = triangles(&f.call_method0("triangulate")?)?.first() {
-            let p = tri_probe(*t);
-            if let Some((_, attrs)) = donors
-                .iter()
-                .find(|(ts, _)| ts.iter().any(|&t| covers(t, p, H)))
-            {
-                f.getattr("attrs")?.call_method1("update", (attrs,))?;
-            }
-        }
     }
     Ok(())
 }
@@ -542,8 +450,6 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "planar_edits")?;
     sub.add_class::<SegmentIndex>()?;
     sub.add_function(wrap_pyfunction!(point_in_tri, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(rebuild_scoped, &sub)?)?;
     sub.add_function(wrap_pyfunction!(store_regions, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(install_flat, &sub)?)?;
     m.add_submodule(&sub)
 }

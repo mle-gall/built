@@ -119,7 +119,7 @@ def test_hidden_panels_let_the_previous_document_go(win):
     del group, scene
     win.new_document()
     assert win.close_document(win.documents()[0], ask=False)
-    win._reclaim_closed_documents()
+    win._host.timers.run_due()
     gc.collect()
     assert view._closed and reference() is None
 

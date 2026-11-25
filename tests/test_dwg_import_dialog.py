@@ -17,7 +17,7 @@ from formats import dwg_bridge  # noqa: E402
 
 @pytest.fixture
 def window(tmp_path):
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     host = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
     yield host.window
     host.close()

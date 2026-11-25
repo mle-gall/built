@@ -16,7 +16,7 @@ fn block<'a>(
     pos: &'a [[f64; 3]],
     edges: &'a [[i64; 2]],
     flags: Option<&'a [u8]>,
-    curves: Option<&'a [i64]>,
+    curves: Option<&'a [i128]>,
     rings: &'a [i64],
     sizes: &'a [i64],
     counts: &'a [i64],

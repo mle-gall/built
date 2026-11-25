@@ -21,7 +21,7 @@ def test_drawing_matches_python_and_change_feed(monkeypatch, case):
     states = []
     for store in (False, True):
         monkeypatch.setattr(scan_index, "_forced_off", not store)
-        sc = _scene(store)
+        sc = _scene()
         m = sc.mesh
         h = History(sc)
         def command(name, **args):
@@ -94,7 +94,6 @@ def test_store_rectangle_never_enumerates_face_views(monkeypatch, curved):
     from core.history import AddFaceCommand
     from core.scene import Scene
     import numpy as np
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     sc = Scene()
     n = 4 if curved else 57
     sc.mesh.add_faces_bulk(np.asarray(_grid_points(n, n + 1)), np.full(n*n, 4), np.ones(n*n, int))
@@ -126,7 +125,7 @@ def test_cycle_graph_keeps_edge_order_across_planned_edits():
     from core.geometry import Edge
     results = []
     for store in (False, True):
-        m = _scene(store).mesh
+        m = _scene().mesh
         a, b = V(0, 0, 0), V(2, 2, 0)
         graph = CycleGraph(m.edges)
         def loops():
@@ -147,7 +146,7 @@ def test_store_ring_queries_match_the_position_kernel():
     from core import topology as topo
     results = []
     for store in (False, True):
-        m = _scene(store).mesh
+        m = _scene().mesh
         face = m.faces[0]
         opening = [V(.5,.5,0), V(1,.5,0), V(1,1,0), V(.5,1,0)]
         m.add_hole(face, opening)

@@ -288,7 +288,10 @@ def test_paste_stamps_once_and_returns_to_select(native_host, monkeypatch):
     # One stamp per paste: after the click the Select tool is back,
     # nothing keeps following the cursor. The clipboard survives, so pasting
     # again stamps another copy.
-    monkeypatch.setattr("formats.clip.current_offer", lambda: None)
+    # A board of this test's own: no copy of an earlier test to adopt.
+    from ingetrazo_render import shell_files as files
+    from ingetrazo_render import ModelClipboard
+    monkeypatch.setattr(files, "_clipboard", ModelClipboard())
     win = native_host.window
     vp = win.viewport
     vp.clipboard = {"faces": [([V(0, 0), V(1, 0), V(1, 1), V(0, 1)], [])],
@@ -419,7 +422,10 @@ def test_paste_in_place_lands_on_the_original_and_selects_it():
 
 
 def test_paste_in_place_menu_action_keeps_the_active_tool(native_host, monkeypatch):
-    monkeypatch.setattr("formats.clip.current_offer", lambda: None)
+    # A board of this test's own: no copy of an earlier test to adopt.
+    from ingetrazo_render import shell_files as files
+    from ingetrazo_render import ModelClipboard
+    monkeypatch.setattr(files, "_clipboard", ModelClipboard())
     win = native_host.window
     vp = win.viewport
     vp.clipboard = {"faces": [([V(0, 0), V(1, 0), V(1, 1), V(0, 1)], [])],

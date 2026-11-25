@@ -150,9 +150,7 @@ pub(crate) fn command_rebuild_plane(
     normal: Point,
     faces: Option<Vec<u128>>,
 ) -> PyResult<Option<RebuiltPlane>> {
-    let Some(hypot) = store_hypot(mesh)? else {
-        return Ok(None);
-    };
+    let hypot = store_hypot(mesh.py())?;
     let start = serial(mesh)?;
     let store = mesh.getattr("_store")?;
     let count = match faces {
@@ -218,9 +216,7 @@ fn inherit_flat_paint(
 }
 
 pub(crate) fn command_rebuild_planar(mesh: &Obj<'_>) -> PyResult<Option<RebuiltPlanar>> {
-    let Some(hypot) = store_hypot(mesh)? else {
-        return Ok(None);
-    };
+    let hypot = store_hypot(mesh.py())?;
     let py = mesh.py();
     let h = crate::hypot_of(&hypot)?;
     let store = mesh.getattr("_store")?;
@@ -262,11 +258,9 @@ pub(crate) fn command_rebuild_planar(mesh: &Obj<'_>) -> PyResult<Option<RebuiltP
     let rebuilt = regions.len();
     planar_edits::install_flat(
         mesh,
-        true,
         edges.into_pyobject(py)?.as_any(),
         regions.into_pyobject(py)?.as_any(),
         flags.as_any(),
-        PyList::empty(py).as_any(),
     )?;
     inherit_flat_paint(mesh, &store, &snapshot, &hypot)?;
     if !winding.is_none() {

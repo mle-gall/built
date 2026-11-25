@@ -235,7 +235,8 @@ def test_the_model_is_parked_and_comes_back(native_window):
 
 
 def test_workspace_cannot_take_over_an_open_or_write_over_the_parked_model(native_window, tmp_path):
-    from app_shell import files, windows
+    from app_shell import windows
+    from ingetrazo_render import shell_files as files
     win = native_window
     doc = win.active_document()
     ws = FakeWorkspace()
@@ -292,7 +293,7 @@ def test_a_workspace_that_will_not_go_stops_quitting(native_window):
     win = native_window
     ws = FakeWorkspace(leave=False)
     _app_for(win).enter_workspace(ws)
-    from app_shell.files import request_close
+    from ingetrazo_render.shell_files import request_close
     assert not request_close(win)
     assert win.workspace() is ws
     ws.leave_answer = True

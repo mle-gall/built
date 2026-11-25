@@ -306,7 +306,7 @@ pub fn read_facts(
         f.paste = clip
             || match opt(win, "_clipboard_available") {
                 Some(available) => available.call0()?.is_truthy()?,
-                None => py.import("formats.clip")?.call_method0("available")?.is_truthy()?,
+                None => py.import("ingetrazo_render")?.getattr("shell_files")?.getattr("_clipboard")?.call_method0("available")?.is_truthy()?,
             };
         let own = vp.getattr("__dict__")?.call_method1("get", ("_isolate_base",))?;
         f.isolated = !own.is_none() || flag(&vp, "_previous_views");

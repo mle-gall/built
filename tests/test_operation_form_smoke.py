@@ -466,7 +466,7 @@ def test_current_view_svg_modes_stay_centred_and_export(tmp_path):
     venv = fixture_venv(
         tmp_path,
         f"""from app_shell import native
-from app_shell.host import Host
+from ingetrazo_render import Host
 native.save_file = lambda *args: {str(drawing)!r}
 original_state = Host.state
 def state(self):
@@ -524,7 +524,7 @@ def test_bevel_inspector_edit_apply_and_leave(tmp_path):
     initial = tmp_path / "wall.built"
     save_scene(_tagged_wall_scene(), initial)
     venv = fixture_venv(tmp_path, """from tools.fillet import FilletTool
-from app_shell.host import Host
+from ingetrazo_render import Host
 FilletTool.shape = "steps"
 FilletTool.radius = 0.01
 state = Host.state
@@ -573,7 +573,7 @@ def test_camera_registry_text_and_plugin_utilities(tmp_path):
     thumb = solid_raster(90, 40, (85, 119, 136))
     assert thumb.save(str(image))
     marker = tmp_path / "preview-closed"
-    venv = fixture_venv(tmp_path, f"""from app_shell.host import Host
+    venv = fixture_venv(tmp_path, f"""from ingetrazo_render import Host
 from core import bim_registry
 from ingetrazo_render import RenderResult
 from core.plugin_panels import show_utility
@@ -686,7 +686,7 @@ def test_drawing_catalog_and_scene_folders_in_native_window(tmp_path):
     output = tmp_path / "drawing.pat"
     venv = fixture_venv(tmp_path, f"""
 import json
-from app_shell.host import Host
+from ingetrazo_render import Host
 from views import wgpu_ui
 from views.filedialogs import file_dialogs
 menu, state = Host.menu, Host.state
@@ -1081,7 +1081,7 @@ def test_native_takeoff_picks_tagged_faces_in_their_edit_context(tmp_path):
     _group(scene, History(scene), faces).name = "Wall assembly"
     model = tmp_path / "wall.built"
     save_scene(scene, model)
-    venv = fixture_venv(tmp_path, """from app_shell.host import Host
+    venv = fixture_venv(tmp_path, """from ingetrazo_render import Host
 from views import wgpu_ui
 menu, state = Host.menu, Host.state
 def drive(self, command):

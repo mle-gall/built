@@ -10,7 +10,7 @@
 use super::steps::{running, version, After, Obj, RecordStep};
 use crate::store::command_facade::{command_heal_overlaps, command_rebuild_plane, command_rebuild_planar};
 use pyo3::prelude::*;
-use pyo3::types::{PyList, PyTuple};
+use pyo3::types::PyList;
 use pyo3::PyClassInitializer;
 
 /// What `RebuildPlaneFacesCommand._on_plane` accepted (and the explode
@@ -19,18 +19,6 @@ const TOL: f64 = 1e-4;
 
 fn none(py: Python<'_>) -> Obj<'_> {
     py.None().into_bound(py)
-}
-
-fn planar<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
-    py.import("ingetrazo_core")?.getattr("planar_edits")?.getattr(name)
-}
-
-fn topology<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
-    py.import("core.topology")?.getattr(name)
-}
-
-fn is_store(py: Python<'_>, mesh: &Obj<'_>) -> PyResult<bool> {
-    Ok(mesh.get_type().is(&py.import("core.store_mesh")?.getattr("StoreMesh")?))
 }
 
 fn face_views<'py>(py: Python<'py>, mesh: &Obj<'py>, keys: &[u128]) -> PyResult<Vec<Obj<'py>>> {
@@ -80,20 +68,12 @@ fn run_plane(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     let keys = if faces.is_none() {
         None
     } else {
-        Some(faces.try_iter()?.map(|f| f?.getattr("key")?.extract::<u128>()).collect::<PyResult<Vec<_>>>())
+        Some(faces.try_iter()?.map(|f| f?.getattr("key")?.extract::<u128>()).collect::<PyResult<Vec<_>>>()?)
     };
-    // Object faces have no store key: the object way rebuilds them.
-    let rebuilt = match keys {
-        None => command_rebuild_plane(&mesh, crate::math::xyz(&origin)?.into(), n.into(), None)?.map(|r| r.ran.then_some(r.rebuilt)),
-        Some(Ok(keys)) => command_rebuild_plane(&mesh, crate::math::xyz(&origin)?.into(), n.into(), Some(keys))?.map(|r| r.ran.then_some(r.rebuilt)),
-        Some(Err(_)) => None,
-    };
-    let count = match rebuilt {
-        Some(count) => count,
-        None => planar(py, "rebuild_scoped")?.call1((&me, &mesh))?.extract::<Option<usize>>()?,
-    };
-    if let Some(count) = count {
-        me.setattr("rebuilt", count)?;
+    let rebuilt = command_rebuild_plane(&mesh, crate::math::xyz(&origin)?.into(), n.into(), keys)?
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("rebuilding requires a store mesh"))?;
+    if rebuilt.ran {
+        me.setattr("rebuilt", rebuilt.rebuilt)?;
         clear_selection(scene)?;
         version(scene)?;
     }
@@ -106,65 +86,15 @@ fn run_planar(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     let me = running(py).expect("a running step");
     let mesh = scene.getattr("mesh")?;
     keep_before(s, py, &mesh, true)?;
-    me.setattr("rebuilt", 0)?;
-    me.setattr("flat", true)?;
-    if let Some(r) = command_rebuild_planar(&mesh)? {
-        me.setattr("flat", r.flat)?;
-        if r.flat {
-            me.setattr("rebuilt", r.rebuilt)?;
-            clear_selection(scene)?;
-            version(scene)?;
-        }
-        return Ok(());
+    let result = command_rebuild_planar(&mesh)?
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("rebuilding requires a store mesh"))?;
+    me.setattr("flat", result.flat)?;
+    me.setattr("rebuilt", result.rebuilt)?;
+    if result.flat {
+        clear_selection(scene)?;
+        version(scene)?;
     }
-    // The object way, as the Python command ran it.
-    let footprint = topology(py, "winding_footprint")?.call1((&mesh,))?;
-    if !mesh.getattr("edges")?.is_truthy()? {
-        return me.setattr("flat", false);
-    }
-    let positions = mesh.getattr("vertices")?.try_iter()?.map(|v| v?.getattr("position")).collect::<PyResult<Vec<_>>>()?;
-    let plane = py.import("core.arrangement")?.getattr("coplanar_plane")?.call1((PyList::new(py, positions)?,))?;
-    if plane.is_none() {
-        return me.setattr("flat", false);
-    }
-    let (mut origin, mut normal) = (plane.get_item(0)?, plane.get_item(1)?);
-    let faces = mesh.getattr("faces")?;
-    if faces.is_truthy()? {
-        // A real face's normal gives a stable orientation.
-        let first = faces.get_item(0)?;
-        normal = first.call_method0("normal")?;
-        origin = first.getattr("vertices")?.get_item(0)?;
-    }
-    let mesh_api = py.import("core.mesh")?;
-    let vec3 = py.import("ingetrazo_core")?.getattr("Vec3")?;
-    let mut segments = Vec::new();
-    let mut flagged = Vec::new();
-    for e in mesh.getattr("edges")?.try_iter()? {
-        let e = e?;
-        segments.push(PyTuple::new(py, [e.getattr("v0")?.getattr("position")?, e.getattr("v1")?.getattr("position")?])?);
-        if !mesh_api.call_method1("edge_is_plain", (&e,))?.is_truthy()? {
-            flagged.push(PyTuple::new(py, [vec3.call1((e.getattr("a")?,))?, vec3.call1((e.getattr("b")?,))?, mesh_api.call_method1("edge_flags", (&e,))?])?);
-        }
-    }
-    let mut paint = Vec::new();
-    for f in faces.try_iter()? {
-        let f = f?;
-        let attrs = f.getattr("attrs")?;
-        if attrs.is_truthy()? {
-            let tris = f.call_method0("triangulate")?.try_iter()?.map(|t| Ok(PyTuple::new(py, t?.try_iter()?.collect::<PyResult<Vec<_>>>()?)?.into_any())).collect::<PyResult<Vec<_>>>()?;
-            paint.push(PyTuple::new(py, [PyList::new(py, tris)?.into_any(), py.get_type::<pyo3::types::PyDict>().call1((attrs,))?])?);
-        }
-    }
-    let rebuilt = py.import("core.arrangement")?.getattr("planar_rebuild")?.call1((PyList::new(py, segments)?, origin, normal))?;
-    let (edges, regions) = (rebuilt.get_item(0)?, rebuilt.get_item(1)?);
-    clear_selection(scene)?;
-    planar(py, "install_flat")?.call1((&mesh, is_store(py, &mesh)?, &edges, &regions, PyList::new(py, flagged)?, PyList::new(py, paint)?))?;
-    if !footprint.is_none() {
-        topology(py, "orient_coplanar_faces")?.call1((&mesh, &footprint))?;
-    }
-    mesh.call_method0("resplit_curves")?;
-    me.setattr("rebuilt", regions.len()?)?;
-    version(scene)
+    Ok(())
 }
 
 // ------------------------------------------------------------ heal
@@ -173,14 +103,9 @@ fn run_heal(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     let me = running(py).expect("a running step");
     let mesh = scene.getattr("mesh")?;
     keep_before(s, py, &mesh, true)?;
-    let removed: Vec<Obj<'_>> = match command_heal_overlaps(&mesh)? {
-        Some(healed) => face_views(py, &mesh, &healed.faces)?,
-        None => {
-            let kw = pyo3::types::PyDict::new(py);
-            kw.set_item("footprint", topology(py, "winding_footprint")?.call1((&mesh,))?)?;
-            topology(py, "heal_overlapping_faces")?.call((&mesh,), Some(&kw))?.try_iter()?.collect::<PyResult<_>>()?
-        }
-    };
+    let healed = command_heal_overlaps(&mesh)?
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("healing requires a store mesh"))?;
+    let removed = face_views(py, &mesh, &healed.faces)?;
     me.setattr("healed", removed.len())?;
     let selection = scene.getattr("selection")?;
     for f in removed {

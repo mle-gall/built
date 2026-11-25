@@ -22,7 +22,6 @@ def drawing():
 
 @pytest.mark.parametrize("scope", ["whole", "two", "stale", "empty", "no_plane"])
 def test_plane_result_matches_history(monkeypatch, scope):
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     actual, expected = drawing(), drawing()
     mesh = actual.mesh
     origin = (0., 0., 12. if scope == "no_plane" else 0.)
@@ -46,18 +45,9 @@ def test_plane_result_matches_history(monkeypatch, scope):
     assert fingerprint(mesh) == fingerprint(expected.mesh)
 
 
-def test_plane_refusal_leaves_rows_untouched(monkeypatch):
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
-    mesh = drawing().mesh
-    before = fingerprint(mesh), mesh.revision
-    mesh._planned_points = {}
-    assert MeshStore.command_rebuild_plane(mesh, (0.,0.,0.), (0.,0.,1.)) is None
-    assert (fingerprint(mesh), mesh.revision) == before
-
 @pytest.mark.parametrize("kind", ["empty", "solid", "painted", "unpainted", "reversed"])
 def test_flat_rebuild_matches_history(monkeypatch, kind):
     from core.history import RebuildPlanarFacesCommand
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     def make():
         scene = Scene()
         mesh = scene.mesh

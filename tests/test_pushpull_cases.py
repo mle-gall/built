@@ -24,6 +24,25 @@ from core.scene import Scene
 from formats.igz import load_into, save_scene
 from tests import test_pushpull_ux as T
 
+@pytest.fixture(autouse=True)
+def compare_recorded_pushes(request, monkeypatch):
+    from tests.test_fuzz_engine import _golden_rows, _scene_digest
+
+    expected = [digest for label, digest in _golden_rows("pushpull")
+                if label.rsplit("\t", 1)[0] == request.node.nodeid]
+    push = T._push
+    observed = []
+
+    def record(scene, *args, **kwargs):
+        result = push(scene, *args, **kwargs)
+        observed.append(_scene_digest(scene))
+        return result
+
+    monkeypatch.setattr(T, "_push", record)
+    yield
+    assert observed == expected
+
+
 # ---- helpers ---------------------------------------------------------------
 
 def _face(mesh, centre, normal, tol=2e-3):

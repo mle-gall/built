@@ -84,7 +84,7 @@ impl Store {
                     .collect();
                 if let Some(edges) = edges {
                     for e in edges {
-                        self.set_edge_curve(e, *next);
+                        self.set_edge_curve(e, (*next).into());
                     }
                     *next += 1;
                 }

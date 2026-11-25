@@ -82,13 +82,9 @@ def _signature(scene):
     return [group(g, str(i)) for i, g in enumerate(scene.groups)]
 
 
-@pytest.mark.parametrize("store", [False, True])
-def test_bulk_flags_match_original_lookup_and_resave(tmp_path, monkeypatch, store):
+def test_bulk_flags_match_original_lookup_and_resave(tmp_path, monkeypatch):
     from core import store_mesh
-    monkeypatch.setenv("INGETRAZO_STORE", "1" if store else "0")
-    if store and not store_mesh.enabled():
-        pytest.skip("requires native store")
-    cls = store_mesh.StoreMesh if store else Mesh
+    cls = store_mesh.StoreMesh
     original = cls.vertex_at
     calls = []
 
@@ -104,7 +100,7 @@ def test_bulk_flags_match_original_lookup_and_resave(tmp_path, monkeypatch, stor
     old_calls = len(calls)
     calls.clear()
     skp.apply_payload(actual, _payload())
-    assert isinstance(actual.groups[0].mesh, store_mesh.StoreMesh) == store
+    assert isinstance(actual.groups[0].mesh, store_mesh.StoreMesh)
     assert len(calls) < old_calls // 4
     assert _signature(actual) == _signature(expected)
     assert actual.groups[2].mesh is actual.groups[3].mesh
@@ -138,12 +134,8 @@ def test_bulk_flags_keep_reporting_inside_a_large_group(monkeypatch):
     assert reports == sorted(reports)
 
 
-@pytest.mark.parametrize("store", [False, True])
-def test_noisy_segments_match_final_lookup_without_changing_other_flags(monkeypatch, store):
+def test_noisy_segments_match_final_lookup_without_changing_other_flags(monkeypatch):
     from core import store_mesh
-    monkeypatch.setenv("INGETRAZO_STORE", "1" if store else "0")
-    if store and not store_mesh.enabled():
-        pytest.skip("requires native store")
     for seed in range(20):
         rng = np.random.default_rng(seed)
         points = rng.integers(-3, 4, size=(90, 3)) * .5
@@ -156,7 +148,7 @@ def test_noisy_segments_match_final_lookup_without_changing_other_flags(monkeypa
         for soften in (_reference_soften, skp._soften_bulk_edges):
             mesh = Mesh()
             vertices, inverse = mesh.bulk_weld(points)
-            edges = None if store else {}
+            edges = None
             mesh.add_faces_welded(vertices, inverse, [3] * 30, [1] * 30, edge_map=edges)
             for i, edge in enumerate(mesh.edges):
                 edge.hidden, edge.curve, edge.layer = i % 2 == 0, i + 10, "Edges"

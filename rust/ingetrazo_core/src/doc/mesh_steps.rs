@@ -20,10 +20,6 @@ fn host<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
     py.import("core.history")?.getattr(name)
 }
 
-fn is_store(py: Python<'_>, mesh: &Obj<'_>) -> PyResult<bool> {
-    Ok(mesh.get_type().is(&py.import("core.store_mesh")?.getattr("StoreMesh")?))
-}
-
 fn optional<'py>(o: &Obj<'py>, name: &str) -> PyResult<Option<Obj<'py>>> {
     Ok(o.getattr_opt(name)?.filter(|v| !v.is_none()))
 }
@@ -75,16 +71,7 @@ fn after_snapshot(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Option
 fn run_tag_curve(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     let mesh = scene.getattr("mesh")?;
     let (points, closed) = (s.arg(py, 0), s.arg(py, 1));
-    if s.journalled() && is_store(py, &mesh)? {
-        touch(&mesh)?;
-        let rows = points.try_iter()?.map(|p| p?.call_method0("toTuple")).collect::<PyResult<Vec<_>>>()?;
-        let counter = py.import("core.mesh")?.getattr("_CURVE_COUNTER")?;
-        if mesh.getattr("_store")?.call_method1("tag_curve_path", (PyList::new(py, rows)?, &closed, counter))?.is_truthy()? {
-            mesh.call_method0("next_curve_id")?;
-        }
-    } else {
-        mesh.call_method1("tag_curve", (points, closed))?;
-    }
+    mesh.call_method1("tag_curve", (points, closed))?;
     Ok(())
 }
 
@@ -92,37 +79,28 @@ fn run_explode_curves(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResu
     let me = running(py).expect("a running step");
     let mesh = scene.getattr("mesh")?;
     let edges = s.arg(py, 0);
-    if s.journalled() && is_store(py, &mesh)? {
-        let mut ids = Vec::new();
-        let mut native = true;
-        for e in edges.try_iter()? {
-            if let Some(id) = optional(&e?, "curve")? {
-                match id.extract::<u64>() {
-                    Ok(v) if id.is_exact_instance_of::<pyo3::types::PyInt>() && v < (1u64 << 63) => ids.push(id),
-                    _ => native = false,
-                }
-            }
-        }
-        if native {
-            let ids = PySet::new(py, ids)?;
-            me.setattr("curves", mesh.getattr("_store")?.call_method1("explode_curves", (ids,))?)?;
-            touch(&mesh)?;
-            return version(scene);
-        }
+    let ids = PySet::empty(py)?;
+    for edge in edges.try_iter()? {
+        if let Some(id) = optional(&edge?, "curve")? { ids.add(id)?; }
     }
-    let result = py.import("ingetrazo_core")?.getattr("object_replay")?.getattr("explode_curves")?.call1((&mesh, &edges))?;
-    me.setattr("curves", result.get_item(0)?)?;
-    me.setattr("_ids", result.get_item(1)?)?;
+    let store = mesh.getattr("_store")?;
+    let prior = store.call_method1("explode_curves", (&ids, !s.journalled()))?;
+    me.setattr("curves", ids.len())?;
+    me.setattr("_ids", prior)?;
+    touch(&mesh)?;
     version(scene)
 }
 
 fn after_explode_curves(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Option<&str>) -> PyResult<()> {
     if phase == Some("undo") && s.is_direct() {
         let me = running(py).expect("a running step");
-        py.import("ingetrazo_core")?
-            .getattr("object_replay")?
-            .getattr("restore_curves")?
-            .call1((scene.getattr("mesh")?, me.getattr("_ids")?))?;
+        let mesh = scene.getattr("mesh")?;
+        let store = mesh.getattr("_store")?;
+        for row in me.getattr("_ids")?.try_iter()? {
+            let row = row?;
+            store.call_method1("set_edge_curve", (row.get_item(0)?, row.get_item(1)?))?;
+        }
+        touch(&mesh)?;
     }
     version(scene)
 }
@@ -171,7 +149,7 @@ fn run_prune_orphans(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResul
     let edges = scans.call_method1("edges_near_points", (&mesh, &keys))?;
     let faces = scans.call_method1("faces_near_points_rings", (&mesh, &keys))?;
     let selection = scene.getattr("selection")?;
-    let removed: Vec<Obj<'_>> = if is_store(py, &mesh)? {
+    let removed: Vec<Obj<'_>> = {
         let store = mesh.getattr("_store")?;
         let prune = if s.journalled() { "prune_orphan_edges" } else { "orphaned_edges_at" };
         let rows = PyList::new(py, vertices.try_iter()?.map(|v| v?.call_method0("toTuple")).collect::<PyResult<Vec<_>>>()?)?;
@@ -190,10 +168,6 @@ fn run_prune_orphans(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResul
             return Ok(());
         }
         removed
-    } else {
-        let edges = if edges.is_none() { scene.getattr("edges")? } else { edges };
-        let faces = if faces.is_none() { scene.getattr("faces")? } else { faces };
-        host(py, "orphaned_edges_at")?.call1((edges, faces, &vertices))?.try_iter()?.collect::<PyResult<_>>()?
     };
     for edge in &removed {
         mesh.call_method1("remove_edge", (edge,))?;
@@ -318,38 +292,9 @@ fn face_meshes<'py>(s: &RecordStep, py: Python<'py>, _scene: &Obj<'py>) -> PyRes
 /// reversed loop changes no count, coordinate or paint, so every mesh
 /// holding a flipped face says so for the group chunks drawing it (#197).
 fn flip(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
-    let result = host(py, "_reverse_faces")?.call1((s.arg(py, 0),))?;
-    let (batches, ids) = (result.get_item(0)?, result.get_item(1)?);
-    let mut owners: Vec<Obj<'_>> = batches.try_iter()?.collect::<PyResult<_>>()?;
-    if ids.is_truthy()? {
-        let mut meshes = vec![
-            scene.getattr_opt("mesh")?.unwrap_or_else(|| none(py)),
-            scene.getattr_opt("loose_mesh")?.unwrap_or_else(|| none(py)),
-        ];
-        let iter_placements = py.import("core.group")?.getattr("iter_placements")?;
-        for g in scene.getattr_opt("groups")?.map_or(Ok(Vec::new()), |g| g.try_iter()?.collect::<PyResult<Vec<_>>>())? {
-            for row in iter_placements.call1((g,))?.try_iter()? {
-                meshes.push(row?.get_item(0)?.getattr("mesh")?);
-            }
-        }
-        let mut seen: HashSet<usize> = owners.iter().map(|m| m.as_ptr() as usize).collect();
-        for m in meshes {
-            if m.is_none() || !seen.insert(m.as_ptr() as usize) {
-                continue;
-            }
-            let mut holds = false;
-            for f in m.getattr("faces")?.try_iter()? {
-                if ids.contains(f?.getattr("key")?)? {
-                    holds = true;
-                    break;
-                }
-            }
-            if holds {
-                owners.push(m);
-            }
-        }
-    }
-    for mesh in owners {
+    let owners = host(py, "_reverse_faces")?.call1((s.arg(py, 0),))?;
+    for mesh in owners.try_iter()? {
+        let mesh = mesh?;
         let rev: i64 = mesh.getattr_opt("_winding_rev")?.map_or(Ok(0), |v| v.extract())?;
         mesh.setattr("_winding_rev", rev + 1)?;
     }

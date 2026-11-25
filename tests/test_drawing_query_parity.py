@@ -49,7 +49,6 @@ def overlay_results(monkeypatch):
     from core.mesh import Mesh
     outputs = []
     for store in (False, True):
-        monkeypatch.setenv("INGETRAZO_STORE", str(int(store)))
         for seed in range(16):
             mesh = Mesh()
             rng = random.Random(seed)

@@ -61,7 +61,7 @@ def open_project(win, path) -> bool:
 
 
 def _open_member(win, s, path, camera, scene) -> None:
-    from app_shell import files
+    from ingetrazo_render import shell_files as files
     from views import document_open
     doc = next((d for d in win._documents if d.same_file(path)), None)
     if doc is not None:

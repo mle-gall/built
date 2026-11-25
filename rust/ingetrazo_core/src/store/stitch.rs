@@ -430,7 +430,7 @@ impl Store {
     /// faces: the key rules' "the new edge takes the old edge's key". Its
     /// flags are the caller's (a new Python edge's defaults, or what
     /// `split_edge_at` copies).
-    fn revive_edge(&mut self, e: u32, a: u32, b: u32, flags: u8, curve: i64, layer: u32, ch: &mut Change) {
+    fn revive_edge(&mut self, e: u32, a: u32, b: u32, flags: u8, curve: i128, layer: u32, ch: &mut Change) {
         debug_assert!(!self.alive(Kind::Edge, e));
         self.state.ends.set(e as usize, [a, b]);
         if *self.state.eflags.get(e as usize) != flags {

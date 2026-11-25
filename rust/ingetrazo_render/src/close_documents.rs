@@ -205,14 +205,14 @@ fn request_close(win: &Bound<'_, PyAny>) -> PyResult<bool> {
 /// that writes to or closes the foreground document.
 #[pyfunction]
 fn project_tab_menu(win: &Bound<'_, PyAny>, verb: &str, index: usize) -> PyResult<()> {
-    let docs: Vec<Bound<'_, PyAny>> = win.getattr("_project_tabs")?.call_method0("documents")?.extract()?;
+    let docs: Vec<Bound<'_, PyAny>> = win.call_method0("documents")?.extract()?;
     let Some(doc) = docs.get(index) else { return Ok(()); };
     if !win.getattr("_doc")?.is(doc) {
         win.call_method1("activate_document", (doc,))?;
         if !win.getattr("_doc")?.is(doc) { return Ok(()); }
     }
     match verb {
-        "new" => { win.getattr("_project_tabs")?.getattr("newRequested")?.call_method0("emit")?; }
+        "new" => { win.call_method0("_on_new_tab")?; }
         "open" => { win.call_method0("_on_open")?; }
         "save" => { win.call_method0("_on_save")?; }
         "save_as" => { win.call_method0("_on_save_as")?; }

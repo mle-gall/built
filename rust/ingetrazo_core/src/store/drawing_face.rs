@@ -817,7 +817,7 @@ impl Store {
         let swap = if let Some(f) = mother {
             let outline = self.outline(f,h);
             if let Some((i,a,b)) = outline.shared_hole(ring) {
-                Some((i,outline.joined_hole(a,b)?))
+                outline.joined_hole(a,b).map(|ring| (i,ring))
             } else { None }
         } else { None };
         let mut enclosed = Vec::new();

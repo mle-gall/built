@@ -1,11 +1,8 @@
-"""Time materialised kernel entry points on generated geometry, in milliseconds."""
+"""Time store kernel entry points on generated geometry, in milliseconds."""
 import json
-import os
 from statistics import median
 from time import perf_counter
 from types import SimpleNamespace
-
-os.environ["INGETRAZO_STORE"] = "0"
 
 from ingetrazo_core import Vec3 as V
 from core import arrangement, push_scans, snap_query, topology

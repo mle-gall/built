@@ -19,17 +19,9 @@ from core.store_mesh import StoreMesh
 SQUARE = [V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)]
 
 
-@pytest.fixture(params=["store", "python"])
-def engine(request, monkeypatch):
-    if request.param == "store":
-        module = pytest.importorskip("ingetrazo_core")
-        monkeypatch.setattr(_native, "native", module)
-        monkeypatch.setenv("INGETRAZO_STORE", "1")
-        monkeypatch.setattr(StoreMesh, "_materialise",
-                            lambda *_: pytest.fail("materialised"))
-    else:
-        monkeypatch.setenv("INGETRAZO_STORE", "0")
-    return request.param
+@pytest.fixture
+def engine(monkeypatch):
+    monkeypatch.setattr(StoreMesh, "_materialise", lambda *_: pytest.fail("materialised"))
 
 
 def _state(mesh):
@@ -41,7 +33,7 @@ def _state(mesh):
 def test_redo_relinks_what_a_later_snapshot_never_held(engine):
     scene = Scene()
     history = History(scene)
-    assert (type(scene.mesh) is StoreMesh) == (engine == "store")
+    assert type(scene.mesh) is StoreMesh
     history.execute(AddEdgeCommand(SQUARE[0], SQUARE[1]))
     history.execute(SnapshotCompound([AddEdgeCommand(SQUARE[1], SQUARE[2])]))
     history.execute(AddEdgeCommand(SQUARE[2], SQUARE[3]))

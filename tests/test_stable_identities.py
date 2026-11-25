@@ -13,7 +13,7 @@ from core.group import Group, copy_group
 from core.mesh import Mesh
 from core.scene import Scene
 from core.ifc_identity import compressed_guid, copied_face_attrs
-from formats import igz, clip
+from formats import igz, clip_payload as clip
 from formats.ifc import save_ifc
 
 

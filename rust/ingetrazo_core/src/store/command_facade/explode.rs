@@ -107,12 +107,7 @@ pub(crate) fn command_explode_geometry(
     transform: Option<[f64; 16]>,
     paint: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<Option<Exploded>> {
-    let Some(hypot) = store_hypot(mesh)? else {
-        return Ok(None);
-    };
-    if store_hypot(group_mesh)?.is_none() {
-        return Ok(None);
-    }
+    let hypot = store_hypot(mesh.py())?;
     let h = crate::hypot_of(&hypot)?;
     let py = mesh.py();
     let start: usize = mesh.getattr("_mut_serial")?.extract()?;

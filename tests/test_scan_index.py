@@ -57,7 +57,7 @@ def _grid_points(n, flat_rows):
     return pts
 
 
-def _scene(store: bool, n: int = 6, flat_rows: int = 3, seed: int = 0,
+def _scene(n: int = 6, flat_rows: int = 3, seed: int = 0,
            flat: bool = False):
     """A deterministic scene: a grid of quads (bulk: store-backed when
     ``store``), a box beside it, free edges, a holed face and a curve.
@@ -68,19 +68,11 @@ def _scene(store: bool, n: int = 6, flat_rows: int = 3, seed: int = 0,
     from core.edits import build_add_edge, build_add_edges
     from core.history import AddFaceCommand, History
     from core.scene import Scene
-    was = os.environ.get("INGETRAZO_STORE")
-    os.environ["INGETRAZO_STORE"] = "1" if store else "0"
-    try:
-        scene = Scene()
-        pts = _grid_points(n, flat_rows)
-        scene.mesh.add_faces_bulk(np.asarray(pts, float),
-                                  np.full(n * n, 4), np.ones(n * n, int))
-    finally:
-        if was is None:
-            del os.environ["INGETRAZO_STORE"]
-        else:
-            os.environ["INGETRAZO_STORE"] = was
-    assert (type(scene.mesh) is S.StoreMesh) == store
+    scene = Scene()
+    pts = _grid_points(n, flat_rows)
+    scene.mesh.add_faces_bulk(np.asarray(pts, float),
+                              np.full(n * n, 4), np.ones(n * n, int))
+    assert type(scene.mesh) is S.StoreMesh
     h = History(scene)
     rng = random.Random(seed)
     # A box standing off the grid.
@@ -266,22 +258,22 @@ def _local_hash(self):
     return self.key & ((1 << 40) - 1)
 
 
-def run_differential(seed: int, store: bool, n_ops: int, n: int = 6,
+def run_differential(seed: int, n_ops: int, n: int = 6,
                      flat: bool = False) -> int:
     """The seeded sequence on two copies, scans on and off; returns the
     number of steps compared."""
     with _KeyHashes():
-        return _run_differential(seed, store, n_ops, n, flat)
+        return _run_differential(seed, n_ops, n, flat)
 
 
-def _run_differential(seed: int, store: bool, n_ops: int, n: int,
+def _run_differential(seed: int, n_ops: int, n: int,
                       flat: bool) -> int:
     from core.history import History
-    on = _scene(store, n=n, seed=seed, flat=flat)
+    on = _scene(n=n, seed=seed, flat=flat)
     off_was = scan_index._forced_off
     scan_index._forced_off = True
     try:
-        off = _scene(store, n=n, seed=seed, flat=flat)
+        off = _scene(n=n, seed=seed, flat=flat)
     finally:
         scan_index._forced_off = off_was
     assert _fingerprint(on.mesh) == _fingerprint(off.mesh)
@@ -297,7 +289,7 @@ def _run_differential(seed: int, store: bool, n_ops: int, n: int,
             _op(r_off, off, h_off, kind)
         finally:
             scan_index._forced_off = off_was
-        ctx = f"seed {seed} step {step} {label} store={store}"
+        ctx = f"seed {seed} step {step} {label}"
         assert h_on.last_error == h_off.last_error, ctx
         assert h_on.last_rejected == h_off.last_rejected, ctx
         assert _fingerprint(on.mesh) == _fingerprint(off.mesh), ctx
@@ -305,23 +297,20 @@ def _run_differential(seed: int, store: bool, n_ops: int, n: int,
     return steps
 
 
-@pytest.mark.parametrize("store", [False, True])
 @pytest.mark.parametrize("seed", fuzz.sample(range(46), 3, "scan_commands"))
-def test_commands_decide_as_the_full_scans(seed, store):
-    assert run_differential(seed, store, n_ops=24) == 24
+def test_commands_decide_as_the_full_scans(seed):
+    assert run_differential(seed, n_ops=24) == 24
 
 
-@pytest.mark.parametrize("store", [False, True])
 @pytest.mark.parametrize("seed", fuzz.sample(range(46), 2, "scan_flat"))
-def test_commands_decide_as_the_full_scans_on_a_flat_drawing(seed, store):
-    assert run_differential(seed, store, n_ops=20, flat=True) == 20
+def test_commands_decide_as_the_full_scans_on_a_flat_drawing(seed):
+    assert run_differential(seed, n_ops=20, flat=True) == 20
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("store", [False, True])
 @pytest.mark.parametrize("seed", range(46))
-def test_commands_decide_as_the_full_scans_random(seed, store):
-    run_differential(seed, store, n_ops=60, n=8, flat=seed % 4 == 0)
+def test_commands_decide_as_the_full_scans_random(seed):
+    run_differential(seed, n_ops=60, n=8, flat=seed % 4 == 0)
 
 
 # ---- fixtures: the planner's decisions, pinned ------------------------------------
@@ -332,13 +321,13 @@ def _deterministic_sets():
         yield
 
 
-def _pair(store):
+def _pair():
     from core.history import History
-    on = _scene(store)
+    on = _scene()
     was = scan_index._forced_off
     scan_index._forced_off = True
     try:
-        off = _scene(store)
+        off = _scene()
     finally:
         scan_index._forced_off = was
     return (on, History(on)), (off, History(off))
@@ -365,19 +354,18 @@ def _P(i, j, flat_rows=3):
 
 
 def _find(m, pts):
-    from core.history import _find_face_by_loop
-    return _find_face_by_loop(m, pts)
+    from core.topology import _key
+    target = {_key(p) for p in pts}
+    return next((f for f in m.faces if {_key(p) for p in f.vertices} == target), None)
 
 
 def _face_at(m, *corners):
-    from core.history import _find_face_by_loop
-    return _find_face_by_loop(m, [V(*c) for c in corners])
+    return _find(m, [V(*c) for c in corners])
 
 
-@pytest.mark.parametrize("store", [False, True])
-def test_line_across_a_face_splits_that_face(store):
+def test_line_across_a_face_splits_that_face():
     from core.edits import build_add_edge
-    pair = _pair(store)
+    pair = _pair()
     nf = len(pair[0][0].mesh.faces)
 
     # Across the non-flat quad (4,4)-(5,5): midpoints of its two x-edges.
@@ -392,18 +380,16 @@ def test_line_across_a_face_splits_that_face(store):
     assert _find(on.mesh, quad) is None
 
 
-@pytest.mark.parametrize("store", [False, True])
-def test_line_vertex_to_vertex_splits_a_flat_quad(store):
+def test_line_vertex_to_vertex_splits_a_flat_quad():
     from core.edits import build_add_edge
-    pair = _pair(store)
+    pair = _pair()
     nf = len(pair[0][0].mesh.faces)
     on = _both(pair, lambda s, h: h.execute(
         build_add_edge(s, V(2, 1, 0), V(3, 2, 0), detect_faces=True)))
     assert len(on.mesh.faces) == nf + 1
 
 
-@pytest.mark.parametrize("store", [False, True])
-def test_rectangle_inside_and_against_an_edge(store):
+def test_rectangle_inside_and_against_an_edge():
     from core.edits import build_add_edges
     from core.history import AddFaceCommand
 
@@ -413,7 +399,7 @@ def test_rectangle_inside_and_against_an_edge(store):
                                       detect_faces=False, extra=[AddFaceCommand(c)],
                                       plane_rebuild=True))
         return fn
-    pair = _pair(store)
+    pair = _pair()
     nf = len(pair[0][0].mesh.faces)
     on = _both(pair, rect([V(4.2, 0.2, 0), V(4.6, 0.2, 0), V(4.6, 0.6, 0), V(4.2, 0.6, 0)]))
     assert len(on.mesh.faces) == nf + 1            # a hole and its fill
@@ -421,11 +407,10 @@ def test_rectangle_inside_and_against_an_edge(store):
     assert len(on.mesh.faces) >= nf + 2            # carved against the edge
 
 
-@pytest.mark.parametrize("store", [False, True])
-def test_erasing_the_split_line_reunites_the_face(store):
+def test_erasing_the_split_line_reunites_the_face():
     from core.edits import build_add_edge
     from core.history import EraseSelectionCommand
-    pair = _pair(store)
+    pair = _pair()
     nf = len(pair[0][0].mesh.faces)
     _both(pair, lambda s, h: h.execute(
         build_add_edge(s, V(2, 1, 0), V(3, 2, 0), detect_faces=True)))
@@ -438,10 +423,9 @@ def test_erasing_the_split_line_reunites_the_face(store):
     assert len(on.mesh.faces) == nf
 
 
-@pytest.mark.parametrize("store", [False, True])
-def test_delete_the_holed_face_and_a_crease_edge(store):
+def test_delete_the_holed_face_and_a_crease_edge():
     from core.history import EraseSelectionCommand
-    pair = _pair(store)
+    pair = _pair()
     nf = len(pair[0][0].mesh.faces)
 
     def delete(s, h):
@@ -473,7 +457,7 @@ def test_delete_the_holed_face_and_a_crease_edge(store):
 
 # ---- the prefilters against brute force ---------------------------------------------
 
-def _random_mesh(rng, store):
+def _random_mesh(rng):
     pts = []
     rings = []
     for _ in range(rng.randrange(20, 60)):
@@ -487,17 +471,9 @@ def _random_mesh(rng, store):
             ring[0] = ring[0] + np.array([0, 0, rng.uniform(-0.5, 0.5)])   # warped
         rings.append(len(ring))
         pts += [tuple(p) for p in ring]
-    was = os.environ.get("INGETRAZO_STORE")
-    os.environ["INGETRAZO_STORE"] = "1" if store else "0"
-    try:
-        m = M.Mesh()
-        m.add_faces_bulk(np.asarray(pts, float), np.asarray(rings),
-                         np.ones(len(rings), int))
-    finally:
-        if was is None:
-            del os.environ["INGETRAZO_STORE"]
-        else:
-            os.environ["INGETRAZO_STORE"] = was
+    m = M.Mesh()
+    m.add_faces_bulk(np.asarray(pts, float), np.asarray(rings),
+                     np.ones(len(rings), int))
     for _ in range(10):
         m.add_edge(V(*[rng.uniform(-5, 5) for _ in range(3)]),
                    V(*[rng.uniform(-5, 5) for _ in range(3)]))
@@ -513,15 +489,14 @@ def _meets(b, lo, hi):
     return all(b[1][k] >= lo[k] and b[0][k] <= hi[k] for k in range(3))
 
 
-@pytest.mark.parametrize("store", [False, True])
 @pytest.mark.parametrize("seed", range(8))
-def test_prefilters_are_supersets_in_list_order(seed, store):
+def test_prefilters_are_supersets_in_list_order(seed):
     from core.history import RebuildPlaneFacesCommand
     from core.topology import loop_inside_face
     rng = random.Random(seed)
-    m = _random_mesh(rng, store)
+    m = _random_mesh(rng)
     sc = scan_index.scan(m)
-    assert sc is not None and sc.store_backed == store
+    assert sc is not None and sc.store_backed
     faces, edges = list(m.faces), list(m.edges)
     fkeys = [f.key for f in faces]
     for _ in range(30):
@@ -537,11 +512,12 @@ def test_prefilters_are_supersets_in_list_order(seed, store):
         assert [f.key for f in sc.faces(sc.faces_meeting((lo, hi)))] == [
             fkeys[i] for i in sc.faces_meeting((lo, hi))]
     # Containment: every face a loop can be strictly inside is held.
-    from core.history import _faces_holding
     for f in faces:
         c = f.centroid()
         loop = [c + (x - c) * 0.6 for x in f.vertices]
-        held = {x.key for x in _faces_holding(m, loop)}
+        lo, hi = scan_index.raw_box(loop)
+        pad = 2e-3 + 1e-6 * max(abs(c) for c in lo + hi)
+        held = {x.key for x in sc.faces(sc.native.faces_holding(lo, hi, pad))}
         for g in faces:
             if loop_inside_face(g, loop, outside_holes=True):
                 assert g.key in held
@@ -590,9 +566,8 @@ def test_cycle_adjacency_is_the_full_one():
     assert (_key(V(99, 99, 99)) in lazy) is False
 
 
-@pytest.mark.parametrize("store", [False, True])
 @pytest.mark.parametrize("seed", range(12))
-def test_whole_drawing_plane_is_coplanar_plane(seed, store):
+def test_whole_drawing_plane_is_coplanar_plane(seed):
     """The flat-drawing gate over the scan answers as ``coplanar_plane`` on
     every vertex: points at the tolerance's edge, a drawing whose first
     points coincide or line up, a tilted plane far from the origin."""
@@ -615,19 +590,11 @@ def test_whole_drawing_plane_is_coplanar_plane(seed, store):
             a, b = rng.uniform(-5, 5), rng.uniform(-5, 5)
         off = rng.choice([0.0, 0.0, 0.99e-4, 1e-4, 1.01e-4, -1e-4, 3e-5])
         pts.append(far + u * a + w * b + tilt * off)
-    was = os.environ.get("INGETRAZO_STORE")
-    os.environ["INGETRAZO_STORE"] = "1" if store else "0"
-    try:
-        scene = Scene()
-        n = len(pts) // 3 * 3
-        scene.mesh.add_faces_bulk(
-            np.asarray([(p.x(), p.y(), p.z()) for p in pts[:n]], float),
-            np.full(n // 3, 3), np.ones(n // 3, int))
-    finally:
-        if was is None:
-            del os.environ["INGETRAZO_STORE"]
-        else:
-            os.environ["INGETRAZO_STORE"] = was
+    scene = Scene()
+    n = len(pts) // 3 * 3
+    scene.mesh.add_faces_bulk(
+        np.asarray([(p.x(), p.y(), p.z()) for p in pts[:n]], float),
+        np.full(n // 3, 3), np.ones(n // 3, int))
     drawn = [pts[-1] + u * 0.5, pts[-1] + w * 0.5 + tilt * rng.choice([0, 2e-4])]
     want = coplanar_plane([v.position for v in scene.mesh.vertices] + drawn)
     got = _whole_drawing_plane(scene, drawn)

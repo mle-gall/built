@@ -260,7 +260,7 @@ enum AfterOpen {
     Quit,
 }
 
-/// One window: its winit window, its Python host (app_shell.host.Host:
+/// One window: its winit window, its Python host (ingetrazo_render.Host:
 /// its projects, its renderer) and its own pointer state. Every window
 /// lives in this one process (app_shell/windows.py): ⇧⌘N and the tab
 /// menu's "Move to new window" make another one here.
@@ -482,7 +482,7 @@ impl App {
                 }
             }
             // Close Window (⇧⌘W): the window in front, after asking about
-            // its unsaved work (app_shell.files: the sheet, answered
+            // its unsaved work (shell_files.rs: the sheet, answered
             // through the modal pump). The last window closed ends the app.
             "close" => {
                 if let Some(id) = front {
