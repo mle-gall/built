@@ -57,6 +57,7 @@ mod model_panels;
 mod document_starter;
 mod scene_navigation;
 mod window_services;
+mod background_autosave;
 mod panic_log;
 mod overlay;
 mod commands;
@@ -3348,6 +3349,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     group_edit::register(m)?;
     document_starter::register(m)?;
     scene_navigation::register(m)?;
+    m.add_function(wrap_pyfunction!(background_autosave::background_autosave, m)?)?;
     window_services::register(m)?;
     m.add_function(wrap_pyfunction!(tool_cursors::rail_icon,m)?)?;
     render_glue::register_render_glue(m)?;
