@@ -8,6 +8,9 @@ construction, copies and share-back."""
 from __future__ import annotations
 
 import copy
+import gzip
+import json
+from pathlib import Path
 import random
 
 import numpy as np
@@ -75,16 +78,14 @@ def test_first_touch_is_a_store_reading_like_the_built_mesh(
         binary, monkeypatch, tmp_path, seed):
     path = tmp_path / "doc.igz"
     igz.save_scene(_random_scene(random.Random(seed)), path)
-    py = _open(path, monkeypatch, False)
-    st = _open(path, monkeypatch, True)
-    pm, sm = list(_meshes(py)), list(_meshes(st))
-    assert any(type(m) is S.StoreMesh for m in sm)
-    assert not any(type(m) is S.StoreMesh for m in pm)
-    for a, b in zip(pm, sm):
-        assert fingerprint(b) == fingerprint(a)
-        if type(b) is S.StoreMesh:
-            # Reading never built Python objects.
-            assert type(b) is S.StoreMesh
+    scene = _open(path, monkeypatch, True)
+    meshes = list(_meshes(scene))
+    with gzip.open(Path(__file__).parent / "fixtures" / "deferred_first_touch.json.gz", "rt") as src:
+        expected = json.load(src)[seed]
+    assert len(meshes) == len(expected)
+    for mesh, state in zip(meshes, expected):
+        assert json.loads(json.dumps(fingerprint(mesh))) == state
+        assert type(mesh) is S.StoreMesh
 
 
 def _store_mesh(monkeypatch, tmp_path, seed=3):
@@ -228,7 +229,7 @@ def test_a_move_command_never_builds_python_objects(binary, monkeypatch,
 
 
 @pytest.mark.parametrize("seed", range(3))
-def test_bulk_construction_into_the_store(monkeypatch, seed):
+def test_bulk_construction_into_the_store(seed):
     rng = random.Random(seed)
     faces = []
     for _ in range(60):
@@ -239,23 +240,21 @@ def test_bulk_construction_into_the_store(monkeypatch, seed):
     attrs = [({"color": [0.5, 0.5, 0.5]} if i % 3 else None)
              for i in range(len(faces))]
     epts = np.array([[0, 0, 0], [3, 0, 0], [3, 0, 0], [3, 3, 0]], float)
-    out = []
-    for on in (False, True):
-        _store(monkeypatch, on)
-        m = M.Mesh()
-        vobjs, inv = m.bulk_weld(np.concatenate([epts, flat]))
-        emap = m.add_edges_welded(vobjs, inv[0:4:2], inv[1:4:2],
-                                  [(True, 5, "T"), (False, None, None, True)])
-        u = len(vobjs)
-        a, b = int(inv[0]), int(inv[1])
-        e = emap.get(a * u + b if a <= b else b * u + a)
-        e.layer = "U"                    # stamped between edges and faces
-        m.add_faces_welded(vobjs, inv[4:], np.full(len(faces), 4),
-                           np.ones(len(faces), dtype=int), attrs,
-                           edge_map=emap)
-        assert (type(m) is S.StoreMesh) == on
-        out.append(fingerprint(m))
-    assert out[0] == out[1]
+    m = M.Mesh()
+    vobjs, inv = m.bulk_weld(np.concatenate([epts, flat]))
+    emap = m.add_edges_welded(vobjs, inv[0:4:2], inv[1:4:2],
+                              [(True, 5, "T"), (False, None, None, True)])
+    u = len(vobjs)
+    a, b = int(inv[0]), int(inv[1])
+    e = emap.get(a * u + b if a <= b else b * u + a)
+    e.layer = "U"                    # stamped between edges and faces
+    m.add_faces_welded(vobjs, inv[4:], np.full(len(faces), 4),
+                       np.ones(len(faces), dtype=int), attrs,
+                       edge_map=emap)
+    with gzip.open(Path(__file__).parent / "fixtures" / "bulk_mesh_construction.json.gz", "rt") as src:
+        expected = json.load(src)[seed]
+    assert json.loads(json.dumps(fingerprint(m))) == expected
+    assert type(m) is S.StoreMesh
 
 
 def test_copies_and_share_back(binary, monkeypatch, tmp_path):
