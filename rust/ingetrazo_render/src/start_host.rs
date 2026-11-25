@@ -1074,7 +1074,7 @@ fn open_recent(py: Python<'_>, win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) 
             recent(py)?.getattr("remember")?.call((p.bind(py),), Some(&[("replace", &o)].into_py_dict(py)?))?;
             Ok(none(py))
         })?;
-        py.import("views.document_open")?.call_method1("after_open", (win, &path, then))?;
+        py.import("ingetrazo_render.document_open")?.call_method1("after_open", (win, &path, then))?;
         return Ok(true);
     }
     rec.getattr("remember")?.call((&path,), Some(&[("replace", &original)].into_py_dict(py)?))?;

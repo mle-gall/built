@@ -13,7 +13,7 @@ def generate(components: Path, output: Path):
     from core.insert import component_from_scene
     from core.scene import Scene
     from formats import igz
-    from views.component_thumbs import thumbnail
+    from ingetrazo_render import component_thumbnail
 
     output.mkdir(parents=True, exist_ok=True)
     for entry in json.loads((components / "components.json").read_text(encoding="utf-8")):
@@ -23,7 +23,7 @@ def generate(components: Path, output: Path):
         definition = component_from_scene(scene, entry["name"])
         if definition is None:
             raise ValueError(f"{key} contains no geometry")
-        if not thumbnail(definition, 320).save(str(output / f"{key}.png")):
+        if not component_thumbnail(definition, 320).save(str(output / f"{key}.png")):
             raise OSError(f"Could not write the thumbnail for {key}")
 
 

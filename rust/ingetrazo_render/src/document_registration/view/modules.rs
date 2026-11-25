@@ -3,7 +3,7 @@
 use super::*;
 use pyo3::types::PyType;
 
-fn import_names(module: &Bound<PyModule>, source: &str, names: &[(&str, &str)]) -> PyResult<()> {
+pub(super) fn import_names(module: &Bound<PyModule>, source: &str, names: &[(&str, &str)]) -> PyResult<()> {
     let source = module.py().import(source)?;
     for &(name, alias) in names {
         module.add(alias, source.getattr(name)?)?;
@@ -74,6 +74,7 @@ pub(super) fn install_interaction_module(module: &Bound<PyModule>) -> PyResult<(
     match full.trim_start_matches("views.") {
         "extension_api" => crate::extension_api::register(module)?,
         "documents" => crate::extension_api::register_documents(module)?,
+        "document_interaction" => super::interaction_host::install(module)?,
         "document_tools" => {
             import_names(module, "__future__", &[("annotations", "annotations")])?;
             import_names(module, "typing", &[("Optional", "Optional")])?;

@@ -3,6 +3,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PySet, PyTuple};
 
 mod documents;
+pub(crate) mod open;
 mod scenes;
 pub(crate) mod playback;
 mod status;
@@ -672,24 +673,20 @@ impl ShellWindow {
             .call_method1("hide", (slf,))
     }
     fn _on_import_orthophoto<'p>(slf: &Bound<'p, Self>) -> PyResult<Obj<'p>> {
-        slf.py()
-            .import("views.survey_import")?
-            .call_method1("import_orthophoto", (slf,))
+        crate::survey_import::commands::orthophoto(slf.as_any())?;
+        Ok(none(slf.py()))
     }
     fn _on_import_photomesh<'p>(slf: &Bound<'p, Self>) -> PyResult<Obj<'p>> {
-        slf.py()
-            .import("views.survey_import")?
-            .call_method1("import_photomesh", (slf,))
+        crate::survey_import::commands::photomesh(slf.as_any())?;
+        Ok(none(slf.py()))
     }
     fn _on_import_georef<'p>(slf: &Bound<'p, Self>) -> PyResult<Obj<'p>> {
-        slf.py()
-            .import("views.survey_import")?
-            .call_method1("import_alignment", (slf,))
+        crate::survey_import::commands::alignment(slf.as_any())?;
+        Ok(none(slf.py()))
     }
     fn _on_import_survey_points<'p>(slf: &Bound<'p, Self>) -> PyResult<Obj<'p>> {
-        slf.py()
-            .import("views.survey_import")?
-            .call_method1("import_points", (slf,))
+        crate::survey_import::commands::points(slf.as_any())?;
+        Ok(none(slf.py()))
     }
     fn open_path<'p>(slf: &Bound<'p, Self>, path: &Obj<'p>) -> PyResult<Obj<'p>> {
         slf.py()

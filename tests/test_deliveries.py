@@ -278,6 +278,6 @@ def test_svg_sheet_previews_the_page_it_writes(one_off, tmp_path, monkeypatch, n
         list(deliveries.write_steps(scene, record, camera=camera))
     text = deliveries.preview_svg(scene, record, camera=camera)
     assert text == target.read_text() and "<path" in text
-    from views.svg_export import preview_pixels
-    w, h, rgba = preview_pixels(text)
+    from ingetrazo_render import svg_preview
+    w, h, rgba = svg_preview(text)
     assert (w, h) == (800, 566) and len(rgba) == w * h * 4

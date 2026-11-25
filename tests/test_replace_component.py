@@ -358,28 +358,29 @@ def _painted_pixels(pm):
 
 
 def test_a_thumbnail_is_drawn_once_and_again_when_the_geometry_changes():
-    from views.component_thumbs import SIZE, thumbnail
+    from ingetrazo_render import component_thumbnail
+    size = 40
     _s, _h, sillas, _m, _c, _holder = _model()
-    pm = thumbnail(sillas[0])
-    assert pm.width == pm.height == SIZE
-    assert _painted_pixels(pm) > SIZE * SIZE // 10
-    assert thumbnail(sillas[1]) is pm               # same definition: cached
+    pm = component_thumbnail(sillas[0])
+    assert pm.width == pm.height == size
+    assert _painted_pixels(pm) > size * size // 10
+    assert component_thumbnail(sillas[1]) is pm               # same definition: cached
     sillas[0].mesh.vertices[0].position = V(0, 0, 4)
-    assert thumbnail(sillas[0]) is not pm           # its geometry changed
+    assert component_thumbnail(sillas[0]) is not pm           # its geometry changed
 
 
 def test_every_copy_draws_the_same_wherever_it_stands():
-    from views.component_thumbs import _signature
+    from ingetrazo_render import component_signature
     a = _component(_quad(1.0), "A", dx=0.0)
     b = copy_group(a, V(30, 0, 0))
     b.xform.rotate(45.0, 0.0, 0.0, 1.0)
-    assert _signature(a) == _signature(b)
+    assert component_signature(a) == component_signature(b)
 
 
 def test_an_empty_definition_gives_a_blank_icon():
-    from views.component_thumbs import thumbnail
+    from ingetrazo_render import component_thumbnail
     g = _component(Mesh(), "Nada")
-    assert _painted_pixels(thumbnail(g)) == 0
+    assert _painted_pixels(component_thumbnail(g)) == 0
 
 
 def _component_sheet(win):
@@ -404,9 +405,8 @@ def test_the_list_rows_carry_a_thumbnail(win):
 
 def test_a_long_list_offers_a_name_filter_that_survives_a_refresh(win, monkeypatch):
     from tests.test_library_sheet import act, frame, tiles
-    from views import component_catalogue
-    monkeypatch.setattr(component_catalogue.library, "index", lambda refresh: [])
-    monkeypatch.setattr(component_catalogue.CatalogueSession, "build", lambda self, sheet, query: sheet)
+    from core import library
+    monkeypatch.setattr(library, "index", lambda refresh: [])
     names = ["Silla", "Sillón", "Mesa", "Lámpara", "Puerta P1", "Puerta P2", "Ventana V1", "Árbol"]
     scene = win.viewport.scene
     scene.groups.extend(_component(_quad(), n) for n in names)
@@ -611,15 +611,15 @@ def test_a_file_without_components_changes_nothing(tmp_path, native_host):
 
 def test_clipped_component_list_does_not_build_thumbnails(win, monkeypatch):
     from tests.test_library_sheet import act
-    from views import component_thumbs
     win.viewport.scene.groups.append(_component(_quad(), "Table"))
     win.viewport.scene.version += 1
     calls = []
-    draw = component_thumbs._polygons
-    monkeypatch.setattr(component_thumbs, "_polygons", lambda g: (calls.append(g), draw(g))[1])
+    from core import lazy_mesh
+    plan = lazy_mesh.plan_of
+    monkeypatch.setattr(lazy_mesh, "plan_of", lambda mesh: (calls.append(mesh), plan(mesh))[1])
     rows = _component_sheet(win)
     assert not calls
     act(win, "component-previews")
     assert not calls
     act(win, "component-previews", rows[0]["icon"])
-    assert calls == [win.viewport.scene.groups[-1]]
+    assert calls == [win.viewport.scene.groups[-1].mesh]

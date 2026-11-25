@@ -90,7 +90,7 @@ fn lazy_chunk_value<'py>(d: &Obj<'py>, k: &Obj<'py>) -> PyResult<Obj<'py>> {
     Ok(value)
 }
 #[pyfunction]
-fn lazy_chunk_fill<'py>(d: &Obj<'py>) -> PyResult<Obj<'py>> {
+pub(crate) fn lazy_chunk_fill<'py>(d: &Obj<'py>) -> PyResult<Obj<'py>> {
     let later = d.getattr("_later")?.cast_into::<PyDict>()?;
     for k in later.keys() {
         d.get_item(k)?;

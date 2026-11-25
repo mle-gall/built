@@ -1,5 +1,6 @@
 //! Place parsed survey records in the current document coordinate system.
 //! The file-format backends and history objects are shared with plugins.
+pub(crate) mod commands;
 use pyo3::{exceptions::PyValueError, prelude::*, types::PyList};
 type Obj<'py> = Bound<'py, PyAny>;
 
