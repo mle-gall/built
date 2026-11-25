@@ -10,7 +10,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 def test_field_of_view_is_set_kept_and_reset(tmp_path):
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     host = Host(0, 900, 600, 1., settings=str(tmp_path / "profile"))
     win = host.window
     win.new_document()

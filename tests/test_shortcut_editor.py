@@ -26,7 +26,7 @@ def sheet(native_host):
 
 @pytest.fixture
 def reopen(tmp_path, monkeypatch, restore_shell_patches):
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     from core import settings as settings_module
     from ingetrazo_core import NativeSettings
     profile = str(tmp_path / "profile")

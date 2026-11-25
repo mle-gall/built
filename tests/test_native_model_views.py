@@ -118,7 +118,7 @@ def test_saved_split_fractions_and_invalid_legacy_values():
 
 
 def test_native_open_save_keeps_the_classic_views_home(tmp_path):
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     from ingetrazo_render import shell_files as files
     from formats import igz
     from core.scene import Scene

@@ -52,7 +52,7 @@ def restore_shell_patches(tmp_path_factory):
 @contextmanager
 def open_test_host(profile, *, width=900, height=600, scale=1.):
     """Open a private document without creating an OS window."""
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     with _shell_state():
         os.environ["BUILT_SETTINGS_DIR"] = str(Path(profile).resolve())
         host = Host(0, width, height, scale, settings=os.environ["BUILT_SETTINGS_DIR"])

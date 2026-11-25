@@ -30,7 +30,7 @@ def test_arabic_is_offered_and_complete():
 
 @pytest.mark.parametrize("lang, rtl", [("ar", True), ("es", False), ("en", False), ("de", False)])
 def test_startup_direction_follows_the_language(lang, rtl, tmp_path, monkeypatch):
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     from core import settings
     from ingetrazo_core import NativeSettings
 

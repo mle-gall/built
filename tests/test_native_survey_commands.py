@@ -9,7 +9,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 @pytest.fixture
 def host(monkeypatch, tmp_path):
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     from georef.tile_fetcher import TileFetcher
     monkeypatch.setattr(TileFetcher, "request", lambda *_a, **_k: None)
     host = Host(0, 900, 600, 1., settings=str(tmp_path / "settings"))

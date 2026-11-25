@@ -1,22 +1,33 @@
-"""The shell imports ``app_shell.host`` before its bootstrap puts the venv on
-``sys.path``: importing it must not import ``core`` or a native module, or
-``core`` registers without them and later imports fail (core.topology)."""
-import subprocess
-import sys
+"""The embedded launcher must install site-packages before importing the document or renderer."""
+import json
+import os
 from pathlib import Path
+import site
+import sys
 
-ROOT = Path(__file__).resolve().parents[1]
+import pytest
+
+from scripts.isolated_launch import run
 
 
-def test_app_shell_host_imports_without_the_venv():
-    probe = (
-        "import sys\n"
-        f"sys.path.insert(0, {str(ROOT)!r})\n"
-        "import app_shell.host\n"
-        "early = sorted(m for m in sys.modules if m.split('.')[0] in "
-        "('core', 'ingetrazo_core', 'ingetrazo_render', 'PySide6'))\n"
-        "assert not early, early\n"
-    )
-    result = subprocess.run([sys.executable, "-S", "-c", probe], cwd="/",
-                            capture_output=True, text=True, timeout=60)
+def test_launcher_processes_the_venv_before_importing_app_code(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    binary = Path(os.environ.get("BUILT_BINARY", root / "rust/built_app/target/release/built"))
+    if not binary.exists():
+        pytest.skip("requires the native launcher")
+    venv = tmp_path / "venv"
+    packages = venv / ("Lib/site-packages" if sys.platform == "win32" else
+                       f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages")
+    packages.mkdir(parents=True)
+    snapshot = tmp_path / "early.json"
+    (packages / "early_probe.py").write_text(
+        "import json, sys\nfrom pathlib import Path\n"
+        "early = sorted(name for name in sys.modules if name.split('.')[0] in "
+        "('core', 'app_shell', 'ingetrazo_core', 'ingetrazo_render'))\n"
+        f"Path({str(snapshot)!r}).write_text(json.dumps(early))\n")
+    (packages / "first.pth").write_text("import early_probe\n" + "".join(
+        f"import site; site.addsitedir({entry!r})\n" for entry in site.getsitepackages()))
+    result = run([str(binary), "--root", str(root), "--venv", str(venv), "--check"],
+                 cwd=tmp_path, capture_output=True, text=True, timeout=60)
     assert result.returncode == 0, result.stderr
+    assert json.loads(snapshot.read_text()) == []

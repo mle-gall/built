@@ -6,7 +6,6 @@ import tempfile
 
 
 def start(directory=None, *, temporary=False):
-    # The launcher imports app_shell.host before bootstrap adds its venv to sys.path.
     from core import i18n, settings
 
     profile = directory or os.environ.get("BUILT_SETTINGS_DIR")

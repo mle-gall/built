@@ -99,14 +99,22 @@ pub fn start(layout: &Layout) -> PyResult<()> {
         let path = sys.getattr("path")?;
         path.call_method1("insert", (0, layout.root.to_string_lossy().to_string()))?;
         sys.setattr("argv", vec!["built".to_string()])?;
-        let host = py.import("app_shell.host")?;
-        host.call_method1(
-            "bootstrap",
-            (
-                layout.root.to_string_lossy().to_string(),
-                layout.venv.as_ref().map(|v| v.to_string_lossy().to_string()),
-            ),
-        )?;
+        // Process the venv (including its .pth files) before loading any
+        // application module. A packaged runtime already has its search path.
+        if let Some(venv) = &layout.venv {
+            let path = py.import("pathlib")?.call_method1("Path", (venv,))?;
+            let pattern = if cfg!(windows) { "Lib/site-packages" } else { "lib/python3*/site-packages" };
+            let directories = py.import("builtins")?.call_method1("sorted", (path.call_method1("glob", (pattern,))?,))?;
+            let site = py.import("site")?;
+            for directory in directories.try_iter()? {
+                site.call_method1("addsitedir", (directory?.str()?,))?;
+            }
+            let binaries: &[&str] = if cfg!(windows) { &["Scripts/python.exe"] } else { &["bin/python3", "bin/python"] };
+            if let Some(executable) = binaries.iter().map(|p| venv.join(p)).find(|p| p.is_file()) {
+                sys.setattr("executable", executable.to_string_lossy().as_ref())?;
+            }
+        }
+        std::env::set_current_dir(&layout.root)?;
         crate::launcher::initialize(py)
     })
 }
@@ -122,7 +130,7 @@ pub struct Extras {
     pub focus: bool,
 }
 
-/// The `app_shell.host.Host` for one window.
+/// The `ingetrazo_render.Host` for one window.
 pub struct Host {
     obj: Py<PyAny>,
 }
@@ -135,7 +143,7 @@ pub fn report(py: Python<'_>, err: PyErr, what: &str) {
 impl Host {
     pub fn new(surface: (usize, usize, &str), width: f64, height: f64, scale: f64, settings: Option<&str>, temporary: bool) -> PyResult<Host> {
         Python::attach(|py| {
-            let cls = py.import("app_shell.host")?.getattr("Host")?;
+            let cls = py.import("ingetrazo_render")?.getattr("Host")?;
             let (window, display, platform) = surface;
             let obj = cls.call1((window, width, height, scale, settings, temporary, display, platform))?;
             Ok(Host { obj: obj.unbind() })

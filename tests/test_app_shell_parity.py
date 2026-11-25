@@ -20,7 +20,7 @@ DATA = Path(__file__).parent / "data"
 
 @pytest.fixture
 def host(tmp_path):
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     h = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
     yield h
     h.close()

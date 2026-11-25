@@ -241,7 +241,7 @@ def run(out_path: str, radii=RADII_PX, directions: int = 16,
         cameras=CAMERAS, tools=TOOLS, scenes=SCENES,
         alt_modes=ALT_MODES, acquired=ACQUIRED, started=STARTED,
         locks=LOCKS) -> int:
-    from app_shell.host import Host
+    from ingetrazo_render import Host
 
     with TemporaryDirectory() as profile, closing(Host(0, 1200, 800, 1.0, settings=profile)) as host:
         win = host.window

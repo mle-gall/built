@@ -1,7 +1,7 @@
 """The native app's windows, all in one process (shell design: windows
 rule).
 
-Each winit window has its own :class:`app_shell.host.Host`, its own
+Each winit window has its own :class:`ingetrazo_render.Host`, its own
 ShellWindow (its projects) and its own renderer. They share one Python interpreter,
 the settings, the recent list and the link sources already
 read. This replaces "⇧⌘N starts another `built` process" (an Archicad-style

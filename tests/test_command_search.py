@@ -140,7 +140,7 @@ def test_a_plugin_can_hide_its_action_after_the_native_search_opens(win):
 
 
 def test_search_finds_translated_names_and_paths_by_either_language(tmp_path):
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     from core import i18n
     from ingetrazo_core import NativeSettings
     profile = str(tmp_path / "profile")

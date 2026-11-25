@@ -14,7 +14,7 @@ SLAB = ROOT / "tests" / "fixtures" / "shell" / "slab-and-cube.igz"
 
 @pytest.fixture
 def host(tmp_path):
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     h = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
     yield h
     for d in h.window._documents:
@@ -92,7 +92,7 @@ def test_read_only_member_rejects_edits(host, tmp_path):
 
 def test_session_restores_order_editable_and_camera(tmp_path):
     from ingetrazo_render import shell_files as files
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     path = three_member_project(tmp_path / "job")
     host = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
     try:

@@ -17,7 +17,7 @@ SLAB = FIXTURES / "slab-and-cube.igz"
 
 @pytest.fixture
 def host(tmp_path):
-    from app_shell.host import Host
+    from ingetrazo_render import Host
     h = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
     yield h
     h.close()
@@ -30,7 +30,7 @@ def second(tmp_path):
     made = []
 
     def make():
-        from app_shell.host import Host
+        from ingetrazo_render import Host
         h = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
         made.append(h)
         return h

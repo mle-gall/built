@@ -83,15 +83,6 @@ fn file_dialogs(py: Python<'_>) -> PyResult<Any<'_>> {
     py.import("views.filedialogs")?.getattr("file_dialogs")
 }
 
-/// `host._error(where)` for `err`. The host formats the exception being
-/// handled, so it is raised and caught around the call.
-fn host_error(py: Python<'_>, win: &Any<'_>, err: &PyErr, place: &str) -> PyResult<()> {
-    let code = c"def report(host, where, exc):\n    try:\n        raise exc\n    except BaseException:\n        host._error(where)\n";
-    let helper = PyModule::from_code(py, code, c"shell_files_report.py", c"shell_files_report")?;
-    helper.call_method1("report", (win.getattr("_host")?, place, err.value(py)))?;
-    Ok(())
-}
-
 // ---- the file dialogs: NSOpenPanel / NSSavePanel ------------------------------------
 
 /// `QFileDialog`'s static pickers, as `views.filedialogs.file_dialogs`
@@ -533,7 +524,7 @@ fn open_document<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>) -> PyRes
             Err(e) if e.is_instance_of::<PyException>(py) => {
                 // Any IO/parse error goes to the user.
                 dialogs.call_method1("close_failed", (&bar, e.value(py)))?;
-                host_error(py, win, &e, "open")?;
+                win.getattr("_host")?.call_method1("error", ("open", e.value(py)))?;
                 dialogs.call_method1("critical", (win, tr(py, "Open failed")?, e.value(py).str()?))?;
                 return Ok(false);
             }
@@ -586,7 +577,7 @@ fn finish_open<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>, recovered:
         if !e.is_instance_of::<PyException>(py) {
             return Err(e);
         }
-        host_error(py, win, &e, "reset_texture_cache")?;
+        win.getattr("_host")?.call_method1("error", ("reset_texture_cache", e.value(py)))?;
     }
     win.call_method0("_forget_coordinate")?;
     vp.getattr("inference")?.call_method0("reset")?;
@@ -1036,7 +1027,7 @@ fn do_save<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>, copy: bool) ->
     let stats = match written {
         Ok(s) => s,
         Err(e) if e.is_instance_of::<PyException>(py) => {
-            host_error(py, win, &e, "save")?;
+            win.getattr("_host")?.call_method1("error", ("save", e.value(py)))?;
             let w = win.clone().unbind();
             let retry = func(py, move |py, _| Ok(fm(py)?.call_method1(if copy { "save_copy" } else { "save_as" }, (w.bind(py),))?.unbind()))?;
             dialogs.call_method1("save_failed", (win, e.value(py), retry))?;
@@ -1136,7 +1127,7 @@ fn export_igz<'py>(py: Python<'py>, win: &Any<'py>, path: Option<Any<'py>>) -> P
     let stats = match write() {
         Ok(s) => s,
         Err(e) if e.is_instance_of::<PyException>(py) => {
-            host_error(py, win, &e, "export igz")?;
+            win.getattr("_host")?.call_method1("error", ("export igz", e.value(py)))?;
             let w = win.clone().unbind();
             let retry = func(py, move |py, _| Ok(fm(py)?.call_method1("export_igz", (w.bind(py),))?.unbind()))?;
             dialogs.call_method1("save_failed", (win, e.value(py), retry))?;

@@ -210,7 +210,7 @@ class Probe:
         from formats import igz
         import views.wgpu_view as wv
         import views.wgpu_inference as wi
-        from app_shell.host import Host
+        from ingetrazo_render import Host
         from app_shell.view import ShellView
         from views import wgpu_scene
         probe = self
