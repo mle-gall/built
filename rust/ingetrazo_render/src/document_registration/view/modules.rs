@@ -72,6 +72,8 @@ pub(super) fn install_interaction_module(module: &Bound<PyModule>) -> PyResult<(
     let py = module.py();
     let full = module.name()?.extract::<String>()?;
     match full.trim_start_matches("views.") {
+        "extension_api" => crate::extension_api::register(module)?,
+        "documents" => crate::extension_api::register_documents(module)?,
         "document_tools" => {
             import_names(module, "__future__", &[("annotations", "annotations")])?;
             import_names(module, "typing", &[("Optional", "Optional")])?;

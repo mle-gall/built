@@ -14,7 +14,7 @@ pub fn tree_tag_action(win: &Bound<'_, PyAny>, tag: &str, isolate: bool) -> PyRe
     let ui = win.py().import("views.wgpu_ui")?;
     if !isolate {
         win.py()
-            .import("views.tree_navigation")?
+            .import("ingetrazo_render.tree_navigation")?
             .call_method1("open_to", (&vp, PyList::empty(win.py())))?;
         let entities = win
             .py()
@@ -97,7 +97,7 @@ pub fn tree_delete_rows(vp: &Bound<'_, PyAny>, clicked: &Bound<'_, PyAny>) -> Py
     }
     if !steps.is_empty() {
         vp.call_method0("end_group_edit")?;
-        py.import("views.tree_navigation")?.call_method1(
+        py.import("ingetrazo_render.tree_navigation")?.call_method1(
             "execute",
             (vp, history.call_method1("CompoundCommand", (steps,))?),
         )?;
@@ -201,7 +201,7 @@ fn delete_tag_answer(
             .import("core.history")?
             .call_method1("DeleteLayerCommand", (key,))?;
         win.py()
-            .import("views.tree_navigation")?
+            .import("ingetrazo_render.tree_navigation")?
             .call_method1("execute", (vp, cmd))?;
     }
     Ok(())
@@ -260,7 +260,7 @@ pub fn tree_header_state(vp: &Bound<'_, PyAny>, scope: &str, lock: bool) -> PyRe
             py.import("core.history")?
                 .call_method1("HideCommand", (rows, !any))?
         };
-        py.import("views.tree_navigation")?
+        py.import("ingetrazo_render.tree_navigation")?
             .call_method1("execute", (vp, cmd))?;
     }
     Ok(())
@@ -331,7 +331,7 @@ fn purge_tags_answer(
             .import("core.history")?
             .call_method1("PurgeUnusedCommand", (true, false))?;
         win.py()
-            .import("views.tree_navigation")?
+            .import("ingetrazo_render.tree_navigation")?
             .call_method1("execute", (vp, cmd))?;
     }
     Ok(())

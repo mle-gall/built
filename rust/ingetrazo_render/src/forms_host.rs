@@ -887,7 +887,7 @@ fn before_frame(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()>
 #[pyfunction]
 fn _pick_path(form: &Bound<'_, PyAny>, f: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = form.py();
-    let dialogs = py.import("views.filedialogs")?.getattr("file_dialogs")?;
+    let dialogs = py.import("ingetrazo_render.shell_files")?.getattr("ShellFileDialog")?;
     let win = form.getattr("win")?;
     let parent = if win.hasattr("isWindow")? { win } else { py.None().into_bound(py) };
     let value = f.getattr("value")?;
@@ -1139,13 +1139,12 @@ impl UnitsDone {
             let chosen = py.import("json")?.call_method1("loads", (model.call_method0("settings")?,))?;
             if custom {
                 let untouched = scene.getattr("version")?.eq(window.getattr("_saved_version")?)?;
-                let apply = py.import("views.settings_apply")?;
-                apply.call_method1("apply_document_units", (window, &chosen))?;
+                crate::settings_rows::live::apply_document_units(&window, &chosen)?;
                 if untouched {
                     window.setattr("_saved_version", scene.getattr("version")?)?;
                     window.call_method0("_update_title")?;
                 }
-                let key = apply.getattr("_UNITS_FOR_NEW_KEY")?;
+                let key = crate::settings_rows::live::NEW_UNITS;
                 let for_new = if model.getattr("for_new")?.is_truthy()? { "1" } else { "0" };
                 py.import("core.settings")?.call_method0("settings")?.call_method1("setValue", (key, for_new))?;
                 u.call_method1("set_ask_at_start", (model.getattr("ask_again")?,))?;

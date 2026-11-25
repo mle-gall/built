@@ -7,9 +7,9 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 def test_save_writes_the_model_from_the_file_menu(native_host, monkeypatch, tmp_path):
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     path = tmp_path / "saved.built"
-    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *_: (str(path), ""))
+    monkeypatch.setattr(ShellFileDialog, "getSaveFileName", lambda *_: (str(path), ""))
     native_host.menu("save")
     assert path.is_file() and native_host.window._current_path == path
 
@@ -24,11 +24,11 @@ def test_simplify_mesh_is_only_in_the_edit_menu():
 def test_stl_simplification_defaults_to_principal_planes(native_host, monkeypatch, tmp_path):
     from core.settings import settings
     from tests.test_import_failure_reported import _GOOD_STL
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     settings().setValue("import/stl_simplify", "true")
     path = tmp_path / "sample.stl"
     path.write_bytes(_GOOD_STL)
-    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *args: (str(path), ""))
+    monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *args: (str(path), ""))
     forms = []
     monkeypatch.setattr("ingetrazo_render.chrome_forms.show", lambda _w, form: forms.append(form))
     native_host.menu("import:stl")

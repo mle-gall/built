@@ -351,7 +351,7 @@ pub(super) fn choose_kept_components(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let title = translated(py, "Components from File", None)?;
     let path = win.getattr("_current_path")?;
     let folder = if path.is_none() { String::new() } else { path.getattr("parent")?.str()?.to_string() };
-    let file = py.import("views.filedialogs")?.getattr("file_dialogs")?.call_method1(
+    let file = py.import("ingetrazo_render.shell_files")?.getattr("ShellFileDialog")?.call_method1(
         "getOpenFileName", (win, &title, folder, py.import("formats.built")?.getattr("DOCUMENT_FILTER")?))?.get_item(0)?;
     if !file.is_truthy()? { return Ok(()); }
     let vars = PyDict::new(py);

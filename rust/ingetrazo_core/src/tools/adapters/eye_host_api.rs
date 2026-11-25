@@ -66,7 +66,7 @@ fn tick<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let module = imported(py, "tools.walkthrough_host")?;
     let tool = a.get_item(0)?;
-    let input_state = imported(py, "views.input_state")?.into_any();
+    let input_state = imported(py, "ingetrazo_core.window_input")?.into_any();
     let vp = tool.getattr("_viewport")?;
     if vp.is_none() {
         return Ok(none(py));

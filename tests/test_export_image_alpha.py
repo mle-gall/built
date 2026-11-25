@@ -179,7 +179,7 @@ def export(view, native_question_host, monkeypatch):
     ticks the box as told and returns the file read back. ``seen`` holds the
     dialog as the user found it."""
     from ingetrazo_render import chrome_forms
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     from ingetrazo_render import shell_services as native
     monkeypatch.setattr(native, "available", lambda: True)
     win, vp, folder = view
@@ -188,7 +188,7 @@ def export(view, native_question_host, monkeypatch):
     def run(name, tick=None, width=900):
         target = folder / name
 
-        monkeypatch.setattr(file_dialogs, "getSaveFileName",
+        monkeypatch.setattr(ShellFileDialog, "getSaveFileName",
                             lambda *a, **k: (str(target), ""))
         win._on_export_image()
         form = chrome_forms.current(win)

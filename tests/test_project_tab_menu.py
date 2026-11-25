@@ -64,11 +64,11 @@ def test_a_cancel_stops_closing_the_rest(native_host, monkeypatch):
 
 
 def test_save_from_the_menu_saves_that_project(native_host, tmp_path, monkeypatch):
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     win = native_host.window
     a, b, c = _three(win)
     target = tmp_path / "from-the-menu.built"
-    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *args, **kw: (str(target), ""))
+    monkeypatch.setattr(ShellFileDialog, "getSaveFileName", lambda *args, **kw: (str(target), ""))
     _menu(native_host, "save", 2)
     assert target.is_file() and c.path == target
     assert win.active_document() is c and b.path is None

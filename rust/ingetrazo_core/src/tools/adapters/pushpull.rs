@@ -617,11 +617,7 @@ fn on_release<'py>(a: &Args<'py>) -> Reply<'py> {
     let mods = if tool.getattr("dragging")?.is_truthy()? {
         module.call_method1(
             "_mods",
-            (module.getattr("input_state")?.call_method(
-                "modifiers",
-                (&viewport,),
-                Some(&fields!(py; "query" => true)),
-            )?,),
+            (module.getattr("window_input")?.call_method1("modifiers", (&viewport,))?,),
         )?
     } else {
         0.into_bound_py_any(py)?

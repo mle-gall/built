@@ -10,10 +10,8 @@ from pathlib import Path
 
 from core.settings import settings as preferences
 from ingetrazo_render import shell_services as native
-from ingetrazo_render.shell_files import ShellFileDialog
 
-from views import filedialogs
-from views.filedialogs import file_dialogs, last_dir, remember, start_in
+from ingetrazo_render.shell_files import ShellFileDialog, last_dir, remember, start_in
 
 
 def _fresh():
@@ -55,7 +53,7 @@ def test_the_shim_feeds_the_dialog_and_learns_from_it(tmp_path, monkeypatch):
     (tmp_path / "salida").mkdir()
     monkeypatch.setattr(native, "save_file", fake_save)
     remember(tmp_path)
-    path, _ = file_dialogs.getSaveFileName(None, "Export PDF…", "lamina.pdf", "PDF (*.pdf)")
+    path, _ = ShellFileDialog.getSaveFileName(None, "Export PDF…", "lamina.pdf", "PDF (*.pdf)")
     assert seen["dir"] == str(tmp_path / "lamina.pdf")   # started where the user was
     assert last_dir() == str(tmp_path / "salida")         # …and learnt the new folder
 
@@ -63,7 +61,7 @@ def test_the_shim_feeds_the_dialog_and_learns_from_it(tmp_path, monkeypatch):
         seen["open"] = str(directory)
         return []
     monkeypatch.setattr(native, "open_files", fake_open)
-    file_dialogs.getOpenFileName(None, "Open", "", "IGZ (*.igz)")
+    ShellFileDialog.getOpenFileName(None, "Open", "", "IGZ (*.igz)")
     assert seen["open"] == str(tmp_path / "salida")
     assert last_dir() == str(tmp_path / "salida")         # a cancel changes nothing
 
@@ -83,7 +81,7 @@ def test_with_nothing_remembered_a_dialog_starts_beside_the_open_document(tmp_pa
         seen["dir"] = str(Path(directory) / name)
         return None
     monkeypatch.setattr(native, "save_file", fake_save)
-    file_dialogs.getSaveFileName(_Composer(), "Export PDF…", "lamina.pdf", "PDF (*.pdf)")
+    ShellFileDialog.getSaveFileName(_Composer(), "Export PDF…", "lamina.pdf", "PDF (*.pdf)")
     assert seen["dir"] == str(tmp_path / "proyecto" / "lamina.pdf")
 
 
@@ -92,14 +90,11 @@ def test_a_share_that_refuses_the_login_falls_back_instead_of_raising(tmp_path, 
     login raises (WinError 1326) instead of answering False, and every
     dialog died before showing."""
     _fresh()
-    share = "//servidor/proyectos"         # what Windows writes as \\servidor\proyectos
-    real_is_dir = filedialogs.Path.is_dir
-
-    def is_dir(self):
-        if str(self).startswith("/servidor") or str(self).startswith(share):
-            raise OSError(1326, "The user name or password is incorrect")
-        return real_is_dir(self)
-    monkeypatch.setattr(filedialogs.Path, "is_dir", is_dir)
+    # A regular file in a directory prefix yields ENOTDIR, just as an
+    # unavailable share makes the platform directory probe fail.
+    inaccessible = tmp_path / "unavailable"
+    inaccessible.write_text("")
+    share = str(inaccessible / "projects")
     preferences().setValue("files/last_dir", share)
     assert last_dir(tmp_path) == str(tmp_path)
     assert start_in("lamina.pdf", tmp_path) == os.path.join(str(tmp_path), "lamina.pdf")

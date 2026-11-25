@@ -129,7 +129,7 @@ def test_terrain_path_projects_cursor_samples_and_exports(host, tmp_path, monkey
     from georef.geopath import GeoPath
     from tests.test_profile import V, StubSampler
     from views import terrain_binding
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
 
     vp, view = host.viewport, host.view
     s = vp.scene
@@ -153,7 +153,7 @@ def test_terrain_path_projects_cursor_samples_and_exports(host, tmp_path, monkey
     assert len(sent["projected"]) == len(sent["terrain"]["samples"])
     assert sent["projected"][4] != sent["projected"][5]
     csv = tmp_path / "route.csv"
-    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *a: (str(csv), ""))
+    monkeypatch.setattr(ShellFileDialog, "getSaveFileName", lambda *a: (str(csv), ""))
     run(host, "terrain.csv")
     assert "photogrammetric survey" in csv.read_text() and "110.0" in csv.read_text()
     run(host, "terrain.close")

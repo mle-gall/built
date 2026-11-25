@@ -19,8 +19,8 @@ def host(monkeypatch, tmp_path):
 
 
 def pick(monkeypatch, path):
-    from views.filedialogs import file_dialogs
-    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *_a, **_k: (str(path), ""))
+    from ingetrazo_render.shell_files import ShellFileDialog
+    monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *_a, **_k: (str(path), ""))
 
 
 @pytest.mark.parametrize("suffix", [".geojson", ".kml", ".kmz"])

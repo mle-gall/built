@@ -630,42 +630,18 @@ def test_writer_finalization_needs_no_qt_version_probe(tmp_path, monkeypatch):
 
 
 def _fake_render(win, log):
-    """The tests' window is never shown, so it has no GL: each frame is
-    a plain picture, and the log keeps what the camera and layers were."""
-    class _Picture:
-        """Grey all over, with the image calls the export makes."""
-        class Format:
-            Format_RGBA8888 = "rgba8888"
-
-        def __init__(self, w, h):
-            self.w, self.h = w, h
-
-        def isNull(self):
-            return False
-
-        def convertToFormat(self, _format):
-            return self
-
-        def width(self):
-            return self.w
-
-        def height(self):
-            return self.h
-
-        def constBits(self):
-            return bytes((128, 128, 128, 255)) * (self.w * self.h)
-
+    """Supply a synthetic RGBA frame through the display's readback API."""
     def render(width, height=None, overlays=True, annotations_only=False):
         cam = win.viewport.camera
         log.append((round(cam.pitch, 3), cam.perspective, cam.aspect,
                     tuple(ly.visible for ly in win.viewport.scene.layers)))
-        return _Picture(width, height)
-    win.viewport.render_image = render
+        return width, height, bytes((128, 128, 128, 255)) * (width * height)
+    win.view.render_pixels = render
 
 
 def test_export_video_renders_every_frame_and_puts_the_view_back(
         win, tmp_path):
-    from views.video_export import export_video
+    from ingetrazo_render import export_video
     _with_layer(win, "Muebles")
     _scenes(win, ("Vista", "iso", set()), ("Planta", "top", {"Muebles"}))
     win.viewport.scene.animation = SceneAnimation(transition=1.0, pause=0.5)
@@ -693,7 +669,7 @@ def test_export_video_renders_every_frame_and_puts_the_view_back(
 
 
 def test_cancelling_the_video_removes_the_file(win, tmp_path):
-    from views.video_export import export_video
+    from ingetrazo_render import export_video
     _scenes(win, ("A", "iso", set()), ("B", "top", set()))
     _fake_render(win, [])
     path = tmp_path / "cancelado.mkv"
@@ -702,7 +678,7 @@ def test_cancelling_the_video_removes_the_file(win, tmp_path):
 
 
 def test_no_scenes_no_video(win, tmp_path):
-    from views.video_export import VideoError, export_video
+    from ingetrazo_render import VideoError, export_video
     with pytest.raises(VideoError):
         export_video(win, tmp_path / "nada.mkv", 160, 90, 10)
     assert not (tmp_path / "nada.mkv").exists()
@@ -755,13 +731,12 @@ def test_without_qt_multimedia_the_writer_still_encodes(monkeypatch, tmp_path):
 
 
 def test_without_qt_multimedia_export_still_offers_a_destination(win, monkeypatch):
-    import views.video_export as ve
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     _scenes(win, ("A", "iso", set()))
     _without_multimedia(monkeypatch)
     asked = []
-    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *a, **k: asked.append(a) or ("", ""))
-    ve.run_export(win)
+    monkeypatch.setattr(ShellFileDialog, "getSaveFileName", lambda *a, **k: asked.append(a) or ("", ""))
+    win.export_video()
     assert len(asked) == 1
 
 
@@ -815,35 +790,33 @@ def test_mp4_discard_preserves_existing_destination(tmp_path):
 @pytest.mark.parametrize("suffix,label", [(".mp4", "H.264 / MP4 (*.mp4)"),
                                           (".mkv", "Motion JPEG / Matroska (*.mkv)")])
 def test_video_picker_and_sheet_agree_on_encoder_format(win, monkeypatch, tmp_path, suffix, label):
-    import views.video_export as ve
     from ingetrazo_render import chrome_forms
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     _scenes(win, ("A", "iso", set()))
-    monkeypatch.setattr(ve, "video_format", lambda: (suffix, label))
+    monkeypatch.setattr("ingetrazo_core.video_format", lambda: (suffix, label))
     picker = []
-    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *args: picker.append(args)
+    monkeypatch.setattr(ShellFileDialog, "getSaveFileName", lambda *args: picker.append(args)
                         or (str(tmp_path / ("tour" + suffix)), ""))
     forms = []
     monkeypatch.setattr(chrome_forms, "show", lambda w, form: forms.append(form))
-    ve.run_export(win)
+    win.export_video()
     assert picker[0][2].endswith(suffix) and picker[0][3] == label
     assert label in forms[0].wire()[2]
 
 
 def test_normalizing_the_movie_suffix_preserves_an_unconfirmed_file(win, monkeypatch, tmp_path):
-    import views.video_export as ve
     from ingetrazo_render import chrome_dialogs
     from ingetrazo_render import chrome_forms
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     _scenes(win, ("A", "iso", set()))
     existing = tmp_path / "site.mp4"
     existing.write_bytes(b"original movie")
-    monkeypatch.setattr(ve, "video_format", lambda: (".mp4", "H.264 / MP4 (*.mp4)"))
-    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *args: (str(tmp_path / "site"), ""))
+    monkeypatch.setattr("ingetrazo_core.video_format", lambda: (".mp4", "H.264 / MP4 (*.mp4)"))
+    monkeypatch.setattr(ShellFileDialog, "getSaveFileName", lambda *args: (str(tmp_path / "site"), ""))
     prompts = []
     monkeypatch.setattr(chrome_dialogs, "ask", lambda *args, **kwargs: prompts.append(args) or "cancel")
     monkeypatch.setattr(chrome_forms, "show", lambda *args: pytest.fail("Export advanced after cancellation"))
-    ve.run_export(win)
+    win.export_video()
     assert prompts and existing.name in prompts[0][2]
     assert existing.read_bytes() == b"original movie"
 

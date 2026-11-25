@@ -137,11 +137,11 @@ def test_inserting_a_document_leaves_out_whatever_figure_the_app_placed(tmp_path
 def test_preferences_choose_my_picture_and_ok_stores_it(native_host, tmp_path, monkeypatch):
     """The whole gesture: «My own picture…» asks for the file at once, OK
     copies it into the data folder and the next new document stands it."""
-    from views import filedialogs
+    from ingetrazo_render import shell_files
     from tests.preferences_chrome import Controls
     monkeypatch.setattr(sf, "figures_dir", lambda: tmp_path / "figures")
     src = _png(tmp_path / "Marco_Sumari.png")
-    monkeypatch.setattr(filedialogs.file_dialogs, "getOpenFileName",
+    monkeypatch.setattr(shell_files.ShellFileDialog, "getOpenFileName",
                         staticmethod(lambda *a, **k: (str(src), "")))
     win = native_host.window
     ui = Controls(win, "general")
@@ -160,9 +160,9 @@ def test_preferences_choose_my_picture_and_ok_stores_it(native_host, tmp_path, m
 
 
 def test_cancelling_the_file_dialog_goes_back_to_the_person_before(native_host, monkeypatch):
-    from views import filedialogs
+    from ingetrazo_render import shell_files
     from tests.preferences_chrome import Controls
-    monkeypatch.setattr(filedialogs.file_dialogs, "getOpenFileName",
+    monkeypatch.setattr(shell_files.ShellFileDialog, "getOpenFileName",
                         staticmethod(lambda *a, **k: ("", "")))
     win = native_host.window
     ui = Controls(win, "general")

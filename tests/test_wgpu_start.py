@@ -303,11 +303,11 @@ def test_enter_on_a_row_opens_it_through_the_window(win, monkeypatch, tmp_path):
 
 
 def test_a_moved_file_is_located(win, monkeypatch, tmp_path):
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     moved = doc(tmp_path, "moved.built")
     old = tmp_path / "gone.built"
     recent.remember(old)
-    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *a: (str(moved), ""))
+    monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *a: (str(moved), ""))
     ws.show(win)
     sheet(win)
     act(win, "menu", "file:" + str(old.resolve()), "locate")
@@ -551,12 +551,12 @@ def test_a_moved_file_hides_its_dead_duplicate(win, monkeypatch, tmp_path):
 
 
 def test_a_missing_row_still_offers_to_locate(win, monkeypatch, tmp_path):
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     found = doc(tmp_path, "found.built")
     gone = tmp_path / "away" / "lost.built"
     recent.remember(gone)
     asked = []
-    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *a: (asked.append(a), (str(found), ""))[1])
+    monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *a: (asked.append(a), (str(found), ""))[1])
     ws.show(win)
     wait_loader(win)
     sh = sheet(win)
