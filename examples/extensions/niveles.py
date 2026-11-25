@@ -143,102 +143,36 @@ def _height_step(unit: str) -> float:
     return 0.10 if unit in ("m", "cm", "mm") else 4 * 0.0254
 
 
-def __getattr__(name):
-    # Compatibility with extensions that explicitly import the old Qt editors.
-    if name not in ("LengthSpinBox", "_LevelDialog"):
-        raise AttributeError(name)
-    from PySide6.QtGui import QValidator
-    from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QDoubleSpinBox,
-                                   QFormLayout, QLineEdit, QToolTip)
+class LengthSpinBox:
+    """Document-unit value for a native height editor, stored in metres."""
 
-    class LengthSpinBox(QDoubleSpinBox):
-        """A spin box whose value is metres and whose text is the document's
-        unit. The arrows add one step of the shown precision (1 mm in a
-        millimetre document); text that is not a length («5 m²», «abc») is not
-        taken, and the reason shows next to the field."""
+    def __init__(self, minimum=0.0, maximum=1000.0):
+        self.units = _units()
+        self.unit = self.units.model_unit()
+        self.precision = self.units.fine_precision()
+        self.minimum, self.maximum = minimum, maximum
+        self._value = minimum
+        self.step = self.units.display_step(self.unit, self.precision)
 
-        def __init__(self, parent=None, minimum: float = 0.0,
-                     maximum: float = 1000.0, unit: str | None = None,
-                     decimals: int | None = None) -> None:
-            super().__init__(parent)
-            self._units = _units()
-            self._unit = unit or self._units.model_unit()
-            # At least to the millimetre: a 2 mm text in a document shown to the
-            # centimetre must not read «0 cm».
-            self._shown = self._units.fine_precision() if decimals is None else decimals
-            # Qt rounds the stored value to decimals(): metres to the micron
-            # keep every unit's shown precision exact.
-            super().setDecimals(9)
-            self.setRange(minimum, maximum)
-            self.setSingleStep(self._units.display_step(self._unit, self._shown))
-            self.setAccelerated(True)
+    def setValue(self, metres):
+        self._value = min(self.maximum, max(self.minimum, metres))
 
-        def unit(self) -> str:
-            return self._unit
+    def value(self):
+        return self._value
 
-        def textFromValue(self, value: float) -> str:
-            return self._units.localized(
-                self._units.format_length(value, self._unit, self._shown))
+    def text(self):
+        return self.units.localized(self.units.format_length(self._value, self.unit, self.precision))
 
-        def valueFromText(self, text: str) -> float:
-            r = self._units.parse(text, "length", self._unit)
-            return r.value if r.ok else self.value()
+    def read(self, text):
+        result = self.units.parse(text, "length", self.unit)
+        if not result.ok:
+            return None, result.message()
+        if not self.minimum <= result.value <= self.maximum:
+            return None, _t("Out of range: {low} to {high}", low=self.minimum, high=self.maximum)
+        return result.value, ""
 
-        def _reading(self, text: str):
-            r = self._units.parse(text, "length", self._unit)
-            if r.ok and not self.minimum() - 1e-12 <= r.value <= self.maximum() + 1e-12:
-                from core.i18n import tr
-                return None, tr("Out of range: {low} to {high}",
-                                low=self.textFromValue(self.minimum()),
-                                high=self.textFromValue(self.maximum()))
-            return (r.value, "") if r.ok else (None, r.message())
-
-        def validate(self, text: str, pos: int):
-            value, _ = self._reading(text)
-            state = QValidator.Acceptable if value is not None \
-                else QValidator.Intermediate
-            return state, text, pos
-
-        def error_text(self) -> str:
-            """Why the text in the field is not taken («» when it is)."""
-            return self._reading(self.lineEdit().text())[1]
-
-        def fixup(self, text: str) -> str:
-            msg = self._reading(text)[1]
-            if msg:
-                # Leaving the field puts the last good value back; say why.
-                QToolTip.showText(self.mapToGlobal(self.rect().bottomLeft()),
-                                  msg, self)
-            return text
-
-
-    class _LevelDialog(QDialog):
-        def __init__(self, parent, title: str, name: str, z: float) -> None:
-            super().__init__(parent)
-            self.setWindowTitle(title)
-            form = QFormLayout(self)
-            self.name = QLineEdit(name)
-            form.addRow(_t("Name:"), self.name)
-            if _units() is not None:
-                # The height in the document's units; value() stays in metres.
-                self.z = LengthSpinBox(minimum=-1000.0, maximum=1000.0)
-                self.z.setSingleStep(_height_step(self.z.unit()))
-            else:
-                self.z = QDoubleSpinBox()
-                self.z.setRange(-1000.0, 1000.0)
-                self.z.setDecimals(2)
-                self.z.setSingleStep(0.10)
-                self.z.setSuffix(" m")
-            self.z.setValue(z)
-            form.addRow(_t("Height:"), self.z)
-            buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-            buttons.accepted.connect(self.accept)
-            buttons.rejected.connect(self.reject)
-            form.addRow(buttons)
-
-
-    globals().update(LengthSpinBox=LengthSpinBox, _LevelDialog=_LevelDialog)
-    return globals()[name]
+    def stepBy(self, steps):
+        self.setValue(self._value + steps * self.step)
 
 
 class LevelsPanel:
@@ -285,19 +219,30 @@ class LevelsPanel:
             index = int(self.selected) if control == "edit" else None
             level = levels[index] if index is not None else dict(
                 name=_t("Level {n}", n=len(levels) + 1), z=_next_height(levels))
-            units = _units()
-            unit = units.model_unit()
-            text = units.format_length(level["z"], unit, units.fine_precision())
+            height = LengthSpinBox(-1000, 1000)
+            height.setValue(level["z"])
+            height.step = _height_step(height.unit)
             fields = [Field("name", "edit", _t("Name:"), level["name"]),
-                      Field("height", "edit", _t("Height:"), text)]
+                      Field("height", "edit", _t("Height:"), height.text()),
+                      Field("up", "button", _t("Raise level")),
+                      Field("down", "button", _t("Lower level"))]
+
+            def step(form, key):
+                value, error = height.read(form.value("height"))
+                if error:
+                    form.error = error
+                else:
+                    height.setValue(value)
+                    height.stepBy(1 if key == "up" else -1)
+                    form.error = ""
+                    form.set("height", height.text())
+
             scene, revision = self.app.scene, self.app.scene.version
 
             def validate(form, answer):
-                height = units.parse(form.value("height"), "length", unit)
-                if not height.ok:
-                    return height.message()
-                if not -1000 <= height.value <= 1000:
-                    return _t("Height must be between -1000 m and 1000 m")
+                _, error = height.read(form.value("height"))
+                if error:
+                    return error
                 if not form.value("name").strip():
                     return _t("Enter a name")
 
@@ -305,7 +250,7 @@ class LevelsPanel:
                 if answer != "ok" or scene is not self.app.scene or scene.version != revision:
                     return
                 changed = dict(name=values["name"].strip(),
-                               z=units.parse(values["height"], "length", unit).value)
+                               z=height.read(values["height"])[0])
                 if index is None:
                     levels.append(changed)
                 else:
@@ -313,7 +258,7 @@ class LevelsPanel:
                 self.selected = None
                 self.app.set_document_data(state)
 
-            show(self.app.window, Form(self.title, fields, validate=validate, on_done=finish))
+            show(self.app.window, Form(self.title, fields, validate=validate, on_button=step, on_done=finish))
 
     def overlay(self, viewport):
         from views.wgpu_overlay import Primitive

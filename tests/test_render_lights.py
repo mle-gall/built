@@ -16,10 +16,6 @@ import pytest
 from core.input_types import QPointF, Qt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
-
-if QApplication.instance() is None:
-    QApplication([])
 
 from core import render_blender as rb  # noqa: E402
 from core.camera import OrbitCamera  # noqa: E402
@@ -237,13 +233,11 @@ def attach_render_surface(window, monkeypatch):
 
 
 def test_a_finished_render_reuses_the_image_utility(window, tmp_path, monkeypatch):
-    from PySide6.QtGui import QImage
+    from tests.plugin_images import write_png
     view = attach_render_surface(window, monkeypatch)
     panel = _panel(window)
     panel.image = tmp_path / "render.png"
-    img = QImage(64, 40, QImage.Format_RGB32)
-    img.fill(0x336699)
-    assert img.save(str(panel.image))
+    write_png(panel.image, 64, 40)
     panel._show_result()
     first = panel.viewer
     assert first.model.slot == "utility" and first.model.path == str(panel.image)
@@ -273,14 +267,12 @@ def test_sections_fold_and_remember_it(window):
 
 
 def test_save_and_open_folder_live_in_the_image_utility(window, tmp_path, monkeypatch):
-    from PySide6.QtGui import QImage
+    from tests.plugin_images import write_png
     from unittest.mock import Mock
     attach_render_surface(window, monkeypatch)
     panel = _panel(window)
     panel.image = tmp_path / "render.png"
-    img = QImage(32, 20, QImage.Format_RGB32)
-    img.fill(0x808080)
-    assert img.save(str(panel.image))
+    write_png(panel.image, 32, 20)
     folder = Mock()
     from plugins import _blender_panel
     from views.filedialogs import file_dialogs

@@ -1,21 +1,27 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The session's QApplication wears the app's style from the start, as the
-app does: a later setStyle walks every widget alive and, mid-batch, met one
-whose C++ half was gone (SIGSEGV in QApplication::setStyle, 12-11)."""
-from PySide6.QtWidgets import QApplication
+"""The native renderer installs the bundled chrome on its first attachment."""
+from unittest.mock import Mock
 
-from views import theme
-
-
-def test_the_style_is_already_the_apps():
-    assert isinstance(QApplication.instance().style(), theme.ChromeStyle)
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from views import wgpu_ui
 
 
-def test_startup_is_idempotent(monkeypatch):
-    app = QApplication.instance()
-    calls = []
-    for setter in ("setStyle", "setPalette", "setStyleSheet"):
-        monkeypatch.setattr(app, setter, calls.append)
-    theme.install_dark_palette(app)
-    assert calls == []
+def test_startup_installs_the_chrome(native_host, monkeypatch):
+    view = native_host.view
+    renderer = Mock()
+    monkeypatch.setattr(view, "renderer", renderer)
+    wgpu_ui.attach(view)
+    renderer.ui_enable.assert_called_once_with(wgpu_ui.FONT)
+    assert view._ui_attached
+    assert view.source_viewport._chrome_owns_labels
+
+
+def test_startup_is_idempotent(native_host):
+    view = native_host.view
+    renderer = Mock()
+    native_host.hand_renderer(view, renderer)
+    timer = view._ui_timer
+    wgpu_ui.attach(view)
+    renderer.ui_enable.assert_not_called()
+    assert view._ui_timer is timer

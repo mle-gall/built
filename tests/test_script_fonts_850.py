@@ -5,18 +5,10 @@ the script, so the vowel and tone marks compose with their consonant.
 Every other language, and Lao elsewhere, start exactly as before."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import pytest
-from PySide6.QtGui import QFontDatabase
-from PySide6.QtWidgets import QApplication
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
-from plugins import _widget_language as script_fonts
-from plugins._widget_language import apply_script_font, script_font_for
-
-_app = QApplication.instance() or QApplication([])
+from plugins._widget_language import chrome_font, script_font_for
 
 WINDOWS_FONTS = ["Noto Sans Lao", "Segoe UI", "Leelawadee UI", "Arial"]
 
@@ -50,42 +42,26 @@ def test_region_tags_read_as_their_language():
     assert script_font_for("lo_LA", WINDOWS_FONTS, "win32") == "Noto Sans Lao"
 
 
-@pytest.fixture
-def app_font():
-    before = _app.font()
-    try:
-        yield
-    finally:
-        _app.setFont(before)
+
+def test_native_chrome_selects_the_available_lao_face(tmp_path):
+    default = chrome_font("es", "win32", [tmp_path])
+    assert chrome_font("lo", "win32", [tmp_path]) == default
+    second = tmp_path / "LeelawUI.ttf"
+    second.touch()
+    assert chrome_font("lo-LA", "win32", [tmp_path]) == str(second)
+    preferred = tmp_path / "NotoSansLao-Regular.ttf"
+    preferred.touch()
+    assert chrome_font("lo", "win32", [tmp_path]) == str(preferred)
+    assert chrome_font("es", "win32", [tmp_path]) == default
+    assert chrome_font("lo", "linux", [tmp_path]) == default
 
 
-def test_apply_puts_the_script_font_first_and_keeps_the_rest(app_font,
-                                                              monkeypatch):
-    installed = QFontDatabase.families()
-    assert installed, "no font at all in this Qt"
-    lao_font = installed[-1]
-    monkeypatch.setitem(script_fonts.SCRIPT_FONTS, "lo", (lao_font,))
-    before = list(_app.font().families() or [_app.font().family()])
-    size = _app.font().pointSizeF()
-
-    assert apply_script_font(_app, "lo", "win32") is True
-    fams = list(_app.font().families())
-    assert fams[0] == lao_font
-    assert [f for f in before if f != lao_font] == fams[1:]
-    assert _app.font().pointSizeF() == size
-
-
-@pytest.mark.parametrize("lang,platform", [("es", "win32"), ("lo", "linux")])
-def test_apply_leaves_the_font_as_it_was(app_font, lang, platform):
-    before = _app.font()
-    assert apply_script_font(_app, lang, platform) is False
-    assert _app.font() == before
-
-
-def test_startup_hook_runs_with_the_language(app_font, monkeypatch, tmp_path):
+def test_startup_uses_the_selected_catalogue(native_host):
+    from core import i18n
     from plugins._widget_language import apply_widget_language
-    seen = []
-    monkeypatch.setattr(script_fonts, "apply_script_font",
-                        lambda app, lang: seen.append(lang) or False)
-    apply_widget_language(_app, "lo")
-    assert seen == ["lo"]
+    previous = i18n.current_language()
+    try:
+        apply_widget_language(native_host, "lo")
+        assert i18n.current_language() == "lo"
+    finally:
+        i18n.set_language(previous)

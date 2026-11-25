@@ -1,5 +1,8 @@
 """Named deliveries through the protocol, dock and one-off export."""
+import json
+import time
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from core import deliveries
@@ -12,7 +15,7 @@ from formats import igz
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_ifc_export import _tagged_wall_scene
 import ingetrazo_render as dock
-from PySide6.QtCore import QTimer
+from app_shell import modal
 
 
 def add(h, path, **fields):
@@ -59,14 +62,33 @@ def test_reopen(tmp_path, ext):
     assert deliveries.records(reopened) == deliveries.records(scene)
 
 
-def test_queue_keep_cancel(tmp_path, monkeypatch):
-    from ingetrazo_render import chrome_forms
+class DeliveryWindow(SimpleNamespace):
+    """A weak-referenceable owner for the native timer queue."""
+
+
+def drain(timers):
+    deadline = time.monotonic() + 5
+    while (delay := timers.next_ms()) is not None:
+        assert time.monotonic() + delay / 1000 < deadline
+        time.sleep(delay / 1000)
+        timers.run_due()
+
+
+@pytest.fixture
+def next_turn(monkeypatch):
+    from core import input_types
+    from ingetrazo_render import WindowTimers, chrome_dialogs
+    timers = WindowTimers()
+    monkeypatch.setattr(input_types, "NATIVE", True)
+    monkeypatch.setattr(chrome_dialogs, "in_shell", lambda: True)
+    return SimpleNamespace(timers=timers)
+
+
+def test_queue_keep_cancel(tmp_path, next_turn):
     scene = _tagged_wall_scene()
     vp = SimpleNamespace(history=History(scene), scene=scene, camera=OrbitCamera())
-    win = SimpleNamespace(viewport=vp)
-    monkeypatch.setattr(chrome_forms, "show", lambda *_: None)
-    ticks = []
-    monkeypatch.setattr(QTimer, "singleShot", lambda _, fn: ticks.append(fn))
+    win = DeliveryWindow(_host=next_turn, viewport=vp)
+    timers = next_turn.timers
     path = tmp_path / "client.glb"
     form = dock.delivery_export_form(win, one_off=True)
     form.receive("format", str(form.field("format").keys().index("glb")))
@@ -76,10 +98,9 @@ def test_queue_keep_cancel(tmp_path, monkeypatch):
     cancelled = tmp_path / "cancel.glb"
     job = dock.enqueue_delivery(win, None, {**record, "destination": str(cancelled)})
     job.cancel()
-    ticks.pop(0)()
+    timers.run_due()
     assert win._chrome_jobs[0].phase == "Writing"
-    while ticks:
-        ticks.pop(0)()
+    drain(timers)
     assert not win._chrome_jobs and not cancelled.exists()
     assert path.read_bytes()[:4] == b"glTF" and deliveries.records(scene)[key]["last_run"]
     assert win._delivery_result[1] == tmp_path
@@ -144,7 +165,6 @@ def test_checks_and_one_off_export(tmp_path, native_host):
     scene.version += 1
     add(win.viewport.history, tmp_path / "handover.ifc")
     from tests.test_tree_links import _View
-    import json
     view = _View()
     view._ui_lens = 2
     wgpu_ui._tree(view, win)
@@ -176,48 +196,46 @@ def test_problem_checks_cover_filed_geometry():
     assert by_id["solid"] == by_id["class"] == [group]
 
 
-def test_running_export_observes_cancellation(tmp_path, monkeypatch):
+def test_running_export_observes_cancellation(tmp_path, monkeypatch, next_turn):
     from core import progress
     from formats import dxf_out
-    from PySide6.QtWidgets import QApplication
     s = _tagged_wall_scene()
     vp = SimpleNamespace(history=History(s), scene=s, camera=OrbitCamera())
-    win = SimpleNamespace(viewport=vp)
-    callbacks = []
-    monkeypatch.setattr(QTimer, "singleShot", lambda _, fn: callbacks.append(fn))
+    win = DeliveryWindow(_host=next_turn, viewport=vp)
+    timers = next_turn.timers
     monkeypatch.setattr(progress, "REPORT_EVERY", 0)
     target = tmp_path / "plan.dxf"
     target.write_text("previous")
     key = add(vp.history, target)
     job = dock.enqueue_delivery(win, key, deliveries.records(s)[key])
-    monkeypatch.setattr(QApplication, "processEvents", job.cancel)
+    monkeypatch.setattr(modal, "tick", job.cancel)
 
     def writer(path, *unused):
         progress.tick(0.5)
         pytest.fail("Cancelled before publishing")
 
     monkeypatch.setattr(dxf_out, "save_dxf_layers", writer)
-    while callbacks:
-        callbacks.pop(0)()
+    drain(timers)
     assert job.cancelled and not win._chrome_jobs
     assert target.read_text() == "previous" and deliveries.records(s)[key]["last_run"] is None
 
 
 @pytest.mark.parametrize("one_off", [True, False], ids=["export", "delivery"])
-def test_svg_sheet_previews_the_page_it_writes(one_off, tmp_path, monkeypatch):
+def test_svg_sheet_previews_the_page_it_writes(one_off, tmp_path, monkeypatch, next_turn, native_host):
     from ingetrazo_render import chrome_sheet as sheet
-    from tests.test_chrome_sheet import View
 
     scene = _tagged_wall_scene()
     camera = OrbitCamera()
     camera.perspective = False
     viewport = SimpleNamespace(scene=scene, camera=camera, history=History(scene))
-    view = View()
-    view.width, view.height = lambda: 960, lambda: 640
-    win = SimpleNamespace(viewport=viewport, _doc=SimpleNamespace(stand_in=view))
-    callbacks = []
-    monkeypatch.setattr(QTimer, "singleShot", lambda delay, fn: callbacks.append(fn))
-    monkeypatch.setattr(sheet, "_arm_watchdog", lambda *args: None)
+    view = native_host.view
+    renderer = Mock()
+    monkeypatch.setattr(view, "renderer", renderer)
+    monkeypatch.setattr(view, "width", lambda: 960)
+    monkeypatch.setattr(view, "height", lambda: 640)
+    monkeypatch.setattr(view, "_ui_attached", True, raising=False)
+    win = DeliveryWindow(_host=next_turn, viewport=viewport, _doc=SimpleNamespace(stand_in=view))
+    timers = next_turn.timers
 
     form = dock.delivery_export_form(win, one_off=one_off)
     sid = "export" if one_off else "delivery"
@@ -234,22 +252,22 @@ def test_svg_sheet_previews_the_page_it_writes(one_off, tmp_path, monkeypatch):
     act("v", "paper_preset", "1")
     act("v", "fill", "3")
     act("v", "svg_preview", "1")
-    assert not view.renderer.icons and not target.exists()
-    while callbacks:
-        callbacks.pop(0)()
+    renderer.ui_set_icons.assert_not_called()
+    assert not target.exists()
+    drain(timers)
     sheet.before_frame(view, win)
-    block = view.renderer.sent[-1]["detail"]["blocks"][0]
+    block = json.loads(renderer.ui_set_large_sheet.call_args.args[0])["detail"]["blocks"][0]
     assert (block["kind"], block["text"]) == ("svg_preview", "Thirds")
-    assert view.renderer.icons == ["delivery_svg_preview"]
+    icons, = renderer.ui_set_icons.call_args.args
+    assert [icon[0] for icon in icons] == ["delivery_svg_preview"]
 
     act("v", "svg_guides", "4")
-    assert not callbacks
+    assert timers.next_ms() is None
     act("svg_frame", "0.1", "-0.2", "2")
-    assert callbacks
+    assert timers.next_ms() is not None
     act("verb", "export" if one_off else "save")
     assert form.closed and not sheet.shown(win)
-    while callbacks:
-        callbacks.pop(0)()
+    drain(timers)
     if one_off:
         assert target.is_file() and not deliveries.records(scene)
         options = dict(paper=[297, 210], frame=[-0.1, -0.2, 2], scale=100,
