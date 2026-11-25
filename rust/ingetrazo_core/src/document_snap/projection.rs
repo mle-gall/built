@@ -171,7 +171,7 @@ pub(super) fn distances<'py>(
         args.push(rows.clone())
     }
     p.py()
-        .import("core.edge_grid")?
+        .import("ingetrazo_core")?
         .call_method1("segment_distances", PyTuple::new(p.py(), args)?)
 }
 #[pyfunction]
@@ -208,7 +208,7 @@ pub(super) fn gedge_dist<'py>(v: &Obj<'py>, x: f64, y: f64) -> PyResult<Obj<'py>
         } else {
             let mut grid = slot.get_item(1)?;
             if grid.is_none() {
-                grid = py.import("core.edge_grid")?.call_method1(
+                grid = py.import("ingetrazo_core")?.call_method1(
                     "EdgeGrid",
                     (
                         p.get_item(0)?,

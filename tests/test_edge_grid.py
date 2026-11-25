@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """The screen grid finds every edge the full pass would, within reach.
 
-``core.edge_grid.EdgeGrid`` replaces, on big models, the per-move pass over
+``ingetrazo_core.EdgeGrid`` replaces, on big models, the per-move pass over
 every group hard edge (``Viewport._gedge_dist``). It may hand back MORE
 candidates than are within reach — never fewer: for random segments of
 every kind (short, long across the view, partly or wholly off screen,
@@ -16,7 +16,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from core.edge_grid import EdgeGrid, segment_distances
+from ingetrazo_core import EdgeGrid, segment_distances
 
 W, H = 1600.0, 900.0
 
@@ -149,20 +149,21 @@ def test_the_kill_switch_runs_the_full_pass(monkeypatch):
     assert getattr(vp, "_gedge_grid_cache", None) is None
 
 
-def _unique_reference(grid, px, py):
-    """near()'s answer the way it was always worked out: np.unique over the
-    long segments and the cell slices."""
-    c, r = grid.cell, grid.reach
-    x0 = max(int(np.floor((px - r) / c)) - grid.cx0, 0)
-    x1 = min(int(np.floor((px + r) / c)) - grid.cx0, grid.ncx - 1)
-    y0 = max(int(np.floor((py - r) / c)) - grid.cy0, 0)
-    y1 = min(int(np.floor((py + r) / c)) - grid.cy0, grid.ncy - 1)
-    parts = [grid.long_ids]
-    for row in range(y0, y1 + 1):
-        lo = np.searchsorted(grid.keys, row * grid.ncx + x0, "left")
-        hi = np.searchsorted(grid.keys, row * grid.ncx + x1, "right")
-        parts.append(grid.ids[lo:hi])
-    return np.unique(np.concatenate(parts))
+def _candidate_boxes(ax, ay, bx, by, ok, reach):
+    # Independent reference: intersect the cursor's cell rectangle with
+    # every clipped edge box, without building or querying a grid.
+    left, right = np.maximum(np.minimum(ax, bx), -reach), np.minimum(np.maximum(ax, bx), W + reach)
+    top, bottom = np.maximum(np.minimum(ay, by), -reach), np.minimum(np.maximum(ay, by), H + reach)
+    live = ok & (left <= right) & (top <= bottom)
+    x0, x1, y0, y1 = (np.floor(v / 32) for v in (left, right, top, bottom))
+    long = (x1 - x0 + 1) * (y1 - y0 + 1) > 16
+
+    def query(px, py):
+        intersects = ((x0 <= np.floor((px + reach) / 32)) & (x1 >= np.floor((px - reach) / 32))
+                      & (y0 <= np.floor((py + reach) / 32)) & (y1 >= np.floor((py - reach) / 32)))
+        return np.flatnonzero(live & (long | intersects))
+
+    return query
 
 
 @pytest.mark.parametrize("n,spread", [(400000, 0.05), (40000, 1.0)])
@@ -174,50 +175,46 @@ def test_near_answers_exactly_what_unique_did(n, spread):
     ax, ay = W / 2 + (ax - W / 2) * spread, H / 2 + (ay - H / 2) * spread
     bx, by = W / 2 + (bx - W / 2) * spread, H / 2 + (by - H / 2) * spread
     grid = EdgeGrid(ax, ay, bx, by, ok, W, H, 48.0)
+    reference = _candidate_boxes(ax, ay, bx, by, ok, 48.0)
     for px, py in rng.uniform([0, 0], [W, H], size=(40, 2)):
         got = grid.near(px, py)
-        want = _unique_reference(grid, px, py)
+        want = reference(px, py)
         assert got.dtype == want.dtype
         np.testing.assert_array_equal(got, want)
 
 
 @pytest.mark.parametrize("seed", range(4))
 def test_the_native_pass_gives_numpys_bits(seed):
-    """Past ``NATIVE_MIN`` segments the distances come from the native
-    engine: bit for bit NumPy's, for all of them and for some, over
-    segments of every length, off screen and degenerate."""
-    import sys
-
-    from core import _native
-    from core import edge_grid as eg
-    if not hasattr(_native.native, "segment_distances"):
-        pytest.skip("no native engine")
-    if eg._native_pass() is None:
-        # Another C library may round hypot its own way: NumPy is kept.
-        # Here, with glibc, the native pass must be the one in use.
-        assert not sys.platform.startswith("linux")
-        pytest.skip("the native pass rounds otherwise here")
     rng = np.random.default_rng(seed)
-    n = eg.NATIVE_MIN * 3
+    n = 60_000
     a = rng.uniform(-300, 1500, (4, n))
     a[2:, : n // 10] = a[:2, : n // 10]            # zero length
     a[:, n // 10: n // 5] = np.round(a[:, n // 10: n // 5])
     ok = rng.random(n) < 0.85
-    which = np.sort(rng.choice(n, eg.NATIVE_MIN + 7, replace=False))
+    which = np.sort(rng.choice(n, 20_007, replace=False))
     for px, py in ((400.5, 300.25), (float(a[0, 3]), float(a[1, 3])),
                    (-20.0, 2000.0)):
         for w in (None, which):
-            got = eg.segment_distances(*a, ok, px, py, w)
-            want = eg._numpy_distances(*a, ok, px, py, w)
+            got = segment_distances(*a, ok, px, py, w)
+            want = _numpy_distances(*a, ok, px, py, w)
             assert got.dtype == want.dtype and got.shape == want.shape
             assert np.array_equal(got, want)
 
 
-def test_few_segments_stay_in_numpy(monkeypatch):
-    from core import edge_grid as eg
-    called = []
-    monkeypatch.setattr(eg, "_native_pass",
-                        lambda: called.append(1) or None)
-    a = np.random.default_rng(0).uniform(0, 100, (4, 50))
-    eg.segment_distances(*a, np.ones(50, bool), 10.0, 10.0)
-    assert not called
+def test_strided_segments_keep_their_order():
+    a = np.random.default_rng(0).uniform(0, 100, (4, 50))[:, ::2]
+    ok = np.ones(a.shape[1], bool)
+    np.testing.assert_array_equal(segment_distances(*a, ok, 10., 10.),
+                                  _numpy_distances(*a, ok, 10., 10.))
+
+
+def _numpy_distances(ax, ay, bx, by, ok, px, py, which=None):
+    """``segment_distances`` in NumPy."""
+    if which is not None:
+        ax, ay, bx, by, ok = ax[which], ay[which], bx[which], by[which], ok[which]
+    dx, dy = bx - ax, by - ay
+    l2 = dx * dx + dy * dy
+    safe = np.where(l2 > 1e-12, l2, 1.0)
+    t = np.clip(((px - ax) * dx + (py - ay) * dy) / safe, 0.0, 1.0)
+    d = np.hypot(ax + t * dx - px, ay + t * dy - py)
+    return np.where(ok, d, np.inf)

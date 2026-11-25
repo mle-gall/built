@@ -18,6 +18,7 @@ mod texture_position;
 mod navigation;
 mod recents;
 mod material_finish;
+mod edge_grid;
 mod builtproject;
 mod delivery_form;
 mod appimage;
@@ -296,6 +297,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(object_weld::revert_object_split, m)?)?;
     m.add_function(wrap_pyfunction!(push_command::outline_curve_runs, m)?)?;
     navigation::register(m)?;
+    m.add_class::<edge_grid::EdgeGrid>()?;
     recents::register(m)?;
     m.add_function(wrap_pyfunction!(material_finish::guess_finish, m)?)?;
     m.add_function(wrap_pyfunction!(material_finish::resolve_finish, m)?)?;
@@ -966,20 +968,14 @@ fn nearest_within<'py>(py: Python<'py>, d: PyReadonlyArray1<'py, f64>, radius: f
     Ok(PyArray1::from_vec(py, all.into_iter().map(|t| t.1 as i64).collect()))
 }
 
-/// ``core.edge_grid.segment_distances``: the pixel distance from ``(px,
-/// py)`` to each segment ``(ax, ay)–(bx, by)`` (inf where ``ok`` is
-/// False), for all of them or only the indices ``which`` — the same
-/// operations in the same order, so the same bits (``hypot`` is the C
-/// library's; the caller checks it is NumPy's). Zoomed out over the plant
-/// of #158 some 475 000 edges lay within 8 px of the cursor: ~11 ms of
-/// NumPy a pointer move.
+/// Pixel distances for all visible segments or an indexed subset.
 #[pyfunction]
 #[pyo3(signature = (ax, ay, bx, by, ok, px, py_, which=None))]
 #[allow(clippy::too_many_arguments)]
-fn segment_distances<'py>(py: Python<'py>, ax: PyReadonlyArray1<'py, f64>,
-                          ay: PyReadonlyArray1<'py, f64>, bx: PyReadonlyArray1<'py, f64>,
-                          by: PyReadonlyArray1<'py, f64>, ok: PyReadonlyArray1<'py, bool>,
-                          px: f64, py_: f64, which: Option<PyReadonlyArray1<'py, i64>>)
+fn segment_distances<'py>(py: Python<'py>, ax: numpy::PyArrayLike1<'py, f64, numpy::AllowTypeChange>,
+                          ay: numpy::PyArrayLike1<'py, f64, numpy::AllowTypeChange>, bx: numpy::PyArrayLike1<'py, f64, numpy::AllowTypeChange>,
+                          by: numpy::PyArrayLike1<'py, f64, numpy::AllowTypeChange>, ok: numpy::PyArrayLike1<'py, bool, numpy::AllowTypeChange>,
+                          px: f64, py_: f64, which: Option<numpy::PyArrayLike1<'py, i64, numpy::AllowTypeChange>>)
     -> PyResult<Bound<'py, PyArray1<f64>>> {
     use rayon::prelude::*;
     let (ax, ay, bx, by, ok) = (ax.as_array(), ay.as_array(), bx.as_array(), by.as_array(),
