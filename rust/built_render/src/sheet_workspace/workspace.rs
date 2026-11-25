@@ -23,13 +23,13 @@ fn export_spec(kind: &str) -> Option<(&'static str, &'static str, &'static str, 
             "Exporting image",
         ),
         "dxf" => (
-            "Export view as DXF…",
+            "Export sheet as DXF…",
             ".dxf",
             "DXF (*.dxf)",
             "Exporting DXF",
         ),
         "svg" => (
-            "Export view as SVG…",
+            "Export sheet as SVG…",
             ".svg",
             "SVG (*.svg)",
             "Exporting SVG",
@@ -1618,15 +1618,14 @@ impl Workspace {
         Ok(None)
     }
     fn exports(s: &Bound<'_, Self>) -> PyResult<Py<PyTuple>> {
-        let frame = Self::_frame(s)?.is_some();
         Ok(PyTuple::new(
             s.py(),
             [
                 ("pdf", "PDF…", true),
                 ("pdf_all", "All sheets…", true),
                 ("png", "Image…", true),
-                ("dxf", "View DXF…", frame),
-                ("svg", "View SVG…", frame),
+                ("dxf", "DXF…", true),
+                ("svg", "SVG…", true),
             ],
         )?
         .unbind())
@@ -2028,9 +2027,6 @@ impl Workspace {
         let Some((title, ext, filters, _)) = export_spec(kind) else {
             return Ok(());
         };
-        if matches!(kind, "dxf" | "svg") && Self::_frame(s)?.is_none() {
-            return Self::flash(s, "Select a model view on the sheet first", 4000);
-        }
         let py = s.py();
         let panel = py
             .import("built_render.shell_files")?
@@ -2097,21 +2093,7 @@ impl Workspace {
                             (view, sheet, path, 200., ground(s)?, current, annots),
                         )?
                         .extract(),
-                    _ => {
-                        let got = frames.call_method1(
-                            if kind == "dxf" {
-                                "export_dxf"
-                            } else {
-                                "export_svg"
-                            },
-                            (view.getattr("source_viewport")?, Self::_frame(s)?, path),
-                        )?;
-                        Ok(if got.is_none() {
-                            vec![sheet.getattr("name")?.extract()?]
-                        } else {
-                            vec![]
-                        })
-                    }
+                    _ => frames.call_method1("export_sheet_vector", (kind, view, sheet, path, ground(s)?, current, annots))?.extract(),
                 }
             })();
             match result {

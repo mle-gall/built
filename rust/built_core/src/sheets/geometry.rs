@@ -26,7 +26,6 @@ use crate::store::py::PyMeshStore;
 use crate::store::{Store, HIDDEN, SOFT};
 use glam::{DMat4, DVec3};
 use numpy::{PyArray1, PyArrayMethods};
-use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use std::collections::HashMap;
@@ -185,10 +184,7 @@ fn arr(p: DVec3) -> [f64; 3] {
 
 fn eat(py: Python<'_>, part: &Part, tags: &Tags, h: Hypot, out: &mut Collected) -> PyResult<()> {
     let mesh = part.geometry.bind(py);
-    let dict = mesh.getattr("__dict__")?.cast_into::<PyDict>()?;
-    let Some(store) = dict.get_item("_store")? else {
-        return Err(PyValueError::new_err("a mesh without a native store"));
-    };
+    let store = mesh.getattr("_store")?;
     let store = store.cast::<PyMeshStore>()?.try_borrow()?;
     let store: &Store = &store.inner;
     let mut attrs = Attrs::of(mesh)?;

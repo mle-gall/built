@@ -9,15 +9,12 @@ use std::collections::HashMap;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
 
 use crate::store::keys::Kind;
 use crate::store::py::PyMeshStore;
 
 fn store_of<'py>(mesh: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyMeshStore>> {
-    let d = mesh.getattr("__dict__")?.cast_into::<PyDict>()?;
-    let Some(s) = d.get_item("_store")? else { return Err(PyValueError::new_err("a mesh without a native store")) };
-    Ok(s.cast_into::<PyMeshStore>()?)
+    Ok(mesh.getattr("_store")?.cast_into::<PyMeshStore>()?)
 }
 
 fn keys(items: &Bound<'_, PyAny>) -> PyResult<Vec<u128>> {
