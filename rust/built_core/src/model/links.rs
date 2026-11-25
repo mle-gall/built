@@ -576,7 +576,7 @@ pub fn link_state(scene: &Obj<'_>, path: &Obj<'_>) -> PyResult<String> {
 fn query<'py>(scene: &Obj<'py>) -> PyResult<Bound<'py, PyList>> {
     let py = scene.py();
     let pathlib = module(py, "pathlib")?;
-    let walk = module(py, "core.group")?.getattr(pyo3::intern!(py, "iter_placements"))?;
+    let walk = module(py, "built_core.group")?.getattr(pyo3::intern!(py, "iter_placements"))?;
     let rows = PyList::empty(py);
     for group in linked_groups(scene, None)? {
         let rec = link_of(&group)?.expect("a linked group");
@@ -767,7 +767,7 @@ fn index_copy<'py>(np: &Obj<'py>, a: &Obj<'py>, n: usize) -> PyResult<(Obj<'py>,
 /// shared) and drop what was derived from the old ones: the lazy plan,
 /// and the drawing cache's key and bake (the key hashes the tables, so the
 /// bake is rebuilt, never shown stale). The store a first touch builds
-/// reads these tables (`core.store_mesh.from_deferred`).
+/// reads these tables (`built_core.store_mesh.from_deferred`).
 ///
 /// A mesh deferred by hand (no loader block: it builds through its own
 /// callback, not the store) builds as before and then has its faces and
@@ -816,7 +816,7 @@ impl RetaggedBuild {
         let py = mesh.py();
         self.original.call1(py, (mesh,))?;
         if let Some(tag) = &self.tag {
-            let layers = module(py, "core.layers")?;
+            let layers = module(py, "built_core.layers")?;
             let map;
             let mut rename = match tag {
                 OwnedRename::Prefix(stem) => Rename::Prefix(stem, HashMap::new()),
@@ -1056,11 +1056,11 @@ pub fn install_definition<'py>(
     renamed: &Bound<'py, PyDict>,
 ) -> PyResult<()> {
     let py = comp.py();
-    let layers = module(py, "core.layers")?;
+    let layers = module(py, "built_core.layers")?;
     let stem = stem(path)?;
     let mut rename = Rename::Prefix(&stem, HashMap::new());
     let paint = (!renamed.is_empty()).then_some(renamed);
-    let walk = module(py, "core.group")?.getattr(pyo3::intern!(py, "iter_placements"))?;
+    let walk = module(py, "built_core.group")?.getattr(pyo3::intern!(py, "iter_placements"))?;
     let mut seen: HashSet<usize> = HashSet::new();
     let mut shared = Shared::default();
     let mut meshes: Vec<Obj<'py>> = Vec::new();
@@ -1126,7 +1126,7 @@ pub fn relabel<'py>(groups: &Obj<'py>, meshes: &Obj<'py>, renames: &Bound<'py, P
     if renames.is_empty() {
         return Ok(());
     }
-    let layers = module(py, "core.layers")?;
+    let layers = module(py, "built_core.layers")?;
     for g in groups.try_iter()? {
         let g = g?;
         let tag = layers.call_method1(pyo3::intern!(py, "layer_of"), (&g,))?;
@@ -1202,7 +1202,7 @@ fn layers_of<'py>(scene: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
 /// The tags something in the document wears.
 fn used_tags(scene: &Obj<'_>) -> PyResult<HashSet<String>> {
     let py = scene.py();
-    let layer_of = module(py, "core.layers")?.getattr(pyo3::intern!(py, "layer_of"))?;
+    let layer_of = module(py, "built_core.layers")?.getattr(pyo3::intern!(py, "layer_of"))?;
     let mut out = HashSet::new();
     for e in module(py, "built_core")?.call_method1(pyo3::intern!(py, "purge_layer_carriers"), (scene,))?.try_iter()? {
         if let Some(t) = str_of(&layer_of.call1((e?,))?) {
@@ -1232,7 +1232,7 @@ fn filter_layers<'py>(scene: &Obj<'py>, keep: impl Fn(&Obj<'py>) -> PyResult<boo
 /// made with them.
 fn apply_tags<'py>(scene: &Obj<'py>, path: &Obj<'py>, tags: &Obj<'py>) -> PyResult<()> {
     let py = scene.py();
-    let layer_cls = module(py, "core.layers")?.getattr(pyo3::intern!(py, "Layer"))?;
+    let layer_cls = module(py, "built_core.layers")?.getattr(pyo3::intern!(py, "Layer"))?;
     let e = entry(scene, path)?;
     let structure = get(tags, "structure")?;
     if structure.is_truthy()? {
@@ -1642,9 +1642,9 @@ pub fn release_tags<'py>(scene: &Obj<'py>, path: &Obj<'py>, used: &Obj<'py>, out
 
 // ---- copies of a source's tree ------------------------------------------------------------
 
-/// Every field a placement has (`core.group.GROUP_FIELDS`).
+/// Every field a placement has (`built_core.group.GROUP_FIELDS`).
 fn group_fields(py: Python<'_>) -> PyResult<(Obj<'_>, Vec<Bound<'_, PyString>>)> {
-    let m = module(py, "core.group")?;
+    let m = module(py, "built_core.group")?;
     let names: Vec<String> = m.getattr(pyo3::intern!(py, "GROUP_FIELDS"))?.extract()?;
     let names = names.iter().filter(|n| *n != "children").map(|n| PyString::intern(py, n)).collect();
     Ok((m.getattr(pyo3::intern!(py, "Group"))?, names))
@@ -1905,7 +1905,7 @@ pub fn copy_parts<'py>(source: &Obj<'py>, copy: &Obj<'py>) -> PyResult<Bound<'py
         return project_parts(copy, &def.get_item(0)?);
     }
     let (cls, fields) = group_fields(py)?;
-    let new_uid = module(py, "core.group")?;
+    let new_uid = module(py, "built_core.group")?;
     let copy_uid: String = copy.getattr(pyo3::intern!(py, "uid"))?.extract()?;
     let uids = PyDict::new(py);
     fn clone<'py>(

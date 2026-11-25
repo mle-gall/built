@@ -13,10 +13,10 @@ from __future__ import annotations
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edge, build_add_edges
-from core.history import AddFaceCommand, History
-from core.scene import Scene
-from core.topology import is_planar
+from built_core.edits import build_add_edge, build_add_edges
+from built_core.history import AddFaceCommand, History
+from built_core.scene import Scene
+from built_core.topology import is_planar
 from tools.pushpull import PushPullTool
 
 

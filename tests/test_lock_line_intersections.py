@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.snap import compute_snap
+from built_core.snap import compute_snap
 
 
 def V(x, y, z=0.0):

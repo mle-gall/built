@@ -27,7 +27,7 @@ fn vectors<'py>(py: Python<'py>, points: Obj<'py>) -> PyResult<Obj<'py>> {
 }
 
 fn keys_of<'py>(py: Python<'py>, points: &Obj<'py>) -> PyResult<Bound<'py, PySet>> {
-    let key = py.import("core.topology")?.getattr("_key")?;
+    let key = py.import("built_core.topology")?.getattr("_key")?;
     PySet::new(py, points.try_iter()?.map(|p| key.call1((p?,))).collect::<PyResult<Vec<_>>>()?)
 }
 
@@ -138,11 +138,11 @@ fn run_prune_orphans(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResul
     let me = running(py).expect("a running step");
     let mesh = scene.getattr("mesh")?;
     let vertices = s.arg(py, 0);
-    let key = py.import("core.topology")?.getattr("_key")?;
+    let key = py.import("built_core.topology")?.getattr("_key")?;
     let keys = PyList::new(py, vertices.try_iter()?.map(|v| key.call1((v?,))).collect::<PyResult<Vec<_>>>()?)?;
     // Only an edge with an end near the vertices can be swept, and only a
     // face with a corner there can still hold it.
-    let scans = py.import("core.push_scans")?;
+    let scans = py.import("built_core.push_scans")?;
     let edges = scans.call_method1("edges_near_points", (&mesh, &keys))?;
     let faces = scans.call_method1("faces_near_points_rings", (&mesh, &keys))?;
     let selection = scene.getattr("selection")?;

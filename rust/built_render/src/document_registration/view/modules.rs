@@ -99,15 +99,15 @@ pub(super) fn install_interaction_module(module: &Bound<PyModule>) -> PyResult<(
         "document_tools" => {
             import_names(module, "__future__", &[("annotations", "annotations")])?;
             import_names(module, "typing", &[("Optional", "Optional")])?;
-            import_names(module, "core.camera", &[("OrbitCamera", "OrbitCamera")])?;
+            import_names(module, "built_core.camera", &[("OrbitCamera", "OrbitCamera")])?;
             import_names(module, "built_core.history", &[("History", "History")])?;
             import_names(module, "built_core.i18n", &[("tr", "tr")])?;
             import_names(
                 module,
-                "core.inference",
+                "built_core.inference",
                 &[("InferenceEngine", "InferenceEngine")],
             )?;
-            import_names(module, "core.scene", &[("Scene", "Scene")])?;
+            import_names(module, "built_core.scene", &[("Scene", "Scene")])?;
             import_names(module, "tools.base", &[("Tool", "Tool")])?;
             module.add(
                 "__doc__",

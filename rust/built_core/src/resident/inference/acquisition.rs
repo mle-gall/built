@@ -101,7 +101,7 @@ pub(super) fn start_edges<'p>(
     let p = interaction(py)?.call_method1("_world_to_pixel", (view, start, &m))?;
     let out = PyList::empty(py);
     if !p.is_none() {
-        let fits = py.import("core.snap")?.getattr("_point_on_segment_world")?;
+        let fits = py.import("built_core.snap")?.getattr("_point_on_segment_world")?;
         for e in nearby_edges(
             index,
             &view.getattr("packed")?,
@@ -275,7 +275,7 @@ pub(super) fn face_centers_near<'p>(
         }
     };
     let mesh = py.import("built_core.mesh")?;
-    let center = py.import("core.snap")?.getattr("face_center_of_face")?;
+    let center = py.import("built_core.snap")?.getattr("face_center_of_face")?;
     let out = PyList::empty(py);
     let append = |c: Obj<'p>, ctx: Option<&str>| -> PyResult<()> {
         if !c.is_none() {

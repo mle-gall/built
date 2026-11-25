@@ -25,8 +25,8 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.history import EraseSelectionCommand, History
-from core.scene import Scene
+from built_core.history import EraseSelectionCommand, History
+from built_core.scene import Scene
 
 
 def V(x, y, z=0.0):

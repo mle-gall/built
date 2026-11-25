@@ -5,10 +5,10 @@ import numpy as np
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from core import _native
-from core.camera import OrbitCamera
-from core.group import Group
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.camera import OrbitCamera
+from built_core.group import Group
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from built_core import pack_scene, source_arrays
 from views.wgpu_billboards import Billboards
 from views.wgpu_axes import axes_state

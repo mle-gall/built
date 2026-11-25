@@ -8,8 +8,8 @@ import numpy as np
 from built_render import AnnotationCanvas
 from built_core import Vec3 as V
 
-from core.history import History
-from core.scene import Scene
+from built_core.history import History
+from built_core.scene import Scene
 from tools.base import ToolContext
 from tools.offset import OffsetTool
 

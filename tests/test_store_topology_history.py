@@ -8,7 +8,7 @@ import random
 
 import pytest
 from built_core import Vec3
-from core.mesh import Mesh, turn_face_over
+from built_core.mesh import Mesh, turn_face_over
 from tests.test_store_mesh import fingerprint
 
 

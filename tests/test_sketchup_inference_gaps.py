@@ -2,7 +2,7 @@
 
 Reported 2026-11-18: «we're still missing some of .skp intelligence like
 perpendicular snapping, face cut detection», «snapping sometimes doesn't
-work (not finding points)». The rules existed in ``core.snap``; what was
+work (not finding points)». The rules existed in ``built_core.snap``; what was
 missing:
 
 * the Metal view handed ``compute_snap`` a short list of its keywords: no
@@ -30,11 +30,11 @@ from built_core import Input as Qt
 from built_render import MouseEvent
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core.group import Group
-from core.history import History
-from core.mesh import Mesh
-from core.scene import Scene
-from core.snap import compute_snap
+from built_core.group import Group
+from built_core.history import History
+from built_core.mesh import Mesh
+from built_core.scene import Scene
+from built_core.snap import compute_snap
 from tools.rust_tools import LineTool
 from tools.rust_tools import RectangleTool
 from tests.controller_surface import ControllerSurface as Viewport
@@ -212,7 +212,7 @@ def test_shift_holds_a_magenta_lock_on_metal(view):
 
 
 def test_metal_hands_compute_snap_every_engine_keyword(view, monkeypatch):
-    import core.snap as snap_rules
+    import built_core.snap as snap_rules
     seen = {}
     real = snap_rules.compute_snap
 

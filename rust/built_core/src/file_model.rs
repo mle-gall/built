@@ -19,7 +19,7 @@ pub(crate) fn new_mesh(py: Python<'_>) -> PyResult<Obj<'_>> {
 pub(crate) fn group<'p>(py: Python<'p>, mesh: &Obj<'p>, name: &str) -> PyResult<Obj<'p>> {
     let kw = PyDict::new(py);
     kw.set_item("name", name)?;
-    py.import("core.group")?
+    py.import("built_core.group")?
         .getattr("Group")?
         .call((mesh,), Some(&kw))
 }

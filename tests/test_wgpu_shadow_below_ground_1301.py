@@ -11,8 +11,8 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from built_core import Vec3 as QVector3D
-from core.camera import OrbitCamera
-from core.scene import Scene
+from built_core.camera import OrbitCamera
+from built_core.scene import Scene
 from views.wgpu_style import SHADOW_CATCHER_Z, style_payload, sun_payload
 
 

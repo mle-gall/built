@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! The hidden-line pass's view maths (`core.hlr`): the camera basis and
+//! The hidden-line pass's view maths (`built_core.hlr`): the camera basis and
 //! camera space, how deep a cut solid runs through its plane, the section
 //! cap's depth plane and ring edges, the layer each ring closes, and the
 //! perspective drawing's projective map with its clips against the view
@@ -222,7 +222,7 @@ fn hlr_cap_ring_edges<'py>(py: Python<'py>, loops: &Bound<'py, PyAny>) -> PyResu
 }
 
 /// `closing_tags(cut_edges, cut_tags)`: each chord given the layer of the
-/// ring it closes (see `core.hlr.closing_tags`).
+/// ring it closes (see `built_core.hlr.closing_tags`).
 #[pyfunction]
 pub(super) fn hlr_closing_tags<'py>(py: Python<'py>, cut_edges: &Bound<'py, PyAny>, cut_tags: &Bound<'py, PyAny>)
     -> PyResult<Bound<'py, PyList>> {
@@ -427,7 +427,7 @@ fn to_clip(m: &[[f64; 4]; 4], p: &P) -> C4 {
     c
 }
 
-/// The perspective turned parallel (`core.hlr.hlr_perspective`): the
+/// The perspective turned parallel (`built_core.hlr.hlr_perspective`): the
 /// triangles and lines through the view's projective map, clipped to the
 /// pyramid, as `(T (N, 3, 3), L (M, 2, 3), depth)` with `depth` the
 /// farthest of them, or `None` when nothing is in view. `soft_n` NaN for an

@@ -12,7 +12,7 @@ use super::model::Fields;
 use super::paint::{align, arc_points, Painter, Pen, Rgba};
 use crate::doc::value::Value;
 
-/// core.composition.PT_TO_MM.
+/// built_core.composition.PT_TO_MM.
 const PT_TO_MM: f64 = 25.4 / 72.0;
 /// views/composer.py TEXT_BG_PAD_MM.
 const TEXT_BG_PAD_MM: f64 = 0.5;

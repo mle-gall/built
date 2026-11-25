@@ -97,7 +97,7 @@ fn _agree_with_neighbour(mesh: &Obj<'_>, face: &Obj<'_>) -> PyResult<()> {
     Ok(())
 }
 fn tolerance(py: Python<'_>) -> PyResult<f64> {
-    py.import("core.topology")?
+    py.import("built_core.topology")?
         .getattr("_PLANAR_TOLERANCE")?
         .extract()
 }

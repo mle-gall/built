@@ -10,10 +10,10 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.history import History
+from built_core.history import History
 from built_core.orient import is_closed, orient_outward, signed_volume
-from core.scene import Scene
-from core.topology import is_planar
+from built_core.scene import Scene
+from built_core.topology import is_planar
 from tests.test_fuzz_engine import V, _draw_rect, _push, _up
 
 
@@ -125,7 +125,7 @@ def test_dedupe_same_outer_cycle_keeps_the_subdivided_face():
     # but not its holes — the old identical-cycle signature missed the pair
     # and the flat result kept both stacked (fuzz prism seed 132). The
     # subdivided face must survive (its holes are filled by their own faces).
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
 
     m = Mesh()
     outer = [V(0, 0), V(4, 0), V(4, 4), V(0, 4)]

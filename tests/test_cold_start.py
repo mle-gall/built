@@ -18,7 +18,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 def cold_start(host, tmp_path, monkeypatch, page=False, recover=False, untitled_slot=False):
     from built_core import autosave
-    from core.scene import Scene
+    from built_core.scene import Scene
     from built_core.settings import settings
     from formats import igz
     from built_render import wgpu_start
@@ -39,8 +39,8 @@ def cold_start(host, tmp_path, monkeypatch, page=False, recover=False, untitled_
     # The last document has a newer auto-save too: still not reopened.
     igz.save_scene(Scene(), work / "autosave" / "last-00000000.built")
     if untitled_slot:
-        from core.group import Group
-        from core.mesh import Mesh
+        from built_core.group import Group
+        from built_core.mesh import Mesh
         from built_core import Vec3 as QVector3D
         scene = Scene()
         mesh = Mesh()

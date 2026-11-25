@@ -71,7 +71,7 @@ impl TagState {
             .get_type::<PyList>()
             .call1((scene.getattr("layers")?,))?
             .cast_into::<PyList>()?;
-        let read = py.import("core.layers")?.getattr("layer_values")?;
+        let read = py.import("built_core.layers")?.getattr("layer_values")?;
         let values = PyDict::new(py);
         for layer in &layers {
             values.set_item(layer.as_ptr() as usize, read.call1((layer,))?)?;

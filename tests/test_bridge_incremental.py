@@ -4,9 +4,9 @@ from types import SimpleNamespace
 import pytest
 from built_core import Vec3 as V
 
-from core.group import Group
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from plugins.ai_bridge import _Bridge
 from tests.test_chunk_stale_materials import _stub
 

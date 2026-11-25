@@ -14,7 +14,7 @@ import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from built_core import Vec3 as V
 
-from core.materials import Material
+from built_core.materials import Material
 from built_render import chrome_sheet as cs
 from built_render import wgpu_library as L
 
@@ -181,12 +181,12 @@ def test_delete_asks_first_over_the_sheet(win, monkeypatch):
 
 def test_linked_files_materials_are_listed_read_only(win, tmp_path):
     from tests import composite_fixture as cf
-    from core import links
-    from core.materials import Material as M
+    from built_core import links
+    from built_core.materials import Material as M
     from formats import igz
     files = cf.build(tmp_path / "comp", big=12)
     # Paint the source's parts, then link it into the open document.
-    from core.scene import Scene
+    from built_core.scene import Scene
     src = Scene()
     igz.load_into(src, files["c"])
     src.materials["Galvanised"] = M("Galvanised", color=(0.7, 0.72, 0.74))
@@ -280,7 +280,7 @@ def test_the_inspector_edits_the_material_paint_holds(win, monkeypatch):
 def test_online_catalogue_search_preview_download_and_document_credit(win, tmp_path, monkeypatch):
     from built_core import component_library as library
     from formats import igz
-    from core.scene import Scene
+    from built_core.scene import Scene
     import zipfile
     import time
 

@@ -94,11 +94,11 @@ def test_right_click_keeps_texture_on_one_textured_face(win, monkeypatch):
 def test_a_big_selection_is_not_walked(win, monkeypatch):
     # Every right-click asks; with Ctrl+A on thousands of faces walking the
     # selection took seconds. A third face is enough to say no.
-    import core.bridge
+    import built_core.bridge
 
     def walked(*_args):
         raise AssertionError("profiles_from_selection walked the selection")
-    monkeypatch.setattr(core.bridge, "profiles_from_selection", walked)
+    monkeypatch.setattr(built_core.bridge, "profiles_from_selection", walked)
     mesh = win.viewport.scene.mesh
     faces = [mesh.add_face([V(i * 2, 0), V(i * 2 + 1, 0), V(i * 2 + 1, 1),
                             V(i * 2, 1)]) for i in range(3)]

@@ -108,7 +108,7 @@ fn prepare_tree_model<'py>(a: &Args<'py>) -> Reply<'py> {
     let counter = collections.getattr("Counter")?;
     let structure = py.import("built_core.structure")?;
     let registry = py.import("core.bim_registry")?.call_method1("get", (&scene,))?;
-    let tree = py.import("core.link_structure")?.getattr("Tree")?.call1((&scene, &registry))?;
+    let tree = py.import("built_core.link_structure")?.getattr("Tree")?.call1((&scene, &registry))?;
     let nodes = tree.getattr("nodes")?;
     let recipes = PyDict::new(py);
     for entry in nodes.call_method0("items")?.try_iter()? {
@@ -280,7 +280,7 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
     };
     let mode = if discover { "".into_bound_py_any(py)? } else { state.call_method1("get", ("_ui_mode", ""))? };
     let structure = py.import("built_core.structure")?;
-    let layers = py.import("core.layers")?;
+    let layers = py.import("built_core.layers")?;
     let history = attr(&viewport, "history")?;
     let readers = attr(&attr(&history, "feed")?, "readers")?;
     let model = module.call_method1("_tree_model", (&view, &scene, &version, if kinds.is_truthy()? { none(py) } else { readers }))?;
@@ -510,8 +510,8 @@ fn problem_rules<'py>(a: &Args<'py>) -> Reply<'py> {
         let spec = spec.str()?.extract::<String>()?;
         rules.append(("Blocks export", format!("ids:{spec}"), format!("IDS: {spec}"), groups))?;
     }
-    let links = py.import("core.links")?;
-    let link_structure = py.import("core.link_structure")?;
+    let links = py.import("built_core.links")?;
+    let link_structure = py.import("built_core.link_structure")?;
     let (stale, states) = (PyList::empty(py), PyDict::new(py));
     for group in links.call_method1("linked_groups", (&scene,))?.try_iter()? {
         let group = group?;
@@ -679,7 +679,7 @@ pub(super) fn component_verb<'py>(a: &Args<'py>) -> Reply<'py> {
             render(py)?.call_method1("select_component_instances", (&win, groups))?;
         }
         "creplace" => {
-            let group = py.import("core.group")?.getattr("Group")?;
+            let group = py.import("built_core.group")?.getattr("Group")?;
             let mesh = definition.getattr("mesh")?;
             let mut swap = false;
             for entity in viewport()?.getattr("scene")?.getattr("selection")?.try_iter()? {

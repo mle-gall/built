@@ -165,11 +165,11 @@ fn line_groups<'py>(source: &Obj<'py>, frame: &Obj<'py>) -> PyResult<Option<Line
     kw.set_item("fills", false)?;
     kw.set_item("hidden", hidden)?;
     let d = py
-        .import("core.hlr")?
+        .import("built_core.hlr")?
         .getattr("hlr_drawing")?
         .call((&pass.scene, &pass.camera), Some(&kw))?;
     let name: String = py
-        .import("core.composition")?
+        .import("built_core.composition")?
         .call_method1("frame_view_name", (frame,))?
         .extract()?;
     let layer = name.split(" — ").next().unwrap_or_default();
@@ -218,7 +218,7 @@ fn export_dxf<'py>(
         let scale = positive_default(frame, "scale_n", 100.)?;
         let h = number(frame, "h_mm")?;
         let height = py
-            .import("core.composition")?
+            .import("built_core.composition")?
             .call_method1("model_height_for_frame", (h, scale))?
             .extract::<f64>()?;
         let kw = PyDict::new(py);

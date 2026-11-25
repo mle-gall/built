@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""A deferred mesh's plan (core.lazy_mesh) is the mesh building it makes,
+"""A deferred mesh's plan (built_core.lazy_mesh) is the mesh building it makes,
 index for index: vertex positions in list order, edges in list order with
 their direction and flags, face corners, and each edge's incident faces in
 order — on scenes whose corners sit a hair apart, so the weld's boundary
@@ -14,9 +14,9 @@ import pytest
 from built_core import Vec3 as V
 
 import core._native as _native
-from core import lazy_mesh
-from core import mesh as M
-from core.scene import Scene
+from built_core import lazy_mesh
+from built_core import mesh as M
+from built_core.scene import Scene
 from formats import igz
 from tests.test_deferred_mesh import _meshes, _random_scene
 
@@ -157,7 +157,7 @@ def test_near_coincident_cloud_keeps_the_plan_vertex_order(seed):
 
 @pytest.mark.parametrize("dtype, vertex_count", [(np.float32, 1), (np.float64, 2)])
 def test_deferred_weld_at_the_radius(monkeypatch, dtype, vertex_count):
-    from core.group import _local_points
+    from built_core.group import _local_points
     from built_core.store_mesh import StoreMesh
 
     mod = pytest.importorskip("built_core")

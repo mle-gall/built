@@ -140,7 +140,7 @@ fn run_one<'py>(win: &Obj<'py>, action: &Obj<'py>, source_view: &Obj<'py>) -> Py
         }
         "linkbanner" => {
             if arg == "locate" {
-                let links = py.import("core.links")?;
+                let links = py.import("built_core.links")?;
                 let scene = viewport()?.getattr("scene")?;
                 for group in links.call_method1("linked_groups", (&scene,))?.try_iter()? {
                     let group = group?;

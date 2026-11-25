@@ -61,7 +61,7 @@ items.append(py.get_type::<pyo3::types::PyList>().call1((module.call_method1("_t
 fn degrees<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let value = a.get_item(0)?;
-    let bare_number_scale = imported(py, "core.units")?.getattr("bare_number_scale")?;
+    let bare_number_scale = imported(py, "built_core.units")?.getattr("bare_number_scale")?;
     let scale = bare_number_scale.call0()?;
     Ok(if scale.is_truthy()? {
         py.get_type::<pyo3::types::PyFloat>()

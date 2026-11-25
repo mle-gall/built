@@ -147,7 +147,7 @@ fn material_key<'p>(f: &Obj<'p>) -> PyResult<Obj<'p>> {
 fn same_material<'p>(scene: &Obj<'p>, entities: &Obj<'p>) -> PyResult<Bound<'p, PyList>> {
     let py = scene.py();
     let fc = py.import("built_core.mesh")?.getattr("Face")?;
-    let gc = py.import("core.group")?.getattr("Group")?;
+    let gc = py.import("built_core.group")?.getattr("Group")?;
     let paints = PySet::empty(py)?;
     let materials = PyList::empty(py);
     let out = PyList::empty(py);
@@ -185,7 +185,7 @@ fn matching_layers<'p>(
     names: &Bound<PySet>,
     check: bool,
 ) -> PyResult<Bound<'p, PyList>> {
-    let layer = scene.py().import("core.layers")?.getattr("layer_of")?;
+    let layer = scene.py().import("built_core.layers")?.getattr("layer_of")?;
     let out = PyList::empty(scene.py());
     if names.is_empty() {
         return Ok(out);
@@ -226,10 +226,10 @@ fn same_layer<'p>(scene: &Obj<'p>, entities: &Obj<'p>) -> PyResult<Bound<'p, PyL
         [
             mesh.getattr("Edge")?,
             mesh.getattr("Face")?,
-            py.import("core.group")?.getattr("Group")?,
+            py.import("built_core.group")?.getattr("Group")?,
         ],
     )?;
-    let layer = py.import("core.layers")?.getattr("layer_of")?;
+    let layer = py.import("built_core.layers")?.getattr("layer_of")?;
     let names = PySet::empty(py)?;
     for obj in entities.try_iter()? {
         let obj = obj?;
@@ -250,7 +250,7 @@ fn on_layers<'p>(scene: &Obj<'p>, names: &Obj<'p>) -> PyResult<Bound<'p, PyList>
 #[pyfunction]
 fn same_definition<'p>(scene: &Obj<'p>, entities: &Obj<'p>) -> PyResult<Bound<'p, PyList>> {
     let py = scene.py();
-    let gc = py.import("core.group")?.getattr("Group")?;
+    let gc = py.import("built_core.group")?.getattr("Group")?;
     let mut definitions = std::collections::HashSet::new();
     for g in entities.try_iter()? {
         let g = g?;

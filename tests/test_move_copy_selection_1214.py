@@ -7,11 +7,11 @@ import pytest
 from built_core import Input
 from built_core import Matrix4 as QMatrix4x4
 
-from core.group import Group
-from core.guide import Guide
-from core.history import Command, CommandRejected, CompoundCommand
-from core.mesh import Edge, Face, Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.guide import Guide
+from built_core.history import Command, CommandRejected, CompoundCommand
+from built_core.mesh import Edge, Face, Mesh
+from built_core.scene import Scene
 from tests.test_move_copy import V, _ctx, _square, _Vp
 from tools.move import MoveTool
 

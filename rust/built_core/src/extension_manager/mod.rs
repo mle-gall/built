@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Manager-owned extension packages, review metadata and discovery settings.
+//! Manager-owned extension packages and discovery settings.
 use pyo3::{
     prelude::*,
-    types::{PyBytes, PyDict, PyList, PyString, PyTuple},
+    types::{PyBytes, PyDict, PyList},
 };
 use std::{
     collections::{BTreeSet, HashSet},
@@ -10,11 +10,11 @@ use std::{
     path::{Path, PathBuf},
 };
 type Obj<'p> = Bound<'p, PyAny>;
-mod catalog;
 pub(crate) mod discovery;
 mod examples;
 mod files;
 mod install;
+mod metadata;
 pyo3::create_exception!(
     extension_manager,
     ExtensionManagerError,
@@ -27,7 +27,7 @@ fn module(py: Python) -> PyResult<Obj> {
     py.import("built_core")?.getattr("extension_manager")
 }
 fn root(py: Python) -> PyResult<PathBuf> {
-    py.import("core.extensions")?
+    py.import("built_core.extensions")?
         .call_method0("user_plugins_dir")?
         .extract()
 }
@@ -53,7 +53,9 @@ fn name(p: &Path) -> &str {
     p.file_name().and_then(|s| s.to_str()).unwrap_or("")
 }
 fn version(py: Python) -> PyResult<String> {
-    py.import("built_core.version")?.getattr("__version__")?.extract()
+    py.import("built_core.version")?
+        .getattr("__version__")?
+        .extract()
 }
 fn digest(py: Python, bytes: &[u8]) -> PyResult<String> {
     py.import("hashlib")?
@@ -126,11 +128,10 @@ fn data_class(
     let kw = PyDict::new(py);
     kw.set_item("frozen", true)?;
     let class = dc.call_method("make_dataclass", (name, fields), Some(&kw))?;
-    class.setattr("__module__", "extension_manager")?;
+    class.setattr("__module__", "built_core.extension_manager")?;
     m.add(name, class)
 }
-/// Catalogue records are constructed on first access. The modelling engine
-/// can start and import its bindings before any plugin catalogue is opened.
+/// Defer dataclass construction until the extension manager opens.
 #[pyfunction]
 fn __getattr__<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
     let m = module(py)?.cast_into::<PyModule>()?;
@@ -141,28 +142,12 @@ fn __getattr__<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
             &[
                 "id",
                 "version",
-                "author",
-                "license",
-                "repository",
-                "download",
                 "sha256",
                 "minimum_version",
                 "name",
                 "summary",
-                "tags",
-            ],
-            &[
-                "screenshot",
-                "updated_at",
-                "thumb",
-                "screenshot_sha",
                 "bundled",
             ],
-        )?,
-        "CatalogSnapshot" => data_class(
-            &m,
-            name,
-            &["extensions", "reviewed", "fetched_at", "from_cache"],
             &[],
         )?,
         _ => return Err(pyo3::exceptions::PyAttributeError::new_err(name.to_owned())),
@@ -177,7 +162,7 @@ pub(crate) fn register(m: &Bound<PyModule>) -> PyResult<()> {
         "ExtensionManagerError",
         py.get_type::<ExtensionManagerError>(),
     )?;
-    catalog::register(&sub)?;
+
     files::register(&sub)?;
     examples::register(&sub)?;
     install::register(&sub)?;

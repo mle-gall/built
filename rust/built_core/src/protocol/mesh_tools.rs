@@ -134,7 +134,7 @@ fn follow_me<'py>(
         .call_method1("from_json_key", (face,))?;
     execute(
         history,
-        &py.import("core.sweep")?.call_method1(
+        &py.import("built_core.sweep")?.call_method1(
             "build_sweep_face",
             (mesh(history)?, key, points, closed, message),
         )?,
@@ -182,7 +182,7 @@ impl MeshEdit {
                     py,
                     std::iter::once(m).chain(args.iter()).collect::<Vec<_>>(),
                 )?;
-                py.import("core.edits")?.call_method(
+                py.import("built_core.edits")?.call_method(
                     if matches!(self.op, Edit::Join) {
                         "join_edges"
                     } else {

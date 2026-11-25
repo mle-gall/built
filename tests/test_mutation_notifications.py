@@ -5,11 +5,11 @@ from types import SimpleNamespace
 import pytest
 from built_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 
-from core.group import Group
-from core.history import (AddEdgeCommand, Command, CommandRejected, FlipFacesCommand,
+from built_core.group import Group
+from built_core.history import (AddEdgeCommand, Command, CommandRejected, FlipFacesCommand,
                           History, SetFaceColorCommand)
-from core.mesh import DeferredMesh, Mesh
-from core.scene import Scene
+from built_core.mesh import DeferredMesh, Mesh
+from built_core.scene import Scene
 
 
 def edge():
@@ -197,7 +197,7 @@ def test_unsubscribe_during_dispatch_and_failed_undo():
 
 
 def test_restamp_existing_edge_and_auto_tag_publish_mutations():
-    from core.history import AutoTagDrawnFacesCommand
+    from built_core.history import AutoTagDrawnFacesCommand
     scene = Scene()
     c = edge()
     c.do(scene)

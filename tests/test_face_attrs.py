@@ -14,10 +14,10 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.history import History, MoveVerticesCommand
-from core.mesh import Mesh
+from built_core.history import History, MoveVerticesCommand
+from built_core.mesh import Mesh
 from built_core.orient import is_closed
-from core.scene import Scene
+from built_core.scene import Scene
 from tests.test_fuzz_engine import V, _draw_rect, _push, _up
 
 RED = {"color": "red"}
@@ -168,8 +168,8 @@ def test_attrs_survive_snapshot_roundtrip():
 def test_flip_faces_command_reverses_winding_and_undoes():
     # Reverse Faces: flips the normal, undo flips back, identity
     # of the Face object is preserved throughout.
-    from core.history import FlipFacesCommand, History
-    from core.scene import Scene
+    from built_core.history import FlipFacesCommand, History
+    from built_core.scene import Scene
     from built_core import Vec3 as QVector3D
 
     scene = Scene()

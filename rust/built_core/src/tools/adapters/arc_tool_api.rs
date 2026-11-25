@@ -202,8 +202,8 @@ fn cue_colour<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let module = imported(py, "tools.rust_tools")?;
     let tool = a.get_item(0)?;
-    let color_midpoint = imported(py, "core.snap")?.getattr("COLOR_MIDPOINT")?;
-    let color_tangent = imported(py, "core.snap")?.getattr("COLOR_TANGENT")?;
+    let color_midpoint = imported(py, "built_core.snap")?.getattr("COLOR_MIDPOINT")?;
+    let color_tangent = imported(py, "built_core.snap")?.getattr("COLOR_TANGENT")?;
     let cue = tool.call_method1("_state", ("cue",))?;
     let colour = fields!(py; "tangent" => &color_tangent, "fillet" => module.getattr("COLOR_FILLET")?, "half" => &color_midpoint).into_any().call_method1("get", (&cue,))?;
     Ok(if !colour.is_none() {
@@ -226,7 +226,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     let [kind, value, point] = unpack::<3>(&label)?;
     let tr = imported(py, "built_core.i18n")?.getattr("tr")?;
-    let length = || imported(py, "core.units")?.call_method1("fmt_len", (&value,));
+    let length = || imported(py, "built_core.units")?.call_method1("fmt_len", (&value,));
     let key: String = kind.extract()?;
     let text = match key.as_str() {
         "tangent_edge" => tr.call1(("Tangent to edge",))?,

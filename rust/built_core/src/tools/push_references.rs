@@ -248,7 +248,7 @@ impl PushReferences {
         excluded: &Bound<'_, PyAny>,
         hidden: &Bound<'_, PyAny>,
     ) -> PyResult<Option<(f64, Vec3)>> {
-        let key = super::adapters::imported(view.py(), "core.topology")?.getattr("_key")?;
+        let key = super::adapters::imported(view.py(), "built_core.topology")?.getattr("_key")?;
         self.nearest_where(view, px, radius, hidden, |point| {
             excluded.contains(key.call1((point,))?)
         })

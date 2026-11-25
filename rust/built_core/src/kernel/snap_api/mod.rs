@@ -289,11 +289,11 @@ fn types(m: &Module<'_>, root: &Module<'_>) -> PyResult<()> {
         fields.append((name, ty, default))?;
     }
     let cls = dc.call_method1("make_dataclass", ("SnapResult", fields))?;
-    cls.setattr("__module__", "core.snap")?;
+    cls.setattr("__module__", "built_core.snap")?;
     m.add("SnapResult", cls)?;
     let namespace = PyDict::new(py);
     namespace.set_item("__slots__", PyTuple::empty(py))?;
-    namespace.set_item("__module__", "core.snap")?;
+    namespace.set_item("__module__", "built_core.snap")?;
     namespace.set_item("__new__", wrap_pyfunction!(patch_new, m)?)?;
     let types = py.import("builtins")?.getattr("type")?;
     m.add(
@@ -314,7 +314,7 @@ fn types(m: &Module<'_>, root: &Module<'_>) -> PyResult<()> {
 }
 pub(super) fn register(root: &Module<'_>) -> PyResult<()> {
     let py = root.py();
-    let m = PyModule::new(py, "core.snap")?;
+    let m = PyModule::new(py, "built_core.snap")?;
     let green = (0.16, 0.62, 0.36);
     let cyan = (0.20, 0.66, 0.74);
     let red = (0.86, 0.22, 0.27);

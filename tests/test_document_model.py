@@ -8,22 +8,22 @@ import random
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core import doc_model
-from core.group import Group
-from core.history import (CommandRejected, Command, CompoundCommand, History,
+from built_core import doc_model
+from built_core.group import Group
+from built_core.history import (CommandRejected, Command, CompoundCommand, History,
                           HideCommand, MoveGroupCommand,
                           NativeCommand)
-from core.layers import Layer
-from core.materials import Material
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.layers import Layer
+from built_core.materials import Material
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from formats import built
 
 N = doc_model.NATIVE
 
 
 def test_shared_child_append_rolls_back_if_occurrence_copy_fails(monkeypatch):
-    from core import group as groups
+    from built_core import group as groups
 
     scene = Scene()
     parent, child = Group(), Group()
@@ -457,8 +457,8 @@ def test_scoped_delivery_copies_kept_placements_and_material_mapping():
 
 
 def test_geometry_savepoints_across_occurrences_and_placement_fields():
-    from core.history import SnapshotMutation
-    from core.mesh import Mesh
+    from built_core.history import SnapshotMutation
+    from built_core.mesh import Mesh
     from built_core.store_mesh import instance_view
 
     scene = Scene()
@@ -503,8 +503,8 @@ def test_geometry_savepoints_across_occurrences_and_placement_fields():
 
 
 def test_singular_store_session_keeps_shared_keys_on_replay():
-    from core.history import AddEdgeCommand
-    from core.reference_edit import record_leave
+    from built_core.history import AddEdgeCommand
+    from built_core.reference_edit import record_leave
 
     scene = Scene()
     a = Group()
@@ -537,7 +537,7 @@ def test_singular_store_session_keeps_shared_keys_on_replay():
 
 
 def test_staged_occurrence_undo_after_leaving_keeps_canonical_coordinates():
-    from core.history import SnapshotMutation
+    from built_core.history import SnapshotMutation
 
     scene = Scene()
     a = Group()
@@ -565,7 +565,7 @@ def test_staged_occurrence_undo_after_leaving_keeps_canonical_coordinates():
 
 
 def test_geometry_commit_failure_rolls_back_all_targets_and_fields(monkeypatch):
-    from core.history import SnapshotMutation
+    from built_core.history import SnapshotMutation
     from built_core.store_mesh import StoreMesh
 
     scene = Scene()
@@ -597,7 +597,7 @@ def test_geometry_commit_failure_rolls_back_all_targets_and_fields(monkeypatch):
 
 
 def test_annotation_vector_edits_and_detached_views():
-    from core.textlabel import TextLabel
+    from built_core.textlabel import TextLabel
 
     label = TextLabel(QVector3D(), QVector3D(1, 2, 3), "Note")
     held = label.offset
@@ -615,7 +615,7 @@ def test_annotation_vector_edits_and_detached_views():
 
 
 def test_sheet_record_edit_rollback_keeps_the_editor_item():
-    from core.composition import Composicion, MarcoVista
+    from built_core.composition import Composicion, MarcoVista
 
     scene = Scene()
     frame = MarcoVista(view_key="scene:Plan")
@@ -639,7 +639,7 @@ def test_edge_anchor_follows_rewired_endpoint_and_undo():
 
 
 def test_occurrence_group_survives_retention_and_replays_one_record():
-    from core.history import OccurrenceCommands
+    from built_core.history import OccurrenceCommands
 
     scene = Scene()
     group = Group(name="before")
@@ -659,8 +659,8 @@ def test_occurrence_group_survives_retention_and_replays_one_record():
 
 
 def test_record_field_change_visible_to_reentrant_subscriber():
-    from core.history import EditTextLabelCommand
-    from core.textlabel import TextLabel
+    from built_core.history import EditTextLabelCommand
+    from built_core.textlabel import TextLabel
 
     scene = Scene()
     label = TextLabel(QVector3D(), QVector3D(0, 1, 0), "A")
@@ -758,7 +758,7 @@ def test_reader_rescans_after_an_unversioned_plugin_write():
 
 def test_mesh_pickle_preserves_handles_and_precision():
     import pickle
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     from built_core.store_mesh import StoreMesh
 
     mesh = Mesh()

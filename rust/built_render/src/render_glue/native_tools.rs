@@ -356,7 +356,7 @@ impl MeshToolAccess {
             if face.is_none() {
                 return Ok(none(py));
             }
-            return py.import("core.snap")?.call_method1("face_plane_world", (face, attr(&placement, "xform")?));
+            return py.import("built_core.snap")?.call_method1("face_plane_world", (face, attr(&placement, "xform")?));
         }
         let row = if picked.is(&py.Ellipsis()) { view.call_method1("pick_row", (x, y))? } else { picked };
         if row.is_none() {
@@ -1790,7 +1790,7 @@ impl NativeTools {
                     (position.call_method0("x")?, position.call_method0("y")?),
                 )?)?;
                 if !face.is_none() {
-                    plane = Some(py.import("core.snap")?.call_method1("face_plane_world", (face, attr(&placement, "xform")?))?);
+                    plane = Some(py.import("built_core.snap")?.call_method1("face_plane_world", (face, attr(&placement, "xform")?))?);
                 }
             }
             tool.call_method1("on_hover", (&ctx,))?;
@@ -1963,7 +1963,7 @@ impl NativeTools {
         let source = s.getattr("view")?.getattr("source_viewport")?;
         let measured = attr(&s.getattr("tool")?, "_measured")?;
         let text = if s.getattr("mode")?.eq("tape")? && s.getattr("start_point")?.is_none() && !measured.is_none() {
-            py.import("core.units")?.call_method1("fmt_len_fine", (measured,))?
+            py.import("built_core.units")?.call_method1("fmt_len_fine", (measured,))?
         } else {
             source.call_method0("_measurement_text")?
         };

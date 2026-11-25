@@ -94,10 +94,6 @@ fn data_class<'p>(
     let cls = py
         .import("dataclasses")?
         .call_method1("dataclass", (cls,))?;
-    cls.setattr(
-        "__module__",
-        m.name()?.to_string().replace("built_core.", "core."),
-    )?;
     m.add(name, &cls)?;
     Ok(cls)
 }

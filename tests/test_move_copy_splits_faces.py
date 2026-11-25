@@ -10,8 +10,8 @@ from __future__ import annotations
 from built_core import ScreenPoint, Input
 from built_core import Vec3 as QVector3D
 
-from core.history import History
-from core.scene import Scene
+from built_core.history import History
+from built_core.scene import Scene
 from tests.test_fuzz_engine import _draw_rect
 from tools.base import ToolContext
 from tools.move import MoveTool
@@ -98,7 +98,7 @@ def test_copying_a_face_with_its_edges_does_not_double_it():
 def _box_and_its_top():
     """A 1 × 0.5 × 0.8 box; the selection is its top face with its edges —
     a piece picked whole, as a triple-click does."""
-    from core.edits import build_add_edges
+    from built_core.edits import build_add_edges
     from tests.test_coplanar_merge import _push
     scene = Scene()
     vp = _Vp(scene)

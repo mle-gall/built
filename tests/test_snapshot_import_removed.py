@@ -8,11 +8,11 @@ and never put the old one back. A console line that only deleted a group
 was worse: the run looked unchanged, so it left no undo step at all."""
 from __future__ import annotations
 
-from core.group import Group
-from core.history import History, SnapshotImport
-from core.layers import Layer
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.history import History, SnapshotImport
+from built_core.layers import Layer
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 
 def _names(items):

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.guide import Guide, GuideCircle, guide_from_dict
+from built_core.guide import Guide, GuideCircle, guide_from_dict
 
 
 def V(x, y, z=0.0):
@@ -58,7 +58,7 @@ def test_guide_from_dict_dispatches_on_kind():
 
 
 def test_a_circle_guide_survives_the_igz(tmp_path):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats.igz import load_into, save_scene
 
     scene = Scene()
@@ -80,7 +80,7 @@ def test_a_version_that_knows_only_lines_still_opens_the_file(tmp_path):
     """Circles were written among the guide lines, and a version from before
     them read each as a line: KeyError 'point', the document refused. They
     go under a key of their own, where such a version does not look."""
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats.igz import _read_document, load_into, save_scene
 
     scene = Scene()
@@ -110,7 +110,7 @@ def test_a_version_that_knows_only_lines_still_opens_the_file(tmp_path):
 def test_a_circle_written_among_the_lines_is_still_read(tmp_path):
     """A file from a build that wrote circles into "guides"."""
     import json
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats.igz import load_into, save_scene
 
     scene = Scene()
@@ -133,7 +133,7 @@ def test_a_circle_written_among_the_lines_is_still_read(tmp_path):
 
 
 def test_closest_on_circle_is_exact():
-    from core.snap import _closest_on_circle
+    from built_core.snap import _closest_on_circle
     circ = GuideCircle(V(0, 0, 0), V(0, 0, 1), 2.0)
 
     def w2p(p):
@@ -148,7 +148,7 @@ def test_closest_on_circle_is_exact():
 def test_compute_snap_lands_on_a_guide_circles_rim():
     import math
     from types import SimpleNamespace
-    from core.snap import compute_snap
+    from built_core.snap import compute_snap
     circ = GuideCircle(V(0, 0, 0), V(0, 0, 1), 2.0)
 
     def w2p(p):
@@ -168,7 +168,7 @@ def test_compute_snap_lands_on_a_guide_circles_rim():
 
 def test_compute_snap_lands_on_a_guide_circles_center():
     from types import SimpleNamespace
-    from core.snap import compute_snap
+    from built_core.snap import compute_snap
     center = V(1.0, 2.0, 0.0)
     center_edge = SimpleNamespace(a=center, b=center, center=True)
 
@@ -187,7 +187,7 @@ def test_compute_snap_lands_on_a_guide_circles_center():
 
 def test_two_guide_circles_intersect_at_the_true_chord():
     import math
-    from core.snap import _circle_circle_intersections
+    from built_core.snap import _circle_circle_intersections
     n = V(0, 0, 1)
     pts = _circle_circle_intersections(V(0, 0, 0), 1.0, n, V(1, 0, 0), 1.0, n)
     assert len(pts) == 2
@@ -198,7 +198,7 @@ def test_two_guide_circles_intersect_at_the_true_chord():
 
 
 def test_a_segment_through_a_guide_circle_gives_two_points():
-    from core.snap import _segment_circle_intersections
+    from built_core.snap import _segment_circle_intersections
     pts = _segment_circle_intersections(
         V(-3, 0, 0), V(3, 0, 0), V(0, 0, 0), 2.0, V(0, 0, 1))
     assert len(pts) == 2
@@ -209,7 +209,7 @@ def test_a_segment_through_a_guide_circle_gives_two_points():
 def test_compute_snap_lands_on_a_circle_circle_intersection():
     import math
     from types import SimpleNamespace
-    from core.snap import compute_snap
+    from built_core.snap import compute_snap
     n = V(0, 0, 1)
     c1 = GuideCircle(V(0, 0, 0), n, 1.0)
     c2 = GuideCircle(V(1, 0, 0), n, 1.0)
@@ -234,7 +234,7 @@ def test_a_line_started_at_one_crossing_detects_the_other():
     the axis magnet the drag is engaged on (#238)."""
     import math
     from types import SimpleNamespace
-    from core.snap import compute_snap
+    from built_core.snap import compute_snap
     n = V(0, 0, 1)
     c1 = GuideCircle(V(0, 0, 0), n, 1.0)
     c2 = GuideCircle(V(1, 0, 0), n, 1.0)
@@ -258,8 +258,8 @@ def test_circle_tool_ctrl_toggles_guide_mode_and_draws_a_guide():
     from built_core import ScreenPoint as QPointF, Input as Qt
     from tools.base import ToolContext
     from tools.circle import CircleTool
-    from core.scene import Scene
-    from core.history import History
+    from built_core.scene import Scene
+    from built_core.history import History
 
     class _Stub:
         def __init__(self):
@@ -311,7 +311,7 @@ def test_circle_tool_ctrl_toggles_guide_mode_and_draws_a_guide():
 
 def test_compute_snap_lands_on_a_guide_circle_quadrant():
     from types import SimpleNamespace
-    from core.snap import compute_snap
+    from built_core.snap import compute_snap
     circ = GuideCircle(V(0, 0, 0), V(0, 0, 1), 2.0)
 
     def w2p(p):
@@ -330,7 +330,7 @@ def test_compute_snap_lands_on_a_guide_circle_quadrant():
 def test_compute_snap_lands_on_a_guide_circle_tangent():
     import math
     from types import SimpleNamespace
-    from core.snap import compute_snap
+    from built_core.snap import compute_snap
     circ = GuideCircle(V(0, 0, 0), V(0, 0, 1), 2.0)
     start = V(5.0, 0.0, 0.0)
     # cos_b = r/d = 0.4, sin_b = sqrt(0.84)
@@ -350,8 +350,8 @@ def test_compute_snap_lands_on_a_guide_circle_tangent():
 
 
 def test_move_guides_command_moves_a_guide_circle_and_undoes():
-    from core.scene import Scene
-    from core.history import AddGuideCommand, History, MoveGuidesCommand
+    from built_core.scene import Scene
+    from built_core.history import AddGuideCommand, History, MoveGuidesCommand
 
     scene = Scene()
     hist = History(scene)
@@ -366,8 +366,8 @@ def test_move_guides_command_moves_a_guide_circle_and_undoes():
 
 
 def test_rotate_guides_command_rotates_a_guide_circle_and_undoes():
-    from core.scene import Scene
-    from core.history import AddGuideCommand, History, RotateGuidesCommand
+    from built_core.scene import Scene
+    from built_core.history import AddGuideCommand, History, RotateGuidesCommand
 
     scene = Scene()
     hist = History(scene)
@@ -383,8 +383,8 @@ def test_rotate_guides_command_rotates_a_guide_circle_and_undoes():
 
 
 def test_add_and_delete_guide_circle_undo_redo():
-    from core.scene import Scene
-    from core.history import AddGuideCommand, DeleteGuidesCommand, History
+    from built_core.scene import Scene
+    from built_core.history import AddGuideCommand, DeleteGuidesCommand, History
 
     scene = Scene()
     hist = History(scene)
@@ -404,9 +404,9 @@ def test_add_and_delete_guide_circle_undo_redo():
 
 
 def test_a_guide_circle_lands_on_the_guides_layer():
-    from core.history import AddGuideCommand, History
-    from core.layers import layer_of
-    from core.scene import Scene
+    from built_core.history import AddGuideCommand, History
+    from built_core.layers import layer_of
+    from built_core.scene import Scene
 
     scene = Scene()
     hist = History(scene)

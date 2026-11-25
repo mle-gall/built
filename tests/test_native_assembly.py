@@ -2,7 +2,7 @@
 """Assembly commands from the native inspector. Every fixture is synthetic."""
 from types import SimpleNamespace
 
-from core.group import Group
+from built_core.group import Group
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_native_inspector_panels import host, run  # noqa: F401
 from tests.test_parts import _box, _copies, _part, _sheet, _stool

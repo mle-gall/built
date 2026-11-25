@@ -2,8 +2,8 @@
 import pytest
 
 from built_core import MeshStore, Vec3
-from core.history import RebuildPlaneFacesCommand
-from core.scene import Scene
+from built_core.history import RebuildPlaneFacesCommand
+from built_core.scene import Scene
 from tests.test_store_mesh import fingerprint
 
 
@@ -47,7 +47,7 @@ def test_plane_result_matches_history(monkeypatch, scope):
 
 @pytest.mark.parametrize("kind", ["empty", "solid", "painted", "unpainted", "reversed"])
 def test_flat_rebuild_matches_history(monkeypatch, kind):
-    from core.history import RebuildPlanarFacesCommand
+    from built_core.history import RebuildPlanarFacesCommand
     def make():
         scene = Scene()
         mesh = scene.mesh

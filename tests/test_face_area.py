@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.geometry import Face
+from built_core.geometry import Face
 
 
 def V(x: float, y: float, z: float = 0.0) -> QVector3D:

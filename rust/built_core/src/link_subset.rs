@@ -134,7 +134,7 @@ pub(crate) fn link_selection_sources(
     window: &Bound<'_, PyAny>,
 ) -> PyResult<std::collections::BTreeMap<String, Vec<Vec<String>>>> {
     let scene = window.getattr("viewport")?.getattr("scene")?;
-    let ty = window.py().import("core.group")?.getattr("Group")?;
+    let ty = window.py().import("built_core.group")?.getattr("Group")?;
     let mut sources = std::collections::BTreeMap::new();
     for doc in window.call_method0("documents")?.try_iter()? {
         let doc = doc?;

@@ -5,7 +5,7 @@ import json
 import random
 
 from built_core import Vec3
-from core.mesh import Mesh
+from built_core.mesh import Mesh
 
 
 def scalar_results(monkeypatch):

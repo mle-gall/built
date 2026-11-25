@@ -6,7 +6,7 @@ from fnmatch import fnmatchcase
 import math
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from core.group import placement_points
+from built_core.group import placement_points
 
 
 def vector(v):
@@ -109,7 +109,7 @@ class InspectionTools:
             keys[group.mesh] = uuid4().hex
         # Content that comes from a linked file is read-only for the host:
         # the agent must see it to leave it alone (and the exporter skips it).
-        from core.links import link_of
+        from built_core.links import link_of
         source = next((link_of(g)["path"] for g in [*parents, group] if link_of(g)), None)
         return dict(uid=group.uid, name=group.name,
                     linked=source is not None, link_source=source,
@@ -136,7 +136,7 @@ class InspectionTools:
         counts = dict(Counter(type(e).__name__ for e in scene.selection))
         groups = [r for r in self._groups() if r[0] in scene.selection]
         from types import SimpleNamespace
-        from core.scene import Scene
+        from built_core.scene import Scene
         loose = scene.selection - {r[0] for r in groups}
         box = bounds(Scene.selection_bounds(SimpleNamespace(selection=loose)))
         boxes = [self._group_bounds(*r) for r in groups]
@@ -211,7 +211,7 @@ class InspectionTools:
         groups = [g for g, _, _ in self._groups()]
         meshes = {id(g.mesh): g.mesh for g in groups}
         meshes[id(scene.loose_mesh)] = scene.loose_mesh
-        from core.layers import layer_of
+        from built_core.layers import layer_of
         group_counts = Counter(layer_of(g) for g in groups)
         face_counts = Counter(layer_of(f) for m in meshes.values() for f in m.faces)
         rows = []

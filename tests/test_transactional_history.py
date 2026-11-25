@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.history import AddEdgeCommand, Command, History
-from core.scene import Scene
+from built_core.history import AddEdgeCommand, Command, History
+from built_core.scene import Scene
 
 
 class _ExplodesMidway(Command):

@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 //! A sheet item made by a placement tool (docs/rust-sheets.md step 6):
 //! `ComposerWindow.place_tool`'s defaults for the tools a click or a drag
-//! places, the record built through its class (core.composition) and not
+//! places, the record built through its class (built_core.composition) and not
 //! yet added: the caller runs it as one step of the history.
 
 use pyo3::prelude::*;
@@ -40,7 +40,7 @@ fn host<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, x: f64, y: f64) -> PyRes
 pub fn sheet_new_item<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, tool: &str, x0: f64, y0: f64, x1: f64, y1: f64,
                            scene: Option<Bound<'py, PyAny>>, template_dir: Option<std::path::PathBuf>,
                            template: Option<String>) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let c = py.import("core.composition")?;
+    let c = py.import("built_core.composition")?;
     let tr = |s: &str| -> PyResult<String> { py.import("built_core.i18n")?.getattr("tr")?.call1((s,))?.extract() };
     let (w, h, x, y) = ((x1 - x0).abs(), (y1 - y0).abs(), x0.min(x1), y0.min(y1));
     let kw = PyDict::new(py);
@@ -118,7 +118,7 @@ pub fn sheet_new_item<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, tool: &str
         }
         "leyenda" => {
             let (rows, swatches): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
-                py.import("core.layers")?.getattr("legend_rows")?.call1((scene.as_ref(),))?.extract()?;
+                py.import("built_core.layers")?.getattr("legend_rows")?.call1((scene.as_ref(),))?.extract()?;
             kw.set_item("x_mm", x0)?;
             kw.set_item("y_mm", y0)?;
             kw.set_item("rows", rows)?;
@@ -214,7 +214,7 @@ pub fn sheet_new_item<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, tool: &str
 pub fn sheet_from_template<'py>(py: Python<'py>, path: std::path::PathBuf) -> PyResult<Option<Bound<'py, PyAny>>> {
     let Ok(text) = std::fs::read_to_string(&path) else { return Ok(None) };
     let Ok(data) = py.import("json")?.call_method1("loads", (text,)) else { return Ok(None) };
-    let Ok(comp) = py.import("core.composition")?.getattr("Composicion")?.call_method1("from_dict", (data,)) else {
+    let Ok(comp) = py.import("built_core.composition")?.getattr("Composicion")?.call_method1("from_dict", (data,)) else {
         return Ok(None);
     };
     let uuid = py.import("uuid")?;
@@ -233,7 +233,7 @@ pub fn sheet_from_template<'py>(py: Python<'py>, path: std::path::PathBuf) -> Py
 /// The document's length unit and precision a new annotation is born with
 /// (`_document_length_style`), and whether a cota shows its unit symbol.
 fn length_style<'py>(py: Python<'py>, scene: Option<&Bound<'py, PyAny>>, kw: &Bound<'py, PyDict>) -> PyResult<()> {
-    let chosen = py.import("core.units")?.getattr("model_units_of")?.call1((scene,))?;
+    let chosen = py.import("built_core.units")?.getattr("model_units_of")?.call1((scene,))?;
     kw.set_item("units", chosen.get_item("length")?)?;
     kw.set_item("decimals", chosen.get_item("precision")?.call_method0("__int__")?)?;
     Ok(())
@@ -249,7 +249,7 @@ fn length_style<'py>(py: Python<'py>, scene: Option<&Bound<'py, PyAny>>, kw: &Bo
 #[pyo3(signature = (comp, a, b, sep=0.0, axis="", scene=None))]
 pub fn sheet_new_cota<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, a: (f64, f64), b: (f64, f64), sep: f64,
                            axis: &str, scene: Option<Bound<'py, PyAny>>) -> PyResult<Bound<'py, PyAny>> {
-    let c = py.import("core.composition")?;
+    let c = py.import("built_core.composition")?;
     let kw = PyDict::new(py);
     // The last dimension's look (text, ends, colour, gap), then the
     // document's units, every time.
@@ -369,7 +369,7 @@ pub fn sheet_new_radial<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, centre: 
     kw.set_item("scale_n", n)?;
     kw.set_item("kind", if kind == "diameter" { "diameter" } else { "radius" })?;
     kw.set_item("angle_deg", (arc_point.1 - centre.1).atan2(arc_point.0 - centre.0).to_degrees())?;
-    let item = py.import("core.composition")?.getattr("CotaRadialItem")?.call((), Some(&kw))?;
+    let item = py.import("built_core.composition")?.getattr("CotaRadialItem")?.call((), Some(&kw))?;
     item.setattr("z", super::display::sheet_next_z(comp)?)?;
     Ok(Some(item))
 }
@@ -391,7 +391,7 @@ pub fn sheet_new_angular<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, vertex:
     kw.set_item("bx_mm", b.0 - vertex.0)?;
     kw.set_item("by_mm", b.1 - vertex.1)?;
     kw.set_item("radius_mm", radius_mm.max(2.0))?;
-    let item = py.import("core.composition")?.getattr("CotaAngularItem")?.call((), Some(&kw))?;
+    let item = py.import("built_core.composition")?.getattr("CotaAngularItem")?.call((), Some(&kw))?;
     item.setattr("z", super::display::sheet_next_z(comp)?)?;
     Ok(Some(item))
 }
@@ -409,7 +409,7 @@ pub fn sheet_new_image<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, path: Str
     kw.set_item("w_mm", 60.0)?;
     kw.set_item("h_mm", if w > 0 { 60.0 * f64::from(h) / f64::from(w) } else { 40.0 })?;
     kw.set_item("path", path)?;
-    let item = py.import("core.composition")?.getattr("ImagenItem")?.call((), Some(&kw))?;
+    let item = py.import("built_core.composition")?.getattr("ImagenItem")?.call((), Some(&kw))?;
     item.setattr("z", super::display::sheet_next_z(comp)?)?;
     Ok(Some(item))
 }

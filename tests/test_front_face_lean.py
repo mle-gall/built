@@ -22,7 +22,7 @@ pytestmark = pytestmark
 
 
 def _twinned(native_host):
-    from core.group import Group
+    from built_core.group import Group
     w, vp = _window(native_host, lazy=True)
     sc = vp.scene
     copies = [g for g in sc.groups if g.name.startswith("C")]
@@ -31,7 +31,7 @@ def _twinned(native_host):
         t.xform = QMatrix4x4(g.xform)
         sc.groups.insert(0 if k % 2 else len(sc.groups), t)
     # A fixed group (no matrix) with a copy's very faces.
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     g = copies[5]
     m = Mesh()
     for f in g.mesh.faces:

@@ -17,11 +17,11 @@ import numpy as np
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.camera import OrbitCamera
-from core.composition import Composicion, MarcoVista, apply_frame_camera
-from core.hlr import (KIND_CUT, KIND_EDGE, KIND_PROFILE, hlr_drawing,
+from built_core.camera import OrbitCamera
+from built_core.composition import Composicion, MarcoVista, apply_frame_camera
+from built_core.hlr import (KIND_CUT, KIND_EDGE, KIND_PROFILE, hlr_drawing,
                       hlr_view, section_loops)
-from core.scene import Scene
+from built_core.scene import Scene
 from built_core.section import SectionPlane
 
 V = QVector3D
@@ -52,7 +52,7 @@ def _ring_area(ring) -> float:
 # ---- section_loops ---------------------------------------------------------
 
 def test_section_loops_close_the_ring_of_a_cut_solid():
-    from core.hlr import clip_to_section, collect_geometry
+    from built_core.hlr import clip_to_section, collect_geometry
     scene = Scene()
     _box(scene.mesh, 0, 0, 0, 2, 3, 2)
     tris, hard, soft = collect_geometry(scene)
@@ -67,7 +67,7 @@ def test_section_loops_close_the_ring_of_a_cut_solid():
 
 
 def test_section_loops_keep_a_hollow_wall_hollow_and_skip_open_chains():
-    from core.hlr import clip_to_section, collect_geometry
+    from built_core.hlr import clip_to_section, collect_geometry
     scene = Scene()
     _box(scene.mesh, 0, 0, 0, 4, 4, 3)                      # outer skin
     _box(scene.mesh, 1, 1, 0, 3, 3, 3)                      # inner skin (a hollow)

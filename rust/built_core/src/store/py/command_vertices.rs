@@ -82,7 +82,7 @@ impl<'py> AttrChanges<'py> {
                     continue;
                 };
                 let (u, cu, v, cv): (Bound<'_, PyAny>, f64, Bound<'_, PyAny>, f64) = py
-                    .import("core.texture")?
+                    .import("built_core.texture")?
                     .call_method1(
                         "face_uv_axes",
                         (&tex, crate::math::Vec3::from(glam::DVec3::from_array(n))),

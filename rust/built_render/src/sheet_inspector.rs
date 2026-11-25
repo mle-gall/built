@@ -142,7 +142,7 @@ fn num_text(v: f64) -> String {
     if s == "-0" { "0".into() } else { s.into() }
 }
 
-/// core.composition.format_scale.
+/// built_core.composition.format_scale.
 pub fn format_scale(n: f64) -> String {
     if !(n > 0.0) {
         return String::new();
@@ -150,7 +150,7 @@ pub fn format_scale(n: f64) -> String {
     if n < 1.0 { format!("{}:1", num_text(1.0 / n)) } else { format!("1:{}", num_text(n)) }
 }
 
-/// core.composition.parse_scale: ``1:50`` → 50, ``10:1`` → 0.1, ``50`` → 50.
+/// built_core.composition.parse_scale: ``1:50`` → 50, ``10:1`` → 0.1, ``50`` → 50.
 pub fn parse_scale(text: &str) -> Option<f64> {
     let s = text.trim().replace(',', ".");
     if let Some((a, b)) = s.split_once(':') {

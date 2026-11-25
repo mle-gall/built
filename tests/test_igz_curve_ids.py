@@ -9,9 +9,9 @@ import zipfile
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-import core.mesh as mesh_module
-from core.mesh import Mesh
-from core.scene import Scene
+import built_core.mesh as mesh_module
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from formats import igz
 
 

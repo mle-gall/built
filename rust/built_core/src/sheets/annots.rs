@@ -642,7 +642,7 @@ fn list_of<'py>(d: &Bound<'py, PyDict>, key: &str) -> PyResult<Vec<Bound<'py, Py
 #[pyfunction]
 pub fn sheet_frame_annotations<'py>(py: Python<'py>, frame: &Bound<'py, PyAny>, camera: &Bound<'py, PyDict>,
                                     data: &Bound<'py, PyDict>) -> PyResult<Bound<'py, PyList>> {
-    py.import("core.doc_model")?.call_method0("flush")?;
+    py.import("built_core.doc_model")?.call_method0("flush")?;
     let (f, proj) = Projector::of(frame, camera, true)?;
     let (w, h) = (f.num("w_mm", 100.0), f.num("h_mm", 100.0));
     let size = match f.num("annot_text_mm", 2.8) { s if s != 0.0 => s, _ => 2.8 };

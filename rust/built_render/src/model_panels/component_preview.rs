@@ -57,7 +57,7 @@ fn preview(definition: &Bound<'_, PyAny>, size: u32, budget: usize) -> PyResult<
             .call_method1("b64decode", (text,))
             .and_then(|v| v.extract::<Vec<u8>>())
         {
-            if let Some(source) = crate::extension_previews::decode(&bytes) {
+            if let Some(source) = crate::image_io::decode(&bytes) {
                 let pixels = source.thumbnail(size, size).to_rgba8();
                 let (w, h) = pixels.dimensions();
                 let (dx, dy) = ((size - w) / 2, (size - h) / 2);

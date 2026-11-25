@@ -1094,7 +1094,7 @@ impl Host {
                 guarded(
                     h,
                     "open panel",
-                    py.import("core.plugin_panels")?
+                    py.import("built_core.plugin_panels")?
                         .call_method1("open_panel", (&w, arg)),
                 )?;
             }

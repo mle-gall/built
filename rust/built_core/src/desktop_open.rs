@@ -7,7 +7,7 @@ type Obj<'p> = Bound<'p, PyAny>;
 #[pyo3(signature=(environ=None))]
 fn host_env<'p>(py: Python<'p>, environ: Option<&Obj<'p>>) -> PyResult<Bound<'p, PyDict>> {
     let env = py
-        .import("core.render_blender")?
+        .import("built_core.render_blender")?
         .call_method1("clean_env", (environ,))?
         .cast_into::<PyDict>()?;
     let read = |k| env.call_method1("get", (k, ""))?.extract::<String>();

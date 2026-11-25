@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Texture maths (`core.texture`): the .skp projection basis and axes,
+//! Texture maths (`built_core.texture`): the .skp projection basis and axes,
 //! planar and fitted UVs, the map a face renders with, the tile size and
 //! turn a fitted map shows, the map carried across a soft edge, the
 //! reference triad, and the HLS colour maths of a tinted image.
@@ -481,7 +481,7 @@ fn texture_hls_to_rgb<'py>(py: Python<'py>, hue: &Bound<'py, PyAny>, lum: &Bound
     arr(py, out, &shape)
 }
 
-/// The colourize pass over RGBA pixels (`core.texture.colorize_image`):
+/// The colourize pass over RGBA pixels (`built_core.texture.colorize_image`):
 /// every pixel's hue, lightness and saturation moved by the delta between
 /// the image average (`avg`, of the visible pixels) and `target` (0..255),
 /// or, `ctype` 1, hue and saturation replaced. Alpha kept.

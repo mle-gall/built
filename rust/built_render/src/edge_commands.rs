@@ -120,7 +120,7 @@ fn split_pieces(win: &Bound<'_, PyAny>) -> PyResult<()> {
         return flash("Leave the group first (Esc) to split it into pieces");
     }
     let mut targets = Vec::new();
-    for group in matching(&scene.getattr("selection")?, "core.group", "Group")?.iter() {
+    for group in matching(&scene.getattr("selection")?, "built_core.group", "Group")?.iter() {
         if !group.getattr("billboard")?.is_truthy()? {
             targets.push(group);
         }
@@ -129,7 +129,7 @@ fn split_pieces(win: &Bound<'_, PyAny>) -> PyResult<()> {
         return flash("Select one group or component to split into pieces");
     };
     let pieces = busy(win, &translated(py, "Split into Pieces", None)?, || {
-        py.import("core.pieces")?
+        py.import("built_core.pieces")?
             .call_method1("split_into_pieces", (group,))
     })?;
     if !pieces.is_truthy()? {
@@ -185,7 +185,7 @@ fn placement<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny
     }
     let iter = scene
         .py()
-        .import("core.group")?
+        .import("built_core.group")?
         .getattr("iter_placements")?;
     for root in scene.getattr("groups")?.try_iter()? {
         for pair in iter.call1((root?,))?.try_iter()? {
@@ -242,7 +242,7 @@ fn join_segments(win: &Bound<'_, PyAny>) -> PyResult<()> {
     } else {
         selected.into_any()
     };
-    let edits = py.import("core.edits")?;
+    let edits = py.import("built_core.edits")?;
     let verdicts = edits.call_method1("join_preview", (&mesh, &edges))?;
     if !verdicts.is_truthy()? {
         return status(win, "No collinear segments to join.", 0);
@@ -378,7 +378,7 @@ fn join_mutation(
         "extend",
         (scene
             .py()
-            .import("core.edits")?
+            .import("built_core.edits")?
             .call_method1("join_edges", (scene.getattr("mesh")?, edges))?,),
     )?;
     Ok(())

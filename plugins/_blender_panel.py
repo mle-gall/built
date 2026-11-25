@@ -9,7 +9,7 @@ from built_core import Vec3
 
 from built_render import blender_availability
 
-from core import render_blender as rb
+from built_core import render_blender as rb
 from built_core.desktop_open import open_url
 from built_core.settings import settings as native_settings
 
@@ -40,7 +40,7 @@ def _store(app, st: dict) -> None:
 
 def _render_result(app, path, following, save, folder, follow):
     from built_render import RenderResult
-    from core.plugin_panels import show_utility
+    from built_core.plugin_panels import show_utility
     return show_utility(app.window, app.key + ".result",
                         RenderResult(str(path), following, save, folder, follow))
 
@@ -155,7 +155,7 @@ class BlenderPanel:
         self.host = app.window._host
         self.sync_timer = self.host.timers.timer(self._sync_camera, 500, True)
         self.process_timer = self.host.timers.timer(self._poll_process, 100, True)
-        from core.plugin_panels import on_document_close
+        from built_core.plugin_panels import on_document_close
         on_document_close(app, self._close)
         self.camera_session = CameraSession(self)
         self.observed_camera = None
@@ -237,7 +237,7 @@ class BlenderPanel:
                                 text=f"{label} · {int(light['power'])} W")
 
     def sections(self):
-        from core.plugin_panels import field, item, section
+        from built_core.plugin_panels import field, item, section
         state = _state(self.app)
         opts = self.opts
         lights = state["lights"]

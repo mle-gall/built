@@ -44,7 +44,7 @@ impl TagCounts {
             let py = history.py();
             let options = PyDict::new(py);
             options.set_item("history", history)?;
-            let iter = py.import("core.purge")?.call_method(
+            let iter = py.import("built_core.purge")?.call_method(
                 "layer_count_steps",
                 (&scene,),
                 Some(&options),

@@ -298,7 +298,7 @@ fn host_offset_refusal<'py>(a: &Args<'py>) -> Reply<'py> {
     let side: Obj<'py>;
     let sign: Obj<'py>;
     let viewport = a.get_item(1)?;
-    let max_offset_distance = imported(py, "core.topology")?.getattr("max_offset_distance")?;
+    let max_offset_distance = imported(py, "built_core.topology")?.getattr("max_offset_distance")?;
     [error, distance, points, normal] = unpack::<4>(&arguments)?;
     let d = module.call_method1("fmt_len", (distance.abs()?,))?;
     if error.eq("hole")? {

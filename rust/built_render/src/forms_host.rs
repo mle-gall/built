@@ -1046,7 +1046,7 @@ fn flow(py: Python<'_>, gen: Py<PyAny>) -> PyResult<()> {
 // ---- the first-run units question (built_render.units_question) -------------------
 
 fn units(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("core.units")
+    py.import("built_core.units")
 }
 
 /// The units editor's rows for `model` (a `UnitsDraft`).

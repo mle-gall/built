@@ -284,7 +284,7 @@ fn parse_stl<'py>(
     if faces.len()? <= threshold(py)? {
         tick(0.85, "Joining triangles…")?;
         if simplify_mode == "none" {
-            let key = py.import("core.topology")?.getattr("_key")?;
+            let key = py.import("built_core.topology")?.getattr("_key")?;
             let seed = PySet::empty(py)?;
             let new_faces = PySet::empty(py)?;
             for face in faces.try_iter()? {
@@ -321,7 +321,7 @@ fn add_stl_mesh(
     if faces.len()? > threshold(py)? {
         let name = path.file_stem().unwrap_or_default().to_string_lossy();
         let group = py
-            .import("core.group")?
+            .import("built_core.group")?
             .getattr("Group")?
             .call1((target, name.as_ref()))?;
         scene.getattr("groups")?.call_method1("append", (group,))?;

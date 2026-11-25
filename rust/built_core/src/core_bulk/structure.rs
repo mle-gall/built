@@ -345,7 +345,7 @@ fn _membership<'p>(group: &Obj<'p>, source: &Obj<'p>, mount_index: &Obj<'p>) -> 
     }
     if group
         .py()
-        .import("core.links")?
+        .import("built_core.links")?
         .call_method1("is_linked", (group,))?
         .is_truthy()?
     {
@@ -547,9 +547,10 @@ fn move_undo(this: &Obj<'_>, scene: &Obj<'_>) -> PyResult<()> {
 fn dependency<'p>(m: &Module<'p>, name: &str) -> PyResult<Obj<'p>> {
     let py = m.py();
     let v = match name {
-        "bim_registry" | "links" => py.import(&format!("core.{name}"))?.into_any(),
-        "DEFAULT_LAYER" | "layer_of" => py.import("core.layers")?.getattr(name)?,
-        "new_uid" => py.import("core.group")?.getattr(name)?,
+        "bim_registry" => py.import("core.bim_registry")?.into_any(),
+        "links" => py.import("built_core.links")?.into_any(),
+        "DEFAULT_LAYER" | "layer_of" => py.import("built_core.layers")?.getattr(name)?,
+        "new_uid" => py.import("built_core.group")?.getattr(name)?,
         _ => return Err(pyo3::exceptions::PyAttributeError::new_err(name.to_owned())),
     };
     m.add(name, &v)?;
@@ -584,7 +585,7 @@ pub(super) fn install(m: &Module<'_>, core: &Module<'_>) -> PyResult<()> {
     m.add("deepcopy", py.import("copy")?.getattr("deepcopy")?)?;
     let ns = PyDict::new(py);
     ns.set_item("doc_undo", true)?;
-    ns.set_item("__module__", "core.structure")?;
+    ns.set_item("__module__", "built_core.structure")?;
     for (n, f) in [
         ("__init__", wrap_pyfunction!(move_init, m)?),
         ("do", wrap_pyfunction!(move_do, m)?),

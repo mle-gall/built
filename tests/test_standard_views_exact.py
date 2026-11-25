@@ -20,7 +20,7 @@ def V(x, y, z=0.0):
 
 
 def _camera(view, perspective=False):
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     c = OrbitCamera()
     c.set_aspect(1000, 700)
     c.perspective = perspective

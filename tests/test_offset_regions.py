@@ -2,13 +2,13 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Offset that can DROP what collapses — and split when the shape does.
 
-`core.topology.offset_loop` slides each edge and re-intersects its
+`built_core.topology.offset_loop` slides each edge and re-intersects its
 neighbours: exact while every corner survives, and it gives up the moment
 one disappears. Marco's paved slab carries the segmented bite the round
 plaza takes out of it, and refused any inward offset past 2.65 cm; the classic
 Offset does it, because it removes what closes.
 
-`core.offset` slides, mitres, hands the segments to the planar arrangement —
+`built_core.offset` slides, mitres, hands the segments to the planar arrangement —
 which already computes every crossing for RebuildPlaneFacesCommand — and
 keeps the regions that really sit `d` inside.
 """
@@ -16,11 +16,11 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.history import History
-from core.mesh import Mesh
-from core.offset import interior_point, offset_regions
-from core.scene import Scene
-from core.topology import offset_loop
+from built_core.history import History
+from built_core.mesh import Mesh
+from built_core.offset import interior_point, offset_regions
+from built_core.scene import Scene
+from built_core.topology import offset_loop
 from tools.offset import OffsetTool
 
 N = QVector3D(0.0, 0.0, 1.0)
@@ -108,7 +108,7 @@ def test_interior_point_of_a_concave_loop_is_really_inside():
     ell = [V(0, 0), V(10, 0), V(10, 4), V(6, 4), V(6, 8), V(0, 8)]
     p = interior_point(ell, N)
     assert p is not None
-    from core.arrangement import _point_in_polygon
+    from built_core.arrangement import _point_in_polygon
     assert _point_in_polygon((p.x(), p.y()), [(v.x(), v.y()) for v in ell])
 
 

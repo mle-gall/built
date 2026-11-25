@@ -279,7 +279,7 @@ impl SvgPicture {
                 } else {
                     py.None().into_bound(py)
                 };
-                let rect = py.import("core.vista_caras")?.call_method1("view_rect", (active.getattr("camera")?,))?;
+                let rect = py.import("built_core.vista_caras")?.call_method1("view_rect", (active.getattr("camera")?,))?;
                 Ok(PyTuple::new(py, [image, rect])?.into_any())
             })();
             if let Some(f) = &framing {
@@ -527,7 +527,7 @@ pub fn export_form<'py>(win: &Bound<'py, PyAny>, key: Option<String>, one_off: b
     };
     let options = record.call_method1("get", ("options", PyDict::new(py)))?;
     let registry = py.import("core.bim_registry")?.call_method1("get", (&scene,))?;
-    let nodes = py.import("core.link_structure")?.getattr("Tree")?.call1((&scene, &registry))?.getattr("nodes")?;
+    let nodes = py.import("built_core.link_structure")?.getattr("Tree")?.call1((&scene, &registry))?.getattr("nodes")?;
     let has_nodes = nodes.is_truthy()?;
     let fmt = record.call_method1("get", ("format", initial_format))?;
     let stl_unit = py.import("built_core.settings")?.call_method0("settings")?.call_method1("value", ("export/stl_unit", "mm"))?.str()?;

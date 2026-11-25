@@ -14,10 +14,10 @@ from types import SimpleNamespace
 import numpy as np
 from built_core import Vec3 as V
 
-from core.group import Group, placement_points
-from core.history import History
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group, placement_points
+from built_core.history import History
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from tools.flip import FlipTool
 
 

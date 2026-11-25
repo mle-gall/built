@@ -112,7 +112,7 @@ impl ViewportToolHost {
                 let owner = owner()?;
                 let attrs = face.getattr("attrs")?;
                 let inherited = py
-                    .import("core.group")?
+                    .import("built_core.group")?
                     .call_method1("effective_material", (&owner,))?;
                 let front = py
                     .import("built_core.materials")?

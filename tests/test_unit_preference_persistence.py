@@ -7,8 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from core import units
-from core.scene import Scene
+from built_core import units
+from built_core.scene import Scene
 from formats import igz
 from built_render.settings_sheet import Env, SettingsSheet
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401

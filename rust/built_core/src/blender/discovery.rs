@@ -3,7 +3,7 @@ use super::*;
 use pyo3::exceptions::PyOSError;
 use std::path::{Path, PathBuf};
 
-#[pyclass(module = "core.render_blender", get_all, set_all)]
+#[pyclass(module = "built_core.render_blender", get_all, set_all)]
 pub(super) struct BlenderFound {
     command: Py<PyList>,
     r#where: String,

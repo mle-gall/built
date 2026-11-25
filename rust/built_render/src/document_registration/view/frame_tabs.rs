@@ -64,7 +64,7 @@ pub(super) fn link_host<'py>(a: &Args<'py>) -> Reply<'py> {
     if path.is_none() {
         return nothing();
     }
-    let links = py.import("core.links")?;
+    let links = py.import("built_core.links")?;
     let docs = if given.is_none() { direct(py, docs, (&win,))? } else { given };
     let preferred = attr(&doc, "link_host")?;
     let mut order = Vec::new();
@@ -288,7 +288,7 @@ fn source_context<'py>(a: &Args<'py>) -> Reply<'py> {
     if mount.is_none() {
         return nothing();
     }
-    let record = py.import("core.links")?.call_method1("link_of", (&mount,))?;
+    let record = py.import("built_core.links")?.call_method1("link_of", (&mount,))?;
     let linked = if record.is_truthy()? { record.call_method1("get", ("path", ""))? } else { "".into_bound_py_any(py)? };
     if path_of(py, linked)?.ne(doc.getattr("path")?)? {
         return nothing();
@@ -352,7 +352,7 @@ pub(super) fn open_link_source<'py>(a: &Args<'py>) -> Reply<'py> {
             let scene = host.getattr("viewport")?.getattr("scene")?;
             let mount = match &address {
                 Some(address) => address.bind(py).clone(),
-                None => match py.import("core.links")?.call_method1("linked_groups", (&scene, held_path.bind(py)))?.try_iter()?.next() {
+                None => match py.import("built_core.links")?.call_method1("linked_groups", (&scene, held_path.bind(py)))?.try_iter()?.next() {
                     Some(source) => scene.call_method1("occurrence_path", (source?,))?,
                     None => py.None().into_bound(py),
                 },

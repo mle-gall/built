@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT))
 
 def generate(components: Path, output: Path):
     from built_core.document_insert import component_from_scene
-    from core.scene import Scene
+    from built_core.scene import Scene
     from built_core.formats import igz
     from built_render import component_thumbnail
 

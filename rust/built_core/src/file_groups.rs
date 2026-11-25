@@ -231,7 +231,7 @@ impl FileGroups {
     ) -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>)> {
         let builder = Builder {
             cancelled: &self.cancelled,
-            group: py.import("core.group")?.getattr("Group")?,
+            group: py.import("built_core.group")?.getattr("Group")?,
             meshes,
             read_mesh,
             built,

@@ -76,7 +76,7 @@ const QUERIES: &str =
 #[pyfunction(name = "__getattr__")]
 fn child<'p>(py: Python<'p>, name: &str) -> PyResult<Obj<'p>> {
     if matches!(name, "commands" | "records" | "queries" | "keys" | "feed") {
-        Ok(py.import(format!("core.protocol.{name}"))?.into_any())
+        Ok(py.import(format!("built_core.protocol.{name}"))?.into_any())
     } else {
         Err(PyAttributeError::new_err(name.to_owned()))
     }
@@ -88,7 +88,7 @@ pub(super) fn run<'p>(
     args: Option<&Bound<'p, PyDict>>,
 ) -> PyResult<Obj<'p>> {
     let py = history.py();
-    let cmds = py.import("core.protocol.commands")?.getattr("COMMANDS")?;
+    let cmds = py.import("built_core.protocol.commands")?.getattr("COMMANDS")?;
     let fun = match cmds.get_item(name) {
         Ok(v) => v,
         Err(e) if e.is_instance_of::<pyo3::exceptions::PyKeyError>(py) => {
@@ -131,9 +131,9 @@ pub(crate) fn install(m: &Module<'_>, full: &str) -> PyResult<()> {
     let core = py.import("built_core")?;
     let protocol = core.getattr("command_protocol")?;
     match full {
-        "core.protocol" => {
-            let keys = py.import("core.protocol.keys")?;
-            let feed = py.import("core.protocol.feed")?;
+        "built_core.protocol" => {
+            let keys = py.import("built_core.protocol.keys")?;
+            let feed = py.import("built_core.protocol.feed")?;
             let names =
                 "KINDS element elements from_json_key known_mesh mesh_key resolve_mesh to_json_key";
             exports(m, keys.as_any(), names)?;
@@ -157,16 +157,16 @@ pub(crate) fn install(m: &Module<'_>, full: &str) -> PyResult<()> {
             )?;
             m.add_function(wrap_pyfunction!(child, m)?)?;
         }
-        "core.protocol.keys" => {
+        "built_core.protocol.keys" => {
             exports(m, &protocol, KEYS)?;
             m.add("KINDS", ("vertex", "edge", "face"))?;
         }
-        "core.protocol.queries" => exports(m, &protocol, QUERIES)?,
-        "core.protocol.feed" => feed::install(m, &core)?,
-        "core.protocol.records" => records::install(m)?,
-        "core.protocol.commands" => {
+        "built_core.protocol.queries" => exports(m, &protocol, QUERIES)?,
+        "built_core.protocol.feed" => feed::install(m, &core)?,
+        "built_core.protocol.records" => records::install(m)?,
+        "built_core.protocol.commands" => {
             let cmds = PyDict::new(py);
-            let records = py.import("core.protocol.records")?;
+            let records = py.import("built_core.protocol.records")?;
             let deliveries = core.getattr("deliveries")?;
             for &name in VERBS {
                 let source = match name {
@@ -188,7 +188,7 @@ pub(crate) fn install(m: &Module<'_>, full: &str) -> PyResult<()> {
             m.add("COMMANDS", cmds)?;
             m.add("run", protocol.getattr("run")?)?;
         }
-        "core.material_commands" => material::install(m)?,
+        "built_core.material_commands" => material::install(m)?,
         _ => wrappers::install(m, full, &core)?,
     }
     Ok(())

@@ -291,7 +291,7 @@ fn _add_face<'p>(
         let pts = tri.try_iter()?.collect::<PyResult<Vec<_>>>()?;
         let pts = PyList::new(py, pts)?;
         let uv = if let Some((sw, sh, rot)) = &options {
-            let tex = py.import("core.texture")?;
+            let tex = py.import("built_core.texture")?;
             Some(if uvw.is_truthy()? {
                 crate::model::module(tex.py(), "built_core")?.call_method1("texture_affine_uv", (&uvw, &pts))?
             } else {

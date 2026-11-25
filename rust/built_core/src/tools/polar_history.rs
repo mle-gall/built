@@ -140,13 +140,13 @@ pub fn rotation_command<'py>(
     let mut commands = Vec::new();
     if copy {
         let (faces, edges) = (elements(faces)?, elements(edges)?);
-        let placements = py.import("core.group")?;
+        let placements = py.import("built_core.group")?;
         let new_attrs = py
             .import("core.ifc_identity")?
             .getattr("copied_face_attrs")?;
         let copy_guide = py.import("built_core.move_ops")?.getattr("copied_guide")?;
         let next_curve = py
-            .import("core.mesh")?
+            .import("built_core.mesh")?
             .getattr("Mesh")?
             .getattr("next_curve_id")?;
         let curves = PyDict::new(py);

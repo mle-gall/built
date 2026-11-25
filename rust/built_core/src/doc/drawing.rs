@@ -381,7 +381,7 @@ fn drawing_value(py: Python<'_>, field: &str, input: &str) -> PyResult<(Field, F
         }
         "linetype"
             if py
-                .import("core.layers")?
+                .import("built_core.layers")?
                 .call_method1("known_linetype", (input,))?
                 .is_truthy()? =>
         {
@@ -400,7 +400,7 @@ fn drawing_value(py: Python<'_>, field: &str, input: &str) -> PyResult<(Field, F
                 .ok().filter(|v| v.is_finite()).ok_or_else(|| PyValueError::new_err("Expected millimetres separated by commas")))
                 .collect::<PyResult<_>>()?;
             if field == "brick" {
-                let clean = py.import("core.hatches")?.call_method1("clean_brick", (nums,))?;
+                let clean = py.import("built_core.hatches")?.call_method1("clean_brick", (nums,))?;
                 if clean.is_none() { return Err(PyValueError::new_err("Invalid piece dimensions or joint widths")); }
                 (field, Value::from_py(&clean)?)
             } else {
@@ -423,7 +423,7 @@ fn drawing_value(py: Python<'_>, field: &str, input: &str) -> PyResult<(Field, F
         "hatch" if input.is_empty() => ("hatch", Value::None),
         "hatch"
             if py
-                .import("core.hatches")?
+                .import("built_core.hatches")?
                 .call_method1("known", (input,))?
                 .is_truthy()? =>
         {
@@ -465,7 +465,7 @@ pub(super) fn prepare(
     }
     let (prop, value) = drawing_value(py, field, input)?;
     let hatch_kinds = if field == "hatch" {
-        let module = py.import("core.hatches")?;
+        let module = py.import("built_core.hatches")?;
         let kinds = module
             .getattr("HATCH_LABELS")?
             .try_iter()?

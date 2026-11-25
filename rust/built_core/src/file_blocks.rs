@@ -102,7 +102,7 @@ fn igz_native_blocks<'p>(meta: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
                 holes.append(h)?;
             }
             let kept = py
-                .import("core.topology")?
+                .import("built_core.topology")?
                 .call_method1("_maximal_holes", (&holes,))?;
             pieces.append(pos.get_item(slice(py, at, corner[start]))?)?;
             let mut pts = vec![];

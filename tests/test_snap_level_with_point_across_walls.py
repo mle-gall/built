@@ -25,8 +25,8 @@ from built_core import ScreenPoint, Input
 from built_render import MouseEvent
 from built_core import Vec3 as QVector3D
 
-from core.scene import Scene
-from core.snap import AXIS_COLORS, COLOR_ENDPOINT, compute_snap
+from built_core.scene import Scene
+from built_core.snap import AXIS_COLORS, COLOR_ENDPOINT, compute_snap
 
 
 def V(x, y, z=0.0):

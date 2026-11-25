@@ -17,8 +17,8 @@ from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 
 def _box(scene, hist):
-    from core.edits import build_add_edges
-    from core.history import MakeGroupCommand
+    from built_core.edits import build_add_edges
+    from built_core.history import MakeGroupCommand
     from tests import test_pushpull_ux as T
     T._cube(scene, hist, size=1.0, height=1.0)
     faces = list(scene.mesh.faces)
@@ -38,8 +38,8 @@ def _mesh_bbox(group):
 
 
 def test_exploded_copies_are_drawn_where_they_are(native_window):
-    from core.group import copy_group
-    from core.history import (ExplodeGroupCommand, InsertGroupCommand,
+    from built_core.group import copy_group
+    from built_core.history import (ExplodeGroupCommand, InsertGroupCommand,
                               MakeNestedGroupCommand)
     win = native_window
     vp = win.viewport

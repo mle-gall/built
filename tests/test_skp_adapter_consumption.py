@@ -7,7 +7,7 @@ from types import SimpleNamespace as NS
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import igz, skp, skp_reader as adapter
 from built_core import PrototypeGeometry
 from tests.test_skp_backend import _tri_def, _fake_definition

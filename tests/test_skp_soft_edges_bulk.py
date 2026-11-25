@@ -7,8 +7,8 @@ import numpy as np
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from formats import igz, skp, skp_reader
 
 

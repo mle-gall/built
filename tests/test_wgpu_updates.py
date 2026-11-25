@@ -5,10 +5,10 @@ import pytest
 from built_core import Input as Qt
 from built_core import ScreenPoint as QPointF
 from built_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
-from core.group import Group
-from core.history import MoveGroupCommand, CompoundCommand
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.history import MoveGroupCommand, CompoundCommand
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from tools.base import ToolContext
 from tools.tape import TapeMeasureTool
 from built_core import pack_scene
@@ -74,7 +74,7 @@ def test_record_edits_submit_nothing():
 
 
 def test_equal_leaf_uids_keep_distinct_metal_rows_on_hide():
-    from core.history import History, HideCommand
+    from built_core.history import History, HideCommand
 
     scene = Scene()
     mesh = Mesh()
@@ -204,7 +204,7 @@ def test_dispatch_is_explicit():
 
 
 def test_history_journal_limits_move_discovery(monkeypatch):
-    from core.history import History, TagGroupsCommand
+    from built_core.history import History, TagGroupsCommand
     scene, updates = fixture_scene()
     history = History(scene)
     updates.observe(history)
@@ -212,7 +212,7 @@ def test_history_journal_limits_move_discovery(monkeypatch):
     ids, rows = updates.diff(scene)
     assert ids.tolist() == [0]
     updates.apply(ids, rows)
-    monkeypatch.setattr('core.purge.iter_groups', lambda *a: (_ for _ in ()).throw(AssertionError('scan')))
+    monkeypatch.setattr('built_core.purge.iter_groups', lambda *a: (_ for _ in ()).throw(AssertionError('scan')))
     history.execute(TagGroupsCommand(scene.groups, 'IfcWall'))
     renderer = Renderer()
     updates.apply(*updates.diff(scene), renderer)
@@ -242,7 +242,7 @@ def test_prototype_reassignment_preserves_row():
 
 @pytest.mark.parametrize("completion", ["click", "escape", "enter"])
 def test_native_move_preview_then_history_commit(completion):
-    from core.history import History
+    from built_core.history import History
     from tools.move import MoveTool
     from built_render import NativeTools
     scene, updates = fixture_scene()
@@ -364,8 +364,8 @@ def test_uid_keeps_row_when_document_replaces_group_object():
 
 
 def test_history_insert_undo_redo_keeps_one_row(monkeypatch):
-    from core.history import History, InsertGroupCommand
-    from core.doc_model import NATIVE
+    from built_core.history import History, InsertGroupCommand
+    from built_core.doc_model import NATIVE
     doc_tree, render_rows = NATIVE.doc_tree, NATIVE.doc_render_rows
     scene, updates = fixture_scene()
     history = History(scene)
@@ -436,7 +436,7 @@ def test_tool_change_signal_reports_unsupported_tool_without_mouse_input():
 
 def test_prototype_bake_does_not_consume_document_group_names(monkeypatch):
     import itertools
-    import core.group as groups
+    import built_core.group as groups
     monkeypatch.setattr(groups, '_counter', itertools.count(100))
     scene, updates = fixture_scene()
     before = next(groups._counter)
@@ -487,7 +487,7 @@ def test_drag_preview_batches_rows_without_rendering_ids():
 
 
 def test_mesh_history_journal_does_not_walk_placements(monkeypatch):
-    from core.history import History, SnapshotMutation
+    from built_core.history import History, SnapshotMutation
     scene, updates = fixture_scene()
     scene.begin_group_edit(scene.groups[0])
     updates.apply(*updates.diff(scene))
@@ -496,7 +496,7 @@ def test_mesh_history_journal_does_not_walk_placements(monkeypatch):
     mesh = scene.mesh
     history.execute(SnapshotMutation(lambda s: s.mesh.move_vertex(
         s.mesh.vertices[0], QVector3D(0, 0, 1))))
-    monkeypatch.setattr('core.purge.iter_groups',
+    monkeypatch.setattr('built_core.purge.iter_groups',
                         lambda *a: (_ for _ in ()).throw(AssertionError('placement scan')))
     updates.apply(*updates.diff(scene))
     assert len(updates.changed) == 1
@@ -531,7 +531,7 @@ def test_nested_row_edits_preserve_painted_variants_and_inherited_flags():
 
 
 def test_hide_command_on_nested_container_updates_only_instance_flags():
-    from core.history import History, HideCommand
+    from built_core.history import History, HideCommand
     scene, _ = fixture_scene()
     root = Group()
     root.adopt(scene.groups[:1])
@@ -580,7 +580,7 @@ def test_attribute_only_edit_without_journal_rebakes_that_mesh():
 
 
 def test_mesh_history_edit_inside_nested_container_does_not_repack(monkeypatch):
-    from core.history import History, SnapshotMutation
+    from built_core.history import History, SnapshotMutation
     scene, _ = fixture_scene()
     a, b = scene.groups
     root = Group()
@@ -668,8 +668,8 @@ def test_component_edit_deep_in_nested_groups_rewrites_one_row(monkeypatch):
     model (2 s on the ride) and the last append copied the resident arrays
     (0.5-1.4 s). The swap is one row from the edit path, a rebake that keeps
     its size goes back in place, and leaving shares back without a walk."""
-    from core.history import History, MoveVerticesCommand
-    from core.reference_edit import ReshareInstanceCommand
+    from built_core.history import History, MoveVerticesCommand
+    from built_core.reference_edit import ReshareInstanceCommand
     scene, leaf, inner, root, proto = _nested_component_scene()
     updates = InstanceUpdates(scene, pack_scene(scene))
     history = History(scene)
@@ -802,8 +802,8 @@ def test_an_edit_keeps_the_container_boxes_it_did_not_touch():
 
 
 def test_draw_snapshot_and_guides_do_not_scan_unrelated_placements(monkeypatch):
-    from core.history import History, SnapshotCompound, AddEdgeCommand, AddGuideCommand
-    from core.guide import Guide
+    from built_core.history import History, SnapshotCompound, AddEdgeCommand, AddGuideCommand
+    from built_core.guide import Guide
     scene, updates = fixture_scene()
     history = History(scene)
     updates.observe(history)
@@ -831,7 +831,7 @@ def test_draw_snapshot_and_guides_do_not_scan_unrelated_placements(monkeypatch):
 
 
 def test_new_default_layer_does_not_change_resident_paint_key():
-    from core.layers import Layer
+    from built_core.layers import Layer
     from views.wgpu_view import _paint_key
     scene = Scene()
     before = _paint_key(scene)
@@ -843,7 +843,7 @@ def test_new_default_layer_does_not_change_resident_paint_key():
 
 def test_bridge_edits_preserve_nested_face_and_edge_draw_ranges():
     from plugins.ai_bridge import _Bridge
-    from core.history import History
+    from built_core.history import History
     scene, leaf, inner, root, mesh = _nested_component_scene()
     second = Mesh()
     second.add_face([QVector3D(), QVector3D(2, 0, 0), QVector3D(0, 2, 0)])
@@ -891,8 +891,8 @@ def test_rebaked_billboard_keeps_hidden_edges_at_their_own_offsets():
 
 def test_callable_agent_edits_leave_other_deferred_meshes_resident():
     from core.ai import run_callable_transactional
-    from core.history import History
-    from core.mesh import DeferredMesh
+    from built_core.history import History
+    from built_core.mesh import DeferredMesh
 
     def build(m):
         m.add_face([QVector3D(), QVector3D(1, 0, 0), QVector3D(0, 1, 0)])
@@ -921,8 +921,8 @@ def test_callable_agent_edits_leave_other_deferred_meshes_resident():
 
 def test_agent_adding_group_on_active_layer_rebakes_only_new_mesh():
     from core.ai import run_transactional
-    from core.history import History
-    from core.layers import Layer
+    from built_core.history import History
+    from built_core.layers import Layer
     scene, updates = fixture_scene()
     scene.layers.append(Layer("Active"))
     scene.active_layer = "Active"
@@ -957,9 +957,9 @@ def test_reupload_after_offscreen_bridge_edit_keeps_material_headers():
 
 
 def test_adding_annotations_preserves_local_journal():
-    from core.dimension import Dimension
-    from core.history import AddDimensionCommand, AddTextLabelCommand, History
-    from core.textlabel import TextLabel
+    from built_core.dimension import Dimension
+    from built_core.history import AddDimensionCommand, AddTextLabelCommand, History
+    from built_core.textlabel import TextLabel
     scene, updates = fixture_scene()
     history = History(scene)
     updates.observe(history)
@@ -975,7 +975,7 @@ def test_adding_annotations_preserves_local_journal():
 
 
 def test_first_loose_edge_only_adds_its_own_row():
-    from core.history import AddEdgeCommand, History
+    from built_core.history import AddEdgeCommand, History
     scene, updates = fixture_scene()
     history = History(scene)
     updates.observe(history)
@@ -986,7 +986,7 @@ def test_first_loose_edge_only_adds_its_own_row():
 
 
 def test_retyped_line_updates_resident_face_split():
-    from core.history import History
+    from built_core.history import History
     from tools.rust_tools import LineTool
 
     scene, _ = fixture_scene()

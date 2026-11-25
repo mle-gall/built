@@ -5,12 +5,12 @@ import pytest
 from built_core import Vec3 as V
 
 from core import _native
-from core.group import Group
-from core.history import History, SetFaceColorCommand, SnapshotMutation
-from core.intersect import WITH_CONTEXT, build_intersect_faces
-from core.mesh import Mesh
-from core.protocol.commands import run
-from core.scene import Scene
+from built_core.group import Group
+from built_core.history import History, SetFaceColorCommand, SnapshotMutation
+from built_core.intersect import WITH_CONTEXT, build_intersect_faces
+from built_core.mesh import Mesh
+from built_core.protocol.commands import run
+from built_core.scene import Scene
 from built_core.store_mesh import StoreMesh
 from tests.test_offset_regions import _VP, _offset
 from tests.test_store_mesh import fingerprint
@@ -151,7 +151,7 @@ def test_bulk_stages_share_lineage_and_preserve_discarded_key_generations(reside
 
 
 def test_group_and_loose_reverse_report_both_owners(resident):
-    from core.history import FlipFacesCommand
+    from built_core.history import FlipFacesCommand
 
     scene = Scene()
     group = Group()

@@ -11,9 +11,9 @@ from __future__ import annotations
 
 from built_core import Vec3 as V
 
-from core.history import (AddEdgeCommand, AddFaceCommand, CompoundCommand,
+from built_core.history import (AddEdgeCommand, AddFaceCommand, CompoundCommand,
                           History, rotation_matrix)
-from core.scene import Scene
+from built_core.scene import Scene
 
 SQUARE = [V(0, 0, 0), V(4, 0, 0), V(4, 4, 0), V(0, 4, 0)]
 

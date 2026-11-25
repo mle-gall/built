@@ -16,13 +16,13 @@ fn selected_edges<'p>(scene: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
     let (edge, face, group) = (
         geo.getattr("Edge")?,
         geo.getattr("Face")?,
-        py.import("core.group")?.getattr("Group")?,
+        py.import("built_core.group")?.getattr("Group")?,
     );
     let mut places = vec![];
     let mut seen = HashSet::new();
     let keys = PySet::empty(py)?;
     let faces = PySet::empty(py)?;
-    let links = py.import("core.links")?;
+    let links = py.import("built_core.links")?;
     for ent in scene.getattr("selection")?.try_iter()? {
         let e = ent?;
         if e.is_instance(&edge)? {

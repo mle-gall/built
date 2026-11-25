@@ -334,7 +334,7 @@ depth-tested, with depth writes disabled and no effect on placement IDs. MSAA
 axes draw inside the existing edge pass, before model edges. Single-sample axes
 use a small separate pass. No Python image rasterization or upload is involved.
 Scene axes visibility, edit-context frames and composer style suppression are
-resolved in `views/wgpu_axes.py`, without changing global `core.axes` state.
+resolved in `views/wgpu_axes.py`, without changing global `built_core.axes` state.
 
 See `docs/benchmarks/billboards-axes/README.md` for bounded captures, targeted
 tests and same-session timing evidence.

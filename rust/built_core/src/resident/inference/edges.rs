@@ -171,7 +171,7 @@ impl ResidentEdges {
         if prefix.is_empty()? && features.is_empty()? {
             return Ok((a, b, tags, grouped).into_pyobject(py)?.into_any());
         }
-        let cols = py.import("core.snap_query")?.getattr("edge_columns")?;
+        let cols = py.import("built_core.snap_query")?.getattr("edge_columns")?;
         let first = cols.call1((prefix,))?;
         let last = cols.call1((features,))?;
         let concat = py.import("numpy")?.getattr("concatenate")?;

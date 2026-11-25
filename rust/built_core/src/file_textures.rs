@@ -142,7 +142,7 @@ pub fn igz_pack_textures<'p>(
     let py = payload.py();
     let blobs = blobs.unwrap_or_else(|| PyDict::new(py));
     let resolved = resolved.unwrap_or_else(|| PyDict::new(py));
-    let texture = py.import("core.texture")?;
+    let texture = py.import("built_core.texture")?;
     let mut missing = 0;
     let mut member = |source: Bound<'p, PyAny>| -> PyResult<Bound<'p, PyAny>> {
         if let Some(known) = resolved.get_item(&source)?.filter(|v| !v.is_none()) {
@@ -202,7 +202,7 @@ pub fn igz_unpack_textures<'p>(
 ) -> PyResult<()> {
     let py = payload.py();
     let cached = PyDict::new(py);
-    let texture = py.import("core.texture")?;
+    let texture = py.import("built_core.texture")?;
     let mut restore = |member: Bound<'p, PyAny>| -> PyResult<Bound<'p, PyAny>> {
         if let Some(out) = cached.get_item(&member)? {
             return Ok(out);

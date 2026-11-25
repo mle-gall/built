@@ -17,11 +17,11 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edges
-from core.geometry import Face
-from core.history import AddFaceCommand, History
-from core.scene import Scene
-from core.topology import find_containing_face, loop_inside_face
+from built_core.edits import build_add_edges
+from built_core.geometry import Face
+from built_core.history import AddFaceCommand, History
+from built_core.scene import Scene
+from built_core.topology import find_containing_face, loop_inside_face
 from built_core.triangulate import triangulate
 
 

@@ -358,7 +358,7 @@ pub struct TagData {
     pub folder: Option<String>,
 }
 
-/// A named paint recipe (`core.materials.Material`). The registry that
+/// A named paint recipe (`built_core.materials.Material`). The registry that
 /// names it (`scene.materials`) stays a Python dict in slice 1.
 #[derive(Default)]
 pub struct MaterialData {
@@ -433,7 +433,7 @@ pub struct Node {
     /// Named attributes ([`Field::Attr`]), set ones only.
     pub attrs: Vec<(u16, Value)>,
     /// The tracked Python container an attribute was last read as
-    /// (`core.doc_model.TrackedDict`): edited in place it writes back.
+    /// (`built_core.doc_model.TrackedDict`): edited in place it writes back.
     pub attr_views: Vec<(u16, Py<PyAny>)>,
 }
 

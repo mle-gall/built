@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The material registry (core.materials): identity over the face attrs.
+"""The material registry (built_core.materials): identity over the face attrs.
 
 The design contract: baked attrs (color/texture) stay the render truth;
 ``attrs["mat"]`` adds identity. The registry rides the scene, serializes
@@ -19,8 +19,8 @@ import pytest
 from built_core import Vec3 as QVector3D
 
 
-from core.materials import Material, register                     # noqa: E402
-from core.scene import Scene                                      # noqa: E402
+from built_core.materials import Material, register                     # noqa: E402
+from built_core.scene import Scene                                      # noqa: E402
 from formats import igz as igz_format                             # noqa: E402
 from formats import skp as skp_format                             # noqa: E402
 

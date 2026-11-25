@@ -19,11 +19,11 @@ import pytest
 from built_core import Vec3 as V
 
 import core._native as _native
-from core import mesh as M
+from built_core import mesh as M
 from built_core import store_mesh as S
-from core.history import (AddEdgeCommand, DeleteEdgesCommand, History,
+from built_core.history import (AddEdgeCommand, DeleteEdgesCommand, History,
                           MoveVerticesCommand)
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import igz
 from tests.test_deferred_mesh import _meshes, _random_scene
 
@@ -281,7 +281,7 @@ def test_link_hooks_relabel_like_the_built_mesh(binary, monkeypatch,
         return renames.get(name, name)
     built_core.link_relabel([], [mesh], renames)
     assert type(mesh) is M.DeferredMesh                     # relabelled unbuilt
-    from core.layers import layer_of
+    from built_core.layers import layer_of
     for actual, original in zip((*mesh.faces, *mesh.edges), (*before.faces, *before.edges), strict=True):
         assert layer_of(actual) == rename(layer_of(original))
 
@@ -290,7 +290,7 @@ def test_link_hooks_relabel_like_the_built_mesh(binary, monkeypatch,
 def test_the_stores_warped_faces_are_is_planars(monkeypatch, seed):
     """``MeshStore.nonplanar_faces`` is ``topology.is_planar`` over every
     face with more than three corners (holes included), bit for bit."""
-    from core.topology import _PLANAR_TOLERANCE, is_planar
+    from built_core.topology import _PLANAR_TOLERANCE, is_planar
     rng = random.Random(seed)
     flat, sizes, counts = [], [], []
     for _ in range(300):
@@ -322,7 +322,7 @@ def test_the_stores_warped_faces_are_is_planars(monkeypatch, seed):
 
 
 def test_cell_queries_are_the_python_scans(binary, monkeypatch, tmp_path):
-    from core.topology import _key
+    from built_core.topology import _key
     _scene, m = _store_mesh(tmp_path)
     vs = list(m.vertices)
     for cells in ({_key(vs[0].position)},

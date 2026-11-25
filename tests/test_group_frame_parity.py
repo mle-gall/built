@@ -74,7 +74,7 @@ def answer(group, pts):
 
 
 def test_the_frame_is_the_python_one_bit_for_bit_and_the_box_within_ulps():
-    from core import group
+    from built_core import group
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     sets = point_sets()
     assert len(sets) == len(want)
@@ -90,7 +90,7 @@ def test_the_frame_is_the_python_one_bit_for_bit_and_the_box_within_ulps():
 
 if __name__ == "__main__" and "--write" in sys.argv:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from core import group as _group
+    from built_core import group as _group
     rows = [answer(_group, p) for p in point_sets()]
     GOLDEN.write_bytes(gzip.compress(json.dumps(rows, separators=(",", ":")).encode(),
                                      mtime=0))

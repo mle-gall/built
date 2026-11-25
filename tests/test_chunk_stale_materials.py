@@ -17,10 +17,10 @@ import pytest
 from tests.raster_samples import solid_raster
 from built_core import Vec3 as QVector3D
 
-from core.group import Group
-from core.history import History, MoveGroupCommand, SetFaceTextureCommand
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.history import History, MoveGroupCommand, SetFaceTextureCommand
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from views.document_interaction import DocumentInteraction
 
 

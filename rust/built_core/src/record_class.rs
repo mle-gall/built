@@ -14,7 +14,7 @@ pub fn build<'p>(
     class_methods: &[&str],
 ) -> PyResult<Bound<'p, PyAny>> {
     let py = module.py();
-    let model = py.import("core.doc_model")?;
+    let model = py.import("built_core.doc_model")?;
     let attrs = PyDict::new(py);
     let names = PyTuple::new(py, fields)?;
     attrs.set_item("__module__", module.name()?)?;

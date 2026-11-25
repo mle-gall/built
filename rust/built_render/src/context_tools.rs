@@ -74,7 +74,7 @@ fn edit_texture(win: &Bound<'_, PyAny>, reset: bool) -> PyResult<()> {
                 .extract()?;
             if !origin.is_none() {
                 let (p, n): (Bound<'_, PyAny>, Bound<'_, PyAny>) = py
-                    .import("core.snap")?
+                    .import("built_core.snap")?
                     .call_method1("face_plane_world", (&face, py.None()))?
                     .extract()?;
                 at = vp.call_method1("_ray_plane", (origin, dir, p, n))?;
@@ -96,7 +96,7 @@ fn edit_texture(win: &Bound<'_, PyAny>, reset: bool) -> PyResult<()> {
 
 #[pyfunction]
 fn selected_text<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let gs = matching(&scene.getattr("selection")?, "core.group", "Group")?;
+    let gs = matching(&scene.getattr("selection")?, "built_core.group", "Group")?;
     if gs.len() != 1 {
         return Ok(None);
     }
@@ -139,7 +139,7 @@ pub(crate) fn text_editable(scene: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) 
     Ok(Some(
         scene
             .py()
-            .import("core.text3d")?
+            .import("built_core.text3d")?
             .call_method1("text_is_pristine", (text,))?
             .is_truthy()?,
     ))
@@ -162,7 +162,7 @@ fn edit_text(win: &Bound<'_, PyAny>, group: Option<Bound<'_, PyAny>>) -> PyResul
         return Ok(());
     }
     if !py
-        .import("core.text3d")?
+        .import("built_core.text3d")?
         .call_method1("text_is_pristine", (&group,))?
         .is_truthy()?
     {
@@ -190,7 +190,7 @@ fn apply_text(
     if !vp.getattr("scene")?.is(scene) || params.is_none() {
         return Ok(());
     }
-    let backend = py.import("core.text3d")?;
+    let backend = py.import("built_core.text3d")?;
     let before = PyDict::new(py);
     let old = group.getattr("text3d")?;
     for key in backend.getattr("TEXT_KEYS")?.try_iter()? {

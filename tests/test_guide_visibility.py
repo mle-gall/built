@@ -11,7 +11,7 @@ from built_core import Vec3 as QVector3D
 
 
 def _window_with_guide(native_host):
-    from core.guide import Guide
+    from built_core.guide import Guide
 
     win = native_host.window
     vp = win.viewport
@@ -36,7 +36,7 @@ def test_clip_segment_front_recovers_projectable_span(native_host):
 
 
 def test_snap_scene_feeds_clipped_guides_and_points(native_host):
-    from core.guide import Guide
+    from built_core.guide import Guide
     win, vp, g = _window_with_guide(native_host)
     vp.scene.guides.append(Guide(QVector3D(2, 3, 0)))    # a guide point
     snap_scene = vp._snap_scene(600, 400)
@@ -54,7 +54,7 @@ def test_snap_scene_feeds_clipped_guides_and_points(native_host):
 
 
 def test_on_guide_snap_in_perspective(native_host):
-    from core.snap import compute_snap
+    from built_core.snap import compute_snap
     win, vp, g = _window_with_guide(native_host)
     # A visible point ON the guide, a bit in front of the camera.
     p = g.point + g.direction * 3.0

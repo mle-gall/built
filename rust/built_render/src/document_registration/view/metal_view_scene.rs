@@ -498,7 +498,7 @@ fn blank<'py>(a: &Args<'py>) -> Reply<'py> {
     view.setattr("_selection_rows", PyDict::new(py))?;
     view.setattr("_resident_edit_copies", PyTuple::empty(py))?;
     view.setattr("_parent_map", py.None())?;
-    let empty = py.import("core.scene")?.getattr("Scene")?.call0()?;
+    let empty = py.import("built_core.scene")?.getattr("Scene")?.call0()?;
     let packed = py.import("views.wgpu_view")?.getattr("pack_scene")?.call1((empty,))?;
     view.setattr("packed", &packed)?;
     view.setattr("_remote_meshes", PyTuple::empty(py))?;
@@ -630,11 +630,11 @@ fn upload<'py>(a: &Args<'py>) -> Reply<'py> {
         // The renderer ABI requires one row. A hidden scratch row lets an
         // empty document show the first tool rubber band.
         let vec3 = py.import("built_core")?.getattr("Vec3")?;
-        let mesh = py.import("core.mesh")?.getattr("Mesh")?.call0()?;
+        let mesh = py.import("built_core.mesh")?.getattr("Mesh")?.call0()?;
         mesh.call_method1("add_edge", (vec3.call0()?, vec3.call1((1, 0, 0))?))?;
         let kw = PyDict::new(py);
-        kw.set_item("groups", PyList::new(py, [py.import("core.group")?.getattr("Group")?.call1((mesh,))?])?)?;
-        let stage = py.import("core.scene")?.getattr("Scene")?.call((), Some(&kw))?;
+        kw.set_item("groups", PyList::new(py, [py.import("built_core.group")?.getattr("Group")?.call1((mesh,))?])?)?;
+        let stage = py.import("built_core.scene")?.getattr("Scene")?.call((), Some(&kw))?;
         let scratch = py.import("views.wgpu_view")?.getattr("pack_scene")?.call1((stage,))?;
         scratch.getattr("instances")?.get_item("info")?.set_item((pyo3::types::PySlice::full(py), 2), 1)?;
         scratch.call_method1("upload", (&renderer,))?;

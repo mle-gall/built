@@ -12,7 +12,7 @@
 
 use rayon::prelude::*;
 
-const T_EPS: f64 = 1e-6; // core.hlr._T_EPS
+const T_EPS: f64 = 1e-6; // built_core.hlr._T_EPS
 
 /// One thread's working buffers: a visit stamp per triangle (so the grid's
 /// candidates come out once each) and two index lists.
@@ -272,7 +272,7 @@ impl Occluders {
         !s1 || !s2
     }
 
-    /// core.hlr._surface_at over the candidate triangles ``cand``.
+    /// built_core.hlr._surface_at over the candidate triangles ``cand``.
     fn surface_at(&self, p: [f64; 2], depth: f64, cand: &[u32], tol: f64) -> bool {
         let lim = depth + tol;
         for &i in cand {
@@ -300,7 +300,7 @@ impl Occluders {
     }
 }
 
-/// core.hlr._interval_from_linear: c0 + c1·t ≥ 0 over [0,1].
+/// built_core.hlr._interval_from_linear: c0 + c1·t ≥ 0 over [0,1].
 #[inline]
 fn interval_from_linear(c0: f64, c1: f64) -> Option<(f64, f64)> {
     if c1.abs() < 1e-15 {
@@ -361,7 +361,7 @@ fn solve3(m: [[f64; 3]; 3], z: [f64; 3]) -> Option<[f64; 3]> {
     Some(y)
 }
 
-/// core.hlr.visible_spans for one edge against the candidates ``idx``.
+/// built_core.hlr.visible_spans for one edge against the candidates ``idx``.
 fn visible_spans(
     a2: [f64; 2],
     b2: [f64; 2],

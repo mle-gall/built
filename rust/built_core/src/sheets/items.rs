@@ -51,7 +51,7 @@ fn num(v: &Value) -> Option<f64> {
 
 // ---- Scale bar -----------------------------------------------------------------
 
-/// core.composition.BarraEscala.segment_m.
+/// built_core.composition.BarraEscala.segment_m.
 pub fn scalebar_segment_m(segments: f64, scale_n: f64) -> f64 {
     let target_mm = 100.0 / segments;
     let raw_m = target_mm * scale_n / 1000.0;

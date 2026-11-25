@@ -13,7 +13,7 @@ import math
 import pytest
 from built_core import Vec3 as QVector3D, Vec4 as QVector4D
 
-from core.camera import MIN_DISTANCE, OrbitCamera
+from built_core.camera import MIN_DISTANCE, OrbitCamera
 
 W, H = 1000, 700
 

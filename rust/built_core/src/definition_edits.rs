@@ -30,7 +30,7 @@ pub(crate) fn replace_definitions<'py>(
     fields: Vec<String>,
 ) -> PyResult<Vec<Bound<'py, PyDict>>> {
     let py = source.py();
-    let copy = py.import("core.group")?.getattr("copy_group")?;
+    let copy = py.import("built_core.group")?.getattr("copy_group")?;
     let keywords = PyDict::new(py);
     keywords.set_item("_in_definition", true)?;
     let deepcopy = py.import("copy")?.getattr("deepcopy")?;
@@ -146,7 +146,7 @@ pub(crate) fn keep_template<'py>(
 #[pyfunction]
 pub(crate) fn merge_group_geometry<'py>(groups: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = groups.py();
-    let api = py.import("core.group")?;
+    let api = py.import("built_core.group")?;
     let mut edge_coords = Vec::new();
     let mut face_coords = Vec::new();
     let mut ring_sizes = Vec::new();
@@ -255,7 +255,7 @@ pub(crate) fn group_owner<'py>(scene: &Obj<'py>, g: &Obj<'py>) -> PyResult<Optio
     }
     let walk = scene
         .py()
-        .import("core.group")?
+        .import("built_core.group")?
         .getattr("iter_placements")?;
     for root in roots.try_iter()? {
         for row in walk.call1((root?,))?.try_iter()? {
@@ -301,7 +301,7 @@ pub(crate) fn rebuild_letter_placement<'py>(
     before: &Obj<'py>,
 ) -> PyResult<Obj<'py>> {
     let py = g.py();
-    let api = py.import("core.text3d")?;
+    let api = py.import("built_core.text3d")?;
     let before = if before.is_none() {
         (
             g.getattr("children")?,

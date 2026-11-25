@@ -14,7 +14,7 @@ import time
 
 import pytest
 
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import dae
 from formats.glb import _node_transforms
 

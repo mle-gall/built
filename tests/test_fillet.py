@@ -16,7 +16,7 @@ import pytest
 from built_core import Vec3 as QVector3D
 
 from built_core import apply_fillet, plan_fillet
-from core.mesh import Mesh
+from built_core.mesh import Mesh
 from built_core.orient import is_closed, signed_volume
 
 

@@ -153,7 +153,7 @@ fn visit<'py>(s: &Obj<'py>, command: &Obj<'py>, phase: &Obj<'py>, step: &Obj<'py
     }
     if classes.any(command, &["HideCommand", "AssignLayerCommand"])? {
         let entities = command.getattr("_entities")?;
-        let group = py.import("core.group")?.getattr("Group")?;
+        let group = py.import("built_core.group")?.getattr("Group")?;
         for entity in entities.try_iter()? {
             if !entity?.is_instance(&group)? {
                 return Ok(false);
@@ -510,7 +510,7 @@ impl InstanceUpdates {
         let chain = PyList::empty(py);
         let roots = set(s, "roots")?;
         let (resident, chains) = (s.getattr("resident")?, dict(s, "chains")?);
-        for group in py.import("core.outliner")?.call_method1("open_path", (s.getattr("scene")?,))?.try_iter()? {
+        for group in py.import("built_core.outliner")?.call_method1("open_path", (s.getattr("scene")?,))?.try_iter()? {
             let group = group?;
             if chain.is_empty() {
                 if !roots.contains(&group)? {
@@ -535,7 +535,7 @@ impl InstanceUpdates {
         let s = slf.as_any();
         s.call_method0("remember_edit_path")?;
         let chains = dict(s, "chains")?;
-        for group in py.import("core.outliner")?.call_method1("open_path", (s.getattr("scene")?,))?.try_iter()? {
+        for group in py.import("built_core.outliner")?.call_method1("open_path", (s.getattr("scene")?,))?.try_iter()? {
             let group = group?;
             if group.getattr("mesh")?.is(mesh) {
                 return Ok(match chains.get_item(row_key(s, &group)?)? {
@@ -832,7 +832,7 @@ impl InstanceUpdates {
             let (code, _) = prototype(&mesh, &paint, &mode, &changed)?;
             let mut row = resident.call_method1("row", (&uid,))?;
             if occurrence_keys.contains(&group)? {
-                let path = py.import("core.link_structure")?.call_method1("row_id", (scene.call_method1("occurrence_path", (&group,))?,))?;
+                let path = py.import("built_core.link_structure")?.call_method1("row_id", (scene.call_method1("occurrence_path", (&group,))?,))?;
                 if !path.eq(&uid)? {
                     return nothing();
                 }
@@ -1041,7 +1041,7 @@ impl InstanceUpdates {
         let flat = |array: &Obj<'py>| -> Reply<'py> { array.call_method1("view", (&uint8,))?.call_method1("reshape", (-1,)) };
         if any_changed {
             // A single bake for the changed set, including shared meshes.
-            let group_type = py.import("core.group")?.getattr("Group")?;
+            let group_type = py.import("built_core.group")?.getattr("Group")?;
             let variants = dict(s, "variants")?;
             let meshes = dict(s, "meshes")?;
             let prototypes = PyList::empty(py);
@@ -1059,7 +1059,7 @@ impl InstanceUpdates {
             }
             let kw = PyDict::new(py);
             kw.set_item("groups", &prototypes)?;
-            let stage = py.import("core.scene")?.getattr("Scene")?.call((), Some(&kw))?;
+            let stage = py.import("built_core.scene")?.getattr("Scene")?.call((), Some(&kw))?;
             let kw = PyDict::new(py);
             kw.set_item("baked_paints", &paints)?;
             let baked = core(py)?.getattr("pack_scene")?.call((stage,), Some(&kw))?;

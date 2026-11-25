@@ -11,8 +11,8 @@ import numpy as np
 import pytest
 
 from core import _native
-from core.mesh import DeferredMesh, Mesh, face_count
-from core.scene import Scene
+from built_core.mesh import DeferredMesh, Mesh, face_count
+from built_core.scene import Scene
 from formats import igz
 
 mod = _native.available()
@@ -271,7 +271,7 @@ def test_equal_attributes_are_one_entry_once_textures_are_unpacked(
         z.writestr("document.json", json.dumps(doc))
         z.writestr("textures/x.png", b"a")
         z.writestr("textures/y-x.png", b"a")
-    monkeypatch.setattr("core.texture.cache_image",
+    monkeypatch.setattr("built_core.texture.cache_image",
                         lambda data, name, kind: tmp_path / "cached.png")
     a = Scene()
     igz.load_into(a, p)
@@ -296,7 +296,7 @@ def test_a_texture_in_a_block_read_by_the_engine_is_unpacked(
     doc["scene"]["groups"] = [dict(big_block(
         300, texture={"embed": "textures/x.png"}), name="g")]
     p = write(tmp_path, doc)
-    monkeypatch.setattr("core.texture.cache_image",
+    monkeypatch.setattr("built_core.texture.cache_image",
                         lambda data, name, kind: tmp_path / "cached.png")
     s = Scene()
     igz.load_into(s, p)

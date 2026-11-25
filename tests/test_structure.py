@@ -3,12 +3,13 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
-from core import bim_registry, structure as st
-from core.group import Group
-from core.history import History
-from core.layers import Layer
-from core.mesh import Mesh
-from core.scene import Scene
+from core import bim_registry
+from built_core import structure as st
+from built_core.group import Group
+from built_core.history import History
+from built_core.layers import Layer
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 
 def node(name, parent=None, order=0, **recipe):
@@ -218,7 +219,7 @@ def test_projection_preserves_legacy_shorthand_and_redo_layer_identity():
 
 
 def test_link_mount_uses_authored_source_tree(tmp_path):
-    from core import links
+    from built_core import links
     from formats import igz
     source, _, g, _ = model()
     st.file(source, [g.uid], 'sections').do(source)
@@ -252,7 +253,7 @@ def test_move_occupied_subtree_reprojects_folders_undoably():
 
 
 def test_registry_replacement_cannot_orphan_local_members():
-    from core.history import SetRegistryCommand
+    from built_core.history import SetRegistryCommand
     scene, r, g, _ = model()
     st.file(scene, [g.uid], 'sections').do(scene)
     candidate = deepcopy(r)

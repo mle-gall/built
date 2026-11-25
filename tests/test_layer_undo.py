@@ -18,15 +18,15 @@ import random
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.group import Group
+from built_core.group import Group
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
-from core.history import DeleteLayerCommand, History
-from core.layers import (DEFAULT_LAYER, Layer, assign_layer, layer_of,
+from built_core.history import DeleteLayerCommand, History
+from built_core.layers import (DEFAULT_LAYER, Layer, assign_layer, layer_of,
                          rename_layer)
-from core.mesh import Mesh
-from core.purge import layer_carriers
+from built_core.mesh import Mesh
+from built_core.purge import layer_carriers
 from built_core.saved_views import SavedView
-from core.scene import Scene
+from built_core.scene import Scene
 
 
 def _square(mesh, x0=0.0, y0=0.0):
@@ -236,7 +236,7 @@ def test_random_renames_keep_every_label_on_a_real_layer(seed):
 # ---- Panel ------------------------------------------------------------------
 
 def test_drawing_add_and_rename_stay_off_the_modelling_history(native_host):
-    from core.history import AddFaceCommand
+    from built_core.history import AddFaceCommand
     from tests.native_tree import action
     vp = native_host.viewport
     scene = vp.scene

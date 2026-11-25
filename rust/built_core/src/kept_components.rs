@@ -39,7 +39,7 @@ fn make_template<'p>(instance: &Obj<'p>) -> PyResult<Obj<'p>> {
 fn place_copy<'p>(template: &Obj<'p>, matrix: Option<&Obj>) -> PyResult<Obj<'p>> {
     let py = template.py();
     let g = py
-        .import("core.group")?
+        .import("built_core.group")?
         .call_method1("copy_group", (template,))?;
     let cls = py.import("built_core")?.getattr("Matrix4")?;
     let m = match matrix {

@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 from built_core import Vec3 as QVector3D
 
-from core.camera import OrbitCamera
+from built_core.camera import OrbitCamera
 
 
 #: The catcher's height in the viewport.

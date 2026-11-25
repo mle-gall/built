@@ -6,9 +6,9 @@ from __future__ import annotations
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edges
-from core.history import AddFaceCommand, History, MakeGroupCommand
-from core.scene import Scene
+from built_core.edits import build_add_edges
+from built_core.history import AddFaceCommand, History, MakeGroupCommand
+from built_core.scene import Scene
 
 
 def V(x, y, z=0.0):
@@ -95,8 +95,8 @@ def test_bundled_components_import_and_insert_undoably():
     import json
     from pathlib import Path
 
-    from core.group import Group
-    from core.history import InsertGroupCommand
+    from built_core.group import Group
+    from built_core.history import InsertGroupCommand
     from formats import igz
 
     comp_dir = Path(__file__).resolve().parent.parent / "resources" / "components"
@@ -144,7 +144,7 @@ def test_a_glb_component_still_imports(tmp_path):
 def test_billboard_group_round_trips_and_faces_camera(tmp_path):
     # Face-me billboards: flag + textured quad persist in .igz; the quad the
     # viewport computes always faces the camera around the vertical axis.
-    from core.group import make_billboard_group
+    from built_core.group import make_billboard_group
     from formats import igz
 
     scene = Scene()
@@ -256,7 +256,7 @@ def test_edit_rest_mode_defaults_to_fade_and_validates():
 def _rotated_slab(angle_deg):
     """A flat 4x1 slab lying in Z=0, turned ``angle_deg`` about Z."""
     import math
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     a = math.radians(angle_deg)
     ca, sa = math.cos(a), math.sin(a)
     pts = [(0, 0), (4, 0), (4, 1), (0, 1)]
@@ -266,7 +266,7 @@ def _rotated_slab(angle_deg):
 
 
 def _own_bounds(mesh):
-    from core.group import frame_from_points, oriented_bounds
+    from built_core.group import frame_from_points, oriented_bounds
     import numpy as np
     pos = np.array([[v.position.x(), v.position.y(), v.position.z()]
                     for v in mesh.vertices])
@@ -286,7 +286,7 @@ def test_derived_frame_finds_the_true_minimum():
     each one finds the real optimum — not an approximation of it."""
     import math
     import numpy as np
-    from core.group import frame_from_points
+    from built_core.group import frame_from_points
     m = _rotated_slab(23.5)
     pos = np.array([[v.position.x(), v.position.y(), v.position.z()]
                     for v in m.vertices])
@@ -321,7 +321,7 @@ def test_oriented_bounds_match_world_axes_when_the_object_does():
 def test_box_corners_lie_on_the_geometry_of_a_rotated_slab():
     """A flat slab's box IS the slab, so every corner sits in its plane —
     which is what makes the corner a useful handle."""
-    from core.group import oriented_box_corners
+    from built_core.group import oriented_box_corners
     corners = oriented_box_corners(*_own_bounds(_rotated_slab(35.0)))
     assert len(corners) == 8
     assert all(abs(c.z()) < 1e-9 for c in corners)

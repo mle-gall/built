@@ -5,9 +5,9 @@ import json
 import random
 
 from built_core import Vec3
-from core.edits import touching_segments
-from core.geometry import Edge, Face
-from core.topology import find_duplicate_edge
+from built_core.edits import touching_segments
+from built_core.geometry import Edge, Face
+from built_core.topology import find_duplicate_edge
 
 
 def query_results():
@@ -45,8 +45,8 @@ def test_outside_contacts_and_duplicate_order():
 
 def overlay_results(monkeypatch):
     from built_core import scan_index
-    from core.edits import _ScanFaces
-    from core.mesh import Mesh
+    from built_core.edits import _ScanFaces
+    from built_core.mesh import Mesh
     outputs = []
     for store in (False, True):
         for seed in range(16):
@@ -79,7 +79,7 @@ def test_scanned_face_overlay_order(monkeypatch):
 
 
 def graph_digest():
-    from core.topology import _cycle_adjacency
+    from built_core.topology import _cycle_adjacency
     results = []
     for seed in range(24):
         rng = random.Random(seed)

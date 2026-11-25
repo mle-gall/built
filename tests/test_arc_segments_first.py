@@ -8,8 +8,8 @@ from __future__ import annotations
 from built_core import ScreenPoint, Input
 from built_core import Vec3 as QVector3D
 
-from core.history import History
-from core.scene import Scene
+from built_core.history import History
+from built_core.scene import Scene
 from tools.arc import ArcTool, CenterArcTool, PieTool, ThreePointArcTool
 from tools.base import ToolContext
 

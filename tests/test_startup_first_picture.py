@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Pending document work waits for a picture of the newly opened document."""
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import igz
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 

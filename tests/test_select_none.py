@@ -12,7 +12,7 @@ from __future__ import annotations
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from built_core import Vec3 as QVector3D
 
-from core.scene import Scene
+from built_core.scene import Scene
 
 
 def V(x, y, z=0.0):

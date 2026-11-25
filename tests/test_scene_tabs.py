@@ -92,7 +92,7 @@ def test_reorder_keeps_camera_and_mark_and_saves_in_one_undo_step(win, tmp_path)
 
 
 def test_rename_tracks_the_mark_and_sheet_reference_through_undo(win):
-    from core.composition import Composicion
+    from built_core.composition import Composicion
     add(win, "Site")
     plan = add(win, "Plan")
     page = Composicion(name="Sheet")

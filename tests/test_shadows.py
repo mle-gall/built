@@ -14,7 +14,7 @@ from built_core import Vec3 as QVector3D
 from tests.preferences_chrome import Controls
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
-from core.scene import Scene  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from built_core.sun import ShadowSettings  # noqa: E402
 
 

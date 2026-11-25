@@ -11,13 +11,13 @@ import random
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core import layers as L
-from core.group import Group
-from core.history import DeleteLayerCommand, History, MakeGroupCommand
-from core.layers import DEFAULT_LAYER, Layer, assign_layer, layer_of
-from core.mesh import Mesh
+from built_core import layers as L
+from built_core.group import Group
+from built_core.history import DeleteLayerCommand, History, MakeGroupCommand
+from built_core.layers import DEFAULT_LAYER, Layer, assign_layer, layer_of
+from built_core.mesh import Mesh
 from built_core.saved_views import SavedView
-from core.scene import Scene
+from built_core.scene import Scene
 
 
 def V(x, y, z=0.0):
@@ -106,8 +106,8 @@ def test_loose_lines_and_faces_stay_on_layer_0_and_their_group_does_not():
     hidden never leaves half a solid (a box pushed up with another layer
     active would have had its sides there). Grouping it puts the group on
     the active layer, which is how drawing «on» a layer works."""
-    from core.edits import build_add_edge
-    from core.history import AddEdgeCommand, AddFaceCommand
+    from built_core.edits import build_add_edge
+    from built_core.history import AddEdgeCommand, AddFaceCommand
     scene = Scene()
     history = History(scene)
     scene.layers.append(Layer("Muros"))
@@ -295,7 +295,7 @@ def test_select_content_takes_the_context_and_skips_locked():
 
 
 def test_effective_attrs_by_layer_and_layer_look():
-    from core.materials import effective_attrs, material_sig
+    from built_core.materials import effective_attrs, material_sig
     scene = Scene()
     scene.layers += [Layer("A", color=(1, 0, 0)),
                      Layer("B", color=(0, 0, 1), opacity=0.5),
@@ -411,8 +411,8 @@ def _two_boxes_scene():
 
 
 def _top_camera(scene=None):
-    from core.camera import OrbitCamera
-    from core.composition import MarcoVista, apply_frame_camera
+    from built_core.camera import OrbitCamera
+    from built_core.composition import MarcoVista, apply_frame_camera
     cam = OrbitCamera()
     f = MarcoVista(view_key="std:top", scale_n=100.0, w_mm=100.0, h_mm=100.0)
     apply_frame_camera(cam, f, saved_view=None, scene=scene or Scene())
@@ -420,7 +420,7 @@ def _top_camera(scene=None):
 
 
 def test_hlr_tags_every_line_with_its_layer():
-    from core.hlr import KIND_CUT, hlr_drawing
+    from built_core.hlr import KIND_CUT, hlr_drawing
     scene = _two_boxes_scene()
     d = hlr_drawing(scene, _top_camera(), profiles=False, layers=True)
     assert d.layers is not None and len(d.layers) == len(d.segs) > 0
@@ -434,7 +434,7 @@ def test_hlr_tags_every_line_with_its_layer():
 
 
 def test_hlr_tags_survive_a_section_cut():
-    from core.hlr import KIND_CUT, hlr_drawing
+    from built_core.hlr import KIND_CUT, hlr_drawing
     from built_core.section import SectionPlane
     scene = _two_boxes_scene()
     for g in scene.groups:
@@ -610,8 +610,8 @@ def test_every_line_type_has_a_name_a_dxf_twin_and_a_pattern(tmp_path):
 
 def test_recount_after_host_drawing_preserves_other_mesh_counts(monkeypatch):
     import built_core
-    from core.purge import layer_count_steps
-    from core.history import AddEdgeCommand
+    from built_core.purge import layer_count_steps
+    from built_core.history import AddEdgeCommand
     scene = Scene(groups=[Group(Mesh())])
     _square(scene.groups[0].mesh)
     history = History(scene)

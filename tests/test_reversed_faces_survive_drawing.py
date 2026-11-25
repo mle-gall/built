@@ -28,10 +28,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edges
-from core.history import (AddFaceCommand, EraseSelectionCommand, History,
+from built_core.edits import build_add_edges
+from built_core.history import (AddFaceCommand, EraseSelectionCommand, History,
                           FlipFacesCommand)
-from core.scene import Scene
+from built_core.scene import Scene
 
 
 def V(x, y, z=0.0):
@@ -52,7 +52,7 @@ def _rect(scene, hist, x0, y0, x1, y1):
 
 
 def _face_at(scene, x, y):
-    from core.topology import _point_in_face_solid
+    from built_core.topology import _point_in_face_solid
     p = V(x, y)
     hits = [f for f in scene.mesh.faces if _point_in_face_solid(f, p)]
     assert len(hits) == 1, f"{len(hits)} faces at ({x}, {y})"

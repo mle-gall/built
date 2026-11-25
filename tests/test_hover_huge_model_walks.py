@@ -21,10 +21,10 @@ import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 import core._native as _native
-from core import mesh as M
+from built_core import mesh as M
 from built_core import scene_bounds_inside as _inside
-from core.group import Group, copy_group
-from core.scene import Scene
+from built_core.group import Group, copy_group
+from built_core.scene import Scene
 from formats import igz
 
 
@@ -186,7 +186,7 @@ def test_a_circle_edge_of_a_lazy_group_still_gives_its_centre(binary,
                                                              tmp_path):
     lazy = _lazy(tmp_path)
     g = lazy.groups[-1]
-    from core.lazy_mesh import plan_of
+    from built_core.lazy_mesh import plan_of
     plan = plan_of(g.mesh)
     i = next(k for k, c in enumerate(plan.curve) if c is not None)
     a, b = (V(*plan.pos[j]) for j in plan.edges[i])
@@ -228,7 +228,7 @@ def test_a_copy_inside_the_box_is_not_read(binary, tmp_path):
 
     # Every copy read, none skipped: the same box.
     from built_core import group_placed_box
-    from core.group import _local_points
+    from built_core.group import _local_points
     los, his = [], []
     for placed, m in sc.placements(precise=True):
         pts = _local_points(placed.mesh)

@@ -8,9 +8,9 @@ import random
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.history import History
+from built_core.history import History
 from built_core import object_replay
-from core.scene import Scene
+from built_core.scene import Scene
 from tools.move import MoveTool
 
 
@@ -127,7 +127,7 @@ def test_array_members_split_each_other_even_far_from_the_original():
 
 
 def test_face_attributes_and_curve_flags_survive_an_exact_copy():
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     scene = _two_storeys()
     source = scene.mesh.faces[0]
     source.attrs.update(color="#123456", ifc_class="IfcSlab", custom={"id": 42})
@@ -151,7 +151,7 @@ def test_face_attributes_and_curve_flags_survive_an_exact_copy():
 
 @pytest.mark.parametrize("curved", [False, True])
 def test_copy_of_an_unfaced_wire_stays_unfaced(curved):
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     scene = Scene()
     loop = [V(0, 0), V(1, 0), V(1, 1), V(0, 1)]
     curve = Mesh.next_curve_id() if curved else None

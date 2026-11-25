@@ -222,7 +222,7 @@ pub(super) fn group<'p>(
     let kw = PyDict::new(py);
     kw.set_item("name", name)?;
     let group = py
-        .import("core.group")?
+        .import("built_core.group")?
         .getattr("Group")?
         .call((mesh,), Some(&kw))?;
     if !layer.is_none() {

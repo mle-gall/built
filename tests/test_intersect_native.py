@@ -17,7 +17,7 @@ import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 
 import core._native as _native  # noqa: E402
-from core import intersect  # noqa: E402
+from built_core import intersect  # noqa: E402
 
 pytestmark = pytest.mark.skipif(_native.native is None,
                                 reason="native module not built")
@@ -92,7 +92,7 @@ def _plates(rng, n):
     """Random tilted rectangles (some with a hole), as loose faces."""
     from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-    from core.scene import Scene
+    from built_core.scene import Scene
     scene = Scene()
     for _ in range(n):
         m = QMatrix4x4()
@@ -111,7 +111,7 @@ def _plates(rng, n):
 
 @pytest.mark.parametrize("seed", range(4))
 def test_intersect_faces_same_segments(monkeypatch, seed):
-    from core.intersect import WITH_SELECTION, segments_for
+    from built_core.intersect import WITH_SELECTION, segments_for
     scene = _plates(random.Random(100 + seed), 40)
     scene.selection.update(scene.mesh.faces)
     out = []

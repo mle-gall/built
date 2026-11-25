@@ -15,7 +15,7 @@ pub(crate) fn open_to(viewport: &Bound<PyAny>, path: Vec<Bound<PyAny>>) -> PyRes
         }
     }
     let scene = viewport.getattr("scene")?;
-    let outliner = viewport.py().import("core.outliner")?;
+    let outliner = viewport.py().import("built_core.outliner")?;
     let current: Vec<Bound<PyAny>> = outliner.call_method1("open_path", (&scene,))?.extract()?;
     let same = current
         .iter()

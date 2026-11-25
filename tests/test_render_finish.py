@@ -17,10 +17,10 @@ import pytest
 from built_core import Vec3 as V
 
 from built_core import guess_finish, resolve_finish  # noqa: E402
-from core import render_blender as rb  # noqa: E402
-from core.history import History, SetMaterialFinishCommand  # noqa: E402
-from core.materials import Material  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core import render_blender as rb  # noqa: E402
+from built_core.history import History, SetMaterialFinishCommand  # noqa: E402
+from built_core.materials import Material  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402
 from formats.gltf import save_glb  # noqa: E402
 
@@ -132,7 +132,7 @@ def test_the_flatpak_asks_for_the_permission_only_when_missing():
 @pytest.mark.slow
 @pytest.mark.blender
 def test_blender_turns_the_finishes_into_materials(tmp_path):
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     scene = _scene_with([("water_calm", {"color": (0.1, 0.3, 0.8)}),
                          ("Vidrio", {"color": (0.8, 0.9, 1.0),
                                      "opacity": 0.3}),

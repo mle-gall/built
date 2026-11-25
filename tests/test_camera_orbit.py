@@ -17,7 +17,7 @@ import math
 
 from built_core import Vec3 as QVector3D
 
-from core.camera import OrbitCamera
+from built_core.camera import OrbitCamera
 
 #: A point one metre above what the camera looks at: high enough on screen
 #: that both gestures move it visibly, and it sits still in world space.

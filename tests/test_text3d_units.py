@@ -11,8 +11,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from core import units
-from core.scene import Scene
+from built_core import units
+from built_core.scene import Scene
 from built_render import font_length
 from built_render import font_picker
 

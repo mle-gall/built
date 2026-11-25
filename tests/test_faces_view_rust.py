@@ -18,11 +18,11 @@ import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core import _native
-from core import vista_caras as VC
-from core.camera import OrbitCamera
-from core.group import Group
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core import vista_caras as VC
+from built_core.camera import OrbitCamera
+from built_core.group import Group
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 native = _native.available()
 pytestmark = pytest.mark.skipif(

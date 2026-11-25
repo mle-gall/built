@@ -2,8 +2,8 @@
 import json
 from pathlib import Path
 
-from core.history import Command, CompoundCommand, History, SetPluginDataCommand
-from core.scene import Scene
+from built_core.history import Command, CompoundCommand, History, SetPluginDataCommand
+from built_core.scene import Scene
 
 
 def history_trace():

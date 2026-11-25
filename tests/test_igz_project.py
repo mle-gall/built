@@ -3,8 +3,8 @@ import pytest
 from copy import deepcopy
 from core import bim_registry
 from built_core import project
-from core.scene import Scene
-from core.history import SetRegistryCommand
+from built_core.scene import Scene
+from built_core.history import SetRegistryCommand
 from formats import project as storage, igz
 
 
@@ -74,7 +74,7 @@ def test_undo_reverts_only_its_own_entry(tmp_path):
 
 
 def test_export_project_guid(tmp_path):
-    from core.group import Group
+    from built_core.group import Group
     from built_core import Vec3 as QVector3D
     from formats.ifc import save_ifc
     a, b = Scene(), Scene()
@@ -95,13 +95,13 @@ def test_export_project_guid(tmp_path):
 def test_agent_links_and_project(tmp_path):
     from types import SimpleNamespace
     from core.agent_links import LinkTools
-    from core.group import Group
+    from built_core.group import Group
     scene = Scene()
     src = Scene()
     src.groups = [Group(name='part')]
     source = tmp_path / 'source.igz'
     igz.save_scene(src, source)
-    from core import links
+    from built_core import links
     def place(path, at, select, include_nested):
         group = links.make_link(scene, path, select=select, include_nested=include_nested)
         scene.groups.append(group)

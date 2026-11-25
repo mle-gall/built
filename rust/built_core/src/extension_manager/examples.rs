@@ -98,38 +98,10 @@ fn bundled_extensions(py: Python) -> PyResult<Vec<Obj>> {
         let summary = PyDict::new(py);
         summary.set_item("en", &e.tagline)?;
         summary.set_item(&lang, i18n.call_method1("tr", (&e.tagline,))?)?;
-        let image_start = if p.is_dir() {
-            p.join("screenshot")
-        } else {
-            p.with_extension("")
-        };
-        let image = ["png", "jpg", "jpeg", "webp"]
-            .map(|ext| image_start.with_extension(ext))
-            .into_iter()
-            .find(|p| p.is_file());
-        let kw = PyDict::new(py);
-        kw.set_item(
-            "screenshot",
-            image.map(|p| p.to_string_lossy().into_owned()),
-        )?;
-        kw.set_item("bundled", p.to_string_lossy().as_ref())?;
         match bundle_hash(py, &p) {
-            Ok(hash) => out.push(class.call(
-                (
-                    id,
-                    &version,
-                    "Built",
-                    "",
-                    "",
-                    "",
-                    hash,
-                    &version,
-                    names,
-                    summary,
-                    PyTuple::empty(py),
-                ),
-                Some(&kw),
-            )?),
+            Ok(hash) => {
+                out.push(class.call((id, &version, hash, &version, names, summary, &p), None)?)
+            }
             Err(e) if e.is_instance_of::<pyo3::exceptions::PyOSError>(py) => continue,
             Err(e) => return Err(e),
         }

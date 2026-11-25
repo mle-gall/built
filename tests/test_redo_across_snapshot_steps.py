@@ -12,8 +12,8 @@ import pytest
 from built_core import Vec3 as V
 
 from core import _native
-from core.history import AddEdgeCommand, AddFaceCommand, History, SnapshotCompound
-from core.scene import Scene
+from built_core.history import AddEdgeCommand, AddFaceCommand, History, SnapshotCompound
+from built_core.scene import Scene
 from built_core.store_mesh import StoreMesh
 
 SQUARE = [V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)]

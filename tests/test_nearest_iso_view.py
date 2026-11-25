@@ -12,7 +12,7 @@ import math
 
 import pytest
 
-from core.camera import OrbitCamera
+from built_core.camera import OrbitCamera
 
 
 @pytest.mark.parametrize(

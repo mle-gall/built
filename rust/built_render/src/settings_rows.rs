@@ -860,7 +860,7 @@ fn units_draft<'py>(env: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let key = live::NEW_UNITS;
     let model = py.import("built_render.units_question")?.call_method1("draft", (env.getattr("scene")?,))?;
     let for_new = truth(&env.getattr("st")?.call_method1("value", (key, "1"))?, "1")?;
-    model.call_method1("edit_document", (for_new, py.import("core.units")?.call_method0("ask_at_start")?))?;
+    model.call_method1("edit_document", (for_new, py.import("built_core.units")?.call_method0("ask_at_start")?))?;
     Ok(model)
 }
 
@@ -871,7 +871,7 @@ pub fn _units<'py>(env: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
         func(py, move |py, a| {
             let (env, value) = (a.get_item(0)?, a.get_item(1)?);
             let key = key.bind(py);
-            let units = py.import("core.units")?;
+            let units = py.import("built_core.units")?;
             let model = units_draft(&env)?;
             let n: i64 = py.import("builtins")?.getattr("int")?.call1((value,))?.extract()?;
             model.call_method1("receive", (key, n.to_string()))?;
@@ -926,7 +926,7 @@ fn style<'py>(env: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 }
 
 fn dimensions<'py>(py: Python<'py>, _env: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
-    let units = py.import("core.units")?;
+    let units = py.import("built_core.units")?;
     let g = |key: &'static str, default: Py<PyAny>| -> Res {
         func(py, move |py, a| Ok(style(&a.get_item(0)?)?.call_method1("get", (key, default.bind(py)))?.unbind()))
     };

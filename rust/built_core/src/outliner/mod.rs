@@ -204,7 +204,7 @@ fn match_group(g: &Obj, q: &str, provider: Option<&Obj>) -> PyResult<bool> {
             .transpose()?
             .unwrap_or_else(|| none(py)),
         ifc_class(g)?.into_pyobject(py)?.into_any(),
-        py.import("core.layers")?.call_method1("layer_of", (g,))?,
+        py.import("built_core.layers")?.call_method1("layer_of", (g,))?,
     ];
     for label in labels {
         if label.is_none() {

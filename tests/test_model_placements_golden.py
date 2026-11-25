@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""``core.group.model_placements`` must answer as the Python generator at
+"""``built_core.group.model_placements`` must answer as the Python generator at
 ``a1240f90`` did, bit for bit: seeded trees (rotations by odd angles,
 scales, mirrors, survey-coordinate offsets, untransformed groups between
 transformed ones, matrices read back from a Built file's exact values), a
@@ -30,14 +30,14 @@ def _walk():
     native = getattr(built_core, "group_model_placements", None)
     if native is not None:
         return native
-    from core.group import model_placements
+    from built_core.group import model_placements
     return model_placements
 
 
 def tree(seed):
     from built_core import Matrix4
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     rng = random.Random(seed)
     n = [0]
 

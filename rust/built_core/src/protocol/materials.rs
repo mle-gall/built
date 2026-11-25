@@ -170,7 +170,7 @@ fn duplicate_material<'py>(
     let before = history.getattr("revision")?;
     let copy = py.import("copy")?.call_method1("deepcopy", (m,))?;
     let step = py
-        .import("core.material_commands")?
+        .import("built_core.material_commands")?
         .call_method1("AddMaterialCommand", (fields(&copy, "name", &new)?,))?;
     history.call_method1("execute", (step,))?;
     let out = answer(history, &before, true)?;
@@ -204,7 +204,7 @@ fn create_material<'py>(
             "a material has one base: a colour or an image",
         ));
     }
-    let api = py.import("core.material_commands")?;
+    let api = py.import("built_core.material_commands")?;
     let scene = history.getattr("scene")?;
     let mats = scene.getattr("materials")?;
     let kw = PyDict::new(py);
@@ -257,7 +257,7 @@ fn create_material<'py>(
 fn name_unnamed_colours<'py>(history: &Obj<'py>) -> Reply<'py> {
     let cmd = history
         .py()
-        .import("core.material_commands")?
+        .import("built_core.material_commands")?
         .call_method0("NameColoursCommand")?;
     let before = history.getattr("revision")?;
     let n = cmd.call_method1("count", (history.getattr("scene")?,))?;
@@ -335,7 +335,7 @@ fn set_material_pbr<'py>(
 ) -> Reply<'py> {
     let py = history.py();
     let m = material(history, name)?;
-    let api = py.import("core.material_commands")?;
+    let api = py.import("built_core.material_commands")?;
     let keys = api.getattr("PBR_KEYS")?;
     let maps = api.getattr("PBR_MAPS")?;
     let mut unknown = Vec::new();

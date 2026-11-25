@@ -110,7 +110,7 @@ fn intersect_faces(win: &Bound<'_, PyAny>, mode: &str) -> PyResult<()> {
         return Ok(());
     }
     let (count, command): (usize, Bound<'_, PyAny>) = py
-        .import("core.intersect")?
+        .import("built_core.intersect")?
         .call_method1("build_intersect_faces", (scene, mode))?
         .extract()?;
     if command.is_none() {
@@ -152,7 +152,7 @@ fn convert_geopath(win: &Bound<'_, PyAny>) -> PyResult<()> {
         return status(win, "Select a path to convert to geometry.", None);
     }
     let cmds = PyList::empty(py);
-    let geometry = py.import("core.edits")?.getattr("build_add_edges")?;
+    let geometry = py.import("built_core.edits")?.getattr("build_add_edges")?;
     let list = py.import("builtins")?.getattr("list")?;
     let opts = PyDict::new(py);
     opts.set_item("detect_faces", true)?;

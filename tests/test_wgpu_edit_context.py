@@ -3,9 +3,9 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from built_core import Vec3 as QVector3D
-from core.scene import Scene
-from core.group import Group
-from core.mesh import Mesh
+from built_core.scene import Scene
+from built_core.group import Group
+from built_core.mesh import Mesh
 from views.document_interaction import edit_fade_color
 from tests.controller_surface import ControllerSurface as Viewport
 from tests.headless_gpu import HeadlessView

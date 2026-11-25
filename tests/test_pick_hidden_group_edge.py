@@ -12,8 +12,8 @@ from __future__ import annotations
 from built_core import Vec3 as QVector3D
 
 
-from core.group import Group  # noqa: E402
-from core.mesh import Face, Mesh  # noqa: E402
+from built_core.group import Group  # noqa: E402
+from built_core.mesh import Face, Mesh  # noqa: E402
 from tools.rust_tools import SelectTool  # noqa: E402
 from tests.controller_surface import ControllerSurface as Viewport
 

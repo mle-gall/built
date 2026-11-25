@@ -28,7 +28,7 @@ def cameras():
     parallel and perspective, two-point, shifted, rolled, clipped, with a
     depth reach, and fitted to boxes."""
     from built_core import Vec3 as V
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     rng = random.Random(20261124)
     out = []
     for view in ("top", "bottom", "front", "back", "right", "left", "iso"):
@@ -128,7 +128,7 @@ def test_the_cached_fields_follow_every_change():
     import copy
     import pickle
     from built_core import Vec3 as V
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     c = OrbitCamera()
     first = list(c.view_matrix().data())
     assert "_rs_cam" in c.__dict__

@@ -94,7 +94,7 @@ fn read_curve(mesh: &Obj<'_>, edge: &Obj<'_>) -> PyResult<Option<CurveShape>> {
         return Ok(None);
     }
     let walk = py
-        .import("core.edits")?
+        .import("built_core.edits")?
         .call_method1("_order_chain", (&chain, edge))?;
     if walk.len()? != chain.len()? {
         return Ok(None);

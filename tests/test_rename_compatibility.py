@@ -18,10 +18,19 @@ def test_old_environment_and_explicit_precedence():
     subprocess.run([sys.executable, "-c", code], env=env, check=True)
 
 
-def test_old_module_identity():
-    for suffix in ("core", "render", "core.mesh", "core.formats.igz"):
-        assert importlib.import_module("ingetrazo_" + suffix) is importlib.import_module("built_" + suffix)
-    assert importlib.import_module("built_core.scene") is importlib.import_module("core.scene")
+def test_removed_extension_names_in_a_fresh_interpreter():
+    subprocess.run([sys.executable, "-c", """
+from importlib import import_module
+from built_core.scene import Scene
+from built_core.mesh import Mesh
+for name in ("ingetrazo_core", "ingetrazo_render", "ingetrazo_rfa", "core.mesh", "core.scene"):
+    try:
+        import_module(name)
+    except ModuleNotFoundError as error:
+        assert error.name == name, error
+    else:
+        raise AssertionError(name)
+"""], check=True)
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="CFPreferences domain")

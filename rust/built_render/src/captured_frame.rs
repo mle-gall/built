@@ -126,7 +126,7 @@ pub fn archive_thumbnail<'py>(
         return None;
     }
     let image = py.detach(|| {
-        let image = crate::extension_previews::decode(png)?.into_rgba8();
+        let image = crate::image_io::decode(png)?.into_rgba8();
         let (w, h) = image.dimensions();
         if blank_picture(w, h, image.as_raw()) {
             return None;

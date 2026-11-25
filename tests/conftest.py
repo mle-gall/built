@@ -93,7 +93,7 @@ def _process_environment():
 @pytest.fixture(autouse=True)
 def _process_units():
     """Restore the document whose units the formatters and value field read."""
-    from core import units
+    from built_core import units
     bound = units._SCENE
     yield
     units._SCENE = bound
@@ -123,9 +123,9 @@ def _paint_tool_choice():
 
 @pytest.fixture(autouse=True)
 def _world_drawing_axes():
-    """The drawing axes are process-wide (core.axes, issue #44): a test that
+    """The drawing axes are process-wide (built_core.axes, issue #44): a test that
     leaves a turned group open must not tilt the next one's inferences."""
-    from core import axes
+    from built_core import axes
     axes.sync(None)
     yield
     axes.sync(None)

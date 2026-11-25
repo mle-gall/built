@@ -200,7 +200,7 @@ fn saved_view_apply_state(py: Python<'_>, view: &Bound<'_, PyAny>, scene: &Bound
     let folders = view.getattr("hidden_folders")?;
     if !folders.is_none() {
         let off = PySet::new(py, folders.try_iter()?.collect::<PyResult<Vec<_>>>()?)?;
-        let all = super::module(py, "core.layers")?.getattr("folders_of")?.call1((scene,))?;
+        let all = super::module(py, "built_core.layers")?.getattr("folders_of")?.call1((scene,))?;
         let vis = PyDict::new(py);
         for f in all.try_iter()? {
             let f = f?;

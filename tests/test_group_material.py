@@ -16,12 +16,12 @@ from built_core import Input as Qt
 from built_core import ScreenPoint as QPointF
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.group import Group, copy_group, effective_material
-from core.history import (ExplodeGroupCommand, History,
+from built_core.group import Group, copy_group, effective_material
+from built_core.history import (ExplodeGroupCommand, History,
                           NativeCommand)
-from core.materials import effective_attrs, has_own_material
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.materials import effective_attrs, has_own_material
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from formats import igz
 from tools.base import ToolContext
 from tools.paint import PaintTool
@@ -271,11 +271,11 @@ def test_the_instanced_pool_splits_a_painted_instance_from_its_siblings():
     b.material = dict(RED)
     scene.version += 1
     assert vp._placements_epoch() != epoch0          # the paint is part of the key
-    from core.materials import material_sig
+    from built_core.materials import material_sig
     assert material_sig(RED) != material_sig(None)
     pooled = {}
     for g in (a, b):
-        from core.group import effective_material
+        from built_core.group import effective_material
         paint = effective_material(g)
         pooled.setdefault((id(g.mesh), material_sig(paint)), []).append(g)
     assert len(pooled) == 2                          # two pools, one prototype
@@ -287,10 +287,10 @@ def test_exploding_a_group_of_groups_lifts_them_whole():
     the side. Group those 2 cubes. Explode the bigger group. The inside
     groups explode as well.» They must come out as the two groups, where
     they were, and an unpainted one wears the paint the container gave it."""
-    from core.edits import build_add_edges
-    from core.history import (InsertGroupCommand, MakeGroupCommand,
+    from built_core.edits import build_add_edges
+    from built_core.history import (InsertGroupCommand, MakeGroupCommand,
                               MakeNestedGroupCommand, MoveGroupCommand)
-    from core.group import world_mesh
+    from built_core.group import world_mesh
     scene = Scene()
     hist = History(scene)
     sq = [V(0, 0), V(1, 0), V(1, 1), V(0, 1)]

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """The frame camera in Rust (built_core sheets::camera) is the one
-core.composition.apply_frame_camera pointed: the same view and projection
+built_core.composition.apply_frame_camera pointed: the same view and projection
 matrices and camera fields for standard views, saved views (lens shift,
 roll, clips, two-point), the frame's own orbit, turn and scale, and
 perspective frames. Goldens from the Python, before it moved
@@ -30,7 +30,7 @@ def test_every_frame_has_a_golden():
 
 @pytest.mark.parametrize("name,kw", FRAMES, ids=[n for n, _ in FRAMES])
 def test_the_rust_frame_camera_is_the_python_one(name, kw):
-    from core.composition import MarcoVista
+    from built_core.composition import MarcoVista
     s = scene()
     frame = MarcoVista(**kw)
     view = next((v for v in s.saved_views if f"scene:{v.name}" == frame.view_key), None)

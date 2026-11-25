@@ -27,7 +27,7 @@ fn hit<'py>(view: &Obj<'py>, name: &str, key: &Obj<'py>) -> PyResult<Option<Obj<
 #[pyfunction]
 fn cut_layer_tags<'py>(idx: &Obj<'py>, rows: Vec<usize>) -> PyResult<Obj<'py>> {
     let py = idx.py();
-    let layers = py.import("core.layers")?;
+    let layers = py.import("built_core.layers")?;
     let default = layers.getattr("DEFAULT_LAYER")?;
     let layer_of = layers.getattr("layer_of")?;
     let entities = idx.getattr("entities")?;
@@ -269,7 +269,7 @@ fn model_line_words<'py>(
             &spec.get_item(0)?.extract::<String>()?,
             spec.get_item(1)?.extract()?,
         );
-        let layers = py.import("core.layers")?;
+        let layers = py.import("built_core.layers")?;
         let unit: f64 = layers.getattr("MODEL_DASH_SCALE")?.extract()?;
         let marks = layers.getattr("text_marks")?;
         let shape = py
@@ -328,7 +328,7 @@ fn model_line_words<'py>(
 #[pyfunction]
 fn model_layer_lines<'py>(view: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = view.py();
-    let layers = py.import("core.layers")?;
+    let layers = py.import("built_core.layers")?;
     let scene = view.getattr("scene")?;
     let styles = crate::host_context::core_module(layers.py())?.getattr("tag_styles")?.call_method1("model_line_styles", (&scene,))?;
     if styles.len()? == 0 {

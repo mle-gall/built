@@ -14,10 +14,10 @@ from __future__ import annotations
 import numpy as np
 from built_core import Vec3 as QVector3D
 
-from core.group import Group
-from core.history import FlipFacesCommand, History
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.history import FlipFacesCommand, History
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from tests.test_chunk_stale_materials import _stub
 
 

@@ -244,7 +244,7 @@ pub(crate) fn section_edit<'py>(
                 fill.set_item(field_name, value)?;
             } else if field_name == "spacing" {
                 let length = py
-                    .import("core.units")?
+                    .import("built_core.units")?
                     .call_method1("parse_length_field", (value,))?
                     .extract::<Option<f64>>()?;
                 let Some(length) = length.filter(|v| v.is_finite() && *v > 0.) else {

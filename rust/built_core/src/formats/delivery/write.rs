@@ -63,7 +63,7 @@ impl<'p> View<'p> {
         let py = model.py();
         let copy = py.import("copy")?;
         let cam = if self.camera.is_none() {
-            py.import("core.camera")?.call_method0("OrbitCamera")?
+            py.import("built_core.camera")?.call_method0("OrbitCamera")?
         } else {
             copy.call_method1("copy", (&self.camera,))?
         };
@@ -117,7 +117,7 @@ impl<'p> View<'p> {
         let mut solids = PyList::empty(py).into_any();
         let kw = PyDict::new(py);
         kw.set_item("geometry", geom)?;
-        let hlr = py.import("core.hlr")?;
+        let hlr = py.import("built_core.hlr")?;
         let groups = if cam.getattr("perspective")?.is_truthy()? {
             PyList::new(
                 py,
@@ -130,7 +130,7 @@ impl<'p> View<'p> {
         } else {
             kw.set_item("layers", true)?;
             let draw = hlr.call_method("hlr_drawing", (model, cam), Some(&kw))?;
-            let layers = py.import("core.layers")?;
+            let layers = py.import("built_core.layers")?;
             draw.setattr("styles", crate::model::tag_styles::line_styles(py, model, true)?)?;
             draw.setattr("labels", crate::model::module(layers.py(), "built_core")?.getattr("tag_edits")?.call_method1("export_labels", (model,))?)?;
             let ls = model.getattr("layers")?;
@@ -160,7 +160,7 @@ impl<'p> View<'p> {
                 .call_method1("save_dxf_layers", (path_obj(py, p)?, groups, solids, texts));
         }
         let faces = opt(&opts, "faces")?;
-        let vista = py.import("core.vista_caras")?;
+        let vista = py.import("built_core.vista_caras")?;
         let fills = if !faces.is_none() {
             vista.call_method("view_faces", (model, cam), Some(faces.cast::<PyDict>()?))?
         } else {

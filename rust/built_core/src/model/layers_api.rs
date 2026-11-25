@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! `core.layers`, served from here (`core/layers.py` is gone): the layer /
+//! `built_core.layers`, served from here (`core/layers.py` is gone): the layer /
 //! tag system, visibility and locking.
 //!
 //! A layer never *owns* geometry. It is a label an entity carries: faces
@@ -33,7 +33,7 @@ use super::py_class::{class, method, FastAttr};
 
 type Obj<'py> = Bound<'py, PyAny>;
 
-const MODULE: &str = "core.layers";
+const MODULE: &str = "built_core.layers";
 pub const DEFAULT_LAYER: &str = "Layer 0";
 /// Where an imported photogrammetric survey lands (Track G, G6). It gets
 /// its own layer by default, not the default one. The whole point of
@@ -158,7 +158,7 @@ fn layer_reduce<'py>(me: &Obj<'py>) -> PyResult<Bound<'py, PyTuple>> {
     let state = PyDict::new(py);
     state.update(me.getattr(intern!(py, "__dict__"))?.cast::<PyDict>()?.as_mapping())?;
     state.update(super::doc_model_api::handle_state(me, tag_fields(py)?.as_any())?.as_mapping())?;
-    let new = py.import("core.doc_model")?.getattr(intern!(py, "new_handle"))?;
+    let new = py.import("built_core.doc_model")?.getattr(intern!(py, "new_handle"))?;
     PyTuple::new(py, [new, PyTuple::new(py, [me.get_type()])?.into_any(), state.into_any()])
 }
 
@@ -327,8 +327,8 @@ fn taggable_kinds(py: Python<'_>) -> PyResult<&Bound<'_, PyTuple>> {
             let kinds = [
                 mesh.getattr("Face")?,
                 mesh.getattr("Edge")?,
-                py.import("core.group")?.getattr("Group")?,
-                py.import("core.dimension")?.getattr("Dimension")?,
+                py.import("built_core.group")?.getattr("Group")?,
+                py.import("built_core.dimension")?.getattr("Dimension")?,
                 py.import("built_core.textlabel")?.getattr("TextLabel")?,
                 py.import("built_core.section")?.getattr("SectionPlane")?,
                 guide.getattr("Guide")?,
@@ -576,15 +576,15 @@ fn section_cut_kind<'py>(scene: &Obj<'py>) -> PyResult<Obj<'py>> {
     Ok(PyString::new(py, if z.abs() >= 0.7 { "plan" } else { "vertical" }).into_any())
 }
 
-/// Fill the module `core.layers`.
+/// Fill the module `built_core.layers`.
 pub(crate) fn install(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
     m.add("__doc__", "Layer / tag system: visibility and locking (rust/built_core/src/model/layers_api.rs).")?;
     let rs = native(py)?;
-    let dm = py.import("core.doc_model")?;
+    let dm = py.import("built_core.doc_model")?;
     m.add("_rs", &rs)?;
     m.add("_dm", &dm)?;
-    m.add("new_uid", py.import("core.group")?.getattr("new_uid")?)?;
+    m.add("new_uid", py.import("built_core.group")?.getattr("new_uid")?)?;
     m.add("PALETTE", rs.getattr("TAG_PALETTE")?)?;
     m.add("automatic_tag_color", rs.getattr("automatic_tag_color")?)?;
     m.add("DEFAULT_LAYER", DEFAULT_LAYER)?;

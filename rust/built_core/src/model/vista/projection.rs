@@ -43,7 +43,7 @@ fn view_matrix(c: &Obj<'_>) -> PyResult<[[f64; 4]; 4]> {
 fn clip_row(m: [f64; 4], p: P) -> f64 {
     dot([m[0], m[1], m[2]], p) + m[3]
 }
-#[pyclass(module = "core.vista_caras")]
+#[pyclass(module = "built_core.vista_caras")]
 pub(super) struct Projection {
     pub cam: Camera,
     pub ok: bool,

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """A Library component keeps focus across a selection and a sheet refresh."""
-from core.group import copy_group
+from built_core.group import copy_group
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_in_model_nested import _component, _quad
 from tests.test_library_sheet import act, frame, tiles, win  # noqa: F401

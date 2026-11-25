@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.mesh import Mesh
+from built_core.mesh import Mesh
 from built_core.orient import is_closed, orient_outward, signed_volume
 
 

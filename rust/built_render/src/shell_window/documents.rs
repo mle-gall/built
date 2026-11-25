@@ -109,7 +109,7 @@ pub(super) fn activate_document(w: &Obj<'_>, doc: &Obj<'_>) -> PyResult<()> {
     }
     let vp = doc.getattr("viewport")?;
     let scene = vp.getattr("scene")?;
-    py.import("core.units")?
+    py.import("built_core.units")?
         .call_method1("bind_scene", (&scene,))?;
     py.import("built_core.axes")?
         .call_method1("sync", (optional(&scene, "drawing_frame")?,))?;

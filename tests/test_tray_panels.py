@@ -15,7 +15,7 @@ def test_the_assistant_and_bridge_publish_native_panels(native_host):
 
 def test_assistant_shortcut_reopens_its_panel(native_host, monkeypatch):
     from plugins import ai_assistant
-    from core import plugin_panels
+    from built_core import plugin_panels
     app = SimpleNamespace(window=native_host.window, key="ai_assistant", add_menu_action=Mock())
     monkeypatch.setattr(plugin_panels, "open_panel", opened := Mock())
     ai_assistant.setup(app)

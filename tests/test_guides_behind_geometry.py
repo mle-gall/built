@@ -22,7 +22,7 @@ import pytest
 from built_render import SurveyRaster
 from built_core import Vec3 as QVector3D
 
-from core.guide import Guide
+from built_core.guide import Guide
 from views.document_interaction import _guide_vertices
 
 V = QVector3D
@@ -66,7 +66,7 @@ def test_the_dash_count_is_capped_however_long_the_guide():
 
 
 def test_a_guide_circle_lays_dashes_on_its_rim():
-    from core.guide import GuideCircle
+    from built_core.guide import GuideCircle
     g = GuideCircle(V(1, 1, 0), V(0, 0, 1), 2.0)   # radius 2, in the XY plane
     coords, spans = _guide_vertices([g], spacing=0.5)
     assert len(spans) == 1
@@ -79,7 +79,7 @@ def test_a_guide_circle_lays_dashes_on_its_rim():
 
 
 def test_a_zero_radius_guide_circle_produces_nothing():
-    from core.guide import GuideCircle
+    from built_core.guide import GuideCircle
     coords, spans = _guide_vertices(
         [GuideCircle(V(0, 0, 0), V(0, 0, 1), 0.0)], spacing=1.0)
     assert spans == [] and len(coords) == 0
@@ -88,8 +88,8 @@ def test_a_zero_radius_guide_circle_produces_nothing():
 def test_pick_guide_picks_a_guide_circle():
     import types
     from types import SimpleNamespace
-    from core.guide import GuideCircle
-    from core.scene import Scene
+    from built_core.guide import GuideCircle
+    from built_core.scene import Scene
     from tests.controller_surface import ControllerSurface as Viewport
 
     scene = Scene()
@@ -110,7 +110,7 @@ def test_pick_guide_picks_a_guide_circle():
 def test_a_small_guide_circle_still_gets_enough_dashes():
     """A circle smaller than one dash period must not collapse to a single
     camera-sized dash: its dashes shrink so the ring stays visibly dashed."""
-    from core.guide import GuideCircle
+    from built_core.guide import GuideCircle
     from views.document_interaction import _MIN_CIRCLE_DASHES
     coords, spans = _guide_vertices(
         [GuideCircle(V(0, 0, 0), V(0, 0, 1), 0.02)], spacing=1.0)
@@ -199,7 +199,7 @@ def test_a_sheet_render_still_carries_no_guides(native_gpu_host):
 
 
 def test_mixed_guide_spans_preserve_segment_end_and_circle_phase():
-    from core.guide import GuideCircle
+    from built_core.guide import GuideCircle
     line = Guide(V(2, 0, 0), V(1, 0, 0))
     segment = Guide(V(1.25, 0, 0), origin=V(0, 0, 0))
     circle = GuideCircle(V(0, 0, 0), V(0, 0, 1), 1.0)
@@ -208,6 +208,6 @@ def test_mixed_guide_spans_preserve_segment_end_and_circle_phase():
     assert spans == [(0, 4, False), (4, 4, False), (8, 48, True)]
     pts = np.frombuffer(coords, np.float32).reshape(-1, 3)
     assert pts[:8, 0].tolist() == [-1, -.5, 0, .5, 0, .5, 1, 1.25]
-    from core.axes import plane_axes
+    from built_core.axes import plane_axes
     u, _ = plane_axes(circle.normal)
     assert np.allclose(pts[8], u.toTuple())

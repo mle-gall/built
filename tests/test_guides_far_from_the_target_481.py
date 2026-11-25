@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 from built_core import Vec3 as V
 
-from core.guide import Guide
+from built_core.guide import Guide
 from views.document_interaction import _guide_vertices
 
 

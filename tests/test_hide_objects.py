@@ -19,11 +19,11 @@ import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 
-from core.group import Group, copy_group
-from core.history import HideCommand, HideEdgesCommand, History
-from core.mesh import Mesh
+from built_core.group import Group, copy_group
+from built_core.history import HideCommand, HideEdgesCommand, History
+from built_core.mesh import Mesh
 from built_core.saved_views import SavedView
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import igz
 
 

@@ -6,14 +6,14 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.history import (
+from built_core.history import (
     AddGeoPathCommand,
     DeleteGeoPathsCommand,
     History,
     MoveGeoPathNodeCommand,
     ToggleGeoPathClosedCommand,
 )
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import igz
 from georef.geopath import GeoPath
 
@@ -151,8 +151,8 @@ def test_clear_resets_geo_paths():
 # ---- Convert to geometry (the bridge into the modelling engine) -----------------
 
 def _convert(scene, hist, path):
-    from core.edits import build_add_edges
-    from core.history import CompoundCommand
+    from built_core.edits import build_add_edges
+    from built_core.history import CompoundCommand
     segs = [(a, b) for a, b in path.segments()]
     hist.execute(CompoundCommand(
         [build_add_edges(scene, segs, detect_faces=True),

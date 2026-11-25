@@ -21,11 +21,11 @@ def _pool():
     """Handles of every kind, with fresh handles of the same mesh elements
     (a store view is made anew on each read: same key, another object)."""
     from built_core import Vec3 as V
-    from core.dimension import Dimension
-    from core.group import Group
-    from core.guide import Guide
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core.dimension import Dimension
+    from built_core.group import Group
+    from built_core.guide import Guide
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
     scene = Scene()
     m = scene.loose_mesh
     for k in range(4):

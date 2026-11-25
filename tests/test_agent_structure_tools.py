@@ -5,9 +5,9 @@ import pytest
 
 from core.agent_structure import StructureTools
 from core.agent_tools import BUILTIN_TOOLS, json_value, register
-from core.group import Group
-from core.history import History
-from core.scene import Scene
+from built_core.group import Group
+from built_core.history import History
+from built_core.scene import Scene
 
 
 def test_catalog_round_trip():

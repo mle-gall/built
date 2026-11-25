@@ -42,7 +42,6 @@ def test_every_credit_line_is_translated():
     import json
     root = Path(__file__).resolve().parents[1] / "i18n"
     lines = [what for _, what, _, _ in AboutReview.contributors()]
-    lines.append("Thanks as well to all the authors of the extensions catalogue")
     for path in sorted(root.glob("*.json")):
         if path.stem != "en":
             catalog = json.loads(path.read_text(encoding="utf-8"))

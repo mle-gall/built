@@ -73,7 +73,7 @@ fn copy_selection(v: &Obj, publish: bool) -> PyResult<bool> {
         attrs.append(&a)?;
         faces.append((ring, holes, a))?;
     }
-    let layers = py.import("core.layers")?;
+    let layers = py.import("built_core.layers")?;
     let edge_layers = PyList::empty(py);
     for e in selected.edges {
         edges.append((
@@ -87,7 +87,7 @@ fn copy_selection(v: &Obj, publish: bool) -> PyResult<bool> {
     let seed = opt(v, "_seed_proto_chunk")?;
     let old = opt(v, "clipboard")?;
     let copy = m.getattr("copy_group")?;
-    let group_api = py.import("core.group")?;
+    let group_api = py.import("built_core.group")?;
     for src in selected.groups {
         let g = copy.call1((&src,))?;
         if g.getattr("xform")?.is_none() {

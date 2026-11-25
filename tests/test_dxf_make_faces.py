@@ -10,9 +10,9 @@ from built_core.settings import settings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from built_core import Vec3 as QVector3D
 
-from core.make_faces import faces_from_linework
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.make_faces import faces_from_linework
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from formats.dxf_in import load_dxf
 
 SQUARE = [(0, 0), (2, 0), (2, 2), (0, 2)]
@@ -116,12 +116,12 @@ def test_a_face_the_file_brought_is_not_doubled(tmp_path):
 
 
 def test_a_failure_making_faces_keeps_the_import(tmp_path, monkeypatch):
-    import core.make_faces
+    import built_core.make_faces
 
     def boom(_mesh):
         raise RuntimeError("no")
 
-    monkeypatch.setattr(core.make_faces, "faces_from_linework", boom)
+    monkeypatch.setattr(built_core.make_faces, "faces_from_linework", boom)
     scene, stats = _load(_plan(), tmp_path, make_faces=True)
     assert stats["outline_faces"] == 0
     assert len(scene.groups[0].mesh.edges) == 4

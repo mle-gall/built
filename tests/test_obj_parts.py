@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.group import world_mesh
-from core.history import ExplodeGroupCommand
-from core.scene import Scene
+from built_core.group import world_mesh
+from built_core.history import ExplodeGroupCommand
+from built_core.scene import Scene
 from formats.obj import load_obj
 
 

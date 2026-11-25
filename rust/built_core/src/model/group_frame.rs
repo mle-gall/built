@@ -1,5 +1,5 @@
 //! A group's derived frame (the yaw about Z whose footprint is tightest)
-//! and its oriented box, from `core.group` (`docs/model-port.md`, bounds).
+//! and its oriented box, from `built_core.group` (`docs/model-port.md`, bounds).
 //!
 //! `frame_from_points` picks the smallest of tied areas on symmetric shapes,
 //! so it is ported operation for operation, the convex hull's pruning
@@ -61,7 +61,7 @@ fn keep(points: Vec<P2>, mask: &[bool]) -> Vec<P2> {
 }
 
 /// Convex hull of 2D points (monotone chain), counter-clockwise from the
-/// lowest x (then y), with `core.group._hull_2d`'s pruning stages.
+/// lowest x (then y), with `built_core.group._hull_2d`'s pruning stages.
 pub fn hull_2d(mut pts: Vec<P2>) -> Vec<P2> {
     if pts.len() > 64 {
         let quad = [pts[argmin_by(&pts, 0)], pts[argmin_by(&pts, 1)], pts[argmax_by(&pts, 0)], pts[argmax_by(&pts, 1)]];
@@ -134,7 +134,7 @@ pub fn hull_2d(mut pts: Vec<P2>) -> Vec<P2> {
 }
 
 /// The in-plane unit axis of the tightest footprint, or `None` (the world
-/// axes): see `core.group.frame_from_points`.
+/// axes): see `built_core.group.frame_from_points`.
 pub fn frame_axis(points: &[P2]) -> Option<P2> {
     if points.len() < 3 {
         return None;
@@ -212,7 +212,7 @@ pub fn group_oriented_extent(points: PyReadonlyArray2<'_, f64>, axes: PyReadonly
 }
 
 /// `points @ m[:3, :3] + m[3, :3]` for a `(4, 4)` row-major matrix `m`
-/// (`core.group.placement_points`): the fused chain NumPy's BLAS takes for
+/// (`built_core.group.placement_points`): the fused chain NumPy's BLAS takes for
 /// most sizes, then the translation.
 #[pyfunction]
 pub fn group_placed_points<'py>(py: Python<'py>, points: PyReadonlyArray2<'py, f64>, m: PyReadonlyArray2<'py, f64>)

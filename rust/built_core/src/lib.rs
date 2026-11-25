@@ -632,12 +632,21 @@ fn built_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     move_ops::register(m)?;
     desktop_open::register(m)?;
     facets::register(m)?;
+    let modules = m.py().import("sys")?.getattr("modules")?;
+    let parent = modules.get_item("built_core")?;
+    m.getattr("install_core_modules")?.call1((parent.getattr("__path__")?,))?;
+    for (name, value) in m.dict().iter() {
+        if value.is_instance_of::<PyModule>() {
+            let key = format!("built_core.{}", name.extract::<String>()?);
+            modules.set_item(key, value)?;
+        }
+    }
     m.py().import("_built_file_packages")?;
     Ok(())
 }
 
 /// The triangles of one hidden-line pass, in camera space, with a 2D grid
-/// over their bounding boxes. Built once per view by `core.hlr`.
+/// over their bounding boxes. Built once per view by `built_core.hlr`.
 #[pyclass(frozen)]
 struct HlrOccluders {
     inner: hlr::Occluders,
@@ -663,7 +672,7 @@ impl HlrOccluders {
         Ok(Self { inner: hlr::Occluders::new(tris) })
     }
 
-    /// Visible t-intervals of every edge: core.hlr.visible_spans for each
+    /// Visible t-intervals of every edge: built_core.hlr.visible_spans for each
     /// row, with the same candidate filter as hlr_drawing. ``a``/``b``:
     /// (E,3) endpoints in camera space. Returns ``(offsets (E+1,), spans
     /// (S,2))``: edge i owns spans[offsets[i]:offsets[i+1]].
@@ -724,7 +733,7 @@ fn rows3(a: &numpy::ndarray::ArrayView2<'_, f64>) -> Vec<[f64; 3]> {
     (0..a.shape()[0]).map(|i| [a[[i, 0]], a[[i, 1]], a[[i, 2]]]).collect()
 }
 
-/// core.intersect._touching for all rows at once: the index pairs ``(i,
+/// built_core.intersect._touching for all rows at once: the index pairs ``(i,
 /// j)`` whose boxes touch (within ``eps``), sorted by i then j; ``same``:
 /// j > i only. ``lo_*``/``hi_*``: (N,3) box corners.
 #[pyfunction]
@@ -1234,7 +1243,7 @@ where T: numpy::Element + Copy + Send + Sync, V: Into<[T;3]> + Copy + Send + Syn
         PyArray1::from_vec(py, tri_face_u)))
 }
 
-/// core.lazy_mesh.weld (Mesh.bulk_weld on an empty mesh): ``pos`` (N,3)
+/// built_core.lazy_mesh.weld (Mesh.bulk_weld on an empty mesh): ``pos`` (N,3)
 /// float32 points, ``scale`` the weld cell (10**decimals), ``tol2`` the
 /// probe's squared distance. Returns ``(vertex positions (V,3) float32,
 /// point → vertex (N,), the point each vertex was made at (V,))``.
@@ -1921,7 +1930,7 @@ fn occlusion_span<'py>(
 }
 
 /// Each face of a view cut down to what nothing in front of it covers —
-/// `core.vista_caras._visible_parts` (see `visible.rs`). The rings of all
+/// `built_core.vista_caras._visible_parts` (see `visible.rs`). The rings of all
 /// faces come flat: `coords` (M, 2), `ring_off` (R + 1) the start of each
 /// ring in `coords`, `face_off` (n + 1) the first ring of each face; `near`
 /// (n, 3) the nearness planes, `opaque` (n,). Back the same way: the
@@ -2014,7 +2023,7 @@ fn earcut_indices<'py>(
 }
 
 /// The geometry of every face of a view (see `facesview.rs`), for
-/// `core.vista_caras.view_faces`. In: the faces' rings flat in their
+/// `built_core.vista_caras.view_faces`. In: the faces' rings flat in their
 /// meshes' coordinates — `coords` (M, 3), `ring_off` (R + 1), `face_off`
 /// (n + 1) — `xf_index` (n,) the placement of each face into `xforms`
 /// (K, 16, row major; -1: none), the camera (`perspective`, and `cam`: a

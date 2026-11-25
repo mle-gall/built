@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from built_core import Input as Qt
 
-from core.history import History
-from core.scene import Scene
+from built_core.history import History
+from built_core.scene import Scene
 from tests.test_fuzz_engine import V, _draw_rect
 from tools.rust_tools import SelectTool
 from tools.select import delete_selection_or_hover

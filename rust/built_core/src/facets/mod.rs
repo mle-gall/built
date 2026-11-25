@@ -198,9 +198,9 @@ fn build<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
         repeated: scene.call_method0("repeated_uids")?,
         layers,
         defs: module.getattr("_definitions")?,
-        link: py.import("core.links")?.getattr("link_of")?,
+        link: py.import("built_core.links")?.getattr("link_of")?,
         role: py.import("core.record")?.getattr("role")?,
-        row_id: py.import("core.link_structure")?.getattr("row_id")?,
+        row_id: py.import("built_core.link_structure")?.getattr("row_id")?,
     };
     walk.visit(
         &groups,

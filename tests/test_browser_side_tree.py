@@ -105,9 +105,9 @@ def test_read_only_and_stale_rows_cannot_delete_the_selection(model):
 
 
 def test_deleting_a_tag_rechecks_the_document_after_confirmation(native_question_host):
-    from core.layers import Layer
+    from built_core.layers import Layer
     from built_render import chrome_dialogs
-    from core.group import Group
+    from built_core.group import Group
     win = native_question_host.window
     scene = win.viewport.scene
     scene.layers.append(Layer("Glass"))
@@ -139,7 +139,7 @@ def test_unchanged_project_rows_reuse_the_model_index(monkeypatch):
 
 def test_a_drop_on_the_header_restores_the_top_level_and_keeps_the_tag(model):
     host, vp, _, level, _ = model
-    from core.layers import Layer
+    from built_core.layers import Layer
     part = level.children[0]
     vp.scene.layers.append(Layer("Walls"))
     part.layer = "Walls"

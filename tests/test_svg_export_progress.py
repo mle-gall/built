@@ -17,8 +17,8 @@ pytest.importorskip("manifold3d")
 
 
 from built_core import progress as P                         # noqa: E402
-from core import vista_caras as VC                      # noqa: E402
-from core.vista_caras import FaceFill                   # noqa: E402
+from built_core import vista_caras as VC                      # noqa: E402
+from built_core.vista_caras import FaceFill                   # noqa: E402
 from tests.vista_caras_reference import _scene        # noqa: E402
 import built_render as wgpu_deliveries              # noqa: E402
 from built_render import chrome_dialogs                        # noqa: E402
@@ -52,11 +52,11 @@ def test_every_stretch_of_the_work_is_heard(monkeypatch):
     """Gathering the faces, filing them, cutting them down and their
     shadows: a stretch that said nothing was a window Windows marked as
     not responding before the bar came (14 s of a plaza's preview)."""
-    from core.scene import Scene
+    from built_core.scene import Scene
     from tests.test_export_view_svg import _box, _camera, _sunny
     scene = Scene()
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     for k in range(40):
         g = Group(Mesh(), name=f"c{k}")
         _box(g.mesh, x0=1.5 * (k % 8), y0=1.5 * (k // 8))
@@ -83,7 +83,7 @@ def test_every_stretch_of_the_work_is_heard(monkeypatch):
     assert len(heard) - fractions[-1] - 1 >= 40 * 6
     # And the hidden lines drawn over them (8.7 s of the plaza's export
     # after the faces, with nothing said).
-    from core.hlr import hlr_drawing
+    from built_core.hlr import hlr_drawing
     heard.clear()
     with P.reporting(lambda done: None):
         hlr_drawing(scene, cam)

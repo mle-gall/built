@@ -22,7 +22,6 @@ pub fn sheet(data: &Value, copied: bool, t: impl Fn(&str) -> PyResult<String>) -
     for (i, (name, role, link, starred)) in credits().iter().enumerate() {
         people.push(json!({"name":name,"role":t(role)?,"verb":if link.is_empty() {String::new()} else {format!("person-{i}")},"starred":starred}));
     }
-    let thanks = t("Thanks as well to all the authors of the extensions catalogue")?;
     let mut blocks = json!([
         {"kind":"text","text":t("Free 3D modeler for architecture, engineering and 3D design.")?},
         {"kind":"text","text":format!("{} Marco Sumari Tellez · {}",t("Created by")?,t("Civil Engineer — Arequipa, Peru")?)},
@@ -32,7 +31,6 @@ pub fn sheet(data: &Value, copied: bool, t: impl Fn(&str) -> PyResult<String>) -
         {"kind":"kv","rows":data["facts"]},
         {"kind":"caption","text":t("With contributions from")?},
         {"kind":"credits","credits":people},
-        {"kind":"prose","spans":[{"text":thanks,"link":"catalogue"}]},
         {"kind":"text","text":t("And thanks to everyone who tries Built and reports what they find.")?},
         {"kind":"buttons","align":"left","buttons":[{"id":"authors","label":"AUTHORS"}]}
     ]);
@@ -164,7 +162,6 @@ impl AboutReview {
         match verb {
             "license" => Some("https://www.gnu.org/licenses/gpl-3.0.html"),
             "upstream" => Some("https://github.com/ingelibre/ingetrazo"),
-            "catalogue" => Some("https://github.com/ingelibre/ingetrazo-extensions"),
             _ => credits()
                 .get(verb.strip_prefix("person-")?.parse::<usize>().ok()?)
                 .map(|c| c.2.as_str())

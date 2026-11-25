@@ -32,7 +32,7 @@ fn move_mesh(mesh: &Obj<'_>, m: &Obj<'_>, delta: Option<&Obj<'_>>) -> PyResult<(
     Ok(())
 }
 fn finish_transform(g: &Obj<'_>, m: &Obj<'_>, texture: bool) -> PyResult<()> {
-    let api = g.py().import("core.group")?;
+    let api = g.py().import("built_core.group")?;
     if texture {
         crate::model::module(api.py(), "built_core")?.call_method1("group_remap_uvws", (g.getattr("mesh")?, m))?;
     }
@@ -196,7 +196,7 @@ impl AxesEdit {
         let mesh = g.getattr("mesh")?;
         let mut seen = HashSet::new();
         let mut instances = Vec::new();
-        let walk = py.import("core.group")?.getattr("iter_placements")?;
+        let walk = py.import("built_core.group")?.getattr("iter_placements")?;
         for root in scene.getattr("groups")?.try_iter()? {
             for entry in walk.call1((root?,))?.try_iter()? {
                 let part = entry?.get_item(0)?;

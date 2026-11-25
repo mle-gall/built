@@ -13,7 +13,7 @@ pub fn inspector_totals(scene: &Bound<'_, PyAny>, selection: &Bound<'_, PyAny>) 
     let face = mesh.getattr("Face")?;
     let edge = mesh.getattr("Edge")?;
     let net_area = py.import("core.bim")?.getattr("face_net_area")?;
-    let units = py.import("core.units")?;
+    let units = py.import("built_core.units")?;
     let settings = scene.getattr("units")?;
     let mut rows = Rows::new();
     let single = selection.len()? == 1;
@@ -105,7 +105,7 @@ pub fn inspector_curve(
         .call_method0("length")?
         .extract::<f64>()?;
     let settings = scene.getattr("units")?;
-    let fmt = scene.py().import("core.units")?.getattr("fmt_len_with")?;
+    let fmt = scene.py().import("built_core.units")?.getattr("fmt_len_with")?;
     let length = |v: f64| fmt.call1((v, &settings))?.extract::<String>();
     let count = if shape.getattr("flat")?.is_truthy()? {
         format!("\u{1d}edit\u{1d}segments\u{1d}{n}")
@@ -144,7 +144,7 @@ pub fn inspector_rename(vp: &Bound<'_, PyAny>, uid: &str, text: &str) -> PyResul
     }
     let group = sel.try_iter()?.next().transpose()?;
     let Some(group) = group else { return Ok(()) };
-    if !group.is_instance(&vp.py().import("core.group")?.getattr("Group")?)?
+    if !group.is_instance(&vp.py().import("built_core.group")?.getattr("Group")?)?
         || group.getattr("uid")?.extract::<String>()? != uid
         || group.getattr("name")?.eq(name)?
     {

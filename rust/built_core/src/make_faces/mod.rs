@@ -350,7 +350,7 @@ fn faces_from_linework(mesh: &Obj) -> PyResult<usize> {
 }
 pub(crate) fn install(m: &Bound<PyModule>) -> PyResult<()> {
     let ex = m.py().get_type::<MakeFacesError>();
-    ex.setattr("__module__", "core.make_faces")?;
+    ex.setattr("__module__", "built_core.make_faces")?;
     m.add("MakeFacesError", ex)?;
     m.add("PLANE_TOL", TOL)?;
     for f in [

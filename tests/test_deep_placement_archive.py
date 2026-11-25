@@ -1,7 +1,7 @@
 import pytest
 
-from core.scene import Scene
-from core.group import Group
+from built_core.scene import Scene
+from built_core.group import Group
 from formats.igz import load_into, save_scene
 
 

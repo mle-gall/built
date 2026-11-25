@@ -99,7 +99,7 @@ pub(super) fn pierce<'py>(
     let q = match query {
         Some(q) => q.clone(),
         None => py
-            .import("core.snap_query")?
+            .import("built_core.snap_query")?
             .call_method1("make_query", (scene.getattr("edges")?, projector, cursor))?,
     };
     let hits = q

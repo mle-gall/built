@@ -56,7 +56,7 @@ fn refilter<'py>(
 }
 fn tree<'py>(py: Python<'py>, groups: &Obj<'py>) -> PyResult<(Obj<'py>, Obj<'py>)> {
     let data = py
-        .import("core.doc_model")?
+        .import("built_core.doc_model")?
         .getattr("NATIVE")?
         .call_method1("doc_tree", (groups,))?;
     Ok((data.get_item(0)?, data.get_item(1)?.call_method0("tolist")?))

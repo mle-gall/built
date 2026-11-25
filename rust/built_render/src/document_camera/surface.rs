@@ -161,7 +161,7 @@ fn framed_image<'py>(
     let (w, h) = (w.max(1.), h.max(1.));
     let aspect = opt(&v.getattr("camera")?, "frame_aspect")?;
     let rect: Option<(f64, f64, f64, f64)> = py
-        .import("core.camera")?
+        .import("built_core.camera")?
         .call_method1("frame_rect", (w, h, &aspect))?
         .extract()?;
     let Some((x, y, fw, fh)) = rect.filter(|(_, _, fw, fh)| *fw < w - 0.5 || *fh < h - 0.5) else {

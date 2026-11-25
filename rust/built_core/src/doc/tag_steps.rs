@@ -167,7 +167,7 @@ fn run_assign(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     // A tag that does not exist yet is made (Entity Info names a new one).
     let mut tag = scene.call_method1("layer", (s.arg(py, 1),))?;
     if tag.is_none() {
-        tag = py.import("core.layers")?.getattr("Layer")?.call1((s.arg(py, 1),))?;
+        tag = py.import("built_core.layers")?.getattr("Layer")?.call1((s.arg(py, 1),))?;
         scene.getattr("layers")?.call_method1("append", (&tag,))?;
         s.publish("_created", tag.clone());
     }

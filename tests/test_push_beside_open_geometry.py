@@ -13,9 +13,9 @@ from __future__ import annotations
 
 from built_core import Vec3 as V
 
-from core.edits import build_add_edges
-from core.history import EraseSelectionCommand, History
-from core.scene import Scene
+from built_core.edits import build_add_edges
+from built_core.history import EraseSelectionCommand, History
+from built_core.scene import Scene
 from tests.test_coplanar_merge import _push
 
 

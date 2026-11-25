@@ -30,7 +30,7 @@ from built_core import Vec3 as QVector3D
 from built_core import Vec3 as V
 
 import core._native as _native
-from core import mesh as M
+from built_core import mesh as M
 from built_core import scan_index
 from built_core import store_mesh as S
 
@@ -65,9 +65,9 @@ def _scene(n: int = 6, flat_rows: int = 3, seed: int = 0,
     flat gate and the planar rebuilds take over."""
     if flat:
         flat_rows = n + 1          # the last row of points too
-    from core.edits import build_add_edge, build_add_edges
-    from core.history import AddFaceCommand, History
-    from core.scene import Scene
+    from built_core.edits import build_add_edge, build_add_edges
+    from built_core.history import AddFaceCommand, History
+    from built_core.scene import Scene
     scene = Scene()
     pts = _grid_points(n, flat_rows)
     scene.mesh.add_faces_bulk(np.asarray(pts, float),
@@ -177,8 +177,8 @@ def _rect_on(rng, m):
 
 def _op(rng, scene, h, kind):
     """One step; returns a label. Draws use the real command builders."""
-    from core.edits import build_add_edge, build_add_edges
-    from core.history import (AddFaceCommand, DeleteEdgesCommand,
+    from built_core.edits import build_add_edge, build_add_edges
+    from built_core.history import (AddFaceCommand, DeleteEdgesCommand,
                               EraseSelectionCommand)
     m = scene.mesh
     if kind == "line":
@@ -264,7 +264,7 @@ def run_differential(seed: int, n_ops: int, n: int = 6,
 
 def _run_differential(seed: int, n_ops: int, n: int,
                       flat: bool) -> int:
-    from core.history import History
+    from built_core.history import History
     on = _scene(n=n, seed=seed, flat=flat)
     off_was = scan_index._forced_off
     scan_index._forced_off = True
@@ -318,7 +318,7 @@ def _deterministic_sets():
 
 
 def _pair():
-    from core.history import History
+    from built_core.history import History
     on = _scene()
     was = scan_index._forced_off
     scan_index._forced_off = True
@@ -350,7 +350,7 @@ def _P(i, j, flat_rows=3):
 
 
 def _find(m, pts):
-    from core.topology import _key
+    from built_core.topology import _key
     target = {_key(p) for p in pts}
     return next((f for f in m.faces if {_key(p) for p in f.vertices} == target), None)
 
@@ -360,7 +360,7 @@ def _face_at(m, *corners):
 
 
 def test_line_across_a_face_splits_that_face():
-    from core.edits import build_add_edge
+    from built_core.edits import build_add_edge
     pair = _pair()
     nf = len(pair[0][0].mesh.faces)
 
@@ -377,7 +377,7 @@ def test_line_across_a_face_splits_that_face():
 
 
 def test_line_vertex_to_vertex_splits_a_flat_quad():
-    from core.edits import build_add_edge
+    from built_core.edits import build_add_edge
     pair = _pair()
     nf = len(pair[0][0].mesh.faces)
     on = _both(pair, lambda s, h: h.execute(
@@ -386,8 +386,8 @@ def test_line_vertex_to_vertex_splits_a_flat_quad():
 
 
 def test_rectangle_inside_and_against_an_edge():
-    from core.edits import build_add_edges
-    from core.history import AddFaceCommand
+    from built_core.edits import build_add_edges
+    from built_core.history import AddFaceCommand
 
     def rect(c):
         def fn(s, h):
@@ -404,8 +404,8 @@ def test_rectangle_inside_and_against_an_edge():
 
 
 def test_erasing_the_split_line_reunites_the_face():
-    from core.edits import build_add_edge
-    from core.history import EraseSelectionCommand
+    from built_core.edits import build_add_edge
+    from built_core.history import EraseSelectionCommand
     pair = _pair()
     nf = len(pair[0][0].mesh.faces)
     _both(pair, lambda s, h: h.execute(
@@ -420,7 +420,7 @@ def test_erasing_the_split_line_reunites_the_face():
 
 
 def test_delete_the_holed_face_and_a_crease_edge():
-    from core.history import EraseSelectionCommand
+    from built_core.history import EraseSelectionCommand
     pair = _pair()
     nf = len(pair[0][0].mesh.faces)
 
@@ -487,8 +487,8 @@ def _meets(b, lo, hi):
 
 @pytest.mark.parametrize("seed", range(8))
 def test_prefilters_are_supersets_in_list_order(seed):
-    from core.history import RebuildPlaneFacesCommand
-    from core.topology import loop_inside_face
+    from built_core.history import RebuildPlaneFacesCommand
+    from built_core.topology import loop_inside_face
     rng = random.Random(seed)
     m = _random_mesh(rng)
     sc = scan_index.scan(m)
@@ -533,9 +533,9 @@ def test_prefilters_are_supersets_in_list_order(seed):
 def test_cycle_adjacency_is_the_full_one():
     """The planner's lazy adjacency lists equal the full build's, node by
     node, over a scene with removed edges and plan pieces."""
-    from core.edits import _ScanEdges
-    from core.geometry import Edge as GEdge
-    from core.topology import _cycle_adjacency, _key
+    from built_core.edits import _ScanEdges
+    from built_core.geometry import Edge as GEdge
+    from built_core.topology import _cycle_adjacency, _key
     scene = _scene(True)
     m = scene.mesh
     sc = scan_index.scan(m)
@@ -567,9 +567,9 @@ def test_whole_drawing_plane_is_coplanar_plane(seed):
     """The flat-drawing gate over the scan answers as ``coplanar_plane`` on
     every vertex: points at the tolerance's edge, a drawing whose first
     points coincide or line up, a tilted plane far from the origin."""
-    from core.arrangement import coplanar_plane
-    from core.edits import _whole_drawing_plane
-    from core.scene import Scene
+    from built_core.arrangement import coplanar_plane
+    from built_core.edits import _whole_drawing_plane
+    from built_core.scene import Scene
     rng = random.Random(seed)
     tilt = V(rng.uniform(-0.3, 0.3), rng.uniform(-0.3, 0.3), 1.0).normalized()
     u = V.crossProduct(tilt, V(1, 0, 0)).normalized()

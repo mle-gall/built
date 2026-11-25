@@ -17,7 +17,7 @@ fn message<'py>(a: &Args<'py>) -> Reply<'py> {
             let number = py.import("builtins")?.getattr("float")?.call1((length,))?;
             args.set_item(
                 key,
-                imported(py, "core.units")?.call_method1("fmt_len", (number,))?,
+                imported(py, "built_core.units")?.call_method1("fmt_len", (number,))?,
             )?;
         }
     }

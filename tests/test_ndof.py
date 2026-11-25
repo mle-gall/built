@@ -16,7 +16,7 @@ import struct
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.camera import OrbitCamera
+from built_core.camera import OrbitCamera
 from built_render.ndof import (NdofSample, NdofSettings, apply_ndof, from_hid,
                        from_spacenavd, mapped_movements, shape)
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401

@@ -315,7 +315,7 @@ pub(crate) fn orthophoto(win: &Obj) -> PyResult<()> {
         let bytes = py
             .import("built_core")?
             .call_method1("survey_webp", (rgba,))?;
-        let cached = py.import("core.texture")?.call_method1(
+        let cached = py.import("built_core.texture")?.call_method1(
             "cache_image",
             (
                 bytes,

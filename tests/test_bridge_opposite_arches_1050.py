@@ -10,9 +10,9 @@ import math
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.bridge import Profile, bridge, strips
+from built_core.bridge import Profile, bridge, strips
 from built_core import bridge_centre, bridge_pairs
-from core.mesh import Mesh
+from built_core.mesh import Mesh
 
 _GAP = 3.0
 

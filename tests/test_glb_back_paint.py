@@ -13,9 +13,9 @@ import struct
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.group import Group
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from formats.gltf import save_glb
 
 RED = (0.8, 0.1, 0.1)
@@ -61,7 +61,7 @@ def _triangles_by_look(doc) -> dict:
 
 def _glb(scene, tmp_path, camera=False):
     path = tmp_path / "m.glb"
-    # With a camera it is the render's own export (core.render_blender).
+    # With a camera it is the render's own export (built_core.render_blender).
     save_glb(scene, path,
              face_me=(lambda a: QVector3D(0, -1, 0)) if camera else None)
     return _triangles_by_look(_read(path))

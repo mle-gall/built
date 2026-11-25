@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from built_core import Vec3 as V
 
-from core.history import History, MakeGroupCommand, MoveVerticesCommand
-from core.scene import Scene
+from built_core.history import History, MakeGroupCommand, MoveVerticesCommand
+from built_core.scene import Scene
 
 P = [V(0, 0, 0), V(3, 0, 0), V(3, 4, 0), V(0, 4, 0),
      V(0, 0, 2.6), V(3, 0, 2.6), V(3, 4, 2.6), V(0, 4, 2.6)]

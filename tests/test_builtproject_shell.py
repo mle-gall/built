@@ -75,7 +75,7 @@ def test_open_with_a_missing_member_never_asks(host, tmp_path, monkeypatch):
 
 
 def test_read_only_member_rejects_edits(host, tmp_path):
-    from core.history import AddEdgeCommand
+    from built_core.history import AddEdgeCommand
     from built_core import Vec3
     host.open_path(three_member_project(tmp_path / "job"))
     win = host.window

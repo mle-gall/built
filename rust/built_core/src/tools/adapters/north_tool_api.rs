@@ -46,7 +46,7 @@ fn host_north_done<'py>(a: &Args<'py>) -> Reply<'py> {
     let result = a.get_item(2)?;
     let vp = a.get_item(1)?;
     let tr = imported(py, "built_core.i18n")?.getattr("tr")?;
-    let fmt_angle_deg = imported(py, "core.units")?.getattr("fmt_angle_deg")?;
+    let fmt_angle_deg = imported(py, "built_core.units")?.getattr("fmt_angle_deg")?;
     [deg, changed] = unpack::<2>(&result)?;
     if changed.is_truthy()? {
         module.call_method1("refresh_north_display", (&vp,))?;
@@ -78,7 +78,7 @@ fn commit<'py>(a: &Args<'py>) -> Reply<'py> {
 fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
-    let fmt_angle_deg = imported(py, "core.units")?.getattr("fmt_angle_deg")?;
+    let fmt_angle_deg = imported(py, "built_core.units")?.getattr("fmt_angle_deg")?;
     let deg = tool.call_method0("pending_deg")?;
     if !deg.is_none() && !tool.getattr("hover_point")?.is_none() {
         return (fmt_angle_deg.call1((&deg,))?, tool.getattr("hover_point")?).into_bound_py_any(py);

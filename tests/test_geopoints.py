@@ -9,9 +9,9 @@ import math
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.history import (AddGeoPointsCommand, DeleteGeoPointsCommand,
+from built_core.history import (AddGeoPointsCommand, DeleteGeoPointsCommand,
                           History)
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import igz
 from georef.datum import SceneDatum
 from georef.points import (GeoPoint, datum_for_rows, parse_points_csv,
@@ -91,7 +91,7 @@ def test_snap_lands_exactly_on_survey_point():
     pseudo-edges (viewport._snap_scene); the endpoint snap fires and the
     direction-based inferences skip zero-length safely."""
     from types import SimpleNamespace
-    from core.snap import compute_snap
+    from built_core.snap import compute_snap
     p = QVector3D(3, 4, 0.5)
     edge = SimpleNamespace(a=QVector3D(p), b=QVector3D(p))
     scene = SimpleNamespace(edges=[edge])

@@ -17,8 +17,8 @@ from built_core import Vec3 as V
 
 
 def _cube(scene):
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     m = Mesh()
     p = [V(0, 0, 0), V(2, 0, 0), V(2, 2, 0), V(0, 2, 0),
          V(0, 0, 2), V(2, 0, 2), V(2, 2, 2), V(0, 2, 2)]
@@ -33,7 +33,7 @@ def _cube(scene):
 
 @pytest.mark.parametrize("deg", [30.0, 90.0])
 def test_turning_a_group_about_its_centre_rebuilds_its_chunk(native_window, deg):
-    from core.history import RotateGroupCommand
+    from built_core.history import RotateGroupCommand
     win = native_window
     vp = win.viewport
     g = _cube(vp.scene)

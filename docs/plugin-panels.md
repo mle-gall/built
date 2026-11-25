@@ -7,7 +7,7 @@ Built draws plugin panels with egui. Select **Plugins** in the right dock to ope
 Expose a `create_panel(app, invalidate)` factory in the discovered plugin module. Built calls it once per document view. `app` is an `ExtensionApp`. The object returned by the factory supplies the panel version, local ID, title, slot, descriptor and event handler.
 
 ```python
-from core.plugin_panels import field, item, section
+from built_core.plugin_panels import field, item, section
 
 
 class Counter:

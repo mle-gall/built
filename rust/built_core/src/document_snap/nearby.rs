@@ -440,7 +440,7 @@ fn pick_edge_any<'py>(v: &Obj<'py>, x: f64, y: f64) -> PyResult<Obj<'py>> {
         if !a.is_none()
             && !b.is_none()
             && py
-                .import("core.snap")?
+                .import("built_core.snap")?
                 .call_method1("_closest_on_segment_2d", ((x, y), a, b))?
                 .get_item(0)?
                 .le(dist)?

@@ -1,7 +1,7 @@
 //! The online scope of Library's Components tab. The document host supplies
 //! the catalogue and files. Browsing, selection and preview demand live here.
 pub(crate) mod session;
-use crate::extension_previews::{decode, read};
+use crate::image_io::{decode, read};
 use pyo3::{
     exceptions::PyValueError,
     prelude::*,

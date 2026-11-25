@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from core.group import Group
+from built_core.group import Group
 from built_core.materials import Material
 from built_core import Vec3
 from built_core.link_meshes import LinkMeshes

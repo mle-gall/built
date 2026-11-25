@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from built_core import Matrix4 as QMatrix4x4
 
-from core.scene import Scene
+from built_core.scene import Scene
 from formats.skp import apply_payload, load_skp
 from formats.skp_reader import _collect
 
@@ -132,7 +132,7 @@ def test_missing_or_duplicate_ids_use_unique_fallbacks():
 
 
 def test_shared_meshes_keep_curves_but_nested_placements_have_distinct_uids():
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     payload = {"identity_namespace": "nested", "protos": [
         {"faces": [], "children": [{"proto": 1, "xform": QMatrix4x4(),
                                     "identity": ("30",)}],

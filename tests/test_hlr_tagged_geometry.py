@@ -21,11 +21,11 @@ from built_core import Vec3 as V
 
 
 from core import _native                                 # noqa: E402
-from core import mesh as M                               # noqa: E402
-from core.group import Group                             # noqa: E402
-from core.hlr import hlr_drawing                         # noqa: E402
-from core.layers import Layer                            # noqa: E402
-from core.scene import Scene                             # noqa: E402
+from built_core import mesh as M                               # noqa: E402
+from built_core.group import Group                             # noqa: E402
+from built_core.hlr import hlr_drawing                         # noqa: E402
+from built_core.layers import Layer                            # noqa: E402
+from built_core.scene import Scene                             # noqa: E402
 from formats import igz                                  # noqa: E402
 
 
@@ -157,7 +157,7 @@ def test_the_arrays_draw_the_lines_the_walk_draws_with_their_layers(
 
 
 def test_with_a_section_cut_too(tmp_path, lazy):
-    from core.history import History, PlaceSectionPlaneCommand
+    from built_core.history import History, PlaceSectionPlaneCommand
     from built_core.section import SectionPlane
     scene = _scene(tmp_path, lazy)
     vp = _viewport(scene)
@@ -176,7 +176,7 @@ def test_with_a_section_cut_too(tmp_path, lazy):
 
 def test_the_exports_hand_the_arrays_over(native_host, tmp_path, monkeypatch):
     """The SVG and DXF exports of a view with layers no longer walk."""
-    from core import hlr as H
+    from built_core import hlr as H
     win = native_host.window
     scene = _scene(tmp_path, False)
     win.viewport.scene.layers[:] = scene.layers

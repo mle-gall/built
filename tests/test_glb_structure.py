@@ -20,9 +20,9 @@ import pytest  # noqa: E402
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 
-from core.group import Group  # noqa: E402
-from core.mesh import Mesh  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core.group import Group  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from formats.glb import read_triangles  # noqa: E402
 from formats.gltf import save_glb  # noqa: E402
 from tests.test_gltf_dae_export import _read_glb  # noqa: E402

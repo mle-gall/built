@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""``core.group.transformed_mesh`` and ``world_mesh`` must build what the
+"""``built_core.group.transformed_mesh`` and ``world_mesh`` must build what the
 Python at ``9a8150f4`` built: seeded meshes (quads, triangles, faces with
 holes, soft and curved edges, painted, textured with and without a fitted
 ``uvw``, small and past the bulk threshold) through seeded matrices
@@ -47,7 +47,7 @@ def look(mesh):
 
 def mesh_of(rng, n):
     from built_core import Vec3 as V
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     m = Mesh()
     for i in range(n):
         x, y = (i % 30) * 2.0, (i // 30) * 2.0
@@ -86,7 +86,7 @@ def matrix(rng):
 
 def answers(seed):
     from built_core import Matrix4
-    from core.group import Group, world_mesh
+    from built_core.group import Group, world_mesh
     from built_core import group_transformed_mesh as transformed_mesh
     rng = random.Random(seed)
     n = rng.choice([4, 20, 300])
@@ -125,7 +125,7 @@ def test_a_copy_carries_soft_flat_and_curves_at_any_size(n):
     the vectorized copy did not; both carry soft, flat and curves now."""
     from built_core import Matrix4, Vec3 as V
     from built_core import group_transformed_mesh as transformed_mesh
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     m = Mesh()
     for i in range(n):
         m.add_face([V(i, 0, 0), V(i + 1, 0, 0), V(i + 1, 1, 0), V(i, 1, 0)])

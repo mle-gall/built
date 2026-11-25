@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from built_core import Matrix4 as QMatrix4x4
 
-from core.group import Group
+from built_core.group import Group
 from built_core import group_scale, group_scale_command
-from core.history import History
-from core.scene import Scene
+from built_core.history import History
+from built_core.scene import Scene
 from tests.test_group_axes import _slab
 
 
@@ -49,7 +49,7 @@ def test_unusable_or_unchanged_values_make_no_command():
 
 def test_a_rotated_group_made_component_scales_along_its_turned_axes():
     from built_core import Vec3 as QVector3D
-    from core.history import GroupToComponentCommand, RotateGroupCommand
+    from built_core.history import GroupToComponentCommand, RotateGroupCommand
     g = _slab()
     scene = Scene()
     scene.groups.append(g)
@@ -76,7 +76,7 @@ def test_a_rotated_group_made_component_scales_along_its_turned_axes():
 def test_repeated_set_and_undo_does_not_drift():
     import math
     from built_core import Vec3 as QVector3D
-    from core.history import GroupToComponentCommand, RotateGroupCommand
+    from built_core.history import GroupToComponentCommand, RotateGroupCommand
     g = _slab()
     scene = Scene()
     scene.groups.append(g)

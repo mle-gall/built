@@ -16,8 +16,8 @@ import uuid
 import numpy as np
 from built_core import Vec3 as QVector3D
 
-from core import links
-from core.layers import assign_layer, layer_of
+from built_core import links
+from built_core.layers import assign_layer, layer_of
 
 
 def V(x, y, z=0.0):
@@ -51,7 +51,7 @@ def test_stable_uid_known_value():
 # ---- new_uid -----------------------------------------------------------------
 
 def test_new_uid_keeps_the_uuid4_form_and_is_unique():
-    from core.group import new_uid
+    from built_core.group import new_uid
     seen = set()
     for _ in range(50_000):           # several pool refills
         u = new_uid()
@@ -62,7 +62,7 @@ def test_new_uid_keeps_the_uuid4_form_and_is_unique():
 
 
 def test_a_forked_child_starts_with_an_empty_pool():
-    from core import group
+    from built_core import group
     group.new_uid()
     assert group._UID_POOL            # something pooled in this process
     group._drop_uid_pool()            # what os.register_at_fork runs
@@ -72,8 +72,8 @@ def test_a_forked_child_starts_with_an_empty_pool():
 
 def test_a_loaded_group_keeps_its_stored_uid_and_one_without_gets_a_fresh_one(tmp_path):
     import json
-    from core.group import Group
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.scene import Scene
     from formats import igz
     s = Scene()
     a = Group(name="A")
@@ -102,7 +102,7 @@ def test_a_loaded_group_keeps_its_stored_uid_and_one_without_gets_a_fresh_one(tm
 # ---- _populate ---------------------------------------------------------------
 
 def test_populate_clones_with_stable_ids_and_copied_records():
-    from core.group import Group
+    from built_core.group import Group
     src = Group(name="Source")
     child = Group(name="Child")
     child.ext = {"plugin": {"k": [1, 2]}}
@@ -127,7 +127,7 @@ def test_populate_clones_with_stable_ids_and_copied_records():
     assert child.ext == {"plugin": {"k": [1, 2]}}
     assert l.ext is None and l.ifc is None
     # Every slot the source had is there, as copy.copy gave.
-    from core.group import Group as G
+    from built_core.group import Group as G
     for name in G.__slots__:
         if name == "source_uid":
             continue                 # set on a link's parts (73ca3c85)
@@ -136,7 +136,7 @@ def test_populate_clones_with_stable_ids_and_copied_records():
 
 
 def test_populate_keeps_an_empty_record_a_copy_of_its_own():
-    from core.group import Group
+    from built_core.group import Group
     src = Group(name="Source")
     child = Group(name="Child")
     child.ext = {}
@@ -152,7 +152,7 @@ def test_populate_keeps_an_empty_record_a_copy_of_its_own():
 def _deferred_pair():
     """Two deferred meshes with the SAME table objects, as a document's
     identical definitions can be."""
-    from core.mesh import DeferredMesh, Mesh
+    from built_core.mesh import DeferredMesh, Mesh
     meta = {"face_attrs": [{"layer": "Wood"}], "edge_layers": ["Wood"]}
 
     def make():
@@ -172,7 +172,7 @@ def _deferred_pair():
 
 def _install(*meshes):
     """The meshes as one source's definition, renamed into a host."""
-    from core.group import Group
+    from built_core.group import Group
     comp = Group(name="Site")
     parts = [Group(m, name=f"P{i}") for i, m in enumerate(meshes)]
     comp.children = parts
@@ -196,7 +196,7 @@ def test_meshes_with_one_table_share_the_renamed_one():
 
 
 def test_untagged_faces_do_not_share_a_table_with_tagged_ones():
-    from core.mesh import DeferredMesh, Mesh
+    from built_core.mesh import DeferredMesh, Mesh
     meta = {"face_attrs": [{"layer": "Wood"}], "edge_layers": []}
     out = []
     for fa in ([0], [0, -1]):
@@ -234,8 +234,8 @@ def test_editing_a_tag_in_one_mesh_never_changes_another():
 # ---- the collector during link resolution ------------------------------------
 
 def test_links_resolve_with_the_collector_off_and_it_comes_back_on(tmp_path, monkeypatch):
-    from core.layers import Layer
-    from core.scene import Scene
+    from built_core.layers import Layer
+    from built_core.scene import Scene
     from formats import igz
     src = Scene()
     src.layers.append(Layer("Wood"))

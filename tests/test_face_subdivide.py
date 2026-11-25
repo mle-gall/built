@@ -16,11 +16,11 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edges
-from core.geometry import Face
-from core.history import AddFaceCommand, History
-from core.scene import Scene
-from core.topology import find_subdividing_chain, subtract_loop_from_face
+from built_core.edits import build_add_edges
+from built_core.geometry import Face
+from built_core.history import AddFaceCommand, History
+from built_core.scene import Scene
+from built_core.topology import find_subdividing_chain, subtract_loop_from_face
 
 
 def V(x: float, y: float, z: float = 0.0) -> QVector3D:
@@ -28,7 +28,7 @@ def V(x: float, y: float, z: float = 0.0) -> QVector3D:
 
 
 def _key_set(loop):
-    from core.topology import _key
+    from built_core.topology import _key
     return frozenset(_key(v) for v in loop)
 
 

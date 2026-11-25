@@ -8,8 +8,8 @@ import math
 import pytest
 from built_core import Vec3 as QVector3D
 from built_render import rail_layout
-from core.make_faces import MakeFacesError, make_faces, plan, selected_edges
-from core.mesh import Mesh
+from built_core.make_faces import MakeFacesError, make_faces, plan, selected_edges
+from built_core.mesh import Mesh
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from built_render import context_menu_build
 
@@ -230,7 +230,7 @@ def test_a_selection_that_makes_nothing_leaves_no_undo_step(win):
 
 
 def test_inside_a_group_the_faces_stay_in_the_group(win):
-    from core.group import Group
+    from built_core.group import Group
     scene = win.viewport.scene
     inner = Mesh()
     _rect(inner, 0, 0, 1, 1)

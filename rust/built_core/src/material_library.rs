@@ -165,7 +165,7 @@ pub(crate) fn pick_library_paint(
                 .getattr("Material")?
                 .call_method1("from_dict", (recipe,))?
         } else {
-            py.import("core.material_commands")?.call_method1(
+            py.import("built_core.material_commands")?.call_method1(
                 "material_for_paint",
                 (
                     scene,
@@ -413,7 +413,7 @@ pub(crate) fn material_surface_input<'py>(
             fields.set_item("roughness", 0.5)?;
         } else if text == "Off" {
             for key in py
-                .import("core.material_commands")?
+                .import("built_core.material_commands")?
                 .getattr("PBR_KEYS")?
                 .try_iter()?
             {

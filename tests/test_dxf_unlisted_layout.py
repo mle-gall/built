@@ -12,7 +12,7 @@ import pytest
 
 ezdxf = pytest.importorskip("ezdxf")
 
-from core.scene import Scene                              # noqa: E402
+from built_core.scene import Scene                              # noqa: E402
 from formats.dxf_in import load_dxf, open_document         # noqa: E402
 
 

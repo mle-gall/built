@@ -11,10 +11,10 @@ from __future__ import annotations
 from built_core import Input, ScreenPoint
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edges
-from core.history import AddFaceCommand, History
+from built_core.edits import build_add_edges
+from built_core.history import AddFaceCommand, History
 from built_core.orient import is_closed, signed_volume
-from core.scene import Scene
+from built_core.scene import Scene
 from tools.base import ToolContext
 from tools.pushpull import _MIN_EXTRUDE, PushPullTool
 
@@ -542,8 +542,8 @@ def test_valid_push_is_not_refused():
 # ---- autofold: a move that warps a face splits it into planar pieces ----------
 
 def test_move_lifting_a_corner_autofolds_quad():
-    from core.history import MoveVerticesCommand
-    from core.topology import is_planar
+    from built_core.history import MoveVerticesCommand
+    from built_core.topology import is_planar
 
     scene = Scene()
     hist = History(scene)
@@ -564,7 +564,7 @@ def test_move_lifting_a_corner_autofolds_quad():
 
 
 def test_move_in_plane_does_not_fold():
-    from core.history import MoveVerticesCommand
+    from built_core.history import MoveVerticesCommand
 
     scene = Scene()
     hist = History(scene)
@@ -579,8 +579,8 @@ def test_move_in_plane_does_not_fold():
 def test_autofold_pentagon_folds_minimally():
     # Lift one vertex of a planar pentagon: the planar remainder must merge
     # back into one piece — pieces stay minimal, not a full triangle fan.
-    from core.history import MoveVerticesCommand
-    from core.topology import is_planar
+    from built_core.history import MoveVerticesCommand
+    from built_core.topology import is_planar
 
     scene = Scene()
     hist = History(scene)
@@ -596,7 +596,7 @@ def test_autofold_pentagon_folds_minimally():
 
 def _boxed_group(scene, x0=0.0):
     """A 2×2×2 closed box living in its own Group, appended to the scene."""
-    from core.group import Group
+    from built_core.group import Group
     from built_core.orient import orient_outward
 
     g = Group()

@@ -176,7 +176,7 @@ fn cached(py: Python<'_>, p: &Path, target: (usize, usize)) -> PyResult<PathBuf>
         .call_method0("hexdigest")?
         .extract::<String>()?;
     let root = py
-        .import("core.texture")?
+        .import("built_core.texture")?
         .call_method0("texture_cache_root")?
         .extract::<PathBuf>()?;
     Ok(root.join("odm").join(format!(

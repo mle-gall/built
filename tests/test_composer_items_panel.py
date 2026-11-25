@@ -15,7 +15,7 @@ def _close(comp, win):
 
 
 def test_the_name_survives_the_igz(tmp_path):
-    from core.composition import Composicion, MarcoVista
+    from built_core.composition import Composicion, MarcoVista
     c = Composicion()
     c.frames.append(MarcoVista(list_name="Alzado norte"))
     back = Composicion.from_dict(c.to_dict())

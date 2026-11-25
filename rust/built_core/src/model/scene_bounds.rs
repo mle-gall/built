@@ -66,7 +66,7 @@ fn none_pair(py: Python<'_>) -> PyResult<Bound<'_, PyTuple>> {
 /// `(None, None)`; a guide by its point only (a circle by 32 samples).
 #[pyfunction]
 fn scene_selection_bounds<'py>(py: Python<'py>, scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
-    let group = super::module(py, "core.group")?;
+    let group = super::module(py, "built_core.group")?;
     let is_guide = super::module(py, "built_core.guide")?.getattr("is_guide")?;
     let mesh = super::module(py, "built_core.mesh")?;
     let (face_cls, edge_cls) = (mesh.getattr("Face")?, mesh.getattr("Edge")?);
@@ -214,7 +214,7 @@ fn scene_bounds<'py>(py: Python<'py>, scene: &Bound<'py, PyAny>) -> PyResult<Bou
     };
     let kept = PyDict::new(py);
     let plan_of = super::module(py, "built_core")?.getattr("plan_of")?;
-    let local_points = super::module(py, "core.group")?.getattr("_local_points")?;
+    let local_points = super::module(py, "built_core.group")?.getattr("_local_points")?;
     let builtins = super::module(py, "builtins")?;
     let kw = PyDict::new(py);
     kw.set_item("precise", true)?;

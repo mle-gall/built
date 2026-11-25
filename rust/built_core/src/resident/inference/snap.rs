@@ -129,7 +129,7 @@ impl SnapRules {
     fn outline<'p>(slf: &Bound<'p, Self>) -> PyResult<Obj<'p>> {
         let t = slf.borrow();
         let py = slf.py();
-        py.import("core.snap")?.call_method1(
+        py.import("built_core.snap")?.call_method1(
             "SurfacePatch",
             (
                 t.point.bind(py),
@@ -279,7 +279,7 @@ impl<'p> Cursor<'p> {
         let rows = rows.as_array();
         let mut keep = vec![true; rows.len()];
         if moving.is_truthy()? {
-            let topo = py.import("core.topology")?;
+            let topo = py.import("built_core.topology")?;
             let key = topo.getattr("_key")?;
             let excluded = PySet::empty(py)?;
             for v in moving.try_iter()? {
@@ -683,7 +683,7 @@ fn resident_snap<'p>(
     }
     let fields = PyDict::new(py);
     fields.set_item("edges", edges)?;
-    py.import("core.snap")?.getattr("compute_snap")?.call(
+    py.import("built_core.snap")?.getattr("compute_snap")?.call(
         (
             point,
             (x, y),

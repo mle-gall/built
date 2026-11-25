@@ -10,8 +10,8 @@ import math
 import numpy as np
 from built_core import Vec3 as QVector3D
 
-from core.camera import OrbitCamera
-from core.hlr import hlr_perspective
+from built_core.camera import OrbitCamera
+from built_core.hlr import hlr_perspective
 
 
 class _Scene:

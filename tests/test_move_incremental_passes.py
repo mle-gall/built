@@ -18,7 +18,7 @@ from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 def _prisma(n=12, r=1.0, h=2.0):
     """A smooth n-sided prism: soft vertical edges, a curved side."""
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     m = Mesh()
     ring = [(r * math.cos(2 * math.pi * i / n), r * math.sin(2 * math.pi * i / n))
             for i in range(n)]
@@ -32,7 +32,7 @@ def _prisma(n=12, r=1.0, h=2.0):
 
 
 def _scene(native_host):
-    from core.group import Group
+    from built_core.group import Group
 
     win = native_host.window
     vp = win.viewport
@@ -67,7 +67,7 @@ def test_a_new_layer_state_is_not_only_matrices(native_host):
 
 
 def test_moving_a_plain_group_is_only_matrices_unless_its_mesh_is_a_prototype(native_host):
-    from core.group import Group
+    from built_core.group import Group
     win, vp, gs = _scene(native_host)
     plain = Group(_prisma(5), name="plain")             # no matrix
     vp.scene.groups.append(plain)

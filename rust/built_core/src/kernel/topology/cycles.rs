@@ -29,7 +29,7 @@ pub(super) fn _key<'py>(p: &Obj<'py>) -> PyResult<Bound<'py, PyTuple>> {
         .collect::<PyResult<Vec<_>>>()?;
     PyTuple::new(p.py(), items)
 }
-#[pyclass(module = "core.topology")]
+#[pyclass(module = "built_core.topology")]
 struct KeyMemo {
     seen: HashMap<usize, (Py<PyAny>, Py<PyTuple>)>,
 }
@@ -77,7 +77,7 @@ fn _store_edge_plan<'py>(edges: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
         return Ok(None);
     }
     Ok(Some(
-        py.import("core.edits")?
+        py.import("built_core.edits")?
             .call_method1("_ScanEdges", (scan,))?,
     ))
 }
@@ -110,7 +110,7 @@ fn _drawing_cycles<'py>(
         .unwrap_or_else(|| edges.py().NotImplemented().into_bound(edges.py())))
 }
 fn key_fn(py: Python<'_>) -> PyResult<Obj<'_>> {
-    py.import("core.topology")?.getattr("_key")
+    py.import("built_core.topology")?.getattr("_key")
 }
 #[pyfunction]
 #[pyo3(signature=(edges,ka,kb,key=None))]
@@ -123,7 +123,7 @@ fn _cycle_adjacency<'py>(
     let default = key_fn(edges.py())?;
     draw_plan::graph_adjacency(edges, ka, kb, key.unwrap_or(&default))
 }
-#[pyclass(module = "core.topology", subclass)]
+#[pyclass(module = "built_core.topology", subclass)]
 struct CycleGraph {
     adjacency: Py<PyDict>,
     key: Py<PyAny>,

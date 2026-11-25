@@ -14,8 +14,8 @@ from __future__ import annotations
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 
-from core.group import Group  # noqa: E402
-from core.mesh import Mesh  # noqa: E402
+from built_core.group import Group  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
 from tests.controller_surface import ControllerSurface as Viewport
 
 

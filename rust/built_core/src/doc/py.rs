@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 //! The Python face of the document: `Placement` (the base class of
-//! `core.group.Group`, and a scene's root), `Tag` (of `core.layers.Layer`),
+//! `built_core.group.Group`, and a scene's root), `Tag` (of `built_core.layers.Layer`),
 //! `HandleList` (the live `g.children` / `scene.groups` / `scene.layers`)
 //! and `Transaction` (one History step's journal).
 //!
@@ -56,7 +56,7 @@ fn parent_reports(py: Python<'_>) -> PyResult<()> {
 /// `(make, bind)`: the Python side of matrix views (`core/doc_model.py`).
 static HOOKS: Mutex<Option<(Py<PyAny>, Py<PyAny>)>> = Mutex::new(None);
 /// `track(key, attr, container)`: the tracked container an attribute's dict
-/// or list is handed out as (`core.doc_model.track`).
+/// or list is handed out as (`built_core.doc_model.track`).
 static TRACK: Mutex<Option<Py<PyAny>>> = Mutex::new(None);
 
 fn hooks(py: Python<'_>) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
@@ -64,13 +64,13 @@ fn hooks(py: Python<'_>) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
     match h.as_ref() {
         Some((a, b)) => Ok((a.clone_ref(py), b.clone_ref(py))),
         None => Err(PyRuntimeError::new_err(
-            "document matrix hooks not installed (core.doc_model)",
+            "document matrix hooks not installed (built_core.doc_model)",
         )),
     }
 }
 
 /// `refill(view, value) -> bool`: put `value` into the tracked container
-/// `view` in place (`core.doc_model._refill`); False when it cannot.
+/// `view` in place (`built_core.doc_model._refill`); False when it cannot.
 static REFILL: Mutex<Option<Py<PyAny>>> = Mutex::new(None);
 
 /// After a replay: refill the tracked containers it wrote (see
@@ -121,7 +121,7 @@ pub(super) fn run_refills(py: Python<'_>) -> PyResult<()> {
     }
 }
 
-/// Install the refill hook (`core.doc_model._refill`).
+/// Install the refill hook (`built_core.doc_model._refill`).
 #[pyfunction]
 fn doc_set_refill_hook(refill: Py<PyAny>) {
     let old = REFILL
@@ -917,7 +917,7 @@ fn clear_node(k: Key) {
 // -------------------------------------------------------------- Placement
 
 /// A placement (group, component instance, nested part) or, made by
-/// `doc_new_root`, a scene's root. `core.group.Group` subclasses it.
+/// `doc_new_root`, a scene's root. `built_core.group.Group` subclasses it.
 #[pyclass(module = "built_core", name = "Placement", subclass, frozen)]
 pub struct PyPlacement {
     pub key: Key,
@@ -933,7 +933,7 @@ impl Drop for PyPlacement {
 impl PyPlacement {
     /// `Placement.__new__(cls, _detached=True)`: a handle with no node,
     /// for a subclass that keeps every field in Python slots (the
-    /// viewport's placement proxies, `core.group.PlacementProxy`): it is a
+    /// viewport's placement proxies, `built_core.group.PlacementProxy`): it is a
     /// `Group` to every `isinstance` and no part of the document.
     #[new]
     #[pyo3(signature = (*_args, **_kwargs))]
@@ -1777,7 +1777,7 @@ impl PyPlacement {
 
 // -------------------------------------------------------------------- Tag
 
-/// A tag's document fields; `core.layers.Layer` subclasses it.
+/// A tag's document fields; `built_core.layers.Layer` subclasses it.
 #[pyclass(module = "built_core", name = "Tag", subclass, frozen)]
 pub struct PyTag {
     pub key: Key,
@@ -1921,7 +1921,7 @@ fn opt_value(v: &Bound<'_, PyAny>) -> PyResult<FVal> {
     }))
 }
 
-/// A material's fields; `core.materials.Material` subclasses it.
+/// A material's fields; `built_core.materials.Material` subclasses it.
 #[pyclass(module = "built_core", name = "MaterialData", subclass, frozen)]
 pub struct PyMaterial {
     pub key: Key,
@@ -2903,7 +2903,7 @@ fn changes_dict<'py>(
         let ty = handle.bind(py).get_type();
         let module = ty.getattr("__module__")?.extract::<String>()?;
         let family = match module.as_str() {
-            "core.composition" => "sheets",
+            "built_core.composition" => "sheets",
             "built_core.saved_views" => "views",
             _ => "annotations",
         };
@@ -3176,7 +3176,7 @@ fn doc_set_hooks(make: Py<PyAny>, bind: Py<PyAny>) {
     drop(old);
 }
 
-/// The suspect containers (`core.doc_model._SUSPECT`: plain containers
+/// The suspect containers (`built_core.doc_model._SUSPECT`: plain containers
 /// stored into tracked ones, written back at boundaries) and the flush
 /// that writes them.
 static SUSPECTS: pyo3::sync::PyOnceLock<(Py<PyDict>, Py<PyAny>)> = pyo3::sync::PyOnceLock::new();
@@ -3429,7 +3429,7 @@ pub(super) fn doc_get_many<'py>(
 }
 
 /// The distinct placements of the trees under `roots`, in document order
-/// (`core.purge.iter_groups`): one call, no list view per node.
+/// (`built_core.purge.iter_groups`): one call, no list view per node.
 #[pyfunction]
 pub(super) fn doc_walk<'py>(
     py: Python<'py>,

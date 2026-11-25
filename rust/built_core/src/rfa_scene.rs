@@ -125,7 +125,7 @@ fn group<'p>(name: &Obj<'p>) -> PyResult<Obj<'p>> {
     let py = name.py();
     let kw = PyDict::new(py);
     kw.set_item("name", name)?;
-    py.import("core.group")?.call_method("Group", (), Some(&kw))
+    py.import("built_core.group")?.call_method("Group", (), Some(&kw))
 }
 fn placeholder<'p>(
     parameters: &Obj<'p>,
@@ -222,7 +222,7 @@ fn clearance<'p>(layers: &Obj<'p>) -> PyResult<Obj<'p>> {
     let kw = PyDict::new(py);
     kw.set_item("key", key)?;
     let l =
-        py.import("core.layers")?
+        py.import("built_core.layers")?
             .call_method("Layer", (tr(py, "Clearance zones")?,), Some(&kw))?;
     layers.call_method1("append", (&l,))?;
     l.getattr("key")
@@ -327,7 +327,7 @@ fn build_family<'p>(
             material(registry, &raw.get_item("name")?, color.as_any(), opacity)?,
         )?;
     }
-    let group_type = py.import("core.group")?.getattr("Group")?;
+    let group_type = py.import("built_core.group")?.getattr("Group")?;
     let matrix = py.get_type::<crate::math::Matrix4>();
     let defs = PyList::empty(py);
     let copy = py.import("copy")?.getattr("deepcopy")?;

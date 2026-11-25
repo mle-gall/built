@@ -140,7 +140,7 @@ impl Geom {
     }
 }
 
-/// `core.arrangement.plane_basis(normal)`.
+/// `built_core.arrangement.plane_basis(normal)`.
 fn origin_in_polygon(poly: &[(f64, f64)]) -> bool {
     let (x, y) = (0.0f64, 0.0f64);
     let mut inside = false;

@@ -26,7 +26,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def _cube(sx=1.0, sy=1.0, sz=1.0, at=(0.0, 0.0, 0.0)):
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     m = Mesh()
     o = V(*at)
     p = [o + V(0, 0, 0), o + V(sx, 0, 0), o + V(sx, sy, 0), o + V(0, sy, 0),
@@ -39,7 +39,7 @@ def _cube(sx=1.0, sy=1.0, sz=1.0, at=(0.0, 0.0, 0.0)):
 
 
 def _window(native_host, lazy):
-    from core.group import Group
+    from built_core.group import Group
     win = native_host.window
     win.new_document()
     vp = win.viewport
@@ -235,7 +235,7 @@ def test_of_two_coplanar_faces_the_smaller_copy_is_picked(native_host):
     """Two copies of one cube whose tops are one plane — a 4×4 slab, then
     a small block standing in it: the ray meets both tops at the same
     depth and the smaller face wins, by its area as placed."""
-    from core.group import Group
+    from built_core.group import Group
     out = []
     for lazy in (True, False):
         win = native_host.window

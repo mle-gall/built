@@ -105,7 +105,7 @@ fn unit(item: &Obj) -> PyResult<String> {
 #[pyfunction]
 fn level_text(item: &Obj) -> PyResult<String> {
     item.py()
-        .import("core.units")?
+        .import("built_core.units")?
         .call_method1(
             "format_signed_level",
             (level_m(item)?, unit(item)?, item.getattr("decimals")?),
@@ -270,7 +270,7 @@ fn linear_label(item: &Obj) -> PyResult<String> {
         return Ok(format!("{:.3} km", d / 1000.));
     }
     item.py()
-        .import("core.units")?
+        .import("built_core.units")?
         .call_method1(
             "format_length",
             (d, unit, num(item, "decimals")?.clamp(0., 6.) as i32, show),

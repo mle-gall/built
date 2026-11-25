@@ -49,7 +49,7 @@ impl<'py> Occurrences<'py> {
         let mut found = false;
         let walk = scene
             .py()
-            .import("core.outliner")?
+            .import("built_core.outliner")?
             .call_method1("walk", (scene.getattr("groups")?,))?;
         for entry in walk.try_iter()? {
             let entry = entry?;
@@ -107,7 +107,7 @@ impl<'py> Occurrences<'py> {
             if siblings
                 && scene
                     .py()
-                    .import("core.links")?
+                    .import("built_core.links")?
                     .call_method1("is_linked", (&self.rows[i].group,))?
                     .is_truthy()?
             {
@@ -120,7 +120,7 @@ impl<'py> Occurrences<'py> {
                     && (row.group.call_method0("is_component")?.is_truthy()?
                         || scene
                             .py()
-                            .import("core.links")?
+                            .import("built_core.links")?
                             .call_method1("is_linked", (&row.group,))?
                             .is_truthy()?)
                 {
@@ -442,7 +442,7 @@ pub fn tree_move(
                     .is_truthy()?
                     || vp
                         .py()
-                        .import("core.links")?
+                        .import("built_core.links")?
                         .call_method1("is_linked", (&tree.rows[j].group,))?
                         .is_truthy()?)
             {

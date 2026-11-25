@@ -510,7 +510,7 @@ impl Store {
 /// Per face with several holes (slots in `faces`), which ones
 /// `Mesh.add_face`'s nested-hole filter keeps: `filter(holes)` is called
 /// with the holes as position rings (`at` maps a vertex slot) and answers
-/// a bool per hole (`core.store_mesh._hole_filter`).
+/// a bool per hole (`built_core.store_mesh._hole_filter`).
 pub(super) fn hole_masks(
     st: &Store,
     faces: &[u32],

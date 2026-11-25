@@ -289,7 +289,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
         return Ok(none(py));
     }
     let tr = imported(py, "built_core.i18n")?.getattr("tr")?;
-    let fmt_len = imported(py, "core.units")?.getattr("fmt_len")?;
+    let fmt_len = imported(py, "built_core.units")?.getattr("fmt_len")?;
     Ok((
         ("R ")
             .into_bound_py_any(py)?

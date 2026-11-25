@@ -6,10 +6,10 @@ import math
 
 import pytest
 
-from core.camera import OrbitCamera
-from core.layers import Layer
+from built_core.camera import OrbitCamera
+from built_core.layers import Layer
 from built_core.saved_views import SavedView, from_lookat
-from core.scene import Scene
+from built_core.scene import Scene
 
 
 def test_capture_apply_round_trips_camera_and_layers():
@@ -224,9 +224,9 @@ def test_documented_plugin_imports_resolve_in_a_fresh_interpreter():
     import sys
 
     subprocess.run([sys.executable, "-c", """
-from core.saved_views import *
-from core.section import *
-from core.orient import *
+from built_core.saved_views import *
+from built_core.section import *
+from built_core.orient import *
 assert callable(from_lookat) and callable(RenameSceneCommand) and callable(MoveSceneCommand)
 from built_core import saved_views, section, orient
 assert SavedView is saved_views.SavedView

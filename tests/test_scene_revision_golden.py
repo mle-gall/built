@@ -23,10 +23,10 @@ CASES = 30
 
 def run(seed):
     from built_core import Matrix4, Vec3
-    from core.group import Group
-    from core.layers import Layer
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.layers import Layer
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
     rng = random.Random(seed)
     s = Scene()
     groups = []
@@ -136,8 +136,8 @@ def test_axes_are_compared_by_value():
     matrix object's address, so an equal matrix assigned moved the revision,
     an edit in place did not, and a reused address could hide a change."""
     from built_core import Matrix4
-    from core.group import Group
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.scene import Scene
     s = Scene()
     g = Group(name="g")
     g.axes = Matrix4()

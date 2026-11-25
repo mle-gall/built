@@ -19,7 +19,7 @@ def test_two_faces_and_three_edges_show_their_totals(native_host):
     loose = [m.add_edge(V(0, 5, 0), V(4, 5, 0)),                      # 4 m
              m.add_edge(V(0, 6, 0), V(0.5, 6, 0))]                    # 0.5 m
     edge = m.find_edge(m.vertex_at(V(0, 0, 0)), m.vertex_at(V(0, 3, 0)))
-    from core.units import fmt_area_with, fmt_len_with
+    from built_core.units import fmt_area_with, fmt_len_with
     rows = inspector(native_host, [a, b])["Geometry"]
     assert rows["Area"] == fmt_area_with(7, scene.units)
     rows = inspector(native_host, loose + [edge])["Geometry"]
@@ -38,7 +38,7 @@ def test_a_face_with_an_opening_shows_its_net_area(native_host):
     f = m.add_face([V(0, 0, 0), V(4, 0, 0), V(4, 4, 0), V(0, 4, 0)],
                    [[V(1, 1, 0), V(1, 2, 0), V(2, 2, 0), V(2, 1, 0)]])
     g = m.add_face([V(6, 0, 0), V(7, 0, 0), V(7, 1, 0), V(6, 1, 0)])
-    from core.units import fmt_area_with
+    from built_core.units import fmt_area_with
     units = native_host.viewport.scene.units
     assert inspector(native_host, [f])["Geometry"]["Area"] == fmt_area_with(15, units)
     assert inspector(native_host, [f, g])["Geometry"]["Area"] == fmt_area_with(16, units)

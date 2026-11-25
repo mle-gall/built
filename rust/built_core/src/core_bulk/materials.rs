@@ -71,7 +71,7 @@ fn from_dict<'p>(cls: &Obj<'p>, raw: &Obj<'p>) -> PyResult<Obj<'p>> {
 #[pyfunction]
 fn reduce<'p>(this: &Obj<'p>) -> PyResult<Obj<'p>> {
     let py = this.py();
-    let dm = py.import("core.doc_model")?;
+    let dm = py.import("built_core.doc_model")?;
     let state = dm.call_method1("handle_state", (this, PyTuple::new(py, FIELDS)?))?;
     Ok((dm.getattr("new_handle")?, (this.get_type(),), state)
         .into_pyobject(py)?
@@ -80,7 +80,7 @@ fn reduce<'p>(this: &Obj<'p>) -> PyResult<Obj<'p>> {
 #[pyfunction]
 fn setstate(this: &Obj<'_>, state: &Obj<'_>) -> PyResult<()> {
     this.py()
-        .import("core.doc_model")?
+        .import("built_core.doc_model")?
         .call_method1("set_handle_state", (this, state))?;
     Ok(())
 }
@@ -98,7 +98,7 @@ fn is_translucent(attrs: &Obj<'_>) -> PyResult<bool> {
         if p.is_truthy()? {
             return attrs
                 .py()
-                .import("core.texture")?
+                .import("built_core.texture")?
                 .call_method1("image_has_cutout", (p,))?
                 .is_truthy();
         }
@@ -211,7 +211,7 @@ fn effective_attrs<'p>(attrs: &Obj<'p>, material: &Obj<'p>) -> PyResult<Obj<'p>>
             if fade > 0. && !get(&d, "texture")?.is_truthy()? {
                 let mut rgb = get(&d, "color")?;
                 if !rgb.is_truthy()? {
-                    rgb = py.import("core.layers")?.getattr("DEFAULT_LAYER_COLOR")?;
+                    rgb = py.import("built_core.layers")?.getattr("DEFAULT_LAYER_COLOR")?;
                 }
                 let mut out = Vec::new();
                 for c in rgb.try_iter()?.take(3) {

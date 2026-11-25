@@ -7,8 +7,8 @@ from built_core import Input as Qt
 from built_core import ScreenPoint as QPointF
 from built_core import Vec3 as QVector3D
 
-from core.group import Group
-from core.mesh import Mesh
+from built_core.group import Group
+from built_core.mesh import Mesh
 from tools.base import ToolContext
 from tools.texture_position import TexturePositionTool
 from views.wgpu_overlay import rasterize, pixels

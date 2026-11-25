@@ -33,10 +33,10 @@ from built_core import ScreenPoint, Input
 from built_core import Vec3 as QVector3D
 
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
-from core.group import Group
-from core.history import History
-from core.mesh import Edge, Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.history import History
+from built_core.mesh import Edge, Mesh
+from built_core.scene import Scene
 from tools.base import ToolContext
 from tools.rust_tools import SelectTool
 

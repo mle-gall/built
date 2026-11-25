@@ -35,7 +35,7 @@ fn link_document<'py>(
     kw.set_item("include_nested", include_nested)?;
     let title = named(win, "Linking {name}…", "name", &p)?;
     let comp = busy(win, &title, || {
-        py.import("core.links")?
+        py.import("built_core.links")?
             .getattr("make_link")?
             .call((vp.getattr("scene")?, &p), Some(&kw))
     })?;
@@ -85,7 +85,7 @@ fn reload_links(win: &Bound<'_, PyAny>, path: Option<PathBuf>) -> PyResult<()> {
     let py = win.py();
     let scene = win.getattr("viewport")?.getattr("scene")?;
     let current = win.getattr("_current_path")?;
-    let backend = py.import("core.links")?;
+    let backend = py.import("built_core.links")?;
     if let Some(path) = path {
         let p = py.import("pathlib")?.call_method1("Path", (path,))?;
         let label = named(win, "Reloading {name}…", "name", &p)?;
@@ -128,7 +128,7 @@ fn set_link_nested(
     enabled: bool,
 ) -> PyResult<bool> {
     let py = win.py();
-    let backend = py.import("core.links")?;
+    let backend = py.import("built_core.links")?;
     if let Err(e) = crate::host_context::core_module(py)?.call_method1(
         "link_set_include_nested",
         (win.getattr("viewport")?.getattr("scene")?, group, enabled),
@@ -147,7 +147,7 @@ fn set_link_nested(
 #[pyfunction]
 fn reset_link_tags(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
-    let backend = py.import("core.links")?;
+    let backend = py.import("built_core.links")?;
     if let Err(e) = crate::host_context::core_module(py)?.call_method1(
         "link_clear_overrides",
         (

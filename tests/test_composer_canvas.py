@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.composition import (Cajetin, Composicion, CotaItem,   # noqa: E402
+from built_core.composition import (Cajetin, Composicion, CotaItem,   # noqa: E402
                               FormaItem, MarcoVista)
 
 
@@ -19,8 +19,8 @@ class _FakeViewport:
     """A GL-free stand-in: the composer only needs scene, camera, update."""
 
     def __init__(self):
-        from core.camera import OrbitCamera
-        from core.scene import Scene
+        from built_core.camera import OrbitCamera
+        from built_core.scene import Scene
         self.scene = Scene()
         self.camera = OrbitCamera()
 

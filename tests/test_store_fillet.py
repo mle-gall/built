@@ -11,7 +11,7 @@ from built_core import Vec3 as V
 from core import _native
 from built_core import mesh as M, store_mesh as S
 from built_core import apply_fillet, plan_fillet
-from core.history import SnapshotMutation
+from built_core.history import SnapshotMutation
 from built_core import plan_vertex_bevel
 from tests.test_fillet import box, edge_at
 from tests.test_vertex_bevel import pyramid
@@ -233,8 +233,8 @@ def test_reject_stale_preview_and_foreign_keys():
 
 @pytest.mark.parametrize("vertices", [False, True])
 def test_tool_uses_native_preview_and_one_snapshot_command(vertices, monkeypatch, tmp_path):
-    from core.scene import Scene
-    from core.history import History
+    from built_core.scene import Scene
+    from built_core.history import History
     from tools.fillet import FilletTool
     sm = store_copy(box())
     scene = Scene(mesh=sm)

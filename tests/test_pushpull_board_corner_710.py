@@ -15,9 +15,9 @@ from __future__ import annotations
 
 from built_core import Vec3 as V
 
-from core.history import History  # noqa: E402
+from built_core.history import History  # noqa: E402
 from built_core.orient import is_closed  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from tests.test_fuzz_engine import _push  # noqa: E402
 
 

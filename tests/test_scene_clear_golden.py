@@ -42,11 +42,11 @@ def state(s):
 
 def run(seed):
     from built_core import Vec3 as V
-    from core.group import Group
-    from core.layers import Layer
-    from core.materials import Material
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.layers import Layer
+    from built_core.materials import Material
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
     rng = random.Random(seed)
     s = Scene()
     pick = rng.random

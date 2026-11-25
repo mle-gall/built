@@ -3,7 +3,7 @@
 //! (`docs/model-port.md`, selection).
 //!
 //! Membership is by identity, as it always was: a mesh element (a
-//! `core.mesh` Vertex, Edge or Face, store views included) by its `key`,
+//! `built_core.mesh` Vertex, Edge or Face, store views included) by its `key`,
 //! anything else (a placement, a guide, a dimension…) by `id()`. The
 //! entries live in a Python dict keyed by that identity, so insertion order,
 //! replacement of a handle with the same key and every edge case are the
@@ -36,7 +36,7 @@ const EDGE: usize = 2;
 const VERTEX: usize = 3;
 const OTHER: usize = 4;
 
-/// `core.mesh`'s Vertex, Edge and Face classes.
+/// `built_core.mesh`'s Vertex, Edge and Face classes.
 fn element_classes(py: Python<'_>) -> PyResult<&'static [Py<PyAny>; 3]> {
     static CLASSES: pyo3::sync::PyOnceLock<[Py<PyAny>; 3]> = pyo3::sync::PyOnceLock::new();
     CLASSES.get_or_try_init(py, || {
@@ -45,7 +45,7 @@ fn element_classes(py: Python<'_>) -> PyResult<&'static [Py<PyAny>; 3]> {
     })
 }
 
-/// The kind of an entry, and its identity (`core.mesh.element_identity`).
+/// The kind of an entry, and its identity (`built_core.mesh.element_identity`).
 fn kind_and_identity<'py>(item: &Bound<'py, PyAny>) -> PyResult<(usize, Bound<'py, PyAny>)> {
     let py = item.py();
     if item.is_instance_of::<PyPlacement>() {

@@ -4,11 +4,11 @@ the feed record match the retired Python commands; the protocol verbs are
 their front doors."""
 import pytest
 
-from core.group import Group
-from core.history import CompoundCommand, Command, History, NativeCommand
-from core.mesh import Mesh
-from core.protocol import commands
-from core.scene import Scene
+from built_core.group import Group
+from built_core.history import CompoundCommand, Command, History, NativeCommand
+from built_core.mesh import Mesh
+from built_core.protocol import commands
+from built_core.scene import Scene
 
 
 def _scene(n=3):
@@ -136,7 +136,7 @@ def test_protocol_verbs_take_uids_or_handles():
 
 
 def test_paint_placements_registers_a_new_material_in_the_same_step():
-    from core.materials import Material
+    from built_core.materials import Material
     scene, h, gs, _ = _scene()
     mat = Material("Oak", color=(0.6, 0.4, 0.2))
     paint = {"color": [0.6, 0.4, 0.2], "mat": "Oak"}
@@ -171,7 +171,7 @@ def test_rename_component_is_one_native_step():
 
 def _guide_scene():
     from built_core import Vec3
-    from core.guide import Guide
+    from built_core.guide import Guide
     scene = Scene()
     guide = Guide(Vec3(0, 0, 0), Vec3(1, 0, 0))
     return scene, History(scene), guide, Vec3
@@ -179,7 +179,7 @@ def _guide_scene():
 
 def test_record_steps_are_native_history_commands():
     import built_core
-    from core import history as H
+    from built_core import history as H
     for name in ("AddGuideCommand", "DeleteDimensionsCommand", "CreatePlanCommand",
                  "UpdateSceneCommand", "MoveGeoPathNodeCommand"):
         cls = getattr(H, name)
@@ -189,7 +189,7 @@ def test_record_steps_are_native_history_commands():
 
 def test_a_record_step_undoes_by_its_transaction_in_history():
     scene, h, guide, _ = _guide_scene()
-    from core.history import AddGuideCommand
+    from built_core.history import AddGuideCommand
     step = AddGuideCommand(guide)
     assert step.guide is guide and step.keeps_rows and step.keeps_paint
     h.execute(step)
@@ -204,7 +204,7 @@ def test_a_record_step_undoes_by_its_transaction_in_history():
 
 def test_a_direct_record_step_replays_the_transaction_it_opened():
     scene, _, guide, Vec3 = _guide_scene()
-    from core.history import AddGuideCommand, MoveGuidesCommand
+    from built_core.history import AddGuideCommand, MoveGuidesCommand
     AddGuideCommand(guide).do(scene)
     move = MoveGuidesCommand([guide], Vec3(0, 2, 0))
     move.do(scene)
@@ -215,7 +215,7 @@ def test_a_direct_record_step_replays_the_transaction_it_opened():
 
 def test_a_record_step_inside_a_compound_with_its_own_inverse_undoes():
     scene, h, guide, Vec3 = _guide_scene()
-    from core.history import AddGuideCommand, CompoundCommand
+    from built_core.history import AddGuideCommand, CompoundCommand
 
     class OwnInverse(CompoundCommand):
         doc_undo = False   # as the Move tool's copies
@@ -229,7 +229,7 @@ def test_a_record_step_inside_a_compound_with_its_own_inverse_undoes():
 
 
 def test_a_rejected_record_step_leaves_nothing_behind():
-    from core.history import SceneTreeCommand
+    from built_core.history import SceneTreeCommand
     scene = Scene()
     h = History(scene)
     before = h.revision
@@ -238,7 +238,7 @@ def test_a_rejected_record_step_leaves_nothing_behind():
 
 
 def test_the_tool_preview_helpers_stay_on_the_classes():
-    from core.history import MoveGuidesCommand, RotateGuidesCommand
+    from built_core.history import MoveGuidesCommand, RotateGuidesCommand
     scene, _, guide, Vec3 = _guide_scene()
     MoveGuidesCommand.shift(guide, Vec3(1, 0, 0))
     assert guide.point.x() == 1
@@ -250,7 +250,7 @@ def test_the_tool_preview_helpers_stay_on_the_classes():
 # ---- group and component steps
 
 def test_insert_and_delete_publish_where_the_placement_went():
-    from core.history import DeleteGroupCommand, InsertGroupCommand
+    from built_core.history import DeleteGroupCommand, InsertGroupCommand
     import built_core
     scene = Scene()
     h = History(scene)
@@ -273,7 +273,7 @@ def test_insert_and_delete_publish_where_the_placement_went():
 
 
 def test_merge_puts_back_the_same_merged_group_on_redo():
-    from core.history import MergeGroupsCommand
+    from built_core.history import MergeGroupsCommand
     from built_core import Vec3
     scene = Scene()
     h = History(scene)
@@ -300,7 +300,7 @@ def _square(mesh, x=0.0):
 
 
 def test_make_group_is_a_native_mesh_step_with_one_group_across_redo():
-    from core.history import MakeGroupCommand, MeshCommand
+    from built_core.history import MakeGroupCommand, MeshCommand
     scene = Scene()
     h = History(scene)
     face = _square(scene.mesh)
@@ -317,7 +317,7 @@ def test_make_group_is_a_native_mesh_step_with_one_group_across_redo():
 
 
 def test_nested_group_and_component_of_hold_the_groups():
-    from core.history import MakeComponentOfCommand, MakeNestedGroupCommand
+    from built_core.history import MakeComponentOfCommand, MakeNestedGroupCommand
     scene = Scene()
     h = History(scene)
     a, b = Group(Mesh(), name="a"), Group(Mesh(), name="b")
@@ -335,7 +335,7 @@ def test_nested_group_and_component_of_hold_the_groups():
 def test_plugin_compound_state_survives_copy_and_pickle():
     from copy import deepcopy
     from pickle import dumps, loads
-    from core.history import SetPluginDataCommand
+    from built_core.history import SetPluginDataCommand
 
     command = CompoundCommand([SetPluginDataCommand("extension", {"tags": ["A"]})])
     for restored in (deepcopy(command), loads(dumps(command))):

@@ -3,8 +3,8 @@ import pytest
 from built_core import Vec3 as V
 
 from core.bim import face_set_volume
-from core.solids import solid_report
-from core.protocol import queries
+from built_core.solids import solid_report
+from built_core.protocol import queries
 from built_core.store_mesh import StoreMesh
 from core import _native
 from tests.test_core_protocol import _scene
@@ -83,8 +83,8 @@ def test_triangle_order_and_snapshot():
 
 
 def test_orient_feed():
-    from core.history import History
-    from core.protocol.commands import run
+    from built_core.history import History
+    from built_core.protocol.commands import run
     from tests.test_core_protocol import _expected, _got, _read
 
     sc = _scene()
@@ -102,8 +102,8 @@ def test_orient_feed():
 def test_split_pushed_cap(hole):
     from built_core import plane_fingerprint as _canon_faces
     from tests.test_core_protocol import _expected, _got, _read
-    from core.history import History
-    from core.protocol.commands import run
+    from built_core.history import History
+    from built_core.protocol.commands import run
 
     results = []
     for store in (False, True):
@@ -155,9 +155,9 @@ def test_split_pushed_cap(hole):
     ],
 )
 def test_store_solid_tool_feed(op, expected):
-    from core.group import Group
-    from core.history import History
-    from core.protocol.commands import run
+    from built_core.group import Group
+    from built_core.history import History
+    from built_core.protocol.commands import run
 
     sc = empty(True)
     inputs = []
@@ -202,8 +202,8 @@ def test_partition_between_boxes():
 
 def test_transformed_solid_operands():
     from built_core import Matrix4 as QMatrix4x4
-    from core.group import Group, world_mesh
-    from core.solids import solid_volume
+    from built_core.group import Group, world_mesh
+    from built_core.solids import solid_volume
 
     sc = empty(True)
     box(sc.mesh, 0)
@@ -238,7 +238,7 @@ def test_seam_and_crack_discovery():
 
 def test_repeated_prism_pushes():
     from built_core import plane_fingerprint as _canon_faces
-    from core.history import History
+    from built_core.history import History
     from tests.test_cap_rebuild import _push, _walls
 
     signatures = []

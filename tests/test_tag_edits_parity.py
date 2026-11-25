@@ -32,9 +32,9 @@ FOLDERS = ["Structure", "Steel", "Building A", "Building B", "Annex", "Structure
 
 
 def _scene(rng):
-    from core.layers import Layer
+    from built_core.layers import Layer
     from built_core.saved_views import SavedView
-    from core.scene import Scene
+    from built_core.scene import Scene
     s = Scene()
     for k in range(rng.randint(2, 9)):
         name = rng.choice(NAMES)
@@ -203,7 +203,7 @@ def corpus(L):
 
 
 def test_the_tag_edits_answer_as_the_python_did():
-    from core import layers
+    from built_core import layers
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     got = json.loads(json.dumps(corpus(layers)))
     assert len(got) == len(want)
@@ -223,7 +223,7 @@ def test_the_corpus_reaches_every_operation():
 
 if __name__ == "__main__" and "--write" in sys.argv:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from core import layers
+    from built_core import layers
     data = corpus(layers)
     GOLDEN.parent.mkdir(exist_ok=True)
     GOLDEN.write_bytes(gzip.compress(json.dumps(data).encode(), mtime=0))

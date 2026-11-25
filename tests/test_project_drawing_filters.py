@@ -3,10 +3,10 @@
 import built_core
 import pytest
 
-from core import layers
-from core.group import Group
-from core.layers import Layer
-from core.scene import Scene
+from built_core import layers
+from built_core.group import Group
+from built_core.layers import Layer
+from built_core.scene import Scene
 from tests.test_tree_links import _View, _Win
 from views import wgpu_ui
 
@@ -125,7 +125,7 @@ def test_a_new_folder_shows_even_empty():
 
 
 def test_move_the_selection_here_from_the_rows_menu():
-    from core import structure
+    from built_core import structure
     from tests.test_structure import model
     scene, _, _, loose = model()
     p = Project(scene=scene)

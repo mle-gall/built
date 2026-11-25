@@ -120,7 +120,7 @@ fn add_dimension<'py>(
     let scene = history.getattr("scene")?;
     let kw = PyDict::new(py);
     kw.set_item("axis", axis)?;
-    let dim = py.import("core.dimension")?.call_method(
+    let dim = py.import("built_core.dimension")?.call_method(
         "Dimension",
         (vec3(a)?, vec3(b)?, vec3(offset)?),
         Some(&kw),

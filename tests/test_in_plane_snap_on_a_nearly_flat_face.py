@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from built_core import Vec3 as V
 
-from core.snap import _in_plane_with_point_snap
+from built_core.snap import _in_plane_with_point_snap
 
 
 def _w2p(p):

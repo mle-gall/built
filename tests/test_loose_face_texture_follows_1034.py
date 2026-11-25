@@ -11,10 +11,10 @@ from __future__ import annotations
 import pytest
 from built_core import Vec3 as V
 
-from core.history import (AddFaceCommand, History,
+from built_core.history import (AddFaceCommand, History,
                           MoveVerticesCommand, RotateVerticesCommand)
-from core.scene import Scene
-from core.texture import face_uv_axes
+from built_core.scene import Scene
+from built_core.texture import face_uv_axes
 
 TEX = {"path": "/x/wood.png", "sw": 0.1, "sh": 0.2, "rot": 0.0}
 
@@ -88,7 +88,7 @@ def test_panel_folded_about_its_edge_keeps_its_texture():
     upper_before = dict(_upper(scene).attrs["texture"])
     hist.execute(RotateVerticesCommand(pts, V(0, 0.1, 0), V(1, 0, 0), 90.0,
                                        carry_textures=True))
-    from core.history import rotation_matrix
+    from built_core.history import rotation_matrix
     m = rotation_matrix(V(0, 0.1, 0), V(1, 0, 0), 90.0)
     turned = [m.map(p) for p in pts]
     low = next(f for f in scene.mesh.faces
@@ -163,7 +163,7 @@ def test_rotate_tool_carries_the_texture(monkeypatch):
     monkeypatch.setattr(tool, "_axis", lambda: V(1, 0, 0))
     tool._positions = list(pts)
     hist.execute(tool._make_builder()([90.0]))
-    from core.history import rotation_matrix
+    from built_core.history import rotation_matrix
     m = rotation_matrix(V(0, 0.1, 0), V(1, 0, 0), 90.0)
     turned = [m.map(p) for p in pts]
     low = next(f for f in scene.mesh.faces

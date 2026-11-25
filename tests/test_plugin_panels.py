@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from core import plugin_panels
+from built_core import plugin_panels
 from plugins import python_console, render_blender
 from views.extension_api import ExtensionApp
 

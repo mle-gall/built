@@ -22,7 +22,7 @@ fn rows2(a: &numpy::ndarray::ArrayView2<'_, f64>) -> PyResult<Vec<[f64; 2]>> {
     Ok((0..a.nrows()).map(|i| [a[[i, 0]], a[[i, 1]]]).collect())
 }
 
-/// The drawing pass of `core.hlr.hlr_drawing` from its camera-space edges:
+/// The drawing pass of `built_core.hlr.hlr_drawing` from its camera-space edges:
 /// ``a``/``b`` (E,3) camera-space endpoints, ``world`` (E,2,3), rows
 /// ``[0, n_hard)`` hard edges then ``n_sil`` silhouettes then cut chords,
 /// ``tris`` (T,3,3) camera-space occluders, the section cap as stacked

@@ -143,7 +143,7 @@ fn add_edge<'py>(
     kw.set_item("eye", eye.map(|v| draw.local(point(v)?)).transpose()?)?;
     let before = history.getattr("revision")?;
     draw.in_frame(|| {
-        let cmd = py.import("core.edits")?.call_method(
+        let cmd = py.import("built_core.edits")?.call_method(
             "build_add_edge",
             (&draw.scene, &a, &b),
             Some(&kw),
@@ -188,7 +188,7 @@ fn add_edges<'py>(history: &Obj<'py>, segments: &Obj<'py>) -> Reply<'py> {
     let before = history.getattr("revision")?;
     draw.in_frame(|| {
         let cmd = py
-            .import("core.edits")?
+            .import("built_core.edits")?
             .call_method1("build_add_edges", (&draw.scene, local))?;
         draw.execute(history, &cmd, &exact)
     })?;
@@ -258,7 +258,7 @@ fn add_face<'py>(
         if curve {
             kw.set_item(
                 "extra",
-                py.import("core.arrangement")?
+                py.import("built_core.arrangement")?
                     .call_method1("curve_extras", (&draw.scene, &points))?,
             )?;
         } else {
@@ -272,7 +272,7 @@ fn add_face<'py>(
             kw.set_item("extra", PyList::new(py, [face])?)?;
             kw.set_item("plane_rebuild", true)?;
         }
-        let cmd = py.import("core.edits")?.call_method(
+        let cmd = py.import("built_core.edits")?.call_method(
             "build_add_edges",
             (&draw.scene, segments),
             Some(&kw),
@@ -309,7 +309,7 @@ fn add_arc<'py>(
     }
     let before = history.getattr("revision")?;
     draw.in_frame(|| {
-        let cmd = py.import("core.arrangement")?.call_method1(
+        let cmd = py.import("built_core.arrangement")?.call_method1(
             "arc_command",
             (
                 &draw.scene,

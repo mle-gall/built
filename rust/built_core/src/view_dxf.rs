@@ -17,7 +17,7 @@ struct Classes {
 }
 impl Classes {
     fn get(py: Python<'_>) -> PyResult<Self> {
-        let m = py.import("core.hlr")?;
+        let m = py.import("built_core.hlr")?;
         Ok(Self {
             edge: m.getattr("KIND_EDGE")?.extract()?,
             profile: m.getattr("KIND_PROFILE")?.extract()?,
@@ -92,7 +92,7 @@ fn dxf_groups_by_layer<'p>(
 ) -> PyResult<Bound<'p, PyList>> {
     let py = drawing.py();
     let c = Classes::get(py)?;
-    let api = py.import("core.layers")?;
+    let api = py.import("built_core.layers")?;
     let kinds = api.getattr("DXF_LINETYPES")?;
     let styles = opt_dict(drawing, "styles")?;
     let labels = opt_dict(drawing, "labels")?;
@@ -228,7 +228,7 @@ fn dxf_cut_layers<'p>(
     geometry: Option<&Obj<'p>>,
 ) -> PyResult<(Bound<'p, PyList>, Bound<'p, PyList>)> {
     let py = scene.py();
-    let api = py.import("core.layers")?;
+    let api = py.import("built_core.layers")?;
     let hatches = crate::model::module(api.py(), "built_core")?.getattr("tag_styles")?.call_method1("cut_hatches", (scene,))?;
     let groups = PyList::empty(py);
     let solids = PyList::empty(py);
@@ -242,7 +242,7 @@ fn dxf_cut_layers<'p>(
     kw.set_item("depth_layers", api.call_method1("grain_layers", (scene,))?)?;
     kw.set_item("geometry", geometry)?;
     let drawing = py
-        .import("core.hlr")?
+        .import("built_core.hlr")?
         .call_method("hlr_drawing", (scene, camera), Some(&kw))?;
     let tags = drawing.getattr("loop_layers")?;
     if tags.is_none() {
@@ -282,7 +282,7 @@ fn dxf_cut_layers<'p>(
         };
         ds.append(if d.is_none() { d } else { d.mul(k)? })?;
     }
-    let hatch = py.import("core.hatches")?;
+    let hatch = py.import("built_core.hatches")?;
     for (tag, data) in by_tag.iter() {
         let (rings, ds): (Obj<'p>, Obj<'p>) = data.extract()?;
         let name = labels

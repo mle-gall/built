@@ -17,9 +17,9 @@ from built_render import SurveyRaster
 from built_core import Vec3 as QVector3D
 
 
-from core.history import History                                  # noqa: E402
-from core.materials import Material                               # noqa: E402
-from core.scene import Scene                                      # noqa: E402
+from built_core.history import History                                  # noqa: E402
+from built_core.materials import Material                               # noqa: E402
+from built_core.scene import Scene                                      # noqa: E402
 from tools.base import ToolContext                                # noqa: E402
 from tools.paint import (                                         # noqa: E402
     RECENT_MAX, PaintTool, push_recent, recent_key)

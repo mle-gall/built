@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! `core.group`, served from here (`core/group.py` is gone). A Group is a
+//! `built_core.group`, served from here (`core/group.py` is gone). A Group is a
 //! self-contained chunk of geometry with its own mesh.
 //!
 //! The scene's main mesh welds every coincident vertex (sticky geometry),
@@ -29,7 +29,7 @@ use super::py_class::{class, method, FastAttr};
 
 type Obj<'py> = Bound<'py, PyAny>;
 
-const MODULE: &str = "core.group";
+const MODULE: &str = "built_core.group";
 /// Every attribute a group has, in one tuple (`link_clone_shell` copies
 /// them). The `DOC_FIELDS` live in the document and the rest stay Python
 /// slots.
@@ -38,7 +38,7 @@ const GROUP_FIELDS: [&str; 20] = [
     "material", "axes", "component", "exploded", "explode_offset", "ext", "locked", "source_uid",
 ];
 /// Custom attributes: document values too, handed out as tracked
-/// containers that write back when edited in place (`core.doc_model`).
+/// containers that write back when edited in place (`built_core.doc_model`).
 const ATTR_FIELDS: [&str; 5] = ["ifc", "ext", "text3d", "exploded", "explode_offset"];
 const DOC_FIELDS: [&str; 18] = [
     "name", "layer", "xform", "children", "hidden", "uid", "material", "axes", "component", "locked", "ifc", "ext",
@@ -182,7 +182,7 @@ fn reserve_group_names<'py>(names: &Obj<'py>) -> PyResult<()> {
 /// exit, the session counter moves past everything the document used, so
 /// a group created by hand afterwards never reuses one of its numbers
 /// either.
-#[pyclass(module = "core.group", name = "document_name_scope")]
+#[pyclass(module = "built_core.group", name = "document_name_scope")]
 struct NameScope {
     local: Py<PyAny>,
     token: Option<Py<PyAny>>,
@@ -245,7 +245,7 @@ fn init_fields<'py>(me: &Obj<'py>, mesh: Option<&Obj<'py>>, name: Option<&Obj<'p
     let uid = match uid.filter(|u| u.is_truthy().unwrap_or(false)) {
         Some(u) => u.clone(),
         // Through the module, as the Python looked it up: scripts and tests
-        // that hand out their own uids replace `core.group.new_uid`.
+        // that hand out their own uids replace `built_core.group.new_uid`.
         None => module(py, MODULE)?.getattr(intern!(py, "new_uid"))?.call0()?,
     };
     me.setattr(intern!(py, "uid"), uid)?;
@@ -382,7 +382,7 @@ fn fields(py: Python<'_>) -> PyResult<Bound<'_, PyTuple>> {
 fn group_reduce<'py>(me: &Obj<'py>) -> PyResult<Bound<'py, PyTuple>> {
     let py = me.py();
     let state = super::doc_model_api::handle_state(me, fields(py)?.as_any())?;
-    let new = py.import("core.doc_model")?.getattr(intern!(py, "new_handle"))?;
+    let new = py.import("built_core.doc_model")?.getattr(intern!(py, "new_handle"))?;
     PyTuple::new(py, [new, PyTuple::new(py, [me.get_type()])?.into_any(), state.into_any()])
 }
 
@@ -516,7 +516,7 @@ fn make_billboard_group<'py>(image_path: &Obj<'py>, height: &Obj<'py>, name: &Ob
 
 // ----------------------------------------------------------------- copies
 
-/// Whether `group` is a placed linked file (`core.links`).
+/// Whether `group` is a placed linked file (`built_core.links`).
 #[pyfunction]
 #[pyo3(name = "_is_link")]
 fn is_link(group: &Obj<'_>) -> PyResult<bool> {
@@ -953,12 +953,12 @@ fn effective_material<'py>(group: &Obj<'py>) -> PyResult<Obj<'py>> {
     Ok(none(py))
 }
 
-/// Fill the module `core.group`.
+/// Fill the module `built_core.group`.
 pub(crate) fn install(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
     m.add("__doc__", "Group: a self-contained chunk of geometry with its own mesh (rust/built_core/src/model/group_api.rs).")?;
     let rs = native(py)?;
-    let dm = py.import("core.doc_model")?;
+    let dm = py.import("built_core.doc_model")?;
     m.add("_NATIVE", &rs)?;
     m.add("built_core", &rs)?;
     m.add("_dm", &dm)?;

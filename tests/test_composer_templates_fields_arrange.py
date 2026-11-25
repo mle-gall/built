@@ -7,7 +7,7 @@ import datetime
 
 import pytest
 
-from core.composition import (Cajetin, Composicion, CotaItem, MarcoVista,
+from built_core.composition import (Cajetin, Composicion, CotaItem, MarcoVista,
                               TextoItem, expand_fields, set_field_context)
 
 

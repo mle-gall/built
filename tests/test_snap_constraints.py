@@ -21,8 +21,8 @@ from types import SimpleNamespace
 import pytest
 from built_core import Vec3 as V
 
-from core import snap
-from core.topology import segment_intersection
+from built_core import snap
+from built_core.topology import segment_intersection
 
 
 def edge(a, b, **flags):
@@ -154,8 +154,8 @@ def test_context_near_tie_is_preserved_across_half_pixel_bucket_boundary():
 
 
 def test_visible_part_of_edge_crossing_camera_plane_still_snaps():
-    from core.camera import OrbitCamera
-    from core.scene import Scene
+    from built_core.camera import OrbitCamera
+    from built_core.scene import Scene
     from tests.controller_surface import ControllerSurface as Viewport
 
     camera = OrbitCamera()

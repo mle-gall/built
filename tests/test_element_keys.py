@@ -5,9 +5,9 @@ import numpy as np
 import pytest
 from built_core import Vec3 as V
 
-from core.mesh import Mesh, DeferredMesh
-from core.scene import Scene
-from core.history import History, MoveVerticesCommand
+from built_core.mesh import Mesh, DeferredMesh
+from built_core.scene import Scene
+from built_core.history import History, MoveVerticesCommand
 
 
 def keys(m):
@@ -127,7 +127,7 @@ def test_bulk_deferred_and_copy():
 
 
 def test_selection_identity_and_copy():
-    from core.mesh import Face
+    from built_core.mesh import Face
     scene = Scene()
     f = triangle(scene.mesh)
     scene.selection = {f}
@@ -185,7 +185,7 @@ def test_bulk_welded_paths_and_multiple_meshes():
 
 
 def test_added_face_boundary_keys_survive_redo():
-    from core.history import AddFaceCommand
+    from built_core.history import AddFaceCommand
     scene = Scene()
     history = History(scene)
     history.execute(AddFaceCommand([V(0, 0, 0), V(2, 0, 0), V(0, 2, 0)]))

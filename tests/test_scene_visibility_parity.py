@@ -26,12 +26,12 @@ GOLDEN = Path(__file__).parent / "fixtures" / "scene_visibility_golden.json.gz"
 
 def _scene(rng):
     from built_core import Matrix4 as M, Vec3 as V
-    from core import layers as L
-    from core.dimension import Dimension
-    from core.group import Group
-    from core.guide import Guide
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core import layers as L
+    from built_core.dimension import Dimension
+    from built_core.group import Group
+    from built_core.guide import Guide
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
     scene = Scene()
     tags = ["A", "B", "C"]
     for t in tags:
@@ -119,7 +119,7 @@ def _rows(scene):
 
 def answers():
     import itertools
-    from core import layers as L
+    from built_core import layers as L
     counter = itertools.count()
     real = L.new_uid
     L.new_uid = lambda: f"k{next(counter)}"

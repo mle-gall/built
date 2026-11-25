@@ -8,9 +8,9 @@ import math
 from built_core import ScreenPoint, Input
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edges
-from core.history import AddFaceCommand, History, MakeGroupCommand
-from core.scene import Scene
+from built_core.edits import build_add_edges
+from built_core.history import AddFaceCommand, History, MakeGroupCommand
+from built_core.scene import Scene
 from tools.base import ToolContext
 from tools.arc import CenterArcTool
 from tools.rotate import RotateTool
@@ -253,8 +253,8 @@ def test_select_all_then_rotate_whole_model_is_rigid():
     # Rotating a whole model must be rigid. A window box-select that misses a
     # protruding piece leaves it behind and the boundary warps (sigue.igz
     # report) — Select All (Ctrl+A) covers every vertex, so nothing folds.
-    from core.history import RotateVerticesCommand
-    from core.topology import _key
+    from built_core.history import RotateVerticesCommand
+    from built_core.topology import _key
 
     scene = Scene()
     vp = _Vp(scene)
@@ -334,12 +334,12 @@ def test_double_click_face_selects_face_plus_edges():
                                   modifiers=Input.NoModifier, snap=None))
     sel = scene.selection
     assert top in sel
-    from core.mesh import Edge
+    from built_core.mesh import Edge
     assert sum(1 for s in sel if isinstance(s, Edge)) == 4   # its 4 edges
 
 
 def test_triple_click_selects_whole_connected_solid():
-    from core.mesh import Edge, Face
+    from built_core.mesh import Edge, Face
     from tools.rust_tools import SelectTool
 
     scene = Scene()
@@ -368,8 +368,8 @@ def test_triple_click_selects_whole_connected_solid():
 def test_ctrl_copy_rotates_a_group_copy():
     # Ctrl = copy mode: the original group stays put, a rotated copy appears,
     # all as ONE undo step.
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     scene = Scene()
     vp = _Vp(scene)
     m = Mesh()
@@ -399,8 +399,8 @@ def test_ctrl_copy_rotates_a_group_copy():
 
 def test_ctrl_copy_of_instance_shares_prototype():
     from built_core import Matrix4 as QMatrix4x4
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     scene = Scene()
     vp = _Vp(scene)
     proto = Mesh()
@@ -500,8 +500,8 @@ def test_drag_from_centre_sets_custom_axis():
 def test_rotate_mixed_selection_groups_and_loose():
     # A whole drawing: two groups + loose geometry, all selected — everything
     # must turn together as ONE undo step (only the first group used to).
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     scene = Scene()
     vp = _Vp(scene)
     _rect(scene, vp.history, 2, 0, 6, 2)           # loose slab
@@ -535,8 +535,8 @@ def test_rotate_mixed_selection_groups_and_loose():
 
 def test_move_mixed_selection_groups_and_loose():
     from built_core import ScreenPoint
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from tools.move import MoveTool
     scene = Scene()
     vp = _Vp(scene)
@@ -564,8 +564,8 @@ def test_move_mixed_selection_groups_and_loose():
 
 
 def test_scale_mixed_selection_groups_and_loose():
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from tools.scale import ScaleTool
     scene = Scene()
     vp = _Vp(scene)

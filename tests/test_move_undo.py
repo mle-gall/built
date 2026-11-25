@@ -6,9 +6,9 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edges
-from core.history import History, MoveVerticesCommand
-from core.scene import Scene
+from built_core.edits import build_add_edges
+from built_core.history import History, MoveVerticesCommand
+from built_core.scene import Scene
 
 
 def V(x, y):

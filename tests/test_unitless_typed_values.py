@@ -14,8 +14,8 @@ from built_core import Input as Qt
 from built_core import Vec3 as QVector3D
 
 
-from core import units  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core import units  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from tests.controller_surface import ControllerSurface as Viewport
 
 

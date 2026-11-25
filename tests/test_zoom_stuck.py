@@ -9,7 +9,7 @@ import math
 
 from built_core import Vec3 as QVector3D
 
-from core.camera import MIN_DISTANCE, OrbitCamera as Camera
+from built_core.camera import MIN_DISTANCE, OrbitCamera as Camera
 
 
 def _close_up(focus):

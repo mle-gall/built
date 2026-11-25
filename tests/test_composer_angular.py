@@ -7,7 +7,7 @@ import math
 
 import pytest
 
-from core.composition import (AddItemCommand, Composicion, CotaAngularItem,
+from built_core.composition import (AddItemCommand, Composicion, CotaAngularItem,
                               RemoveItemCommand)
 
 

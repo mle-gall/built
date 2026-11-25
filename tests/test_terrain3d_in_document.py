@@ -15,7 +15,7 @@ from georef.datum import SceneDatum
 
 
 def _georef_scene(terrain3d=None):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from georef.tiles import PRESETS, TileLayer
     scene = Scene()
     scene.georef = SceneDatum(-16.39889, -71.53694)
@@ -28,7 +28,7 @@ def _georef_scene(terrain3d=None):
 
 
 def test_the_flag_round_trips_and_old_files_open_flat(tmp_path):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     for want in (True, False):
         out = tmp_path / f"t{want}.igz"

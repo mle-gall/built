@@ -32,7 +32,7 @@ CASES = [(g, name, make) for g in GROUPS for name, make in cases(g)]
 def _no_field_context():
     """The goldens were recorded with no sheet's fields in force ({escala}
     reads nothing): a sheet another test left current must not fill them."""
-    from core.composition import set_field_context
+    from built_core.composition import set_field_context
     set_field_context()
     yield
 
@@ -110,7 +110,7 @@ def test_the_box_is_the_record_s(group, name, make):
 @pytest.mark.parametrize("older_record", [True, False])
 def test_legend_hatch_uses_the_same_clipped_marks_as_a_frame(older_record):
     import numpy as np
-    from core.composition import Leyenda, MarcoVista
+    from built_core.composition import Leyenda, MarcoVista
 
     color, ink, ground = [.3, .6, .8], [.2, .1, .3], [1., .9, .8]
     form = {"angle": 33., "scale": .65}

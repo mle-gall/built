@@ -208,7 +208,7 @@ steps! {
 #[pymethods]
 impl EnsureLayers {
     /// Give a document the tags and folders pasted geometry carries and it
-    /// lacks, as a step of the paste (`core.layers.add_missing`).
+    /// lacks, as a step of the paste (`built_core.layers.add_missing`).
     #[new]
     fn new(template: Obj<'_>) -> PyClassInitializer<Self> {
         let step = RecordStep::new("EnsureLayersCommand", run_ensure, vec![("_template", template)])

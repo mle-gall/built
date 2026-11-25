@@ -12,8 +12,8 @@ import random
 
 import pytest
 
-from core import units
-from core.scene import Scene
+from built_core import units
+from built_core.scene import Scene
 
 IN = 0.0254
 FT = 0.3048

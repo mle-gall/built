@@ -379,7 +379,7 @@ pub(crate) fn plan_segments<'py>(
     tag: Obj<'py>,
 ) -> PyResult<Bound<'py, PyList>> {
     let py = segments.py();
-    let api = py.import("core.edits")?;
+    let api = py.import("built_core.edits")?;
     let plan = Plan {
         api,
         edges,

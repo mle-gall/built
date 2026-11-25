@@ -14,7 +14,7 @@ from tests.raster_samples import pixels, solid_raster
 
 from built_core.settings import settings
 from built_core import recent
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import igz
 from built_render import chrome_sheet as cs
 from built_render import wgpu_start as ws

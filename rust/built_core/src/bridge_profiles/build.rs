@@ -115,7 +115,7 @@ pub(super) fn bridge<'py>(mesh: &Obj<'py>, profiles: &Obj<'py>) -> PyResult<Boun
     let before = keys(&mesh.getattr("faces")?)?;
     let mut diagonals = vec![];
     let seed = PySet::empty(py)?;
-    let key = crate::model::module(py, "core.topology")?.getattr("_key")?;
+    let key = crate::model::module(py, "built_core.topology")?.getattr("_key")?;
     for poly in polys.iter() {
         let mut points = vec![];
         let mut coords: Vec<glam::DVec3> = vec![];
@@ -180,7 +180,7 @@ pub(super) fn bridge<'py>(mesh: &Obj<'py>, profiles: &Obj<'py>) -> PyResult<Boun
         }
     }
     let ids = keys(new.as_any())?;
-    let facet = crate::model::module(py, "core.sweep")?
+    let facet = crate::model::module(py, "built_core.sweep")?
         .getattr("_CURVE_FACET_COS")?
         .extract::<f64>()?;
     for e in mesh.getattr("edges")?.try_iter()? {

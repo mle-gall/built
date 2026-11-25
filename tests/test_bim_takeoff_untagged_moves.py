@@ -14,9 +14,9 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from built_core import Vec3 as V
 from views import wgpu_ui
 
-from core.group import Group  # noqa: E402
-from core.history import MoveGroupCommand  # noqa: E402
-from core.mesh import Mesh  # noqa: E402
+from built_core.group import Group  # noqa: E402
+from built_core.history import MoveGroupCommand  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
 
 
 def _box(x):
@@ -106,7 +106,7 @@ def test_another_project_is_measured_on_its_own(native_host):
 
 
 def test_an_empty_takeoff_maps_no_tree(native_host, monkeypatch):
-    from core import outliner
+    from built_core import outliner
     _model(native_host.viewport.scene)
     def unexpected(*_):
         raise AssertionError("measuring an empty takeoff walked the Browser parents")

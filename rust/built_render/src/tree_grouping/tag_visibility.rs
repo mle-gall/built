@@ -47,7 +47,7 @@ pub fn isolate_tags(vp: &Bound<'_, PyAny>, rows: Vec<String>) -> PyResult<()> {
         vp.call_method1("flash_status", (translated(py, READ_ONLY, None)?, 4000))?;
         return Ok(());
     }
-    let layers = py.import("core.layers")?;
+    let layers = py.import("built_core.layers")?;
     let mut keys = BTreeSet::new();
     for row in &rows {
         if let Some(key) = row.strip_prefix("preview-folder:") {
@@ -143,7 +143,7 @@ pub fn choose_merge_tag(win: &Bound<'_, PyAny>, key: &str) -> PyResult<()> {
     if source.is_none() {
         return Ok(());
     }
-    let layers = py.import("core.layers")?;
+    let layers = py.import("built_core.layers")?;
     let choices = PyDict::new(py);
     for tag in scene.getattr("layers")?.try_iter()? {
         let tag = tag?;
@@ -222,7 +222,7 @@ pub fn has_tag_actions(scene: &Bound<'_, PyAny>, entities: &Bound<'_, PyAny>) ->
         && entities.len()? > 0
         && scene
             .py()
-            .import("core.layers")?
+            .import("built_core.layers")?
             .call_method1("taggable", (entities,))?
             .len()?
             > 0
@@ -242,7 +242,7 @@ pub fn viewport_tag_menu(win: &Bound<'_, PyAny>, selection: &Bound<'_, PyAny>) -
     if !targets.eq(scene.getattr("selection")?)? {
         return Ok(());
     }
-    let layers = py.import("core.layers")?;
+    let layers = py.import("built_core.layers")?;
     let current: BTreeSet<String> = layers
         .call_method1("selection_layers", (&scene,))?
         .extract()?;

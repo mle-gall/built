@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 def test_open_forgets_every_id_keyed_cache(native_window, tmp_path):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     path = tmp_path / "other.igz"
     igz.save_scene(Scene(), path)
@@ -71,7 +71,7 @@ def test_new_drawing_drops_acquired_inference_references(native_window):
 def test_undo_drops_acquired_inference_references(native_window):
     from built_core import Vec3 as QVector3D
 
-    from core.history import AddEdgeCommand
+    from built_core.history import AddEdgeCommand
 
     win = native_window
     vp = win.viewport

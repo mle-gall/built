@@ -17,7 +17,7 @@ def win(native_host):
 
 
 def _doc_file(tmp_path, name="abierto.igz"):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     path = tmp_path / name
     igz.save_scene(Scene(), path)
@@ -31,7 +31,7 @@ def test_closing_the_last_project_shows_start(win):
 
 
 def test_plus_brings_a_project_and_its_scene_commands_back(win):
-    from core import units
+    from built_core import units
     units.set_ask_at_start(False)
     win.close_document()
     wgpu_tabs.action(win, None, "new")
@@ -109,7 +109,7 @@ def test_plus_from_start_inserts_the_scale_figure(win):
 
 def test_an_external_edit_reveals_the_drawing(win):
     from built_core import Vec3
-    from core.history import AddEdgeCommand
+    from built_core.history import AddEdgeCommand
     win.close_document()
     win.viewport.notify_scene_changed()
     wgpu_start.before_frame(win._host.view, win)
@@ -122,8 +122,8 @@ def test_an_external_edit_reveals_the_drawing(win):
 
 
 def test_a_workspace_entered_from_start_is_visible(win):
-    from core.history import History
-    from core.scene import Scene
+    from built_core.history import History
+    from built_core.scene import Scene
 
     class Workspace:
         allowed_tools = None

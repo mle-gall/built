@@ -10,7 +10,7 @@ use pyo3::{
 fn can_make_here(vp: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = vp.py();
     if py
-        .import("core.outliner")?
+        .import("built_core.outliner")?
         .call_method1("editing_inside_component", (vp.getattr("scene")?,))?
         .is_truthy()?
     {
@@ -53,7 +53,7 @@ fn make_group(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let sel = vp.getattr("scene")?.getattr("selection")?;
     let faces = matching(&sel, "built_core.mesh", "Face")?;
     let edges = matching(&sel, "built_core.mesh", "Edge")?;
-    let groups = matching(&sel, "core.group", "Group")?;
+    let groups = matching(&sel, "built_core.group", "Group")?;
     let loose = !edges.is_empty() || !faces.is_empty();
     let hist = py.import("built_core.history")?;
     let fail = if loose {
@@ -113,7 +113,7 @@ fn explode_group(win: &Bound<'_, PyAny>) -> PyResult<()> {
     }
     let vp = win.getattr("viewport")?;
     let sel = vp.getattr("scene")?.getattr("selection")?;
-    let groups = matching(&sel, "core.group", "Group")?;
+    let groups = matching(&sel, "built_core.group", "Group")?;
     if groups.is_empty() {
         if !matching(&sel, "built_core.image_plane", "ImagePlane")?.is_empty() {
             win.call_method0("_on_explode_image")?;
@@ -265,7 +265,7 @@ fn make_component(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let faces = matching(&sel, "built_core.mesh", "Face")?;
     let edges = matching(&sel, "built_core.mesh", "Edge")?;
     let groups = PyList::empty(py);
-    for g in matching(&sel, "core.group", "Group")?.iter() {
+    for g in matching(&sel, "built_core.group", "Group")?.iter() {
         if !g.getattr("billboard")?.is_truthy()? {
             groups.append(g)?;
         }

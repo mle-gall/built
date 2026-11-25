@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""What the retired Python passes of :mod:`core.vista_caras` answered.
+"""What the retired Python passes of :mod:`built_core.vista_caras` answered.
 
 The faces a view shows were worked out twice: by the Rust engine
 (``faces_view``, ``visible_parts``) and by a Python pass of the same rules
@@ -36,7 +36,7 @@ def _square(x, y, s):
 def _scene(rng, n, roof=True):
     """Small tiles at random heights over a floor, under a roof covering
     half of them: the faces a view of a building is made of."""
-    from core.vista_caras import FaceFill
+    from built_core.vista_caras import FaceFill
     faces = []
 
     def face(ring, z, tilt=(0.0, 0.0)):
@@ -55,7 +55,7 @@ def _scene(rng, n, roof=True):
 
 
 def copies(faces):
-    from core.vista_caras import FaceFill
+    from built_core.vista_caras import FaceFill
     return [FaceFill(**vars(f)) for f in faces]
 
 
@@ -64,7 +64,7 @@ def vp_same_faces():
 
 
 def vp_holes():
-    from core.vista_caras import FaceFill
+    from built_core.vista_caras import FaceFill
     faces = copies(_scene(np.random.default_rng(8), 120))
     outer = _square(2, 2, 4)
     hole = _square(3, 3, 2)[::-1].copy()
@@ -78,7 +78,7 @@ def vp_holes():
 
 
 def vp_grazing():
-    from core.vista_caras import FaceFill
+    from built_core.vista_caras import FaceFill
     slab = FaceFill(rings=[_square(0, 0, 6), _square(2, 2, 2)[::-1].copy()],
                     rgb=(0, 0, 0), layer="0", depth=0.0,
                     extra={"near": (0.0, 0.0, 0.0)})
@@ -88,7 +88,7 @@ def vp_grazing():
 
 
 def vp_coplanar():
-    from core.vista_caras import FaceFill
+    from built_core.vista_caras import FaceFill
     a = FaceFill(rings=[_square(0, 0, 2)], rgb=(0, 0, 0), layer="0",
                  depth=-1.0, extra={"near": (0.0, 0.0, 1.0)})
     b = FaceFill(rings=[_square(1, 1, 2)], rgb=(0, 0, 0), layer="0",
@@ -97,7 +97,7 @@ def vp_coplanar():
 
 
 def vp_hair():
-    from core.vista_caras import FaceFill
+    from built_core.vista_caras import FaceFill
     faces = copies(_scene(np.random.default_rng(2), 60))
     t = np.linspace(0, 1, 200)
     hair = np.column_stack([3 + t, 5 + 1e-7 * (t * 2e6 % 2)])
@@ -108,7 +108,7 @@ def vp_hair():
 
 
 def _face(ring, near, depth):
-    from core.vista_caras import FaceFill
+    from built_core.vista_caras import FaceFill
     return FaceFill(rings=[ring], rgb=(0, 0, 0), layer="0", opacity=1.0,
                     depth=depth, extra={"near": near})
 
@@ -133,7 +133,7 @@ def vp_quarters():
 
 
 def vp_kerb():
-    from core.vista_caras import FaceFill
+    from built_core.vista_caras import FaceFill
     return [FaceFill(rings=[np.array(r, float) for r in f["rings"]],
                      rgb=(0, 0, 0), layer="0", opacity=f["opacity"],
                      depth=f["depth"], extra={"near": tuple(f["near"])})
@@ -149,9 +149,9 @@ def geometry_cases():
     """``{name: (items, camera, projector, section)}`` of the face-geometry
     comparisons (``tests/test_faces_view_rust.py``'s scenes)."""
     from built_core import Vec3 as V
-    from core import vista_caras as VC
-    from core.camera import OrbitCamera
-    from core.scene import Scene
+    from built_core import vista_caras as VC
+    from built_core.camera import OrbitCamera
+    from built_core.scene import Scene
     from built_core.section import SectionPlane
     from tests.test_faces_view_rust import _camera, _scene as model
     out = {}
@@ -186,7 +186,7 @@ def geometry_cases():
 # ---- Answers -----------------------------------------------------------------
 
 def net(f) -> float:
-    from core.vista_caras import _area
+    from built_core.vista_caras import _area
     return float(sum(_area(r) for r in f.rings))
 
 
@@ -238,7 +238,7 @@ def python_view_faces():
 
 def _write():
     from core import _native
-    from core import vista_caras as VC
+    from built_core import vista_caras as VC
     data = {"visible": {}, "geometry": {}}
     for name, make in VISIBLE.items():
         data["visible"][name] = visible_record(VC._visible_parts_py(copies(make())))

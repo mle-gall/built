@@ -15,9 +15,9 @@ from built_core import ScreenPoint, Input
 from built_render import MouseEvent
 from built_core import Vec3 as V
 
-from core.history import History
-from core.scene import Scene
-from core.snap import SnapResult
+from built_core.history import History
+from built_core.scene import Scene
+from built_core.snap import SnapResult
 from tools.base import ToolContext
 from tools.move import MoveTool
 

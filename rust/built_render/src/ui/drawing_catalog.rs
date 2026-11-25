@@ -214,7 +214,7 @@ impl Catalog {
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
         self.standard_inks = scene.getattr("linetype_colors")?.extract()?;
         if self.patterns.is_empty() {
-            self.patterns = py.import("core.layers")?.getattr("LINETYPES")?.extract()?;
+            self.patterns = py.import("built_core.layers")?.getattr("LINETYPES")?.extract()?;
             for pattern in self.patterns.values_mut() {
                 for gap in pattern.iter_mut().skip(1).step_by(2) { *gap = -*gap; }
             }

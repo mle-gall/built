@@ -244,7 +244,7 @@ def test_tile_layer_round_trips_through_an_igz(tmp_path):
     """The base map's CAPTURE is document state. It gets set up around whatever
     you imported; a reopened file that fell back to a default square somewhere
     else reads as the map being misplaced — which is how this was found."""
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     from georef.tiles import PRESETS, TileLayer
 
@@ -267,7 +267,7 @@ def test_tile_layer_round_trips_through_an_igz(tmp_path):
 
 def test_custom_source_survives_without_a_preset(tmp_path):
     """A user's own XYZ source isn't in PRESETS, so the URL has to travel."""
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     from georef.tiles import TileLayer, TileSource
 
@@ -285,7 +285,7 @@ def test_custom_source_survives_without_a_preset(tmp_path):
 
 
 def test_document_without_a_base_map_loads_clean(tmp_path):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
 
     out = tmp_path / "plain.igz"

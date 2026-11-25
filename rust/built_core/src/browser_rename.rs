@@ -274,7 +274,7 @@ pub(crate) fn browser_rename(
     let walk = py
         .import("built_core.structure")?
         .call_method1("_placements", (scene,))?;
-    let row_id = py.import("core.link_structure")?.getattr("row_id")?;
+    let row_id = py.import("built_core.link_structure")?.getattr("row_id")?;
     let repeated: HashSet<String> = root.call_method0("_repeated_uids")?.extract()?;
     let qualified_keys = ranks.keys().any(|key| key.starts_with("@["));
     let mut targets = Vec::new();

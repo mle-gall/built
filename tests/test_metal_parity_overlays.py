@@ -8,13 +8,13 @@ from built_core import ScreenPoint as QPointF, Input as Qt
 from built_render import AnnotationCanvas, PaintColor, PaintPen, SurveyRaster
 from tests.raster_samples import pixels
 from built_core import Vec3 as V
-from core.camera import OrbitCamera as Camera
-from core.scene import Scene
-from core.dimension import Dimension
-from core.textlabel import TextLabel
-from core.guide import Guide
+from built_core.camera import OrbitCamera as Camera
+from built_core.scene import Scene
+from built_core.dimension import Dimension
+from built_core.textlabel import TextLabel
+from built_core.guide import Guide
 from built_core.section import SectionPlane
-from core.snap import SnapResult
+from built_core.snap import SnapResult
 from views.document_interaction import _guide_vertices, shown_guides
 from tests.controller_surface import ControllerSurface as Viewport
 from views.wgpu_overlay import draw_snap_indicator, paint_layer, selection_rectangle
@@ -169,8 +169,8 @@ def test_tool_overlay_on_empty_annotation_document(tool_name):
         tool._anchor_px = QPointF(180, 50)
     else:
         from tools.flip import FlipTool
-        from core.mesh import Mesh
-        from core.group import Group
+        from built_core.mesh import Mesh
+        from built_core.group import Group
         mesh = Mesh()
         mesh.add_face([V(-1, -1, 0), V(1, -1, 0), V(0, 1, 1)])
         group = Group(mesh)

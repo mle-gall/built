@@ -18,8 +18,8 @@ import random
 import pytest
 from built_core import Vec3 as V
 
-from core.mesh import Mesh
-from core.topology import fold_nonplanar_faces, is_planar
+from built_core.mesh import Mesh
+from built_core.topology import fold_nonplanar_faces, is_planar
 
 
 def _frame(rng):

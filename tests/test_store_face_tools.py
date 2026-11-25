@@ -9,11 +9,11 @@ import pytest
 from built_core import Vec3 as V
 
 from built_core import store_mesh as S
-from core.history import History
-from core.intersect import WITH_CONTEXT, segments_for
-from core.intersect import build_intersect_faces
-from core.mesh import _KEY_NAMESPACES
-from core.scene import Scene
+from built_core.history import History
+from built_core.intersect import WITH_CONTEXT, segments_for
+from built_core.intersect import build_intersect_faces
+from built_core.mesh import _KEY_NAMESPACES
+from built_core.scene import Scene
 from tests.test_store_mesh import fingerprint
 from tests.test_offset_regions import _VP, _offset
 from tests.test_intersect_faces import _box, RED
@@ -82,8 +82,8 @@ def test_sweep(monkeypatch, shape):
                     for i in range(12 if shape == "closed" else 5)]
         face = scene.mesh.add_face([path[0] + V(x, 0, z) for x,z in [(0,0),(1,0),(1,1),(0,1)]])
         if shape == "arc":
-            import core.mesh
-            monkeypatch.setattr(core.mesh, "_CURVE_COUNTER", 300)
+            import built_core.mesh
+            monkeypatch.setattr(built_core.mesh, "_CURVE_COUNTER", 300)
             for p, q in zip(path, path[1:]):
                 scene.mesh.add_edge(p, q)
             scene.mesh.tag_curve(path, closed=False)
@@ -140,7 +140,7 @@ def test_intersect(monkeypatch, shape):
 def test_tilted_plates_match_order_and_float_endpoints(monkeypatch):
     import random
     from tests.test_intersect_native import _plates
-    from core.intersect import WITH_SELECTION
+    from built_core.intersect import WITH_SELECTION
 
     plates = _plates(random.Random(104), 50)
     results = []
@@ -153,7 +153,7 @@ def test_tilted_plates_match_order_and_float_endpoints(monkeypatch):
 
 def test_transformed_group_crossings_ignore_foreign_keys(monkeypatch):
     from built_core import Matrix4 as QMatrix4x4
-    from core.intersect import WITH_MODEL
+    from built_core.intersect import WITH_MODEL
 
     results = []
     for scene in scenes(monkeypatch):
@@ -192,7 +192,7 @@ def test_refused_face_mutation_restores_mesh_and_edit_scope(monkeypatch, outer_e
 
 
 def test_rejected_sweep_preserves_snapshot(monkeypatch):
-    from core.sweep import build_sweep_face
+    from built_core.sweep import build_sweep_face
 
     scene = list(scenes(monkeypatch))[-1]
     mesh = scene.mesh
@@ -206,7 +206,7 @@ def test_rejected_sweep_preserves_snapshot(monkeypatch):
 
 
 def test_direct_offset_record_and_hole_refusal(monkeypatch):
-    from core.offset import build_offset_face, OffsetHoleCollision
+    from built_core.offset import build_offset_face, OffsetHoleCollision
 
     scene = list(scenes(monkeypatch))[-1]
     mesh = scene.mesh
@@ -243,7 +243,7 @@ def _check_feed(step, before):
 
 def test_reverse_profile_paints_outward_faces_only(monkeypatch):
     from tests.test_core_protocol import _read
-    from core.protocol.commands import run
+    from built_core.protocol.commands import run
     for scene in scenes(monkeypatch):
         m, hist = scene.mesh, History(scene)
         profile = m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 0, 1), V(0, 0, 1)])
@@ -274,10 +274,10 @@ def test_reverse_profile_paints_outward_faces_only(monkeypatch):
 
 @pytest.mark.parametrize("placed", [False, True])
 def test_piercing_slab_partitions_both_solids(monkeypatch, placed):
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from tests.test_core_protocol import _read
-    from core.protocol.commands import run
+    from built_core.protocol.commands import run
     from built_core import Matrix4 as QMatrix4x4
 
     for scene in scenes(monkeypatch):
@@ -329,8 +329,8 @@ def test_piercing_slab_partitions_both_solids(monkeypatch, placed):
 
 
 def test_placement_cut_failure_restores_both_meshes(monkeypatch):
-    from core import intersect as X
-    from core.group import Group
+    from built_core import intersect as X
+    from built_core.group import Group
     from tests.test_core_protocol import _read
 
     left, right = [s.mesh for s in scenes(monkeypatch)]

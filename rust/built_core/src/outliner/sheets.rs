@@ -102,7 +102,7 @@ fn world_bounds(groups: &Obj, group: &Obj) -> PyResult<Option<((f64, f64, f64), 
     }
     let placements = groups
         .py()
-        .import("core.group")?
+        .import("built_core.group")?
         .call_method1("iter_placements", (group, base))?;
     let (mut lo, mut hi) = (DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY));
     for row in placements.try_iter()? {
@@ -182,7 +182,7 @@ fn fit_scale(scene: &Obj, view: &Obj, w_mm: f64, h_mm: f64, fill: f64) -> PyResu
     }
     let camera = scene
         .py()
-        .import("core.camera")?
+        .import("built_core.camera")?
         .call_method0("OrbitCamera")?;
     camera.setattr("target", Vec3::from(xyz(&view.getattr("target")?)?))?;
     for key in ["distance", "yaw", "pitch"] {

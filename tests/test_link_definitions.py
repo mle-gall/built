@@ -14,11 +14,11 @@ import built_core
 import pytest
 from built_core import Vec3 as V
 
-from core import links
-from core.group import copy_group, iter_placements
-from core.history import History, UnlinkCommand
-from core.layers import Layer
-from core.scene import Scene
+from built_core import links
+from built_core.group import copy_group, iter_placements
+from built_core.history import History, UnlinkCommand
+from built_core.layers import Layer
+from built_core.scene import Scene
 from formats import igz
 from tests.test_links_unlink import _source, _parts, _meshes
 
@@ -84,7 +84,7 @@ def test_a_reload_swaps_the_definition(tmp_path):
 
 
 def test_what_holds_a_part_keeps_holding_it_through_a_reload(tmp_path):
-    from core.dimension import Dimension
+    from built_core.dimension import Dimension
     host, link, src = _host(tmp_path)
     part = link.children[0]
     host.selection.add(part)

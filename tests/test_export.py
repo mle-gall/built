@@ -9,10 +9,10 @@ from pathlib import Path
 
 from built_core import Vec3 as QVector3D
 
-from core.history import History, SetFaceColorCommand
-from core.group import Group
+from built_core.history import History, SetFaceColorCommand
+from built_core.group import Group
 from built_core.orient import is_closed, orient_outward, signed_volume
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import obj as obj_format
 from formats import stl as stl_format
 import tests.test_fuzz_engine as F
@@ -214,7 +214,7 @@ def test_big_import_lands_as_reference_group(tmp_path):
 
 
 def test_big_import_undo_removes_the_group(tmp_path):
-    from core.history import SnapshotImport
+    from built_core.history import SnapshotImport
     from formats.dae import _MAX_FUSE_LOOPS
 
     p = _big_obj(tmp_path, _MAX_FUSE_LOOPS + 10)

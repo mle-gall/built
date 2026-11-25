@@ -13,12 +13,12 @@ import math
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.group import Group, copy_group, frame_axes, group_frame
-from core.history import (ExplodeGroupCommand, FlipGroupsCommand, History,
+from built_core.group import Group, copy_group, frame_axes, group_frame
+from built_core.history import (ExplodeGroupCommand, FlipGroupsCommand, History,
                           MoveGroupCommand, RotateGroupCommand,
                           ScaleGroupCommand)
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from formats import igz
 
 
@@ -240,7 +240,7 @@ def test_the_scale_box_of_a_turned_group_is_its_own_size():
 
 
 def test_scaling_along_a_turned_red_stretches_only_that_way():
-    from core.history import scale_matrix
+    from built_core.history import scale_matrix
     a = math.radians(30)
     x = V(math.cos(a), math.sin(a))
     y = V(-math.sin(a), math.cos(a))
@@ -271,7 +271,7 @@ def test_scale_group_command_along_its_axes_keeps_the_width():
 # ---- Phase 4: Change Axes ---------------------------------------------------------
 
 def _world_pts(g):
-    from core.group import world_mesh
+    from built_core.group import world_mesh
     return sorted((round(v.position.x(), 5), round(v.position.y(), 5),
                    round(v.position.z(), 5)) for v in world_mesh(g).vertices)
 
@@ -284,7 +284,7 @@ def _frame_at(o, deg):
 
 
 def test_change_axes_on_a_group_moves_nothing():
-    from core.history import ChangeAxesCommand
+    from built_core.history import ChangeAxesCommand
     scene = Scene()
     hist = History(scene)
     g = _slab()
@@ -298,7 +298,7 @@ def test_change_axes_on_a_group_moves_nothing():
 
 
 def test_change_axes_on_a_component_keeps_every_copy_in_place():
-    from core.history import ChangeAxesCommand
+    from built_core.history import ChangeAxesCommand
     scene = Scene()
     hist = History(scene)
     proto = _slab().mesh
@@ -326,7 +326,7 @@ def test_change_axes_on_a_component_that_kept_its_group_axes_484():
     those axes on top of its placement; Change Axes left them there, so the
     frame came out turned again — 180° on @jonson7777's chair, which read as
     «nothing changed»."""
-    from core.history import ChangeAxesCommand
+    from built_core.history import ChangeAxesCommand
     scene = Scene()
     hist = History(scene)
     proto = _slab().mesh
@@ -405,10 +405,10 @@ def test_a_pasted_rotated_group_keeps_its_axes():
     snapshot and Paste copies that — the instance copy dropped the local
     axes, so a pasted rotated group came back with the world's axes."""
     from built_core import Matrix4 as QMatrix4x4, Vec3 as V
-    from core.group import Group, copy_group, group_frame
-    from core.history import RotateGroupCommand
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core.group import Group, copy_group, group_frame
+    from built_core.history import RotateGroupCommand
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
     m = Mesh()
     m.add_face([V(0, 0, 0), V(2, 0, 0), V(2, 1, 0), V(0, 1, 0)])
     g = Group(m)

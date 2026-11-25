@@ -11,11 +11,11 @@ import pytest
 from built_core import ScreenPoint as QPointF
 from built_core import Input as Qt
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
-from core.camera import OrbitCamera as Camera
-from core.group import Group
-from core.mesh import Mesh
-from core.scene import Scene
-from core.snap import SnapResult
+from built_core.camera import OrbitCamera as Camera
+from built_core.group import Group
+from built_core.mesh import Mesh
+from built_core.scene import Scene
+from built_core.snap import SnapResult
 from tests.controller_surface import ControllerSurface as Viewport
 from views.wgpu_annotations import AnnotationLayout, draw_tool_feedback
 from views.wgpu_overlay import draw_snap_indicator

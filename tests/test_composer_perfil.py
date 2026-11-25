@@ -13,7 +13,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from built_core import ScreenRect as QRectF
 from built_core import Vec3 as QVector3D
 
-from core.composition import AddItemCommand, Composicion, PerfilTerreno
+from built_core.composition import AddItemCommand, Composicion, PerfilTerreno
 from georef.datum import SceneDatum
 from georef.geopath import GeoPath
 from tests.test_composer_canvas import _FakeViewport

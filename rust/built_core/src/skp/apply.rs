@@ -105,7 +105,7 @@ pub fn skp_apply_folders<'py>(
     records: &Bound<'py, PyAny>,
 ) -> PyResult<(Bound<'py, PyDict>, Bound<'py, PyDict>)> {
     let py = scene.py();
-    let layers = py.import("core.layers")?;
+    let layers = py.import("built_core.layers")?;
     let names = PyDict::new(py);
     let visibility = PyDict::new(py);
     let folders = PyDict::new(py);
@@ -173,7 +173,7 @@ pub fn skp_apply_metadata(scene: &Bound<'_, PyAny>, payload: &Bound<'_, PyDict>)
         let (folders, _) = skp_apply_folders(scene, &rows(payload, "layer_folders")?)?;
         let list = scene.getattr("layers")?;
         let existing = names(&list, "key")?;
-        let class = py.import("core.layers")?.getattr("Layer")?;
+        let class = py.import("built_core.layers")?.getattr("Layer")?;
         for row in tags.try_iter()? {
             let row = row?;
             let name = opt(&row, "name")?;
@@ -222,7 +222,7 @@ pub fn skp_apply_metadata(scene: &Bound<'_, PyAny>, payload: &Bound<'_, PyDict>)
     }
     let dims = rows(payload, "dimensions")?;
     if dims.is_truthy()? {
-        let class = py.import("core.dimension")?.getattr("Dimension")?;
+        let class = py.import("built_core.dimension")?.getattr("Dimension")?;
         let list = scene.getattr("dimensions")?;
         for raw in dims.try_iter()? {
             let raw = raw?;
@@ -414,7 +414,7 @@ pub(super) fn apply_geometry<'py>(
     let mut defs = Definitions {
         records: rows(payload, "protos")?.extract()?,
         meshes: Vec::new(),
-        group: py.import("core.group")?.getattr("Group")?,
+        group: py.import("built_core.group")?.getattr("Group")?,
         ids: used,
         namespace: opt(payload, "identity_namespace")?,
         uuid: py.import("uuid")?.into_any(),

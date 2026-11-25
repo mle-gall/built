@@ -4,7 +4,7 @@
 //! plan), the paint each face is drawn with and, for textured faces, the
 //! mapping of each side.
 //!
-//! The material rules themselves (`core.materials`: the container's paint
+//! The material rules themselves (`built_core.materials`: the container's paint
 //! under a face's own, the back of a face) are the document's and are asked
 //! per attribute row, not per face.
 use super::assemble::{choose_origin, REBASE_DISTANCE};
@@ -279,7 +279,7 @@ fn material_columns<'py>(
     }
     let normals = points.normals(corners, sizes, counts, &textured)?;
     let vec3 = py.import("built_core")?.getattr("Vec3")?;
-    let axes = py.import("core.texture")?.getattr("face_uv_axes")?;
+    let axes = py.import("built_core.texture")?.getattr("face_uv_axes")?;
     let rebased = origin.iter().any(|v| *v != 0.);
     let mut resolved: HashMap<(i64, [u64; 3]), [f32; 16]> = HashMap::new();
     let mut maps = Array2::<f32>::zeros((faces, 16));

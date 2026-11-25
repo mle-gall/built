@@ -103,9 +103,9 @@ fn answer(win: &Obj, payload: &str, source_view: Option<&Obj>) -> PyResult<()> {
 #[pyfunction]
 fn text3d(win: &Obj, params: &Obj, done: Py<PyAny>) -> PyResult<()> {
     let py = win.py();
-    let units = py.import("core.units")?;
+    let units = py.import("built_core.units")?;
     let draft = py
-        .import("core.text3d")?
+        .import("built_core.text3d")?
         .call_method1("text_params", (tr(py, "Built")?,))?;
     if !params.is_none() {
         draft.call_method1("update", (params,))?;
@@ -124,10 +124,10 @@ fn text3d(win: &Obj, params: &Obj, done: Py<PyAny>) -> PyResult<()> {
         let unit = unit.clone();
         func(py, move |py, args| {
             let p = args.get_item(0)?;
-            let units = py.import("core.units")?;
+            let units = py.import("built_core.units")?;
             let metres =
                 |k: &str| units.call_method1("metres_from_number", (p.get_item(k)?, &unit));
-            let value = py.import("core.text3d")?.call_method1(
+            let value = py.import("built_core.text3d")?.call_method1(
                 "text_params",
                 (
                     p.get_item("text")?.call_method0("strip")?,

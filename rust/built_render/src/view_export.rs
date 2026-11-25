@@ -24,7 +24,7 @@ fn render(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
 }
 fn rect(cam: &Obj) -> PyResult<(f64, f64, f64, f64)> {
     cam.py()
-        .import("core.vista_caras")?
+        .import("built_core.vista_caras")?
         .call_method1("view_rect", (cam,))?
         .extract()
 }

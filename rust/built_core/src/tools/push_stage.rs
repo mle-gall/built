@@ -281,7 +281,7 @@ impl PushStages {
         else {
             return Ok(None);
         };
-        let views = py.import("core.push_scans")?.getattr("views")?;
+        let views = py.import("built_core.push_scans")?.getattr("views")?;
         let faces = views.call1((mesh, "face", &slide.faces))?;
         let made = py
             .import("built_core")?
@@ -313,7 +313,7 @@ impl PushStages {
     fn vertices(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         if let Some(stage) = &self.active {
             return Ok(py
-                .import("core.push_scans")?
+                .import("built_core.push_scans")?
                 .call_method1("views", (&stage.mesh, "vertex", stage.slide.vertices()))?
                 .unbind());
         }

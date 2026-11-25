@@ -153,7 +153,7 @@ pub(super) fn install(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
     unit_fields.append(("aliases", "tuple", field(PyTuple::empty(py).into_any())?))?;
     let class = dc.call_method("make_dataclass", ("Unit", unit_fields), Some(&options))?;
-    class.setattr("__module__", "core.units")?;
+    class.setattr("__module__", "built_core.units")?;
     m.add("Unit", &class)?;
     let rows = PyDict::new(py);
     let aliases = PyDict::new(py);
@@ -181,7 +181,7 @@ pub(super) fn install(m: &Bound<'_, PyModule>) -> PyResult<()> {
         fields.append((name, ty, field(default)?))?;
     }
     let parsed = dc.call_method("make_dataclass", ("Parsed", fields), Some(&options))?;
-    parsed.setattr("__module__", "core.units")?;
+    parsed.setattr("__module__", "built_core.units")?;
     parsed.setattr(
         "ok",
         py.import("builtins")?

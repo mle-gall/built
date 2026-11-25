@@ -177,7 +177,7 @@ pub fn scene_revision(py: Python<'_>, scene: &Obj<'_>) -> PyResult<i64> {
     }
     keyed.extend_from_slice(&out[at..]);
     // The tags and the folder tables, as the Python compared them.
-    let layer_values = module(py, "core.layers")?.getattr("layer_values")?;
+    let layer_values = module(py, "built_core.layers")?.getattr("layer_values")?;
     let tags = pyo3::types::PyList::empty(py);
     for ly in scene.getattr(pyo3::intern!(py, "layers"))?.try_iter()? {
         tags.append(layer_values.call1((ly?,))?)?;

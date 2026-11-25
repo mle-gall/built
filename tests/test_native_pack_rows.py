@@ -7,10 +7,10 @@ from types import SimpleNamespace
 import pytest
 from built_core import Matrix4, Vec3
 
-from core.group import Group
-from core.layers import LINK_UNTAGGED_SUFFIX, Layer
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.layers import LINK_UNTAGGED_SUFFIX, Layer
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 import built_core
 from views.document_interaction import _paint_of
 

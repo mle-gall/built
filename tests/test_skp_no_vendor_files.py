@@ -27,7 +27,7 @@ def test_an_unreadable_skp_is_reported_and_nothing_else_runs(native_host, monkey
                         staticmethod(lambda *a, **k: pytest.fail("asked to install something")))
     # The Render tab looks for Blender when the window opens (one
     # `flatpak info` where Flatpak exists): that is not the .skp import.
-    import core.render_blender as rb
+    import built_core.render_blender as rb
     monkeypatch.setattr(rb, "find_blender", lambda *a, **k: None)
     import subprocess
     monkeypatch.setattr(subprocess, "run",

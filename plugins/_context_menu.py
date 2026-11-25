@@ -2,7 +2,7 @@
 from uuid import uuid4
 
 import built_render as native
-from core.extensions import note_failure
+from built_core.extensions import note_failure
 
 
 def _present(win, view, menu):

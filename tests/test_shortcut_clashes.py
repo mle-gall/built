@@ -19,7 +19,7 @@ from built_render import keyboard_bindings as sc
 
 
 def test_redo_answers_both_keys(ventana):  # noqa: F811
-    from core.history import AddEdgeCommand
+    from built_core.history import AddEdgeCommand
     from built_core import Vec3
     from built_core import Input as Qt
     action = ventana._registry_actions["menu:redo"]

@@ -17,8 +17,8 @@ CASES = (
 
 
 def archive_results(source, folder, monkeypatch):
-    from core import group, layers
-    from core.scene import Scene
+    from built_core import group, layers
+    from built_core.scene import Scene
     from formats import igz
 
     ids = itertools.count()

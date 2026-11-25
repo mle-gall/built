@@ -173,8 +173,8 @@ def test_el_boton_de_vista_muestra_su_atajo(ventana):
 def _caja(nombre: str, x0: float):
     """Un grupo cúbico de lado 1 generado en el momento."""
     from built_core import Vec3 as QVector3D
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     malla = Mesh()
     P = [QVector3D(x0 + (i & 1), (i >> 1) & 1, i >> 2) for i in range(8)]
     for q in ([0, 2, 3, 1], [4, 5, 7, 6], [0, 1, 5, 4], [2, 6, 7, 3],

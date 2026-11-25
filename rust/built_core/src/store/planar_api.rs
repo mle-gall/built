@@ -184,7 +184,7 @@ fn arc_command<'py>(
     let mut remove = None;
     if let Some(t) = trim {
         if t.is_truthy()? {
-            let factory = py.import("core.arrangement")?.getattr("_Seg")?;
+            let factory = py.import("built_core.arrangement")?.getattr("_Seg")?;
             let edges = PyList::empty(py);
             for pair in t.try_iter()? {
                 let pair = pair?;
@@ -206,7 +206,7 @@ fn arc_command<'py>(
     let kw = PyDict::new(py);
     kw.set_item("detect_faces", !flat)?;
     kw.set_item("extra", extra)?;
-    py.import("core.edits")?
+    py.import("built_core.edits")?
         .getattr("build_add_edges")?
         .call((scene, segments), Some(&kw))
 }
@@ -261,7 +261,7 @@ fn _build_graph(
     super::arrangement::plane_split_graph(py, segments_2d)
 }
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    let sub = PyModule::new(m.py(), "core.arrangement")?;
+    let sub = PyModule::new(m.py(), "built_core.arrangement")?;
     sub.add_function(wrap_pyfunction!(project_loop, &sub)?)?;
     sub.add_function(wrap_pyfunction!(loops_overlap, &sub)?)?;
     sub.add_function(wrap_pyfunction!(grid_key, &sub)?)?;
@@ -301,7 +301,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
     sub.add("_TOL", TOL)?;
     let kw = PyDict::new(m.py());
-    kw.set_item("module", "core.arrangement")?;
+    kw.set_item("module", "built_core.arrangement")?;
     sub.add(
         "_Seg",
         m.py()

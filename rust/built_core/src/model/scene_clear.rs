@@ -65,7 +65,7 @@ pub fn scene_clear(scene: &Obj<'_>) -> PyResult<()> {
         scene.setattr("plugin_data", PyDict::new(py))?;
         scene.setattr("link_registry", PyDict::new(py))?;
         scene.getattr("selection")?.call_method0("clear")?;
-        let layers = module(py, "core.layers")?;
+        let layers = module(py, "built_core.layers")?;
         let default = layers.getattr("Layer")?.call1((layers.getattr("DEFAULT_LAYER")?,))?;
         scene.setattr("layers", PyList::new(py, [default])?)?;
         scene.setattr("active_layer", py.None())?;
@@ -77,7 +77,7 @@ pub fn scene_clear(scene: &Obj<'_>) -> PyResult<()> {
         for name in ["georef", "tile_layer", "terrain", "back_face_color", "active_ifc"] {
             scene.setattr(name, py.None())?;
         }
-        let own = module(py, "core.scene")?;
+        let own = module(py, "built_core.scene")?;
         scene.setattr("display_style", own.call_method0("_make_style")?)?;
         scene.setattr("shadows", own.call_method0("_make_shadows")?)?;
         scene.setattr("animation", own.call_method0("_make_animation")?)?;

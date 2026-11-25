@@ -7,9 +7,9 @@ import random
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core import outliner
-from core.group import Group, copy_group
-from core.mesh import Mesh
+from built_core import outliner
+from built_core.group import Group, copy_group
+from built_core.mesh import Mesh
 
 _QUADS = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6),
           (0, 2, 6, 4), (1, 5, 7, 3)]
@@ -168,8 +168,8 @@ def _moved_container():
 
 
 def test_a_classic_group_dropped_into_a_turned_group_stays_put():
-    from core.history import ReparentGroupsCommand
-    from core.scene import Scene
+    from built_core.history import ReparentGroupsCommand
+    from built_core.scene import Scene
     scene = Scene()
     shelf = _moved_container()
     loose = _group("Loose", (3, 4, 0))
@@ -186,8 +186,8 @@ def test_a_classic_group_dropped_into_a_turned_group_stays_put():
 
 
 def test_an_instance_taken_out_keeps_its_place_and_children():
-    from core.history import ReparentGroupsCommand
-    from core.scene import Scene
+    from built_core.history import ReparentGroupsCommand
+    from built_core.scene import Scene
     scene = Scene()
     shelf = _moved_container()
     kid = shelf.children[0]
@@ -203,8 +203,8 @@ def test_an_instance_taken_out_keeps_its_place_and_children():
 
 
 def test_a_plain_target_becomes_a_group_of_groups_not_a_component():
-    from core.history import ReparentGroupsCommand
-    from core.scene import Scene
+    from built_core.history import ReparentGroupsCommand
+    from built_core.scene import Scene
     scene = Scene()
     a, b = _group("A"), _group("B", (2, 0, 0))
     scene.groups[:] = [a, b]
@@ -246,7 +246,7 @@ def test_what_cannot_be_re_nested():
 
 
 def test_a_locked_group_cannot_be_picked_nor_what_it_holds():
-    from core.scene import Scene
+    from built_core.scene import Scene
     building, tree = _building()
     scene = Scene()
     scene.groups[:] = [building, tree]
@@ -259,7 +259,7 @@ def test_a_locked_group_cannot_be_picked_nor_what_it_holds():
 
 
 def test_the_lock_is_saved_in_the_igz_and_kept_by_copies(tmp_path):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats.igz import load_into, save_scene
     building, tree = _building()
     tree.locked = True
@@ -285,7 +285,7 @@ def _two_planes(scene):
 
 
 def test_section_modes_in_the_core():
-    from core.scene import Scene
+    from built_core.scene import Scene
     scene = Scene()
     a, b = _two_planes(scene)
     assert outliner.section_mode(a) == "both"
@@ -298,7 +298,7 @@ def test_section_modes_in_the_core():
 
 
 def test_a_hidden_frame_is_saved_and_not_picked(tmp_path):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from built_core.section import SectionPlane
     from formats.igz import load_into, save_scene
     scene = Scene()
@@ -334,7 +334,7 @@ def _moved_container_for_bounds():
 
 
 def test_free_slot_fills_the_page_then_steps():
-    from core.composition import Composicion, MarcoVista
+    from built_core.composition import Composicion, MarcoVista
     sheet = Composicion(name="S", paper="A3")
     pw, ph = sheet.page_size_mm()
     w, h = (pw - 20) / 2 - 15, (ph - 20) / 2 - 15
@@ -390,7 +390,7 @@ def test_the_padlock_locks_and_unlocks_in_one_undo_step():
 
 
 def test_a_scene_remembers_what_the_outliner_hid():
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     from built_core.saved_views import SavedView
     from tests.test_project_drawing_filters import Project
     p, camera = Project(), OrbitCamera()
@@ -407,7 +407,7 @@ def test_a_scene_remembers_what_the_outliner_hid():
 
 
 def test_several_rows_go_to_a_layer_in_one_step():
-    from core import structure
+    from built_core import structure
     from tests.test_project_drawing_filters import Project
     from tests.test_structure import model
     scene, _, _, _ = model()

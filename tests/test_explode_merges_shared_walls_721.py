@@ -15,11 +15,11 @@ from __future__ import annotations
 from built_core import Matrix4 as QMatrix4x4
 from built_core import Vec3 as V
 
-from core.group import Group
-from core.history import (ExplodeGroupCommand, GroupInContextCommand,
+from built_core.group import Group
+from built_core.history import (ExplodeGroupCommand, GroupInContextCommand,
                           History, MakeGroupCommand)
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 
 def _box_faces(x0, y0, z0, x1, y1, z1):

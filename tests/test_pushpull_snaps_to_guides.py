@@ -16,7 +16,7 @@ from built_core import ScreenPoint, Input
 from built_render import MouseEvent
 from built_core import Vec3 as QVector3D
 
-from core.guide import Guide
+from built_core.guide import Guide
 
 
 def _window(native_host):

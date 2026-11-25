@@ -3,7 +3,7 @@
 muestran como unas guías… sería bueno implementar eso en composición»)."""
 from built_core import ScreenPoint as QPointF
 
-from core.composition import Composicion, FormaItem
+from built_core.composition import Composicion, FormaItem
 from tests.test_composer_canvas import _FakeViewport
 
 

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""``core.group.visible_placements`` must answer as the Python generator at
+"""``built_core.group.visible_placements`` must answer as the Python generator at
 ``6977fb85``: seeded trees four levels deep (rotated and untransformed
 placements, Hide at any level, tags hidden, locked, in hidden folders, by
 key and by label, unknown tags, untagged parts inheriting), every top-level
@@ -23,10 +23,10 @@ CASES = 60
 
 def scene_of(seed):
     from built_core import Matrix4
-    from core.group import Group
-    from core.layers import Layer
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.layers import Layer
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
     rng = random.Random(seed)
     s = Scene()
     s.layer_folders = ["F", "G"]
@@ -70,7 +70,7 @@ def _walk():
     native = getattr(built_core, "group_visible_placements", None)
     if native is not None:
         return native
-    from core.group import visible_placements
+    from built_core.group import visible_placements
     return visible_placements
 
 

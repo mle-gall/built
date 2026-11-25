@@ -21,9 +21,9 @@ import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 
-from core.group import Group                                      # noqa: E402
-from core.mesh import Mesh                                        # noqa: E402
-from core.scene import Scene                                      # noqa: E402
+from built_core.group import Group                                      # noqa: E402
+from built_core.mesh import Mesh                                        # noqa: E402
+from built_core.scene import Scene                                      # noqa: E402
 from formats import dae as dae_format                             # noqa: E402
 from formats import gltf as gltf_format                           # noqa: E402
 from formats import obj as obj_format                             # noqa: E402

@@ -11,7 +11,7 @@ fn locking(tool: &Obj) -> PyResult<bool> {
 }
 fn plane_of<'py>(face: &Obj<'py>, place: &Obj<'py>) -> PyResult<Obj<'py>> {
     face.py()
-        .import("core.snap")?
+        .import("built_core.snap")?
         .call_method1("face_plane_world", (face, opt(place, "xform")?))
 }
 fn copied<'py>(p: &Obj<'py>) -> PyResult<Obj<'py>> {

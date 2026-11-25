@@ -123,16 +123,7 @@ pub(crate) fn register(core: &M<'_>) -> PyResult<()> {
     let modules = py.import("sys")?.getattr("modules")?;
     // Existing plugin archives name the original mesh/view classes and rebuild functions.
     let archive = PyModule::new(py, "core.store_mesh")?;
-    for name in [
-        "StoreMesh",
-        "DeferredMesh",
-        "VertexView",
-        "EdgeView",
-        "FaceView",
-        "instance_view",
-        "_unpickle_mesh",
-        "_unpickle_view",
-    ] {
+    for name in ["FaceView", "_unpickle_mesh", "_unpickle_view"] {
         archive.add(name, s.getattr(name)?)?;
     }
     modules.set_item("core.store_mesh", archive)?;

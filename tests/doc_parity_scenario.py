@@ -14,9 +14,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core import doc_model  # noqa: E402
-from core.group import Group  # noqa: E402
-from core.history import (AddKeptComponentsCommand,  # noqa: E402
+from built_core import doc_model  # noqa: E402
+from built_core.group import Group  # noqa: E402
+from built_core.history import (AddKeptComponentsCommand,  # noqa: E402
                           AssignLayerCommand, ChangeAxesCommand,
                           DeleteGroupCommand, DeleteLayerCommand,
                           ExplodeViewCommand,
@@ -29,15 +29,15 @@ from core.history import (AddKeptComponentsCommand,  # noqa: E402
                           SetMaterialFinishCommand,
                           SetPluginDataCommand, SetRecordCommand,
                           SetStructureNodeCommand, TagGroupsCommand)
-from core.material_commands import AddMaterialCommand  # noqa: E402
-from core.protocol.commands import SetTagStateCommand  # noqa: E402
-from core.layers import TAG_FIELDS, Layer  # noqa: E402
-from core.materials import Material  # noqa: E402
-from core.mesh import Mesh  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core.material_commands import AddMaterialCommand  # noqa: E402
+from built_core.protocol.commands import SetTagStateCommand  # noqa: E402
+from built_core.layers import TAG_FIELDS, Layer  # noqa: E402
+from built_core.materials import Material  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from formats import built, igz  # noqa: E402
-import core.group as _group  # noqa: E402
-import core.layers as _layers  # noqa: E402
+import built_core.group as _group  # noqa: E402
+import built_core.layers as _layers  # noqa: E402
 import itertools  # noqa: E402
 
 # Uids (and IFC guids) the two runs agree on.
@@ -206,7 +206,7 @@ def slice_two(scene, h):
     """The commands slice 2 makes transactions (records, structure, plugin
     data, folders, kept components, the registry, placements' structure
     and matrices), each run, all undone, all redone."""
-    from core.purge import iter_groups
+    from built_core.purge import iter_groups
     out = []
     by_uid = {g.uid: g for g in iter_groups(scene.groups)}
     assembly, site, classic = by_uid["assembly"], by_uid["site"], by_uid["classic"]
@@ -253,7 +253,7 @@ def slice_two(scene, h):
 
 
 def structural_steps(steps):
-    from core.history import (ExplodeGroupCommand, GroupToComponentCommand,
+    from built_core.history import (ExplodeGroupCommand, GroupToComponentCommand,
                               MakeComponentOfCommand, MakeGroupCommand,
                               MakeUniqueCommand, MergeGroupsCommand,
                               ReplaceComponentCommand, SplitIntoPiecesCommand,
@@ -296,7 +296,7 @@ def structural_steps(steps):
 
 def shared_assembly(work):
     """Persisted occurrences have their own UIDs, visibility, tags and records."""
-    from core.protocol import commands
+    from built_core.protocol import commands
     scene = Scene()
     scene.layers.append(Layer("Steel", uid="steel"))
     geometry, part = Mesh(), Mesh()
@@ -314,7 +314,7 @@ def shared_assembly(work):
     west, east, annex = scene.groups
     target = east.children[0]
     path = [east.uid, target.uid]
-    from core.link_structure import Tree
+    from built_core.link_structure import Tree
     tree = Tree(scene, {})
     assert tree.address(west.children[0]) == [west.uid, "beam"]
     assert tree.address(target) == path and tree.row_id(west.children[0]) != tree.row_id(target)
@@ -377,11 +377,11 @@ def shared_assembly(work):
 
 def geometry_steps(work):
     """Compare the loose mesh, feed and replay at each command boundary."""
-    from core.history import (MakeGroupCommand, ExplodeGroupCommand, SetFaceColorCommand,
+    from built_core.history import (MakeGroupCommand, ExplodeGroupCommand, SetFaceColorCommand,
                               AddEdgeCommand, DeleteEdgesCommand, DeleteFaceCommand,
                               ExplodeCurvesCommand, TagCurveCommand, PruneOrphanEdgesCommand,
                               AddFaceCommand, EraseSelectionCommand, MoveVerticesCommand, SnapshotCompound)
-    from core.protocol import commands
+    from built_core.protocol import commands
 
     scene = Scene()
     # Commands in the preceding scenario consume generated UIDs differently
@@ -498,7 +498,7 @@ def geometry_steps(work):
     out.append(state())
     assert h.redo() and warp not in mesh.faces
     out.append(state())
-    from core.history import FlipVerticesCommand, RotateVerticesCommand, ScaleVerticesCommand
+    from built_core.history import FlipVerticesCommand, RotateVerticesCommand, ScaleVerticesCommand
     panel = mesh.add_face(rectangle(500, 0, 2, 2))
     panel.attrs["texture"] = {"path": "fabric.png", "sw": .7, "sh": .3}
     pivot, axis = QVector3D(500, 0, 0), QVector3D(0, 0, 1)
@@ -527,7 +527,7 @@ def geometry_steps(work):
     assert h.redo() and face_ids == [f.key for f in mesh.faces]
     out.append(state())
     # Offset a painted face with an opening, through its normal History entry.
-    from core.offset import build_offset_face
+    from built_core.offset import build_offset_face
     slab = mesh.add_face(rectangle(850, 0, 6, 6), [rectangle(852, 2, 1, 1)])
     slab.attrs["color"] = [.3, .4, .8]
     h.execute(build_offset_face(mesh, slab.key, .5))
@@ -557,9 +557,9 @@ def geometry_steps(work):
     out.append(state())
     assert h.redo() and (seam.soft, seam.flat) == (True, True)
     out.append(state())
-    from core.history import (SetFaceOpacityCommand, SetFaceTextureCommand,
+    from built_core.history import (SetFaceOpacityCommand, SetFaceTextureCommand,
                               SetFaceBackCommand, SetFaceMaterialTagCommand)
-    from core.materials import Material
+    from built_core.materials import Material
     painted = list(seam.faces)
     painted[0].attrs["back"] = True
     swatch = Material("Parity blue", color=(.2, .35, .55), pbr={"roughness": .3})
@@ -596,8 +596,8 @@ def geometry_steps(work):
 def anchor_steps(work):
     """Three attachment kinds on the second of two nested instances."""
     from built_core.annotation_anchor import Attachment
-    from core.history import MoveGroupCommand
-    from core.textlabel import TextLabel
+    from built_core.history import MoveGroupCommand
+    from built_core.textlabel import TextLabel
 
     scene = Scene()
     mesh = Mesh()
@@ -627,7 +627,7 @@ def anchor_steps(work):
     assert not history.last_error, history.last_error
     assert history.undo() and not scene.text_placement_anchors
     assert history.redo() and len(scene.text_placement_anchors) == 1
-    from core.composition import Composicion, CotaItem, MarcoVista
+    from built_core.composition import Composicion, CotaItem, MarcoVista
     start_point = positions(scene)[0]
     item = CotaItem(anchor_uid="detail", a_world=list(start_point), b_world=[0, 0, 0])
     item.hold_a = (start_point, scene.text_labels[0].attachment)
@@ -642,7 +642,7 @@ def anchor_steps(work):
     assert sign.xform.map(QVector3D()).toTuple() == (0, 0, 0)
     assert history.redo() and positions(scene) == moved
     # A translation of the defining vertices keeps all three element keys.
-    from core.history import MoveVerticesCommand
+    from built_core.history import MoveVerticesCommand
     scene.begin_group_edit(part)
     vertices = [v.position for v in scene.mesh.vertices]
     history.execute(MoveVerticesCommand(vertices, QVector3D(0, 0, 2)))
@@ -671,7 +671,7 @@ def anchor_steps(work):
         assert positions(back) == original
         assert tuple(back.compositions[0].to_dict()["cotas"][0]["a_world"]) == original[0]
         assert back.resolve_occurrence(["sign"]).xform.map(QVector3D()).toTuple() == (0, 0, 0)
-    from core.history import AddTextLabelCommand
+    from built_core.history import AddTextLabelCommand
     auto = TextLabel(QVector3D(), QVector3D(), "New")
     history.execute(AddTextLabelCommand(auto))
     tag = scene.layer(auto.layer)
@@ -683,13 +683,13 @@ def anchor_steps(work):
 
 def presentation_steps(scene, steps):
     from built_core.annotation_anchor import Attachment
-    from core.composition import Composicion, MarcoVista, TextoItem
-    from core.dimension import Dimension
-    from core.history import (AddDimensionCommand, AddSceneCommand, AddSheetCommand,
+    from built_core.composition import Composicion, MarcoVista, TextoItem
+    from built_core.dimension import Dimension
+    from built_core.history import (AddDimensionCommand, AddSceneCommand, AddSheetCommand,
                               AddTextLabelCommand, EditDimensionTextCommand,
                               MoveTextLabelsCommand, PlaceViewCommand)
     from built_core.saved_views import RenameSceneCommand, SavedView
-    from core.textlabel import TextLabel
+    from built_core.textlabel import TextLabel
 
     h = History(scene)
     h.feed.subscribe(lambda step: steps.append(step_record(step)))
@@ -730,7 +730,7 @@ def main(work: Path):
     initial_scene.groups.append(other)
     # Two occurrences of the same geometry can carry distinct IFC and tag
     # values. Address the second part through its persisted UID path.
-    from core.protocol import commands
+    from built_core.protocol import commands
     history = History(initial_scene)
     child = other.children[0]
     child.ifc = {"name": "Second record"}
@@ -804,7 +804,7 @@ def main(work: Path):
     endpoints = [QVector3D(1, 2, 3), QVector3D(3, 1, 2)]
     framed.mesh.add_edge(*(transform.map(p) for p in endpoints))
     assert first.mesh is second.mesh and len(second.mesh.edges) == 1
-    from core.protocol.keys import mesh_key
+    from built_core.protocol.keys import mesh_key
     assert mesh_key(framed.mesh) == mesh_key(second.mesh)
     framed.end_group_edit()
     positions = [v.position_tuple() for v in second.mesh.vertices]

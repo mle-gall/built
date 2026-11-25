@@ -21,7 +21,7 @@ from built_core import Vec3 as QVector3D
 
 import pytest  # noqa: E402
 
-from core.history import AddFaceCommand, MakeGroupCommand  # noqa: E402
+from built_core.history import AddFaceCommand, MakeGroupCommand  # noqa: E402
 
 
 @pytest.fixture

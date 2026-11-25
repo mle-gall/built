@@ -1,11 +1,11 @@
 """Schema facts and user-owned metadata must survive a real IFC consumer."""
 import pytest
 from built_core import Vec3 as QVector3D
-from core.scene import Scene
-from core.group import Group
-from core.materials import Material
-from core.layers import Layer
-from core.mesh import Mesh
+from built_core.scene import Scene
+from built_core.group import Group
+from built_core.materials import Material
+from built_core.layers import Layer
+from built_core.mesh import Mesh
 from core.bim import face_set_volume
 from core import record, bim_registry
 from formats.ifc import save_ifc
@@ -129,7 +129,7 @@ def test_malformed_relationship_records(patch):
 
 
 def test_copied_openings_get_new_identity_and_internal_references():
-    from core.group import copy_group
+    from built_core.group import copy_group
     from core.ifc_identity import ensure_guid
     host = Group(name='Host')
     void = Group(mesh_at(0), 'Void')

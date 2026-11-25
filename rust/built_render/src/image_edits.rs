@@ -162,7 +162,7 @@ fn image_answer(
         let vars = PyDict::new(py);
         vars.set_item(
             "size",
-            py.import("core.units")?.call_method1(
+            py.import("built_core.units")?.call_method1(
                 "fmt_pair",
                 (u.call_method0("length")?, v.call_method0("length")?),
             )?,

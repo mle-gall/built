@@ -14,9 +14,9 @@ from tests.test_xray_toggle import _state
 from views import view_commands
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core.group import Group  # noqa: E402
-from core.mesh import Mesh  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core.group import Group  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402
 
 def _square(x0, y0=0.0):

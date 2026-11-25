@@ -1,6 +1,10 @@
 """Locate Built's native packages, including first imports by plugins."""
 import sys
-import _built_legacy_imports
+import os
+
+for key, value in tuple(os.environ.items()):
+    if key.startswith("INGETRAZO_"):
+        os.environ.setdefault("BUILT_" + key.removeprefix("INGETRAZO_"), value)
 
 
 class _FilePackages:

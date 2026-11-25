@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.snap import COLOR_AXIS_X, SnapResult
+from built_core.snap import COLOR_AXIS_X, SnapResult
 from tests.controller_surface import ControllerSurface as Viewport
 
 

@@ -11,10 +11,10 @@ import pytest
 from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core.edits import build_add_edge
-from core.group import Group
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.edits import build_add_edge
+from built_core.group import Group
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 Z = 9.0
 
@@ -172,12 +172,12 @@ def _parts_at(scene):
 
 
 def _move(win, vp, a):
-    from core.history import MoveGroupCommand
+    from built_core.history import MoveGroupCommand
     vp.history.execute(MoveGroupCommand(a.children[0], V(0, 5, 0)))
 
 
 def _delete(win, vp, a):
-    from core.history import DeleteGroupCommand
+    from built_core.history import DeleteGroupCommand
     vp.history.execute(DeleteGroupCommand(a.children[0]))
 
 
@@ -187,7 +187,7 @@ def _draw_and_delete(win, vp, a):
 
 
 def _explode(win, vp, a):
-    from core.history import ExplodeGroupCommand
+    from built_core.history import ExplodeGroupCommand
     win._execute_make(ExplodeGroupCommand(a.children[0]))
 
 
@@ -304,7 +304,7 @@ def _deep():
 
 def _matrices(groups):
     """Every placement's own matrix and axes, copied, depth first."""
-    from core.purge import iter_groups
+    from built_core.purge import iter_groups
     return [(g.name, QMatrix4x4(g.xform) if g.xform is not None else None,
              None if g.axes is None else QMatrix4x4(g.axes))
             for g in iter_groups(groups)]
@@ -399,7 +399,7 @@ def test_esc_level_by_level_from_two_deep_folds_into_one_step(native_host):
 
 @pytest.mark.parametrize("edit", ["delete", "move"])
 def test_a_part_changed_two_levels_deep_undoes_in_place(native_host, edit):
-    from core.history import DeleteGroupCommand, MoveGroupCommand
+    from built_core.history import DeleteGroupCommand, MoveGroupCommand
     tops = _deep()
     win, vp, scene = _window(native_host, *tops)
     r2 = tops[1]
@@ -504,7 +504,7 @@ def test_metal_follows_a_part_deleted_in_an_assembly_without_a_repack(
         native_host, monkeypatch):
     """A part deleted inside: no row swap covers it, so the rows are
     rescanned — but nothing is packed again."""
-    from core.history import DeleteGroupCommand
+    from built_core.history import DeleteGroupCommand
     a, b = _assembly(True, turn=90.0)
     win, vp, scene = _window(native_host, a, b)
     metal = _Metal(vp, monkeypatch)
@@ -529,7 +529,7 @@ def test_a_linked_assembly_stays_read_only(native_host, tmp_path, monkeypatch):
     """Parts of a linked file are edited in their own document: going into
     a copy of a link, or a part of it, offers the file and enters nothing."""
     from built_render import chrome_dialogs
-    from core import links
+    from built_core import links
     from formats import igz
     src = Scene()
     kid = Group(_box(), name="part")
@@ -554,7 +554,7 @@ def test_a_linked_assembly_stays_read_only(native_host, tmp_path, monkeypatch):
     before = _matrices(scene.groups)
     meshes = [g.mesh for g, _m in scene.placements()]
     steps = len(vp.history.undo_stack)
-    from core.purge import iter_groups
+    from built_core.purge import iter_groups
     for g in list(iter_groups([link, copy])):
         vp.begin_group_edit(g)
         assert scene.edit_group is None
@@ -636,7 +636,7 @@ def test_inference_inside_a_nested_copy_finds_its_parts_where_they_stand(native_
     """Inside a copy, two levels down, the cursor over a corner of the part
     it holds snaps to that corner where the part is drawn in the world —
     not where the definition or another copy would put it."""
-    from core.purge import iter_groups
+    from built_core.purge import iter_groups
     tops = build()
     win, vp, scene = _window(native_host, *tops)
     native_host.resize(1200, 800, 1.0)

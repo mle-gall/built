@@ -42,7 +42,7 @@ def section_cases(geometry, scene, packed):
     """``{case: (bytes, digest)}`` of ``geometry`` over planes, fills, face
     modes, cameras and heights."""
     from built_core import Vec3
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     from built_core.section import SectionPlane
     from built_core.style import Style
     low, high = scene.bounds()
@@ -76,7 +76,7 @@ def kernel_cases(scene, packed):
     segments at two spacings, one way and both."""
     import built_core
     from built_core import Vec3
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     from built_core.section import SectionPlane
     from built_core.style import Style
     from views.wgpu_sections import geometry
@@ -124,7 +124,7 @@ def hidden_view(scene):
 
 
 def hidden_cases(selected_hidden, scene):
-    from core.group import Group
+    from built_core.group import Group
     view, source = hidden_view(scene)
     try:
         scene.show_hidden_geometry = True

@@ -11,9 +11,9 @@ import pytest
 from built_render import SurveyRaster
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.group import Group
-from core.mesh import Mesh
-from core.texture import (COLORIZE_SHIFT, COLORIZE_TINT, colorize_image,
+from built_core.group import Group
+from built_core.mesh import Mesh
+from built_core.texture import (COLORIZE_SHIFT, COLORIZE_TINT, colorize_image,
                           tinted_texture, untinted_texture)
 
 
@@ -118,7 +118,7 @@ def test_the_igz_carries_the_base_so_the_tint_stays_editable(stone, tmp_path):
     """Without the base embedded, a document opened elsewhere could only
     re-tint the tinted image and 'remove colour' would have nothing to
     restore."""
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     scene = Scene()
     f = scene.mesh.add_face([V(0, 0), V(2, 0), V(2, 2), V(0, 2)])
@@ -146,9 +146,9 @@ def test_the_igz_carries_the_base_so_the_tint_stays_editable(stone, tmp_path):
 def test_restamping_a_material_reaches_faces_inside_components():
     """The bug found while investigating this feature: 'edit the material
     once and restamp every face' walked scene.groups as a flat list."""
-    from core.history import History, RestampMaterialCommand
-    from core.materials import Material
-    from core.scene import Scene
+    from built_core.history import History, RestampMaterialCommand
+    from built_core.materials import Material
+    from built_core.scene import Scene
 
     scene = Scene()
     hondo = Mesh()

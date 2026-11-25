@@ -25,7 +25,7 @@ def _box(scene, x0, y0, z0, x1, y1, z1):
 
 
 def test_a_point_behind_a_wall_is_hidden_and_one_in_front_is_not(native_gpu_host):
-    from core.dimension import Dimension
+    from built_core.dimension import Dimension
     win = native_gpu_host.window
     vp = win.viewport
     sc = vp.scene

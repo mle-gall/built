@@ -17,8 +17,8 @@ import pytest
 from built_core import Vec3 as V
 
 from built_core import autosave
-from core.history import AddEdgeCommand
-from core.scene import Scene
+from built_core.history import AddEdgeCommand
+from built_core.scene import Scene
 from formats import igz as igz_format
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from built_render.shell_files import ShellFileDialog
@@ -302,8 +302,8 @@ def test_leaving_a_workspace_finds_the_project_clean(win, tmp_path):
 def test_saving_ends_the_group_open_in_the_project(win, tmp_path):
     """With a view in front the open group of the project itself ends too:
     what is written is the model, not the group's edit state."""
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     path = tmp_path / "a.built"
     doc = _new_tab(win, 3, path)
     mesh = Mesh()

@@ -182,7 +182,7 @@ fn selection<'py>(scene: &Obj<'py>) -> Reply<'py> {
     for k in ["vertex", "edge", "face"] {
         kinds.set_item(k, PyList::empty(py))?;
     }
-    let group = py.import("core.group")?.getattr("Group")?;
+    let group = py.import("built_core.group")?.getattr("Group")?;
     for x in scene.getattr("selection")?.try_iter()? {
         let x = x?;
         if x.is_instance(&group)? {
@@ -276,7 +276,7 @@ fn solid_report<'py>(scene: &Obj<'py>, mesh: Option<&Obj<'py>>) -> Reply<'py> {
     let m = resolve_mesh(scene, mesh)?;
     let pair = scene
         .py()
-        .import("core.solids")?
+        .import("built_core.solids")?
         .call_method1("solid_report", (&m,))?;
     let out = base(&m)?;
     out.set_item("solid", pair.get_item(0)?)?;

@@ -108,7 +108,7 @@ def test_a_sheet_made_through_the_bridge_is_one_undoable_step(native_host, monke
     reply said nothing changed, and the agent's undo took the user's last
     edit while the sheet stayed. A script that failed after appending one
     left it behind."""
-    from core.history import AddEdgeCommand
+    from built_core.history import AddEdgeCommand
     from plugins.ai_bridge import _Bridge
     from built_core import Vec3 as QVector3D
     monkeypatch.setenv("BUILT_AI_PORT", "0")
@@ -120,7 +120,7 @@ def test_a_sheet_made_through_the_bridge_is_one_undoable_step(native_host, monke
     sheets = len(vp.scene.compositions)
     bridge = _Bridge(vp)
     bridge.start()
-    add = ("from core.composition import Composicion\n"
+    add = ("from built_core.composition import Composicion\n"
            "c = Composicion(name='A1')\n"
            "c.frames.append(c.default_frame())\n"
            "scene.compositions.append(c)\n")

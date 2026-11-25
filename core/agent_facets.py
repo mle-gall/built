@@ -71,7 +71,7 @@ def set_display(viewport, filter=None, color_by=None, *, isolate=True, key=None,
     viewport.scene._navigator_allowed = allowed
     viewport.scene._navigator_through = through
     if allowed is not None:
-        from core.group import Group
+        from built_core.group import Group
         viewport.scene.selection.difference_update([
             g for g in viewport.scene.selection if isinstance(g, Group) and qualified.get(g, g.uid) not in allowed])
     if tint and color_by != 'structure':

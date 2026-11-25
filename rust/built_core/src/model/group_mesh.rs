@@ -76,7 +76,7 @@ pub fn remapped_uvw<'py>(uvw: &Obj<'py>, minv: &Obj<'py>) -> PyResult<Obj<'py>> 
 /// the planar projection of the face's normal there. None for a degenerate
 /// or stale face.
 /// What the planar projections ask once per build: the hypot convention,
-/// `core.texture.face_uv_axes` and the vector class.
+/// `built_core.texture.face_uv_axes` and the vector class.
 struct UvCx<'py> {
     hypot: Obj<'py>,
     axes: Obj<'py>,
@@ -87,7 +87,7 @@ impl<'py> UvCx<'py> {
     fn new(py: Python<'py>) -> PyResult<Self> {
         Ok(UvCx {
             hypot: module(py, "built_core.store_mesh")?.call_method0("_hypot")?,
-            axes: module(py, "core.texture")?.getattr("face_uv_axes")?,
+            axes: module(py, "built_core.texture")?.getattr("face_uv_axes")?,
             vec3: module(py, "built_core")?.getattr("Vec3")?,
         })
     }
@@ -109,7 +109,7 @@ fn implicit_uvw<'py>(cx: &UvCx<'py>, face: &Obj<'py>, tex: &Obj<'py>, minv: &Obj
     uv_axes(py, &cx.axes, tex, &normal).map(Some)
 }
 
-/// `[*gu, cu, *gv, cv]` of `core.texture.face_uv_axes(tex, normal)`.
+/// `[*gu, cu, *gv, cv]` of `built_core.texture.face_uv_axes(tex, normal)`.
 fn uv_axes<'py>(py: Python<'py>, face_uv_axes: &Obj<'py>, tex: &Obj<'py>, normal: &Obj<'py>) -> PyResult<Obj<'py>> {
     let axes = face_uv_axes.call1((tex, normal))?;
     let (gu, cu, gv, cv) = (axes.get_item(0)?, axes.get_item(1)?, axes.get_item(2)?, axes.get_item(3)?);
@@ -224,7 +224,7 @@ pub fn placed_face_paint<'py>(attrs: &Obj<'py>, face: &Obj<'py>, inverse: &Obj<'
         }
         let mut uvw = get(&tex, "uvw")?;
         if !uvw.is_truthy()? {
-            uvw = uv_axes(py, &module(py, "core.texture")?.getattr("face_uv_axes")?, &tex, &face.call_method0("normal")?)?;
+            uvw = uv_axes(py, &module(py, "built_core.texture")?.getattr("face_uv_axes")?, &tex, &face.call_method0("normal")?)?;
         }
         let t = copy_dict(&tex)?;
         t.set_item("uvw", remapped_uvw(&uvw, inverse)?)?;

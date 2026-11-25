@@ -10,8 +10,8 @@ import math
 
 from built_core import Vec3 as V
 
-from core.history import ExplodeCurvesCommand, History
-from core.scene import Scene
+from built_core.history import ExplodeCurvesCommand, History
+from built_core.scene import Scene
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 
 

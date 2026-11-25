@@ -172,7 +172,7 @@ def test_every_python_https_call_uses_the_context(monkeypatch, tmp_path):
     import io
     import re
     import urllib.request
-    from built_core import component_library, extension_manager
+    from built_core import component_library
 
     # The AI client owns its own urllib calls. Both catalogues obtain the
     # same context at request time, including when the mirror is overridden.
@@ -196,8 +196,7 @@ def test_every_python_https_call_uses_the_context(monkeypatch, tmp_path):
     monkeypatch.setenv("BUILT_LIBRARY", "https://example.invalid")
     monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "textures"))
     assert component_library.index(refresh=True) == []
-    assert extension_manager.download("https://example.invalid/extensions", 100)
-    assert seen == [context, context]
+    assert seen == [context]
 
 
 def test_the_windows_build_ships_truststore():

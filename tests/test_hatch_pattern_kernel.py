@@ -3,7 +3,7 @@ import hashlib
 import json
 import random
 
-from core import hatches
+from built_core import hatches
 
 
 def test_generated_patterns_match_recorded_paper_geometry():

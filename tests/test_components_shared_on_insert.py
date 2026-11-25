@@ -45,7 +45,7 @@ def _counting(win, monkeypatch, name):
 
 
 def _base_center(group):
-    from core.group import placement_points
+    from built_core.group import placement_points
     import numpy as np
     pts = np.asarray(placement_points(group), dtype=float).reshape(-1, 3)
     lo, hi = pts.min(axis=0), pts.max(axis=0)
@@ -111,7 +111,7 @@ def test_editing_inside_one_copy_reaches_the_others(win, monkeypatch):
 def test_library_models_are_shared_too_and_save_once(win, tmp_path, monkeypatch):
     from built_core import component_library as library
     from formats import igz
-    from core.scene import Scene
+    from built_core.scene import Scene
     obj = tmp_path / "caja.obj"
     obj.write_text(
         "v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\n"

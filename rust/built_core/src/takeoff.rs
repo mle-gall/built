@@ -153,7 +153,7 @@ impl InspectorTakeoff {
         }
         let path = vp
             .py()
-            .import("core.outliner")?
+            .import("built_core.outliner")?
             .call_method1("path_to", (scene.getattr("groups")?, &group))?;
         if path.is_none() {
             return Ok(());

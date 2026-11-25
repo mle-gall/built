@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 from built_core import Vec3 as QVector3D
 
-from core.snap import (AXIS_COLORS, COLOR_EXTENSION, COLOR_REFERENCE,
+from built_core.snap import (AXIS_COLORS, COLOR_EXTENSION, COLOR_REFERENCE,
                        compute_snap)
 
 

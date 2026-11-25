@@ -396,9 +396,9 @@ def test_the_metal_view_orbits_and_pinches_too(native_host, monkeypatch):
     from types import SimpleNamespace
 
     from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-    from core.group import Group
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
     from tests.controller_surface import ControllerSurface as Viewport
     from built_core import resident_prepare as prepare
     from built_core import pack_scene

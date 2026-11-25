@@ -7,7 +7,7 @@ used instead, wherever the bundle lives (Blender Launcher keeps one per
 version under ~/Documents)."""
 from __future__ import annotations
 
-from core import render_blender as rb
+from built_core import render_blender as rb
 
 
 def test_the_program_inside_the_bundle_is_found(tmp_path, monkeypatch):

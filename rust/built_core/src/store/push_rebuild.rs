@@ -32,7 +32,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 const ON_PLANE: f64 = 1e-4;
 /// `cap_rebuild._SAMPLE_OFF`.
 const SAMPLE_OFF: f64 = 1e-3;
-/// `core.arrangement._TOL`.
+/// `built_core.arrangement._TOL`.
 const ARR_TOL: f64 = 1e-4;
 /// `built_core.orient._RAYS`, `_JITTER`.
 const RAYS: usize = 7;

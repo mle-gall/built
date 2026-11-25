@@ -93,7 +93,7 @@ fn wireframe_color<'py>(a: &Args<'py>) -> Reply<'py> {
     if !axis.is_none() {
         return Ok(axis.clone());
     }
-    let color_reference = imported(py, "core.snap")?.getattr("COLOR_REFERENCE")?;
+    let color_reference = imported(py, "built_core.snap")?.getattr("COLOR_REFERENCE")?;
     Ok({
         let values = PyList::empty(py);
         values.call_method1("extend", (&color_reference,))?;

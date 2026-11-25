@@ -23,8 +23,8 @@ from built_core import ScreenPoint, Input
 from built_core import Vec3 as QVector3D
 
 
-from core.scene import Scene
-from core.history import History
+from built_core.scene import Scene
+from built_core.history import History
 from tools.base import ToolContext
 from tools.pushpull import PushPullTool
 

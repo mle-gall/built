@@ -8,8 +8,8 @@ import math
 from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Vec3 as QVector3D
 
-from core.history import History
-from core.scene import Scene
+from built_core.history import History
+from built_core.scene import Scene
 from tools.arc import ArcTool, ThreePointArcTool
 from tools.base import ToolContext
 from tools.circle import CircleTool, PolygonTool
@@ -88,7 +88,7 @@ def test_circle_tangent_to_edge_vertex_commits(  # circc.igz report (2026-07-12)
     then rolled back ("degenerate edge: endpoints weld to one vertex")."""
     scene = Scene()
     vp = _VP(scene)
-    from core.edits import build_add_edge
+    from built_core.edits import build_add_edge
     # Exact float32-sensitive coordinates from the user's file: a 36×18 slab
     # whose bottom edge is split at the future tangent point.
     t = V(3.639848232269287, -18.0)
@@ -276,7 +276,7 @@ def test_deleting_cylinder_side_leaves_no_dangling_seams():
     # Erasing the curved side surface prunes its hidden vertical seams — no stray
     # vertical lines remain, just the two cap circles.
     import tests.test_fuzz_engine as F
-    from core.history import EraseSelectionCommand
+    from built_core.history import EraseSelectionCommand
     scene = Scene()
     vp = _VP(scene)
     c = CircleTool()
@@ -336,8 +336,8 @@ _TEX = {"path": "/tmp/piedra.jpg", "sw": 0.5, "sh": 0.5,
 
 
 def _painted_square(scene, hist, size=4.0, z=0.0):
-    from core.edits import build_add_edges
-    from core.history import AddFaceCommand
+    from built_core.edits import build_add_edges
+    from built_core.history import AddFaceCommand
     ring = [V(0, 0, z), V(size, 0, z), V(size, size, z), V(0, size, z)]
     hist.execute(build_add_edges(
         scene, [(ring[i], ring[(i + 1) % 4]) for i in range(4)],
@@ -351,7 +351,7 @@ def test_a_line_across_a_painted_face_keeps_the_paint_on_both_halves():
     # Drawing a line across a textured rectangle wiped the texture off both
     # halves (Marco, 2026-08-27): the chord split deleted the mother and added
     # two bare faces. The halves ARE the mother, cut in two.
-    from core.edits import build_add_edges
+    from built_core.edits import build_add_edges
 
     scene = Scene()
     hist = History(scene)
@@ -369,7 +369,7 @@ def test_a_line_across_a_painted_face_keeps_the_paint_on_both_halves():
 
 
 def test_the_split_survives_undo():
-    from core.edits import build_add_edges
+    from built_core.edits import build_add_edges
 
     scene = Scene()
     hist = History(scene)
@@ -384,7 +384,7 @@ def test_a_line_across_one_face_of_a_painted_box_keeps_every_face_painted():
     # The cut also inserts a collinear vertex into the two side faces whose
     # top edge it lands on; those are the SAME faces and must keep their paint
     # too (they lost it as well — four faces went bare, not two).
-    from core.edits import build_add_edges
+    from built_core.edits import build_add_edges
 
     scene = Scene()
     hist = History(scene)
@@ -408,8 +408,8 @@ def test_a_door_drawn_down_to_the_floor_edge_takes_the_wall_texture():
     # Three edges plus the wall's own bottom edge close the door: it is carved
     # out of the wall (AddFaceCommand's direction C). Only the REMAINDER
     # inherited, so the door came out bare (Marco, 2026-08-27).
-    from core.edits import build_add_edges
-    from core.history import AddFaceCommand
+    from built_core.edits import build_add_edges
+    from built_core.history import AddFaceCommand
 
     scene = Scene()
     hist = History(scene)
@@ -436,8 +436,8 @@ def test_a_door_drawn_down_to_the_floor_edge_takes_the_wall_texture():
 def test_a_rectangle_drawn_inside_a_painted_face_takes_its_paint_too():
     # Same gesture, not touching the boundary: the new face falls strictly
     # inside the mother (direction A, which punches a hole in her).
-    from core.edits import build_add_edges
-    from core.history import AddFaceCommand
+    from built_core.edits import build_add_edges
+    from built_core.history import AddFaceCommand
 
     scene = Scene()
     hist = History(scene)
@@ -453,7 +453,7 @@ def test_a_rectangle_drawn_inside_a_painted_face_takes_its_paint_too():
 
 def test_a_face_drawn_with_its_own_paint_keeps_it():
     # Inheritance fills gaps only: whatever the face already declares wins.
-    from core.history import AddFaceCommand
+    from built_core.history import AddFaceCommand
 
     scene = Scene()
     hist = History(scene)

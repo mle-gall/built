@@ -1874,7 +1874,7 @@ pub(super) fn fit(ui: &egui::Ui, text: &str, font: egui::FontId, color: Color32,
 }
 
 /// Native samples of the standard cut patterns. The geometry is an 8 × 3 mm
-/// window of core.hatches.hatch_marks, clipped and rounded to 0.01 paper mm.
+/// window of built_core.hatches.hatch_marks, clipped and rounded to 0.01 paper mm.
 pub const HATCH_KEYS: &str = include_str!("assets/hatches.txt");
 
 mod hatch;

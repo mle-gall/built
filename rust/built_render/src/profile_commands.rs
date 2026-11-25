@@ -52,14 +52,14 @@ fn create_profile_faces(win: &Bound<'_, PyAny>, bridge: bool) -> PyResult<()> {
     let mesh = scene.getattr("mesh")?;
     let (module, select, verb, error) = if bridge {
         (
-            "core.bridge",
+            "built_core.bridge",
             "profiles_from_selection",
             "bridge",
             "BridgeError",
         )
     } else {
         (
-            "core.make_faces",
+            "built_core.make_faces",
             "selected_edges",
             "make_faces",
             "MakeFacesError",

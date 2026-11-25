@@ -8,7 +8,7 @@ import math
 
 from built_core import Vec3 as QVector3D
 
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import igz
 from georef.datum import SceneDatum, utm_forward, utm_inverse, zone_for_lon
 

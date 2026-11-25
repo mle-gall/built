@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core.group import Group
+from built_core.group import Group
 from built_core.i18n import tr
-from core.mesh import Mesh
+from built_core.mesh import Mesh
 import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.native_tree import action

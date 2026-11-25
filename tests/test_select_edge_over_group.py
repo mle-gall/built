@@ -12,8 +12,8 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.group import Group
-from core.mesh import Edge, Mesh
+from built_core.group import Group
+from built_core.mesh import Edge, Mesh
 from tools.rust_tools import SelectTool
 
 

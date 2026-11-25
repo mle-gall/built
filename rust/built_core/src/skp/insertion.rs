@@ -122,7 +122,7 @@ impl SkpInsertion {
         }
         skp_apply_metadata(scene, self.layers.bind(py))?;
         let existing = scene.call_method0("groups_by_uid")?.cast_into::<PyDict>()?;
-        let fresh = py.import("core.group")?.getattr("new_uid")?;
+        let fresh = py.import("built_core.group")?.getattr("new_uid")?;
         if !existing.is_empty() {
             let mut used = self
                 .placements

@@ -5,13 +5,13 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.history import (
+from built_core.history import (
     ExplodeGroupCommand,
     History,
     MakeGroupCommand,
     MoveGroupCommand,
 )
-from core.scene import Scene
+from built_core.scene import Scene
 
 
 def V(x: float, y: float, z: float = 0.0) -> QVector3D:
@@ -75,7 +75,7 @@ def test_group_keeps_soft_and_curve_flags_round_trip(tmp_path):
     from built_core import Input as Qt
     from built_core import ScreenPoint as QPointF
 
-    from core.history import ExplodeGroupCommand, History, MakeGroupCommand
+    from built_core.history import ExplodeGroupCommand, History, MakeGroupCommand
     from formats import igz
     from tools.base import ToolContext
     from tools.circle import CircleTool
@@ -161,10 +161,10 @@ def test_merge_groups_fuses_without_touching_loose_mesh():
     # into ONE group (instances baked to world, attrs and soft/hidden
     # flags carried) and the loose mesh never changes. Exact undo.
     from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-    from core.group import Group
-    from core.history import History, MergeGroupsCommand
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.history import History, MergeGroupsCommand
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
 
     scene = Scene()
     hist = History(scene)

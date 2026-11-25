@@ -11,10 +11,10 @@ from __future__ import annotations
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from built_core import Vec3 as V
 
-from core.group import Group, copy_group, iter_placements
-from core.history import History, MakeComponentOfCommand, MakeNestedGroupCommand
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group, copy_group, iter_placements
+from built_core.history import History, MakeComponentOfCommand, MakeNestedGroupCommand
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 
 def _box_group(x, name):
@@ -69,7 +69,7 @@ def test_a_group_exploded_out_of_a_copy_is_its_own_when_opened(native_window):
     """Explode frees the groups of one copy; opening one of them must not
     edit the groups still inside the other copies."""
     import sys
-    from core.history import ExplodeGroupCommand
+    from built_core.history import ExplodeGroupCommand
     win = native_window
     vp = win.viewport
     scene = vp.scene

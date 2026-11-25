@@ -70,7 +70,7 @@ def test_crease_is_not_merged():
 
 
 def test_soften_smooth_edges_marks_shallow_dihedrals():
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     m = Mesh()
     # Nearly-flat pair (fold of ~5°) + a hard 90° corner.
     m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0.05), V(0, 1, 0.05)])

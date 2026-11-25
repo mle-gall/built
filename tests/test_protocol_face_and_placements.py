@@ -5,11 +5,11 @@ import numpy as np
 import pytest
 from built_core import Matrix4, Vec3
 
-from core.group import Group
-from core.history import History
-from core.mesh import Mesh
-from core.protocol.commands import run
-from core.scene import Scene
+from built_core.group import Group
+from built_core.history import History
+from built_core.mesh import Mesh
+from built_core.protocol.commands import run
+from built_core.scene import Scene
 
 
 def _scene_with_box():
@@ -106,8 +106,8 @@ def test_move_selection_by_keys_and_as_an_array_of_copies():
 
 
 def _dimensioned_square():
-    from core.history import AddDimensionCommand
-    from core.dimension import Dimension
+    from built_core.history import AddDimensionCommand
+    from built_core.dimension import Dimension
     scene = Scene()
     history = History(scene)
     run(history, "add_face", outer=[[0, 0, 0], [4, 0, 0], [4, 4, 0], [0, 4, 0]])

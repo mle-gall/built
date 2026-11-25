@@ -13,8 +13,8 @@ from built_core import Vec3 as V
 
 
 def _box_window(native_host):
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
 
     win = native_host.window
     native_host.resize(1200, 800, 1.0)

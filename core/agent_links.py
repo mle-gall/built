@@ -2,7 +2,7 @@
 """Link and project inspection uses the same operations as the project browser."""
 import built_core
 
-from core import links
+from built_core import links
 from built_core import project
 
 

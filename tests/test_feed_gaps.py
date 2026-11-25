@@ -6,15 +6,15 @@ from __future__ import annotations
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core import mesh as M
+from built_core import mesh as M
 from built_core import store_mesh as S
-from core.group import Group
-from core.history import History, SplitIntoPiecesCommand
-from core.reference_edit import ReshareInstanceCommand
-from core.pieces import split_into_pieces
-from core.protocol import commands as C
-from core.protocol.keys import mesh_key
-from core.scene import Scene
+from built_core.group import Group
+from built_core.history import History, SplitIntoPiecesCommand
+from built_core.reference_edit import ReshareInstanceCommand
+from built_core.pieces import split_into_pieces
+from built_core.protocol import commands as C
+from built_core.protocol.keys import mesh_key
+from built_core.scene import Scene
 from tests.test_core_protocol import _expected, _got, _inverse, _read
 from tests.test_store_mesh import fingerprint, pytestmark  # noqa: F401
 

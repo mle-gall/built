@@ -288,7 +288,7 @@ pub(crate) fn project_context_rows(
             let address = scene.call_method1("occurrence_path", (&g,))?;
             let id: String = scene
                 .py()
-                .import("core.link_structure")?
+                .import("built_core.link_structure")?
                 .call_method1("row_id", (address,))?
                 .extract()?;
             let key = format!("i:{id}");
@@ -401,7 +401,7 @@ pub(crate) fn reset_source_tags<'py>(
         }
     }
     let history = py.import("built_core.history")?;
-    commands.append(py.import("core.links")?.call_method1("set_registry_command", (saved,))?)?;
+    commands.append(py.import("built_core.links")?.call_method1("set_registry_command", (saved,))?)?;
     Ok(Some(history.call_method1("CompoundCommand", (commands,))?))
 }
 
@@ -433,7 +433,7 @@ pub(crate) fn source_placement_rows(
     if copies.len() < 2 {
         return Ok(rows);
     }
-    let tree = scene.py().import("core.link_structure")?;
+    let tree = scene.py().import("built_core.link_structure")?;
     let selection = scene.getattr("selection")?;
     for (index, g) in copies.iter().enumerate() {
         let address = scene.call_method1("occurrence_path", (g,))?;
@@ -469,7 +469,7 @@ pub(crate) fn expand_project_folders(
     }
     for folder in scene
         .py()
-        .import("core.layers")?
+        .import("built_core.layers")?
         .call_method1("folders_of", (scene,))?
         .try_iter()?
     {
@@ -490,7 +490,7 @@ pub(crate) fn reveal_branches(
     let members = tree.getattr("member")?;
     let formatter = scene
         .py()
-        .import("core.link_structure")?
+        .import("built_core.link_structure")?
         .getattr("row_id")?;
     for item in scene.getattr("selection")?.try_iter()? {
         let item = item?;

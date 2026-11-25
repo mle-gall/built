@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.composition import Composicion, NivelItem
+from built_core.composition import Composicion, NivelItem
 
 
 def test_the_value_reads_signed_with_a_datum_and_plus_minus_zero():

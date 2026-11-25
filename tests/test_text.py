@@ -7,11 +7,11 @@ from __future__ import annotations
 from built_core import Vec3 as QVector3D
 
 
-from core.history import (AddTextLabelCommand, DeleteTextLabelsCommand,
+from built_core.history import (AddTextLabelCommand, DeleteTextLabelsCommand,
                           History)
-from core.scene import Scene
-from core.text3d import build_text_mesh
-from core.textlabel import TextLabel
+from built_core.scene import Scene
+from built_core.text3d import build_text_mesh
+from built_core.textlabel import TextLabel
 from formats import igz
 
 
@@ -95,7 +95,7 @@ def test_the_default_label_of_a_face_with_an_opening_quotes_its_net_area():
     """#742: clicking a 4x4 m face with a 1x1 m opening with the Text
     tool offers a label of 15 m², not the outline's 16."""
     from types import SimpleNamespace
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     from tools.text import TextTool
 
     mesh = Mesh()
@@ -131,7 +131,7 @@ def test_label_commands_undo_redo():
 
 
 def test_label_edit_command_undo_redo():
-    from core.history import EditTextLabelCommand
+    from built_core.history import EditTextLabelCommand
     scene = Scene()
     history = History(scene)
     lab = TextLabel(QVector3D(1, 2, 0), QVector3D(0.5, 0, 1), "Muro eje A")
@@ -183,7 +183,7 @@ def test_select_double_click_edits_label(monkeypatch):
 
 
 def test_label_move_command_shifts_offset_only():
-    from core.history import MoveTextLabelsCommand
+    from built_core.history import MoveTextLabelsCommand
     scene = Scene()
     history = History(scene)
     lab = TextLabel(QVector3D(1, 2, 0), QVector3D(0.5, 0, 1), "Muro eje A")

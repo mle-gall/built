@@ -3,8 +3,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from core import bridge, link_structure, material_commands
-from core.protocol import commands, feed, keys, records
+from built_core import bridge, link_structure, material_commands
+from built_core.protocol import commands, feed, keys, records
 
 
 def observations():
@@ -37,13 +37,13 @@ def test_first_import_can_be_the_tree_command_dispatcher():
     from textwrap import dedent
 
     subprocess.run([sys.executable, "-c", dedent("""
-        from core.protocol.commands import COMMANDS, run
-        from core.protocol import commands
+        from built_core.protocol.commands import COMMANDS, run
+        from built_core.protocol import commands
         from built_core import command_protocol
         assert commands.__spec__.origin == 'built_core'
         assert run is command_protocol.run
         assert COMMANDS['set_tag_state'] is command_protocol.set_tag_state
-        from core.history import History
-        from core.scene import Scene
+        from built_core.history import History
+        from built_core.scene import Scene
         assert run(History(Scene()), 'undo')['step'] is None
     """)], check=True)

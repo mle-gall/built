@@ -4,7 +4,7 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from types import SimpleNamespace
 import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from core.composition import MarcoVista
+from built_core.composition import MarcoVista
 from built_core.saved_views import SavedView
 
 
@@ -12,8 +12,8 @@ def test_offscreen_size_and_live_camera_unchanged(monkeypatch):
     import sys
     import views.wgpu_view as module
     from tests.controller_surface import ControllerSurface as Viewport
-    from core.scene import Scene
-    from core.camera import OrbitCamera
+    from built_core.scene import Scene
+    from built_core.camera import OrbitCamera
     class Renderer:
         def set_axes(self, frame, spacing, visible):
             assert len(frame) == 16
@@ -47,7 +47,7 @@ def test_offscreen_size_and_live_camera_unchanged(monkeypatch):
 
 
 def test_scene_recall_updates_metal_layers_camera_style_and_filter(native_host):
-    from core.layers import Layer
+    from built_core.layers import Layer
     from built_core.style import Style
     from tests.scene_controls import choose
     win = native_host.window

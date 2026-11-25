@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The green X where two edges cross (``core.snap._intersection_snap``)
+"""The green X where two edges cross (``built_core.snap._intersection_snap``)
 asks ``segment_intersection`` only for pairs whose boxes come close
 (``_pairs_that_may_meet``) and occlusion only nearest first, until a
 crossing in sight. Same answer as asking every pair and every crossing:
@@ -15,8 +15,8 @@ from types import SimpleNamespace
 
 from built_core import Vec3 as V
 
-from core import snap
-from core.topology import segment_intersection
+from built_core import snap
+from built_core.topology import segment_intersection
 
 
 def _reference(cx, cy, scene, world_to_pixel, et, is_occluded):

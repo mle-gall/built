@@ -14,7 +14,7 @@ from collections import Counter
 from built_core import Input
 from built_core import Vec3 as QVector3D
 
-from core.scene import Scene
+from built_core.scene import Scene
 from tools.move import MoveTool
 from tests.test_move_copy import _ctx, _Vp
 

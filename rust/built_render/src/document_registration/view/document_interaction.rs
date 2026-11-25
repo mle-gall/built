@@ -16,7 +16,7 @@ fn document_interaction_format_dim_value<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let metres = a.get_item(0)?;
     let style = a.get_item(1)?;
-    let format_length = py.import("core.units")?.getattr("format_length")?;
+    let format_length = py.import("built_core.units")?.getattr("format_length")?;
     format_length.call1((
         &metres,
         style.call_method1("get", ("units", "m"))?,
@@ -32,7 +32,7 @@ fn document_interaction_format_dim_value<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn document_interaction_chunk_cache_dir<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let texture_cache_root = py.import("core.texture")?.getattr("texture_cache_root")?;
+    let texture_cache_root = py.import("built_core.texture")?.getattr("texture_cache_root")?;
     let d = texture_cache_root
         .call0()?
         .getattr("parent")?
@@ -117,14 +117,14 @@ fn document_interaction_parse_value_buffer<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let buffer = a.get_item(0)?;
     let comma_lists = a.get_item(1)?;
-    let parse_value_box = py.import("core.units")?.getattr("parse_value_box")?;
+    let parse_value_box = py.import("built_core.units")?.getattr("parse_value_box")?;
     parse_value_box.call1((&buffer, &comma_lists))
 }
 
 #[rustfmt::skip]
 pub(super) const DOCUMENT_INTERACTION: &[Method] = &[
     ("_sync_axes", Mode::Method, document_interaction_sync_axes, &["self"], "None", "Make the drawing axes the current context's (issue #44) — the\nworld's at the top level, the open group's own inside it."),
-    ("_format_dim_value", Mode::Static, document_interaction_format_dim_value, &["metres:float", "style:dict"], "str", "Format a length (metres) per the dimension style: unit + precision\n(see :mod:`core.units` — metric, decimal or fractional imperial),\nwith or without the unit symbol (#374)."),
+    ("_format_dim_value", Mode::Static, document_interaction_format_dim_value, &["metres:float", "style:dict"], "str", "Format a length (metres) per the dimension style: unit + precision\n(see :mod:`built_core.units` — metric, decimal or fractional imperial),\nwith or without the unit symbol (#374)."),
     ("_chunk_cache_dir", Mode::Static, document_interaction_chunk_cache_dir, &[], "", ""),
     ("edit_rest_mode", Mode::Property, document_interaction_edit_rest_mode, &["self"], "str", "``normal`` / ``fade`` / ``hide`` — how the model outside the group\nbeing edited reads. See :data:`EDIT_REST_MODES`."),
     ("edit_rest_fade", Mode::Property, document_interaction_edit_rest_fade, &["self"], "float", "0..1 strength of the grey wash applied outside the edit context."),
@@ -134,7 +134,7 @@ pub(super) const DOCUMENT_INTERACTION: &[Method] = &[
     ("_axis_source_cue", Mode::Method, document_interaction_axis_source_cue, &["self", "snap", "px_x:float", "px_y:float"], "", ""),
     ("_extension_snap", Mode::Method, document_interaction_extension_snap, &["self", "snap", "px_x:float", "px_y:float"], "", ""),
     ("_handle_value_key", Mode::Method, document_interaction_handle_value_key, &["self", "ev"], "bool", "Route a value-box key to its document tool or the camera lens."),
-    ("_parse_value_buffer", Mode::Static, document_interaction_parse_value_buffer, &["buffer:str", "comma_lists:bool=False"], "", "The value box's text → a float, a 2-tuple ``(w, h)``, a 3-tuple\n``(dx, dy, dz)``, an array, radius, profile, segments or slope\ntuple, or None (``core.units.parse_value_box``: the grammar is\nRust's, ``rust/built_core/src/units.rs``). Each tool's\n``on_value`` takes the arity it understands. ``comma_lists``: a\ncomma separates fields when the entry has no ``;`` and no space\n(#152)."),
+    ("_parse_value_buffer", Mode::Static, document_interaction_parse_value_buffer, &["buffer:str", "comma_lists:bool=False"], "", "The value box's text → a float, a 2-tuple ``(w, h)``, a 3-tuple\n``(dx, dy, dz)``, an array, radius, profile, segments or slope\ntuple, or None (``built_core.units.parse_value_box``: the grammar is\nRust's, ``rust/built_core/src/units.rs``). Each tool's\n``on_value`` takes the arity it understands. ``comma_lists``: a\ncomma separates fields when the entry has no ``;`` and no space\n(#152)."),
 ];
 
 fn entity_owner<'py>(a: &Args<'py>) -> Reply<'py> {
@@ -246,14 +246,14 @@ fn guide_vertices<'py>(a: &Args<'py>) -> Reply<'py> {
 fn parse_number<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tok = a.get_item(0)?;
-    let _number = py.import("core.units")?.getattr("_number")?;
+    let _number = py.import("built_core.units")?.getattr("_number")?;
     _number.call1((&tok,))
 }
 
 fn parse_length_field<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let field = a.get_item(0)?;
-    let parse_length_field = py.import("core.units")?.getattr("parse_length_field")?;
+    let parse_length_field = py.import("built_core.units")?.getattr("parse_length_field")?;
     parse_length_field.call1((&field,))
 }
 
@@ -264,6 +264,6 @@ pub(super) const FUNCTIONS: &[Method] = &[
     ("_qv_hypot3", Mode::Function, qv_hypot3, &[], "", ""),
     ("_box_edge_vertices", Mode::Function, box_edge_vertices, &["corners"], "", ""),
     ("_guide_vertices", Mode::Function, guide_vertices, &["guides", "spacing:float", "selection=()", "centre=None", "reach:float=0.0", "eye=None"], "", ""),
-    ("_parse_number", Mode::Function, parse_number, &["tok:str"], "", "``2``, ``2.5``, ``.5``, ``3/4`` (a fraction), ``1-1/2`` (a mixed\nnumber, the hyphen form) → float, else None — ``core.units`` reads it,\nrefusing a number too long for a float or too big for a model (#185)."),
-    ("_parse_length_field", Mode::Function, parse_length_field, &["field:str"], "", "One typed length in metres: metric or imperial, the usual forms.\n\n``2`` (the document's unit, issue #33) · ``30cm`` · ``1500mm`` ·\n``1m20`` · ``2\"`` / ``2in`` · ``1'`` / ``1ft`` · ``1'6\"`` · ``3/4\"`` ·\n``1'3/4\"``. A leading minus is kept. Returns None when the field is not\na length. The reading itself lives in ``core.units.parse``, the one\nevery length field shares."),
+    ("_parse_number", Mode::Function, parse_number, &["tok:str"], "", "``2``, ``2.5``, ``.5``, ``3/4`` (a fraction), ``1-1/2`` (a mixed\nnumber, the hyphen form) → float, else None — ``built_core.units`` reads it,\nrefusing a number too long for a float or too big for a model (#185)."),
+    ("_parse_length_field", Mode::Function, parse_length_field, &["field:str"], "", "One typed length in metres: metric or imperial, the usual forms.\n\n``2`` (the document's unit, issue #33) · ``30cm`` · ``1500mm`` ·\n``1m20`` · ``2\"`` / ``2in`` · ``1'`` / ``1ft`` · ``1'6\"`` · ``3/4\"`` ·\n``1'3/4\"``. A leading minus is kept. Returns None when the field is not\na length. The reading itself lives in ``built_core.units.parse``, the one\nevery length field shares."),
 ];

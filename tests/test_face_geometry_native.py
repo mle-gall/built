@@ -18,7 +18,7 @@ import pytest
 from built_core import Vec3 as V
 
 import core._native as _native
-from core.mesh import Mesh
+from built_core.mesh import Mesh
 from built_core.triangulate import plane_axes, triangulate
 
 nat = _native.available()
@@ -158,7 +158,7 @@ def test_face_geometry_is_the_python_one(seed, monkeypatch):
         except ValueError:
             pass
     # Slivers and a collapsed face, built straight from vertices.
-    from core.mesh import Face
+    from built_core.mesh import Face
     a, b, c = (m.vertex(V(0, 0, 0)), m.vertex(V(1, 0, 0)),
                m.vertex(V(2, 1e-7, 0)))
     faces += [Face([a, b, c]), Face([a, b]), Face([a, b, a, b])]
@@ -210,8 +210,8 @@ def test_face_geometry_is_the_python_one(seed, monkeypatch):
 
 
 def test_store_triangulation_keeps_model_corners(monkeypatch):
-    from core.protocol.queries import triangles
-    from core.scene import Scene
+    from built_core.protocol.queries import triangles
+    from built_core.scene import Scene
 
     monkeypatch.setattr(_native, "native", nat)
     scene = Scene()
@@ -228,7 +228,7 @@ def test_preview_face_preserves_recorded_newell_geometry():
     import hashlib
     import struct
 
-    from core.geometry import Face
+    from built_core.geometry import Face
 
     rng = random.Random(54172)
     digest = hashlib.sha256()

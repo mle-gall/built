@@ -24,7 +24,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 
-from core.composition import CotaItem, cota_line_deg
+from built_core.composition import CotaItem, cota_line_deg
 
 
 # Two points that are NOT aligned: 30 mm across, 40 mm up the page.
@@ -74,7 +74,7 @@ def test_the_two_extension_lines_have_DIFFERENT_lengths():
 
 
 def test_an_older_sheet_opens_aligned_and_a_forced_one_survives_the_file():
-    from core.composition import Composicion
+    from built_core.composition import Composicion
     c = Composicion()
     c.cotas.append(_slanted(axis="v"))
     c.cotas.append(_slanted())

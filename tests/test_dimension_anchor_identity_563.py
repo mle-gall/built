@@ -19,12 +19,12 @@ import pytest
 from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Vec3 as QVector3D
 
-from core.dimension import Dimension
-from core.history import (AddDimensionCommand, History,
+from built_core.dimension import Dimension
+from built_core.history import (AddDimensionCommand, History,
                           MoveVerticesCommand)
-from core.mesh import Mesh
-from core.scene import Scene
-from core.snap import SnapResult
+from built_core.mesh import Mesh
+from built_core.scene import Scene
+from built_core.snap import SnapResult
 from formats import igz
 from tools.base import ToolContext
 from tools.move import MoveTool

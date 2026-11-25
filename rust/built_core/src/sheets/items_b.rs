@@ -24,7 +24,7 @@ pub fn py_mod(a: f64, b: f64) -> f64 {
     if r != 0.0 && (r < 0.0) != (b < 0.0) { r + b } else { r }
 }
 
-/// core.composition.readable_deg.
+/// built_core.composition.readable_deg.
 pub fn readable_deg(dx: f64, dy: f64) -> f64 {
     py_mod(dy.atan2(dx).to_degrees() + 90.0, 180.0) - 90.0
 }

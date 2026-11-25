@@ -21,14 +21,14 @@ import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 import core._native as _native
-from core import mesh as M
+from built_core import mesh as M
 from built_core import store_mesh as S
-from core.history import (AssignLayerCommand, History, InsertGroupCommand,
+from built_core.history import (AssignLayerCommand, History, InsertGroupCommand,
                           SetFaceColorCommand)
-from core.protocol import commands as C
-from core.protocol import queries as Q
-from core.protocol.keys import mesh_key, resolve_mesh
-from core.scene import Scene
+from built_core.protocol import commands as C
+from built_core.protocol import queries as Q
+from built_core.protocol.keys import mesh_key, resolve_mesh
+from built_core.scene import Scene
 
 mod = _native.available()
 needs_store = pytest.mark.skipif(
@@ -205,8 +205,8 @@ def test_store_attrs_edits_are_face_modifications(monkeypatch):
     """Face attrs live beside the store: an edit by any command shows as
     a modified face (StoreState.changes_since); past ATTRS_COPY_MAX the
     feed no longer copies them, and paint commands still name theirs."""
-    from core.history import SnapshotMutation
-    from core.protocol import feed as F
+    from built_core.history import SnapshotMutation
+    from built_core.protocol import feed as F
     sc = _scene()
     h = History(sc)
     f = sc.mesh.faces[0]
@@ -223,12 +223,12 @@ def test_store_attrs_edits_are_face_modifications(monkeypatch):
 
 
 def test_document_changes_by_key():
-    from core.layers import Layer
+    from built_core.layers import Layer
     sc = _scene()
     h = History(sc)
     g = M.Mesh()
     g.add_face([V(5, 0, 0), V(6, 0, 0), V(6, 1, 0)])
-    from core.group import Group
+    from built_core.group import Group
     group = Group(g, name="Box")
     h.execute(InsertGroupCommand(group))
     step = h.feed.last
@@ -245,7 +245,7 @@ def test_document_changes_by_key():
     # The tag was added outside History: the next step sees no change of
     # it; renaming it inside one does.
     assert step.tags == {"created": [], "removed": [], "modified": []}
-    from core.history import SnapshotMutation
+    from built_core.history import SnapshotMutation
 
     def rename(scene):
         layer.name = "Muros"
@@ -275,7 +275,7 @@ def test_since_and_the_ring():
 
 
 def test_a_failed_or_rejected_step_publishes_nothing():
-    from core.history import SnapshotMutation
+    from built_core.history import SnapshotMutation
     sc = _scene()
     h = History(sc)
 
@@ -342,8 +342,8 @@ def test_renderer_reads_the_feed_for_a_store_mesh():
     """InstanceUpdates: a mesh edit inside an open group is found from
     the feed's step (not from the command class) and the element records
     travel with the rebake."""
-    from core.group import Group
-    from core.history import SnapshotMutation
+    from built_core.group import Group
+    from built_core.history import SnapshotMutation
     from built_core import pack_scene
     from built_core import InstanceUpdates
     mesh = M.Mesh()
@@ -377,8 +377,8 @@ def test_renderer_undo_after_leaving_the_group_rebakes_it():
     """Edit inside a group, leave it, undo: the undo ran on the group's
     mesh, which the feed names. Derived from the command class (the open
     mesh, now the loose one) the resident pack kept the edit drawn."""
-    from core.group import Group
-    from core.history import SnapshotMutation
+    from built_core.group import Group
+    from built_core.history import SnapshotMutation
     from tests.test_wgpu_updates import assert_matches_fresh_pack
     from built_core import pack_scene
     from built_core import InstanceUpdates
@@ -445,8 +445,8 @@ def test_bridge_tools_name_faces_by_key_and_read_the_feed(bridge):
 def test_placement_commands_reach_nested_placements():
     """hide / unhide / lock / rename_placement / set_tag (added for the
     egui UI) take uids at any depth and answer with the feed's step."""
-    from core.group import Group
-    from core.layers import Layer
+    from built_core.group import Group
+    from built_core.layers import Layer
     sc = _scene()
     h = History(sc)
     inner_mesh = M.Mesh()
@@ -482,7 +482,7 @@ def test_resegment_curve_and_repair_solid():
     from tools.base import ToolContext
     from tools.circle import CircleTool
     from tests.controller_surface import ControllerSurface as Viewport
-    from core.protocol.keys import to_json_key
+    from built_core.protocol.keys import to_json_key
     vp = Viewport(None)
     vp.flash_status = lambda *a, **k: None
     tool = CircleTool()
@@ -496,7 +496,7 @@ def test_resegment_curve_and_repair_solid():
     assert out["ok"]
     assert sum(1 for e in vp.scene.mesh.edges if e.curve is not None) == before * 2
     # An open box (no top) as a group: repair closes the flat hole.
-    from core.group import Group
+    from built_core.group import Group
     box = M.Mesh()
     a, b, c, d = V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)
     up = V(0, 0, 1)
@@ -541,9 +541,9 @@ def test_bridge_rotates_named_vertices_in_one_undo_step(bridge):
 
 
 def test_offset_uses_the_face_key_and_model_frame_for_a_distant_path():
-    from core.protocol.commands import run
-    from core.scene import Scene
-    from core.history import History
+    from built_core.protocol.commands import run
+    from built_core.scene import Scene
+    from built_core.history import History
     from built_core import Vec3
     scene = Scene()
     history = History(scene)
@@ -562,10 +562,10 @@ def test_offset_uses_the_face_key_and_model_frame_for_a_distant_path():
 
 
 def test_paint_material_uses_named_recipe_on_the_requested_side_and_preserves_it_on_undo():
-    from core.protocol.commands import run
-    from core.materials import Material
-    from core.scene import Scene
-    from core.history import History
+    from built_core.protocol.commands import run
+    from built_core.materials import Material
+    from built_core.scene import Scene
+    from built_core.history import History
     from built_core import Vec3
     scene = Scene()
     history = History(scene)
@@ -608,10 +608,10 @@ def test_bridge_mirrors_and_stamps_the_model_clipboard(bridge):
 
 
 def test_group_axes_verb_rejects_collinearity_and_preserves_world_points():
-    from core.group import frame_axes, group_frame
-    from core.history import History
-    from core.protocol.commands import run
-    from core.scene import Scene
+    from built_core.group import frame_axes, group_frame
+    from built_core.history import History
+    from built_core.protocol.commands import run
+    from built_core.scene import Scene
     from tests.test_group_axes import _slab, _world_pts
     scene, group = Scene(), _slab()
     scene.groups.append(group)

@@ -7,13 +7,13 @@ from __future__ import annotations
 from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Vec3 as QVector3D
 
-from core.dimension import Dimension
-from core.history import (
+from built_core.dimension import Dimension
+from built_core.history import (
     AddDimensionCommand,
     DeleteDimensionsCommand,
     History,
 )
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import igz
 from tools.base import ToolContext
 from tools.dimension import DimensionTool
@@ -249,8 +249,8 @@ def test_geometry_inside_a_group_occludes_too():
     holds every group's triangles as well.
     """
     from built_core import Vec3 as QVector3D
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from views.document_interaction import DocumentInteraction
 
     wall = Mesh()
@@ -314,7 +314,7 @@ def test_world_under_cursor_uses_cached_pick():
 
 def test_dimension_custom_text_and_placeholder():
     from built_core import Vec3 as QVector3D
-    from core.dimension import Dimension
+    from built_core.dimension import Dimension
     d = Dimension(QVector3D(0, 0, 0), QVector3D(2.4, 0, 0), QVector3D(0, 1, 0))
     assert d.display_text("2.40 m") == "2.40 m"              # automatic
     d.text = "H = <> (verificar)"
@@ -325,9 +325,9 @@ def test_dimension_custom_text_and_placeholder():
 
 def test_edit_dimension_text_command_undo_redo():
     from built_core import Vec3 as QVector3D
-    from core.dimension import Dimension
-    from core.history import EditDimensionTextCommand, History
-    from core.scene import Scene
+    from built_core.dimension import Dimension
+    from built_core.history import EditDimensionTextCommand, History
+    from built_core.scene import Scene
     scene = Scene()
     history = History(scene)
     d = Dimension(QVector3D(0, 0, 0), QVector3D(2, 0, 0), QVector3D(0, 1, 0))
@@ -350,9 +350,9 @@ def test_select_double_click_edits_dimension_text(monkeypatch, tmp_path):
     from types import SimpleNamespace
     from built_core import Vec3 as QVector3D
     from built_render import chrome_forms
-    from core.dimension import Dimension
-    from core.history import History
-    from core.scene import Scene
+    from built_core.dimension import Dimension
+    from built_core.history import History
+    from built_core.scene import Scene
     from formats import igz as igz_format
     from tools.rust_tools import SelectTool
 

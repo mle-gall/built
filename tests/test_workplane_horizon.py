@@ -102,7 +102,7 @@ def test_una_vista_normal_no_cambia(viewport):
 def test_si_hay_una_cara_bajo_el_cursor_el_punto_cae_en_ella(viewport, monkeypatch):
     """Lo que pasaba en la captura: el cursor SOBRE una viga y el punto a
     1757 m. Si hay una cara ahí, es la cara la que manda."""
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     viewport.active_tool = _Tool()
     _camara_rasante(viewport)
     mesh = Mesh()

@@ -28,10 +28,10 @@ GOLDEN = Path(__file__).parent / "fixtures" / "saved_view_state_golden.json.gz"
 
 def _scene(rng):
     from built_core import Vec3 as V
-    from core import layers as L
-    from core.group import Group
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core import layers as L
+    from built_core.group import Group
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
     from built_core.section import SectionPlane
     scene = Scene()
     for i in range(rng.randint(0, 5)):
@@ -81,7 +81,7 @@ def _scene(rng):
 
 def _camera(rng):
     from built_core import Vec3 as V
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     cam = OrbitCamera()
     cam.target = V(rng.uniform(-9, 9), rng.uniform(-9, 9), rng.uniform(-2, 2))
     cam.distance = rng.uniform(1, 90)
@@ -135,7 +135,7 @@ def _view_fields(v):
 
 def answers():
     import itertools
-    from core import layers as L
+    from built_core import layers as L
     counter = itertools.count()
     real = L.new_uid
     L.new_uid = lambda: f"k{next(counter)}"

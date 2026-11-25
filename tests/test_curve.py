@@ -8,8 +8,8 @@ import math
 
 from built_core import Vec3 as QVector3D
 
-from core.history import History, TagCurveCommand
-from core.scene import Scene
+from built_core.history import History, TagCurveCommand
+from built_core.scene import Scene
 from formats import igz
 
 
@@ -20,8 +20,8 @@ def _circle_pts(cx, cy, r, n=24):
 
 
 def _draw_circle(scene):
-    from core.edits import build_add_edges
-    from core.history import AddFaceCommand
+    from built_core.edits import build_add_edges
+    from built_core.history import AddFaceCommand
     pts = _circle_pts(0, 0, 5, 24)
     segs = [(pts[i], pts[(i + 1) % len(pts)]) for i in range(len(pts))]
     return build_add_edges(scene, segs, detect_faces=False,
@@ -83,8 +83,8 @@ def test_two_circles_get_distinct_ids():
     hist = History(scene)
     c1, _ = _draw_circle(scene)
     hist.execute(c1)
-    from core.edits import build_add_edges
-    from core.history import AddFaceCommand
+    from built_core.edits import build_add_edges
+    from built_core.history import AddFaceCommand
     pts2 = _circle_pts(100, 100, 5, 24)
     segs2 = [(pts2[i], pts2[(i + 1) % 24]) for i in range(24)]
     hist.execute(build_add_edges(scene, segs2, detect_faces=False,
@@ -97,7 +97,7 @@ def test_two_circles_get_distinct_ids():
 def test_tag_curve_robust_to_split_segments():
     # A loop segment split into two pieces: both must be tagged (this is what
     # was breaking selection when a circle crossed existing geometry).
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     m = Mesh()
     loop = [QVector3D(0, 0, 0), QVector3D(10, 0, 0),
             QVector3D(10, 10, 0), QVector3D(0, 10, 0)]
@@ -114,8 +114,8 @@ def test_tag_curve_robust_to_split_segments():
 
 def _draw_user_scenario(scene, hist):
     """The reported case: rectangle → corner square → circle crossing it."""
-    from core.edits import build_add_edges
-    from core.history import AddFaceCommand, RebuildPlanarFacesCommand
+    from built_core.edits import build_add_edges
+    from built_core.history import AddFaceCommand, RebuildPlanarFacesCommand
 
     def V(x, y):
         return QVector3D(x, y, 0)
@@ -159,8 +159,8 @@ def test_square_drawn_after_circle_splits_three_areas():
     # build_add_edges must run the planar arrangement itself (flat + curves
     # gate) — otherwise a duplicate square face stacks over the lens
     # (z-fighting stripes on screen). Expected: three areas.
-    from core.edits import build_add_edges
-    from core.history import AddFaceCommand, RebuildPlanarFacesCommand
+    from built_core.edits import build_add_edges
+    from built_core.history import AddFaceCommand, RebuildPlanarFacesCommand
 
     scene = Scene()
     hist = History(scene)
@@ -250,8 +250,8 @@ def test_two_circles_intersect_next_to_a_solid():
 def test_square_over_circle_next_to_a_solid():
     # Same 3D-scene gate for STRAIGHT edges over curves: the per-plane rebuild
     # in build_add_edges must split square+circle into three areas.
-    from core.edits import build_add_edges
-    from core.history import AddFaceCommand
+    from built_core.edits import build_add_edges
+    from built_core.history import AddFaceCommand
 
     scene = Scene()
     hist = History(scene)
@@ -281,8 +281,8 @@ def test_two_overlapping_rectangles_split_into_three_regions():
     # rectangle (rect.igz report). The scoped planar rebuild must split the
     # overlap into its own region — the three expected areas — while deleted
     # faces stay deleted (coverage semantics).
-    from core.edits import build_add_edges
-    from core.history import AddFaceCommand, DeleteFaceCommand
+    from built_core.edits import build_add_edges
+    from built_core.history import AddFaceCommand, DeleteFaceCommand
 
     scene = Scene()
     hist = History(scene)
@@ -381,8 +381,8 @@ def test_offset_of_circle_tags_ring_and_undoes_cleanly():
 
 
 def test_deleting_one_contour_leaves_the_other():
-    from core.history import EraseSelectionCommand
-    from core.mesh import Edge
+    from built_core.history import EraseSelectionCommand
+    from built_core.mesh import Edge
     scene = Scene()
     hist = History(scene)
     _draw_user_scenario(scene, hist)
@@ -402,8 +402,8 @@ def test_deleting_one_contour_leaves_the_other():
 def test_line_crossing_circle_splits_into_contours():
     # Drawing a line across a circle must keep every split piece tagged (the
     # planner propagates curve ids) and re-split into separate contours.
-    from core.edits import build_add_edges
-    from core.history import AddFaceCommand
+    from built_core.edits import build_add_edges
+    from built_core.history import AddFaceCommand
     scene = Scene()
     hist = History(scene)
     cmd, pts = _draw_circle(scene)
@@ -423,7 +423,7 @@ def test_deleting_big_rectangle_leaves_clean_faces():
     # face (the heal's partial-overlap test used the polygon centroid, which
     # for the concave square-minus-sector face falls inside the sector) —
     # producing a giant garbled face on screen. Faces must stay hole-free.
-    from core.history import EraseSelectionCommand
+    from built_core.history import EraseSelectionCommand
     scene = Scene()
     hist = History(scene)
     _draw_user_scenario(scene, hist)
@@ -450,8 +450,8 @@ def test_tangent_lines_split_circle_into_arcs():
     # Two lines merely TOUCHING the circle at vertices (endpoint snap — no
     # crossing, no edge splits) must still break the curve there, the
     # classic way: deleting the arc between the tangent points leaves the rest.
-    from core.edits import build_add_edge
-    from core.history import EraseSelectionCommand
+    from built_core.edits import build_add_edge
+    from built_core.history import EraseSelectionCommand
     scene = Scene()
     hist = History(scene)
     cmd, pts = _draw_circle(scene)

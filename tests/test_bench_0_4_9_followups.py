@@ -18,11 +18,11 @@ from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 
-from core.edits import build_add_edge, build_add_edges, face_up_or_toward  # noqa: E402
-from core.group import Group  # noqa: E402
-from core.history import History  # noqa: E402
-from core.mesh import Mesh  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core.edits import build_add_edge, build_add_edges, face_up_or_toward  # noqa: E402
+from built_core.group import Group  # noqa: E402
+from built_core.history import History  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 
 
 def V(x, y, z=0.0):
@@ -55,7 +55,7 @@ def test_a_vertical_face_looks_at_the_eye_that_drew_it():
     wall = [V(0, 0, 0), V(2, 0, 0), V(2, 0, 2), V(0, 0, 2)]     # in the XZ plane
     toward_minus_y = face_up_or_toward(wall, eye=V(1, -5, 1))
     toward_plus_y = face_up_or_toward(wall, eye=V(1, 5, 1))
-    from core.edits import _newell
+    from built_core.edits import _newell
     assert _newell(toward_minus_y).y() < 0
     assert _newell(toward_plus_y).y() > 0
     assert face_up_or_toward(wall, eye=None) == wall             # nothing decides
@@ -68,7 +68,7 @@ def test_line_closing_a_wall_in_front_of_the_camera_shows_its_front():
     vp.camera.set_aspect(800, 600)
     vp.camera.set_view("front")            # the camera sits at -Y looking +Y
     scene = vp.scene
-    from core.protocol.commands import run
+    from built_core.protocol.commands import run
     pts = [V(0, 0, 0), V(0, 0, 2), V(2, 0, 2), V(2, 0, 0)]
     for a, b in zip(pts, pts[1:] + pts[:1]):
         # The Line tool's commit: the protocol's add_edge with the eye.

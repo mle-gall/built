@@ -48,7 +48,7 @@ fn put(out: &Dict<'_>, key: &str, v: &Obj<'_>) -> PyResult<()> {
 fn archive_folders(scene: &Obj<'_>, out: &Dict<'_>, layers: bool) -> PyResult<()> {
     let py = scene.py();
     let module = py.import(if layers {
-        "core.layers"
+        "built_core.layers"
     } else {
         "built_core.scene_tree"
     })?;
@@ -106,7 +106,7 @@ fn archive_styles(scene: &Obj<'_>, out: &Dict<'_>) -> PyResult<()> {
     let py = scene.py();
     let layers = attr(scene, "layers")?;
     if !layers.is_none() {
-        let class = py.import("core.layers")?.getattr("Layer")?;
+        let class = py.import("built_core.layers")?.getattr("Layer")?;
         out.set_item(
             "layers",
             rows(&layers, |ly| {
@@ -358,7 +358,7 @@ pub fn igz_archive_scene_fields(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_
     archive_folders(scene, out, false)?;
     let comps = attr(scene, "compositions")?;
     if comps.is_truthy()? {
-        let class = py.import("core.composition")?.getattr("Composicion")?;
+        let class = py.import("built_core.composition")?.getattr("Composicion")?;
         out.set_item(
             "compositions",
             rows(&comps, |c| {
@@ -537,13 +537,13 @@ pub fn igz_reset_scene(scene: &Obj<'_>, payload: &Dict<'_>, survey: &Obj<'_>) ->
         scene.setattr(k, v)?;
     }
     let factory = py
-        .import("core.scene")?
+        .import("built_core.scene")?
         .getattr("Scene")?
         .getattr("__dataclass_fields__")?
         .get_item("dimension_style")?
         .getattr("default_factory")?;
     scene.setattr("dimension_style", factory.call0()?)?;
-    let module = py.import("core.layers")?;
+    let module = py.import("built_core.layers")?;
     let class = module.getattr("Layer")?;
     let default = module.getattr("DEFAULT_LAYER")?;
     // Reset the default layer before decoding the file. Its construction is
@@ -611,7 +611,7 @@ pub fn igz_reset_scene(scene: &Obj<'_>, payload: &Dict<'_>, survey: &Obj<'_>) ->
         crate::model::module(py, "built_core")?.getattr(owner)?.call_method1(load, (scene, data(payload, key)?))?;
     }
     if let Ok(patterns) = data(payload, "hatch_patterns")?.cast::<PyDict>() {
-        let clean = py.import("core.hatches")?.getattr("clean_families")?;
+        let clean = py.import("built_core.hatches")?.getattr("clean_families")?;
         let dest = scene.getattr("hatch_patterns")?;
         for (k, v) in patterns.iter().take(500) {
             let Ok(name) = k.extract::<String>() else {
@@ -749,7 +749,7 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
     }
     scene.setattr(
         "units",
-        py.import("core.units")?
+        py.import("built_core.units")?
             .call_method1("model_units_of", (payload,))?,
     )?;
     if let Ok(seq) = data(payload, "custom_scales")?.cast::<PyList>() {
@@ -841,7 +841,7 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
     }
     restore_records(scene, payload, "geo_paths", "built_core.georef.geopath", "GeoPath")?;
     restore_records(scene, payload, "geo_points", "built_core.georef.points", "GeoPoint")?;
-    py.import("core.composition")?
+    py.import("built_core.composition")?
         .call_method1("bind_sheet_anchors", (scene,))?;
     let anchors = scene.getattr("text_placement_anchors")?;
     anchors.call_method0("clear")?;

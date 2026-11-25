@@ -138,9 +138,9 @@ def test_the_dxf_still_reads_groups_that_carry_a_pen(tmp_path):
 # ---- From the program ------------------------------------------------------
 
 def _two_layer_scene(scene):
-    from core.group import Group
-    from core.layers import DEFAULT_LAYER, Layer
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.layers import DEFAULT_LAYER, Layer
+    from built_core.mesh import Mesh
 
     def box(mesh, x0):
         V = QVector3D
@@ -205,7 +205,7 @@ def _box(mesh, x0=0.0, y0=0.0, z0=0.0, s=1.0):
 
 
 def _camera(scene, view="iso"):
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     cam = OrbitCamera()
     cam.set_aspect(800, 600)
     cam.perspective = False
@@ -216,21 +216,21 @@ def _camera(scene, view="iso"):
 
 
 def _ring_area(f):
-    from core.vista_caras import _area
+    from built_core.vista_caras import _area
     return sum(abs(_area(r)) for r in f.rings)
 
 
 def test_the_matte_light_is_the_viewport_s():
-    from core.vista_caras import MATTE_LIGHT
+    from built_core.vista_caras import MATTE_LIGHT
     from tests.controller_surface import ControllerSurface as Viewport
     light = Viewport._LIGHT
     assert np.allclose(MATTE_LIGHT, [light.x(), light.y(), light.z()])
 
 
 def test_an_unpainted_box_is_built_white_lit_as_in_the_view():
-    from core.scene import Scene
+    from built_core.scene import Scene
     from built_core.style import DEFAULT_FACE_COLOR
-    from core.vista_caras import shade_factor, shaded, view_faces
+    from built_core.vista_caras import shade_factor, shaded, view_faces
     scene = Scene()
     _box(scene.loose_mesh)
     faces = view_faces(scene, _camera(scene))
@@ -245,10 +245,10 @@ def test_an_unpainted_box_is_built_white_lit_as_in_the_view():
 
 
 def test_a_painted_object_wears_its_colour_and_a_face_its_own():
-    from core.group import Group
-    from core.mesh import Mesh
-    from core.scene import Scene
-    from core.vista_caras import view_faces
+    from built_core.group import Group
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
+    from built_core.vista_caras import view_faces
     scene = Scene()
     g = Group(Mesh(), name="caja")
     _box(g.mesh)
@@ -265,15 +265,15 @@ def test_a_painted_object_wears_its_colour_and_a_face_its_own():
 def test_a_nearer_face_hides_what_is_behind_it():
     """Seen from the top, a square floating over a bigger one: the lower
     keeps only the ring round the upper — no face lies under another."""
-    from core.scene import Scene
-    from core.vista_caras import view_faces
+    from built_core.scene import Scene
+    from built_core.vista_caras import view_faces
     V = QVector3D
     scene = Scene()
     scene.loose_mesh.add_face([V(0, 0, 0), V(4, 0, 0), V(4, 4, 0),
                                V(0, 4, 0)])
     scene.loose_mesh.add_face([V(1, 1, 1), V(3, 1, 1), V(3, 3, 1),
                                V(1, 3, 1)])
-    from core.vista_caras import _area
+    from built_core.vista_caras import _area
     faces = view_faces(scene, _camera(scene, "top"))
     assert len(faces) == 2
     upper, lower = sorted(faces, key=lambda f: len(f.rings))
@@ -284,9 +284,9 @@ def test_a_nearer_face_hides_what_is_behind_it():
 
 
 def test_glass_hides_nothing_and_a_face_seen_from_behind_is_back_colour():
-    from core.scene import Scene
+    from built_core.scene import Scene
     from built_core.style import effective_back_color
-    from core.vista_caras import view_faces
+    from built_core.vista_caras import view_faces
     V = QVector3D
     scene = Scene()
     scene.loose_mesh.add_face([V(0, 0, 0), V(4, 0, 0), V(4, 4, 0),
@@ -329,9 +329,9 @@ def test_a_textured_face_is_one_shape_filled_as_the_view_lays_it(tmp_path):
     laid onto the face here, as the viewport does (its world → UV map and
     its image turned bottom-up), so any program shows it the same."""
     import base64
-    from core.scene import Scene
-    from core.texture import face_uv_axes
-    from core.vista_caras import view_faces
+    from built_core.scene import Scene
+    from built_core.texture import face_uv_axes
+    from built_core.vista_caras import view_faces
     from formats.svg_out import save_svg_layers
     XL = "{http://www.w3.org/1999/xlink}href"
     V = QVector3D
@@ -487,11 +487,11 @@ def test_default_colour_only_drops_every_material_and_texture(tmp_path):
     """Painted, textured, see-through: with «Default colour only» every
     face comes out in Built's default colour, lit as the view or flat,
     opaque, with no image — a clean model to colour elsewhere."""
-    from core.group import Group
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
     from built_core.style import DEFAULT_FACE_COLOR
-    from core.vista_caras import shade_factor, shaded, view_faces
+    from built_core.vista_caras import shade_factor, shaded, view_faces
     from formats.svg_out import save_svg_layers
     scene = Scene()
     g = Group(Mesh(), name="caja")
@@ -534,8 +534,8 @@ def _slab(mesh, x0, y0, z0, sx, sy, sz):
 def test_a_thin_slab_shows_its_top_not_its_underside(perspective):
     """Sorted by mean depth, the underside of a thin, wide slab came out
     nearer than its top and hid it (the test house's roof slope)."""
-    from core.scene import Scene
-    from core.vista_caras import view_faces
+    from built_core.scene import Scene
+    from built_core.vista_caras import view_faces
     scene = Scene()
     _slab(scene.loose_mesh, 0, 0, 3, 8.0, 4.0, 0.05)
     cam = _camera(scene)
@@ -550,8 +550,8 @@ def test_a_thin_slab_shows_its_top_not_its_underside(perspective):
 def test_a_box_at_the_far_end_of_a_big_floor_stays_in_view():
     """A floor reaching toward the eye has its mean depth nearer than a box
     standing at its far end; the box must still show, the floor round it."""
-    from core.scene import Scene
-    from core.vista_caras import view_faces
+    from built_core.scene import Scene
+    from built_core.vista_caras import view_faces
     V = QVector3D
     scene = Scene()
     scene.loose_mesh.add_face([V(-20, -20, 0), V(2, -20, 0), V(2, 2, 0),
@@ -567,8 +567,8 @@ def test_a_box_at_the_far_end_of_a_big_floor_stays_in_view():
 def test_two_faces_that_cross_each_show_the_part_in_front():
     """An X seen from the front: each upright face is in front of the other
     on one side of the crossing — no order by depth can draw that."""
-    from core.scene import Scene
-    from core.vista_caras import view_faces
+    from built_core.scene import Scene
+    from built_core.vista_caras import view_faces
     V = QVector3D
     scene = Scene()
     scene.loose_mesh.add_face([V(-1, -1, 0), V(1, 1, 0), V(1, 1, 1),
@@ -587,9 +587,9 @@ def test_in_perspective_the_texture_lands_where_the_camera_puts_it():
     coordinates, must land where the camera projects it — an affine guess
     from three points broke the brick courses at every piece of wall."""
     from built_core import ScreenPoint as QPointF
-    from core.scene import Scene
-    from core.texture import face_uv_axes
-    from core.vista_caras import _Perspective, view_faces
+    from built_core.scene import Scene
+    from built_core.texture import face_uv_axes
+    from built_core.vista_caras import _Perspective, view_faces
     from formats.svg_out import _uv_to_page
     V = QVector3D
     scene = Scene()
@@ -655,8 +655,8 @@ def _sunny(scene):
 
 
 def test_the_ground_shadow_falls_away_from_the_sun():
-    from core.scene import Scene
-    from core.vista_caras import GROUND_LAYER, _Parallel, view_faces
+    from built_core.scene import Scene
+    from built_core.vista_caras import GROUND_LAYER, _Parallel, view_faces
     scene = Scene()
     _slab(scene.loose_mesh, 0, 0, 0, 1, 1, 3)        # a 3 m post
     d = _sunny(scene)
@@ -682,8 +682,8 @@ def test_a_post_shades_part_of_a_slab_and_a_wall_turned_away_is_dark():
     """A slab with a post standing beside it on the sun's side: part of
     the slab's top is in the post's shadow, not all of it; the post's side
     turned from the sun is in shadow whole."""
-    from core.scene import Scene
-    from core.vista_caras import view_faces
+    from built_core.scene import Scene
+    from built_core.vista_caras import view_faces
     scene = Scene()
     d = _sunny(scene)
     _slab(scene.loose_mesh, -3, -3, 0, 6, 6, 0.2)    # the slab
@@ -704,13 +704,13 @@ def test_a_post_shades_part_of_a_slab_and_a_wall_turned_away_is_dark():
 
 
 def _area_of(r):
-    from core.vista_caras import _area
+    from built_core.vista_caras import _area
     return _area(r)
 
 
 def test_the_shadows_go_out_on_layers_of_their_own(tmp_path):
-    from core.scene import Scene
-    from core.vista_caras import view_faces
+    from built_core.scene import Scene
+    from built_core.vista_caras import view_faces
     from formats.svg_out import save_svg_layers
     scene = Scene()
     _slab(scene.loose_mesh, 0, 0, 0, 1, 1, 3)
@@ -761,8 +761,8 @@ def test_the_picture_of_the_view_lies_under_the_lines_on_its_window():
 
 @pytest.mark.parametrize("perspective", [False, True])
 def test_the_window_rect_holds_what_the_screen_shows(perspective):
-    from core.scene import Scene
-    from core.vista_caras import _Parallel, _Perspective, view_rect
+    from built_core.scene import Scene
+    from built_core.vista_caras import _Parallel, _Perspective, view_rect
     scene = Scene()
     _slab(scene.loose_mesh, 0, 0, 0, 2, 2, 2)
     cam = _camera(scene)
@@ -911,10 +911,10 @@ def test_the_sheet_takes_the_part_and_the_size_apart():
 def test_the_selection_part_exports_only_what_is_selected(tmp_path):
     """«Selection»: only the selected objects, as if the rest were hidden —
     and the model is left as it was."""
-    from core.group import Group
-    from core.mesh import Mesh
-    from core.scene import Scene
-    from core.vista_caras import view_faces
+    from built_core.group import Group
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
+    from built_core.vista_caras import view_faces
     from built_render.view_export import SvgBuilder, selection_only
     scene = Scene()
     a, b = Group(Mesh(), name="a"), Group(Mesh(), name="b")
@@ -959,8 +959,8 @@ def test_a_sheet_of_another_shape_shows_what_lay_past_the_screen(
     of that shape — wider shows more at the sides with the same height,
     taller shows more above and below with the same width — and the
     camera is left as it was."""
-    from core.scene import Scene
-    from core.vista_caras import view_rect
+    from built_core.scene import Scene
+    from built_core.vista_caras import view_rect
     from built_render.view_export import widened
     scene = Scene()
     _slab(scene.loose_mesh, 0, 0, 0, 2, 2, 2)
@@ -1058,8 +1058,8 @@ def test_preview_renders_the_requested_page_and_remembers_it():
 @pytest.mark.parametrize("perspective", [False, True])
 def test_the_framing_moves_and_zooms_the_view_and_leaves_it_as_it_was(
         perspective):
-    from core.scene import Scene
-    from core.vista_caras import _Parallel, _Perspective, view_rect
+    from built_core.scene import Scene
+    from built_core.vista_caras import _Parallel, _Perspective, view_rect
     from built_render.view_export import framed
     scene = Scene()
     _slab(scene.loose_mesh, 0, 0, 0, 2, 2, 2)

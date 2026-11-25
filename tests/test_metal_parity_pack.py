@@ -7,11 +7,11 @@ import numpy as np
 import pytest
 from built_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 from core import _native
-from core.group import Group
-from core.layers import Layer
-from core.materials import effective_attrs
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.layers import Layer
+from built_core.materials import effective_attrs
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from views.document_interaction import _paint_of
 from built_core import pack_scene, source_arrays, COMMAND, OBJECT_HIDDEN, VISIBILITY_FILTERED
 from built_render import material_texture_array

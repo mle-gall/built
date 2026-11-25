@@ -11,7 +11,7 @@ MM = {"length": "mm", "precision": 1}
 
 def test_new_documents_start_in_the_remembered_units(tmp_path, monkeypatch):
     from built_render import Host
-    from core import units
+    from built_core import units
     from built_core import settings
     from built_core import NativeSettings
     profile = str(tmp_path / "profile")
@@ -32,8 +32,8 @@ def test_new_documents_start_in_the_remembered_units(tmp_path, monkeypatch):
 
 
 def test_an_opened_document_keeps_its_own_units(tmp_path):
-    from core import units
-    from core.scene import Scene
+    from built_core import units
+    from built_core.scene import Scene
     from formats import igz
     path = tmp_path / "old.igz"
     igz.save_scene(Scene(), path)                   # drawn in metres

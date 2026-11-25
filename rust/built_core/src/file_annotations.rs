@@ -85,7 +85,7 @@ pub fn igz_load_annotations(
     let (module, class) = if labels {
         ("built_core.textlabel", "TextLabel")
     } else {
-        ("core.dimension", "Dimension")
+        ("built_core.dimension", "Dimension")
     };
     let class = py.import(module)?.getattr(class)?;
     // A dimension's record as a canonical key (keys sorted at every

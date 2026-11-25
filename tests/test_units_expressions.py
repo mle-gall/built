@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from core import units
+from built_core import units
 
 IN = 0.0254
 FT = 0.3048

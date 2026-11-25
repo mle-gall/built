@@ -7,10 +7,10 @@ import pytest
 from built_core import Input as Qt
 from built_core import ScreenPoint as QPointF
 from built_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
-from core.scene import Scene
-from core.mesh import Mesh
-from core.group import Group
-from core.snap import compute_snap
+from built_core.scene import Scene
+from built_core.mesh import Mesh
+from built_core.group import Group
+from built_core.snap import compute_snap
 from built_core import pack_scene
 from built_core import resident_prepare as prepare, resident_snap as snap
 from tests.headless_gpu import HeadlessView
@@ -214,7 +214,7 @@ def test_worker_warms_first_hover_for_the_captured_camera(view):
 
 
 def test_idle_document_edits_refresh_native_view(native_host):
-    from core.history import HideCommand, DeleteGroupCommand
+    from built_core.history import HideCommand, DeleteGroupCommand
     vp, display = native_host.viewport, native_host.view
     mesh = Mesh()
     mesh.add_edge(QVector3D(), QVector3D(1, 0, 0))
@@ -350,7 +350,7 @@ def test_leaving_a_group_clears_the_rest_after_an_update_reset(view):
 
 
 def test_locked_tag_group_provides_a_reference_without_accepting_selection(view):
-    from core.layers import Layer, assign_layer
+    from built_core.layers import Layer, assign_layer
     group = view.scene.groups[0]
     tag = Layer("Survey", key="survey-key", locked=True)
     view.scene.layers.append(tag)

@@ -417,7 +417,7 @@ impl MeshScan {
         self.fplane.as_ref().unwrap()
     }
 
-    /// Edges by the topology key cell of their ends (`core.topology._key`:
+    /// Edges by the topology key cell of their ends (`built_core.topology._key`:
     /// `round(x, 4)` per axis, as the integer `round(x * 1e4)`). A
     /// coordinate whose product lands within float error of a half is filed
     /// under both neighbouring cells, so the map holds every edge that can

@@ -271,7 +271,7 @@ fn copied<'py>(py: Python<'py>, after: &Obj<'py>) -> PyResult<(Bound<'py, PyList
 /// host's own now, at the top of the tree, the copies relabelled where one
 /// merged into a host tag of the same label.
 fn release(py: Python<'_>, me: &Obj<'_>, scene: &Obj<'_>, gone: &Bound<'_, PySet>) -> PyResult<()> {
-    let counts = py.import("core.purge")?.getattr("layer_counts")?;
+    let counts = py.import("built_core.purge")?.getattr("layer_counts")?;
     let used = counts.call1((scene,))?.cast_into::<PyDict>()?;
     let namespace = py.import("types")?.getattr("SimpleNamespace")?;
     let after = me.getattr("_after")?;

@@ -16,11 +16,12 @@ def _file(path, folders, tags, count, links_to=()):
     """One .igz: ``folders`` {name: parent}, ``tags`` {tag: folder}, ``count``
     placements spread over the tags, ``links_to`` placed as linked files."""
     from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-    from core import bim_registry, links, structure
-    from core.group import Group
-    from core.layers import Layer
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from core import bim_registry
+    from built_core import links, structure
+    from built_core.group import Group
+    from built_core.layers import Layer
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
     from formats import igz
     s = Scene()
     s.layer_folders = list(folders)

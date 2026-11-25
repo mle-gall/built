@@ -98,7 +98,7 @@ fn read_sensor(v: &Obj<'_>) -> Option<(f64, f64)> {
     ((1.0..=100.).contains(&w) && (1.0..=100.).contains(&h) && (w, h) != FULL_FRAME)
         .then_some((w, h))
 }
-#[pyclass(dict, weakref, subclass, module = "core.camera")]
+#[pyclass(dict, weakref, subclass, module = "built_core.camera")]
 pub struct OrbitCamera;
 
 #[pymethods]
@@ -733,7 +733,7 @@ fn fitted(s: &Camera<'_>) -> PyResult<Option<(f64, f64)>> {
 }
 pub(super) fn register(parent: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = parent.py();
-    let m = PyModule::new(py, "core.camera")?;
+    let m = PyModule::new(py, "built_core.camera")?;
     m.add_class::<OrbitCamera>()?;
     for name in ["CameraPoint", "QVector3D"] {
         m.add(name, py.get_type::<Vec3>())?;

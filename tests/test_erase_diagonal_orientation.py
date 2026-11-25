@@ -3,10 +3,10 @@
 import pytest
 from built_core import Vec3 as V
 
-from core.edits import build_add_edge, build_add_edges
-from core.history import AddFaceCommand, EraseSelectionCommand, History
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.edits import build_add_edge, build_add_edges
+from built_core.history import AddFaceCommand, EraseSelectionCommand, History
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 
 @pytest.mark.parametrize("plane", ["xy", "xz", "tilted"])
@@ -58,7 +58,7 @@ def test_draw_split_erase_preserves_normal_and_paint(plane, reversed_face, diago
 def test_merge_orients_outer_and_hole_independently(
     method, opposite_fragment, reverse_hole
 ):
-    import core.mesh as mesh_module
+    import built_core.mesh as mesh_module
 
     m = Mesh()
     hole = [V(.5, 1, 0), V(.5, 2, 0), V(1.5, 2, 0), V(1.5, 1, 0)]

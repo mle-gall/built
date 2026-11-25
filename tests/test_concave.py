@@ -16,7 +16,7 @@ import math
 
 from built_core import Vec3 as QVector3D
 
-from core.geometry import Face
+from built_core.geometry import Face
 from built_core.triangulate import is_convex
 
 

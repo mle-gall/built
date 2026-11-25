@@ -31,12 +31,12 @@ def _tup(v):
 
 def answers():
     from built_core import Matrix4 as M, Vec3 as V
-    from core.dimension import Dimension
-    from core.group import Group
-    from core.guide import Guide, GuideCircle
-    from core.layers import Layer
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core.dimension import Dimension
+    from built_core.group import Group
+    from built_core.guide import Guide, GuideCircle
+    from built_core.layers import Layer
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
     rng = random.Random(20261125)
     p = lambda s=10.0: V(rng.uniform(-s, s), rng.uniform(-s, s), rng.uniform(-s, s))  # noqa: E731
     out = []

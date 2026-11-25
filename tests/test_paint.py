@@ -4,9 +4,9 @@ def test_glass_paints_translucent_and_undoes(monkeypatch):
     # The library's glass carries opacity: painting stamps it, an opaque
     # repaint clears it, and the eyedropper samples it.
     from built_core import Vec3 as QVector3D
-    from core.scene import Scene
-    from core.history import History
-    from core.history import (CompoundCommand, SetFaceColorCommand,
+    from built_core.scene import Scene
+    from built_core.history import History
+    from built_core.history import (CompoundCommand, SetFaceColorCommand,
                               SetFaceOpacityCommand, SetFaceTextureCommand)
     scene = Scene()
     hist = History(scene)

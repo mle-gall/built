@@ -16,9 +16,9 @@ import numpy as np  # noqa: E402
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 
-from core.group import Group  # noqa: E402
+from built_core.group import Group  # noqa: E402
 from built_core import group_transformed_mesh as transformed_mesh
-from core.mesh import Mesh  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
 
 
 def _box():

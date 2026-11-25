@@ -60,8 +60,8 @@ def test_crash_log_opens_with_a_read_only_cwd_and_no_stderr(tmp_path, state_home
 
 
 def test_failed_commands_log_into_the_user_folder(state_home):
-    from core.history import Command, History
-    from core.scene import Scene
+    from built_core.history import Command, History
+    from built_core.scene import Scene
 
     class _Boom(Command):
         def do(self, scene):
@@ -80,6 +80,6 @@ def test_failed_commands_log_into_the_user_folder(state_home):
 
 def test_no_default_writes_land_in_the_working_directory(tmp_path, state_home, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    from core.history import History
+    from built_core.history import History
     assert not Path("built-errors.log").exists()
     assert Path(History.default_error_log()).is_absolute()

@@ -37,7 +37,7 @@ fn history_init(this: &Obj<'_>, scene: &Obj<'_>) -> PyResult<()> {
     }
     this.setattr(
         "feed",
-        py.import("core.protocol.feed")?
+        py.import("built_core.protocol.feed")?
             .call_method1("ChangeFeed", (this,))?,
     )
 }
@@ -463,7 +463,7 @@ and keeps the reason in ``last_rejected`` for the tool to show."#,
             vec![builtins.getattr("Exception")?],
             &ns,
         )?
-        .setattr("__module__", "core.history")?;
+        .setattr("__module__", "built_core.history")?;
     }
     {
         let ns = PyDict::new(py);
@@ -488,7 +488,7 @@ and keeps the reason in ``last_rejected`` for the tool to show."#,
             method(&ns, name, abstract_fn)?;
         }
         class(m, "Command", vec![abc.getattr("ABC")?], &ns)?
-            .setattr("__module__", "core.history")?;
+            .setattr("__module__", "built_core.history")?;
     }
     {
         let ns = PyDict::new(py);
@@ -499,7 +499,7 @@ and the document field journal."#,
         )?;
         meth!(ns, m, "geometry_meshes", meshes);
         class(m, "MeshCommand", vec![m.getattr("Command")?], &ns)?
-            .setattr("__module__", "core.history")?;
+            .setattr("__module__", "built_core.history")?;
     }
     {
         let ns = PyDict::new(py);
@@ -510,7 +510,7 @@ and the document field journal."#,
             vec![m.getattr("MeshCommand")?],
             &ns,
         )?
-        .setattr("__module__", "core.history")?;
+        .setattr("__module__", "built_core.history")?;
     }
     {
         let ns = PyDict::new(py);
@@ -531,7 +531,7 @@ step's transaction undoes it."#,
             vec![core.getattr("PluginDataStep")?, m.getattr("Command")?],
             &ns,
         )?
-        .setattr("__module__", "core.history")?;
+        .setattr("__module__", "built_core.history")?;
     }
     {
         let ns = PyDict::new(py);
@@ -562,7 +562,7 @@ one — a push/pull aimed at a Group edits that group's isolated mesh."#,
             vec![core.getattr("MutationStep")?, m.getattr("MeshCommand")?],
             &ns,
         )?
-        .setattr("__module__", "core.history")?;
+        .setattr("__module__", "built_core.history")?;
     }
     {
         let ns = PyDict::new(py);
@@ -600,7 +600,7 @@ for good on undo, which only took the new one away."#,
             vec![core.getattr("ImportStep")?, m.getattr("Command")?],
             &ns,
         )?
-        .setattr("__module__", "core.history")?;
+        .setattr("__module__", "built_core.history")?;
     }
     {
         let ns = PyDict::new(py);
@@ -628,7 +628,7 @@ drawing-specific global face cleanup."#,
             ],
             &ns,
         )?
-        .setattr("__module__", "core.history")?;
+        .setattr("__module__", "built_core.history")?;
     }
     {
         let ns = PyDict::new(py);
@@ -654,7 +654,7 @@ working across this undo."#,
             ],
             &ns,
         )?
-        .setattr("__module__", "core.history")?;
+        .setattr("__module__", "built_core.history")?;
     }
     {
         let ns = PyDict::new(py);
@@ -670,7 +670,7 @@ working across this undo."#,
             vec![core.getattr("CompoundStep")?, m.getattr("Command")?],
             &ns,
         )?
-        .setattr("__module__", "core.history")?;
+        .setattr("__module__", "built_core.history")?;
     }
     {
         let ns = PyDict::new(py);
@@ -695,7 +695,7 @@ working across this undo."#,
             vec![m.getattr("CompoundCommand")?],
             &ns,
         )?
-        .setattr("__module__", "core.history")?;
+        .setattr("__module__", "built_core.history")?;
     }
     {
         let ns = PyDict::new(py);
@@ -715,7 +715,7 @@ Snapshots are detached and retained across redo, including new identities."#,
             vec![core.getattr("RecordPatchStep")?, m.getattr("Command")?],
             &ns,
         )?
-        .setattr("__module__", "core.history")?;
+        .setattr("__module__", "built_core.history")?;
     }
     {
         let ns = PyDict::new(py);
@@ -726,7 +726,7 @@ Snapshots are detached and retained across redo, including new identities."#,
             vec![m.getattr("SetRecordCommand")?],
             &ns,
         )?
-        .setattr("__module__", "core.history")?;
+        .setattr("__module__", "built_core.history")?;
     }
     {
         let ns = PyDict::new(py);
@@ -737,7 +737,7 @@ Snapshots are detached and retained across redo, including new identities."#,
             vec![m.getattr("SetRecordCommand")?],
             &ns,
         )?
-        .setattr("__module__", "core.history")?;
+        .setattr("__module__", "built_core.history")?;
     }
     {
         let ns = PyDict::new(py);
@@ -752,7 +752,7 @@ Snapshots are detached and retained across redo, including new identities."#,
             vec![m.getattr("SetPluginDataCommand")?],
             &ns,
         )?
-        .setattr("__module__", "core.history")?;
+        .setattr("__module__", "built_core.history")?;
     }
     {
         let ns = PyDict::new(py);
@@ -768,7 +768,7 @@ Snapshots are detached and retained across redo, including new identities."#,
             vec![core.getattr("FaceTagsStep")?, m.getattr("Command")?],
             &ns,
         )?
-        .setattr("__module__", "core.history")?;
+        .setattr("__module__", "built_core.history")?;
     }
     {
         let ns = PyDict::new(py);
@@ -797,7 +797,7 @@ loop). Same fail-safe doctrine as the BIM push guard, one level up."#,
             "default_error_log",
             builtins.call_method1("staticmethod", (wrap_pyfunction!(default_error_log, m)?,))?,
         )?;
-        class(m, "History", vec![], &ns)?.setattr("__module__", "core.history")?;
+        class(m, "History", vec![], &ns)?.setattr("__module__", "built_core.history")?;
     }
     for name in "MakeGroupCommand HideCommand HideEdgesCommand AssignLayerCommand MoveGroupCommand RotateGroupCommand ScaleGroupCommand FlipGroupsCommand ChangeAxesCommand AddEdgeCommand AddFaceCommand DeleteEdgesCommand DeleteFaceCommand EraseSelectionCommand MoveVerticesCommand FlipVerticesCommand RotateVerticesCommand ScaleVerticesCommand HealOverlapsCommand RebuildPlanarFacesCommand RebuildPlaneFacesCommand ExplodeGroupCommand TagCurveCommand ExplodeCurvesCommand AutoTagDrawnFacesCommand PruneOrphanEdgesCommand CoplanarMergeCommand StitchSolidCommand SimplifyMeshCommand RestampMaterialCommand EditTexturedMaterialCommand DeleteMaterialCommand".split_whitespace() {m.getattr("MeshCommand")?.call_method1("register",(m.getattr(name)?,))?;}
     for name in "SetFaceColorCommand SetFaceOpacityCommand SetFaceTextureCommand SetFaceBackCommand SetFaceMaterialTagCommand FlipFacesCommand".split_whitespace() {m.getattr("FaceAttributeCommand")?.call_method1("register",(m.getattr(name)?,))?;}

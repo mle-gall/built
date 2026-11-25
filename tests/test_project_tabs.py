@@ -30,7 +30,7 @@ def _face(scene, z=0.0, size=2.0):
 
 
 def _igz(tmp_path, name, z=0.0):
-    from core.scene import Scene
+    from built_core.scene import Scene
     s = Scene()
     _face(s, z)
     path = tmp_path / name
@@ -40,7 +40,7 @@ def _igz(tmp_path, name, z=0.0):
 
 def _edit(win, z=5.0):
     """One real, undoable edit in the project in front."""
-    from core.history import AddEdgeCommand
+    from built_core.history import AddEdgeCommand
     win.viewport.history.execute(AddEdgeCommand(V(0, 0, z), V(1, 0, z)))
     win.viewport.notify_scene_changed()
 
@@ -158,8 +158,8 @@ def test_each_tab_keeps_its_own_undo_and_camera(win, tmp_path):
 
 
 def test_switching_drops_the_tool_and_leaves_the_group(win):
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     m = Mesh()
     m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
     g = Group(m, "box")
@@ -218,8 +218,8 @@ def test_panels_forget_what_they_drew_for_the_other_project(win):
 
 
 def test_materials_let_go_of_the_meshes_of_the_project_left(win):
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from built_render.wgpu_library import material_uses
     mesh = Mesh()
     face = mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(0, 1, 0)])
@@ -332,7 +332,7 @@ def test_each_untitled_project_autosaves_to_its_own_slot(win):
         slot_b = autosave.pending(None, untitled=b.untitled_no)
         assert slot_a and slot_b and slot_a != slot_b
         # Each slot holds its own project (the tab behind too).
-        from core.scene import Scene
+        from built_core.scene import Scene
         for slot, z in ((slot_a, 1.0), (slot_b, 2.0)):
             s = Scene()
             igz_format.load_into(s, slot)
@@ -350,7 +350,7 @@ def test_each_untitled_project_autosaves_to_its_own_slot(win):
 
 def test_every_untitled_slot_is_offered_back(win, monkeypatch, tmp_path):
     from built_core import autosave
-    from core.scene import Scene
+    from built_core.scene import Scene
     for n, z in ((1, 1.0), (2, 2.0)):
         s = Scene()
         _face(s, z)
@@ -415,8 +415,8 @@ def test_the_ai_bridge_acts_on_the_tab_in_front(win):
 
 
 def test_a_workspace_holds_the_tabs(win):
-    from core.history import History
-    from core.scene import Scene
+    from built_core.history import History
+    from built_core.scene import Scene
 
     class _Ws:
         def __init__(self):
@@ -451,8 +451,8 @@ def test_a_workspace_holds_the_tabs(win):
 
 # ---- copy and paste between projects --------------------------------------
 def test_copy_in_one_project_paste_in_another(win):
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     vp = win.viewport
     m = Mesh()
     m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])

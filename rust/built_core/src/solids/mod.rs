@@ -123,7 +123,7 @@ fn solid_report(mesh: &Obj) -> PyResult<(bool, Option<f64>)> {
 }
 #[pyfunction]
 fn solid_volume(group: &Obj) -> PyResult<Option<f64>> {
-    if !group.is_instance(&group.py().import("core.group")?.getattr("Group")?)?
+    if !group.is_instance(&group.py().import("built_core.group")?.getattr("Group")?)?
         || group.getattr("children")?.is_truthy()?
         || lazily_open(&group.getattr("mesh")?)?
     {
@@ -159,7 +159,7 @@ impl<'p> Sources<'p> {
         let py = group.py();
         let mesh = world(group)?;
         let mat = py
-            .import("core.group")?
+            .import("built_core.group")?
             .call_method1("effective_material", (group,))?;
         let paint = py.import("built_core.materials")?.getattr("effective_attrs")?;
         let mut soup = Surface::empty();
@@ -335,7 +335,7 @@ pub(crate) fn install(m: &Bound<PyModule>) -> PyResult<()> {
     m.add("RESULT_NAMES", names)?;
     m.add("OPS", PyTuple::new(py, OPERATIONS.map(|(k, _)| k))?)?;
     let ex = py.get_type::<SolidError>();
-    ex.setattr("__module__", "core.solids")?;
+    ex.setattr("__module__", "built_core.solids")?;
     m.add("SolidError", ex)?;
     for f in [
         wrap_pyfunction!(solid_report, m)?,

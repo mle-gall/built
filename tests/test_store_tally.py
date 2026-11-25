@@ -4,7 +4,7 @@ from collections import Counter
 
 from built_core import Vec3
 
-from core.mesh import Mesh
+from built_core.mesh import Mesh
 from built_core import store_layer_tally, store_material_names
 
 

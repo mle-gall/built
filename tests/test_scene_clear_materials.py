@@ -19,8 +19,8 @@ from built_render import SurveyRaster
 from built_core import Vec3 as QVector3D
 
 
-from core.materials import Material                                  # noqa: E402
-from core.scene import Scene                                         # noqa: E402
+from built_core.materials import Material                                  # noqa: E402
+from built_core.scene import Scene                                         # noqa: E402
 from formats import igz as igz_format                                # noqa: E402
 
 

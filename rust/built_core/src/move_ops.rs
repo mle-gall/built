@@ -149,7 +149,7 @@ fn plan_do(cmd: &Obj, scene: &Obj) -> PyResult<()> {
         let kw = PyDict::new(cmd.py());
         kw.set_item("preserve_faces", true)?;
         kw.set_item("plane_rebuild", true)?;
-        step = cmd.py().import("core.edits")?.call_method(
+        step = cmd.py().import("built_core.edits")?.call_method(
             "build_add_edges",
             (scene, cmd.getattr("_segments")?),
             Some(&kw),

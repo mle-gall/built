@@ -15,8 +15,8 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_bim_takeoff_untagged_moves import measure
 from tests.native_tree import inspector
 
-from core.group import Group  # noqa: E402
-from core.mesh import Mesh  # noqa: E402
+from built_core.group import Group  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
 
 
 def _bar(x):
@@ -54,7 +54,7 @@ def test_a_selection_keeps_the_takeoff_and_an_edit_remeasures(native_host, monke
 
 def test_an_edit_remeasures_only_the_object_it_touched():
     from core.bim import collect_objects
-    from core.scene import Scene
+    from built_core.scene import Scene
     scene = Scene()
     bars = [_bar(i) for i in range(3)]
     scene.groups += bars

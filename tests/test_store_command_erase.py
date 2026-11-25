@@ -3,8 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 from built_core import MeshStore
-from core.history import EraseSelectionCommand
-from core.mesh import Mesh
+from built_core.history import EraseSelectionCommand
+from built_core.mesh import Mesh
 from tests.test_store_mesh import fingerprint
 
 

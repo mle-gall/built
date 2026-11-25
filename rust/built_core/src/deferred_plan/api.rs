@@ -50,7 +50,7 @@ pub(super) fn deferred_plan<'py>(
     data.set_item("pos", pos)?;
     data.set_item("ring_sizes", sizes)?;
     data.set_item("ring_counts", counts)?;
-    crate::model::module(py, "core.lazy_mesh")?
+    crate::model::module(py, "built_core.lazy_mesh")?
         .getattr("Plan")?
         .call((), Some(&data))
 }

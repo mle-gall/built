@@ -4,7 +4,7 @@ from built_core import project_sidebar as native_project_sidebar
 
 def project_sidebar(scene, tree, rows, *options):
     from built_render.shell_windows import hosts
-    from core import outliner
+    from built_core import outliner
 
     rows, path = native_project_sidebar(scene, tree, rows, *options)
     providers = next((vars(host.window).get("_outliner_kinds", ())

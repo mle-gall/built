@@ -293,7 +293,7 @@ def polygon_properties(pts):
 # ---------------------------------------------------------------------------
 
 def _selected_faces(scene):
-    from core.mesh import Face
+    from built_core.mesh import Face
     faces = scene.mesh.faces
     return [e for e in scene.selection if isinstance(e, Face) and e in faces]
 
@@ -302,7 +302,7 @@ def faces_plane(faces):
     """``(origin, u, v, n)`` of the plane shared by ``faces``: the model's
     origin projected onto it, and the drawing's axes in it."""
     from built_core import Vec3 as QVector3D
-    from core.axes import plane_axes
+    from built_core.axes import plane_axes
     n = QVector3D(faces[0].normal())
     if n.length() < 1e-9:
         raise PolygonError(_tr("The polygon is degenerate (area ≈ 0)."))
@@ -346,7 +346,7 @@ def selection_properties(scene):
 # ---------------------------------------------------------------------------
 
 def format_report(props, plane, counts) -> str:
-    from core import units
+    from built_core import units
     unit = units.model_unit()
     metric = unit in ("m", "cm", "mm")
     f = {"m": 1.0, "cm": 100.0, "mm": 1000.0}.get(unit, 1.0)
@@ -410,7 +410,7 @@ def format_report(props, plane, counts) -> str:
 
 
 def show_properties(viewport) -> None:
-    from core.plugin_panels import show_utility
+    from built_core.plugin_panels import show_utility
     from built_render import PluginTextReport
     try:
         props, plane, counts = selection_properties(viewport.scene)
@@ -421,7 +421,7 @@ def show_properties(viewport) -> None:
     report = PluginTextReport(_tr("Polygon properties"), text, _tr("Copy"),
                               _tr("Copied to the clipboard."))
     show_utility(viewport.window(), KEY, report)
-    from core import units
+    from built_core import units
     viewport.flash_status(
         f"{_tr('Polygon properties')}: {_tr('Area')} {units.fmt_area(props['area'])}, "
         f"{_tr('Perimeter')} {units.fmt_len_fine(props['perimeter'])}", 5000)

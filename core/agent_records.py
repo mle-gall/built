@@ -63,7 +63,7 @@ class RecordTools(LinkTools):
             raise ValueError('Unknown filters: ' + ', '.join(filters))
         if linked is not None and not isinstance(linked, bool):  # `type` is a filter here
             raise ValueError('linked must be a boolean or omitted')
-        from core.links import is_linked
+        from built_core.links import is_linked
         registry = self._tool_query_registry()
         rows, counts, tagged, untagged_count, linked_count = [], Counter(), 0, 0, 0
         for group, parents, _ in self._groups():
@@ -164,7 +164,7 @@ class RecordTools(LinkTools):
                     value['guid'] = group.ifc['guid']
             uid = group.uid
             if uid in repeated:
-                from core.link_structure import row_id
+                from built_core.link_structure import row_id
                 uid = row_id(self._viewport.scene.occurrence_path(group))
             problems[uid] = record.validate(value, registry, schema) if value is not None else []
         # Only the uids with something to say: a 241-uid batch answering

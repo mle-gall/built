@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.group import Group
-from core.mesh import Mesh
+from built_core.group import Group
+from built_core.mesh import Mesh
 from tests.native_tree import action, inspector
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from views.wgpu_ui import _edit

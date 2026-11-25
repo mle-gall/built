@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 //! Each face of a view cut down to what nothing in front of it covers —
-//! `core.vista_caras._visible_parts`, the SVG export's faces.
+//! `built_core.vista_caras._visible_parts`, the SVG export's faces.
 //!
 //! The same rules as the Python pass: where an opaque face B overlaps A in
 //! the drawing, B hides A on the side of the line where their nearness

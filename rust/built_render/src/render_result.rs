@@ -5,7 +5,7 @@ use serde_json::json;
 /// Resolve the executable and explain whether this package can launch it.
 #[pyfunction]
 pub fn blender_availability<'py>(py: Python<'py>, path: &str) -> PyResult<(Option<Bound<'py, PyAny>>, String)> {
-    let backend = py.import("core.render_blender")?;
+    let backend = py.import("built_core.render_blender")?;
     let (found, message) = if backend.call_method0("in_snap")?.is_truthy()? {
         let steps = backend.call_method1("install_steps", ("snap",))?;
         (None, steps.get_item(0)?.get_item(0)?.extract::<String>()?)

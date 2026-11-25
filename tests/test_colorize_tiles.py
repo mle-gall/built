@@ -7,8 +7,8 @@ import numpy as np
 import pytest
 from built_render import SurveyRaster
 
-from core import texture
-from core.texture import COLORIZE_SHIFT
+from built_core import texture
+from built_core.texture import COLORIZE_SHIFT
 
 
 # Frozen full-image oracle: preserve the exact global reduction and pixel math.

@@ -6,7 +6,7 @@
 //!
 //! What stays Python is what records/IFC are by design: the occurrence
 //! record, the filing rule, the IFC vocabulary and their protocol commands
-//! (`core.protocol.records`, `core.bim_registry`, `core.structure`). The
+//! (`built_core.protocol.records`, `core.bim_registry`, `built_core.structure`). The
 //! document, camera and tools are reached through their attributes.
 mod terrain;
 use pyo3::{
@@ -50,14 +50,14 @@ fn record_address<'py>(scene: &Bound<'py, PyAny>, group: &Bound<'py, PyAny>) -> 
     let uid = group.getattr("uid")?;
     let nested = path.is_truthy()? && (path.len()? > 1 || uid.str()?.to_str()?.starts_with("@["));
     if nested {
-        py.import("core.link_structure")?.call_method1("row_id", (path,))
+        py.import("built_core.link_structure")?.call_method1("row_id", (path,))
     } else {
         Ok(uid)
     }
 }
 
 fn groups_in<'py>(py: Python<'py>, sel: &[Bound<'py, PyAny>]) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    let cls = py.import("core.group")?.getattr("Group")?;
+    let cls = py.import("built_core.group")?.getattr("Group")?;
     Ok(sel.iter().filter(|e| e.is_instance(&cls).unwrap_or(false)).cloned().collect())
 }
 
@@ -106,7 +106,7 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
             schema = profiles.call_method1("get", (profile, PyDict::new(py)))?.call_method1("get", ("schema", &schema))?;
         }
         let links = crate::host_context::core_module(py)?;
-        let occurrence = py.import("core.protocol.records")?.getattr("occurrence")?;
+        let occurrence = py.import("built_core.protocol.records")?.getattr("occurrence")?;
         for g in &groups {
             let linked = links.call_method1("link_linked_ancestor", (g,))?.is_truthy()?;
             let record = occurrence.call1((g, &registry, linked))?;
@@ -181,7 +181,7 @@ fn bevel_state<'py>(py: Python<'py>, tool: &Bound<'py, PyAny>) -> PyResult<Bound
     let b = PyDict::new(py);
     b.set_item("affect", tool.getattr("affect")?)?;
     b.set_item("measure", tool.getattr("measure")?)?;
-    b.set_item("amount", py.import("core.units")?.call_method1("fmt_len_fine", (tool.getattr("radius")?,))?)?;
+    b.set_item("amount", py.import("built_core.units")?.call_method1("fmt_len_fine", (tool.getattr("radius")?,))?)?;
     b.set_item("segments", &segments)?;
     b.set_item("shape", &shape)?;
     b.set_item("profile", tool.getattr("profile")?)?;
@@ -325,7 +325,7 @@ fn camera_edit(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, key: &str, v: &B
             cam.call_method1("set_projection", (v,))?;
         }
         "focal" | "fov" => {
-            let range = py.import("core.camera")?.getattr("FOV_RANGE")?;
+            let range = py.import("built_core.camera")?.getattr("FOV_RANGE")?;
             let (lo, hi): (f64, f64) = (range.get_item(0)?.extract()?, range.get_item(1)?.extract()?);
             let wanted: f64 = if key == "focal" { cam.call_method1("fov_for_focal", (v,))?.extract()? } else { v.extract()? };
             cam.setattr("fov_deg", hi.min(lo.max(wanted)))?;
@@ -382,7 +382,7 @@ fn bevel_edit(host: &Bound<'_, PyAny>, tool: &Bound<'_, PyAny>, key: &str, value
             tool.call_method1("apply_from_panel", (host,))?;
         }
         ("amount", _) => {
-            let n = py.import("core.units")?.call_method1("parse_length_field", (value,))?;
+            let n = py.import("built_core.units")?.call_method1("parse_length_field", (value,))?;
             let number = !n.is_instance_of::<pyo3::types::PyBool>() && (n.is_instance_of::<pyo3::types::PyInt>() || n.is_instance_of::<pyo3::types::PyFloat>());
             if number && n.extract::<f64>()? > 0.0 {
                 tool.call_method1("set_size", (host, n))?;
@@ -458,7 +458,7 @@ fn rule_edit(view: &Bound<'_, PyAny>, vp: &Bound<'_, PyAny>, verb: &str, v: &Bou
     let (node, expected, recipe) = (v.get_item(0)?, v.get_item(1)?, v.get_item(2)?);
     if verb == "preview" {
         let kwargs = [("expected", &expected)].into_py_dict(py)?;
-        let filing_rule = py.import("core.protocol.records")?.getattr("filing_rule")?;
+        let filing_rule = py.import("built_core.protocol.records")?.getattr("filing_rule")?;
         let result = match filing_rule.call((vp.getattr("scene")?, &node, &recipe), Some(&kwargs)) {
             Ok(r) => r.cast_into::<PyDict>()?.copy()?,
             Err(e) if e.is_instance_of::<pyo3::exceptions::PyKeyError>(py) || e.is_instance_of::<pyo3::exceptions::PyTypeError>(py) || e.is_instance_of::<pyo3::exceptions::PyValueError>(py) => {

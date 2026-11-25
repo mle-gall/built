@@ -13,10 +13,10 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edge
-from core.history import History
+from built_core.edits import build_add_edge
+from built_core.history import History
 from built_core.orient import is_closed, orient_outward
-from core.scene import Scene
+from built_core.scene import Scene
 from tests.test_fuzz_engine import V, _draw_rect, _push, _up
 
 
@@ -164,7 +164,7 @@ def test_line_grazing_hole_boundary_subdivides_not_stacks():
 
 
 def test_deleting_the_fence_line_fuses_the_plane_back():
-    from core.history import EraseSelectionCommand
+    from built_core.history import EraseSelectionCommand
     scene, hist = _slab_with_inner_rect()
     m = scene.mesh
     hist.execute(build_add_edge(scene, V(2, 0, 1), V(2, -4, 1)))
@@ -191,8 +191,8 @@ def _flat_ring_with_fence():
     """30×20 mother + 10×8 inner rect + a fence line from the inner rect's
     corner (10,6) to the outline (10,0). The plane rebuild traces the mother
     as ONE cut-open ring walking the fence twice (a slit edge)."""
-    from core.history import AddFaceCommand
-    from core.edits import build_add_edges
+    from built_core.history import AddFaceCommand
+    from built_core.edits import build_add_edges
 
     scene = Scene()
     hist = History(scene)
@@ -217,7 +217,7 @@ def _slit_edges(mesh):
 def test_deleting_a_slit_edge_keeps_the_face():
     # Erasing the fence line used to dissolve the ring face "with itself":
     # the face vanished and the line stayed. It must be the other way around.
-    from core.history import EraseSelectionCommand
+    from built_core.history import EraseSelectionCommand
     scene, hist = _flat_ring_with_fence()
     m = scene.mesh
     slits = _slit_edges(m)
@@ -235,9 +235,9 @@ def test_deleting_a_slit_edge_keeps_the_face():
 def test_deleting_one_piece_of_a_two_piece_fence():
     # Only the erased piece goes; the other survives as a free edge on the
     # healed face.
-    from core.history import AddFaceCommand
-    from core.edits import build_add_edges
-    from core.history import EraseSelectionCommand
+    from built_core.history import AddFaceCommand
+    from built_core.edits import build_add_edges
+    from built_core.history import EraseSelectionCommand
 
     scene = Scene()
     hist = History(scene)

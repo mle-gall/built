@@ -9,8 +9,8 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 def test_a_painted_group_puts_its_material_in_the_model_list(native_host):
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from tools.paint import PaintTool
     from built_render import wgpu_library as library
 
@@ -35,7 +35,7 @@ def test_a_painted_group_puts_its_material_in_the_model_list(native_host):
 def test_closing_a_document_releases_its_material_survey():
     import gc
     import weakref
-    from core.scene import Scene
+    from built_core.scene import Scene
     from built_core import material_survey
 
     scene = Scene()

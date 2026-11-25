@@ -13,7 +13,7 @@ import pytest
 from tests.preferences_chrome import Controls, settings_file
 from built_core import Vec3 as V
 
-from core.scene import Scene  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from views.document_interaction import SOFT_SHADOW_SPREAD
 from views.wgpu_style import style_payload, sun_payload  # noqa: E402
 
@@ -49,7 +49,7 @@ def test_off_or_nonsense_is_the_crisp_map():
 
 
 def test_the_metal_view_reads_the_level_off_its_viewport(monkeypatch):
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     from views import wgpu_style
     from tests.headless_gpu import HeadlessView
 

@@ -25,12 +25,12 @@ pub(super) fn classify(entity: &Bound<'_, PyAny>) -> PyResult<&'static str> {
     static CLASSES: pyo3::sync::PyOnceLock<Classes> = pyo3::sync::PyOnceLock::new();
     let classes = CLASSES.get_or_try_init(py, || {
         [
-            ("core.mesh", "Face", "face"),
-            ("core.mesh", "Edge", "edge"),
-            ("core.group", "Group", "group"),
+            ("built_core.mesh", "Face", "face"),
+            ("built_core.mesh", "Edge", "edge"),
+            ("built_core.group", "Group", "group"),
             ("built_core.section", "SectionPlane", "section_plane"),
             ("built_core.textlabel", "TextLabel", "text_label"),
-            ("core.dimension", "Dimension", "dimension"),
+            ("built_core.dimension", "Dimension", "dimension"),
             ("built_core.image_plane", "ImagePlane", "image_plane"),
             ("built_core.guide", "Guide", "guide"),
             ("built_core.guide", "GuideCircle", "guide"),

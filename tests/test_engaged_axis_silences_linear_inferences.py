@@ -42,7 +42,7 @@ from types import SimpleNamespace
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.snap import _AXIS_VECTORS, compute_snap
+from built_core.snap import _AXIS_VECTORS, compute_snap
 
 
 def V(x, y, z=0.0):
@@ -164,7 +164,7 @@ def test_the_axis_keeps_from_point_along_itself():
     on_the_line = _closest_on_line(cand)(V(0, 0, 0), _AXIS_VECTORS["x"])
     assert _same(held.point, on_the_line), (held.point, on_the_line)
     assert _same(held.point, V(2, 0, 0))                # the corner's foot
-    from core.snap import AXIS_COLORS
+    from built_core.snap import AXIS_COLORS
     assert held.lock_color == AXIS_COLORS["x"]          # the line stays red
 
 

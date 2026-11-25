@@ -115,8 +115,8 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     view.setattr("_ui_insp_sig", sig)?;
     let counter = py.import("collections")?.getattr("Counter")?;
     let structure = py.import("built_core.structure")?;
-    let links = py.import("core.links")?;
-    let group_type = py.import("core.group")?.getattr("Group")?;
+    let links = py.import("built_core.links")?;
+    let group_type = py.import("built_core.group")?.getattr("Group")?;
     let groups = empty(py);
     for entity in sel.iter() {
         if entity.is_instance(&group_type)? {
@@ -541,7 +541,7 @@ fn linked_inspector<'py>(a: &Args<'py>) -> Reply<'py> {
             let last = folder_parts.get_item(pyo3::types::PySlice::new(py, -2, isize::MAX, 1))?;
             format!("…/{}", text(&"/".into_bound_py_any(py)?.call_method1("join", (last,))?)?)
         };
-        let state = py.import("core.link_structure")?.call_method("file_state", (&scene, &path), Some(&fields!(py; "nested" => !top)))?;
+        let state = py.import("built_core.link_structure")?.call_method("file_state", (&scene, &path), Some(&fields!(py; "nested" => !top)))?;
         let missing = state.eq("missing")?;
         let visibility = format!(
             "{}{}",
@@ -572,7 +572,7 @@ fn linked_inspector<'py>(a: &Args<'py>) -> Reply<'py> {
             rows.call_method1("extend", (py.import("built_core")?.call_method1("link_subset_rows", (&copy,))?,))?;
             if top && !missing {
                 acts.append((format!("lnk:linksubset:{name}"), "Edit linked subset…"))?;
-                let nested = py.import("core.links")?.call_method1("link_of", (copy,))?.call_method1("get", ("include_nested", true))?.is_truthy()?;
+                let nested = py.import("built_core.links")?.call_method1("link_of", (copy,))?.call_method1("get", ("include_nested", true))?.is_truthy()?;
                 acts.append((format!("lnk:linknested:{name}"), if nested { "Source only" } else { "Include nested links" }))?;
             }
         }
@@ -634,7 +634,7 @@ fn linked_inspector<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 
 pub(super) fn link_state<'py>(a: &Args<'py>) -> Reply<'py> {
-    a.py().import("core.links")?.call_method1("link_state", (a.get_item(0)?, a.get_item(1)?.get_item("path")?))
+    a.py().import("built_core.links")?.call_method1("link_state", (a.get_item(0)?, a.get_item(1)?.get_item("path")?))
 }
 
 fn core<'py>(viewport: &Obj<'py>, command: &str, args: Bound<'py, PyDict>) -> Reply<'py> {
@@ -648,14 +648,14 @@ fn link_error(py: Python<'_>, error: &PyErr, key_error: bool) -> PyResult<bool> 
     Ok(error.is_instance_of::<PyValueError>(py)
         || error.is_instance_of::<PyOSError>(py)
         || (key_error && error.is_instance_of::<PyKeyError>(py))
-        || error.is_instance(py, &py.import("core.links")?.getattr("LinkError")?))
+        || error.is_instance(py, &py.import("built_core.links")?.getattr("LinkError")?))
 }
 
 /// One link verb; `false` when it is done without the common ending.
 fn link_verb<'py>(win: &Obj<'py>, view: &Obj<'py>, group: &Obj<'py>, key: &str, record: &Obj<'py>) -> PyResult<bool> {
     let py = win.py();
     let module = ui(py)?;
-    let links = py.import("core.links")?;
+    let links = py.import("built_core.links")?;
     let viewport = win.getattr("viewport")?;
     let scene = viewport.getattr("scene")?;
     let path = || record.get_item("path");
@@ -775,7 +775,7 @@ fn link_action<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (win, view, group) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?);
     let key: String = a.get_item(3)?.extract()?;
-    let record = py.import("core.links")?.call_method1("link_of", (&group,))?;
+    let record = py.import("built_core.links")?.call_method1("link_of", (&group,))?;
     if !record.is_truthy()? {
         return Ok(none(py));
     }

@@ -28,8 +28,8 @@ import pytest
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 
 from built_core import extension_manager as manager   # noqa: E402
-import core.extensions as extensions                     # noqa: E402
-from core.extensions import discover_plugins             # noqa: E402
+import built_core.extensions as extensions                     # noqa: E402
+from built_core.extensions import discover_plugins             # noqa: E402
 
 needs_permissions = pytest.mark.skipif(
     sys.platform == "win32" or (hasattr(os, "geteuid") and os.geteuid() == 0),
@@ -80,14 +80,10 @@ def _package(root: Path, name: str, source: str = "def setup(app):\n    pass\n",
     return folder
 
 
-def _extension(ident: str, payload: bytes = b"def setup(app):\n    pass\n"):
-    return manager.Extension(
-        id=ident, version="1.0", author="Author", license="MIT",
-        repository="https://github.com/example/sample",
-        download="https://example.org/sample.py",
-        sha256=hashlib.sha256(payload).hexdigest(),
-        minimum_version="0.1.0", name={"en": ident}, summary={"en": "x"},
-        tags=())
+def _extension(ident, payload=b"def setup(app):\n    pass\n"):
+    from tests.test_extension_manager import _extension as local_package
+    from dataclasses import replace
+    return replace(local_package(payload, ident), name={"en": ident})
 
 
 # ---- the plugin scan ------------------------------------------------------
@@ -176,7 +172,6 @@ def test_the_manager_reads_survive_an_unreadable_folder(plugins, py312_paths):
     assert manager.is_extension_enabled("locked") is False
     assert manager.extension_startup_state() == {}
     assert manager.hand_installed_plugins() == [folder]
-    assert manager.retired_extensions(["other"]) == []
     assert manager.manual_copies("x", plugins) == []
 
 
@@ -185,7 +180,6 @@ def test_an_unreadable_folder_can_be_replaced_without_rights_on_it(
         plugins, py312_paths, monkeypatch):
     payload = b"def setup(app):\n    pass\n"
     extension = _extension("locked", payload)
-    monkeypatch.setattr(manager, "download", lambda *_args: payload)
     _package(plugins, "locked", managed=True).chmod(0)
     asides = manager.replace_hand_installed(extension)
     assert manager.installed_info("locked")["version"] == "1.0"
@@ -212,7 +206,6 @@ def test_an_installed_folder_keeps_the_folders_normal_permissions(
     # The mode is what can be seen from here; the Windows side is on the
     # round's checklist.
     payload = b"def setup(app):\n    pass\n"
-    monkeypatch.setattr(manager, "download", lambda *_args: payload)
     old = os.umask(0o022)
     try:
         manager.install_extension(_extension("sample", payload))
@@ -226,19 +219,19 @@ def test_the_manager_opens_with_an_unreadable_extension(plugins, py312_paths, mo
     from tests.extensions_chrome import Browser
     _package(plugins, "locked", managed=True).chmod(0)
     browser = Browser(monkeypatch, plugins, [_extension("locked"), _extension("other")])
-    assert set(browser.act("tab", "Browse").ids) == {"locked", "other"}
-    assert browser.act("focus", "locked").buttons["replace"] == "Replace with the catalog version"
+    assert set(browser.ids) == {"locked", "other"}
+    assert browser.act("focus", "locked").buttons["replace"] == "Replace with the included version"
 
 
 def test_a_card_that_cannot_be_built_costs_only_itself(plugins, monkeypatch):
     from dataclasses import replace
     from tests.extensions_chrome import Browser
-    bad = replace(_extension("bad"), name={"en": []}, screenshot="../escape.png")
-    browser = Browser(monkeypatch, plugins, [bad, _extension("good")]).act("tab", "Browse")
+    bad = replace(_extension("bad"), name={"en": []})
+    browser = Browser(monkeypatch, plugins, [bad, _extension("good")])
     assert browser.act("focus", "good").spec["detail"]["title"] == "good"
     # A malformed display name falls back to its ID and an invalid image is omitted.
     bad_tile = next(item for item in browser.items if item["id"] == "bad")
-    assert bad_tile["label"] == "bad" and not bad_tile["icon"]
+    assert bad_tile["label"] == "bad" and not bad_tile.get("icon")
 
 
 # ---- the window -----------------------------------------------------------

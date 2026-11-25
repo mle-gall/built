@@ -121,7 +121,7 @@ pub fn tree_delete_tag(win: &Bound<'_, PyAny>, key: &str) -> PyResult<()> {
         return Ok(());
     }
     let counts = py
-        .import("core.purge")?
+        .import("built_core.purge")?
         .call_method1("layer_counts", (&scene,))?;
     let count: usize = counts.call_method1("get", (key, 0))?.extract()?;
     let revision = scene.getattr("content_version")?.extract()?;

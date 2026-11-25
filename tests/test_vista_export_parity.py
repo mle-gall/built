@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from core.scene import Scene
-from core import vista_caras as vista
+from built_core.scene import Scene
+from built_core import vista_caras as vista
 from tests.test_export_view_svg import _camera, _slab, _sunny
 
 

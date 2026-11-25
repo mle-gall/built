@@ -6,7 +6,7 @@ use std::path::PathBuf;
 fn reset_home(vp: &Bound<'_, PyAny>) -> PyResult<()> {
     let fresh = vp
         .py()
-        .import("core.camera")?
+        .import("built_core.camera")?
         .getattr("OrbitCamera")?
         .call0()?;
     let cam = vp.getattr("camera")?;
@@ -52,7 +52,7 @@ fn billboard_person(
     let kw = PyDict::new(py);
     kw.set_item("position", position)?;
     Ok(py
-        .import("core.group")?
+        .import("built_core.group")?
         .getattr("make_billboard_group")?
         .call(
             (

@@ -200,7 +200,7 @@ fn strips<'py>(
 }
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(selection::profiles_from_selection, m)?)?;
-    m.add_function(wrap_pyfunction!(build::bridge, m)?)?;
+
     m.add_function(wrap_pyfunction!(build::follow_neighbours, m)?)?;
     m.add_function(wrap_pyfunction!(bridge_pairs, m)?)?;
     m.add_function(wrap_pyfunction!(bridge_plan, m)?)?;
@@ -213,7 +213,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
 fn bridge_error(py: Python<'_>, message: &str) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        crate::model::module(py, "core.bridge")?
+        crate::model::module(py, "built_core.bridge")?
             .getattr("BridgeError")?
             .call1((message,))?,
     ))
@@ -337,7 +337,7 @@ fn bridge_plan<'py>(profiles: &PointList<'py>) -> PyResult<Bound<'py, PyList>> {
         )?);
     }
     if p.getattr("closed")?.is_truthy()? || q.getattr("closed")?.is_truthy()? {
-        let key = crate::model::module(py, "core.topology")?.getattr("_key")?;
+        let key = crate::model::module(py, "built_core.topology")?.getattr("_key")?;
         let keys = pyo3::types::PySet::empty(py)?;
         for pt in a.objects {
             keys.add(key.call1((pt,))?)?;
@@ -353,4 +353,8 @@ fn bridge_plan<'py>(profiles: &PointList<'py>) -> PyResult<Bound<'py, PyList>> {
         out.call_method1("extend", (strips(&a, &b, closed)?,))?;
     }
     Ok(out)
+}
+
+pub(crate) fn register_bridge(m: &Bound<PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(build::bridge, m)?)
 }

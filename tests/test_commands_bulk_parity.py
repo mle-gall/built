@@ -7,10 +7,10 @@ from built_core import Vec3
 
 
 def bulk_results():
-    from core import axes, geometry, guide, materials, structure
+    from built_core import axes, geometry, guide, materials, structure
     from built_core import sun
     from built_core import autosave, style, triangulate
-    from core.textlabel import TextLabel
+    from built_core.textlabel import TextLabel
 
     ring = [Vec3(x, y, 0) for x, y in [(0, 0), (4, 0), (4, 3), (2, 1), (0, 3)]]
     face = geometry.Face(ring)

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! `core.doc_model`, served from here (`core/doc_model.py` is gone): the
+//! `built_core.doc_model`, served from here (`core/doc_model.py` is gone): the
 //! Python handles and transaction boundaries of the Rust document.
 //!
 //! - `PlacedMatrix`, the `Matrix4` a placement hands out as its `xform` /
@@ -49,14 +49,14 @@ use super::py_class::{class, method, property, FastAttr};
 
 type Obj<'py> = Bound<'py, PyAny>;
 
-const MODULE: &str = "core.doc_model";
+const MODULE: &str = "built_core.doc_model";
 
 /// What every container of one tracked value points at: the binding
 /// (`(key, attr)`, or None once replaced) and a weak reference to the top
 /// container. Weak, so a tracked value is no reference cycle: a record's
 /// dicts go with their node by reference counting, not by the collector (a
 /// model's links registry is tens of thousands of them).
-#[pyclass(module = "core.doc_model", name = "_Anchor")]
+#[pyclass(module = "built_core.doc_model", name = "_Anchor")]
 pub struct Anchor {
     #[pyo3(get, set)]
     bind: Option<Py<PyAny>>,
@@ -82,7 +82,7 @@ fn st(py: Python<'_>) -> PyResult<&State> {
         // A Rust reader before anything imported the module.
         py.import(MODULE)?;
     }
-    STATE.get(py).ok_or_else(|| PyTypeError::new_err("core.doc_model is not installed"))
+    STATE.get(py).ok_or_else(|| PyTypeError::new_err("built_core.doc_model is not installed"))
 }
 
 fn none(py: Python<'_>) -> Obj<'_> {
@@ -1021,11 +1021,11 @@ fn is_list(value: &Obj<'_>) -> PyResult<bool> {
 #[pyfunction]
 fn object_state<'py>(obj: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = obj.py();
-    let group = py.import("core.group")?;
+    let group = py.import("built_core.group")?;
     if obj.is_instance(&group.getattr("Group")?)? {
         return Ok(handle_state(obj, &group.getattr("GROUP_FIELDS")?)?.into_any());
     }
-    let layers = py.import("core.layers")?;
+    let layers = py.import("built_core.layers")?;
     if obj.is_instance(&layers.getattr("Layer")?)? {
         return layers.call_method1("layer_values", (obj,));
     }
@@ -1049,7 +1049,7 @@ fn set_object_state<'py>(obj: &Obj<'py>, values: &Obj<'py>) -> PyResult<()> {
     let py = obj.py();
     let values = st(py)?.dict_type.bind(py).call1((values,))?.cast_into::<PyDict>()?;
     let doc = PyDict::new(py);
-    let layers = py.import("core.layers")?;
+    let layers = py.import("built_core.layers")?;
     if obj.is_instance(&layers.getattr("Layer")?)? {
         for k in layers.getattr("TAG_FIELDS")?.try_iter()? {
             let k = k?;
@@ -1088,7 +1088,7 @@ fn set_handle_state_py<'py>(obj: &Obj<'py>, state: &Obj<'py>) -> PyResult<()> {
 /// `scene.layers` (with the default tag, as the Python field had).
 #[pyfunction]
 fn new_scene_root(py: Python<'_>) -> PyResult<Obj<'_>> {
-    let layers = py.import("core.layers")?;
+    let layers = py.import("built_core.layers")?;
     let root = st(py)?.native.bind(py).call_method0(intern!(py, "doc_new_root"))?;
     let tag = layers.getattr("Layer")?.call1((layers.getattr("DEFAULT_LAYER")?,))?;
     root.getattr(intern!(py, "_tags"))?.call_method1(intern!(py, "append"), (tag,))?;
@@ -1124,7 +1124,7 @@ fn build_state(m: &Bound<'_, PyModule>) -> PyResult<State> {
     // TrackedDict
     let ns = PyDict::new(py);
     ns.set_item("__slots__", &slots)?;
-    ns.set_item("__doc__", "A document attribute's dict (see core.doc_model).")?;
+    ns.set_item("__doc__", "A document attribute's dict (see built_core.doc_model).")?;
     property(&ns, "_doc_bind", wrap_pyfunction!(td_doc_bind, m)?.into_any(), None)?;
     method(&ns, "__setitem__", wrap_pyfunction!(td_setitem, m)?)?;
     method(&ns, "__delitem__", wrap_pyfunction!(td_delitem, m)?)?;
@@ -1143,7 +1143,7 @@ fn build_state(m: &Bound<'_, PyModule>) -> PyResult<State> {
     // TrackedList
     let ns = PyDict::new(py);
     ns.set_item("__slots__", &slots)?;
-    ns.set_item("__doc__", "A document attribute's list (see core.doc_model). Setting an index or\nappending is one entry; any other edit writes the list again.")?;
+    ns.set_item("__doc__", "A document attribute's list (see built_core.doc_model). Setting an index or\nappending is one entry; any other edit writes the list again.")?;
     property(&ns, "_doc_bind", wrap_pyfunction!(td_doc_bind, m)?.into_any(), None)?;
     method(&ns, "append", wrap_pyfunction!(tl_append, m)?)?;
     method(&ns, "extend", wrap_pyfunction!(tl_extend, m)?)?;
@@ -1174,7 +1174,7 @@ fn build_state(m: &Bound<'_, PyModule>) -> PyResult<State> {
 
 static RECORD: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
-/// Fill the module `core.doc_model`.
+/// Fill the module `built_core.doc_model`.
 pub(crate) fn install(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
     m.add("__doc__", "Python handles and transaction boundaries for the Rust document (rust/built_core/src/model/doc_model_api.rs).")?;

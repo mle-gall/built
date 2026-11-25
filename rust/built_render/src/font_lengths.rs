@@ -4,7 +4,7 @@ use pyo3::{exceptions::PyValueError, prelude::*};
 
 #[pyfunction]
 pub fn font_length(py: Python<'_>, text: &str, unit: &str, low: f64, high: f64) -> PyResult<f64> {
-    let units = py.import("core.units")?;
+    let units = py.import("built_core.units")?;
     let parsed = units.call_method1("parse", (text, "length", unit))?;
     if !parsed.getattr("ok")?.is_truthy()? {
         return Err(PyValueError::new_err(

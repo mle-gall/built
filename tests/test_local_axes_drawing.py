@@ -4,7 +4,7 @@
 
 The usual convention: «when you open a group for editing you see its axes, not the
 model axes» — the red/green/blue inferences, the arrow-key locks, the
-rectangle and the ground follow them, level by level. ``core.axes`` holds
+rectangle and the ground follow them, level by level. ``built_core.axes`` holds
 the one table every tool reads; the viewport syncs it to the open
 context."""
 from __future__ import annotations
@@ -16,11 +16,11 @@ from built_core import ScreenPoint as QPointF
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 
-from core import axes  # noqa: E402
-from core.group import Group, frame_axes, group_frame  # noqa: E402
-from core.history import MakeGroupCommand  # noqa: E402
-from core.mesh import Mesh  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core import axes  # noqa: E402
+from built_core.group import Group, frame_axes, group_frame  # noqa: E402
+from built_core.history import MakeGroupCommand  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 
 
 def V(x, y, z=0.0):
@@ -39,7 +39,7 @@ def _turn(deg=30.0):
 
 
 def test_the_world_frame_is_bit_for_bit_the_old_tables():
-    from core.snap import _AXIS_VECTORS
+    from built_core.snap import _AXIS_VECTORS
     from tools.base import PLANE_LOCK_AXES
     assert _AXIS_VECTORS is axes.AXES and PLANE_LOCK_AXES is axes.AXES
     assert [tuple((v.x(), v.y(), v.z())) for v in axes.AXES.values()] == [
@@ -48,7 +48,7 @@ def test_the_world_frame_is_bit_for_bit_the_old_tables():
 
 
 def test_sync_turns_every_table_at_once_and_back():
-    from core.snap import _AXIS_VECTORS
+    from built_core.snap import _AXIS_VECTORS
     axes.sync(_turn())
     a = math.radians(30)
     assert _close(_AXIS_VECTORS["x"], V(math.cos(a), math.sin(a)))
@@ -58,7 +58,7 @@ def test_sync_turns_every_table_at_once_and_back():
 
 
 def test_axis_alignment_is_measured_on_the_local_axes():
-    from core.snap import _detect_axis_alignment
+    from built_core.snap import _detect_axis_alignment
     a = math.radians(30)
     along_red = V(math.cos(a), math.sin(a))
     assert _detect_axis_alignment(V(0, 0), along_red, 3.0) is None  # world
@@ -83,7 +83,7 @@ def test_plane_lock_and_default_ground_follow_the_context():
 
 
 def test_a_rectangle_lines_up_with_the_group():
-    from core.axes import plane_axes
+    from built_core.axes import plane_axes
     axes.sync(_turn(30.0))
     u, v = plane_axes(V(0, 0, 1))
     a = math.radians(30)
@@ -180,7 +180,7 @@ def test_a_component_made_inside_is_placed_on_the_contexts_axes():
     a = math.radians(30)
     assert _close(x, V(math.cos(a), math.sin(a)))
     # the geometry did not move in the world
-    from core.group import world_mesh
+    from built_core.group import world_mesh
     got = sorted((round(v.position.x(), 4), round(v.position.y(), 4))
                  for v in world_mesh(g).vertices)
     assert got == sorted((round(p.x(), 4), round(p.y(), 4)) for p in pts)

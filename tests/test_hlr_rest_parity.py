@@ -63,7 +63,7 @@ class _Scene:
 
 
 def _camera(rng, perspective=True):
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     from built_core import Vec3 as CameraPoint
     c = OrbitCamera()
     c.target = CameraPoint((rng.uniform(-3, 3), rng.uniform(-3, 3), rng.uniform(0, 2)))
@@ -173,7 +173,7 @@ TOLERANCE = {"depth": 1e-9, "cap": 1e-9, "persp": 1e-9}
 
 
 def test_the_hidden_line_rest_answers_as_the_numpy_one_did():
-    from core import hlr
+    from built_core import hlr
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     got = json.loads(json.dumps(answers(hlr)))
     wrong = []
@@ -195,7 +195,7 @@ def test_the_corpus_measures_and_draws():
 
 if __name__ == "__main__" and "--write" in sys.argv:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from core import hlr
+    from built_core import hlr
     data = answers(hlr)
     GOLDEN.parent.mkdir(exist_ok=True)
     GOLDEN.write_bytes(gzip.compress(json.dumps(data).encode(), mtime=0))

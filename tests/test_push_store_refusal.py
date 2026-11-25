@@ -11,8 +11,8 @@ import json
 import pytest
 
 import built_core.store_mesh as S
-from core.protocol.commands import push_pull
-from core.protocol.keys import to_json_key
+from built_core.protocol.commands import push_pull
+from built_core.protocol.keys import to_json_key
 from tests.test_pushpull_cases import _boxed, _face
 
 
@@ -24,7 +24,7 @@ def _state(mesh):
 @pytest.fixture
 def logs(monkeypatch, tmp_path):
     import built_core.paths
-    import core.push_pull as P
+    import built_core.push_pull as P
     monkeypatch.setattr(built_core.paths, "user_log_dir", lambda: tmp_path)
     monkeypatch.setattr(P, "_REPROS", set())
     return tmp_path
@@ -46,7 +46,7 @@ def test_a_store_refusal_leaves_the_model_and_writes_a_repro(monkeypatch, logs, 
 
     monkeypatch.setattr(MeshStore, "push_" + where, refused)
     flashes = []
-    from core.push_pull import PushPullOperation
+    from built_core.push_pull import PushPullOperation
     commit = PushPullOperation._commit
 
     def observe_commit(operation, viewport):

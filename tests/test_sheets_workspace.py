@@ -291,7 +291,7 @@ def test_a_shaded_frame_renders_into_the_page_without_touching_the_model(host):
     tags and the style stay as they are; the picture goes to the page."""
     import numpy as np
     import built_core as NATIVE
-    from core.composition import RENDER_DPI
+    from built_core.composition import RENDER_DPI
     ws = _sheets(host)
     rec = host.view.renderer
     plan, iso = ws.composer.comp.frames
@@ -390,7 +390,7 @@ def test_the_next_dimension_level_and_ground_line_take_the_last_look(host):
     units, never where its text sits along it — and the dimension's lasts
     into the next session, the others not."""
     import built_core as NATIVE
-    from core.composition import AddItemCommand
+    from built_core.composition import AddItemCommand
     from built_render import sheet_workspace
     ws = _sheets(host)
     comp = ws.composer.comp
@@ -466,7 +466,7 @@ def test_delete_duplicate_and_lock_on_the_selection(host):
 # ---- keys, pointer, pan and zoom --------------------------------------------------------
 def _texts(host, ws):
     """A new text on the sheet, on the page."""
-    from core.composition import TextoItem
+    from built_core.composition import TextoItem
     text = TextoItem(x_mm=40, y_mm=40, w_mm=60, text="Pozo de registro")
     ws.composer.comp.texts.append(text)
     ws.sheet_changed()

@@ -84,7 +84,7 @@ fn null(py: Python<'_>) -> Obj<'_> {
     py.None().into_bound(py)
 }
 fn placed_elsewhere(scene: &Obj<'_>, group: &Obj<'_>, mesh: &Obj<'_>) -> PyResult<bool> {
-    for g in crate::model::module(scene.py(), "core.purge")?
+    for g in crate::model::module(scene.py(), "built_core.purge")?
         .call_method1("iter_groups", (scene.getattr("groups")?,))?
         .try_iter()?
     {

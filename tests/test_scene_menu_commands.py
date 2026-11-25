@@ -7,12 +7,12 @@ import pytest
 from built_render import ShellScenes
 from built_render import SceneMark
 from built_core import scene_tree
-from core.camera import OrbitCamera
-from core.composition import Composicion
-from core.history import History
-from core.protocol.commands import edit_saved_scene
+from built_core.camera import OrbitCamera
+from built_core.composition import Composicion
+from built_core.history import History
+from built_core.protocol.commands import edit_saved_scene
 from built_core.saved_views import SavedView
-from core.scene import Scene
+from built_core.scene import Scene
 
 
 @pytest.fixture

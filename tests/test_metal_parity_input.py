@@ -9,10 +9,10 @@ import pytest
 from built_core import PixelPoint as QPoint, ScreenPoint as QPointF
 from built_core import Input as Qt
 from built_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
-from core.scene import Scene
-from core.mesh import Mesh
-from core.group import Group
-from core.history import History
+from built_core.scene import Scene
+from built_core.mesh import Mesh
+from built_core.group import Group
+from built_core.history import History
 from tools.rust_tools import SelectTool
 from tests.controller_surface import ControllerSurface as Viewport
 from built_core import resident_prepare as prepare
@@ -218,7 +218,7 @@ def test_selection_marks_and_preview_bridge(view):
 
 @pytest.mark.parametrize('fail', [False, True])
 def test_billboard_export_restores_world_and_schedules_overlays(view, fail, monkeypatch):
-    from core.group import make_billboard_group
+    from built_core.group import make_billboard_group
     from built_core import INSTANCE
     from built_render import SurveyRaster
     from pathlib import Path
@@ -298,7 +298,7 @@ def test_texture_preview_owns_its_materials(view):
 
 
 def test_guides_and_tool_overlay_without_labels(view):
-    from core.guide import Guide
+    from built_core.guide import Guide
     from views.wgpu_overlay import rasterize, pixels
     from tools.walkthrough import WalkTool
     view.scene.guides.append(Guide(QVector3D(1, 1, 0)))

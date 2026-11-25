@@ -1,7 +1,7 @@
 """Pre-port gestures for the remaining modelling tools, for tool_parity.record."""
 from unittest.mock import patch
 
-from core.scene import Scene
+from built_core.scene import Scene
 from tests.test_parity_tools import _Vp, _ctx, V
 
 
@@ -98,7 +98,7 @@ def solid_cases():
 
 
 def run_solid(tool_type, mode):
-    from core.solids import solid_volume
+    from built_core.solids import solid_volume
     from tests.test_solid_tools import _VP, _click, _pair
     scene = Scene()
     a, b = _pair()

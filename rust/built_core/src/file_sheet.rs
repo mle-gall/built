@@ -74,7 +74,7 @@ pub fn igz_load_sheet<'py>(
     py: Python<'py>,
     raw: &Bound<'py, PyDict>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    load_sheet(&py.import("core.composition")?.getattr("Composicion")?, raw)
+    load_sheet(&py.import("built_core.composition")?.getattr("Composicion")?, raw)
 }
 
 pub(crate) fn load_sheet<'py>(
@@ -82,7 +82,7 @@ pub(crate) fn load_sheet<'py>(
     raw: &Bound<'py, PyDict>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = raw.py();
-    let types = py.import("core.composition")?;
+    let types = py.import("built_core.composition")?;
     let kwargs = PyDict::new(py);
     for key in ["name", "paper", "landscape", "margin_mm"] {
         if let Some(v) = raw.get_item(key)? {
@@ -165,7 +165,7 @@ fn archive_item<'py>(item: &Bound<'py, PyAny>, anchors: bool) -> PyResult<Bound<
         out.set_item(key, crate::doc::value::Value::from_py(&value)?.to_py(py)?)?;
     }
     if anchors {
-        let types = py.import("core.composition")?;
+        let types = py.import("built_core.composition")?;
         let holds = PyDict::new(py);
         for bound in types.call_method1("sheet_holds", (item,))?.try_iter()? {
             let (name, (_, hold)): (String, (Bound<'_, PyAny>, Bound<'_, PyAny>)) =

@@ -437,7 +437,7 @@ fn sync_units<'py>(a: &Args<'py>) -> Reply<'py> {
     let (view, history) = (a.get_item(0)?, a.get_item(1)?);
     let revision = (&history, history.getattr("_native")?.getattr("units_revision")?).into_bound_py_any(py)?;
     if attr(&view, "_ui_units_sent")?.ne(&revision)? {
-        let units = py.import("core.units")?;
+        let units = py.import("built_core.units")?;
         let unit = units.call_method1("model_units_of", (history.getattr("scene")?,))?.get_item("length")?;
         let suffix = units.call_method1("length_suffix", (&unit,))?.call_method0("strip")?;
         view.getattr("renderer")?.call_method1("ui_set_units", (if suffix.is_truthy()? { suffix } else { unit },))?;
@@ -586,7 +586,7 @@ fn options<'py>(a: &Args<'py>) -> Reply<'py> {
             if !selected.is_none() && selected.len()? == 1 {
                 let group = selected.try_iter()?.next().transpose()?.unwrap_or_else(|| none(py));
                 if attr(&group, "text3d")?.is_truthy()? && !truthy(&group, "locked")? {
-                    py.import("core.links")?;
+                    py.import("built_core.links")?;
                     if module.getattr("built_core")?.call_method1("link_linked_ancestor", (&group,))?.is_none() {
                         let group = group.unbind();
                         let run = action(py, move |py| {
@@ -863,7 +863,7 @@ pub(super) fn isolate<'py>(a: &Args<'py>) -> Reply<'py> {
     if uids.iter().any(|uid| !uid.is_instance_of::<PyString>()) {
         // A placement's key is its UID, or its address when the UID repeats
         // (built_core.facets): from the native tree, not the facet index.
-        let row_id = py.import("core.link_structure")?.getattr("row_id")?;
+        let row_id = py.import("built_core.link_structure")?.getattr("row_id")?;
         let repeated = scene.call_method0("repeated_uids")?;
         for entry in uids.iter_mut() {
             if entry.is_instance_of::<PyString>() {

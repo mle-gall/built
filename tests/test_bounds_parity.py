@@ -4,7 +4,7 @@
 (``rust/built_core/src/group_frame.rs``: a prototype's points through a
 placement, and their box) and must answer as the Python did at
 ``dc7b485a``: ``Scene.bounds``, ``Scene.selection_bounds`` and
-``core.group.placement_points``.
+``built_core.group.placement_points``.
 
 NumPy's ``(N, 3) @ (3, 3)`` runs through BLAS kernels that change with
 ``N`` (``tests/test_group_frame_parity.py``), so these agree to 4 ulp of
@@ -37,9 +37,9 @@ def _box_mesh(mesh, rng, n=2):
 
 def scenes():
     from built_core import Matrix4 as M, Vec3 as V
-    from core.group import Group
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
     rng = random.Random(20261124)
     out = []
     for k in range(24):
@@ -79,7 +79,7 @@ def scenes():
 
 
 def answer(scene, frac):
-    from core.group import placement_points
+    from built_core.group import placement_points
     lo, hi = scene.bounds()
     pts = [placement_points(g).tolist() for g in scene.groups]
     n = max(1, int(len(scene.groups) * frac))

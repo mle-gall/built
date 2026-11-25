@@ -42,7 +42,7 @@ from pathlib import Path
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D, Vec4 as QVector4D
 
-from core.history import Command
+from built_core.history import Command
 
 log = logging.getLogger("built.plugins.windowizer")
 
@@ -796,7 +796,7 @@ def _next_name(scene) -> str:
 # ---------------------------------------------------------------------------
 
 def ensure_default_materials(scene) -> None:
-    from core.materials import Material
+    from built_core.materials import Material
     mats = scene.materials
     if FRAME_MAT not in mats:
         mats[FRAME_MAT] = Material(FRAME_MAT, color=(105 / 255, 105 / 255, 105 / 255))
@@ -871,7 +871,7 @@ def grid_panes(quad, p):
 
 def single_pane(outline, p):
     """Non-quadrilateral outlines: one pane, inset by the frame width."""
-    from core.offset import offset_regions
+    from built_core.offset import offset_regions
     normal = _unit(_newell(outline))
     regions = offset_regions([_v(q) for q in outline], _v(normal), p["frame_w"])
     if not regions:
@@ -915,8 +915,8 @@ def _prism(mesh, outline, holes, y0, y1, attrs):
 def build_parts(scene, outline, params, pose: QMatrix4x4):
     """The window's parts: ``[Frame, Glass 1…n]`` as nested groups over
     local meshes, each placed by ``pose``."""
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     p = normalize_params(params)
     frame_attrs = _paint(scene, p["frame_mat"])
     glass_attrs = _paint(scene, p["glass_mat"], glass=True)
@@ -997,7 +997,7 @@ def _frame_of(outer):
 def _find_back_face(mesh, face, normal):
     """The wall's other side: the nearest face facing the opposite way that
     the host's centre, pushed along -normal, runs into."""
-    from core.arrangement import _point_in_polygon, plane_basis
+    from built_core.arrangement import _point_in_polygon, plane_basis
     c = _t(face.centroid())
     ray = _mul(normal, -1.0)
     best = None
@@ -1156,7 +1156,7 @@ def _json_safe(obj):
 
 def make_window(scene, face, params, name=None):
     """Face → opening + window container. Returns the container."""
-    from core.group import Group
+    from built_core.group import Group
     p = normalize_params(params)
     name = name or _next_name(scene)
     pose, local, rec = cut_opening(scene, face, p)
@@ -1281,7 +1281,7 @@ def _at_top_level(viewport) -> bool:
 
 
 def _selected_faces(scene, selection=None):
-    from core.mesh import Face
+    from built_core.mesh import Face
     return [e for e in (scene.selection if selection is None else selection)
             if isinstance(e, Face) and e in scene.mesh.faces]
 
@@ -1409,7 +1409,7 @@ def _warn(viewport, text) -> None:
 def _fmt(metres) -> str:
     """Metric documents show mm (window profiles are millimetre work)."""
     try:
-        from core.units import fmt_len, model_unit
+        from built_core.units import fmt_len, model_unit
         if model_unit() not in ("m", "cm", "mm"):
             return fmt_len(metres)
     except Exception:  # noqa: BLE001
@@ -1418,7 +1418,7 @@ def _fmt(metres) -> str:
 
 
 def _parse(text):
-    from core.units import parse_length_field
+    from built_core.units import parse_length_field
     val = parse_length_field(str(text).replace(" ", "").replace(",", "."))
     if val is None:
         raise WindowizerError(_tr("Invalid length: {text} (e.g. 5cm, 50mm, 0.05)", text=repr(text)))
@@ -1534,7 +1534,7 @@ def outliner_kind(group):
     data = window_data(group)
     if data is None:
         return None
-    from core.units import fmt_len
+    from built_core.units import fmt_len
     p = normalize_params(data.get("params"))
     props = [("Panes", f"{len(parse_bands(p['cols']))} × "
                        f"{len(parse_bands(p['rows']))}")]

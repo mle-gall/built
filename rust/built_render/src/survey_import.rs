@@ -246,7 +246,7 @@ pub fn place_survey_mesh(
             .call_method1("__isub__", ((0., 0., origin),))?;
         mesh.call_method0("invalidate_index")?;
     }
-    let layers = py.import("core.layers")?;
+    let layers = py.import("built_core.layers")?;
     let layer = layers.getattr("SURVEY_LAYER")?;
     if scene.call_method1("layer", (&layer,))?.is_none() {
         scene

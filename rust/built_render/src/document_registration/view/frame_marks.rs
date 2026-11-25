@@ -403,7 +403,7 @@ fn references_sync<'py>(a: &Args<'py>) -> Reply<'py> {
         if off.is_none() {
             return scene.call_method1("entity_visible", (entity,))?.is_truthy();
         }
-        let layer = py.import("core.layers")?.call_method1("layer_of", (entity,))?;
+        let layer = py.import("built_core.layers")?.call_method1("layer_of", (entity,))?;
         Ok(!off.contains(layer)? && !scene.call_method1("entity_hidden", (entity,))?.is_truthy()?)
     };
     let datum = attr(&scene, "georef")?;

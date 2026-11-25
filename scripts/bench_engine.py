@@ -36,12 +36,12 @@ os.environ["XDG_DATA_HOME"] = _tmp
 os.environ["BUILT_SETTINGS_DIR"] = _tmp
 
 from core._native import engine  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from built_core.formats import igz  # noqa: E402
 
 
 def _biggest_group(scene):
-    from core.group import Group, iter_placements
+    from built_core.group import Group, iter_placements
     best, n = None, -1
     for g in scene.groups:
         if not isinstance(g, Group):
@@ -73,13 +73,13 @@ def op_obj(ctx):
 
 
 def op_collect(ctx):
-    from core.hlr import collect_geometry
+    from built_core.hlr import collect_geometry
     collect_geometry(ctx["scene"])
 
 
 def _hlr(ctx, view):
-    from core.camera import OrbitCamera
-    from core.hlr import hlr_drawing
+    from built_core.camera import OrbitCamera
+    from built_core.hlr import hlr_drawing
     scene = ctx["scene"]
     cam = OrbitCamera()
     cam.set_view(view)
@@ -100,7 +100,7 @@ def op_hlr_iso(ctx):
 def op_intersect_find(ctx):
     """Intersect Faces ▸ With Selection, everything selected (#541): the
     crossings."""
-    from core.intersect import WITH_SELECTION, segments_for
+    from built_core.intersect import WITH_SELECTION, segments_for
     scene = ctx["scene"]
     scene.selection.clear()
     scene.selection.update(scene.mesh.faces)
@@ -110,7 +110,7 @@ def op_intersect_find(ctx):
 
 def op_intersect_apply(ctx):
     """…and adding them as edges (one undo step), as the menu does."""
-    from core.edits import build_add_edges
+    from built_core.edits import build_add_edges
     from built_core.history import History
     scene = ctx["scene"]
     from built_core.mesh import _KEY_SCALE
@@ -124,7 +124,7 @@ def op_intersect_apply(ctx):
 
 def op_orient(ctx):
     """Orient Faces over the biggest group's meshes."""
-    from core.group import iter_placements
+    from built_core.group import iter_placements
     from built_core.orient import orient_outward
     for m, _ in iter_placements(_biggest_group(ctx["scene"])):
         orient_outward(m.mesh)
@@ -132,7 +132,7 @@ def op_orient(ctx):
 
 def op_triangulate(ctx):
     """Every face triangulated again (what a full GPU rebuild asks)."""
-    from core.group import iter_placements
+    from built_core.group import iter_placements
     scene = ctx["scene"]
     for f in scene.mesh.faces:
         f.triangulate()
@@ -167,7 +167,7 @@ def push_faces(scene, n=12, seed=3, after=None):
     commit as the tool does it. Returns a signature of the result."""
     import random
 
-    from core.group import iter_placements
+    from built_core.group import iter_placements
     from built_core.history import History
     from tools.pushpull import PushPullTool
     rng = random.Random(seed)

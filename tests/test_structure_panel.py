@@ -1,12 +1,13 @@
 """Filing, recipe editing, and bootstrap through the Project tree and protocol."""
 import pytest
 
-from core import bim_registry, structure
+from core import bim_registry
+from built_core import structure
 from built_core import facets
 from core.agent_facets import set_display
-from core.group import Group
-from core.layers import Layer
-from core.protocol import commands
+from built_core.group import Group
+from built_core.layers import Layer
+from built_core.protocol import commands
 from tests.test_project_drawing_filters import Project
 from tests.test_structure import model
 from views import wgpu_ui
@@ -114,7 +115,7 @@ def test_filed_placements_refile_through_the_tree_and_reject_direct_tag_edits(pa
 
 def test_hidden_changes_coalesce_in_one_membership_pass(panel, monkeypatch):
     p, _, _ = panel
-    from core import link_structure
+    from built_core import link_structure
     calls = []
     original = link_structure.Tree
     def counted(*args):
@@ -168,7 +169,7 @@ def test_mounted_rows_and_exact_nested_members(panel):
 
 
 def test_drawing_preserves_structure_rows(panel):
-    from core.history import AddEdgeCommand
+    from built_core.history import AddEdgeCommand
     from built_core import Vec3
     p, _, _ = panel
     tree = p.view._ui_tree["tree"]

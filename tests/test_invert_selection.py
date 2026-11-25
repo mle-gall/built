@@ -12,10 +12,10 @@ from built_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from built_render.keyboard_bindings import action_keys, collect_actions
 
-from core.group import Group
-from core.layers import Layer, assign_layer
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.layers import Layer, assign_layer
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 
 def V(x, y, z=0.0):

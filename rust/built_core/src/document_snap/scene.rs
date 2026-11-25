@@ -253,7 +253,7 @@ fn document_snap_scene<'py>(
 fn selection_box_points<'py>(view: &Obj<'py>, skip: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = view.py();
     let group = host(py)?.getattr("Group")?;
-    let corners = py.import("core.group")?.getattr("oriented_box_corners")?;
+    let corners = py.import("built_core.group")?.getattr("oriented_box_corners")?;
     let out = PyList::empty(py);
     for e in view.getattr("scene")?.getattr("selection")?.try_iter()? {
         let e = e?;

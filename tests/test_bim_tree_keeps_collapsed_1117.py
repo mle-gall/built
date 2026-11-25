@@ -12,8 +12,8 @@ from tests.test_tree_links import _View
 from views import wgpu_ui
 
 from core.bim import tag_group  # noqa: E402
-from core.group import Group  # noqa: E402
-from core.mesh import Mesh  # noqa: E402
+from built_core.group import Group  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
 
 
 def _box(x):

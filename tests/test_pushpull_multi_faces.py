@@ -12,10 +12,10 @@ from __future__ import annotations
 from built_core import Input, ScreenPoint
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edges
-from core.history import AddFaceCommand, History
+from built_core.edits import build_add_edges
+from built_core.history import AddFaceCommand, History
 from built_core.orient import is_closed
-from core.scene import Scene
+from built_core.scene import Scene
 from tools.base import ToolContext
 from tools.pushpull import PushPullTool
 

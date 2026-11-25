@@ -8,9 +8,9 @@ import pytest
 from built_core import Input
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core.group import Group
-from core.history import History, NativeCommand
-from core.mesh import Mesh
+from built_core.group import Group
+from built_core.history import History, NativeCommand
+from built_core.mesh import Mesh
 from tools.rust_tools import LineTool
 from tests.controller_surface import ControllerSurface as Viewport
 
@@ -97,7 +97,7 @@ def test_hidden_locked_group_does_not_offer_edges(box):
 
 
 def test_locked_tag_is_a_reference_until_its_folder_is_hidden(box):
-    from core.layers import Layer, assign_layer
+    from built_core.layers import Layer, assign_layer
     vp, group, transform = box
     tag = Layer("Survey", key="survey-key", folder="refs", locked=True)
     vp.scene.layers.append(tag)
@@ -116,8 +116,8 @@ def test_locked_tag_is_a_reference_until_its_folder_is_hidden(box):
 def test_native_candidates_keep_locked_references_out_of_editable_picks(monkeypatch):
     """Exercise the native masks even on CI without the compiled engine."""
     from types import SimpleNamespace
-    from core.layers import Layer
-    from core.scene import Scene
+    from built_core.layers import Layer
+    from built_core.scene import Scene
     from views import document_interaction as viewport_module
 
     scene = Scene()

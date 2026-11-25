@@ -20,7 +20,7 @@ from built_core import Vec3 as V
 
 
 import views.document_interaction as vpmod  # noqa: E402
-from core.guide import Guide  # noqa: E402
+from built_core.guide import Guide  # noqa: E402
 
 
 def test_dashes_match_a_point_by_point_construction():
@@ -44,8 +44,8 @@ def test_dashes_match_a_point_by_point_construction():
 def test_the_edit_box_sharing_the_buffer_does_not_eat_the_guides(native_gpu_host):
     """The dashed box of the group being edited reuses the guides' buffer;
     a cached frame must not draw the box where the guides were."""
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     win = native_gpu_host.window
     vp = win.viewport
     m = Mesh()

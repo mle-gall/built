@@ -12,13 +12,13 @@ import pytest
 from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.dimension import Dimension
-from core.group import Group
-from core.history import (AddDimensionCommand, History, MoveDimensionsCommand,
+from built_core.dimension import Dimension
+from built_core.group import Group
+from built_core.history import (AddDimensionCommand, History, MoveDimensionsCommand,
                           MoveGroupCommand,
                           MoveVerticesCommand)
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from tools.base import ToolContext
 from tools.move import MoveTool
 
@@ -83,7 +83,7 @@ def test_a_dimension_on_two_vertices_follows_a_scale_and_re_measures():
 def test_the_scale_tool_command_takes_the_dimension_along():
     """The user's very case: draw, dimension, scale — the dimension must
     grow with the drawing and say the new length."""
-    from core.history import ScaleVerticesCommand
+    from built_core.history import ScaleVerticesCommand
     scene = Scene()
     _square(scene)
     hist = History(scene)
@@ -115,8 +115,8 @@ def test_a_dimension_on_a_group_made_from_geometry_follows_the_scale_tool():
     the loose one, at the same spots; the anchor found those ghosts first
     and the group scaled away from under the dimension. A vertex nothing
     references is no anchor."""
-    from core.edits import build_add_edges
-    from core.history import MakeGroupCommand
+    from built_core.edits import build_add_edges
+    from built_core.history import MakeGroupCommand
     from tools.scale import ScaleTool
     scene = Scene()
     vp = _Vp(scene)
@@ -152,8 +152,8 @@ def test_a_dimension_grouped_with_its_geometry_follows_the_group():
     takes the vertex standing there — the group's — so scaling the group
     takes the dimension along; undoing the group hands it back to the
     loose vertices."""
-    from core.edits import build_add_edges
-    from core.history import MakeGroupCommand
+    from built_core.edits import build_add_edges
+    from built_core.history import MakeGroupCommand
     from tools.scale import ScaleTool
     scene = Scene()
     vp = _Vp(scene)
@@ -190,7 +190,7 @@ def test_far_out_coordinates_still_bind_through_a_placement():
     """A point that came through a placement's float32 matrix and back is
     off by a micron or so at hundreds of metres; the old 1e-6 tolerance
     rejected the very vertex the registry had found."""
-    from core.group import world_mesh
+    from built_core.group import world_mesh
     scene = Scene()
     m = Mesh()
     m.add_face([V(0, 0), V(2.37, 0), V(2.37, 1.41), V(0, 1.41)])
@@ -445,7 +445,7 @@ def test_a_groups_preview_shows_the_dimension_where_the_commit_puts_it(
     touch no geometry until the commit, so a dimension on it waited for
     the release. ``carried`` draws it through the same matrix — and it
     must land exactly where the committed command then reads it."""
-    from core.history import RotateGroupCommand, rotation_matrix
+    from built_core.history import RotateGroupCommand, rotation_matrix
     scene = Scene()
     g = make(scene)
     hist = History(scene)

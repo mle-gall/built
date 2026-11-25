@@ -53,7 +53,7 @@ pub fn import_hatch_file(history: &Bound<'_, PyAny>, path: PathBuf) -> PyResult<
     let text = read_pattern(path)?;
     let py = history.py();
     let found = py
-        .import("core.hatches")?
+        .import("built_core.hatches")?
         .call_method1("parse_pat", (text,))?
         .cast_into::<PyDict>()?;
     let count = found.len();

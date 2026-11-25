@@ -6,10 +6,10 @@ import numpy as np
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core.group import Group, copy_group
-from core.history import History
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group, copy_group
+from built_core.history import History
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from built_core.soften import SoftenByAngleCommand, selected_edges
 from tests.test_viewport_smooth_shading import _cylinder, _stub
 
@@ -105,7 +105,7 @@ def test_nested_definitions_are_processed_once_and_hidden_flags_survive():
 
 
 def test_locked_and_linked_groups_are_left_alone(tmp_path):
-    from core import links
+    from built_core import links
     from formats import igz
     locked = Group(_cylinder(Mesh(), soft=False))
     locked.locked = True
@@ -153,7 +153,7 @@ def test_coplanar_and_unsoften_controls():
 def test_the_command_replays_by_key_across_other_undos():
     """Undo of an earlier mesh edit restores the mesh's elements by key:
     the smoothing still replays on them."""
-    from core.edits import build_add_edge
+    from built_core.edits import build_add_edge
     scene = Scene()
     _cylinder(scene.mesh, soft=False)
     hist = History(scene)

@@ -3,9 +3,9 @@
 import numpy as np
 import pytest
 
-from core.history import History
-from core.protocol import commands, queries
-from core.scene import Scene
+from built_core.history import History
+from built_core.protocol import commands, queries
+from built_core.scene import Scene
 from built_core.store_mesh import StoreMesh
 
 pytest.importorskip("built_core")
@@ -178,8 +178,8 @@ def test_metal_mouse_tools_at_raw_lambert(view):
 
 def test_scene_frame_stays_put_and_composes_child_offsets_in_double():
     from built_core import Matrix4 as QMatrix4x4
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from built_core import pack_scene
 
     leaf = Group(Mesh())
@@ -296,8 +296,8 @@ def test_metal_camera_tracks_document_controls_without_quantising_local_pan(view
 
 
 def test_group_face_pick_at_raw_coordinates(view):
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from tests.test_.skp_inference_gaps import refresh
     group = Group(Mesh())
     face = group.mesh.add_face([(650000.+dx, 6860000.+dy, 0.) for dx, dy in
@@ -322,7 +322,7 @@ def test_format_three_reopens_edge_with_original_float32_weld_decision(
     if reader == "eager-bulk":
         monkeypatch.setattr(igz, "_BULK_MIN", 1)
     if reader != "deferred":
-        from core.mesh import DeferredMesh
+        from built_core.mesh import DeferredMesh
         monkeypatch.setattr(DeferredMesh, "defer", staticmethod(lambda *args: False))
     path = tmp_path / "weld-boundary.igz"
     igz.save_scene(scene, path)
@@ -334,8 +334,8 @@ def test_format_three_reopens_edge_with_original_float32_weld_decision(
 
 def test_camera_relative_edit_through_a_far_mirrored_occurrence(monkeypatch):
     from built_core.coordinate_frame import mesh_frame
-    from core.group import Group
-    from core.history import SnapshotMutation
+    from built_core.group import Group
+    from built_core.history import SnapshotMutation
     from built_core import Matrix4, Vec3
 
     scene = Scene()

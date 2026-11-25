@@ -298,7 +298,7 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
                 }
                 Ok(none(py))
             })?;
-            let range = py.import("core.camera")?.getattr("FOV_RANGE")?;
+            let range = py.import("built_core.camera")?.getattr("FOV_RANGE")?;
             let kw = kwargs(py, &[("done", apply.into_bound(py)), ("suffix", s(py, "°"))])?;
             done!(py.import("built_render.chrome_forms")?.getattr("ask_number")?.call(
                 (win, tr(py, "Field of view")?, tr(py, "Field of view in degrees (1–120):")?, cam.getattr("fov_deg")?, range.get_item(0)?, range.get_item(1)?, 1),
@@ -448,7 +448,7 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
         "_link_watcher" => call!("link_watcher", (win,)),
         "_after_links_loaded" => done!(call!("links_loaded", (win,))),
         "_apply_new_document_units" => {
-            let units = py.import("core.units")?;
+            let units = py.import("built_core.units")?;
             done!(units.call_method1("apply_units", (scene(win)?, units.call_method0("new_document_units")?)))
         }
         "_on_new" => done!(call!("new_document_command", (win,))),

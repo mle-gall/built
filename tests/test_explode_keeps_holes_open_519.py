@@ -15,11 +15,11 @@ from __future__ import annotations
 
 from built_core import Vec3 as V
 
-from core.edits import build_add_edges
-from core.history import (EraseSelectionCommand, ExplodeGroupCommand,
+from built_core.edits import build_add_edges
+from built_core.history import (EraseSelectionCommand, ExplodeGroupCommand,
                           MakeGroupCommand)
-from core.scene import Scene
-from core.topology import loop_inside_face
+from built_core.scene import Scene
+from built_core.topology import loop_inside_face
 from tests.test_line_restarts_after_cutting_a_face import _Vp, _click
 from tools.rust_tools import LineTool
 

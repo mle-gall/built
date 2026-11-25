@@ -12,9 +12,9 @@ import gc
 import built_core
 import pytest
 
-import core.doc_model as dm
-from core.group import Group
-from core.scene import Scene
+import built_core.doc_model as dm
+from built_core.group import Group
+from built_core.scene import Scene
 
 
 def doc(handle, name):
@@ -113,7 +113,7 @@ def test_rust_reads_a_link_path_edited_in_place():
 
 
 def test_undo_puts_back_an_edit_made_in_a_step():
-    from core.history import Command, History
+    from built_core.history import Command, History
 
     class Edit(Command):
         doc_undo = True

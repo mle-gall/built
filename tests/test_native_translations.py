@@ -35,7 +35,7 @@ def test_translation_api_in_a_fresh_plugin_interpreter():
     from built_core.paths import app_root
 
     subprocess.run([sys.executable, "-c", """
-from core.i18n import (LANGUAGE_NAMES, RTL_LANGUAGES, HIDDEN_LANGUAGES, SYSTEM,
+from built_core.i18n import (LANGUAGE_NAMES, RTL_LANGUAGES, HIDDEN_LANGUAGES, SYSTEM,
     available_languages, current_language, is_rtl, language_for_locales,
     resolve_language, set_language, source_of, tr)
 from built_core import i18n

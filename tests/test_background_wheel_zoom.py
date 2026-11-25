@@ -4,7 +4,7 @@ import pytest
 from built_core import PixelPoint as QPoint, ScreenPoint as QPointF, Input as Qt
 from built_render import WheelEvent
 from built_core import Vec3 as V
-from core.camera import OrbitCamera
+from built_core.camera import OrbitCamera
 from tests.controller_surface import ControllerSurface as Viewport
 
 

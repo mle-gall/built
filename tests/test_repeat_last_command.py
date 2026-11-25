@@ -93,7 +93,7 @@ def test_the_right_click_entry_is_repeatable_after_its_menu_dies(win):
 
 
 def test_intersect_repeats_with_the_same_mode(win, monkeypatch):
-    import core.intersect as inter
+    import built_core.intersect as inter
     seen = []
     monkeypatch.setattr(inter, "segments_for",
                         lambda scene, mode: seen.append(mode) or [])

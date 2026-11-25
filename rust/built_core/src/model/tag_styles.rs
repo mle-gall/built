@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! A tag's styles (`core.layers`): its colour, its hatch's ground and ink,
+//! A tag's styles (`built_core.layers`): its colour, its hatch's ground and ink,
 //! the paint and look it gives its objects, the line styles a sheet and the
 //! model ink with, a sheet legend's rows, the hatched cut's patterns,
 //! grounds, inks and forms, the line types' own colours, and the tags left
 //! out of the sheets.
 //!
 //! Read from the tags and the scene as the Python read them, in its order;
-//! the hatch catalogue (`core.hatches`) and the line type tables
-//! (`core.layers.LINETYPES`, the dash helpers) are called back.
+//! the hatch catalogue (`built_core.hatches`) and the line type tables
+//! (`built_core.layers.LINETYPES`, the dash helpers) are called back.
 //! `tests/test_tag_styles_parity.py`.
 
 use pyo3::prelude::*;
@@ -44,11 +44,11 @@ fn table<'py>(o: &Obj<'py>, name: &str) -> PyResult<Obj<'py>> {
 }
 
 fn hatches(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("core.hatches")
+    py.import("built_core.hatches")
 }
 
 fn layers_module(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("core.layers")
+    py.import("built_core.layers")
 }
 
 fn custom_name(key: &Obj<'_>) -> Option<String> {

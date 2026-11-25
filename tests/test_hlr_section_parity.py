@@ -110,7 +110,7 @@ def _jsonable(x):
 
 
 def test_the_section_maths_answers_as_the_python_one_did():
-    from core import hlr
+    from built_core import hlr
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     got = [_jsonable(answer(hlr, c)) for c in cases()]
     assert len(got) == len(want)
@@ -121,7 +121,7 @@ def test_the_section_maths_answers_as_the_python_one_did():
 
 if __name__ == "__main__" and "--write" in sys.argv:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from core import hlr as _hlr
+    from built_core import hlr as _hlr
     rows = [_jsonable(answer(_hlr, c)) for c in cases()]
     GOLDEN.write_bytes(gzip.compress(json.dumps(rows, separators=(",", ":")).encode(),
                                      mtime=0))

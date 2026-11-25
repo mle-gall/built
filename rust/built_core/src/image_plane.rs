@@ -130,7 +130,7 @@ fn as_group<'p>(s: &Obj<'p>) -> PyResult<Option<Obj<'p>>> {
     let name = s.getattr("name")?;
     kw.set_item("name", name.is_truthy()?.then_some(name))?;
     let g = py
-        .import("core.group")?
+        .import("built_core.group")?
         .call_method("Group", (mesh,), Some(&kw))?;
     g.setattr("layer", s.getattr("layer")?)?;
     Ok(Some(g))

@@ -14,7 +14,7 @@ import built_core as NATIVE  # noqa: E402
 
 
 def test_a_title_block_starts_from_its_template(tmp_path):
-    from core.composition import Composicion, MarcoVista
+    from built_core.composition import Composicion, MarcoVista
     tpl = {"name": "Estudio", "layout": "banded", "columns": 2, "fill_color": "#dfe6ee", "w_mm": 150.0,
            "h_mm": 40.0, "x_mm": 3.0, "locked": True, "nonsense": 1,
            "campos": [["PROYECTO", "Casa"], ["CLIENTE", 7], ["bad"], ["FECHA", ""], ["ESCALA", ""]]}
@@ -34,12 +34,12 @@ def test_a_title_block_starts_from_its_template(tmp_path):
 
 def test_a_line_type_writes_its_words_along_its_lines():
     """The words of a line type (GAS…) along a vector frame's lines of
-    that layer: one per place core.layers.text_marks finds, in the line's
+    that layer: one per place built_core.layers.text_marks finds, in the line's
     colour, reading upright; none on the cut."""
     import json
     import numpy as np
-    from core.composition import MarcoVista
-    from core.layers import text_marks
+    from built_core.composition import MarcoVista
+    from built_core.layers import text_marks
     frame = MarcoVista(w_mm=100, h_mm=80, style="vectorial")
     segs = np.array([[10.0, 10.0, 90.0, 10.0], [10.0, 20.0, 10.0, 70.0], [20.0, 30.0, 80.0, 30.0]])
     spec = ("GAS", 1.5, 4.0, 12.0)

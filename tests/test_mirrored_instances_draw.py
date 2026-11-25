@@ -27,8 +27,8 @@ AMARILLO = (1.0, 0.85, 0.0)
 
 
 def test_a_mirrored_placement_draws_instanced_with_its_front_colour(native_gpu_host):
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     win = native_gpu_host.window
     vp = win.viewport
     sc = vp.scene
@@ -67,7 +67,7 @@ def test_a_mirrored_placement_draws_instanced_with_its_front_colour(native_gpu_h
 def _prisma(n=12, r=1.0, h=2.0):
     """A smooth n-sided prism: soft vertical edges, a curved side."""
     import math
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     m = Mesh()
     ring = [(r * math.cos(2 * math.pi * i / n), r * math.sin(2 * math.pi * i / n))
             for i in range(n)]
@@ -84,7 +84,7 @@ def test_the_placements_signature_survives_an_orbit_and_follows_an_edit(native_w
     """Orbiting a big model walked every placement on every frame to sign
     them (#158). The signature is kept while the scene version stands and
     re-signed when a command moves a placement (and bumps the version)."""
-    from core.group import Group
+    from built_core.group import Group
     win = native_window
     vp = win.viewport
     g = Group(_prisma(), name="P")

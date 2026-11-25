@@ -18,7 +18,7 @@ use super::paint::{align, Cap, Painter, Pen, Rgba};
 
 const INK: Rgba = Rgba(30, 36, 44, 255);
 const RENDER_DPI: f64 = 300.0;
-/// core.hlr line classes.
+/// built_core.hlr line classes.
 pub const KIND_EDGE: i8 = 0;
 pub const KIND_PROFILE: i8 = 1;
 pub const KIND_CUT: i8 = 2;
@@ -48,13 +48,13 @@ pub struct FrameContent {
     /// the frame's own fill.
     pub fill_ops: Option<Vec<super::paint::Op>>,
     /// The words a line type writes along its lines (worked out with
-    /// `core.layers.text_marks` when the content was read).
+    /// `built_core.layers.text_marks` when the content was read).
     pub word_ops: Option<Vec<super::paint::Op>>,
     /// The model's annotations over the content (sheets::annots).
     pub annots: Vec<super::annots::Annot>,
 }
 
-/// How a layer's lines are inked (`core.layers.line_styles`, its line type
+/// How a layer's lines are inked (`built_core.layers.line_styles`, its line type
 /// resolved to a dash pattern in paper mm).
 #[derive(Default, Clone, Debug)]
 pub struct LayerStyle {

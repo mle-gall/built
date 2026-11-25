@@ -25,10 +25,10 @@ def _fountain_like(scene):
 
 def test_hlr_geometry_matches_the_python_walk(native_host):
     """Viewport.hlr_geometry() (arrays from the caches) carries the same
-    triangles, hard edges and soft edges as core.hlr.collect_geometry, and
+    triangles, hard edges and soft edges as built_core.hlr.collect_geometry, and
     hlr_view draws the same segments from either."""
-    from core.camera import OrbitCamera
-    from core.hlr import collect_geometry, hlr_view
+    from built_core.camera import OrbitCamera
+    from built_core.hlr import collect_geometry, hlr_view
 
     win = native_host.window
     vp = win.viewport

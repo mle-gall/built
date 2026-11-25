@@ -18,7 +18,7 @@ from __future__ import annotations
 from built_core import ScreenPoint, Input
 from built_core import Vec3 as QVector3D
 
-from core.mesh import Mesh
+from built_core.mesh import Mesh
 from tools.base import PLANE_LOCK_KEYS, PlaneLock, ToolContext
 from tools.rotated_rectangle import RotatedRectangleTool
 
@@ -148,7 +148,7 @@ def test_an_arrow_lock_beats_the_face_under_the_cursor():
 # Capturar el plano en el primer clic —lo que ya se arregló— no da eso.
 
 def _tool_con_base(scene, a=V(0, 0), b=V(9, 0)):
-    from core.history import History
+    from built_core.history import History
     vp = _VP(scene=scene)
     vp.history = History(scene)
     tool = RotatedRectangleTool()
@@ -158,7 +158,7 @@ def _tool_con_base(scene, a=V(0, 0), b=V(9, 0)):
 
 
 def test_escribir_ancho_y_angulo_levanta_el_rectangulo():
-    from core.scene import Scene
+    from built_core.scene import Scene
     scene = Scene()
     tool, vp = _tool_con_base(scene)
     tool.hover_point = V(9, 1)
@@ -171,7 +171,7 @@ def test_escribir_ancho_y_angulo_levanta_el_rectangulo():
 
 
 def test_un_solo_numero_mantiene_el_angulo_actual():
-    from core.scene import Scene
+    from built_core.scene import Scene
     scene = Scene()
     tool, vp = _tool_con_base(scene)
     tool.hover_point = V(9, 1)
@@ -181,7 +181,7 @@ def test_un_solo_numero_mantiene_el_angulo_actual():
 
 
 def test_el_cursor_fuera_del_plano_da_el_angulo_solo():
-    from core.scene import Scene
+    from built_core.scene import Scene
     tool, _vp = _tool_con_base(Scene())
     ancho, angulo = tool._width_and_angle(V(9, 0, 2.5))
     assert abs(ancho - 2.5) < 1e-6
@@ -192,7 +192,7 @@ def test_el_cursor_fuera_del_plano_da_el_angulo_solo():
 
 
 def test_el_angulo_se_pega_a_plano_y_perpendicular():
-    from core.scene import Scene
+    from built_core.scene import Scene
     tool, _vp = _tool_con_base(Scene())
     import math
     # 88.5° está dentro del imán de 3°: debe caer en 90 clavado.
@@ -208,8 +208,8 @@ def test_el_angulo_se_pega_a_plano_y_perpendicular():
 def test_ancho_cero_avisa_en_vez_de_reventar():
     """Un clic sobre la propia arista base fundía las esquinas y el plan
     moría con «degenerate edge», revertido y sin explicación."""
-    from core.history import History
-    from core.scene import Scene
+    from built_core.history import History
+    from built_core.scene import Scene
     scene = Scene()
     vp = _VP(scene=scene)
     vp.history = History(scene)
@@ -223,8 +223,8 @@ def test_ancho_cero_avisa_en_vez_de_reventar():
 
 
 def test_el_rectangulo_tumbado_no_cambia():
-    from core.history import History
-    from core.scene import Scene
+    from built_core.history import History
+    from built_core.scene import Scene
     scene = Scene()
     vp = _VP(scene=scene)
     vp.history = History(scene)
@@ -246,7 +246,7 @@ class _VPLock(_VP):
 
 
 def _con_base(scene, lock=None, a=V(7.2, 21.4), b=V(16.2, 21.4)):
-    from core.history import History
+    from built_core.history import History
     vp = _VPLock(scene=scene, axis_lock=lock)
     vp.history = History(scene)
     tool = RotatedRectangleTool()
@@ -259,7 +259,7 @@ def test_el_snap_no_puede_tumbar_un_rectangulo_con_el_eje_bloqueado():
     """El caso reportado, con sus coordenadas: la vista previa decía 90° y
     el clic llegaba pegado a una arista del suelo, a 0,60 m de la base. Salía
     un rectángulo tumbado en vez del vertical que se estaba viendo."""
-    from core.scene import Scene
+    from built_core.scene import Scene
     scene = Scene()
     tool, vp = _con_base(scene, lock="z")
     tool.on_hover(_ctx(vp, V(16.2, 21.4, 1.05)))       # el ratón, arriba
@@ -273,7 +273,7 @@ def test_el_snap_no_puede_tumbar_un_rectangulo_con_el_eje_bloqueado():
 def test_sin_bloqueo_el_clic_sigue_mandando():
     """Sin eje bloqueado no hay nada que respetar: el punto del clic decide,
     aunque se aparte de lo que mostraba la vista previa."""
-    from core.scene import Scene
+    from built_core.scene import Scene
     scene = Scene()
     tool, vp = _con_base(scene)
     tool.on_hover(_ctx(vp, V(16.2, 21.4, 1.05)))
@@ -283,7 +283,7 @@ def test_sin_bloqueo_el_clic_sigue_mandando():
 
 
 def test_el_eje_bloqueado_fija_la_direccion_del_ancho():
-    from core.scene import Scene
+    from built_core.scene import Scene
     tool, vp = _con_base(Scene(), lock="z")
     d = tool.locked_dir(vp)
     assert d is not None
@@ -298,7 +298,7 @@ def test_escribir_solo_el_ancho_respeta_el_angulo_que_se_esta_viendo():
     arriba mostrando 90°, y el ancho escrito en el cuadro. Como `on_value` no
     pasa por `on_click`, el ángulo se quedaba en 0 y salía tumbado — con la
     vista previa prometiendo lo contrario."""
-    from core.scene import Scene
+    from built_core.scene import Scene
     scene = Scene()
     tool, vp = _con_base(scene, lock="z", a=V(7.2, 21.4), b=V(16.2, 21.404))
     tool.on_hover(_ctx(vp, V(7.2, 21.4, 2.017)))
@@ -311,7 +311,7 @@ def test_escribir_solo_el_ancho_respeta_el_angulo_que_se_esta_viendo():
 def test_el_hover_no_pisa_el_angulo_con_ancho_cero():
     """Pasar el ratón por la propia arista base no debe borrar el ángulo:
     ahí no hay dirección que medir."""
-    from core.scene import Scene
+    from built_core.scene import Scene
     tool, vp = _con_base(Scene(), lock="z")
     tool.on_hover(_ctx(vp, V(16.2, 21.4, 1.5)))
     assert abs(tool.angle - 90.0) < 1e-6
@@ -327,7 +327,7 @@ def test_escribir_el_ancho_lo_pone_del_lado_del_cursor():
     180° es el lado opuesto a `_perp`. Multiplicar encima por un signo sacado
     de `_width_for` lo devolvía al lado contrario — dos negaciones.
     """
-    from core.scene import Scene
+    from built_core.scene import Scene
     for lado, esperado in ((-3.0, [-2.0, 0.0]), (3.0, [0.0, 2.0])):
         scene = Scene()
         tool, vp = _tool_con_base(scene)
@@ -340,7 +340,7 @@ def test_escribir_el_ancho_lo_pone_del_lado_del_cursor():
 def test_escribir_el_ancho_hacia_abajo_no_sube_el_rectangulo():
     """Lo mismo de pie: con el cursor por debajo de la arista el ángulo vale
     -90°, y el rectángulo tiene que bajar."""
-    from core.scene import Scene
+    from built_core.scene import Scene
     scene = Scene()
     tool, vp = _tool_con_base(scene)
     tool.on_hover(_ctx(vp, V(4.5, 0.0, -2.5)))

@@ -12,9 +12,9 @@ from __future__ import annotations
 import pytest
 from built_core import Vec3 as V
 
-from core.dimension import Dimension
-from core.history import AddDimensionCommand, History
-from core.scene import Scene
+from built_core.dimension import Dimension
+from built_core.history import AddDimensionCommand, History
+from built_core.scene import Scene
 from tests import test_pushpull_ux as T
 
 

@@ -15,9 +15,9 @@ import random
 import numpy as np
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.camera import OrbitCamera
-from core.composition import MarcoVista, apply_frame_camera
-from core.scene import Scene
+from built_core.camera import OrbitCamera
+from built_core.composition import MarcoVista, apply_frame_camera
+from built_core.scene import Scene
 from built_core.section import SectionPlane
 
 VIEWS = ("top", "front", "right", "iso")
@@ -126,7 +126,7 @@ def soft_camera(view: str) -> OrbitCamera:
 
 def cases():
     """``(name, run)`` for every fixture; ``run(**kw)`` → HlrDrawing."""
-    from core.hlr import hlr_drawing
+    from built_core.hlr import hlr_drawing
     out = []
     for seed in range(12):
         for view in VIEWS:

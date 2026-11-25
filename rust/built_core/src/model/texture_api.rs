@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! `core.texture`, served from here (`core/texture.py` is gone): image
+//! `built_core.texture`, served from here (`core/texture.py` is gone): image
 //! textures mapped the .skp way for interchange compatibility.
 //!
 //! A textured face carries `attrs["texture"] = {"path", "sw", "sh"}`, a real
@@ -101,9 +101,9 @@ fn files_under(dir: &std::path::Path, out: &mut Vec<u64>) {
 
 /// The cache root through the module, as the Python read its global:
 /// scripts and tests point it elsewhere by replacing
-/// `core.texture.texture_cache_root`.
+/// `built_core.texture.texture_cache_root`.
 fn root_path(py: Python<'_>) -> PyResult<PathBuf> {
-    let root = module(py, "core.texture")?.call_method0("texture_cache_root")?;
+    let root = module(py, "built_core.texture")?.call_method0("texture_cache_root")?;
     Ok(PathBuf::from(root.str()?.to_string()))
 }
 
@@ -350,7 +350,7 @@ pub fn tinted_texture<'py>(tex: &Obj<'py>, color: &Obj<'py>, ctype: i64) -> PyRe
     };
     let comps: Vec<f64> = PyTuple::new(py, color.try_iter()?.take(3).collect::<PyResult<Vec<_>>>()?)?.extract()?;
     let rgb255: Vec<i64> = comps.iter().map(|c| (c.clamp(0.0, 1.0) * 255.0).round_ties_even() as i64).collect();
-    let me = module(py, "core.texture")?;
+    let me = module(py, "built_core.texture")?;
     let out = me.call_method1("colorize_image", (&data, PyTuple::new(py, &rgb255)?, ctype))?;
     if out.is(&data) {
         return copy(tex); // colorize failed: leave it alone
@@ -400,13 +400,13 @@ fn texture_as_dict<'py>(me: &Obj<'py>) -> PyResult<Bound<'py, PyDict>> {
 fn texture_from_dict<'py>(d: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = d.py();
     let float = module(py, "builtins")?.getattr("float")?;
-    let cls = module(py, "core.texture")?.getattr("Texture")?;
+    let cls = module(py, "built_core.texture")?.getattr("Texture")?;
     let sw = float.call1((d.call_method1("get", ("sw", 1.0))?,))?;
     let sh = float.call1((d.call_method1("get", ("sh", 1.0))?,))?;
     cls.call1((d.get_item("path")?, sw, sh))
 }
 
-/// Fill the module `core.texture`.
+/// Fill the module `built_core.texture`.
 pub(crate) fn install(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
     m.add("__doc__", "Image textures, mapped the .skp way for interchange compatibility (rust/built_core/src/model/texture_api.rs).")?;
@@ -448,7 +448,7 @@ pub(crate) fn install(m: &Bound<'_, PyModule>) -> PyResult<()> {
     ns.set_item("from_dict", builtins.getattr("staticmethod")?.call1((wrap_pyfunction!(texture_from_dict, m)?,))?)?;
     let kw = PyDict::new(py);
     kw.set_item("namespace", ns)?;
-    kw.set_item("module", "core.texture")?;
+    kw.set_item("module", "built_core.texture")?;
     let cls = dc.call_method("make_dataclass", ("Texture", fields), Some(&kw))?;
     m.add("Texture", cls)?;
     Ok(())

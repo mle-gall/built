@@ -73,7 +73,7 @@ pub(crate) fn resolve_mesh<'py>(scene: &Obj<'py>, r#ref: Option<&Obj<'py>>) -> P
         }
         let placements = scene
             .py()
-            .import("core.group")?
+            .import("built_core.group")?
             .getattr("iter_placements")?;
         for root in scene.getattr("groups")?.try_iter()? {
             for pair in placements.call1((root?,))?.try_iter()? {

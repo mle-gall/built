@@ -32,10 +32,10 @@ pub(crate) fn _partition_faces<'py>(
         let (a, b) = (seg.get_item(0)?, seg.get_item(1)?);
         let index = scan.call1((mesh,))?;
         let plan = if index.is_none() {
-            py.import("core.topology")?
+            py.import("built_core.topology")?
                 .call_method1("plan_edge_split", (mesh.getattr("edges")?, a, b))?
         } else {
-            py.import("core.edits")?
+            py.import("built_core.edits")?
                 .call_method1("_ScanEdges", (index,))?
                 .call_method1("split_plan", (a, b))?
         };

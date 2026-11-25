@@ -7,10 +7,10 @@ import pytest
 from built_core import ScreenPoint as QPointF
 from built_core import Input as Qt
 from built_core import Vec3 as QVector3D
-from core.scene import Scene
-from core.group import Group
-from core.layers import Layer
-from core.mesh import Mesh
+from built_core.scene import Scene
+from built_core.group import Group
+from built_core.layers import Layer
+from built_core.mesh import Mesh
 from built_core import pack_scene, VERTEX
 from views.wgpu_parity import face_ranges, has_transparency, hidden_geometry, preview_mesh
 from views.wgpu_style import style_payload
@@ -115,7 +115,7 @@ def test_soft_pairs_and_opacity_survive_pack():
 
 
 def test_tape_and_eraser_reference_pickers(view):
-    from core.guide import Guide
+    from built_core.guide import Guide
     from built_core import resident_prepare as prepare
     f = face(view)
     view.scene.guides.append(Guide(QVector3D(0,1,0), QVector3D(1,0,0)))
@@ -185,7 +185,7 @@ def test_matching_back_header_renders_both_sides(native):
 
 
 def test_eraser_guide_click_and_undo(view):
-    from core.guide import Guide
+    from built_core.guide import Guide
     from tools.eraser import EraserTool
     face(view)
     guide=Guide(QVector3D(0,1,0),QVector3D(1,0,0))

@@ -12,7 +12,7 @@ use pyo3::{
     types::{PyDict, PyTuple},
 };
 
-#[pyclass(dict, module = "core.snap_frame")]
+#[pyclass(dict, module = "built_core.snap_frame")]
 pub(crate) struct SnapFrame;
 type F<'py> = Bound<'py, SnapFrame>;
 type Obj<'py> = Bound<'py, PyAny>;
@@ -58,7 +58,7 @@ impl SnapFrame {
         let py = options.py();
         let f = Bound::new(py, Self)?;
         f.getattr("__dict__")?.call_method1("update", (options,))?;
-        let api = py.import("core.snap")?;
+        let api = py.import("built_core.snap")?;
         f.setattr("_api", &api)?;
         f.setattr("query", query)?;
         let threshold = f.getattr("threshold_px")?;
@@ -141,7 +141,7 @@ impl SnapFrame {
         kw.set_item("quadrants", inputs.get_item(1)?)?;
         kw.set_item("hidden_many", slf.getattr("are_occluded")?)?;
         slf.py()
-            .import("core.snap_query")?
+            .import("built_core.snap_query")?
             .getattr("point_result")?
             .call(
                 (
@@ -449,7 +449,7 @@ impl SnapFrame {
     }
 }
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    let sub = PyModule::new(m.py(), "core.snap_frame")?;
+    let sub = PyModule::new(m.py(), "built_core.snap_frame")?;
     sub.add_class::<SnapFrame>()?;
     m.add_submodule(&sub)
 }

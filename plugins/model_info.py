@@ -26,7 +26,7 @@ from pathlib import Path
 from core import bim
 from built_core.i18n import tr
 from tools.base import Tool
-from core.units import fmt_area, fmt_volume
+from built_core.units import fmt_area, fmt_volume
 
 
 # ---------------------------------------------------------------------------
@@ -55,7 +55,7 @@ def _collect_stats(scene) -> dict:
     # Instances share their prototype mesh; counting it once per instance is
     # deliberate — these are render/entity counts, the way modellers usually
     # report them, not a dedup of prototypes.
-    from core.group import iter_placements
+    from built_core.group import iter_placements
     placed = [(pg, m) for g in groups for pg, m in iter_placements(g)]
 
     group_verts = sum(len(g.mesh.vertices) for g, _m in placed)
@@ -101,7 +101,7 @@ def _collect_stats(scene) -> dict:
                 continue
             entry = colors.setdefault(
                 tuple(col), {"rgb": tuple(col), "faces": 0, "area": 0.0})
-        # Registry identity (attrs["mat"], core.materials): the entry shows
+        # Registry identity (attrs["mat"], built_core.materials): the entry shows
         # ITS name — "Concreto visto: 84 m²", a finishes takeoff line —
         # instead of an anonymous rgb() or a texture-file stem.
         if f.attrs.get("mat") and "mat" not in entry:
@@ -219,7 +219,7 @@ class ModelInfoPanel:
         self._stats = None
 
     def sections(self):
-        from core.plugin_panels import field, item, section
+        from built_core.plugin_panels import field, item, section
 
         scene = self.app.scene
         if self._revision != scene.version:
@@ -302,7 +302,7 @@ class ModelInfoTool(Tool):
     uses_snap = False
 
     def on_activate(self, viewport) -> None:
-        from core.plugin_panels import open_panel
+        from built_core.plugin_panels import open_panel
         open_panel(viewport.window(), "model_info")
 
     def on_deactivate(self, viewport) -> None:

@@ -16,7 +16,7 @@ import pytest
 from tests.raster_samples import pixels
 from built_core import Vec3 as QVector3D
 
-from core.camera import OrbitCamera
+from built_core.camera import OrbitCamera
 
 
 V = QVector3D

@@ -9,11 +9,11 @@ import random
 import pytest
 from tests.test_project_drawing_filters import Project
 
-from core import layers as L
-from core.group import Group
-from core.layers import DEFAULT_LAYER, Layer, layer_of
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core import layers as L
+from built_core.group import Group
+from built_core.layers import DEFAULT_LAYER, Layer, layer_of
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 
 def drawing():

@@ -161,7 +161,7 @@ fn faces<'p>(mesh: &Obj<'p>, input: &Obj<'p>, soft: &Obj<'p>, tick: &Obj<'p>) ->
                 hh.append(ring(h)?)?;
             }
             let Ok(kept) = py
-                .import("core.topology")?
+                .import("built_core.topology")?
                 .call_method1("_maximal_holes", (hh,))
             else {
                 continue;

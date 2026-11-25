@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Shared-vertex, non-manifold connectivity mesh (core.mesh).
+"""Shared-vertex, non-manifold connectivity mesh (built_core.mesh).
 
 Phase M0 of the topology migration (docs/halfedge-migration-plan.md): the new
 model is built and tested in parallel; the running app is not wired to it yet.
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.mesh import Edge, Face, Mesh, Vertex
+from built_core.mesh import Edge, Face, Mesh, Vertex
 
 
 def V(x: float, y: float, z: float = 0.0) -> QVector3D:
@@ -168,7 +168,7 @@ def test_mesh_face_exposes_positions_like_legacy():
         [[V(0.5, 0.5), V(1.5, 0.5), V(1.5, 1.5), V(0.5, 1.5)]],
     )
     # .vertices / .holes read as plain positions (not Vertex objects), matching
-    # the legacy core.geometry.Face interface the renderer/save consume.
+    # the legacy built_core.geometry.Face interface the renderer/save consume.
     assert all(isinstance(p, QVector3D) for p in f.vertices)
     assert all(isinstance(p, QVector3D) for loop in f.holes for p in loop)
     # connectivity is still vertices underneath

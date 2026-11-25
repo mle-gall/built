@@ -14,8 +14,8 @@ from __future__ import annotations
 from built_core import ScreenPoint, Input
 from built_core import Vec3 as QVector3D
 
-from core.mesh import Edge, Face
-from core.scene import Scene
+from built_core.mesh import Edge, Face
+from built_core.scene import Scene
 from tools.base import ToolContext
 from tools.rust_tools import SelectTool
 from built_core import select_mode as _select_mode

@@ -17,7 +17,7 @@ impl DocumentSettings {
         let payload = PyDict::new(py);
         payload.set_item("units", values)?;
         let units = py
-            .import("core.units")?
+            .import("built_core.units")?
             .call_method1("model_units_of", (payload,))?;
         let style = PyDict::new(py);
         style.set_item("units", units.get_item("length")?)?;
@@ -58,7 +58,7 @@ impl DocumentSettings {
             ),
             "units" => value
                 .py()
-                .import("core.units")?
+                .import("built_core.units")?
                 .getattr("UNIT_CHOICES")?
                 .contains(value)?,
             "show_unit" => value.extract::<bool>().is_ok(),

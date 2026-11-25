@@ -4,7 +4,7 @@
 stays in the plane you're looking at instead of falling to the ground."""
 from built_core import Vec3 as QVector3D
 
-from core.snap import first_point_work_plane
+from built_core.snap import first_point_work_plane
 
 C = QVector3D(3.0, 4.0, 5.0)          # a model centre off every axis
 
@@ -42,7 +42,7 @@ class TestFirstPointWorkPlane:
         assert first_point_work_plane(QVector3D(0, 0, 0), C) is None
 
 
-from core.snap import project_to_view_plane
+from built_core.snap import project_to_view_plane
 
 
 class TestProjectToViewPlane:

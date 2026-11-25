@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! The walks over a group's placements (`core.group.iter_placements` and
+//! The walks over a group's placements (`built_core.group.iter_placements` and
 //! `iter_painted_placements`) read from the Rust document: each placement's
 //! children and matrix come from its node, not from Python attributes.
 //!

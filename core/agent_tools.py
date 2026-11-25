@@ -84,7 +84,7 @@ BUILTIN_TOOLS = [
 ]
 
 
-from core.doc_model import JSON_DICTS as _JSON_DICTS, JSON_LISTS as _JSON_LISTS
+from built_core.doc_model import JSON_DICTS as _JSON_DICTS, JSON_LISTS as _JSON_LISTS
 
 
 def json_value(value):

@@ -16,7 +16,7 @@ from .entities import Builder
 from core.ifc_tables_data import SCHEMA_DATA
 from .relationships import Appearance
 from .geometry import array_body, mapped_body
-from core.geometry_arrays import (world_arrays, merged, faces_arrays,
+from built_core.geometry_arrays import (world_arrays, merged, faces_arrays,
                                   quantities as array_quantities, measurements,
                                   face_attributes, recorded_arrays)
 from .step import _s, _f
@@ -65,7 +65,7 @@ def _save_ifc(scene, path, project_name, profile, stream):
         raise ValueError('Unsupported schema: ' + schema)
     # Content placed from a linked file is that file's deliverable: the host
     # leaves it out unless the profile says ``include_links``.
-    from core.links import is_linked
+    from built_core.links import is_linked
     include_links = bool(config.get('include_links', False))
     objects = collect_objects(scene)
     linked_skipped = 0
@@ -236,7 +236,7 @@ def _save_ifc(scene, path, project_name, profile, stream):
             arrays = merged(world_arrays(group, bases[id(group)], excluded))
             # Appearance needs attributes only, never geometric face objects.
             from core.bim import _untagged_part
-            from core.group import iter_placements
+            from built_core.group import iter_placements
             attributes = [attrs for placed, _ in iter_placements(_untagged_part(group, excluded))
                           for attrs in face_attributes(placed.mesh)]
             faces = []

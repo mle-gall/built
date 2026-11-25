@@ -2,11 +2,11 @@
 import pytest
 from built_core import Matrix4, MeshStore, Vec3
 from built_core import store_mesh
-from core.history import History, MoveVerticesCommand, SnapshotMutation
+from built_core.history import History, MoveVerticesCommand, SnapshotMutation
 from built_core import group_remap_uvws as _remap_uvws
-from core.mesh import Mesh
-from core.scene import Scene
-from core.topology import _key
+from built_core.mesh import Mesh
+from built_core.scene import Scene
+from built_core.topology import _key
 from tests.test_store_mesh import fingerprint
 
 

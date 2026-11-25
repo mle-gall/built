@@ -321,7 +321,7 @@ impl CopyWire {
     fn add_group(&mut self, group: &Bound<'_, PyAny>) -> PyResult<()> {
         let placements = group
             .py()
-            .import("core.group")?
+            .import("built_core.group")?
             .call_method1("iter_placements", (group,))?;
         for p in placements.try_iter()? {
             let p = p?;
@@ -409,7 +409,7 @@ pub fn placement_template(
         .transpose()?
         .unwrap_or_else(|| bounds.anchor(aligned));
     let py = group.py();
-    let lazy = py.import("core.mesh")?.getattr("DeferredMesh")?;
+    let lazy = py.import("built_core.mesh")?.getattr("DeferredMesh")?;
     let is_tree = group
         .getattr_opt("children")?
         .map(|v| v.is_truthy())
@@ -420,7 +420,7 @@ pub fn placement_template(
         let mut total = 0;
         let mut draw = true;
         for place in py
-            .import("core.group")?
+            .import("built_core.group")?
             .call_method1("iter_placements", (group,))?
             .try_iter()?
         {

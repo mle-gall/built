@@ -110,7 +110,7 @@ pub fn cursor_plane_color(normal: &Bound<'_, PyAny>) -> PyResult<Option<(f64, f6
     for (name, axis) in [("x", axes.x), ("y", axes.y), ("z", axes.z)] {
         if n.dot(axis).abs() > 0.99 {
             let rgb = py
-                .import("core.snap")?
+                .import("built_core.snap")?
                 .getattr("AXIS_COLORS")?
                 .get_item(name)?;
             return Ok(Some((

@@ -10,10 +10,10 @@ import pytest
 from built_render import SurveyRaster
 from built_core import Vec3 as V
 
-from core.group import Group
-from core.history import RestampMaterialCommand
-from core.materials import Material, register
-from core.scene import Scene
+from built_core.group import Group
+from built_core.history import RestampMaterialCommand
+from built_core.materials import Material, register
+from built_core.scene import Scene
 from formats import igz
 from formats.glb import load_glb, parse_container
 from formats.gltf import save_glb
@@ -134,7 +134,7 @@ def test_restamp_keeps_uv_and_legacy_corner_bytes(tmp_path):
 def test_cross_document_paste_registers_recipe_and_undoes_collision(tmp_path):
     from formats.clip_payload import encode, decode
     from tests.test_paste import _VP, _paste_at
-    from core.history import History
+    from built_core.history import History
     from tests.controller_surface import ControllerSurface as Viewport
     first = Scene()
     mat = Material("Metal", pbr={"normal_map": {"path": image(tmp_path / "n.png", (128, 128, 255))}})
@@ -157,7 +157,7 @@ def test_cross_document_paste_registers_recipe_and_undoes_collision(tmp_path):
 
 
 def test_linked_recipe_on_nested_group_with_name_collision(tmp_path):
-    from core import links
+    from built_core import links
     source = Scene()
     mat = Material("Steel", pbr={"metallic": .9})
     source.materials[mat.name] = mat

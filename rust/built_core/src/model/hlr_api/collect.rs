@@ -25,7 +25,7 @@ fn groups<'p>(scene: &Obj<'p>) -> PyResult<Vec<Obj<'p>>> {
 #[pyfunction(signature=(scene,layers=false))]
 pub(super) fn collect_geometry<'p>(scene: &Obj<'p>, layers: bool) -> PyResult<Bound<'p, PyTuple>> {
     let py = scene.py();
-    let l = py.import("core.layers")?;
+    let l = py.import("built_core.layers")?;
     let layer = l.getattr("layer_of")?;
     let default = l.getattr("DEFAULT_LAYER")?;
     let [tris, hard, soft, hard_tags, soft_tags, tri_tags] =
@@ -122,7 +122,7 @@ pub(super) fn collect_geometry<'p>(scene: &Obj<'p>, layers: bool) -> PyResult<Bo
 pub(super) fn collect_circles<'p>(scene: &Obj<'p>) -> PyResult<Bound<'p, PyList>> {
     let py = scene.py();
     let out = PyList::empty(py);
-    let curves = py.import("core.snap")?.getattr("curve_centers_of_face")?;
+    let curves = py.import("built_core.snap")?.getattr("curve_centers_of_face")?;
     let mut seen = HashSet::new();
     let mut eat = |mesh: Obj<'p>, xf: Obj<'p>, loose: bool| -> PyResult<()> {
         for face in mesh.getattr("faces")?.try_iter()? {

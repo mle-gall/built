@@ -155,7 +155,7 @@ impl<'py> Catalogue<'py> {
     }
     fn extension_kind(&self, group: &Obj<'py>) -> PyResult<(String, String)> {
         let Some(providers) = &self.providers else { return Ok(Default::default()) };
-        let description = group.py().import("core.outliner")?.call_method1("custom_kind", (group, providers))?;
+        let description = group.py().import("built_core.outliner")?.call_method1("custom_kind", (group, providers))?;
         if description.is_none() { return Ok(Default::default()); }
         let kind = description.get_item("type")?.extract()?;
         let properties: Vec<(String, String)> = description.get_item("props")?.extract()?;
@@ -175,7 +175,7 @@ impl<'py> Catalogue<'py> {
         let walk = self
             .scene
             .py()
-            .import("core.outliner")?
+            .import("built_core.outliner")?
             .call_method1("walk", (self.scene.getattr("groups")?,))?;
         let mut path: Vec<(usize, bool, bool)> = Vec::new();
         let query = self.filter.to_lowercase();
@@ -442,7 +442,7 @@ fn controls<'py>(
     drawing: bool,
 ) -> PyResult<(i64, i64, Vec<String>)> {
     let py = c.scene.py();
-    let layers = py.import("core.layers")?;
+    let layers = py.import("built_core.layers")?;
     let kind: String = node.get_item("kind")?.extract()?;
     if kind == "link" {
         let folders = node.get_item("folders")?;

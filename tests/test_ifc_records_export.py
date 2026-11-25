@@ -2,8 +2,8 @@
 from pathlib import Path
 import pytest
 from built_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
-from core.scene import Scene
-from core.group import Group
+from built_core.scene import Scene
+from built_core.group import Group
 from formats.ifc import save_ifc
 from formats.ifc.entities import Builder
 from formats.ifc.step import _s

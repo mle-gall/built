@@ -105,7 +105,7 @@ pub(super) fn install(m: &Module<'_>, core: &Module<'_>) -> PyResult<()> {
             .import("builtins")?
             .call_method1("type", (name, PyTuple::empty(py), ns))?;
         let cls = decorate.call1((cls,))?;
-        cls.setattr("__module__", "core.geometry")?;
+        cls.setattr("__module__", "built_core.geometry")?;
         m.add(name, cls)?;
     }
     m.add("QVector3D", core.getattr("Vec3")?)?;

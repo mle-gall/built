@@ -26,7 +26,7 @@ pub fn snapshot(
 ) -> PyResult<(Vec<u8>, Vec<Tag>)> {
     let py = scene.py();
     let matrix = py
-        .import("core.outliner")?
+        .import("built_core.outliner")?
         .getattr("world_matrix")?
         .call1((scene.getattr("groups")?, mount))?;
     let world = if matrix.is_none() {

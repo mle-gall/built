@@ -125,7 +125,7 @@ def test_shift_holds_the_width_angle():
 def test_an_angle_is_not_a_length_in_a_millimetre_model(monkeypatch):
     """«3;90» in a millimetre document: the parser reads bare fields as
     millimetres, so the angle reached the tool as 0.09."""
-    import core.units as units
+    import built_core.units as units
     monkeypatch.setattr(units, "bare_number_scale", lambda: 0.001)
     vp = _VP()
     tool = _started(vp)
@@ -147,7 +147,7 @@ class _EyeVP(_VP):
 
 
 def _ctx_snap(vp, world, kind):
-    from core.snap import SnapResult
+    from built_core.snap import SnapResult
     return ToolContext(viewport=vp, world=world, screen=ScreenPoint(0, 0),
                        modifiers=Input.NoModifier, snap=SnapResult(world, kind))
 

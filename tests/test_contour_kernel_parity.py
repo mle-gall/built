@@ -7,9 +7,9 @@ import random
 
 import pytest
 from built_core import Matrix4, Vec3
-from core import mesh as mesh_api
-from core.mesh import Mesh
-from core.snap import curve_centers_of_face
+from built_core import mesh as mesh_api
+from built_core.mesh import Mesh
+from built_core.snap import curve_centers_of_face
 
 
 def contour_results(monkeypatch):

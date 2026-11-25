@@ -10,7 +10,7 @@
 //! saved in the preferences), reads the model's materials and components
 //! and who uses them, runs the verbs through the protocol, and feeds the
 //! Paint strip and the material inspector. Model edits go through
-//! `core.protocol.commands`.
+//! `built_core.protocol.commands`.
 use crate::settings_rows::{func, none, obj, opt, s, Res};
 use pyo3::{
     prelude::*,
@@ -234,7 +234,7 @@ fn linked_material_uses<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
         return Ok(hit);
     }
     let read = || -> PyResult<Bound<'py, PyDict>> {
-        let links = py.import("core.links")?;
+        let links = py.import("built_core.links")?;
         let purge = py.import("built_core")?;
         let out = PyDict::new(py);
         for path in links.call_method1("sources", (scene,))?.try_iter()? {
@@ -321,7 +321,7 @@ fn unnamed_colours_cached<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
     if let Some(hit) = hit {
         return Ok(hit);
     }
-    let found = py.import("core.material_commands")?.call_method1("unnamed_colours", (scene,))?;
+    let found = py.import("built_core.material_commands")?.call_method1("unnamed_colours", (scene,))?;
     scene.setattr("_lib_unnamed", (sig, &found))?;
     Ok(found)
 }
@@ -932,7 +932,7 @@ impl MaterialsProvider {
 pub struct ComponentsProvider;
 
 fn is_linked(g: &Bound<'_, PyAny>) -> bool {
-    g.py().import("core.links").and_then(|l| l.call_method1("is_linked", (g,))).and_then(|v| v.is_truthy()).unwrap_or(false)
+    g.py().import("built_core.links").and_then(|l| l.call_method1("is_linked", (g,))).and_then(|v| v.is_truthy()).unwrap_or(false)
 }
 
 /// Only mesh identities are needed to decide whether a row can replace any selected copy.
@@ -1110,7 +1110,7 @@ impl ComponentsProvider {
                 render(py)?.call_method1("select_component_instances", (&win, &groups))?;
             }
             "replace" => {
-                let group_cls = py.import("core.group")?.getattr("Group")?;
+                let group_cls = py.import("built_core.group")?.getattr("Group")?;
                 let mesh = definition.getattr("mesh")?;
                 let mut swap = false;
                 for g in scene.getattr("selection")?.try_iter()? {

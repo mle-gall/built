@@ -8,13 +8,13 @@ import math
 
 from built_core import Vec3 as QVector3D
 
-from core import intersect as X
-from core.edits import build_add_edges
-from core.group import Group
-from core.history import History
-from core.mesh import Mesh
-from core.scene import Scene
-from core.solids import solid_report
+from built_core import intersect as X
+from built_core.edits import build_add_edges
+from built_core.group import Group
+from built_core.history import History
+from built_core.mesh import Mesh
+from built_core.scene import Scene
+from built_core.solids import solid_report
 
 RED, BLUE = [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]
 

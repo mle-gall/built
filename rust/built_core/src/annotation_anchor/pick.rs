@@ -24,7 +24,7 @@ fn edge_by_endpoints<'p>(
     }
     for row in scene
         .py()
-        .import("core.dimension")?
+        .import("built_core.dimension")?
         .call_method1("_anchor_candidates", (scene, start, 1e-4))?
         .try_iter()?
     {
@@ -181,7 +181,7 @@ fn picked_attachment(ctx: &Obj) -> PyResult<Option<Attachment>> {
             }
             let h = ctx
                 .py()
-                .import("core.dimension")?
+                .import("built_core.dimension")?
                 .call_method1("resolve_vertex_anchor", (&scene, &world))?;
             if !h.is_none() {
                 let chain = h.getattr("chain")?;

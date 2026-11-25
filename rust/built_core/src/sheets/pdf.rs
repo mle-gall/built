@@ -639,8 +639,8 @@ pub fn sheet_pdf(py: Python<'_>, path: std::path::PathBuf, comps: Vec<Bound<'_, 
 pub fn pages_of(py: Python<'_>, comps: &[Bound<'_, PyAny>], contents: Option<&Bound<'_, PyDict>>,
                 profiles: Option<&Bound<'_, PyAny>>, scene: Option<&Bound<'_, PyAny>>,
                 doc_path: Option<&Bound<'_, PyAny>>) -> PyResult<Vec<Page>> {
-    py.import("core.doc_model")?.call_method0("flush")?;
-    let composition = py.import("core.composition")?;
+    py.import("built_core.doc_model")?.call_method0("flush")?;
+    let composition = py.import("built_core.composition")?;
     // The field context is set per sheet and put back after: it is the
     // caller's (the page's sheet), never left on the last sheet written.
     let ctx = composition.getattr("_FIELD_CTX")?;

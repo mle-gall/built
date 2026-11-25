@@ -86,7 +86,7 @@ fn recover_untitled(win: &Bound<'_, PyAny>, n: usize, slot: &Bound<'_, PyAny>) -
     if !answer.eq("yes")? {
         return Ok(());
     }
-    let staged = py.import("core.scene")?.call_method0("Scene")?;
+    let staged = py.import("built_core.scene")?.call_method0("Scene")?;
     if let Err(err) = py
         .import("built_core.formats.igz")?
         .call_method1("load_into", (&staged, slot))

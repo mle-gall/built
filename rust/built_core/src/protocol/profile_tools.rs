@@ -45,7 +45,7 @@ fn push_pull<'py>(
     let mesh = scene.getattr("mesh")?;
     let f = one(history, "face", face)?;
     let op = py
-        .import("core.push_pull")?
+        .import("built_core.push_pull")?
         .call_method0("PushPullOperation")?;
     op.setattr("base_face", &f)?;
     let frame = py
@@ -111,7 +111,7 @@ fn offset_outline<'py>(
             "offset distance must be finite and nonzero",
         ));
     }
-    let offset = py.import("core.offset")?;
+    let offset = py.import("built_core.offset")?;
     let frames = py.import("built_core.coordinate_frame")?;
     if let Some(face) = face {
         let target = one(history, "face", face)?;
@@ -155,7 +155,7 @@ fn offset_outline<'py>(
             path.append(local(&p?)?)?;
         }
         let shifted = if closed {
-            py.import("core.topology")?.getattr("offset_loop")?
+            py.import("built_core.topology")?.getattr("offset_loop")?
         } else {
             offset.getattr("offset_chain")?
         }
@@ -172,7 +172,7 @@ fn offset_outline<'py>(
         kw.set_item("eye", eye.map(local).transpose()?)?;
         execute(
             history,
-            &py.import("core.edits")?
+            &py.import("built_core.edits")?
                 .call_method("build_add_edges", (scene, segs), Some(&kw))?,
         )
     })

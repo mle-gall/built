@@ -18,10 +18,10 @@ from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Vec3 as V
 
 
-from core.group import Group  # noqa: E402
-from core.history import AddImagePlaneCommand, History  # noqa: E402
+from built_core.group import Group  # noqa: E402
+from built_core.history import AddImagePlaneCommand, History  # noqa: E402
 from built_core.image_plane import IMAGE_LAYER, ImagePlane  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from tools.base import ToolContext  # noqa: E402
 from tools.paint import PaintTool  # noqa: E402
 

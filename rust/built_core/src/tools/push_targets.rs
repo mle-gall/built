@@ -31,7 +31,7 @@ impl Search<'_> {
         // on the first actual exclusion check in this sample.
         if self.excluded.get().is_none() {
             let py = self.cap.py();
-            let key = super::adapters::imported(py, "core.topology")?.getattr("_key")?;
+            let key = super::adapters::imported(py, "built_core.topology")?.getattr("_key")?;
             let keys = PySet::empty(py)?;
             for point in self.cap.try_iter()? {
                 keys.add(key.call1((point?,))?)?;
@@ -186,7 +186,7 @@ impl Search<'_> {
         let plane = self
             .view
             .py()
-            .import("core.snap")?
+            .import("built_core.snap")?
             .call_method1("face_plane_world", (face, group.getattr_opt("xform")?))?;
         let (point, n) = (
             xyz(&plane.get_item(0)?)?,

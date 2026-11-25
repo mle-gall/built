@@ -16,10 +16,10 @@ from collections import Counter
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edge, divide_edges
-from core.history import EraseSelectionCommand, History, SnapshotMutation
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.edits import build_add_edge, divide_edges
+from built_core.history import EraseSelectionCommand, History, SnapshotMutation
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from formats import igz
 
 

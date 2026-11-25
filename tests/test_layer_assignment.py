@@ -14,11 +14,11 @@ from __future__ import annotations
 from built_core import Vec3 as QVector3D
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from core.group import Group
-from core.history import AssignLayerCommand, History
-from core.layers import Layer, layer_of
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.history import AssignLayerCommand, History
+from built_core.layers import Layer, layer_of
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 
 def _square(mesh, x0=0.0):

@@ -18,9 +18,9 @@ from __future__ import annotations
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.group import Group
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 
 def V(x, y, z=0.0):
@@ -328,7 +328,7 @@ def test_el_aviso_dice_en_que_nivel_estas():
 def _visor_con_picking(scene):
     """El stub de test_pick_index, con la cámara de planta: lo justo para
     que el índice de picking, el snap y pick_group corran sin GL."""
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     from tests.test_pick_index import _VP as _PickVP, _bind
     vp = _bind(_PickVP(scene))
     vp._placement_proxies = {}
@@ -417,7 +417,7 @@ def test_borrar_un_hijo_del_contenedor_abierto_y_deshacer():
     """«Quiero eliminar, tampoco puedo» (Marco, 2026-09-11, una pileta
     dentro de un componente importado): DeleteGroupCommand buscaba el grupo
     en scene.groups, no estaba, y el comando se anulaba entero."""
-    from core.history import DeleteGroupCommand, History
+    from built_core.history import DeleteGroupCommand, History
     scene, padre, h1, h2 = _plaza()
     hist = History(scene)
     scene.begin_group_edit(padre)
@@ -476,7 +476,7 @@ def test_la_caja_del_contenedor_sigue_a_sus_hijos():
     borrar un hijo no la encogía, y entrar —que baja la matriz a los hijos—
     la deslizaba a los ejes."""
     from built_core import Matrix4 as QMatrix4x4
-    from core.group import oriented_box_corners
+    from built_core.group import oriented_box_corners
     from tests.test_pick_index import _VP, _bind
     scene, padre, h1, h2 = _plaza()
     m = QMatrix4x4()

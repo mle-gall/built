@@ -13,10 +13,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.group import (Group, copy_group, iter_placements,  # noqa: E402
+from built_core.group import (Group, copy_group, iter_placements,  # noqa: E402
                         world_mesh)
-from core.mesh import Mesh  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from tests.controller_surface import ControllerSurface as Viewport
 
 
@@ -142,7 +142,7 @@ def test_hidden_owner_hides_its_nested_placements():
     top, _ = _tree()
     top.layer = "oculta"
     top.children[0].layer = "visible"             # a differently tagged child
-    from core.layers import Layer
+    from built_core.layers import Layer
     scene.layers.append(Layer("oculta", visible=False))
     scene.layers.append(Layer("visible"))
     scene.groups.append(top)
@@ -160,7 +160,7 @@ def test_a_hidden_tag_deeper_down_hides_that_subtree():
     mid = top.children[0]
     mid.layer = "oculta"
     mid.children[1].layer = "visible"             # a differently tagged leaf
-    from core.layers import Layer
+    from built_core.layers import Layer
     scene.layers.append(Layer("oculta", visible=False))
     scene.layers.append(Layer("visible"))
     scene.groups.append(top)
@@ -301,7 +301,7 @@ def test_explode_removes_one_level():
     inside groups explode as well»). The top's own quad goes loose; the
     nested component comes out whole, carrying the top's placement, and its
     own children stay inside it. The shared prototype is never touched."""
-    from core.history import ExplodeGroupCommand, History
+    from built_core.history import ExplodeGroupCommand, History
 
     scene = Scene()
     top, proto = _tree()
@@ -330,7 +330,7 @@ def test_the_selection_box_follows_a_moved_group():
     fast path moved every array except that one — so a moved component left
     a ghost rectangle where it used to be. Predates nesting; fixed for every
     group."""
-    from core.group import oriented_box_corners
+    from built_core.group import oriented_box_corners
 
     scene = Scene()
     top, _ = _tree()

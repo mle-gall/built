@@ -86,7 +86,7 @@ fn proto_points_store(view: &Obj, group: &Obj, protos: &Bound<PyDict>) -> PyResu
 #[pyfunction]
 fn compute_obb<'py>(group: &Obj<'py>, protos: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = group.py();
-    let lib = py.import("core.group")?;
+    let lib = py.import("built_core.group")?;
     let pos = lib.call_method1("placement_points", (group, protos))?;
     let frame = lib.call_method1("group_frame", (group,))?;
     let kw = kw(py, "points", &pos)?;
@@ -150,7 +150,7 @@ fn group_obb<'py>(view: &Obj<'py>, group: &Obj<'py>) -> PyResult<Obj<'py>> {
     }
     let as_tuple = py.import("builtins")?.getattr("tuple")?;
     let f = py
-        .import("core.group")?
+        .import("built_core.group")?
         .call_method1("group_frame", (group,))?;
     let fk = if f.is_none() {
         none(py)

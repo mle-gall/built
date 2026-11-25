@@ -13,13 +13,13 @@ from tests.shell_isolation import native_window, restore_shell_patches  # noqa: 
 import pytest
 from built_core import Vec3 as V
 
-from core import links
+from built_core import links
 from formats import igz
 
 
 def _source(path, faces=1):
-    from core.layers import Layer
-    from core.scene import Scene
+    from built_core.layers import Layer
+    from built_core.scene import Scene
     s = Scene()
     s.layers.append(Layer("Wood"))
     for i in range(faces):
@@ -36,7 +36,7 @@ def win(native_host):
 
 
 def _faces(g):
-    from core.group import iter_placements
+    from built_core.group import iter_placements
     return sum(len(p.mesh.faces) for p, _m in iter_placements(g))
 
 
@@ -95,8 +95,8 @@ def test_save_as_placeholder_and_reopen(win, tmp_path):
 
 
 def test_project_link_subset_and_agent_surface(win, tmp_path):
-    from core.group import Group
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.scene import Scene
     from core.agent_tools import BUILTIN_TOOLS
     scene = Scene()
     scene.groups = [Group(name='A'), Group(name='B')]
@@ -165,9 +165,9 @@ def test_a_reloaded_link_keeps_the_layers_rows(win, tmp_path):
 
 def test_project_edits_only_the_addressed_link_subset_and_undoes_without_source(win, tmp_path, monkeypatch):
     import json
-    from core.group import Group
-    from core.scene import Scene
-    from core.protocol import commands
+    from built_core.group import Group
+    from built_core.scene import Scene
+    from built_core.protocol import commands
     from tests.test_tree_links import _View
     from views import wgpu_ui as ui
     src = Scene()
@@ -201,8 +201,8 @@ def test_project_edits_only_the_addressed_link_subset_and_undoes_without_source(
 @pytest.mark.parametrize("nested", [True, False, None])
 def test_link_selection_header_preserves_occurrence_and_nested_choice(win, tmp_path, monkeypatch, nested):
     from types import SimpleNamespace
-    from core.group import Group
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.scene import Scene
     from tests.test_tree_links import _View
     from views import wgpu_ui
     from built_render import chrome_forms

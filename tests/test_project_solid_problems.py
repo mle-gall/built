@@ -4,10 +4,10 @@ import json
 
 import pytest
 
-from core.group import Group
-from core.mesh import Mesh
-from core.scene import Scene
-from core.protocol.commands import run
+from built_core.group import Group
+from built_core.mesh import Mesh
+from built_core.scene import Scene
+from built_core.protocol.commands import run
 from built_core import Vec3, solid_inspector_sections, solid_problem_targets
 from tests.solid_fixture import _box, _top
 from tests.test_tree_links import _View, _Win

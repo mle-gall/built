@@ -191,7 +191,7 @@ fn template_dict<'p>(item: &Obj<'p>) -> PyResult<Obj<'p>> {
         d.del_item(k)?;
     }
     item.py()
-        .import("core.doc_model")?
+        .import("built_core.doc_model")?
         .call_method1("plain", (d,))
 }
 #[pyfunction]

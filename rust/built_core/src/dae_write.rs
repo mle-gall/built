@@ -211,7 +211,7 @@ impl Geometry {
         for pts in polys {
             let uvs = if textured {
                 let uvw = get(&tex, "uvw")?;
-                let texture = py.import("core.texture")?;
+                let texture = py.import("built_core.texture")?;
                 if uvw.is_truthy()? {
                     Some(crate::model::module(texture.py(), "built_core")?.call_method1("texture_affine_uv", (uvw, &pts))?)
                 } else {
@@ -446,7 +446,7 @@ impl<'p> Export<'p> {
     fn paint(&self, g: &Obj<'p>) -> PyResult<Obj<'p>> {
         self.scene
             .py()
-            .import("core.group")?
+            .import("built_core.group")?
             .call_method1("effective_material", (g,))
     }
     fn signature(&self, g: &Obj<'p>, depth: usize) -> PyResult<Signature> {
@@ -546,7 +546,7 @@ impl<'p> Export<'p> {
                 let src: PathBuf = info.get_item("src")?.extract()?;
                 let dst = path.with_file_name(&fname);
                 if py
-                    .import("core.texture")?
+                    .import("built_core.texture")?
                     .call_method1("is_image_file", (&src,))?
                     .is_truthy()?
                     && (dst.canonicalize().ok() != src.canonicalize().ok())

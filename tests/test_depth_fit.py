@@ -13,7 +13,7 @@ import pytest
 from built_core import Vec3 as V
 
 
-from core.camera import OrbitCamera  # noqa: E402
+from built_core.camera import OrbitCamera  # noqa: E402
 
 
 def camera():
@@ -82,7 +82,7 @@ def test_clipping_set_by_hand_wins():
 @pytest.mark.parametrize('empty', [False, True])
 def test_unknown_bounds_are_cached_and_empty_groups_do_not_block_fit(empty):
     from types import SimpleNamespace as NS
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     from tests.controller_surface import ControllerSurface as Viewport
     mesh = Mesh()
     if not empty:

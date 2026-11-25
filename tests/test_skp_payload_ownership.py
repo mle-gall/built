@@ -7,8 +7,8 @@ import weakref
 import pytest
 from built_core import Matrix4 as QMatrix4x4
 
-from core.history import History, SnapshotImport
-from core.scene import Scene
+from built_core.history import History, SnapshotImport
+from built_core.scene import Scene
 from formats import igz, skp
 
 

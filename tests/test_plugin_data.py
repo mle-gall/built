@@ -16,8 +16,8 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from core.history import History, SetPluginDataCommand
-from core.scene import Scene
+from built_core.history import History, SetPluginDataCommand
+from built_core.scene import Scene
 from formats import igz
 
 JOB = {"units": "mm", "stock": {"x": 600.0, "y": 400.0, "z": 18.0},
@@ -132,8 +132,8 @@ def test_set_plugin_data_none_removes_the_entry():
 def test_plugin_data_edits_mark_the_document_modified():
     """Found 2026-09-26: SetPluginDataCommand left the version alone, so a plugin's
     edit never showed «*» nor asked to be saved."""
-    from core.history import History, SetPluginDataCommand
-    from core.scene import Scene
+    from built_core.history import History, SetPluginDataCommand
+    from built_core.scene import Scene
     scene = Scene()
     h = History(scene)
     v0 = scene.version

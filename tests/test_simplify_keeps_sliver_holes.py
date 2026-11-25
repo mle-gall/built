@@ -13,7 +13,7 @@ from built_core import Vec3 as V
 
 
 def _plate_with_sliver_hole():
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     m = Mesh()
     outer = [V(0, 0, 0), V(10, 0, 0), V(10, 10, 0), V(0, 10, 0)]
     # Under a degree off the line: collinear for collapsible_vertex.
@@ -30,7 +30,7 @@ def test_a_three_corner_hole_keeps_its_corners():
 
 
 def test_simplify_leaves_no_hole_of_two_and_the_plate_saves(tmp_path):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats.fuse import simplify_mesh
     from formats.igz import load_into, save_scene
     sc = Scene()
@@ -47,7 +47,7 @@ def test_simplify_leaves_no_hole_of_two_and_the_plate_saves(tmp_path):
 def test_a_longer_loop_still_loses_its_collinear_vertex():
     """The clean-up stays: a spare vertex on a straight side of a square
     goes, as before."""
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     m = Mesh()
     m.add_face([V(0, 0, 0), V(5, 0, 0), V(10, 0, 0), V(10, 10, 0),
                 V(0, 10, 0)])

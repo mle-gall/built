@@ -19,8 +19,8 @@ import numpy as np
 import pytest
 
 from core import _native
-from core import vista_caras as VC
-from core.vista_caras import FaceFill
+from built_core import vista_caras as VC
+from built_core.vista_caras import FaceFill
 from tests import vista_caras_reference as R
 
 native = _native.available()

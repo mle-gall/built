@@ -15,10 +15,10 @@ import math
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.history import History
-from core.mesh import Mesh
-from core.scene import Scene
-from core.snap import curve_centers_of_face, fit_circle
+from built_core.history import History
+from built_core.mesh import Mesh
+from built_core.scene import Scene
+from built_core.snap import curve_centers_of_face, fit_circle
 
 
 def V(x, y, z=0.0):
@@ -101,7 +101,7 @@ class _Visor:
 
 
 def test_pasar_por_la_cara_del_circulo_deja_el_centro_como_referencia_y_snapea():
-    from core.snap import compute_snap
+    from built_core.snap import compute_snap
     scene = Scene()
     pts = _circle_pts(3.0, 2.0, 1.5)
     f = scene.mesh.add_face(pts)
@@ -198,7 +198,7 @@ def test_borrar_el_circulo_se_lleva_el_punto_verde_y_moverlo_lo_arrastra():
     segundos» (Marco, 2026-09-11): la referencia se revalida con cada
     cambio de la escena — desaparece con el círculo, y sigue al círculo
     si este se mueve."""
-    from core.history import EraseSelectionCommand, MoveVerticesCommand
+    from built_core.history import EraseSelectionCommand, MoveVerticesCommand
     scene = Scene()
     pts = _circle_pts(3.0, 2.0, 1.5)
     f = scene.mesh.add_face(pts)

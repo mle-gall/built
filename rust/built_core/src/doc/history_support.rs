@@ -9,7 +9,7 @@ type Obj<'py> = Bound<'py, PyAny>;
 pub(crate) fn dirty_group_chunks(scene: &Obj<'_>) -> PyResult<()> {
     let py = scene.py();
     scene.getattr("mesh")?.call_method0("bump_revision")?;
-    let placements = py.import("core.group")?.getattr("iter_placements")?;
+    let placements = py.import("built_core.group")?.getattr("iter_placements")?;
     if let Some(groups) = scene.getattr_opt("groups")? {
         for g in groups.try_iter()? {
             for pair in placements.call1((g?,))?.try_iter()? {

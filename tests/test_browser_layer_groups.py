@@ -4,9 +4,9 @@
 import built_core
 import time
 
-from core import layers as L
-from core.group import Group
-from core.layers import DEFAULT_LAYER, Layer
+from built_core import layers as L
+from built_core.group import Group
+from built_core.layers import DEFAULT_LAYER, Layer
 from tests.native_tree import action
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_browser_layer_order import _group, _container
@@ -23,7 +23,7 @@ def test_only_matching_folders_and_their_ancestors_get_a_heading():
 
 
 def test_the_filter_leaves_no_empty_heading():
-    from core import structure
+    from built_core import structure
     from tests.test_project_drawing_filters import Project
     from tests.test_structure import model
     scene, registry, house, shed = model()
@@ -117,7 +117,7 @@ def test_counts_exclude_nested_parts_and_follow_retagging():
     p.action("toggle", "preview-folder:Building")
     rows = p.action("toggle", "preview-folder:Envelope")
     assert [rows[k][1][1] for k in ["preview-folder:Building", "preview-tag:Walls", "preview-tag:Roof"]] == [3, 2, 1]
-    from core.protocol.commands import set_tag
+    from built_core.protocol.commands import set_tag
     assert set_tag(p.win.viewport.history, [room.uid], "Roof")["ok"]
     rows = p.rows()
     assert [rows[k][1][1] for k in ["preview-tag:Walls", "preview-tag:Roof"]] == [1, 2]

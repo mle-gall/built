@@ -30,7 +30,7 @@ def _box(mesh, x0, y0, z0, x1, y1, z1):
 
 def _every_kind(comp) -> None:
     """One item of every kind the sheet holds, below the views."""
-    from core.composition import (BarraEscala, CotaAngularItem, CotaItem, CotaRadialItem,
+    from built_core.composition import (BarraEscala, CotaAngularItem, CotaItem, CotaRadialItem,
                                   EtiquetaItem, FlechaNorte, FormaItem, ImagenItem, Leyenda,
                                   LlamadaItem, NivelItem, PerfilTerreno)
     comp.scalebars.append(BarraEscala(x_mm=215, y_mm=185, scale_n=100.0))
@@ -58,9 +58,9 @@ def _every_kind(comp) -> None:
 
 
 def build(path: Path) -> None:
-    from core.composition import Composicion, MarcoVista, TextoItem
+    from built_core.composition import Composicion, MarcoVista, TextoItem
     from built_core.saved_views import SavedView
-    from core.scene import Scene
+    from built_core.scene import Scene
     from built_core.formats.igz import save_scene
     scene = Scene()
     _box(scene.mesh, 0, 0, 0, 12, 8, 0.3)

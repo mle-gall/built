@@ -5,8 +5,8 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.mesh import Mesh
-from core.topology import heal_overlapping_faces
+from built_core.mesh import Mesh
+from built_core.topology import heal_overlapping_faces
 
 
 def V(x: float, y: float, z: float = 0.0) -> QVector3D:
@@ -86,7 +86,7 @@ def test_heal_flips_a_reversed_face():
 
 
 def _solid_overlap(m):
-    from core.topology import _faces_coplanar, _point_in_face_solid
+    from built_core.topology import _faces_coplanar, _point_in_face_solid
     import itertools
     n = 0
     for a, b in itertools.combinations(m.faces, 2):
@@ -126,8 +126,8 @@ def test_heal_skips_import_scale_meshes():
     # 9k-face import, ONE Delete took >120 s (piscina.igz user report).
     # Above the cap it must return immediately and touch nothing.
     import time
-    from core import topology
-    from core.mesh import Mesh
+    from built_core import topology
+    from built_core.mesh import Mesh
     from built_core import Vec3 as V
     m = Mesh()
     m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])

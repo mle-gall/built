@@ -50,7 +50,7 @@ def _mesh(rng, V, Mesh, n):
 
 def _deferred(rng, n, survey=0.0, dtype="float64"):
     import numpy as np
-    from core.mesh import DeferredMesh, Mesh
+    from built_core.mesh import DeferredMesh, Mesh
     m = Mesh()
     pos = np.array([[rng.uniform(-3, 3) + survey, rng.uniform(-3, 3), rng.uniform(0, 3)]
                     for _ in range(n)], dtype=dtype)
@@ -60,9 +60,9 @@ def _deferred(rng, n, survey=0.0, dtype="float64"):
 
 def _scene(seed):
     from built_core import Matrix4 as M, Vec3 as V
-    from core.group import Group
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
     rng = random.Random(seed)
     scene = Scene()
     survey = 1e5 if seed % 5 == 4 else 0.0
@@ -110,7 +110,7 @@ def answers():
     from built_core import Vec3 as V
     import numpy as np
     import built_core as N
-    from core import dimension as D
+    from built_core import dimension as D
     out = {"may_hold": [], "scenes": []}
     rng = random.Random(20261125)
     for k in range(60):
@@ -128,7 +128,7 @@ def answers():
             row.append(bool(N.dimension_may_hold(mesh, V(*p), tol)))
         out["may_hold"].append(row)
     # Not deferred, or deferred without source points: True.
-    from core.mesh import DeferredMesh, Mesh
+    from built_core.mesh import DeferredMesh, Mesh
     plain = Mesh()
     bare = Mesh()
     DeferredMesh.defer(bare, lambda _m: None, 0, None)
@@ -143,7 +143,7 @@ def answers():
             dm, dpos = _deferred(srng, 30)
             bare = Mesh()
             DeferredMesh.defer(bare, lambda _m: None, 0, None)
-            from core.group import Group
+            from built_core.group import Group
             from built_core import Matrix4 as M
             for mesh in (dm, bare):
                 for _ in range(40):

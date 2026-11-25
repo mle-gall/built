@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! Which axis-aligned boxes touch: `core.intersect._touching` for every
+//! Which axis-aligned boxes touch: `built_core.intersect._touching` for every
 //! pair at once. The test itself is Python's, operation for operation
 //! (`lo_a <= hi_b + eps && lo_b <= hi_a + eps` on all three axes, in f64);
 //! a grid over x/y only finds the candidates faster, so the answer is the

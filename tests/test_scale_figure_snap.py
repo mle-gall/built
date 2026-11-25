@@ -25,7 +25,7 @@ def test_the_feet_follow_the_figures_added_and_taken_away(native_window):
     taken away or made a plain group changes the feet offered."""
     from built_core import Matrix4 as QMatrix4x4
 
-    from core.group import Group
+    from built_core.group import Group
     win = native_window
     win._start_blank_document()
     vp = win.viewport

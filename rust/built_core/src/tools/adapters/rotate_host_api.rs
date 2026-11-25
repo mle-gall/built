@@ -300,7 +300,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     if deg.is_none() {
         return Ok(none(py));
     }
-    let fmt_angle_deg = imported(py, "core.units")?.getattr("fmt_angle_deg")?;
+    let fmt_angle_deg = imported(py, "built_core.units")?.getattr("fmt_angle_deg")?;
     Ok((
         fmt_angle_deg.call((&deg,), Some(&fields!(py; "signed" => true)))?,
         tool.getattr("hover_point")?,

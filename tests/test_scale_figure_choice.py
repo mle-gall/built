@@ -15,8 +15,8 @@ from built_render import SurveyRaster
 from built_core import Vec3 as V
 
 from built_core import scale_figure as sf  # noqa: E402
-from core.group import Group, make_billboard_group  # noqa: E402
-from core.mesh import Mesh  # noqa: E402
+from built_core.group import Group, make_billboard_group  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
 
 
 @pytest.fixture
@@ -104,7 +104,7 @@ def test_a_new_document_stands_my_picture_and_marks_it(native_host, settings, tm
 
 
 def test_the_mark_travels_in_the_igz(tmp_path):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     scene = Scene()
     g = make_billboard_group(str(_png(tmp_path / "p.png")), 1.7, "P", 0.33)

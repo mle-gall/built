@@ -368,7 +368,7 @@ pub(crate) fn rename_view<'py>(
         }
     }
     let frames = py
-        .import("core.outliner")?
+        .import("built_core.outliner")?
         .call_method1("frames_showing", (scene, &old))?;
     let new_key = format!("scene:{}", name.str()?);
     let mut touched = Vec::new();
@@ -446,7 +446,7 @@ pub(crate) fn set_text(o: &Obj<'_>, value: &Obj<'_>) -> PyResult<()> {
 /// Use the sheet codec's item table for subclasses as well as base items.
 #[pyfunction]
 pub(crate) fn sheet_container<'py>(sheet: &Obj<'py>, item: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
-    let classes = sheet.py().import("core.composition")?;
+    let classes = sheet.py().import("built_core.composition")?;
     for &(field, kind) in crate::file_sheet::ITEMS {
         if item.is_instance(&classes.getattr(kind)?)? {
             return Ok(Some(sheet.getattr(field)?));

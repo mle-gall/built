@@ -102,7 +102,7 @@ fn undo(cmd: &Obj, scene: &Obj) -> PyResult<()> {
 pub(super) fn install(m: &Bound<PyModule>) -> PyResult<()> {
     let py = m.py();
     let ns = PyDict::new(py);
-    ns.set_item("__module__", "core.solids")?;
+    ns.set_item("__module__", "built_core.solids")?;
     ns.set_item("doc_undo", true)?;
     let method = py.import("functools")?.getattr("partialmethod")?;
     for (k, f) in [

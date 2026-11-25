@@ -443,7 +443,7 @@ fn autosave_result(py: Python<'_>, win: &Bound<'_, PyAny>, name: &Bound<'_, PyAn
 /// The "linked files missing" banner of the window's document; the count.
 #[pyfunction]
 fn update_link_banner(py: Python<'_>, win: &Bound<'_, PyAny>) -> PyResult<usize> {
-    let links = py.import("core.links")?;
+    let links = py.import("built_core.links")?;
     let scene = win.getattr("viewport")?.getattr("scene")?;
     let mut count = 0usize;
     for p in links.call_method1("sources", (&scene,))?.try_iter()? {

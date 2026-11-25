@@ -8,7 +8,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 fn component_groups<'py>(items: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let mut groups = Vec::new();
-    for g in matching(items, "core.group", "Group")?.iter() {
+    for g in matching(items, "built_core.group", "Group")?.iter() {
         if g.call_method0("is_component")?.is_truthy()? {
             groups.push(g)
         }
@@ -211,7 +211,7 @@ fn replace_selection(win: &Bound<'_, PyAny>, source: &Bound<'_, PyAny>) -> PyRes
         &win.getattr("viewport")?
             .getattr("scene")?
             .getattr("selection")?,
-        "core.group",
+        "built_core.group",
         "Group",
     )?;
     replace_groups(win, &targets, source)

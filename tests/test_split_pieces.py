@@ -11,11 +11,11 @@ import pytest
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.group import Group, world_mesh
-from core.history import SplitIntoPiecesCommand
-from core.mesh import Mesh
-from core.pieces import connected_parts, solid_parts, split_into_pieces
-from core.scene import Scene
+from built_core.group import Group, world_mesh
+from built_core.history import SplitIntoPiecesCommand
+from built_core.mesh import Mesh
+from built_core.pieces import connected_parts, solid_parts, split_into_pieces
+from built_core.scene import Scene
 
 _QUADS = ((0, 2, 3, 1), (4, 5, 7, 6), (0, 1, 5, 4),
           (2, 6, 7, 3), (0, 4, 6, 2), (1, 3, 7, 5))
@@ -151,7 +151,7 @@ def test_a_zero_thickness_double_sided_sheet_is_not_a_solid():
            QVector3D(0, 1, 0)]
     mesh.add_face(pts)
     mesh.add_face(list(reversed(pts)))
-    from core.pieces import _is_solid
+    from built_core.pieces import _is_solid
     assert not _is_solid(list(mesh.faces))
 
 

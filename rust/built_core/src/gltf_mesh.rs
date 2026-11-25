@@ -337,7 +337,7 @@ fn stage<'py>(
     let kw = PyDict::new(py);
     kw.set_item("name", name)?;
     let group = py
-        .import("core.group")?
+        .import("built_core.group")?
         .getattr("Group")?
         .call((mesh,), Some(&kw))?;
     Ok((group, offset).into_pyobject(py)?.into_any())

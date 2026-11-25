@@ -28,10 +28,10 @@ HATCHES = ("brick", "concrete", "insulation", "brick_flemish", "tiles", "parquet
 
 
 def _scene(rng):
-    from core.group import Group
-    from core.layers import Layer
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.layers import Layer
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
     from built_core.style import Style
     s = Scene()
     s.hatch_patterns = {"mine": {"label": "Mine", "families": [[45.0, 0, 0, 0, 2.0, []]]}}
@@ -150,7 +150,7 @@ def answers(L):
 
 
 def test_the_tag_styles_answer_as_the_python_did():
-    from core import layers
+    from built_core import layers
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     got = json.loads(json.dumps(answers(layers)))
     assert len(got) == len(want)
@@ -160,7 +160,7 @@ def test_the_tag_styles_answer_as_the_python_did():
 
 if __name__ == "__main__" and "--write" in sys.argv:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from core import layers
+    from built_core import layers
     data = answers(layers)
     GOLDEN.parent.mkdir(exist_ok=True)
     GOLDEN.write_bytes(gzip.compress(json.dumps(data).encode(), mtime=0))

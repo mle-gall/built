@@ -9,10 +9,10 @@ import pytest
 from tests.test_library_sheet import win  # noqa: F401
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core.group import Group, copy_group, world_mesh
-from core.history import History, ReplaceComponentCommand
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group, copy_group, world_mesh
+from built_core.history import History, ReplaceComponentCommand
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from built_core import same_definition
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 
@@ -243,7 +243,7 @@ def test_its_own_row_does_not_offer_to_replace_the_selection(native_components):
 # --- Keep in File: definitions with no copy placed ----------------------------
 
 def test_keep_in_file_survives_deleting_every_copy_and_undoes():
-    from core.history import KeepComponentCommand
+    from built_core.history import KeepComponentCommand
     from built_core.kept_components import kept_template
     scene, hist, sillas, _m, _c, _h = _model()
     proto = sillas[0].mesh
@@ -267,7 +267,7 @@ def test_keep_in_file_survives_deleting_every_copy_and_undoes():
 
 
 def test_stop_keeping_takes_it_out_and_undo_puts_it_back():
-    from core.history import KeepComponentCommand
+    from built_core.history import KeepComponentCommand
     scene, hist, sillas, mesas, _c, _h = _model()
     hist.execute(KeepComponentCommand(sillas[0]))
     hist.execute(KeepComponentCommand(mesas[0]))
@@ -279,7 +279,7 @@ def test_stop_keeping_takes_it_out_and_undo_puts_it_back():
 
 
 def test_an_edit_to_the_definition_reaches_the_kept_template():
-    from core.history import KeepComponentCommand
+    from built_core.history import KeepComponentCommand
     scene, hist, sillas, _m, _c, _h = _model()
     hist.execute(KeepComponentCommand(sillas[0]))
     t = scene.kept_components[0]
@@ -291,7 +291,7 @@ def test_an_edit_to_the_definition_reaches_the_kept_template():
 
 
 def test_kept_definitions_survive_the_igz_and_share_with_copies(tmp_path):
-    from core.history import KeepComponentCommand
+    from built_core.history import KeepComponentCommand
     from formats import igz
     scene, hist, sillas, mesas, _c, _h = _model()
     hist.execute(KeepComponentCommand(sillas[0]))   # still placed
@@ -314,7 +314,7 @@ def test_kept_definitions_survive_the_igz_and_share_with_copies(tmp_path):
 
 
 def test_a_kept_definition_with_no_copy_can_replace_and_be_placed():
-    from core.history import KeepComponentCommand
+    from built_core.history import KeepComponentCommand
     from built_core.kept_components import place_copy
     scene, hist, sillas, mesas, _c, _h = _model()
     hist.execute(KeepComponentCommand(mesas[0]))
@@ -331,7 +331,7 @@ def test_a_kept_definition_with_no_copy_can_replace_and_be_placed():
 
 
 def test_the_list_shows_a_kept_definition_with_no_copy(native_components, monkeypatch):
-    from core.history import KeepComponentCommand
+    from built_core.history import KeepComponentCommand
     win, scene, chairs, tables = native_components
     monkeypatch.setattr(win, "_ask_keep_orphans", lambda _: False)
     win.viewport.history.execute(KeepComponentCommand(tables[0]))
@@ -427,8 +427,8 @@ def test_short_component_lists_use_the_shared_library_search(win):
 
 
 def test_purge_keeps_what_only_a_kept_definition_wears():
-    from core.history import KeepComponentCommand
-    from core.purge import used_layers, used_materials
+    from built_core.history import KeepComponentCommand
+    from built_core.purge import used_layers, used_materials
     scene, hist, _s, mesas, _c, _h = _model()
     for f in mesas[0].mesh.faces:
         f.attrs["mat"] = "Roble"
@@ -455,7 +455,7 @@ def native_components(native_question_host):
 
 
 def test_orphaned_by_names_only_definitions_left_with_no_copy():
-    from core.history import KeepComponentCommand
+    from built_core.history import KeepComponentCommand
     from built_core.kept_components import orphaned_by
     scene, hist, sillas, mesas, _c, _h = _model()
     assert orphaned_by(scene, sillas[:2]) == []          # one chair stays
@@ -516,7 +516,7 @@ def test_no_question_while_a_copy_remains(native_components, monkeypatch):
 
 def test_rename_reaches_every_copy_and_the_kept_template(native_components, monkeypatch):
     from built_render import chrome_forms
-    from core.history import KeepComponentCommand
+    from built_core.history import KeepComponentCommand
     win, scene, sillas, mesas = native_components
     box = Group(Mesh(), name="Comedor")
     nested = copy_group(sillas[0], V(0, 5, 0))
@@ -547,10 +547,10 @@ def test_rename_is_in_the_list_menu(native_components):
 
 def test_components_from_another_file_arrive_kept_and_placeable(tmp_path, native_host, monkeypatch):
     from formats import igz
-    from core.history import KeepComponentCommand
+    from built_core.history import KeepComponentCommand
     # the «library» file: two placed definitions, one kept, a plain group
     lib, hist, sillas, mesas, _c, _h = _model()
-    from core.materials import Material
+    from built_core.materials import Material
     lib.materials["Brass"] = Material("Brass", color=(0.9, 0.8, 0.1))
     lamp = _component(_quad(0.3), "Lámpara")
     for f in lamp.mesh.faces:

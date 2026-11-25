@@ -64,7 +64,7 @@ pub(super) fn known(
     {
         return Ok(true);
     }
-    let groups = || crate::model::module(py, "core.group")?.getattr("Group");
+    let groups = || crate::model::module(py, "built_core.group")?.getattr("Group");
     if journalled && (is("HideCommand")? || is("AssignLayerCommand")?) {
         let g = groups()?;
         let mut all = true;
@@ -117,7 +117,7 @@ pub(super) fn known(
     let made = if undo { "removed" } else { "created" };
     let gone = if undo { "created" } else { "removed" };
     if cmd
-        .is_instance(&crate::model::module(py, "core.solids")?.getattr("SolidOperationCommand")?)?
+        .is_instance(&crate::model::module(py, "built_core.solids")?.getattr("SolidOperationCommand")?)?
     {
         append_uids("created", &cmd.getattr(made)?, false)?;
         append_uids("removed", &cmd.getattr(gone)?, false)?;

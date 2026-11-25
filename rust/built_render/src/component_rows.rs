@@ -99,7 +99,7 @@ pub fn select_component_instances(
     let vp = win.getattr("viewport")?;
     let scene = vp.getattr("scene")?;
     let roots = scene.getattr("groups")?;
-    let outliner = py.import("core.outliner")?;
+    let outliner = py.import("built_core.outliner")?;
     let parents = outliner
         .call_method1("parents", (&roots,))?
         .cast_into::<pyo3::types::PyDict>()?;

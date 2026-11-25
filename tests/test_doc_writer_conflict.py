@@ -2,9 +2,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from core import doc_model
-from core.history import Command, History
-from core.scene import Scene
+from built_core import doc_model
+from built_core.history import Command, History
+from built_core.scene import Scene
 
 
 class Probe(Command):

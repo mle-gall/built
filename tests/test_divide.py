@@ -6,10 +6,10 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.edits import divide_edges
-from core.history import History, SnapshotMutation, AddEdgeCommand
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.edits import divide_edges
+from built_core.history import History, SnapshotMutation, AddEdgeCommand
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 
 def V(x, y, z=0.0):

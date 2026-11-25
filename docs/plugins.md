@@ -54,7 +54,7 @@ Keep the mesh and the face key for a later callback. Resolve the key when
 the callback runs, before reading paint, geometry or issuing an edit.
 
 ```python
-from core.protocol.keys import element
+from built_core.protocol.keys import element
 
 def remember_face(scene, face):
     return scene.mesh, face.key
@@ -80,7 +80,7 @@ Python Console (below) does this for you; a dialog-based plugin does it
 explicitly:
 
 ```python
-from core.history import SnapshotImport
+from built_core.history import SnapshotImport
 
 def on_activate(self, viewport):
     def mutate(scene):
@@ -99,14 +99,14 @@ whole), and publishes one change-feed record.
 
 | Need | Use |
 |---|---|
-| An edit the editor already has | `core.protocol.commands.run(history, name, **args)`, or the function of that name (`lock`, `rename_placement`, `paint_placements`, `move_placements`, `erase`, …). Arguments are keys, placement uids or, in process, the placement handles. The answer is `{"ok", "step", "error", "rejected"}`. These are the same verbs MCP uses. |
+| An edit the editor already has | `built_core.protocol.commands.run(history, name, **args)`, or the function of that name (`lock`, `rename_placement`, `paint_placements`, `move_placements`, `erase`, …). Arguments are keys, placement uids or, in process, the placement handles. The answer is `{"ok", "step", "error", "rejected"}`. These are the same verbs MCP uses. |
 | A typed native step to combine with others | `from built_core import NativeCommand`: `NativeCommand.rename(group, name)`, `NativeCommand.rename_each(groups, names)`, `NativeCommand.lock(groups, locked)`, `NativeCommand.paint(groups, paint_or_None)`. |
-| An annotation, section, guide, image, scene, sheet, group or component edit | The editor's own step classes keep their names and constructors (`core.history.AddDimensionCommand(dim)`, `InsertGroupCommand(group)`, …). They are native `built_core.RecordStep` subclasses: combine them freely, and `isinstance(step, core.history.Command)` stays true. |
-| Several steps as one | `core.history.CompoundCommand([step, ...])`. |
-| Any mesh, group or tag change written in Python | `core.history.SnapshotImport(mutate)`, below. |
-| A step with your own inverse | Subclass `core.history.Command` and implement `do(scene)` and `undo(scene)`. Set `doc_undo = True` when everything it changes is document state: the Rust history then undoes and redoes it from its transaction and never calls your `undo`. |
-| Extension data in the file | `core.history.SetPluginDataCommand(key, value)`, or `app.set_document_data` from `setup(app)`. |
-| Declining on purpose | Raise `core.history.CommandRejected("why")` from `do`; History treats it as a no-op and shows the reason. |
+| An annotation, section, guide, image, scene, sheet, group or component edit | The editor's own step classes keep their names and constructors (`built_core.history.AddDimensionCommand(dim)`, `InsertGroupCommand(group)`, …). They are native `built_core.RecordStep` subclasses: combine them freely, and `isinstance(step, built_core.history.Command)` stays true. |
+| Several steps as one | `built_core.history.CompoundCommand([step, ...])`. |
+| Any mesh, group or tag change written in Python | `built_core.history.SnapshotImport(mutate)`, below. |
+| A step with your own inverse | Subclass `built_core.history.Command` and implement `do(scene)` and `undo(scene)`. Set `doc_undo = True` when everything it changes is document state: the Rust history then undoes and redoes it from its transaction and never calls your `undo`. |
+| Extension data in the file | `built_core.history.SetPluginDataCommand(key, value)`, or `app.set_document_data` from `setup(app)`. |
+| Declining on purpose | Raise `built_core.history.CommandRejected("why")` from `do`; History treats it as a no-op and shows the reason. |
 
 Run any of them with `viewport.history.execute(step)`. Do not start a
 second `history.execute` from inside a step's `do`: it folds into the outer
@@ -200,7 +200,7 @@ def setup(app):
     app.on_document_closed(forget)        # forget(scene): a project tab closed
 
     # Open the native panel registered by this module's create_panel.
-    from core.plugin_panels import open_panel
+    from built_core.plugin_panels import open_panel
 
     # Several commands? A submenu of your own: Extensions ▸ Windowizer ▸ …
     sub = app.add_menu("Windowizer")
@@ -253,7 +253,7 @@ def setup(app):
                      on_select=lambda item: ..., delete=lambda item: ...)
 
     # Offered the snap engine's answer on every hover and click; return a
-    # core.snap.SnapResult (its `label` is the ScreenTip) or None.
+    # built_core.snap.SnapResult (its `label` is the ScreenTip) or None.
     app.add_snap_provider(lambda viewport, snap, px, py: None)
 ```
 
@@ -302,42 +302,9 @@ so they cannot undo a subsequent user rearrangement. A fresh profile keeps
 the extension's default placement. This hook is for startup completion;
 do not create a new `ExtensionApp` and restore the layout on every command.
 
-### Managing community extensions
+### Managing local extensions
 
-**Extensions ▸ Manage extensions…** reads the community catalog from
-[`built-extensions`](https://github.com/ingelibre/ingetrazo-extensions),
-downloads individual Python files or ZIP packages, and installs them in the
-per-user plugins directory. The manager separates browsing from the list of
-installed catalog extensions; both views support text and tag filtering.
-Catalog data is cached locally: the manager shows the last cached catalog
-immediately and refreshes it in the background. If GitHub is unavailable, the
-last valid cache remains usable and its refresh time is shown. Catalog sorting
-includes name, reviewed status, installed state, and available updates; sorting
-by update date is available only when the catalog supplies per-extension
-dates. The manager shows installed and available versions for updates, and
-warns when an extension's tested Built version is substantially older.
-Each entry shows its license and links to the author's repository before
-installation. Entries not in the maintainer-reviewed hash list are labelled
-as Community; assume that exact catalog version has not been reviewed by an
-Built maintainer.
-Extensions requiring a newer Built version cannot be installed or enabled.
-
-Each download is checked against the catalog's SHA-256 before it is installed.
-The manager marks an extension as reviewed only when its hash matches the
-maintainer's entry in `reviewed.toml`.
-
-Installed catalog extensions can be updated, enabled, disabled, or uninstalled
-from the manager. Update availability is shown as soon as the catalog is
-loaded; extension package files are downloaded only after choosing Download or
-Update. These changes take effect after restarting Built because
-extensions register tools and UI during startup. Extensions are Python code:
-install only extensions whose source and publisher you trust. The checksum
-detects content that differs from the catalog; it is not a sandbox or a
-guarantee that code is safe.
-
-If an installed extension fails to load at startup, its manager entry shows
-the load error and offers actions to disable it, open its folder, and open
-Built's log folder for the full traceback.
+Use **Extensions ▸ Manage extensions** to install a local Python file, ZIP package or included example, enable or disable local plugins, and remove installed copies. Restart Built to apply changes. Plugins use the in-process API in `views.extension_api` and the model types in `built_core`.
 
 ### Where your interface goes
 
@@ -415,11 +382,6 @@ import chrome_forms` (`Field`, `Form`, `show`, `ask_text`, `ask_number`,
 chrome_dialogs` (`ask_later`, `notify`, `Job` for long work in the top bar).
 `views.extension_api` re-exports `chrome_forms`, `chrome_dialogs` and `Job`.
 
-**Deprecated:** the module names `views.chrome_forms` and
-`views.chrome_dialogs` from before the chrome moved to Rust still resolve to
-the same modules, for extensions written against them; they will go in a
-later API version.
-
 ## Bundled reference plugins
 
 - Model Info presents geometry, materials, layers and BIM statistics in a read-only utility panel.
@@ -436,9 +398,7 @@ later API version.
 - Side-panel registration, document data, viewport overlays and snap
   providers — **done** (`setup(app)`, above).
 - Plugin manifest (`plugin.toml`) for metadata and dependencies.
-- Plugin manager UI (install, enable, disable, update) — **done**; it uses
-  the community catalog without imposing a package format on the extension
-  API.
+- The Extension Manager installs local Python files and ZIP packages, enables or disables extensions, and removes installed copies.
 
 ### Command notifications and mutation revisions (API 2)
 

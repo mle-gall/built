@@ -261,7 +261,7 @@ fn crossing_sides<'py>(
         .getattr("edge_snap_threshold_px")?
         .extract::<f64>()?
         .max(v.getattr("_CROSSING_RING_PX")?.extract()?);
-    v.py().import("core.snap")?.call_method1(
+    v.py().import("built_core.snap")?.call_method1(
         "face_crossing_near_ray",
         (
             x,

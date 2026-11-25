@@ -6,7 +6,7 @@ Covers the classic weld: drawing an edge that already exists (in
 either orientation, within the position tolerance) reuses it instead of
 stacking a duplicate. Exercised at two levels:
 
-- the ``find_duplicate_edge`` primitive in ``core.topology``;
+- the ``find_duplicate_edge`` primitive in ``built_core.topology``;
 - the ``AddEdgeCommand`` that wires it into the undo/redo history, including
   the regression that undo must never delete the edge it merged into.
 
@@ -17,10 +17,10 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.geometry import Edge
-from core.history import AddEdgeCommand, History
-from core.scene import Scene
-from core.topology import find_duplicate_edge, same_position
+from built_core.geometry import Edge
+from built_core.history import AddEdgeCommand, History
+from built_core.scene import Scene
+from built_core.topology import find_duplicate_edge, same_position
 
 
 def V(x: float, y: float, z: float = 0.0) -> QVector3D:

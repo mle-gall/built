@@ -11,7 +11,7 @@ pub(crate) fn add_image(scene: &Obj<'_>, image: &Obj<'_>) -> PyResult<bool> {
     if make {
         let layer = scene
             .py()
-            .import("core.layers")?
+            .import("built_core.layers")?
             .getattr("Layer")?
             .call1((name,))?;
         scene.getattr("layers")?.call_method1("append", (layer,))?;

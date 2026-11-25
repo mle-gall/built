@@ -19,7 +19,7 @@ from built_core import Input as Qt
 from built_core import ScreenPoint as QPointF
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edges
+from built_core.edits import build_add_edges
 from tools.base import ToolContext
 from tools.texture_position import (PIN_MOVE, PIN_SCALE_ROTATE,
                                     PIN_SCALE_SHEAR, TexturePositionTool)

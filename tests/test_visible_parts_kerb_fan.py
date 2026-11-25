@@ -24,8 +24,8 @@ import numpy as np
 import pytest
 
 from core import _native
-from core import vista_caras as VC
-from core.vista_caras import FaceFill
+from built_core import vista_caras as VC
+from built_core.vista_caras import FaceFill
 from tests import vista_caras_reference as R
 
 FIXTURE = Path(__file__).resolve().parent / "data" / "plaza_kerb_fan.json"
@@ -37,8 +37,9 @@ pytestmark = pytest.mark.skipif(
 
 CHILD = r"""
 import json, sys, numpy as np
-from core import vista_caras as VC, _native
-from core.vista_caras import FaceFill
+from core import _native
+from built_core import vista_caras as VC
+from built_core.vista_caras import FaceFill
 raw = json.load(open(sys.argv[1]))
 faces = [FaceFill(rings=[np.array(r, float) for r in f["rings"]], rgb=(0, 0, 0),
                   layer="0", opacity=f["opacity"], depth=f["depth"],

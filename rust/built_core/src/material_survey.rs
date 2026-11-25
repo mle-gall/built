@@ -45,7 +45,7 @@ impl Paints {
         let mut result = Self::default();
         let rows = mesh
             .py()
-            .import("core.geometry_arrays")?
+            .import("built_core.geometry_arrays")?
             .call_method1("face_attributes", (mesh,))?;
         for row in rows.try_iter()? {
             let row = row?;

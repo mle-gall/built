@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from built_core import Vec3 as V
 
-from core.arrangement import planar_arrangement
-from core.history import AddEdgeCommand, History, RebuildPlanarFacesCommand
-from core.scene import Scene
+from built_core.arrangement import planar_arrangement
+from built_core.history import AddEdgeCommand, History, RebuildPlanarFacesCommand
+from built_core.scene import Scene
 
 O = V(0, 0, 0)
 N = V(0, 0, 1)

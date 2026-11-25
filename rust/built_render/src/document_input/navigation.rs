@@ -206,7 +206,7 @@ fn apply_zoom_value(v: &Obj, typed: &str) -> PyResult<bool> {
     } else {
         number
     };
-    let (lo, hi): (f64, f64) = py.import("core.camera")?.getattr("FOV_RANGE")?.extract()?;
+    let (lo, hi): (f64, f64) = py.import("built_core.camera")?.getattr("FOV_RANGE")?.extract()?;
     camera.setattr("fov_deg", angle.clamp(lo, hi))?;
     update(v)?;
     let kw = PyDict::new(py);

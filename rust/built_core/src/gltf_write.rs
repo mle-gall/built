@@ -56,7 +56,7 @@ fn image(py: Python<'_>, path: &Path) -> PyResult<Option<(Vec<u8>, &'static str)
         .extension()
         .is_some_and(|e| e.eq_ignore_ascii_case("tga"))
         && !py
-            .import("core.texture")?
+            .import("built_core.texture")?
             .call_method1("is_image_bytes", (PyBytes::new(py, &data),))?
             .is_truthy()?
     {
@@ -157,7 +157,7 @@ impl<'py> Writer<'py> {
             if let Some(i) = self.texture(&src)? {
                 mr.set_item("baseColorTexture", record!(py;"index"=>i))?;
                 if py
-                    .import("core.texture")?
+                    .import("built_core.texture")?
                     .call_method1("image_has_cutout", (src.str()?,))?
                     .is_truthy()?
                 {

@@ -46,7 +46,7 @@ def _type(vp, text):
 
 
 def _window(native_host):
-    from core import units
+    from built_core import units
 
     win = native_host.window
     native_host.resize(1200, 800, 1.0)

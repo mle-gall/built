@@ -23,9 +23,9 @@ fn every_face_painted<'py>(a: &Args<'py>) -> Reply<'py> {
     let mut _m: Obj<'py>;
     let mut g: Obj<'py>;
     let obj = a.get_item(0)?;
-    let iter_placements = imported(py, "core.group")?.getattr("iter_placements")?;
+    let iter_placements = imported(py, "built_core.group")?.getattr("iter_placements")?;
     let has_own_material = imported(py, "built_core.materials")?.getattr("has_own_material")?;
-    let face_attrs = imported(py, "core.mesh")?.getattr("face_attrs")?;
+    let face_attrs = imported(py, "built_core.mesh")?.getattr("face_attrs")?;
     let mut seen = false.into_bound_py_any(py)?;
     for item in iter_placements.call1((&obj,))?.try_iter()? {
         [g, _m] = unpack::<2>(&item?)?;
@@ -129,7 +129,7 @@ fn host_brush<'py>(a: &Args<'py>) -> Reply<'py> {
     let vp = a.get_item(1)?;
     let refresh_library_paint = imported(py, "built_core")?.getattr("refresh_library_paint")?;
     let material_for_paint =
-        imported(py, "core.material_commands")?.getattr("material_for_paint")?;
+        imported(py, "built_core.material_commands")?.getattr("material_for_paint")?;
     let brush = tool.get_type().into_any();
     refresh_library_paint.call1((vp.getattr("scene")?, &brush))?;
     if !(brush.getattr("current_is_default")?.is_truthy()?)

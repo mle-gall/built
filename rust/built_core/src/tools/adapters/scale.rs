@@ -659,7 +659,7 @@ fn active_axes<'py>(a: &Args<'py>) -> Reply<'py> {
 fn pick_frame<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let [tool, viewport] = unpack::<2>(a.as_any())?;
-    let group = imported(py, "core.group")?;
+    let group = imported(py, "built_core.group")?;
     let axes = imported(py, "built_core.axes")?;
     let selection = viewport
         .getattr("scene")?

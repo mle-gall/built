@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""``core.texture`` must answer as ``core/texture.py`` did at ``58520a91``:
+"""``built_core.texture`` must answer as ``core/texture.py`` did at ``58520a91``:
 file names for the cache (unsafe characters, digest prefixes stacked by
 old saves, long names clipped with their extension), image signatures, the
 cache root under each environment setting, content-addressed cache paths,
@@ -32,7 +32,7 @@ def _png(rgba, w=2, h=2):
 
 
 def answers():
-    import core.texture as T
+    import built_core.texture as T
     out = {}
     out["names"] = [T.texture_file_name(n) for n in NAMES]
     heads = [b"\x89PNG\r\n\x1a\nrest", b"\xff\xd8\xff\xe0", b"GIF87a", b"GIF89a", b"BM\x00",

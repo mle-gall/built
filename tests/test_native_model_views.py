@@ -121,7 +121,7 @@ def test_native_open_save_keeps_the_classic_views_home(tmp_path):
     from built_render import Host
     from built_render import shell_files as files
     from formats import igz
-    from core.scene import Scene
+    from built_core.scene import Scene
     scene = Scene()
     scene.views_home = {"layout": "two_wide", "columns": 0.75, "rows": [0.5, 0.5]}
     source = tmp_path / "views.built"

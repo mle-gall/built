@@ -300,7 +300,7 @@ fn tracked(
     restore: &str,
 ) -> PyResult<()> {
     let py = api.py();
-    let doc = py.import("core.doc_model")?;
+    let doc = py.import("built_core.doc_model")?;
     let ns = api.methods(methods, &[])?;
     ns.set_item(
         "from_dict",

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! `core.links`, served from here (`core/links.py` is gone): linked files,
+//! `built_core.links`, served from here (`core/links.py` is gone): linked files,
 //! another .igz placed in this one as a live reference.
 //!
 //! A linked file is a component whose definition is not the host's: it is
@@ -47,7 +47,7 @@ use super::py_class::{class, method};
 
 type Obj<'py> = Bound<'py, PyAny>;
 
-const MODULE: &str = "core.links";
+const MODULE: &str = "built_core.links";
 
 static LINK_ERROR: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 static SET_REGISTRY: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
@@ -105,7 +105,7 @@ fn set_registry_command<'py>(value: &Obj<'py>) -> PyResult<Obj<'py>> {
     cls.bind(py).call1((value,))
 }
 
-/// Fill the module `core.links`.
+/// Fill the module `built_core.links`.
 pub(crate) fn install(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
     m.add("__doc__", "Linked files: another .igz placed in this one as a live reference (rust/built_core/src/model/links_api.rs).")?;

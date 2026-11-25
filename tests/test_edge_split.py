@@ -18,11 +18,11 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edge
-from core.geometry import Edge
-from core.history import AddEdgeCommand, History
-from core.scene import Scene
-from core.topology import plan_edge_split, same_position, segment_intersection
+from built_core.edits import build_add_edge
+from built_core.geometry import Edge
+from built_core.history import AddEdgeCommand, History
+from built_core.scene import Scene
+from built_core.topology import plan_edge_split, same_position, segment_intersection
 
 
 def V(x: float, y: float, z: float = 0.0) -> QVector3D:

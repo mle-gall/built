@@ -13,7 +13,7 @@ import sys
 import time
 import types
 import numpy as np
-from core.mesh import Mesh
+from built_core.mesh import Mesh
 source = subprocess.check_output(["git", "show", "bec189c4:core/mesh.py"], text=True)
 parent = types.ModuleType("core._parent_mesh_bench")
 sys.modules[parent.__name__] = parent

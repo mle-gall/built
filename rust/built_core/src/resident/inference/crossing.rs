@@ -154,7 +154,7 @@ pub(super) fn face_crossing<'p>(
         .unwrap_or(14.)
         .max(ring);
     for (g, r) in planes {
-        let found = py.import("core.snap")?.call_method1(
+        let found = py.import("built_core.snap")?.call_method1(
             "face_crossing_near_ray",
             (
                 x,

@@ -15,14 +15,14 @@ import random
 
 from built_core import Vec3 as V
 
-from core import solids
-from core.arrangement import _interior_point, _point_in_polygon
+from built_core import solids
+from built_core.arrangement import _interior_point, _point_in_polygon
 from built_core import plane_region_point as _region_test_point
-from core.edits import build_add_edges
-from core.history import History
-from core.mesh import Mesh
+from built_core.edits import build_add_edges
+from built_core.history import History
+from built_core.mesh import Mesh
 from built_core.orient import is_closed
-from core.scene import Scene
+from built_core.scene import Scene
 from tests.test_pushpull_ux import _StubViewport
 from tests.test_solid_tools import BLUE, RED, _box
 from tools.pushpull import PushPullTool

@@ -13,8 +13,8 @@ import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.preferences_chrome import Controls
 
-from core.composition import Composicion, CotaItem, CotaRadialItem  # noqa: E402
-from core.units import format_length  # noqa: E402
+from built_core.composition import Composicion, CotaItem, CotaRadialItem  # noqa: E402
+from built_core.units import format_length  # noqa: E402
 
 
 @pytest.mark.parametrize("units, shown, bare", [
@@ -41,7 +41,7 @@ def test_not_a_number_stays_a_dash():
 
 
 def test_model_dimension_style_hides_the_unit():
-    from core.scene import Scene
+    from built_core.scene import Scene
     from tests.controller_surface import ControllerSurface as Viewport
     style = Scene().dimension_style
     assert style["show_unit"] is True                 # new documents: as before
@@ -108,7 +108,7 @@ def test_sheet_keeps_the_choice_and_old_sheets_show_the_unit():
 def test_document_keeps_the_choice_and_old_documents_show_the_unit(tmp_path):
     import json
 
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     scene = Scene()
     scene.dimension_style["show_unit"] = False

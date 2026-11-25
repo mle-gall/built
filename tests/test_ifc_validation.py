@@ -22,9 +22,9 @@ import ifcopenshell.util.element  # noqa: E402
 import ifcopenshell.validate  # noqa: E402
 
 from core.bim import next_object_id, tag_faces, tag_group  # noqa: E402
-from core.edits import build_add_edges  # noqa: E402
-from core.history import AddFaceCommand, History, MakeGroupCommand  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core.edits import build_add_edges  # noqa: E402
+from built_core.history import AddFaceCommand, History, MakeGroupCommand  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from formats.ifc import save_ifc  # noqa: E402
 from tools.base import ToolContext  # noqa: E402
 from tools.pushpull import PushPullTool  # noqa: E402

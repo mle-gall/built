@@ -16,9 +16,9 @@ import pytest
 from built_core import Vec3 as QVector3D
 
 import built_core.autosave as autosave
-from core.edits import build_add_edges
-from core.history import History
-from core.scene import Scene
+from built_core.edits import build_add_edges
+from built_core.history import History
+from built_core.scene import Scene
 
 #: The genuine ``autosave_dir``, captured at import — the fixture below
 #: replaces it on the module for every test, and the APPDATA test needs

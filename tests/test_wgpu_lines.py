@@ -8,10 +8,10 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from core.group import Group
-from core.guide import Guide
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.guide import Guide
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from views.document_interaction import _box_edge_vertices
 from tests.controller_surface import ControllerSurface as Viewport
 from views.wgpu_lines import SEGMENT, sync
@@ -148,7 +148,7 @@ def test_live_annotations_leave_guide_lines_to_the_native_pass(monkeypatch):
     monkeypatch.setattr(annotations, 'draw_guide_lines', lambda *a: calls.append(a))
     scene = Scene()
     scene.guides = [Guide(V(0, 0, 1), V(1, 0, 0))]
-    from core.camera import OrbitCamera as Camera
+    from built_core.camera import OrbitCamera as Camera
     from built_render import AnnotationCanvas
     for guide_lines, expected in ((False, 0), (True, 1)):
         painter = AnnotationCanvas(64, 64, 64.)

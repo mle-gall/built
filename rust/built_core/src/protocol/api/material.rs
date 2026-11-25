@@ -192,7 +192,7 @@ fn unnamed_colours<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
         .try_iter()?
     {
         for pair in py
-            .import("core.group")?
+            .import("built_core.group")?
             .call_method1("iter_placements", (top?,))?
             .try_iter()?
         {

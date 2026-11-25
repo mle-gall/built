@@ -20,7 +20,7 @@ import pytest
 from built_core import ScreenPoint, Input
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edges
+from built_core.edits import build_add_edges
 from tools.arc import COLOR_FILLET, ArcTool
 from tools.base import ToolContext
 
@@ -85,7 +85,7 @@ def test_start_on_an_edge_previews_the_tangent_arc(viewport):
     tool.on_hover(_ctx(viewport, QVector3D(1.0, 1.0, 0)))
     lines = tool.rubber_band_lines()
     assert len(lines) > 1
-    from core.snap import COLOR_TANGENT
+    from built_core.snap import COLOR_TANGENT
     assert tool.wireframe_color[:3] == COLOR_TANGENT
     assert tool.value_label()[0] == "Tangent to edge"
     # The arc leaves P1 along the edge: its first span is (nearly) along X.

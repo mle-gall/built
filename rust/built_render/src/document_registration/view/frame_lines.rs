@@ -64,7 +64,7 @@ fn scaffold_dash(view: &Obj<'_>, height: f64) -> PyResult<f64> {
 }
 fn selected_groups<'py>(view: &Obj<'py>) -> PyResult<Bound<'py, PyList>> {
     let py = view.py();
-    let group = py.import("core.group")?.getattr("Group")?;
+    let group = py.import("built_core.group")?.getattr("Group")?;
     let groups = empty(py);
     for entity in view.getattr("scene")?.getattr("selection")?.try_iter()? {
         let entity = entity?;
@@ -767,7 +767,7 @@ pub(super) fn selection_box_segments<'py>(a: &Args<'py>) -> Reply<'py> {
         return (key, cache.get_item("segments")?).into_bound_py_any(py);
     }
     let measure = interaction(py)?.getattr("DocumentInteraction")?.getattr("_compute_obb")?;
-    let corners_of = py.import("core.group")?.getattr("oriented_box_corners")?;
+    let corners_of = py.import("built_core.group")?.getattr("oriented_box_corners")?;
     let parts = empty(py);
     for group in shown.iter() {
         let mut corners = cache.call_method1("get", (&group,))?;

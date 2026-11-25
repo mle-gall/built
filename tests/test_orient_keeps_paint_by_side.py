@@ -25,10 +25,10 @@ from built_core import ScreenPoint as QPointF
 from built_core import Vec3 as QVector3D
 
 
-from core.history import FlipFacesCommand, History
-from core.mesh import Mesh, turn_face_over
+from built_core.history import FlipFacesCommand, History
+from built_core.mesh import Mesh, turn_face_over
 from built_core.orient import orient_outward
-from core.scene import Scene
+from built_core.scene import Scene
 
 BRICK = {"color": [0.7, 0.3, 0.2], "mat": "Ladrillo"}
 PLASTER = {"color": [0.95, 0.95, 0.9], "mat": "Yeso"}

@@ -23,11 +23,11 @@ from built_core import ScreenPoint, Input
 from built_core import Vec3 as QVector3D
 
 
-from core.group import Group
-from core.guide import Guide, GuideCircle
-from core.history import History, MoveGuidesCommand, RotateGuidesCommand
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.guide import Guide, GuideCircle
+from built_core.history import History, MoveGuidesCommand, RotateGuidesCommand
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from tools.base import ToolContext
 from tools.move import MoveTool
 from tools.rotate import RotateTool

@@ -4,7 +4,7 @@ use super::*;
 #[pyo3(signature=(vp,fast=true))]
 pub(super) fn view_line_groups<'p>(vp: &Obj<'p>, fast: bool) -> ResultObj<'p> {
     let py = vp.py();
-    let hlr = py.import("core.hlr")?;
+    let hlr = py.import("built_core.hlr")?;
     let cam = vp.getattr("camera")?;
     let scene = vp.getattr("scene")?;
     let kw = PyDict::new(py);
@@ -84,7 +84,7 @@ impl ActiveDrawing {
     #[pyo3(signature=(**options))]
     fn faces<'p>(&self, py: Python<'p>, options: Option<&Bound<'p, PyDict>>) -> ResultObj<'p> {
         let vp = self.vp.bind(py);
-        py.import("core.vista_caras")?
+        py.import("built_core.vista_caras")?
             .getattr("view_faces")?
             .call((vp.getattr("scene")?, vp.getattr("camera")?), options)
     }

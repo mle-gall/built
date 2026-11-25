@@ -24,7 +24,7 @@ fn matrix<'p>(scene: &Obj<'p>, owner: Option<&Obj<'p>>) -> PyResult<Option<Obj<'
     } else {
         scene
             .py()
-            .import("core.outliner")?
+            .import("built_core.outliner")?
             .call_method1("world_matrix", (scene.getattr("groups")?, owner))?
     };
     Ok((!m.is_none()).then_some(m))

@@ -15,7 +15,7 @@ import pytest
 
 from built_core import Vec3 as V
 
-from core.camera import OrbitCamera
+from built_core.camera import OrbitCamera
 
 WIDTH, HEIGHT = 1440.0, 900.0
 
@@ -88,7 +88,7 @@ def test_without_a_floor_the_zoom_is_the_plain_ten_percent_step():
 
 
 def test_the_floor_stops_at_the_far_limit():
-    from core.camera import MAX_DISTANCE
+    from built_core.camera import MAX_DISTANCE
     cam = close_up()
     focus = beside_the_centre(cam)
     cam.zoom_to(-1.0, focus, min_step=MAX_DISTANCE * 10)

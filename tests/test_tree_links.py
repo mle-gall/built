@@ -48,7 +48,7 @@ class _Renderer:
 
 class _Viewport:
     def __init__(self, scene):
-        from core.history import History
+        from built_core.history import History
         self.scene, self.history = scene, History(scene)
         self.status = []
 
@@ -81,7 +81,7 @@ class _View:
 @pytest.fixture
 def ui(request):
     files = request.getfixturevalue("big_files" if getattr(request, "param", SMALL) == BIG else "small_files")
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     import views.wgpu_ui as wu
     scene = Scene()
@@ -139,7 +139,8 @@ def test_linked_files_are_roots_with_their_structures_and_counts(ui):
 
 
 def test_bootstrap_mounts_only_the_hosts_own_links(ui):
-    from core import bim_registry, structure
+    from core import bim_registry
+    from built_core import structure
     scene = ui[0]
     nodes = structure.bootstrap(scene, bim_registry.get(scene))["structure"]["nodes"]
     roots = [n["name"] for n in nodes.values() if n["parent"] is None]
@@ -149,7 +150,7 @@ def test_bootstrap_mounts_only_the_hosts_own_links(ui):
 
 @at_scale
 def test_a_link_row_selects_its_placement_and_inspects_the_file(ui):
-    from core import links
+    from built_core import links
     scene, win, view, rows, act = ui
     import views.wgpu_ui as wu
     # This process's CPU time, not wall time: other work on the machine
@@ -201,7 +202,7 @@ def test_expanding_is_paged_and_cheap(ui):
 
 
 def test_eye_and_lock_on_mounted_nodes_write_overrides_and_undo(ui):
-    from core import layers as L, links
+    from built_core import layers as L, links
     scene, win, view, rows, act = ui
     rails = _key(view, "Rails")
     view._ui_exp.update({"n:link:A", "n:" + _key(view, "Track")})
@@ -240,7 +241,7 @@ def test_linked_rows_are_read_only(ui):
 
 
 def test_set_tag_state_refuses_unknown_keys(ui):
-    from core.protocol import commands
+    from built_core.protocol import commands
     scene, win = ui[0], ui[1]
     with pytest.raises(KeyError):
         commands.run(win.viewport.history, "set_tag_state", tags=["nope"], visible=False)
@@ -252,7 +253,7 @@ def test_set_tag_state_refuses_unknown_keys(ui):
 def _visible(scene, g):
     """Drawn by the Metal pack: not filtered, its holders included."""
     from types import SimpleNamespace
-    from core.group import iter_placements
+    from built_core.group import iter_placements
     import built_core
     root = g
     while getattr(root, "owner", None) is not None:

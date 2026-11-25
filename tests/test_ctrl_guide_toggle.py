@@ -30,8 +30,8 @@ from types import SimpleNamespace
 from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Vec3 as QVector3D
 
-from core.history import History
-from core.scene import Scene
+from built_core.history import History
+from built_core.scene import Scene
 from tools.base import ToolContext
 from tools.protractor import ProtractorTool
 from tools.rotate import RotateTool

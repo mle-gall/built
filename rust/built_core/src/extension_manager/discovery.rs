@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Plugin discovery and the published core.extensions scripting module.
+//! Plugin discovery and the published built_core.extensions scripting module.
 use super::path;
 use pyo3::{
     exceptions::{PyException, PyImportError, PySystemExit, PyTypeError, PyValueError},
@@ -318,7 +318,7 @@ fn discover_plugins<'p>(
     panels_only: bool,
     native_panels: Option<&Obj<'p>>,
 ) -> PyResult<(Bound<'p, PyList>, Bound<'p, PyList>)> {
-    let api = py.import("core.extensions")?;
+    let api = py.import("built_core.extensions")?;
     let manager = super::module(py)?;
     let found = PyList::empty(py);
     let errors = PyList::empty(py);
@@ -427,7 +427,7 @@ pub(crate) fn install(m: &Bound<'_, PyModule>) -> PyResult<()> {
             }
         }
         let cls = dc.call_method1("make_dataclass", (name, &fields))?;
-        cls.setattr("__module__", "core.extensions")?;
+        cls.setattr("__module__", "built_core.extensions")?;
         m.add(name, cls)?;
     }
     m.add_function(wrap_pyfunction!(user_plugins_dir, m)?)?;

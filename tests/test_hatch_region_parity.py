@@ -3,7 +3,7 @@ import hashlib
 import random
 import struct
 
-from core.hatches import clip_segments, fill_quads
+from built_core.hatches import clip_segments, fill_quads
 
 
 def test_seeded_paper_regions():
@@ -27,7 +27,7 @@ def test_seeded_paper_regions():
 def test_catalogue_on_seeded_section_bands():
     """Clipped DXF segments, sheet marks and PAT families from the Python catalogue."""
     import json
-    from core import hatches
+    from built_core import hatches
 
     def rounded(value):
         if isinstance(value, float):
@@ -57,7 +57,7 @@ def test_catalogue_on_seeded_section_bands():
 
 
 def test_script_rings_accept_json_coordinates():
-    from core import hatches
+    from built_core import hatches
 
     points = [(0, 0), (8, 0), (8, 4), (0, 4)]
     decoded = [[str(x), str(y)] for x, y in points]

@@ -25,8 +25,8 @@ from tests.shell_isolation import native_window, restore_shell_patches  # noqa: 
 from built_render import AnnotationCanvas
 from built_core import Vec3 as V
 
-from core.history import History
-from core.scene import Scene
+from built_core.history import History
+from built_core.scene import Scene
 
 def _app_for(win, key="myext"):
     from views.extension_api import ExtensionApp
@@ -108,7 +108,7 @@ def test_reopening_plugin_panels_preserves_each_instance(native_host, monkeypatc
     import json
     from types import SimpleNamespace
     from unittest.mock import Mock
-    from core import plugin_panels
+    from built_core import plugin_panels
 
     win, view = native_host.window, native_host.view
     renderer = Mock()

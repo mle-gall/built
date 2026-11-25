@@ -219,27 +219,6 @@ fn remove_hand_installed<'p>(py: Python<'p>, path: PathBuf) -> PyResult<Obj<'p>>
     }
     super::path(py, &aside(&path)?)
 }
-fn retired(py: Python, ids: &HashSet<String>) -> PyResult<Vec<PathBuf>> {
-    let mut out = vec![];
-    for p in entries(&root(py)?) {
-        if visible(&p)
-            && valid(name(&p))
-            && !ids.contains(name(&p))
-            && installed_info(py, name(&p))?.is_some()
-        {
-            out.push(p);
-        }
-    }
-    Ok(out)
-}
-#[pyfunction]
-fn retired_extensions<'p>(catalog_ids: &Obj<'p>) -> PyResult<Vec<Obj<'p>>> {
-    let py = catalog_ids.py();
-    paths(py, retired(py, &strings(catalog_ids)?)?)
-}
-fn strings(o: &Obj) -> PyResult<HashSet<String>> {
-    o.try_iter()?.map(|v| v?.extract()).collect()
-}
 pub(super) fn descendants(dir: &Path) -> Vec<PathBuf> {
     let mut result = vec![];
     let mut dirs = vec![dir.to_owned()];
@@ -291,27 +270,17 @@ fn fingerprint(py: Python, p: &Path) -> PyResult<(Option<String>, HashSet<PathBu
     }
     Ok((Some(digest(py, &normalized)?), modules))
 }
-pub(super) fn copies(
-    py: Python,
-    id: &str,
-    package: &Path,
-    catalog: Option<&Obj>,
-) -> PyResult<Vec<PathBuf>> {
+pub(super) fn copies(py: Python, id: &str, package: &Path) -> PyResult<Vec<PathBuf>> {
     require_id(id)?;
     let (hash, modules) = fingerprint(py, package)?;
-    let retired = match catalog {
-        Some(c) => retired(py, &strings(c)?)?,
-        None => vec![],
-    };
+
     let mut found = vec![];
     for p in entries(&root(py)?) {
         if !visible(&p) || p.is_symlink() || ident(&p) == id {
             continue;
         }
         if p.is_dir() {
-            if !p.join("__init__.py").is_file()
-                || p.join("extension.json").is_file() && !retired.contains(&p)
-            {
+            if !p.join("__init__.py").is_file() || p.join("extension.json").is_file() {
                 continue;
             }
         } else if p.extension().is_none_or(|s| s != "py") {
@@ -328,14 +297,9 @@ pub(super) fn copies(
     }
     Ok(found)
 }
-#[pyfunction(signature=(ident,package,catalog_ids=None))]
-fn manual_copies<'p>(
-    py: Python<'p>,
-    ident: &str,
-    package: PathBuf,
-    catalog_ids: Option<&Obj>,
-) -> PyResult<Vec<Obj<'p>>> {
-    paths(py, copies(py, ident, &package, catalog_ids)?)
+#[pyfunction(signature=(ident,package))]
+fn manual_copies<'p>(py: Python<'p>, ident: &str, package: PathBuf) -> PyResult<Vec<Obj<'p>>> {
+    paths(py, copies(py, ident, &package)?)
 }
 pub(super) fn register(m: &Bound<PyModule>) -> PyResult<()> {
     for f in [
@@ -354,7 +318,6 @@ pub(super) fn register(m: &Bound<PyModule>) -> PyResult<()> {
         wrap_pyfunction!(hand_installed_plugins, m)?,
         wrap_pyfunction!(hand_installed_ident, m)?,
         wrap_pyfunction!(remove_hand_installed, m)?,
-        wrap_pyfunction!(retired_extensions, m)?,
         wrap_pyfunction!(manual_copies, m)?,
     ] {
         m.add_function(f)?

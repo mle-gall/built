@@ -5,7 +5,7 @@ of a hidden back edge or of its midpoint. In X-ray nothing hides anything,
 so the back edge still lends its height there.
 
 Drives an unshown ``WgpuView`` with the real Line tool (the fixture of
-``test_.skp_inference_gaps``): the rules are ``core.snap``'s, the
+``test_.skp_inference_gaps``): the rules are ``built_core.snap``'s, the
 candidates and the occlusion test are the Metal view's own."""
 import math
 

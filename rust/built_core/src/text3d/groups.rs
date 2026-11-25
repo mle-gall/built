@@ -42,7 +42,7 @@ fn text_params<'p>(
 }
 fn letter_groups<'p>(params: &Obj<'p>, frame: Option<&Obj<'p>>) -> PyResult<Bound<'p, PyList>> {
     let py = params.py();
-    let group = py.import("core.group")?.getattr("Group")?;
+    let group = py.import("built_core.group")?.getattr("Group")?;
     let matrix = py.import("built_core")?.getattr("Matrix4")?;
     let text = params.get_item("text")?.extract::<String>()?;
     let font = params
@@ -199,7 +199,7 @@ fn make_text_group<'p>(params: &Obj<'p>) -> PyResult<Option<Obj<'p>>> {
     let kw = PyDict::new(py);
     kw.set_item("name", name)?;
     let group = py
-        .import("core.group")?
+        .import("built_core.group")?
         .call_method("Group", (), Some(&kw))?;
     group.call_method1("adopt", (&kids,))?;
     group.setattr("component", false)?;

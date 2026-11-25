@@ -39,9 +39,9 @@ MATS = ["Oak", "Brick", "Glass", "Concrete"]
 
 def _fn(name):
     """A links operation by its Python name: the native ``link_*`` function
-    when there is one (after the move), else ``core.links``'s."""
+    when there is one (after the move), else ``built_core.links``'s."""
     import built_core
-    from core import links
+    from built_core import links
     for cand in ("link_" + name, name):
         f = getattr(built_core, cand, None)
         if f is not None and cand.startswith("link"):
@@ -51,7 +51,7 @@ def _fn(name):
 
 def _registry(scene):
     import built_core
-    from core import links
+    from built_core import links
     read = getattr(built_core, "link_registry_view", None)
     return read(scene) if read is not None else _fn("registry_view")(scene)
 
@@ -83,8 +83,8 @@ def _clean(v, tmp):
 def _mesh_rows(mesh):
     """Each face's (tag, front paint, back paint, corner count) and each
     edge's tag, in order; a deferred mesh's from its tables, unbuilt."""
-    from core.mesh import DeferredMesh
-    from core.layers import layer_of
+    from built_core.mesh import DeferredMesh
+    from built_core.layers import layer_of
 
     def paint(a):
         a = a or {}
@@ -114,7 +114,7 @@ def _mesh_rows(mesh):
 
 
 def _built_rows(mesh):
-    from core.layers import layer_of
+    from built_core.layers import layer_of
     out = []
     for f in mesh.faces:
         a = {k: v for k, v in (f.attrs or {}).items() if k != "layer"}
@@ -127,7 +127,7 @@ def _built_rows(mesh):
 
 
 def fingerprint(scene, tmp, *, build=False):
-    from core import links
+    from built_core import links
     uids, meshes, fuids = _Canon(), _Canon(), _Canon()
     mesh_rows = {}
     out = {}
@@ -181,7 +181,7 @@ def fingerprint(scene, tmp, *, build=False):
     out["tree"] = [node(g, None, None) for g in scene.groups]
     out["meshes"] = [mesh_rows[k] for k in sorted(mesh_rows, key=meshes)]
     # The queries.
-    from core.purge import iter_groups
+    from built_core.purge import iter_groups
     q = {}
     q["sources"] = _clean(_fn("sources")(scene), tmp)
     q["linked"] = [uids(g.uid) for g in _fn("linked_groups")(scene)]
@@ -227,11 +227,11 @@ def _write_source(path, rng, *, nested=None, generation=0):
     tree, faces on them or untagged, materials (some colliding with the
     host's), groups and a component placed twice; optionally a file
     linked inside it (``nested``)."""
-    from core import links
-    from core.group import Group
-    from core.layers import Layer, DEFAULT_LAYER
-    from core.materials import Material
-    from core.scene import Scene
+    from built_core import links
+    from built_core.group import Group
+    from built_core.layers import Layer, DEFAULT_LAYER
+    from built_core.materials import Material
+    from built_core.scene import Scene
     from formats import igz
     from built_core import Matrix4
     s = Scene()
@@ -264,7 +264,7 @@ def _write_source(path, rng, *, nested=None, generation=0):
         mats.append(m)
 
     def mesh_of(n, x, y, z):
-        from core.mesh import Mesh
+        from built_core.mesh import Mesh
         m = Mesh()
         for i in range(n):
             f = _square(m, x + i, y, z, rng)
@@ -274,7 +274,7 @@ def _write_source(path, rng, *, nested=None, generation=0):
             _paint(f, rng, mats)
         if rng.random() < 0.4 and m.edges:
             e = m.edges[0]
-            from core.layers import assign_layer
+            from built_core.layers import assign_layer
             assign_layer(e, rng.choice(tags))
         return m
     for k in range(rng.randint(1, 3)):
@@ -318,9 +318,9 @@ def _write_source(path, rng, *, nested=None, generation=0):
 
 
 def _host(rng):
-    from core.layers import Layer
-    from core.materials import Material
-    from core.scene import Scene
+    from built_core.layers import Layer
+    from built_core.materials import Material
+    from built_core.scene import Scene
     h = Scene()
     if rng.random() < 0.6:
         h.layer_folders = ["Structure"]
@@ -345,16 +345,16 @@ class _Run:
 
 
 def _top_links(host):
-    from core import links
+    from built_core import links
     return [g for g in host.groups if _fn("is_linked")(g)]
 
 
 def run_case(seed, tmp):
     """Every step's fingerprint for case ``seed``."""
-    from core import links
-    from core.group import copy_group
-    from core.history import History, UnlinkCommand
-    from core.scene import Scene
+    from built_core import links
+    from built_core.group import copy_group
+    from built_core.history import History, UnlinkCommand
+    from built_core.scene import Scene
     from formats import igz
     import built_core
     run = _Run(seed, tmp)
@@ -427,7 +427,7 @@ def run_case(seed, tmp):
             elif op == "relink":
                 link(rng.choice(srcs))
             elif op == "build":
-                from core.group import iter_placements
+                from built_core.group import iter_placements
                 for g in host.groups:
                     for p, _m in iter_placements(g):
                         len(p.mesh.faces)
@@ -448,7 +448,7 @@ def run_case(seed, tmp):
 
 
 def _src_groups(path):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     s = Scene()
     igz.load_into(s, path)
@@ -457,7 +457,7 @@ def _src_groups(path):
 
 def pure_cases():
     """The path and name helpers, on fixed inputs."""
-    from core import links
+    from built_core import links
     out = {}
     out["stable_uid"] = [_fn("stable_uid")(a, b) for a, b in
                          [("a", "b"), ("", ""), ("0123456789abcdef", "fedcba9876543210"),
@@ -479,8 +479,8 @@ def pure_cases():
 
 def _with_uids(fn):
     """Seeded group and folder uids, so a run is the same every time."""
-    import core.group as group
-    import core.layers as layers
+    import built_core.group as group
+    import built_core.layers as layers
     import itertools
     counter = itertools.count()
     old_g, old_l = group.new_uid, getattr(layers, "new_uid", None)

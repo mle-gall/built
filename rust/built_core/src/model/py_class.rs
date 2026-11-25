@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Python classes built from native functions, for the `core.*` modules
-//! served from Rust (`core.doc_model`, `core.dimension`, …): plugins
+//! served from Rust (`built_core.doc_model`, `built_core.dimension`, …): plugins
 //! subclass them, pickle them and check them with `isinstance`, so they
 //! stay ordinary heap types made with `type(name, bases, namespace)`; the
 //! methods are native functions bound by [`NativeMethod`], which binds as
