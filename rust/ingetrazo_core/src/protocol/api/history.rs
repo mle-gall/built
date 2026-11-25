@@ -1,16 +1,20 @@
 //! Public command classes and the host for the native document journal.
 use super::*;
 use pyo3::types::{PyInt, PySet, PyString};
-use pyo3::IntoPyObjectExt;
 
-fn zero() -> PyResult<Py<PyAny>> {
-    Python::attach(|py| 0.into_py_any(py))
+fn zero() -> Py<PyAny> {
+    Python::attach(|py| 0i32.into_pyobject(py).unwrap().into_any().unbind())
 }
-fn yes() -> PyResult<Py<PyAny>> {
-    Python::attach(|py| true.into_py_any(py))
+fn yes() -> Py<PyAny> {
+    Python::attach(|py| {
+        pyo3::types::PyBool::new(py, true)
+            .to_owned()
+            .into_any()
+            .unbind()
+    })
 }
-fn empty_name() -> PyResult<Py<PyAny>> {
-    Python::attach(|py| "".into_py_any(py))
+fn empty_name() -> Py<PyAny> {
+    Python::attach(|py| PyString::new(py, "").into_any().unbind())
 }
 fn empty_tuple() -> Py<PyAny> {
     Python::attach(|py| PyTuple::empty(py).into_any().unbind())
@@ -75,7 +79,7 @@ fn add_listener<'p>(
 fn revision<'p>(this: &Obj<'p>) -> PyResult<Obj<'p>> {
     this.getattr("_native")?.getattr("revision")
 }
-#[pyfunction(signature=(this, revision=zero()?))]
+#[pyfunction(signature=(this, revision=zero()))]
 fn changes_since<'p>(this: &Obj<'p>, revision: Py<PyAny>) -> PyResult<Obj<'p>> {
     let revision = revision.bind(this.py());
     if !revision.is_exact_instance_of::<PyInt>()
@@ -133,6 +137,13 @@ fn context_changed(this: &Obj<'_>, before: &Obj<'_>) -> PyResult<()> {
         }
     }
     Ok(())
+}
+#[pyfunction]
+fn command_state<'p>(this: &Obj<'p>) -> PyResult<Obj<'p>> {
+    this.py()
+        .import("builtins")?
+        .getattr("object")?
+        .call_method1("__getstate__", (this,))
 }
 #[pyfunction]
 fn direct_snapshot<'p>(this: &Obj<'p>, mesh: &Obj<'p>) -> PyResult<Obj<'p>> {
@@ -222,7 +233,7 @@ fn import_init(this: &Obj<'_>, mutate: &Obj<'_>) -> PyResult<()> {
 fn collect<'p>(v: &Obj<'p>) -> PyResult<Obj<'p>> {
     v.py().get_type::<PyList>().call1((v,))
 }
-#[pyfunction(signature=(this,inner,*,heal=yes()?))]
+#[pyfunction(signature=(this,inner,*,heal=yes()))]
 fn compound_snapshot_init(this: &Obj<'_>, inner: &Obj<'_>, heal: Py<PyAny>) -> PyResult<()> {
     this.setattr("inner", collect(inner)?)?;
     this.setattr("_heal", heal)?;
@@ -282,7 +293,7 @@ fn group_do(this: &Obj<'_>, scene: &Obj<'_>) -> PyResult<()> {
 fn group_undo(this: &Obj<'_>, scene: &Obj<'_>) -> PyResult<()> {
     group(this, scene, true, false)
 }
-#[pyfunction(signature=(this,targets,patch,*,normalize_values=yes()?))]
+#[pyfunction(signature=(this,targets,patch,*,normalize_values=yes()))]
 fn record_init(
     this: &Obj<'_>,
     targets: &Obj<'_>,
@@ -298,7 +309,7 @@ fn previous(this: &Obj<'_>) -> PyResult<()> {
     this.setattr("_before", this.py().None())?;
     this.setattr("_after", this.py().None())
 }
-#[pyfunction(signature=(this,targets,ifc_class,name=empty_name()?))]
+#[pyfunction(signature=(this,targets,ifc_class,name=empty_name()))]
 fn tag_init(
     this: &Obj<'_>,
     targets: &Obj<'_>,
@@ -308,11 +319,11 @@ fn tag_init(
     let d = dict(this.py());
     d.set_item("class", ifc_class)?;
     d.set_item("name", name)?;
-    record_init(this, targets, &d, yes()?)
+    record_init(this, targets, &d, yes())
 }
 #[pyfunction]
 fn untag_init(this: &Obj<'_>, targets: &Obj<'_>) -> PyResult<()> {
-    record_init(this, targets, &none(this.py()), yes()?)
+    record_init(this, targets, &none(this.py()), yes())
 }
 #[pyfunction(signature=(this,value,*,refiled_uids=empty_tuple()))]
 fn registry_init(this: &Obj<'_>, value: &Obj<'_>, refiled_uids: Py<PyAny>) -> PyResult<()> {
@@ -359,7 +370,7 @@ fn registry_after(_this: &Obj<'_>, scene: &Obj<'_>, phase: &Obj<'_>) -> PyResult
     scene.getattr("mesh")?.call_method0("bump_revision")?;
     bump(scene)
 }
-#[pyfunction(signature=(this,faces,ifc_class=None,name=empty_name()?))]
+#[pyfunction(signature=(this,faces,ifc_class=None,name=empty_name()))]
 fn face_init(
     this: &Obj<'_>,
     faces: &Obj<'_>,
@@ -460,6 +471,7 @@ and keeps the reason in ``last_rejected`` for the tool to show."#,
             "__doc__",
             r#"Abstract reversible operation against a :class:`Scene`."#,
         )?;
+        meth!(ns, m, "__getstate__", command_state);
         meth!(ns, m, "_direct_snapshot", direct_snapshot);
         meth!(ns, m, "bind_transaction", bind_transaction);
         meth!(ns, m, "doc_after", doc_after);
@@ -610,7 +622,10 @@ drawing-specific global face cleanup."#,
         class(
             m,
             "SnapshotCompound",
-            vec![core.getattr("DrawingSnapshotStep")?, m.getattr("MeshCommand")?],
+            vec![
+                core.getattr("DrawingSnapshotStep")?,
+                m.getattr("MeshCommand")?,
+            ],
             &ns,
         )?
         .setattr("__module__", "core.history")?;
@@ -633,7 +648,10 @@ working across this undo."#,
         class(
             m,
             "MeshSnapshotCommand",
-            vec![core.getattr("StitchSnapshotStep")?, m.getattr("MeshCommand")?],
+            vec![
+                core.getattr("StitchSnapshotStep")?,
+                m.getattr("MeshCommand")?,
+            ],
             &ns,
         )?
         .setattr("__module__", "core.history")?;
