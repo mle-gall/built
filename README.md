@@ -1,35 +1,36 @@
 <h1 align="center">Built</h1>
 
-<p align="center"><strong>Draw what was built, file each element once, export IFC.</strong></p>
+<p align="center"><strong>Push/pull modelling at native speed, with BIM built in.</strong></p>
 
 <p align="center">
-  <img src="docs/images/built/overview.png" alt="The whole model in the Built window: tools on the left, the project tree on the right" width="100%">
+  <img src="docs/images/built/overview.png" alt="A large model in the Built window: tools on the left, the project tree on the right" width="100%">
 </p>
 
-Built is a native 3D modeller for as-built and construction work, written in Rust. You model by drawing and push/pull, and the same file holds the project tree and the record of every element.
+Built is a native 3D modeller: draw faces, push and pull them into shape with inference guiding every click, and file each element for BIM and IFC as you go. It stays fast on models of millions of faces.
 
 ## Highlights
 
-### Stays workable on very large models
+### Draw, push, pull
 
-<img src="docs/images/built/line-tool.png" alt="A close-up of a large steel structure with the Line tool snapping to an endpoint" width="100%">
+<img src="docs/images/built/line-tool.png" alt="The Line tool snapping to an endpoint inside a large model, with the length shown beside the cursor" width="100%">
 
-The renderer runs on the GPU (wgpu, Metal on macOS) and culls there, so models of several million faces can be drawn and edited.
-Inference keeps working at that size: the Line tool here snaps to an endpoint and shows the length.
+Draw a face and pull it into a solid. The cursor snaps to endpoints, edges and faces, and the arrow keys lock a line to an axis.
+Offset, follow-me, fillet and solid operations work the same direct way, with the length typed or read as you go.
 
-### One project tree files every element
+### Fast on very large models
+
+The renderer runs on the GPU (wgpu, Metal on macOS) and culls there, so a model of several million faces stays interactive while you orbit, zoom and draw.
+Edits stay local: changing one part does not rebuild the rest of the model.
+
+### BIM built in
 
 <img src="docs/images/built/tree-and-record.png" alt="An element selected in the model, with the project tree and its record beside it" width="100%">
 
-Each node of the tree carries a recipe: IFC class and type, tag, classification and default properties.
-File an element under a node once, and its tag, record and export follow.
-
-### Checks before IFC
+One project tree files every element. A node carries the IFC class and type, tag, classification and default properties, and each element's record travels in the file.
 
 <img src="docs/images/built/export-checks.png" alt="The Export columns of the project tree: a readiness count per node and a list of what to fix" width="100%">
 
-The Export columns show, node by node, how many items are ready and what is missing.
-You fix the list in the model, then export.
+Before export, the same tree shows node by node how many items are ready for IFC and what is missing.
 
 More in [`docs/features.md`](docs/features.md).
 
