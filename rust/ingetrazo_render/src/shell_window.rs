@@ -821,7 +821,8 @@ impl ShellWindow {
     #[staticmethod]
     fn _clipboard_available(py: Python<'_>) -> PyResult<bool> {
         py.import(RENDER)?
-            .getattr("ModelClipboard")?
+            .getattr("shell_files")?
+            .getattr("_clipboard")?
             .call_method0("available")?
             .is_truthy()
     }

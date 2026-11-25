@@ -1,8 +1,10 @@
 //! Platform clipboard formats used by the shell. Keep the document MIME
 //! interoperable with older Built instances and text with other applications.
 use std::sync::Mutex;
-const MODEL: &str = "com.trolltech.anymime.application--x-ingetrazo-clipboard";
+/// The model type, by its name here and on the platform. Callers asking by
+/// the Qt-era name (what the Qt window wrote on macOS) get the same data.
 const MIME: &str = "application/x-ingetrazo-clipboard";
+const QT_ERA: &str = "com.trolltech.anymime.application--x-ingetrazo-clipboard";
 const TEXT: &str = "public.utf8-plain-text";
 type Items = Vec<(String, Vec<u8>)>;
 
@@ -58,7 +60,7 @@ mod platform {
     fn format(kind: &str) -> Option<u32> {
         match kind {
             TEXT => Some(13), // CF_UNICODETEXT
-            MODEL => {
+            MIME | QT_ERA => {
                 Some(unsafe { RegisterClipboardFormatW(w!("application/x-ingetrazo-clipboard")) })
                     .filter(|f| *f != 0)
             }
@@ -163,7 +165,7 @@ mod platform {
         }
     }
     pub fn types() -> (Vec<String>, isize) {
-        let types = [MODEL, TEXT]
+        let types = [MIME, TEXT]
             .into_iter()
             .filter(|k| {
                 format(k).is_some_and(|fmt| unsafe { IsClipboardFormatAvailable(fmt).is_ok() })
@@ -251,7 +253,7 @@ mod platform {
             let mut targets = Vec::new();
             for (i, (kind, _)) in items.iter().enumerate() {
                 let formats: &[&str] = match kind.as_str() {
-                    MODEL => &[MIME],
+                    MIME | QT_ERA => &[MIME],
                     TEXT => &["UTF8_STRING", "text/plain;charset=utf-8", "text/plain"],
                     _ => return false,
                 };
@@ -280,7 +282,7 @@ mod platform {
     pub fn read(kind: &str) -> Option<Vec<u8>> {
         let text = match kind {
             TEXT => true,
-            MODEL => false,
+            MIME | QT_ERA => false,
             _ => return None,
         };
         request(move |board, _| {
@@ -298,7 +300,7 @@ mod platform {
             for atom in board.wait_for_targets().unwrap_or_default() {
                 let name = atom.name();
                 let key = match name.as_str() {
-                    MIME => MODEL,
+                    MIME => MIME,
                     "UTF8_STRING" | "text/plain;charset=utf-8" | "text/plain" => TEXT,
                     _ => continue,
                 };

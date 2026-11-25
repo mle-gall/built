@@ -32,7 +32,6 @@ def setup(app):
             "classic": [name for name in retired if name in sys.modules or
                         importlib.util.find_spec(name) is not None],
             "skp_exporter": "formats.skp_out" in sys.modules,
-            "clipboard_adapter": "formats.clip" in sys.modules,
             "qt_modules": sorted(name for name in sys.modules
                                  if name.partition(".")[0] in {"PySide6", "shiboken6"}),
             "scenes": [v.name for v in app.scene.saved_views],
@@ -142,6 +141,5 @@ quit
     snapshot = json.loads(probe.with_suffix(".json").read_text())
     assert not snapshot["classic"]
     assert not snapshot["skp_exporter"]
-    assert not snapshot["clipboard_adapter"]
     assert snapshot["qt_modules"] == []
     assert len(set(snapshot["scenes"])) >= 2

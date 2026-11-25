@@ -7,17 +7,8 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group, copy_group
 from core.mesh import Mesh
-from formats import clip
+from formats import clip_payload as clip
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-
-
-@pytest.fixture
-def private_offer(monkeypatch):
-    from app_shell import native
-
-    monkeypatch.setattr(native, "available", lambda: False)
-    monkeypatch.setattr(clip, "_offer", None)
-    monkeypatch.setattr(clip, "_change", None)
 
 
 def _box_group(x: float) -> Group:
@@ -65,20 +56,6 @@ def test_garbage_is_not_a_clipboard():
     assert clip.decode(b"not a zip") is None
 
 
-def test_this_windows_own_copy_is_not_foreign(private_offer):
-    clip.publish(_clip())
-    assert clip.available()
-    assert clip.foreign() is None
-
-
-def test_the_offer_is_rendered_on_demand():
-    mime = clip.ClipMime(_clip())
-    assert mime.formats() == [clip.MIME]
-    data = mime.retrieveData(clip.MIME, None)
-    assert clip.decode(data.data()) is not None
-    assert mime.retrieveData("text/plain", None) is None
-
-
 @pytest.mark.parametrize("package", ["APPIMAGE", "FLATPAK_ID", None])
 def test_new_window_uses_the_running_application(native_host, tmp_path, monkeypatch, package):
     from ingetrazo_render import Host
@@ -99,28 +76,24 @@ def test_new_window_uses_the_running_application(native_host, tmp_path, monkeypa
         other.close()
 
 
-def test_quitting_leaves_the_copy_as_plain_data(private_offer):
-    clip.publish(_clip())
-    clip.flush()
-    md = clip.current_offer()
-    assert not isinstance(md, clip.ClipMime)
-    assert clip.decode(md.data(clip.MIME).data()) is not None
-
-
-def test_native_window_adopts_a_platform_offer_once(monkeypatch):
+def test_without_a_shell_a_copy_reaches_the_other_documents_once(monkeypatch):
     from types import SimpleNamespace
     from ingetrazo_render import ModelClipboard
     from app_shell import native
 
-    original = _clip()
-    offer = clip.ClipMime(original)
     monkeypatch.setattr(native, "available", lambda: False)
-    monkeypatch.setattr(clip, "current_offer", lambda: offer)
+    board = ModelClipboard()
+    assert not board.available()
+    original = _clip()
+    source = SimpleNamespace(viewport=SimpleNamespace(clipboard=original))
+    board.publish(source, original)
+    assert board.available()
+    board.adopt(source)                      # this document's own copy stays
+    assert source.viewport.clipboard is original
     released = []
     previous = _clip()
     vp = SimpleNamespace(clipboard=previous, _drop_clip_protos=released.append)
     win = SimpleNamespace(viewport=vp)
-    board = ModelClipboard()
     board.adopt(win)
     adopted = vp.clipboard
     assert adopted is not original and adopted["groups"][0].mesh is not original["groups"][0].mesh
