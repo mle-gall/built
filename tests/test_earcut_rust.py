@@ -84,12 +84,7 @@ def test_the_degenerate_cases_recover_the_same_way():
 def test_projected_vertex_identity_and_order():
     # Fix the input directions as binary64: a libm ulp in a nearly coplanar
     # point can change the selected diagonal before earcut is even called.
-    import gzip
-    import struct
-    from pathlib import Path
-    packed = (Path(__file__).parent / "fixtures/earcut_unit_rings.f64.gz").read_bytes()
-    pairs = struct.iter_unpack("<dd", gzip.decompress(packed))
-    rings = {size: [next(pairs) for _ in range(size)] for size in range(3, 65)}
+    from tests.unit_rings import rings
     rng = random.Random(372901)
     digest = hashlib.sha256()
     for k in range(500):

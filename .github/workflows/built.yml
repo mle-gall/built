@@ -46,7 +46,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-          cache: pip
+          cache: ${{ runner.os != 'Windows' && 'pip' || '' }}
           cache-dependency-path: built/requirements.txt
 
       - uses: actions/cache@v4
@@ -127,23 +127,6 @@ jobs:
             echo "::notice::$BUILT_CI_SKIP_WINDOWS; window tests will be marked skipped."
           fi
           .venv/bin/python -m pytest -n auto --dist loadfile -q -rs tests
-
-      - name: Capture Linux overlay reference pixels
-        if: runner.os == 'Linux'
-        run: |
-          mkdir -p overlay-reference
-          .venv/bin/python - <<'PYTHON'
-          from pathlib import Path
-          from tests.test_wgpu_overlay import primitive_pixels
-          for scale in (1, 2, 3):
-              Path(f"overlay-reference/{scale}.rgba").write_bytes(primitive_pixels(scale))
-          PYTHON
-
-      - uses: actions/upload-artifact@v4
-        if: runner.os == 'Linux'
-        with:
-          name: linux-overlay-pixels
-          path: built/overlay-reference/*.rgba
 
       - name: Run the Linux non-window tier and check the launcher
         if: runner.os == 'Linux'

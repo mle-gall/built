@@ -35,7 +35,12 @@ def _prism(rng):
     for i in range(steps):
         a = sweep * i / n
         rr = r * (1 + (rng.uniform(-0.3, 0.3) if rng.random() < 0.2 else 0))
-        ring.append((rr * math.cos(a), rr * math.sin(a)))
+        if closed:
+            from tests.unit_rings import rings
+            x, y = rings[n][i]
+        else:
+            x, y = math.cos(a), math.sin(a)
+        ring.append((rr * x, rr * y))
     faces = []
     for i in range(n if closed else n):
         (x0, y0), (x1, y1) = ring[i], ring[(i + 1) % steps]

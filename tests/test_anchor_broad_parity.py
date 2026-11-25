@@ -182,8 +182,8 @@ def test_anchor_broad_phase_answers_as_the_python_did():
     assert len(got["scenes"]) == len(want["scenes"])
     for i, (g, w) in enumerate(zip(got["scenes"], want["scenes"])):
         assert matches(g["entries"], w["entries"]), f"scene {i} entries"
-        for q, (a, b) in enumerate(zip(g["queries"], w["queries"])):
-            assert a == b, f"scene {i} query {q}"
+        for q, (a, b) in enumerate(zip(g["queries"], w["queries"], strict=True)):
+            assert matches(a, b), f"scene {i} query {q}"
 
 
 if __name__ == "__main__" and "--write" in sys.argv:

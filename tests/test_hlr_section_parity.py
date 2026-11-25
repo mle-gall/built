@@ -38,8 +38,8 @@ def _box(x0, y0, z0, sx, sy, sz):
 
 
 def _prism(rng, cx, cy, n, r, h):
-    ring = [(cx + r * math.cos(2 * math.pi * k / n), cy + r * math.sin(2 * math.pi * k / n))
-            for k in range(n)]
+    from tests.unit_rings import rings
+    ring = [(cx + r * x, cy + r * y) for x, y in rings[n]]
     tris, hard = [], []
     for k in range(n):
         (ax, ay), (bx, by) = ring[k], ring[(k + 1) % n]

@@ -30,7 +30,11 @@ def test_every_case_has_a_golden():
 def test_the_drawing_matches_the_python_pass(name, run):
     want = GOLDENS[name]
     got = canonical(run())
-    assert len(got) == len(want)
+    if len(got) != len(want):
+        def missing(left, right):
+            return [a for a in left if not any(tuple(a[:2]) == tuple(b[:2])
+                    and all(abs(x - y) < 1e-9 for x, y in zip(a[2:], b[2:])) for b in right)]
+        pytest.fail(f"{name}: missing {missing(want, got)}, extra {missing(got, want)}")
     for g, w in zip(got, want):
         assert g[:2] == tuple(w[:2]) or list(g[:2]) == w[:2], (name, g[:2], w[:2])
         assert max(abs(a - b) for a, b in zip(g[2:], w[2:])) < 1e-9, (name, g, w)

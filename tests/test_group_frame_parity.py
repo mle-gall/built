@@ -63,6 +63,11 @@ def point_sets():
         else:              # a big cloud (prunes twice before the scan)
             pts = rng.uniform(-50, 50, (int(rng.integers(500, 5000)), 3))
         out.append(np.asarray(pts, float))
+    # Keep the exact point clouds used to choose axes on symmetric hulls.
+    # NumPy trigonometric kernels generate different inputs across CPUs.
+    inputs = GOLDEN.with_name("group_frame_rotated_inputs.json.gz")
+    for row, points in json.loads(gzip.decompress(inputs.read_bytes())).items():
+        out[int(row)] = np.asarray(points)
     return out
 
 
