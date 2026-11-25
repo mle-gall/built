@@ -38,7 +38,6 @@ def _plog(tag: str, ms: float, extra: str = "", floor: float = 50.0) -> None:
                      f"{tag} {ms:.0f}ms"
                      f"{' ' + extra if extra else ''}\n")
 
-from core.input_types import NATIVE
 from ingetrazo_core import Type as QEvent, Input as Qt, ScreenPoint as QPointF, ScreenRect as QRectF
 from core.host_callbacks import Signal
 from core.timers import later, timer as window_timer
