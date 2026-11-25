@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Editor binding for document History and public command imports."""
+"""Document History and the editor and extension command API."""
 from __future__ import annotations
 
 import logging
@@ -10,14 +10,1636 @@ from pathlib import Path as _Path
 from typing import Optional
 
 from ingetrazo_core import DocumentHistory
-from core import history_commands
-from core.history_commands import *  # Existing editor and extension API.
-from core.history_commands import _dirty_placements, _RENDER_FIELDS
+
+# ---- The editor and extension command API ------------------------------------
+# The undoable commands are native ingetrazo_core steps (docs/commands-port.md).
+# What stays here is the plugin command API (docs/plugins.md), the snapshot
+# and compound wrappers, and the helpers other modules share.
+# core/history_commands.py re-exports this module for older imports.
+
+from ingetrazo_core import planar_edits as _planar
+from ingetrazo_core import object_replay as _replay, object_drawing as _drawing
+from ingetrazo_core import (definition_edits as _definitions, placement_edits as _placements,
+                            placement_transform as _transform)
+
+from abc import ABC, abstractmethod
+from collections import Counter
+from typing import Iterable, Optional
+
+from core.mesh import element_identity
+from core.element_set import ElementSet
+from ingetrazo_core import Vec3 as QVector3D
+# Typed native steps (docs/commands-port.md): placement renames, locks and
+# whole-placement paint are Rust deltas, created through the protocol verbs.
+from ingetrazo_core import NativeCommand
+# Drawing steps (rust/ingetrazo_core/src/doc/draw_steps.rs).
+from ingetrazo_core import (AddEdgeCommand, AddFaceCommand, DeleteEdgesCommand, DeleteFaceCommand,
+                            EraseSelectionCommand)
+# Plane rebuilds (rust/ingetrazo_core/src/doc/plane_steps.rs).
+from ingetrazo_core import HealOverlapsCommand, RebuildPlanarFacesCommand, RebuildPlaneFacesCommand
+# Explode (rust/ingetrazo_core/src/doc/explode_steps.rs).
+from ingetrazo_core import ExplodeGroupCommand, UnlinkCommand
+# Curve tags, push/pull clean-ups, Simplify, Reverse Faces, tag as you draw
+# (rust/ingetrazo_core/src/doc/mesh_steps.rs).
+from ingetrazo_core import (AutoTagDrawnFacesCommand, CoplanarMergeCommand, ExplodeCurvesCommand,
+                            FlipFacesCommand, PruneOrphanEdgesCommand, SimplifyMeshCommand,
+                            StitchSolidCommand, TagCurveCommand)
+# Material registry edits (rust/ingetrazo_core/src/doc/material_steps.rs).
+from ingetrazo_core import DeleteMaterialCommand, EditTexturedMaterialCommand, RestampMaterialCommand
+# Vertex edits (rust/ingetrazo_core/src/doc/vertex_steps.rs).
+from ingetrazo_core import (FlipVerticesCommand, MoveVerticesCommand, RotateVerticesCommand,
+                            ScaleVerticesCommand)
+# Steps with host state (rust/ingetrazo_core/src/doc/host_steps.rs).
+from ingetrazo_core import AddGeoPointsCommand, SetNorthCommand, StraightenModelCommand
+# Group transform steps (rust/ingetrazo_core/src/doc/transform_steps.rs).
+from ingetrazo_core import (ChangeAxesCommand, FlipGroupsCommand, MoveGroupCommand, RotateGroupCommand,
+                            ScaleGroupCommand)
+# Tag-list steps (rust/ingetrazo_core/src/doc/layer_steps.rs).
+from ingetrazo_core import DeleteLayerCommand, EnsureLayersCommand, PurgeUnusedCommand
+# Hide and Tag steps (rust/ingetrazo_core/src/doc/tag_steps.rs).
+from ingetrazo_core import AssignLayerCommand, HideCommand, HideEdgesCommand
+# Face paint steps (rust/ingetrazo_core/src/doc/paint_steps.rs).
+from ingetrazo_core import (SetFaceBackCommand, SetFaceColorCommand, SetFaceMaterialTagCommand,
+                            SetFaceOpacityCommand, SetFaceTextureCommand)
+# Group and component steps (rust/ingetrazo_core/src/doc/group_steps.rs).
+from ingetrazo_core import (ReplaceComponentCommand, KeepComponentCommand, AddKeptComponentsCommand, GroupToComponentCommand, EditText3DCommand, ReparentGroupsCommand, MergeGroupsCommand, MakeUniqueCommand, InsertGroupCommand, DeleteGroupCommand, SetStructureNodeCommand, SplitIntoPiecesCommand,
+                            SetMaterialFinishCommand, MakeGroupCommand, MakeNestedGroupCommand,
+                            MakeComponentOfCommand, GroupInContextCommand, ExplodeViewCommand)
+# Annotation, section, guide, image, survey, saved-scene and sheet steps
+# (rust/ingetrazo_core/src/doc/steps.rs): the retired classes' names.
+from ingetrazo_core import (RecordStep, AddDimensionCommand, DeleteDimensionsCommand, AddTextLabelCommand, MoveTextLabelsCommand, MoveGuidesCommand, RotateGuidesCommand, MoveDimensionsCommand, EditTextLabelCommand, EditDimensionTextCommand, DeleteTextLabelsCommand, AddGuideCommand, PlaceSectionPlaneCommand, DeleteSectionPlanesCommand, ReverseSectionPlaneCommand, SetActiveSectionCommand, SetSectionModeCommand, SetSectionFillCommand, RenameSectionPlaneCommand, AddSheetCommand, PlaceViewCommand, SheetCommand, InsertSheetCommand, RemoveSheetCommand, MoveSheetCommand, CreatePlanCommand, AddSceneCommand, DeleteScenesCommand, UpdateSceneCommand, SceneTreeCommand, MoveSectionPlanesCommand, RotateSectionPlanesCommand, ChangeGuideCommand, DeleteGuidesCommand, AddImagePlaneCommand, DeleteImagePlanesCommand, TransformImagePlaneCommand, SetImagePlaneOpacityCommand, MoveImagePlanesCommand, RotateImagePlanesCommand, ScaleImagePlanesCommand, AddGeoPathCommand, DeleteGeoPointsCommand, DeleteGeoPathsCommand, ToggleGeoPathClosedCommand, SetGeoPathSurfaceCommand, MoveGeoPathNodeCommand)
+
+from core.group import Group
+from core import doc_model as _doc
+from core.materials import has_own_material
+from core.mesh import (PAINT_KEYS, Edge, Face, Mesh, Vertex, edge_flags,
+                       edge_is_plain, stamp_edge_flags)
+from core.topology import (
+    _key,
+    _loop_edges,
+    carve_loop_by_chords,
+    defects_near,
+    find_containing_face,
+    fold_nonplanar_faces,
+    heal_overlapping_faces,
+    hole_merged_with_loop,
+    loop_inside_face,
+    new_defects,
+    orient_coplanar_faces,
+    orphaned_edges_at,
+    subtract_loop_from_face,
+    winding_footprint,
+)
 
 
-def __getattr__(name):
-    # Legacy tools also import geometry helpers from core.history.
-    return getattr(history_commands, name)
+def _find_face_by_loop(mesh, loop_positions) -> Optional[Face]:
+    """The mesh face whose outer loop matches ``loop_positions`` (by key), or
+    ``None``. Used to resolve a command's target face against the live mesh."""
+    target = frozenset(_key(p) for p in loop_positions)
+    for f in _faces_keyed_like(mesh, loop_positions):
+        if frozenset(_key(p) for p in f.vertices) == target:
+            return f
+    return None
+
+
+#: A point whose ``_key`` is one of a loop's lies within one key cell
+#: (1e-4) of that loop's corner; the scans look this far and a bit more.
+_KEY_REACH = 2e-4
+
+
+def _faces_keyed_like(mesh, loop_positions, sc=None) -> list:
+    """The faces, in list order, that can have the same corner keys as
+    ``loop_positions``: every corner of such a face lies within a key cell
+    of the loop's, so its box lies within the loop's grown by that. From
+    the mesh scan when there is one (``core.scan_index``), else every face
+    — the caller's key test decides either way. ``sc``: a scan taken
+    earlier (the faces of THAT revision)."""
+    pts = list(loop_positions)
+    from core import scan_index
+    if sc is None:
+        sc = scan_index.scan(mesh) if pts else None
+    if sc is None or not pts:
+        return mesh.faces
+    return sc.faces(sc.faces_within(scan_index.box_of(pts, _KEY_REACH)))
+
+
+class CommandRejected(Exception):
+    """A command declining to happen, on purpose: it has put the scene back
+    the way it found it and says why in plain words. :class:`History` takes
+    it as a no-op — nothing on the undo stack, nothing in the error log —
+    and keeps the reason in ``last_rejected`` for the tool to show."""
+
+
+class Command(ABC):
+    """Abstract reversible operation against a :class:`Scene`."""
+
+    #: Whether doing or undoing it leaves every material where it was —
+    #: which ones the model wears.
+    keeps_paint = False
+    #: Whether doing or undoing it only puts groups in the model or takes
+    #: them out, whole, and leaves every group that stays as it was — its
+    #: Browser row, the paint of its faces.
+    keeps_groups = False
+    #: Whether it only changes the geometry of the mesh it edits: no group
+    #: comes or goes, and nothing a Browser row shows (name, tag, material,
+    #: copies, IFC class, hidden, locked) changes.
+    #: A push/pull on the ride no longer reads its 85 000 rows again.
+    keeps_rows = False
+    #: Undone and redone by its document transaction (core/doc_model.py,
+    #: docs/rust-document-model.md §4) instead of by ``undo`` / ``do``:
+    #: everything it changes lives in the document. A method
+    #: ``doc_undo(scene) -> bool`` for commands that qualify for some
+    #: inputs only (asked right after ``do``). ``undo`` stays: it is the
+    #: direct and mixed-command replay hook.
+    doc_undo = False
+    _journal_geometry = False
+
+    def _direct_snapshot(self, mesh):
+        if not self._journal_geometry:
+            return mesh.capture_state()
+
+    def bind_transaction(self, txn):
+        self._doc_txn = txn
+
+    def doc_after(self, scene, phase) -> None:
+        """What an undo or redo by transaction still does beside the
+        document (``phase`` "undo" / "redo"): bump the version. Commands
+        that also drop things from the selection or dirty caches extend it."""
+        scene.version += 1
+
+    @abstractmethod
+    def do(self, scene) -> None:
+        """Apply the operation."""
+
+    @abstractmethod
+    def undo(self, scene) -> None:
+        """Reverse the operation."""
+
+
+# The native steps are History commands for every ``isinstance`` check.
+Command.register(NativeCommand)
+Command.register(RecordStep)
+
+
+class MeshCommand(Command):
+    """Commands whose persistent changes are covered by these geometry stores
+    and the document field journal. Object meshes retain the command inverse."""
+    def geometry_meshes(self, scene):
+        return (scene.mesh,)
+
+
+# Native mesh steps: History enlists their stores (``geometry_meshes``).
+for _mesh_step in (MakeGroupCommand, HideCommand, HideEdgesCommand, AssignLayerCommand,
+                   MoveGroupCommand, RotateGroupCommand, ScaleGroupCommand, FlipGroupsCommand,
+                   ChangeAxesCommand, AddEdgeCommand, AddFaceCommand, DeleteEdgesCommand,
+                   DeleteFaceCommand, EraseSelectionCommand, MoveVerticesCommand,
+                   FlipVerticesCommand, RotateVerticesCommand, ScaleVerticesCommand,
+                   HealOverlapsCommand, RebuildPlanarFacesCommand, RebuildPlaneFacesCommand,
+                   ExplodeGroupCommand, TagCurveCommand, ExplodeCurvesCommand,
+                   AutoTagDrawnFacesCommand, PruneOrphanEdgesCommand, CoplanarMergeCommand,
+                   StitchSolidCommand, SimplifyMeshCommand, RestampMaterialCommand,
+                   EditTexturedMaterialCommand, DeleteMaterialCommand):
+    MeshCommand.register(_mesh_step)
+
+
+class FaceAttributeCommand(MeshCommand):
+    def geometry_meshes(self, scene):
+        return {getattr(face, "_m", None) for face in self._faces}
+
+
+for _paint in (SetFaceColorCommand, SetFaceOpacityCommand, SetFaceTextureCommand,
+               SetFaceBackCommand, SetFaceMaterialTagCommand, FlipFacesCommand):
+    FaceAttributeCommand.register(_paint)
+
+
+class SetPluginDataCommand(Command):
+    """Replace one extension's document data (``scene.plugin_data[key]``),
+    undoably. ``value`` None removes the key. Values are copied through JSON
+    both ways, so neither the caller nor the history can alias them.
+
+    With the Rust document ``scene.plugin_data`` is a document value: the
+    step's transaction undoes it."""
+
+    doc_undo = True
+
+    def __init__(self, key: str, value) -> None:
+        import json
+        self.key = str(key)
+        self.value = None if value is None else json.loads(json.dumps(value))
+        self._had = False
+        self._before = None
+
+    def do(self, scene) -> None:
+        import json
+        data = scene.plugin_data
+        self._had = self.key in data
+        self._before = (json.loads(json.dumps(data[self.key]))
+                        if self._had else None)
+        if self.value is None:
+            data.pop(self.key, None)
+        else:
+            data[self.key] = json.loads(json.dumps(self.value))
+        scene.version += 1
+
+    def undo(self, scene) -> None:
+        import json
+        if self._had:
+            scene.plugin_data[self.key] = json.loads(json.dumps(self._before))
+        else:
+            scene.plugin_data.pop(self.key, None)
+        scene.version += 1
+
+
+def _geometry_plan(cmd, scene, targets):
+    """Enlist all known stores for rollback. Use transaction replay only
+    when it also covers the other commands in the step."""
+    if isinstance(cmd, CompoundCommand):
+        coverage = [_geometry_plan(c, scene, targets) for c in cmd.commands]
+        return all(coverage) and (type(cmd) is CompoundCommand or cmd.journal_parts)
+    if isinstance(cmd, GroupInContextCommand):
+        return _geometry_plan(cmd.inner, scene, targets)
+    if isinstance(cmd, MakeComponentOfCommand):
+        return _geometry_plan(cmd._nest, scene, targets)
+    if isinstance(cmd, MakeNestedGroupCommand) and cmd._inner is not None:
+        return _geometry_plan(cmd._inner, scene, targets)
+    if isinstance(cmd, MeshCommand):
+        from core.store_mesh import StoreMesh
+        meshes = cmd.geometry_meshes(scene)
+        stores = [m for m in meshes if type(m) is StoreMesh]
+        if stores:
+            targets.append((cmd, stores))
+        return len(stores) == len(meshes)
+    return _uses_doc_undo(cmd, scene)
+
+
+def _uses_doc_undo(cmd, scene) -> bool:
+    if getattr(cmd, "_journal_geometry", False):
+        return True
+    flag = getattr(cmd, "doc_undo", False)
+    if callable(flag):
+        try:
+            return bool(flag(scene))
+        except Exception:  # noqa: BLE001 — undecided: its own undo
+            return False
+    return bool(flag)
+
+
+# ---- Concrete commands ------------------------------------------------------
+
+def _faces_by_segments(mesh, segments) -> list:
+    """The faces, in list order, whose outer loop can run along one of
+    ``segments`` (``(a, b)`` points) by key: such a face has a corner
+    within a key cell of each end, so its box meets the segment's grown by
+    that. Every face when there is no scan (or too many segments for
+    single queries to beat one pass)."""
+    from core import scan_index
+    segs = list(segments)
+    sc = scan_index.scan(mesh) if 0 < len(segs) <= 256 else None
+    if sc is None:
+        return mesh.faces
+    hit: set = set()
+    for a, b in segs:
+        hit.update(sc.faces_meeting(scan_index.box_of((a, b), _KEY_REACH)))
+    return sc.faces(sorted(hit))
+
+
+def _inherit_paint(face, mother) -> None:
+    """Give ``face`` the paint of the ``mother`` it was drawn on, for the keys
+    it does not already carry itself.
+
+    A face drawn on a painted one is part of that surface: a door outlined on
+    a textured wall comes out textured, and lines up with the wall
+    because both keep the same world→UV map. Only the remainder of a carved
+    mother inherited here, so the cut-out itself came back bare (Marco,
+    2026-08-27). Verbatim, map included — the two are coplanar, so the image
+    has to run straight across the outline.
+
+    Whatever the face already declares wins: a rectangle drawn with a material
+    active, or one the caller stamped (the chord split hands its halves the
+    mother's attrs directly), keeps what it was given.
+    """
+    src = getattr(mother, "attrs", None)
+    if not src:
+        return
+    for k in PAINT_KEYS:
+        if k in src and k not in face.attrs:
+            v = src[k]
+            face.attrs[k] = dict(v) if isinstance(v, dict) else v
+
+
+#: How far off a face's plane its containment tests let a point sit
+#: (``topology._PLANAR_TOLERANCE``, 1e-3), with room to spare.
+_PLANE_REACH = 2e-3
+
+
+def _faces_holding(mesh, loop) -> list:
+    """The faces, in list order, that can hold ``loop`` the way the
+    containment tests ask (``loop_inside_face``, ``find_subdividing_chain``,
+    ``carve_loop_by_chords``): every corner of the loop on the face's plane
+    within the planar tolerance and projected inside it, or on its
+    boundary. Such a face's box, grown by that tolerance and by how far its
+    own corners stray from its plane, holds the loop's box. A list taken
+    now, as ``list(m.faces)`` was: the caller may edit the mesh as it goes.
+    Every face when there is no scan."""
+    from core import scan_index
+    pts = list(loop)
+    sc = scan_index.scan(mesh) if pts else None
+    if sc is None:
+        return list(mesh.faces)
+    # The loop's own box, not grown: the FACE's grows (a bigger loop box
+    # would hold fewer faces).
+    lo, hi = scan_index.raw_box(pts)
+    pad = _PLANE_REACH + 1e-6 * max(abs(c) for c in lo + hi)
+    return sc.faces(sc.native.faces_holding(lo, hi, pad))
+
+
+def _faces_inside(mesh, face) -> list:
+    """The faces, in list order, that can lie strictly inside ``face``
+    (``loop_inside_face(face, other.vertices)``): every corner of theirs
+    within the planar tolerance of its plane and projected inside its
+    outer loop, so within its box grown by that tolerance and by how far
+    its corners stray from its plane. A list taken now; every face without
+    a scan (or for a face whose plane Python may read differently)."""
+    from core import scan_index
+    pts = face.vertices
+    sc = scan_index.scan(mesh) if len(pts) >= 3 else None
+    reach = _plane_reach(face) if sc is not None else None
+    if reach is None:
+        return list(mesh.faces)
+    return sc.faces(sc.faces_within(scan_index.box_of(pts, reach)))
+
+
+def _plane_reach(face) -> Optional[float]:
+    """How far from ``face``'s box a point projected inside it can lie:
+    the planar tolerance plus the farthest corner off the face's plane,
+    with slack for float32. ``None`` when the Newell vector is too short
+    to be sure which normal Python picks."""
+    pts = face.vertices
+    nx = ny = nz = 0.0
+    k = len(pts)
+    for i in range(k):
+        p, q = pts[i], pts[(i + 1) % k]
+        nx += (p.y() - q.y()) * (p.z() + q.z())
+        ny += (p.z() - q.z()) * (p.x() + q.x())
+        nz += (p.x() - q.x()) * (p.y() + q.y())
+    length = (nx * nx + ny * ny + nz * nz) ** 0.5
+    if length < 1e-8:
+        return None
+    nx, ny, nz = nx / length, ny / length, nz / length
+    o = pts[0]
+    off = span = 0.0
+    for p in pts:
+        dx, dy, dz = p.x() - o.x(), p.y() - o.y(), p.z() - o.z()
+        off = max(off, abs(dx * nx + dy * ny + dz * nz))
+        span = max(span, (dx * dx + dy * dy + dz * dz) ** 0.5)
+    return _PLANE_REACH + off + 1e-5 * span + 1e-7
+
+
+def _dirty_group_chunks(scene) -> None:
+    """Attr edits bypass the mesh mutation primitives — flag every group
+    mesh so the viewport's cached chunks re-validate their materials.
+
+    Two flags, because they answer different questions. ``_chunk_dirty`` is
+    "something touched this mesh"; ``_attrs_dirty`` is "a MATERIAL changed",
+    and only the second can be told apart from a move. The viewport's
+    translation fast path reuses a cached chunk's texture buckets after
+    checking geometry alone, so without this a repaint that happened in the
+    same breath as a drag stayed invisible outside the group — the flagstone
+    corner of Plaza Yanque kept its neighbour's grey (Marco, 2026-09-10).
+
+    Nested placements are flagged too: their meshes render as part of the
+    parent, and walking scene.groups as a flat list never reached them.
+    """
+    from core.group import iter_placements
+    # The mesh being edited changed too (its faces' paint or tags), so its
+    # revision moves; not mark_modified, which also bumps the mutation
+    # serial and the winding count the viewport keys its geometry caches
+    # on, and a paint would have re-walked every coordinate.
+    scene.mesh.bump_revision()
+    for g in getattr(scene, "groups", []):
+        for pg, _m in iter_placements(g):
+            pg.mesh._chunk_dirty = True
+            pg.mesh._attrs_dirty = True
+
+
+def _dirty_placements(groups) -> None:
+    """:func:`_dirty_group_chunks` for the placements ``groups`` and their
+    subtrees only: what History does after a step from the placements its
+    transaction changed (the tag, Hide, paint: what a chunk bakes), instead
+    of every command flagging every mesh — Hide on 200 placements of a
+    20,000-placement file walked all of them (≈11 ms)."""
+    from core.purge import iter_groups
+    for g in iter_groups(groups):
+        mesh = getattr(g, "mesh", None)
+        if mesh is not None:
+            mesh.invalidate_placement_chunks()
+
+
+#: The placement fields a viewport chunk depends on (see _dirty_placements).
+_RENDER_FIELDS = ["layer", "hidden", "material"]
+
+
+def _unselect(scene, items) -> None:
+    """``scene.selection.discard(e)`` for every item: from the selection's
+    side when it is the smaller (Lock or Hide of 20,000 placements with a
+    handful selected need not look each one up)."""
+    sel = scene.selection
+    if not sel:
+        return
+    if len(sel) * 4 < len(items):
+        from core.mesh import element_identity
+        drop = {element_identity(e) for e in items}
+        gone = [e for e in sel if element_identity(e) in drop]
+    else:
+        gone = items
+    for e in gone:
+        sel.discard(e)
+
+
+def _reverse_faces(faces):
+    from core.store_mesh import FaceView, StoreMesh
+    batches = {}
+    object_keys = set()
+    for face in faces:
+        if isinstance(face, FaceView) and isinstance(face._m, StoreMesh):
+            batches.setdefault(face._m, []).append(face.key)
+        else:
+            face.reverse_rings()
+            object_keys.add(face.key)
+    for mesh, keys in batches.items():
+        mesh._store.reverse_faces(keys)
+    return batches, object_keys
+
+
+def _is_hidden(entity) -> bool:
+    attrs = getattr(entity, "attrs", None)
+    if attrs is not None:                          # Face
+        return bool(attrs.get("hidden"))
+    return bool(getattr(entity, "hidden", False))
+
+
+def _set_hidden(entity, hidden: bool) -> None:
+    attrs = getattr(entity, "attrs", None)
+    if attrs is not None:                          # Face
+        if hidden:
+            attrs["hidden"] = True
+        else:
+            attrs.pop("hidden", None)
+    else:
+        entity.hidden = hidden
+
+
+def translate_points(scene, keys: set, delta: QVector3D) -> None:
+    """Move every shared vertex whose position key is in ``keys`` by ``delta``.
+
+    Because vertices are shared, every edge and face referencing a moved vertex
+    follows for free — the mechanic behind raising a ridge into a gable roof.
+    Shared by :class:`MoveVerticesCommand` and the Push/Pull live preview.
+    """
+    moving = _vertices_at(scene.mesh, keys)
+    for v in moving:
+        scene.mesh.move_vertex(v, delta)
+    scene.version += 1
+
+
+def _vertices_at(mesh, cells) -> list:
+    """The mesh's vertices whose position key (``topology._key``) is in
+    ``cells``, in mesh order. A store-backed mesh answers from its position array
+    instead of a view per vertex (core/store_mesh.py)."""
+    fast = getattr(mesh, "vertices_in_cells", None)
+    if fast is not None:
+        return fast(cells, _key)
+    return [v for v in mesh.vertices if _key(v.position) in cells]
+
+
+def _cells_of(mesh, vertex_keys) -> set:
+    """The position keys (``topology._key``) of the vertices with these
+    element keys."""
+    fast = getattr(mesh, "cells_of", None)
+    if fast is not None:
+        return fast(vertex_keys, _key)
+    return {_key(v.position) for v in mesh.vertices if v.key in vertex_keys}
+
+
+def defect_names() -> dict:
+    """The words a refused weld uses for each defect kind."""
+    from core.i18n import tr
+    return {
+        "duplicate_face": tr("a face doubled over another"),
+        "overlapping_face": tr("two faces overlapping in one plane"),
+        "pinched_face": tr("a face that touches itself"),
+        "crossed_face": tr("a face whose sides cross"),
+        "flat_face": tr("a face with no area"),
+        "zero_edge": tr("an edge of zero length"),
+    }
+
+
+def _weld_landed(mesh, moving: set) -> bool:
+    from core.store_mesh import StoreMesh
+    if type(mesh) is StoreMesh and not mesh.__dict__.get("_planned_points"):
+        result = mesh._store.weld_landing(list(moving))
+        if result is not None:
+            welded, bumps, copies = result
+            mesh._inherit_face_attrs(bumps, ((old, [new]) for old, new in copies))
+            return welded
+    from ingetrazo_core import MeshStore
+    cells = _cells_of(mesh, moving)
+    if not any(v.key not in moving for v in _vertices_at(mesh, cells)):
+        return False
+    mesh.weld_coincident()
+    for face in list(mesh.faces):
+        if face.hole_loops:
+            continue
+        loop = face.loop
+        kept = MeshStore.landing_ring([(v.key, _key(v.position) in cells) for v in loop])
+        if len(kept) != len(loop):
+            points = [QVector3D(loop[i].position) for i in kept]
+            attrs = dict(face.attrs)
+            mesh.remove_face(face)
+            if len(points) >= 3:
+                mesh.add_face(points).attrs = attrs
+    return True
+
+
+def _carried_faces(mesh, moving: set) -> list:
+    """Textured faces whose outer and inner rings move as a unit."""
+    from core.store_mesh import FaceView, StoreMesh
+    if type(mesh) is StoreMesh:
+        keys = [f.key for f in mesh.textured_faces() if f.attrs.get("texture")]
+        return [FaceView(mesh, k) for k in mesh._store.carried_faces(keys, list(moving))]
+    from ingetrazo_core import MeshStore
+    faces = [f for f in mesh.faces if f.attrs and f.attrs.get("texture")]
+    rings = [[v.key for ring in (f.loop, *f.hole_loops) for v in ring] for f in faces]
+    return [faces[i] for i in MeshStore.carried_object_faces(rings, set(moving))]
+
+
+def rotation_matrix(center: QVector3D, axis: QVector3D, degrees: float):
+    """Rigid rotation of ``degrees`` around ``axis`` through ``center``."""
+    from ingetrazo_core import Matrix4 as QMatrix4x4
+    m = QMatrix4x4()
+    m.translate(center)
+    m.rotate(degrees, axis.normalized())
+    m.translate(-center)
+    return m
+
+
+def rotate_points(scene, keys: set, matrix) -> None:
+    """Rotate every shared vertex whose position key is in ``keys`` by the
+    rigid ``matrix`` (the rotation twin of :func:`translate_points`). Shared
+    by :class:`RotateVerticesCommand` and the Rotate tool's live preview."""
+    _map_selected_vertices(scene, keys, matrix, carry_textures=False)
+
+
+def _map_selected_vertices(scene, keys, matrix, carry_textures):
+    from core.store_mesh import StoreMesh
+    from ingetrazo_core import Matrix4
+    mesh = scene.mesh
+    if type(mesh) is StoreMesh and type(matrix) is Matrix4:
+        count, ids = mesh._store.transform_vertices(list(keys), matrix.data(), carry_textures)
+        if count:
+            mesh._dirty(count)
+        carried = _carried_faces(mesh, ids) if carry_textures else []
+    else:
+        moving = [v for v in mesh.vertices if _key(v.position) in keys]
+        carried = _carried_faces(mesh, {v.key for v in moving}) if carry_textures else []
+        for v in moving:
+            mesh.move_vertex(v, matrix.map(v.position) - v.position)
+    if carried:
+        from core.group import _remap_uvws
+        _remap_uvws(mesh, matrix, carried)
+    scene.version += 1
+
+
+def mirror_matrix(centre: QVector3D, axis: QVector3D):
+    """Reflection about the plane through ``centre`` with normal ``axis``
+    (Householder), as a QMatrix4x4 — the Flip tool."""
+    from ingetrazo_core import Matrix4 as QMatrix4x4
+    n = QVector3D(axis).normalized()
+    r = QMatrix4x4(
+        1 - 2 * n.x() * n.x(), -2 * n.x() * n.y(), -2 * n.x() * n.z(), 0,
+        -2 * n.y() * n.x(), 1 - 2 * n.y() * n.y(), -2 * n.y() * n.z(), 0,
+        -2 * n.z() * n.x(), -2 * n.z() * n.y(), 1 - 2 * n.z() * n.z(), 0,
+        0, 0, 0, 1)
+    t_in = QMatrix4x4()
+    t_in.translate(-centre)
+    t_out = QMatrix4x4()
+    t_out.translate(centre)
+    return t_out * r * t_in
+
+
+def _member_placement(scene, group):
+    """A classic member initially draws at identity in its parent's definition."""
+    if (group.xform is None and getattr(scene.mesh, "_instance_definition", None) is not None
+            and scene.edit_group is not None and group in scene.edit_group.children):
+        from ingetrazo_core import Matrix4
+        group.component = False
+        return Matrix4()
+    return group.xform
+
+
+def _edit_local_transform(scene, group, transform):
+    if scene.edit_group is not None and group in scene.edit_group.children:
+        view = scene.mesh.__dict__.get("_instance_definition")
+        if view is not None:
+            parent = scene.mesh._store.tool_placement()
+            inverse, ok = parent.inverted()
+            if ok:
+                return inverse * transform * parent
+    return transform
+
+
+def scale_matrix(center: QVector3D, factor, axes=None):
+    """Scale about ``center``: a float scales uniformly, a 3-tuple scales each
+    axis by its own factor (the edge/face grips). A negative factor
+    mirrors through the centre along that axis (allowed — dragging
+    a grip past its anchor, or typing -1).
+
+    ``axes`` = ``(red, green, blue)`` unit vectors: the three factors act
+    along THOSE instead of the world's — the grip box of a turned group, on
+    its own axes (issue #44). ``None`` is the world, exactly as before."""
+    from ingetrazo_core import Matrix4 as QMatrix4x4
+    if axes is not None and isinstance(factor, (tuple, list)):
+        from core.axes import frame_matrix
+        rot = frame_matrix(QVector3D(0.0, 0.0, 0.0), *axes)
+        inv = rot.transposed()
+        s = QMatrix4x4()
+        s.scale(float(factor[0]), float(factor[1]), float(factor[2]))
+        m = QMatrix4x4()
+        m.translate(center)
+        m = m * rot * s * inv
+        back = QMatrix4x4()
+        back.translate(-center)
+        return m * back
+    m = QMatrix4x4()
+    m.translate(center)
+    if isinstance(factor, (tuple, list)):
+        m.scale(float(factor[0]), float(factor[1]), float(factor[2]))
+    else:
+        m.scale(float(factor))
+    m.translate(-center)
+    return m
+
+
+def invert_scale_factor(factor):
+    """The factor that undoes ``factor`` — per-axis for tuples. Zero factors
+    (already rejected upstream) invert to 1.0 instead of dividing by zero."""
+    def inv(f):
+        return 1.0 / f if abs(f) > 1e-12 else 1.0
+    if isinstance(factor, (tuple, list)):
+        return tuple(inv(float(f)) for f in factor)
+    return inv(float(factor))
+
+
+def run_stitch(mesh, seedkeys: set, new_faces: Optional[set] = None,
+               coplanar_merge: bool = True, dedupe: bool = True) -> None:
+    """Three-phase watertight cleanup (no undo bookkeeping — the caller snapshots).
+    See :class:`StitchSolidCommand` for the rationale of each phase.
+
+    ``seedkeys`` are the operation's own positions (``core.topology._key``
+    tuples). They bound phase 1 — only an edge reaching that box can be split,
+    which is every T-junction the op can have created and none of the ones it
+    found lying around — and seed phase 3.
+
+    ``new_faces`` (when given) are the faces this operation created; phase 3 only
+    fuses a coplanar component that contains one of them, so a seam a push just
+    made is merged while a pre-existing coplanar split (a user's diagonal) is
+    left intact. ``None`` means merge any seeded component (manual stitch).
+
+    ``coplanar_merge=False`` runs only phases 0–2 (connectivity repair). Solid
+    push/pull uses this: its seams are dissolved by the deterministic per-plane
+    rebuild (``Store::rebuild_push_planes``) instead of the winding-tolerant merge,
+    which only remains for raw/open geometry where outwardness is undefined.
+
+    ``dedupe=False`` skips the identical-cycle face dedupe of phase 0. The
+    solid path's *first* stitch needs that: a flush-collapse sweep quad lands
+    identical to the face it must annihilate *with*, and the per-plane rebuild
+    is what decides whether the pair means "keep one" (a shared wall built
+    twice — material on both sides) or "drop both" (an emptied region) — by
+    parity, where the pair's two crossings cancel. Deduping it early restores
+    the material reading and the collapse never classifies."""
+    # A store does phases 0–2 in one native call (Store::stitch_connect).
+    if type(mesh).__name__ == "StoreMesh" and mesh.stitch_connect(seedkeys, dedupe):
+        if coplanar_merge:
+            _coplanar_phase(mesh, seedkeys, new_faces)
+        return
+    # Phase 0 — weld coincident vertices (a translated cap landing flush on the
+    # ring it came from); merges duplicate edges, drops degenerated faces. Then
+    # drop faces stacked on an identical cycle (a shared wall built twice).
+    mesh.weld_coincident()
+    if dedupe:
+        mesh.dedupe_faces()
+    # Phase 1 — resolve T-junctions (global). Batch form: the per-edge
+    # ``interior_vertex_on`` walked EVERY vertex in Python and the loop
+    # restarted from edge zero after each split — O(splits × E × V). An
+    # imported brick barbecue (3k faces, T-junctions everywhere) hung the
+    # push preview for minutes per drag frame (SIGUSR1 autopsy: two stacks
+    # pinned at interior_vertex_on).
+    #
+    # Now the sweep is ONE vectorised pass, and it is **scoped to the
+    # operation**: only edges whose box meets the seed's box can be split.
+    #
+    # That scope is a correctness fix as much as a speed one. Sweeping every
+    # edge made a push *silently re-topologise geometry it never touched* —
+    # on an imported barbecue, pushing one brick split ten edges, eight of
+    # them a metre away on an unrelated plane, and since a drag preview
+    # reverts each frame it redid that same distant repair on every mouse
+    # move. A stitch repairs what its operation disturbed; a T-junction the
+    # op did not create is not its business.
+    #
+    # The scope is exact for what the op *can* create: a split needs the
+    # splitting vertex to lie on the edge, and either the vertex is the op's
+    # (so it is in the seed box, and the edge's box must reach it) or the
+    # edge is the op's (so its box is inside the seed box). Either way the
+    # edge's box meets the seed box.
+    from core.topology import sweep_tjunctions
+    sweep_tjunctions(mesh, seedkeys)
+    # Phase 2 — collapse redundant valence-2 collinear vertices (global): the
+    # first collapsible vertex in list order, until none is left
+    # (``Mesh.collapse_collinear``; a store-backed mesh does it natively).
+    mesh.collapse_collinear()
+    if coplanar_merge:
+        _coplanar_phase(mesh, seedkeys, new_faces)
+
+
+def _coplanar_phase(mesh, seedkeys, new_faces) -> None:
+    # Phase 3 — coplanar-merge, seeded to the operation. Fuses the whole coplanar
+    # component (every shared edge, any number of faces) at once, but only when it
+    # includes a face this operation created (so user diagonals survive).
+    from core.store_mesh import FaceView, _hypot, _store_of
+    start = 0
+    while (store := _store_of(mesh)) is not None:
+        fresh = None if new_faces is None else {f.key for f in new_faces}
+        match = store.stitch_region(list(seedkeys or ()), fresh, start, _hypot())
+        if match is None:
+            return
+        start, keys = match
+        component = {FaceView(mesh, k) for k in keys}
+        region = mesh.dissolve_coplanar_region(component)
+        if region is not None:
+            if new_faces is not None:
+                new_faces.difference_update(component)
+                new_faces.add(region)
+            start = 0
+    _merge_object_regions(mesh, seedkeys, new_faces, start)
+
+
+def _merge_object_regions(mesh, seedkeys, new_faces, start):
+    from ingetrazo_core import merge_materialised_regions
+    return merge_materialised_regions(mesh, list(seedkeys), new_faces, start)
+
+
+class SnapshotMutation(MeshCommand):
+    """Wrap an arbitrary mesh mutation with snapshot undo. The push/pull live
+    preview applies the *same* mutation each drag frame (then reverts via its own
+    snapshot), so the forming solid renders exactly as it will commit — clean,
+    already stitched — instead of flashing the pre-stitch seams.
+
+    Redo restores the captured *result* rather than re-running the mutation: the
+    closure usually closes over tool state (``base_face`` etc.) that is reset
+    right after commit, so re-running it on redo would crash — and re-running the
+    deterministic plane rebuild on stale state would be wasteful besides.
+
+    ``mesh`` (when given) is the mesh to snapshot instead of the scene's loose
+    one — a push/pull aimed at a Group edits that group's isolated mesh."""
+
+    keeps_rows = True
+
+    def __init__(self, mutate, mesh: Optional[Mesh] = None) -> None:
+        self.mutate = mutate
+        self._mesh = mesh
+        self.before: Optional[dict] = None
+        self.after: Optional[dict] = None
+
+    @classmethod
+    def from_states(cls, before: dict, after: dict,
+                    mesh: Optional[Mesh] = None) -> "SnapshotMutation":
+        """A mutation already applied to the model, given its two snapshots:
+        ``do`` takes the redo branch (restores ``after``) and nothing is
+        re-run. Push/Pull commits its staged preview this way — the model
+        already shows the result."""
+        cmd = cls(None, mesh=mesh)
+        cmd.before, cmd.after = before, after
+        return cmd
+
+    def geometry_meshes(self, scene):
+        return (self._target(scene),)
+
+    def _target(self, scene) -> Mesh:
+        return self._mesh if self._mesh is not None else scene.mesh
+
+    def do(self, scene) -> None:
+        mesh = self._target(scene)
+        if self.after is None:
+            self.before = self._direct_snapshot(mesh)
+            self.mutate(scene)
+            self.after = self._direct_snapshot(mesh)
+        else:
+            mesh.restore_state(self.after)
+        scene.version += 1
+
+    def undo(self, scene) -> None:
+        if self.before is not None:
+            self._target(scene).restore_state(self.before)
+            scene.version += 1
+
+
+class SnapshotImport(Command):
+    """Wrap a file import that may add loose geometry AND/OR reference groups
+    (big DAE/OBJ models land as a Group). SnapshotMutation only snapshots the
+    mesh, so a group added by the loader would survive undo — this also
+    remembers and reverts the groups the import appended.
+
+    Sheets too: an agent asked for "a new sheet" appends a composition
+    through ``run_python``, and untracked it was no step at all — the
+    bridge said nothing changed, and its undo took the user's previous
+    edit instead (#694).
+
+    And what the mutation removed: an extension that replaces its own
+    container group, or a console line that deletes one, lost that group
+    for good on undo, which only took the new one away."""
+
+    # Scene list -> (what the mutation added, what it removed). The removed
+    # entries are (index before the mutation, item), so undo puts each one
+    # back where it was.
+    _TRACKED = (
+        ("groups", "added_groups", "removed_groups"),
+        ("layers", "added_layers", "removed_layers"),
+        ("saved_views", "added_views", "removed_views"),
+        ("dimensions", "added_dims", "removed_dims"),
+        ("text_labels", "added_texts", "removed_texts"),
+        ("compositions", "added_sheets", "removed_sheets"),
+    )
+
+    def __init__(self, mutate) -> None:
+        self.mutate = mutate
+        self.before: Optional[dict] = None
+        self.after: Optional[dict] = None
+        for _, added, removed in self._TRACKED:
+            setattr(self, added, [])
+            setattr(self, removed, [])
+
+    @property
+    def changed(self) -> bool:
+        """Whether the run did anything undo would have to revert."""
+        return (self.before != self.after
+                or any(getattr(self, added) or getattr(self, removed)
+                       for _, added, removed in self._TRACKED))
+
+    def do(self, scene) -> None:
+        m = scene.mesh
+        if self.after is None:
+            lists_before = {name: list(getattr(scene, name))
+                            for name, _, _ in self._TRACKED}
+            self.before = m.capture_state()
+            try:
+                self.mutate(scene)
+            except BaseException:
+                # Restore membership and order, not only newly appended items:
+                # failed recipes may also remove or reorder existing objects.
+                # Slice assignment preserves references held by scripting scopes.
+                for name, items in lists_before.items():
+                    getattr(scene, name)[:] = items
+                raise
+            self.after = m.capture_state()
+            for name, added, removed in self._TRACKED:
+                before, now = lists_before[name], getattr(scene, name)
+                setattr(self, added, [x for x in now if x not in before])
+                setattr(self, removed, [(i, x) for i, x in enumerate(before)
+                                        if x not in now])
+        else:
+            m.restore_state(self.after)
+            for name, added, removed in self._TRACKED:
+                items = getattr(scene, name)
+                for _, x in getattr(self, removed):
+                    if x in items:
+                        items.remove(x)
+                    if name == "groups":
+                        scene.selection.discard(x)
+                for x in getattr(self, added):
+                    if x not in items:
+                        items.append(x)
+        scene.version += 1
+
+    def undo(self, scene) -> None:
+        if self.before is not None:
+            scene.mesh.restore_state(self.before)
+        for name, added, removed in self._TRACKED:
+            items = getattr(scene, name)
+            for x in getattr(self, added):
+                if x in items:
+                    items.remove(x)
+                if name == "groups":
+                    scene.selection.discard(x)
+            # Ascending order of the old index, so each insert lands where
+            # the item was once the ones before it are back.
+            for i, x in getattr(self, removed):
+                if x not in items:
+                    items.insert(min(i, len(items)), x)
+        scene.version += 1
+
+
+def _run_snapshot_parts(parent, scene):
+    # These drawing operations edit only the mesh already enlisted by the
+    # enclosing snapshot. Other parts can have additional geometry owners.
+    covered = (AddEdgeCommand, DeleteEdgesCommand, DeleteFaceCommand, TagCurveCommand,
+               ExplodeCurvesCommand, PruneOrphanEdgesCommand, MoveVerticesCommand)
+    for part in parent.inner:
+        # Direct face undo also uses snapshots. The enclosing
+        # command already owns them in either document mode.
+        if type(part) is not AddFaceCommand and (
+                not parent._journal_geometry or type(part) not in covered):
+            part.do(scene)
+            continue
+        previous = getattr(part, "_journal_geometry", False)
+        part._journal_geometry = True
+        try:
+            part.do(scene)
+        finally:
+            part._journal_geometry = previous
+
+
+class SnapshotCompound(MeshCommand):
+    """Run a list of sub-commands under one identity-preserving snapshot, undone
+    by restoring it.
+
+    The line-draw plan splits and welds edges (and punches holes in coplanar
+    faces); the per-command inverses don't compose into a clean whole — undoing
+    them piecemeal leaves orphan split edges and stray vertices behind. One
+    snapshot of the entire edit reverses it exactly, and because identity is
+    preserved, earlier history entries keep working across this undo.
+    ``heal=False`` preserves supplied copy topology instead of applying
+    drawing-specific global face cleanup.
+    """
+
+    keeps_rows = True
+
+    def __init__(self, inner: Iterable[Command], *, heal: bool = True) -> None:
+        self.inner = list(inner)
+        self._heal = heal
+        self.before: Optional[dict] = None
+        self.after: Optional[dict] = None
+
+    def do(self, scene, *, transaction_captured_before=False) -> None:
+        if self.after is None:
+            # First run: snapshot before, apply the plan, clean up any coplanar
+            # overlap it created (redundant nested holes / spurious mother), then
+            # snapshot the result so undo/redo restore exactly.
+            if not transaction_captured_before:
+                self.before = self._direct_snapshot(scene.mesh)
+            # Which way every face looked before the draw: the heal may
+            # align the faces the draw MADE, never the ones already there
+            # (a Reverse Faces undone by the next rectangle).
+            footprint = winding_footprint(scene.mesh) if self._heal else None
+            _run_snapshot_parts(self, scene)
+            if self._heal:
+                for f in heal_overlapping_faces(scene.mesh, footprint=footprint):
+                    scene.selection.discard(f)
+            # A draw that split a curve leaves it in separate contours — break
+            # the curve ids there, before the snapshot so redo keeps it.
+            scene.mesh.resplit_curves()
+            self.after = self._direct_snapshot(scene.mesh)
+        else:
+            # Redo: re-running the delta plan wouldn't reproduce the splits, so
+            # restore the captured result directly.
+            scene.mesh.restore_state(self.after)
+        scene.version += 1
+
+    def undo(self, scene) -> None:
+        if self.before is not None:
+            scene.mesh.restore_state(self.before)
+            scene.version += 1
+
+
+class MeshSnapshotCommand(MeshCommand):
+    """Run a list of sub-commands plus the stitch pass under a single
+    identity-preserving snapshot, undone by restoring that snapshot.
+
+    Push/pull builds its edit as delta commands and then stitches the result
+    watertight; the stitch's splits/merges restructure the very edges those
+    commands own, so composing their individual undos leaves orphan edges. One
+    snapshot of the whole push is exact and robust — and because it preserves
+    object identity, *other* history entries (a drawn line, an earlier push) keep
+    working across this undo."""
+
+    def __init__(self, inner: Iterable[Command], stitch_seed: Iterable[QVector3D]) -> None:
+        self.inner = list(inner)
+        self.seed = [QVector3D(p) for p in stitch_seed]
+        self.snapshot: Optional[dict] = None
+
+    def do(self, scene) -> None:
+        self.snapshot = self._direct_snapshot(scene.mesh)
+        before = set(scene.mesh.faces)
+        _run_snapshot_parts(self, scene)
+        new_faces = set(scene.mesh.faces) - before
+        run_stitch(scene.mesh, {_key(p) for p in self.seed}, new_faces)
+        scene.version += 1
+
+    def undo(self, scene) -> None:
+        if self.snapshot is not None:
+            scene.mesh.restore_state(self.snapshot)
+            scene.version += 1
+
+
+def _move_holds(scene, placements, moved) -> None:
+    """The dimensions held on a vertex inside ``placements`` hold the
+    same vertex in its copy now: ``moved`` maps ``id`` of each part and
+    mesh replaced to its replacement (UnlinkCommand, either way). Their
+    holds would otherwise stay on the parts no longer placed — still
+    reading as alive through the placement at the top of their chain."""
+    dims = getattr(scene, "dimensions", None) or ()
+    if not dims or not moved:
+        return
+    from core.dimension import VertexAnchor
+    roots = {id(g) for g in placements}
+
+    def remap(h):
+        if h is None or not any(id(g) in roots or id(g) in moved
+                                for g in h.chain):
+            return h
+        mesh = moved.get(id(h.mesh), h.mesh)
+        chain = tuple(moved.get(id(g), g) for g in h.chain)
+        if mesh is h.mesh:
+            return VertexAnchor(h.vertex, mesh, chain)
+        try:
+            v = mesh.vertex_at(QVector3D(h.vertex.position))
+        except Exception:  # noqa: BLE001 — a mesh that cannot answer
+            v = None
+        return VertexAnchor(v, mesh, chain) if v is not None else None
+
+    for dim in dims:
+        for which in ("a", "b"):
+            name = "anchor_" + which
+            if getattr(dim, name, None) is not None:
+                setattr(dim, name, remap(getattr(dim, name)))
+            holds = getattr(dim, "_holds", None)
+            if holds and holds.get(which):
+                holds[which] = [h for h in map(remap, holds[which])
+                                if h is not None]
+
+
+class _TagState:
+    """What the tags tree, the link registry and the materials were at one
+    moment (UnlinkCommand): undo and redo go from one such state to the
+    other by changing only what differs between them, so a tag made or
+    renamed in the Layers panel in between (not on the undo stack) is
+    left alone."""
+
+    _MAPS = ("folder_parents", "folder_visibility", "layer_folder_names",
+             "layer_folder_uids")
+
+    def __init__(self, scene) -> None:
+        from copy import deepcopy
+        from core import links
+        from core.layers import folders_of, layer_values
+        self.layers = list(scene.layers)
+        self.attrs = {id(ly): layer_values(ly) for ly in self.layers}
+        self.folders = list(folders_of(scene))
+        self.maps = {name: dict(getattr(scene, name, None) or {})
+                     for name in self._MAPS}
+        self.registry = deepcopy(links.registry(scene))
+        self.cache = dict(scene.__dict__.get("_link_tag_tables") or {})
+        self.materials = dict(scene.materials)
+        self.active = getattr(scene, "active_layer", None)
+
+    @staticmethod
+    def _sync(now: dict, old: dict, new: dict, copy=lambda v: v) -> None:
+        for key in old.keys() | new.keys():
+            a, b = old.get(key, _MISSING), new.get(key, _MISSING)
+            if a is b or (a is not _MISSING and b is not _MISSING and a == b):
+                continue
+            if b is _MISSING:
+                now.pop(key, None)
+            else:
+                now[key] = copy(b)
+
+    def go(self, scene, to: "_TagState") -> None:
+        """Change ``scene`` from this state to ``to``."""
+        from copy import deepcopy
+        from core import links
+        old_ids = {id(ly) for ly in self.layers}
+        new_ids = {id(ly) for ly in to.layers}
+        scene.layers[:] = [ly for ly in scene.layers
+                           if id(ly) in new_ids or id(ly) not in old_ids]
+        have = {id(ly) for ly in scene.layers}
+        for i, ly in enumerate(to.layers):
+            if id(ly) not in have:
+                scene.layers.insert(min(i, len(scene.layers)), ly)
+        for ly in to.layers:
+            a, b = self.attrs.get(id(ly), {}), to.attrs[id(ly)]
+            for k, v in b.items():
+                if a.get(k, _MISSING) != v:
+                    setattr(ly, k, v)
+        folders = [f for f in (scene.layer_folders or ())
+                   if f in to.folders or f not in self.folders]
+        for i, f in enumerate(to.folders):
+            if f not in folders:
+                folders.insert(min(i, len(folders)), f)
+        maps = {}
+        for name in self._MAPS:
+            now = dict(getattr(scene, name, None) or {})
+            self._sync(now, self.maps[name], to.maps[name])
+            maps[name] = now
+        for name, now in maps.items():
+            setattr(scene, name, now)
+        scene.layer_folders = folders
+        self._sync(links.registry(scene), self.registry, to.registry, deepcopy)
+        self._sync(scene.__dict__.setdefault("_link_tag_tables", {}),
+                   self.cache, to.cache)
+        self._sync(scene.materials, self.materials, to.materials)
+        if self.active != to.active:
+            scene.active_layer = to.active
+
+
+_MISSING = object()
+
+
+def _nested_pairs(old, new) -> list:
+    """``(old, new)`` for the parts and meshes of a file linked inside a
+    link just unlinked, now read again as the host's own link (``new``):
+    the part read again for each one ``old`` held. ``old``'s parts came
+    through the outer file, under the uids it gave them — its copy of
+    this file named by ``old.source_uid`` (``links.stable_uid``)."""
+    from core import links
+    from core.purge import iter_groups
+    origin = getattr(old, "source_uid", None)
+    out = []
+    if old.mesh is not None and new.mesh is not None:
+        out.append((old.mesh, new.mesh))
+    if not origin:
+        return out
+    fresh = {}
+    for part in iter_groups(new.children or ()):
+        src = getattr(part, "source_uid", None)
+        if src:
+            fresh[links.stable_uid(origin, src)] = part
+    meshes = {id(old.mesh)}
+    for part in iter_groups(old.children or ()):
+        twin = fresh.get(getattr(part, "source_uid", None))
+        if twin is None:
+            continue
+        out.append((part, twin))
+        if id(part.mesh) not in meshes:
+            meshes.add(id(part.mesh))
+            out.append((part.mesh, twin.mesh))
+    return out
+
+
+def _discard_removed_selection(scene):
+    for element in tuple(scene.selection):
+        owner = getattr(element, "_m", None)
+        store = getattr(owner, "_store", None)
+        if store is not None and not store.is_live(element.key):
+            scene.selection.discard(element)
+
+
+def _drop_dead_elements(scene, mesh) -> None:
+    """Keep in the selection only the faces and edges still in ``mesh``
+    (answered by the store for a store-backed mesh: no view per face)."""
+    from core.store_mesh import StoreMesh
+    st = mesh._store if type(mesh) is StoreMesh else None
+    if st is not None:
+        scene.selection = {s for s in ElementSet(scene.selection)
+                           if not isinstance(s, (Face, Edge))
+                           or st.is_live(s.key)}
+        return
+    live = set(map(element_identity, mesh.faces))
+    live_e = set(map(element_identity, mesh.edges))
+    scene.selection = {s for s in ElementSet(scene.selection)
+                       if not isinstance(s, (Face, Edge))
+                       or s.key in (live if isinstance(s, Face) else live_e)}
+
+
+def _merge_overlapping_planes(scene, before, added, *, on_rebuild=None,
+                              others=False) -> int:
+    """Rebuild, plane by plane, where faces just ``added`` to the mesh
+    overlap faces it already had (``before``): each region of the plane
+    ends up covered by ONE face, as when a face is drawn or pasted there
+    (:class:`RebuildPlaneFacesCommand`, scoped to the faces involved).
+    Faces that only share an edge or a corner are left alone, and so is
+    every plane no older face overlaps. Runs inside a command that already
+    holds a snapshot of the mesh, so it takes none. Returns how many planes
+    were rebuilt. ``on_rebuild`` lets a caller take its snapshot lazily,
+    immediately before the first mutation, only if a rebuild is needed.
+
+    ``others=True``: ``before`` is every face of the mesh but ``added``
+    (pass None). A store-backed mesh then finds the face pairs whose boxes
+    overlap natively (``MeshStore.plane_merge_candidates``) and the plane
+    tests below run on those pairs only, in the same order.
+    """
+    if not added:
+        return 0
+    mesh = scene.mesh
+    tol = RebuildPlaneFacesCommand._TOL
+    found = None
+    if others:
+        from core.store_parts import merge_candidates
+        found = merge_candidates(mesh, added, tol)
+        if found is None:
+            ids = set(map(element_identity, added))
+            before = [f for f in mesh.faces if f.key not in ids]
+    if found is None:
+        if not before:
+            return 0
+        live = set(map(element_identity, mesh.faces))
+        added = [f for f in added if f.key in live]
+        if not added:
+            return 0
+
+    def box(f):
+        ps = f.vertices
+        xs = [p.x() for p in ps]
+        ys = [p.y() for p in ps]
+        zs = [p.z() for p in ps]
+        return (min(xs), min(ys), min(zs)), (max(xs), max(ys), max(zs))
+
+    def unit_normal(f):
+        n = f._newell()
+        length = n.length()
+        return n / length if length > 1e-9 else None
+
+    def overlap(alo, ahi, blo, bhi) -> bool:
+        # The _plane_merges test of Paste: the boxes overlap with some area
+        # along each axis, or are both flat along it.
+        return all(alo[i] < bhi[i] - tol and blo[i] < ahi[i] - tol
+                   or abs(ahi[i] - alo[i]) < tol and abs(bhi[i] - blo[i]) < tol
+                   for i in range(3))
+
+    if found is not None:
+        new_faces, pairs = found
+        entries: dict = {}
+
+        def entry(j):
+            e = entries.get(j)
+            if e is None:
+                nf = new_faces[j]
+                e = entries[j] = (nf, unit_normal(nf), *box(nf))
+            return e
+
+        def candidates():
+            for f, hits in pairs:
+                yield f, (entry(j) for j in hits)
+    else:
+        new = []
+        glo = [float("inf")] * 3
+        ghi = [float("-inf")] * 3
+        for f in added:
+            n = unit_normal(f)
+            if n is None:
+                continue
+            lo, hi = box(f)
+            new.append((f, n, lo, hi))
+            glo = [min(a, b) for a, b in zip(glo, lo)]
+            ghi = [max(a, b) for a, b in zip(ghi, hi)]
+        if not new:
+            return 0
+        added_ids = set(map(element_identity, added))
+
+        def candidates():
+            for f in before:
+                if f.key not in live or f.key in added_ids:
+                    continue
+                lo, hi = box(f)
+                if not all(lo[i] <= ghi[i] + tol and glo[i] <= hi[i] + tol
+                           for i in range(3)):
+                    continue
+                yield f, (e for e in new if overlap(lo, hi, e[2], e[3]))
+
+    planes: list = []          # [origin, normal, [old faces], [new faces]]
+    for f, near in candidates():
+        n = None
+        for nf, nn, nlo, nhi in near:
+            if nn is None:
+                continue
+            if n is None:
+                n = unit_normal(f)
+                if n is None:
+                    break
+            if abs(QVector3D.dotProduct(n, nn)) < 1.0 - 1e-6:
+                continue
+            o = nf.vertices[0]
+            if any(abs(QVector3D.dotProduct(p - o, nn)) > tol
+                   for p in f.vertices):
+                continue
+            for entry_ in planes:
+                if (abs(QVector3D.dotProduct(entry_[1], nn)) > 1.0 - 1e-6
+                        and abs(QVector3D.dotProduct(o - entry_[0],
+                                                     entry_[1])) < tol):
+                    break
+            else:
+                entry_ = [QVector3D(o), QVector3D(nn), [], []]
+                planes.append(entry_)
+            if f not in entry_[2]:
+                entry_[2].append(f)
+            if nf not in entry_[3]:
+                entry_[3].append(nf)
+    if not planes:
+        return 0
+    if on_rebuild is not None:
+        on_rebuild()
+    keep = ElementSet(scene.selection)
+    for origin, n, old_faces, new_faces in planes:
+        # The new faces on that plane that overlap NO older face stay as
+        # they are; the rest rebuild with the older faces they cover.
+        cmd = RebuildPlaneFacesCommand(origin, n,
+                                       faces=old_faces + new_faces)
+        cmd.take_snapshot = False
+        cmd.do(scene)
+    scene.selection = set(keep)
+    _drop_dead_elements(scene, mesh)
+    return len(planes)
+
+
+def placement_is_identity(xform, tol: float = 1e-6) -> bool:
+    """True when a placement neither turns nor moves anything (within
+    ``tol``) — straightening it would be a silent no-op."""
+    if xform is None:
+        return True
+    from ingetrazo_core import Matrix4 as QMatrix4x4
+    ident = QMatrix4x4()
+    return all(abs(a - b) <= tol for a, b in zip(xform.data(), ident.data()))
+
+
+def placement_rotation_deg(xform) -> float:
+    """Turn about Z (degrees, counter-clockwise seen from above) of a rigid
+    placement; raises ``ValueError`` when the placement tilts or scales —
+    there is no north angle for those."""
+    import math
+    c0, c1, c2 = xform.column(0), xform.column(1), xform.column(2)
+    if (abs(c2.x()) > 1e-6 or abs(c2.y()) > 1e-6 or abs(c2.z() - 1.0) > 1e-6
+            or abs(c0.z()) > 1e-6 or abs(c1.z()) > 1e-6):
+        raise ValueError("the model is tilted (its Z axis is not vertical)")
+    sx = math.hypot(c0.x(), c0.y())
+    sy = math.hypot(c1.x(), c1.y())
+    if abs(sx - 1.0) > 1e-4 or abs(sy - 1.0) > 1e-4:
+        raise ValueError("the model is scaled")
+    return math.degrees(math.atan2(c0.y(), c0.x()))
+
+
+def group_owner_list(scene, group):
+    """The list ``group`` lives in: ``scene.groups`` at the root, or the
+    ``children`` of the container that owns it, however deep. ``None`` when
+    the group is not in the scene at all."""
+    return _definitions.group_owner(scene, group)
+
+
+_point_in_tri = _planar.point_in_tri
+_segment_grid = _planar.SegmentIndex
+
+
+class CompoundCommand(Command):
+    """A list of commands executed and reverted as one atomic step."""
+
+    journal_parts = False
+
+    def __init__(self, commands: Iterable[Command]) -> None:
+        self.commands: list[Command] = list(commands)
+
+    @property
+    def keeps_paint(self) -> bool:
+        return all(getattr(c, "keeps_paint", False) for c in self.commands)
+
+    @property
+    def keeps_groups(self) -> bool:
+        return all(getattr(c, "keeps_paint", False)
+                   or getattr(c, "keeps_groups", False)
+                   for c in self.commands)
+
+    @property
+    def keeps_rows(self) -> bool:
+        return all(getattr(c, "keeps_paint", False)
+                   or getattr(c, "keeps_rows", False)
+                   for c in self.commands)
+
+    def do(self, scene) -> None:
+        done = []
+        try:
+            for cmd in self.commands:
+                cmd.do(scene)
+                done.append(cmd)
+        except CommandRejected:
+            # One part declined: the rest goes back too (a group moved
+            # with the vertices lives outside the mesh snapshot).
+            if not self._journal_geometry:
+                for cmd in reversed(done):
+                    cmd.undo(scene)
+            raise
+
+    def undo(self, scene) -> None:
+        for cmd in reversed(self.commands):
+            cmd.undo(scene)
+
+    def doc_undo(self, scene) -> bool:
+        """By its transaction when every part would be."""
+        return bool(self.commands) and all(
+            _uses_doc_undo(c, scene) for c in self.commands)
+
+    def doc_after(self, scene, phase) -> None:
+        parts = reversed(self.commands) if phase == "undo" else self.commands
+        for cmd in parts:
+            cmd.doc_after(scene, phase)
+
+
+class OccurrenceCommands(CompoundCommand):
+    """Replay committed commands in their original occurrence coordinate frames."""
+
+    @staticmethod
+    def group_start(history, session):
+        return history._native.group_start(session)
+
+    @staticmethod
+    def fold(history, session):
+        return history._native.fold_occurrence(session, OccurrenceCommands)
+
+    @staticmethod
+    def _in_frame(scene, cmd, action, *args):
+        from contextlib import nullcontext
+        from core.coordinate_frame import mesh_frame
+        active = scene.mesh
+        try:
+            scene.mesh = getattr(cmd, "_history_mesh", active)
+            frame = getattr(cmd, "_tool_frame", None)
+            with mesh_frame(scene.mesh, frame[0], matrix=frame[1]) if frame else nullcontext():
+                action(*args)
+        finally:
+            scene.mesh = active
+
+    def doc_after(self, scene, phase):
+        _doc.NATIVE.DocumentHistory.replay_group(self, scene, phase == "undo", True)
+
+    def _replay(self, scene, undo):
+        return _doc.NATIVE.DocumentHistory.replay_group(self, scene, undo, False)
+
+    def do(self, scene):
+        self._replay(scene, False)
+
+    def undo(self, scene):
+        self._replay(scene, True)
+
+
+class SetRecordCommand(Command):
+    """Top-level patch of group records; None patch removes the record.
+
+    Nested values replace whole fields. GUIDs cannot be changed by a patch.
+    Snapshots are detached and retained across redo, including new identities.
+    """
+    # History currently treats keeps_paint as also keeping BIM tags.
+    keeps_paint = False
+    #: Records are document values (``Group.ifc``, slice 2).
+    doc_undo = True
+
+    def doc_after(self, scene, phase) -> None:
+        meshes = {id(scene.mesh): scene.mesh}
+        for group in self.targets:
+            meshes[id(group.mesh)] = group.mesh
+        for mesh in meshes.values():
+            mesh.bump_revision()
+        scene.version += 1
+
+    def __init__(self, targets, patch, *, normalize_values=True):
+        self.normalize_values = normalize_values
+        from copy import deepcopy
+        self.targets = list(targets)
+        self.patch = deepcopy(patch)
+        self._before = None
+        self._after = None
+
+    def _write(self, scene, records):
+        from copy import deepcopy
+        meshes = {id(scene.mesh): scene.mesh}
+        for group, record in zip(self.targets, records):
+            group.ifc = deepcopy(record)
+            meshes[id(group.mesh)] = group.mesh
+        for mesh in meshes.values():
+            mesh.bump_revision()
+        scene.version += 1
+
+    def do(self, scene):
+        from copy import deepcopy
+        from core.ifc_identity import ensure_guid
+        from core.record import normalize
+        if self._before is None:
+            self._before = [deepcopy(g.ifc) for g in self.targets]
+            self._after = []
+            for old in self._before:
+                if self.patch is None:
+                    self._after.append(None)
+                    continue
+                new = {**deepcopy(old or {}), **deepcopy(self.patch)}
+                if old and old.get('guid'):
+                    new['guid'] = old['guid']
+                else:
+                    new.pop('guid', None)
+                    ensure_guid(new)
+                self._after.append(normalize(new) if self.normalize_values else new)
+        self._write(scene, self._after)
+
+    def undo(self, scene):
+        self._write(scene, self._before)
+
+
+class TagGroupsCommand(SetRecordCommand):
+    def __init__(self, targets, ifc_class, name=''):
+        super().__init__(targets, {'class': ifc_class, 'name': name})
+
+
+class UntagGroupsCommand(SetRecordCommand):
+    def __init__(self, targets):
+        super().__init__(targets, None)
+
+
+class SetRegistryCommand(SetPluginDataCommand):
+    def __init__(self, value, *, refiled_uids=()):
+        self.refiled_uids = frozenset(refiled_uids)
+        from core.bim_registry import validate
+        errors = validate(value)
+        if errors:
+            raise ValueError('; '.join(errors))
+        super().__init__('bim_registry', value)
+
+    def do(self, scene):
+        from core import project, bim_registry
+        stamp = getattr(scene, '_project_mtime_ns', None)
+        # What the edit was derived from: the merge base of the shared write.
+        base = getattr(scene, '_project_registry_base', None)
+        current = bim_registry.get(scene)
+        removed = (current.get('structure', {}).get('nodes', {}).keys()
+                   - self.value.get('structure', {}).get('nodes', {}).keys())
+        if removed:
+            from core.structure import _placements, node_of
+            for group, source, _ in _placements(scene):
+                if not source and node_of(group) in removed and group.uid not in self.refiled_uids:
+                    raise CommandRejected('Cannot delete occupied node: ' + node_of(group))
+        if not hasattr(self, '_project_before'):
+            self._project_before = current
+        if stamp is not None:
+            scene._project_mtime_ns = stamp
+        if base is not None:
+            scene._project_registry_base = base
+        if project.write_registry(scene, self.value):
+            scene.version += 1
+        else:
+            super().do(scene)
+        scene.mesh.bump_revision()
+
+    def undo(self, scene):
+        from core import project
+        # Revert only what this command changed (base: its after-value).
+        if project.write_registry(scene, self._project_before, base=self.value):
+            scene.version += 1
+        else:
+            super().undo(scene)
+        scene.mesh.bump_revision()
+
+    def doc_undo(self, scene) -> bool:
+        # A project's registry lives in its project file, not the document.
+        from core import project
+        return project.path_for(scene) is None
+
+    def doc_after(self, scene, phase) -> None:
+        scene.mesh.bump_revision()
+        scene.version += 1
+
+
+class SetFaceTagsCommand(Command):
+    """Legacy loose-face tags, with stable identities across redo."""
+    # History currently treats keeps_paint as also keeping BIM tags.
+    keeps_paint = False
+
+    def __init__(self, faces, ifc_class=None, name=''):
+        self.faces = list(faces)
+        self.ifc_class, self.name = ifc_class, name
+        self._before = self._after = None
+
+    def _write(self, scene, values):
+        from copy import deepcopy
+        from core import bim
+        for face, value in zip(self.faces, values):
+            if value is None:
+                face.attrs.pop('ifc', None)
+            else:
+                face.attrs['ifc'] = deepcopy(value)
+        bim._TAG_EPOCH += 1
+        scene.mesh.bump_revision()
+        scene.version += 1
+
+    def do(self, scene):
+        from copy import deepcopy
+        from core.bim import next_object_id
+        from core.ifc_identity import ensure_guid
+        if self._before is None:
+            self._before = [deepcopy(f.attrs.get('ifc')) for f in self.faces]
+            tag = None
+            if self.ifc_class:
+                tag = {'id': next_object_id(scene), 'class': self.ifc_class, 'name': self.name}
+                ensure_guid(tag)
+            self._after = [deepcopy(tag) for f in self.faces]
+        self._write(scene, self._after)
+
+    def undo(self, scene):
+        self._write(scene, self._before)
+
+
+# ---- History ------------------------------------------------------------------
 
 
 _PERF = bool(_os.environ.get("INGETRAZO_PERF"))
