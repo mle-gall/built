@@ -133,7 +133,14 @@ pub struct Extras {
 /// The `ingetrazo_render.Host` for one window.
 pub struct Host {
     obj: Py<PyAny>,
+    /// When the last wheel or gesture event was handled (see `navigating`).
+    navigated: std::cell::Cell<Option<std::time::Instant>>,
 }
+
+/// How long after a wheel or gesture event the camera still counts as moving.
+/// A trackpad sends one every 8 to 16 ms and a hand turns a wheel a notch
+/// every 50 to 100 ms; a pause this long is the end of the zoom.
+const NAVIGATION_SETTLE: std::time::Duration = std::time::Duration::from_millis(150);
 
 pub fn report(py: Python<'_>, err: PyErr, what: &str) {
     eprintln!("[built] python error in {what}:");
@@ -146,7 +153,7 @@ impl Host {
             let cls = py.import("ingetrazo_render")?.getattr("Host")?;
             let (window, display, platform) = surface;
             let obj = cls.call1((window, width, height, scale, settings, temporary, display, platform))?;
-            Ok(Host { obj: obj.unbind() })
+            Ok(Host { obj: obj.unbind(), navigated: std::cell::Cell::new(None) })
         })
     }
 
@@ -170,7 +177,24 @@ impl Host {
             "gesture" => crate::perf::note("gesture_ms", t0),
             _ => {}
         }
+        if matches!(name, "wheel" | "gesture") {
+            self.navigated.set(Some(std::time::Instant::now()));
+        }
         out
+    }
+
+    /// While a wheel, slide or pinch is moving the camera: when it will
+    /// count as over. Pointer moves wait for that (`App::pointer`): what is
+    /// under the cursor changes with every event of the gesture, and a
+    /// hover (a pick and a snap) after each one is the lag of a zoom on a
+    /// large model.
+    pub fn navigating(&self) -> Option<std::time::Instant> {
+        let until = self.navigated.get()? + NAVIGATION_SETTLE;
+        if std::time::Instant::now() < until {
+            return Some(until);
+        }
+        self.navigated.set(None);
+        None
     }
 
     pub fn call0(&self, name: &str) -> Option<Py<PyAny>> {
