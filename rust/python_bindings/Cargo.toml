@@ -6,4 +6,4 @@ license = "GPL-3.0-or-later"
 publish = false
 
 [dependencies]
-pyo3 = { version = "0.29", features = ["abi3-py310"] }
+pyo3 = { version = "0.29", features = ["abi3-py311"] }

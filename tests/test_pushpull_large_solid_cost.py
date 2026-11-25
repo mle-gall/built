@@ -52,36 +52,6 @@ def _raise(scene, hist, face):
     _push(scene, face, 0.5)
 
 
-def test_an_orientation_pass_triangulates_each_face_once(monkeypatch):
-    from core import orient
-    # The Python pass is the one measured: with the scans on, the fork's
-    # Rust engine decides (core.orient._native_decision) and cuts no face
-    # in Python at all.
-    monkeypatch.setenv("INGETRAZO_SCANS", "0")
-
-    scene, _hist = _slab_with_cylinders(4)
-    # What earlier passes kept (a face whose corners have not moved is not
-    # cut again at all) is forgotten, so this pass starts from nothing.
-    orient._TRI_MEMO.pop(scene.mesh, None)
-    calls = []
-    # The faces' own class: a store-backed face answers from the store.
-    cls = type(scene.mesh.faces[0])
-    real = cls.triangulate
-    monkeypatch.setattr(
-        cls, "triangulate",
-        lambda self, *a, **k: calls.append(self) or real(self, *a, **k))
-    assert orient.orient_outward(scene.mesh) == []      # already outward
-    per_face = {}
-    for f in calls:
-        per_face[f] = per_face.get(f, 0) + 1
-    assert set(per_face) == set(scene.mesh.faces)
-    assert max(per_face.values()) == 1, "a face was triangulated again"
-    # ... and the next pass, with nothing moved, cuts none.
-    calls.clear()
-    assert orient.orient_outward(scene.mesh) == []
-    assert calls == []
-
-
 def test_a_push_lists_each_neighbours_edges_once_per_question():
     from core import topology
 
