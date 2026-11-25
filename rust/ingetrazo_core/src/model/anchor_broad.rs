@@ -170,6 +170,23 @@ impl AnchorPlacements {
         Ok(AnchorPlacements { entries: entries.unbind(), batches, boxes: PyDict::new(py).unbind() })
     }
 
+    /// The placements, meshes and matrices held are Python objects that can
+    /// lead back to the scene keeping this: the collector must see them.
+    fn __traverse__(&self, visit: pyo3::PyVisit<'_>) -> Result<(), pyo3::PyTraverseError> {
+        visit.call(&self.entries)?;
+        visit.call(&self.boxes)?;
+        for b in &self.batches {
+            visit.call(&b.mesh)?;
+        }
+        Ok(())
+    }
+
+    fn __clear__(&mut self, py: Python<'_>) {
+        self.batches.clear();
+        self.entries = PyList::empty(py).unbind();
+        self.boxes = PyDict::new(py).unbind();
+    }
+
     fn candidates(&self, py: Python<'_>, point: &Bound<'_, PyAny>, tol: f64) -> PyResult<Py<PyAny>> {
         let entries = self.entries.bind(py);
         if self.batches.is_empty() {
