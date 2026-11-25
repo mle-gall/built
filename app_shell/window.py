@@ -7,9 +7,8 @@ from __future__ import annotations
 
 import ingetrazo_render as native
 
-import sys
 
-from core.input_types import NATIVE, QEvent, Qt
+from core.input_types import QEvent, Qt
 
 from ingetrazo_render import shell_action as ShellAction
 from views.view_host import MISSING
@@ -299,16 +298,7 @@ def discover_window_plugins():
 
 
 def new_shell_window(host):
-    plugins = discover_window_plugins()
-    if NATIVE and "PySide6.QtGui" in sys.modules:
-        from app_shell.qt_host import enable_plugin_widgets
-        enable_plugin_widgets()
-        from PySide6.QtCore import QObject
-
-        class PluginWindow(ShellWindow, QObject):
-            """Parent for raw widget actions contributed by a loaded Qt plugin."""
-        return PluginWindow(host, plugins)
-    return ShellWindow(host, plugins)
+    return ShellWindow(host, discover_window_plugins())
 
 
 from core.host_callbacks import Signal
