@@ -101,7 +101,7 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
     if !groups.is_empty() {
         let registry = bim.call_method1("get", (&scene,))?;
         vocabulary = py.import("core.record_inspector")?.call_method1("vocabulary", (&registry,))?;
-        let all = py.import("core.deliveries")?.call_method1("records", (&scene,))?;
+        let all = py.import("ingetrazo_core.deliveries")?.call_method1("records", (&scene,))?;
         let key = delivery_key.clone().unwrap_or_else(|| py.None().into_bound(py));
         let delivery = all.call_method1("get", (key, PyDict::new(py)))?;
         if delivery.call_method1("get", ("format",))?.eq("ifc")? {

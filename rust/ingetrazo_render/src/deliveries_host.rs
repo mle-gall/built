@@ -6,7 +6,7 @@
 //!
 //! `ingetrazo_core`'s `delivery_form.rs` owns the formats, scopes, visible
 //! fields, record and validation; `sheet_host.rs` shows the form. What stays
-//! Python: the writers themselves (`core.deliveries.write_steps`,
+//! Python: the writers themselves (`ingetrazo_core.deliveries.write_steps`,
 //! `preview_svg`, the IFC writer behind them) and the protocol's delivery
 //! commands.
 use pyo3::{
@@ -34,7 +34,7 @@ fn dialogs(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
 }
 
 fn deliveries(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("core.deliveries")
+    py.import("ingetrazo_core.deliveries")
 }
 
 fn run_command<'py>(py: Python<'py>, history: &Bound<'py, PyAny>, name: &str, kwargs: &Bound<'py, PyDict>) -> PyResult<Bound<'py, PyAny>> {

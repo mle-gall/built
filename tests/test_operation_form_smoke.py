@@ -408,7 +408,7 @@ def test_native_ai_connection_edits_plugin_model(tmp_path):
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_svg_preview_and_delivery_edit(tmp_path):
     from ingetrazo_render import SurveyRaster
-    from core import deliveries
+    from ingetrazo_core import deliveries
     from core.history import History
     from core.scene import Scene
     from formats.igz import load_into, save_scene

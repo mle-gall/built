@@ -323,7 +323,7 @@ def shared_assembly(work):
     commands.run(h, "patch_record_field", placements=[path], path=["description"], value="East only")
     assert target.ifc["description"] == "East only"
     assert "description" not in west.children[0].ifc
-    from core.deliveries import scoped
+    from ingetrazo_core.deliveries import scoped
     scene.select([target])
     projection = scoped(scene, {"scope": "selection"})
     delivered = projection.resolve_occurrence(path)

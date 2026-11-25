@@ -8,16 +8,13 @@ use pyo3::{
     types::{PyDict, PyList, PySet},
 };
 use std::collections::HashMap;
+#[pyfunction]
 fn records<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
     scene
         .getattr("plugin_data")?
         .call_method1("get", ("deliveries", PyDict::new(scene.py())))
 }
-#[pyfunction]
-fn delivery_records<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
-    records(scene)
-}
-#[pyfunction]
+#[pyfunction(name="validate")]
 fn delivery_validate(record: &Obj<'_>) -> PyResult<()> {
     let py = record.py();
     let kw = PyDict::new(py);
@@ -82,7 +79,7 @@ fn delete_delivery<'p>(history: &Obj<'p>, key: &Obj<'p>) -> PyResult<Obj<'p>> {
     vals.del_item(key)?;
     store(history, key, &vals)
 }
-#[pyfunction]
+#[pyfunction(name="finish")]
 fn delivery_finish<'p>(history: &Obj<'p>, key: &Obj<'p>) -> PyResult<Obj<'p>> {
     let py = history.py();
     let date = py.import("datetime")?;
@@ -117,7 +114,7 @@ fn run_delivery<'p>(
         return Ok(d.into_any());
     }
     for step in py
-        .import("core.deliveries")?
+        .import("ingetrazo_core.deliveries")?
         .call_method("write_steps", (&s, record), context)?
         .try_iter()?
     {
@@ -224,7 +221,7 @@ impl<'p> Scope<'p> {
 fn delivery_visible(_entity: &Obj<'_>) -> bool {
     true
 }
-#[pyfunction]
+#[pyfunction(name="scoped")]
 fn delivery_scoped<'p>(py: Python<'p>, scene: &Obj<'p>, record: &Obj<'p>) -> PyResult<Obj<'p>> {
     let scope = record.get_item("scope")?.extract::<String>()?;
     let mut ctx = Scope {
@@ -354,12 +351,17 @@ fn delivery_scoped<'p>(py: Python<'p>, scene: &Obj<'p>, record: &Obj<'p>) -> PyR
     if scope != "scenes" {
         out.setattr(
             "entity_visible",
-            py.import("ingetrazo_core")?.getattr("delivery_visible")?,
+            wrap_pyfunction!(delivery_visible,py)?,
         )?
     }
     Ok(out)
 }
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    functions!(m;delivery_records,delivery_validate,create_delivery,edit_delivery,delete_delivery,delivery_finish,run_delivery,delivery_visible,delivery_scoped);
-    write::register(m)
+    let py=m.py();
+    let sub=&PyModule::new(py,"ingetrazo_core.deliveries")?;
+    functions!(sub;records,delivery_validate,create_delivery,edit_delivery,delete_delivery,delivery_finish,run_delivery,delivery_scoped);
+    write::register(sub)?;
+    sub.add("FORMATS",pyo3::types::PyTuple::new(py,crate::delivery_form::delivery_formats())?)?;
+    py.import("sys")?.getattr("modules")?.set_item("ingetrazo_core.deliveries",sub)?;
+    m.add("deliveries",sub)
 }

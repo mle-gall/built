@@ -122,7 +122,7 @@ def test_locked_target_rejects_a_fault_from_before_the_lock(project):
 
 
 def test_scoped_status_fix_updates_readiness_and_undo(project, tmp_path):
-    from core.deliveries import create_delivery
+    from ingetrazo_core.deliveries import create_delivery
     scene, win, view = project
     scene.plugin_data["bim_registry"] = {"structure": {"nodes": {
         "walls": {"name": "Walls", "parent": None, "recipe": {"class": "IfcWall"}}

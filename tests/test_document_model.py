@@ -442,7 +442,7 @@ def test_definition_does_not_pin_a_geometry_cycle():
 
 
 def test_scoped_delivery_copies_kept_placements_and_material_mapping():
-    from core.deliveries import scoped
+    from ingetrazo_core.deliveries import scoped
     scene = Scene()
     kept = Group(name="Kept")
     kept.adopt([Group(name="Child")])
