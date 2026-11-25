@@ -8,7 +8,7 @@ fn textured_face<'py>(
 ) -> PyResult<Option<(Bound<'py, PyAny>, &'static str)>> {
     let faces = matching(
         &vp.getattr("scene")?.getattr("selection")?,
-        "core.mesh",
+        "ingetrazo_core.mesh",
         "Face",
     )?;
     if faces.len() != 1 {

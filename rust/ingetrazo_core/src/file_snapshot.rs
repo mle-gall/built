@@ -220,7 +220,7 @@ async fn capture_geometry(mesh: Owned) -> PyResult<Owned> {
     let deferred = Python::attach(|py| -> PyResult<_> {
         let m = mesh.bind(py);
         Ok(m.get_type()
-            .is(&py.import("core.mesh")?.getattr("DeferredMesh")?)
+            .is(&py.import("ingetrazo_core.mesh")?.getattr("DeferredMesh")?)
             .then(|| {
                 m.getattr("__dict__")?
                     .get_item("_deferred_source")

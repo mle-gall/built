@@ -72,7 +72,7 @@ pub(crate) fn open_plan(plan: &Obj) -> PyResult<bool> {
     Ok(starts.windows(2).any(|w| w[1] - w[0] != 2))
 }
 fn store(mesh: &Obj) -> PyResult<bool> {
-    mesh.is_instance(&mesh.py().import("core.store_mesh")?.getattr("StoreMesh")?)
+    mesh.is_instance(&mesh.py().import("ingetrazo_core.store_mesh")?.getattr("StoreMesh")?)
 }
 fn installed_hypot<'p>(mesh: &Obj<'p>) -> PyResult<Option<Obj<'p>>> {
     if !store(mesh)? {
@@ -180,7 +180,7 @@ impl<'p> Sources<'p> {
             for f in &mut soup.owners {
                 *f += self.attrs.len() as u32;
             }
-            let class = py.import("core.store_mesh")?.getattr("FaceView")?;
+            let class = py.import("ingetrazo_core.store_mesh")?.getattr("FaceView")?;
             for key in packet.get_item(3)?.try_iter()? {
                 skin.push(class.call1((&mesh, key?))?);
             }

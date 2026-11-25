@@ -100,7 +100,7 @@ pub(super) fn paint_classes<'py>(mesh: &Obj<'py>, push: bool) -> PyResult<Obj<'p
             swapped.push(classes.intern(&copy)?);
         }
     }
-    let paint_keys = py.import("core.mesh")?.getattr("PAINT_KEYS")?;
+    let paint_keys = py.import("ingetrazo_core.mesh")?.getattr("PAINT_KEYS")?;
     let mut surfaces = vec![];
     for i in 0..classes.rows.len() {
         let v = classes.rows.get_item(i)?;

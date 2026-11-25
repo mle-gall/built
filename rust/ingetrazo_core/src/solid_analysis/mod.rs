@@ -135,7 +135,7 @@ fn positions<'p>(vs: &[Obj<'p>]) -> PyResult<Vec<Obj<'p>>> {
 #[pyfunction]
 fn _copy_faces<'p>(faces: &Obj<'p>) -> PyResult<(Obj<'p>, Bound<'p, PyDict>)> {
     let py = faces.py();
-    let mesh = py.import("core.mesh")?.call_method0("Mesh")?;
+    let mesh = py.import("ingetrazo_core.mesh")?.call_method0("Mesh")?;
     let orig = PyDict::new(py);
     for f in faces.try_iter()? {
         let f = f?;
@@ -220,7 +220,7 @@ fn inspect_mesh<'p>(mesh: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
     let py = mesh.py();
     let edges = mesh.getattr("edges")?;
     let faces = mesh.getattr("faces")?;
-    let store = py.import("core.store_mesh")?;
+    let store = py.import("ingetrazo_core.store_mesh")?;
     let mut defects: [Vec<Obj<'_>>; 3] = Default::default();
     if mesh.is_instance(&store.getattr("StoreMesh")?)? {
         let keys = mesh

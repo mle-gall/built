@@ -40,7 +40,7 @@ pub(crate) fn unselect(scene: &Obj<'_>, items: &Obj<'_>) -> PyResult<()> {
         return Ok(());
     }
     if sel.len()?.saturating_mul(4) < items.len()? {
-        let identity = py.import("core.mesh")?.getattr("element_identity")?;
+        let identity = py.import("ingetrazo_core.mesh")?.getattr("element_identity")?;
         let drop = PySet::empty(py)?;
         for e in items.try_iter()? {
             drop.add(identity.call1((e?,))?)?;
@@ -146,7 +146,7 @@ pub(crate) fn drop_dead_elements(scene: &Obj<'_>, mesh: &Obj<'_>) -> PyResult<()
     let sel = py
         .import("core.element_set")?
         .call_method1("ElementSet", (scene.getattr("selection")?,))?;
-    let classes = py.import("core.mesh")?;
+    let classes = py.import("ingetrazo_core.mesh")?;
     let kinds = (classes.getattr("Face")?, classes.getattr("Edge")?).into_pyobject(py)?;
     let store = mesh.getattr("_store")?;
     let keep = PySet::empty(py)?;
@@ -176,7 +176,7 @@ pub(crate) fn run_stitch(
         return Ok(());
     }
     let py = mesh.py();
-    let module = py.import("core.store_mesh")?;
+    let module = py.import("ingetrazo_core.store_mesh")?;
     let face = module.getattr("FaceView")?;
     let store = mesh.getattr("_store")?;
     let hypot = module.call_method0("_hypot")?;

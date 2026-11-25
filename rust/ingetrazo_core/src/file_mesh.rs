@@ -160,7 +160,7 @@ fn bump_curve(module: &Bound<'_, PyModule>, cid: &Obj<'_>) -> PyResult<()> {
 #[pyfunction]
 fn igz_load_mesh_small(mesh: &Obj<'_>, payload: &Dict<'_>) -> PyResult<()> {
     let py = mesh.py();
-    let module = py.import("core.mesh")?;
+    let module = py.import("ingetrazo_core.mesh")?;
     for raw in records(payload, "edges")?.try_iter()? {
         let raw = raw?.cast_into::<PyDict>()?;
         let point = |k| {
@@ -557,7 +557,7 @@ fn plain_store_records<'py>(mesh: &Obj<'py>) -> PyResult<Option<Dict<'py>>> {
         py::PyMeshStore,
     };
     let py = mesh.py();
-    let module = py.import("core.store_mesh")?;
+    let module = py.import("ingetrazo_core.store_mesh")?;
     if !mesh.get_type().is(&module.getattr("StoreMesh")?) {
         return Ok(None);
     }

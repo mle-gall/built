@@ -15,7 +15,7 @@ use pyo3::{
 };
 type Obj<'py> = Bound<'py, PyAny>;
 fn store_api(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("core.store_mesh")
+    py.import("ingetrazo_core.store_mesh")
 }
 
 #[pyfunction]

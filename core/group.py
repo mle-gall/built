@@ -22,7 +22,7 @@ import os
 import sys
 import uuid
 
-from core.mesh import Mesh
+from ingetrazo_core.mesh import Mesh
 
 _counter = itertools.count(1)
 _document_counter = ContextVar("document_group_counter", default=None)
@@ -367,7 +367,7 @@ def _implicit_uvw(face, tex, minv):
     inverse of the transform about to be accounted for) pins that look
     into a ``uvw`` the remap below can carry. ``None`` for a degenerate
     face, whose projection is meaningless either way."""
-    from core.store_mesh import FaceView, StoreMesh, _hypot
+    from ingetrazo_core.store_mesh import FaceView, StoreMesh, _hypot
     from core.texture import face_uv_axes
     from ingetrazo_core import Matrix4, Vec3
 
@@ -468,7 +468,7 @@ def world_mesh(group, placements=None) -> Mesh:
 
 def _ring_coordinates(face):
     """Outer ring and maximal holes at the source mesh's model precision."""
-    from core.store_mesh import FaceView, StoreMesh, _hole_filter
+    from ingetrazo_core.store_mesh import FaceView, StoreMesh, _hole_filter
     from core.topology import _maximal_holes
     if isinstance(face, FaceView) and isinstance(face._m, StoreMesh):
         outer, *holes = face._m._store.face_positions(face.key)
@@ -503,8 +503,8 @@ def _store_built(parts, *, uv) -> Mesh:
     map; ``"all"`` also pins the planar projection a textured face without
     one is showing (:func:`_remap_uvws`), face by face."""
     import numpy as np
-    from core import mesh as _mesh_mod
-    from core.store_mesh import _weld_args
+    from ingetrazo_core import mesh as _mesh_mod
+    from ingetrazo_core.store_mesh import _weld_args
     import ingetrazo_core as native
     pos_parts, edge_parts, flag_parts, curve_parts = [], [], [], []
     corner_parts, size_parts, count_parts, fa_parts = [], [], [], []
@@ -908,7 +908,7 @@ def _local_points(mesh):
     a 5-million-face model built every one of them, past 12 GB."""
     import numpy as np
     from ingetrazo_core import deferred_weld
-    from core.mesh import DeferredMesh
+    from ingetrazo_core.mesh import DeferredMesh
     if type(mesh) is DeferredMesh:
         d = mesh.__dict__
         hit = d.get("_deferred_plan")
@@ -918,7 +918,7 @@ def _local_points(mesh):
             s = d["_deferred_source"]
             pos = deferred_weld(s["pos"], s.get("sequential", False))[0]
         return np.array(pos, dtype=np.float64) if len(pos) else None
-    from core.store_mesh import StoreMesh
+    from ingetrazo_core.store_mesh import StoreMesh
     if mesh.__class__ is StoreMesh:
         # The store's dense positions, in ``mesh.vertices`` order: walking
         # the views made a cached QVector3D per vertex, and selecting a

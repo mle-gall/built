@@ -250,7 +250,7 @@ fn parse_stl<'py>(
             }
         });
     }
-    let mesh = py.import("core.mesh")?.getattr("Mesh")?.call0()?;
+    let mesh = py.import("ingetrazo_core.mesh")?.getattr("Mesh")?.call0()?;
     for chunk in rows.chunks(4096 * 9) {
         let triangles = chunk.len() / 9;
         let vertices = Array2::from_shape_vec((triangles * 3, 3), chunk.to_vec())

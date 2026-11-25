@@ -51,8 +51,8 @@ fn make_group(win: &Bound<'_, PyAny>) -> PyResult<()> {
     }
     let vp = win.getattr("viewport")?;
     let sel = vp.getattr("scene")?.getattr("selection")?;
-    let faces = matching(&sel, "core.mesh", "Face")?;
-    let edges = matching(&sel, "core.mesh", "Edge")?;
+    let faces = matching(&sel, "ingetrazo_core.mesh", "Face")?;
+    let edges = matching(&sel, "ingetrazo_core.mesh", "Edge")?;
     let groups = matching(&sel, "core.group", "Group")?;
     let loose = !edges.is_empty() || !faces.is_empty();
     let hist = py.import("ingetrazo_core.history")?;
@@ -262,8 +262,8 @@ fn make_component(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let vp = win.getattr("viewport")?;
     let scene = vp.getattr("scene")?;
     let sel = scene.getattr("selection")?;
-    let faces = matching(&sel, "core.mesh", "Face")?;
-    let edges = matching(&sel, "core.mesh", "Edge")?;
+    let faces = matching(&sel, "ingetrazo_core.mesh", "Face")?;
+    let edges = matching(&sel, "ingetrazo_core.mesh", "Edge")?;
     let groups = PyList::empty(py);
     for g in matching(&sel, "core.group", "Group")?.iter() {
         if !g.getattr("billboard")?.is_truthy()? {

@@ -73,7 +73,7 @@ fn need<'py>(mesh: &Obj<'py>, kind: &str, keys: &Obj<'py>) -> PyResult<Bound<'py
         .collect::<PyResult<Vec<_>>>()?;
     let result = PyList::empty(py);
     let store = mesh.getattr("_store")?;
-    let class = py.import("core.store_mesh")?.getattr(match kind_enum {
+    let class = py.import("ingetrazo_core.store_mesh")?.getattr(match kind_enum {
         Kind::Vertex => "VertexView",
         Kind::Edge => "EdgeView",
         Kind::Face => "FaceView",

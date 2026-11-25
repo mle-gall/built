@@ -40,7 +40,7 @@ fn coords(face: &Obj, xf: Option<&Obj>) -> PyResult<WorldRings> {
         .collect()
 }
 fn h(py: Python) -> PyResult<String> {
-    py.import("core.store_mesh")?
+    py.import("ingetrazo_core.store_mesh")?
         .call_method0("_hypot")?
         .extract()
 }
@@ -136,7 +136,7 @@ fn segments_for(scene: &Obj, mode: &str, selection: Option<&Obj>) -> PyResult<Ve
     let py = scene.py();
     let mesh = scene.getattr("mesh")?;
     let group = py.import("core.group")?.getattr("Group")?;
-    let face = py.import("core.mesh")?.getattr("Face")?;
+    let face = py.import("ingetrazo_core.mesh")?.getattr("Face")?;
     let entities = match selection {
         Some(v) => v.clone(),
         None => scene.getattr("selection")?,
@@ -266,7 +266,7 @@ fn placement_do(cmd: &Obj, scene: &Obj) -> PyResult<()> {
 }
 fn length_floor(py: Python) -> PyResult<f64> {
     Ok(1.
-        / py.import("core.mesh")?
+        / py.import("ingetrazo_core.mesh")?
             .getattr("_KEY_SCALE")?
             .extract::<f64>()?)
 }

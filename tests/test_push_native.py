@@ -42,7 +42,7 @@ import core._native as _native
 from core import mesh as M
 from core import orient as O
 from core import push_scans, scan_index
-from core import store_mesh as S
+from ingetrazo_core import store_mesh as S
 
 mod = _native.native
 pytestmark = pytest.mark.skipif(

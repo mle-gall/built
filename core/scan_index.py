@@ -54,7 +54,7 @@ def enabled() -> bool:
 
 
 def _token(mesh):
-    from core import store_mesh
+    from ingetrazo_core import store_mesh
     if isinstance(mesh, store_mesh.StoreMesh):
         st = mesh.__dict__["_store"]
         return (store_mesh.StoreMesh, id(st), st.lineage, st.revision)
@@ -65,7 +65,7 @@ def _token(mesh):
 def store_backed(mesh) -> bool:
     """Whether ``mesh`` lives in the Rust store (its scans read the store's
     columns, and its revision moves with every change)."""
-    from core import store_mesh
+    from ingetrazo_core import store_mesh
     return isinstance(mesh, store_mesh.StoreMesh)
 
 
@@ -77,7 +77,7 @@ def scan(mesh, fresh: bool = False) -> "Scan | None":
     place, an ``interior`` mark), and a scan reads its objects lazily."""
     if mesh is None or not enabled():
         return None
-    from core import mesh as _mesh
+    from ingetrazo_core import mesh as _mesh
     if type(mesh) is _mesh.DeferredMesh:
         len(mesh.faces)                 # built now, as the loop would have
     token = _token(mesh)
@@ -135,7 +135,7 @@ class Scan:
         return self
 
     def __init__(self, mesh) -> None:
-        from core import store_mesh
+        from ingetrazo_core import store_mesh
         self._mesh = weakref.ref(mesh)
         self.store_backed = isinstance(mesh, store_mesh.StoreMesh)
         if self.store_backed:
@@ -154,7 +154,7 @@ class Scan:
         got = self.native.keys_at(kind, idx)
         if not self.store_backed:
             return got
-        from core import store_mesh
+        from ingetrazo_core import store_mesh
         m = self._mesh()
         cls = {"face": store_mesh.FaceView, "edge": store_mesh.EdgeView,
                "vertex": store_mesh.VertexView}[kind]

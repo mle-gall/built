@@ -34,7 +34,7 @@ fn proto_points_cache<'py>(view: &Obj<'py>, group: &Obj<'py>) -> PyResult<Obj<'p
     let store = dict_slot(view, "_proto_pts_store")?;
     let editing = view.call_method0("_editing_meshes")?;
     let valid = PyDict::new(py);
-    let deferred = py.import("core.mesh")?.getattr("DeferredMesh")?;
+    let deferred = py.import("ingetrazo_core.mesh")?.getattr("DeferredMesh")?;
     for g in descendants(group)?.try_iter()? {
         let mesh = g?.getattr("mesh")?;
         let k = id(&mesh);

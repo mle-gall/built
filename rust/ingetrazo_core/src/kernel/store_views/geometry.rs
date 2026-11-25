@@ -98,7 +98,7 @@ pub(super) fn exchange_paint(attrs: &Obj<'_>) -> PyResult<()> {
     let front = PyDict::new(attrs.py());
     for key in attrs
         .py()
-        .import("core.mesh")?
+        .import("ingetrazo_core.mesh")?
         .getattr("PAINT_KEYS")?
         .try_iter()?
     {

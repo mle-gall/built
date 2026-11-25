@@ -76,7 +76,7 @@ def test_mixed_payload_matches_legacy_weld_order_and_archive(count, tmp_path, mo
         skp.apply_payload(expected, payload(True))
     calls = []
     # A store-backed mesh has its own bulk weld: watch whichever runs.
-    from core.store_mesh import StoreMesh
+    from ingetrazo_core.store_mesh import StoreMesh
     for cls in (Mesh, StoreMesh):
         def weld(self, pos, original=cls.__dict__['bulk_weld']):
             calls.append(len(pos))

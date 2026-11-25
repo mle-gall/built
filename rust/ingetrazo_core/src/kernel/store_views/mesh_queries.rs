@@ -50,7 +50,7 @@ fn stitch_arrays<'py>(mesh: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = mesh.py();
     let st = mesh.getattr("_store")?;
     let a = st.call_method0("arrays")?;
-    let api = crate::model::module(py, "core.store_mesh")?;
+    let api = crate::model::module(py, "ingetrazo_core.store_mesh")?;
     let col = |kind: &str, cls: &str| -> PyResult<Py<PieceElements>> {
         Py::new(
             py,
@@ -68,7 +68,7 @@ fn stitch_arrays<'py>(mesh: &Obj<'py>) -> PyResult<Obj<'py>> {
 }
 #[pyfunction]
 fn face_count(mesh: &Obj<'_>) -> PyResult<usize> {
-    let m = crate::model::module(mesh.py(), "core.store_mesh")?;
+    let m = crate::model::module(mesh.py(), "ingetrazo_core.store_mesh")?;
     if mesh.get_type().is(m.getattr("DeferredMesh")?) {
         return mesh
             .getattr("__dict__")?
@@ -80,7 +80,7 @@ fn face_count(mesh: &Obj<'_>) -> PyResult<usize> {
 #[pyfunction]
 fn face_attribute_rows<'py>(mesh: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = mesh.py();
-    let m = crate::model::module(py, "core.store_mesh")?;
+    let m = crate::model::module(py, "ingetrazo_core.store_mesh")?;
     if mesh.get_type().is(m.getattr("DeferredMesh")?) {
         let src = mesh.getattr("__dict__")?.get_item("_deferred_source")?;
         let table = src.get_item("meta")?.call_method1("get", ("face_attrs",))?;

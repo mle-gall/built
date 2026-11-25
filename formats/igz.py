@@ -78,7 +78,7 @@ from ingetrazo_core import (
     igz_json_arrays as _json_arrays,
 )
 
-from core.mesh import Mesh
+from ingetrazo_core.mesh import Mesh
 
 
 PLAIN_FORMAT = 1        # bare JSON document (no images to carry)

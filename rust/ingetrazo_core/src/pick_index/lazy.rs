@@ -89,7 +89,7 @@ pub fn pick_lazy_table<'py>(view: &Obj<'py>) -> PyResult<Obj<'py>> {
             }
         }
     }
-    let count = py.import("core.mesh")?.getattr("face_count")?;
+    let count = py.import("ingetrazo_core.mesh")?.getattr("face_count")?;
     let groups = PyList::empty(py);
     let ids = PySet::empty(py)?;
     let mut source = Vec::new();

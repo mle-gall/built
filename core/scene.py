@@ -13,7 +13,7 @@ to rebuild its dynamic VBOs.
 """
 from __future__ import annotations
 import ingetrazo_core
-from core.mesh import element_identity
+from ingetrazo_core.mesh import element_identity
 from core.element_set import ElementSet
 
 from dataclasses import InitVar, dataclass, field
@@ -24,7 +24,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core import layers as _layers
 from core import doc_model as _dm
-from core.mesh import Edge, Face, Mesh
+from ingetrazo_core.mesh import Edge, Face, Mesh
 
 
 def _make_style():
@@ -578,7 +578,7 @@ class Scene:
         active_mesh = None
         if (group.xform is not None or (
                 self._edit_stack and self._edit_stack[-1].get("affine"))):
-            from core.store_mesh import instance_view
+            from ingetrazo_core.store_mesh import instance_view
             world = self._root._edit_matrix(group)
             active_mesh = instance_view(group.mesh, world)
             if active_mesh is not None:
@@ -589,7 +589,7 @@ class Scene:
         if active_mesh is None and (group.children or group.xform is not None):
             attachments = self._attachment_swap()
             from ingetrazo_core.command_protocol import enter_reference
-            from core.store_mesh import StoreMesh
+            from ingetrazo_core.store_mesh import StoreMesh
             # A singular placement needs the compatibility world copy. Keep
             # the placement swaps on entry so its History step can replay them.
             depth = _dm.begin() if type(entry_mesh) is StoreMesh else 0

@@ -354,8 +354,8 @@ fn move_selection<'py>(
         fs = PyList::empty(py);
         let classes = [
             ("core.group", "Group", &groups),
-            ("core.mesh", "Edge", &es),
-            ("core.mesh", "Face", &fs),
+            ("ingetrazo_core.mesh", "Edge", &es),
+            ("ingetrazo_core.mesh", "Face", &fs),
             ("core.dimension", "Dimension", &dims),
             ("core.section", "SectionPlane", &planes),
             ("core.textlabel", "TextLabel", &labels),
@@ -510,7 +510,7 @@ fn flip_selection<'py>(
             )?)?;
         }
         let curves = PyDict::new(py);
-        let mesh_type = py.import("core.mesh")?.getattr("Mesh")?;
+        let mesh_type = py.import("ingetrazo_core.mesh")?.getattr("Mesh")?;
         for e in edges.iter() {
             let curve = e.getattr("curve")?;
             if !curve.is_none() && !curves.contains(&curve)? {

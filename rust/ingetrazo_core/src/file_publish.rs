@@ -379,7 +379,7 @@ fn igz_empty_mesh(py: Python<'_>) -> PyResult<Obj<'_>> {
     let api = codec(py)?;
     let cache = api.getattr("_EMPTY")?;
     if cache.len()? == 0 {
-        cache.call_method1("append", (py.import("core.mesh")?.call_method0("Mesh")?,))?;
+        cache.call_method1("append", (py.import("ingetrazo_core.mesh")?.call_method0("Mesh")?,))?;
     }
     cache.get_item(0)
 }

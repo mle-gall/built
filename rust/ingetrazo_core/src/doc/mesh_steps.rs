@@ -151,7 +151,7 @@ fn run_prune_orphans(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResul
         let prune = if s.journalled() { "prune_orphan_edges" } else { "orphaned_edges_at" };
         let rows = PyList::new(py, vertices.try_iter()?.map(|v| v?.call_method0("toTuple")).collect::<PyResult<Vec<_>>>()?)?;
         let found: Vec<u128> = store.call_method1(prune, (rows, key_list(py, &edges)?, key_list(py, &faces)?))?.extract()?;
-        let view = py.import("core.store_mesh")?.getattr("EdgeView")?;
+        let view = py.import("ingetrazo_core.store_mesh")?.getattr("EdgeView")?;
         let removed = found.iter().map(|k| view.call1((&mesh, *k))).collect::<PyResult<Vec<_>>>()?;
         if s.journalled() {
             me.setattr("removed", PyList::new(py, &removed)?)?;
@@ -204,7 +204,7 @@ fn run_coplanar_merge(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResu
             m
         }
     };
-    let api = py.import("core.store_mesh")?;
+    let api = py.import("ingetrazo_core.store_mesh")?;
     let record = if s.journalled() { none(py) } else { merges };
     let merged = py
         .import("ingetrazo_core")?
@@ -307,7 +307,7 @@ fn after_flip_faces(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Opti
     if phase == Some("undo") && s.is_direct() {
         return flip(s, py, scene);
     }
-    let view = py.import("core.store_mesh")?.getattr("FaceView")?;
+    let view = py.import("ingetrazo_core.store_mesh")?.getattr("FaceView")?;
     let mut seen = HashSet::new();
     for f in s.items(py, 0)? {
         if f.is_instance(&view)? {
@@ -480,7 +480,7 @@ impl FlipFaces {
     /// loose mesh or inside a group's mesh.
     #[new]
     fn new(py: Python<'_>, faces: Obj<'_>) -> PyResult<PyClassInitializer<Self>> {
-        let face_type = py.import("core.mesh")?.getattr("Face")?;
+        let face_type = py.import("ingetrazo_core.mesh")?.getattr("Face")?;
         let mut kept = Vec::new();
         for f in faces.try_iter()? {
             let f = f?;
@@ -498,7 +498,7 @@ impl FlipFaces {
     fn meshes<'py>(slf: PyRef<'py, Self>) -> PyResult<Bound<'py, PySet>> {
         let py = slf.py();
         let s: &RecordStep = &*slf.as_super();
-        let view = py.import("core.store_mesh")?.getattr("FaceView")?;
+        let view = py.import("ingetrazo_core.store_mesh")?.getattr("FaceView")?;
         let mut out = Vec::new();
         for f in s.items(py, 0)? {
             if f.is_instance(&view)? {

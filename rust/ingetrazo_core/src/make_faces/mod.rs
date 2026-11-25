@@ -148,7 +148,7 @@ fn selected_edges<'p>(mesh: &Obj<'p>, selection: &Obj<'p>) -> PyResult<Vec<Obj<'
         .try_iter()?
         .map(|e| id(&e?))
         .collect::<PyResult<HashSet<_>>>()?;
-    let class = mesh.py().import("core.mesh")?.getattr("Edge")?;
+    let class = mesh.py().import("ingetrazo_core.mesh")?.getattr("Edge")?;
     let mut out = Vec::new();
     for e in selection.try_iter()? {
         let e = e?;
@@ -232,7 +232,7 @@ fn make<'p>(
                 if xyz(&f.face.call_method0("normal")?)?.dot(crate::polygon::raw_newell(&want)) < 0.
                     && !topology::has_neighbours(mesh, &f.face)?
                 {
-                    py.import("core.mesh")?
+                    py.import("ingetrazo_core.mesh")?
                         .call_method1("turn_face_over", (&f.face,))?;
                     out.turned += 1;
                 }

@@ -263,7 +263,7 @@ def _loose_scene():
 
 @pytest.mark.parametrize("crossing", [False, True])
 def test_loose_store_mesh_matches_the_walk(crossing):
-    from core.store_mesh import StoreMesh
+    from ingetrazo_core.store_mesh import StoreMesh
     scene = _loose_scene()
     if scene.mesh.__class__ is not StoreMesh:
         pytest.skip("mesh store off")

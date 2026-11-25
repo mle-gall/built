@@ -29,8 +29,8 @@ fn vector(py: Python<'_>, p: Point) -> PyResult<Obj<'_>> {
 
 fn flags<'py>(mesh: &Obj<'py>, keys: Vec<u128>) -> PyResult<Bound<'py, PyList>> {
     let py = mesh.py();
-    let view = py.import("core.store_mesh")?.getattr("EdgeView")?;
-    let read = py.import("core.mesh")?.getattr("edge_flags")?;
+    let view = py.import("ingetrazo_core.store_mesh")?.getattr("EdgeView")?;
+    let read = py.import("ingetrazo_core.mesh")?.getattr("edge_flags")?;
     let entries = PyList::empty(py);
     for key in keys {
         let edge = view.call1((mesh, key))?;
@@ -73,7 +73,7 @@ fn scoped(
         }
         (faces, edges)
     };
-    let api = mesh.py().import("core.store_mesh")?;
+    let api = mesh.py().import("ingetrazo_core.store_mesh")?;
     let views = |name: &str, keys: Vec<u128>| -> PyResult<Vec<Obj<'_>>> {
         let ctor = api.getattr(name)?;
         keys.into_iter().map(|k| ctor.call1((mesh, k))).collect()
@@ -205,7 +205,7 @@ fn inherit_flat_paint(
             (snapshot.getattr("snap")?, painted, rows, hypot),
         )?
         .extract()?;
-    let view = mesh.py().import("core.store_mesh")?.getattr("FaceView")?;
+    let view = mesh.py().import("ingetrazo_core.store_mesh")?.getattr("FaceView")?;
     for (face, source, row) in owners {
         let attrs = crate::kernel::store_views::snapshot_attr(
             snapshot,

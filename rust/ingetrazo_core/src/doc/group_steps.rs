@@ -259,7 +259,7 @@ fn run_make_nested(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<
         match s.remembered(py, 0) {
             Some(c) => c,
             None => {
-                let mesh = py.import("core.mesh")?.getattr("Mesh")?.call0()?;
+                let mesh = py.import("ingetrazo_core.mesh")?.getattr("Mesh")?.call0()?;
                 let kw = pyo3::types::PyDict::new(py);
                 kw.set_item("name", s.arg(py, 2))?;
                 py.import("core.group")?.getattr("Group")?.call((mesh,), Some(&kw))?

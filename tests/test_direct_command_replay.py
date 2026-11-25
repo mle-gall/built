@@ -102,7 +102,7 @@ def test_rejected_mixed_edit_restores_each_geometry_owner(occurrence):
         assert [edge.curve for edge in group.mesh.edges] == [17]
 
 def test_plugin_reordering_keeps_the_store_and_held_edges():
-    from core.store_mesh import StoreMesh
+    from ingetrazo_core.store_mesh import StoreMesh
     scene = Scene()
     mesh = scene.mesh
     mesh.add_face(ring(0, 2))

@@ -76,7 +76,7 @@ pub(super) fn profiles_from_selection<'py>(
     selection: &Obj<'py>,
 ) -> PyResult<Bound<'py, PyList>> {
     let py = mesh.py();
-    let model = crate::model::module(py, "core.mesh")?;
+    let model = crate::model::module(py, "ingetrazo_core.mesh")?;
     let face = model.getattr("Face")?;
     let edge = model.getattr("Edge")?;
     let faces = ids(&mesh.getattr("faces")?)?;

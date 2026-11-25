@@ -8,7 +8,7 @@ from core.history import AddEdgeCommand, History, SnapshotMutation
 from core.layers import DEFAULT_LAYER
 from core.mesh import Mesh
 from core.scene import Scene
-from core import store_mesh
+from ingetrazo_core import store_mesh
 
 
 def test_draw_edge_matches_command_on_creation_and_restamps(monkeypatch):

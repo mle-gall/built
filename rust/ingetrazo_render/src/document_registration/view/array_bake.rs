@@ -170,7 +170,7 @@ fn light_face<'py>(a: &Args<'py>) -> Reply<'py> {
     out.setattr("mesh", &mesh)?;
     out.setattr("index", &face)?;
     let (starts, edge_of) = face_edges(&plan)?;
-    let edge = py.import("core.mesh")?.getattr("Edge")?;
+    let edge = py.import("ingetrazo_core.mesh")?.getattr("Edge")?;
     let flag = |name: &str, index: &Obj<'py>| -> PyResult<bool> { plan.getattr(name)?.get_item(index)?.is_truthy() };
     let flat = plan.getattr("flat")?;
     for index in edge_of.get_item(span(py, int(starts.get_item(at)?)?, int(starts.get_item(at + 1)?)?))?.call_method0("tolist")?.try_iter()? {
@@ -252,7 +252,7 @@ fn faces_layer_at<'py>(a: &Args<'py>) -> Reply<'py> {
     let own = |attrs: Obj<'py>| -> Reply<'py> {
         if attrs.is_truthy()? { attrs.call_method1("get", ("layer",)) } else { Ok(none(py)) }
     };
-    if !mesh.get_type().is(&py.import("core.mesh")?.getattr("DeferredMesh")?) {
+    if !mesh.get_type().is(&py.import("ingetrazo_core.mesh")?.getattr("DeferredMesh")?) {
         return own(mesh.getattr("faces")?.get_item(face)?.getattr("attrs")?);
     }
     let source = mesh.getattr("__dict__")?.get_item("_deferred_source")?;
@@ -750,7 +750,7 @@ pub(super) fn install_module(module: &Bound<PyModule>) -> PyResult<()> {
     modules::import_names(module, "ingetrazo_core", &[("Vec3", "QVector3D"), ("bake_deferred_chunk", "_bake")])?;
     module.add("_native", py.import("core._native")?)?;
     module.add("lazy_mesh", py.import("core.lazy_mesh")?)?;
-    modules::import_names(module, "core.mesh", &[("DeferredMesh", "DeferredMesh"), ("Face", "Face"), ("Vertex", "Vertex")])?;
+    modules::import_names(module, "ingetrazo_core.mesh", &[("DeferredMesh", "DeferredMesh"), ("Face", "Face"), ("Vertex", "Vertex")])?;
     // While True, a face asked of a still-lazy mesh comes as a LightFace and
     // the mesh stays unbuilt: only the hover's read-only passes turn it on.
     module.add("_reading", false)?;

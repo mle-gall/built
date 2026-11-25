@@ -1,0 +1,67 @@
+{
+  "type": "PluginMesh",
+  "label": "wall",
+  "positions": [
+    [
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      3.0,
+      0.0,
+      0.0
+    ],
+    [
+      3.0,
+      2.0,
+      0.0
+    ],
+    [
+      0.0,
+      2.0,
+      0.0
+    ]
+  ],
+  "edges": [
+    [
+      0,
+      1,
+      true
+    ],
+    [
+      1,
+      2,
+      false
+    ],
+    [
+      2,
+      3,
+      false
+    ],
+    [
+      3,
+      0,
+      false
+    ]
+  ],
+  "faces": [
+    [
+      0,
+      1,
+      2,
+      3
+    ]
+  ],
+  "area": 6.0,
+  "attrs": {
+    "texture": {
+      "path": "wall.png"
+    }
+  },
+  "interfaces": [
+    true,
+    true,
+    true
+  ]
+}
