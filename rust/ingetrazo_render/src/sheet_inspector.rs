@@ -5,7 +5,7 @@
 //! fields of the selected item, or of the sheet when nothing is selected,
 //! as the dock's rows (ui/sheets.rs `sheet_rows`), and the edits typed
 //! back into field changes. An edit leaves as ``set␟<key>␟<json changes>``
-//! (``sheet`` for the sheet itself); views/wgpu_sheets.py runs it as one
+//! (``sheet`` for the sheet itself); sheet_workspace runs it as one
 //! step of the document's history.
 
 use crate::sheet_page::{Item, Snapshot};

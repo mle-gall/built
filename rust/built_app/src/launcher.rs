@@ -190,7 +190,7 @@ fn write_pdf(job: &PdfExport, host: &python::Host) -> PyResult<i32> {
             return Ok(1);
         }
         let composer = py
-            .import("views.wgpu_sheets")?
+            .import("ingetrazo_render.sheet_workspace")?
             .call_method1("composer_for", (window,))?;
         let troubled = composer.call_method1("export_all_pdf", (&job.output, sheets))?;
         if !job.output.is_file() {

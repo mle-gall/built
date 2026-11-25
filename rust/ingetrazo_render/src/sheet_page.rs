@@ -11,7 +11,7 @@
 //! border, the guides, every item, the selection and its handles; zoom and
 //! pan; picking, moving and resizing items and placing a view. Edits leave
 //! as actions (`sheets:rects`, `sheets:place`, `sheets:select`), one per
-//! gesture, which views/wgpu_sheets.py runs through the sheet's history.
+//! gesture, which sheet_workspace runs through the sheet's history.
 
 use crate::ui::tokens::{ACCENT, CONTACT, DESK, FAINT, TYPE_META};
 use egui::{pos2, vec2, Align2, Color32, FontId, Pos2, Rect, Stroke};
