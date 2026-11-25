@@ -221,7 +221,7 @@ class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
             job["done"].set()
             return
         self._busy = True
-        from views import chrome_dialogs, chrome_forms
+        from ingetrazo_render import chrome_dialogs, chrome_forms
         win = self._viewport.window()
         previous_forms = tuple(chrome_forms.forms(win))
         previous_sheets = tuple(chrome_dialogs._sheets(win))
