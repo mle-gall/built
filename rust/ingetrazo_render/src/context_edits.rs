@@ -438,7 +438,7 @@ fn rebuild_path_surfaces(vp: &Bound<'_, PyAny>) -> PyResult<()> {
     if !paths.is_empty() {
         let sampler = surface_sampler(vp, &datum)?;
         let vec = py.import("ingetrazo_core")?.getattr("Vec3")?;
-        let build = py.import("georef.surface")?.getattr("build_surface")?;
+        let build = py.import("ingetrazo_core")?.getattr("build_surface")?;
         for p in paths {
             let mut lo = (f64::INFINITY, f64::INFINITY);
             let mut hi = (f64::NEG_INFINITY, f64::NEG_INFINITY);

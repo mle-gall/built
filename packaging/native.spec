@@ -155,10 +155,6 @@ hiddenimports += [
     'formats.gltf',
     'tools.place_group',
     'tools.paste',
-    'georef.points',
-    'georef.terrain',
-    'georef.dem',
-    'georef.profile',
     # Pure-Python .skp backend (upstream openskp: classic-MFC + VFF readers
     # and the legacy writer) — imported lazily by formats/skp.py and
     # formats/skp_out.py.
@@ -266,6 +262,8 @@ excludes = [
     'ifcopenshell',
     'pytest',
 ]
+
+hiddenimports.append('georef')  # Rust registers the survey modules on package import.
 
 for package in ('app_shell', 'core', 'formats', 'views', 'tools'):
     hiddenimports += collect_submodules(package)

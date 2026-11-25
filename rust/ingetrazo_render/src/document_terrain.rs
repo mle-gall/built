@@ -65,7 +65,7 @@ pub(super) fn rebuild_terrain(v: &Obj) -> PyResult<()> {
     let ground = if ground.is_truthy()? {
         ground
     } else {
-        py.import("georef.surface")?
+        py.import("ingetrazo_core")?
             .call_method1("ground_reference", (&sampler, &datum))?
     };
     if ground.is_none() {

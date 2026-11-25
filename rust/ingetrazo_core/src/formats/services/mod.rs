@@ -21,14 +21,28 @@ fn survey_download<'p>(py: Python<'p>, url: &str, agent: &Obj<'p>) -> PyResult<O
     {
         return Err(PyValueError::new_err("Survey URL must use HTTP or HTTPS"));
     }
-    let m = module(py)?;
+    let m = py.import("urllib.request")?;
+    let members = PyDict::new(py);
+    members.set_item(
+        "redirect_request",
+        py.import("functools")?
+            .call_method1("partialmethod", (wrap_pyfunction!(survey_redirect, py)?,))?,
+    )?;
+    let redirect = py.import("builtins")?.call_method1(
+        "type",
+        (
+            "SurveyRedirect",
+            (m.getattr("HTTPRedirectHandler")?,),
+            members,
+        ),
+    )?;
     let kw = PyDict::new(py);
     kw.set_item(
         "context",
         py.import("core.tls")?.call_method0("https_context")?,
     )?;
     let handler = m.call_method("HTTPSHandler", (), Some(&kw))?;
-    let opener = m.call_method1("build_opener", (handler, m.call_method0("_Redirect")?))?;
+    let opener = m.call_method1("build_opener", (handler, redirect.call0()?))?;
     let headers = PyDict::new(py);
     headers.set_item("User-Agent", agent.call_method0("decode")?)?;
     let kw = PyDict::new(py);
@@ -56,7 +70,9 @@ fn survey_redirect<'p>(
             "Refusing to downgrade an HTTPS survey request",
         ));
     }
-    module(owner.py())?
+    owner
+        .py()
+        .import("urllib.request")?
         .getattr("HTTPRedirectHandler")?
         .call_method1(
             "redirect_request",
@@ -72,11 +88,33 @@ fn survey_request<'p>(
     error: &Obj<'p>,
 ) -> PyResult<Obj<'p>> {
     let m = module(owner.py())?;
-    let future = m
-        .getattr("_workers")?
-        .call_method1("submit", (m.getattr("_download")?, url, agent))?;
-    m.getattr("WindowJob")?
+    let workers = match m.getattr_opt("_workers")? {
+        Some(pool) => pool,
+        None => {
+            let py = owner.py();
+            let kw = PyDict::new(py);
+            kw.set_item("thread_name_prefix", "survey")?;
+            let pool = py.import("concurrent.futures")?.call_method(
+                "ThreadPoolExecutor",
+                (8,),
+                Some(&kw),
+            )?;
+            m.dict().call_method1("setdefault", ("_workers", pool))?
+        }
+    };
+    let future = workers.call_method1("submit", (m.getattr("_download")?, url, agent))?;
+    owner
+        .py()
+        .import("ingetrazo_render")?
+        .getattr("WindowJob")?
         .call_method1("submit", (owner, future, ready, error))
+}
+fn user_agent(py: Python<'_>) -> PyResult<Bound<'_, PyBytes>> {
+    let version = py.import("core.version")?.getattr("__version__")?;
+    Ok(PyBytes::new(
+        py,
+        format!("IngeTrazo/{version} (https://github.com/ingelibre/ingetrazo)").as_bytes(),
+    ))
 }
 fn init_service(o: &Obj<'_>, parent: Option<&Obj<'_>>) -> PyResult<()> {
     module(o.py())?
@@ -96,11 +134,7 @@ fn geo_get<'p>(
     on_error: &Obj<'p>,
 ) -> PyResult<Obj<'p>> {
     let py = owner.py();
-    let m = py.import("georef.geocode")?;
-    module(py)?.call_method1(
-        "request",
-        (owner, url, m.getattr("_USER_AGENT")?, on_bytes, on_error),
-    )
+    module(py)?.call_method1("request", (owner, url, user_agent(py)?, on_bytes, on_error))
 }
 #[pyfunction(signature=(query,limit=8))]
 fn geocode_url(py: Python<'_>, query: &str, limit: i64) -> PyResult<String> {
@@ -242,7 +276,8 @@ fn tile_request<'p>(
     let k = key(py, source, x, y, z)?;
     let bytes = o.getattr("_cache")?.call_method1("get", &k)?;
     if !bytes.is_none() {
-        let img = tile_api(py)?
+        let img = py
+            .import("ingetrazo_render")?
             .getattr("SurveyRaster")?
             .call_method1("decode", (bytes,))?;
         if !img.is_none() {
@@ -285,13 +320,12 @@ fn tile_failed(o: &Obj<'_>, key: &Obj<'_>, reason: &Obj<'_>) -> PyResult<()> {
 #[pyfunction]
 fn tile_start(o: &Obj<'_>, source: &Obj<'_>, x: i64, y: i64, z: i64) -> PyResult<()> {
     let py = o.py();
-    let m = tile_api(py)?;
     let k = key(py, source, x, y, z)?;
     let url = source.call_method1("url", (x, y, z))?;
     let active = o.getattr("_inflight")?;
     let ok = partial(py, (o.getattr("_completed")?, &k))?;
-    let fail = partial(py, (m.getattr("_tile_failed")?, o, &k))?;
-    let job = module(py)?.call_method1("request", (o, url, m.getattr("_USER_AGENT")?, ok, fail))?;
+    let fail = partial(py, (wrap_pyfunction!(tile_failed, py)?, o, &k))?;
+    let job = module(py)?.call_method1("request", (o, url, user_agent(py)?, ok, fail))?;
     active.set_item(k, job)
 }
 #[pyfunction(signature=(o,key,data,error=""))]
@@ -304,7 +338,7 @@ fn tile_completed(o: &Obj<'_>, key: &Obj<'_>, data: &Obj<'_>, error: &str) -> Py
     let img = if data.is_none() {
         py.None().into_bound(py)
     } else {
-        tile_api(py)?
+        py.import("ingetrazo_render")?
             .getattr("SurveyRaster")?
             .call_method1("decode", (data,))?
     };
