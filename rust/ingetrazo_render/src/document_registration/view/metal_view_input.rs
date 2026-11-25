@@ -234,7 +234,7 @@ fn context_menu<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, event) = (a.get_item(0)?, a.get_item(1)?);
     // The sheet's own menus.
-    if py.import("views.wgpu_sheets")?.call_method1("context_menu", (&view, &event))?.is_truthy()? {
+    if py.import("ingetrazo_render.sheet_workspace")?.call_method1("context_menu", (&view, &event))?.is_truthy()? {
         return Ok(none(py));
     }
     let point = event.call_method0("pos")?;
@@ -318,7 +318,7 @@ fn event<'py>(a: &Args<'py>) -> Reply<'py> {
     if kind.eq(kinds.getattr("NativeGesture")?)? {
         // Pinch on the sheet; then pinch and smart zoom: a trackpad's, or
         // the touch screen's (#248).
-        if py.import("views.wgpu_sheets")?.call_method1("gesture", (&view, &event))?.is_truthy()?
+        if py.import("ingetrazo_render.sheet_workspace")?.call_method1("gesture", (&view, &event))?.is_truthy()?
             || py.import("ingetrazo_render")?.getattr("trackpad_nav")?.call_method1("native_gesture", (&view, &event))?.is_truthy()?
         {
             return true.into_bound_py_any(py);

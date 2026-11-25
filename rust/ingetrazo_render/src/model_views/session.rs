@@ -148,7 +148,7 @@ impl DocumentViews {
         let ui = py.import("views.wgpu_ui")?;
         if ui.call_method1("chrome_only", (&primary,))?.is_truthy()?
             || py
-                .import("views.wgpu_sheets")?
+                .import("ingetrazo_render.sheet_workspace")?
                 .call_method1("shown", (&primary,))?
                 .is_truthy()?
         {

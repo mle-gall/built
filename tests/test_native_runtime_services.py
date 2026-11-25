@@ -32,7 +32,8 @@ def setup(app):
         from georef.tiles import PRESETS, TileCache
         from georef.tile_fetcher import TileFetcher
         from ingetrazo_render import SurveyRaster, notice_text
-        from views import drawing_cache, wgpu_sheets
+        from views import drawing_cache
+        from ingetrazo_render import sheet_workspace
         from ingetrazo_render import about_review
         from views.ndof_input import shared_input
         from ingetrazo_render import ask_scale
@@ -48,10 +49,10 @@ def setup(app):
         view._pick_frame_dirty = True
         view.hover(view.width() // 2, view.height() // 2)
         assert drawing_cache.signature()
-        assert wgpu_sheets._cajetin_template()[0]
-        wgpu_sheets.to_sheets(app.window)
+        assert sheet_workspace._cajetin_template()[0]
+        sheet_workspace.to_sheets(app.window)
         assert app.window._composer.isVisible()
-        wgpu_sheets.to_model(app.window)
+        sheet_workspace.to_model(app.window)
         assert not app.window._composer.isVisible()
         assert about_review("smoke", host=app.window._host).sheet(str)
         assert notice_text("<b>A</b><br>B") == "A\\nB"

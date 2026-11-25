@@ -11,7 +11,7 @@ fn is_input(value: &Obj<'_>, name: &str) -> PyResult<bool> {
     value.eq(input(value.py(), name)?)
 }
 fn sheets<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyModule>> {
-    py.import("views.wgpu_sheets")
+    py.import("ingetrazo_render.sheet_workspace")
 }
 fn mods_of<'py>(py: Python<'py>, event: &Obj<'py>) -> Reply<'py> {
     ui(py)?.call_method1("_mods", (event,))

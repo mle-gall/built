@@ -208,7 +208,7 @@ fn command<'py>(py: Python<'py>, win: &Any<'py>, name: &str, args: &Bound<'py, P
         "sheet_export_to" => {
             // sheet_export_to:pdf:/path/file.pdf
             let (what, path) = arg.split_once(':').unwrap_or((arg, ""));
-            let ws = py.import("views.wgpu_sheets")?.call_method1("workspace_of", (win.getattr("view")?,))?;
+            let ws = py.import("ingetrazo_render.sheet_workspace")?.call_method1("workspace_of", (win.getattr("view")?,))?;
             return if ws.is_none() { Ok(nil(py)) } else { ws.call_method1("_export_to", (what, path)) };
         }
         "link_source" => return py.import("views.wgpu_tabs")?.call_method1("open_link_source", (win, path_of(py, &s(py, arg))?)),
@@ -254,7 +254,7 @@ fn command<'py>(py: Python<'py>, win: &Any<'py>, name: &str, args: &Bound<'py, P
         "select_none" => win.call_method0("_on_select_none"),
         "next_doc" => m.call_method1("step_document", (win, 1)),
         "prev_doc" => m.call_method1("step_document", (win, -1)),
-        // The workspaces (views/wgpu_sheets.py): the top bar's workspace ▾.
+        // The workspaces (sheet_workspace): the top bar's workspace ▾.
         "sheets" => win.call_method0("_to_sheets"),
         "model" => win.call_method0("_show_model"),
         _ => {

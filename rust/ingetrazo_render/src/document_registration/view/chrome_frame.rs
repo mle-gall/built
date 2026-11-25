@@ -268,10 +268,10 @@ fn tabs<'py>(a: &Args<'py>) -> Reply<'py> {
     let views = listed(py, attr(&scene, "saved_views")?)?;
     let row = attr(&attr(&win, "_scene_tabs")?, "tabs")?;
     let marked = if !row.is_none() && row.hasattr("marked_view")? { row.call_method0("marked_view")? } else { none(py) };
-    let sheets = py.import("views.wgpu_sheets")?;
+    let sheets = py.import("ingetrazo_render.sheet_workspace")?;
     let on_sheets = sheets.call_method1("shown", (&view,))?.is_truthy()?;
     if sheets.call_method1("embeds", (&win,))?.is_truthy()? {
-        // Sheets is a workspace of this window (views/wgpu_sheets.py).
+        // Sheets is a workspace of this window (sheet_workspace).
         sheet = "Sheets".into_bound_py_any(py)?;
     }
     let work = PyList::new(
