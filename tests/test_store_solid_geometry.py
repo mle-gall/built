@@ -5,7 +5,7 @@ from ingetrazo_core import Vec3 as V
 from core.bim import face_set_volume
 from core.solids import solid_report
 from core.protocol import queries
-from core.store_mesh import StoreMesh
+from ingetrazo_core.store_mesh import StoreMesh
 from core import _native
 from tests.test_core_protocol import _scene
 
@@ -218,7 +218,7 @@ def test_transformed_solid_operands():
 
 def test_seam_and_crack_discovery():
     import sys
-    from core.store_mesh import _hypot
+    from ingetrazo_core.store_mesh import _hypot
 
     mesh = empty(True).mesh
     f = mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])

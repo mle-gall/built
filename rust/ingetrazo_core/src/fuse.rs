@@ -504,7 +504,7 @@ fn simplify_mesh(
         assign(&n, &f.getattr("attrs")?)?;
         n.setattr("interior", f.getattr("interior")?)?;
     }
-    let api = py.import("core.mesh")?;
+    let api = py.import("ingetrazo_core.mesh")?;
     let mut flags = HashMap::new();
     let k = |e: &Obj<'_>| -> PyResult<_> {
         Ok(edge(

@@ -145,7 +145,7 @@ impl MeshSnapshotRecord {
         }
         let snap = slf.getattr("snap")?;
         let hit = if name.eq("vpos")? {
-            crate::model::module(slf.py(), "core.store_mesh")?
+            crate::model::module(slf.py(), "ingetrazo_core.store_mesh")?
                 .call_method1("_SnapPositions", (snap,))?
         } else {
             snap.call_method1(

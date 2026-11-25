@@ -79,7 +79,7 @@ fn orient_coplanar_faces<'py>(
         Some(f) => f,
         None => {
             let old = if let Some(ns) = ns {
-                let old = py.import("core.mesh")?.call_method0("Mesh")?;
+                let old = py.import("ingetrazo_core.mesh")?.call_method0("Mesh")?;
                 let store = py
                     .import("core._native")?
                     .getattr("native")?
@@ -109,7 +109,7 @@ fn sweep_tjunctions(mesh: &Obj<'_>, seedkeys: Option<&Obj<'_>>) -> PyResult<()> 
     object_repair::sweep_junctions(
         mesh,
         &list(py, seedkeys)?,
-        py.import("core.mesh")?.getattr("_STITCH_TOL")?.extract()?,
+        py.import("ingetrazo_core.mesh")?.getattr("_STITCH_TOL")?.extract()?,
         &api.getattr("scan")?,
         &api.getattr("Scan")?,
     )
@@ -164,7 +164,7 @@ fn prune_collinear_orphan_edges<'py>(mesh: &Obj<'py>) -> PyResult<Obj<'py>> {
     if !scan.is_truthy()? {
         scan = api.call_method1("Scan", (mesh,))?;
     }
-    let flags = py.import("core.mesh")?;
+    let flags = py.import("ingetrazo_core.mesh")?;
     object_repair::prune_orphans(
         mesh,
         &scan,

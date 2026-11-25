@@ -180,7 +180,7 @@ fn arc_sweep_midpoint(points: &Obj<'_>, fit: Option<&Obj<'_>>) -> PyResult<Optio
 #[pyfunction(signature=(face,xform=None))]
 fn curve_centers_of_face<'p>(face: &Obj<'p>, xform: Option<&Obj<'p>>) -> PyResult<Obj<'p>> {
     let py = face.py();
-    let api = py.import("core.store_mesh")?;
+    let api = py.import("ingetrazo_core.store_mesh")?;
     if face.is_instance(&api.getattr("FaceView")?)? {
         let store = api.call_method1("_store_of", (face.getattr("_m")?,))?;
         let key = face.getattr("key")?;

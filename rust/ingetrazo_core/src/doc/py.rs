@@ -3507,7 +3507,7 @@ fn igz_large_document(
         }
         meshes
     };
-    let deferred = py.import("core.mesh")?.getattr("DeferredMesh")?;
+    let deferred = py.import("ingetrazo_core.mesh")?.getattr("DeferredMesh")?;
     let entity_count = py.import("ingetrazo_core")?.getattr("entity_count")?;
     let exact_count =
         |mesh: &Py<PyAny>| -> PyResult<i64> { entity_count.call1((mesh,))?.extract() };

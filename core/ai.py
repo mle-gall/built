@@ -48,7 +48,7 @@ def build_scope(viewport, scope: dict | None = None) -> dict:
     from core import bim
     from core.group import Group
     from core.layers import Layer
-    from core.mesh import Edge, Face, Mesh, Vertex
+    from ingetrazo_core.mesh import Edge, Face, Mesh, Vertex
     scope = scope if scope is not None else {"__name__": "__ai__"}
     scope.update(
         viewport=viewport, scene=viewport.scene, model=viewport.scene,
@@ -89,7 +89,7 @@ def _recipe_helpers(scene) -> dict:
     (no soft edges, wrong winding). These build correct solids instead."""
     from ingetrazo_core import Vec3 as QVector3D
     from core.group import Group
-    from core.mesh import Mesh
+    from ingetrazo_core.mesh import Mesh
     from core.orient import orient_outward
 
     def _soften(mesh, deg=42.0):

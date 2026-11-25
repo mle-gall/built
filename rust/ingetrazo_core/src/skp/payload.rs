@@ -204,7 +204,7 @@ fn faces<'p>(mesh: &Obj<'p>, input: &Obj<'p>, soft: &Obj<'p>, tick: &Obj<'p>) ->
         let map = if soft.is_truthy()?
             && mesh
                 .get_type()
-                .is(&py.import("core.mesh")?.getattr("Mesh")?)
+                .is(&py.import("ingetrazo_core.mesh")?.getattr("Mesh")?)
         {
             PyDict::new(py).into_any()
         } else {

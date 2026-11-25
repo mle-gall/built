@@ -123,7 +123,7 @@ class ImagePlane(Record):
         rectangle. The face is new geometry in a group of its own, so it
         never welds into what was drawn over the image."""
         from core.group import Group
-        from core.mesh import Mesh
+        from ingetrazo_core.mesh import Mesh
         if QVector3D.crossProduct(self.u, self.v).length() <= 1e-12:
             return None
         mesh = Mesh()

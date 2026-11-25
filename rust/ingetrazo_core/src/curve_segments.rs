@@ -316,7 +316,7 @@ fn rebuild(mesh: &Obj<'_>, shape: &CurveShape, n: usize) -> PyResult<bool> {
             f.getattr("interior")?,
         ));
     }
-    let api = py.import("core.mesh")?;
+    let api = py.import("ingetrazo_core.mesh")?;
     let flags = api.call_method1("edge_flags", (shape.edges.bind(py).get_item(0)?,))?;
     for f in faces.iter() {
         mesh.call_method1("remove_face", (f,))?;

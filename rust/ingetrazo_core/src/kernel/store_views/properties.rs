@@ -20,7 +20,7 @@ fn endpoint<'py>(index: usize, view: &Obj<'py>) -> PyResult<Obj<'py>> {
         .call_method1("edge_ends", (view.getattr("key")?,))?
         .get_item(index)?;
     view.py()
-        .import("core.store_mesh")?
+        .import("ingetrazo_core.store_mesh")?
         .call_method1("VertexView", (mesh, key))
 }
 

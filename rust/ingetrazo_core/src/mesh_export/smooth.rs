@@ -25,7 +25,7 @@ fn all_corners_flat(face: &Obj<'_>) -> PyResult<bool> {
     static TYPES: PyOnceLock<Types> = PyOnceLock::new();
     let py = face.py();
     let (face_type, mesh_type) = TYPES.get_or_try_init(py, || -> PyResult<Types> {
-        let module = py.import("core.store_mesh")?;
+        let module = py.import("ingetrazo_core.store_mesh")?;
         Ok((
             module.getattr("FaceView")?.unbind(),
             module.getattr("StoreMesh")?.unbind(),

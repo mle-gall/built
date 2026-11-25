@@ -144,8 +144,8 @@ pub fn read_facts(
     let py = scene.py();
     let links = py.import("core.links")?;
     let group_cls = class(py, "core.group", "Group")?;
-    let face_cls = class(py, "core.mesh", "Face")?;
-    let edge_cls = class(py, "core.mesh", "Edge")?;
+    let face_cls = class(py, "ingetrazo_core.mesh", "Face")?;
+    let edge_cls = class(py, "ingetrazo_core.mesh", "Edge")?;
     let pick = |cls: &Bound<'_, PyAny>| -> Vec<Bound<'_, PyAny>> {
         sel.iter().filter(|e| e.is_instance(cls).unwrap_or(false)).cloned().collect()
     };
@@ -776,7 +776,7 @@ pub fn run(
     match how {
         "slot" => {
             let Some(slot) = opt(win, &name) else { return Ok(false) };
-            let face = class(py, "core.mesh", "Face")?;
+            let face = class(py, "ingetrazo_core.mesh", "Face")?;
             let args: Option<Vec<Bound<'_, PyAny>>> = match arg.as_str() {
                 "" => Some(Vec::new()),
                 "sel0" => sel.first().map(|e| vec![e.clone()]),

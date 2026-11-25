@@ -120,7 +120,7 @@ def pick_edit_target(scene, max_faces: int = 200):
     at least one level deep (depth first, document order) whose mesh no
     other group shares, not hidden, locked or linked. None when there is
     none. Reads face counts without building deferred meshes."""
-    from core.mesh import face_count
+    from ingetrazo_core.mesh import face_count
     from core import links
     counts: dict = {}
     stack = list(scene.groups)
@@ -427,7 +427,7 @@ class Probe:
             self.result["notes"].append("edit: no small unshared nested leaf group found")
             return next_step()
         path = target
-        from core.mesh import face_count
+        from ingetrazo_core.mesh import face_count
         self.result["edit_target"] = {
             "path": [g.name for g in path], "depth": len(path),
             "faces": face_count(path[-1].mesh)}

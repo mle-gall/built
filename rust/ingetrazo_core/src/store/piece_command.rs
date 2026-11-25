@@ -129,7 +129,7 @@ fn copy_part<'p>(faces: &Obj<'p>, edges: &Obj<'p>) -> PyResult<Obj<'p>> {
     if let Some(made) = crate::kernel::store_views::pieces::copy_mesh_part(faces, edges)? {
         return Ok(made);
     }
-    let api = py.import("core.mesh")?;
+    let api = py.import("ingetrazo_core.mesh")?;
     let mesh = api.call_method0("Mesh")?;
     let mut flat = Vec::new();
     let edges = items(edges)?;

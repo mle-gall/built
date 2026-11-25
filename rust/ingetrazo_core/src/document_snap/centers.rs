@@ -259,7 +259,7 @@ fn valid_center_ref<'py>(v: &Obj<'py>) -> PyResult<Obj<'py>> {
     let lazy = !real.is_none()
         && mesh
             .get_type()
-            .is(&py.import("core.mesh")?.getattr("DeferredMesh")?);
+            .is(&py.import("ingetrazo_core.mesh")?.getattr("DeferredMesh")?);
     if !real.is_none() && !lazy {
         src = real.call0()?
     }

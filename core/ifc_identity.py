@@ -35,7 +35,7 @@ def object_guid(scene, obj, occurrence=None):
     owner = obj.get("owner")
     # Shared definitions cannot store a placement's GUID on their faces.
     if owner is not None:
-        from core.mesh import DeferredMesh
+        from ingetrazo_core.mesh import DeferredMesh
         if type(owner.mesh) is DeferredMesh:
             # Persist into the deferred document metadata, so both building
             # and saving later see the identity without building faces now.

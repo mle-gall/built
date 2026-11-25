@@ -1,7 +1,7 @@
 """Keyed moves and affine maps preserve folds, UVs and transaction boundaries."""
 import pytest
 from ingetrazo_core import Matrix4, MeshStore, Vec3
-from core import store_mesh
+from ingetrazo_core import store_mesh
 from core.history import History, MoveVerticesCommand, SnapshotMutation
 from core.group import _remap_uvws
 from core.mesh import Mesh

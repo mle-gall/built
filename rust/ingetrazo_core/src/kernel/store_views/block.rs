@@ -83,11 +83,11 @@ pub(crate) fn store_from_source<'py>(
         np.call_method1("ascontiguousarray", (flags, np.getattr("uint8")?))?
     };
     let ns = py
-        .import("core.mesh")?
+        .import("ingetrazo_core.mesh")?
         .getattr("_KEY_NAMESPACES")?
         .call_method0("__next__")?;
     let kw = py
-        .import("core.store_mesh")?
+        .import("ingetrazo_core.store_mesh")?
         .call_method0("_weld_args")?
         .cast_into::<PyDict>()?;
     kw.set_item(

@@ -14,7 +14,7 @@ pub(crate) fn verts<'p>(py: Python<'p>, pts: &[DVec3]) -> PyResult<Bound<'p, PyL
     Ok(l)
 }
 pub(crate) fn new_mesh(py: Python<'_>) -> PyResult<Obj<'_>> {
-    py.import("core.mesh")?.call_method0("Mesh")
+    py.import("ingetrazo_core.mesh")?.call_method0("Mesh")
 }
 pub(crate) fn group<'p>(py: Python<'p>, mesh: &Obj<'p>, name: &str) -> PyResult<Obj<'p>> {
     let kw = PyDict::new(py);
@@ -51,7 +51,7 @@ pub(crate) fn dae_add_fused(mesh: &Obj<'_>, fused: &Obj<'_>) -> PyResult<()> {
     Ok(())
 }
 pub(crate) fn place_mesh(py: Python<'_>, dst: &Obj<'_>, src: &Obj<'_>) -> PyResult<()> {
-    let store = py.import("core.store_mesh")?.getattr("StoreMesh")?;
+    let store = py.import("ingetrazo_core.store_mesh")?.getattr("StoreMesh")?;
     if dst.get_type().is(&store)
         && src.get_type().is(&store)
         && dst

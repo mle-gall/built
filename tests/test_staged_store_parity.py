@@ -4,7 +4,7 @@ import hashlib
 import json
 
 import numpy as np
-from core.store_mesh import StoreMesh
+from ingetrazo_core.store_mesh import StoreMesh
 
 
 def staged_result():

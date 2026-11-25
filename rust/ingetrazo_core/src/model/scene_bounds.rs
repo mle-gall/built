@@ -68,7 +68,7 @@ fn none_pair(py: Python<'_>) -> PyResult<Bound<'_, PyTuple>> {
 fn scene_selection_bounds<'py>(py: Python<'py>, scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
     let group = super::module(py, "core.group")?;
     let is_guide = super::module(py, "core.guide")?.getattr("is_guide")?;
-    let mesh = super::module(py, "core.mesh")?;
+    let mesh = super::module(py, "ingetrazo_core.mesh")?;
     let (face_cls, edge_cls) = (mesh.getattr("Face")?, mesh.getattr("Edge")?);
     let mut b = NanBox::new();
     for ent in scene.getattr("selection")?.try_iter()? {

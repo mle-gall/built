@@ -59,7 +59,7 @@ fn solid<'p>(
     base: f64,
     thickness: f64,
 ) -> PyResult<Obj<'p>> {
-    let mesh = py.import("core.mesh")?.call_method0("Mesh")?;
+    let mesh = py.import("ingetrazo_core.mesh")?.call_method0("Mesh")?;
     let rings: Vec<_> = glyph.iter().copied().filter(|r| r.len() >= 3).collect();
     let depths: Vec<_> = rings
         .iter()
@@ -164,7 +164,7 @@ fn build_text_mesh<'p>(
 ) -> PyResult<Obj<'p>> {
     let shapes = outlines(py, text, font_family, bold, italic)?;
     let Some((factor, base)) = scale(&shapes, height) else {
-        return py.import("core.mesh")?.call_method0("Mesh");
+        return py.import("ingetrazo_core.mesh")?.call_method0("Mesh");
     };
     solid(
         py,

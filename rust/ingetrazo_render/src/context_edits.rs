@@ -145,7 +145,7 @@ fn explode_curves(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let mesh_edges = vp.getattr("scene")?.getattr("mesh")?.getattr("edges")?;
     let edges = PyList::empty(py);
     let mut curved = false;
-    for edge in selected(win, "core.mesh", "Edge")?.iter() {
+    for edge in selected(win, "ingetrazo_core.mesh", "Edge")?.iter() {
         if mesh_edges.contains(&edge)? {
             curved |= !edge.getattr("curve")?.is_none();
             edges.append(edge)?;

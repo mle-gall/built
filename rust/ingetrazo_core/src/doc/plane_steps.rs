@@ -22,7 +22,7 @@ fn none(py: Python<'_>) -> Obj<'_> {
 }
 
 fn face_views<'py>(py: Python<'py>, mesh: &Obj<'py>, keys: &[u128]) -> PyResult<Vec<Obj<'py>>> {
-    let view = py.import("core.store_mesh")?.getattr("FaceView")?;
+    let view = py.import("ingetrazo_core.store_mesh")?.getattr("FaceView")?;
     keys.iter().map(|k| view.call1((mesh, *k))).collect()
 }
 

@@ -7,7 +7,7 @@ use pyo3::{
     types::{PyInt, PyList},
 };
 fn api(py: Python<'_>) -> PyResult<Obj<'_>> {
-    crate::model::module(py, "core.store_mesh")
+    crate::model::module(py, "ingetrazo_core.store_mesh")
 }
 fn refusal(py: Python<'_>, op: &str) -> PyResult<PyErr> {
     Ok(PyErr::from_value(api(py)?.getattr("StoreRefusal")?.call1(

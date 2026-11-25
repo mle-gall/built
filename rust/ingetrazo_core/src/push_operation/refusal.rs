@@ -35,7 +35,7 @@ pub(super) fn write(mesh: &Obj, op: &Obj, reason: &str) -> PyResult<()> {
         .map(|f| index(&f?))
         .collect::<PyResult<Vec<_>>>()?;
     push.set_item("extra_faces", extra)?;
-    let facade = py.import("core.store_mesh")?;
+    let facade = py.import("ingetrazo_core.store_mesh")?;
     let owner = facade.call_method1("_attribute_owner", (mesh,))?;
     let attrs = PyDict::new(py);
     for (key, v) in owner.get_item("_attr_own")?.cast::<PyDict>()? {

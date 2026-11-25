@@ -47,7 +47,7 @@ fn donors(mesh: &Obj<'_>, pairs: &Obj<'_>, only_empty: bool) -> PyResult<()> {
 fn report<'py>(mesh: &Obj<'py>, op: &str, result: PyResult<Obj<'py>>) -> PyResult<Obj<'py>> {
     if let Err(e) = &result {
         if e.is_instance_of::<crate::store::py::StoreFallback>(mesh.py()) {
-            crate::model::module(mesh.py(), "core.store_mesh")?
+            crate::model::module(mesh.py(), "ingetrazo_core.store_mesh")?
                 .call_method1("_note_refusal", (op, e.value(mesh.py())))?;
         }
     }
@@ -128,7 +128,7 @@ fn push_translate(
     preview: &Obj<'_>,
 ) -> PyResult<()> {
     let py = mesh.py();
-    let public = crate::model::module(py, "core.mesh")?;
+    let public = crate::model::module(py, "ingetrazo_core.mesh")?;
     let cls = paint_classes(mesh, false)?;
     let points = PyList::empty(py);
     for p in cap.try_iter()? {
@@ -180,7 +180,7 @@ fn stitch_connect(mesh: &Obj<'_>, seedkeys: &Obj<'_>, dedupe: bool) -> PyResult<
     let args = (
         seeds,
         dedupe,
-        crate::model::module(py, "core.mesh")?.getattr("_STITCH_TOL")?,
+        crate::model::module(py, "ingetrazo_core.mesh")?.getattr("_STITCH_TOL")?,
         hypot(py)?,
     );
     stitched(

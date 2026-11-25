@@ -320,7 +320,7 @@ fn import_kept_components(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> Py
     // A detached traversal root lets merge_materials restamp each shared mesh
     // exactly once, even when it belongs to two imported definitions.
     let root = py.import("types")?.getattr("SimpleNamespace")?.call0()?;
-    root.setattr("mesh", py.import("core.mesh")?.call_method0("Mesh")?)?;
+    root.setattr("mesh", py.import("ingetrazo_core.mesh")?.call_method0("Mesh")?)?;
     root.setattr("xform", py.None())?;
     root.setattr("material", py.None())?;
     root.setattr("children", &templates)?;

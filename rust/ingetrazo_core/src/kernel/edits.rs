@@ -384,7 +384,7 @@ fn build_add_edges<'p>(
 }
 
 fn store_profile<'p>(mesh: &Obj<'p>) -> PyResult<Option<Obj<'p>>> {
-    let api = mesh.py().import("core.store_mesh")?;
+    let api = mesh.py().import("ingetrazo_core.store_mesh")?;
     if !mesh.get_type().is(&api.getattr("StoreMesh")?) {
         return Ok(None);
     }
@@ -413,7 +413,7 @@ fn divide_edges(mesh: &Obj<'_>, edges: &Obj<'_>, n: &Obj<'_>) -> PyResult<usize>
     let Some(h) = store_profile(mesh)? else {
         return crate::object_edge_edits::divide_edges(mesh, edges, n as usize);
     };
-    let mm = py.import("core.mesh")?;
+    let mm = py.import("ingetrazo_core.mesh")?;
     let pair = mesh.getattr("_store")?.call_method1(
         "divide_edges",
         (
@@ -463,7 +463,7 @@ fn join_edges<'p>(
         .get_item(0)?;
     let joins = result.get_item(2)?.extract::<usize>()?;
     mesh.call_method1("_dirty", (3 * joins,))?;
-    let api = py.import("core.store_mesh")?;
+    let api = py.import("ingetrazo_core.store_mesh")?;
     if let Some(v) = verdicts {
         for pair in result.get_item(1)?.try_iter()? {
             let p = pair?;
@@ -499,7 +499,7 @@ fn __getattr__<'p>(m: &Bound<'p, PyModule>, name: &str) -> PyResult<Obj<'p>> {
         "AddEdgeCommand" | "AddFaceCommand" | "DeleteFaceCommand" | "DeleteEdgesCommand"
         | "Command" | "CompoundCommand" | "SnapshotCompound" => "ingetrazo_core.history",
         "Face" | "Edge" => "core.geometry",
-        "element_identity" => "core.mesh",
+        "element_identity" => "ingetrazo_core.mesh",
         "_point_in_face_solid"
         | "face_exists"
         | "find_chord_split"

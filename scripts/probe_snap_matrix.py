@@ -176,7 +176,7 @@ def _build_turned_edit(vp, kind: str) -> None:
     edge 1.5 m out along its local +X, both built in local coordinates and
     placed by the turn — the geometry a local-axes change must answer to."""
     from core.group import Group
-    from core.mesh import Mesh
+    from ingetrazo_core.mesh import Mesh
     P = QVector3D
     local = Mesh()
     local.add_face([P(-1.0, -1.0, 0.0), P(1.0, -1.0, 0.0),

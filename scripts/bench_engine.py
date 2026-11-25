@@ -113,7 +113,7 @@ def op_intersect_apply(ctx):
     from core.edits import build_add_edges
     from ingetrazo_core.history import History
     scene = ctx["scene"]
-    from core.mesh import _KEY_SCALE
+    from ingetrazo_core.mesh import _KEY_SCALE
     segs = [(a, b) for a, b in ctx.get("segs", [])
             if (b - a).length() >= 1.0 / _KEY_SCALE][:ctx["apply_cap"]]
     ctx["applied"] = len(segs)

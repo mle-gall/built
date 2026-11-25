@@ -38,7 +38,7 @@ pub(crate) fn edge_between<'p>(a: &Obj<'p>, b: &Obj<'p>) -> PyResult<Option<Obj<
 
 fn search<'p>(seed: &Obj<'p>, need_faces: bool) -> PyResult<(Vec<Obj<'p>>, usize)> {
     let py = seed.py();
-    let api = py.import("core.store_mesh")?;
+    let api = py.import("ingetrazo_core.store_mesh")?;
     if seed.is_instance(&api.getattr("FaceView")?)? {
         let mesh = seed.getattr("_m")?;
         if mesh.is_instance(&api.getattr("StoreMesh")?)? {

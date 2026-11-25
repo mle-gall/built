@@ -223,7 +223,7 @@ pub(crate) fn split_placement<'py>(
         g.getattr("exploded")?,
     );
     let mesh = if emptied.is_none() {
-        py.import("core.mesh")?.getattr("Mesh")?.call0()?
+        py.import("ingetrazo_core.mesh")?.getattr("Mesh")?.call0()?
     } else {
         emptied.clone()
     };

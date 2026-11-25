@@ -117,8 +117,8 @@ fn delete_entities(vp: &Bound<'_, PyAny>) -> PyResult<()> {
     }
     let commands = PyList::empty(py);
     let history = py.import("ingetrazo_core.history")?;
-    let edges = matching(&sel, "core.mesh", "Edge")?;
-    let faces = matching(&sel, "core.mesh", "Face")?;
+    let edges = matching(&sel, "ingetrazo_core.mesh", "Edge")?;
+    let faces = matching(&sel, "ingetrazo_core.mesh", "Face")?;
     if !edges.is_empty() || !faces.is_empty() {
         commands.append(history.call_method1("EraseSelectionCommand", (edges, faces))?)?;
     }
@@ -192,7 +192,7 @@ pub(super) fn paste_model(win: &Bound<'_, PyAny>, in_place: bool) -> PyResult<()
 #[pyfunction]
 fn hideable<'py>(entities: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
     let py = entities.py();
-    let mesh = py.import("core.mesh")?;
+    let mesh = py.import("ingetrazo_core.mesh")?;
     let types = (
         mesh.getattr("Edge")?,
         mesh.getattr("Face")?,
@@ -211,7 +211,7 @@ fn hideable<'py>(entities: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
 }
 
 fn at_least(sel: &Bound<'_, PyAny>, class: &str, count: usize) -> PyResult<bool> {
-    let ty = sel.py().import("core.mesh")?.getattr(class)?;
+    let ty = sel.py().import("ingetrazo_core.mesh")?.getattr(class)?;
     let mut n = 0;
     for e in sel.try_iter()? {
         if e?.is_instance(&ty)? {

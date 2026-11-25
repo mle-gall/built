@@ -126,7 +126,7 @@ fn mesh_part<'p>(mesh: &Obj<'p>, keep: Option<&Obj<'p>>) -> PyResult<Obj<'p>> {
     let Some(keep) = keep else {
         return Ok(mesh.clone());
     };
-    let out = mesh.py().import("core.mesh")?.call_method0("Mesh")?;
+    let out = mesh.py().import("ingetrazo_core.mesh")?.call_method0("Mesh")?;
     for f in mesh.getattr("faces")?.try_iter()? {
         let f = f?;
         if keep.call1((&f,))?.is_truthy()? {
@@ -198,7 +198,7 @@ impl<'p> Scope<'p> {
             let test = self.wanted.as_ref().unwrap().getattr("__contains__")?;
             item.setattr("mesh", mesh_part(&mesh, Some(&test))?)?
         } else if !inside {
-            item.setattr("mesh", py.import("core.mesh")?.call_method0("Mesh")?)?
+            item.setattr("mesh", py.import("ingetrazo_core.mesh")?.call_method0("Mesh")?)?
         } else if let Some(visible) = &self.visible {
             let part = match self.meshes.entry(mesh.as_ptr() as usize) {
                 std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),

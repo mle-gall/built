@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from ingetrazo_core import Vec3 as V
 
-from core import store_mesh as S
+from ingetrazo_core import store_mesh as S
 from core.history import History
 from core.intersect import WITH_CONTEXT, segments_for
 from core.intersect import build_intersect_faces

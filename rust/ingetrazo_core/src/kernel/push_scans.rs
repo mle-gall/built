@@ -321,7 +321,7 @@ fn view_type<'py>(py: Python<'py>, kind: &str) -> PyResult<Obj<'py>> {
         "vertex" => "VertexView",
         _ => return Err(pyo3::exceptions::PyKeyError::new_err(kind.to_owned())),
     };
-    py.import("core.store_mesh")?.getattr(name)
+    py.import("ingetrazo_core.store_mesh")?.getattr(name)
 }
 #[pyfunction]
 fn views<'py>(mesh: &Obj<'py>, kind: &str, keys: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
