@@ -459,15 +459,20 @@ pub(crate) fn register(m: &Bound<PyModule>) -> PyResult<()> {
         m.add(name, render.getattr(name)?)?;
     }
     m.add("Job", m.getattr("chrome_dialogs")?.getattr("Job")?)?;
+    // The Python plugin API had no __all__. Preserve its wildcard exports.
+    let logging = py.import("logging")?;
+    let built = py.import("formats.built")?;
+    m.add(
+        "annotations",
+        py.import("__future__")?.getattr("annotations")?,
+    )?;
+    m.add("built", &built)?;
+    m.add("logging", &logging)?;
     m.add(
         "log",
-        py.import("logging")?
-            .call_method1("getLogger", ("ingetrazo.plugins",))?,
+        logging.call_method1("getLogger", ("ingetrazo.plugins",))?,
     )?;
-    let mut suffixes: Vec<String> = py
-        .import("formats.built")?
-        .getattr("DOCUMENT_SUFFIXES")?
-        .extract()?;
+    let mut suffixes: Vec<String> = built.getattr("DOCUMENT_SUFFIXES")?.extract()?;
     suffixes.extend(
         [
             ".builtproject",

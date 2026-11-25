@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The extension API, version 2 (views/extension_api.py) — what a bigger
+"""The extension API, version 2 (views.extension_api) — what a bigger
 extension needs beyond Levels: a CAM job, say, which has its own panels,
 draws toolpaths over the view, opens its own files and shows its own
 document in place of the model.
@@ -40,6 +40,45 @@ def test_the_api_version_stays_2():
     from views.extension_api import API_VERSION, ExtensionApp
     assert API_VERSION == 2 and ExtensionApp.api_version == 2
     assert hasattr(ExtensionApp, "on_document_closed")
+
+
+def test_extensions_can_import_the_complete_native_v2_api():
+    import __future__
+    import importlib
+    import logging
+
+    import ingetrazo_render
+    from formats import built
+
+    api = importlib.import_module("views.extension_api")
+    assert api.__spec__.origin == "ingetrazo_core"
+    # Published plugins could import any of these names, including with import *.
+    exports = {}
+    exec("from views.extension_api import *", {}, exports)
+    assert {
+        "API_VERSION", "CORE_FILE_SUFFIXES", "ExtensionApp", "Job", "annotations",
+        "built", "chrome_dialogs", "chrome_forms", "log", "logging",
+    } <= exports.keys()
+    for name in ("chrome_forms", "chrome_dialogs"):
+        assert exports[name] is importlib.import_module(f"views.{name}")
+        assert exports[name] is getattr(ingetrazo_render, name)
+    assert exports["Job"] is ingetrazo_render.chrome_dialogs.Job
+    assert exports["annotations"] is __future__.annotations
+    assert exports["built"] is built
+    assert exports["logging"] is logging
+    assert exports["log"] is logging.getLogger("ingetrazo.plugins")
+    assert api.ExtensionApp.__module__ == "views.extension_api"
+    app = api.ExtensionApp(object(), "example")
+    assert app.key == "example"
+    assert {
+        "add_agent_tool", "add_command_listener", "add_context_menu", "add_file_opener",
+        "add_menu", "add_menu_action", "add_outliner_kind", "add_overlay", "add_panel",
+        "add_pickable", "add_sheet_annotations", "add_snap_provider", "api_version",
+        "document_data", "enter_workspace", "import_igz", "leave_workspace",
+        "on_document_changed", "on_document_closed", "pick_point", "release_pick",
+        "remove_agent_tools", "restore_toolbar_layout", "scene", "set_document_data",
+        "show_panel", "viewport", "viewport_widget", "window", "workspace", "world_to_pixels",
+    } <= set(dir(api.ExtensionApp))
 
 
 # ---- panels -----------------------------------------------------------------------
