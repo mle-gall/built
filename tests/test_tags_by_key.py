@@ -3,7 +3,7 @@
 """Tags and tag folders are known by a key; their names are labels
 (#tags-by-key).
 
-.skp wants tag names unique, so a model's tags came in as «Observation
+The .skp format requires unique tag names, so a model's tags came in as «Observation
 Deck - Steel - Beams», «Preshow 1 - Steel - Beams»… — the folder path spelt
 out in every name. Entities now carry the tag's KEY (the name it was made
 with, stable), and the name is only what the panels show: free to repeat

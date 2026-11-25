@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Built contributors.
-"""Curve and identity regressions against .skp-authored fixtures."""
+"""Curve and identity regressions against .skp fixtures."""
 from collections import Counter
 from pathlib import Path
 
@@ -48,7 +48,7 @@ def test_nested_legacy_groups_keep_uids_and_repeated_imports_do_not_collide():
 
 
 def test_the_identity_namespace_is_the_file_name_not_its_definitions(tmp_path):
-    """A file edited in .skp (a component added, one renamed) and
+    """An edited .skp file (a component added, one renamed) and
     imported again keeps its UIDs: the namespace comes from the file's name,
     not from a digest of its definition list."""
     import shutil

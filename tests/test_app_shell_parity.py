@@ -3,7 +3,7 @@
 No surface, so no renderer: the sheet cannot be drawn and its questions
 are answered here by replacing ``chrome_dialogs.ask`` / ``question`` (the
 windowed path, the modal pump answering a real key, is exercised by
-``built --script`` with ``BUILT_ANSWERS``; see docs/rust-app-shell.md).
+``built --script`` with ``BUILT_ANSWERS``).
 Every file is synthetic or from tests/fixtures; settings go to tmp_path.
 """
 from pathlib import Path

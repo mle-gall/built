@@ -1,4 +1,4 @@
-"""Native History steps (docs/commands-port.md): placement renames, locks
+"""Native History steps: placement renames, locks
 and whole-placement paint are typed Rust deltas. Execute, undo, redo and
 the feed record match the retired Python commands; the protocol verbs are
 their front doors."""

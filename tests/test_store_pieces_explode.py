@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Pieces, Explode and Purge on store-backed meshes against the Python
-kernel (docs/meshstore-design.md, "Pieces, Explode and Purge").
+kernel.
 
 Each scenario runs twice from the same construction: on Python meshes and
 on store-backed ones. The store run must never materialise; both must

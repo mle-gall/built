@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! The line drawing of a sheet frame (docs/rust-sheets.md §2, step 4).
+//! The line drawing of a sheet frame.
 //!
 //! What `core/hlr.py`'s `hlr_drawing` did after it had the camera-space
 //! edges: every edge's visible spans and its hidden remainder, the section

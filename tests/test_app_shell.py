@@ -1,7 +1,6 @@
 """The native shell and document bindings, headless: no surface, so
 no renderer is made; the document, tools and key routing run as in the
-window. The windowed path is exercised by ``built --script`` (see
-docs/rust-app-shell.md)."""
+window. The windowed path is exercised by ``built --script``."""
 from pathlib import Path
 
 import pytest

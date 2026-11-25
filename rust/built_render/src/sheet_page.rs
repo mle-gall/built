@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! The sheet page of the Sheets workspace, native (docs/rust-sheets.md §3–4).
+//! The sheet page of the Sheets workspace, native.
 //! It draws the document (paper, ink, the frames' contents): its colours
 //! are the drawing's, outside the chrome tokens; the selection, the desk
 //! and its labels use the window's tokens.

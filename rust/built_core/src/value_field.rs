@@ -1,4 +1,4 @@
-//! The value box (R2.5 slice 7, `docs/rust-tools.md` §20): which keys it
+//! The value box: which keys it
 //! takes and what Enter reads, for a modelling tool and for Zoom's lens.
 //!
 //! Before this slice it was `DocumentInteraction._handle_value_key` and

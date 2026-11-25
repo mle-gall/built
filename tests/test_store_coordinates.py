@@ -10,7 +10,7 @@ from built_core.store_mesh import StoreMesh
 
 pytest.importorskip("built_core")
 
-from tests.test_.skp_inference_gaps import view  # noqa: F401
+from tests.test_inference_and_face_cutting import view  # noqa: F401
 from tests.test_wgpu_soft_shadows import native  # noqa: F401
 
 
@@ -44,7 +44,7 @@ def test_store_coordinates_moves_weld_and_snapshots(origin, monkeypatch):
 
 def test_georeferenced_draw_push_weld_pack_and_endpoint(view, monkeypatch):
     from georef.datum import SceneDatum, utm_inverse
-    from tests.test_.skp_inference_gaps import move, refresh
+    from tests.test_inference_and_face_cutting import move, refresh
     from built_core import Vec3 as QVector3D
 
     monkeypatch.setenv("BUILT_RUST", "1")
@@ -96,7 +96,7 @@ def test_format_three_rounds_only_the_saved_copy(tmp_path, monkeypatch):
 
 def test_raw_lambert_draw_pick_snap_push_and_weld(view, monkeypatch):
     from built_core import Vec3 as V
-    from tests.test_.skp_inference_gaps import refresh, move
+    from tests.test_inference_and_face_cutting import refresh, move
 
     mesh = view.scene.mesh
     assert isinstance(mesh, StoreMesh)
@@ -134,7 +134,7 @@ def test_metal_mouse_tools_at_raw_lambert(view):
     from built_core import Input
     from built_core import Vec3 as V
     from built_render import KeyEvent
-    from tests.test_.skp_inference_gaps import click, move, refresh, use
+    from tests.test_inference_and_face_cutting import click, move, refresh, use
     from tools.rust_tools import LineTool
     from tools.pushpull import PushPullTool
     from tools.rust_tools import RectangleTool
@@ -206,7 +206,7 @@ def test_scene_frame_stays_put_and_composes_child_offsets_in_double():
 def test_frame_preserves_numeric_input_and_feed_coordinates(view):
     from built_core.coordinate_frame import mesh_frame
     from built_core import Vec3 as V
-    from tests.test_.skp_inference_gaps import click, move, refresh, use
+    from tests.test_inference_and_face_cutting import click, move, refresh, use
     from tools.rust_tools import LineTool
     from tools.rust_tools import RectangleTool
 
@@ -277,7 +277,7 @@ def test_bulk_weld_uses_source_precision_at_the_radius(dtype, counts):
 
 def test_metal_camera_tracks_document_controls_without_quantising_local_pan(view):
     from built_core import Vec3 as V
-    from tests.test_.skp_inference_gaps import refresh
+    from tests.test_inference_and_face_cutting import refresh
     mesh = view.scene.mesh
     mesh.add_face([(650000.+dx, 6860000.+dy, 0.) for dx, dy in
                    [(.01,.02),(.03,.02),(.03,.04),(.01,.04)]])
@@ -298,7 +298,7 @@ def test_metal_camera_tracks_document_controls_without_quantising_local_pan(view
 def test_group_face_pick_at_raw_coordinates(view):
     from built_core.group import Group
     from built_core.mesh import Mesh
-    from tests.test_.skp_inference_gaps import refresh
+    from tests.test_inference_and_face_cutting import refresh
     group = Group(Mesh())
     face = group.mesh.add_face([(650000.+dx, 6860000.+dy, 0.) for dx, dy in
                                 [(.01,.02),(.03,.02),(.03,.04),(.01,.04)]])

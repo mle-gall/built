@@ -1,4 +1,4 @@
-//! Native picking kernels (R2.5 slice 2, `docs/rust-tools.md` §15).
+//! Native picking kernels.
 //!
 //! What lies under the cursor and what a selection box catches, answered
 //! from the store's arrays and the packed instance rows: the ray against

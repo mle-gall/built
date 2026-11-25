@@ -4,7 +4,7 @@
 //! methods answer [`ToolHost`]; it returns `{consumed, redraw, committed}`.
 //! Commands reach the host as `run(name, json_args)`. `preview()`, `state()`
 //! and `info` are plain dicts and tuples. Used by `tools/rust_tools.py`
-//! (the transition adapter, `docs/rust-tools.md` §10).
+//! (the transition adapter).
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;

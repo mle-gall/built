@@ -293,7 +293,7 @@ fn loops_overlap(py: Python<'_>, a: &[[f64; 2]], b: &[[f64; 2]]) -> PyResult<boo
 }
 
 /// How far a face may be pushed INTO the solid (`PushPullOperation.
-/// _compute_inward_limit`, docs/rust-tools.md §19): None for unbounded.
+/// _compute_inward_limit`): None for unbounded.
 ///
 /// - A parallel face on the material side that overlaps the base laterally
 ///   and stands behind the WHOLE base (#1076) blocks at its distance; one

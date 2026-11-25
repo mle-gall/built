@@ -1,6 +1,6 @@
-# PBR materials in `.skp` files (.skp 2025+)
+# PBR materials in `.skp` files (2025 and later)
 
-How a .skp 2025+ file stores a material's PBR data (metallic,
+How a 2025 or later `.skp` file stores a material's PBR data (metallic,
 roughness, normal map and ambient occlusion), and how Built imports it.
 Read by `formats/openskp_compat.py` (`read_pbr`, `attach_pbr`) and mapped to
 `core.materials.Material.pbr` by `rust/built_core/src/skp/materials.rs`.
@@ -9,13 +9,13 @@ Read by `formats/openskp_compat.py` (`read_pbr`, `attach_pbr`) and mapped to
 
 Black-box: only files and public documentation were read.
 
-- **The shipped material library.** .skp 2026's 290 `.skm` files
-  (`.skp.app/Contents/Resources/Materials`): all of them carry the PBR
+- **The shipped material library.** The 2026 library’s 290 `.skm` files
+  (in the application’s material resources): all of them carry the PBR
   block, covering every combination of maps the library uses.
 - **Real 2025/2026 `.skp` files** (read-only): 286 VFF files on the
   development Mac were scanned, and two 2026.2 files with PBR maps were
   imported for comparison (not committed).
-- **The public .skp C SDK 2025.0** (`.skpAPI/model/material.h`) for
+- **The public 2025.0 C SDK** (`model/material.h`) for
   the meaning of the enums, the value ranges and the image formats.
   `skp_pbr_2025.truth.json` is the ground truth recorded for the fixture
   `tests/data/skp_pbr_2025.skp`.
@@ -91,13 +91,13 @@ A disabled channel's value is a leftover default, not a setting.
   `name_<id>.png` under `ref/` in a `.skm`. It is the entry to read.
 - `file_name` is the image's name when it was loaded. The base texture's
   `textureFilename` attribute, by contrast, often holds the author's full
-  original path (`P:/.skp projects/...`).
+  original path (`P:/projects/...`).
 - `id` numbers the material's images: 1 is the base image (`<mat:images>`),
   then the maps.
 - The images are stored as their original bytes (PNG or JPEG). The C API
   asks for **8-bit single-channel** metallic, roughness and AO maps and a
   24-bit RGB normal map. All 99 such maps in the shipped library are
-  Grayscale8. .skp never packs channels: each map is its own image,
+  Grayscale8. The library stores channels separately: each map is its own image,
   and each material owns its own copies (the API forbids sharing).
 
 ## Mapping to `Material.pbr`
@@ -124,22 +124,22 @@ a prefix.
 | writer | tested by |
 |---|---|
 | 2025 (`{25.0.633}`) | `tests/data/skp_pbr_2025.skp`, with its recorded ground truth |
-| .skp 2026 (`{26.x}`) | the 2026 differences (`roughness_texture_invert`, `thumbnail.jpg`) applied to a copy of the fixture in the tests; two real 2026.2 files checked by hand |
+| 2026 (`{26.x}`) | the 2026 differences (`roughness_texture_invert`, `thumbnail.jpg`) applied to a copy of the fixture in the tests; two real 2026.2 files checked by hand |
 | 2021–2024 | `workflow="0"` throughout, or no block at all: imports unchanged (`skp_arcs_2021.skp`, `skp_instances_2021.skp`) |
 | pre-2021 (MFC, not ZIP) | cannot carry PBR; untouched |
 
 ## Open questions
 
 - **A factor together with a map.** The importer passes both, and a glTF
-  renderer multiplies them. Whether .skp multiplies, or ignores the
+  renderer multiplies them. Whether the reference renderer multiplies, or ignores the
   factor once a map is set, is not established: the shipped library always
   pairs maps with factor 1, so it never shows the difference.
 - **A map on an untextured material** tiles by `pbrMR`'s `xScale`/`yScale`
-  in .skp. The contract has no tile for maps, and the renderer uses a
+  in the reference renderer. The contract has no tile for maps, and the renderer uses a
   1 m planar tile instead.
 - **`roughness_texture_invert` = 1** never appears in a real file seen so
   far. Reading it as "glossiness, invert it" follows from the name and from
   how renderers treat glossiness maps; it is not confirmed against
-  the modeller's own rendering.
+  the reference rendering.
 - `pbrPromoState` and `baseColorFactor` are not decoded (they are constant
   or have no visible effect in every file seen).

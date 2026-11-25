@@ -127,7 +127,7 @@ lists are the contract to build to):
 | What | Key | Lifetime |
 |---|---|---|
 | Placement (group, component instance, nested part) | `Group.uid` (a string) | saved with the document; a copy gets its own; linked parts derive theirs from the source |
-| Tag | `Layer.key` (`docs/tags-by-key`: names are labels) | saved |
+| Tag | `Layer.key` (names are labels) | saved |
 | Material | its name in `scene.materials` | saved; a rename is a remove plus a create until materials get keys as tags did |
 | Mesh | `"m<n>"`, given the first time the protocol names a mesh (`core.protocol.keys.mesh_key`) | this session. The loose model and each geometry definition have a key. An active native occurrence view uses its definition’s key. |
 | Element | `(mesh key, element key)`. The element key is the int every `Vertex` / `Edge` / `Face` already carries | this session; unique across meshes in the process; kept across undo / redo, remove / relink and the store's restores; a deep copy is new elements with new keys |

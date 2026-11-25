@@ -1,6 +1,6 @@
 """Orbit, Pan and Zoom in the middle of a tool keep the tool's state.
 
-the modeller's camera tools are temporary: start a line, orbit (the wheel held,
+The camera tools are temporary: start a line, orbit (the wheel held,
 or Orbit / Pan / Zoom from the toolbar or their keys), come back to the
 Line, and the first point is still placed and the rubber band goes on —
 the tool was suspended, then resumed. Here a camera mode deactivated the
@@ -27,7 +27,7 @@ from tools.rotate import RotateTool
 from tools.tape import TapeMeasureTool
 from tests.controller_surface import ControllerSurface as Viewport
 
-from tests.test_.skp_inference_gaps import (  # noqa: F401 (fixture)
+from tests.test_inference_and_face_cutting import (  # noqa: F401 (fixture)
     _event, click, move, refresh, view)
 
 TOOLS = [LineTool, RectangleTool, MoveTool, RotateTool, TapeMeasureTool,

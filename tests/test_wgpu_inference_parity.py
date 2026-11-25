@@ -18,7 +18,7 @@ cues it never ran:
   Metal's ``work_point`` kept the plane the first click captured.
 
 Each case drives an unshown ``WgpuView`` with the real tools (the fixture of
-``test_.skp_inference_gaps``: no renderer, no window, no settings) and
+``test_inference_and_face_cutting``: no renderer, no window, no settings) and
 asks the GL viewport behind it the same pixel: both must answer the same
 kind, point and ScreenTip context — on loose geometry, in groups and
 components, from inside an open group and on a linked file's geometry.
@@ -34,7 +34,7 @@ from built_core.group import Group
 from built_core.mesh import Mesh
 from built_core.snap import SnapResult
 from tests.headless_gpu import mouse
-from tests.test_.skp_inference_gaps import (  # noqa: F401
+from tests.test_inference_and_face_cutting import (  # noqa: F401
     click, move, refresh, use, view)
 from tools.rust_tools import RectangleTool
 from tools.tape import TapeMeasureTool

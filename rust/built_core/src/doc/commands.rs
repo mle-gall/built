@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Native History steps (docs/commands-port.md). A `NativeCommand` is a
+//! Native History steps. A `NativeCommand` is a
 //! typed delta over the document: executing it writes the fields in Rust
 //! inside the step's transaction, and the recorded inverse is explicit, so
 //! no Python `do` or `undo` takes part. History replays the transaction;
@@ -290,7 +290,7 @@ impl NativeCommand {
     }
 }
 
-/// Every class and function of the commands lane (docs/commands-port.md):
+/// Every class and function of the commands lane:
 /// the one registration the shared `lib.rs` calls.
 pub fn register_commands(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<NativeCommand>()?;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Native drawing steps (docs/commands-port.md): add an edge, add a face.
+//! Native drawing steps: add an edge, add a face.
 //!
 //! On a store mesh History journals, the kernel's command entry points
 //! (`store::command_facade`) draw in Rust and the transaction replays the

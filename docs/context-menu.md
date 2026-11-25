@@ -9,8 +9,7 @@ The native shell draws this menu with egui. The Select row grows the selection i
 
 ## How it works
 
-1. **Right-clicking an unselected object selects it first**, as in
-   .skp (`Viewport._context_pick`). Right-clicking inside the selection
+1. **Right-clicking an unselected object selects it first** (`Viewport._context_pick`). Right-clicking inside the selection
    keeps the selection, and the menu then acts on all of it. A right-click
    on nothing clears nothing and gives the empty-space menu.
 2. **Header.** It names what was hit, its kind, and where it is filed: the

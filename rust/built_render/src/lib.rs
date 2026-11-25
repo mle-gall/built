@@ -1751,7 +1751,7 @@ impl Renderer {
     }
     /// A sheet frame's picture rendered straight into a texture of the
     /// Sheets page (no read-back): as ``render_image``, kept under the
-    /// frame's ``key`` for the page to draw (docs/rust-sheets.md step 4).
+    /// frame's ``key`` for the page to draw.
     #[pyo3(signature = (key, width, height, view, projection, style, instances=None, far_clip=false, sharp_shadows=false))]
     #[allow(clippy::too_many_arguments)]
     fn page_frame_render(&mut self, key: u64, width: u32, height: u32, view: Vec<f32>,
@@ -2381,7 +2381,7 @@ impl Renderer {
             .upload(&self.device, &self.queue, width, height, bytes);
         Ok(())
     }
-    // ---- The Sheets page (ui/page.rs, docs/rust-sheets.md) -------------------
+    // ---- The Sheets page (ui/page.rs) -------------------
     /// The sheet as ``built_core.sheet_page_json`` writes it.
     fn page_set(&mut self, snapshot: String) {
         if let Some(ui) = self.ui.as_mut() { ui.page.set(snapshot); }
@@ -3317,7 +3317,7 @@ mod library_view;
 mod resident_rows;
 mod scene_photo;
 mod shortcut_text;
-/// The Sheets workspace's page, native (docs/rust-sheets.md).
+/// The Sheets workspace's page, native.
 pub mod sheet_page;
 pub mod sheet_tools;
 mod sheet_search;

@@ -1,4 +1,4 @@
-"""Interaction cues the Metal view paints with GL's own code (docs/metal-parity-audit.md).
+"""Interaction cues the Metal view paints with GL's own code.
 
 Draw annotations into a native RGBA canvas and record renderer calls.
 """

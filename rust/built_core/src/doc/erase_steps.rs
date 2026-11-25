@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Native erase steps (docs/commands-port.md): delete edges, delete a
+//! Native erase steps: delete edges, delete a
 //! face, erase a selection.
 //!
 //! On a journalled store mesh the kernel's command entry points

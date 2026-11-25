@@ -3,8 +3,7 @@
 """Frames and views of the frame-camera parity goldens
 (tests/test_sheet_camera_parity.py): the camera ``built_core.composition.
 apply_frame_camera`` points at each frame, from a default OrbitCamera, in a
-scene of three boxes. Written before the camera moved to Rust
-(docs/rust-sheets.md step 4)."""
+scene of three boxes. Written before the camera moved to Rust."""
 from __future__ import annotations
 
 import math

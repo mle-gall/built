@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Native steps that also change host state (docs/commands-port.md): the
+//! Native steps that also change host state: the
 //! north angle, Straighten Model and survey points with a datum.
 //!
 //! The datum (`scene.georef`) and the terrain are host objects, so these

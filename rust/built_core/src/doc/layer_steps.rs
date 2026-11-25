@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Native tag-list steps (docs/commands-port.md): bring a template's
+//! Native tag-list steps: bring a template's
 //! missing tags in, delete or merge a tag, and purge what nothing uses.
 //!
 //! The tag list, folders, the active tag, placements' tags and saved views

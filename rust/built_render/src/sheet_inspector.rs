@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 //! The Sheets dock's inspector, built from the page snapshot (the sheet's
-//! records as the document holds them; docs/rust-sheets.md step 3): the
+//! records as the document holds them): the
 //! fields of the selected item, or of the sheet when nothing is selected,
 //! as the dock's rows (ui/sheets.rs `sheet_rows`), and the edits typed
 //! back into field changes. An edit leaves as ``set␟<key>␟<json changes>``

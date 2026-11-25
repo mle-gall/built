@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! The native shell's glue in Rust (docs/shell-port.md), registered in one
+//! The native shell's glue in Rust, registered in one
 //! place, after the rest of `built_render`: the window's commands and
 //! events, its menus, sheets, forms, questions and jobs, Settings, the
 //! Library and the start page. The order below is the order their

@@ -110,7 +110,7 @@ pub(crate) fn install(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
     m.add("__doc__", "Linked files: another .igz placed in this one as a live reference (rust/built_core/src/model/links_api.rs).")?;
     let rs = module(py, "built_core")?;
-    // The plugin surface (docs/model-port.md).
+    // The plugin surface.
     for (name, native) in [
         ("link_of", "link_of"),
         ("fill_link", "link_fill"),

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The Project tree, option A + C (docs/ui-decisions.md, 2026-11-23), on a
+"""The Project tree, option A + C, on a
 small copy of the composite fixture named like Maxence's case: Site links
 Ride (which links Ride stairs and Ride facilities) and Show building.
 

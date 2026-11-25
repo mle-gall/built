@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The Rust ``MeshStore`` skeleton (docs/meshstore-design.md) against the
+"""The Rust ``MeshStore`` skeleton against the
 Python it will replace, with ``core/mesh.py`` as the oracle:
 
 - built from a format-3 block it IS ``lazy_mesh.plan`` and the mesh the

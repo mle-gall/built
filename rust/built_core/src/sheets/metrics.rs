@@ -7,7 +7,7 @@
 //! at a pixel size of 100: advances, pair kerning (its GPOS) and the
 //! vertical metrics. The sums reproduce `QFontMetricsF.horizontalAdvance`
 //! exactly on the strings tested, and the advances are Inter's own widths,
-//! so the PDF writer can embed it (docs/rust-sheets.md §5).
+//! so the PDF writer can embed it.
 
 use serde_json::Value;
 use std::collections::HashMap;

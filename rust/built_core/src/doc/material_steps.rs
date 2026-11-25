@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Native material-registry steps (docs/commands-port.md): restamp a
+//! Native material-registry steps: restamp a
 //! material everywhere it is worn, edit a textured one in place, delete one.
 //!
 //! The faces, groups and components wearing the material are rewritten by

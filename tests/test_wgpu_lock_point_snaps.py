@@ -8,12 +8,12 @@ edge ends there, and a midpoint or the origin on the line came back as a
 'from point' foot or the cursor's own projection.
 
 Drives an unshown ``WgpuView`` with the real Line tool (the fixture of
-``test_.skp_inference_gaps``)."""
+``test_inference_and_face_cutting``)."""
 import pytest
 from built_core import Vec3 as V
 from tests.headless_gpu import mouse
 
-from tests.test_.skp_inference_gaps import click, refresh, view  # noqa: F401
+from tests.test_inference_and_face_cutting import click, refresh, view  # noqa: F401
 
 
 def _scene(view):

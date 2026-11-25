@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! What a sheet frame shows of the model (docs/rust-sheets.md step 4): the
+//! What a sheet frame shows of the model: the
 //! placements its saved view hides, worked out from the document alone.
 //! The live scene is never toggled: until now the composer applied the
 //! view to the scene (`SavedView.apply_state`), read the rows

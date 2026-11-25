@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! The incidence primitives of `core/mesh.py` as store ops (port step 2,
-//! `docs/meshstore-design.md` §8 item 2 and §15): `vertex`, `_link_edge` /
+//! The incidence primitives of `core/mesh.py` as store ops: `vertex`, `_link_edge` /
 //! `add_edge`, `add_face`, `remove_edge`, `remove_face`, `relink_edge`,
 //! `relink_face`, `add_hole`, `remove_hole`, `purge_debris`,
 //! `drop_orphan_vertices`, `relink_vertices`. Each one is its Python

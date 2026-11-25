@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Linked files (`core/links.py`, `docs/model-port.md` Round 9): another
+//! Linked files: another
 //! document placed in this one as a live reference.
 //!
 //! What a link is lives in the Rust document: each placed copy's link
@@ -1496,8 +1496,7 @@ pub fn sync_tags<'py>(scene: &Obj<'py>, path: &Obj<'py>, tags: &Obj<'py>) -> PyR
 /// the top of the tags tree (the same keys, labels, colours and
 /// visibility) and the file's folders come along as top-level folders. A
 /// tag landing beside one of the host's of the same label is that one, and
-/// two folders of one label at one level merge, level by level (as
-/// .skp merges a component's tags into the model's by name), unless
+/// two folders of one label at one level merge, level by level, unless
 /// something outside the unlinked copies wears it (`outside`). The file's
 /// copies of the tags of the files linked inside it that nothing wears any
 /// more (`used`) go. Returns `{file tag key: host tag key}`.

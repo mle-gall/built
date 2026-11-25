@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Native plane rebuilds (docs/commands-port.md): one plane's faces from
+//! Native plane rebuilds: one plane's faces from
 //! its edges, a whole flat drawing, and the overlap heal.
 //!
 //! On a store mesh the kernel's entry points (`command_rebuild_plane`,

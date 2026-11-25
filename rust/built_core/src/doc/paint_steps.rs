@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Native face paint steps (docs/commands-port.md): colour, opacity,
+//! Native face paint steps: colour, opacity,
 //! texture, back paint and the material tag of a set of faces.
 //!
 //! History enlists the faces' meshes. When it journals their stores, the

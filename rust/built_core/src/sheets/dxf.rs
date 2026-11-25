@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! A sheet view's lines as DXF (docs/rust-sheets.md §5): an ASCII DXF R12
+//! A sheet view's lines as DXF: an ASCII DXF R12
 //! with LINE, SOLID and TEXT entities, the layers with their line types and
 //! the nearest standard colour, in model units. Ported from
 //! formats/dxf_out.py `save_dxf_layers` byte for byte

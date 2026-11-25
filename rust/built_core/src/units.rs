@@ -1,4 +1,4 @@
-//! Units and typed values (R2.5 slice 3, `docs/rust-tools.md` §16).
+//! Units and typed values.
 //!
 //! The one table of units (Python's `built_core.units` reads it from here), the
 //! reading of one typed measurement (`parse`), calculations after `=`

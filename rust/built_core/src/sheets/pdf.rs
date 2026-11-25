@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! Sheets as PDF, from their display lists (docs/rust-sheets.md §5):
+//! Sheets as PDF, from their display lists:
 //! every item's primitives in stacking order, then the sheet's border, in
 //! paper millimetres on a page of the sheet's size. Lines, polygons,
 //! ellipses, rounded rectangles and paths as PDF paths with their pens;

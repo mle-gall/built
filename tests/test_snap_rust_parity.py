@@ -6,7 +6,7 @@ from built_core.group import Group
 from built_core.mesh import Mesh
 from built_core.scene import Scene
 from tests.test_metal_parity_inference import at, harness
-from tests.test_.skp_inference_gaps import view  # noqa: F401
+from tests.test_inference_and_face_cutting import view  # noqa: F401
 
 
 @pytest.fixture(params=["callback", "matrix"], autouse=True)
@@ -77,7 +77,7 @@ def test_recorded_modes(mode):
 
 
 def test_recorded_lambert(view):
-    from tests.test_.skp_inference_gaps import refresh, move
+    from tests.test_inference_and_face_cutting import refresh, move
     origin = (650000., 6860000.)
     square = [(.01, .02), (.03, .02), (.03, .04), (.01, .04)]
     view.scene.mesh.add_face([(origin[0]+x, origin[1]+y, 0.) for x, y in square])

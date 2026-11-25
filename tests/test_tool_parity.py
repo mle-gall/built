@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The tools replay the scenarios recorded from the Python tools before
-they moved to Rust (docs/rust-tools.md §11, tests/tool_parity.py)."""
+they moved to Rust (tests/tool_parity.py)."""
 import json
 
 import pytest

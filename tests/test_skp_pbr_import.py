@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-""".skp 2025+ PBR materials come through a .skp import
+"""PBR materials from 2025 and later come through a .skp import
 (docs/skp-pbr-format.md).
 
 ``tests/data/skp_pbr_2025.skp`` is a 2025-format file, and
@@ -164,7 +164,7 @@ def test_reimport_reuses_the_extracted_maps(cache):
 
 
 def _invert_roughness(name, data):
-    # The .skp 2026 writer adds <mat:roughness_texture_invert> to every
+    # The 2026 .skp writer adds <mat:roughness_texture_invert> to every
     # pbrMR block and a thumbnail.jpg to every material folder.
     if name == "materials/PBR All Maps/material.xml":
         data = data.replace(

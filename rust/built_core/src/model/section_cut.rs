@@ -1,7 +1,7 @@
 //! A section plane's cut through collected geometry (`built_core.hlr`): the
 //! triangles, hard and soft edges clipped to the kept side, the chords where
 //! the plane crosses the triangles, and those chords chained into the closed
-//! rings a drafter fills with poché (`docs/model-port.md`, hidden lines).
+//! rings a drafter fills with poché.
 //!
 //! Ported line by line from Python, operation for operation (the plane's
 //! distance is `((x·nx + y·ny) + z·nz) − c`), so the answers are bit for bit

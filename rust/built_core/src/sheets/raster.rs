@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! A sheet as a picture (the image export, docs/rust-sheets.md §5): the
+//! A sheet as a picture (the image export): the
 //! same page the PDF writer writes (`pdf::pages_of`), drawn on white paper
 //! at a chosen dpi with tiny-skia, the text in Inter's own outlines laid
 //! out as the PDF lays it (`pdf::text_lines`). It replaces the composer's

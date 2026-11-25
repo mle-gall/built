@@ -25,7 +25,7 @@ from built_core import Vec3 as V
 
 from built_core.mesh import Face, Mesh
 from tests.headless_gpu import mouse
-from tests.test_.skp_inference_gaps import refresh, view  # noqa: F401
+from tests.test_inference_and_face_cutting import refresh, view  # noqa: F401
 from tests.test_wgpu_inference_parity import _box, _component, _look
 
 

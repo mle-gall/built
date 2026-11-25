@@ -1,6 +1,6 @@
 //! Line types: the built-in catalogue, the `.lin` line type files, and how
 //! a pattern is drawn — dashes cut along a segment, the words a line type
-//! writes along it (`docs/model-port.md`, layers).
+//! writes along it.
 //!
 //! `built_core.layers` was the implementation; it keeps the same names as a
 //! facade over these functions. A pattern is kept as a line type file has
