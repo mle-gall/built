@@ -25,7 +25,9 @@ def _shell_state():
     saved = []
     for name, attrs in _PATCHED.items():
         mod = importlib.import_module(name)
-        saved.extend((mod, attr, getattr(mod, attr, _MISSING)) for attr in attrs)
+        # Capture only overrides installed in the module. Looking up an
+        # absent attribute can invoke a backend's lazy __getattr__.
+        saved.extend((mod, attr, vars(mod).get(attr, _MISSING)) for attr in attrs)
     try:
         yield
     finally:
@@ -36,8 +38,7 @@ def _shell_state():
                 os.environ[k] = v
         for mod, attr, value in reversed(saved):
             if value is _MISSING:
-                if hasattr(mod, attr):
-                    delattr(mod, attr)
+                vars(mod).pop(attr, None)
             else:
                 setattr(mod, attr, value)
 

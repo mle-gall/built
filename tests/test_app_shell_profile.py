@@ -16,6 +16,24 @@ def test_pytest_requires_isolation(monkeypatch):
         profile.start()
 
 
+def test_offscreen_document_fixture_keeps_a_cold_process_qt_free(tmp_path):
+    script = """
+        import os
+        import sys
+        flag = os.environ.get("PYSIDE6_OPTION_PYTHON_ENUM")
+        from tests.shell_isolation import open_test_host
+        with open_test_host(os.environ["BUILT_SETTINGS_DIR"]) as host:
+            assert host.viewport is not None
+        loaded = [name for name in sys.modules
+                  if name.partition(".")[0] in {"PySide6", "shiboken6"}]
+        assert not loaded, loaded
+        assert os.environ.get("PYSIDE6_OPTION_PYTHON_ENUM") == flag
+    """
+    isolated_launch.run([sys.executable, "-c", textwrap.dedent(script)],
+                        home=tmp_path / "home", settings=tmp_path / "settings",
+                        check=True, timeout=45)
+
+
 @pytest.mark.parametrize("mode", ["directory", "environment", "temporary"])
 def test_isolated_profiles(tmp_path, mode):
     env = dict(os.environ, HOME=str(tmp_path), CFFIXED_USER_HOME=str(tmp_path))

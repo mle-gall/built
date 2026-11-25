@@ -1,6 +1,8 @@
 """Standard native button labels follow the selected JSON catalogue."""
 import pytest
 from core import i18n
+from core.input_codes import StandardButton
+from ingetrazo_render import chrome_dialogs
 
 
 @pytest.mark.parametrize("lang,yes,cancel", [
@@ -8,8 +10,6 @@ from core import i18n
     ("vi", "Có", "Hủy bỏ"), ("ja", "はい", "キャンセル"),
 ])
 def test_standard_buttons_follow_language(lang, yes, cancel, monkeypatch):
-    from views import chrome_dialogs
-    box = chrome_dialogs.QMessageBox
     shown = []
 
     def capture(parent, title, body, buttons, **options):
@@ -20,8 +20,9 @@ def test_standard_buttons_follow_language(lang, yes, cancel, monkeypatch):
     before = i18n.current_language()
     try:
         i18n.set_language(lang)
-        result = chrome_dialogs.question(None, "Title", "Question", box.Yes | box.Cancel, box.Yes)
-        assert result == box.Yes
+        result = chrome_dialogs.question(None, "Title", "Question",
+                                         StandardButton.Yes | StandardButton.Cancel, StandardButton.Yes)
+        assert result == StandardButton.Yes
         assert len(shown) == 2 and set(shown) == {yes, cancel}
     finally:
         i18n.set_language(before)
