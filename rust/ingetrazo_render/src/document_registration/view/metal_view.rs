@@ -470,5 +470,21 @@ pub(super) fn register(cls: &Obj, module: &Bound<PyModule>) -> PyResult<()> {
     install(cls, &module.dict(), metal_view_frame::METHODS)?;
     metal_view_capture::register(cls, module)?;
     install(cls, &module.dict(), metal_view_selection::METHODS)?;
+    install(cls, &module.dict(), metal_view_input::METHODS)?;
     modules::method(cls, "_schedule_tool_sync", wrap_pyfunction!(schedule_tool_sync, module)?.as_any())
+}
+
+/// Build `views.wgpu_view`: the view class over `ViewNavigation` and the
+/// module's functions.
+pub(super) fn install_module(module: &Bound<PyModule>) -> PyResult<()> {
+    let py = module.py();
+    modules::import_names(module, "ingetrazo_core", &[("pack_scene", "pack_scene")])?;
+    module.add("__doc__", "Native Metal input and presentation sharing the document camera and selection.")?;
+    let navigation = py.import("views.view_navigation")?.getattr("ViewNavigation")?;
+    let builtins = py.import("builtins")?;
+    let (float, object) = (builtins.getattr("float")?, builtins.getattr("object")?);
+    let ready = py.import("core.host_callbacks")?.getattr("Signal")?.call1((&float, object, &float))?;
+    let cls = modules::class(module, "MetalView", &[navigation], &fields!(py; "frameReady" => ready, "_ZOOM_OUT_STEP" => 0.05))?;
+    install(module.dict().as_any(), &module.dict(), FUNCTIONS)?;
+    register(&cls, module)
 }

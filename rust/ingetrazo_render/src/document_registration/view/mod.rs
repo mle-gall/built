@@ -55,6 +55,7 @@ mod document_tools;
 mod metal_view;
 mod metal_view_capture;
 mod metal_view_frame;
+mod metal_view_input;
 mod metal_view_scene;
 mod metal_view_selection;
 mod modules;
@@ -131,9 +132,6 @@ pub(super) fn register(module: &Bound<PyModule>) -> PyResult<()> {
         texture_probe::measure_texture_position,
         module
     )?)?;
-    // Transitional, while views/wgpu_view.py still holds part of MetalView.
-    module.add_function(wrap_pyfunction!(register_view_class, module)?)?;
-    module.add_function(wrap_pyfunction!(register_view_functions, module)?)?;
 
     Ok(())
 }
