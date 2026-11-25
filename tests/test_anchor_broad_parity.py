@@ -15,6 +15,7 @@ Regenerate only on purpose, against the reference implementation:
 ``python tests/test_anchor_broad_parity.py --write``."""
 from __future__ import annotations
 
+from tests.platform_golden import matches
 import gzip
 import json
 import math
@@ -180,7 +181,7 @@ def test_anchor_broad_phase_answers_as_the_python_did():
     assert got["may_hold"] == want["may_hold"]
     assert len(got["scenes"]) == len(want["scenes"])
     for i, (g, w) in enumerate(zip(got["scenes"], want["scenes"])):
-        assert g["entries"] == w["entries"], f"scene {i} entries"
+        assert matches(g["entries"], w["entries"]), f"scene {i} entries"
         for q, (a, b) in enumerate(zip(g["queries"], w["queries"])):
             assert a == b, f"scene {i} query {q}"
 

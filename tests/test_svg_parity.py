@@ -7,6 +7,7 @@ goldens were taken from the Python writer before the lines path moved to
 Rust."""
 from __future__ import annotations
 
+from tests.platform_golden import matches
 import gzip
 import json
 from pathlib import Path
@@ -37,4 +38,4 @@ def test_the_svg_is_the_python_writer_s(name, kw):
 def test_the_chains_are_the_python_writer_s(seed):
     for gi, g in enumerate(groups(seed)):
         got = [[[list(p) for p in pts], closed] for pts, closed in chain_segments(g[1])]
-        assert got == GOLDENS["chains"][f"{seed}-{gi}"], (seed, gi)
+        assert matches(got, GOLDENS["chains"][f"{seed}-{gi}"]), (seed, gi)

@@ -13,6 +13,7 @@ on purpose, against the reference implementation:
 ``python tests/test_camera_parity.py --write``."""
 from __future__ import annotations
 
+from tests.platform_golden import matches
 import gzip
 import json
 import math
@@ -108,7 +109,7 @@ def test_the_camera_answers_as_the_python_one_did():
     for i, ((c, boxes), expected) in enumerate(zip(cases, want)):
         got = _jsonable(answer(c, boxes))
         for key in expected:
-            if got[key] != expected[key]:
+            if not matches(got[key], expected[key]):
                 wrong.append(f"camera {i} {key}: {got[key]!r} != {expected[key]!r}")
     assert not wrong, f"{len(wrong)} answers differ:\n" + "\n".join(wrong[:20])
 

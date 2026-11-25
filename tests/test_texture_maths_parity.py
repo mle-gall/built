@@ -16,6 +16,7 @@ map, is held to 1e-9 relative. Regenerate only on purpose, against the
 reference implementation: ``python tests/test_texture_maths_parity.py --write``."""
 from __future__ import annotations
 
+from tests.platform_golden import matches
 import built_core
 import gzip
 import json
@@ -210,8 +211,8 @@ def test_the_texture_maths_answers_as_the_python_one_did():
             if not _close(got[key], w, 1e-9):
                 wrong.append(key)
             continue
-        if got[key] != w:
-            bad = [i for i, (a, b) in enumerate(zip(got[key], w)) if a != b]
+        if not matches(got[key], w):
+            bad = [i for i, (a, b) in enumerate(zip(got[key], w)) if not matches(a, b)]
             wrong.append(f"{key}: {len(bad)} of {len(w)}, first {bad[:5]}")
     assert not wrong, wrong
 

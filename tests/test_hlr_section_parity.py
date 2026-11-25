@@ -11,6 +11,7 @@ from). Regenerate only on purpose, against the reference implementation:
 ``python tests/test_hlr_section_parity.py --write``."""
 from __future__ import annotations
 
+from tests.platform_golden import matches
 import built_core
 import gzip
 import json
@@ -115,7 +116,7 @@ def test_the_section_maths_answers_as_the_python_one_did():
     got = [_jsonable(answer(hlr, c)) for c in cases()]
     assert len(got) == len(want)
     wrong = [f"case {i} {k}" for i, (g, w) in enumerate(zip(got, want))
-             for k in w if g[k] != w[k]]
+             for k in w if not matches(g[k], w[k])]
     assert not wrong, f"{len(wrong)} answers differ: {wrong[:20]}"
 
 

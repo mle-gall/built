@@ -11,6 +11,7 @@ Regenerate only on purpose, against the reference implementation:
 ``python tests/test_continuous_maps_parity.py --write``."""
 from __future__ import annotations
 
+from tests.platform_golden import matches
 import gzip
 import json
 import math
@@ -86,7 +87,7 @@ def test_continuous_maps_answer_as_the_python_did():
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     got = json.loads(json.dumps(answers()))
     assert len(got) == len(want)
-    bad = [i for i, (g, w) in enumerate(zip(got, want)) if g != w]
+    bad = [i for i, (g, w) in enumerate(zip(got, want)) if not matches(g, w)]
     assert not bad, bad[:10]
 
 

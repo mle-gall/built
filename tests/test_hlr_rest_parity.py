@@ -16,6 +16,7 @@ Regenerate only on purpose, against the reference implementation:
 ``python tests/test_hlr_rest_parity.py --write``."""
 from __future__ import annotations
 
+from tests.platform_golden import matches
 import built_core
 import gzip
 import json
@@ -181,7 +182,7 @@ def test_the_hidden_line_rest_answers_as_the_numpy_one_did():
         g = got[key]
         rel = TOLERANCE.get(key)
         bad = [i for i, (a, b) in enumerate(zip(g, w))
-               if (a != b if rel is None else not _close(a, b, rel))]
+               if (not matches(a, b) if rel is None else not _close(a, b, rel))]
         if len(g) != len(w) or bad:
             wrong.append(f"{key}: {len(bad)} of {len(w)}, first {bad[:5]}")
     assert not wrong, wrong

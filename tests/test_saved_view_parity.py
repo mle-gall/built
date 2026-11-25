@@ -12,6 +12,7 @@ Regenerate only on purpose, against the reference implementation:
 ``python tests/test_saved_view_parity.py --write``."""
 from __future__ import annotations
 
+from tests.platform_golden import matches
 import gzip
 import json
 import math
@@ -90,7 +91,7 @@ def test_the_saved_view_archive_answers_as_the_python_one_did():
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     got = json.loads(json.dumps(answers(saved_views)))
     for key in want:
-        bad = [i for i, (g, w) in enumerate(zip(got[key], want[key])) if g != w]
+        bad = [i for i, (g, w) in enumerate(zip(got[key], want[key])) if not matches(g, w)]
         assert len(got[key]) == len(want[key]) and not bad, (key, bad[:10])
 
 

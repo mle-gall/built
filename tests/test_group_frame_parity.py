@@ -19,6 +19,7 @@ regenerate only on purpose, against the reference implementation:
 ``python tests/test_group_frame_parity.py --write``."""
 from __future__ import annotations
 
+from tests.platform_golden import matches
 import gzip
 import json
 import math
@@ -80,8 +81,8 @@ def test_the_frame_is_the_python_one_bit_for_bit_and_the_box_within_ulps():
     assert len(sets) == len(want)
     for i, (pts, w) in enumerate(zip(sets, want)):
         g = answer(group, pts)
-        assert g["frame"] == w["frame"], i
-        assert g["hull"] == w["hull"], i
+        assert matches(g["frame"], w["frame"]), i
+        assert matches(g["hull"], w["hull"]), i
         extent = max(1.0, *map(abs, w["lo"] + w["hi"]))
         tol = 4 * math.ulp(extent)
         for k in ("lo", "hi"):
