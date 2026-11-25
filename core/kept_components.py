@@ -54,7 +54,7 @@ def copies_of(scene, mesh) -> list:
     """Every placed copy of the definition whose prototype is ``mesh`` —
     at the top level and nested inside other groups, never the kept
     template."""
-    from core.purge import iter_groups
+    from ingetrazo_core import purge_iter_groups as iter_groups
     return [g for g in iter_groups(getattr(scene, "groups", None))
             if g.mesh is mesh and g.is_component()]
 
@@ -97,7 +97,7 @@ def definitions_of(scene) -> list:
 def names_in_use(scene, skip=None) -> set:
     """The names of every group and component in the model — nested ones
     and the kept templates too — but ``skip``'s own."""
-    from core.purge import iter_groups
+    from ingetrazo_core import purge_iter_groups as iter_groups
     groups = list(iter_groups(getattr(scene, "groups", None)))
     groups += list(getattr(scene, "kept_components", None) or ())
     return {g.name for g in groups if g is not skip and g.name}

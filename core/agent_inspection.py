@@ -237,7 +237,7 @@ class InspectionTools:
             if not matches:
                 raise ValueError(f"unknown layer {key!r}")
             chosen.extend(matches)
-        from core.protocol import commands
+        from ingetrazo_core import command_protocol as commands
         commands.set_tag_state(self._viewport.history,
                                tags=list(dict.fromkeys(layer.key for layer in chosen)), visible=visible)
         return self._tool_query_layers()

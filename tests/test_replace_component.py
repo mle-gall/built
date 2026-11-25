@@ -614,9 +614,9 @@ def test_clipped_component_list_does_not_build_thumbnails(win, monkeypatch):
     win.viewport.scene.groups.append(_component(_quad(), "Table"))
     win.viewport.scene.version += 1
     calls = []
-    from core import lazy_mesh
-    plan = lazy_mesh.plan_of
-    monkeypatch.setattr(lazy_mesh, "plan_of", lambda mesh: (calls.append(mesh), plan(mesh))[1])
+    import ingetrazo_core
+    plan = ingetrazo_core.plan_of
+    monkeypatch.setattr(ingetrazo_core, "plan_of", lambda mesh: (calls.append(mesh), plan(mesh))[1])
     rows = _component_sheet(win)
     assert not calls
     act(win, "component-previews")

@@ -24,8 +24,8 @@ pub(crate) fn dirty_group_chunks(scene: &Obj<'_>) -> PyResult<()> {
 pub(crate) fn dirty_placements(groups: &Obj<'_>) -> PyResult<()> {
     let items = groups
         .py()
-        .import("core.purge")?
-        .call_method1("iter_groups", (groups,))?;
+        .import("ingetrazo_core")?
+        .call_method1("purge_iter_groups", (groups,))?;
     for g in items.try_iter()? {
         if let Some(m) = g?.getattr_opt("mesh")?.filter(|m| !m.is_none()) {
             m.call_method0("invalidate_placement_chunks")?;

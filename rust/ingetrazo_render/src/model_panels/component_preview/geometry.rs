@@ -116,7 +116,7 @@ impl<'p> Deferred<'p> {
     fn load(mesh: &Obj<'p>) -> PyResult<Option<Self>> {
         let py = mesh.py();
         let plan = py
-            .import("core.lazy_mesh")?
+            .import("ingetrazo_core")?
             .call_method1("plan_of", (mesh,))?;
         if plan.is_none() {
             return Ok(None);
@@ -145,7 +145,7 @@ impl<'p> Deferred<'p> {
     fn index_rings(&mut self, mesh: &Obj) -> PyResult<()> {
         let plan = mesh
             .py()
-            .import("core.lazy_mesh")?
+            .import("ingetrazo_core")?
             .call_method1("plan_of", (mesh,))?;
         let counts: Vec<usize> = plan.getattr("ring_counts")?.extract()?;
         let sizes: Vec<usize> = plan.getattr("ring_sizes")?.extract()?;

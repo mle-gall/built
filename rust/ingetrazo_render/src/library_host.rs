@@ -235,13 +235,13 @@ fn linked_material_uses<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
     }
     let read = || -> PyResult<Bound<'py, PyDict>> {
         let links = py.import("core.links")?;
-        let purge = py.import("core.purge")?;
+        let purge = py.import("ingetrazo_core")?;
         let out = PyDict::new(py);
         for path in links.call_method1("sources", (scene,))?.try_iter()? {
             let path = path?;
             let counts = py.import("collections")?.getattr("Counter")?.call0()?;
             for g in links.call_method1("linked_groups", (scene, &path))?.try_iter()? {
-                for pg in purge.call_method1("iter_groups", (PyTuple::new(py, [g?])?,))?.try_iter()? {
+                for pg in purge.call_method1("purge_iter_groups", (PyTuple::new(py, [g?])?,))?.try_iter()? {
                     let Some(mesh) = opt(&pg?, "mesh") else { continue };
                     for n in mesh_names(py, &mesh, false)?.try_iter()? {
                         let n = n?;
@@ -270,7 +270,7 @@ fn linked_material_uses<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
 fn select_material_uses(ctx: &Bound<'_, PyAny>, name: &Bound<'_, PyAny>) -> PyResult<usize> {
     let py = ctx.py();
     let scene = ctx.getattr("scene")?;
-    let purge = py.import("core.purge")?;
+    let purge = py.import("ingetrazo_core")?;
     let mut picked = Vec::new();
     for f in scene.getattr("mesh")?.getattr("faces")?.try_iter()? {
         let f = f?;
@@ -284,7 +284,7 @@ fn select_material_uses(ctx: &Bound<'_, PyAny>, name: &Bound<'_, PyAny>) -> PyRe
     let memo = PyDict::new(py);
     for g in scene.getattr("groups")?.try_iter()? {
         let g = g?;
-        for pg in purge.call_method1("iter_groups", (PyTuple::new(py, [&g])?,))?.try_iter()? {
+        for pg in purge.call_method1("purge_iter_groups", (PyTuple::new(py, [&g])?,))?.try_iter()? {
             let pg = pg?;
             let paint = pg.getattr("material").ok().filter(|p| p.is_truthy().unwrap_or(false));
             let painted = match paint {
@@ -592,7 +592,7 @@ impl MaterialsProvider {
 
     fn type_actions<'py>(&self, py: Python<'py>, ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
         let scene = ctx.getattr("scene")?;
-        let n = py.import("core.purge")?.call_method1("unused_materials", (&scene,))?.len()?;
+        let n = py.import("ingetrazo_core")?.call_method1("purge_unused_materials", (&scene,))?.len()?;
         let acts = PyList::empty(py);
         let k = survey(&scene, ctx_history(ctx))?.get_item(1)?.len()?;
         if k != 0 {

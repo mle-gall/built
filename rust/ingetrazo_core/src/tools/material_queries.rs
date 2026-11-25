@@ -169,7 +169,7 @@ impl ViewportToolHost {
                     }
                 }
                 let key = py
-                    .import("core.protocol.keys")?
+                    .import("ingetrazo_core.command_protocol")?
                     .call_method1("mesh_key", (&mesh,))?
                     .extract::<String>()?;
                 json!({"mesh":key,"seed":face.getattr("key")?.str()?.to_string(),"faces":ids,"back":clicked_back_side(view,&face,&owner,x,y)?})

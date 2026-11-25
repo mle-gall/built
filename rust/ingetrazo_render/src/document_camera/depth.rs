@@ -138,7 +138,7 @@ fn missing(py: Python<'_>) -> PyResult<Obj<'_>> {
 fn depth_boxes<'py>(v: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = v.py();
     let sc = v.getattr("scene")?;
-    let lazy = py.import("core.lazy_mesh")?;
+    let lazy = py.import("ingetrazo_core")?;
     let mut boxes = Vec::new();
     for g in v.call_method0("_placements")?.try_iter()? {
         let g = g?;

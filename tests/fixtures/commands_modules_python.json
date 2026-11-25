@@ -1,0 +1,273 @@
+{
+  "commands": [
+    "set_location",
+    "set_model_units",
+    "set_annotation_font",
+    "set_dimension_style",
+    "patch_record_field",
+    "set_filing_rule",
+    "create_delivery",
+    "edit_delivery",
+    "delete_delivery",
+    "run_delivery",
+    "follow_me",
+    "intersect_faces",
+    "add_edge",
+    "add_edges",
+    "add_face",
+    "add_guide",
+    "change_guide",
+    "add_guide_circle",
+    "add_arc",
+    "move_placements",
+    "copy_placements",
+    "move_selection",
+    "scale_selection",
+    "place_group",
+    "erase_stroke",
+    "add_geo_path",
+    "move_geo_path_node",
+    "add_text_label",
+    "add_dimension",
+    "place_section_plane",
+    "set_north",
+    "add_image_plane",
+    "set_group_scale",
+    "set_group_axes",
+    "flip_selection",
+    "paste_clipboard",
+    "bevel_selection",
+    "rotate_selection",
+    "offset_outline",
+    "paint_material",
+    "divide_edges",
+    "join_edges",
+    "move_vertices",
+    "erase",
+    "reverse_faces",
+    "push_pull",
+    "orient_faces",
+    "rebuild_cap",
+    "solid_operation",
+    "explode_group",
+    "split_into_pieces",
+    "explode_view",
+    "purge_unused",
+    "purge_debris",
+    "undo",
+    "redo",
+    "hide",
+    "unhide",
+    "lock",
+    "rename_placement",
+    "rename_placements",
+    "paint_placements",
+    "make_unique",
+    "edit_assembly_part",
+    "edit_visibility_set",
+    "edit_saved_scene",
+    "edit_link_subset",
+    "reset_link_tags",
+    "unlink_placements",
+    "edit_section_plane",
+    "edit_loose_geometry",
+    "file_placements",
+    "promote_tag",
+    "edit_structure_node",
+    "edit_tag",
+    "set_tag",
+    "set_tag_state",
+    "resegment_curve",
+    "repair_solid",
+    "rename_material",
+    "edit_material",
+    "duplicate_material",
+    "delete_material",
+    "delete_placements",
+    "rename_component",
+    "create_material",
+    "set_material_base",
+    "set_material_pbr",
+    "name_unnamed_colours"
+  ],
+  "step": {
+    "revision": 17,
+    "phase": "undo",
+    "command": "Move",
+    "complete": true,
+    "meshes": [],
+    "placements": {
+      "created": [],
+      "removed": [],
+      "modified": []
+    },
+    "tags": {
+      "created": [],
+      "removed": [],
+      "modified": [
+        "Walls"
+      ]
+    },
+    "materials": {
+      "created": [],
+      "removed": [],
+      "modified": []
+    },
+    "copies": []
+  },
+  "keys": [
+    "9223372036854775809",
+    42
+  ],
+  "occurrence": {
+    "uid": "g",
+    "fields": [
+      {
+        "path": [
+          "class"
+        ],
+        "value": "IfcWall",
+        "owner": "This object",
+        "editable": true,
+        "kind": "text"
+      },
+      {
+        "path": [
+          "predefined_type"
+        ],
+        "value": "",
+        "owner": "This object",
+        "editable": true,
+        "kind": "text"
+      },
+      {
+        "path": [
+          "type"
+        ],
+        "value": "",
+        "owner": "This object",
+        "editable": true,
+        "kind": "text"
+      },
+      {
+        "path": [
+          "object_type"
+        ],
+        "value": "",
+        "owner": "This object",
+        "editable": true,
+        "kind": "text"
+      },
+      {
+        "path": [
+          "name"
+        ],
+        "value": "W",
+        "owner": "This object",
+        "editable": true,
+        "kind": "text"
+      },
+      {
+        "path": [
+          "description"
+        ],
+        "value": "",
+        "owner": "This object",
+        "editable": true,
+        "kind": "text"
+      },
+      {
+        "path": [
+          "tag"
+        ],
+        "value": "",
+        "owner": "This object",
+        "editable": true,
+        "kind": "text"
+      }
+    ],
+    "ifc_class": "IfcWall",
+    "editable": true
+  },
+  "linked": {
+    "uid": "g",
+    "fields": [
+      {
+        "path": [
+          "class"
+        ],
+        "value": "IfcWall",
+        "owner": "Linked source",
+        "editable": false,
+        "kind": "text"
+      },
+      {
+        "path": [
+          "predefined_type"
+        ],
+        "value": "",
+        "owner": "Linked source",
+        "editable": false,
+        "kind": "text"
+      },
+      {
+        "path": [
+          "type"
+        ],
+        "value": "",
+        "owner": "Linked source",
+        "editable": false,
+        "kind": "text"
+      },
+      {
+        "path": [
+          "object_type"
+        ],
+        "value": "",
+        "owner": "Linked source",
+        "editable": false,
+        "kind": "text"
+      },
+      {
+        "path": [
+          "name"
+        ],
+        "value": "W",
+        "owner": "Linked source",
+        "editable": false,
+        "kind": "text"
+      },
+      {
+        "path": [
+          "description"
+        ],
+        "value": "",
+        "owner": "Linked source",
+        "editable": false,
+        "kind": "text"
+      },
+      {
+        "path": [
+          "tag"
+        ],
+        "value": "",
+        "owner": "Linked source",
+        "editable": false,
+        "kind": "text"
+      }
+    ],
+    "ifc_class": "IfcWall",
+    "editable": false
+  },
+  "row": "@[\"A\",\"B/\\u00e9\"]",
+  "mount": "link:A/link:B",
+  "points": [
+    1,
+    2,
+    3
+  ],
+  "paint": [
+    "Colour #8000FF",
+    "A (3)"
+  ]
+}

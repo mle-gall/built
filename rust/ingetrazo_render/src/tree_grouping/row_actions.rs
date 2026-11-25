@@ -244,7 +244,7 @@ pub fn tree_header_state(vp: &Bound<'_, PyAny>, scope: &str, lock: bool) -> PyRe
         let kw = pyo3::types::PyDict::new(py);
         kw.set_item("tags", keys)?;
         kw.set_item(field, !all)?;
-        py.import("core.protocol.commands")?
+        py.import("ingetrazo_core.command_protocol")?
             .getattr("set_tag_state")?
             .call((vp.getattr("history")?,), Some(&kw))?;
         vp.call_method0("refresh_after_edit")?;
@@ -281,8 +281,8 @@ pub fn tree_purge_tags(win: &Bound<'_, PyAny>) -> PyResult<()> {
         return Ok(());
     }
     let candidates = py
-        .import("core.purge")?
-        .call_method1("unused_layers", (&scene,))?;
+        .import("ingetrazo_core")?
+        .call_method1("purge_unused_layers", (&scene,))?;
     let count = candidates.len()?;
     if count == 0 {
         vp.call_method1(

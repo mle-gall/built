@@ -31,7 +31,7 @@ fn tuple_of<'py>(py: Python<'py>, o: Option<Obj<'py>>) -> PyResult<Obj<'py>> {
 
 
 fn every_mesh<'py>(_s: &RecordStep, py: Python<'py>, scene: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
-    py.import("core.purge")?.getattr("iter_meshes")?.call1((scene,))?.try_iter()?.collect()
+    py.import("ingetrazo_core")?.getattr("purge_iter_meshes")?.call1((scene,))?.try_iter()?.collect()
 }
 
 /// The meshes the edit touched changed under their chunks, and so did
@@ -50,7 +50,7 @@ fn restamp(s: &RecordStep, py: Python<'_>, me: &Obj<'_>, scene: &Obj<'_>, kind: 
     let materials = scene.getattr("materials")?;
     let new = me.getattr("_new")?;
     if optional(me, "_edit")?.is_none() {
-        let groups = py.import("core.purge")?.getattr("iter_groups")?.call1((scene.getattr("groups")?,))?;
+        let groups = py.import("ingetrazo_core")?.getattr("purge_iter_groups")?.call1((scene.getattr("groups")?,))?;
         let edit = py.import("ingetrazo_core")?.getattr("MaterialRestamp")?.call1((
             scene.getattr("loose_mesh")?,
             groups,

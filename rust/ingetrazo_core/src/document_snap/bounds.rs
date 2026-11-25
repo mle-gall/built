@@ -25,8 +25,8 @@ fn editing_meshes<'py>(view: &Obj<'py>) -> PyResult<Bound<'py, PySet>> {
 fn descendants<'py>(group: &Obj<'py>) -> PyResult<Obj<'py>> {
     group
         .py()
-        .import("core.purge")?
-        .call_method1("iter_groups", ((group,),))
+        .import("ingetrazo_core")?
+        .call_method1("purge_iter_groups", ((group,),))
 }
 #[pyfunction]
 fn proto_points_cache<'py>(view: &Obj<'py>, group: &Obj<'py>) -> PyResult<Obj<'py>> {

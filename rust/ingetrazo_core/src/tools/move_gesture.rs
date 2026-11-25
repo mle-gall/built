@@ -113,7 +113,7 @@ fn submit_move(
     kwargs.set_item("delta", delta.to_array())?;
     kwargs.set_item("copy", copy)?;
     kwargs.set_item("_plan", plan)?;
-    py.import("core.protocol.commands")?
+    py.import("ingetrazo_core.command_protocol")?
         .getattr("run")?
         .call((view.getattr("history")?, "move_selection"), Some(&kwargs))?;
     Ok(())

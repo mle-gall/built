@@ -76,9 +76,7 @@ fn push_pull<'py>(
             op.call_method0("_reset")?;
             return answer(history, &before, false);
         }
-        let viewport = py
-            .import("core.protocol.commands")?
-            .call_method1("_Headless", (history,))?;
+        let viewport = Bound::new(py, super::api::Headless::from_history(history.clone())?)?;
         op.call_method1("_commit", (viewport,))?;
         answer(history, &before, true)
     })

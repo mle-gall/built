@@ -156,7 +156,7 @@ fn build_sweep_face<'p>(
 ) -> PyResult<Obj<'p>> {
     let py = mesh.py();
     let profile = py
-        .import("core.protocol.keys")?
+        .import("ingetrazo_core.command_protocol")?
         .call_method1("elements", (mesh, "face", PyList::new(py, [key])?))?
         .get_item(key)?;
     let cmd = if mesh.hasattr("_store")? {

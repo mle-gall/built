@@ -42,7 +42,7 @@ fn world<'p>(group: &Obj<'p>) -> PyResult<Obj<'p>> {
 fn lazily_open(mesh: &Obj) -> PyResult<bool> {
     let plan = mesh
         .py()
-        .import("core.lazy_mesh")?
+        .import("ingetrazo_core")?
         .call_method1("plan_of", (mesh,))?;
     if plan.is_none() {
         return Ok(false);

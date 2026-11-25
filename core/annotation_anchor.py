@@ -7,7 +7,7 @@ from ingetrazo_core import Matrix4, Vec3
 from core.doc_model import Record, record_fields
 
 from core.outliner import world_matrix
-from core.protocol.keys import element, kind_of
+from ingetrazo_core.command_protocol import element, kind_of
 
 
 def _matrix(scene, owner):

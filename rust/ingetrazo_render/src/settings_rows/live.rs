@@ -191,7 +191,7 @@ pub(crate) fn apply_document_units(window: &Obj, chosen: &Obj) -> PyResult<bool>
         return Ok(false);
     }
     if !py
-        .import("core.protocol.commands")?
+        .import("ingetrazo_core.command_protocol")?
         .call_method1("set_model_units", (document_history(&vp)?, chosen))?
         .get_item("ok")?
         .is_truthy()?

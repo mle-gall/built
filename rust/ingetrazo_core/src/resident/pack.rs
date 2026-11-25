@@ -536,7 +536,7 @@ pub fn pack_scene<'py>(
     };
     let mut total = 1usize;
     if let Some(progress) = &progress {
-        let count = py.import("core.purge")?.call_method1("iter_groups", (scene.getattr("groups")?,))?.try_iter()?.count();
+        let count = py.import("ingetrazo_core")?.call_method1("purge_iter_groups", (scene.getattr("groups")?,))?.try_iter()?.count();
         total = count.max(1);
         progress.call1((0.0, packing))?;
     }

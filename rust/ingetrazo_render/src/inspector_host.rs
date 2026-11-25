@@ -416,7 +416,7 @@ fn bevel_edit(host: &Bound<'_, PyAny>, tool: &Bound<'_, PyAny>, key: &str, value
 }
 
 fn commands(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    py.import("core.protocol.commands")?.getattr("run")
+    py.import("ingetrazo_core.command_protocol")?.getattr("run")
 }
 
 fn record_edit(view: &Bound<'_, PyAny>, vp: &Bound<'_, PyAny>, verb:&str, v: &Bound<'_, PyAny>) -> PyResult<()> {
