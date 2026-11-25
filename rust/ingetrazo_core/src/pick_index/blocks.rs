@@ -53,21 +53,14 @@ fn prepare<'py>(
     let mut chunks = Vec::new();
     let grids = PyList::empty(py);
     let floor: usize = host.getattr("_SPAN_GRID_MIN")?.extract()?;
-    for group in candidates.try_iter()? {
-        let group = group?;
+    let candidates = PyList::new(py, candidates.try_iter()?.collect::<PyResult<Vec<_>>>()?)?;
+    // The scene's rules for every placement at once (`scene_group_states`).
+    let states = crate::model::scene_mesh_states::scene_group_states(py, &scene, candidates.as_any())?;
+    for (group, (visible, snappable, selectable)) in candidates.iter().zip(states) {
         if attr(&group, "billboard")?.is_truthy()? {
             continue;
         }
-        let visible = scene
-            .call_method1("entity_visible", (&group,))?
-            .is_truthy()?;
-        let snappable = scene
-            .call_method1("group_snappable", (&group,))?
-            .is_truthy()?;
-        let selectable = scene
-            .call_method1("entity_selectable", (&group,))?
-            .is_truthy()?
-            && touchable.contains(group.as_ptr() as usize)?;
+        let selectable = selectable && touchable.contains(group.as_ptr() as usize)?;
         if !visible && !snappable {
             continue;
         }
