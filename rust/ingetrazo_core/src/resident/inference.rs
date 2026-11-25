@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Screen-space bounds of resident instances for cursor queries.
+mod acquisition;
+mod context;
+mod crossing;
 mod edges;
 mod index;
 mod lease;
@@ -64,7 +67,10 @@ pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(nearest_inference_triangle, m)?)?;
     m.add_function(wrap_pyfunction!(resident_curve_features, m)?)?;
     screen::register(m)?;
-    picking::register(m)
+    picking::register(m)?;
+    context::register(m)?;
+    crossing::register(m)?;
+    acquisition::register(m)
 }
 
 /// The front triangle and its normal, using the same barycentric slack as picking.

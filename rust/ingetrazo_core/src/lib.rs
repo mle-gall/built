@@ -1856,10 +1856,14 @@ impl InstanceSet {
     /// the ray: ``(hidden, doubt)``. Any one that hides it settles it, so
     /// the order they are met in does not matter.
     fn occluded_ray(&self, mask: &[bool], o: [f64; 3], d: [f64; 3], limit: f64) -> (bool, bool) {
+        self.occluded_where(|i| mask[i], o, d, limit)
+    }
+
+    fn occluded_where(&self, eligible: impl Fn(usize) -> bool, o: [f64; 3], d: [f64; 3], limit: f64) -> (bool, bool) {
         let mut doubt = false;
         let mut found = false;
         self.bvh.on_ray(o, d, limit, |i| {
-            if !mask[i] {
+            if !eligible(i) {
                 return true;
             }
             let p = &self.places[i];
