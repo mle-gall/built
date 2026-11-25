@@ -3,11 +3,10 @@
 that toggle on a Ctrl tap (Move's copy, Rectangle's centre) ask
 ``ctrl_tapped`` on the release. Only the controller's own key handler
 recorded it, so on this view every tap read as a chord and was taken back."""
-import pytest
 from ingetrazo_render import KeyEvent, ShortcutOverride
 
 from core.input_codes import Key, KeyboardModifier
-from tests.headless_gpu import _code, qt_surface
+from tests.headless_gpu import _code
 from tests.test_.skp_inference_gaps import view  # noqa: F401  (fixture)
 
 CTRL = KeyboardModifier.ControlModifier
@@ -18,8 +17,6 @@ def _press(key, mods=0):
 
 
 def test_a_lone_ctrl_is_a_tap_and_a_chord_is_not(view):  # noqa: F811
-    if qt_surface():
-        pytest.skip("native key events need the native ControllerSurface (qt-host)")
     source = view.source_viewport
     view.keyPressEvent(_press(Key.Key_Control))
     assert source.ctrl_tapped()

@@ -92,13 +92,6 @@ def pixel(image, x, y):
     return tuple(int(v) for v in np.frombuffer(image.rgba(), np.uint8).reshape(h, w, 4)[int(y), int(x)])
 
 
-def qt_surface() -> bool:
-    """Whether tests/controller_surface.py is still a Qt widget (before
-    qt-host's native surface): its handlers then want Qt events."""
-    from tests.controller_surface import ControllerSurface
-    return any(c.__module__.startswith("PySide6") for c in ControllerSurface.__mro__)
-
-
 def _code(value) -> int:
     """A Qt enum or flag, or the native code, as the int the shell sends."""
     return int(getattr(value, "value", value) or 0)
