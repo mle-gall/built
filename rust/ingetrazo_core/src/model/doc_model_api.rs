@@ -45,7 +45,7 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyCFunction, PyDict, PyList, PySlice, PyString, PyTuple, PyType, PyWeakrefReference};
 
 use super::module;
-use super::py_class::{class, method, property};
+use super::py_class::{class, method, property, FastAttr};
 
 type Obj<'py> = Bound<'py, PyAny>;
 
@@ -121,7 +121,7 @@ fn write_back(m: &Obj<'_>) -> PyResult<()> {
     if bind.is_none() {
         return Ok(());
     }
-    let src = m.getattr_opt(intern!(py, "_built_source"))?.unwrap_or_else(|| none(py));
+    let src = m.attr_opt(intern!(py, "_built_source"))?.unwrap_or_else(|| none(py));
     let data = m.call_method0(intern!(py, "data"))?;
     let changed = st(py)?.native.bind(py).getattr(intern!(py, "doc_view_changed"))?.call1((bind.get_item(0)?, bind.get_item(1)?, m, data, src))?;
     if !changed.is_truthy()? {
@@ -157,7 +157,7 @@ fn placed_reduce<'py>(me: &Obj<'py>) -> PyResult<Bound<'py, PyTuple>> {
 fn placed_deepcopy<'py>(me: &Obj<'py>, _memo: Option<&Obj<'py>>) -> PyResult<Obj<'py>> {
     let py = me.py();
     let out = st(py)?.matrix.bind(py).call1((me,))?;
-    if let Some(src) = me.getattr_opt(intern!(py, "_built_source"))? {
+    if let Some(src) = me.attr_opt(intern!(py, "_built_source"))? {
         if !src.is_none() {
             out.setattr(intern!(py, "_built_source"), src)?;
         }
@@ -185,7 +185,7 @@ fn make<'py>(key: &Obj<'py>, which: &Obj<'py>, data: &Obj<'py>, src: &Obj<'py>) 
 
 fn copy_view<'py>(value: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = value.py();
-    let src = value.getattr_opt(intern!(py, "_built_source"))?;
+    let src = value.attr_opt(intern!(py, "_built_source"))?;
     let out = st(py)?.placed.bind(py).call1((value,))?;
     if let Some(src) = src.filter(|s| !s.is_none()) {
         out.setattr(intern!(py, "_built_source"), src)?;
@@ -220,7 +220,7 @@ fn bind_matrix<'py>(value: &Obj<'py>, key: &Obj<'py>, which: &Obj<'py>) -> PyRes
         value = copy_view(&value)?;
     } else {
         // 16 numbers, column-major as `Matrix4.data()` gives them.
-        let raw = if value.hasattr(intern!(py, "data"))? { value.call_method0(intern!(py, "data")) } else { Ok(value.clone()) };
+        let raw = if value.has_attr(intern!(py, "data"))? { value.call_method0(intern!(py, "data")) } else { Ok(value.clone()) };
         let data: Option<Vec<f64>> = raw.ok().and_then(|r| r.try_iter().ok().and_then(|it| it.map(|v| v.and_then(|v| v.extract::<f64>())).collect::<PyResult<Vec<f64>>>().ok()));
         match data {
             Some(d) if d.len() == 16 => {
@@ -234,7 +234,7 @@ fn bind_matrix<'py>(value: &Obj<'py>, key: &Obj<'py>, which: &Obj<'py>) -> PyRes
     }
     value.setattr(intern!(py, "_doc_bind"), (key, which))?;
     let data = value.call_method0(intern!(py, "data"))?;
-    let src = value.getattr_opt(intern!(py, "_built_source"))?.unwrap_or_else(|| none(py));
+    let src = value.attr_opt(intern!(py, "_built_source"))?.unwrap_or_else(|| none(py));
     PyTuple::new(py, [value, data, src])
 }
 
@@ -322,7 +322,7 @@ fn index<'py>(parent: &Obj<'py>, node: &Obj<'py>, key: &Obj<'py>) -> PyResult<Op
     let py = parent.py();
     if let Ok(pd) = parent.cast::<PyDict>() {
         let mut key = key.clone();
-        if key.is_none() && node.getattr_opt(intern!(py, "_doc_root"))?.is_some() {
+        if key.is_none() && node.attr_opt(intern!(py, "_doc_root"))?.is_some() {
             key = node.getattr(intern!(py, "_doc_key"))?;
         }
         if !key.is_none() {
@@ -436,7 +436,7 @@ fn stored<'py>(node: &Obj<'py>, key: &Obj<'py>, value: &Obj<'py>) -> PyResult<()
         return Ok(());
     }
     let root = anchor_of(node)?;
-    let tracked = value.getattr_opt(intern!(py, "_doc_root"))?.is_some_and(|r| r.is(&root));
+    let tracked = value.attr_opt(intern!(py, "_doc_root"))?.is_some_and(|r| r.is(&root));
     let here = tracked && {
         let up = value.getattr(intern!(py, "_doc_up"))?;
         !up.is_none() && up.call0()?.is(node) && value.getattr(intern!(py, "_doc_key"))?.eq(key)?
@@ -496,12 +496,18 @@ pub fn flush(py: Python<'_>) -> PyResult<()> {
     Ok(())
 }
 
+/// How many references hold `o`.
+fn refcnt(o: &Obj<'_>) -> isize {
+    // SAFETY: `o` is a live object; reading its count has no effect.
+    unsafe { pyo3::ffi::Py_REFCNT(o.as_ptr()) }
+}
+
 /// Whether no container inside `value` is held outside it (each one
 /// referenced once, by its parent).
 fn unshared(value: &Obj<'_>) -> PyResult<bool> {
     let check = |v: Obj<'_>| -> PyResult<bool> {
         // The parent's slot and this loop's reference.
-        Ok(!((v.is_instance_of::<PyDict>() || v.is_instance_of::<PyList>()) && (v.get_refcnt() > 2 || !unshared(&v)?)))
+        Ok(!((v.is_instance_of::<PyDict>() || v.is_instance_of::<PyList>()) && (refcnt(&v) > 2 || !unshared(&v)?)))
     };
     if let Ok(d) = value.cast::<PyDict>() {
         for (_, v) in d.iter() {
@@ -533,7 +539,7 @@ fn promote<'py>(suspect: &Bound<'py, PyDict>, sid: &Obj<'py>) -> PyResult<()> {
     let keep = (anchor.clone(), parent_ref.clone(), key.clone());
     drop(entry);
     // The parent's slot and the name `value`.
-    if parent.is_none() || value.get_refcnt() > 2 || !unshared(&value)? {
+    if parent.is_none() || refcnt(&value) > 2 || !unshared(&value)? {
         let entry = PyTuple::new(py, [keep.0.into_any(), keep.1, keep.2, value])?;
         suspect.set_item(sid, entry)?;
         return Ok(());
@@ -756,7 +762,7 @@ fn track<'py>(key: &Obj<'py>, attr: &Obj<'py>, value: &Obj<'py>) -> PyResult<Obj
 /// inside a tracked value is re-read whole: its children need none).
 fn up_of<'py>(container: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = container.py();
-    if container.getattr_opt(intern!(py, "_doc_root"))?.is_some() { weak(container) } else { Ok(none(py)) }
+    if container.attr_opt(intern!(py, "_doc_root"))?.is_some() { weak(container) } else { Ok(none(py)) }
 }
 
 fn same_kind(cur: &Obj<'_>, v: &Obj<'_>) -> PyResult<bool> {
@@ -846,7 +852,7 @@ fn record_fields_of<'py>(me: &Obj<'py>) -> PyResult<Vec<Bound<'py, PyString>>> {
 }
 
 fn own_dict<'py>(me: &Obj<'py>) -> PyResult<Option<Bound<'py, PyDict>>> {
-    Ok(me.getattr_opt(intern!(me.py(), "__dict__"))?.and_then(|d| d.cast_into::<PyDict>().ok()))
+    Ok(me.attr_opt(intern!(me.py(), "__dict__"))?.and_then(|d| d.cast_into::<PyDict>().ok()))
 }
 
 #[pyfunction]
@@ -882,7 +888,7 @@ fn record_copy<'py>(me: &Obj<'py>) -> PyResult<Obj<'py>> {
 }
 
 #[pyfunction]
-fn record_deepcopy<'py>(me: &Obj<'py>, memo: &Obj<'py>) -> PyResult<Obj<'py>> {
+pub(crate) fn record_deepcopy<'py>(me: &Obj<'py>, memo: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = me.py();
     let deepcopy = module(py, "copy")?.getattr(intern!(py, "deepcopy"))?;
     let cls = me.get_type();
@@ -1023,13 +1029,13 @@ fn object_state<'py>(obj: &Obj<'py>) -> PyResult<Obj<'py>> {
     if obj.is_instance(&layers.getattr("Layer")?)? {
         return layers.call_method1("layer_values", (obj,));
     }
-    if let Some(d) = obj.getattr_opt(intern!(py, "__dict__"))? {
+    if let Some(d) = obj.attr_opt(intern!(py, "__dict__"))? {
         return Ok(d);
     }
     let out = PyDict::new(py);
     for k in obj.getattr("__slots__")?.try_iter()? {
         let k = k?;
-        if let Some(v) = obj.getattr_opt(k.cast::<PyString>()?)? {
+        if let Some(v) = obj.attr_opt(k.cast::<PyString>()?)? {
             out.set_item(k, v)?;
         }
     }
@@ -1053,7 +1059,7 @@ fn set_object_state<'py>(obj: &Obj<'py>, values: &Obj<'py>) -> PyResult<()> {
             }
         }
     }
-    if let Some(d) = obj.getattr_opt(intern!(py, "__dict__"))? {
+    if let Some(d) = obj.attr_opt(intern!(py, "__dict__"))? {
         d.call_method0(intern!(py, "clear"))?;
         d.call_method1(intern!(py, "update"), (&values,))?;
     } else {

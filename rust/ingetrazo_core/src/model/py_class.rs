@@ -84,6 +84,32 @@ pub fn class<'py>(py: Python<'py>, module: &str, name: &str, bases: &[Obj<'py>],
     py.import("builtins")?.getattr("type")?.call1((name, PyTuple::new(py, bases)?, ns))
 }
 
+static GETATTR: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+static MISSING: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+
+/// `getattr(o, name, default)` and `hasattr` the way Python runs them. Built
+/// for the 3.11 stable ABI, PyO3's `getattr_opt` and `hasattr` raise and
+/// catch an `AttributeError` for every missing name, and making that
+/// exception costs more than the rule asking (`layer_of` on an edge, which
+/// has no `attrs`). The builtin looks the name up without raising.
+pub trait FastAttr<'py> {
+    fn attr_opt<N: IntoPyObject<'py>>(&self, name: N) -> PyResult<Option<Obj<'py>>>;
+    fn has_attr<N: IntoPyObject<'py>>(&self, name: N) -> PyResult<bool> {
+        Ok(self.attr_opt(name)?.is_some())
+    }
+}
+
+impl<'py, T> FastAttr<'py> for Bound<'py, T> {
+    fn attr_opt<N: IntoPyObject<'py>>(&self, name: N) -> PyResult<Option<Obj<'py>>> {
+        let py = self.py();
+        let getattr = GETATTR.get_or_try_init(py, || -> PyResult<_> { Ok(py.import("builtins")?.getattr("getattr")?.unbind()) })?;
+        let missing = MISSING.get_or_try_init(py, || -> PyResult<_> { Ok(py.import("builtins")?.getattr("object")?.call0()?.unbind()) })?;
+        let name = pyo3::BoundObject::into_bound(pyo3::BoundObject::into_any(name.into_pyobject(py).map_err(Into::into)?));
+        let got = getattr.bind(py).call1((self.as_any(), name, missing.bind(py)))?;
+        Ok(if got.is(missing.bind(py)) { None } else { Some(got) })
+    }
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<NativeMethod>()
 }
