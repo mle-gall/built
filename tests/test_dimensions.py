@@ -206,7 +206,7 @@ def test_xray_and_wireframe_let_snaps_through_faces():
     # dimension the floor of a pool through its water (Marco, 2026-09-02).
     # Shaded/hidden-line styles keep the visible-only rule.
     from ingetrazo_core import Vec3 as QVector3D
-    from core.style import Style
+    from ingetrazo_core.style import Style
     from views.document_interaction import DocumentInteraction
 
     scene = Scene()

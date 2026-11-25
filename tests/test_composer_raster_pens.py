@@ -44,7 +44,7 @@ class _RecordingViewport(_FakeViewport):
         self.seen = []
 
     def _effective_style(self):
-        from core.style import Style
+        from ingetrazo_core.style import Style
         return self.style_override or Style()
 
     def render_image(self, w, h, overlays=True, sharp_shadows=False):

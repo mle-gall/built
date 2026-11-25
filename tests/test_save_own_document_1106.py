@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 from ingetrazo_core import Vec3 as V
 
-from core import autosave
+from ingetrazo_core import autosave
 from core.history import AddEdgeCommand
 from core.scene import Scene
 from formats import igz as igz_format

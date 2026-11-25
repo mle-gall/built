@@ -89,13 +89,6 @@ pub(crate) fn convert_component<'py>(
     Ok(old)
 }
 #[pyfunction]
-pub(crate) fn restore_component(group: &Obj<'_>, old: (Obj<'_>, Obj<'_>, Obj<'_>)) -> PyResult<()> {
-    group.setattr("xform", old.0)?;
-    group.setattr("component", old.1)?;
-    group.setattr("name", old.2)
-}
-
-#[pyfunction]
 pub(crate) fn nest<'py>(
     roots: &Obj<'py>,
     group: &Obj<'py>,
@@ -121,21 +114,6 @@ pub(crate) fn nest<'py>(
     group.setattr("component", false)?;
     Ok((xform, positions))
 }
-#[pyfunction]
-pub(crate) fn unnest(
-    roots: &Obj<'_>,
-    group: &Obj<'_>,
-    xform: &Obj<'_>,
-    positions: Vec<Positioned<'_>>,
-) -> PyResult<()> {
-    group.setattr("children", PyList::empty(roots.py()))?;
-    group.setattr("xform", xform)?;
-    for (i, child) in positions {
-        roots.call_method1("insert", (i.min(roots.len()?), child))?;
-    }
-    Ok(())
-}
-
 #[pyfunction]
 pub(crate) fn reparent<'py>(
     roots: &Obj<'py>,
@@ -190,26 +168,6 @@ pub(crate) fn reparent<'py>(
     Ok((state, moves))
 }
 #[pyfunction]
-pub(crate) fn restore_parent(
-    roots: &Obj<'_>,
-    target: &Obj<'_>,
-    state: Option<TargetState<'_>>,
-    moves: Vec<Moved<'_>>,
-) -> PyResult<()> {
-    let dest = siblings(roots, target)?;
-    for (g, old, index, xform, mesh) in moves.into_iter().rev() {
-        dest.call_method1("remove", (&g,))?;
-        g.setattr("xform", xform)?;
-        g.setattr("mesh", mesh)?;
-        siblings(roots, &old)?.call_method1("insert", (index, g))?;
-    }
-    if let Some((xform, component)) = state {
-        target.setattr("xform", xform)?;
-        target.setattr("component", component)?;
-    }
-    Ok(())
-}
-#[pyfunction]
 pub(crate) fn split_placement<'py>(
     g: &Obj<'py>,
     pieces: &Obj<'py>,
@@ -232,24 +190,14 @@ pub(crate) fn split_placement<'py>(
     g.setattr("exploded", py.None())?;
     Ok((before, mesh))
 }
-#[pyfunction]
-pub(crate) fn restore_split(g: &Obj<'_>, before: (Obj<'_>, Obj<'_>, Obj<'_>, Obj<'_>)) -> PyResult<()> {
-    g.setattr("mesh", before.0)?;
-    g.setattr("children", before.1)?;
-    g.setattr("xform", before.2)?;
-    g.setattr("exploded", before.3)
-}
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "placement_edits")?;
     sub.add_function(wrap_pyfunction!(insert_placement, &sub)?)?;
     sub.add_function(wrap_pyfunction!(convert_component, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(restore_component, &sub)?)?;
     sub.add_function(wrap_pyfunction!(nest, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(unnest, &sub)?)?;
     sub.add_function(wrap_pyfunction!(reparent, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(restore_parent, &sub)?)?;
     sub.add_function(wrap_pyfunction!(split_placement, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(restore_split, &sub)?)?;
+
     m.add_submodule(&sub)?;
     Ok(())
 }

@@ -43,7 +43,7 @@ def _normals(rng):
 def _polygon(rng, n, regular=False):
     from ingetrazo_core import Vec3 as V
     nx, ny, nz = rng.uniform(-1, 1), rng.uniform(-1, 1), rng.uniform(-1, 1)
-    from core.triangulate import plane_axes
+    from ingetrazo_core.triangulate import plane_axes
     nn = V(nx, ny, nz).normalized()
     if nn.length() == 0:
         nn = V(0, 0, 1)

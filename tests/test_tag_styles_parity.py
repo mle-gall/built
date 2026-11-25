@@ -32,7 +32,7 @@ def _scene(rng):
     from core.layers import Layer
     from core.mesh import Mesh
     from core.scene import Scene
-    from core.style import Style
+    from ingetrazo_core.style import Style
     s = Scene()
     s.hatch_patterns = {"mine": {"label": "Mine", "families": [[45.0, 0, 0, 0, 2.0, []]]}}
     if rng.random() < 0.5:

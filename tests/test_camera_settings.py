@@ -349,7 +349,7 @@ def test_export_image_menu_crops_to_the_frame(monkeypatch, tmp_path, native_host
 # ---- Basic and advanced ----------------------------------------------------------
 
 def test_basic_settings_first_advanced_on_request(native_host):
-    from core.settings import settings
+    from ingetrazo_core.settings import settings
     win = native_host.window
     settings().remove("camera_settings/advanced")
     inspector = open_camera(win)

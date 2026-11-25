@@ -241,15 +241,6 @@ pub(super) fn nesting(
 }
 
 #[pyfunction]
-pub(crate) fn plane_nesting(
-    py: Python<'_>,
-    rings: Vec<Ring>,
-    arranged: bool,
-) -> PyResult<Vec<(usize, Vec<usize>)>> {
-    nesting(&Metrics::new(py)?, &rings, arranged)
-}
-
-#[pyfunction]
 pub(crate) fn plane_interior_point(py: Python<'_>, ring: Ring) -> PyResult<(f64, f64)> {
     Ok(Metrics::new(py)?.interior(&ring)?.into())
 }

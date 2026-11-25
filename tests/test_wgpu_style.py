@@ -1,7 +1,7 @@
 """Style handoff must preserve document intent without creating a native device."""
 from types import SimpleNamespace
 import pytest
-from core.style import Style, FACE_MODES
+from ingetrazo_core.style import Style, FACE_MODES
 from views.wgpu_style import style_payload
 
 

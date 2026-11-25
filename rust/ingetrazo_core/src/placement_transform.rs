@@ -365,51 +365,6 @@ pub(crate) fn rotate_offsets(container: &Obj<'_>, transform: &Obj<'_>) -> PyResu
     Ok(())
 }
 
-#[pyfunction]
-fn exploded_snapshot<'py>(
-    container: &Obj<'py>,
-) -> PyResult<(Obj<'py>, Vec<(Obj<'py>, Obj<'py>, Obj<'py>)>)> {
-    let py = container.py();
-    let state = container.getattr("exploded")?;
-    let state = if state.is_truthy()? {
-        py.get_type::<PyDict>().call1((state,))?
-    } else {
-        py.None().into_bound(py)
-    };
-    let mut kids = Vec::new();
-    for k in container.getattr("children")?.try_iter()? {
-        let k = k?;
-        let pose = k.getattr("xform")?;
-        let pose = if pose.is_none() {
-            pose
-        } else {
-            copy_matrix(&pose)?
-        };
-        let offset = k.getattr("explode_offset")?;
-        kids.push((k, pose, offset));
-    }
-    Ok((state, kids))
-}
-#[pyfunction]
-fn restore_exploded(container: &Obj<'_>, snap: &Obj<'_>) -> PyResult<()> {
-    let py = container.py();
-    let state = snap.get_item(0)?;
-    container.setattr(
-        "exploded",
-        if state.is_truthy()? {
-            py.get_type::<PyDict>().call1((state,))?
-        } else {
-            py.None().into_bound(py)
-        },
-    )?;
-    for row in snap.get_item(1)?.try_iter()? {
-        let row = row?;
-        let kid = row.get_item(0)?;
-        kid.setattr("xform", row.get_item(1)?)?;
-        kid.setattr("explode_offset", row.get_item(2)?)?;
-    }
-    Ok(())
-}
 // A world reframe also moves loose or classic meshes. Its survey datum is
 // owned by the host, so keep both exact mesh states for mixed-command replay.
 fn reframe_mesh(
@@ -553,8 +508,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(assembled_centres, &sub)?)?;
     sub.add_function(wrap_pyfunction!(explode_offsets, &sub)?)?;
     sub.add_function(wrap_pyfunction!(apply_explode, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(exploded_snapshot, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(restore_exploded, &sub)?)?;
+
     m.add_submodule(&sub)?;
     Ok(())
 }

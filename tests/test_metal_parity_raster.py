@@ -49,7 +49,7 @@ def test_sun_matches_gl_and_can_be_disabled(monkeypatch):
     np.testing.assert_allclose(p['sun_direction'], view._sun_dir_now())
     assert len(p['shadow_matrix']) == 16
     assert sun_payload(scene, override=scene.display_style)['shadows']
-    from core.style import Style
+    from ingetrazo_core.style import Style
     assert not sun_payload(scene, override=Style(name='tecnico'))['shadows']
     monkeypatch.setenv('INGETRAZO_NO_SHADOWS','1')
     assert not sun_payload(scene)['shadows']

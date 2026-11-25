@@ -1,6 +1,6 @@
 """The native Keyboard table edits the same bindings the window dispatches."""
 from ingetrazo_core import Input as Qt
-from core.settings import settings
+from ingetrazo_core.settings import settings
 from ingetrazo_render import shortcut_text
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 

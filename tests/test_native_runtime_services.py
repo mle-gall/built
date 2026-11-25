@@ -26,7 +26,7 @@ def setup(app):
         from ingetrazo_render import background_autosave
         from ingetrazo_core.scale_figure import store_picture
         from core.text3d import build_text_letters
-        from core.paths import cache_directory
+        from ingetrazo_core.paths import cache_directory
         from core.texture import texture_cache_root
         from georef import transport
         from georef.tiles import PRESETS, TileCache

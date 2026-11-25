@@ -7,7 +7,7 @@ from tests.shell_isolation import native_window, restore_shell_patches  # noqa: 
 
 
 from core.scene import Scene
-from core.style import BUILTIN_STYLES, FACE_MODES, Style
+from ingetrazo_core.style import BUILTIN_STYLES, FACE_MODES, Style
 
 
 def test_style_roundtrip_and_defaults():
@@ -85,7 +85,7 @@ def test_saved_view_remembers_the_style():
 
 
 def test_style_by_name_returns_copies():
-    from core.style import style_by_name
+    from ingetrazo_core.style import style_by_name
     a = style_by_name("Architectural")
     assert a is not None and a.face_mode == "textures"
     assert a.background == (1.0, 1.0, 1.0) and a.sky is False

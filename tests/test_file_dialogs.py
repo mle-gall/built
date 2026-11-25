@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 
-from core.settings import settings as preferences
+from ingetrazo_core.settings import settings as preferences
 from ingetrazo_render import shell_services as native
 
 from ingetrazo_render.shell_files import ShellFileDialog, last_dir, remember, start_in

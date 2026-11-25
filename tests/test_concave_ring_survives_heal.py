@@ -23,7 +23,7 @@ from core.mesh import Mesh
 from core.scene import Scene
 from core.topology import (_interior_point, _loop_inside_loop,
                            _point_inside_2d, heal_overlapping_faces)
-from core.triangulate import plane_axes
+from ingetrazo_core.triangulate import plane_axes
 from tools.offset import OffsetTool
 
 

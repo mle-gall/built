@@ -224,7 +224,7 @@ def test_intensity_zero_leaves_the_picture_untouched(
 # ---- The style's switch (Styles panel) -------------------------------------
 
 def test_the_style_carries_it_and_every_preset_has_it_off():
-    from core.style import BUILTIN_STYLES, Style
+    from ingetrazo_core.style import BUILTIN_STYLES, Style
     assert all(not p.ambient_occlusion for p in BUILTIN_STYLES)
     s = Style(ambient_occlusion=True, ao_distance=1.25, ao_intensity=1.5)
     back = Style.from_dict(s.to_dict())
@@ -233,7 +233,7 @@ def test_the_style_carries_it_and_every_preset_has_it_off():
 
 
 def test_a_file_from_before_reads_it_off_and_bad_values_are_kept_in_range():
-    from core.style import AO_DISTANCE_RANGE, Style
+    from ingetrazo_core.style import AO_DISTANCE_RANGE, Style
     old = Style().to_dict()
     for k in ("ambient_occlusion", "ao_distance", "ao_intensity"):
         old.pop(k)
@@ -245,7 +245,7 @@ def test_a_file_from_before_reads_it_off_and_bad_values_are_kept_in_range():
 
 def test_the_frame_follows_the_style_unless_the_environment_forces_it(
         monkeypatch):
-    from core.style import Style
+    from ingetrazo_core.style import Style
     monkeypatch.delenv("INGETRAZO_AO", raising=False)
     assert ao_settings(Style()) is None
     got = ao_settings(Style(ambient_occlusion=True, ao_distance=2.0,

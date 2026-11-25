@@ -187,7 +187,7 @@ def test_a_sheet_render_still_carries_no_guides(native_gpu_host):
     """A styled composer frame never drew the scaffolding and must not
     start now that the pass moved into GL."""
     win, vp = _scene_looking_down_minus_y(native_gpu_host)
-    from core.style import style_by_name
+    from ingetrazo_core.style import style_by_name
     vp.style_override = style_by_name("Architectural")
     try:
         bare = _pixels(vp.render_raster(300, 300, overlays=False))

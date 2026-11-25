@@ -704,7 +704,7 @@ def dispatch(self, command):
     elif command=="fixture-hatch":
         wgpu_ui._tree_action(self.window,self.view,"drawingpatch"+wgpu_ui.SEP+json.dumps([["Paths"],dict(hatch="brick",mortar="1",hatch_ground="layer")]))
         act("documentpiece","brick",[250,115,60,8])
-        from core.settings import settings
+        from ingetrazo_core.settings import settings
         pref=self.view.renderer.ui_hatch_preference
         for key in ("glass","brick","glass","glass"):
             pref("pin",key)

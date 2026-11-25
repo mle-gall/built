@@ -121,23 +121,6 @@ fn walk<'p>(
 }
 
 #[pyfunction]
-pub fn igz_texture_references(
-    node: &Bound<'_, PyAny>,
-    resolve: Bound<'_, PyAny>,
-    packing: bool,
-) -> PyResult<()> {
-    walk(node, |parent, key, image| {
-        slot(
-            packing,
-            &mut |value| resolve.call1((value,)),
-            parent,
-            key,
-            image,
-        )
-    })
-}
-
-#[pyfunction]
 pub fn igz_texture_slots<'p>(node: &Bound<'p, PyAny>) -> PyResult<Bound<'p, PyAny>> {
     let slots = PyList::empty(node.py());
     walk(node, |parent, key, _| slots.append((parent, key)))?;

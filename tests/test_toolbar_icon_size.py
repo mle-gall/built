@@ -22,7 +22,7 @@ def test_simplify_mesh_is_only_in_the_edit_menu():
 
 
 def test_stl_simplification_defaults_to_principal_planes(native_host, monkeypatch, tmp_path):
-    from core.settings import settings
+    from ingetrazo_core.settings import settings
     from tests.test_import_failure_reported import _GOOD_STL
     from ingetrazo_render.shell_files import ShellFileDialog
     settings().setValue("import/stl_simplify", "true")

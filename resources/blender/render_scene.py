@@ -219,7 +219,7 @@ def face_figures(figures, cam_cfg):
 
 
 def add_sun(scene, direction, strength):
-    """``direction`` points FROM the scene TOWARD the sun (core.sun)."""
+    """``direction`` points FROM the scene TOWARD the sun (ingetrazo_core.sun)."""
     d = Vector(direction).normalized()
     light = bpy.data.lights.new("IngeTrazo sun", type="SUN")
     light.energy = strength

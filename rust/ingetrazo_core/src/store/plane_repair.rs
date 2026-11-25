@@ -206,49 +206,6 @@ pub(crate) fn install_rebuilt_plane(
     Ok(true)
 }
 
-#[pyfunction]
-pub(crate) fn prune_object_plane(
-    mesh: &Obj<'_>,
-    origin: &Obj<'_>,
-    normal: &Obj<'_>,
-    tolerance: f64,
-) -> PyResult<()> {
-    let o = xyz(origin)?;
-    let n = xyz(normal)?;
-    let on_plane = |p: &Obj<'_>| -> PyResult<bool> { Ok((xyz(p)? - o).dot(n).abs() < tolerance) };
-    let edges = mesh
-        .getattr("edges")?
-        .try_iter()?
-        .collect::<PyResult<Vec<_>>>()?;
-    for e in edges {
-        if e.getattr("faces")?.is_empty()?
-            && on_plane(&e.getattr("a")?)?
-            && on_plane(&e.getattr("b")?)?
-        {
-            mesh.call_method1("remove_edge", (e,))?;
-        }
-    }
-    let referenced = PySet::empty(mesh.py())?;
-    for f in mesh.getattr("faces")?.try_iter()? {
-        for r in crate::object_weld::rings(&f?)? {
-            for v in r.try_iter()? {
-                referenced.add(v?)?;
-            }
-        }
-    }
-    let orphans = PyList::empty(mesh.py());
-    for v in mesh.getattr("vertices")?.try_iter()? {
-        let v = v?;
-        if v.getattr("edges")?.is_empty()? && !referenced.contains(&v)? {
-            orphans.append(v)?;
-        }
-    }
-    if !orphans.is_empty() {
-        mesh.call_method1("drop_orphan_vertices", (orphans,))?;
-    }
-    Ok(())
-}
-
 fn normal_of(face: &Obj<'_>, cache: &Obj<'_>) -> PyResult<DVec3> {
     if cache.is_none() {
         Ok(xyz(&face.call_method0("normal")?)?.normalize_or_zero())

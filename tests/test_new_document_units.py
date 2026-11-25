@@ -11,7 +11,8 @@ MM = {"length": "mm", "precision": 1}
 
 def test_new_documents_start_in_the_remembered_units(tmp_path, monkeypatch):
     from ingetrazo_render import Host
-    from core import settings, units
+    from core import units
+    from ingetrazo_core import settings
     from ingetrazo_core import NativeSettings
     profile = str(tmp_path / "profile")
     monkeypatch.setattr(settings, "_store", NativeSettings(profile))

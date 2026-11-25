@@ -205,10 +205,6 @@ fn copy(value: Owned, depth: usize) -> Job {
         }
     })
 }
-#[pyfunction]
-fn copy_steps(value: Owned) -> Steps {
-    steps(copy(value, 0))
-}
 fn geometry_record(geometry: Geometry) -> PyResult<Owned> {
     Python::attach(|py| {
         let d = PyDict::new(py);
@@ -642,7 +638,7 @@ fn resolve_geometry<'p>(payload: &Obj<'p>, sink: &Obj<'p>, encode_meta: &Obj<'p>
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Geometry>()?;
     m.add_class::<Survey>()?;
-    m.add_function(wrap_pyfunction!(copy_steps, m)?)?;
+
     m.add_function(wrap_pyfunction!(geometry_steps, m)?)?;
     m.add_function(wrap_pyfunction!(snapshot_steps, m)?)?;
     m.add_function(wrap_pyfunction!(survey_steps, m)?)?;

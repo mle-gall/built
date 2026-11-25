@@ -232,7 +232,7 @@ def test_momentum_keeps_turning_with_inertia_on(vp):
 
 
 def test_inertia_off_drops_momentum(vp):
-    from core.settings import settings as preferences
+    from ingetrazo_core.settings import settings as preferences
     settings = preferences()
     settings.setValue("nav/trackpad_inertia", "0")
     try:

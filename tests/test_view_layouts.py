@@ -195,7 +195,7 @@ def test_a_drawing_tool_owns_a_crossing_while_a_divider_still_drags(grid):
 @pytest.mark.parametrize(("tolerance", "snaps"), [(16, False), (45, True)])
 def test_native_divider_uses_the_saved_snap_distance(grid, tolerance, snaps):
     from ingetrazo_render import MouseEvent
-    from core.settings import settings
+    from ingetrazo_core.settings import settings
 
     settings().setValue("views/divider_snap_px", tolerance)
     grid.choose("single")

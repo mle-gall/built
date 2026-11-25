@@ -67,7 +67,7 @@ def view(tmp_path, native_gpu_host):
 
 def _saved(vp, folder, style, **kw):
     """The picture as a viewer gets it: written to disk and read back."""
-    from core.style import style_by_name
+    from ingetrazo_core.style import style_by_name
     vp.style_override = style_by_name(style)
     path = folder / "out.png"
     assert vp.render_raster(WIDTH, sharp_shadows=True, **kw).save(str(path))

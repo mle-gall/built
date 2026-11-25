@@ -8,7 +8,7 @@ keeps running, and the «fatal» entries buried the real crash. At start
 the log drops the RPC-facility entries and keeps everything else."""
 from __future__ import annotations
 
-from core.paths import prune_handled_com_errors
+from ingetrazo_core.paths import prune_handled_com_errors
 
 _COM = """Windows fatal exception: code 0x8001010d
 

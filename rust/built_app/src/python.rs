@@ -267,7 +267,8 @@ impl Host {
     }
 
     /// `BUILT_PERF`: the GPU time of each pass of the last timed frame, in
-    /// milliseconds (the renderer's timestamp queries; a few frames late).
+    /// milliseconds (the renderer's timestamp queries; a few frames late),
+    /// and that frame's culling counters under a '#' name.
     pub fn gpu_passes(&self) -> Vec<(String, f64)> {
         Python::attach(|py| {
             let read = || -> PyResult<Vec<(String, f64)>> {
@@ -275,9 +276,13 @@ impl Host {
                 if renderer.is_none() {
                     return Ok(Vec::new());
                 }
-                let passes: std::collections::BTreeMap<String, Option<f64>> =
-                    renderer.call_method0("last_timings")?.get_item(3)?.extract()?;
-                Ok(passes.into_iter().filter_map(|(name, ms)| Some((name, ms?))).collect())
+                let timings = renderer.call_method0("last_timings")?;
+                let passes: std::collections::BTreeMap<String, Option<f64>> = timings.get_item(3)?.extract()?;
+                // The culling counters of the same frame, marked with '#'.
+                let counters: std::collections::BTreeMap<String, u64> = timings.get_item(4)?.extract()?;
+                Ok(passes.into_iter().filter_map(|(name, ms)| Some((name, ms?)))
+                    .chain(counters.into_iter().map(|(name, n)| (format!("#{name}"), n as f64)))
+                    .collect())
             };
             read().unwrap_or_default()
         })
@@ -395,9 +400,6 @@ impl Host {
         })
     }
 
-    pub fn get_f64(&self, name: &str) -> Option<f64> {
-        Python::attach(|py| self.obj.bind(py).getattr(name).ok()?.extract().ok())
-    }
 }
 
 #[cfg(test)]

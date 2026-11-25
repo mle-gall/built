@@ -143,7 +143,6 @@ pub(super) fn register_formats(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(file_styles::igz_load_material, m)?)?;
     m.add_function(wrap_pyfunction!(file_sheet::igz_load_sheet, m)?)?;
     m.add_function(wrap_pyfunction!(file_sheet::igz_archive_sheet, m)?)?;
-    m.add_function(wrap_pyfunction!(file_textures::igz_texture_references, m)?)?;
     m.add_function(wrap_pyfunction!(file_textures::igz_pack_textures, m)?)?;
     m.add_function(wrap_pyfunction!(file_textures::igz_unpack_textures, m)?)?;
     m.add_function(wrap_pyfunction!(file_textures::igz_texture_slots, m)?)?;

@@ -150,7 +150,7 @@ pub(crate) fn vec(v: DVec3) -> Vec3 { v.into() }
 
 pub(crate) const AXIS: [&str; 3] = ["x", "y", "z"];
 
-/// `core.axes.plane_axes` / `core.triangulate.plane_axes`: `(u, v)` of a
+/// `core.axes.plane_axes` / `ingetrazo_core.triangulate.plane_axes`: `(u, v)` of a
 /// plane normal against the drawing axes `(o, x, y, z)` (the world's when
 /// omitted).
 #[pyfunction]

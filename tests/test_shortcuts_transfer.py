@@ -5,7 +5,7 @@ computer — Preferences ▸ Keyboard shortcuts ▸ Export… / Import…."""
 from __future__ import annotations
 
 import pytest
-from core.settings import settings
+from ingetrazo_core.settings import settings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_render import keyboard_bindings as sc
 

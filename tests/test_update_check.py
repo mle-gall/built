@@ -11,7 +11,8 @@ from tests.shell_isolation import native_question_host, restore_shell_patches  #
 from ingetrazo_render import release_check as uc
 from ingetrazo_render import chrome_dialogs, chrome_sheet
 from ingetrazo_render import start_check
-from core import settings as settings_module, timers
+from ingetrazo_core import settings as settings_module
+from ingetrazo_core import timers
 from ingetrazo_core import desktop_open
 
 

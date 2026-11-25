@@ -39,15 +39,6 @@ fn fields_of(kind: &str) -> &'static [&'static str] {
     }
 }
 
-fn kind_key(kind: &str) -> Option<&'static str> {
-    match kind {
-        "cota" => Some("cota"),
-        "nivel" => Some("nivel"),
-        "ground" => Some("ground"),
-        _ => None,
-    }
-}
-
 /// Which look an item carries: a dimension's, a level mark's, a ground
 /// line's; None for the others.
 fn kind_of(item: &Bound<'_, PyAny>) -> PyResult<Option<&'static str>> {
@@ -76,7 +67,7 @@ fn store(py: Python<'_>, kind: &'static str, d: &Bound<'_, PyDict>) {
     }
 }
 
-/// The host's preference store (core.settings).
+/// The host's preference store (ingetrazo_core.settings).
 fn prefs(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     py.import("ingetrazo_core.settings")?.getattr("settings")?.call0()
 }
@@ -143,15 +134,6 @@ pub fn sheet_restore_looks(py: Python<'_>) -> PyResult<()> {
     }
     store(py, "cota", &keep);
     Ok(())
-}
-
-/// The remembered look of ``kind`` (a copy), for the inspector and tests.
-#[pyfunction]
-pub fn sheet_look<'py>(py: Python<'py>, kind: &str) -> PyResult<Bound<'py, PyDict>> {
-    Ok(match kind_key(kind) {
-        Some(k) => look(py, k),
-        None => PyDict::new(py),
-    })
 }
 
 /// Forget every remembered look (a new document session, tests).

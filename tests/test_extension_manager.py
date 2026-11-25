@@ -289,7 +289,7 @@ def test_extension_sort_modes_and_recent_date_availability(tmp_path, monkeypatch
 
 
 def test_failed_extension_card_offers_recovery_actions(tmp_path, monkeypatch):
-    from core import paths
+    from ingetrazo_core import paths
     from ingetrazo_core import desktop_open
     ext = _extension(TOOL_SOURCE.encode())
     folder = tmp_path / ext.id

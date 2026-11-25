@@ -1,7 +1,7 @@
 """AO uses the same style values and diagnostic overrides in both views."""
 from types import SimpleNamespace
 
-from core.style import Style
+from ingetrazo_core.style import Style
 from views.wgpu_style import style_payload
 
 

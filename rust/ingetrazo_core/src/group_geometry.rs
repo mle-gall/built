@@ -341,18 +341,6 @@ pub(crate) fn make_placement_unique<'py>(
     group.call_method0("make_unique")?;
     Ok(Some(prior))
 }
-#[pyfunction]
-pub(crate) fn restore_unique_placement(group: &Obj<'_>, prior: Vec<Obj<'_>>) -> PyResult<()> {
-    for (field, value) in UNIQUE_FIELDS.into_iter().zip(prior) {
-        if field == "children" && !value.is_truthy()? {
-            group.setattr(field, pyo3::types::PyList::empty(group.py()))?;
-        } else {
-            group.setattr(field, value)?;
-        }
-    }
-    Ok(())
-}
-
 fn paint_copy<'py>(paint: &Obj<'py>) -> PyResult<Bound<'py, PyDict>> {
     let result = PyDict::new(paint.py());
     for pair in paint.call_method0("items")?.try_iter()? {

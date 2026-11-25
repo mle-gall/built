@@ -109,15 +109,6 @@ pub(crate) fn delete_items<'py>(
     Ok(before)
 }
 #[pyfunction]
-pub(crate) fn restore_items(list: &Obj<'_>, mut before: Vec<Indexed<'_>>) -> PyResult<()> {
-    before.sort_by_key(|p| p.0);
-    for (i, item) in before {
-        list.call_method1("insert", (i, item))?;
-    }
-    Ok(())
-}
-
-#[pyfunction]
 pub(crate) fn translate_items(items: Vec<Obj<'_>>, field: &str, step: &Obj<'_>) -> PyResult<()> {
     let step = xyz(step)?;
     for item in items {
@@ -307,24 +298,6 @@ pub(crate) fn make_plan<'py>(
     Ok(old)
 }
 #[pyfunction]
-pub(crate) fn remove_plan(
-    scene: &Obj<'_>,
-    plane: &Obj<'_>,
-    view: &Obj<'_>,
-    sheet: &Obj<'_>,
-    add_plane: bool,
-    old: &Obj<'_>,
-) -> PyResult<()> {
-    if !sheet.is_none() {
-        remove_item(&scene.getattr("compositions")?, sheet)?;
-    }
-    remove_item(&scene.getattr("saved_views")?, view)?;
-    if add_plane {
-        remove_item(&scene.getattr("section_planes")?, plane)?;
-    }
-    restore_active(scene, old)
-}
-#[pyfunction]
 pub(crate) fn insert_scene(scene: &Obj<'_>, item: &Obj<'_>, at: &Obj<'_>) -> PyResult<()> {
     let views = scene.getattr("saved_views")?;
     let n = views.len()?;
@@ -406,15 +379,6 @@ pub(crate) fn rename_view<'py>(
     }
     view.setattr("name", name)?;
     Ok(Some((old, touched)))
-}
-#[pyfunction]
-pub(crate) fn restore_view_name(view: &Obj<'_>, old: &Obj<'_>, frames: Vec<Obj<'_>>) -> PyResult<()> {
-    view.setattr("name", old)?;
-    let key = format!("scene:{}", old.str()?);
-    for frame in frames {
-        frame.setattr("view_key", &key)?;
-    }
-    Ok(())
 }
 #[pyfunction]
 pub(crate) fn update_scene<'py>(
@@ -552,7 +516,6 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(add_item, &sub)?)?;
     sub.add_function(wrap_pyfunction!(remove_item, &sub)?)?;
     sub.add_function(wrap_pyfunction!(delete_items, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(restore_items, &sub)?)?;
     sub.add_function(wrap_pyfunction!(translate_items, &sub)?)?;
     sub.add_function(wrap_pyfunction!(shift_guide, &sub)?)?;
     sub.add_function(wrap_pyfunction!(shift_dimension, &sub)?)?;
@@ -565,11 +528,9 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(set_section_label, &sub)?)?;
     sub.add_function(wrap_pyfunction!(set_section_fill, &sub)?)?;
     sub.add_function(wrap_pyfunction!(make_plan, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(remove_plan, &sub)?)?;
     sub.add_function(wrap_pyfunction!(insert_scene, &sub)?)?;
     sub.add_function(wrap_pyfunction!(move_item, &sub)?)?;
     sub.add_function(wrap_pyfunction!(rename_view, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(restore_view_name, &sub)?)?;
     sub.add_function(wrap_pyfunction!(update_scene, &sub)?)?;
     sub.add_function(wrap_pyfunction!(restore_fields, &sub)?)?;
     m.add_submodule(&sub)?;

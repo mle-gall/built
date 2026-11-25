@@ -227,7 +227,7 @@ def test_hlr_view_honours_the_active_section():
 # ---- Section fill + direct grab (round 2) -----------------------------------
 
 def test_style_carries_section_fill():
-    from core.style import Style
+    from ingetrazo_core.style import Style
     st = Style()
     assert st.section_fill is True             # the usual default: on
     st.section_fill = False

@@ -2,7 +2,7 @@
 """Named, localized RAL paint from the native Library."""
 import json
 from ingetrazo_core.i18n import current_language, set_language
-from core.paths import app_root
+from ingetrazo_core.paths import app_root
 from ingetrazo_core import bundled_materials
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tools.paint import PaintTool

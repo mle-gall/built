@@ -665,9 +665,9 @@ pub mod molecules {
         if let Some(colour) = colour {
             painter.rect_filled(rect, corners, colour);
         } else {
-            painter.line_segment([rect.left_top(), rect.right_bottom()], Stroke::new(1.5, ERROR));
+            painter.line_segment([rect.left_top(), rect.right_bottom()], Stroke::new(1.5_f32, ERROR));
         }
-        painter.rect_stroke(rect, corners, Stroke::new(1., EDGE), egui::StrokeKind::Inside);
+        painter.rect_stroke(rect, corners, Stroke::new(1_f32, EDGE), egui::StrokeKind::Inside);
     }
     pub fn swatch(ui: &mut egui::Ui, value: &mut Color32) -> egui::Response {
         ui.color_edit_button_srgba(value)
@@ -1475,7 +1475,7 @@ pub fn credits_roll(ui: &mut egui::Ui, id: &str, rows: &[CreditRow], height: f32
             if !row.verb.is_empty() && band.intersects(name_box) {
                 let hit = ui.interact(name_box.intersect(band), key.with((&row.verb,copy)), egui::Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
                 hit.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Link,true,&row.name));
-                if hit.hovered() || hit.has_focus() { painter.line_segment([name_box.left_bottom(), name_box.right_bottom()],egui::Stroke::new(1.,ACCENT)); }
+                if hit.hovered() || hit.has_focus() { painter.line_segment([name_box.left_bottom(), name_box.right_bottom()],egui::Stroke::new(1_f32,ACCENT)); }
                 if hit.clicked() {clicked=Some(row.verb.clone());}
             }
         }
@@ -1592,8 +1592,8 @@ pub fn svg_preview(ui: &mut egui::Ui, texture: Option<&egui::TextureHandle>, gui
     let painter = ui.painter_at(page);
     let line = |a, b| {
         let points = [page.lerp_inside(a), page.lerp_inside(b)];
-        painter.line_segment(points, Stroke::new(2., WELL.gamma_multiply(0.55)));
-        painter.line_segment(points, Stroke::new(1., BRIGHT.gamma_multiply(0.8)));
+        painter.line_segment(points, Stroke::new(2_f32, WELL.gamma_multiply(0.55)));
+        painter.line_segment(points, Stroke::new(1_f32, BRIGHT.gamma_multiply(0.8)));
     };
     for &p in svg_guide_divisions(guide) {
         line(vec2(0., p), vec2(1., p));
@@ -1609,7 +1609,7 @@ pub fn svg_preview(ui: &mut egui::Ui, texture: Option<&egui::TextureHandle>, gui
         let center = vec2(0.5, 0.5);
         line(center - vec2(arm.x, 0.), center + vec2(arm.x, 0.));
         line(center - vec2(0., arm.y), center + vec2(0., arm.y));
-        for pen in [Stroke::new(2., WELL.gamma_multiply(0.55)), Stroke::new(1., BRIGHT.gamma_multiply(0.8))] {
+        for pen in [Stroke::new(2_f32, WELL.gamma_multiply(0.55)), Stroke::new(1_f32, BRIGHT.gamma_multiply(0.8))] {
             painter.circle_stroke(page.center(), side * 0.04, pen);
         }
     }

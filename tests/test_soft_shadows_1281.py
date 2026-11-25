@@ -104,7 +104,7 @@ def test_restore_defaults_turns_them_off(settings_file):
     (None, 0), ("0", 0), ("2", 2), ("3", 3), ("7", 0), ("lots", 0)])
 def test_the_viewport_reads_the_level_and_ignores_nonsense(
         tmp_path, monkeypatch, stored, level):
-    from core import settings
+    from ingetrazo_core import settings
     st = NativeSettings(tmp_path)
     monkeypatch.setattr(settings, "_store", st)
     if stored is not None:

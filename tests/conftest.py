@@ -30,7 +30,7 @@ from ingetrazo_core import install_main_thread_collector
 install_main_thread_collector()
 
 import pytest  # noqa: E402
-from core import settings as product_settings  # noqa: E402
+from ingetrazo_core import settings as product_settings  # noqa: E402
 from tests.shell_isolation import native_host  # noqa: E402,F401
 
 product_settings.use_native(_settings_dir)

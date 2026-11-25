@@ -44,26 +44,6 @@ pub(crate) fn vertex_faces<'py>(edges: &Obj<'py>) -> PyResult<Bound<'py, PySet>>
     Ok(faces)
 }
 #[pyfunction]
-pub(crate) fn insert_between(
-    face: &Obj<'_>,
-    a: &Obj<'_>,
-    b: &Obj<'_>,
-    mid: &Obj<'_>,
-) -> PyResult<()> {
-    for r in rings(face)? {
-        let n = r.len()?;
-        for i in 0..n {
-            let x = r.get_item(i)?;
-            let y = r.get_item((i + 1) % n)?;
-            if x.is(a) && y.is(b) || x.is(b) && y.is(a) {
-                r.call_method1("insert", (i + 1, mid))?;
-                return Ok(());
-            }
-        }
-    }
-    Ok(())
-}
-#[pyfunction]
 pub(crate) fn collapse_collinear(mesh: &Obj<'_>) -> PyResult<usize> {
     let py = mesh.py();
     let mut count = 0;
@@ -164,26 +144,4 @@ pub(crate) fn ring_normal(ring: &Obj<'_>) -> PyResult<crate::math::Vec3> {
     let n = ring_newell(ring)?;
     let l = n.length();
     Ok((if l < 1e-9 { glam::DVec3::Z } else { n / l }).into())
-}
-#[pyfunction]
-pub(crate) fn orient_union(
-    outer: &Obj<'_>,
-    holes: &Obj<'_>,
-    normal: &Obj<'_>,
-    face_type: &Obj<'_>,
-) -> PyResult<()> {
-    let aim = xyz(normal)?;
-    let aligned = |ring: &Obj| -> PyResult<f64> {
-        Ok(xyz(&face_type.call1((ring,))?.call_method0("normal")?)?.dot(aim))
-    };
-    if aligned(outer)? < 0. {
-        outer.call_method0("reverse")?;
-    }
-    for hole in holes.try_iter()? {
-        let hole = hole?;
-        if aligned(&hole)? > 0. {
-            hole.call_method0("reverse")?;
-        }
-    }
-    Ok(())
 }
