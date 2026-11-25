@@ -9,7 +9,7 @@ from core.mesh import Mesh
 from views.document_interaction import edit_fade_color
 from tests.controller_surface import ControllerSurface as Viewport
 from tests.headless_gpu import HeadlessView
-from views.wgpu_scene import pack_scene
+from ingetrazo_core import pack_scene
 from views.wgpu_edit_context import rest_rows
 from views.wgpu_style import style_payload
 

@@ -253,15 +253,15 @@ def _visible(scene, g):
     """Drawn by the Metal pack: not filtered, its holders included."""
     from types import SimpleNamespace
     from core.group import iter_placements
-    from views import wgpu_scene
+    import ingetrazo_core
     root = g
     while getattr(root, "owner", None) is not None:
         root = root.owner
     root = next((r for r in scene.groups if r is root or any(p is g for p, _m in iter_placements(r))), root)
-    for p, _m, _x, f, _c in wgpu_scene._placement_records(scene, [root], SimpleNamespace(scene=scene),
-                                                      wgpu_scene._placement_state(scene)):
+    for p, _m, _x, f, _c in ingetrazo_core.placement_records(scene, [root], SimpleNamespace(scene=scene),
+                                                      ingetrazo_core.PlacementState(scene)):
         if p is g:
-            return not f & (wgpu_scene.VISIBILITY_FILTERED | 1)
+            return not f & (ingetrazo_core.VISIBILITY_FILTERED | 1)
     return False
 
 
@@ -340,7 +340,7 @@ def test_native_isolation_matches_the_facet_index(ui):
 def test_packer_draws_isolated_parts_through_their_link(ui):
     """The Metal pack: an isolated part inside a link is drawn, the link's
     own geometry and the other parts are not."""
-    from views import wgpu_scene
+    import ingetrazo_core
     scene, win, view, rows, act = ui
     tree = view._ui_tree["tree"]
     a = tree.links["link:A"][0]
@@ -348,7 +348,7 @@ def test_packer_draws_isolated_parts_through_their_link(ui):
     tie = tree.direct[_key(view, "Ties")][0]
     act("isolate", "n:" + _key(view, "Rails"))
     from types import SimpleNamespace
-    flags = {id(g): f for g, _m, _p, f, _c in wgpu_scene._placement_records(
-        scene, [a], SimpleNamespace(scene=scene), wgpu_scene._placement_state(scene))}
-    filt = wgpu_scene.VISIBILITY_FILTERED
+    flags = {id(g): f for g, _m, _p, f, _c in ingetrazo_core.placement_records(
+        scene, [a], SimpleNamespace(scene=scene), ingetrazo_core.PlacementState(scene))}
+    filt = ingetrazo_core.VISIBILITY_FILTERED
     assert flags[id(a)] & filt and not flags[id(rail)] & filt and flags[id(tie)] & filt

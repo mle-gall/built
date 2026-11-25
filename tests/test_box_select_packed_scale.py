@@ -27,7 +27,7 @@ import tools.select_host as select
 from tools.rust_tools import SelectTool
 from ingetrazo_render import MeshToolAccess
 from views.document_interaction import DocumentInteraction
-from views.wgpu_scene import pack_scene
+from ingetrazo_core import pack_scene
 
 W, H = 800, 600
 

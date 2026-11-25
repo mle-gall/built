@@ -7,7 +7,7 @@ from core.scene import Scene
 from formats import igz
 from ingetrazo_core import DocumentOpen
 from tests.fixtures.shell.make_composite import make
-from views.wgpu_scene import open_focus, pack_scene
+from ingetrazo_core import open_focus, pack_scene
 
 
 def test_worker_matches_blocking_nested_open(tmp_path):

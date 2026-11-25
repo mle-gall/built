@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """What a sheet frame shows (ingetrazo_core sheets::visibility) is what the
 composer showed by applying the frame's saved view to the live scene and
-reading the rows (SavedView.apply_state + views/wgpu_scene's placement
+reading the rows (SavedView.apply_state + the pack's placement
 walk), without touching the scene: tags, tags that do not print, nested tag folders, Hide on
 groups and nested placements, the view's hidden objects and folders."""
 from __future__ import annotations
@@ -68,13 +68,13 @@ def _reference(scene, view):
     walk the placements."""
     from types import SimpleNamespace
     import ingetrazo_core
-    from views.wgpu_scene import _placement_records, _placement_state
+    from ingetrazo_core import placement_records, PlacementState
     if view is not None:
         view.apply_state(scene)
     ingetrazo_core.tag_styles.hide_unprinted(scene)
     vp = SimpleNamespace(scene=scene)
-    state = _placement_state(scene)
-    return {id(g): bool(flags & 1) for g, _, _, flags, _c in _placement_records(scene, scene.groups, vp, state)}
+    state = PlacementState(scene)
+    return {id(g): bool(flags & 1) for g, _, _, flags, _c in placement_records(scene, scene.groups, vp, state)}
 
 
 @pytest.mark.parametrize("view", [None, "all", "no walls", "folders", "objects", "mixed"])

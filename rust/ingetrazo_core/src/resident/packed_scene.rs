@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! The resident scene as it is packed for the GPU (`PackedScene`), from
-//! `views/wgpu_scene.py`.
+//! The resident scene as it is packed for the GPU (`PackedScene`).
 //!
 //! The ABI is little endian: 28-byte vertices, 32-byte prototype bounds,
 //! 80-byte instances and 20-byte indexed indirect commands. Alpha zero
@@ -109,6 +108,14 @@ pub struct PackedScene {
 }
 
 impl PackedScene {
+    fn fields(&self) -> [&Py<PyAny>; 26] {
+        [&self.vertices, &self.indices, &self.bounds, &self.commands, &self.edge_commands, &self.instances, &self.uids,
+         &self.world_bounds, &self.timings, &self.groups, &self.materials, &self.textures, &self.texture_paths,
+         &self.hidden_commands, &self.hidden_edge_commands, &self.profile_exclusions, &self.reveal_hidden,
+         &self.prototype_lookup, &self.prototype_paints, &self.material_updates, &self.origin, &self.prototype_origins,
+         &self.model_translations, &self.bake_focus, &self.occurrence_keys, &self.mesh_codes]
+    }
+
     /// The record of a finished pack: `field` hands over what the assembly
     /// computed, the rest is what the walk gathered.
     #[allow(clippy::too_many_arguments)]
@@ -239,6 +246,21 @@ impl PackedScene {
             occurrence_keys: empty_dict(py, occurrence_keys),
             mesh_codes: empty_dict(py, mesh_codes),
         })
+    }
+
+    fn __traverse__(&self, visit: pyo3::PyVisit<'_>) -> Result<(), pyo3::PyTraverseError> {
+        for field in self.fields() {
+            visit.call(field)?;
+        }
+        Ok(())
+    }
+    fn __clear__(&mut self, py: Python<'_>) {
+        // The groups, meshes and paints are the document's: let them go.
+        for field in [&mut self.uids, &mut self.groups, &mut self.prototype_lookup, &mut self.prototype_paints,
+                      &mut self.material_updates, &mut self.occurrence_keys, &mut self.mesh_codes, &mut self.textures,
+                      &mut self.texture_paths, &mut self.profile_exclusions] {
+            *field = py.None();
+        }
     }
 
     /// A copy of the record with `fields` replaced: the buffers it does not

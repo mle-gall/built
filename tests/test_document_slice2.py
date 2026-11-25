@@ -303,10 +303,10 @@ def _tree():
 
 
 def test_doc_tree_composes_as_model_placements():
-    from views.wgpu_scene import _doc_worlds
+    from ingetrazo_core import doc_worlds
     roots = _tree()
     handles, parent, local, has, hidden = N.doc_tree(roots)
-    world, defined = _doc_worlds(local, has, parent)
+    world, defined = doc_worlds(local, has, parent)
     ref = [p for r in roots for p in model_placements(r)]
     assert [g for g, _m in ref] == list(handles)
     for i, (_g, m) in enumerate(ref):

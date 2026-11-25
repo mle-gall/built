@@ -17,7 +17,7 @@ from core.group import Group
 from core.mesh import Edge, Face, Mesh
 from core.scene import Scene
 from views.wgpu_inference import prepare
-from views.wgpu_scene import pack_scene
+from ingetrazo_core import pack_scene
 from tests.headless_gpu import HeadlessView, mouse
 
 

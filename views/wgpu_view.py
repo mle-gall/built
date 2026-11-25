@@ -10,7 +10,7 @@ from core.timers import later
 from ingetrazo_render import PaintColor as QColor
 from ingetrazo_core import Vec3 as QVector3D
 from core.camera import OrbitCamera
-from views.wgpu_scene import pack_scene
+from ingetrazo_core import pack_scene
 from tools.rust_tools import selection_mode
 
 
@@ -396,7 +396,7 @@ class MetalView(ViewNavigation):
         self._scene_dirty = True
         self._selection_signature = None
         self._tint_signature = None
-        from views.wgpu_updates import InstanceUpdates
+        from ingetrazo_core import InstanceUpdates
         if tracker is not None and tracker.unsubscribe is not None:
             tracker.unsubscribe()
         self._resident_count = len(self.packed.instances)
@@ -1356,7 +1356,7 @@ class MetalView(ViewNavigation):
                     marks = np.concatenate((marks, hover_face_marks(self, hover_face, placement)))
                 self.renderer.set_face_marks(marks)
             if edges_here:
-                from views.wgpu_scene import VERTEX
+                from ingetrazo_core import VERTEX
                 from views.wgpu_parity import raw
                 edges = [(e, (.95, .45, .16)) for e in selected if isinstance(e, Edge)]
                 if isinstance(hovered, Edge) and hovered not in selected:

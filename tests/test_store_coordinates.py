@@ -180,7 +180,7 @@ def test_scene_frame_stays_put_and_composes_child_offsets_in_double():
     from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
-    from views.wgpu_scene import pack_scene
+    from ingetrazo_core import pack_scene
 
     leaf = Group(Mesh())
     leaf.mesh.add_face([(0.,0.,0.), (.02,0.,0.), (.02,.02,0.), (0.,.02,0.)])
@@ -243,7 +243,7 @@ def test_frame_preserves_numeric_input_and_feed_coordinates(view):
 
 def test_raw_lambert_metal_raster_and_id_buffer(native):
     from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-    from views.wgpu_scene import pack_scene
+    from ingetrazo_core import pack_scene
 
     camera, projection = QMatrix4x4(), QMatrix4x4()
     camera.lookAt(V(.02,.03,.1), V(.02,.03,0.), V(0.,1.,0.))

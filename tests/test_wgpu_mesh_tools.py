@@ -12,8 +12,8 @@ from tools.rust_tools import LineTool
 from tools.rust_tools import RectangleTool
 from tools.base import ToolContext
 from ingetrazo_render import NativeTools
-from views.wgpu_scene import pack_scene
-from views.wgpu_updates import InstanceUpdates
+from ingetrazo_core import pack_scene
+from ingetrazo_core import InstanceUpdates
 
 
 def harness(tool, inside=False):

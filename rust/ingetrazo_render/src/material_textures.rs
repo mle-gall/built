@@ -52,6 +52,7 @@ enum Entry {
 }
 
 #[pyfunction]
+#[pyo3(signature = (entries, device_limit = 8192, memory_budget = 256 * 1024 * 1024))]
 pub fn material_texture_array<'py>(
     py: Python<'py>,
     entries: &Bound<'py, PyAny>,

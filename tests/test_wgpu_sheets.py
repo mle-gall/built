@@ -36,7 +36,7 @@ def test_offscreen_size_and_live_camera_unchanged(monkeypatch):
     from core.section import SectionPlane
     from ingetrazo_core import Vec3 as QVector3D
     source.scene.section_planes = [SectionPlane(QVector3D(), QVector3D(1,0,0), active=True)]
-    from views.wgpu_scene import pack_scene
+    from ingetrazo_core import pack_scene
     view.packed = pack_scene(source.scene)
     before = dict(source.camera.__dict__)
     image = view.render_image(123, 47)

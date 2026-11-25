@@ -153,7 +153,7 @@ def test_coplanar_faces_joined_by_a_soft_edge_keep_the_flat_colour():
 
 
 def test_loose_geometry_shades_round_too():
-    from views.wgpu_scene import pack_scene
+    from ingetrazo_core import pack_scene
     scene = Scene()
     _cylinder(scene.mesh)
     packed = pack_scene(scene)

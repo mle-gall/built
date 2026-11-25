@@ -76,7 +76,7 @@ def _probe(vp):
 def _mark_positions(face, placement=None):
     from types import SimpleNamespace
     from views.wgpu_parity import hover_face_marks
-    from views.wgpu_scene import VERTEX
+    from ingetrazo_core import VERTEX
     marks = hover_face_marks(SimpleNamespace(source_viewport=None), face, placement)
     return marks.view(VERTEX)['pos']
 

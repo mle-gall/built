@@ -42,7 +42,7 @@ from core.scene import Scene
 from core.mesh import Mesh
 from core.group import Group
 from core.guide import Guide
-from views.wgpu_scene import pack_scene
+from ingetrazo_core import pack_scene
 from views.wgpu_inference import (prepare, snap, nearby_edges, reference_edge,
                                   tangent_direction, eligible_rows, surface)
 

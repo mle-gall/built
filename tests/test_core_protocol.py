@@ -338,13 +338,13 @@ def test_unknown_keys_refuse_before_running():
 
 @needs_store
 def test_renderer_reads_the_feed_for_a_store_mesh():
-    """views/wgpu_updates: a mesh edit inside an open group is found from
+    """InstanceUpdates: a mesh edit inside an open group is found from
     the feed's step (not from the command class) and the element records
     travel with the rebake."""
     from core.group import Group
     from core.history import SnapshotMutation
-    from views.wgpu_scene import pack_scene
-    from views.wgpu_updates import InstanceUpdates
+    from ingetrazo_core import pack_scene
+    from ingetrazo_core import InstanceUpdates
     mesh = M.Mesh()
     S.become_store(mesh, mod.MeshStore(next(M._KEY_NAMESPACES), **S._weld_args()), [])
     mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(0, 3, 0)])
@@ -379,8 +379,8 @@ def test_renderer_undo_after_leaving_the_group_rebakes_it():
     from core.group import Group
     from core.history import SnapshotMutation
     from tests.test_wgpu_updates import assert_matches_fresh_pack
-    from views.wgpu_scene import pack_scene
-    from views.wgpu_updates import InstanceUpdates
+    from ingetrazo_core import pack_scene
+    from ingetrazo_core import InstanceUpdates
     mesh = M.Mesh()
     mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(0, 3, 0)])
     scene = Scene(groups=[Group(mesh), Group(M.Mesh())])

@@ -1,7 +1,7 @@
 """Resident parity handoffs. Work is keyed to scene edits, never screen pixels."""
 import numpy as np
 from ingetrazo_core import pack_tool_preview as preview_mesh
-from views.wgpu_scene import VERTEX, OBJECT_HIDDEN, VISIBILITY_FILTERED
+from ingetrazo_core import VERTEX, OBJECT_HIDDEN, VISIBILITY_FILTERED
 
 
 def raw(array):
