@@ -32,7 +32,7 @@ fn cs(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 }
 
 fn recent(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("core.recent")
+    py.import("ingetrazo_core.recent")
 }
 
 fn store(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {

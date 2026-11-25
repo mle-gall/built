@@ -115,7 +115,7 @@ from PyInstaller.utils.hooks import collect_submodules
 # self-contained native extension module (libstdc++/libm/libc only).
 hiddenimports += ['manifold3d', 'core.solids', 'tools.solid_tools']
 # truststore (#783): Python's HTTPS on Windows verifies through the system
-# verifier; imported inside core.tls.https_context, and without it the
+# verifier; imported inside ingetrazo_core.python_tls.https_context, and without it the
 # extension manager silently falls back to Python's own store.
 hiddenimports += ['truststore']
 # Copy/Paste between windows (#76): imported lazily by the viewport and

@@ -7,7 +7,8 @@ from tests.shell_isolation import native_host, restore_shell_patches  # noqa: F4
 import pytest
 from ingetrazo_core import Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
-from core import project, recent
+from core import project
+from ingetrazo_core import recent
 from core.scene import Scene
 from core.history import AddEdgeCommand
 from formats import igz

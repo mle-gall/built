@@ -39,7 +39,7 @@ fn survey_download<'p>(py: Python<'p>, url: &str, agent: &Obj<'p>) -> PyResult<O
     let kw = PyDict::new(py);
     kw.set_item(
         "context",
-        py.import("core.tls")?.call_method0("https_context")?,
+        py.import("ingetrazo_core.python_tls")?.call_method0("https_context")?,
     )?;
     let handler = m.call_method("HTTPSHandler", (), Some(&kw))?;
     let opener = m.call_method1("build_opener", (handler, redirect.call0()?))?;

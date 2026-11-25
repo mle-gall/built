@@ -170,7 +170,7 @@ def test_screen_boxes_are_the_eight_projected_corners(view):
 
 
 def test_edge_grid_near_is_unique_sorted():
-    from core.edge_grid import EdgeGrid
+    from ingetrazo_core import EdgeGrid
     rng = np.random.default_rng(3)
     ax, ay = rng.uniform(0, 400, 500), rng.uniform(0, 300, 500)
     bx, by = ax + rng.uniform(-60, 60, 500), ay + rng.uniform(-60, 60, 500)

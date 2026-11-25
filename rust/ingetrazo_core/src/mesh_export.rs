@@ -333,7 +333,6 @@ fn _add_face<'p>(
 #[pyfunction]
 fn _resolve_finishes(scene: &Obj<'_>, materials: &Bound<'_, PyDict>) -> PyResult<()> {
     let py = scene.py();
-    let resolve = py.import("core.finish")?.getattr("resolve")?;
     let registry = truth(attr(scene, "materials")?, PyDict::new(py).into_any())?;
     for (_, info) in materials.iter() {
         let mat = get(&info, "mat")?;
@@ -344,7 +343,12 @@ fn _resolve_finishes(scene: &Obj<'_>, materials: &Bound<'_, PyDict>) -> PyResult
         };
         info.set_item(
             "finish",
-            resolve.call1((chosen, mat, get(&info, "map")?, get(&info, "opacity")?))?,
+            crate::material_finish::resolve_finish(
+                chosen.extract::<Option<String>>()?.as_deref(),
+                mat.extract::<Option<String>>()?.as_deref(),
+                get(&info, "map")?.extract::<Option<std::path::PathBuf>>()?.as_deref().and_then(|p| p.to_str()),
+                get(&info, "opacity")?.extract()?,
+            ),
         )?;
     }
     Ok(())

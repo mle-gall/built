@@ -529,7 +529,7 @@ class StoreMesh(_mesh._MeshState):
     def fillet_edges(self, keys, radius, segments=8, profile=0.5,
                      measure="radius", corners="round", shape=None):
         """Round live edge keys, returning one StoreChange for the whole edit."""
-        from core.fillet import plan_fillet
+        from ingetrazo_core import plan_fillet
         plan = plan_fillet(self, [EdgeView(self, k) for k in keys], radius,
                            segments, profile, measure, corners, shape)
         return self._apply_round_plan(plan)
@@ -542,11 +542,9 @@ class StoreMesh(_mesh._MeshState):
         return self._apply_round_plan(plan)
 
     def _apply_round_plan(self, plan):
-        from core.fillet import apply_fillet
+        from ingetrazo_core import apply_fillet
         if isinstance(plan, str):
             raise ValueError(plan)
-        if plan._store_plan is None:
-            raise StoreFallback("native fillet requires a supported Qt vector kernel")
         return apply_fillet(self, plan)
 
     def split_edge(self, edge, position):

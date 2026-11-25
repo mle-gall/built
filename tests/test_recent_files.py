@@ -16,7 +16,7 @@ def _reset():
 def test_old_recents_are_read_once_and_clearing_stays_cleared(native_host, tmp_path):
     """The plain path list older builds kept is the list until the first
     write, which drops it; Clear list then cannot bring it back."""
-    from core import recent
+    from ingetrazo_core import recent
     _reset()
     old, pinned, new = (tmp_path / f"{n}.igz" for n in ("old", "pinned", "new"))
     for p in (old, pinned, new):
@@ -57,6 +57,20 @@ def test_recent_list_is_ordered_deduplicated_and_capped(native_host, tmp_path):
     docs[-1].unlink()
     recent = native_host.extras()["recent"]
     assert str(docs[-1]) not in recent and str(docs[-3]) in recent
-    from core.recent import clear
+    from ingetrazo_core.recent import clear
     clear()
     assert not win._recent_paths()
+
+
+def test_forget_resolves_each_path_from_a_one_shot_iterable(tmp_path, monkeypatch):
+    from ingetrazo_core import NativeSettings, recent
+
+    st = NativeSettings(str(tmp_path / "settings"))
+    monkeypatch.chdir(tmp_path)
+    recent.remember("first.built", settings=st)
+    recent.note("first.built", {"links": 2}, settings=st)
+    recent.remember("second.built", settings=st)
+    recent.forget(iter(["first.built", "second.built"]), settings=st)
+    assert recent.entries(settings=st) == []
+    assert recent.meta("first.built", settings=st) == {}
+    assert not st.contains("home/last_file")

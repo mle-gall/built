@@ -22,7 +22,7 @@ pub(super) fn download<'p>(py: Python<'p>, url: &str, limit: usize) -> PyResult<
     kw.clear();
     kw.set_item(
         "context",
-        py.import("core.tls")?.call_method0("https_context")?,
+        py.import("ingetrazo_core.python_tls")?.call_method0("https_context")?,
     )?;
     kw.set_item("timeout", 20)?;
     let response = request

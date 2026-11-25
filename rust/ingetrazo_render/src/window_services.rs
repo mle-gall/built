@@ -106,7 +106,7 @@ fn remember_document(
         .getattr("DOCUMENT_SUFFIXES")?
         .contains(suffix)?
     {
-        py.import("core.recent")?
+        py.import("ingetrazo_core.recent")?
             .call_method1("remember", (path,))?;
         let kw = PyDict::new(py);
         kw.set_item("doc", doc)?;

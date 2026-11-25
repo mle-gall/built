@@ -15,7 +15,7 @@ import math
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.fillet import apply_fillet, plan_fillet
+from ingetrazo_core import apply_fillet, plan_fillet
 from core.mesh import Mesh
 from core.orient import is_closed, signed_volume
 

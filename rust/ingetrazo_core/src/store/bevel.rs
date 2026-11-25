@@ -48,7 +48,7 @@ pub fn plan(
             plan.edges.insert(e);
         }
     }
-    let exponent = 4f64.ln() / (1. / profile).ln();
+    let exponent = bevel_exponent(profile);
     let mut curves: BTreeMap<u32, Vec<Vec<V3>>> = BTreeMap::new();
     for f in touched {
         plan.materials.push(f);
@@ -189,3 +189,6 @@ pub(super) fn close_corner(
     }
     Ok(())
 }
+
+#[pyo3::pyfunction]
+pub(crate) fn bevel_exponent(profile: f64) -> f64 { 4f64.ln() / (1. / profile).ln() }

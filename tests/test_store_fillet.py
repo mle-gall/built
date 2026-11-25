@@ -9,7 +9,7 @@ import pytest
 from ingetrazo_core import Vec3 as V
 
 from core import _native, mesh as M, store_mesh as S
-from core.fillet import apply_fillet, plan_fillet
+from ingetrazo_core import apply_fillet, plan_fillet
 from core.history import SnapshotMutation
 from ingetrazo_core import plan_vertex_bevel
 from tests.test_fillet import box, edge_at
@@ -158,7 +158,7 @@ def test_command_parity_and_snapshot_history(case, monkeypatch):
     plan = preview(sm, case)
     assert not isinstance(reference, str), reference
     assert not isinstance(plan, str), plan
-    assert plan._store_plan is not None
+    assert isinstance(plan, native.BevelPreview)
     python_serial, store_serial = pm._mut_serial, sm._mut_serial
     apply_fillet(pm, reference)
     before = sm.capture_state()
@@ -174,8 +174,8 @@ def test_command_parity_and_snapshot_history(case, monkeypatch):
     else:
         assert sm._mut_serial - store_serial == pm._mut_serial - python_serial
         assert model(sm) == model(pm)
-    assert set(changes[0].removed["face"]) == {f.key for f in plan.removed_faces}
-    assert set(changes[0].removed["edge"]) == {e.key for e in plan.removed_edges}
+    assert set(changes[0].removed["face"]) == set(plan.removed_faces)
+    assert set(changes[0].removed["edge"]) == set(plan.removed_edges)
     for kind, old in keys_before.items():
         removed = set(changes[0].removed[kind])
         created = set(changes[0].created[kind])
@@ -246,7 +246,7 @@ def test_tool_uses_native_preview_and_one_snapshot_command(vertices, monkeypatch
         monkeypatch.setattr(FilletTool, key, value)
     tool = FilletTool()
     tool.on_activate(vp)
-    assert tool.preview_faces() and tool._plan._store_plan is not None
+    assert tool.preview_faces() and isinstance(tool._plan, native.BevelPreview)
     # A flag write changes the store revision independently of the tool's
     # Python dirty counter. Commit must replan before applying the preview.
     edge = sm.edges[0]

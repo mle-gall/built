@@ -778,7 +778,7 @@ fn commands_class<'py>(m: &Bound<'py, PyModule>) -> PyResult<Bound<'py, PyAny>> 
     let staticmethod = py.import("builtins")?.getattr("staticmethod")?;
     ns.set_item("_survey_note", staticmethod.call1((n.getattr("survey_note")?,))?)?;
     ns.set_item("_dxf_failure_text", staticmethod.call1((n.getattr("dxf_failure")?,))?)?;
-    let recent = func(py, |py, _| Ok(py.import("core.recent")?.getattr("menu")?.call((), Some(&kwargs(py, &[("limit", obj(py, 10)?.into_bound(py))])?))?.unbind()))?;
+    let recent = func(py, |py, _| Ok(py.import("ingetrazo_core.recent")?.getattr("menu")?.call((), Some(&kwargs(py, &[("limit", obj(py, 10)?.into_bound(py))])?))?.unbind()))?;
     ns.set_item("_recent_paths", staticmethod.call1((recent,))?)?;
     let makes_faces = func(py, |py, a| Ok(native(py)?.call_method1("makes_faces", (a.get_item(0)?,))?.unbind()))?;
     ns.set_item("_makes_faces", staticmethod.call1((makes_faces,))?)?;

@@ -907,7 +907,7 @@ impl DepthLimits {
     }
 }
 
-/// ``core.edge_grid.segment_distances`` for one segment: the pixel
+/// ``ingetrazo_core.segment_distances`` for one segment: the pixel
 /// distance from ``(px, py)`` to ``a``–``b``, operation for operation.
 #[inline]
 pub fn segment_distance(ax: f64, ay: f64, bx: f64, by: f64, px: f64, py: f64) -> f64 {

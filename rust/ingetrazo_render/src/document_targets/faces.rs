@@ -225,7 +225,7 @@ fn pick_group<'py>(v: &Obj<'py>, x: f64, y: f64) -> PyResult<Obj<'py>> {
         let mut threshold = v.getattr("pick_threshold_px")?.extract::<f64>()?;
         let mut group = none(py);
         if !proj.is_none() && proj.get_item(4)?.call_method0("any")?.is_truthy()? {
-            let grid = py.import("core.edge_grid")?;
+            let grid = py.import("ingetrazo_core")?;
             let mut args = proj.try_iter()?.collect::<PyResult<Vec<_>>>()?;
             args.extend([
                 x.into_pyobject(py)?.into_any(),
