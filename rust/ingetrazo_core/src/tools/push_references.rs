@@ -248,6 +248,22 @@ impl PushReferences {
         excluded: &Bound<'_, PyAny>,
         hidden: &Bound<'_, PyAny>,
     ) -> PyResult<Option<(f64, Vec3)>> {
+        let key = super::adapters::imported(view.py(), "core.topology")?.getattr("_key")?;
+        self.nearest_where(view, px, radius, hidden, |point| {
+            excluded.contains(key.call1((point,))?)
+        })
+    }
+}
+
+impl PushReferences {
+    pub(super) fn nearest_where(
+        &mut self,
+        view: &Bound<'_, PyAny>,
+        px: [f64; 2],
+        radius: f64,
+        hidden: &Bound<'_, PyAny>,
+        excluded: impl Fn(&Bound<'_, PyAny>) -> PyResult<bool>,
+    ) -> PyResult<Option<(f64, Vec3)>> {
         let mut frame = None;
         if let Some(f) = view.getattr_opt("_camera_px")? {
             match f.call0() {
@@ -260,12 +276,16 @@ impl PushReferences {
             Some(f) => self.native_hits(f, px, radius),
             None => self.custom_hits(view, px, radius)?,
         };
+        if hits.is_empty() {
+            return Ok(None);
+        }
         // Ordered distance, then original mesh and vertex order for ties.
         hits.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
-        let key = view.py().import("core.topology")?.getattr("_key")?;
         let p = |&(_, m, i): &Candidate| self.points[m][i];
         let eligible = |h: &Candidate| -> PyResult<bool> {
-            Ok(!excluded.contains(key.call1((Vec3::from(DVec3::from(p(h))),))?)?)
+            Ok(!excluded(
+                Bound::new(view.py(), Vec3::from(DVec3::from(p(h))))?.as_any(),
+            )?)
         };
         let mut remaining = &hits[..];
         if let Some(clear) = view.getattr_opt("_first_clear")? {

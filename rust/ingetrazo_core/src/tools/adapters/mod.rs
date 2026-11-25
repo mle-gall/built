@@ -19,7 +19,7 @@ macro_rules! fields {
 
 /// Tool callbacks look up their live globals on every dispatch so plugins may
 /// replace helpers. Already loaded modules need no Python import-hook call.
-fn imported<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyModule>> {
+pub(super) fn imported<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyModule>> {
     // SAFETY: Python owns sys.modules and the interpreter is attached here.
     let modules = unsafe { Bound::from_borrowed_ptr(py, pyo3::ffi::PyImport_GetModuleDict()) };
     if let Some(module) = modules.cast::<PyDict>()?.get_item(name)? {
@@ -75,6 +75,7 @@ mod image_tool_api;
 mod line_tool_api;
 mod move_host_api;
 mod namespace;
+mod definitions;
 mod north_tool_api;
 mod offset_host_api;
 mod paint_host_api;
