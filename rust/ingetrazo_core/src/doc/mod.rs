@@ -41,6 +41,8 @@ mod purge;
 mod layer_steps;
 mod transform_steps;
 mod host_steps;
+mod draw_steps;
+mod erase_steps;
 mod file_view;
 pub(crate) mod drawing;
 pub mod occurrences;

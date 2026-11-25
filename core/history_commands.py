@@ -18,6 +18,9 @@ from ingetrazo_core import Vec3 as QVector3D
 # Typed native steps (docs/commands-port.md): placement renames, locks and
 # whole-placement paint are Rust deltas, created through the protocol verbs.
 from ingetrazo_core import NativeCommand
+# Drawing steps (rust/ingetrazo_core/src/doc/draw_steps.rs).
+from ingetrazo_core import (AddEdgeCommand, AddFaceCommand, DeleteEdgesCommand, DeleteFaceCommand,
+                            EraseSelectionCommand)
 # Steps with host state (rust/ingetrazo_core/src/doc/host_steps.rs).
 from ingetrazo_core import AddGeoPointsCommand, SetNorthCommand, StraightenModelCommand
 # Group transform steps (rust/ingetrazo_core/src/doc/transform_steps.rs).
@@ -160,7 +163,8 @@ class MeshCommand(Command):
 # Native mesh steps: History enlists their stores (``geometry_meshes``).
 for _mesh_step in (MakeGroupCommand, HideCommand, HideEdgesCommand, AssignLayerCommand,
                    MoveGroupCommand, RotateGroupCommand, ScaleGroupCommand, FlipGroupsCommand,
-                   ChangeAxesCommand):
+                   ChangeAxesCommand, AddEdgeCommand, AddFaceCommand, DeleteEdgesCommand,
+                   DeleteFaceCommand, EraseSelectionCommand):
     MeshCommand.register(_mesh_step)
 
 
@@ -248,113 +252,6 @@ def _uses_doc_undo(cmd, scene) -> bool:
 
 # ---- Concrete commands ------------------------------------------------------
 
-class AddEdgeCommand(MeshCommand):
-    """Add a single edge. The mesh always welds and dedups, so a coincident
-    edge is reused rather than duplicated; ``_owned`` records whether this
-    command actually created the edge, so undo only removes an edge it owns
-    (never the pre-existing one it merged into)."""
-
-    keeps_rows = True
-
-    def __init__(self, a: QVector3D, b: QVector3D, merge: bool = True,
-                 soft: bool | None = None, curve: int | None = None,
-                 layer: str | None = None) -> None:
-        self.a = QVector3D(a)
-        self.b = QVector3D(b)
-        self.merge = merge  # kept for API parity; the mesh never duplicates
-        # Optional flags stamped on the resulting edge — used when a split
-        # replaces a curve/soft edge with sub-edges, so the pieces inherit.
-        self.soft = soft
-        self.curve = curve
-        # A pasted edge keeps its tag (None: the edge's own, untouched).
-        self.layer = layer
-        self.edge: Optional[Edge] = None
-        self._owned = False
-
-    def do(self, scene) -> None:
-        m = scene.mesh
-        if self._journal_geometry and type(self.soft) in (bool, type(None)) and (
-                self.curve is None or type(self.curve) is int) and (
-                self.layer is None or isinstance(self.layer, str)):
-            from core.layers import DEFAULT_LAYER
-            from core.store_mesh import EdgeView, StoreMesh
-            if type(m) is StoreMesh:
-                key = m._store.draw_command_edge(m._input_point(self.a), m._input_point(self.b),
-                                                 self.soft, self.curve, self.layer, DEFAULT_LAYER)
-                self._owned = key is not None
-                self.edge = EdgeView(m, key) if self._owned else None
-                if self._owned:
-                    m._dirty(1)
-                elif any(v is not None for v in (self.soft, self.curve, self.layer)):
-                    m.mark_modified()
-                scene.version += 1
-                return
-        _replay.draw_edge(self, m)
-        scene.version += 1
-
-    def doc_after(self, scene, phase):
-        if phase == "undo" and self._owned:
-            scene.selection.discard(self.edge)
-        scene.version += 1
-
-    def undo(self, scene):
-        if _replay.undo_edge(self, scene.mesh):
-            scene.selection.discard(self.edge)
-            scene.version += 1
-
-
-class RemoveGeometryCommand(MeshCommand):
-    """Deleting an element changes ordered incidence lists. Direct replay
-    restores their order and the original element handles."""
-    keeps_rows = True
-    _before = None
-
-    def undo(self, scene):
-        if self._before is not None:
-            scene.mesh.restore_state(self._before)
-            scene.version += 1
-
-    def doc_after(self, scene, phase):
-        _discard_removed_selection(scene)
-        scene.version += 1
-
-
-class DeleteEdgesCommand(RemoveGeometryCommand):
-    """Erase edges (resolved by endpoint position). A face can't outlive a
-    bounding edge — erasing an edge takes its faces with it — so every
-    face that used a deleted edge on its *outer* boundary is removed too (its
-    other edges stay, now free). Hole edges are left alone."""
-
-    def __init__(self, edges: Iterable, cascade_faces: bool = True) -> None:
-        self._endpoints = [(QVector3D(e.a), QVector3D(e.b)) for e in edges]
-        self.cascade_faces = cascade_faces
-        self.removed_edges: list[Edge] = []
-        self.removed_faces: list[Face] = []
-
-    def do(self, scene) -> None:
-        m = scene.mesh
-        from core.store_mesh import StoreMesh, EdgeView, FaceView
-        if self._journal_geometry and type(m) is StoreMesh and not m.__dict__.get("_planned_points"):
-            candidates = _faces_by_segments(m, self._endpoints) if self.cascade_faces else ()
-            removed = m._store.delete_edge_segments(
-                [(a.toTuple(), b.toTuple()) for a, b in self._endpoints],
-                [f.key for f in candidates])
-            if removed is not None:
-                edges, faces = removed
-                self.removed_edges = [EdgeView(m, key) for key in edges]
-                self.removed_faces = [FaceView(m, key) for key in faces]
-                m._dirty(len(edges) + len(faces))
-                for face in self.removed_faces:
-                    scene.selection.discard(face)
-                for edge in self.removed_edges:
-                    scene.selection.discard(edge)
-                scene.version += 1
-                return
-        self._before = self._direct_snapshot(m)
-        self.removed_edges, self.removed_faces = _drawing.delete_edges(m, self._endpoints, self.cascade_faces, scene.selection)
-        scene.version += 1
-
-
 def _faces_by_segments(mesh, segments) -> list:
     """The faces, in list order, whose outer loop can run along one of
     ``segments`` (``(a, b)`` points) by key: such a face has a corner
@@ -370,99 +267,6 @@ def _faces_by_segments(mesh, segments) -> list:
     for a, b in segs:
         hit.update(sc.faces_meeting(scan_index.box_of((a, b), _KEY_REACH)))
     return sc.faces(sorted(hit))
-
-
-class EraseSelectionCommand(RemoveGeometryCommand):
-
-    """Erase selected edges and faces, the usual way.
-
-    An edge that divides two *coplanar* faces is dissolved and the faces merge
-    back into one (rubbing out a face's split line reunites it). Any other erased
-    edge takes the faces it bounds with it (a non-planar pair can't become one
-    face) — except through a *hole*: an edge that only bounds a face as one of
-    its hole's edges takes the hole with it and the face fills in. Undo restores
-    an identity-preserving snapshot — the merge restructures
-    connectivity too much for a clean per-edge inverse."""
-
-    keeps_rows = False
-
-    def __init__(self, edges: Iterable, faces: Iterable = ()) -> None:
-        self._edge_endpoints = [(QVector3D(e.a), QVector3D(e.b)) for e in edges]
-        self._face_loops = [[QVector3D(v) for v in f.vertices] for f in faces]
-        self._before = None
-
-    def do(self, scene) -> None:
-        m = scene.mesh
-        self._before = self._direct_snapshot(m)
-        footprint = winding_footprint(m)
-        from core.store_mesh import EdgeView, FaceView, StoreMesh, _hypot
-        result = None
-        if type(m) is StoreMesh and (hypot := _hypot()) is not None:
-            result = m._store.erase_selection(
-                [[p.toTuple() for p in loop] for loop in self._face_loops],
-                [(m._input_point(a), m._input_point(b)) for a,b in self._edge_endpoints], hypot)
-        if result is None:
-            slit_planes, across = _drawing.erase_selection(m, self._face_loops, self._edge_endpoints, scene.selection)
-        else:
-            dirty, edges, faces, merges, slits, across_keys = result
-            if dirty:
-                m._dirty(dirty)
-            from core.mesh import _dominant_attrs
-            for target, sources, stacked in merges:
-                merged = FaceView(m, target)
-                if not stacked or not merged.attrs:
-                    candidates = sources[1:] if stacked else sources
-                    merged.attrs = dict(_dominant_attrs([FaceView(m, k) for k in candidates]))
-            for key in faces:
-                scene.selection.discard(FaceView(m, key))
-            for key in edges:
-                scene.selection.discard(EdgeView(m, key))
-            slit_planes = [(QVector3D(*o), QVector3D(*n)) for o,n in slits]
-            across = [FaceView(m, key) for key in across_keys]
-        # Slit removals re-derive their plane from the arrangement while the
-        # cut-ring face is still present to provide coverage (it re-emits as
-        # outer + hole, attrs intact; uncovered regions stay empty).
-        done_planes: list = []
-        for origin, normal in slit_planes:
-            nn = normal.normalized()
-            if any(abs(QVector3D.dotProduct(nn, n)) > 0.999 and
-                   abs(QVector3D.dotProduct(origin - o, n)) < 1e-4
-                   for o, n in done_planes):
-                continue
-            done_planes.append((origin, nn))
-            RebuildPlaneFacesCommand(origin, nn).do(scene)
-        # The faces across a reunited line, each plane from its own faces'
-        # remaining edges: the line's other faces may span past it (the
-        # jamb above the sill) and only what still closes comes back.
-        while across:
-            f = across[0]
-            o, n = QVector3D(f.vertices[0]), f.normal()
-            same = [g for g in across if abs(QVector3D.dotProduct(
-                n, g.normal())) > 0.999 and abs(QVector3D.dotProduct(
-                QVector3D(g.vertices[0]) - o, n)) < 1e-4]
-            across = [g for g in across if g not in same]
-            RebuildPlaneFacesCommand(o, n, faces=same).do(scene)
-        # Deleting a curved surface takes its hidden seams with it: a soft edge
-        # left bordering no face is a dangling curve segment (a cylinder side's
-        # vertical seam) — prune it so no stray vertical lines remain. Hard
-        # orphan edges stay (an erased flat face keeps its outline).
-        if result is not None and type(m) is StoreMesh:
-            n = m._store.erase_soft_seams()
-            if n:
-                m._dirty(n)
-        else:
-            _drawing.prune_soft_edges(m)
-        # A merge can leave the big enclosing face overlapping its subdivisions;
-        # drop any such redundant mother (covered by the snapshot undo above).
-        for f in heal_overlapping_faces(m, footprint=footprint):
-            scene.selection.discard(f)
-        # And the endpoints go with them. remove_edge only detaches, so an
-        # erase used to leave its vertices in the mesh: invisible, ignored by
-        # bounds(), and written into the .igz. Nine of them 16 km out were
-        # all Marco's document had left after deleting a stray line, which is
-        # why zoom-to-extents could not bring him back (2026-09-18).
-        m.prune_orphan_vertices()
-        scene.version += 1
 
 
 class TagCurveCommand(MeshCommand):
@@ -582,114 +386,6 @@ def _plane_reach(face) -> Optional[float]:
         off = max(off, abs(dx * nx + dy * ny + dz * nz))
         span = max(span, (dx * dx + dy * dy + dz * dz) ** 0.5)
     return _PLANE_REACH + off + 1e-5 * span + 1e-7
-
-
-class AddFaceCommand(MeshCommand):
-    """Add a face, dividing any coplanar face it lands strictly inside.
-
-    When the new loop falls wholly within an existing face, that mother face
-    gains a hole so it no longer overlaps the new face. The hole is recorded so
-    undo removes exactly the loop this command punched.
-    """
-
-    keeps_rows = True
-
-    def __init__(
-        self,
-        vertices: Iterable[QVector3D],
-        auto: bool = True,
-        holes: Optional[Iterable[Iterable[QVector3D]]] = None,
-        attrs: Optional[dict] = None,
-        *,
-        interior: bool = False,
-    ) -> None:
-        self.vertices = [QVector3D(v) for v in vertices]
-        self.preset_holes = (
-            [[QVector3D(v) for v in loop] for loop in holes] if holes else None
-        )
-        self.auto = auto
-        self.interior = interior
-        # Attrs stamped onto the face at creation (paste carries the copied
-        # colour/texture); they stay on the object across undo/redo.
-        self.attrs = dict(attrs) if attrs else None
-        self.face: Optional[Face] = None
-        self._hole_swaps = False
-        self._before = self._after = None
-
-    def do(self, scene) -> None:
-        mesh = scene.mesh
-        if self._after is not None:
-            mesh.restore_state(self._after)
-        else:
-            self._before = self._direct_snapshot(mesh)
-            self.face = mesh.add_face(self.vertices, self.preset_holes)
-            self.face.interior = self.interior
-            if self.attrs:
-                self.face.attrs.update(self.attrs)
-            if self.auto:
-                self._divide(mesh)
-            self._after = self._direct_snapshot(mesh)
-        scene.version += 1
-
-    def _divide(self, mesh):
-        from core.store_mesh import FaceView, StoreMesh, _hypot
-        if (type(mesh) is StoreMesh and not mesh.__dict__.get("_planned_points")
-                and (hypot := _hypot()) is not None):
-            result = mesh._store.divide_drawn_face(
-                self.face.key, [f.key for f in _faces_holding(mesh, self.face.vertices)],
-                [f.key for f in _faces_inside(mesh, self.face)], hypot)
-            if result is not None:
-                dirty, source, remainder, self._hole_swaps = result
-                if dirty:
-                    mesh._dirty(dirty)
-                if source is not None:
-                    mother = FaceView(mesh, source)
-                    for key in remainder:
-                        FaceView(mesh, key).attrs = dict(mother.attrs)
-                    _inherit_paint(self.face, mother)
-                return
-        self._hole_swaps = _drawing.divide_face(mesh, self.face)
-
-    def doc_after(self, scene, phase):
-        _discard_removed_selection(scene)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        if self._before is not None:
-            selected = [e for e in scene.selection if isinstance(e, Edge) and e in scene.mesh.edges]
-            scene.mesh.restore_state(self._before)
-            for edge in selected:
-                if edge not in scene.mesh.edges:
-                    scene.selection.discard(edge)
-            _discard_removed_selection(scene)
-            scene.version += 1
-
-
-class DeleteFaceCommand(RemoveGeometryCommand):
-    """Remove a face (resolved by its outer loop). Holes travel with it, so undo
-    restores them via relink."""
-
-    def __init__(self, face) -> None:
-        self._loop = [QVector3D(v) for v in face.vertices]
-        self.face: Optional[Face] = None
-
-    def do(self, scene) -> None:
-        from core.store_mesh import StoreMesh, FaceView
-        mesh = scene.mesh
-        if self._journal_geometry and type(mesh) is StoreMesh:
-            handled, key = mesh._store.delete_face_loop(
-                [p.toTuple() for p in self._loop],
-                [f.key for f in _faces_keyed_like(mesh, self._loop)])
-            if handled:
-                self.face = FaceView(mesh, key) if key is not None else None
-                if self.face is not None:
-                    mesh._dirty()
-                    scene.selection.discard(self.face)
-                scene.version += 1
-                return
-        self._before = self._direct_snapshot(mesh)
-        self.face = _drawing.delete_face(mesh, self._loop, scene.selection)
-        scene.version += 1
 
 
 def _dirty_group_chunks(scene) -> None:
@@ -1103,7 +799,11 @@ def _carried_faces(mesh, moving: set) -> list:
 class _VertexEditCommand(MeshCommand):
     """Replay standalone and object-mesh edits from the shared mesh snapshot."""
     _before = _after = None
-    undo = RemoveGeometryCommand.undo
+
+    def undo(self, scene):
+        if self._before is not None:
+            scene.mesh.restore_state(self._before)
+            scene.version += 1
 
     def do(self, scene):
         if self._after is None:
@@ -1812,7 +1512,7 @@ def _run_snapshot_parts(parent, scene):
                 not parent._journal_geometry or type(part) not in covered):
             part.do(scene)
             continue
-        previous = part._journal_geometry
+        previous = getattr(part, "_journal_geometry", False)
         part._journal_geometry = True
         try:
             part.do(scene)
