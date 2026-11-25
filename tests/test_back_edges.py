@@ -9,6 +9,7 @@ Pixel cases use the native wgpu surface."""
 from __future__ import annotations
 
 from tests.controller_surface import live_image
+from tests.raster_samples import pixels
 from tests.shell_isolation import native_gpu_host, native_window, restore_shell_patches  # noqa: F401
 from tests.test_xray_toggle import _state
 from views import view_commands
@@ -24,10 +25,10 @@ def _box(scene, x0, y0, z0, x1, y1, z1):
         scene.mesh.add_face([p[i] for i in idx])
 
 
-def _dark(c, ref=None):
+def _dark(lightness):
     """Ink on paper: clearly darker than the white faces and the grey
     background (antialiasing spreads a 1 px line over two rows)."""
-    return c.lightnessF() < 0.72
+    return lightness < 0.72
 
 
 @pytest.fixture
@@ -55,7 +56,9 @@ def _row(win, pts):
     import math
     vp = win.viewport
     img = live_image(vp)
-    dpr = img.width() / max(vp.width(), 1)
+    dpr = img.width / max(vp.width(), 1)
+    rgb = pixels(img)[:, :, :3].astype(float)
+    lightness = (rgb.min(axis=2) + rgb.max(axis=2)) / 510
     a, b = vp._world_to_pixel(pts[0]), vp._world_to_pixel(pts[-1])
     dx, dy = b[0] - a[0], b[1] - a[1]
     ln = math.hypot(dx, dy) or 1.0
@@ -66,9 +69,8 @@ def _row(win, pts):
         x, y = px[0] * dpr, px[1] * dpr
         # floor, not round: round() takes halves to even, and a line at
         # y = 339.5 was sampled at 338, 338, 340, 340, 342 — never 339.
-        out.append(min((img.pixelColor(math.floor(x + k * nx), math.floor(y + k * ny))
-                        for k in (-2, -1, 0, 1, 2)),
-                       key=lambda c: c.lightnessF()))
+        out.append(min(lightness[math.floor(y + k * ny), math.floor(x + k * nx)]
+                       for k in (-2, -1, 0, 1, 2)))
     return out
 
 
@@ -77,33 +79,31 @@ def _samples(y=1.0, z=1.0, x0=-0.7, x1=0.7, n=60):
 
 
 def test_hidden_edges_stay_hidden_by_default(win):
-    ec = win.viewport.scene.display_style.edge_color
     assert not win.viewport.scene.display_style.back_edges
     behind = _row(win, _samples())
-    assert not any(_dark(c, ec) for c in behind)
+    assert not any(_dark(c) for c in behind)
     # the part of the bar that no face hides is drawn solid
     outside = _row(win, _samples(x0=1.6, x1=2.8))
-    assert all(_dark(c, ec) for c in outside)
+    assert all(_dark(c) for c in outside)
 
 
 def test_back_edges_draws_them_dashed(win):
     st = win.viewport.scene.display_style
-    ec = st.edge_color
     assert view_commands.run(win, "back_edges")
     assert st.back_edges
-    behind = [_dark(c, ec) for c in _row(win, _samples())]
+    behind = [_dark(c) for c in _row(win, _samples())]
     assert 0.25 < sum(behind) / len(behind) < 0.75, behind   # dashes, not solid
     runs = sum(1 for a, b in zip(behind, behind[1:]) if a != b)
     assert runs >= 6
     # the diagonal too: a screen-space pattern would be all dash or all gap
-    diag = [_dark(c, ec) for c in _row(
+    diag = [_dark(c) for c in _row(
         win, [V(-0.6 + 1.2 * i / 59, 1, 0.4 + 1.2 * i / 59) for i in range(60)])]
     # (without antialiasing a 1 px diagonal is a staircase that sampling
     # across it partly misses: neither solid nor empty is what matters)
     assert 0.12 < sum(diag) / len(diag) < 0.75, diag
     assert sum(1 for a, b in zip(diag, diag[1:]) if a != b) >= 6
     # the visible part of the bar is still solid
-    assert all(_dark(c, ec) for c in _row(win, _samples(x0=1.6, x1=2.8)))
+    assert all(_dark(c) for c in _row(win, _samples(x0=1.6, x1=2.8)))
 
 
 def test_k_is_back_edges_and_the_style_remembers_it(native_window):

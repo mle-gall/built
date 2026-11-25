@@ -3,9 +3,8 @@ from types import SimpleNamespace
 from weakref import proxy
 
 from core.input_codes import Type
-from core.input_types import NATIVE
-from ingetrazo_core import WindowInput, capture_document_frame
-from ingetrazo_render import WindowTimers
+from ingetrazo_core import WindowInput
+from ingetrazo_render import SurveyRaster, WindowTimers
 from views.document_interaction import DocumentInteraction
 from views.view_host import WidgetShim
 
@@ -35,9 +34,8 @@ class ControllerSurface(DocumentInteraction, _InputSurface):
         host = SimpleNamespace(width=640, height=480, scale=1., ns_view=0,
                                timers=WindowTimers(), input_state=WindowInput(), window=proxy(self),
                                request_frame=lambda: None, cursor_changed=lambda cursor: None)
-        if NATIVE:
-            from app_shell.host import Host
-            host.tool_cursor = Host.tool_cursor
+        from app_shell.host import Host
+        host.tool_cursor = Host.tool_cursor
         super().__init__(parent, host=host)
 
     def resize(self, width, height=None):
@@ -60,21 +58,14 @@ class ControllerSurface(DocumentInteraction, _InputSurface):
     def reset_texture_cache(self):
         self.reset_document_caches()
 
-class _PixelCount(int):
-    # Existing frame callers use width(), while raster callers read width.
-    __call__ = int.__int__
-
-
-class _DocumentImage:
-    """Expose the renderer-owned capture to both frame and raster assertions."""
-
-    def __init__(self, controller):
-        self._frame = capture_document_frame(controller)
-        self.width = _PixelCount(self._frame.width())
-        self.height = _PixelCount(self._frame.height())
-
-    def __getattr__(self, name):
-        return getattr(self._frame, name)
-
-
-live_image = _DocumentImage
+def live_image(controller):
+    """Read back a rendered document frame at the surface's physical size."""
+    display = controller.keys_stand_in
+    display.set_scene(controller.scene)
+    display._prepare_pick_frame()
+    display.renderer.request_capture()
+    display.draw_frame()
+    rgba = bytes(display.renderer.take_capture())
+    width = round(display.width() * display.devicePixelRatioF())
+    assert width > 0 and rgba and len(rgba) % (4 * width) == 0
+    return SurveyRaster(width, len(rgba) // (4 * width), rgba)

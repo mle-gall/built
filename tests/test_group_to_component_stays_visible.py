@@ -10,6 +10,7 @@ has none. The epoch tests run everywhere."""
 from __future__ import annotations
 
 from tests.controller_surface import live_image
+from tests.raster_samples import pixels
 import pytest
 from ingetrazo_core import Vec3 as V
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
@@ -78,16 +79,16 @@ def test_the_box_stays_on_screen(win, native_gpu_host):
 
     def on_face():
         img = live_image(vp)
-        dpr = img.width() / max(vp.width(), 1)
+        dpr = img.width / max(vp.width(), 1)
         # Off the face's centre, clear of any edge or axis.
         x, y = vp._world_to_pixel(V(0.37, -1, 0.73))[:2]
-        return img.pixelColor(int(x * dpr), int(y * dpr)).name()
+        return tuple(pixels(img)[int(y * dpr), int(x * dpr), :3])
 
     def on_background():
         img = live_image(vp)
-        dpr = img.width() / max(vp.width(), 1)
+        dpr = img.width / max(vp.width(), 1)
         x, y = vp._world_to_pixel(V(2.7, -1, 2.7))[:2]
-        return img.pixelColor(int(x * dpr), int(y * dpr)).name()
+        return tuple(pixels(img)[int(y * dpr), int(x * dpr), :3])
 
     g = _group_the_box(vp)
     face = on_face()

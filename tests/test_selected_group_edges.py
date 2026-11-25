@@ -6,7 +6,8 @@ from core.mesh import Mesh
 from core.group import Group
 from tests.controller_surface import live_image
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
-from tests.test_rendering_surface_regressions import viewport, pixels
+from tests.test_rendering_surface_regressions import viewport
+from tests.raster_samples import pixels
 
 
 @pytest.mark.parametrize('nested', [False, True])
