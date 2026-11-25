@@ -103,6 +103,53 @@ pub struct PackedScene {
 }
 
 impl PackedScene {
+    /// The record of a finished pack: `field` hands over what the assembly
+    /// computed, the rest is what the walk gathered.
+    #[allow(clippy::too_many_arguments)]
+    pub fn assembled(
+        py: Python<'_>,
+        field: &dyn Fn(&str) -> PyResult<Py<PyAny>>,
+        uids: Py<PyAny>,
+        groups: Py<PyAny>,
+        textures: Py<PyAny>,
+        texture_paths: Py<PyAny>,
+        reveal_hidden: Py<PyAny>,
+        prototype_lookup: Py<PyAny>,
+        prototype_paints: Py<PyAny>,
+        bake_focus: Py<PyAny>,
+        occurrence_keys: Py<PyAny>,
+        mesh_codes: Py<PyAny>,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            vertices: field("vertices")?,
+            indices: field("indices")?,
+            bounds: field("bounds")?,
+            commands: field("commands")?,
+            edge_commands: field("edge_commands")?,
+            instances: field("instances")?,
+            uids,
+            world_bounds: field("world_bounds")?,
+            timings: py.None(),
+            groups,
+            materials: field("materials")?,
+            textures,
+            texture_paths,
+            hidden_commands: field("hidden_commands")?,
+            hidden_edge_commands: field("hidden_edge_commands")?,
+            profile_exclusions: field("profile_exclusions")?,
+            reveal_hidden,
+            prototype_lookup,
+            prototype_paints,
+            material_updates: PyDict::new(py).into_any().unbind(),
+            origin: field("origin")?,
+            prototype_origins: field("prototype_origins")?,
+            model_translations: field("model_translations")?,
+            bake_focus,
+            occurrence_keys,
+            mesh_codes,
+        })
+    }
+
     fn upload_arrays<'py>(&self, py: Python<'py>) -> PyResult<(Bound<'py, PyTuple>, Obj<'py>)> {
         let np = py.import("numpy")?;
         let raw = |array: &Obj<'py>| -> PyResult<Obj<'py>> {

@@ -202,15 +202,10 @@ def test_pack_never_builds_plan_and_calls_native_once(tmp_path, monkeypatch):
         raise AssertionError('renderer built a Plan')
     monkeypatch.setattr(core.lazy_mesh, 'plan', forbidden)
     monkeypatch.setattr(packing, 'plan_of', forbidden)
-    calls = []
-    original = packing.assemble_scene
-    def once(*args):
-        calls.append(True)
-        return original(*args)
-    # One assembly, which runs the one scene bake (resident/assemble.rs).
-    monkeypatch.setattr(packing, 'assemble_scene', once)
-    pack_scene(scene)
-    assert calls == [True]
+    # The pack reads the file's own arrays (resident/sources.rs) and bakes
+    # them in one pass (resident/assemble.rs): no Plan on the way.
+    packed = pack_scene(scene)
+    assert len(packed.instances) == 2 and len(packed.commands) == 2
     for group in scene.groups:
         assert type(group.mesh) is DeferredMesh
         assert '_deferred_plan' not in group.mesh.__dict__

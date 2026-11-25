@@ -236,7 +236,7 @@ fn material_columns<'py>(
             let mut texture = attrs.call_method1("get", ("texture",))?;
             let mut path = if texture.is_truthy()? { texture.call_method1("get", ("path",))? } else { py.None().into_bound(py) };
             if let Some(recipe) = value(attrs, "pbr")? {
-                path = py.import("views.wgpu_scene")?.call_method1("_pbr_entry", (path, recipe))?;
+                path = super::pack::pbr_entry(py, &path, &recipe)?;
                 if !texture.is_truthy()? {
                     let unit = PyDict::new(py);
                     unit.set_item("sw", 1.)?;
