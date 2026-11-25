@@ -28,6 +28,11 @@ def test_overlay_buffers_do_not_expand_lazy_mesh_or_follow_unrelated_edits(viewp
     assert type(mesh) is DeferredMesh
     group = loaded.groups.pop()
     vp = viewport
+    # This test is about the renderer's buffers. The bundled Model Info panel
+    # walks every face on each scene revision whether or not it is open, and
+    # that builds the mesh too: a separate defect, reported to the plugins lane.
+    from core import plugin_panels
+    monkeypatch.setattr(plugin_panels, "sync", lambda view, win: None)
     vp.scene.groups.append(group)
     vp.scene.show_hidden_geometry = True
     vp.scene.select([group])

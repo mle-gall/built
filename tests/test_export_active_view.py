@@ -14,13 +14,16 @@ from tests.model_panes import grid  # noqa: F401
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
-def _spy(grid, monkeypatch, name, result):
+def _spy(grid, monkeypatch, name, result, display=False):
+    """Record which view's ``name`` runs; ``display``: on the view's
+    display (``keys_stand_in``) instead of the view itself."""
     called = []
     for pane in grid.panes().values():
         def fake(*args, vp=pane.source_viewport, **kwargs):
             called.append(vp)
             return result() if callable(result) else result
-        monkeypatch.setattr(pane.source_viewport, name, fake)
+        target = pane.source_viewport.keys_stand_in if display else pane.source_viewport
+        monkeypatch.setattr(target, name, fake)
     return called
 
 
@@ -50,8 +53,9 @@ def test_the_view_lines_and_the_svg_take_the_active_view(grid, monkeypatch):
     win._view_line_groups()
     assert called and set(called) == {top}
     # The SVG builder draws its picture and faces from the same view.
-    called = _spy(grid, monkeypatch, "render_image",
-                  lambda: solid_raster(8, 8, (0, 0, 0)))
+    called = _spy(grid, monkeypatch, "render_pixels",
+                  (8, 8, bytes(8 * 8 * 4)), display=True)
     builder = win.view_svg_builder()
-    builder._image_fn(64)
+    picture, _rect = builder._image_fn(64)
     assert called == [top]
+    assert (picture.width, picture.height) == (8, 8)
