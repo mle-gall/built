@@ -65,7 +65,7 @@ fn drop<'py>(a: &Args<'py>) -> Reply<'py> {
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
     let window: Obj<'py>;
-    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "ingetrazo_core.i18n")?.getattr("tr")?;
     if tool
         .call_method1("_send", (&vp, &event))?
         .get_item("committed")?

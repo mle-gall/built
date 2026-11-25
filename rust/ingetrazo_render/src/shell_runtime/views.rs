@@ -138,7 +138,7 @@ fn display_name<'p>(doc: &Obj<'p>) -> PyResult<Obj<'p>> {
     }
     let name = doc.getattr("import_name")?;
     if name.is_truthy()? {return Ok(name.str()?.into_any());}
-    py.import("core.i18n")?.call_method1("tr", ("Untitled",))
+    py.import("ingetrazo_core.i18n")?.call_method1("tr", ("Untitled",))
 }
 #[pyfunction]
 fn same_file(doc: &Obj<'_>, path: &Obj<'_>) -> PyResult<bool> {

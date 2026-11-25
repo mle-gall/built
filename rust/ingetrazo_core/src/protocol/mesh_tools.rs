@@ -125,7 +125,7 @@ fn follow_me<'py>(
 ) -> Reply<'py> {
     let py = history.py();
     let points = py.get_type::<PyList>().call1((path,))?;
-    let message = py.import("core.i18n")?.call_method1(
+    let message = py.import("ingetrazo_core.i18n")?.call_method1(
         "tr",
         ("Follow Me: could not sweep along that path (reversal or degenerate segment)",),
     )?;

@@ -163,7 +163,7 @@ fn igz_nonfinite_error(owner: &Obj<'_>, r#where: &Obj<'_>) -> PyResult<()> {
     owner.setattr("where", r#where)?;
     let kwargs = PyDict::new(py);
     kwargs.set_item("where", r#where)?;
-    let message = py.import("core.i18n")?.call_method(
+    let message = py.import("ingetrazo_core.i18n")?.call_method(
         "tr",
         (concat!(
             "The model has a point with invalid coordinates (not a number), ",

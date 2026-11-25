@@ -478,7 +478,7 @@ impl SvgOptions {
     }
 
     fn wire(&self, py: Python<'_>) -> PyResult<Wire> {
-        let tr = py.import("core.i18n")?.getattr("tr")?;
+        let tr = py.import("ingetrazo_core.i18n")?.getattr("tr")?;
         let translate = |s: &str| tr.call1((s,))?.extract::<String>();
         let mut fields = self.fields();
         for row in &mut fields {

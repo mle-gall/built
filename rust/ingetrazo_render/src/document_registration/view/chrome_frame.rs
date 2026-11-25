@@ -662,7 +662,7 @@ fn chrome_offset(display: &Obj<'_>) -> PyResult<(f64, f64)> {
 fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, win) = (a.get_item(0)?, a.get_item(1)?);
-    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let tr = py.import("ingetrazo_core.i18n")?.getattr("tr")?;
     let tools = attr(&view, "tools")?;
     let tool = attr(&tools, "active_tool")?;
     let caption = match attr(&tool, "vcb_caption")? {
@@ -749,7 +749,7 @@ pub(super) fn lens_value<'py>(a: &Args<'py>) -> Reply<'py> {
     let (x, y): (f64, f64) = (position.call_method0("x")?.extract()?, position.call_method0("y")?.extract()?);
     renderer.call_method1(
         "ui_set_cursor_value",
-        (py.import("core.i18n")?.call_method1("tr", ("Field of view",))?, text, typing, x + dx, y + dy - 40.0, py.None(), lens),
+        (py.import("ingetrazo_core.i18n")?.call_method1("tr", ("Field of view",))?, text, typing, x + dx, y + dy - 40.0, py.None(), lens),
     )?;
     Ok(none(py))
 }

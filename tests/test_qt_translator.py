@@ -3,7 +3,7 @@
 import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
-from core import i18n
+from ingetrazo_core import i18n
 from plugins._widget_language import apply_widget_language
 from ingetrazo_render.chrome_forms import Field, Form
 

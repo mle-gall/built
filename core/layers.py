@@ -381,7 +381,7 @@ def auto_layer(scene, english: str) -> str:
     new is ever drawn straight into hiding, as with the active layer.
     «Guides» is born not printed: guides never reach a sheet, and a printed
     layer would stand in every sheet's layer legend."""
-    from core.i18n import tr
+    from ingetrazo_core.i18n import tr
     name = tr(english)
     ly = scene.layer(name)
     if ly is None:

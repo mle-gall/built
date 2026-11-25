@@ -621,7 +621,7 @@ fn library_pick<'py>(a: &Args<'py>) -> Reply<'py> {
         "sc" => {
             let entry = starter()?;
             if entry.is_truthy()? {
-                let name = py.import("core.i18n")?.call_method1("tr", (entry.get_item("name")?,))?;
+                let name = py.import("ingetrazo_core.i18n")?.call_method1("tr", (entry.get_item("name")?,))?;
                 win.call_method1("_on_insert_component", (entry.get_item("key")?, name))?;
             }
         }

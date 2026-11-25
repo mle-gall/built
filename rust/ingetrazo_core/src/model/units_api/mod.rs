@@ -109,7 +109,7 @@ fn remember_new_document_units(units: &Obj<'_>) -> PyResult<()> {
 #[pyfunction]
 fn unit_label(py: Python<'_>, code: &str) -> PyResult<String> {
     let m = module(py)?;
-    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let tr = py.import("ingetrazo_core.i18n")?.getattr("tr")?;
     for name in ["UNIT_LABELS", "KIND_UNIT_NAMES"] {
         let labels = m.getattr(name)?;
         if labels.contains(code)? {
@@ -306,7 +306,7 @@ fn message(record: &Obj<'_>) -> PyResult<String> {
     if err.contains("{unit}") {
         kw.set_item("unit", record.getattr("word")?)?
     }
-    py.import("core.i18n")?
+    py.import("ingetrazo_core.i18n")?
         .call_method("tr", (err,), Some(&kw))?
         .extract()
 }

@@ -53,7 +53,7 @@ def test_into_and_beside_drops_restore_parents_in_one_undo_each(model):
 
 
 def test_row_menu_and_delete_key_remove_picked_rows_together(model):
-    from core.i18n import tr
+    from ingetrazo_core.i18n import tr
     host, vp, house, level, tree = model
     vp.scene.select([tree, level])
     assert tr("Delete") in group_rows(host, tree)

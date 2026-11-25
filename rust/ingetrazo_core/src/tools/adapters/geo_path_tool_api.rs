@@ -8,7 +8,7 @@ fn host_geo_plan<'py>(a: &Args<'py>) -> Reply<'py> {
     let enter = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
-    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "ingetrazo_core.i18n")?.getattr("tr")?;
     if enter.is_truthy()? && vp.call_method0("has_ground_surface")?.is_truthy()? {
         cam = vp.getattr("camera")?;
         tool.setattr(

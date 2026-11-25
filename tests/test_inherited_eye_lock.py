@@ -10,7 +10,7 @@ from __future__ import annotations
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group
-from core.i18n import tr
+from ingetrazo_core.i18n import tr
 from core.mesh import Mesh
 import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401

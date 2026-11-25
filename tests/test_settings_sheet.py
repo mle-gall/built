@@ -194,7 +194,7 @@ def test_a_built_setting_applies_at_once(win):
 
 
 def test_a_change_for_the_next_start_says_so(win):
-    from core.i18n import available_languages, current_language, set_language
+    from ingetrazo_core.i18n import available_languages, current_language, set_language
     running = current_language()
     others = [c for c in available_languages() if c != running]
     if not others:
@@ -202,7 +202,7 @@ def test_a_change_for_the_next_start_says_so(win):
     win.open_preferences()
     sheet = frame(win)
     row = fields(sheet)["language"]
-    from core.i18n import LANGUAGE_NAMES
+    from ingetrazo_core.i18n import LANGUAGE_NAMES
     sheet = act(win, "v", "language", row[7].index(LANGUAGE_NAMES.get(others[0], others[0])))
     assert preferences().value("language") == others[0]
     notes = [b["text"] for b in sheet["content"]["blocks"] if b["kind"] == "text" and b.get("tone") == "warn"]

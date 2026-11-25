@@ -566,7 +566,7 @@ def test_components_from_another_file_arrive_kept_and_placeable(tmp_path, native
     scene = win.viewport.scene
     from ingetrazo_render import wgpu_library as library
     from tests.test_library_sheet import Renderer, act, frame
-    from core.i18n import tr
+    from ingetrazo_core.i18n import tr
     from ingetrazo_render.shell_files import ShellFileDialog
     from ingetrazo_render import chrome_dialogs
     monkeypatch.setattr(chrome_dialogs, "warning", lambda _, title, msg: pytest.fail(f"{title}: {msg}"))

@@ -77,7 +77,7 @@ fn prompt<'py>(a: &Args<'py>, dimension: bool) -> Reply<'py> {
     if !dimension {
         options.set_item("multiline", true)?;
     }
-    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "ingetrazo_core.i18n")?.getattr("tr")?;
     imported(py, "ingetrazo_render")?
         .getattr("chrome_forms")?
         .call_method(

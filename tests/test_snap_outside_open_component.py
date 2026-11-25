@@ -158,7 +158,7 @@ def test_the_box_does_not_take_the_rest_of_the_model(native_host):
 def test_the_tip_says_the_point_is_outside_the_open_component(native_host):
     """The ScreenTip's suffix: the rest of the model is not «in component»,
     it is outside the component being edited."""
-    from core.i18n import tr
+    from ingetrazo_core.i18n import tr
     win, vp, a, _b = _window(native_host)
     vp.begin_group_edit(a)
     assert _snap(vp, V(6.0, 0.0, 0.0)).context == "outside"
@@ -181,7 +181,7 @@ def test_the_tip_says_the_point_is_outside_the_open_component(native_host):
 
 
 def test_outside_a_plain_group_the_tip_names_the_group(native_host):
-    from core.i18n import tr
+    from ingetrazo_core.i18n import tr
     win, vp, _a, _b = _window(native_host)
     gm = Mesh()
     _box(gm)
@@ -195,7 +195,7 @@ def test_outside_a_plain_group_the_tip_names_the_group(native_host):
 
 
 def test_at_the_root_a_components_point_still_says_in_component(native_host):
-    from core.i18n import tr
+    from ingetrazo_core.i18n import tr
     win, vp, _a, _b = _window(native_host)
     assert vp.scene.edit_group is None
     assert _snap(vp, V(3.0, 0.0, 1.0)).context == "component"

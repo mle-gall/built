@@ -1,6 +1,6 @@
 """Prompt, provider settings and conversation limits shared by assistant panels."""
 from core import ai, ai_recipes
-from core.i18n import tr
+from ingetrazo_core.i18n import tr
 
 MAX_ROUNDS = 12
 
@@ -37,7 +37,7 @@ def system_prompt(lang: str | None = None) -> str:
     español», so it answered an English user in Spanish even after being
     told not to (#790)."""
     if lang is None:
-        from core.i18n import current_language
+        from ingetrazo_core.i18n import current_language
         lang = current_language()
     name = _LANGUAGE_NAMES.get(lang, "English")
     return SYSTEM_PROMPT + (

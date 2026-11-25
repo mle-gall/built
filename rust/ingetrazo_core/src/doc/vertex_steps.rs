@@ -91,7 +91,7 @@ fn reject(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, reason: &Obj<'_>) -> 
     let kw = pyo3::types::PyDict::new(py);
     kw.set_item("defect", defect)?;
     let message = py
-        .import("core.i18n")?
+        .import("ingetrazo_core.i18n")?
         .getattr("tr")?
         .call(("Not joined: it would leave {defect}. The move was undone.",), Some(&kw))?;
     Err(PyErr::from_value(host(py, "CommandRejected")?.call1((message,))?))

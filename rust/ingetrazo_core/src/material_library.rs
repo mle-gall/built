@@ -352,7 +352,7 @@ pub(crate) fn material_inspector(
     }
     let opacity = (data["opacity"].as_f64().unwrap_or(1.) * 100.).round();
     use crate::material_finish::{guess_finish, lookup, FINISHES};
-    let tr = mat.py().import("core.i18n")?.getattr("tr")?;
+    let tr = mat.py().import("ingetrazo_core.i18n")?.getattr("tr")?;
     let filename = image.and_then(|p| p.rsplit(['/', '\\']).next());
     let guess = guess_finish(Some(&name), filename, data["opacity"].as_f64());
     let kwargs = PyDict::new(mat.py());

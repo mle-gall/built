@@ -88,7 +88,7 @@ impl CatalogueSession {
     }
     fn build<'p>(&mut self, base: &Obj<'p>, query: &str) -> PyResult<Obj<'p>> {
         let py = base.py();
-        let i18n = py.import("core.i18n")?;
+        let i18n = py.import("ingetrazo_core.i18n")?;
         let json = py.import("json")?;
         let wire = json
             .call_method1("dumps", (base.call_method0("wire")?,))?

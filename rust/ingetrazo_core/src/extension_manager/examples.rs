@@ -84,7 +84,7 @@ pub(super) fn bundle_hash(py: Python, p: &Path) -> PyResult<String> {
 }
 #[pyfunction]
 fn bundled_extensions(py: Python) -> PyResult<Vec<Obj>> {
-    let i18n = py.import("core.i18n")?;
+    let i18n = py.import("ingetrazo_core.i18n")?;
     let lang = i18n.call_method0("current_language")?.extract::<String>()?;
     let lang = lang.split(['-', '_']).next().unwrap_or("").to_lowercase();
     let version = version(py)?;

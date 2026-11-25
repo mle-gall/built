@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from core.i18n import tr
+from ingetrazo_core.i18n import tr
 from core.settings import settings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_shortcuts_transfer import _keys, ventana  # noqa: F401

@@ -46,7 +46,7 @@ from __future__ import annotations
 from typing import Optional
 
 from ingetrazo_core import Vec3 as QVector3D
-from core.i18n import tr
+from ingetrazo_core.i18n import tr
 from tools.base import Tool
 
 

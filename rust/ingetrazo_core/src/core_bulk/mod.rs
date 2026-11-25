@@ -8,6 +8,7 @@ mod annotations;
 mod autosave;
 mod axes;
 mod geometry;
+mod i18n;
 mod materials;
 mod paths;
 mod structure;
@@ -199,6 +200,7 @@ pub(crate) fn register(core: &Module<'_>) -> PyResult<()> {
         "settings",
         "timers",
         "paths",
+        "i18n",
         "autosave",
         "axes",
         "geometry",
@@ -212,6 +214,7 @@ pub(crate) fn register(core: &Module<'_>) -> PyResult<()> {
         let m = PyModule::new(py, &format!("ingetrazo_core.{name}"))?;
         modules.set_item(m.name()?, &m)?;
         match name {
+            "i18n" => i18n::install(&m)?,
             "paths" => paths::install(&m)?,
             "autosave" => autosave::install(&m)?,
             "axes" => axes::install(&m, core)?,

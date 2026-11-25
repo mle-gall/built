@@ -137,7 +137,7 @@ fn why_not_repairable<'p>(mesh: &Obj<'p>, item: &Obj<'p>) -> PyResult<Option<Obj
         }
         _ => return Ok(None),
     };
-    Ok(Some(py.import("core.i18n")?.call_method1("tr", (msg,))?))
+    Ok(Some(py.import("ingetrazo_core.i18n")?.call_method1("tr", (msg,))?))
 }
 
 pub(super) fn winding(mesh: &Obj<'_>) -> PyResult<()> {

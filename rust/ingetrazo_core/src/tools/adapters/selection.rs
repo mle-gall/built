@@ -472,7 +472,7 @@ fn cycle_status<'py>(a: &Args<'py>) -> Reply<'py> {
     let viewport = a.get_item(0)?;
     let flash = optional(&viewport, "flash_status")?;
     if flash.is_callable() {
-        let tr = imported(py, "core.i18n")?.getattr("tr")?;
+        let tr = imported(py, "ingetrazo_core.i18n")?.getattr("tr")?;
         flash.call1((tr.call1(("{index} of {count}: {what} — click again for the next",))?.call_method("format", (), Some(&fields!(py; "index" => index.add(1)?, "count" => &count, "what" => module.call_method1("describe_pick", (&entity,))?)))?,))?;
     }
     Ok(none(py))
@@ -520,7 +520,7 @@ fn describe_pick<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let entity = a.get_item(0)?;
     let module = imported(py, "tools.select_host")?;
-    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "ingetrazo_core.i18n")?.getattr("tr")?;
     if entity.is_instance(&module.getattr("Group")?)? {
         let group = tr.call1((if entity.call_method0("is_instance")?.is_truthy()? {
             "Component"

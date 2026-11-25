@@ -139,7 +139,7 @@ pub fn sheet_command_scope<'py>(win: &Bound<'py, PyAny>) -> PyResult<Bound<'py, 
     owner.setattr("_registry_actions", &registry)?;
     let paths = PyDict::new(py);
     owner.setattr("_command_paths", &paths)?;
-    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let tr = py.import("ingetrazo_core.i18n")?.getattr("tr")?;
     let bind =
         |id: &str, label: &str, path: &str, tip: &str, keys: &[&str], tool: bool| -> PyResult<()> {
             let action = crate::shell_commands::make(&owner, &tr.call1((label,))?, None, None, false, true)?;

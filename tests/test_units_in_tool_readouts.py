@@ -20,7 +20,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core import units  # noqa: E402
 from core.history import History  # noqa: E402
-from core.i18n import tr  # noqa: E402
+from ingetrazo_core.i18n import tr  # noqa: E402
 from core.scene import Scene  # noqa: E402
 from tools.base import ToolContext  # noqa: E402
 from tools.circle import CircleTool, PolygonTool  # noqa: E402

@@ -1060,7 +1060,7 @@ fn model_rows<'py>(py: Python<'py>, model: &Bound<'py, PyAny>) -> PyResult<Bound
         let unit = u.getattr("UNITS")?.get_item(u.call_method1(name, (&length,))?)?;
         auto.push(trf(py, "By the length ({unit})", &[("unit", unit.getattr("symbol")?)])?);
     }
-    let tr_fn = py.import("core.i18n")?.getattr("tr")?;
+    let tr_fn = py.import("ingetrazo_core.i18n")?.getattr("tr")?;
     model.call_method1("rows", (tr_fn, u.getattr("unit_label")?, u.call_method1("preview_text", (&settings,))?, PyTuple::new(py, auto)?, u.getattr("FRACTION_LABELS")?))
 }
 

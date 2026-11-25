@@ -59,7 +59,7 @@ pub(crate) fn plan_scene_command<'py>(
     let command = match verb {
         "duplicate" => {
             let suffix: String = py
-                .import("core.i18n")?
+                .import("ingetrazo_core.i18n")?
                 .call_method1("tr", (" (copy)",))?
                 .extract()?;
             let base = format!("{}{suffix}", view.getattr("name")?.extract::<String>()?);

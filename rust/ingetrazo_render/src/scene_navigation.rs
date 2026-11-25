@@ -161,7 +161,7 @@ fn play_scenes(win: &Bound<'_, PyAny>, on: bool) -> PyResult<()> {
     win.call_method1("_on_player_active", (active,))?;
     win.call_method0("statusBar")?.call_method1(
         "showMessage",
-        (py.import("core.i18n")?.call_method1("tr", (tip,))?, ms),
+        (py.import("ingetrazo_core.i18n")?.call_method1("tr", (tip,))?, ms),
     )?;
     Ok(())
 }

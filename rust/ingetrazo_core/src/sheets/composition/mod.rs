@@ -28,7 +28,7 @@ fn fields(record: &Obj) -> PyResult<model::Fields> {
     model::read_fields(crate::doc::py::handle_key(record)?)
 }
 fn tr(py: Python<'_>, key: &str) -> PyResult<String> {
-    py.import("core.i18n")?
+    py.import("ingetrazo_core.i18n")?
         .call_method1("tr", (key,))?
         .extract()
 }

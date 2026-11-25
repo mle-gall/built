@@ -64,7 +64,7 @@ def test_clear_selection_on_an_empty_selection_is_a_no_op():
 # ---- the window: menu, shortcut, status bar, configurability ----------------
 
 def test_edit_menu_offers_it(native_host):
-    from core.i18n import source_of
+    from ingetrazo_core.i18n import source_of
     win = native_host.window
     assert source_of(_action(win).text()) == "Select None"
 

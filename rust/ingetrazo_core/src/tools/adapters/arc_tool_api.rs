@@ -225,7 +225,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
         return Ok(none(py));
     }
     let [kind, value, point] = unpack::<3>(&label)?;
-    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "ingetrazo_core.i18n")?.getattr("tr")?;
     let length = || imported(py, "core.units")?.call_method1("fmt_len", (&value,));
     let key: String = kind.extract()?;
     let text = match key.as_str() {

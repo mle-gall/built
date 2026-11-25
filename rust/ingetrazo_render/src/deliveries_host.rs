@@ -394,7 +394,7 @@ impl FormCheck {
                     let objects = py.import("core.bim")?.call_method1("collect_objects", (scoped,))?;
                     if !objects.is_truthy()? {
                         let text = "Nothing to export: tag geometry in the BIM panel first (only tagged objects go to IFC).";
-                        return Ok(Some(py.import("core.i18n")?.call_method1("tr", (text,))?.extract()?));
+                        return Ok(Some(py.import("ingetrazo_core.i18n")?.call_method1("tr", (text,))?.extract()?));
                     }
                 }
             }

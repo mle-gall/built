@@ -510,7 +510,7 @@ impl<'py> Hierarchy<'py> {
             materials: PyDict::new(py),
             meshes: PyDict::new(py),
             figures: PyList::empty(py),
-            tr: py.import("core.i18n")?.getattr("tr")?,
+            tr: py.import("ingetrazo_core.i18n")?.getattr("tr")?,
         };
         let visible = |f: &Obj<'py>| -> PyResult<bool> {
             Ok(scene.call_method1("entity_visible", (f,))?.is_truthy()?

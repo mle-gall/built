@@ -101,7 +101,7 @@ pub(super) fn install_interaction_module(module: &Bound<PyModule>) -> PyResult<(
             import_names(module, "typing", &[("Optional", "Optional")])?;
             import_names(module, "core.camera", &[("OrbitCamera", "OrbitCamera")])?;
             import_names(module, "ingetrazo_core.history", &[("History", "History")])?;
-            import_names(module, "core.i18n", &[("tr", "tr")])?;
+            import_names(module, "ingetrazo_core.i18n", &[("tr", "tr")])?;
             import_names(
                 module,
                 "core.inference",
@@ -250,7 +250,7 @@ fn labels<'py>(a: &Args<'py>) -> Reply<'py> {
         names.add(row.get_item(0)?)?;
         names.add(row.get_item(2)?)?;
     }
-    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let tr = py.import("ingetrazo_core.i18n")?.getattr("tr")?;
     let result = PyDict::new(py);
     for name in names.iter() {
         result.set_item(&name, tr.call1((&name,))?)?;

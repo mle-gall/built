@@ -52,5 +52,5 @@ def test_the_click_says_why_nothing_changed():
     name = "panela_porta"
     msg = ("{name}: every face has its own material, so nothing changed "
            "— open it and paint the faces")
-    from core.i18n import tr
+    from ingetrazo_core.i18n import tr
     assert tr(msg, name=name).startswith(name)

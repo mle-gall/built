@@ -114,7 +114,7 @@ pub(crate) fn defect_name(py: Python<'_>, kind: &str) -> PyResult<String> {
         "zero_edge" => "an edge of zero length",
         other => return Err(PyKeyError::new_err(other.to_owned())),
     };
-    py.import("core.i18n")?.getattr("tr")?.call1((text,))?.extract()
+    py.import("ingetrazo_core.i18n")?.getattr("tr")?.call1((text,))?.extract()
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

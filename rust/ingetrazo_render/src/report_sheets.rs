@@ -37,7 +37,7 @@ fn spec_sheet<'py>(py: Python<'py>, spec: &str) -> PyResult<Bound<'py, PyAny>> {
 }
 
 fn tr(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    py.import("core.i18n")?.getattr("tr")
+    py.import("ingetrazo_core.i18n")?.getattr("tr")
 }
 
 /// Put `text` on the clipboard (the system pasteboard; false where there
@@ -135,7 +135,7 @@ pub fn about_review<'py>(
     })?;
     d.set_item("size", size)?;
     d.set_item("native", host.is_some())?;
-    d.set_item("language", py.import("core.i18n")?.call_method0("current_language")?)?;
+    d.set_item("language", py.import("ingetrazo_core.i18n")?.call_method0("current_language")?)?;
     d.set_item("engine", py.import("core._native")?.call_method0("engine")?)?;
     d.set_item("commit", env!("BUILT_COMMIT"))?;
     let review = py.import("ingetrazo_render")?.getattr("AboutReview")?;
@@ -535,7 +535,7 @@ impl ExtensionsSheet {
         d.set_item("incompatible", incompatible)?;
         d.set_item("old", old)?;
         d.set_item("cache", self.cache.bind(py).str()?)?;
-        d.set_item("lang", py.import("core.i18n")?.call_method0("current_language")?)?;
+        d.set_item("lang", py.import("ingetrazo_core.i18n")?.call_method0("current_language")?)?;
         d.set_item("build", py.import("ingetrazo_core.version")?.getattr("__version__")?)?;
         let text = py.import("json")?.getattr("dumps")?.call((d,), Some(&[("default", py.import("builtins")?.getattr("str")?)].into_py_dict(py)?))?;
         self.model.bind(py).call_method1("load", (text,))?;

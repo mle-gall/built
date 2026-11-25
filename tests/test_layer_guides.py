@@ -339,7 +339,7 @@ def test_undo_and_redo_keep_the_automatic_layer():
 
 
 def test_the_automatic_layers_take_the_interface_language():
-    from core.i18n import current_language, set_language
+    from ingetrazo_core.i18n import current_language, set_language
     before = current_language()
     set_language("es")
     try:

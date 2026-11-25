@@ -100,7 +100,7 @@ fn preview<'py>(
                 fields.set_item("p", format!("({x:.2}, {y:.2}, {z:.2})"))?;
             }
             return py
-                .import("core.i18n")?
+                .import("ingetrazo_core.i18n")?
                 .call_method("tr", (message,), Some(&fields));
         }
         Err(e) => return Err(e),
@@ -202,7 +202,7 @@ pub(crate) fn plan_fillet<'p>(
     let py = mesh.py();
     let keys = selected(edges)?;
     if let Some(msg) = refusal(&keys, radius, profile, "Pick an edge to round.") {
-        return py.import("core.i18n")?.call_method1("tr", (msg,));
+        return py.import("ingetrazo_core.i18n")?.call_method1("tr", (msg,));
     }
     let measure = match measure {
         "offset" | "width" | "depth" => measure,
@@ -215,7 +215,7 @@ pub(crate) fn plan_fillet<'p>(
         if shape.is_instance_of::<PyTuple>() || shape.is_instance_of::<PyList>() {
             controls = crate::bevel_editor::read(shape).unwrap_or_default();
             if !valid_controls(&controls) {
-                return py.import("core.i18n")?.call_method1(
+                return py.import("ingetrazo_core.i18n")?.call_method1(
                     "tr",
                     ("The drawn profile must run from one face to the other.",),
                 );
@@ -259,7 +259,7 @@ pub(crate) fn plan_vertex_bevel<'p>(
     let py = mesh.py();
     let keys = selected(vertices)?;
     if let Some(msg) = refusal(&keys, size, profile, "Pick a corner to bevel.") {
-        return py.import("core.i18n")?.call_method1("tr", (msg,));
+        return py.import("ingetrazo_core.i18n")?.call_method1("tr", (msg,));
     }
     let store = mesh.getattr("_store")?;
     let plan = store.extract::<PyRef<PyMeshStore>>()?.plan_vertex_bevel(

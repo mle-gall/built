@@ -343,7 +343,7 @@ fn degenerate_reason<'py>(a: &Args<'py>) -> Reply<'py> {
     let tool = a.get_item(0)?;
     let template: Obj<'py>;
     let world = a.get_item(1)?;
-    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "ingetrazo_core.i18n")?.getattr("tr")?;
     {
         let [part0, part1] = unpack::<2>(&tool.call_method1(
             "_query",

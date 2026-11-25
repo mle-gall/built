@@ -808,7 +808,7 @@ impl<'a, 'py> Row<'a, 'py> {
                 let done = (|| {
                     let count = core_module.call_method1("import_hatch_file", (viewport.getattr("history")?, &path))?;
                     let name = py.import("pathlib")?.getattr("Path")?.call1((&path,))?.getattr("name")?;
-                    let message = py.import("core.i18n")?.getattr("tr")?.call(("{n} hatch patterns imported from {name}",), Some(&fields!(py; "n" => count, "name" => name)))?;
+                    let message = py.import("ingetrazo_core.i18n")?.getattr("tr")?.call(("{n} hatch patterns imported from {name}",), Some(&fields!(py; "n" => count, "name" => name)))?;
                     self.flash(message.str()?.to_str()?)?;
                     self.rebuild()?;
                     self.changed()

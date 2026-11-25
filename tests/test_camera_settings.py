@@ -252,8 +252,8 @@ def test_the_inspector_shows_and_sets_the_camera(native_host):
 
 def test_every_language_names_the_window():
     import json
-    from core.i18n import _I18N_DIR
-    for p in _I18N_DIR.glob("*.json"):
+    from ingetrazo_core.paths import app_root
+    for p in (app_root() / "i18n").glob("*.json"):
         if p.stem == "en":
             continue
         data = json.loads(p.read_text(encoding="utf-8"))

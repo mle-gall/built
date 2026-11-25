@@ -34,7 +34,7 @@ import traceback
 from pathlib import Path
 
 from ingetrazo_core.history import SnapshotImport
-from core.i18n import tr
+from ingetrazo_core.i18n import tr
 from ingetrazo_render.shell_files import ShellFileDialog
 from tools.base import Tool
 

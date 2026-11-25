@@ -106,7 +106,7 @@ fn on_release<'py>(a: &Args<'py>) -> Reply<'py> {
         .call_method1("_release_axis_drag", (&viewport,))?
         .is_truthy()?
     {
-        let tr = imported(py, "core.i18n")?.getattr("tr")?;
+        let tr = imported(py, "ingetrazo_core.i18n")?.getattr("tr")?;
         viewport.call_method1(
             "flash_status",
             (tr.call1(("Protractor axis set along the drag",))?,),
@@ -170,7 +170,7 @@ fn host_guide_toggle<'py>(a: &Args<'py>) -> Reply<'py> {
     let say: Obj<'py>;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
-    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "ingetrazo_core.i18n")?.getattr("tr")?;
     [guides, say] = unpack::<2>(&arguments)?;
     tool.getattr("_during")?
         .set_item("guides", guides.clone())?;
@@ -233,7 +233,7 @@ fn host_measured_angle<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let degrees = a.get_item(2)?;
     let viewport = a.get_item(1)?;
-    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "ingetrazo_core.i18n")?.getattr("tr")?;
     let fmt_angle_deg = imported(py, "core.units")?.getattr("fmt_angle_deg")?;
     viewport.call_method1("flash_status", (tr.call1(("Angle: {a}",))?.call_method("format", (), Some(&fields!(py; "a" => fmt_angle_deg.call((&degrees,), Some(&fields!(py; "signed" => true)))?)))?, 4000,))?;
     Ok(none(py))
@@ -298,7 +298,7 @@ fn status_clause<'py>(a: &Args<'py>) -> Reply<'py> {
     let guia: Obj<'py>;
     let medir: Obj<'py>;
     let tool = a.get_item(0)?;
-    let _tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let _tr = imported(py, "ingetrazo_core.i18n")?.getattr("tr")?;
     {
         let [part0, part1] = unpack::<2>(
             &(_tr.call1(("guide",))?, _tr.call1(("measure",))?).into_bound_py_any(py)?,

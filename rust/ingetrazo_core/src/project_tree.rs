@@ -136,7 +136,7 @@ pub(crate) fn placement_controls(row: &mut Row, group: &Bound<'_, PyAny>) -> PyR
         (1, locked, 0, "Locked by «{name}»"),
     ] {
         if let Some(name) = ancestor.filter(|_| row.1[5 + i] == open) {
-            let tr = group.py().import("core.i18n")?.getattr("tr")?;
+            let tr = group.py().import("ingetrazo_core.i18n")?.getattr("tr")?;
             let fields = pyo3::types::PyDict::new(group.py());
             fields.set_item("name", if name.is_empty() {
                 tr.call1(("Unnamed group",))?.extract()?

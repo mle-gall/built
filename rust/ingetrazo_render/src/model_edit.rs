@@ -28,7 +28,7 @@ pub(super) fn translated<'py>(
     text: &str,
     values: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    py.import("core.i18n")?.getattr("tr")?.call((text,), values)
+    py.import("ingetrazo_core.i18n")?.getattr("tr")?.call((text,), values)
 }
 
 pub(super) fn matching<'py>(

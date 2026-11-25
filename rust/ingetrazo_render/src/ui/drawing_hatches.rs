@@ -120,7 +120,7 @@ impl Hatches {
             let py = scene.py();
             let domain = py.import("core.hatches")?;
             let names: BTreeMap<String, String> = domain.getattr("HATCH_LABELS")?.extract()?;
-            let translate = py.import("core.i18n")?.getattr("tr")?;
+            let translate = py.import("ingetrazo_core.i18n")?.getattr("tr")?;
             let groups = domain
                 .getattr("HATCH_GROUPS")?
                 .extract::<Vec<(String, Vec<String>)>>()?;

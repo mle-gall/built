@@ -36,7 +36,7 @@ fn ctrl_clause<'py>(a: &Args<'py>) -> Reply<'py> {
     let active = a.get_item(0)?;
     let mut off = a.get_item(2)?;
     let mut on = a.get_item(1)?;
-    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "ingetrazo_core.i18n")?.getattr("tr")?;
     {
         let [part0, part1] =
             unpack::<2>(&(tr.call1((&on,))?, tr.call1((&off,))?).into_bound_py_any(py)?)?;

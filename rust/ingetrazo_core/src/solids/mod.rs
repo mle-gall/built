@@ -283,7 +283,7 @@ fn run<'p>(op: &str, groups: &Obj<'p>) -> PyResult<(Bound<'p, PyList>, Bound<'p,
         .map(|(i, g)| sources.operand(g, i))
         .collect::<PyResult<Vec<_>>>()?;
     let result = PyList::empty(py);
-    let name = py.import("core.i18n")?.call_method1("tr", (*label,))?;
+    let name = py.import("ingetrazo_core.i18n")?.call_method1("tr", (*label,))?;
     let add = |man: &Obj, operand: usize, outer: bool| -> PyResult<bool> {
         if let Some(g) = output::group(man, &sources, &name, &gs[operand].getattr("layer")?, outer)?
         {

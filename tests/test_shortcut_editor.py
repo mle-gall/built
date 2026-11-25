@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from core.i18n import current_language, set_language
+from ingetrazo_core.i18n import current_language, set_language
 from core.settings import settings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_render import settings_sheet

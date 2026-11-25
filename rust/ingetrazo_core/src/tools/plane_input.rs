@@ -91,7 +91,7 @@ pub fn plane_input(
             args.set_item("plane", label)?;
         }
         let translated = py
-            .import("core.i18n")?
+            .import("ingetrazo_core.i18n")?
             .getattr("tr")?
             .call((text,), Some(&args))?;
         flash.call1((translated,))?;

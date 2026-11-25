@@ -163,7 +163,7 @@ impl BrowserRename {
             .flat_map(|(a, b)| [a, b])
             .collect();
         rows.push(pairs);
-        let tr = py.import("core.i18n")?.getattr("tr")?;
+        let tr = py.import("ingetrazo_core.i18n")?.getattr("tr")?;
         for field in &mut rows {
             field.2 = tr.call1((&field.2,))?.extract()?;
             if field.1 == "choice" {

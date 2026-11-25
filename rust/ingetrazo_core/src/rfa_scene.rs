@@ -27,7 +27,7 @@ fn dict<'p>(d: &Obj<'p>, k: &str) -> PyResult<Bound<'p, PyDict>> {
     }
 }
 fn tr<'p>(py: Python<'p>, msg: &str) -> PyResult<Obj<'p>> {
-    py.import("core.i18n")?.call_method1("tr", (msg,))
+    py.import("ingetrazo_core.i18n")?.call_method1("tr", (msg,))
 }
 fn invalid(py: Python<'_>, msg: &str) -> PyErr {
     tr(py, msg)
@@ -134,7 +134,7 @@ fn placeholder<'p>(
 ) -> PyResult<Obj<'p>> {
     let py = name.py();
     let mut dims = [1.; 3];
-    let translator = py.import("core.i18n")?.getattr("tr")?;
+    let translator = py.import("ingetrazo_core.i18n")?.getattr("tr")?;
     let kw = PyDict::new(py);
     kw.set_item("name", name)?;
     for (i, axis) in ["Width", "Depth", "Height"].into_iter().enumerate() {

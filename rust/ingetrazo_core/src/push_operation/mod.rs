@@ -270,7 +270,7 @@ fn flash(vp: &Obj, msg: &str, ms: u32, args: &[(&str, Obj)]) -> PyResult<()> {
     }
     let text = vp
         .py()
-        .import("core.i18n")?
+        .import("ingetrazo_core.i18n")?
         .call_method("tr", (msg,), Some(&kw))?;
     vp.call_method1("flash_status", (text, ms))?;
     Ok(())

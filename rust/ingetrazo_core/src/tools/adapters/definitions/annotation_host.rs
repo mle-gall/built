@@ -38,7 +38,7 @@ fn prompt<'py>(a: &Args<'py>) -> Reply<'py> {
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
     let args = a.get_item(2)?;
-    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "ingetrazo_core.i18n")?.getattr("tr")?;
     tool.setattr("work_plane", py.None())?;
     let done = py
         .import("functools")?

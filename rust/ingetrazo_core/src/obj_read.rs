@@ -318,7 +318,7 @@ fn piece_name(py: Python<'_>, s: &str, i: usize) -> PyResult<String> {
     } else {
         kw.set_item("n", n)?
     }
-    py.import("core.i18n")?
+    py.import("ingetrazo_core.i18n")?
         .call_method("tr", ("Part {n}",), Some(&kw))?
         .extract()
 }
@@ -437,7 +437,7 @@ fn obj_load<'p>(
             path.file_name().unwrap_or_default().to_string_lossy(),
         )?;
         Some(
-            py.import("core.i18n")?
+            py.import("ingetrazo_core.i18n")?
                 .call_method("tr", ("“{name}” has no geometry.",), Some(&kw))?
                 .extract::<String>()?,
         )

@@ -21,7 +21,7 @@ def test_the_unsaved_changes_sheet_offers_discard_cancel_and_save(native_host, m
 
 
 def test_the_buttons_speak_the_app_language(native_host, monkeypatch):
-    from core import i18n
+    from ingetrazo_core import i18n
     seen = []
 
     def answer(win, title, text, buttons, **roles):

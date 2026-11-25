@@ -24,7 +24,7 @@ import math
 
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.i18n import current_language
+from ingetrazo_core.i18n import current_language
 
 #: Guides and snapping only when the view looks sideways: |pitch| below this.
 MAX_PITCH_DEG = 15.0
