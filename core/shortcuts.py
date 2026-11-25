@@ -33,9 +33,7 @@ def collect_actions(window) -> list:
     """The window's actions a user can press: with text, not a separator,
     not a submenu, one per key (the first wins)."""
     seen: dict = {}
-    gui = sys.modules.get("PySide6.QtGui")
-    widget_actions = window.findChildren(gui.QAction) if gui and hasattr(window, "findChildren") else ()
-    for act in (*vars(window).get("_command_actions", {}).values(), *widget_actions):
+    for act in vars(window).get("_command_actions", {}).values():
         if act.isSeparator() or act.menu() is not None:
             continue
         if not _plain(act.text()):
@@ -63,9 +61,6 @@ def action_keys(action):
 
 
 def set_action_keys(action, keys):
-    if not hasattr(action, "portable_keys"):
-        from PySide6.QtGui import QKeySequence
-        keys = [QKeySequence(s) for s in keys]
     action.setShortcuts(keys)
 
 

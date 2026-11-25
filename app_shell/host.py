@@ -30,7 +30,6 @@ _CURSORS = {
     17: "grab", 18: "grabbing", 20: "copy", 21: "alias",
 }
 #: Qt.BitmapCursor: a pixmap cursor (the tools' icons).
-_BITMAP = 24
 
 #: The repository and venv the interpreter was started on (bootstrap).
 ROOT = None
@@ -207,35 +206,10 @@ class Host:
         try:
             shape = cursor.shape() if hasattr(cursor, "shape") else cursor
             value = int(getattr(shape, "value", shape))
-            if value == _BITMAP and hasattr(cursor, "pixmap"):
-                name = self._bitmap_cursor(cursor)
-            else:
-                name = _CURSORS.get(value, "crosshair")
+            name = _CURSORS.get(value, "crosshair")
         except Exception:
             name = "default"
         self._cursor = name
-
-    def _bitmap_cursor(self, cursor):
-        """A tool's pixmap cursor as a native one: its picture at the
-        cursor's logical size (winit sizes a custom cursor by its pixels)."""
-        from PySide6.QtCore import Qt
-        from PySide6.QtGui import QImage
-        pm = cursor.pixmap()
-        if pm.isNull():
-            return "crosshair"
-        key = str(pm.cacheKey())
-        if key not in self._custom_cursors:
-            dpr = pm.devicePixelRatio() or 1.0
-            w = max(1, int(round(pm.width() / dpr)))
-            h = max(1, int(round(pm.height() / dpr)))
-            img = pm.toImage().scaled(w, h, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
-            img = img.convertToFormat(QImage.Format_RGBA8888)
-            data = bytes(img.constBits())[: w * h * 4]
-            hot = cursor.hotSpot()
-            hx = min(w - 1, max(0, int(hot.x())))
-            hy = min(h - 1, max(0, int(hot.y())))
-            self._custom_cursors[key] = (w, h, hx, hy, data)
-        return "custom:" + key
 
     def custom_cursor(self, key):
         return self._custom_cursors.get(key)
@@ -266,6 +240,8 @@ class Host:
         """Qt's posted events and timers; then what the window should do:
         ``(frame_wanted, wake_in_ms or None, cursor or None, title or None)``."""
         self._guard("window timers", self.timers.run_due)
+        from core import timers as core_timers
+        self._guard("hostless timers", core_timers.run_due)
         self.window._extension_menus.refresh(self.window)
         pending = self.window.__dict__.get("_pending_open")
         if pending and time.monotonic() >= pending.next_poll:
@@ -300,6 +276,7 @@ class Host:
         title, self._title = self._title, None
         wanted, self._frame_wanted = self._frame_wanted, False
         sooner(self.timers.next_ms())
+        sooner(core_timers.next_ms())
         return wanted, delay, cursor, title
 
     def extras(self):
@@ -363,6 +340,8 @@ class Host:
     def modal_frame(self):
         """A frame while a question or a job holds the loop (app_shell.modal)."""
         self._guard("window timers", self.timers.run_due)
+        from core import timers as core_timers
+        self._guard("hostless timers", core_timers.run_due)
         if self._frame_wanted:
             self._frame_wanted = False
             self.frame()
@@ -544,9 +523,6 @@ class Host:
         if slot is not None:
             win._command_actions[slot].trigger()
             return True
-        if vars(win).get("_action_tree_changed"):
-            from app_shell.legacy_actions import sync
-            sync(win)
         action = win._command_store.plugin_action(int(key), int(modifiers))
         if action is None:
             return False
@@ -677,9 +653,6 @@ class Host:
         chrome_forms.close_all(self.window)
         self.window._release_check = None
         windows.unregister(self)
-        if vars(self.window).get("_action_observer") is not None:
-            from app_shell.legacy_actions import close
-            close(self.window)
         self.window.scene_player.cancel()
         self.window._extension_menus.clear()
         self.window._extension_closed.emit()

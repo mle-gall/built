@@ -41,10 +41,6 @@ fn run_command<'py>(py: Python<'py>, history: &Bound<'py, PyAny>, name: &str, kw
     py.import("core.protocol.commands")?.getattr("run")?.call((history, name), Some(kwargs))
 }
 
-fn native(py: Python<'_>) -> PyResult<bool> {
-    py.import("core.input_types")?.getattr("NATIVE")?.is_truthy()
-}
-
 fn history_of<'py>(win: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     win.getattr("viewport")?.getattr("history")
 }
@@ -58,14 +54,10 @@ fn active_view<'py>(win: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     }
 }
 
-/// Run `fn` on the next turn of the window's loop.
+/// Run `fn` on the next turn of the window's loop (its host's queue, or
+/// the headless one, `core.timers`).
 fn next_turn(win: &Bound<'_, PyAny>, f: Bound<'_, PyAny>) -> PyResult<()> {
-    let py = win.py();
-    if native(py)? {
-        win.getattr("_host")?.getattr("timers")?.call_method1("later", (win, 0, f))?;
-    } else {
-        py.import("PySide6.QtCore")?.getattr("QTimer")?.call_method1("singleShot", (0, f))?;
-    }
+    win.py().import("core.timers")?.call_method1("later", (win, 0, f))?;
     Ok(())
 }
 
@@ -91,11 +83,7 @@ fn monotonic(py: Python<'_>) -> PyResult<f64> {
 fn report_job(win: &Bound<'_, PyAny>, history: &Bound<'_, PyAny>, job: &Bound<'_, PyAny>, fraction: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
     job.call_method1("update", (fraction,))?;
-    if dialogs(py)?.call_method0("in_shell")?.is_truthy()? {
-        py.import("app_shell.modal")?.call_method0("tick")?;
-    } else {
-        py.import("PySide6.QtWidgets")?.getattr("QApplication")?.call_method0("processEvents")?;
-    }
+    py.import("app_shell.modal")?.call_method0("tick")?; // a turn of the shell's loop; none headless
     if job.getattr("cancelled")?.is_truthy()? || !history_of(win)?.is(history) {
         return Err(PyInterruptedError::new_err("Delivery cancelled"));
     }
@@ -284,16 +272,12 @@ impl SvgPicture {
             let picture = (|| -> PyResult<Bound<'py, PyAny>> {
                 let width = svg.getattr(if self.preview { "PREVIEW_IMAGE_PX" } else { "EXPORT_IMAGE_PX" })?;
                 let kwargs = [("overlays", false), ("sharp_shadows", true)].into_py_dict(py)?;
-                let image = if native(py)? {
-                    let display = opt(&renderer, "keys_stand_in").unwrap_or_else(|| renderer.clone());
-                    let pixels = display.getattr("render_pixels")?.call((width,), Some(&kwargs))?;
-                    if pixels.is_truthy()? {
-                        py.import("ingetrazo_render")?.getattr("SurveyRaster")?.call1(pixels.cast_into::<PyTuple>()?)?
-                    } else {
-                        py.None().into_bound(py)
-                    }
+                let display = opt(&renderer, "keys_stand_in").unwrap_or_else(|| renderer.clone());
+                let pixels = display.getattr("render_pixels")?.call((width,), Some(&kwargs))?;
+                let image = if pixels.is_truthy()? {
+                    py.import("ingetrazo_render")?.getattr("SurveyRaster")?.call1(pixels.cast_into::<PyTuple>()?)?
                 } else {
-                    renderer.getattr("render_image")?.call((width,), Some(&kwargs))?
+                    py.None().into_bound(py)
                 };
                 let rect = py.import("core.vista_caras")?.call_method1("view_rect", (active.getattr("camera")?,))?;
                 Ok(PyTuple::new(py, [image, rect])?.into_any())

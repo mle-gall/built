@@ -174,7 +174,6 @@ def _merge_title_row(win) -> None:
     the model reaches the window's top edge; the project tabs are a glass
     capsule after the window buttons, on the top row of the chrome; the
     buttons sit centred on that row."""
-    chrome = getattr(win, "_mac_chrome", None)
     bar = getattr(win, "_project_tabs", None)
     if bar is not None:
         bar.hide()
@@ -182,23 +181,6 @@ def _merge_title_row(win) -> None:
     area = getattr(win, "_doc_area", None)
     if area is not None and area.layout() is not None:
         area.layout().setContentsMargins(0, 0, 0, 0)
-    if chrome is None:
-        return
-    from PySide6.QtCore import QPoint
-
-    def fit():
-        from views.mac_glass import _window_alive
-        if not _window_alive(win):
-            return
-        if win.windowState() & Qt.WindowFullScreen:
-            chrome._glass.place_lights(None)
-            return
-        view = getattr(getattr(win, "_doc", None), "stand_in", None)
-        top = view.mapTo(win, QPoint(0, 0)).y() if view is not None else 0
-        chrome._glass.place_lights(top + TOP_H / 2)     # the top bar's centre
-    chrome.fit_lights = fit
-    later(win, 0, fit)
-    later(win, 400, fit)
 
 
 def _project_action(win, arg) -> None:

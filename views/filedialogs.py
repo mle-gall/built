@@ -20,12 +20,18 @@ import os
 from pathlib import Path
 
 from core.settings import settings as QSettings
-from app_shell.native import _shell
-if _shell is not None:
-    from app_shell.files import ShellFileDialog as QFileDialog
-else:
-    from PySide6.QtCore import QStandardPaths
-    from PySide6.QtWidgets import QFileDialog
+
+
+#: The pickers in use: the system's file panels
+#: (``app_shell.files.ShellFileDialog``) unless a caller set others.
+QFileDialog = None
+
+
+def _pickers():
+    if QFileDialog is not None:
+        return QFileDialog
+    from app_shell.files import ShellFileDialog
+    return ShellFileDialog
 
 _KEY = "files/last_dir"
 
@@ -49,8 +55,8 @@ def last_dir(fallback: str | os.PathLike | None = None) -> str:
         return str(saved)
     if fallback and _is_dir(fallback):
         return str(fallback)
-    docs = (_shell.documents_directory() if _shell is not None else
-            QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation))
+    from ingetrazo_render import documents_directory
+    docs = documents_directory()
     return str(docs) if docs and _is_dir(docs) else str(Path.home())
 
 
@@ -110,20 +116,20 @@ class file_dialogs:  # noqa: N801 — reads like QFileDialog at the call site
 
     @staticmethod
     def getOpenFileName(*args, **kwargs):  # noqa: N802
-        return file_dialogs._run(QFileDialog.getOpenFileName, args, kwargs,
+        return file_dialogs._run(_pickers().getOpenFileName, args, kwargs,
                                  lambda r: r[0] if r else None)
 
     @staticmethod
     def getOpenFileNames(*args, **kwargs):  # noqa: N802
-        return file_dialogs._run(QFileDialog.getOpenFileNames, args, kwargs,
+        return file_dialogs._run(_pickers().getOpenFileNames, args, kwargs,
                                  lambda r: (r[0][0] if r and r[0] else None))
 
     @staticmethod
     def getSaveFileName(*args, **kwargs):  # noqa: N802
-        return file_dialogs._run(QFileDialog.getSaveFileName, args, kwargs,
+        return file_dialogs._run(_pickers().getSaveFileName, args, kwargs,
                                  lambda r: r[0] if r else None)
 
     @staticmethod
     def getExistingDirectory(*args, **kwargs):  # noqa: N802
-        return file_dialogs._run(QFileDialog.getExistingDirectory, args,
+        return file_dialogs._run(_pickers().getExistingDirectory, args,
                                  kwargs, lambda r: r or None)
