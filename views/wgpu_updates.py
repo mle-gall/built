@@ -89,10 +89,6 @@ class InstanceUpdates:
         # another mesh than the one resident (see the module docstring).
         self.pending_swaps = {}
         self.chains = {}
-        # (vertices, indices) with spare room past the resident arrays, so
-        # a rebake that outgrows its range appends without copying them.
-        self._store = None
-        self._reserving = None
         self.last_local = False
         self.added = 0
         self.pending = set()
@@ -346,11 +342,7 @@ class InstanceUpdates:
         self.packed.prototype_lookup[key] = code
         self.variants.setdefault(id(mesh), {})[code] = (paint, mode)
         fresh[code] = mesh
-        self.packed.bounds = np.concatenate((self.packed.bounds, np.zeros((1, 2, 4), np.float32)))
-        self.packed.commands = np.concatenate((self.packed.commands, np.zeros(1, COMMAND)))
-        self.packed.edge_commands = np.concatenate((self.packed.edge_commands, np.zeros(1, COMMAND)))
-        self.packed.hidden_commands = np.concatenate((self.packed.hidden_commands, np.zeros(1, COMMAND)))
-        self.packed.hidden_edge_commands = np.concatenate((self.packed.hidden_edge_commands, np.zeros(1, COMMAND)))
+        assert self.packed.append_prototype() == code
         return code, old
 
     def rebake_limit(self) -> int:
@@ -526,7 +518,7 @@ class InstanceUpdates:
         self.removed = removed if local else gone
         self.added = len(additions)
         if additions:
-            self.packed.instances = np.concatenate((self.packed.instances, np.zeros(len(additions), INSTANCE)))
+            self.packed.append_rows(len(additions))
             for uid, group, row in additions:
                 self.resident.add(uid, row)
                 self.packed.uids.append(uid)
@@ -534,93 +526,12 @@ class InstanceUpdates:
         return np.asarray(ids, np.int64), np.asarray(values, dtype=INSTANCE)
 
     def reserve(self, executor):
-        """Copy the resident CPU arrays into ones with spare room on
-        ``executor``, ahead of the first edit that appends. The first
-        append otherwise copies the whole model on the UI thread (65-200 ms
-        on the ride's 32 M vertices). Called on entering a group: the
-        intent to edit, and nothing is held twice for a model only looked
-        at (the copy is adopted as soon as it is done)."""
-        if self._store is not None or self._reserving is not None:
-            return
-        src_v, src_i = self.packed.vertices, self.packed.indices
-
-        def copy():
-            n = len(src_v)
-            capacity = n + max(n // 32, 4096)
-            vbuf = np.empty(capacity, src_v.dtype)
-            ibuf = np.empty(capacity, src_i.dtype)
-            # As raw bytes: a plain copy that releases the GIL.
-            for target, source in ((vbuf, src_v), (ibuf, src_i)):
-                if source.flags.c_contiguous:
-                    target[:n].view(np.uint8)[:] = source.view(np.uint8).reshape(-1)
-                else:
-                    target[:n] = source
-            return src_v, src_i, vbuf, ibuf
-        self._reserving = executor.submit(copy)
+        """Give the resident vertices and indices spare room, copied on
+        ``executor`` (PackedScene.reserve)."""
+        self.packed.reserve(executor)
 
     def adopt_reserved(self, wait=False):
-        """Swap a finished reservation in: the old ``(vertices, indices)``
-        when it was adopted, None when none is pending or it no longer
-        matches, False while it is still copying (and not ``wait``)."""
-        future = self._reserving
-        if future is None:
-            return None
-        if not wait and not future.done():
-            return False
-        self._reserving = None
-        try:
-            src_v, src_i, vbuf, ibuf = future.result()
-        except Exception:
-            return None
-        # Every write to these arrays goes through _place, which adopts
-        # first: identical arrays mean identical contents.
-        if (self._store is not None or self.packed.vertices is not src_v
-                or self.packed.indices is not src_i):
-            return None
-        n = len(src_v)
-        self.packed.vertices, self.packed.indices = vbuf[:n], ibuf[:n]
-        self._store = (vbuf, ibuf)
-        return src_v, src_i
-
-    def _place(self, code, vertices, indices) -> int:
-        """Write a rebaked prototype into the resident CPU arrays; its base.
-
-        Concatenating onto them copied the whole model per edit (0.5 s on
-        the ride, 1.4 s the first time). A rebake that fits the range its
-        code owns goes back there (a moved face keeps its counts); a longer
-        one is appended into spare room, grown by a margin when full."""
-        self.adopt_reserved(wait=True)
-        total = len(vertices)
-        packed = self.packed
-        tables = (packed.commands, packed.edge_commands,
-                  packed.hidden_commands, packed.hidden_edge_commands)
-        if code < len(packed.commands):
-            owned = sum(int(t[code]['count']) for t in tables)
-            base = int(packed.commands[code]['base'])
-            if total <= owned:
-                sizes = sum(t['count'].astype(np.int64) for t in tables)
-                # Two codes never share a range in the bake; check anyway,
-                # a shared one must not be overwritten for both.
-                if np.count_nonzero((packed.commands['base'] == base) & (sizes > 0)) == 1:
-                    packed.vertices[base:base+total] = vertices
-                    packed.indices[base:base+total] = indices
-                    return base
-        used = len(packed.vertices)
-        store = self._store
-        if (store is None or packed.vertices.base is not store[0]
-                or used + total > len(store[0])):
-            capacity = used + total + max(total * 4, used // 32, 4096)
-            vbuf = np.empty(capacity, packed.vertices.dtype)
-            ibuf = np.empty(capacity, packed.indices.dtype)
-            vbuf[:used] = packed.vertices
-            ibuf[:used] = packed.indices
-            store = self._store = (vbuf, ibuf)
-        vbuf, ibuf = store
-        vbuf[used:used+total] = vertices
-        ibuf[used:used+total] = indices
-        packed.vertices = vbuf[:used+total]
-        packed.indices = ibuf[:used+total]
-        return used
+        return self.packed.adopt_reserved(wait)
 
     def apply(self, ids, rows, renderer=None):
         if self.changed:
@@ -695,7 +606,7 @@ class InstanceUpdates:
                         records[:, 16:20] = vertices['color'][:int(face['count'])]
                         material = records.reshape(-1)
                     renderer.update_prototype_materials(code, material)
-                offset = self._place(code, vertices, indices)
+                offset = self.packed.place(code, vertices, indices)
                 self.packed.bounds[code] = bounds
                 for target, source in ((self.packed.commands, face), (self.packed.edge_commands, edge),
                                        (self.packed.hidden_commands, hidden_face),

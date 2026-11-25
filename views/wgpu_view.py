@@ -449,7 +449,7 @@ class MetalView(ViewNavigation):
     def _reserve_edit_room(self, tracker):
         """Entering a group: give the resident arrays spare room on the
         worker (InstanceUpdates.reserve), adopted once copied."""
-        if tracker._store is not None or tracker._reserving is not None:
+        if tracker.packed.room is not None or tracker.packed.reserving is not None:
             return
         if not hasattr(self, '_inference_worker'):
             self._inference_worker = _index_worker()

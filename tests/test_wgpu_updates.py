@@ -729,12 +729,14 @@ def test_reserved_room_takes_the_first_append_without_a_copy():
     with ThreadPoolExecutor(1) as pool:
         updates.reserve(pool)
         old = updates.adopt_reserved(wait=True)
-    assert old is not None and updates._store is not None
-    store = updates._store[0]
+    assert old is not None and updates.packed.room is not None
+    room = updates.packed.room
     mesh = scene.groups[0].mesh
     mesh.add_face([QVector3D(0, 0, 1), QVector3D(1, 0, 1), QVector3D(0, 1, 1)])
     updates.apply(*updates.diff(scene))
-    assert updates.packed.vertices.base is store and len(updates.packed.vertices) > size
+    # Appended into the reserved room: the same allocation, not a copy.
+    assert updates.packed.room is room and len(updates.packed.vertices) > size
+    assert len(updates.packed.vertices) <= room.capacity
     assert_matches_fresh_pack(updates, scene)
 
 

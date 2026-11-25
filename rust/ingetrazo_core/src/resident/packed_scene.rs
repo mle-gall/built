@@ -11,9 +11,15 @@
 //! edit filtering also hides it. Materials are 16-byte prototype headers
 //! followed by 32-byte corner records.
 //!
-//! The buffers are NumPy arrays (the document readers still index them by
-//! field); this side reads and writes their bytes in place.
-use numpy::{PyArray1, PyArrayDescrMethods, PyReadonlyArray2, PyUntypedArray, PyUntypedArrayMethods};
+//! The buffers are Rust allocations seen through NumPy arrays (the document
+//! readers index them by field); this side reads and writes their bytes in
+//! place. Vertices and indices can have spare room past their end (`Room`),
+//! so a rebaked prototype that outgrows its range is appended without
+//! copying the model.
+use numpy::{
+    ndarray::ArrayView1, PyArray1, PyArrayDescrMethods, PyArrayMethods, PyReadonlyArray2, PyUntypedArray,
+    PyUntypedArrayMethods,
+};
 use pyo3::{
     exceptions::PyValueError,
     prelude::*,
@@ -268,7 +274,12 @@ impl PackedScene {
     /// was noted on this one (a staged upload, the snap sources).
     fn __copy__<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, Self>> {
         let copy = Self::replace(slf, None)?;
-        copy.as_any().getattr("__dict__")?.call_method1("update", (slf.as_any().getattr("__dict__")?,))?;
+        let noted = copy.as_any().getattr("__dict__")?;
+        noted.call_method1("update", (slf.as_any().getattr("__dict__")?,))?;
+        // The spare room stays with the record that grows into it.
+        for key in ["_room", "_reserving"] {
+            noted.call_method1("pop", (key, slf.py().None()))?;
+        }
         Ok(copy)
     }
 
@@ -357,6 +368,193 @@ impl PackedScene {
         Ok(stream)
     }
 
+    /// The spare room past the vertices and indices, or None.
+    #[getter]
+    fn room<'py>(slf: &Bound<'py, Self>) -> PyResult<Obj<'py>> {
+        noted(slf, "_room")
+    }
+    /// The pending reservation of that room (`reserve`), or None.
+    #[getter]
+    fn reserving<'py>(slf: &Bound<'py, Self>) -> PyResult<Obj<'py>> {
+        noted(slf, "_reserving")
+    }
+
+    /// One more prototype, drawing nothing yet: its code.
+    fn append_prototype(&mut self, py: Python<'_>) -> PyResult<usize> {
+        let code = bytes(self.commands.bind(py))?.len() / COMMAND_BYTES;
+        let mut bounds = bytes(self.bounds.bind(py))?.to_vec();
+        bounds.extend_from_slice(&[0u8; 32]);
+        let floats: Vec<f32> = bounds.chunks_exact(4).map(|b| f32::from_le_bytes(b.try_into().expect("four bytes"))).collect();
+        self.bounds = PyArray1::from_vec(py, floats).call_method1("reshape", (-1, 2, 4))?.unbind();
+        for table in [&mut self.commands, &mut self.edge_commands, &mut self.hidden_commands, &mut self.hidden_edge_commands] {
+            let mut rows = bytes(table.bind(py))?.to_vec();
+            rows.extend_from_slice(&[0u8; COMMAND_BYTES]);
+            *table = records(py, rows, "COMMAND")?.unbind();
+        }
+        Ok(code)
+    }
+
+    /// `count` more resident rows, zeroed.
+    fn append_rows(&mut self, py: Python<'_>, count: usize) -> PyResult<()> {
+        let mut rows = bytes(self.instances.bind(py))?.to_vec();
+        rows.resize(rows.len() + count * INSTANCE_BYTES, 0);
+        self.instances = records(py, rows, "INSTANCE")?.unbind();
+        Ok(())
+    }
+
+    /// Copy the resident vertices and indices into ones with spare room on
+    /// `executor`, ahead of the first edit that appends. The first append
+    /// otherwise copies the whole model on the UI thread (65-200 ms on a
+    /// 32 M vertex model). Called on entering a group: the intent to edit,
+    /// and nothing is held twice for a model only looked at.
+    fn reserve<'py>(slf: &Bound<'py, Self>, executor: &Obj<'py>) -> PyResult<()> {
+        let py = slf.py();
+        if !noted(slf, "_room")?.is_none() || !noted(slf, "_reserving")?.is_none() {
+            return Ok(());
+        }
+        let (vertices, indices) = {
+            let s = slf.borrow();
+            (s.vertices.clone_ref(py), s.indices.clone_ref(py))
+        };
+        let copy = pyo3::types::PyCFunction::new_closure(py, None, None, move |args: &Bound<'_, PyTuple>, _: Option<&Bound<'_, PyDict>>| -> PyResult<Py<PyAny>> {
+            let py = args.py();
+            let (source_v, source_i) = (bytes(vertices.bind(py))?, bytes(indices.bind(py))?);
+            let count = source_v.len() / VERTEX_BYTES;
+            if source_i.len() != count * INDEX_BYTES {
+                return Err(PyValueError::new_err("one index per resident vertex"));
+            }
+            // As raw bytes, without the GIL: the arrays are kept alive by
+            // this job, and every write to them adopts the room first.
+            let (from_v, from_i) = (source_v.as_ptr() as usize, source_i.as_ptr() as usize);
+            let room = py.detach(move || {
+                let mut room = Room::with_capacity(count + (count / 32).max(4096));
+                // SAFETY: both sources span `count` elements (checked above).
+                unsafe {
+                    std::ptr::copy_nonoverlapping(from_v as *const u8, room.vertices.as_mut_ptr(), count * VERTEX_BYTES);
+                    std::ptr::copy_nonoverlapping(from_i as *const u8, room.indices.as_mut_ptr().cast::<u8>(), count * INDEX_BYTES);
+                }
+                room
+            });
+            Ok((vertices.clone_ref(py), indices.clone_ref(py), Py::new(py, room)?).into_pyobject(py)?.into_any().unbind())
+        })?;
+        note(slf, "_reserving", &executor.call_method1("submit", (copy,))?)
+    }
+
+    /// Swap a finished reservation in: the old `(vertices, indices)` when it
+    /// was adopted, None when none is pending or it no longer matches,
+    /// False while it is still copying (and not `wait`).
+    #[pyo3(signature = (wait = false))]
+    fn adopt_reserved<'py>(slf: &Bound<'py, Self>, wait: bool) -> PyResult<Obj<'py>> {
+        let py = slf.py();
+        let future = noted(slf, "_reserving")?;
+        if future.is_none() {
+            return Ok(py.None().into_bound(py));
+        }
+        if !wait && !future.call_method0("done")?.is_truthy()? {
+            return Ok(pyo3::types::PyBool::new(py, false).to_owned().into_any());
+        }
+        note(slf, "_reserving", &py.None().into_bound(py))?;
+        let Ok(result) = future.call_method0("result") else {
+            return Ok(py.None().into_bound(py));
+        };
+        let (source_v, source_i, room) = (result.get_item(0)?, result.get_item(1)?, result.get_item(2)?.cast_into::<Room>()?);
+        // Every write to these arrays goes through `place`, which adopts
+        // first: identical arrays mean identical contents.
+        let same = {
+            let s = slf.borrow();
+            s.vertices.bind(py).is(&source_v) && s.indices.bind(py).is(&source_i)
+        };
+        if !noted(slf, "_room")?.is_none() || !same {
+            return Ok(py.None().into_bound(py));
+        }
+        let count = bytes(&source_v)?.len() / VERTEX_BYTES;
+        let (vertices, indices) = room_views(&room, count)?;
+        {
+            let mut s = slf.borrow_mut();
+            s.vertices = vertices.unbind();
+            s.indices = indices.unbind();
+        }
+        note(slf, "_room", room.as_any())?;
+        Ok((source_v, source_i).into_pyobject(py)?.into_any())
+    }
+
+    /// Write a rebaked prototype into the resident vertices and indices:
+    /// its base.
+    ///
+    /// A rebake that fits the range its code owns goes back there (a moved
+    /// face keeps its counts); a longer one is appended into the spare
+    /// room, grown by a margin when full. Concatenating copied the whole
+    /// model per edit.
+    fn place<'py>(slf: &Bound<'py, Self>, code: usize, vertices: &Obj<'py>, indices: &Obj<'py>) -> PyResult<usize> {
+        let py = slf.py();
+        Self::adopt_reserved(slf, true)?;
+        let np = py.import("numpy")?;
+        let flat = |array: &Obj<'py>| -> PyResult<Obj<'py>> {
+            np.call_method1("ascontiguousarray", (array,))?.call_method1("view", (np.getattr("uint8")?,))?.call_method1("reshape", (-1,))
+        };
+        let (new_v, new_i) = (flat(vertices)?, flat(indices)?);
+        let (new_v, new_i) = (bytes(&new_v)?, bytes(&new_i)?);
+        let total = new_v.len() / VERTEX_BYTES;
+        if new_v.len() != total * VERTEX_BYTES || new_i.len() != total * INDEX_BYTES {
+            return Err(PyValueError::new_err("one index per rebaked vertex"));
+        }
+        let used = {
+            let s = slf.borrow();
+            let tables = [&s.commands, &s.edge_commands, &s.hidden_commands, &s.hidden_edge_commands].map(|t| bytes(t.bind(py)));
+            let [faces, edges, hidden_faces, hidden_edges] = tables;
+            let tables = [faces?, edges?, hidden_faces?, hidden_edges?];
+            let count_of = |table: &[u8], code: usize| u32_at(table, code * COMMAND_BYTES) as usize;
+            let base_of = |code: usize| i32::from_le_bytes(tables[0][code * COMMAND_BYTES + 12..code * COMMAND_BYTES + 16].try_into().expect("four bytes"));
+            let prototypes = tables[0].len() / COMMAND_BYTES;
+            if code < prototypes {
+                let owned: usize = tables.iter().map(|t| count_of(t, code)).sum();
+                let base = base_of(code);
+                // Two codes never share a range in the bake; check anyway,
+                // a shared one must not be overwritten for both.
+                let sharing = (0..prototypes).filter(|c| base_of(*c) == base && tables.iter().any(|t| count_of(t, *c) > 0)).count();
+                if total <= owned && sharing == 1 && base >= 0 {
+                    let base = base as usize;
+                    let (target_v, target_i) = (bytes_mut(s.vertices.bind(py))?, bytes_mut(s.indices.bind(py))?);
+                    let range = |unit: usize| base * unit..(base + total) * unit;
+                    target_v.get_mut(range(VERTEX_BYTES)).ok_or_else(|| PyValueError::new_err("prototype range out of bounds"))?.copy_from_slice(new_v);
+                    target_i.get_mut(range(INDEX_BYTES)).ok_or_else(|| PyValueError::new_err("prototype range out of bounds"))?.copy_from_slice(new_i);
+                    return Ok(base);
+                }
+            }
+            bytes(s.vertices.bind(py))?.len() / VERTEX_BYTES
+        };
+        let current = bytes(slf.borrow().vertices.bind(py))?.as_ptr();
+        let room = noted(slf, "_room")?;
+        let room = match room.cast_into::<Room>() {
+            Ok(room) if room.borrow().vertices.as_ptr() == current && used + total <= room.borrow().capacity() => room,
+            _ => {
+                let mut fresh = Room::with_capacity(used + total + (total * 4).max(used / 32).max(4096));
+                {
+                    let s = slf.borrow();
+                    fresh.vertices[..used * VERTEX_BYTES].copy_from_slice(bytes(s.vertices.bind(py))?);
+                    let indices = bytes(s.indices.bind(py))?;
+                    // SAFETY: the room holds at least `used` indices.
+                    unsafe { std::ptr::copy_nonoverlapping(indices.as_ptr(), fresh.indices.as_mut_ptr().cast::<u8>(), used * INDEX_BYTES) };
+                }
+                Bound::new(py, fresh)?
+            }
+        };
+        {
+            let mut r = room.borrow_mut();
+            r.vertices[used * VERTEX_BYTES..(used + total) * VERTEX_BYTES].copy_from_slice(new_v);
+            // SAFETY: the room holds at least `used + total` indices.
+            unsafe { std::ptr::copy_nonoverlapping(new_i.as_ptr(), r.indices.as_mut_ptr().add(used).cast::<u8>(), total * INDEX_BYTES) };
+        }
+        let (vertices, indices) = room_views(&room, used + total)?;
+        {
+            let mut s = slf.borrow_mut();
+            s.vertices = vertices.unbind();
+            s.indices = indices.unbind();
+        }
+        note(slf, "_room", room.as_any())?;
+        Ok(used)
+    }
+
     fn _upload_arrays<'py>(&self, py: Python<'py>) -> PyResult<(Bound<'py, PyTuple>, Obj<'py>)> {
         self.upload_arrays(py)
     }
@@ -404,6 +602,69 @@ impl PackedScene {
     }
 }
 
+const VERTEX_BYTES: usize = 28;
+const INDEX_BYTES: usize = 4;
+
+/// Vertices and indices with spare room past the resident ones. The
+/// allocations never move: the record's arrays are views of their start.
+#[pyclass(module = "ingetrazo_core")]
+pub struct Room {
+    vertices: Box<[u8]>,
+    indices: Box<[u32]>,
+}
+
+impl Room {
+    fn with_capacity(elements: usize) -> Self {
+        Self { vertices: vec![0u8; elements * VERTEX_BYTES].into_boxed_slice(), indices: vec![0u32; elements].into_boxed_slice() }
+    }
+    fn capacity(&self) -> usize {
+        self.indices.len()
+    }
+}
+
+#[pymethods]
+impl Room {
+    /// Vertices (and indices) the room holds.
+    #[getter(capacity)]
+    fn py_capacity(&self) -> usize {
+        self.capacity()
+    }
+}
+
+/// The first `count` vertices and indices of `room`, as the record's arrays.
+fn room_views<'py>(room: &Bound<'py, Room>, count: usize) -> PyResult<(Obj<'py>, Obj<'py>)> {
+    let py = room.py();
+    let (vertices, indices) = {
+        let r = room.borrow();
+        if count > r.capacity() {
+            return Err(PyValueError::new_err("more vertices than the room holds"));
+        }
+        (r.vertices.as_ptr(), r.indices.as_ptr())
+    };
+    // SAFETY: the room's allocations never move or shrink, each array
+    // keeps the room alive as its base, and `count` is within capacity.
+    let (vertices, indices) = unsafe {
+        (
+            PyArray1::<u8>::borrow_from_array(&ArrayView1::from_shape_ptr(count * VERTEX_BYTES, vertices), room.clone().into_any()),
+            PyArray1::<u32>::borrow_from_array(&ArrayView1::from_shape_ptr(count, indices), room.clone().into_any()),
+        )
+    };
+    Ok((vertices.call_method1("view", (dtype(py, "VERTEX")?,))?, indices.into_any()))
+}
+
+/// A structured array over `bytes` (`INSTANCE` or `COMMAND`).
+fn records<'py>(py: Python<'py>, bytes: Vec<u8>, layout: &str) -> PyResult<Obj<'py>> {
+    PyArray1::from_vec(py, bytes).call_method1("view", (dtype(py, layout)?,))
+}
+
+/// What is noted on the record beside its fields (its `__dict__`).
+fn noted<'py>(scene: &Bound<'py, PackedScene>, key: &str) -> PyResult<Obj<'py>> {
+    scene.as_any().getattr("__dict__")?.call_method1("get", (key,))
+}
+fn note(scene: &Bound<'_, PackedScene>, key: &str, value: &Obj<'_>) -> PyResult<()> {
+    scene.as_any().getattr("__dict__")?.set_item(key, value)
+}
+
 /// The buffers' record layouts, as NumPy dtypes (`VERTEX`, `INSTANCE`,
 /// `COMMAND` on the module).
 pub fn dtype<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
@@ -429,5 +690,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("COMMAND", layout(vec![("count", "<u4", None), ("instances", "<u4", None), ("first", "<u4", None), ("base", "<i4", None), ("start", "<u4", None)])?)?;
     m.add("OBJECT_HIDDEN", OBJECT_HIDDEN)?;
     m.add("VISIBILITY_FILTERED", VISIBILITY_FILTERED)?;
+    m.add_class::<Room>()?;
     m.add_class::<PackedScene>()
 }
