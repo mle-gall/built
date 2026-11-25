@@ -2,7 +2,8 @@
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from core.input_types import QPointF, Qt
+from core.input_codes import Input as Qt
+from ingetrazo_core import ScreenPoint as QPointF
 from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 from core.group import Group
 from core.history import MoveGroupCommand, CompoundCommand
@@ -273,16 +274,16 @@ def test_native_move_preview_then_history_commit(completion):
     native.hover(event)
     assert scene.groups[0].xform.column(3).x() == 0
     assert view.packed.instances['world'][0, 3, 0] == 2
-    from tests.headless_gpu import HeadlessView as WgpuView
+    from tests.headless_gpu import HeadlessView
     view.tools = native
     if completion == 'escape':
-        WgpuView.keyPressEvent(view, SimpleNamespace(key=lambda: Qt.Key_Escape))
+        HeadlessView.keyPressEvent(view, SimpleNamespace(key=lambda: Qt.Key_Escape))
         assert not history.undo_stack
         assert view.packed.instances['world'][0, 3, 0] == 0
         return
     if completion == 'enter':
-        WgpuView.keyPressEvent(view, SimpleNamespace(key=lambda: Qt.Key_4, text=lambda: '4', modifiers=lambda: Qt.NoModifier))
-        WgpuView.keyPressEvent(view, SimpleNamespace(key=lambda: Qt.Key_Return, text=lambda: '', modifiers=lambda: Qt.NoModifier))
+        HeadlessView.keyPressEvent(view, SimpleNamespace(key=lambda: Qt.Key_4, text=lambda: '4', modifiers=lambda: Qt.NoModifier))
+        HeadlessView.keyPressEvent(view, SimpleNamespace(key=lambda: Qt.Key_Return, text=lambda: '', modifiers=lambda: Qt.NoModifier))
     else:
         native.click(event)
     assert isinstance(history.undo_stack[-1], MoveGroupCommand)
@@ -397,7 +398,7 @@ def test_history_insert_undo_redo_keeps_one_row(monkeypatch):
 
 
 def test_tool_change_signal_reports_unsupported_tool_without_mouse_input():
-    from tests.headless_gpu import HeadlessView as WgpuView
+    from tests.headless_gpu import HeadlessView
     messages = []
 
     class Signal:
@@ -421,7 +422,7 @@ def test_tool_change_signal_reports_unsupported_tool_without_mouse_input():
             messages.append(message)
 
     source = Source()
-    view = WgpuView()
+    view = HeadlessView()
     view.source_viewport = source
     view._observe_tool_source()
     view.isVisible = lambda: True            # shown: the sync is only for a visible view
@@ -781,18 +782,18 @@ def test_older_module_gets_the_whole_list_when_an_exclusion_moved():
 def test_an_edit_keeps_the_container_boxes_it_did_not_touch():
     """Every set_scene used to drop the container boxes measured after the
     open (0.9 s each on the ride, measured again at the next double-click)."""
-    from tests.headless_gpu import HeadlessView as WgpuView
+    from tests.headless_gpu import HeadlessView
     scene, updates = fixture_scene()
     view = SimpleNamespace(packed=updates.packed, _container_boxes={}, _container_box_rows={})
     far, near = object(), object()
     boxes = {far: 'far box', near: 'near box'}
     rows = {far: np.array([1]), near: np.array([0])}
     tracker = SimpleNamespace(last_local=True, added=0, removed=[], changed=[])
-    WgpuView._keep_container_boxes(view, tracker, np.array([0]), boxes, rows)
+    HeadlessView._keep_container_boxes(view, tracker, np.array([0]), boxes, rows)
     assert view._container_boxes == {far: 'far box'}
     view._container_boxes = {}
     tracker.added = 1                       # a new row may sit in any container
-    WgpuView._keep_container_boxes(view, tracker, np.array([0]), boxes, rows)
+    HeadlessView._keep_container_boxes(view, tracker, np.array([0]), boxes, rows)
     assert view._container_boxes == {}
 
 

@@ -18,7 +18,7 @@ from core.mesh import Edge, Face, Mesh
 from core.scene import Scene
 from views.wgpu_inference import prepare
 from views.wgpu_scene import pack_scene
-from tests.headless_gpu import HeadlessView as WgpuView, mouse
+from tests.headless_gpu import HeadlessView, mouse
 
 
 class _Renderer:
@@ -62,7 +62,7 @@ def view():
     gl.resize(800, 600)
     gl.scene = scene
     gl.active_tool = SelectTool()
-    view = WgpuView()
+    view = HeadlessView()
     view.resize(800, 600)
     view.scene = scene
     view.source_viewport = gl

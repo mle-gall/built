@@ -51,7 +51,7 @@ def test_off_or_nonsense_is_the_crisp_map():
 def test_the_metal_view_reads_the_level_off_its_viewport(monkeypatch):
     from core.camera import OrbitCamera
     from views import wgpu_style
-    from tests.headless_gpu import HeadlessView as WgpuView
+    from tests.headless_gpu import HeadlessView
 
     class PayloadReceived(Exception):
         pass
@@ -62,7 +62,7 @@ def test_the_metal_view_reads_the_level_off_its_viewport(monkeypatch):
         raise PayloadReceived
 
     monkeypatch.setattr(wgpu_style, "style_payload", record)
-    view = WgpuView()
+    view = HeadlessView()
     source = SimpleNamespace(scene=_wall_scene(), camera=OrbitCamera(), _effective_style=lambda: None)
     view.source_viewport = source
     view.packed = SimpleNamespace(model_translations=None)

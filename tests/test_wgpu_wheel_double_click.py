@@ -18,7 +18,7 @@ from core.scene import Scene
 from views.wgpu_inference import prepare
 from views.wgpu_scene import pack_scene
 from core.input_codes import MouseButton
-from tests.headless_gpu import HeadlessView as WgpuView, mouse
+from tests.headless_gpu import HeadlessView, mouse
 
 WHEEL = MouseButton.MiddleButton
 
@@ -37,7 +37,7 @@ def view():
     scene = Scene()
     scene.guides.clear()
     scene.mesh.add_face([V(-10, 0, -10), V(10, 0, -10), V(10, 0, 10), V(-10, 0, 10)])
-    v = WgpuView()
+    v = HeadlessView()
     v.resize(800, 600)
     v.scene = scene
     v.packed = pack_scene(scene)

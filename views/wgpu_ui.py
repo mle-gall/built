@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from core.input_types import Qt
+from core.input_codes import Input as Qt
 from core.timers import later
 from ingetrazo_render import shortcut_text
 from core.shortcuts import action_keys
@@ -983,7 +983,7 @@ from contextlib import contextmanager
 
 @contextmanager
 def _wait_cursor(viewport):
-    from core.input_types import Qt
+    from core.input_codes import Input as Qt
     previous = viewport.cursor()
     viewport.setCursor(Qt.WaitCursor)
     try:
@@ -2828,7 +2828,7 @@ def _command_query(view, win, query) -> None:
 
 
 def _problem_key(view, event) -> int:
-    if view.__dict__.get("_ui_lens") != 2 or not (bits(event.modifiers()) & bits(Qt.ControlModifier)):
+    if view.__dict__.get("_ui_lens") != 2 or not (event.modifiers() & Qt.ControlModifier):
         return 0
     return {Qt.Key_BracketRight: 1, Qt.Key_BracketLeft: -1}.get(event.key(), 0)
 
@@ -2896,16 +2896,10 @@ def key(view, event, pressed: bool) -> bool:
     return True
 
 
-def bits(value) -> int:
-    """A modifier or button set as an int, whichever enum carries it: the
-    shell's events have the native codes, a host's own may have another."""
-    return int(getattr(value, "value", value) or 0)
-
-
 def _mods(event) -> int:
-    m = bits(event.modifiers())
-    return ((1 if m & bits(Qt.AltModifier) else 0) | (2 if m & bits(Qt.MetaModifier) else 0)
-            | (4 if m & bits(Qt.ShiftModifier) else 0) | (8 if m & bits(Qt.ControlModifier) else 0))
+    m = event.modifiers()
+    return ((1 if m & Qt.AltModifier else 0) | (2 if m & Qt.MetaModifier else 0)
+            | (4 if m & Qt.ShiftModifier else 0) | (8 if m & Qt.ControlModifier else 0))
 
 
 _BUTTONS = {Qt.LeftButton: 1, Qt.RightButton: 2, Qt.MiddleButton: 3}

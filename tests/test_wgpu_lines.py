@@ -16,7 +16,7 @@ from views.document_interaction import _box_edge_vertices
 from tests.controller_surface import ControllerSurface as Viewport
 from views.wgpu_lines import SEGMENT, sync
 from views.wgpu_scene import pack_scene
-from tests.headless_gpu import HeadlessView as WgpuView
+from tests.headless_gpu import HeadlessView
 V = QVector3D
 
 
@@ -36,7 +36,7 @@ def view():
     source = Viewport()
     source.scene = scene
     source.resize(800, 600)
-    v = WgpuView()
+    v = HeadlessView()
     v.resize(800, 600)
     v.scene = scene
     v.source_viewport = source

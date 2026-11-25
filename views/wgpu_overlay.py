@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import math
 
 import numpy as np
-from core.input_types import Qt
+from core.input_codes import Input as Qt
 
 
 @dataclass(frozen=True)

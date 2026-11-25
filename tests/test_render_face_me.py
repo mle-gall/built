@@ -13,7 +13,7 @@ import json
 import math
 import struct
 
-from core.input_types import Qt
+from core.input_codes import Input as Qt
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from ingetrazo_render import SurveyRaster
 

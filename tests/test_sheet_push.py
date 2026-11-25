@@ -7,7 +7,8 @@ sheet's regions as phantoms and DELETED the neighbours — pushing the
 circle∩square lens made the rest of the drawing disappear."""
 from __future__ import annotations
 
-from core.input_types import QPointF, Qt
+from core.input_codes import Input as Qt
+from ingetrazo_core import ScreenPoint as QPointF
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
