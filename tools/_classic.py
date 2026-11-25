@@ -25,3 +25,13 @@ def texture_menu(tool, viewport, global_pos, rows):
             action = section.addAction(tr(label), lambda checked=False, key=key: tool.menu_action(viewport, key))
             action.setEnabled(on)
     menu.exec(global_pos)
+
+
+def measure_view(scene):
+    from PySide6.QtWidgets import QApplication
+    from views.wgpu_view import WgpuView
+    app = QApplication.instance() or QApplication([])
+    view = WgpuView()
+    view.resize(1000, 700)
+    view.set_scene(scene)
+    return app, view
