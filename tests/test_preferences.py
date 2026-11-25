@@ -123,20 +123,21 @@ def test_restore_leaves_retired_appearance_keys_intact(settings_file):
     assert st.value("General/accent") == "orange"
 
 
-def test_the_3d_mouse_page_shows_the_device_live(settings_file, monkeypatch):
+def test_the_3d_mouse_page_shows_the_device_live(native_host, monkeypatch):
     """Nobody on the team has a SpaceMouse: the page shows the six numbers
     as the device sends them and how IngeTrazo reads them, so an owner can
     report a wrong sign by looking (#108)."""
     from core.ndof import NdofSample
     from views import ndof_input
 
+    win = native_host.window
     dev = ndof_input.NdofInput()
+    monkeypatch.setattr(dev, "_driver_checked", True)
     monkeypatch.setattr(ndof_input, "_shared", dev)
     monkeypatch.setattr(type(dev), "backend_name",
                         property(lambda self: "rawinput"))
     from ingetrazo_render import chrome_sheet
     from ingetrazo_render import settings_sheet
-    win = _Win()
     settings_sheet.show(win, page="ndof")
     sheet = chrome_sheet.current(win)
     context = chrome_sheet.Ctx(win, None)

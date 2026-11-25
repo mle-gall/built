@@ -338,7 +338,7 @@ def test_paste_keeps_curve_identity():
     _click(vp, t, 3, 0)
     arc = next(e for e in scene.mesh.edges if e.curve is not None)
     scene.selection.update(scene.mesh.curve_edges(arc))
-    assert Viewport.copy_selection(vp)          # unbound: stub viewport
+    assert Viewport.copy_selection(vp, publish=False)
     p = PasteTool()
     p.on_activate(vp)
     _click(vp, p, 10, 0)
