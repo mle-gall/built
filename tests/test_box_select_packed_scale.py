@@ -25,7 +25,8 @@ from core.mesh import Edge, Face, Mesh, Vertex
 from core.scene import Scene
 import tools.select_host as select
 from tools.rust_tools import SelectTool
-from views.wgpu_mesh_tools import MeshToolAccess, _viewport_class
+from ingetrazo_render import MeshToolAccess
+from views.document_interaction import DocumentInteraction
 from views.wgpu_scene import pack_scene
 
 W, H = 800, 600
@@ -121,11 +122,11 @@ class _View:
         return H
 
     def _world_to_pixel(self, point):
-        return _viewport_class()._world_to_pixel(self, point)
+        return DocumentInteraction._world_to_pixel(self, point)
 
 
 class _Facade(MeshToolAccess):
-    """The Metal view's tool facade (views.wgpu_tools.NativeTools), minus
+    """The Metal view's tool facade (ingetrazo_render.NativeTools), minus
     the window: no GL chunks, projection through the view's camera."""
 
     def __init__(self, scene, camera):

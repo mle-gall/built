@@ -11,7 +11,7 @@ from core.history import History
 from tools.rust_tools import LineTool
 from tools.rust_tools import RectangleTool
 from tools.base import ToolContext
-from views.wgpu_tools import NativeTools
+from ingetrazo_render import NativeTools
 from views.wgpu_scene import pack_scene
 from views.wgpu_updates import InstanceUpdates
 

@@ -314,7 +314,7 @@ def test_guides_and_tool_overlay_without_labels(view):
 
 def test_move_facade_reads_document_from_native_view(view):
     from tools.move import MoveTool
-    from views.wgpu_tools import NativeTools
+    from ingetrazo_render import NativeTools
     mesh = Mesh()
     mesh.add_edge(QVector3D(), QVector3D(1, 0, 0))
     group = Group(mesh)

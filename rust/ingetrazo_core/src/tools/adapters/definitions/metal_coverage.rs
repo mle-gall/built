@@ -106,7 +106,7 @@ fn table<'py>(a: &Args<'py>) -> Reply<'py> {
         );
     }
     source_classes(py, &root, &mut classes)?;
-    let dispatch = imported(py, "views.wgpu_tools")?.getattr("TOOL_DISPATCH")?;
+    let dispatch = imported(py, "ingetrazo_render")?.getattr("TOOL_DISPATCH")?;
     let registered = imported(py, "tools.metal_coverage")?
         .call_method1("registry", (&root,))?
         .cast_into::<PyDict>()?;

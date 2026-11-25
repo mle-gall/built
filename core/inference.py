@@ -370,7 +370,7 @@ class InferenceEngine:
 
         ``picks`` is what the axis-source cue picks and projects through —
         this viewport by default; the Metal view hands its own tool facade
-        (``views.wgpu_tools.NativeTools``), whose occlusion asks the snap
+        (``ingetrazo_render.NativeTools``), whose occlusion asks the snap
         index rather than the GL pick index. The extension providers are
         always handed this viewport: their signature is ``fn(viewport,
         snap, px, py)`` with the document's viewport, whichever view drew

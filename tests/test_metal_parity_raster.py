@@ -783,7 +783,7 @@ def test_clipboard_group_preview_moves_nested_texture_and_preserves_scene(native
     from core.scene import Scene
     from core.group import Group
     from core.mesh import Mesh
-    from views.wgpu_mesh_tools import MeshToolAccess
+    from ingetrazo_render import MeshToolAccess
 
     upload(native, 255)
     native.set_antialias(aa)
