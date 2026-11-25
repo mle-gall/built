@@ -170,6 +170,27 @@ def test_transformed_group_crossings_ignore_foreign_keys(monkeypatch):
     assert len(results[0]) == 6 and results[1] == results[0]
 
 
+@pytest.mark.parametrize("outer_edit", [False, True])
+def test_refused_face_mutation_restores_mesh_and_edit_scope(monkeypatch, outer_edit):
+    from ingetrazo_core import resident_face_mutation
+
+    scene = list(scenes(monkeypatch))[-1]
+    mesh = scene.mesh
+    if outer_edit:
+        mesh._resident_edit = True
+    before = fingerprint(mesh)
+
+    def refuse_after_writing(scene):
+        assert mesh._resident_edit is True
+        mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(0, 1, 0)])
+        raise ValueError("refused after inserting a face")
+
+    with pytest.raises(ValueError, match="refused after inserting"):
+        resident_face_mutation(refuse_after_writing, mesh).apply(scene)
+    assert fingerprint(mesh) == before
+    assert mesh.__dict__.get("_resident_edit") is (True if outer_edit else None)
+
+
 def test_rejected_sweep_preserves_snapshot(monkeypatch):
     from core.sweep import build_sweep_face
 

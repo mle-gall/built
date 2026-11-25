@@ -105,14 +105,14 @@ struct Command {
 fn action_key(action: &Obj) -> PyResult<String> {
     action
         .py()
-        .import("core.shortcuts")?
+        .import("ingetrazo_render.keyboard_bindings")?
         .call_method1("action_key", (action,))?
         .extract()
 }
 fn binding(action: &Obj) -> PyResult<String> {
     let keys = action
         .py()
-        .import("core.shortcuts")?
+        .import("ingetrazo_render.keyboard_bindings")?
         .call_method1("action_keys", (action,))?;
     Ok(keys
         .try_iter()?
@@ -239,7 +239,7 @@ fn commands<'p>(window: &Obj<'p>, scope: &str) -> PyResult<Vec<Obj<'p>>> {
     let fresh = PyDict::new(py);
     let mut pool = Vec::new();
     for a in py
-        .import("core.shortcuts")?
+        .import("ingetrazo_render.keyboard_bindings")?
         .call_method1("collect_actions", (window,))?
         .try_iter()?
     {

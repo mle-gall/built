@@ -30,7 +30,7 @@ def _loose(scene):
 
 def _action(win):
     """The window's Ctrl+T owner, the way the menu holds it."""
-    from core.shortcuts import action_keys, collect_actions
+    from ingetrazo_render.keyboard_bindings import action_keys, collect_actions
     acts = [a for a in collect_actions(win) if "Ctrl+T" in action_keys(a)]
     assert len(acts) == 1                     # one owner: never ambiguous
     return acts[0]

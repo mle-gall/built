@@ -179,7 +179,7 @@ pub fn sheet_command_scope<'py>(win: &Bound<'py, PyAny>) -> PyResult<Bound<'py, 
     for &(id, name, tip, keys) in EDITS {
         bind(id, name, "Sheet", tip, keys, false)?;
     }
-    let shortcuts = py.import("core.shortcuts")?;
+    let shortcuts = py.import("ingetrazo_render.keyboard_bindings")?;
     shortcuts.call_method1("remember_defaults", (&owner,))?;
     shortcuts.call_method1("apply_user_shortcuts", (&owner,))?;
     win.setattr("_sheet_command_scope", &owner)?;

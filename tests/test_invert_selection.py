@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from ingetrazo_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from core.shortcuts import action_keys, collect_actions
+from ingetrazo_render.keyboard_bindings import action_keys, collect_actions
 
 from core.group import Group
 from core.layers import Layer, assign_layer

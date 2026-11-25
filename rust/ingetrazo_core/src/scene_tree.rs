@@ -300,7 +300,18 @@ fn move_folder(scene: &Obj<'_>, name: &str, parent: Option<&str>) -> PyResult<bo
     scene.setattr("scene_folder_parents", table)?;
     Ok(true)
 }
-#[pyfunction(signature=(scene,views,folders,folder,before=None))]
+#[pyfunction(name = "move_rows", signature = (scene, views, folders, folder, before=None))]
+fn move_row_inputs<'p>(
+    scene: &Obj<'p>,
+    views: &Obj<'p>,
+    folders: &Obj<'p>,
+    folder: Option<&str>,
+    before: Option<&Obj<'p>>,
+) -> PyResult<()> {
+    let views = views.try_iter()?.collect::<PyResult<Vec<_>>>()?;
+    let folders = folders.try_iter()?.map(|row| row?.extract()).collect::<PyResult<Vec<_>>>()?;
+    move_rows(scene, views, folders, folder, before)
+}
 fn move_rows(
     scene: &Obj<'_>,
     views: Vec<Obj<'_>>,
@@ -694,7 +705,9 @@ fn edit_menu_folder(
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    let sub = PyModule::new(m.py(), "scene_tree")?;
+    let name = "ingetrazo_core.scene_tree";
+    let sub = PyModule::new(m.py(), name)?;
+    m.py().import("sys")?.getattr("modules")?.set_item(name, &sub)?;
     sub.add_function(wrap_pyfunction!(folders_of, &sub)?)?;
     sub.add_function(wrap_pyfunction!(folder_parent, &sub)?)?;
     sub.add_function(wrap_pyfunction!(folder_of, &sub)?)?;
@@ -714,6 +727,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(rename_folder, &sub)?)?;
     sub.add_function(wrap_pyfunction!(delete_folder, &sub)?)?;
     sub.add_function(wrap_pyfunction!(move_folder, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(move_rows, &sub)?)?;
-    m.add_submodule(&sub)
+    sub.add_function(wrap_pyfunction!(move_row_inputs, &sub)?)?;
+    m.add("scene_tree", sub)
 }

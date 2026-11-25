@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 from core.settings import settings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from core import shortcuts as sc
+from ingetrazo_render import keyboard_bindings as sc
 
 
 @pytest.fixture

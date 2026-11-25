@@ -303,8 +303,8 @@ fn bevel_selection<'py>(
     let class = if plan.getattr("_store_plan")?.is_none() {
         py.import("core.history")?.getattr("SnapshotMutation")?
     } else {
-        py.import("core.store_face_edit")?
-            .getattr("StoreFaceMutation")?
+        py.import("ingetrazo_core")?
+            .getattr("resident_face_mutation")?
     };
     let callback = Bound::new(
         py,

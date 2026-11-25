@@ -7,7 +7,7 @@ import pytest
 from core import extensions, settings
 from ingetrazo_core import NativeSettings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from core import shortcuts
+from ingetrazo_render import keyboard_bindings as shortcuts
 
 
 @pytest.mark.parametrize("factory,rebound", [(None, "Ctrl+Alt+U"), ("Ctrl+Alt+J", "Ctrl+Alt+K")])

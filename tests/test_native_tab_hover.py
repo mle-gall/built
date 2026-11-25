@@ -39,7 +39,7 @@ def setup(app):
             Path(__file__).with_suffix(".redrew").touch()
             raise AssertionError("rendered the model again for a tab preview")
         type(win.view).render_pixels = unexpected
-        from core.shortcuts import action_keys
+        from ingetrazo_render.keyboard_bindings import action_keys
         from ingetrazo_render import shortcut_domains
         from ingetrazo_render.settings_sheet import SettingsSheet
         sheet = SettingsSheet("keyboard")
