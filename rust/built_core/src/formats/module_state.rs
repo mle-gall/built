@@ -115,8 +115,8 @@ fn _family_record<'p>(
         let row = row?;
         params.set_item(row.get_item("name")?, _property(&row)?)?;
     }
-    psets.set_item("Revit family", descriptor)?;
-    psets.set_item("Revit parameters", params)?;
+    psets.set_item(".rfa family", descriptor)?;
+    psets.set_item(".rfa parameters", params)?;
     record.set_item("v", 1)?;
     record.set_item("class", "IfcBuildingElementProxy")?;
     record.set_item("name", typ.get_item("name")?)?;

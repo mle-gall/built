@@ -62,13 +62,13 @@ def test_mapping():
     assert solid.xform.map(QVector3D(1, 0, 0)).toTuple() == pytest.approx((2, 4, 4))
     assert max(v.position.x() for v in solid.children[0].mesh.vertices) == 1
     assert definition.ifc['classifications'] == [{'system': 'omniclass', 'code': '23.80.30.11.17'}]
-    assert definition.ifc['psets']['Revit family']['Source file'] == 'cabinet.rfa'
-    assert definition.ifc['psets']['Revit family']['Category'] == 'Electrical Equipment'
+    assert definition.ifc['psets']['.rfa family']['Source file'] == 'cabinet.rfa'
+    assert definition.ifc['psets']['.rfa family']['Category'] == 'Electrical Equipment'
     assert definition.ext['rfa']['parameters'][0]['value'] == 'Schneider'
     box = scene.kept_components[1].children[0].mesh
     assert len(box.faces) == 6
     assert tuple(max(getattr(v.position, axis)() for v in box.vertices) for axis in ('x', 'y', 'z')) == pytest.approx((.710, .600, 2))
-    assert scene.kept_components[1].ifc['psets']['Revit parameters']['Width'] == {'kind': 'length', 'value': .71}
+    assert scene.kept_components[1].ifc['psets']['.rfa parameters']['Width'] == {'kind': 'length', 'value': .71}
     assert report[0] == 'Decoder warning'
     assert any('placeholder' in w for w in report)
 

@@ -1,8 +1,7 @@
-//! Revit family (.rfa) reader for Built.
+//! .rfa family reader for Built.
 //!
-//! A family file saves, beside its parametric forms, the display mesh Revit
-//! drew for each type of each nested family and for each element placed in
-//! the family. rvt-rs decodes those meshes (`native_saved_scene`). This
+//! Alongside its parametric forms, a family file stores the display meshes for
+//! nested family types and placed elements. rvt-rs decodes those meshes (`native_saved_scene`). This
 //! module turns them into one JSON document per file, schema
 //! `built.rfa/1`: the family's types (from `PartAtom`), each composed of
 //! meshes with transforms, plus materials, graphics styles, the preview
@@ -26,7 +25,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const SCHEMA: &str = "built.rfa/1";
 const FOOT: f64 = 0.3048;
-/// Built-in category of the saved-graphics style Revit families use for
+/// Built-in category of the saved-graphics style .rfa families use for
 /// clearance and access zones (seen on Schneider's Prisma P families).
 const ZONE_CATEGORIES: &[i64] = &[-2009512];
 
@@ -119,7 +118,7 @@ fn flat(m: &Mat4) -> Value {
     json!(m.iter().flatten().copied().collect::<Vec<f64>>())
 }
 
-/// `0xBBGGRR` as Revit stores a colour, to sRGB bytes.
+/// `0xBBGGRR` colour order in .rfa files, to sRGB bytes.
 fn rgb(color: i64) -> [u8; 3] {
     [
         (color & 0xff) as u8,
@@ -149,14 +148,14 @@ pub fn read_family(path: &str) -> Result<Value> {
         .collect::<String>();
     drop(bytes);
     let mut rf = RevitFile::open_with_limits(path, rvt::cli::open_limits(None, None, true))
-        .with_context(|| format!("opening {path} as a Revit file"))?;
+        .with_context(|| format!("opening {path} as an .rfa file"))?;
     let version = rf.basic_file_info().ok().map(|b| b.version);
     let mut warnings: Vec<String> = Vec::new();
 
     // Family identity and types, from PartAtom.
     let atom = rf
         .part_atom()
-        .context("the file has no PartAtom: not a Revit family")?;
+        .context("the file has no PartAtom: not a .rfa family")?;
     let omniclass = atom.omniclass.clone();
     let category = atom
         .categories
@@ -361,7 +360,7 @@ pub fn read_family(path: &str) -> Result<Value> {
                         if !warned_nested {
                             warned_nested = true;
                             warnings.push(format!(
-                                "Type \"{}\": drawn from nested type {}'s own defaults; settings Revit applies to the placed instance (plinth height, door hand) may differ.",
+                                "Type \"{}\": drawn from nested type {}'s own defaults; settings applied to the placed instance (plinth height, door hand) may differ.",
                                 t.name,
                                 symbol_name.get(&symbol).cloned().unwrap_or_default()
                             ));
@@ -635,7 +634,7 @@ mod built_rfa {
     use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
 
-    /// Read a Revit family file; returns the `built.rfa/1` JSON text.
+    /// Read a .rfa family file; returns the `built.rfa/1` JSON text.
     #[pyfunction]
     fn read_family(py: Python<'_>, path: String) -> PyResult<String> {
         py.detach(|| super::read_family_json(&path))

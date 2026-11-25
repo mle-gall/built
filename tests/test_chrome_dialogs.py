@@ -199,7 +199,7 @@ def test_warning_before_the_first_frame_is_kept_in_the_chrome_history(native_hos
     ("_on_recover_discarded", "Recover a discarded auto-save…"),
     ("_on_insert_faceme_image", "Face-me image"),
     ("_on_get_models", "Get more models and textures"),
-    ("_import_rfa_path", "Revit family import report"),
+    ("_import_rfa_path", ".rfa family import report"),
     ("_on_clear_texture_cache", "Texture cache"),
 ])
 def test_information_call_sites_post_toasts(win, tmp_path, monkeypatch, method, title):

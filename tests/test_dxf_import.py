@@ -122,7 +122,7 @@ def test_inserts_become_component_instances_sharing_one_proto(tmp_path):
     assert len(curves) == 1
 
 
-def test_a_rotated_scaled_insert_lands_where_autocad_put_it(tmp_path):
+def test_a_rotated_scaled_insert_lands_at_its_transformed_position(tmp_path):
     doc = _doc()
     blk = doc.blocks.new("B")
     blk.add_line((0, 0), (1, 0))

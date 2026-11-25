@@ -256,7 +256,7 @@ fn imported_name(code: &str) -> String {
         "dwg" => "DWG".into(),
         "dxf" => "DXF".into(),
         "ifc" => "IFC".into(),
-        "rfa" => "Revit".into(),
+        "rfa" => ".rfa".into(),
         other => other.to_uppercase(),
     }
 }

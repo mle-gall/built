@@ -231,7 +231,7 @@ impl Page {
         crate::sheet_tools::snap_sep(a, b, axis, mm, &self.cota_lines(None), thr)
     }
     /// The one dimension selected, unlocked: where a chain or a baseline
-    /// run carries on from (`_seed_run_from`, AutoCAD's DIMCONTINUE and
+    /// run carries on from (`_seed_run_from`, DIMCONTINUE and
     /// DIMBASELINE) — its points, its line's offset, its axis.
     fn run_seed(&self) -> Option<([f64; 2], [f64; 2], f64, String)> {
         let [k] = self.selection.as_slice() else { return None };

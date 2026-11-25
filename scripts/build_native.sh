@@ -19,7 +19,7 @@ CARGO_PROFILE_RELEASE_STRIP=none ./$venv/bin/maturin build --release \
     --features extension-module -m rust/built_render/Cargo.toml -o "$out"
 ./$venv/bin/python -m pip install --quiet --force-reinstall --no-deps "$out"/built_render-*.whl
 ./$venv/bin/python -c "import built_render"
-# Revit family reader: needs the rvt-rs checkout beside this repository
+# .rfa family reader: needs the rvt-rs checkout beside this repository
 # (../rvt-rs, branch ingetrazo/rfa-family). Without it .rfa import reports
 # the reader missing.
 if [[ -d ../rvt-rs ]]; then

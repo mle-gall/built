@@ -118,7 +118,7 @@ import importlib.util as _ilu
 if _ilu.find_spec('built_core') is None:
     raise SystemExit("Build built_core before packaging the application")
 hiddenimports += ['core._native', 'built_core', '_built_file_packages']
-# Collect the optional native Revit family reader when installed.
+# Collect the optional native .rfa family reader when installed.
 omit_rfa = sys.platform == 'darwin' and os.environ.get('BUILT_PACKAGE_RFA') == '0'
 if not omit_rfa and _ilu.find_spec('built_rfa') is not None:
     hiddenimports += collect_submodules('built_rfa')

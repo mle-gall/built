@@ -5,7 +5,7 @@
 He asked for the radius right after we shipped Fillet — «ya que pusisteis
 el redondeo, pues sería lo suyo» (revisión 2, 42:40) — and his video on
 drafting standards adds the diameter and the rules both obey, drawn case
-by case on the AutoCAD sheet of `rafael-cotas/fotogramas/f1230.jpg`:
+by case on the reference sheet of `rafael-cotas/fotogramas/f1230.jpg`:
 
   8  the diameter's line passes through the centre
   9  it all fits inside → inside, arrows out at the arc

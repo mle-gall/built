@@ -91,7 +91,7 @@ def _run(comp, tool, pts, offset):
     return view
 
 
-# ---- AutoCAD's flow: a run carries on from a dimension already there ----
+# ---- A run carries on from a dimension already there ----
 
 def _armed(comp, tool):
     comp.tool_mode = tool

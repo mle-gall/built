@@ -12,7 +12,7 @@ Shift used to drag the second POINT onto an axis, which is the wrong cure:
 it throws away the snap to the point he actually wants — «el problema es
 que aquí me cogen muchos puntos, no me coge el punto final así como así» —
 and leaves the number to the eye, «software técnico: a ojo no». What a
-drafter wants is AutoCAD's DIMLINEAR: keep both points, measure only their
+drafter wants is a linear dimension: keep both points, measure only their
 horizontal or vertical separation, and draw the line straight with
 extension lines of different lengths.
 """

@@ -264,7 +264,7 @@ fn import_file(
     let args = PyDict::new(py);
     args.set_item("name", &name)?;
     let error_title = match kind {
-        "rfa" => "Import Revit family failed",
+        "rfa" => "Import .rfa family failed",
         "obj" => "Import OBJ failed",
         "stl" => "Import STL failed",
         "dae" => "Import DAE failed",
@@ -400,7 +400,7 @@ fn import_file(
                 "information",
                 (
                     win,
-                    translated(py, "Revit family import report", None)?,
+                    translated(py, ".rfa family import report", None)?,
                     lines.join("\n"),
                 ),
             )?;

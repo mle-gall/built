@@ -3,7 +3,7 @@ name = "built_rfa"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
-description = "Revit family (.rfa) reader for Built, on rvt-rs (optional: the importer reports it missing)"
+description = ".rfa family reader for Built, on rvt-rs (optional: the importer reports it missing)"
 publish = false
 
 [lib]
