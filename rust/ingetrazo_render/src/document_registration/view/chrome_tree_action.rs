@@ -1270,7 +1270,7 @@ impl<'a, 'py> Row<'a, 'py> {
 #[pyfunction(name = "_core", signature = (vp, command, /, **args))]
 fn core_command<'py>(vp: &Obj<'py>, command: &Obj<'py>, args: Option<&Bound<'py, PyDict>>) -> Reply<'py> {
     let py = vp.py();
-    let commands = py.import("core.protocol")?.getattr("commands")?;
+    let commands = py.import("core.protocol.commands")?;
     match commands.getattr("run")?.call((vp.getattr("history")?, command), args) {
         Err(error) if error.is_instance_of::<PyKeyError>(py) => {
             let text: String = error.value(py).str()?.extract()?;
