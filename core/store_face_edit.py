@@ -27,7 +27,7 @@ class _ResidentEdit:
         return self.after.changes_since(self.before) if self.after is not None else None
 
     def do(self, scene):
-        mesh = self._target(scene) if isinstance(self, SnapshotMutation) else scene.mesh
+        mesh = self.geometry_meshes(scene)[0]
         with resident_edit(mesh):
             try:
                 super().do(scene)

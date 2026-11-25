@@ -46,7 +46,7 @@ fn after_removal(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Option<
         }
         return Ok(());
     }
-    py.import("core.history")?.getattr("_discard_removed_selection")?.call1((scene,))?;
+    crate::doc::history_support::discard_removed_selection(scene)?;
     version(scene)
 }
 

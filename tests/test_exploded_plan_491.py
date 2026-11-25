@@ -21,7 +21,8 @@ from ingetrazo_core import Vec3 as V
 
 import core.arrangement as ar  # noqa: E402
 from core.arrangement import planar_rebuild  # noqa: E402
-from core.history import RebuildPlanarFacesCommand, _segment_grid  # noqa: E402
+from ingetrazo_core import planar_edits
+from core.history import RebuildPlanarFacesCommand  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
 from core.scene import Scene  # noqa: E402
 from core.topology import _point_on_seg_incl  # noqa: E402
@@ -140,7 +141,7 @@ def test_the_flag_grid_never_misses_an_edge_the_point_lies_on():
             dx, dy = rng.uniform(-1, 1), rng.uniform(-1, 1)
             segs.append((o + u * x + w * y,
                          o + u * (x + length * dx) + w * (y + length * dy)))
-        near = _segment_grid(segs)
+        near = planar_edits.SegmentIndex(segs)
         for a, b in segs:
             for t in (-2e-4, 0.0, rng.random(), 1.0, 1.0 + 2e-4):
                 p = a + (b - a) * t + n * rng.uniform(-1e-4, 1e-4)

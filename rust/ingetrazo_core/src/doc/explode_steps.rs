@@ -48,7 +48,7 @@ fn replay(py: Python<'_>, me: &Obj<'_>, scene: &Obj<'_>, mesh: &Obj<'_>) -> PyRe
         return Ok(false);
     }
     mesh.call_method1("restore_state", (after,))?;
-    host(py, "_drop_dead_elements")?.call1((scene, mesh))?;
+    crate::doc::history_support::drop_dead_elements(scene, mesh)?;
     Ok(true)
 }
 
@@ -147,7 +147,7 @@ fn after_explode(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Option<
         if lifted.is_truthy()? {
             scene.setattr("selection", kids(py, &lifted)?)?;
         }
-        host(py, "_drop_dead_elements")?.call1((scene, &mesh))?;
+        crate::doc::history_support::drop_dead_elements(scene, &mesh)?;
     }
     version(scene)
 }

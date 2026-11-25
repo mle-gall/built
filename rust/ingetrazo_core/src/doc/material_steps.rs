@@ -28,10 +28,7 @@ fn tuple_of<'py>(py: Python<'py>, o: Option<Obj<'py>>) -> PyResult<Obj<'py>> {
     }
 }
 
-fn dirty_chunks(py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
-    py.import("core.history")?.getattr("_dirty_group_chunks")?.call1((scene,))?;
-    Ok(())
-}
+
 
 fn every_mesh<'py>(_s: &RecordStep, py: Python<'py>, scene: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
     py.import("core.purge")?.getattr("iter_meshes")?.call1((scene,))?.try_iter()?.collect()
@@ -39,13 +36,13 @@ fn every_mesh<'py>(_s: &RecordStep, py: Python<'py>, scene: &Obj<'py>) -> PyResu
 
 /// The meshes the edit touched changed under their chunks, and so did
 /// the groups drawing them.
-fn touch(py: Python<'_>, me: &Obj<'_>, scene: &Obj<'_>) -> PyResult<()> {
+fn touch(me: &Obj<'_>, scene: &Obj<'_>) -> PyResult<()> {
     for mesh in me.getattr("_meshes")?.try_iter()? {
         let mesh = mesh?;
         let serial: i64 = mesh.getattr("_mut_serial")?.extract()?;
         mesh.setattr("_mut_serial", serial + 1)?;
     }
-    dirty_chunks(py, scene)?;
+    crate::doc::history_support::dirty_group_chunks(scene)?;
     version(scene)
 }
 
@@ -68,7 +65,7 @@ fn restamp(s: &RecordStep, py: Python<'_>, me: &Obj<'_>, scene: &Obj<'_>, kind: 
     }
     let edited = if kind == "texture" { me.getattr("edited")? } else { none(py) };
     me.getattr("_edit")?.call_method1("apply", (&materials, new, edited))?;
-    touch(py, me, scene)?;
+    touch(me, scene)?;
     if s.journalled() {
         me.setattr("_edit", none(py))?;
     }
@@ -117,7 +114,7 @@ fn after_restamp(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Option<
         let Some(edit) = optional(&me, "_edit")? else { return Ok(()) };
         edit.call_method1("restore", (scene.getattr("materials")?,))?;
     }
-    touch(py, &me, scene)
+    touch(&me, scene)
 }
 
 macro_rules! steps {

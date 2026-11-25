@@ -180,7 +180,7 @@ fn hide_group<'p>(
     }
     if !contains {
         out.truncate(start);
-        if !hist.call_method1("_is_hidden", (g,))?.is_truthy()? {
+        if !hist.call_method1("is_hidden", (g,))?.is_truthy()? {
             out.push(g.clone())
         }
     }
@@ -202,14 +202,14 @@ impl PictureScope {
     }
     fn bump(&self, py: Python) -> PyResult<()> {
         let scene = self.scene.bind(py);
-        py.import("core.history")?
-            .call_method1("_dirty_group_chunks", (scene,))?;
+        py.import("ingetrazo_core")?
+            .call_method1("dirty_group_chunks", (scene,))?;
         scene.setattr("version", scene.getattr("version")?.extract::<u64>()? + 1)
     }
     fn unhide(&mut self, py: Python) -> PyResult<()> {
-        let hist = py.import("core.history")?;
+        let hist = py.import("ingetrazo_core")?;
         for e in self.hidden.drain(..) {
-            hist.call_method1("_set_hidden", (e, false))?;
+            hist.call_method1("set_hidden", (e, false))?;
         }
         Ok(())
     }
@@ -218,7 +218,7 @@ impl PictureScope {
 impl PictureScope {
     fn __enter__(&mut self, py: Python) -> PyResult<()> {
         let scene = self.scene.bind(py);
-        let hist = py.import("core.history")?;
+        let hist = py.import("ingetrazo_core")?;
         let chosen = scene.getattr("selection")?;
         let mut hide = Vec::new();
         for g in scene.getattr("groups")?.try_iter()? {
@@ -232,14 +232,14 @@ impl PictureScope {
                 } else {
                     chosen.contains(&e)?
                 };
-                if !keep && !hist.call_method1("_is_hidden", (&e,))?.is_truthy()? {
+                if !keep && !hist.call_method1("is_hidden", (&e,))?.is_truthy()? {
                     hide.push(e);
                 }
             }
         }
         let result = (|| {
             for e in hide {
-                hist.call_method1("_set_hidden", (&e, true))?;
+                hist.call_method1("set_hidden", (&e, true))?;
                 self.hidden.push(e.unbind());
             }
             self.bump(py)

@@ -16,9 +16,6 @@ fn none(py: Python<'_>) -> Obj<'_> {
     py.None().into_bound(py)
 }
 
-fn host<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
-    py.import("core.history")?.getattr(name)
-}
 
 fn optional<'py>(o: &Obj<'py>, name: &str) -> PyResult<Option<Obj<'py>>> {
     Ok(o.getattr_opt(name)?.filter(|v| !v.is_none()))
@@ -235,7 +232,7 @@ fn run_stitch(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     let me = running(py).expect("a running step");
     let mesh = scene.getattr("mesh")?;
     me.setattr("snapshot", snapshot(s, py, &mesh)?)?;
-    host(py, "run_stitch")?.call1((&mesh, keys_of(py, &s.arg(py, 0))?))?;
+    crate::doc::history_support::run_stitch(&mesh,keys_of(py, &s.arg(py, 0))?.as_any(),None,true,true)?;
     version(scene)
 }
 
@@ -292,13 +289,13 @@ fn face_meshes<'py>(s: &RecordStep, py: Python<'py>, _scene: &Obj<'py>) -> PyRes
 /// reversed loop changes no count, coordinate or paint, so every mesh
 /// holding a flipped face says so for the group chunks drawing it (#197).
 fn flip(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
-    let owners = host(py, "_reverse_faces")?.call1((s.arg(py, 0),))?;
+    let owners = crate::doc::history_support::reverse_faces(&s.arg(py, 0))?;
     for mesh in owners.try_iter()? {
         let mesh = mesh?;
         let rev: i64 = mesh.getattr_opt("_winding_rev")?.map_or(Ok(0), |v| v.extract())?;
         mesh.setattr("_winding_rev", rev + 1)?;
     }
-    host(py, "_dirty_group_chunks")?.call1((scene,))?;
+    crate::doc::history_support::dirty_group_chunks(scene)?;
     version(scene)
 }
 

@@ -6,6 +6,13 @@ use pyo3::{
     types::{PyDict, PyList, PyModule, PyTuple},
 };
 mod placements;
+mod transforms;
+mod inspectors;
+mod solids;
+mod paint_place;
+mod guides;
+mod profile_tools;
+mod mesh_tools;
 mod document;
 mod drawing;
 mod materials;
@@ -132,6 +139,13 @@ pub(crate) fn register(root: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(move_vertices, &m)?)?;
     m.add_function(wrap_pyfunction!(undo, &m)?)?;
     m.add_function(wrap_pyfunction!(redo, &m)?)?;
+    paint_place::register(&m)?;
+    solids::register(&m)?;
+    guides::register(&m)?;
+    profile_tools::register(&m)?;
+    inspectors::register(&m)?;
+    mesh_tools::register(&m)?;
+    transforms::register(&m)?;
     drawing::register(&m)?;
     annotations::register(&m)?;
     materials::register(&m)?;
