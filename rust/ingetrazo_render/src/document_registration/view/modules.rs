@@ -81,6 +81,11 @@ pub(super) fn install_interaction_module(module: &Bound<PyModule>) -> PyResult<(
         "wgpu_billboards" => super::frame_scene::install_billboards(module)?,
         "wgpu_style" => super::frame_scene::install_style(module)?,
         "wgpu_sections" => super::frame_scene::install_sections(module)?,
+        "wgpu_lines" => super::frame_lines::install_lines(module)?,
+        "wgpu_overlay" => super::frame_lines::install_overlay(module)?,
+        "wgpu_edit_context" => super::frame_lines::install_edit_context(module)?,
+        "wgpu_parity" => super::frame_marks::install_parity(module)?,
+        "wgpu_references" => super::frame_marks::install_references(module)?,
         "document_tools" => {
             import_names(module, "__future__", &[("annotations", "annotations")])?;
             import_names(module, "typing", &[("Optional", "Optional")])?;

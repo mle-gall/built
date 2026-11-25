@@ -226,6 +226,11 @@ const VIEW_MODULES: &[&str] = &[
     "wgpu_billboards",
     "wgpu_style",
     "wgpu_sections",
+    "wgpu_lines",
+    "wgpu_overlay",
+    "wgpu_edit_context",
+    "wgpu_parity",
+    "wgpu_references",
 ];
 
 #[pyclass(module = "ingetrazo_core", frozen)]

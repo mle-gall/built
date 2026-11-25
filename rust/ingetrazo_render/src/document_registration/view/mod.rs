@@ -55,6 +55,8 @@ mod chrome_inspector;
 mod chrome_tree;
 mod chrome_tree_action;
 mod device;
+mod frame_lines;
+mod frame_marks;
 mod frame_scene;
 mod document_controller;
 mod document_interaction;
