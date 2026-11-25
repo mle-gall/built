@@ -96,7 +96,7 @@ fn divide_answer(
     }
     let result = win
         .py()
-        .import("core.protocol.commands")?
+        .import("ingetrazo_core.command_protocol")?
         .call_method1("divide_edges", (vp.getattr("history")?, keys, n as usize))?;
     if !result.get_item("ok")?.is_truthy()? {
         return Ok(());

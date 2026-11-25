@@ -61,7 +61,7 @@ pub fn to_cam(p: &P, eye: &P, r: &P, u: &P, f: &P) -> P {
 }
 
 #[pyfunction]
-fn hlr_camera_basis<'py>(py: Python<'py>, camera: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
+pub(super) fn hlr_camera_basis<'py>(py: Python<'py>, camera: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
     let eye = xyz(&camera.call_method0("eye")?)?;
     let target = xyz(&camera.getattr("target")?)?;
     let up = if camera.hasattr("up_vector")? { camera.call_method0("up_vector")? } else { camera.getattr("up")? };
@@ -176,7 +176,7 @@ fn solve3(mut a: [[f64; 3]; 3], mut b: [f64; 3]) -> Option<[f64; 3]> {
 /// with the cut plane's camera depth `alpha·x + beta·y + gamma`, or `None`
 /// seen edge-on.
 #[pyfunction]
-fn hlr_cap_depth_affine<'py>(py: Python<'py>, plane: &Bound<'py, PyAny>, eye: &Bound<'py, PyAny>,
+pub(super) fn hlr_cap_depth_affine<'py>(py: Python<'py>, plane: &Bound<'py, PyAny>, eye: &Bound<'py, PyAny>,
                              right: &Bound<'py, PyAny>, up: &Bound<'py, PyAny>, fwd: &Bound<'py, PyAny>)
     -> PyResult<Option<Bound<'py, PyAny>>> {
     let (u, v) = crate::tools::plane::drawing_plane_axes(&plane.getattr("normal")?, None)?;
@@ -224,7 +224,7 @@ fn hlr_cap_ring_edges<'py>(py: Python<'py>, loops: &Bound<'py, PyAny>) -> PyResu
 /// `closing_tags(cut_edges, cut_tags)`: each chord given the layer of the
 /// ring it closes (see `core.hlr.closing_tags`).
 #[pyfunction]
-fn hlr_closing_tags<'py>(py: Python<'py>, cut_edges: &Bound<'py, PyAny>, cut_tags: &Bound<'py, PyAny>)
+pub(super) fn hlr_closing_tags<'py>(py: Python<'py>, cut_edges: &Bound<'py, PyAny>, cut_tags: &Bound<'py, PyAny>)
     -> PyResult<Bound<'py, PyList>> {
     let tags: Vec<Bound<'py, PyAny>> = cut_tags.try_iter()?.collect::<PyResult<_>>()?;
     let ids = PyDict::new(py);
@@ -435,7 +435,7 @@ fn to_clip(m: &[[f64; 4]; 4], p: &P) -> C4 {
 /// turn opposite ways to the eye.
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
-fn hlr_perspective_parts<'py>(py: Python<'py>, tris: &Bound<'py, PyAny>, hard: &Bound<'py, PyAny>,
+pub(super) fn hlr_perspective_parts<'py>(py: Python<'py>, tris: &Bound<'py, PyAny>, hard: &Bound<'py, PyAny>,
                               cut: &Bound<'py, PyAny>, soft: &Bound<'py, PyAny>, soft_n: &Bound<'py, PyAny>,
                               camera: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyTuple>>> {
     let tri = rows3(&flat_f64(tris)?);
@@ -512,7 +512,7 @@ fn hlr_perspective_parts<'py>(py: Python<'py>, tris: &Bound<'py, PyAny>, hard: &
 /// `_geometry_as_lists(tris, hard, soft, soft_n)`: arrays to the tuple
 /// lists `clip_to_section` walks.
 #[pyfunction]
-fn hlr_geometry_lists<'py>(py: Python<'py>, tris: &Bound<'py, PyAny>, hard: &Bound<'py, PyAny>,
+pub(super) fn hlr_geometry_lists<'py>(py: Python<'py>, tris: &Bound<'py, PyAny>, hard: &Bound<'py, PyAny>,
                            soft: &Bound<'py, PyAny>, soft_n: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
     let tup = |p: &P| PyTuple::new(py, p.iter().copied());
     let t = PyList::empty(py);

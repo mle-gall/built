@@ -405,7 +405,7 @@ impl InstanceUpdates {
                 meshes.set_item(id(&mesh), (&mesh, mesh.getattr("_mut_serial")?, codes.get_item(row)?))?;
             }
             let mut every = vec![loose];
-            for group in py.import("core.purge")?.call_method1("iter_groups", (scene.getattr("groups")?,))?.try_iter()? {
+            for group in py.import("ingetrazo_core")?.call_method1("purge_iter_groups", (scene.getattr("groups")?,))?.try_iter()? {
                 every.push(group?.getattr("mesh")?);
             }
             for mesh in every {
@@ -912,7 +912,7 @@ impl InstanceUpdates {
         let removed = PyList::empty(py);
         let pending_removed = set(s, "pending_removed")?;
         if local {
-            let walk = py.import("core.purge")?.getattr("iter_groups")?;
+            let walk = py.import("ingetrazo_core")?.getattr("purge_iter_groups")?;
             for root in pending_removed.iter() {
                 for group in walk.call1(((root,),))?.try_iter()? {
                     let key = packed.call_method1("row_key", (group?,))?;

@@ -23,7 +23,7 @@ fn place_label(vp: &Obj, args: &Bound<PyDict>, text: &Obj) -> PyResult<()> {
         if stripped.is_truthy()? {
             let fields = args.copy()?;
             fields.set_item("text", stripped)?;
-            imported(vp.py(), "core.protocol.commands")?.call_method(
+            imported(vp.py(), "ingetrazo_core.command_protocol")?.call_method(
                 "run",
                 (vp.getattr("history")?, "add_text_label"),
                 Some(&fields),

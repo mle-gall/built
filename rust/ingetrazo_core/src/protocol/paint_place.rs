@@ -82,7 +82,7 @@ fn paint_material<'py>(
         (Some(group), None, PyList::empty(py), None)
     } else {
         let target = py
-            .import("core.protocol.keys")?
+            .import("ingetrazo_core.command_protocol")?
             .call_method1("resolve_mesh", (&scene, mesh))?;
         let targets = need(&target, "face", &faces)?;
         let clicked = if let Some(seed) = seed {

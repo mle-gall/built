@@ -498,7 +498,7 @@ fn host_fillet_plan<'py>(a: &Args<'py>) -> Reply<'py> {
         )?;
         return Ok(none(py));
     }
-    let to_json_key = imported(py, "core.protocol.keys")?.getattr("to_json_key")?;
+    let to_json_key = imported(py, "ingetrazo_core.command_protocol")?.getattr("to_json_key")?;
     let kind = if tool.call_method0("_corners_mode")?.is_truthy()? {
         ("vertices").into_bound_py_any(py)?
     } else {

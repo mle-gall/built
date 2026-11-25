@@ -218,8 +218,8 @@ fn drop_clip_protos(v: &Obj, clip: &Obj) -> PyResult<()> {
     }
     let cache = opt(v, "_group_chunks")?;
     let all = py
-        .import("core.purge")?
-        .call_method1("iter_groups", (v.getattr("scene")?.getattr("groups")?,))?;
+        .import("ingetrazo_core")?
+        .call_method1("purge_iter_groups", (v.getattr("scene")?.getattr("groups")?,))?;
     let mut live = std::collections::HashSet::new();
     for g in all.try_iter()? {
         live.insert(id(&g?.getattr("mesh")?));

@@ -1269,7 +1269,7 @@ impl<'a, 'py> Row<'a, 'py> {
 /// raised.
 pub(super) fn core_command<'py>(vp: &Obj<'py>, command: &Obj<'py>, args: Option<&Bound<'py, PyDict>>) -> Reply<'py> {
     let py = vp.py();
-    let commands = py.import("core.protocol.commands")?;
+    let commands = py.import("ingetrazo_core.command_protocol")?;
     match commands.getattr("run")?.call((vp.getattr("history")?, command), args) {
         Err(error) if error.is_instance_of::<PyKeyError>(py) => {
             let text: String = error.value(py).str()?.extract()?;

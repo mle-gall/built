@@ -201,7 +201,7 @@ def test_make_component_names_through_the_chrome(win):
 
 
 def test_divide_goes_through_the_protocol_once_answered(win, monkeypatch):
-    from core.protocol import commands as protocol
+    from ingetrazo_core import command_protocol as protocol
     scene = win.viewport.scene
     from ingetrazo_core import Vec3 as QVector3D
     edge = scene.mesh.add_edge(QVector3D(0, 0, 0), QVector3D(4, 0, 0))

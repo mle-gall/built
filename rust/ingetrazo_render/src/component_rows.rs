@@ -19,8 +19,8 @@ impl ComponentRows {
     fn new(scene: &Bound<'_, PyAny>) -> PyResult<Self> {
         let walk = scene
             .py()
-            .import("core.purge")?
-            .call_method1("iter_groups", (scene.getattr("groups")?,))?
+            .import("ingetrazo_core")?
+            .call_method1("purge_iter_groups", (scene.getattr("groups")?,))?
             .try_iter()?;
         Ok(Self {
             walk: walk.unbind(),

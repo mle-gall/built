@@ -228,7 +228,7 @@ pub fn read_facts(
                 None => PyTuple::empty(py).into_any(),
             };
             let mut instances = 0;
-            for o in py.import("core.purge")?.call_method1("iter_groups", (roots,))?.try_iter()? {
+            for o in py.import("ingetrazo_core")?.call_method1("purge_iter_groups", (roots,))?.try_iter()? {
                 instances += usize::from(o?.getattr("mesh")?.is(&mesh));
             }
             f.instances = instances;

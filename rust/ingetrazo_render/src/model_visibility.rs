@@ -24,8 +24,8 @@ fn hidden_everywhere<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyLi
     let out = PyList::empty(py);
     let hidden = py.import("ingetrazo_core")?.getattr("is_hidden")?;
     let groups = py
-        .import("core.purge")?
-        .call_method1("iter_groups", (scene.getattr("groups")?,))?;
+        .import("ingetrazo_core")?
+        .call_method1("purge_iter_groups", (scene.getattr("groups")?,))?;
     add_hidden(&out, &groups, &hidden)?;
     let mesh = scene.getattr("mesh")?;
     for key in ["faces", "edges"] {

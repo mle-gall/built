@@ -32,9 +32,9 @@ def test_only_rows_on_screen_are_drawn(win, monkeypatch):
     from tests.test_replace_component import _component_sheet
     from tests.test_library_sheet import act
     drawn = []
-    from core import lazy_mesh
-    plan = lazy_mesh.plan_of
-    monkeypatch.setattr(lazy_mesh, "plan_of", lambda mesh: (drawn.append(id(mesh)), plan(mesh))[1])
+    import ingetrazo_core
+    plan = ingetrazo_core.plan_of
+    monkeypatch.setattr(ingetrazo_core, "plan_of", lambda mesh: (drawn.append(id(mesh)), plan(mesh))[1])
     scene = win.viewport.scene
     scene.groups.extend(_component(i) for i in range(120))
     scene.version += 1

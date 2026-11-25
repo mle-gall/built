@@ -198,7 +198,7 @@ pub(super) fn local_hidden_edges<'py>(a: &Args<'py>) -> Reply<'py> {
     let (scene, mesh) = (a.get_item(0)?, a.get_item(1)?);
     let numpy = np(py)?;
     let namespace = py.import("types")?.getattr("SimpleNamespace")?;
-    let plan = py.import("core.lazy_mesh")?.call_method1("plan_of", (&mesh,))?;
+    let plan = py.import("ingetrazo_core")?.call_method1("plan_of", (&mesh,))?;
     if plan.is_none() {
         let pairs = empty(py);
         for edge in mesh.getattr("edges")?.try_iter()? {
@@ -686,7 +686,7 @@ fn rest_rows<'py>(a: &Args<'py>) -> Reply<'py> {
         return Ok(rows.into_any());
     }
     let mut subject = std::collections::HashSet::new();
-    for group in py.import("core.purge")?.call_method1("iter_groups", ((&context,),))?.try_iter()? {
+    for group in py.import("ingetrazo_core")?.call_method1("purge_iter_groups", ((&context,),))?.try_iter()? {
         subject.insert(id(&group?));
     }
     for (row, group) in groups.try_iter()?.enumerate() {

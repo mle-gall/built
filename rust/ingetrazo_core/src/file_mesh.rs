@@ -660,7 +660,7 @@ fn plain_store_records<'py>(mesh: &Obj<'py>) -> PyResult<Option<Dict<'py>>> {
 fn igz_mesh_json<'py>(mesh: &Obj<'py>, geom_sink: Option<&Obj<'py>>) -> PyResult<Dict<'py>> {
     let py = mesh.py();
     let plan = py
-        .import("core.lazy_mesh")?
+        .import("ingetrazo_core")?
         .call_method1("plan_of", (mesh,))?;
     let codec = py.import("formats.igz")?;
     let out = PyDict::new(py);

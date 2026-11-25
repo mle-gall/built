@@ -116,10 +116,10 @@ pub(crate) fn project_sidebar(
         let mut used: HashSet<String> = HashSet::new();
         let mut kept: HashSet<String> = HashSet::new();
         if wants("is:used") || wants("is:unused") {
-            let purge = scene.py().import("core.purge")?;
-            used = purge.call_method1("used_layers", (scene,))?.extract()?;
+            let purge = scene.py().import("ingetrazo_core")?;
+            used = purge.call_method1("purge_used_layers", (scene,))?.extract()?;
             if wants("is:unused") {
-                kept = purge.call_method1("layers_held_by_scenes", (scene,))?.extract()?;
+                kept = purge.call_method1("purge_layers_held_by_scenes", (scene,))?.extract()?;
             }
         }
         let mut tags: Vec<Row> = root

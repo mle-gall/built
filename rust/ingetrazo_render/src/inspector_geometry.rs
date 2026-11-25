@@ -156,7 +156,7 @@ pub fn inspector_rename(vp: &Bound<'_, PyAny>, uid: &str, text: &str) -> PyResul
     let path = scene.call_method1("occurrence_path", (&group,))?;
     if !path.is_none() {
         vp.py()
-            .import("core.protocol.commands")?
+            .import("ingetrazo_core.command_protocol")?
             .call_method1("rename_placement", (vp.getattr("history")?, path, name))?;
         vp.call_method0("update")?;
     }

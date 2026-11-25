@@ -133,7 +133,7 @@ pub(crate) fn material_survey<'py>(
     if !current {
         cache.meshes.clear();
     } else if let Some(f) = &feed {
-        let keys = py.import("core.protocol.keys")?;
+        let keys = py.import("ingetrazo_core.command_protocol")?;
         for key in f
             .getattr("readers")?
             .call_method0("dirty_library_paint_meshes")?
@@ -156,9 +156,9 @@ pub(crate) fn material_survey<'py>(
                 .2 += count;
         }
     };
-    let purge = py.import("core.purge")?;
+    let purge = py.import("ingetrazo_core")?;
     let mut next = HashMap::new();
-    for mesh in purge.call_method1("iter_meshes", (scene,))?.try_iter()? {
+    for mesh in purge.call_method1("purge_iter_meshes", (scene,))?.try_iter()? {
         let mesh = mesh?;
         let id = mesh.as_ptr() as usize;
         let serial = mesh
@@ -180,8 +180,8 @@ pub(crate) fn material_survey<'py>(
     let registry = scene.getattr("materials")?;
     let mut stored = HashSet::new();
     let mut recipes = Vec::new();
-    let groups = purge.call_method1("_document_groups", (scene,))?;
-    for group in purge.call_method1("iter_groups", (groups,))?.try_iter()? {
+    let groups = purge.call_method1("purge_document_groups", (scene,))?;
+    for group in purge.call_method1("purge_iter_groups", (groups,))?.try_iter()? {
         let attrs = group?.getattr("material")?;
         if let Ok(paint) = attrs.cast::<PyDict>() {
             let mut paints = Paints::default();

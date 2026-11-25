@@ -365,7 +365,7 @@ fn build_intersect_faces<'p>(
     let api = py.import("core.intersect")?;
     let segs = if let Some(keys) = face_keys {
         let found = py
-            .import("core.protocol.keys")?
+            .import("ingetrazo_core.command_protocol")?
             .call_method1("elements", (&mesh, "face", keys))?;
         let faces = keys
             .try_iter()?

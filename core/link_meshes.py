@@ -28,7 +28,7 @@ def _digest(block, geom, compressed):
 
 class LinkMeshes:
     def __init__(self, path, registry, previous=None, *, filtered=False):
-        from core.purge import iter_groups
+        from ingetrazo_core import purge_iter_groups as iter_groups
         self.path = str(path)
         self.registry = registry
         self.previous = {}
