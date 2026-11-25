@@ -326,7 +326,7 @@ def test_inference_reads_committed_rows_from_the_native_index():
 
 
 def test_moving_geometry_leaves_the_snap_candidates_as_columns():
-    from views.wgpu_inference import ResidentEdges
+    from ingetrazo_core import ResidentEdges
     a = np.array([[0., 0, 0], [1, 0, 0], [5, 5, 5]])
     b = np.array([[1., 0, 0], [1, 1, 0], [6, 5, 5]])
     context = object()

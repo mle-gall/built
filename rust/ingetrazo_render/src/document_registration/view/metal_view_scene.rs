@@ -541,7 +541,7 @@ fn prepare_inference<'py>(a: &Args<'py>) -> Reply<'py> {
     let packed = view.call_method0("_inference_snapshot")?;
     // The job reads the document through a lease the worker's shutdown
     // takes back: a closed document is not kept until the job ends.
-    let lease = inference.getattr("SceneLease")?.call1((view.getattr("scene")?,))?;
+    let lease = py.import("ingetrazo_core")?.getattr("SceneLease")?.call1((view.getattr("scene")?,))?;
     worker.setattr("lease", &lease)?;
     let camera = view.getattr("camera")?;
     let mvp = camera.call_method0("projection_matrix")?.mul(camera.call_method0("view_matrix")?)?;
