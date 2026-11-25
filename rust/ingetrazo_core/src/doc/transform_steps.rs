@@ -18,9 +18,6 @@ fn is_instance(g: &Obj<'_>) -> PyResult<bool> {
     Ok(!g.getattr("xform")?.is_none())
 }
 
-fn host<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
-    py.import("core.history")?.getattr(name)
-}
 
 fn kernel<'py>(py: Python<'py>, class: &str) -> PyResult<Obj<'py>> {
     py.import("ingetrazo_core")?.getattr("placement_transform")?.getattr(class)?.call0()
@@ -138,9 +135,9 @@ fn run_flip(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     let instances = classic(&groups)?.is_empty();
     s.set_undo_by_transaction(instances);
     if instances {
-        host(py, "_dirty_placements")?.call1((s.arg(py, 0),))?;
+        crate::doc::history_support::dirty_placements(&s.arg(py, 0))?;
     } else {
-        host(py, "_dirty_group_chunks")?.call1((scene,))?;
+        crate::doc::history_support::dirty_group_chunks(scene)?;
     }
     version(scene)
 }
@@ -152,10 +149,10 @@ fn after_flip(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Option<&st
         let back = classic(&s.items(py, 0)?)?;
         if !back.is_empty() {
             crate::placement_transform::flip_groups(scene, back, &s.arg(py, 1))?;
-            host(py, "_dirty_group_chunks")?.call1((scene,))?;
+            crate::doc::history_support::dirty_group_chunks(scene)?;
         }
     }
-    host(py, "_dirty_placements")?.call1((s.arg(py, 0),))?;
+    crate::doc::history_support::dirty_placements(&s.arg(py, 0))?;
     version(scene)
 }
 

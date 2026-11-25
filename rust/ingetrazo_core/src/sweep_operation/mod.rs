@@ -181,7 +181,7 @@ fn stitch(mesh: &Obj, ss: &[Station]) -> PyResult<()> {
     }
     let kw = PyDict::new(py);
     kw.set_item("coplanar_merge", false)?;
-    py.import("core.history")?
+    py.import("ingetrazo_core")?
         .getattr("run_stitch")?
         .call((mesh, keys, py.None()), Some(&kw))?;
     Ok(())

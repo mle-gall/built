@@ -103,7 +103,7 @@ fn edit_tag<'py>(
     if !edit.is_none() {
         let step = history
             .py()
-            .import("core.protocol.commands")?
+            .import("ingetrazo_core")?
             .call_method1("EditTagCommand", (edit,))?;
         history.call_method1("execute", (step,))?;
     }

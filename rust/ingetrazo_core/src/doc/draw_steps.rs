@@ -24,9 +24,6 @@ fn view<'py>(py: Python<'py>, class: &str, mesh: &Obj<'py>, key: u128) -> PyResu
     py.import("core.store_mesh")?.getattr(class)?.call1((mesh, key))
 }
 
-fn host<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
-    py.import("core.history")?.getattr(name)
-}
 
 // ------------------------------------------------------------ edge
 
@@ -128,7 +125,7 @@ fn after_face(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Option<&st
             }
         }
     }
-    host(py, "_discard_removed_selection")?.call1((scene,))?;
+    crate::doc::history_support::discard_removed_selection(scene)?;
     version(scene)
 }
 

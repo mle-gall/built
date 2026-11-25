@@ -16,10 +16,7 @@ fn rows<'py>(items: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
     items.try_iter()?.collect()
 }
 fn apply_pose(scene: &Obj<'_>, g: &Obj<'_>, m: &Obj<'_>, pose: &Obj<'_>) -> PyResult<()> {
-    let local = scene
-        .py()
-        .import("core.history")?
-        .call_method1("_edit_local_transform", (scene, g, m))?;
+    let local = crate::doc::history_support::edit_local_transform(scene,g,m)?;
     g.setattr("xform", local.mul(pose)?)
 }
 fn move_mesh(mesh: &Obj<'_>, m: &Obj<'_>, delta: Option<&Obj<'_>>) -> PyResult<()> {
@@ -44,10 +41,7 @@ fn finish_transform(g: &Obj<'_>, m: &Obj<'_>, texture: bool) -> PyResult<()> {
 }
 #[pyfunction]
 pub(crate) fn shift_group(scene: &Obj<'_>, g: &Obj<'_>, delta: &Obj<'_>) -> PyResult<()> {
-    let pose = scene
-        .py()
-        .import("core.history")?
-        .call_method1("_member_placement", (scene, g))?;
+    let pose = crate::doc::history_support::member_placement(scene,g)?;
     let m = matrix(scene.py())?;
     m.call_method1("translate", (delta,))?;
     if pose.is_none() {
@@ -60,10 +54,9 @@ pub(crate) fn shift_group(scene: &Obj<'_>, g: &Obj<'_>, delta: &Obj<'_>) -> PyRe
 #[pyfunction]
 pub(crate) fn flip_groups(scene: &Obj<'_>, groups: Vec<Obj<'_>>, m: &Obj<'_>) -> PyResult<()> {
     let py = scene.py();
-    let api = py.import("core.history")?;
     let store = py.import("core.store_mesh")?.getattr("StoreMesh")?;
     for g in groups {
-        let pose = api.call_method1("_member_placement", (scene, &g))?;
+        let pose = crate::doc::history_support::member_placement(scene,&g)?;
         if !pose.is_none() {
             apply_pose(scene, &g, m, &pose)?;
             continue;
@@ -75,7 +68,7 @@ pub(crate) fn flip_groups(scene: &Obj<'_>, groups: Vec<Obj<'_>>, m: &Obj<'_>) ->
             let st = mesh.getattr("_store")?;
             st.call_method1("reverse_faces", (st.call_method1("keys", ("face",))?,))?;
         } else {
-            api.call_method1("_reverse_faces", (mesh.getattr("faces")?,))?;
+            crate::doc::history_support::reverse_faces(&mesh.getattr("faces")?)?;
         }
     }
     Ok(())
@@ -108,8 +101,7 @@ impl GroupTransform {
         let pose = if undo {
             g.getattr("xform")?
         } else {
-            py.import("core.history")?
-                .call_method1("_member_placement", (scene, g))?
+            crate::doc::history_support::member_placement(scene,g)?
         };
         if !pose.is_none() {
             apply_pose(scene, g, &make_matrix.call1((undo,))?, &pose)?;

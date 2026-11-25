@@ -75,7 +75,7 @@ fn recall<'py>(scene: &Obj<'py>, data: &Obj<'py>) -> PyResult<Option<Obj<'py>>> 
     let py = scene.py();
     let history = py.import("core.history")?;
     let switches = py
-        .import("core.protocol.commands")?
+        .import("ingetrazo_core")?
         .getattr("SetTagStateCommand")?;
     let mut commands = Vec::new();
     let tag_states: HashMap<String, bool> = data.get_item("tags")?.extract()?;

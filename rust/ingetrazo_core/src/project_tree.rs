@@ -154,8 +154,8 @@ pub(crate) fn placement_controls(row: &mut Row, group: &Bound<'_, PyAny>) -> PyR
 fn loose_visible(mesh: &Bound<'_, PyAny>) -> PyResult<bool> {
     let hidden = mesh
         .py()
-        .import("core.history")?
-        .getattr("_is_hidden")?;
+        .import("ingetrazo_core")?
+        .getattr("is_hidden")?;
     for field in ["faces", "edges"] {
         for entity in mesh.getattr(field)?.try_iter()? {
             if !hidden.call1((entity?,))?.is_truthy()? {
@@ -393,7 +393,7 @@ pub(crate) fn reset_source_tags<'py>(
     entry.set_item("overrides", PyDict::new(py))?;
     let commands = PyList::empty(py);
     let flags = py
-        .import("core.protocol.commands")?
+        .import("ingetrazo_core")?
         .getattr("SetTagStateCommand")?;
     for (index, keys) in tags.iter().enumerate() {
         if !keys.is_empty() {

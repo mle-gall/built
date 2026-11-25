@@ -3049,6 +3049,10 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(doc_attr_patch, m)?)?;
     m.add_class::<super::anchor::ElementAnchor>()?;
     m.add_function(wrap_pyfunction!(super::unlink::fill,m)?)?;
+    super::snapshot_steps::register(m)?;
+    super::inspector_steps::register(m)?;
+    super::metadata_steps::register(m)?;
+    super::history_support::register(m)?;
     m.add_class::<super::history::DocumentHistory>()?;
     m.add_class::<super::feed::FeedReaders>()?;
     m.add_class::<DocRecord>()?;

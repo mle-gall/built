@@ -43,7 +43,6 @@ fn doc_after(cmd: &Obj, scene: &Obj, phase: &str) -> PyResult<()> {
 fn apply(cmd: &Obj, scene: &Obj) -> PyResult<()> {
     prepare(cmd)?;
     let py = cmd.py();
-    let owner = py.import("core.history")?.getattr("group_owner_list")?;
     cmd.setattr(
         "_selection",
         py.get_type::<PySet>()
@@ -57,21 +56,17 @@ fn apply(cmd: &Obj, scene: &Obj) -> PyResult<()> {
     } else {
         0
     };
-    let home = owner.call1((scene, cmd.getattr("groups")?.get_item(dest)?))?;
-    let home = if home.is_truthy()? {
-        home
-    } else {
-        scene.getattr("groups")?
-    };
+    let home =
+        crate::definition_edits::group_owner(scene, &cmd.getattr("groups")?.get_item(dest)?)?
+            .unwrap_or(scene.getattr("groups")?);
     cmd.setattr("_home", &home)?;
     let slots = PyList::empty(py);
     let mut at = home.len()?;
     for g in cmd.getattr("removed")?.try_iter()? {
         let g = g?;
-        let list = owner.call1((scene, &g))?;
-        if list.is_none() {
+        let Some(list) = crate::definition_edits::group_owner(scene, &g)? else {
             continue;
-        }
+        };
         let i: usize = list.call_method1("index", (&g,))?.extract()?;
         if list.is(&home) {
             at = at.min(i);

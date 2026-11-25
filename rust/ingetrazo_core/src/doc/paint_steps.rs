@@ -31,10 +31,7 @@ fn face_meshes<'py>(s: &RecordStep, py: Python<'py>, _scene: &Obj<'py>) -> PyRes
     Ok(out)
 }
 
-fn dirty_chunks(py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
-    py.import("core.history")?.getattr("_dirty_group_chunks")?.call1((scene,))?;
-    Ok(())
-}
+
 
 /// Write `fields` on the faces; keep what they held on the first direct run.
 fn paint(s: &RecordStep, py: Python<'_>, fields: Vec<(String, Py<PyAny>)>) -> PyResult<()> {
@@ -62,14 +59,14 @@ fn field(s: &RecordStep, py: Python<'_>) -> PyResult<String> {
 
 fn run_field(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     paint(s, py, vec![(field(s, py)?, s.arg(py, 2).unbind())])?;
-    dirty_chunks(py, scene)?;
+    crate::doc::history_support::dirty_group_chunks(scene)?;
     version(scene)
 }
 
 fn after_field(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Option<&str>) -> PyResult<()> {
     if phase == Some("undo") && s.is_direct() {
         restore(s, py, vec![field(s, py)?])?;
-        dirty_chunks(py, scene)?;
+        crate::doc::history_support::dirty_group_chunks(scene)?;
     }
     version(scene)
 }

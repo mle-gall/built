@@ -66,6 +66,42 @@ pub(super) fn run<'py>(host: &Obj<'py>, cmd: &Obj<'py>, phase: &str) -> PyResult
     dispatch(host, cmd, phase)
 }
 
+fn notify(
+    listeners: &Obj<'_>,
+    index: usize,
+    cmd: &Obj<'_>,
+    phase: &str,
+    ran: bool,
+) -> PyResult<()> {
+    let py = listeners.py();
+    let frame = py
+        .import("core.coordinate_frame")?
+        .call_method0("model_frame")?;
+    in_frame(&frame, || {
+        for entry in listeners.try_iter()? {
+            let callback = entry?.get_item(index)?;
+            if callback.is_none() {
+                continue;
+            }
+            if let Err(e) = callback.call1((cmd, phase, ran)) {
+                if !e.is_instance_of::<pyo3::exceptions::PyException>(py) {
+                    return Err(e);
+                }
+                let args = PyDict::new(py);
+                args.set_item("exc_info", (e.get_type(py), e.value(py), e.traceback(py)))?;
+                py.import("logging")?
+                    .call_method1("getLogger", ("ingetrazo.history",))?
+                    .call_method(
+                        "exception",
+                        ("Command listener failed (%s)", phase),
+                        Some(&args),
+                    )?;
+            }
+        }
+        Ok(())
+    })
+}
+
 fn dispatch<'py>(host: &Obj<'py>, cmd: &Obj<'py>, phase: &str) -> PyResult<Obj<'py>> {
     let py = host.py();
     let nested = host.getattr("_running")?.is_truthy()?;
@@ -75,17 +111,17 @@ fn dispatch<'py>(host: &Obj<'py>, cmd: &Obj<'py>, phase: &str) -> PyResult<Obj<'
     let listeners = py
         .get_type::<PyTuple>()
         .call1((host.getattr("_listeners")?,))?;
-    host.call_method1("_notify", (&listeners, 0, cmd, phase, false))?;
+    notify(&listeners, 0, cmd, phase, false)?;
     host.setattr("_running", true)?;
     let mut ran = false;
     let result = (|| {
         let value = if phase == "execute" {
-            let v = super::lifecycle::execute(host,cmd,nested)?;
+            let v = super::lifecycle::execute(host, cmd, nested)?;
             ran = !host.getattr("last_error")?.is_truthy()?
                 && !host.getattr("last_rejected")?.is_truthy()?;
             v
         } else {
-            let v = super::lifecycle::replay(host,cmd,phase=="undo")?;
+            let v = super::lifecycle::replay(host, cmd, phase == "undo")?;
             ran = v.is_truthy()?;
             v
         };
@@ -100,6 +136,6 @@ fn dispatch<'py>(host: &Obj<'py>, cmd: &Obj<'py>, phase: &str) -> PyResult<Obj<'
         Ok(value)
     })();
     host.setattr("_running", nested)?;
-    host.call_method1("_notify", (listeners, 1, cmd, phase, ran))?;
+    notify(&listeners, 1, cmd, phase, ran)?;
     result
 }
