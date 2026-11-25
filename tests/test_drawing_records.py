@@ -280,7 +280,7 @@ def test_a_section_plane_on_a_hidden_layer_cuts_nothing():
 
 
 def test_select_content_takes_the_context_and_skips_locked():
-    from core.select_ops import on_layers
+    from ingetrazo_core import on_layers
     scene = Scene()
     scene.layers += [Layer("A"), Layer("B", locked=True)]
     f1 = _square(scene.mesh)

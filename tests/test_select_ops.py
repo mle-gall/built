@@ -11,7 +11,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from core.layers import assign_layer
 from core.mesh import Edge, Face
 from core.scene import Scene
-from core.select_ops import (all_connected, bounding_edges, same_layer,
+from ingetrazo_core import (all_connected, bounding_edges, same_layer,
                              same_material)
 
 

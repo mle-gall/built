@@ -161,6 +161,7 @@ def test_show_home_puts_the_page_on_the_sheet(win, monkeypatch, tmp_path):
     tpl = section(sh, "templates")
     assert [t["id"] for t in tpl] == ["tpl:survey", "tpl:steel", "tpl:arch_mm", "tpl:blank"]
     assert sh["footer"]["hint"].count("Engine:") == 1
+    assert "Renderer: wgpu (native app)" in sh["footer"]["hint"]
     assert [l["id"] for l in sh["footer"]["links"]] == ["libraries", "prefs", "extensions", "help"]
     # The first row is focused; its preview is on the right.
     assert sh["focus"] == "cont"

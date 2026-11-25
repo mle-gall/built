@@ -660,8 +660,7 @@ fn last_file_py(py: Python<'_>) -> PyResult<String> {
 fn footer(py: Python<'_>) -> String {
     let text = || -> PyResult<String> {
         let engine: String = py.import("core._native")?.call_method0("engine")?.extract()?;
-        let renderer: String = py.import("core.renderer_settings")?.call_method0("status_text")?.extract()?;
-        Ok(format!("Engine: {engine} · Renderer: {renderer}"))
+        Ok(format!("Engine: {engine} · Renderer: wgpu (native app)"))
     };
     text().unwrap_or_default()
 }

@@ -177,22 +177,6 @@ impl ShellFileDialog {
     }
 }
 
-/// Install the shell's bindings for document commands.
-#[pyfunction]
-fn install(py: Python<'_>, win: &Any<'_>) -> PyResult<()> {
-    let _ = win;
-    // The shell draws with the GPU by construction: no probe process, no
-    // fallback to report (the start page's footer, the chrome's checks).
-    let rs = py.import("core.renderer_settings")?;
-    if !rs.getattr("_shell_installed").map(|v| truthy(&v)).unwrap_or(false) {
-        let capability = rs.getattr("Capability")?.call1((true,))?.unbind();
-        rs.setattr("capability", func(py, move |py, _| Ok(capability.clone_ref(py)))?)?;
-        rs.setattr("status_text", func(py, |py, _| obj(py, "wgpu (native app)"))?)?;
-        rs.setattr("_shell_installed", true)?;
-    }
-    Ok(())
-}
-
 // ---- commands -------------------------------------------------------------------------
 
 /// A command by name (menu bar, start page, document ▾). Returns what the
@@ -1227,7 +1211,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         wrap_pyfunction!(directories::remember, &sub)?,
         wrap_pyfunction!(directories::last_dir, &sub)?,
         wrap_pyfunction!(directories::start_in, &sub)?,
-        wrap_pyfunction!(install, &sub)?,
         wrap_pyfunction!(command, &sub)?,
         wrap_pyfunction!(open_library, &sub)?,
         wrap_pyfunction!(open_settings, &sub)?,

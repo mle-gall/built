@@ -186,7 +186,7 @@ impl SvgProgress {
         Self { win, history, label, current, started: 0.0, job: None, reporting: None }
     }
 
-    /// `core.progress` reports a fraction here.
+    /// `ingetrazo_core.progress` reports a fraction here.
     fn __call__(&mut self, py: Python<'_>, fraction: &Bound<'_, PyAny>) -> PyResult<()> {
         self.report(py, fraction)
     }
@@ -200,7 +200,7 @@ impl SvgProgress {
             slf.borrow_mut().settle(py, Some(&e))?;
             return Err(e);
         }
-        let reporting = py.import("core.progress")?.call_method1("reporting", (slf,))?;
+        let reporting = py.import("ingetrazo_core.progress")?.call_method1("reporting", (slf,))?;
         reporting.call_method0("__enter__")?;
         slf.borrow_mut().reporting = Some(reporting.unbind());
         Ok(())
@@ -731,7 +731,7 @@ impl DeliveryStep {
             return Ok(false);
         }
         let reporter = Py::new(py, JobReport { win: win.clone().unbind(), history: history.clone().unbind(), job: job.clone().unbind() })?;
-        let reporting = py.import("core.progress")?.call_method1("reporting", (reporter,))?;
+        let reporting = py.import("ingetrazo_core.progress")?.call_method1("reporting", (reporter,))?;
         reporting.call_method0("__enter__")?;
         let next = py.import("builtins")?.getattr("next")?.call1((me.steps.bind(py),));
         let none = py.None().into_bound(py);

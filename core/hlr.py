@@ -31,7 +31,7 @@ import numpy as np
 
 import ingetrazo_core as NATIVE
 
-from core import progress as _progress
+from ingetrazo_core import progress as _progress
 
 # ── Camera basis ────────────────────────────────────────────────────────────
 

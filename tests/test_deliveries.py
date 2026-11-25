@@ -195,7 +195,7 @@ def test_problem_checks_cover_filed_geometry():
 
 
 def test_running_export_observes_cancellation(tmp_path, monkeypatch, next_turn):
-    from core import progress
+    from ingetrazo_core import progress
     from formats import dxf_out
     s = _tagged_wall_scene()
     vp = SimpleNamespace(history=History(s), scene=s, camera=OrbitCamera())

@@ -18,7 +18,7 @@ pub fn tree_tag_action(win: &Bound<'_, PyAny>, tag: &str, isolate: bool) -> PyRe
             .call_method1("open_to", (&vp, PyList::empty(win.py())))?;
         let entities = win
             .py()
-            .import("core.select_ops")?
+            .import("ingetrazo_core")?
             .call_method1("on_layers", (&scene, [tag]))?;
         ui.call_method1("_select", (win, entities))?;
         return Ok(());

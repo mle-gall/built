@@ -1050,7 +1050,7 @@ impl SettingsSheet {
                 if !path.is_truthy()? {
                     return Ok(());
                 }
-                let profile = match py.import("core.ndof_profiles")?.call_method1("load_profile", (&path,)) {
+                let profile = match crate::preferences::device_profile::load_profile(py, path.extract()?) {
                     Ok(p) => p,
                     Err(e) if e.is_instance_of::<pyo3::exceptions::PyOSError>(py) || e.is_instance_of::<pyo3::exceptions::PyValueError>(py) || e.is_instance_of::<pyo3::exceptions::PyUnicodeError>(py) => {
                         return note(slf, &format!("{}: {}", tr(py, "Invalid SpaceMouse profile")?, e.value(py).str()?), "error");
@@ -1081,7 +1081,7 @@ impl SettingsSheet {
                     let envb = env(&win(me)?)?;
                     let (model, _) = crate::settings_rows::device_preferences(&envb, None)?;
                     let json = py.import("json")?.call_method1("loads", (model.call_method0("profile")?,))?;
-                    let profile = py.import("core.ndof_profiles")?.call_method1("profile_from_dict", (json,))?;
+                    let profile = crate::preferences::device_profile::profile_from_dict(&json)?;
                     if crate::settings_rows::apply(py)?.call_method0("read_named_ndof_profiles")?.contains(&name)? {
                         let (me2, name2, profile2) = (me.clone().unbind(), name.clone(), profile.clone().unbind());
                         let replace = func(py, move |py, _a| {

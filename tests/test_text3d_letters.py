@@ -403,3 +403,14 @@ def test_a_text_from_an_older_document_keeps_its_back_face_on_re_edit():
         g, text_params("A", "Sans", height=0.25, thickness=0.02)))
     ys = placement_points(g)[:, 1]
     assert abs(float(ys.max()) - 0.05) < 1e-6
+
+
+def test_saved_letter_fingerprint_survives_the_native_port():
+    from types import SimpleNamespace
+    from core.mesh import Mesh
+    from core.text3d import letters_fingerprint
+
+    mesh = Mesh()
+    face = mesh.add_face([QVector3D(-1.234567, 0.1, 0), QVector3D(0, -1, 0), QVector3D(0, 0, 1)])
+    face.attrs.update(mat="été", color=[.123456, .75, 1.0], back={})
+    assert letters_fingerprint([SimpleNamespace(mesh=mesh, name="É")]) == "ebec80c7a8302328"

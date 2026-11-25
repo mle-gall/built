@@ -113,7 +113,7 @@ def test_under_flatpak_the_script_travels_next_to_the_job(tmp_path,
 def test_under_flatpak_renders_go_where_the_host_sees_them(tmp_path,
                                                           monkeypatch):
     monkeypatch.setattr(rb, "in_flatpak", lambda: True)
-    monkeypatch.setattr(rb.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     assert rb.work_base() == tmp_path / ".cache" / "IngeTrazo" / "render"
 
 

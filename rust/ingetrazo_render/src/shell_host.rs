@@ -238,7 +238,6 @@ impl Host {
         w.call_method1("bind", (&vp, view))?;
         vp.call_method1("set_active_tool", (py.None(),))?;
         front(h)?;
-        py.import(FILES)?.call_method1("install", (&w,))?;
         let ext = w
             .getattr("__dict__")?
             .call_method1("pop", ("_pending_extensions",))?;

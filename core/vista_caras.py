@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from core import progress as _progress
+from ingetrazo_core import progress as _progress
 
 #: The viewport's fixed matte light (``Viewport._LIGHT``): from above,
 #: slightly front-right. A test keeps the two in step.
