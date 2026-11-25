@@ -104,10 +104,9 @@ pub(super) fn collect_geometry<'p>(scene: &Obj<'p>, layers: bool) -> PyResult<Bo
             let placements = py
                 .import("ingetrazo_core")?
                 .call_method1("group_visible_placements", (scene, &g))?;
-            py.import("core.group")?
-                .call_method1("world_mesh", (&g, placements))?
+            crate::model::group_mesh::world_mesh(&g, Some(&placements))?
         } else if !g.getattr("xform")?.is_none() {
-            py.import("core.group")?.call_method1("world_mesh", (&g,))?
+            crate::model::group_mesh::world_mesh(&g, None)?
         } else {
             g.getattr("mesh")?
         };
