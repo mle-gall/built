@@ -2471,7 +2471,7 @@ fn doc_new_root(py: Python<'_>) -> PyResult<Py<PyPlacement>> {
 #[pyo3(signature=(document=None))]
 fn doc_begin(py: Python<'_>, document: Option<Key>) -> PyResult<usize> {
     let _writer = super::Writer::acquire(py, document)?;
-    py.import("core.doc_model")?.call_method0("flush")?;
+    fresh(py)?;
     let depth = { lock().begin(document) }
         .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Document writer reservation lost"))?;
     super::geometry::begin();
@@ -2524,6 +2524,42 @@ fn doc_rollback(py: Python<'_>) -> PyResult<()> {
 fn doc_set_hooks(make: Py<PyAny>, bind: Py<PyAny>) {
     let old = HOOKS.lock().unwrap_or_else(|e| e.into_inner()).replace((make, bind));
     drop(old);
+}
+
+/// The suspect containers (`core.doc_model._SUSPECT`: plain containers
+/// stored into tracked ones, written back at boundaries) and the flush
+/// that writes them.
+static SUSPECTS: pyo3::sync::PyOnceLock<(Py<PyDict>, Py<PyAny>)> = pyo3::sync::PyOnceLock::new();
+
+#[pyfunction]
+fn doc_set_suspects(py: Python<'_>, suspects: Py<PyDict>, flush: Py<PyAny>) {
+    let _ = SUSPECTS.set(py, (suspects, flush));
+}
+
+/// Make the document's values what Python sees before Rust reads them
+/// directly: tracked containers write through already; plain ones stored
+/// into them are flushed, when any is waiting (a length check otherwise).
+pub(crate) fn fresh(py: Python<'_>) -> PyResult<()> {
+    if let Some((suspects, flush)) = SUSPECTS.get(py) {
+        if !suspects.bind(py).is_empty() {
+            flush.call0(py)?;
+        }
+    }
+    Ok(())
+}
+
+/// The document's own value of attribute `name` of a handle, read from
+/// the node (not its Python view): what Rust code sees.
+#[pyfunction]
+fn doc_attr_value<'py>(py: Python<'py>, handle: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyAny>> {
+    fresh(py)?;
+    let k = handle_key(handle)?;
+    let a = super::attr_id(name).map_err(err)?;
+    let v = { lock().need(k).map_err(err)?.attr(a).cloned() };
+    match v {
+        Some(v) => v.to_py(py),
+        None => Ok(py.None().into_bound(py)),
+    }
 }
 
 /// Install the tracked-container hook: `track(key, attr, container)`.
@@ -3044,6 +3080,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(doc_set_many, m)?)?;
     m.add_function(wrap_pyfunction!(doc_parent_mode, m)?)?;
     m.add_function(wrap_pyfunction!(doc_set_track_hook, m)?)?;
+    m.add_function(wrap_pyfunction!(doc_set_suspects, m)?)?;
+    m.add_function(wrap_pyfunction!(doc_attr_value, m)?)?;
     m.add_function(wrap_pyfunction!(doc_set_refill_hook, m)?)?;
     m.add_function(wrap_pyfunction!(doc_attr_changed, m)?)?;
     m.add_function(wrap_pyfunction!(doc_attr_patch, m)?)?;
