@@ -103,24 +103,4 @@ class ChangeFeed(HistoryFeed):
     maxlen = 256
 
     def __init__(self, history):
-        self._history = weakref.ref(history)
-        self._native = history._native
-        self._subscribers = history._native.subscribers
-        from ingetrazo_core import FeedReaders
-        self.readers = FeedReaders(getattr(getattr(history.scene, "_root", None), "_doc_key", None))
-        self.subscribe(self.readers)
-        self._pending = None
-        self._depth = 0
-        self.unsubscribe = history.add_listener(before=self._before,
-                                                after=self._after)
-
-    def subscribe(self, fn):
-        """Call ``fn(step)`` after every published step; returns an
-        unsubscribe function."""
-        entry = [fn]
-        self._subscribers.append(entry)
-
-        def unsubscribe():
-            if entry in self._subscribers:
-                self._subscribers.remove(entry)
-        return unsubscribe
+        self._connect(history)

@@ -35,125 +35,12 @@ from collections.abc import Sequence
 from types import SimpleNamespace
 import math
 
-import threading
+from ingetrazo_core import ResidentEdges, resident_prepare, resident_rebase, resident_prototype
 import weakref
 import numpy as np
-from ingetrazo_core import Vec3 as QVector3D
+from ingetrazo_core import Vec3 as QVector3D, project_boxes, nearest_inference_triangle, resident_curve_features as _curve_features
 from core import _native
 from core.snap import SurfacePatch, compute_snap, face_crossing_near_ray
-
-
-def _source_visible(source, scene):
-    layers = source.get('layers')
-    visible = getattr(scene, 'entity_visible', None)
-    names = source.get('meta', {}).get('edge_layers') or ()
-    if layers is None or visible is None or not names:
-        return np.ones(len(source['edges']), bool)
-    # The negative sentinel (untagged) always passes. Evaluate layer policy
-    # once per name and gather the mask in a single pass over edges.
-    allowed = np.array([visible(SimpleNamespace(layer=name)) for name in names] + [True])
-    return allowed[np.where(layers >= 0, layers, -1)]
-
-
-def _prototype_arrays(packed, code, scene, first_row, cache):
-    """Gather snapshots; expansion and curve grouping belong to the native worker."""
-    face, edge = packed.commands[code], packed.edge_commands[code]
-    start, count = int(face['base']), int(face['count'])
-    triangles = np.ascontiguousarray(packed.vertices['pos'][start:start+count])
-    groups = getattr(packed, 'groups', None)
-    group = groups[first_row] if groups is not None and first_row >= 0 else None
-    mesh = group.mesh if group is not None else getattr(scene, 'loose_mesh', None)
-    key = (id(mesh), group is not None)
-    if mesh is not None and key in cache:
-        return (triangles, *cache[key])
-    reveal = bool(getattr(scene, 'show_hidden_geometry', False))
-    source = mesh.__dict__.get('_deferred_source') if mesh is not None else None
-    store = mesh.__dict__.get('_store') if mesh is not None else None
-    frame = (0., 0., 0.)
-    if source is None and store is not None:
-        # Pin one native snapshot for the whole read. The worker can overlap
-        # a tool gesture or undo turning the mesh into another coordinate frame.
-        saved = getattr(packed, '_snap_sources', {}).get(id(mesh))
-        snapshot, frame = saved if saved is not None else (store.snapshot(), store.frame_origin)
-        arrays = snapshot.arrays()
-        source = dict(pos=arrays['pos'], edges=arrays['edges'], flags=arrays['flags'],
-                      curves=arrays['curve'], layers=arrays['layer'],
-                      meta={'edge_layers': snapshot.layer_names()})
-    if source is not None:
-        pos = np.ascontiguousarray(source['pos'], dtype=float)
-        edges = np.ascontiguousarray(source['edges'], dtype=np.int64)
-        keep = _source_visible(source, scene)
-        flags = source['flags']
-        if flags is not None and not reveal:
-            keep &= (flags & (3 if group is not None else 2)) == 0
-        curves = source.get('curves')
-        curves = (np.full(len(edges), -1, np.int64) if curves is None else
-                  np.ascontiguousarray(curves, dtype=np.int64))
-    else:
-        lines, named = [], []
-        if mesh is None:
-            pos = packed.vertices['pos'][start+count:start+count+int(edge['count'])]
-        else:
-            visible = getattr(scene, 'edge_snappable', lambda e: not e.hidden or reveal)
-            for e in mesh.edges:
-                if (group is None or reveal or not e.soft) and visible(e):
-                    lines.extend((e.v0.position_tuple(), e.v1.position_tuple()))
-                    named.append(-1 if e.curve is None else e.curve)
-            pos = lines
-        pos = np.ascontiguousarray(pos, dtype=float).reshape(-1, 3)
-        edges = np.arange(len(pos), dtype=np.int64).reshape(-1, 2)
-        keep = np.ones(len(edges), bool)
-        curves = np.asarray(named, np.int64) if mesh is not None else np.full(len(edges), -1, np.int64)
-    if mesh is not None and code < len(packed.prototype_origins):
-        origin = packed.prototype_origins[code]
-        if tuple(frame) != origin:
-            pos = pos + np.subtract(frame, origin)
-    arrays = (pos, edges, keep, curves)
-    if mesh is not None:
-        cache[key] = arrays
-    return (triangles, *arrays)
-
-
-def _prototype(packed, code, scene, first_row):
-    protos, _ = _native.available().build_snap_index(
-        [_prototype_arrays(packed, code, scene, first_row, {})],
-        np.empty(0, np.int64), np.empty((0, 16)), np.empty((0, 3)), np.empty((0, 3)))
-    return protos[0], protos[0]
-
-
-def _curve_features(curves):
-    """Fit only a queried prototype's named curves from its visibility
-    snapshot: ``(centres, tangents, arc midpoints)`` in prototype space.
-    The arc midpoint is GL's «Arc midpoint» (``core.snap.
-    arc_sweep_midpoint``), for an open chain only: two ends, three or more
-    vertices — a circle has none."""
-    from core.snap import fit_circle, arc_sweep_midpoint
-    if hasattr(curves, 'curve_segments'):
-        curves = curves.curve_segments()
-    centers, tangents, mids = [], [], []
-    for segments in curves:
-        ends = np.asarray(segments, float).reshape(-1, 3)
-        points, counts = np.unique(ends, axis=0, return_counts=True)
-        vertices = [QVector3D(*p) for p in points]
-        fit = fit_circle(vertices) if len(points) >= 3 else None
-        if fit is None:
-            continue
-        if int((counts == 1).sum()) == 2:
-            mid = arc_sweep_midpoint(vertices, fit)
-            if mid is not None:
-                mids.append(np.array(mid.toTuple()))
-        center = np.array(fit[0].toTuple())
-        centers.append(center)
-        for point in points[counts == 1]:
-            at = np.flatnonzero(np.all(ends == point, axis=1))[0]
-            leaving = point - ends[at ^ 1]
-            radial = point-center
-            radial /= np.linalg.norm(radial)
-            tangent = leaving-radial*np.dot(leaving, radial)
-            length = np.linalg.norm(tangent)
-            if length > 1e-9:
-                tangents.append((point, tangent/length))
-    return centers, tangents, mids
 
 
 def tangent_direction(index, packed, row, point):
@@ -236,7 +123,7 @@ class ResidentInference:
 
             affected = (code_rows[code] if code_rows is not None else
                         np.flatnonzero(packed.instances['info'][:, 0] == code))
-            self.protos[code], curves = _prototype(
+            self.protos[code], curves = resident_prototype(
                 packed, code, self.scene, affected[0] if len(affected) else -1)
             self.bounds[code] = packed.bounds[code].copy()
             self.features.replace(code, curves)
@@ -304,77 +191,12 @@ class ResidentInference:
         return self._query('edges_near', rows, *args)
 
 
-def _placement_arrays(packed):
-    mats = packed.instances['world'].astype(np.float64).reshape(-1, 16)
-    ids = packed.instances['info'][:, 0].astype(np.int64)
-    bounds = packed.bounds[ids, :, :3].astype(np.float64)
-    matrix = mats.reshape(-1, 4, 4).transpose(0, 2, 1)
-    center = bounds.mean(axis=1)
-    extent = (bounds[:, 1] - bounds[:, 0]) / 2
-    wc = np.einsum('nij,nj->ni', matrix[:, :3, :3], center) + matrix[:, :3, 3]
-    we = np.einsum('nij,nj->ni', abs(matrix[:, :3, :3]), extent)
-    return ids, mats, wc, we
-
-
 def rebase(index, packed):
-    """Keep prototype BVHs and replace their placement rows in the new frame."""
-    ids, mats, wc, we = _placement_arrays(packed)
-    base = _native.available().InstanceSet(index.protos, ids, mats,
-                                         np.ascontiguousarray(wc-we), np.ascontiguousarray(wc+we))
-    result = ResidentInference(base, index.protos, list(index.protos), packed, index.scene)
-    result.world_box_cache = wc, we
-    return result
-
-
-class SceneLease:
-    """The document a snap-index job reads, held only while it reads it.
-
-    The job runs on a worker and outlives a closed view; the document must
-    not wait for it. ``release()`` (the view closing) takes the document
-    back: a job not started reads nothing, one that is reading stops at the
-    prototype it is on. The native build that follows needs no document."""
-
-    def __init__(self, scene):
-        self.scene = scene
-        self.released = False
-        self._reading = threading.Lock()
-
-    def release(self):
-        self.released = True
-        with self._reading:
-            self.scene = None
+    return resident_rebase(ResidentInference, index, packed)
 
 
 def prepare(packed, scene=None):
-    """The snap index of ``packed``. ``scene`` may be a :class:`SceneLease`:
-    then None is returned if the lease is released before the read ends."""
-    native = _native.available()
-    codes, rows = np.unique(packed.instances['info'][:, 0], return_index=True)
-    first = np.full(len(packed.commands), -1, dtype=np.int64)
-    first[codes] = rows
-    cache = {}
-    lease = scene if isinstance(scene, SceneLease) else None
-    if lease is not None:
-        with lease._reading:
-            scene = lease.scene
-            arrays = []
-            for code, row in enumerate(first):
-                if lease.released:
-                    lease.scene = scene = None
-                    return None
-                arrays.append(_prototype_arrays(packed, code, scene, row, cache))
-            lease.scene = None
-    else:
-        arrays = [_prototype_arrays(packed, code, scene, row, cache)
-                  for code, row in enumerate(first)]
-    # From here the job holds the document weakly only.
-    scene = None if scene is None else weakref.ref(scene)
-    ids, mats, wc, we = _placement_arrays(packed)
-    protos, base = native.build_snap_index(arrays, ids, mats, np.ascontiguousarray(wc-we),
-                                           np.ascontiguousarray(wc+we))
-    index = ResidentInference(base, protos, list(protos), packed, scene)
-    index.world_box_cache = wc, we
-    return index
+    return resident_prepare(ResidentInference, packed, scene)
 
 
 def surface(index, row, origin, direction, limit=float('inf')):
@@ -386,21 +208,15 @@ def surface(index, row, origin, direction, limit=float('inf')):
 def surface_hit(index, row, origin, direction, limit=float('inf')):
     """:func:`surface` and the unit normal of the triangle it hit, from the
     same candidates: ``(point, normal)`` or ``None``."""
-    from views.document_interaction import _moller_trumbore
     rows = np.asarray(row, np.int64).reshape(-1)
     rows = rows[(rows >= 0) & (rows < len(index.packed.instances))]
     rows = rows[(index.packed.instances['info'][rows, 2] & 129) == 0]
     _, _, v0, e1, e2 = index.ray_cands(rows, origin.toTuple(), direction.toTuple(), limit)
-    if not len(v0):
+    hit = nearest_inference_triangle(origin.toTuple(), direction.toTuple(), v0, e1, e2)
+    if hit is None:
         return None
-    t, hit = _moller_trumbore(np.array(origin.toTuple()), np.array(direction.toTuple()), v0, e1, e2)
-    if not hit.any():
-        return None
-    k = int(np.argmin(np.where(hit, t, np.inf)))
-    n = np.cross(e1[k], e2[k])
-    length = float(np.linalg.norm(n))
-    normal = QVector3D(*(n / length)) if length > 1e-30 else None
-    return origin + direction * float(t[k]), normal
+    _, distance, normal = hit
+    return origin + direction * distance, QVector3D(*normal) if normal is not None else None
 
 
 def packed_surface(packed, row, origin, direction):
@@ -452,7 +268,7 @@ def screen_boxes(index, packed, mvp, width, height):
         changed = np.fromiter(index.screen_dirty, np.int64)
     if len(changed):
         wc, we = _world_boxes(index, packed)
-        low, high = _project_boxes(wc[changed], we[changed], mvp, width, height)
+        low, high = project_boxes(wc[changed], we[changed], mvp, width, height)
         lo[changed], hi[changed] = low, high
         index.screen_dirty.clear()
         if grid is None:
@@ -495,43 +311,6 @@ def _world_boxes(index, packed):
     return wc, we
 
 
-def _project_boxes(wc, we, mvp, width, height):
-    """Conservative screen boxes ``(low, high)`` of the world boxes: the
-    eight corners projected, ``±inf`` for a box crossing the eye plane,
-    ``+inf`` for one wholly behind it. The clip transform is linear, so
-    each corner is the clip centre plus signed clip extents — eight passes
-    over contiguous rows, not reductions over a short middle axis (half of
-    the first hover's 17 ms over 30 000 placements)."""
-    matrix = np.asarray(mvp.data()).reshape(4, 4).T
-    centre = wc @ matrix[:, :3].T + matrix[:, 3]
-    axes = [we[:, k, None] * matrix[:, k] for k in range(3)]
-    n = len(wc)
-    low = np.full((n, 2), np.inf)
-    high = np.full((n, 2), -np.inf)
-    any_front = np.zeros(n, bool)
-    all_front = np.ones(n, bool)
-    half_w, half_h = width / 2, height / 2
-    for sx in (-1., 1.):
-        for sy in (-1., 1.):
-            for sz in (-1., 1.):
-                clip = centre + sx * axes[0] + sy * axes[1] + sz * axes[2]
-                w = clip[:, 3]
-                front = w > 1e-3
-                denom = np.where(front, w, 1.)
-                px = (clip[:, 0] / denom + 1.) * half_w
-                py = (1. - clip[:, 1] / denom) * half_h
-                np.minimum(low[:, 0], px, out=low[:, 0])
-                np.minimum(low[:, 1], py, out=low[:, 1])
-                np.maximum(high[:, 0], px, out=high[:, 0])
-                np.maximum(high[:, 1], py, out=high[:, 1])
-                any_front |= front
-                all_front &= front
-    crossing = any_front & ~all_front
-    low[crossing], high[crossing] = -np.inf, np.inf
-    low[~any_front], high[~any_front] = np.inf, np.inf
-    return low, high
-
-
 def _screen_rows(index, packed, mvp, width, height, x, y, radius, rows):
     lo, hi, grid, moved = screen_boxes(index, packed, mvp, width, height)
     candidates = grid.near(x, y, radius) if grid is not None and radius <= 128 else None
@@ -569,68 +348,6 @@ def context_hit(view, context, x, y):
     placements, *_ = index.edges_near(rows, mvp.data(), float(view.width()),
         float(view.height()), float(x), float(y), float(radius), 1)
     return int(placements[0]) if len(placements) else None
-
-
-class ResidentEdges(Sequence):
-    """Keep nearby placement/edge ordinals packed until a rule needs a Qt reference."""
-    def __init__(self, columns, groups, context):
-        self.rows, self.ids, self.a, self.b, self.distances = columns
-        self.groups = groups
-        self.context = context
-        self.prefix = []
-        self.features = []
-
-    def __len__(self):
-        return len(self.prefix) + len(self.rows) + len(self.features)
-
-    def __getitem__(self, index):
-        if isinstance(index, slice):
-            return [self[i] for i in range(*index.indices(len(self)))]
-        if index < 0:
-            index += len(self)
-        if index < 0 or index >= len(self):
-            raise IndexError(index)
-        if index < len(self.prefix):
-            return self.prefix[index]
-        i = index - len(self.prefix)
-        if i >= len(self.rows):
-            return self.features[i-len(self.rows)]
-        row = int(self.rows[i])
-        group = self.groups[row] if self.groups is not None else None
-        loose = group is self.context
-        word = None if loose else ('component' if group is not None and group.is_instance() else 'group')
-        return SimpleNamespace(a=QVector3D(*self.a[i]), b=QVector3D(*self.b[i]),
-            row=row, edge_id=int(self.ids[i]), distance=float(self.distances[i]), group=group,
-            in_group=not loose, context=word)
-
-    def keep(self, mask):
-        """The same edges less the masked-out placement ones (prefix and
-        features stay), still as columns."""
-        mask = np.asarray(mask, bool)
-        out = ResidentEdges(tuple(column[mask] for column in (self.rows, self.ids, self.a, self.b, self.distances)),
-                            self.groups, self.context)
-        out.prefix, out.features = self.prefix, self.features
-        return out
-
-    def in_group(self):
-        """Per edge: whether its placement is not the open context."""
-        if self.groups is None:
-            return np.full(len(self.rows), self.context is not None)
-        rows, inverse = np.unique(self.rows, return_inverse=True)
-        return np.asarray([self.groups[r] is not self.context for r in rows], bool)[inverse]
-
-    def snap_columns(self):
-        from core.snap_query import edge_columns
-        count = len(self.rows)
-        grouped = self.in_group().tolist()
-        tags = [0] * count
-        if not self.prefix and not self.features:
-            return self.a, self.b, tags, grouped
-        first_a, first_b, first_tags, first_groups = edge_columns(self.prefix)
-        last_a, last_b, last_tags, last_groups = edge_columns(self.features)
-        return (np.concatenate((first_a, self.a, last_a)),
-                np.concatenate((first_b, self.b, last_b)),
-                first_tags + tags + last_tags, first_groups + grouped + last_groups)
 
 
 def nearby_edges(index, packed, camera, width, height, x, y, *,
@@ -1016,7 +733,6 @@ def on_surface(index, view, row, point, project=None):
 def _front_at(index, view, x, y, rows, mvp):
     """``(point, unit normal, row)`` of the front surface at pixel
     ``(x, y)``, asked of the placements whose screen box holds the pixel."""
-    from views.document_interaction import _moller_trumbore
     origin, direction = view._pixel_to_ray(x, y)
     if origin is None or direction is None:
         return None
@@ -1026,18 +742,13 @@ def _front_at(index, view, x, y, rows, mvp):
         return None
     pl, _, v0, e1, e2 = index.ray_cands(near, origin.toTuple(), direction.toTuple(),
                                         float('inf'))
-    if not len(v0):
+    hit = nearest_inference_triangle(origin.toTuple(), direction.toTuple(), v0, e1, e2)
+    if hit is None:
         return None
-    t, hit = _moller_trumbore(np.array(origin.toTuple()), np.array(direction.toTuple()),
-                              v0, e1, e2)
-    if not hit.any():
+    k, distance, normal = hit
+    if normal is None:
         return None
-    k = int(np.argmin(np.where(hit, t, np.inf)))
-    n = np.cross(e1[k], e2[k])
-    length = float(np.linalg.norm(n))
-    if length < 1e-30:
-        return None
-    return origin + direction * float(t[k]), QVector3D(*(n / length)), int(pl[k])
+    return origin + direction * distance, QVector3D(*normal), int(pl[k])
 
 
 def _on_plane(hit, plane, depth):

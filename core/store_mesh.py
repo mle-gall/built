@@ -217,22 +217,7 @@ class _MutList(list):
 
     def _write(name):
         def method(self, *args, **kwargs):
-            field, *index = self._path
-            current = getattr(self._owner, field)
-            if index and (index[0] >= len(current) or current[index[0]] != self):
-                raise ValueError("the held hole ring has been replaced")
-            target = list(current[index[0]] if index else current)
-            result = getattr(target, name)(*args, **kwargs)
-            if index:
-                rings = list(current)
-                rings[index[0]] = target
-                setattr(self._owner, field, rings)
-            else:
-                setattr(self._owner, field, target)
-            if field == "hole_loops" and not index:
-                target = self._owner.hole_loops
-            list.__setitem__(self, slice(None), target)
-            return result
+            return store_views.mutate_incidence(self, name, args, kwargs)
         return method
 
     append = _write("append")
@@ -293,7 +278,7 @@ class StoreState(store_views.MeshSnapshotRecord, Mapping):
              "efaces", "esoft", "eflat", "ehidden", "elayer", "ecurve", "floop",
              "fholes", "fattrs", "finterior")
 
-class _SnapPositions(Mapping):
+class _SnapPositions(store_views.SnapshotPositions, Mapping):
     """``snap["vpos"]``: vertex key → position in the snapshot."""
 
     __slots__ = ("snap",)
@@ -301,24 +286,6 @@ class _SnapPositions(Mapping):
     def __init__(self, snap):
         self.snap = snap
 
-    def __contains__(self, key):
-        return isinstance(key, int) and self.snap.has(key) and \
-            (key >> 38) & 3 == 0
-
-    def __getitem__(self, key):
-        try:
-            return QVector3D(*self.snap.vertex_position(key))
-        except (KeyError, OverflowError, TypeError):
-            raise KeyError(key) from None
-
-    def __iter__(self):
-        return iter(self.snap.keys("vertex"))
-
-    def __len__(self):
-        return self.snap.counts()[0]
-
-
-# ---- The store-backed mesh -------------------------------------------------
 
 def _seq_property(kind, cls):
     def get(self):
@@ -388,9 +355,6 @@ class StoreMesh(_mesh._MeshState):
         k = self._store.vertex_at(self._input_point(position))
         return None if k is None else VertexView(self, k)
 
-    def _lookup(self, position):
-        return self.vertex_at(position)
-
     def registers(self, v) -> bool:
         try:
             return self._store.registers(v.key)
@@ -449,14 +413,6 @@ class StoreMesh(_mesh._MeshState):
         return [FaceView(self, k)
                 for k in self._store.nonplanar_faces(tolerance)]
 
-    # -- port step 2: the incidence primitives as store ops ---------------
-    # Each is its Mesh method's semantics (store/topo.rs), with the same
-    # dirty / revision bumps on the Python side (`_dirty(n)` = n times
-    # ``_chunk_dirty = True; _mut_serial += 1``), so readers keyed on them
-    # see the same thing. An element of another mesh, or a result the
-    # store does not represent (``StoreFallback``, raised before anything
-    # changed), runs the Python kernel instead (`_py`).
-
     def _dirty(self, n=1) -> None:
         return store_views.dirty(self, n)
 
@@ -485,11 +441,6 @@ class StoreMesh(_mesh._MeshState):
         self.__dict__.pop("_bulk", None)
         k, _ch = self._store.vertex(self._input_point(position))
         return VertexView(self, k)
-
-    def _probe_neighbours(self, k, position):
-        p = _xyz(position)
-        hit = self._store.probe(tuple(k), p)
-        return None if hit is None else VertexView(self, hit)
 
     def _link_edge(self, v0, v1):
         st = self._store
@@ -562,13 +513,6 @@ class StoreMesh(_mesh._MeshState):
             raise StoreRefusal("relink_vertices requires live, representable incidence in this mesh")
         self._store.relink_vertices(keys)
         self._dirty(1)
-
-    # -- port step 3: splits and the stitch primitives (store/stitch.rs) --
-    # Each is its Mesh method step for step, its dirty bumps counted by the
-    # store; attrs (Python dicts) are carried here, as the Python methods
-    # carry them. The geometric tests go through QVector3D in Python, so
-    # the store needs this Qt's ``length()`` formula
-    # (``_native.qt_hypot()``); without one, they run on views here.
 
     def _live(self, x, kind):
         return store_views.owned(self, x, kind, True)
@@ -832,7 +776,7 @@ def _unpickle_mesh(version, archive, cls=StoreMesh):
     return store_views.unpickle_mesh(version, archive, cls)
 
 
-class _EdgeMap(Mapping):
+class _EdgeMap(store_views.BulkEdgeMap, Mapping):
     """``add_edges_welded``'s ``{packed vertex pair: edge}`` for a bulk
     store, answered by the store (``find_edge``) instead of a dict of
     half a million views."""
@@ -843,40 +787,6 @@ class _EdgeMap(Mapping):
         self.m = m
         self.vobjs = vobjs
         self._full = None
-
-    def _pair(self, key):
-        u = len(self.vobjs)
-        return divmod(key, u)
-
-    def __getitem__(self, key):
-        try:
-            a, b = self._pair(int(key))
-            e = self.m.find_edge(self.vobjs[a], self.vobjs[b])
-        except (IndexError, TypeError, ValueError):
-            raise KeyError(key) from None
-        if e is None:
-            raise KeyError(key)
-        return e
-
-    def _dict(self):
-        if self._full is None:
-            u = len(self.vobjs)
-            out = {}
-            index = {v.key: i for i, v in enumerate(self.vobjs)}
-            for e in self.m.edges:
-                i0 = index.get(e.v0.key)
-                i1 = index.get(e.v1.key)
-                if i0 is not None and i1 is not None:
-                    out.setdefault(i0 * u + i1 if i0 <= i1 else i1 * u + i0,
-                                   e)
-            self._full = out
-        return self._full
-
-    def __iter__(self):
-        return iter(self._dict())
-
-    def __len__(self):
-        return len(self._dict())
 
 
 def faces_arrays(mesh):
