@@ -56,7 +56,7 @@ pub(super) fn dirty<'py>(a: &Args<'py>) -> Reply<'py> {
 /// `(host document, placements)` when `doc`'s file is linked into another
 /// project open in this window, else `(None, 0)`. The host the source was
 /// opened from wins ("Open source").
-fn link_host<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn link_host<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (win, doc, given) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?);
     let nothing = || (py.None(), 0).into_bound_py_any(py);
@@ -146,13 +146,12 @@ fn pictures_on<'py>(a: &Args<'py>) -> Reply<'py> {
 fn tabs<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (win, given) = (a.get_item(0)?, a.get_item(1)?);
-    let module = tabs_module(py)?;
     let docs = if given.is_none() { direct(py, docs, (&win,))? } else { py.get_type::<PyList>().call1((given,))? };
     let front = attr(&win, "_doc")?;
     let out = PyList::empty(py);
     for doc in docs.try_iter()? {
         let doc = doc?;
-        let [host, count] = unpack::<2>(&module.call_method1("link_host", (&win, &doc, &docs))?)?;
+        let [host, count] = unpack::<2>(&direct(py, link_host, (&win, &doc, &docs))?)?;
         out.append((
             doc.getattr("tab_id")?,
             doc.call_method0("display_name")?,
@@ -383,7 +382,6 @@ pub(super) fn install_tabs(module: &Bound<PyModule>) -> PyResult<()> {
         module.dict().as_any(),
         &module.dict(),
         &[
-            ("link_host", Mode::Function, link_host, &["win", "doc", "docs=None"], "", ""),
             ("pictures_on", Mode::Function, pictures_on, &[], "", ""),
             ("tabs", Mode::Function, tabs, &["win", "docs=None"], "", ""),
             ("_elsewhere", Mode::Function, elsewhere, &["win"], "", ""),

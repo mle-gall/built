@@ -703,7 +703,7 @@ fn glue(
             ui()?.call_method1("_isolate", (win, uids(&groups_of(sel)?)))?;
         }
         "fileto" => {
-            ui()?.call_method1("_file_to", (win, groups_of(sel)?.len()))?;
+            crate::document_registration::view::calls::file_to(win, groups_of(sel)?.len())?;
         }
         "lock" => crate::context_edits::context_lock(&vp, groups_of(sel)?, !f.all_locked)?,
         "keep" => {
@@ -797,7 +797,7 @@ pub fn run(
             let vp = win.getattr("viewport")?;
             let kwargs = PyDict::new(py);
             kwargs.set_item("placements", uids(sel))?;
-            py.import("views.wgpu_ui")?.getattr("_core")?.call((&vp, &name), Some(&kwargs))?;
+            crate::document_registration::view::calls::core_command(&vp, &name, Some(&kwargs))?;
             vp.call_method0("update")?;
         }
         "glue" => glue(win, view, sel, &name, &arg, f)?,

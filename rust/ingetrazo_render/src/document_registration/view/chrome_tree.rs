@@ -539,7 +539,7 @@ fn problem_rules<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(rules.into_any())
 }
 
-fn hex<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn hex<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let rgb = a.get_item(0)?;
     if !rgb.is_truthy()? {
@@ -553,7 +553,7 @@ fn hex<'py>(a: &Args<'py>) -> Reply<'py> {
     "#%02x%02x%02x".into_bound_py_any(py)?.rem(PyTuple::new(py, bytes)?)
 }
 
-fn current_material_name<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn current_material_name<'py>(a: &Args<'py>) -> Reply<'py> {
     let material = attr(&a.py().import("tools.paint")?.getattr("PaintTool")?, "current_material")?;
     attr(&material, "name")
 }
@@ -572,15 +572,15 @@ fn active_tool_id<'py>(a: &Args<'py>) -> Reply<'py> {
     "".into_bound_py_any(py)
 }
 
-fn components_dir<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn components_dir<'py>(a: &Args<'py>) -> Reply<'py> {
     a.py().import("core.paths")?.call_method0("app_root")?.div("resources")?.div("components")
 }
 
 /// The bundled set: `sc:<key>` 3D starters, `pp:<key>` 2D people.
-fn starter_components<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn starter_components<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let json = py.import("json")?;
-    let folder = ui(py)?.call_method0("_components_dir")?;
+    let folder = direct(py, components_dir, ())?;
     let out = PyDict::new(py);
     for (file, prefix) in [("components.json", "sc:"), ("people.json", "pp:")] {
         let path = folder.div(file)?;
@@ -616,7 +616,7 @@ fn library_pick<'py>(a: &Args<'py>) -> Reply<'py> {
     let (win, view, key) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?);
     let module = ui(py)?;
     let (kind, _) = parts(&key)?;
-    let starter = || module.call_method0("_starter_components")?.call_method1("get", (&key,));
+    let starter = || direct(py, starter_components, ())?.call_method1("get", (&key,));
     match kind.as_str() {
         "sc" => {
             let entry = starter()?;
@@ -857,11 +857,7 @@ pub(super) const FUNCTIONS: &[Method] = &[
     ("_sync_project_rows", Mode::Function, sync_project_rows, &["view", "win"], "", ""),
     ("_tree", Mode::Function, tree, &["view", "win", "*", "discover=False"], "", ""),
     ("_problem_rules", Mode::Function, problem_rules, &["scene", "registry", "nodes", "recipes", "unfiled", "profile=None"], "", ""),
-    ("_hex", Mode::Function, hex, &["rgb"], "", ""),
-    ("_current_material_name", Mode::Function, current_material_name, &[], "", ""),
     ("_active_tool_id", Mode::Function, active_tool_id, &["win"], "", ""),
-    ("_components_dir", Mode::Function, components_dir, &[], "", ""),
-    ("_starter_components", Mode::Function, starter_components, &[], "", ""),
     ("_components_in_model", Mode::Function, components_in_model, &["view", "win"], "", ""),
     ("_library_pick", Mode::Function, library_pick, &["win", "view", "key"], "", ""),
     ("_paint_with", Mode::Function, paint_with, &["win", "key"], "", ""),

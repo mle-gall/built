@@ -72,7 +72,7 @@ pub(super) fn reveal_shortcut<'py>(a: &Args<'py>) -> Reply<'py> {
 
 /// ShortcutOverride: does the chrome own this key (a focused field, or
 /// Escape while its popup is open)? Then no window shortcut fires.
-fn claims_key<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn claims_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, event) = (a.get_item(0)?, a.get_item(1)?);
     if !truthy(&view, "_ui_attached")? {
@@ -274,7 +274,6 @@ fn pointer<'py>(a: &Args<'py>) -> Reply<'py> {
 
 #[rustfmt::skip]
 const FUNCTIONS: &[Method] = &[
-    ("claims_key", Mode::Function, claims_key, &["view", "event"], "", ""),
     ("key", Mode::Function, key, &["view", "event", "pressed"], "", ""),
     ("_mods", Mode::Function, mods, &["event"], "", ""),
     ("wheel", Mode::Function, wheel, &["view", "event"], "", ""),

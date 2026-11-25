@@ -145,7 +145,7 @@ impl Ctx {
 
     #[pyo3(signature = (command, **args))]
     fn core<'py>(&self, py: Python<'py>, command: &str, args: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py, PyAny>> {
-        ui(py)?.getattr("_core")?.call((self.vp.bind(py), command), args)
+        crate::document_registration::view::calls::core_command(self.vp.bind(py), command, args)
     }
 
     fn flash(&self, py: Python<'_>, text: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -846,7 +846,7 @@ impl MaterialsProvider {
             return Ok(None);
         }
         let ui = ui(py)?;
-        let painting = ui.call_method1("_active_tool_id", (ctx.getattr("win")?,))?.eq("paint")? && ui.call_method0("_current_material_name")?.eq(mat.getattr("name")?)?;
+        let painting = ui.call_method1("_active_tool_id", (ctx.getattr("win")?,))?.eq("paint")? && crate::document_registration::view::calls::current_material_name(py)?.eq(mat.getattr("name")?)?;
         let focused = ctx.getattr("view")?.getattr("__dict__")?.call_method1("get", ("_ui_mat_focus",))?.eq(&key)?;
         Ok(Some(py.import("ingetrazo_core")?.call_method1("material_inspector", (mat, item.call_method1("get", ("uses", 0))?, painting, focused))?))
     }
@@ -1002,8 +1002,8 @@ impl ComponentsProvider {
                 ("verbs", verbs(py, &v)?),
             ])?)?;
         }
-        let res = ui(py)?.call_method0("_components_dir")?;
-        for pair in ui(py)?.call_method0("_starter_components")?.call_method0("items")?.try_iter()? {
+        let res = crate::document_registration::view::calls::components_dir(py)?;
+        for pair in crate::document_registration::view::calls::starter_components(py)?.call_method0("items")?.try_iter()? {
             let pair = pair?;
             let (key, e) = (pair.get_item(0)?, pair.get_item(1)?);
             let people = key.str()?.to_string().starts_with("pp:");
@@ -1470,7 +1470,7 @@ impl LibrarySheet {
         PyTuple::new(py, [
             obj(py, scene.as_ptr() as usize)?.into_bound(py),
             scene.getattr("content_version")?,
-            ui(py)?.call_method0("_current_material_name")?,
+            crate::document_registration::view::calls::current_material_name(py)?,
             st.get_item("mine_rev")?,
             if st.get_item("type")?.eq("components")? { scene.getattr("version")? } else { py.None().into_bound(py) },
             PyTuple::new(py, recent)?.into_any(),
@@ -1575,7 +1575,7 @@ impl LibrarySheet {
             target.call_method1("prepare", (&items, &browse_d))?;
             st.set_item("items", by_key(&items)?)?;
         }
-        let current = if has_target { target.getattr("current")? } else { ui(py)?.call_method0("_current_material_name")? };
+        let current = if has_target { target.getattr("current")? } else { crate::document_registration::view::calls::current_material_name(py)? };
         let materials = prov_id == "materials";
         let spec = PyDict::new(py);
         spec.set_item("type", &prov_id)?;
@@ -2080,7 +2080,7 @@ fn recent_look<'py>(py: Python<'py>, key: &str) -> PyResult<(String, Bound<'py, 
 fn palette_items<'py>(view: &Bound<'py, PyAny>, win: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
     let py = view.py();
     let scene = win.getattr("viewport")?.getattr("scene")?;
-    let cur = ui(py)?.call_method0("_current_material_name")?;
+    let cur = crate::document_registration::view::calls::current_material_name(py)?;
     let is_cur = |name: &Bound<'_, PyAny>| name.eq(&cur).unwrap_or(false);
     let out = PyList::empty(py);
     let mats: Vec<(Bound<'_, PyAny>, Bound<'_, PyAny>)> = match opt(&scene, "materials").filter(|m| m.is_truthy().unwrap_or(false)) {
@@ -2093,14 +2093,13 @@ fn palette_items<'py>(view: &Bound<'py, PyAny>, win: &Bound<'py, PyAny>) -> PyRe
     let order: Vec<usize> = render(py)?.call_method1("library_by_use", (names, counts))?.extract()?;
     // The model's, most used first (what you paint with most is under the hand).
     let ordered: Vec<&(Bound<'_, PyAny>, Bound<'_, PyAny>)> = order.iter().filter_map(|i| mats.get(*i)).collect();
-    let ui_hex = ui(py)?.getattr("_hex")?;
     for (name, mat) in ordered.iter().take(STRIP_MODEL) {
         let tex = opt(mat, "texture").filter(|t| t.is_truthy().unwrap_or(false));
         let icon = match tex.map(|t| get(&t, "path")).transpose()?.filter(|p| p.is_truthy().unwrap_or(false)) {
             Some(p) => thumb(view, &p)?,
             None => String::new(),
         };
-        out.append((format!("m:{}", name.str()?), name, ui_hex.call1((mat.getattr("color")?,))?, icon, is_cur(name)))?;
+        out.append((format!("m:{}", name.str()?), name, crate::document_registration::view::calls::hex(&mat.getattr("color")?)?, icon, is_cur(name)))?;
     }
     let st = _state(view)?;
     let in_model = |n: &str| mats.iter().any(|(m, _)| m.eq(n).unwrap_or(false));
@@ -2312,7 +2311,7 @@ fn inspector_key(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<Op
         }
     }
     if ui(py)?.call_method1("_active_tool_id", (win,))?.eq("paint")? {
-        let cur = ui(py)?.call_method0("_current_material_name")?;
+        let cur = crate::document_registration::view::calls::current_material_name(py)?;
         if cur.is_truthy()? && mats.contains(&cur)? {
             return Ok(Some(format!("m:{}", cur.str()?)));
         }
