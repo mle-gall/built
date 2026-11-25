@@ -22,6 +22,7 @@ mod delivery_form;
 mod appimage;
 mod worker_gc;
 mod gpu_prefs;
+mod heap;
 mod link_scan;
 mod command_search;
 mod location;
@@ -196,6 +197,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     screen::register(m)?;
     scene_animation::register(m)?;
     component_library::register(m)?;
+    m.add_function(wrap_pyfunction!(heap::trim_heap, m)?)?;
     appimage::register(m)?;
     m.add_function(wrap_pyfunction!(worker_gc::install_main_thread_collector, m)?)?;
     m.add_function(wrap_pyfunction!(gpu_prefs::ensure_high_performance_gpu, m)?)?;
