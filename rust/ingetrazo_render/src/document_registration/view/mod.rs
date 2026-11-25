@@ -49,6 +49,9 @@ macro_rules! fields {
     }};
 }
 mod chrome_frame;
+mod chrome_inspector;
+mod chrome_tree;
+mod chrome_tree_action;
 mod device;
 mod document_controller;
 mod document_interaction;
@@ -120,7 +123,12 @@ fn register_view_functions(namespace: &Bound<PyDict>) -> PyResult<()> {
         "views.view_commands" => view_commands::FUNCTIONS,
         "views.ndof_input" => ndof_input::FUNCTIONS,
         "views.wgpu_view" => metal_view::FUNCTIONS,
-        "views.wgpu_ui" => chrome_frame::FUNCTIONS,
+        "views.wgpu_ui" => {
+            install(namespace.as_any(), namespace, chrome_tree::FUNCTIONS)?;
+            install(namespace.as_any(), namespace, chrome_inspector::FUNCTIONS)?;
+            chrome_tree_action::register(namespace)?;
+            chrome_frame::FUNCTIONS
+        }
         _ => return Err(pyo3::exceptions::PyValueError::new_err(name)),
     };
     install(namespace.as_any(), namespace, methods)
