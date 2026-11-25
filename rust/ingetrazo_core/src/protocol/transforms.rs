@@ -500,7 +500,7 @@ fn flip_selection<'py>(
             kw.set_item(
                 "attrs",
                 attrs.call1((
-                    group.call_method1("transformed_attrs", (face.getattr("attrs")?, &m))?,
+                    crate::model::module(group.py(), "ingetrazo_core")?.call_method1("group_transformed_attrs", (face.getattr("attrs")?, &m))?,
                 ))?,
             )?;
             cmds.append(py.import("core.history")?.call_method(

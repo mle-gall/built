@@ -93,8 +93,8 @@ impl<'py> AttrChanges<'py> {
                 uvw = vec![a, b, c, cu, d, e, f, cv].into_pyobject(py)?.into_any();
             }
             let mapped = py
-                .import("core.group")?
-                .call_method1("_remapped_uvw", (&uvw, &minv))?;
+                .import("ingetrazo_core")?
+                .call_method1("group_remapped_uvw", (&uvw, &minv))?;
             let copy = py.get_type::<PyDict>().call1((&tex,))?;
             copy.set_item("uvw", mapped)?;
             self.textures.set_item(key, copy)?;

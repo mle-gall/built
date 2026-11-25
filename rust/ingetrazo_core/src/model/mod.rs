@@ -12,6 +12,7 @@ pub mod camera_live;
 mod orbit_camera;
 pub mod dimension_frame;
 pub mod group_frame;
+pub mod group_mesh;
 pub mod hlr_view;
 pub mod linetypes;
 pub mod links;
@@ -69,6 +70,7 @@ pub fn register_model(m: &Bound<'_, PyModule>) -> PyResult<()> {
     solid_checks::register(m)?;
     placement_walks::register(m)?;
     links::register(m)?;
+    group_mesh::register(m)?;
     scene_revision::register(m)?;
     Ok(())
 }

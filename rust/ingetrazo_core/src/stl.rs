@@ -392,7 +392,7 @@ fn faces<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
             scene.getattr("loose_mesh")?.getattr("faces")?,
         ),
     )?)?;
-    let world_mesh = py.import("core.group")?.getattr("world_mesh")?;
+    let world_mesh = py.import("ingetrazo_core")?.getattr("group_world_mesh")?;
     for group in groups.try_iter()? {
         let group = group?;
         if scene

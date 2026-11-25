@@ -294,7 +294,7 @@ def view_faces(scene, camera, as_view: bool = True,
     the shadows on the bare ground come first, as a face of their own on
     the ground layer (:data:`GROUND_LAYER`) — see :func:`_cast_shadows`."""
     from ingetrazo_core import Vec3 as QVector3D
-    from core.group import transformed_attrs
+    from ingetrazo_core import group_transformed_attrs as transformed_attrs
     from core.materials import effective_attrs
     from core.style import DEFAULT_FACE_COLOR, effective_back_color
     from core.texture import face_uv_axes

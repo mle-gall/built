@@ -34,7 +34,7 @@ fn move_mesh(mesh: &Obj<'_>, m: &Obj<'_>, delta: Option<&Obj<'_>>) -> PyResult<(
 fn finish_transform(g: &Obj<'_>, m: &Obj<'_>, texture: bool) -> PyResult<()> {
     let api = g.py().import("core.group")?;
     if texture {
-        api.call_method1("_remap_uvws", (g.getattr("mesh")?, m))?;
+        crate::model::module(api.py(), "ingetrazo_core")?.call_method1("group_remap_uvws", (g.getattr("mesh")?, m))?;
     }
     api.call_method1("carry_axes", (g, m))?;
     Ok(())
@@ -139,8 +139,8 @@ fn reexpress(g: &Obj<'_>, delta: &Obj<'_>) -> PyResult<()> {
     let proto = g.getattr("mesh")?;
     let moved = g
         .py()
-        .import("core.group")?
-        .call_method1("transformed_mesh", (&proto, delta))?;
+        .import("ingetrazo_core")?
+        .call_method1("group_transformed_mesh", (&proto, delta))?;
     proto.call_method1("restore_state", (moved.call_method0("capture_state")?,))?;
     let kids = g.getattr("children")?;
     if kids.is_truthy()? {
@@ -428,8 +428,8 @@ fn reframe_mesh(
         let before = mesh.call_method0("capture_state")?;
         move_mesh(mesh, m, None)?;
         mesh.py()
-            .import("core.group")?
-            .call_method1("_remap_uvws", (mesh, m))?;
+            .import("ingetrazo_core")?
+            .call_method1("group_remap_uvws", (mesh, m))?;
         snaps.set_item(key, (before, mesh.call_method0("capture_state")?))?;
     }
     Ok(())

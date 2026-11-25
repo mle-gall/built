@@ -36,8 +36,8 @@ fn none(py: Python) -> Obj {
 fn world<'p>(group: &Obj<'p>) -> PyResult<Obj<'p>> {
     group
         .py()
-        .import("core.group")?
-        .call_method1("world_mesh", (group,))
+        .import("ingetrazo_core")?
+        .call_method1("group_world_mesh", (group,))
 }
 fn lazily_open(mesh: &Obj) -> PyResult<bool> {
     let plan = mesh

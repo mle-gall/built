@@ -192,8 +192,7 @@ fn groups<'py>(
             for placement in api.call_method1("iter_placements", (&copy,))?.try_iter()? {
                 let g = placement?.get_item(0)?;
                 g.setattr("layer", remapped(names, &g.getattr("layer")?)?)?;
-                let mesh = api.call_method1(
-                    "transformed_mesh",
+                let mesh = crate::model::module(api.py(), "ingetrazo_core")?.call_method1("group_transformed_mesh",
                     (g.getattr("mesh")?, native.call_method0("Matrix4")?),
                 )?;
                 g.setattr("mesh", &mesh)?;
@@ -292,7 +291,7 @@ pub(super) fn stamp(history: &Obj<'_>, clip: &Obj<'_>, offset: DVec3) -> PyResul
     }
     let mut face_steps = Vec::new();
     let mut loops = Vec::new();
-    let translate = py.import("core.group")?.getattr("translated_attrs")?;
+    let translate = py.import("ingetrazo_core")?.getattr("group_translated_attrs")?;
     for (row, outer, holes) in planned {
         let attrs = if row.len()? > 2 && row.get_item(2)?.is_truthy()? {
             translate.call1((row.get_item(2)?, &off))?
