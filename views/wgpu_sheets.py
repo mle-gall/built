@@ -1253,7 +1253,8 @@ class Workspace:
             dx, dy = a.x() / 8.0 * 3, a.y() / 8.0 * 3
         else:
             dx, dy = float(d.x()), float(d.y())
-        zoom = bool(event.modifiers() & Qt.ControlModifier)
+        from views.wgpu_ui import bits
+        zoom = bool(bits(event.modifiers()) & bits(Qt.ControlModifier))
         self.view.renderer.page_wheel(float(p.x()), float(p.y()), dx, dy, zoom)
         self._touch()
 

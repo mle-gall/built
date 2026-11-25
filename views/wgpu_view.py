@@ -77,6 +77,13 @@ def _tool_frame(method):
 
 
 import ingetrazo_render
+
+
+def _bits(value) -> int:
+    """Modifiers or buttons as an int, whichever enum carries them (wgpu_ui.bits)."""
+    return int(getattr(value, "value", value) or 0)
+
+
 from views.view_navigation import ViewNavigation
 
 
@@ -1160,7 +1167,7 @@ class MetalView(ViewNavigation):
                            acquired_point=getattr(inference, '_acquired_point', None),
                            acquired_points=getattr(inference, '_encouraged', None),
                            axis_lock=getattr(inference, 'axis_lock', None),
-                           shift_held=bool(modifiers & Qt.ShiftModifier),
+                           shift_held=bool(_bits(modifiers) & _bits(Qt.ShiftModifier)),
                            reference_edge=getattr(inference, 'reference_edge', None),
                            reference_mode=getattr(inference, 'reference_mode', None),
                            magnetic_axis_deg=getattr(tool, 'magnetic_axis_deg', None),
@@ -1277,7 +1284,7 @@ class MetalView(ViewNavigation):
 
     def _leave_edit_on_empty_click(self, x, y, modifiers):
         if (self.scene.edit_group is not None and not self.scene.selection
-                and not modifiers & (Qt.ControlModifier | Qt.MetaModifier | Qt.ShiftModifier)
+                and not _bits(modifiers) & (_bits(Qt.ControlModifier) | _bits(Qt.MetaModifier) | _bits(Qt.ShiftModifier))
                 and not self.edit_group_box_contains_pixel(x, y)):
             self.source_viewport.end_one_group_edit()
             self.update()
@@ -1501,15 +1508,15 @@ class MetalView(ViewNavigation):
         self.last = event.position()
         mode = getattr(self.source_viewport, 'nav_mode', None)
         if self._drag_nav and mode != 'zoom_window':
-            ingetrazo_render.camera_drag(self, mode, delta, bool(event.modifiers() & Qt.ShiftModifier))
+            ingetrazo_render.camera_drag(self, mode, delta, bool(_bits(event.modifiers()) & _bits(Qt.ShiftModifier)))
         elif self.tools.sync() in ('tape', 'move', 'mesh'):
             self.hover(event.position().x(), event.position().y(), event.modifiers())
             self.tools.hover(event)
-        elif event.buttons() & Qt.LeftButton and mode == 'zoom_window':
+        elif _bits(event.buttons()) & _bits(Qt.LeftButton) and mode == 'zoom_window':
             from views import wgpu_overlay
             self.overlay_primitives = [wgpu_overlay.selection_rectangle(
                 (self.press.x(), self.press.y()), (self.last.x(), self.last.y()), zoom=True)]
-        elif event.buttons() & Qt.LeftButton and self.tools.mode == 'select':
+        elif _bits(event.buttons()) & _bits(Qt.LeftButton) and self.tools.mode == 'select':
             from views import wgpu_overlay
             # The machine shows a box only past its drag threshold (a click
             # that jitters a pixel is no box).

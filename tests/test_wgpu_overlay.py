@@ -14,9 +14,10 @@ def app():
 def test_rgba_scale_and_transparent_background(app):
     image = rasterize([Primitive("rectangle", ((10, 10), (30, 30)),
                                  "#ff0000", fill="#ff0000")], 100, 80, 2)
-    assert (image.width(), image.height()) == (200, 160)
-    assert image.pixelColor(40, 40).getRgb() == (255, 0, 0, 255)
-    assert image.pixelColor(150, 100).alpha() == 0
+    from tests.headless_gpu import pixel
+    assert (image.width, image.height) == (200, 160)
+    assert pixel(image, 40, 40) == (255, 0, 0, 255)
+    assert pixel(image, 150, 100)[3] == 0
     assert pixels(image).size == 200 * 160 * 4
 
 
