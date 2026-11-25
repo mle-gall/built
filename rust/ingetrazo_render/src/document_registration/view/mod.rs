@@ -52,6 +52,9 @@ mod device;
 mod document_controller;
 mod document_interaction;
 mod document_tools;
+mod metal_view;
+mod metal_view_frame;
+mod metal_view_scene;
 mod modules;
 mod interaction_host;
 mod ndof_input;
@@ -90,6 +93,9 @@ fn register_view_class(cls: &Obj) -> PyResult<()> {
             return view_navigation::register(cls, &cls.py().import(module)?)
         }
         ("views.view_host", "WidgetShim") => view_host::WIDGET_SHIM,
+        ("views.wgpu_view", "MetalView") => {
+            return metal_view::register(cls, &cls.py().import(module)?)
+        }
         ("views.document_interaction", "DocumentInteraction") => {
             document_interaction::DOCUMENT_INTERACTION
         }
@@ -109,6 +115,7 @@ fn register_view_functions(namespace: &Bound<PyDict>) -> PyResult<()> {
         "views.document_interaction" => document_interaction::FUNCTIONS,
         "views.view_commands" => view_commands::FUNCTIONS,
         "views.ndof_input" => ndof_input::FUNCTIONS,
+        "views.wgpu_view" => metal_view::FUNCTIONS,
         _ => return Err(pyo3::exceptions::PyValueError::new_err(name)),
     };
     install(namespace.as_any(), namespace, methods)
@@ -122,6 +129,9 @@ pub(super) fn register(module: &Bound<PyModule>) -> PyResult<()> {
         texture_probe::measure_texture_position,
         module
     )?)?;
+    // Transitional, while views/wgpu_view.py still holds part of MetalView.
+    module.add_function(wrap_pyfunction!(register_view_class, module)?)?;
+    module.add_function(wrap_pyfunction!(register_view_functions, module)?)?;
 
     Ok(())
 }
