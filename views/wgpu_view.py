@@ -526,7 +526,8 @@ class MetalView(ViewNavigation):
     def _prepare_inference(self):
         if getattr(self, '_closed', False):
             return
-        from views.wgpu_inference import SceneLease, prepare
+        from ingetrazo_core import SceneLease
+        from views.wgpu_inference import prepare
         if not hasattr(self, '_inference_worker'):
             self._inference_worker = _index_worker()
         previous = getattr(self, '_inference_future', None)

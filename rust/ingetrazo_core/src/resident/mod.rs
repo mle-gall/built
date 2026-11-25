@@ -8,6 +8,7 @@
 //! mesh; `pack` walks the document's placements and puts the three together.
 use pyo3::prelude::*;
 
+mod inference;
 pub mod assemble;
 pub mod pack;
 pub mod packed_scene;
@@ -15,6 +16,7 @@ pub mod sources;
 pub mod updates;
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    inference::register(m)?;
     packed_scene::register(m)?;
     pack::register(m)?;
     sources::register(m)?;
