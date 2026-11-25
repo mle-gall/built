@@ -19,8 +19,16 @@ fn gpu_adapter() -> PyResult<String> {
     Ok(adapter.get_info().name)
 }
 
+/// An encoded picture (PNG, JPEG…) as `(width, height, RGBA8 bytes)`.
+#[pyfunction]
+fn image_rgba<'py>(py: Python<'py>, data: &[u8]) -> PyResult<(u32, u32, Bound<'py, pyo3::types::PyBytes>)> {
+    let img = image::load_from_memory(data).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?.to_rgba8();
+    Ok((img.width(), img.height(), pyo3::types::PyBytes::new(py, img.as_raw())))
+}
+
 pub fn register_shell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(gpu_adapter, m)?)?;
+    m.add_function(wrap_pyfunction!(image_rgba, m)?)?;
     crate::viewport_menu::register(m)?;
     crate::shell_commands::register(m)?;
     crate::report_sheets::register(m)?;
