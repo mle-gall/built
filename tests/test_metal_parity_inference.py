@@ -1,7 +1,7 @@
 """P6 device-free candidate contract; never constructs a renderer or a window.
 
 Bounded offscreen ride measurement, 2026-11-09, same process/camera/pixels:
-asbuilt_ride.igz, 1000x700 fitted overview, 66,874 visible placements.
+the reference as-built model, 1000x700 fitted overview, 66,874 visible placements.
 Ten pixels over projected placement bounds, one warm-up pass then two passes
 (20 measured samples per operation), 300-second subprocess deadline. Picked
 rows were resolved before timing: these are CPU inference timings, NOT GPU

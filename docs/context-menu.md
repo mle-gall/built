@@ -1,10 +1,5 @@
 # The viewport right-click menu
 
-> Status: 2026-11-23, branch `shell/tabs-menu`. Design: option A of the shell
-> review, without its More ›. Maxence: "we could avoid More by adapting the
-> items to what's selected. Some stuff apply to raw geometry, some only to
-> groups/components."
-
 The menu shows only the verbs that apply to what you right-clicked. It has
 no More › and no submenus. Related verbs share one row as segments (for
 example **Intersect: Model | Selection | Context**). No kind has more than

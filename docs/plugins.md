@@ -91,7 +91,7 @@ def on_activate(self, viewport):
 
 ### Undoable steps: the plugin command API
 
-The editor's own commands are moving to Rust (docs/commands-port.md). A
+The editor's own commands are implemented in Rust. A
 retired Python command class is not coming back, so build on the names
 below. Every one of them makes exactly one undo step on the document's Rust
 history, runs inside a document transaction (a failure rolls the step back

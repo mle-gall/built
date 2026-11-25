@@ -23,7 +23,7 @@ NAMESPACE = "ca2c12df23ac48f9a103455660d950e5"
 def legacy_value(**extra):
     """An .igzproj as the fork wrote it (version 1, every section)."""
     registry = bim_registry.seed_defaults()
-    registry["project"] = {"name": "As-built ride", "phase": "As-built"}
+    registry["project"] = {"name": "As-built survey", "phase": "As-built"}
     registry["types"]["queue_wall"] = {"name": "Queue wall", "ifc_class": "IfcWall",
                                        "predefined_type": "STANDARD", "psets": {}, "classifications": []}
     value = {
@@ -216,7 +216,7 @@ def test_old_pointer_finds_the_converted_sibling_and_moves_on_save(tmp_path):
     assert host.read_bytes() == before["host.igz"][0]     # opening rewrote nothing
     assert scene.plugin_data["project"]["path"].endswith("Job.igzproj")
     assert project.path_for(scene) == (tmp_path / "Job.builtproject").resolve()
-    assert bim_registry.get(scene)["project"]["name"] == "As-built ride"
+    assert bim_registry.get(scene)["project"]["name"] == "As-built survey"
     igz.save_scene(scene, host)         # the next normal save moves the pointer
     again = Scene()
     igz.load_into(again, host)

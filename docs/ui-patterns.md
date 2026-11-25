@@ -2,8 +2,8 @@
 
 Patterns the Built chrome (egui in the Metal frame, `rust/built_render/src/ui*.rs`)
 reuses from one surface to the next. A new surface picks one of these
-before it is designed; a surface that fits none is a design question for
-Maxence, not a new one-off.
+before it is designed; a surface that fits none is a design question to
+raise first, not a new one-off.
 
 ## The large sheet
 
@@ -142,10 +142,9 @@ changes; only a changed sheet is sent. `closed(ctx)` runs when it goes
 back after Settings). The Qt host closes an undrawn sheet and reports a missing frame. Tests check every sheet they send against the Rust schema
 with `chrome_sheet.check_wire`.
 
-By the port rule of 2026-11-23 (`docs/rust-port-plan.md`), a **new**
-sheet's view model goes in Rust: a Rust provider fills the same `Spec`
-from the Rust document and the store, and only calls into Python where a
-subsystem is still Python (`docs/python-glue.md`).
+A **new** sheet's view model goes in Rust: a Rust provider fills the same
+`Spec` from the Rust document and the store, and only calls into Python
+where a subsystem is still Python.
 
 ### The three sheets today
 

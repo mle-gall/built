@@ -73,8 +73,17 @@ vendor/libredwg/bin/*
 # (the Windows dwg2dxf.exe + DLLs and the macOS build are fetched by CI, #101)
 !vendor/libredwg/SOURCES.md
 
-# Notas de trabajo locales del asistente (no se publican)
+# AI and agent work files: briefs, notes and scratch stay local
+.claude/
+.codex/
+AGENTS.md
 CLAUDE.md
+**/AGENTS.md
+**/CLAUDE.md
+briefs/
+*.brief.md
+scratch/
+.scratch/
 
 # Synthetic benchmark documents (scripts/bench_models.py regenerates them;
 # city-XL alone is ~580 MB)

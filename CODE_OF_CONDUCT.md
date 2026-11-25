@@ -1,7 +1,5 @@
 # Code of Conduct
 
-[Bahasa Indonesia](CODE_OF_CONDUCT.id.md)
-
 ## Our pledge
 
 We pledge to make participation in the Built community a respectful, harassment-free experience for everyone — regardless of age, body size, disability, ethnicity, gender identity, level of experience, nationality, personal appearance, race, religion, or sexual orientation.

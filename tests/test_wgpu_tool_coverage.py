@@ -12,5 +12,5 @@ def test_registry_and_published_coverage_agree():
     rendered = table(root)
     for key in registered:
         assert f'| {key} |' in rendered
-    document = (root / 'docs/performance-plan.md').read_text()
+    document = (root / 'docs/tool-coverage.md').read_text()
     assert '<!-- R3c-1 coverage -->\n' + rendered + '\n<!-- /R3c-1 coverage -->' in document

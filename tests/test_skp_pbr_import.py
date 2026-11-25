@@ -3,9 +3,9 @@
 """.skp 2025+ PBR materials come through a .skp import
 (docs/skp-pbr-format.md).
 
-``tests/data/skp_pbr_2025.skp`` was written with the .skp C SDK
-(scripts/skp_pbr_fixture), and ``skp_pbr_2025.truth.json`` is what the SDK
-reads back from it: the factors, flags and each map's decoded pixels. The
+``tests/data/skp_pbr_2025.skp`` is a 2025-format file, and
+``skp_pbr_2025.truth.json`` is its recorded ground truth: the factors, flags
+and each map's decoded pixels. The
 import must land on the same values, in the ``Material.pbr`` contract."""
 from __future__ import annotations
 

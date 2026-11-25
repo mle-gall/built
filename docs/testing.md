@@ -13,7 +13,7 @@ workers replaced (`--max-worker-restart 8`).
 
 ```bash
 export HOME=$(mktemp -d) BUILT_SETTINGS_DIR=$(mktemp -d)   # never the real profile
-python -m pytest -n 4 -m "not slow and not window" tests  # delegate subset: while iterating
+python -m pytest -n 4 -m "not slow and not window" tests  # quick subset: while iterating
 python -m pytest -n 8 -m "not slow" tests     # fast suite: before handing work back
 python -m pytest -n 8 tests                   # full suite: before installing a build
 python -m pytest tests/test_x.py::test_y      # one test, serially (no -n)
@@ -21,21 +21,21 @@ python -m pytest tests/test_x.py::test_y      # one test, serially (no -n)
 
 | Selection | Tests (2026-11-24) | What it leaves out |
 |---|---|---|
-| Delegate subset, `-m "not slow and not window"` | about 7 500 of 14 200; 2.5 min at `-n 4` with the machine loaded, under 3 min quiet | the `window` files and the `slow` tests |
+| Quick subset, `-m "not slow and not window"` | about 7 500 of 14 200; 2.5 min at `-n 4` with the machine loaded, under 3 min quiet | the `window` files and the `slow` tests |
 | Fast suite, `-m "not slow"` | about 12 000 | the `slow` tests |
 | Full suite | all enabled tests | opt-in cases unless enabled |
 
-The delegate subset covers the document and its kernels (store, topology,
+The quick subset covers the document and its kernels (store, topology,
 booleans, push/pull, snapping, inference), file formats (IGZ/Built, SKP,
 IFC, DXF, STL and the rest), the Rust bridges, the chrome's data and view
 models, tools driven without a window, and the Project tree. It leaves out
 the files marked `window`: `tests/conftest.py` marks a file that builds an
 application window (`MainWindow`, `ComposerWindow`, the shell's `Host`) or
-launches the app. Run the delegate subset while iterating, the tests of the
+launches the app. Run the quick subset while iterating, the tests of the
 files you touched, and the fast suite before handing work back. Work on
 windows, docks, menus or dialogs needs the fast suite.
 
-Use at most `-n 8`: other agents share the machine. Without `-n` nothing
+Use at most `-n 8`: more workers than cores slows the run down. Without `-n` nothing
 changes from a plain serial pytest run.
 
 ## Rendering with Blender
