@@ -53,7 +53,7 @@ fn kind(group: &Obj<'_>, context: &Obj<'_>) -> PyResult<Option<&'static str>> {
     })
 }
 #[pyfunction]
-fn placement_context(
+pub(super) fn placement_context(
     view: &Obj<'_>,
     row: &Obj<'_>,
     context: &Obj<'_>,
@@ -82,7 +82,7 @@ pub(super) fn snap_context(
     kind(&g, context)
 }
 #[pyfunction(signature=(index,view,row,point,project=None))]
-fn on_surface(
+pub(super) fn on_surface(
     index: &Obj<'_>,
     view: &Obj<'_>,
     row: &Obj<'_>,
@@ -193,7 +193,7 @@ pub(super) fn occluded(
 }
 
 #[pyfunction(name="resident_occluded_many", signature=(index,view,points,rows=None))]
-fn occluded_many(
+pub(super) fn occluded_many(
     index: &Obj<'_>,
     view: &Obj<'_>,
     points: &Obj<'_>,
@@ -412,7 +412,7 @@ pub(super) fn reference_edge<'p>(
     Ok(None)
 }
 #[pyfunction]
-fn scene_edges<'p>(view: &Obj<'p>) -> PyResult<Bound<'p, PyList>> {
+pub(super) fn scene_edges<'p>(view: &Obj<'p>) -> PyResult<Bound<'p, PyList>> {
     let py = view.py();
     let out = PyList::empty(py);
     let doc = py.import("views.document_interaction")?;
