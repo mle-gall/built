@@ -7,8 +7,10 @@ from types import SimpleNamespace
 
 from tests.shell_isolation import native_host, restore_shell_patches  # noqa: F401
 import pytest
-from PySide6.QtCore import QByteArray, QBuffer, QEvent, QIODevice, Qt
-from PySide6.QtGui import QImage, QKeyEvent
+import numpy as np
+from core.input_codes import Input as Qt
+from ingetrazo_render import KeyEvent, SurveyRaster, blank_picture
+from tests.raster_samples import pixels, solid_raster
 
 from core.settings import settings
 from core import recent
@@ -73,17 +75,7 @@ def win(monkeypatch, native_host):
 
 
 def thumb_png(w=40, h=24):
-    # Not one flat colour: the page takes that for a blank picture.
-    image = QImage(w, h, QImage.Format_RGB32)
-    image.fill(Qt.darkCyan)
-    for x in range(w // 2):
-        for y in range(h):
-            image.setPixel(x, y, 0xFFD0D8E0)
-    data = QByteArray()
-    buf = QBuffer(data)
-    buf.open(QIODevice.WriteOnly)
-    image.save(buf, "PNG")
-    return bytes(data)
+    return gradient(w, h).png()
 
 
 def doc(tmp_path, name, picture=True):
@@ -257,7 +249,7 @@ def test_typing_filters_the_list(win, monkeypatch, tmp_path):
 
 # ---- Keys --------------------------------------------------------------------
 def key_event(key, text="", mods=Qt.NoModifier):
-    return QKeyEvent(QEvent.KeyPress, key, mods, text)
+    return KeyEvent(True, key, mods, text)
 
 
 def test_keys_go_to_the_sheet_but_command_keys_stay_the_windows(win, monkeypatch):
@@ -416,52 +408,36 @@ def test_note_remembers_what_the_window_knows(win, tmp_path):
 
 
 # ---- Pictures: a black one is no picture ---------------------------------------
-def png_of(image):
-    data = QByteArray()
-    buf = QBuffer(data)
-    buf.open(QIODevice.WriteOnly)
-    image.save(buf, "PNG")
-    return bytes(data)
-
-
 def gradient(w=280, h=175):
-    from PySide6.QtGui import QColor, QPainter
-    image = QImage(w, h, QImage.Format_RGB32)
-    image.fill(QColor(200, 214, 230))                   # sky
-    p = QPainter(image)
-    p.fillRect(0, h // 2, w, h // 2, QColor(120, 128, 110))   # ground
-    p.fillRect(w // 3, h // 4, w // 3, h // 2, QColor(70, 70, 80))  # the model
-    p.end()
-    return image
+    rgba = np.empty((h, w, 4), np.uint8)
+    rgba[:] = (200, 214, 230, 255)                # sky
+    rgba[h // 2:] = (120, 128, 110, 255)          # ground
+    rgba[h // 4:3 * h // 4, w // 3:2 * w // 3] = (70, 70, 80, 255)
+    return SurveyRaster(w, h, rgba.tobytes())
 
 
 def test_blank_pictures_are_told_apart():
-    black = QImage(280, 175, QImage.Format_RGB32)
-    black.fill(Qt.black)
-    assert ws.blank_picture(black)
-    grey = QImage(280, 175, QImage.Format_RGB32)
-    grey.fill(Qt.darkGray)
-    assert ws.blank_picture(grey)
-    # A black frame with a far speck of model in it (the composite's tile).
-    speck = black.copy()
-    for x in range(138, 142):
-        for y in range(86, 89):
-            speck.setPixel(x, y, 0xFFFFFFFF)
-    assert ws.blank_picture(speck)
-    assert ws.blank_picture(QImage()) and ws.blank_picture(None)
-    assert not ws.blank_picture(gradient())
+    black = solid_raster(280, 175, (0, 0, 0))
+    grey = solid_raster(280, 175, (128, 128, 128))
+    for image in (black, grey):
+        assert blank_picture(image.width, image.height, image.rgba())
+    speck = pixels(black).copy()
+    speck[86:89, 138:142] = 255
+    assert blank_picture(black.width, black.height, speck.tobytes())
+    assert blank_picture(0, 0, b"")
+    image = gradient()
+    assert not blank_picture(image.width, image.height, image.rgba())
 
 
 def test_a_black_thumbnail_shows_the_placeholder(win, monkeypatch, tmp_path):
-    black = QImage(280, 175, QImage.Format_RGB32)
-    black.fill(Qt.black)
+    black = solid_raster(280, 175, (0, 0, 0))
     dark = tmp_path / "dark.built"
     scene = Scene()
-    scene._home_thumbnail_png = png_of(black)
+    scene._home_thumbnail_png = black.png()
     igz.save_scene(scene, dark)
     lit = tmp_path / "lit.built"
     scene = Scene()
-    scene._home_thumbnail_png = png_of(gradient())
+    scene._home_thumbnail_png = gradient().png()
     igz.save_scene(scene, lit)
     recent.remember(dark)
     recent.remember(lit)
@@ -479,9 +455,7 @@ def saved_picture(path):
     with zipfile.ZipFile(path) as archive:
         if "thumbnail.png" not in archive.namelist():
             return None
-        image = QImage()
-        image.loadFromData(archive.read("thumbnail.png"), "PNG")
-        return image
+        return archive.read("thumbnail.png")
 
 
 def save_with(win, monkeypatch, path, image):
@@ -493,8 +467,8 @@ def save_with(win, monkeypatch, path, image):
         asked.append(width)
         if image is None:
             return 0, 0, b""
-        scaled = image.scaledToWidth(width).convertToFormat(QImage.Format_RGBA8888)
-        return scaled.width(), scaled.height(), bytes(scaled.constBits())
+        scaled = image.resized(width, round(image.height * width / image.width))
+        return scaled.width, scaled.height, scaled.rgba()
 
     with monkeypatch.context() as patch:
         patch.setattr(view, "renderer", object())
@@ -507,12 +481,13 @@ def save_with(win, monkeypatch, path, image):
 
 def test_save_under_metal_keeps_the_renderers_picture(win, monkeypatch, tmp_path):
     picture = save_with(win, monkeypatch, tmp_path / "metal.built", gradient(800, 500))
-    assert picture is not None and not ws.blank_picture(picture)
+    assert picture is not None
+    image = SurveyRaster.decode(picture)
+    assert not blank_picture(image.width, image.height, image.rgba())
 
 
 def test_a_blank_metal_frame_is_not_saved(win, monkeypatch, tmp_path):
-    black = QImage(280, 175, QImage.Format_RGB32)
-    black.fill(Qt.black)
+    black = solid_raster(280, 175, (0, 0, 0))
     assert save_with(win, monkeypatch, tmp_path / "black.built", black) is None
     assert save_with(win, monkeypatch, tmp_path / "none.built", None) is None
 

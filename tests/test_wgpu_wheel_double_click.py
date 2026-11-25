@@ -8,38 +8,27 @@ use never hears of it and no orbit starts. Device free: the pick is the
 offscreen stand-in the other test_wgpu_* files use.
 """
 import math
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QEvent, QPointF, Qt
-from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from core.mesh import Mesh
 from core.scene import Scene
 from views.wgpu_inference import prepare
 from views.wgpu_scene import pack_scene
-from views.wgpu_view import WgpuView
+from core.input_codes import MouseButton
+from tests.headless_gpu import HeadlessView, mouse
 
-_app = QApplication.instance() or QApplication([])
-
-
-def _event(kind, x, y, button, buttons):
-    p = QPointF(x, y)
-    return QMouseEvent(kind, p, p, button, buttons, Qt.NoModifier)
+WHEEL = MouseButton.MiddleButton
 
 
-def _double_click(view, x, y, button=Qt.MiddleButton):
-    """What Qt delivers: press, release, double click, release."""
-    view.mousePressEvent(_event(QEvent.MouseButtonPress, x, y, button, button))
-    view.mouseReleaseEvent(_event(QEvent.MouseButtonRelease, x, y, button, Qt.NoButton))
-    view.mouseDoubleClickEvent(_event(QEvent.MouseButtonDblClick, x, y, button, button))
-    view.mouseReleaseEvent(_event(QEvent.MouseButtonRelease, x, y, button, Qt.NoButton))
+def _double_click(view, x, y, button=WHEEL):
+    """What the window delivers: press, release, double click, release."""
+    mouse(view, "press", x, y, button, button)
+    mouse(view, "release", x, y, button, 0)
+    mouse(view, "double", x, y, button, button)
+    mouse(view, "release", x, y, button, 0)
 
 
 @pytest.fixture
@@ -48,7 +37,7 @@ def view():
     scene = Scene()
     scene.guides.clear()
     scene.mesh.add_face([V(-10, 0, -10), V(10, 0, -10), V(10, 0, 10), V(-10, 0, 10)])
-    v = WgpuView()
+    v = HeadlessView()
     v.resize(800, 600)
     v.scene = scene
     v.packed = pack_scene(scene)
@@ -111,13 +100,13 @@ def test_the_tool_never_hears_of_it(view, monkeypatch):
 def test_no_orbit_after_the_double_click(view):
     _double_click(view, 460, 260)
     yaw, pitch = view.camera.yaw, view.camera.pitch
-    view.mouseMoveEvent(_event(QEvent.MouseMove, 520, 300, Qt.NoButton, Qt.MiddleButton))
+    mouse(view, "move", 520, 300, 0, WHEEL)
     assert (view.camera.yaw, view.camera.pitch) == (yaw, pitch)
 
 
 def test_a_wheel_drag_still_orbits(view):
     x, y = 460, 260
-    view.mousePressEvent(_event(QEvent.MouseButtonPress, x, y, Qt.MiddleButton, Qt.MiddleButton))
+    mouse(view, "press", x, y, WHEEL, WHEEL)
     yaw = view.camera.yaw
-    view.mouseMoveEvent(_event(QEvent.MouseMove, x + 60, y, Qt.NoButton, Qt.MiddleButton))
+    mouse(view, "move", x + 60, y, 0, WHEEL)
     assert not math.isclose(view.camera.yaw, yaw)

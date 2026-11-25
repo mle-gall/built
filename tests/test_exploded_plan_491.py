@@ -12,16 +12,12 @@ filter here must give the answer the full scan gave, so every test compares
 against it."""
 from __future__ import annotations
 
-import os
 import random
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
 
 import core.arrangement as ar  # noqa: E402
 from core.arrangement import planar_rebuild  # noqa: E402

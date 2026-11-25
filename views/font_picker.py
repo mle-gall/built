@@ -1,7 +1,7 @@
 """Host binding for the renderer's font picker and retained text geometry."""
 import json
 
-from core.settings import settings as QSettings
+from core.settings import settings as native_settings
 from ingetrazo_render import chrome_dialogs
 
 
@@ -9,7 +9,7 @@ def show(win, title, text, family, bold, italic, size, unit, done, *, depth=None
     view = chrome_dialogs.view_of(win)
     if not getattr(view, "_ui_attached", False):
         return False
-    settings = QSettings()
+    settings = native_settings()
     draft = dict(title=title, text=text, font=family, bold=bold, italic=italic,
                  height=size, unit=unit, editable=editable, thickness=depth, lengths=lengths, minimum=bounds[0], maximum=bounds[1])
     for key in ("recent", "favourites"):
@@ -26,7 +26,7 @@ def answer(win, payload, source_view=None):
     done = vars(view).pop("_font_done", None) if view else None
     if done and payload and view is current:
         choice = json.loads(payload)
-        settings = QSettings()
+        settings = native_settings()
         for key in ("recent", "favourites"):
             settings.setValue("fonts/" + key, choice[key])
         done(choice)

@@ -649,9 +649,9 @@ fn edit_text(win: &Bound<'_, PyAny>, view: Option<&Bound<'_, PyAny>>) -> PyResul
     let vp = win.getattr("viewport")?;
     let Some(px) = opt(&vp, "_context_pixel") else { return Ok(()) };
     let tools = view.and_then(|v| opt(v, "tools")).filter(|t| t.is_truthy().unwrap_or(false)).unwrap_or_else(|| vp.clone());
-    let input = py.import("core.input_types")?;
-    let point = input.getattr("QPointF")?.call1((px.get_item(0)?.extract::<f64>()?, px.get_item(1)?.extract::<f64>()?))?;
-    let no_modifier = input.getattr("Qt")?.getattr("NoModifier")?;
+    let input = py.import("ingetrazo_core")?;
+    let point = input.getattr("ScreenPoint")?.call1((px.get_item(0)?.extract::<f64>()?, px.get_item(1)?.extract::<f64>()?))?;
+    let no_modifier = input.getattr("Input")?.getattr("NoModifier")?;
     let origin = class(py, "ingetrazo_core", "Vec3")?.call0()?;
     let ctx = class(py, "tools.base", "ToolContext")?.call1((tools, origin, point, no_modifier, py.None()))?;
     class(py, "tools.rust_tools", "SelectTool")?.call0()?.call_method1("on_double_click", (ctx,))?;

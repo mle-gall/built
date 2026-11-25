@@ -255,10 +255,13 @@ fn igz_stream_start(
     stream.setattr("compatibility", compatibility)?;
     stream.setattr("destination", destination)?;
     stream.setattr("displacement_mm", 0.)?;
-    stream.setattr(
-        "file",
-        py.import("tempfile")?.call_method0("TemporaryFile")?,
-    )?;
+    let tempfile = py.import("tempfile")?;
+    let file = if built {
+        tempfile.call_method1("SpooledTemporaryFile", (CHUNK,))?
+    } else {
+        tempfile.call_method0("TemporaryFile")?
+    };
+    stream.setattr("file", file)?;
     stream.setattr("blobs", PyDict::new(py))?;
     stream.setattr("resolved", PyDict::new(py))?;
     stream.setattr("missing", 0)

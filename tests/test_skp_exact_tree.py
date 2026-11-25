@@ -10,16 +10,12 @@ Every placement must come in as its own object at its own depth, small or
 not, once or many times."""
 from __future__ import annotations
 
-import os
 from types import SimpleNamespace as NS
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
 pytest.importorskip("openskp")
-_app = QApplication.instance() or QApplication([])
 
 from core.scene import Scene  # noqa: E402
 from formats import skp, skp_reader  # noqa: E402

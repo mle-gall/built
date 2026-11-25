@@ -7,25 +7,15 @@ through the viewport (the same live path the Camera menu uses).
 """
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QApplication, QWidget
+from ingetrazo_core import NativeSettings
 
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
 
 from tests.preferences_chrome import Controls, settings_file
 
 
-class _Win(QWidget):
+class _Win:
     """Just enough main window: a viewport with the rest-mode contract."""
 
     def __init__(self):
@@ -46,7 +36,7 @@ class _Win(QWidget):
 
 
 def _fresh(path):
-    return QSettings(str(path), QSettings.IniFormat)
+    return NativeSettings(path.parent.parent)
 
 
 def test_ok_writes_the_settings(settings_file):
@@ -109,21 +99,17 @@ def test_dialog_reloads_saved_values(settings_file):
 
 
 def test_toolbar_sizes_are_fixed_even_with_old_keys(settings_file):
-    from views.icons import DEFAULT_TOOLBAR_ICON_PX
     st = _fresh(settings_file)
     st.setValue("ui/toolbar_icon_px", 40)
     st.setValue("ui/large_toolbar_icons", "1")
     with pytest.raises(KeyError):
         Controls(_Win(), "general").row("icon_px")
-    assert DEFAULT_TOOLBAR_ICON_PX == 24
     assert st.value("ui/large_toolbar_icons") == "1"
 
 
 def test_old_theme_is_ignored_by_the_default_palette(settings_file):
-    from views import theme
     st = _fresh(settings_file)
     st.setValue("General/theme", "light")
-    theme.install_dark_palette(QApplication.instance())
     with pytest.raises(KeyError):
         Controls(_Win(), "general").row("theme")
 
@@ -137,20 +123,21 @@ def test_restore_leaves_retired_appearance_keys_intact(settings_file):
     assert st.value("General/accent") == "orange"
 
 
-def test_the_3d_mouse_page_shows_the_device_live(settings_file, monkeypatch):
+def test_the_3d_mouse_page_shows_the_device_live(native_host, monkeypatch):
     """Nobody on the team has a SpaceMouse: the page shows the six numbers
     as the device sends them and how IngeTrazo reads them, so an owner can
     report a wrong sign by looking (#108)."""
     from core.ndof import NdofSample
     from views import ndof_input
 
+    win = native_host.window
     dev = ndof_input.NdofInput()
+    monkeypatch.setattr(dev, "_driver_checked", True)
     monkeypatch.setattr(ndof_input, "_shared", dev)
     monkeypatch.setattr(type(dev), "backend_name",
                         property(lambda self: "rawinput"))
     from ingetrazo_render import chrome_sheet
     from ingetrazo_render import settings_sheet
-    win = _Win()
     settings_sheet.show(win, page="ndof")
     sheet = chrome_sheet.current(win)
     context = chrome_sheet.Ctx(win, None)

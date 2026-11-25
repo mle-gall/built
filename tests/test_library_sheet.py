@@ -7,6 +7,7 @@ the material Paint holds. Offscreen: a stand-in renderer records the
 sheet's JSON."""
 from __future__ import annotations
 
+from tests.raster_samples import solid_raster
 import json
 
 import pytest
@@ -280,7 +281,6 @@ def test_online_catalogue_search_preview_download_and_document_credit(win, tmp_p
     from core import library
     from formats import igz
     from core.scene import Scene
-    from PySide6.QtGui import QImage
     import zipfile
     import time
 
@@ -294,8 +294,7 @@ def test_online_catalogue_search_preview_download_and_document_credit(win, tmp_p
     with zipfile.ZipFile(src / "modelos/stool.zip", "w") as z:
         z.writestr("stool.obj", "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n")
         z.writestr("LICENSE.txt", "CC BY · Ana")
-    image = QImage(32, 32, QImage.Format_RGBA8888)
-    image.fill(0xff4532ab)
+    image = solid_raster(32, 32, (69, 50, 171))
     image.save(str(src / "miniaturas/stool.png"))
     monkeypatch.setenv("INGETRAZO_LIBRARY", str(src))
     monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "cache/tex"))

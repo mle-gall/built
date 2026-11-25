@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
 
 ifcopenshell = pytest.importorskip("ifcopenshell")

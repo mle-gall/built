@@ -96,10 +96,7 @@ impl<'py> Paint<'py> {
                 .map(|&p| self.px(p))
                 .collect::<PyResult<Vec<_>>>()?,
         )?;
-        self.p.call_method1(
-            "drawPolygon",
-            (self.styles.call_method1("QPolygonF", (list,))?,),
-        )?;
+        self.p.call_method1("drawPolygon", (list,))?;
         Ok(())
     }
     fn text(&self, p: Point, s: &str) -> PyResult<()> {

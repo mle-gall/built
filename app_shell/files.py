@@ -69,8 +69,6 @@ class ShellFileDialog:
 
 def install(win) -> None:
     """Install the shell’s bindings for document commands."""
-    from views import filedialogs
-    filedialogs.QFileDialog = ShellFileDialog
     # The shell draws with Metal by construction: no probe process, no
     # GL fallback to report (the start page's footer, the chrome's checks).
     from core import renderer_settings

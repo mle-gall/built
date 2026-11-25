@@ -327,10 +327,12 @@ def test_a_plain_file_too(any_size, tmp_path):
 def test_a_block_that_is_not_empty_when_read_builds_at_once(any_size):
     """defer() refuses a mesh that already holds something: the arrays still
     make the mesh the plain reader would."""
+    from ingetrazo_core import Vec3
+
     tree = igz._parse_native(json.dumps(document()).encode())
     block = tree["scene"]["protos"][1]
     m = Mesh()
-    m.vertex(__import__("PySide6.QtGui", fromlist=["QVector3D"]).QVector3D(9, 9, 9))
+    m.vertex(Vec3(9, 9, 9))
     backing = type(m)
     igz._load_mesh(m, block)
     assert type(m) is backing

@@ -6,7 +6,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtGui import QImage, QColor
+from ingetrazo_render import SurveyRaster
+from tests.raster_samples import solid_raster
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History, SetFaceColorCommand, SetFaceTextureCommand
@@ -28,12 +29,9 @@ def _cube(scene, hist, height=3.0):
 
 
 def _checker(path, n=16):
-    img = QImage(n, n, QImage.Format_RGB888)
-    for y in range(n):
-        for x in range(n):
-            img.setPixelColor(x, y, QColor(200, 120, 60) if (x + y) % 2
-                              else QColor(245, 235, 220))
-    img.save(str(path))
+    colors = (bytes((245, 235, 220, 255)), bytes((200, 120, 60, 255)))
+    rgba = b"".join(colors[(x + y) % 2] for y in range(n) for x in range(n))
+    assert SurveyRaster(n, n, rgba).save(path)
 
 
 # ---- Planar UV projection ------------------------------------------------------
@@ -344,7 +342,7 @@ def test_texture_rotation_round_trips_igz(tmp_path):
 def _model_with_map(tmp_path, map_line, image=None):
     """A one-triangle OBJ whose material carries ``map_line`` and a red Kd."""
     if image is not None:
-        QImage(2, 2, QImage.Format_RGB32).save(str(tmp_path / image))
+        solid_raster(2, 2, (0, 0, 0)).save(str(tmp_path / image))
     (tmp_path / "m.mtl").write_text(
         "newmtl skin\nKd 0.8 0.1 0.1\n%s\n" % map_line)
     obj = tmp_path / "m.obj"
@@ -450,7 +448,7 @@ def test_an_obj_brings_its_own_texture_coordinates(tmp_path):
     # and a person's clothes came out as confetti. The file says where the
     # image goes; the import has to keep it.
     from core.texture import affine_uv
-    QImage(2, 2, QImage.Format_RGB32).save(str(tmp_path / "skin.jpg"))
+    solid_raster(2, 2, (0, 0, 0)).save(str(tmp_path / "skin.jpg"))
     (tmp_path / "m.mtl").write_text("newmtl skin\nKd 1 1 1\nmap_Kd skin.jpg\n")
     obj = tmp_path / "m.obj"
     obj.write_text("mtllib m.mtl\n"

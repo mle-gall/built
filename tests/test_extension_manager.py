@@ -10,7 +10,6 @@ import pytest
 from dataclasses import replace
 from types import SimpleNamespace
 
-from PySide6.QtWidgets import QApplication
 
 from core import extension_manager as manager
 from core.extensions import discover_plugins
@@ -378,12 +377,9 @@ def test_catalog_text_is_shown_as_plain_text(tmp_path, monkeypatch):
     assert "repository" not in browser.buttons and browser.provider.model.command("repository", str) is None
 
 
-def test_building_the_manager_never_shows_a_stray_window(tmp_path, monkeypatch):
-    app = QApplication.instance() or QApplication([])
-    before = {w for w in app.topLevelWidgets() if w.isVisible()}
+def test_browser_builds_in_the_extensions_sheet(tmp_path, monkeypatch):
     browser = Browser(monkeypatch, tmp_path, [_extension(b"x")]).act("tab", "Browse")
     assert browser.spec["id"] == "extensions" and browser.ids == ["sample"]
-    assert {w for w in app.topLevelWidgets() if w.isVisible()} == before
 
 
 def test_zip_names_with_a_colon_are_rejected(tmp_path, monkeypatch):

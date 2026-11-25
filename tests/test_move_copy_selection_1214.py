@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import Qt
+from ingetrazo_core import Input
 from ingetrazo_core import Matrix4 as QMatrix4x4
 
 from core.group import Group
@@ -38,7 +38,7 @@ def _source(scene, kind):
 def _copy(vp, distance=3):
     tool = MoveTool()
     tool.on_click(_ctx(vp, 0, 0))
-    tool.on_key(vp, Qt.Key_Control, Qt.NoModifier)
+    tool.on_key(vp, Input.Key_Control, Input.NoModifier)
     tool.on_click(_ctx(vp, distance, 0))
     assert vp.history.last_error is None
     return tool
@@ -158,7 +158,7 @@ def test_a_copied_edge_split_at_a_crossing_selects_both_fragments():
     vp = _Vp(scene)
     tool = MoveTool()
     tool.on_click(_ctx(vp, 0, 0))
-    tool.on_key(vp, Qt.Key_Control, Qt.NoModifier)
+    tool.on_key(vp, Input.Key_Control, Input.NoModifier)
     tool.on_click(_ctx(vp, 0, 2))
 
     assert scene.selection

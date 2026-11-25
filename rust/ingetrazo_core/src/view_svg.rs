@@ -12,33 +12,12 @@ use std::{
 };
 type Obj<'p> = Bound<'p, PyAny>;
 type Rings = Vec<Vec<[f64; 2]>>;
+/// A view picture (`ingetrazo_render.SurveyRaster`) as base64 PNG, or JPEG
+/// when it needs no alpha.
 fn encode(img: &Obj<'_>, alpha: Option<bool>) -> PyResult<String> {
     let py = img.py();
-    let (alpha, data) =
-        if img.is_instance(&py.import("ingetrazo_render")?.getattr("SurveyRaster")?)? {
-            let alpha = alpha.unwrap_or(true);
-            (alpha, img.call_method0(if alpha { "png" } else { "jpeg" })?)
-        } else {
-            let qt = py.import("PySide6.QtCore")?;
-            let alpha = img.call_method0("hasAlphaChannel")?.is_truthy()?;
-            let bytes = qt.call_method0("QByteArray")?;
-            let buffer = qt.call_method1("QBuffer", (&bytes,))?;
-            buffer.call_method1("open", (qt.getattr("QIODevice")?.getattr("WriteOnly")?,))?;
-            let res = img.call_method1(
-                "save",
-                (
-                    &buffer,
-                    if alpha { "PNG" } else { "JPG" },
-                    if alpha { -1 } else { 90 },
-                ),
-            );
-            buffer.call_method0("close")?;
-            res?;
-            (
-                alpha,
-                py.import("builtins")?.call_method1("bytes", (bytes,))?,
-            )
-        };
+    let alpha = alpha.unwrap_or(true);
+    let data = img.call_method0(if alpha { "png" } else { "jpeg" })?;
     let b64 = py
         .import("base64")?
         .call_method1("b64encode", (data,))?

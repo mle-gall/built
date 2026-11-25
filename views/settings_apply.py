@@ -3,7 +3,7 @@
 """Settings persistence and live application shared by the chrome and Qt host."""
 from __future__ import annotations
 
-from core.settings import settings as QSettings
+from core.settings import settings as native_settings
 
 from core import general_settings as _gs
 from core.i18n import SYSTEM as SYSTEM_LANGUAGE
@@ -44,7 +44,7 @@ def apply_language(code, st=None) -> bool:
     change back to the running language just rewrites the stored value —
     no restart note for a no-op (nor for "Same as the system" when the
     system's is the running language)."""
-    st = st if st is not None else QSettings()
+    st = st if st is not None else native_settings()
     saved = str(st.value("language") or SYSTEM_LANGUAGE)
     if code == saved:
         return False
@@ -78,7 +78,7 @@ def apply_rest_mode(window, mode, fade: float) -> None:
 def apply_autosave(window, on: bool, minutes: int, backup: bool | None = None,
                    st=None) -> None:
     """Auto-save and its pace (and the .bak), the timer re-armed."""
-    st = st if st is not None else QSettings()
+    st = st if st is not None else native_settings()
     _gs.set_value("autosave", "1" if on else "0", st)
     _gs.set_value("autosave_min", int(minutes), st)
     if backup is not None:
@@ -89,7 +89,7 @@ def apply_autosave(window, on: bool, minutes: int, backup: bool | None = None,
 
 
 def apply_undo_steps(window, steps: int, st=None) -> None:
-    st = st if st is not None else QSettings()
+    st = st if st is not None else native_settings()
     _gs.set_value("undo_steps", int(steps), st)
     for viewport in viewports_of(window):
         if history := getattr(viewport, "history", None):
@@ -97,14 +97,14 @@ def apply_undo_steps(window, steps: int, st=None) -> None:
 
 
 def apply_invert_wheel(window, on: bool, st=None) -> None:
-    st = st if st is not None else QSettings()
+    st = st if st is not None else native_settings()
     st.setValue("nav/invert_wheel", "1" if on else "0")
     for v in viewports_of(window):
         v._invert_wheel = bool(on)
 
 
 def apply_invert_orbit(window, on: bool, st=None) -> None:
-    st = st if st is not None else QSettings()
+    st = st if st is not None else native_settings()
     st.setValue("nav/invert_orbit_y", "1" if on else "0")
     for v in viewports_of(window):
         v._invert_orbit_y = bool(on)
@@ -112,14 +112,14 @@ def apply_invert_orbit(window, on: bool, st=None) -> None:
 
 def apply_slides(window, trackpad: str, st=None) -> None:
     """Apply the trackpad gesture to each open viewport."""
-    st = st if st is not None else QSettings()
+    st = st if st is not None else native_settings()
     st.setValue("nav/trackpad_slide", trackpad)
     for v in viewports_of(window):
         v._trackpad_slide = trackpad
 
 
 def apply_cursor_style(window, style: str, st=None) -> None:
-    st = st if st is not None else QSettings()
+    st = st if st is not None else native_settings()
     _gs.set_value("cursor_style", style, st)
     reapply = getattr(getattr(window, "viewport", None),
                       "_apply_tool_cursor", None)
@@ -128,7 +128,7 @@ def apply_cursor_style(window, style: str, st=None) -> None:
 
 
 def apply_soft_shadows(window, on: bool, level: int, st=None) -> None:
-    st = st if st is not None else QSettings()
+    st = st if st is not None else native_settings()
     level = int(level)
     soft = level if on else 0
     st.setValue("display/soft_shadows", soft)
@@ -178,7 +178,7 @@ def read_named_ndof_profiles() -> dict:
     """The saved, named SpaceMouse profiles: {name: NdofSettings}."""
     import json
     from core.ndof_profiles import profile_from_dict
-    raw = QSettings().value("ndof/named_profiles", "{}")
+    raw = native_settings().value("ndof/named_profiles", "{}")
     try:
         parsed = json.loads(str(raw))
         if not isinstance(parsed, dict):
@@ -209,7 +209,7 @@ def save_ndof(nd, named: dict, selected, st=None) -> None:
     import json
     from core.ndof_profiles import profile_to_dict
     from views.ndof_input import save_settings
-    st = st if st is not None else QSettings()
+    st = st if st is not None else native_settings()
     # Named presets are materialised into Custom at runtime. Their name
     # is stored separately so the dropdown restores on the next launch.
     nd.mapping_preset = selected if selected in ("original", "freecad") else "custom"

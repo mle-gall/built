@@ -91,8 +91,8 @@ def _tip(win, doc, host, n) -> str:
 
 
 def pictures_on() -> bool:
-    from core.settings import settings as QSettings
-    return str(QSettings().value("tabs/hover_picture", "1")) != "0"
+    from core.settings import settings as native_settings
+    return str(native_settings().value("tabs/hover_picture", "1")) != "0"
 
 
 def tabs(win, docs=None) -> list:

@@ -70,7 +70,7 @@ pub fn tool_cursor_name(key: Option<&str>, plus: bool, style: &str) -> Option<St
     Some(format!("tool:{key}{}", if plus { "+" } else { "" }))
 }
 
-fn pixels(name: &str, side: u32) -> Option<(RgbaImage, [f32; 2])> {
+pub(crate) fn pixels(name: &str, side: u32) -> Option<(RgbaImage, [f32; 2])> {
     let key = name.strip_suffix('+').unwrap_or(name);
     let (index, hot) = lookup(key)?;
     if !(1..=256).contains(&side) {

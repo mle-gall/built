@@ -5,7 +5,7 @@
 should stop constraining" report: the window must release the arrow-key lock before it cancels a tool."""
 from __future__ import annotations
 
-from core.input_types import Qt
+from ingetrazo_core import Input as Qt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 

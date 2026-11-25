@@ -139,13 +139,8 @@ fn copy_selection(v: &Obj, publish: bool) -> PyResult<bool> {
     data.set_item("ref", vec3(py, lo)?)?;
     v.setattr("clipboard", &data)?;
     if publish {
-        if m.getattr("NATIVE")?.is_truthy()? {
-            py.import("app_shell.files")?
-                .call_method1("publish_clipboard", (v.call_method0("window")?, data))?;
-        } else {
-            py.import("formats.clip")?
-                .call_method1("publish", (data,))?;
-        }
+        py.import("app_shell.files")?
+            .call_method1("publish_clipboard", (v.call_method0("window")?, data))?;
     }
     Ok(true)
 }

@@ -85,7 +85,6 @@ fn register_view_class(cls: &Obj) -> PyResult<()> {
         ("views.document_controller", "DocumentController") => {
             document_controller::DOCUMENT_CONTROLLER
         }
-        ("views.document_controller", "QtViewHost") => document_controller::QT_VIEW_HOST,
         ("views.view_navigation", "ViewNavigation") => {
             return view_navigation::register(cls, &cls.py().import(module)?)
         }

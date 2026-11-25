@@ -30,11 +30,10 @@ pytest.importorskip("openskp")
 
 
 def _pixels(path) -> str:
-    from PySide6.QtGui import QImage
-    img = QImage(str(path)).convertToFormat(QImage.Format_RGBA8888)
-    assert not img.isNull(), path
-    return hashlib.sha256(
-        bytes(img.constBits())[:img.sizeInBytes()]).hexdigest()
+    from ingetrazo_render import SurveyRaster
+    img = SurveyRaster.open(path)
+    assert img is not None, path
+    return hashlib.sha256(img.rgba()).hexdigest()
 
 
 @pytest.fixture
@@ -181,18 +180,20 @@ _invert_roughness.extra = {
 
 def test_2026_glossiness_flag_writes_an_inverted_roughness_map(
         cache, tmp_path):
-    from PySide6.QtGui import QImage
+    from ingetrazo_render import SurveyRaster
     skp = _rewrite(FIXTURE, tmp_path / "pbr_2026_style.skp", _invert_roughness)
     _payload, mats = _materials(skp)
     pbr = mats["PBR All Maps"]["pbr"]
     path = Path(pbr["roughness_map"]["path"])
     assert path.name == "all_rough_inverted.png"
     with zipfile.ZipFile(FIXTURE) as zf:
-        src = QImage.fromData(zf.read("materials/PBR All Maps/all_rough.png"))
-    inv = QImage(str(path))
-    assert (inv.width(), inv.height()) == (src.width(), src.height())
+        src = SurveyRaster.decode(zf.read("materials/PBR All Maps/all_rough.png"))
+    inv = SurveyRaster.open(path)
+    assert (inv.width, inv.height) == (src.width, src.height)
+    original, inverted = src.rgba(), inv.rgba()
     for x, y in ((0, 0), (5, 3), (15, 15)):
-        assert inv.pixelColor(x, y).red() == 255 - src.pixelColor(x, y).red()
+        index = 4 * (y * src.width + x)
+        assert inverted[index] == 255 - original[index]
     # The thumbnail never stands in for the base image.
     assert _pixels(mats["PBR All Maps"]["texture"]["path"]) == TRUTH[
         "PBR All Maps"]["textures"]["base"]["pixels_sha256"]

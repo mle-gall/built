@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from PySide6.QtCore import QPointF, Qt
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, world_mesh
@@ -59,8 +59,8 @@ def _bounds(mesh):
     return pts.min(axis=0), pts.max(axis=0)
 
 
-def _ctx(vp, x, y, modifiers=Qt.NoModifier):
-    return ToolContext(viewport=vp, world=QVector3D(), screen=QPointF(x, y),
+def _ctx(vp, x, y, modifiers=Input.NoModifier):
+    return ToolContext(viewport=vp, world=QVector3D(), screen=ScreenPoint(x, y),
                        modifiers=modifiers, snap=None)
 
 
@@ -88,7 +88,7 @@ def test_the_paint_hover_marking_lies_on_the_part_it_is_over(native_host):
     for x, y, _face, _placement in _probe(vp):
         # The eyedropper (Alt) marks the one face it samples; the bucket
         # marks the closed component whole, as its click paints it.
-        tool.on_hover(_ctx(vp, x, y, Qt.AltModifier))
+        tool.on_hover(_ctx(vp, x, y, Input.AltModifier))
         face, placement = vp._hover_entity, vp._hover_placement
         assert face is not None and placement is not None
         marking = _mark_positions(face, placement)

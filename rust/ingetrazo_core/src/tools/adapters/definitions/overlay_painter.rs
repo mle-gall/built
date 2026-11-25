@@ -6,11 +6,7 @@ fn draw_overlay<'py>(a: &Args<'py>) -> Reply<'py> {
     let tool = a.get_item(0)?;
     let view = a.get_item(1)?;
     let painter = a.get_item(2)?;
-    if let Some(draw) = painter.getattr_opt("draw_tool")? {
-        draw.call1((tool.getattr("overlay_kind")?, tool, view))
-    } else {
-        imported(a.py(), "tools._classic")?.call_method1("draw_tile", (tool, view, painter))
-    }
+    painter.call_method1("draw_tool", (tool.getattr("overlay_kind")?, tool, view))
 }
 pub(super) fn install(module: &Bound<PyModule>) -> PyResult<()> {
     let py = module.py();

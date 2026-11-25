@@ -96,7 +96,7 @@ def test_ray_filter_never_drops_a_hit(seed):
 
 @pytest.mark.parametrize("seed", range(4))
 def test_screen_filter_never_drops_something_near(seed):
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3
     rng = np.random.default_rng(100 + seed)
     protos = [_proto(rng) for _ in range(5)]
     natp = [mod.InstanceProto(*p) for p in protos]
@@ -108,8 +108,7 @@ def test_screen_filter_never_drops_something_near(seed):
     proj = QMatrix4x4()
     proj.perspective(50.0, W / H, 0.5, 500.0)
     view = QMatrix4x4()
-    view.lookAt(*(__import__("PySide6.QtGui", fromlist=["QVector3D"]).QVector3D(*v)
-                  for v in ((60.0, -70.0, 50.0), (0, 0, 0), (0, 0, 1))))
+    view.lookAt(Vec3(60, -70, 50), Vec3(0, 0, 0), Vec3(0, 0, 1))
     M = np.array((proj * view).data(), dtype=np.float64).reshape(4, 4).T
 
     def screen(p):

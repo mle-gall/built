@@ -11,16 +11,10 @@ points are no reference but whose middle is.
 """
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtCore import QPointF  # noqa: E402
+from ingetrazo_core import ScreenPoint  # noqa: E402
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-if QApplication.instance() is None:
-    QApplication([])
 
 from tools.pushpull import PushPullTool  # noqa: E402
 from tests.controller_surface import ControllerSurface as Viewport
@@ -59,7 +53,7 @@ def _scene(vp):
 def _hover_at(tool, vp, world):
     px, py = vp._world_to_pixel(world)
     return tool._infer_reference_distance(
-        SimpleNamespace(viewport=vp, screen=QPointF(px, py)))
+        SimpleNamespace(viewport=vp, screen=ScreenPoint(px, py)))
 
 
 def test_the_push_stops_level_with_an_edge_midpoint():
@@ -77,7 +71,7 @@ def test_a_few_pixels_off_the_midpoint_still_reads_it():
     tool = _scene(vp)
     px, py = vp._world_to_pixel(V(1, -1, 2))
     d = tool._infer_reference_distance(
-        SimpleNamespace(viewport=vp, screen=QPointF(px + 3, py - 3)))
+        SimpleNamespace(viewport=vp, screen=ScreenPoint(px + 3, py - 3)))
     assert tool._inference_kind == "midpoint" and abs(d - 2.0) < 1e-6
 
 

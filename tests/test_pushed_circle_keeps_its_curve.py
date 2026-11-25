@@ -11,7 +11,6 @@ import math
 
 import pytest
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from tests import test_pushpull_ux as T
 from tools.circle import CircleTool
@@ -19,7 +18,6 @@ from tools.circle import CircleTool
 
 @pytest.fixture(scope="module")
 def viewport():
-    QApplication.instance() or QApplication([])
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.flash_status = lambda *a, **k: None

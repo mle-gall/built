@@ -1,4 +1,5 @@
 """Open, apply and close migrated chrome operations in a native window."""
+from tests.raster_samples import solid_raster
 import json
 import os
 from pathlib import Path
@@ -25,7 +26,7 @@ def english(profile):
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_soften_and_export(tmp_path):
-    from PySide6.QtGui import QImage
+    from ingetrazo_render import SurveyRaster
     from core.group import Group
     from core.mesh import Mesh
     from core.scene import Scene
@@ -67,8 +68,8 @@ quit
               if line.startswith("[built] state ")]
     assert len(states) >= 2 and all(s["errors"] == 0 for s in states), log
     assert states[0]["status"] == "Smoothed 12 edge(s)", log
-    image = QImage(str(picture))
-    assert image.width() == 3520 and image.height() > 0, log
+    image = SurveyRaster.open(picture)
+    assert image.width == 3520 and image.height > 0, log
 
 
 def fixture_venv(tmp_path, code):
@@ -119,12 +120,12 @@ def test_native_release_review(tmp_path):
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_first_run_custom_units(tmp_path):
-    from PySide6.QtCore import QSettings
+    from ingetrazo_core import NativeSettings
 
     profile = tmp_path / "profile"
     folder = profile / "IngeTrazo"
     folder.mkdir(parents=True)
-    settings = QSettings(str(folder / "IngeTrazo.ini"), QSettings.IniFormat)
+    settings = NativeSettings(profile)
     custom = {"length": "cm", "precision": 3}
     settings.setValue("units/new_document", json.dumps(custom))
     settings.sync()
@@ -155,7 +156,7 @@ def test_native_first_run_custom_units(tmp_path):
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_settings_device_preferences(tmp_path):
-    from PySide6.QtCore import QSettings
+    from ingetrazo_core import NativeSettings
 
     profile = tmp_path / "profile"
     home = tmp_path / "home"
@@ -173,7 +174,7 @@ def test_native_settings_device_preferences(tmp_path):
               if line.startswith("[built] state ")]
     assert result.returncode == 0 and [s["large_sheet"] for s in states[:2]] == ["settings", "start"], log
     assert not any(s["errors"] or s["blocked_widgets"] for s in states), log
-    settings = QSettings(str(profile / "IngeTrazo" / "IngeTrazo.ini"), QSettings.IniFormat)
+    settings = NativeSettings(profile)
     assert settings.value("ndof/enabled") == "0"
 
 
@@ -356,7 +357,7 @@ def test_native_f3_finds_and_runs_a_misspelled_command(tmp_path):
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists()
                     or __import__("sys").platform != "darwin", reason="requires the native macOS menu")
 def test_native_menu_search_and_persisted_keyboard_binding(tmp_path):
-    from PySide6.QtCore import QSettings
+    from ingetrazo_core import NativeSettings
     from core.scene import Scene
     from formats.igz import save_scene
     from core.shortcuts import _store_key
@@ -366,7 +367,7 @@ def test_native_menu_search_and_persisted_keyboard_binding(tmp_path):
     config = profile / "IngeTrazo"
     config.mkdir(parents=True)
     home.mkdir()
-    settings = QSettings(str(config / "IngeTrazo.ini"), QSettings.IniFormat)
+    settings = NativeSettings(profile)
     settings.setValue("shortcuts/" + _store_key("menu:cutlist"), "Ctrl+Shift+F9")
     settings.sync()
     steps = tmp_path / "menu-commands"
@@ -384,7 +385,7 @@ def test_native_menu_search_and_persisted_keyboard_binding(tmp_path):
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_ai_connection_edits_plugin_model(tmp_path):
-    from PySide6.QtCore import QSettings
+    from ingetrazo_core import NativeSettings
 
     home, profile = tmp_path / "home", tmp_path / "settings"
     home.mkdir()
@@ -399,14 +400,14 @@ def test_native_ai_connection_edits_plugin_model(tmp_path):
               if s.startswith("[built] state ")]
     assert result.returncode == 0 and not any(s["errors"] for s in states), result.stderr
     assert [s["large_sheet"] for s in states[:2]] == ["settings", "start"]
-    store = QSettings(str(profile / "IngeTrazo" / "IngeTrazo.ini"), QSettings.IniFormat)
+    store = NativeSettings(profile)
     assert store.value("ia/modelo") == "fixture-model"
 
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_svg_preview_and_delivery_edit(tmp_path):
-    from PySide6.QtGui import QImage
+    from ingetrazo_render import SurveyRaster
     from core import deliveries
     from core.history import History
     from core.scene import Scene
@@ -440,9 +441,11 @@ def test_native_svg_preview_and_delivery_edit(tmp_path):
     assert [s["large_sheet"] for s in states[:4]] == ["export", "", "delivery", ""], log
     assert all(not s["errors"] and not s["blocked_widgets"] for s in states), log
     for name in ("one-off", "named"):
-        frame = QImage(str(tmp_path / f"{name}.png"))
-        assert not frame.isNull()
-        assert frame.pixelColor(int(frame.width() * .79), int(frame.height() * .45)).lightness() > 230
+        frame = SurveyRaster.open(tmp_path / f"{name}.png")
+        assert frame is not None
+        from tests.raster_samples import pixels
+        rgb = pixels(frame)[int(frame.height * .45), int(frame.width * .79), :3].astype(int)
+        assert (rgb.min() + rgb.max()) / 2 > 230
     assert "<path" in drawing.read_text()
     edited = Scene()
     load_into(edited, saved)
@@ -560,15 +563,14 @@ Host.state = bevel_state
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_camera_registry_text_and_plugin_utilities(tmp_path):
     """Use renderer verbs for controls without a native menu-script spelling."""
-    from PySide6.QtGui import QImage
+    from ingetrazo_render import SurveyRaster
     from core.scene import Scene
     from formats.igz import save_scene
 
     initial = tmp_path / "empty.built"
     save_scene(Scene(), initial)
     image = tmp_path / "render.png"
-    thumb = QImage(90, 40, QImage.Format_RGB32)
-    thumb.fill(0x557788)
+    thumb = solid_raster(90, 40, (85, 119, 136))
     assert thumb.save(str(image))
     marker = tmp_path / "preview-closed"
     venv = fixture_venv(tmp_path, f"""from app_shell.host import Host

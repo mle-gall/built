@@ -17,7 +17,7 @@ fn start_from_hover<'py>(a: &Args<'py>) -> Reply<'py> {
     let mut pixel = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
-    let q_point_f = imported(py, "core.input_types")?.getattr("QPointF")?;
+    let q_point_f = imported(py, "ingetrazo_core")?.getattr("ScreenPoint")?;
     let input_state = imported(py, "views.input_state")?.into_any();
     let _hover_event = imported(py, "views.document_interaction")?.getattr("_HoverEvent")?;
     if !tool.getattr("start_point")?.is_none() || tool.getattr("_mode")?.ne("line")? {

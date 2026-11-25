@@ -10,7 +10,7 @@ inferred plane, as before.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, Qt
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
@@ -36,8 +36,8 @@ class _Vp:
 
 def _ctx(vp, x, y, z=0.0):
     return ToolContext(viewport=vp, world=QVector3D(x, y, z),
-                       screen=QPointF(x * 100.0, y * 100.0),
-                       modifiers=Qt.NoModifier, snap=None)
+                       screen=ScreenPoint(x * 100.0, y * 100.0),
+                       modifiers=Input.NoModifier, snap=None)
 
 
 def test_a_drag_from_the_vertex_sets_the_axis_along_it():

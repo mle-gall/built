@@ -13,8 +13,10 @@ fn siblings<'py>(a: &Args<'py>) -> Reply<'py> {
 fn qt_cursor<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
-    let solid_cursor = imported(py, "views.icons")?.getattr("solid_cursor")?;
-    solid_cursor.call1((tool.getattr("_badge")?,))
+    // «×» over anything that is not a solid, «1» or «2» over a solid for
+    // the pick it will be.
+    let badge: String = tool.getattr("_badge")?.extract()?;
+    pyo3::IntoPyObjectExt::into_bound_py_any(format!("tool:solid-{badge}"), py)
 }
 fn host_solid_selection<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();

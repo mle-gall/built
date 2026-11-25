@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """An edge midpoint is still an edge source for a parallel Tape guide."""
 from types import SimpleNamespace
-from PySide6.QtCore import QPointF, Qt
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as V
 from core.history import History
 from core.scene import Scene
@@ -18,7 +18,7 @@ def _setup():
 
 
 def _ctx(vp, x, y, kind):
-    return ToolContext(vp,V(x,y,0),QPointF(20,20),Qt.NoModifier,
+    return ToolContext(vp,V(x,y,0),ScreenPoint(20,20),Input.NoModifier,
                        SimpleNamespace(kind=kind))
 
 

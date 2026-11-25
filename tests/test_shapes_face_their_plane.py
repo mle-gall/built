@@ -25,10 +25,10 @@ so a wall can arrive inside-out somewhere else entirely.
 from __future__ import annotations
 
 
+from ingetrazo_render import MouseEvent
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMouseEvent
+from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
 
 from tools.base import face_the_plane, loop_normal
@@ -47,9 +47,7 @@ def _draw(native_host, tool_key, points):
         px, py = vp._world_to_pixel(w)
         vp._last_mouse_pos = QPointF(px, py)
         vp._refresh_snap()
-        vp._dispatch_tool_click(QMouseEvent(
-            QMouseEvent.MouseButtonPress, QPointF(px, py),
-            Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+        vp._dispatch_tool_click(MouseEvent('press', px, py, Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
     faces = vp.scene.mesh.faces
     return faces[0].normal() if faces else None
 

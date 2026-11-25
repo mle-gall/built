@@ -2,81 +2,15 @@
 //! Host bindings for document_controller.
 use super::*;
 fn document_controller_set_updates_enabled<'py>(a: &Args<'py>) -> Reply<'py> {
-    let py = a.py();
-    let module = py.import("views.document_controller")?;
-    let enabled = a.get_item(1)?;
-    let view = a.get_item(0)?;
-    if view
-        .getattr("_host")?
-        .is_instance(&module.getattr("QtViewHost")?)?
-    {
-        view.getattr("_host")?
-            .getattr("display")?
-            .call_method1("setUpdatesEnabled", (&enabled,))?;
-    } else {
-        view.setattr("_updates_enabled", &enabled)?;
-    }
-    Ok(none(py))
+    a.get_item(0)?.setattr("_updates_enabled", a.get_item(1)?)?;
+    Ok(none(a.py()))
 }
-
 fn document_controller_updates_enabled<'py>(a: &Args<'py>) -> Reply<'py> {
-    let py = a.py();
-    let module = py.import("views.document_controller")?;
-    let view = a.get_item(0)?;
-    if view
-        .getattr("_host")?
-        .is_instance(&module.getattr("QtViewHost")?)?
-    {
-        return Ok(view
-            .getattr("_host")?
-            .getattr("display")?
-            .call_method0("updatesEnabled")?);
+    match a.get_item(0)?.getattr_opt("_updates_enabled")? {
+        Some(value) => Ok(value),
+        None => true.into_bound_py_any(a.py()),
     }
-    Ok(view
-        .getattr_opt("_updates_enabled")?
-        .unwrap_or(true.into_bound_py_any(py)?))
 }
-
-fn document_controller_map_to<'py>(a: &Args<'py>) -> Reply<'py> {
-    let py = a.py();
-    let module = py.import("views.document_controller")?;
-    let point = a.get_item(2)?;
-    let view = a.get_item(0)?;
-    let target = a.get_item(1)?;
-    if view
-        .getattr("_host")?
-        .is_instance(&module.getattr("QtViewHost")?)?
-    {
-        return Ok(view
-            .getattr("_host")?
-            .getattr("display")?
-            .call_method1("mapTo", (&target, &point))?);
-    }
-    py.import("builtins")?
-        .getattr("super")?
-        .call1((module.getattr("DocumentController")?, &view))?
-        .call_method1("mapTo", (&target, &point))
-}
-
-fn document_controller_cursor<'py>(a: &Args<'py>) -> Reply<'py> {
-    let py = a.py();
-    let module = py.import("views.document_controller")?;
-    let view = a.get_item(0)?;
-    if view
-        .getattr("_host")?
-        .is_instance(&module.getattr("QtViewHost")?)?
-    {
-        return Ok(view
-            .getattr("_host")?
-            .getattr("display")?
-            .call_method0("cursor")?);
-    }
-    py.import("builtins")?
-        .getattr("super")?
-        .call1((module.getattr("DocumentController")?, &view))?
-        .call_method0("cursor")
-}
-
 fn document_controller_reset_texture_cache<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let view = a.get_item(0)?;
@@ -266,8 +200,6 @@ fn document_controller_render_image<'py>(a: &Args<'py>) -> Reply<'py> {
 pub(super) const DOCUMENT_CONTROLLER: &[Method] = &[
     ("setUpdatesEnabled", Mode::Method, document_controller_set_updates_enabled, &["self", "enabled"], "", ""),
     ("updatesEnabled", Mode::Method, document_controller_updates_enabled, &["self"], "", ""),
-    ("mapTo", Mode::Method, document_controller_map_to, &["self", "target", "point"], "", ""),
-    ("cursor", Mode::Method, document_controller_cursor, &["self"], "", ""),
     ("reset_texture_cache", Mode::Method, document_controller_reset_texture_cache, &["self"], "", ""),
     ("_depth_world_at", Mode::Method, document_controller_depth_world_at, &["self", "x", "y"], "", ""),
     ("upload_terrain", Mode::Method, document_controller_upload_terrain, &["self", "terrain"], "", ""),
@@ -277,50 +209,4 @@ pub(super) const DOCUMENT_CONTROLLER: &[Method] = &[
     ("_photo_showing", Mode::Method, document_controller_photo_showing, &["self"], "", ""),
     ("render_raster", Mode::Method, document_controller_render_raster, &["self", "width_px", "height_px=None", "overlays=True", "annotations_only=False", "sharp_shadows=False", "transparent=False", "crop_to_frame=False"], "", ""),
     ("render_image", Mode::Method, document_controller_render_image, &["self", "width_px", "height_px=None", "overlays=True", "annotations_only=False", "sharp_shadows=False", "transparent=False", "crop_to_frame=False"], "", ""),
-];
-
-fn qt_view_host_window<'py>(a: &Args<'py>) -> Reply<'py> {
-    let view = a.get_item(0)?;
-    view.getattr("display")?.call_method0("window")
-}
-
-fn qt_view_host_width<'py>(a: &Args<'py>) -> Reply<'py> {
-    let view = a.get_item(0)?;
-    view.getattr("display")?.call_method0("width")
-}
-
-fn qt_view_host_height<'py>(a: &Args<'py>) -> Reply<'py> {
-    let view = a.get_item(0)?;
-    view.getattr("display")?.call_method0("height")
-}
-
-fn qt_view_host_scale<'py>(a: &Args<'py>) -> Reply<'py> {
-    let view = a.get_item(0)?;
-    view.getattr("display")?.call_method0("devicePixelRatioF")
-}
-
-fn qt_view_host_request_frame<'py>(a: &Args<'py>) -> Reply<'py> {
-    let py = a.py();
-    let view = a.get_item(0)?;
-    view.getattr("display")?.call_method0("update")?;
-    Ok(none(py))
-}
-
-fn qt_view_host_cursor_changed<'py>(a: &Args<'py>) -> Reply<'py> {
-    let py = a.py();
-    let cursor = a.get_item(1)?;
-    let view = a.get_item(0)?;
-    view.getattr("display")?
-        .call_method1("setCursor", (&cursor,))?;
-    Ok(none(py))
-}
-
-#[rustfmt::skip]
-pub(super) const QT_VIEW_HOST: &[Method] = &[
-    ("window", Mode::Property, qt_view_host_window, &["self"], "", ""),
-    ("width", Mode::Property, qt_view_host_width, &["self"], "", ""),
-    ("height", Mode::Property, qt_view_host_height, &["self"], "", ""),
-    ("scale", Mode::Property, qt_view_host_scale, &["self"], "", ""),
-    ("request_frame", Mode::Method, qt_view_host_request_frame, &["self"], "", ""),
-    ("cursor_changed", Mode::Method, qt_view_host_cursor_changed, &["self", "cursor"], "", ""),
 ];

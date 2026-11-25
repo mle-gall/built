@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import math
+from functools import partialmethod
 
 
 from core.history import SnapshotImport, SetRegistryCommand
 from core.i18n import tr
 
 
-from ingetrazo_core import rfa_read as read_rfa, rfa_triangle_mesh as _triangle_mesh, rfa_apply as apply_payload
+from ingetrazo_core import rfa_history_do, rfa_history_undo, rfa_read as read_rfa, rfa_triangle_mesh as _triangle_mesh, rfa_apply as apply_payload
 
 
 #: The "Clearance zones" tag's key: every .rfa import puts zones on it.
@@ -43,26 +44,5 @@ class RfaImport(SnapshotImport):
     """Keep templates, paints and classification registry in the undo step."""
     _TRACKED = SnapshotImport._TRACKED + (('kept_components', 'added_templates', 'removed_templates'),)
 
-    def do(self, scene):
-        from core.bim_registry import get
-        first = self.after is None
-        if first:
-            self.materials_before = dict(scene.materials)
-        try:
-            super().do(scene)
-            if first:
-                self.materials_after = dict(scene.materials)
-                registry = get(scene)
-                registry.setdefault('classification_systems', {}).setdefault('omniclass', {'name': 'OmniClass'})
-                self.registry_command = SetRegistryCommand(registry)
-            scene.materials = dict(self.materials_after)
-            self.registry_command.do(scene)
-        except Exception:
-            scene.materials = dict(self.materials_before)
-            raise
-
-    def undo(self, scene):
-        super().undo(scene)
-        scene.materials = dict(self.materials_before)
-        if hasattr(self, 'registry_command'):
-            self.registry_command.undo(scene)
+    do = partialmethod(rfa_history_do)
+    undo = partialmethod(rfa_history_undo)

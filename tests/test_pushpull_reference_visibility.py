@@ -13,16 +13,10 @@ everything snaps, as it always did.
 """
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtCore import QPointF  # noqa: E402
+from ingetrazo_core import ScreenPoint  # noqa: E402
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-if QApplication.instance() is None:
-    QApplication([])
 
 from core.section import SectionPlane  # noqa: E402
 from core.style import Style  # noqa: E402
@@ -58,7 +52,7 @@ def _dragging_tool(base_face):
 def _hover_at(tool, vp, world):
     px, py = vp._world_to_pixel(world)
     return tool._infer_reference_distance(
-        SimpleNamespace(viewport=vp, screen=QPointF(px, py)))
+        SimpleNamespace(viewport=vp, screen=ScreenPoint(px, py)))
 
 
 def _scene_with_reference_vertex(vp):

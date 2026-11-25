@@ -9,16 +9,12 @@ to say it was working and no way to give up but killing the program.
 """
 from __future__ import annotations
 
-import os
 
 import numpy as np
 import pytest
 
 pytest.importorskip("manifold3d")
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtWidgets import QApplication              # noqa: E402
 
 from core import progress as P                         # noqa: E402
 from core import vista_caras as VC                      # noqa: E402
@@ -162,7 +158,7 @@ def test_cancel_on_the_bar_raises_and_puts_everything_back(monkeypatch):
     assert len(made) == 1
     assert len(made[0].values) == 4 and made[0].values == sorted(made[0].values)
     assert made[0].cancelled and not win._chrome_jobs
-    assert P._report is None and QApplication.overrideCursor() is None
+    assert P._report is None
 
 
 def _window_with_faces(host):
@@ -209,20 +205,14 @@ def test_the_bar_left_alone_writes_the_svg_as_before(native_host, tmp_path, monk
     assert "<path" in before and before == after
 
 
-def test_cancel_on_a_slow_preview_turns_the_preview_off(monkeypatch):
+def test_cancel_on_a_slow_preview_turns_the_preview_off(native_host, monkeypatch):
     import time
-    from types import SimpleNamespace
     from core import deliveries
-    from core.camera import OrbitCamera
-    from core.history import History
-    from core.scene import Scene
     from ingetrazo_render import chrome_sheet
-    from PySide6.QtCore import QTimer
+    from app_shell import modal
 
-    scene = Scene()
-    win = SimpleNamespace(viewport=SimpleNamespace(scene=scene, history=History(scene), camera=OrbitCamera()))
-    ticks = []
-    monkeypatch.setattr(QTimer, "singleShot", lambda delay, fn: ticks.append(fn))
+    win = native_host.window
+    monkeypatch.setattr(chrome_dialogs, "in_shell", lambda: True)
     clock, built = [0.], []
 
     def render(*args, **kwargs):
@@ -232,7 +222,7 @@ def test_cancel_on_a_slow_preview_turns_the_preview_off(monkeypatch):
         pytest.fail("The preview writer continued after cancellation")
     monkeypatch.setattr(P, "REPORT_EVERY", 0)
     monkeypatch.setattr(deliveries, "preview_svg", render)
-    monkeypatch.setattr(QApplication, "processEvents", lambda: win._chrome_jobs[0].cancel())
+    monkeypatch.setattr(modal, "tick", lambda: win._chrome_jobs[0].cancel())
     form = wgpu_deliveries.delivery_export_form(win, one_off=True)
     form.set("format", "svg")
     provider = chrome_sheet.current(win)
@@ -240,12 +230,16 @@ def test_cancel_on_a_slow_preview_turns_the_preview_off(monkeypatch):
     svg = provider.build(ctx).forms()[1]
     svg.receive("svg_preview", "1")
     provider.build(ctx)
-    assert len(ticks) == 1
+    assert built == []
     monkeypatch.setattr(time, "monotonic", lambda: clock[0])
-    ticks.pop()()
+    deadline = time.perf_counter() + 3.
+    while not built and time.perf_counter() < deadline:
+        native_host.timers.run_due()
+        time.sleep(.005)
     assert built == [True] and not win._chrome_jobs
     assert not svg.preview_enabled and provider.build(ctx).wire()["detail"] is None
-    assert QApplication.overrideCursor() is None and not ticks
+    native_host.timers.run_due()
+    assert built == [True]
     chrome_sheet.close(win)
 
 

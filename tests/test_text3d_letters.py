@@ -4,16 +4,12 @@
 editable afterwards (Rafael's review, 2026-09-16)."""
 from __future__ import annotations
 
-import os
 
 import pytest
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtGui import QGuiApplication
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-_app = QGuiApplication.instance() or QGuiApplication([])
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from core.group import Group, copy_group, iter_placements

@@ -11,16 +11,11 @@ Driven through the real hover path, because the state lives between hovers.
 from __future__ import annotations
 
 import math
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QPointF, Qt  # noqa: E402
+from ingetrazo_core import ScreenPoint, Input  # noqa: E402
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-if QApplication.instance() is None:
-    QApplication([])
 
 from tools.rust_tools import LineTool  # noqa: E402
 from views.document_interaction import _HoverEvent
@@ -41,7 +36,7 @@ def _vp():
 
 def _hover(vp, p):
     x, y = vp._world_to_pixel(p)
-    vp._process_hover(QPointF(x, y), Qt.NoModifier)
+    vp._process_hover(ScreenPoint(x, y), Input.NoModifier)
     return vp.last_snap
 
 
@@ -51,7 +46,7 @@ def _line_along_x(vp):
     t.on_activate(vp)
     x, y = vp._world_to_pixel(V(0, 0, 0))
     _hover(vp, V(0, 0, 0))
-    t.on_click(vp._build_ctx(_HoverEvent(QPointF(x, y), Qt.NoModifier)))
+    t.on_click(vp._build_ctx(_HoverEvent(ScreenPoint(x, y), Input.NoModifier)))
     assert _hover(vp, V(1, 0, 0)).kind == "axis"
     assert _hover(vp, V(1.4, 0, 0)).kind == "axis"
 
@@ -95,8 +90,8 @@ def test_a_move_over_a_face_lands_on_it_not_on_a_reference_in_the_air():
     vp.active_tool = t
     t.on_activate(vp)
     x, y = vp._world_to_pixel(V(0.5, 0.25, 0))
-    vp._process_hover(QPointF(x, y), Qt.NoModifier)
-    t.on_click(vp._build_ctx(_HoverEvent(QPointF(x, y), Qt.NoModifier)))
+    vp._process_hover(ScreenPoint(x, y), Input.NoModifier)
+    t.on_click(vp._build_ctx(_HoverEvent(ScreenPoint(x, y), Input.NoModifier)))
     ref = V(-2, 0, 3)
     vp.inference._acquired_point = ref
     vp.inference._encouraged = [V(ref)]
@@ -108,8 +103,7 @@ def test_a_move_over_a_face_lands_on_it_not_on_a_reference_in_the_air():
 def test_an_arrow_before_the_first_click_leaves_the_corner_to_click():
     """The arrow says which way the line runs from the corner about to be
     clicked. A corner paused on earlier must not take that corner away."""
-    from PySide6.QtCore import QEvent
-    from PySide6.QtGui import QKeyEvent
+    from ingetrazo_render import KeyEvent
 
     vp = _vp()
     vp.scene.mesh.add_edge(V(0, 0, 0), V(1, 0, 2))
@@ -119,12 +113,12 @@ def test_an_arrow_before_the_first_click_leaves_the_corner_to_click():
     t.on_activate(vp)
     assert _hover(vp, V(1, 0, 2)).kind == "endpoint"
     vp._encourage_dwelt()
-    vp.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Right, Qt.NoModifier))
+    vp.keyPressEvent(KeyEvent(True, Input.Key_Right, Input.NoModifier))
     r = _hover(vp, V(4, 3, 0))
     assert r.kind == "endpoint"
     assert (r.point - V(4, 3, 0)).length() < 1e-6
     x, y = vp._world_to_pixel(V(4, 3, 0))
-    t.on_click(vp._build_ctx(_HoverEvent(QPointF(x, y), Qt.NoModifier)))
+    t.on_click(vp._build_ctx(_HoverEvent(ScreenPoint(x, y), Input.NoModifier)))
     r = _hover(vp, V(6, 3.5, 0))               # and the arrow holds from there
     assert r.kind == "axis" and r.axis == "x"
     assert abs(r.point.y() - 3.0) < 1e-6

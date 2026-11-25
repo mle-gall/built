@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from PySide6.QtCore import QPointF, Qt
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.guide import Guide
@@ -68,8 +68,8 @@ class _Vp:
 
 
 def _ctx(vp, x, y, z=0.0, snap=None):
-    return ToolContext(viewport=vp, world=V(x, y, z), screen=QPointF(0, 0),
-                       modifiers=Qt.NoModifier, snap=snap)
+    return ToolContext(viewport=vp, world=V(x, y, z), screen=ScreenPoint(0, 0),
+                       modifiers=Input.NoModifier, snap=snap)
 
 
 def _pseudo_edge(a, b):

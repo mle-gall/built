@@ -1,12 +1,9 @@
 """Several views of one resident Metal scene (Renderer.add_target).
 
 Each view has its own surface, size, camera, style and pick IDs; the scene
-is sent once. Default pytest runs Qt offscreen and skips these: run with
-QT_QPA_PLATFORM=cocoa on macOS (no widget is shown).
+is sent once. Each view draws on a headless layer (tests/headless_gpu.py).
 """
 import importlib.util
-import os
-import sys
 
 import numpy as np
 import pytest
@@ -27,21 +24,11 @@ def _camera(shift_x=0.):
 
 @pytest.fixture
 def two():
-    if (not HAS_RENDERER or sys.platform != 'darwin'
-            or os.environ.get('QT_QPA_PLATFORM') != 'cocoa'):
-        pytest.skip('Metal checks need the release crate and an unshown Cocoa NSView')
-    from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QApplication, QWidget
-    from ingetrazo_render import Renderer
-    QApplication.instance() or QApplication([])
-    hosts = []
-    for w, h in ((64, 64), (48, 32)):
-        host = QWidget()
-        host.setAttribute(Qt.WA_DontShowOnScreen)
-        host.setAttribute(Qt.WA_NativeWindow)
-        host.resize(w, h)
-        hosts.append(host)
-    renderer = Renderer(int(hosts[0].winId()), 64, 64, 1.)
+    if not HAS_RENDERER:
+        pytest.skip('Metal checks need the release crate')
+    from ingetrazo_render import Renderer, headless_layer
+    hosts = [headless_layer(64, 64), headless_layer(48, 32)]
+    renderer = Renderer(hosts[0], 64, 64, 1., platform="layer")
     renderer.set_antialias(False)
     renderer.set_edges(False)
     renderer.set_camera(*_camera())
@@ -50,8 +37,6 @@ def two():
                        r.view(np.uint8).ravel())
     yield renderer, hosts
     del renderer
-    for host in hosts:
-        host.close()
 
 
 def _capture(renderer, w, h):
@@ -68,7 +53,7 @@ def test_a_second_view_shares_the_scene_and_keeps_its_own_camera(two):
     renderer, hosts = two
     scene_bytes = renderer.gpu_memory
     one_view = renderer.target_memory
-    second = renderer.add_target(int(hosts[1].winId()), 48, 32, 1.)
+    second = renderer.add_target(hosts[1], 48, 32, 1., platform="layer")
     assert second == 1 and renderer.target_count == 2
     # Nothing of the scene is sent again; only the view's own attachments.
     assert renderer.gpu_memory == scene_bytes
@@ -88,7 +73,7 @@ def test_a_second_view_shares_the_scene_and_keeps_its_own_camera(two):
 
 def test_each_view_has_its_own_style(two):
     renderer, hosts = two
-    second = renderer.add_target(int(hosts[1].winId()), 48, 32, 1.)
+    second = renderer.add_target(hosts[1], 48, 32, 1., platform="layer")
     renderer.bind_target(second)
     renderer.set_camera(*_camera())
     renderer.set_style(dict(face_mode='wireframe', sky=False, edges=False,
@@ -104,7 +89,7 @@ def test_each_view_has_its_own_style(two):
 
 def test_picking_reads_the_view_asked(two):
     renderer, hosts = two
-    second = renderer.add_target(int(hosts[1].winId()), 48, 32, 1.)
+    second = renderer.add_target(hosts[1], 48, 32, 1., platform="layer")
     renderer.bind_target(second)
     renderer.set_camera(*_camera(shift_x=5.))
     renderer.render(False)
@@ -116,7 +101,7 @@ def test_picking_reads_the_view_asked(two):
 
 def test_a_scene_change_reaches_every_view(two):
     renderer, hosts = two
-    second = renderer.add_target(int(hosts[1].winId()), 48, 32, 1.)
+    second = renderer.add_target(hosts[1], 48, 32, 1., platform="layer")
     renderer.bind_target(second)
     renderer.set_camera(*_camera())
     renderer.render(False)
@@ -131,7 +116,7 @@ def test_a_scene_change_reaches_every_view(two):
 
 def test_a_view_goes_and_the_first_stays(two):
     renderer, hosts = two
-    second = renderer.add_target(int(hosts[1].winId()), 48, 32, 1.)
+    second = renderer.add_target(hosts[1], 48, 32, 1., platform="layer")
     renderer.bind_target(second)
     renderer.remove_target(second)
     assert renderer.active_target == 0 and renderer.target_count == 1

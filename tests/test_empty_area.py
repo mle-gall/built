@@ -3,6 +3,7 @@
 """Start, new, open, drop and edit after closing the last native document."""
 from __future__ import annotations
 
+from ingetrazo_render import KeyEvent
 import pytest
 
 from tests.shell_isolation import native_host, restore_shell_patches  # noqa: F401
@@ -42,12 +43,11 @@ def test_plus_brings_a_project_and_its_scene_commands_back(win):
 
 
 def test_start_claims_modelling_shortcuts_until_a_document_opens(win):
-    from PySide6.QtCore import QEvent, Qt
-    from PySide6.QtGui import QKeyEvent
+    from ingetrazo_core import Input as Qt
     from ingetrazo_render import chrome_sheet
 
     win.close_document()
-    key = QKeyEvent(QEvent.KeyPress, Qt.Key_L, Qt.NoModifier, "l")
+    key = KeyEvent(True, Qt.Key_L, Qt.NoModifier, 'l')
     assert chrome_sheet.claims_key(win._host.view, key)
     wgpu_start.new_model(win, ask_units=False)
     assert not chrome_sheet.claims_key(win._host.view, key)

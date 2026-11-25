@@ -10,8 +10,8 @@ from __future__ import annotations
 import math
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMouseEvent
+from ingetrazo_core import Input
+from ingetrazo_render import MouseEvent
 from ingetrazo_core import Vec3 as V
 
 
@@ -28,19 +28,19 @@ def _box(scene, x0, y0, z0, x1, y1, z1):
 
 
 def _ev(kind, x, y, button, buttons):
-    return QMouseEvent(kind, QPointF(x, y), QPointF(x, y), button, buttons,
-                       Qt.NoModifier)
+    return MouseEvent(kind, x, y, button, buttons,
+                       Input.NoModifier)
 
 
-def _drag(vp, x0, y0, x1, y1, button=Qt.MiddleButton):
-    vp.mousePressEvent(_ev(QMouseEvent.MouseButtonPress, x0, y0, button, button))
+def _drag(vp, x0, y0, x1, y1, button=Input.MiddleButton):
+    vp.mousePressEvent(_ev("press", x0, y0, button, button))
     steps = 6
     for i in range(1, steps + 1):
         x = x0 + (x1 - x0) * i / steps
         y = y0 + (y1 - y0) * i / steps
-        vp.mouseMoveEvent(_ev(QMouseEvent.MouseMove, x, y, Qt.NoButton, button))
-    vp.mouseReleaseEvent(_ev(QMouseEvent.MouseButtonRelease, x1, y1, button,
-                             Qt.NoButton))
+        vp.mouseMoveEvent(_ev("move", x, y, Input.NoButton, button))
+    vp.mouseReleaseEvent(_ev("release", x1, y1, button,
+                             Input.NoButton))
 
 
 def _screen(vp, p: V):
@@ -74,7 +74,7 @@ def test_the_orbit_tool_drag_turns_about_the_same_pivot(native_host):
     box_corner = V(505, 495, 10)
     sx, sy = _screen(vp, box_corner)
     pivot = vp._orbit_pivot_at(sx, sy)
-    _drag(vp, sx, sy, sx - 90, sy + 40, Qt.LeftButton)
+    _drag(vp, sx, sy, sx - 90, sy + 40, Input.LeftButton)
     ax, ay = _screen(vp, pivot)
     assert abs(ax - sx) < 1.5 and abs(ay - sy) < 1.5
 

@@ -7,104 +7,42 @@ every other tap the pointer stayed a bucket. Alt is now heard at
 application level, wherever the key event lands."""
 from __future__ import annotations
 
-import os
+import pytest
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtCore import QEvent, Qt  # noqa: E402
-from PySide6.QtGui import QKeyEvent  # noqa: E402
-from PySide6.QtWidgets import QApplication, QMenuBar  # noqa: E402
-
-if QApplication.instance() is None:
-    QApplication([])
-
-import pytest  # noqa: E402
-
-from tests.controller_surface import ControllerSurface as Viewport
+from ingetrazo_core import Input
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from tools.paint import PaintTool
 
 
-@pytest.fixture(autouse=True)
-def _only_this_test_s_viewports():
-    """The Alt watcher tells every live viewport, and the first one in
-    Paint takes the tap. A MainWindow an earlier file left alive (they are
-    never destroyed, see scripts/pytest_batches.py) still in Paint took it
-    and toggled ITS eyedropper button instead: the tap test failed in a
-    batch and passed alone (Windows round 0.6.2). Each test hears only the
-    viewports it builds; the others come back after it."""
-    import weakref
-
-    from views.document_interaction import _AltWatch
-    Viewport(None)                      # the watcher exists from here on
-    watch = _AltWatch._instance
-    kept = watch._viewports
-    watch._viewports = weakref.WeakSet()
-    yield
-    for vp in kept:
-        watch._viewports.add(vp)
+@pytest.fixture
+def paint_host(native_host, monkeypatch):
+    monkeypatch.setattr(PaintTool, "sample_armed", False)
+    native_host.window._activate_tool("paint")
+    return native_host
 
 
-def _paint_viewport():
-    from tools.paint import PaintTool
-    # Windows closed by earlier tests linger in the Alt-tap watcher until
-    # collected, and one still holding Paint could take the tap.
-    import gc
-    gc.collect()
-    vp = Viewport(None)
-    vp.flash_status = lambda *a, **k: None
-    tool = PaintTool()
-    tool.icon = "paint"                  # as MainWindow tags its tools
-    vp.active_tool = tool
-    return vp
+def alt(host, pressed):
+    host.key(pressed, Input.Key_Alt, Input.AltModifier if pressed else Input.NoModifier)
 
 
-def _key(target, press: bool):
-    t = QEvent.KeyPress if press else QEvent.KeyRelease
-    mods = Qt.AltModifier if press else Qt.NoModifier
-    QApplication.sendEvent(target, QKeyEvent(t, Qt.Key_Alt, mods))
+def test_alt_taps_on_the_menu_bar_still_reach_the_viewport(paint_host):
+    paint_host.pointer("move", 10, 5)
+    vp = paint_host.window.viewport
+    alt(paint_host, True)
+    assert vp._alt_down
+    alt(paint_host, False)
+    assert not vp._alt_down
 
 
-def test_alt_taps_on_the_menu_bar_still_reach_the_viewport():
-    """The pointer follows the key even while the menu bar holds focus."""
-    vp = _paint_viewport()
-    shown = []
-    vp._apply_tool_cursor = lambda: shown.append(vp._alt_down)
-    bar = QMenuBar()                    # where the focus goes after a tap
-    _key(bar, True)
-    assert vp._alt_down is True
-    _key(bar, False)
-    assert vp._alt_down is False
+def test_a_tap_toggles_the_eyedropper_and_it_stays(paint_host):
+    for armed in (True, False):
+        alt(paint_host, True)
+        alt(paint_host, False)
+        assert PaintTool.sample_armed is armed
 
 
-def test_a_tap_toggles_the_eyedropper_and_it_stays():
-    """The current convention (Marco: «se alterna con Alt, no es que se
-    mantenga presionado»): tap = eyedropper on, it stays after the release;
-    tap again = off."""
-    from tools.paint import PaintTool
-    PaintTool.sample_armed = False
-    vp = _paint_viewport()
-    bar = QMenuBar()
-    try:
-        _key(bar, True)
-        _key(bar, False)
-        assert PaintTool.sample_armed is True      # stays after the release
-        _key(bar, True)
-        _key(bar, False)
-        assert PaintTool.sample_armed is False     # tapped again: off
-    finally:
-        PaintTool.sample_armed = False
-
-
-def test_alt_tab_is_not_a_tap():
-    """Alt+Tab all day (@pacaeiro, #26) must not arm the eyedropper."""
-    from tools.paint import PaintTool
-    PaintTool.sample_armed = False
-    vp = _paint_viewport()
-    bar = QMenuBar()
-    try:
-        _key(bar, True)
-        QApplication.sendEvent(bar, QKeyEvent(QEvent.KeyPress, Qt.Key_Tab,
-                                              Qt.AltModifier))
-        _key(bar, False)
-        assert PaintTool.sample_armed is False
-    finally:
-        PaintTool.sample_armed = False
+def test_alt_tab_is_not_a_tap(paint_host):
+    alt(paint_host, True)
+    paint_host.key(True, Input.Key_Tab, Input.AltModifier)
+    alt(paint_host, False)
+    assert not PaintTool.sample_armed

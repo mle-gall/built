@@ -8,16 +8,12 @@ eager bake gave."""
 from __future__ import annotations
 
 from tests.controller_surface import ControllerSurface
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
 
 import views.document_interaction as viewport  # noqa: E402
 from core.group import Group  # noqa: E402

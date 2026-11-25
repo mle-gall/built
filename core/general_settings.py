@@ -19,7 +19,7 @@ there and nobody loses a setting on the way.
 """
 from __future__ import annotations
 
-from core.settings import settings as QSettings
+from core.settings import settings as native_settings
 
 _GROUP = "General/"
 _OLD_GROUP = "general/"
@@ -27,7 +27,7 @@ _OLD_GROUP = "general/"
 
 def value(name: str, default=None, settings=None):
     """The saved General setting ``name``, or ``default``."""
-    st = settings if settings is not None else QSettings()
+    st = settings if settings is not None else native_settings()
     got = st.value(_GROUP + name)
     if got is None:
         got = st.value(_OLD_GROUP + name)
@@ -35,5 +35,5 @@ def value(name: str, default=None, settings=None):
 
 
 def set_value(name: str, val, settings=None) -> None:
-    st = settings if settings is not None else QSettings()
+    st = settings if settings is not None else native_settings()
     st.setValue(_GROUP + name, val)

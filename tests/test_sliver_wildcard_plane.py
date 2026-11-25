@@ -31,11 +31,7 @@ def V(x, y, z=0.0):
     return QVector3D(float(x), float(y), float(z))
 
 
-def test_qt_nulls_short_vectors_which_is_why_we_divide_by_hand():
-    """The trap itself, pinned: if Qt ever changes, this says so."""
-    from PySide6.QtGui import QVector3D as QtVector
-    assert QtVector(0.0, 0.0, 1e-4).normalized().length() == 1.0
-    assert QtVector(0.0, 0.0, 1e-5).normalized().length() == 0.0
+def test_short_native_normals_preserve_the_plane_direction():
     assert (V(0, 0, 1e-5).normalized() - V(0, 0, 1)).length() < 1e-15
 
 

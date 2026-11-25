@@ -14,7 +14,6 @@ import contextlib
 import random
 
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from core import solids
 from core.arrangement import _interior_point, _point_in_polygon
@@ -28,7 +27,6 @@ from tests.test_pushpull_ux import _StubViewport
 from tests.test_solid_tools import BLUE, RED, _box
 from tools.pushpull import PushPullTool
 
-_app = QApplication.instance() or QApplication([])
 
 T = 0.3
 

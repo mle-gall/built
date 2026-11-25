@@ -194,7 +194,7 @@ def test_square_drawn_after_circle_splits_three_areas():
 
 
 def _click(vp, tool, x, y):
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
     from tools.base import ToolContext
     tool.on_click(ToolContext(viewport=vp, world=QVector3D(x, y, 0),
                               screen=QPointF(0, 0), modifiers=Qt.NoModifier,
@@ -338,7 +338,7 @@ def test_paste_keeps_curve_identity():
     _click(vp, t, 3, 0)
     arc = next(e for e in scene.mesh.edges if e.curve is not None)
     scene.selection.update(scene.mesh.curve_edges(arc))
-    assert Viewport.copy_selection(vp)          # unbound: stub viewport
+    assert Viewport.copy_selection(vp, publish=False)
     p = PasteTool()
     p.on_activate(vp)
     _click(vp, p, 10, 0)
