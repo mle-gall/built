@@ -32,15 +32,6 @@ SKIP = {"fp", "mesh", "faces", "vkey", "flags_gen"}
 
 
 
-@pytest.fixture(autouse=True)
-def _no_drawing_cache(monkeypatch):
-    """The fork keeps bakes across sessions (views/drawing_cache.py): one
-    document opened twice here would come back from it and never bake.
-    These tests are about the bake itself."""
-    from views import drawing_cache
-    monkeypatch.setattr(drawing_cache, "store", lambda: False)
-
-
 def _plain(v):
     if isinstance(v, np.ndarray):
         return (v.dtype.str, v.shape, v.tobytes())

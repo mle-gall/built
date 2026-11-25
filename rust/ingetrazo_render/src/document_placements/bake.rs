@@ -66,17 +66,6 @@ fn instanced_eligible(v: &Obj, g: &Obj) -> PyResult<bool> {
     }
     Ok(ok)
 }
-#[pyclass]
-struct RestoreProgress {
-    callback: Py<PyAny>,
-}
-#[pymethods]
-impl RestoreProgress {
-    fn __call__(&self, py: Python, f: f64, text: &Obj) -> PyResult<()> {
-        self.callback.bind(py).call1((0.65 * f, text))?;
-        Ok(())
-    }
-}
 #[pyfunction]
 fn prepare_drawing(v: &Obj, progress: &Obj) -> PyResult<()> {
     let py = v.py();
@@ -84,32 +73,15 @@ fn prepare_drawing(v: &Obj, progress: &Obj) -> PyResult<()> {
     let m = host(py)?;
     let bake = py.import("views.array_bake")?;
     let paint = m.getattr("_paint_of")?;
-    let mut variants = Vec::new();
     let mut rows = Vec::new();
     let mut meshes = Vec::new();
     for g in groups.try_iter()? {
         let g = g?;
         let p = paint.call1((v, &g))?;
         let mesh = g.getattr("mesh")?;
-        variants.push((mesh.clone(), p.clone()));
         meshes.push(mesh);
         rows.push((g, p));
     }
-    let kw = PyDict::new(py);
-    if !progress.is_none() {
-        kw.set_item(
-            "progress",
-            Bound::new(
-                py,
-                RestoreProgress {
-                    callback: progress.clone().unbind(),
-                },
-            )?,
-        )?
-    } else {
-        kw.set_item("progress", py.None())?
-    }
-    bake.call_method("restore_cached", (v, variants), Some(&kw))?;
     let notify = |at: f64| -> PyResult<()> {
         if !progress.is_none() {
             progress.call1((at, "Preparing the drawing…"))?;

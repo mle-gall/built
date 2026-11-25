@@ -75,6 +75,7 @@ pub(super) fn install_interaction_module(module: &Bound<PyModule>) -> PyResult<(
         "extension_api" => crate::extension_api::register(module)?,
         "documents" => crate::extension_api::register_documents(module)?,
         "document_interaction" => super::interaction_host::install(module)?,
+        "array_bake" => super::array_bake::install_module(module)?,
         "wgpu_view" => super::metal_view::install_module(module)?,
         "wgpu_ui" => super::chrome_input::install_module(module)?,
         "wgpu_axes" => super::frame_scene::install_axes(module)?,

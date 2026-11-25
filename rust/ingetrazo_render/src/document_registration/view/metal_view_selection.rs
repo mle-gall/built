@@ -377,7 +377,7 @@ fn sync_selection<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     if edges_here {
         let vertices = PyList::empty(py);
-        let mut mark = |entity: &Obj<'py>, colour: (u8, u8, u8, u8)| -> PyResult<()> {
+        let mark = |entity: &Obj<'py>, colour: (u8, u8, u8, u8)| -> PyResult<()> {
             for end in ["a", "b"] {
                 vertices.append((entity.getattr(end)?.call_method0("toTuple")?, (0, 0, 1), colour))?;
             }

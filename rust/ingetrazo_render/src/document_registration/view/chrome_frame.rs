@@ -195,7 +195,7 @@ fn send_tools<'py>(a: &Args<'py>) -> Reply<'py> {
         renderer.call_method1("ui_set_tools", (groups, disabled))?;
     }
     let icons = PyList::empty(py);
-    let mut add = |key: Obj<'py>| -> PyResult<()> {
+    let add = |key: Obj<'py>| -> PyResult<()> {
         let [w, h, rgba] = icon(&key)?;
         icons.append((key, w, h, rgba))
     };
