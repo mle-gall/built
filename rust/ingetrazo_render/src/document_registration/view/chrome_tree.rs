@@ -46,7 +46,7 @@ pub(super) fn waiting<'py, T>(viewport: &Obj<'py>, body: impl FnOnce() -> PyResu
     result
 }
 
-fn kind_of<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn kind_of<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let class = a.get_item(0)?;
     let kinds = ui(py)?.getattr("KINDS")?;
@@ -235,7 +235,7 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
     // Watertight checks in Export must follow mesh edits.
     let geometric = lens.eq(2)?;
     let content = scene.getattr("content_version")?;
-    let version = if geometric { content.clone() } else { module.call_method1("_tree_version", (&win, &scene))? };
+    let version = if geometric { content.clone() } else { direct(py, tree_version, (&win, &scene))? };
     let kinds = outliner_kinds(&win)?;
     let mut kind_ids = Vec::new();
     for kind in kinds.try_iter()? {
@@ -253,7 +253,7 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
             tuple_of(py, sorted(py, pages.call_method0("items")?)?)?,
             flt.clone(),
             if filtering { content.clone() } else { none(py) },
-            module.call_method1("_sel_key", (scene.getattr("selection")?,))?,
+            direct(py, super::chrome_frame::sel_key, (scene.getattr("selection")?,))?,
             lens.clone(),
             view.getattr_opt("_ui_layer_rev")?.unwrap_or(0.into_bound_py_any(py)?),
             scene.getattr("show_section_planes")?,
@@ -431,7 +431,7 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(none(py))
 }
 
-fn tree_version<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn tree_version<'py>(a: &Args<'py>) -> Reply<'py> {
     let (win, scene) = (a.get_item(0)?, a.get_item(1)?);
     let feed = attr(&attr(&win.getattr("viewport")?, "history")?, "feed")?;
     let content = scene.getattr("content_version")?;
@@ -539,23 +539,6 @@ fn problem_rules<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(rules.into_any())
 }
 
-/// A texture's thumbnail as a chrome icon (loaded once).
-fn tex_icon<'py>(a: &Args<'py>) -> Reply<'py> {
-    let py = a.py();
-    let (view, path) = (a.get_item(0)?, a.get_item(1)?);
-    let key = format!("tex:{}", path.str()?.extract::<String>()?);
-    let sent = view.getattr("__dict__")?.call_method1("setdefault", ("_ui_tex_icons", PySet::empty(py)?))?;
-    if !sent.contains(&key)? {
-        sent.call_method1("add", (&key,))?;
-        let pixels = 48;
-        let rgba = render(py)?.call_method1("swatch_pixels", (&path, pixels, false))?;
-        if !rgba.is_none() {
-            view.getattr("renderer")?.call_method1("ui_set_icons", (PyList::new(py, [(&key, pixels, pixels, rgba)])?,))?;
-        }
-    }
-    key.into_bound_py_any(py)
-}
-
 fn hex<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let rgb = a.get_item(0)?;
@@ -587,37 +570,6 @@ fn active_tool_id<'py>(a: &Args<'py>) -> Reply<'py> {
         }
     }
     "".into_bound_py_any(py)
-}
-
-/// With Paint active: the model's named materials as a strip.
-fn palette<'py>(a: &Args<'py>) -> Reply<'py> {
-    let py = a.py();
-    let (view, win, active) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?);
-    let module = ui(py)?;
-    let items = PyList::empty(py);
-    if active.eq("paint")? {
-        let scene = win.getattr("viewport")?.getattr("scene")?;
-        let current = module.call_method0("_current_material_name")?;
-        let materials = attr(&scene, "materials")?;
-        if materials.is_truthy()? {
-            for entry in materials.call_method0("items")?.try_iter()?.take(32) {
-                let [name, material] = unpack::<2>(&entry?)?;
-                let texture = attr(&material, "texture")?;
-                let icon = if texture.is_truthy()? && texture.call_method1("get", ("path",))?.is_truthy()? {
-                    module.call_method1("_tex_icon", (&view, texture.get_item("path")?))?
-                } else {
-                    "".into_bound_py_any(py)?
-                };
-                let key = format!("m:{}", name.str()?.extract::<String>()?);
-                items.append((key, &name, module.call_method1("_hex", (material.getattr("color")?,))?, icon, name.eq(&current)?))?;
-            }
-        }
-    }
-    if items.as_any().ne(attr(&view, "_ui_palette")?)? {
-        view.setattr("_ui_palette", &items)?;
-        view.getattr("renderer")?.call_method1("ui_set_palette", (&items,))?;
-    }
-    Ok(none(py))
 }
 
 fn components_dir<'py>(a: &Args<'py>) -> Reply<'py> {
@@ -681,7 +633,7 @@ fn library_pick<'py>(a: &Args<'py>) -> Reply<'py> {
             }
         }
         "cm" => {
-            module.call_method1("_component_verb", (&win, &view, "cplace", &key))?;
+            direct(py, component_verb, (&win, &view, "cplace", &key))?;
         }
         _ => {
             module.call_method1("_paint_with", (&win, &key))?;
@@ -690,7 +642,7 @@ fn library_pick<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(none(py))
 }
 
-fn component_verb<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn component_verb<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (win, view, verb, key) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?, a.get_item(3)?);
     let components = match attr(&view, "_ui_comp_cache")? {
@@ -797,7 +749,7 @@ fn measure<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(none(py))
 }
 
-fn qty_rows<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn qty_rows<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let units = ui(py)?.getattr("UNIT_TEXT")?;
     let format = builtins(py)?.getattr("format")?;
@@ -810,7 +762,7 @@ fn qty_rows<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(rows.into_any())
 }
 
-fn export_csv<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn export_csv<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let win = a.get_item(0)?;
     let dialog = render(py)?.getattr("shell_files")?.getattr("ShellFileDialog")?;
@@ -831,7 +783,7 @@ fn export_csv<'py>(a: &Args<'py>) -> Reply<'py> {
 
 /// The tag (layer) a node's recipe names: by key, else by label, else by
 /// the last part of a folder path.
-fn layer<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn layer<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (scene, tag) = (a.get_item(0)?, a.get_item(1)?);
     if !tag.is_truthy()? {
@@ -845,7 +797,7 @@ fn layer<'py>(a: &Args<'py>) -> Reply<'py> {
     }
 }
 
-fn tree_groups<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn tree_groups<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let out = PyList::empty(py);
     let data = attr(&a.get_item(0)?, "_ui_tree")?;
@@ -863,7 +815,7 @@ fn tree_groups<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(out.into_any())
 }
 
-fn group_by_uid<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn group_by_uid<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (win, uid) = (a.get_item(0)?, a.get_item(1)?);
     let scene = win.getattr("viewport")?.getattr("scene")?;
@@ -899,30 +851,20 @@ fn select<'py>(a: &Args<'py>) -> Reply<'py> {
 
 #[rustfmt::skip]
 pub(super) const FUNCTIONS: &[Method] = &[
-    ("kind_of", Mode::Function, kind_of, &["ifc_class"], "", ""),
     ("_tree_model", Mode::Function, tree_model, &["view", "scene", "cv", "readers"], "", ""),
     ("prepare_tree_model", Mode::Function, prepare_tree_model, &["scene"], "", ""),
     ("open_line_type", Mode::Function, open_line_type, &["win", "name", "tags"], "", ""),
     ("_sync_project_rows", Mode::Function, sync_project_rows, &["view", "win"], "", ""),
     ("_tree", Mode::Function, tree, &["view", "win", "*", "discover=False"], "", ""),
-    ("_tree_version", Mode::Function, tree_version, &["win", "scene"], "", ""),
     ("_problem_rules", Mode::Function, problem_rules, &["scene", "registry", "nodes", "recipes", "unfiled", "profile=None"], "", ""),
-    ("_tex_icon", Mode::Function, tex_icon, &["view", "path"], "", ""),
     ("_hex", Mode::Function, hex, &["rgb"], "", ""),
     ("_current_material_name", Mode::Function, current_material_name, &[], "", ""),
     ("_active_tool_id", Mode::Function, active_tool_id, &["win"], "", ""),
-    ("_palette", Mode::Function, palette, &["view", "win", "active"], "", ""),
     ("_components_dir", Mode::Function, components_dir, &[], "", ""),
     ("_starter_components", Mode::Function, starter_components, &[], "", ""),
     ("_components_in_model", Mode::Function, components_in_model, &["view", "win"], "", ""),
     ("_library_pick", Mode::Function, library_pick, &["win", "view", "key"], "", ""),
-    ("_component_verb", Mode::Function, component_verb, &["win", "view", "verb", "key"], "", ""),
     ("_paint_with", Mode::Function, paint_with, &["win", "key"], "", ""),
     ("_measure", Mode::Function, measure, &["view", "win", "auto=False"], "", ""),
-    ("_qty_rows", Mode::Function, qty_rows, &["per_unit"], "", ""),
-    ("_export_csv", Mode::Function, export_csv, &["win"], "", ""),
-    ("_layer", Mode::Function, layer, &["scene", "tag"], "", ""),
-    ("_tree_groups", Mode::Function, tree_groups, &["view", "key"], "", ""),
-    ("_group_by_uid", Mode::Function, group_by_uid, &["win", "uid"], "", ""),
     ("_select", Mode::Function, select, &["win", "groups"], "", ""),
 ];

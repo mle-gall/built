@@ -73,7 +73,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     let scene = win.getattr("viewport")?.getattr("scene")?;
     let state = view.getattr("__dict__")?;
     let focus = attr(&view, "_ui_insp_node")?;
-    let sel_sig = module.call_method1("_sel_key", (scene.getattr("selection")?,))?;
+    let sel_sig = direct(py, super::chrome_frame::sel_key, (scene.getattr("selection")?,))?;
     let node_focus = if focus.is_truthy()? && focus.get_item(1)?.eq(&sel_sig)? { focus.get_item(0)? } else { none(py) };
     let filename = text_or(attr(&win, "_current_path")?, "")?;
     let tool = module.call_method1("_active_tool_id", (&win,))?;
@@ -186,14 +186,14 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
         return Ok(none(py));
     }
     let edit = |key: String, value: Obj<'py>| module.call_method1("_edit", (key, value));
-    let qty_rows = |per_unit: Obj<'py>| module.call_method1("_qty_rows", (per_unit,));
+    let qty_rows = |per_unit: Obj<'py>| direct(py, super::chrome_tree::qty_rows, (per_unit,));
     if !node_focus.is_none() && nodes.contains(&node_focus)? {
         let node = nodes.get_item(&node_focus)?;
         let recipe = structure.call_method1("resolve", (&registry, &node_focus))?;
         let own_recipe = node.call_method1("get", ("recipe", PyDict::new(py)))?;
-        let members = module.call_method1("_tree_groups", (&view, &node_focus))?;
+        let members = direct(py, super::chrome_tree::tree_groups, (&view, &node_focus))?;
         let missing = missing_status(py, &members)?;
-        let kind = if node.contains("source")? { "Reference".into_bound_py_any(py)? } else { module.call_method1("kind_of", (get(&recipe, "class")?,))? };
+        let kind = if node.contains("source")? { "Reference".into_bound_py_any(py)? } else { direct(py, super::chrome_tree::kind_of, (get(&recipe, "class")?,))? };
         let rows = empty(py);
         rows.append(("Name", edit(format!("nodename:{focus_name}"), node.get_item("name")?)?))?;
         rows.append(("Kind", kind))?;
@@ -298,7 +298,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
         } else if !record.is_truthy()? {
             ("Record", "Comes with a kind".to_owned())
         } else {
-            ("Status", text_or(module.call_method1("_status_text", (&record,))?, "Missing")?)
+            ("Status", text_or(direct(py, status_text, (&record,))?, "Missing")?)
         };
         let sections = empty(py);
         sections.append(("Item", rows))?;
@@ -343,7 +343,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
             }
         }
         if link.is_truthy()? {
-            let state = module.call_method1("_link_state", (&scene, &link))?;
+            let state = direct(py, link_state, (&scene, &link))?;
             let nested = link.call_method1("get", ("include_nested", true))?.is_truthy()?;
             let source = text(&link.call_method1("get", ("path", ""))?)?;
             let rows = empty(py);
@@ -454,7 +454,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
             break;
         }
     }
-    let shape = if groups.is_empty() { module.call_method1("_curve_of", (&scene, &sel))? } else { none(py) };
+    let shape = if groups.is_empty() { direct(py, curve_of, (&scene, &sel))? } else { none(py) };
     if !shape.is_none() {
         sections.insert(0, glue.call_method1("inspector_curve", (&scene, shape))?)?;
     } else if others != 0 {
@@ -609,7 +609,7 @@ fn linked_inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     } else if kind == "tagfolder" {
         "Tag folder".into_bound_py_any(py)?
     } else if class.is_truthy()? || !children.is_truthy()? {
-        module.call_method1("kind_of", (&class,))?
+        direct(py, super::chrome_tree::kind_of, (&class,))?
     } else {
         "Group of nodes".into_bound_py_any(py)?
     };
@@ -633,7 +633,7 @@ fn linked_inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     })
 }
 
-fn link_state<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn link_state<'py>(a: &Args<'py>) -> Reply<'py> {
     a.py().import("core.links")?.call_method1("link_state", (a.get_item(0)?, a.get_item(1)?.get_item("path")?))
 }
 
@@ -793,7 +793,7 @@ fn link_action<'py>(a: &Args<'py>) -> Reply<'py> {
 
 /// One curve selected (all its edges, one curve id) that reads back as a
 /// regular circle, arc or polygon; else None.
-fn curve_of<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn curve_of<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (scene, sel) = (a.get_item(0)?, a.get_item(1)?);
     if !sel.is_truthy()? || sel.len()? > 4096 {
@@ -812,7 +812,7 @@ fn curve_of<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(if !shape.is_none() && shape.getattr("segments")?.eq(sel.len()?)? { shape } else { none(py) })
 }
 
-fn status_text<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn status_text<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     for entry in or_dict(get(&a.get_item(0)?, "psets")?)?.call_method0("items")?.try_iter()? {
         let [name, props] = unpack::<2>(&entry?)?;
@@ -831,7 +831,7 @@ fn status_text<'py>(a: &Args<'py>) -> Reply<'py> {
 
 /// Pset_<Class>Common.Status on every selected item that has a record: one
 /// undo step.
-fn set_status<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn set_status<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (win, groups, value) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?);
     let history = py.import("core.history")?;
@@ -917,11 +917,7 @@ fn after_frame<'py>(a: &Args<'py>) -> Reply<'py> {
 pub(super) const FUNCTIONS: &[Method] = &[
     ("_inspector", Mode::Function, inspector, &["view", "win"], "", ""),
     ("_linked_inspector", Mode::Function, linked_inspector, &["view", "win", "data", "key"], "", ""),
-    ("_link_state", Mode::Function, link_state, &["scene", "link"], "", ""),
     ("_link_action", Mode::Function, link_action, &["win", "view", "g", "key"], "", ""),
-    ("_curve_of", Mode::Function, curve_of, &["scene", "sel"], "", ""),
-    ("_status_text", Mode::Function, status_text, &["rec"], "", ""),
-    ("_set_status", Mode::Function, set_status, &["win", "groups", "value"], "", ""),
     ("_file_to", Mode::Function, file_to, &["win", "n"], "", ""),
     ("after_frame", Mode::Function, after_frame, &["view"], "", ""),
 ];
