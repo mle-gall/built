@@ -1055,6 +1055,45 @@ fn box_corner(lo: [f64; 3], hi: [f64; 3], i: usize) -> [f64; 3] {
      if i & 4 != 0 { hi[2] } else { lo[2] }]
 }
 
+/// Homogeneous clip planes of the cursor's pixel square. A placement
+/// straddling the eye plane has an unbounded projected rectangle, but can
+/// still lie entirely to one side of this square (often true in large scenes).
+pub struct CursorPlanes([([f64; 4], [f64; 4]); 4]);
+
+impl CursorPlanes {
+    pub fn new(m: &[f64; 16], width: f64, height: f64, x: f64, y: f64, radius: f64) -> Option<Self> {
+        if !(width > 0.0 && height > 0.0 && radius.is_finite()) { return None; }
+        // Widen by the same two pixels as the distance bound.
+        let r = radius + 2.0;
+        let left = 2.0 * (x - r) / width - 1.0;
+        let right = 2.0 * (x + r) / width - 1.0;
+        let bottom = 1.0 - 2.0 * (y + r) / height;
+        let top = 1.0 - 2.0 * (y - r) / height;
+        // Keep a per-coefficient roundoff allowance from the original terms,
+        // even when nearly equal clip and w coefficients cancel.
+        let plane = |axis: usize, sign: f64, bound: f64| {
+            let coeff = std::array::from_fn(|k| sign * (m[4*k + axis] - bound * m[4*k + 3]));
+            let scale = std::array::from_fn(|k| m[4*k + axis].abs() + (bound * m[4*k + 3]).abs());
+            (coeff, scale)
+        };
+        Some(Self([plane(0, 1., left), plane(0, -1., right),
+                   plane(1, 1., bottom), plane(1, -1., top)]))
+    }
+
+    pub fn excludes(&self, p: &Placement) -> bool {
+        self.0.iter().any(|(a, error)| {
+            let mut upper = a[3];
+            let mut scale = error[3];
+            for k in 0..3 {
+                let term = a[k] * if a[k] < 0.0 { p.lo[k] } else { p.hi[k] };
+                upper += term;
+                scale += error[k] * p.lo[k].abs().max(p.hi[k].abs());
+            }
+            upper < -(1.0 + scale) * 1e-10
+        })
+    }
+}
+
 impl Placement {
     /// ``rect_gap`` of its world box: no edge of it lies nearer the pixel.
     pub fn screen_gap(&self, mvp: &[f64; 16], w: f64, h: f64, px: f64, py: f64) -> f64 {

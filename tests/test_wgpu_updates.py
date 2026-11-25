@@ -1012,3 +1012,21 @@ def test_retyped_line_updates_resident_face_split():
     check(1)
     assert history.undo()
     check(1)
+
+
+def test_incremental_edge_distance_ties_use_row_then_edge():
+    from views.wgpu_inference import prepare
+    scene, updates = fixture_scene()
+    scene.groups.append(Group(scene.groups[0].mesh))
+    packed = pack_scene(scene)
+    index = prepare(packed)
+    # An edit to a third placement still puts a two-row query in incremental
+    # mode. The untouched BVH orders ties by the supplied candidate order.
+    index.update([2], packed)
+    for edited in ([], [0]):
+        index.update(edited, packed)
+        rows, edges, _, _, distances = index.edges_near(
+            [1, 0], QMatrix4x4().data(), 100., 100., 50., 50., 300., 32)
+        ranked = list(zip(distances.tolist(), rows.tolist(), edges.tolist()))
+        assert set(rows) == {0, 1}
+        assert ranked == sorted(ranked)
