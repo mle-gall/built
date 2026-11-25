@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Align CAD profiles and build their side polygons in arc-length order.
 use crate::math::{xyz, Vec3};
+mod build;
+mod selection;
 use glam::DVec3;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
@@ -197,6 +199,9 @@ fn strips<'py>(
     Ok(out)
 }
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(selection::profiles_from_selection, m)?)?;
+    m.add_function(wrap_pyfunction!(build::bridge, m)?)?;
+    m.add_function(wrap_pyfunction!(build::follow_neighbours, m)?)?;
     m.add_function(wrap_pyfunction!(bridge_pairs, m)?)?;
     m.add_function(wrap_pyfunction!(bridge_plan, m)?)?;
     m.add_function(wrap_pyfunction!(bridge_centre, m)?)?;

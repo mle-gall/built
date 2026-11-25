@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Store pieces as lazy key sequences. Row interning follows source row order
 //! before face-specific overrides, preserving the archive's table order.
+use super::provenance::{self, CopiedKeys, PieceElements};
 use pyo3::{
     prelude::*,
     types::{PyDict, PyList},
@@ -27,14 +28,13 @@ fn mesh_parts<'py>(mesh: &Obj<'py>, solid: bool) -> PyResult<Option<Bound<'py, P
         snap.call_method0("connected_parts")?
     };
     let out = PyList::empty(py);
-    let views = module(py, "core.store_parts")?.getattr("Views")?;
     let faces = facade.getattr("FaceView")?;
     let edges = facade.getattr("EdgeView")?;
     for pair in groups.try_iter()? {
         let pair = pair?;
         out.append((
-            views.call1((mesh, pair.get_item(0)?, &faces))?,
-            views.call1((mesh, pair.get_item(1)?, &edges))?,
+            Py::new(py, PieceElements::new(mesh, pair.get_item(0)?, &faces))?,
+            Py::new(py, PieceElements::new(mesh, pair.get_item(1)?, &edges))?,
         ))?;
     }
     Ok(Some(out))
@@ -43,22 +43,21 @@ struct Column<'py> {
     mesh: Option<Obj<'py>>,
     keys: Vec<u128>,
 }
-fn column<'py>(
-    elements: &Obj<'py>,
-    class: &Obj<'py>,
-    views: &Obj<'py>,
-) -> PyResult<Option<Column<'py>>> {
+fn column<'py>(elements: &Obj<'py>, class: &Obj<'py>) -> PyResult<Option<Column<'py>>> {
     if elements.is_empty()? {
         return Ok(Some(Column {
             mesh: None,
             keys: vec![],
         }));
     }
-    if elements.is_instance(views)? && elements.getattr("_cls")?.is(class) {
-        return Ok(Some(Column {
-            mesh: Some(elements.getattr("_m")?),
-            keys: elements.getattr("_keys")?.extract()?,
-        }));
+    if let Ok(views) = elements.cast::<PieceElements>() {
+        let view = views.borrow();
+        if view.class.bind(elements.py()).is(class) {
+            return Ok(Some(Column {
+                mesh: Some(view.mesh.bind(elements.py()).clone()),
+                keys: view.keys.bind(elements.py()).extract()?,
+            }));
+        }
     }
     let mut result = Column {
         mesh: None,
@@ -82,12 +81,10 @@ fn column<'py>(
 fn copy_mesh_part<'py>(faces: &Obj<'py>, edges: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
     let py = faces.py();
     let model = module(py, "core.store_mesh")?;
-    let pieces = module(py, "core.store_parts")?;
-    let views = pieces.getattr("Views")?;
-    let Some(fs) = column(faces, &model.getattr("FaceView")?, &views)? else {
+    let Some(fs) = column(faces, &model.getattr("FaceView")?)? else {
         return Ok(None);
     };
-    let Some(es) = column(edges, &model.getattr("EdgeView")?, &views)? else {
+    let Some(es) = column(edges, &model.getattr("EdgeView")?)? else {
         return Ok(None);
     };
     if let (Some(a), Some(b)) = (&fs.mesh, &es.mesh) {
@@ -154,13 +151,7 @@ fn copy_mesh_part<'py>(faces: &Obj<'py>, edges: &Obj<'py>) -> PyResult<Option<Ob
     new.call_method0("resplit_curves")?;
     let cols = PyDict::new(py);
     cols.set_item("face", (fs.keys, store.call_method1("keys", ("face",))?))?;
-    pieces.getattr("_ORIGINS")?.set_item(
-        &new,
-        (
-            module(py, "weakref")?.call_method1("ref", (mesh,))?,
-            pieces.call_method1("CopiedKeys", (cols,))?,
-        ),
-    )?;
+    provenance::remember(&new, &mesh, CopiedKeys::new(cols))?;
     Ok(Some(new))
 }
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

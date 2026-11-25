@@ -5,6 +5,7 @@ pub(crate) mod block;
 mod deferred;
 mod edits;
 mod pieces;
+pub(crate) mod provenance;
 mod paint_classes;
 mod geometry;
 mod incidence;
@@ -129,6 +130,7 @@ pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     s.add_function(wrap_pyfunction!(vertices_in_cells, &s)?)?;
     s.add_function(wrap_pyfunction!(cells_of, &s)?)?;
     s.add_function(wrap_pyfunction!(paint_classes::paint_classes, &s)?)?;
+    provenance::register(&s)?;
     pieces::register(&s)?;
     edits::register(&s)?;
     block::register(&s)?;

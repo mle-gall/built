@@ -5,6 +5,8 @@ use pyo3::{
     prelude::*,
     types::{PyList, PyTuple},
 };
+mod build;
+mod mount;
 use std::collections::HashSet;
 type Obj<'py> = Bound<'py, PyAny>;
 #[pyfunction]
@@ -87,7 +89,7 @@ fn tree_subtree<'py>(children: &Obj<'py>, key: Obj<'py>) -> PyResult<Vec<Obj<'py
     Ok(out)
 }
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(link_placements, m)?)?;
+    m.add_function(wrap_pyfunction!(build::build_project_tree, m)?)?;
     m.add_function(wrap_pyfunction!(tree_order, m)?)?;
     m.add_function(wrap_pyfunction!(tree_subtree, m)?)?;
     Ok(())

@@ -160,7 +160,6 @@ pub(super) fn paste<'py>(
         )?;
     }
     cols.set_item("face", (keys, made.get_item(0)?))?;
-    let copies =
-        crate::model::module(py, "core.store_parts")?.call_method1("CopiedKeys", (cols,))?;
+    let copies = Py::new(py,crate::kernel::store_views::provenance::CopiedKeys::new(cols))?.into_bound(py).into_any();
     Ok((made.get_item(0)?.extract()?, copies))
 }
