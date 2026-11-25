@@ -191,6 +191,11 @@ fn py_norm(path: &Obj<'_>) -> PyResult<String> {
 
 // ---- stable uids --------------------------------------------------------------------
 
+/// Lower-case hex SHA-1 of `data` (`hashlib.sha1(data).hexdigest()`).
+pub(crate) fn sha1_hex(data: &[u8]) -> String {
+    sha1(data).iter().map(|b| format!("{b:02x}")).collect()
+}
+
 fn sha1(data: &[u8]) -> [u8; 20] {
     let mut h: [u32; 5] = [0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0];
     let mut msg = data.to_vec();

@@ -38,6 +38,7 @@ pub mod tag_styles;
 pub mod texture_maths;
 pub mod units_format;
 pub(crate) mod units_api;
+pub(crate) mod texture_api;
 
 /// A module already imported, from `sys.modules`: `py.import` runs the
 /// import hooks every time (over a microsecond under PySide's), and these
