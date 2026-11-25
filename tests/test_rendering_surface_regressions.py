@@ -8,25 +8,33 @@ from ingetrazo_core import Vec3 as V, Matrix4 as QMatrix4x4
 from core.mesh import Mesh
 from core.group import Group, transformed_mesh
 from formats.meshexport import SmoothNormals
-from tests.test_viewport_smooth_shading import _cylinder, _stub
-from core.scene import Scene
+from tests.controller_surface import ControllerSurface
+
+
+def _tube(split_panel=False):
+    mesh = Mesh()
+    count = 12
+    bottom = [V(math.cos(i * math.tau / count), math.sin(i * math.tau / count), 0)
+              for i in range(count)]
+    top = [p + V(0, 0, 2) for p in bottom]
+    sides = []
+    for i in range(count):
+        j = (i + 1) % count
+        if split_panel and i == 0:
+            sides.append(mesh.add_face([bottom[i], bottom[j], top[j]]))
+            sides.append(mesh.add_face([bottom[i], top[j], top[i]]))
+        else:
+            sides.append(mesh.add_face([bottom[i], bottom[j], top[j], top[i]]))
+    if not split_panel:
+        mesh.add_face(list(reversed(bottom)))
+        mesh.add_face(top)
+    for edge in mesh.edges:
+        edge.soft = len(edge.faces) == 2 and all(face in sides for face in edge.faces)
+    return mesh
 
 
 def test_splitting_one_tube_panel_does_not_move_its_corner_normals():
-    m = Mesh()
-    n = 12
-    ring = [V(math.cos(i * 2 * math.pi / n), math.sin(i * 2 * math.pi / n), 0)
-            for i in range(n)]
-    top = [p + V(0, 0, 2) for p in ring]
-    for i in range(n):
-        j = (i + 1) % n
-        if i == 0:
-            m.add_face([ring[i], ring[j], top[j]])
-            m.add_face([ring[i], top[j], top[i]])
-        else:
-            m.add_face([ring[i], ring[j], top[j], top[i]])
-    for e in m.edges:
-        e.soft = len(e.faces) == 2
+    m = _tube(split_panel=True)
     smooth = SmoothNormals()
     for f in m.faces:
         for pos, normal in smooth.corners(f).items():
@@ -34,8 +42,10 @@ def test_splitting_one_tube_panel_does_not_move_its_corner_normals():
 
 
 def test_rotating_smooth_cpu_chunk_matches_baking_world_geometry():
-    vp = _stub(Scene())
-    mesh = _cylinder(Mesh())
+    vp = ControllerSurface()
+    vp._LIGHT = V(1., .3, 0.).normalized()
+    vp._chunk_cache_load = vp._chunk_cache_store = None
+    mesh = _tube()
     xf = QMatrix4x4()
     xf.rotate(43, 1, 0, 0)
     instance = Group(mesh, 'instance')
@@ -80,7 +90,7 @@ def test_thin_plate_reverse_material_does_not_show_through(viewport):
 
 def test_smooth_gpu_cylinder_is_invariant_under_one_panel_rotation(viewport):
     vp = viewport
-    mesh = _cylinder(Mesh())
+    mesh = _tube()
     group = Group(mesh, 'tube')
     group.xform = QMatrix4x4()
     vp.scene.groups.append(group)
