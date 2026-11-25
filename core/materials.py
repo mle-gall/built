@@ -57,8 +57,8 @@ class Material(_dm.NATIVE.MaterialData):
     #: 0–1 translucency, or ``None`` for opaque (the attrs convention:
     #: the key is simply absent on opaque faces).
     opacity: Optional[float] = None
-    #: How the surface answers light in a render (core.finish): one of
-    #: ``core.finish.FINISHES``, or ``None`` = guessed from the name.
+    #: How the surface answers light in a render (matte, satin, gloss, metal, glass or water).
+    #: With no choice the exporter guesses from the name.
     finish: Optional[str] = None
 
     #: Maps share the base projection. Without a base image, use a 1 m planar tile.

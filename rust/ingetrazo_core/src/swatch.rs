@@ -129,7 +129,7 @@ pub fn edit_swatch(
     if field == "finish" {
         let finish = if raw == "auto" {
             None
-        } else if py.import("core.finish")?.getattr("FINISHES")?.contains(raw)? {
+        } else if crate::material_finish::lookup(raw).is_some() {
             Some(raw)
         } else {
             return Err(PyValueError::new_err("Unknown render finish"));

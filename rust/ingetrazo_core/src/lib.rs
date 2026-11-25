@@ -17,6 +17,7 @@ mod screen;
 mod texture_position;
 mod navigation;
 mod recents;
+mod material_finish;
 mod builtproject;
 mod delivery_form;
 mod appimage;
@@ -296,6 +297,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(push_command::outline_curve_runs, m)?)?;
     navigation::register(m)?;
     recents::register(m)?;
+    m.add_function(wrap_pyfunction!(material_finish::guess_finish, m)?)?;
+    m.add_function(wrap_pyfunction!(material_finish::resolve_finish, m)?)?;
     delivery_form::register(m)?;
     m.add_class::<math::Vec3>()?;
     m.add_class::<texture_position::TextureMap>()?;

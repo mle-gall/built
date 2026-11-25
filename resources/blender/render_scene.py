@@ -104,7 +104,7 @@ def _ripples(mat, bsdf, scale=6.0, strength=0.12):
 
 
 def apply_finishes():
-    """Turn IngeTrazo's finish (glTF extras, core.finish) into a real
+    """Turn IngeTrazo's finish (glTF extras) into a real
     material: the importer keeps extras as custom properties."""
     counts = {}
     for mat in bpy.data.materials:

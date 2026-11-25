@@ -217,23 +217,17 @@ impl<'py> Writer<'py> {
                 }
             }
         } else if finish.is_truthy()? {
-            let props = py
-                .import("core.finish")?
-                .getattr("PBR")?
-                .get_item(&finish)?;
-            mr.set_item("roughnessFactor", props.get_item(0)?)?;
-            mr.set_item("metallicFactor", props.get_item(1)?)?;
+            let id: String = finish.extract()?;
+            let [roughness, metallic, transmission, ior] = crate::material_finish::lookup(&id)
+                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(id))?.pbr;
+            mr.set_item("roughnessFactor", roughness)?;
+            mr.set_item("metallicFactor", metallic)?;
             mat.set_item("extras", record!(py;"ingetrazo_finish"=>finish))?;
             let ext = PyDict::new(py);
-            let trans = props.get_item(2)?;
-            if trans.is_truthy()? {
-                ext.set_item(
-                    "KHR_materials_transmission",
-                    record!(py;"transmissionFactor"=>trans),
-                )?
+            if transmission != 0.0 {
+                ext.set_item("KHR_materials_transmission", record!(py;"transmissionFactor"=>transmission))?;
             }
-            let ior = props.get_item(3)?;
-            if !ior.eq(1.5)? {
+            if ior != 1.5 {
                 ext.set_item("KHR_materials_ior", record!(py;"ior"=>ior))?;
             }
             if !ext.is_empty() {
