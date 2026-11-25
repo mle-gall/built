@@ -14,7 +14,6 @@ Regenerate only on purpose, against the reference implementation:
 ``python tests/test_placement_walks_parity.py --write``."""
 from __future__ import annotations
 
-import ingetrazo_core
 import gzip
 import json
 import random
@@ -30,7 +29,7 @@ def _walks():
         return (N.group_iter_placements, N.group_iter_painted_placements,
                 N.group_visible_placements, N.group_model_placements)
     from core import group as G     # the reference, before the move
-    return G.iter_placements, ingetrazo_core.group_iter_painted_placements, ingetrazo_core.group_visible_placements, ingetrazo_core.group_model_placements
+    return G.iter_placements, G.iter_painted_placements, G.visible_placements, G.model_placements
 
 
 def _scene(rng):
