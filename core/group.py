@@ -483,76 +483,121 @@ def _ring_coordinates(face):
 
 def _merged_placements(group, placements=None) -> Mesh:
     """Every placement of ``group`` welded into ONE mesh, in a single
-    vectorized pass.
+    pass over the stores' arrays (:func:`_store_built`): each placement's
+    positions mapped as one array, the faces' attributes carried with
+    their texture maps re-fitted for the placement, the whole component
+    welded once, as the ``.igz`` loader builds a mesh."""
+    parts = list(iter_placements(group) if placements is None else placements)
+    return _store_built(parts, uv="fitted")
 
-    Folding the children by copying each subtree and appending it face by
-    face cost 20 s on the hedge against 4.5 s for the old single
-    ``transformed_mesh`` — the per-entity walk this codebase already learned
-    to avoid. Here each placement's corners are transformed as one array and
-    the whole component welds once, the same recipe ``transformed_mesh`` and
-    the ``.igz`` loader use."""
+
+def _store_built(parts, *, uv) -> Mesh:
+    """A new store-backed mesh holding the geometry of every
+    ``(mesh, matrix)`` of ``parts`` (``matrix`` None: as it is), built from
+    the stores' arrays by ``MeshStore.from_block`` (corners welded as the
+    loader welds them): each face's rings in the order that keeps its
+    front the front (reversed through a mirror), its attributes copied,
+    each edge's soft flag and curve (what the vectorized copy always
+    carried); the texture maps (``uvw``) re-fitted for the matrix once per
+    attribute row. ``uv``: ``"fitted"`` re-fits only the faces that have a
+    map; ``"all"`` also pins the planar projection a textured face without
+    one is showing (:func:`_remap_uvws`), face by face."""
     import numpy as np
-    new = Mesh()
-    edge_parts: list = []
-    face_parts: list = []
-    edge_flags: list = []
-    ring_sizes: list = []
-    ring_counts: list = []
-    attrs_list: list = []
-    for g, m in (iter_placements(group) if placements is None
-                 else placements):
-        src = g.mesh
-        mirror = _is_mirror(m)
-        epts: list = []
-        fpts: list = []
-        for e in src.edges:
-            epts.append(e.v0.position_tuple())
-            epts.append(e.v1.position_tuple())
-            edge_flags.append((e.soft, e.curve, None))
-        for f in src.faces:
-            rings = _ring_coordinates(f)
-            ring_counts.append(len(rings))
-            for ring in rings:
-                ring_sizes.append(len(ring))
-                fpts.extend(_ring(ring, mirror))
-            # The texture's world->UV map travels with the placement, so a
-            # nested leaf keeps its wood grain instead of inheriting the
-            # parent's frame.
-            attrs_list.append(transformed_attrs(f.attrs, m)
-                              if (f.attrs and m is not None)
-                              else (dict(f.attrs) if f.attrs else None))
+    from core import mesh as _mesh_mod
+    from core.store_mesh import _weld_args, become_store
+    import ingetrazo_core as native
+    pos_parts, edge_parts, flag_parts, curve_parts = [], [], [], []
+    corner_parts, size_parts, count_parts, fa_parts = [], [], [], []
+    table: list = []
+    implicit: list = []          # (face index, matrix): planar maps to pin
+    v_off = 0
+    c_off = 0
+    f_off = 0
+    for g, m in parts:
+        src = g.mesh if hasattr(g, "mesh") else g
+        st = src._store
+        a = st.arrays()
+        pos = np.asarray(a["pos"], dtype=np.float64).reshape(-1, 3)
         if m is not None:
             rot, trans = np_affine(m)
-            if epts:
-                epts = np.asarray(epts, dtype=np.float64) @ rot.T + trans
-            if fpts:
-                fpts = np.asarray(fpts, dtype=np.float64) @ rot.T + trans
-        else:
-            epts = np.asarray(epts, dtype=np.float64) if epts else None
-            fpts = np.asarray(fpts, dtype=np.float64) if fpts else None
-        if epts is not None and len(epts):
-            edge_parts.append(epts)
-        if fpts is not None and len(fpts):
-            face_parts.append(fpts)
-    e_all = (np.concatenate(edge_parts) if edge_parts
-             else np.empty((0, 3), dtype=np.float64))
-    f_all = (np.concatenate(face_parts) if face_parts
-             else np.empty((0, 3), dtype=np.float64))
-    if not len(e_all) and not len(f_all):
+            pos = pos @ rot.T + trans
+        corners = np.asarray(a["corners"], dtype=np.int64)
+        sizes = np.asarray(a["ring_sizes"], dtype=np.int64)
+        if m is not None and _is_mirror(m) and len(sizes):
+            starts = np.cumsum(sizes) - sizes
+            at = np.arange(len(corners)) - np.repeat(starts, sizes)
+            corners = corners[np.repeat(starts + sizes - 1, sizes) - at]
+        curves = np.asarray(a["curve"], dtype=np.int64)
+        if len(curves):
+            live = curves >= 0
+            curves = np.where(live, curves + c_off, -1)
+            if live.any():
+                c_off = int(curves.max()) + 1
+        pos_parts.append(pos)
+        edge_parts.append(np.asarray(a["edges"], dtype=np.int64).reshape(-1, 2) + v_off)
+        flag_parts.append(np.asarray(a["flags"], dtype=np.uint8) & 1)
+        curve_parts.append(curves)
+        corner_parts.append(corners + v_off)
+        size_parts.append(sizes)
+        count_parts.append(np.asarray(a["ring_counts"], dtype=np.int64))
+        # Attribute rows: the source's, re-fitted once per row; a face's
+        # own dict a row of its own.
+        d = src.__dict__
+        src_table, own = d.get("_attr_table") or [], d.get("_attr_own") or {}
+        rows = np.asarray(a["face_attr"], dtype=np.int64)
+        minv, ok = m.inverted() if m is not None else (None, False)
+        base = len(table)
+        for row in src_table:
+            table.append(_placed_row(row, minv if ok else None))
+        fa = np.where(rows >= 0, rows + base, -1)
+        if own:
+            fkeys = st.keys("face")
+            for i, k in enumerate(fkeys):
+                attrs = own.get(k)
+                if attrs is not None:
+                    fa[i] = len(table) if attrs else -1
+                    if attrs:
+                        table.append(_placed_row(attrs, minv if ok else None))
+        if uv == "all" and ok:
+            for i, r in enumerate(fa.tolist()):
+                t = table[r].get("texture") if r >= 0 else None
+                if t and not (t.get("uvw") and len(t["uvw"]) == 8):
+                    implicit.append((f_off + i, minv))
+        fa_parts.append(fa)
+        v_off += len(pos)
+        f_off += len(rows)
+    new = Mesh()
+    if not v_off:
         return new
-    pts = np.concatenate([e_all, f_all])
-    n_edge_pts = len(e_all)
-    vobjs, inverse = new.bulk_weld(pts)
-    emap = None
-    if n_edge_pts:
-        emap = new.add_edges_welded(
-            vobjs, inverse[0:n_edge_pts:2], inverse[1:n_edge_pts:2],
-            edge_flags)
-    if ring_counts:
-        new.add_faces_welded(vobjs, inverse[n_edge_pts:], ring_sizes,
-                             ring_counts, attrs_list, edge_map=emap)
+    store = native.MeshStore.from_block(
+        next(_mesh_mod._KEY_NAMESPACES), np.ascontiguousarray(np.concatenate(pos_parts)),
+        np.ascontiguousarray(np.concatenate(edge_parts)), np.ascontiguousarray(np.concatenate(flag_parts)),
+        np.ascontiguousarray(np.concatenate(curve_parts)), None, [],
+        np.ascontiguousarray(np.concatenate(corner_parts)), np.ascontiguousarray(np.concatenate(size_parts)),
+        np.ascontiguousarray(np.concatenate(count_parts)), np.ascontiguousarray(np.concatenate(fa_parts)),
+        sequential=False, **_weld_args())
+    become_store(new, store, table)
     new.resplit_curves()
+    if implicit:
+        faces = new.faces
+        for i, minv in implicit:
+            f = faces[i]
+            t = f.attrs.get("texture")
+            uvw = _implicit_uvw(f, t, minv)
+            if uvw is not None:
+                f.attrs["texture"] = {**t, "uvw": _remapped_uvw(uvw, minv)}
     return new
+
+
+def _placed_row(attrs, minv):
+    """A face attribute row copied, its texture map (``uvw``) re-fitted
+    for geometry mapped through the matrix whose inverse is ``minv``."""
+    out = dict(attrs)
+    t = out.get("texture")
+    uvw = t.get("uvw") if isinstance(t, dict) else None
+    if minv is not None and uvw and len(uvw) == 8:
+        out["texture"] = {**t, "uvw": _remapped_uvw(uvw, minv)}
+    return out
 
 
 #: ``iter_placements(group, base=None)``: ``(group, world_matrix)`` for
@@ -605,40 +650,7 @@ def transformed_mesh(src: Mesh, m) -> Mesh:
     plain walk (the bulk pass's fixed cost loses there)."""
     if len(src.edges) * 2 + len(src.faces) * 4 < 1024:
         return _transformed_mesh_walk(src, m)
-    import numpy as np
-    new = Mesh()
-    mirror = _is_mirror(m)
-    flat: list = []
-    for e in src.edges:
-        flat.append(e.v0.position_tuple())
-        flat.append(e.v1.position_tuple())
-    n_edge_pts = len(flat)
-    ring_sizes: list = []
-    ring_counts: list = []
-    attrs_list: list = []
-    for f in src.faces:
-        rings = _ring_coordinates(f)
-        ring_counts.append(len(rings))
-        for ring in rings:
-            ring_sizes.append(len(ring))
-            flat.extend(_ring(ring, mirror))
-        attrs_list.append(dict(f.attrs) if f.attrs else None)
-    if not flat:
-        return new
-    rot, trans = np_affine(m)
-    pts = np.array(flat, dtype=np.float64) @ rot.T + trans
-    vobjs, inverse = new.bulk_weld(pts)
-    emap = None
-    if src.edges:
-        flags = [(e.soft, e.curve, None) for e in src.edges]
-        emap = new.add_edges_welded(
-            vobjs, inverse[0:n_edge_pts:2], inverse[1:n_edge_pts:2], flags)
-    if ring_counts:
-        new.add_faces_welded(vobjs, inverse[n_edge_pts:], ring_sizes,
-                             ring_counts, attrs_list, edge_map=emap)
-    new.resplit_curves()
-    _remap_uvws(new, m)
-    return new
+    return _store_built([(src, m)], uv="all")
 
 
 def _transformed_mesh_walk(src: Mesh, m) -> Mesh:
