@@ -260,7 +260,7 @@ impl LinkMeshes {
         let mut needed = HashSet::new();
         let empty = PyDict::new(py);
         for b in py
-            .import("formats.igz")?
+            .import("ingetrazo_core.formats.igz")?
             .call_method1("_mesh_blocks", (payload,))?
             .try_iter()?
         {
@@ -318,7 +318,7 @@ impl LinkMeshes {
                 return Ok(old);
             }
         }
-        py.import("formats.igz")?
+        py.import("ingetrazo_core.formats.igz")?
             .call_method1("_load_mesh", (mesh, block, geom))?;
         mesh.getattr("__dict__")?
             .set_item("_link_geometry", (key, mesh.getattr("revision")?))?;

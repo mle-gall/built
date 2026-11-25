@@ -7,7 +7,7 @@ use std::{
 };
 type Obj<'p> = Bound<'p, PyAny>;
 fn api(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("formats.skp")
+    py.import("ingetrazo_core.formats.skp")
 }
 fn detect(path: &Path) -> &'static str {
     let mut header = [0; 64];
@@ -147,7 +147,7 @@ impl Backend {
     ) -> PyResult<Obj<'p>> {
         let kw = PyDict::new(py);
         kw.set_item("progress", progress)?;
-        py.import("formats.skp_reader")?
+        py.import("ingetrazo_core.formats.skp_reader")?
             .call_method("parse", (path,), Some(&kw))
     }
 }

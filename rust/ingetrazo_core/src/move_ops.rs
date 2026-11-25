@@ -212,7 +212,7 @@ fn class(py: Python<'_>, copy: bool) -> PyResult<&Bound<'_, PyAny>> {
     Ok(cache
         .get_or_try_init(py, || -> PyResult<_> {
             let kw = PyDict::new(py);
-            kw.set_item("__module__", "ingetrazo_core.move_ops")?;
+            kw.set_item("__module__", "move_ops")?;
             let (name, base, init, execute, undo) = if copy {
                 kw.set_item("doc_undo", false)?;
                 (

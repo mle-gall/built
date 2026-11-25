@@ -10,7 +10,7 @@ use std::{collections::HashMap, future::Future, pin::Pin};
 type Owned = Py<PyAny>;
 type Obj<'p> = Bound<'p, PyAny>;
 fn api(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("formats.igz")
+    py.import("ingetrazo_core.formats.igz")
 }
 fn attr<'p>(o: &Obj<'p>, k: &str) -> PyResult<Obj<'p>> {
     match o.getattr(k) {
@@ -126,7 +126,7 @@ impl Prepare {
                     i
                 };
                 Python::attach(|py| -> PyResult<_> {
-                    let built = py.import("formats.built")?;
+                    let built = py.import("ingetrazo_core.formats.built")?;
                     let xf = xf.bind(py);
                     let values = if direct {
                         xf.clone()
@@ -289,7 +289,7 @@ fn igz_prepare_scene_steps(
                     .unwrap_or(false);
             let placements = if compat {
                 Some(
-                    py.import("formats.built")?
+                    py.import("ingetrazo_core.formats.built")?
                         .call_method1("export_placements", (s,))?
                         .unbind(),
                 )
@@ -413,7 +413,7 @@ fn igz_prepare_scene_steps(
             } else {
                 Python::attach(|py| -> PyResult<_> {
                     let (meta, blobs): (Owned, Owned) = py
-                        .import("georef.photomesh")?
+                        .import("ingetrazo_core.georef.photomesh")?
                         .call_method1("pack_mesh", (s,))?
                         .extract()?;
                     payload.bind(py).set_item("photo_mesh", meta)?;

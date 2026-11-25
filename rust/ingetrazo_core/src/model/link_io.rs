@@ -194,7 +194,7 @@ pub fn load_source<'py>(path: &Obj<'py>, select: Option<&Obj<'py>>, include_nest
         kw.set_item("progress", progress.map_or_else(|| none(py), |p| p.clone()))?;
         kw.set_item("include_links", include_nested)?;
         kw.set_item("link_meshes", link_meshes.map_or_else(|| none(py), |p| p.clone()))?;
-        module(py, "formats.igz")?.getattr("load_into")?.call((&src, path_of(py, path)?), Some(&kw))?;
+        module(py, "ingetrazo_core.formats.igz")?.getattr("load_into")?.call((&src, path_of(py, path)?), Some(&kw))?;
         // A cycle further down is this link's failure too; a source of the
         // source that is merely missing is not (its copies show empty).
         if let Some(errors) = src.getattr_opt("link_errors")?.filter(|e| e.is_truthy().unwrap_or(false)) {

@@ -8,7 +8,7 @@ use pyo3::{
 };
 type Obj<'p> = Bound<'p, PyAny>;
 fn api(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("formats.igz")
+    py.import("ingetrazo_core.formats.igz")
 }
 fn get<'p>(d: &Obj<'p>, k: &str) -> PyResult<Obj<'p>> {
     d.call_method1("get", (k,))

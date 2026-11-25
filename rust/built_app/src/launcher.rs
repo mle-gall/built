@@ -173,7 +173,7 @@ fn write_pdf(job: &PdfExport, host: &python::Host) -> PyResult<i32> {
         let scene = window.getattr("viewport")?.getattr("scene")?;
         // Batch export reads the supplied archive directly, without prompting
         // for recovery or deleting a newer autosave of the same document.
-        py.import("formats.igz")?
+        py.import("ingetrazo_core.formats.igz")?
             .call_method1("load_into", (&scene, &job.input))?;
         window.setattr("_current_path", &job.input)?;
         let sheets = scene.getattr("compositions")?;
@@ -348,7 +348,7 @@ pub fn self_check(layout: &python::Layout) -> i32 {
             println!(".rfa import: available");
         }
         let converter = py
-            .import("formats.dwg_bridge")?
+            .import("ingetrazo_core.formats.dwg_bridge")?
             .call_method0("find_dwg2dxf")?;
         if converter.is_none() {
             println!("DWG converter: MISSING");

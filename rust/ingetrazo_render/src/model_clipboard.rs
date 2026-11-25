@@ -119,7 +119,7 @@ impl ModelClipboard {
             return Ok(());
         };
         let other = py
-            .import("formats.clip_payload")?
+            .import("ingetrazo_core.formats.clip_payload")?
             .call_method1("decode", (data,))?;
         if other.is_none() {
             return Ok(());
@@ -135,7 +135,7 @@ impl ModelClipboard {
     /// Publish an existing document snapshot from either a native command or a script.
     fn publish(&self, win: &Bound<'_, PyAny>, clip: &Bound<'_, PyAny>) -> PyResult<()> {
         let py = win.py();
-        let encode = py.import("formats.clip_payload")?.getattr("encode")?;
+        let encode = py.import("ingetrazo_core.formats.clip_payload")?.getattr("encode")?;
         // A window's host reports a failed encode; a bare document has none.
         let data = match win.getattr_opt("_host")?.filter(|h| !h.is_none()) {
             Some(host) => host.call_method1("_guard", ("clipboard encode", encode, clip))?,

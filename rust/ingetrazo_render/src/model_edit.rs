@@ -141,7 +141,7 @@ fn delete_entities(vp: &Bound<'_, PyAny>) -> PyResult<()> {
         ("ingetrazo_core.section", "SectionPlane", "DeleteSectionPlanesCommand"),
         ("core.dimension", "Dimension", "DeleteDimensionsCommand"),
         ("ingetrazo_core.textlabel", "TextLabel", "DeleteTextLabelsCommand"),
-        ("georef.geopath", "GeoPath", "DeleteGeoPathsCommand"),
+        ("ingetrazo_core.georef.geopath", "GeoPath", "DeleteGeoPathsCommand"),
     ] {
         let chosen = matching(&sel, module, class)?;
         if !chosen.is_empty() {

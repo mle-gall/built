@@ -190,7 +190,7 @@ fn write_job<'p>(
     )?;
     let kw = PyDict::new(py);
     kw.set_item("face_me", toward)?;
-    py.import("formats.gltf")?
+    py.import("ingetrazo_core.formats.gltf")?
         .call_method("save_glb", (scene, path_obj(py, &glb)?), Some(&kw))?;
     let data = PyDict::new(py);
     data.set_item("glb", glb.to_string_lossy())?;

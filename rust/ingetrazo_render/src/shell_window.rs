@@ -502,7 +502,7 @@ impl ShellWindow {
         let scene = vp.getattr("scene")?;
         let mut layer = scene.getattr("tile_layer")?;
         if layer.is_none() {
-            layer = py.import("georef.tiles")?.call_method1(
+            layer = py.import("ingetrazo_core.georef.tiles")?.call_method1(
                 "TileLayer",
                 (py.import(RENDER)?.call_method0("selected_tile_source")?,),
             )?;

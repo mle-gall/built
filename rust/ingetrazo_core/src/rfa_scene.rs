@@ -116,7 +116,7 @@ fn rfa_triangle_mesh<'p>(
             "add_faces_welded",
             (v, inv, vec![3; n], vec![1; n], vec![None::<i32>; n]),
         )?;
-        py.import("formats.fuse")?
+        py.import("ingetrazo_core.formats.fuse")?
             .call_method1("soften_smooth_edges", (&mesh,))?;
     }
     Ok(mesh)
@@ -351,7 +351,7 @@ fn build_family<'p>(
         def.setattr("ext", ext)?;
         def.setattr(
             "ifc",
-            py.import("formats.rfa")?
+            py.import("ingetrazo_core.formats.rfa")?
                 .call_method1("_family_record", (&typ, &family, &source, &params))?,
         )?;
         let solids = PyList::empty(py);

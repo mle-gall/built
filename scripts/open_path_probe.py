@@ -207,7 +207,7 @@ class Probe:
 
     # wrappers ---------------------------------------------------------------
     def install(self):
-        from formats import igz
+        from ingetrazo_core.formats import igz
         import views.wgpu_view as wv
         from ingetrazo_render import Host
         from ingetrazo_render.shell_views import ShellView

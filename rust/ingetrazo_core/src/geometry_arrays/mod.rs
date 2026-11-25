@@ -227,7 +227,7 @@ fn face_attributes<'p>(mesh: &Obj<'p>) -> PyResult<Vec<Obj<'p>>> {
     let ty = mesh.get_type();
     let (table, keys) = if ty.is(&py.import("ingetrazo_core.mesh")?.getattr("DeferredMesh")?) {
         let src = mesh.getattr("__dict__")?.get_item("_deferred_source")?;
-        let json = py.import("formats.igz")?.getattr("_face_attrs_from_json")?;
+        let json = py.import("ingetrazo_core.formats.igz")?.getattr("_face_attrs_from_json")?;
         let attrs = src.get_item("meta")?.call_method1("get", ("face_attrs",))?;
         let mut table = Vec::new();
         if !attrs.is_none() {

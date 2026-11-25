@@ -29,7 +29,7 @@ pub(crate) fn store_from_source<'py>(
         meta = PyDict::new(py).into_any();
     }
     let table = PyList::empty(py);
-    let decode = py.import("formats.igz")?.getattr("_face_attrs_from_json")?;
+    let decode = py.import("ingetrazo_core.formats.igz")?.getattr("_face_attrs_from_json")?;
     for raw in rows(&meta, "face_attrs")?.iter() {
         let row = decode.call1((raw,))?;
         table.append(if row.is_truthy()? {

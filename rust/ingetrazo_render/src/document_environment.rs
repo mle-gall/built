@@ -26,7 +26,7 @@ fn ensure_tile_fetcher<'py>(v: &Obj<'py>) -> PyResult<Obj<'py>> {
     let kw = PyDict::new(py);
     kw.set_item("parent", v)?;
     let f = py
-        .import("georef.tile_fetcher")?
+        .import("ingetrazo_core.georef.tile_fetcher")?
         .call_method("TileFetcher", (), Some(&kw))?;
     v.setattr("_tile_fetcher", &f)?;
     f.getattr("tileReady")?
@@ -68,7 +68,7 @@ fn disk_cached_tile<'py>(
     } else {
         let mut c = opt(v, "_tile_disk_cache")?;
         if c.is_none() {
-            let tiles = py.import("georef.tiles")?;
+            let tiles = py.import("ingetrazo_core.georef.tiles")?;
             c = tiles.call_method1("TileCache", (tiles.call_method0("default_cache_dir")?,))?;
             v.setattr("_tile_disk_cache", &c)?;
         }

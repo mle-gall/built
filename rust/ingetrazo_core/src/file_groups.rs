@@ -281,7 +281,7 @@ impl FileGroupWriter {
         precise: bool,
         destination: Option<Py<PyAny>>,
     ) -> PyResult<Self> {
-        let igz = py.import("formats.igz")?;
+        let igz = py.import("ingetrazo_core.formats.igz")?;
         Ok(Self {
             scene,
             block,

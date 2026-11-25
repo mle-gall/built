@@ -84,7 +84,7 @@ fn service<'p>(
     }
     api.class(
         name,
-        Some(api.py().import("georef.transport")?.getattr("Service")?),
+        Some(api.py().import("ingetrazo_core.georef.transport")?.getattr("Service")?),
         members,
     )?;
     Ok(())

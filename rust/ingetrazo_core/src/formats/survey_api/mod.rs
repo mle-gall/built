@@ -175,6 +175,7 @@ pub(super) fn register_survey(package: &Bound<'_, PyModule>) -> PyResult<()> {
             modules.del_item(&path)?;
             return Err(error);
         }
+        modules.set_item(format!("ingetrazo_core.{path}"), &module)?;
         package.add(name, module)?;
     }
     Ok(())

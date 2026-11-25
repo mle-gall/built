@@ -115,7 +115,7 @@ fn bake<'py>(
     let curved = h.call_method1("_curved_faces", (mesh,))?;
     let element = h.getattr("element_identity")?;
     let smoother = py
-        .import("formats.meshexport")?
+        .import("ingetrazo_core.formats.meshexport")?
         .call_method0("SmoothNormals")?;
     let out = PyDict::new(py);
     let face_handles = PyList::empty(py);

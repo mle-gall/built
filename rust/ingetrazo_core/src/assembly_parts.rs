@@ -215,7 +215,7 @@ fn paint_areas<'p>(mesh: &Obj<'p>, cache: Cache<'p>) -> PyResult<Obj<'p>> {
         }
     } else {
         let source = mesh.getattr("__dict__")?.get_item("_deferred_source")?;
-        let decode = py.import("formats.igz")?.getattr("_face_attrs_from_json")?;
+        let decode = py.import("ingetrazo_core.formats.igz")?.getattr("_face_attrs_from_json")?;
         let table = PyList::empty(py);
         for row in source
             .get_item("meta")?

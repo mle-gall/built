@@ -591,7 +591,7 @@ fn dae_save<'p>(
     path: PathBuf,
     project_name: &str,
 ) -> PyResult<()> {
-    let h = py.import("formats.meshexport")?;
+    let h = py.import("ingetrazo_core.formats.meshexport")?;
     let mut exp = Export {
         scene: scene.clone(),
         smoother: h.call_method0("SmoothNormals")?,

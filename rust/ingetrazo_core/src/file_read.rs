@@ -8,7 +8,7 @@ use pyo3::{
 use std::time::Duration;
 type Obj<'p> = Bound<'p, PyAny>;
 fn api(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("formats.igz")
+    py.import("ingetrazo_core.formats.igz")
 }
 #[pyfunction]
 #[pyo3(signature=(work,pump=None,*,background=false,cancel=None))]

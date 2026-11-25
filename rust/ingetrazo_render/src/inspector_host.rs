@@ -149,7 +149,7 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
         }
     }
     view.setattr("_panel_schema", &schema)?;
-    let geopath = py.import("georef.geopath")?.getattr("GeoPath")?;
+    let geopath = py.import("ingetrazo_core.georef.geopath")?.getattr("GeoPath")?;
     let out = PyDict::new(py);
     out.set_item("schema", schema)?;
     out.set_item("vocabulary", vocabulary)?;

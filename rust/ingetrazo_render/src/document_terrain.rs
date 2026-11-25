@@ -35,7 +35,7 @@ fn capture_bounds(layer: &Obj) -> PyResult<(f64, f64, f64, f64)> {
 pub(super) fn texture(v: &Obj, terrain: &Obj, layer: &Obj) -> PyResult<()> {
     let image = v
         .py()
-        .import("georef.terrain")?
+        .import("ingetrazo_core.georef.terrain")?
         .call_method1("build_mosaic", (terrain, layer.getattr("images")?))?;
     terrain.setattr("texture_image", image)?;
     v.call_method1("upload_terrain", (terrain,))?;
@@ -56,7 +56,7 @@ pub(super) fn rebuild_terrain(v: &Obj) -> PyResult<()> {
     let layer = scene.getattr("tile_layer")?;
     let sampler = surface_sampler(v, &datum)?;
     let bbox = capture_bounds(&layer)?;
-    let terrain_mod = py.import("georef.terrain")?;
+    let terrain_mod = py.import("ingetrazo_core.georef.terrain")?;
     let area: (f64, f64, f64, f64) = terrain_mod
         .call_method1("_bbox_ll", (&datum, bbox))?
         .extract()?;

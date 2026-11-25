@@ -192,7 +192,7 @@ fn light_face<'py>(a: &Args<'py>) -> Reply<'py> {
     let row = int(source.get_item("face_attr")?.get_item(at)?)?;
     if row >= 0 {
         let raw = source.get_item("meta")?.call_method1("get", ("face_attrs",))?;
-        let own = py.import("formats.igz")?.call_method1("_face_attrs_from_json", (raw.get_item(row)?,))?;
+        let own = py.import("ingetrazo_core.formats.igz")?.call_method1("_face_attrs_from_json", (raw.get_item(row)?,))?;
         if own.is_truthy()? {
             out.getattr("attrs")?.call_method1("update", (own,))?;
         }
@@ -367,7 +367,7 @@ fn prebake<'py>(a: &Args<'py>) -> Reply<'py> {
 /// of a few: the document's table, parsed once.
 fn attrs_table<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let parse = py.import("formats.igz")?.getattr("_face_attrs_from_json")?;
+    let parse = py.import("ingetrazo_core.formats.igz")?.getattr("_face_attrs_from_json")?;
     let out = PyList::empty(py);
     let table = a.get_item(0)?.get_item("meta")?.call_method1("get", ("face_attrs",))?;
     if table.is_truthy()? {
