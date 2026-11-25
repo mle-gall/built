@@ -201,7 +201,7 @@ impl GroupGeometry {
                 if m.is_none() {
                     group.setattr(
                         "mesh",
-                        facade.call_method1("transformed_mesh", (&mesh, &inverse))?,
+                        crate::model::module(facade.py(), "ingetrazo_core")?.call_method1("group_transformed_mesh", (&mesh, &inverse))?,
                     )?;
                     facade.call_method1("carry_axes", (&group, inverse))?;
                 } else {
@@ -404,7 +404,7 @@ pub(crate) fn lift_placements<'py>(
             if xform.is_none() {
                 child.setattr(
                     "mesh",
-                    api.call_method1("transformed_mesh", (mesh, &frame))?,
+                    crate::model::module(api.py(), "ingetrazo_core")?.call_method1("group_transformed_mesh", (mesh, &frame))?,
                 )?;
                 api.call_method1("carry_axes", (child, &frame))?;
             } else {

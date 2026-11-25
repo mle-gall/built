@@ -136,7 +136,7 @@ pub(super) fn preview_faces<'py>(
 ) -> PyResult<Bound<'py, PyList>> {
     let out = PyList::empty(py);
     let face = py.import("ingetrazo_core.geometry")?.getattr("Face")?;
-    let translated = py.import("core.group")?.getattr("translated_attrs")?;
+    let translated = py.import("ingetrazo_core")?.getattr("group_translated_attrs")?;
     for (i, surface) in surfaces.iter().enumerate() {
         let Some((outer, holes)) = surface.split_first() else {
             continue;

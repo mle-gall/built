@@ -247,12 +247,12 @@ def test_links_resolve_with_the_collector_off_and_it_comes_back_on(tmp_path, mon
                                        host_path=tmp_path / "host.igz"))
     igz.save_scene(host, tmp_path / "host.igz")
     states = []
-    real = links.resolve
+    real = ingetrazo_core.link_resolve
 
     def spy(*a, **k):
         states.append(gc.isenabled())
         return real(*a, **k)
-    monkeypatch.setattr(links, "resolve", spy)
+    monkeypatch.setattr(ingetrazo_core, "link_resolve", spy)
     was = gc.isenabled()
     gc.enable()
     try:

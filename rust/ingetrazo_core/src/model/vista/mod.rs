@@ -369,9 +369,7 @@ fn view_faces<'p>(
         let Some(g) = g else { continue };
         let mut attrs = face.getattr("attrs")?;
         if !m.is_none() && attrs.is_truthy()? && get(&attrs, "texture")?.is_truthy()? {
-            attrs = py
-                .import("core.group")?
-                .call_method1("transformed_attrs", (&attrs, m))?;
+            attrs = crate::model::group_mesh::transformed_attrs(&attrs, &m)?.into_any();
         }
         let mut eff = if materials {
             mats.call_method1("effective_attrs", (attrs, paint))?

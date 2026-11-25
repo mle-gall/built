@@ -50,8 +50,8 @@ fn _turned_toward<'p>(mesh: &Obj<'p>, toward: &Obj<'p>) -> PyResult<Obj<'p>> {
     let matrix =
         DMat4::from_translation(a) * DMat4::from_rotation_z(yaw) * DMat4::from_translation(-a);
     mesh.py()
-        .import("core.group")?
-        .call_method1("transformed_mesh", (mesh, Matrix4::from(matrix)))
+        .import("ingetrazo_core")?
+        .call_method1("group_transformed_mesh", (mesh, Matrix4::from(matrix)))
 }
 #[pyfunction]
 fn _facing_quad<'p>(mesh: &Obj<'p>, toward: &Obj<'p>) -> PyResult<Obj<'p>> {
@@ -128,8 +128,8 @@ fn placed_mesh<'p>(group: &Obj<'p>, matrix: &Obj<'p>) -> PyResult<Obj<'p>> {
     } else {
         group
             .py()
-            .import("core.group")?
-            .call_method1("transformed_mesh", (mesh, matrix))
+            .import("ingetrazo_core")?
+            .call_method1("group_transformed_mesh", (mesh, matrix))
     }
 }
 fn turned<'p>(mesh: &Obj<'p>, kind: &Obj<'p>, toward: &Obj<'p>) -> PyResult<Obj<'p>> {
@@ -312,7 +312,7 @@ impl Faces {
                 self.pieces = Some(PyList::new(py, pieces)?.try_iter()?.unbind())
             } else {
                 self.start(
-                    &api.call_method1("world_mesh", (&group,))?,
+                    &crate::model::module(api.py(), "ingetrazo_core")?.call_method1("group_world_mesh", (&group,))?,
                     attr(&group, "material")?,
                 )?;
             }

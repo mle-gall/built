@@ -91,7 +91,7 @@ def test_a_host_override_survives_the_source_and_can_be_cleared(tmp_path):
     links.reload(host, src)
     assert host.layer("Site / Wood").visible is False      # host's choice
     # Not overridden: the source's switch comes through.
-    links.clear_overrides(host, src)
+    ingetrazo_core.link_clear_overrides(host, src)
     assert host.layer("Site / Wood").visible is True
     _source(src, wood_visible=False)
     links.reload(host, src)

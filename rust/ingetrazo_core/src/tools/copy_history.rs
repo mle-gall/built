@@ -445,7 +445,7 @@ pub(super) fn copied_face<'py>(
     }
     kw.set_item("auto", false)?;
     let transformed =
-        group.call_method1("transformed_attrs", (source.getattr("attrs")?, matrix))?;
+        crate::model::module(group.py(), "ingetrazo_core")?.call_method1("group_transformed_attrs", (source.getattr("attrs")?, matrix))?;
     kw.set_item("attrs", attrs.call1((transformed,))?)?;
     if carry_interior {
         kw.set_item("interior", source.getattr("interior")?)?;

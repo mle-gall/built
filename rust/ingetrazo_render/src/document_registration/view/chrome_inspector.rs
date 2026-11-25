@@ -752,7 +752,7 @@ fn link_verb<'py>(win: &Obj<'py>, view: &Obj<'py>, group: &Obj<'py>, key: &str, 
                 records.append(record)?;
             }
             for record in records.iter() {
-                record.call_method1("update", (links.call_method1("_link_record", (&chosen, win.getattr("_current_path")?))?,))?;
+                record.call_method1("update", (crate::host_context::core_module(py)?.call_method1("link_record", (&chosen, win.getattr("_current_path")?))?,))?;
             }
             if let Err(error) = links.call_method1("reload", (&scene, &chosen)) {
                 if error.is_instance_of::<PyException>(py) {

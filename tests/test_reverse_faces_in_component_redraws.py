@@ -24,7 +24,8 @@ from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.group import Group, transformed_mesh, world_mesh
+from core.group import Group, world_mesh
+from ingetrazo_core import group_transformed_mesh as transformed_mesh
 from core.history import FlipFacesCommand, History
 from core.mesh import Mesh
 from core.scene import Scene

@@ -86,7 +86,8 @@ def matrix(rng):
 
 def answers(seed):
     from ingetrazo_core import Matrix4
-    from core.group import Group, transformed_mesh, world_mesh
+    from core.group import Group, world_mesh
+    from ingetrazo_core import group_transformed_mesh as transformed_mesh
     rng = random.Random(seed)
     n = rng.choice([4, 20, 300])
     src = mesh_of(rng, n)
@@ -116,6 +117,34 @@ def _golden():
         with gzip.open(GOLDEN, "rt") as f:
             _CACHE.append(json.load(f))
     return _CACHE[0]
+
+
+@pytest.mark.parametrize("n", [1, 6, 400])
+def test_a_copy_carries_soft_flat_and_curves_at_any_size(n):
+    """One build at any size: the small-mesh walk copied the flat flag and
+    the vectorized copy did not; both carry soft, flat and curves now."""
+    from ingetrazo_core import Matrix4, Vec3 as V
+    from ingetrazo_core import group_transformed_mesh as transformed_mesh
+    from core.mesh import Mesh
+    m = Mesh()
+    for i in range(n):
+        m.add_face([V(i, 0, 0), V(i + 1, 0, 0), V(i + 1, 1, 0), V(i, 1, 0)])
+    edges = list(m.edges)
+    edges[0].soft = True
+    edges[1].flat = True
+    t = Matrix4()
+    t.translate(1.0, 2.0, 0.0)
+    t.rotate(90.0, 0, 0, 1)
+    out = transformed_mesh(m, t)
+
+    def flags(mesh, mapped):
+        return sorted((tuple(sorted(tuple(round(c, 9) + 0.0 for c in mapped(p)) for p in (e.v0.position_tuple(), e.v1.position_tuple()))),
+                       bool(e.soft), bool(e.flat)) for e in mesh.edges)
+    def through(p):
+        q = t.map(V(*p))
+        return (q.x(), q.y(), q.z())
+    assert flags(out, lambda p: p) == flags(m, through)
+    assert sum(e.flat for e in out.edges) == 1 and sum(e.soft for e in out.edges) == 1
 
 
 if __name__ == "__main__":
