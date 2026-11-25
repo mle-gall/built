@@ -142,7 +142,7 @@ def test_cross_document_paste_registers_recipe_and_undoes_collision(tmp_path):
     f.attrs.update(mat.face_attrs())
     first.selection.add(f)
     source = _VP(first, History(first), None)
-    assert Viewport.copy_selection(source)
+    assert Viewport.copy_selection(source, publish=False)
     clip = decode(encode(source.clipboard))
     second = Scene()
     second.materials["Metal"] = Material("Metal")
