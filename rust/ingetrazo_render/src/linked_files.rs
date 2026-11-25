@@ -104,7 +104,7 @@ fn reload_links(win: &Bound<'_, PyAny>, path: Option<PathBuf>) -> PyResult<()> {
     } else {
         let caption = translated(py, "Reloading linked documents…", None)?;
         let errors = busy(win, &caption, || {
-            backend.call_method1("resolve", (scene, current))
+            crate::host_context::core_module(py)?.call_method1("link_resolve", (scene, current))
         })?;
         win.call_method1(
             "_relink_done",

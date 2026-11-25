@@ -11,6 +11,7 @@ pub mod anchor_broad;
 pub mod camera_live;
 mod orbit_camera;
 pub mod dimension_frame;
+pub mod edit_context;
 pub mod group_frame;
 pub mod group_mesh;
 pub mod hlr_view;
@@ -24,6 +25,7 @@ pub mod pyfloat;
 pub mod saved_view;
 pub mod saved_view_state;
 pub mod scene_bounds;
+pub mod scene_clear;
 pub mod scene_mesh_states;
 pub mod scene_revision;
 pub mod solid_checks;
@@ -77,5 +79,7 @@ pub fn register_model(m: &Bound<'_, PyModule>) -> PyResult<()> {
     link_io::register(m)?;
     group_mesh::register(m)?;
     scene_revision::register(m)?;
+    scene_clear::register(m)?;
+    edit_context::register(m)?;
     Ok(())
 }

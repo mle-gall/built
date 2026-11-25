@@ -318,11 +318,9 @@ fn local_frame(step: &Obj<'_>, parts: Option<&str>) -> PyResult<()> {
     Ok(())
 }
 fn refresh(scene: &Obj<'_>) -> PyResult<()> {
-    if let Some(f) = scene
-        .getattr_opt("_refresh_dimension_holds")?
-        .filter(|v| !v.is_none())
-    {
-        f.call0()?;
+    // A scene's dimension holds (a stand-in without dimensions has none).
+    if scene.hasattr("dimensions")? {
+        crate::model::edit_context::refresh_dimension_holds(scene)?;
     }
     Ok(())
 }

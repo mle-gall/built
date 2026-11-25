@@ -535,158 +535,21 @@ class Scene:
     # ---- Group-edit context (Groups v2) --------------------------------------
     def begin_group_edit(self, group) -> None:
         """Enter a group: tools and commands now edit ITS mesh (the usual
-        double-click-into-group).
-
-        Entering a CHILD of the group already open pushes a level instead of
-        starting over — that is the nesting. Anything else closes what is
-        open first.
-
-        A group that owns children used to be BAKED on the way in
-        (``materialize``): its nine nested groups became one mesh, and both
-        the structure and the per-group chunks were gone. «Es lo que no
-        quiero, que se fundan todos los grupos, porque además pierdo
-        rendimiento» (Marco, 2026-09-11). Now it enters as it is.
-
-        The active store presents the definition in the occurrence frame.
-        Other placements keep reading the same definition while tools edit it."""
-        anidando = (self.edit_group is not None
-                    and group in (getattr(self.edit_group, "children", None) or ()))
-        if self.edit_group is not None and not anidando:
-            self.end_group_edit()
-        if not anidando:
-            # Tree and protocol actions can open a nested row directly.
-            # Enter its ancestors just as a sequence of double-clicks would.
-            from core.group import Group
-            parent = group._parent
-            if isinstance(parent, Group):
-                self.begin_group_edit(parent)
-        self._refresh_dimension_holds()
-        attachments = ()
-        entry_mesh = group.mesh
-        anterior = self.mesh
-        # The context's own axes (issue #44), read BEFORE anything below
-        # rewrites the placement: drawing inside a group happens on the
-        # group's axes, level by level.
-        from core.group import group_frame
-        frame = group_frame(group)
-        # The definition its sibling instances share, read before the entry
-        # below swaps the instance onto a world copy (Hide Similar).
-        is_comp = getattr(group, "is_component", None)
-        definition = (group.mesh if callable(is_comp) and is_comp()
-                      else None)
-        parts = None
-        active_mesh = None
-        if (group.xform is not None or (
-                self._edit_stack and self._edit_stack[-1].get("affine"))):
-            from core.store_mesh import instance_view
-            world = self._root._edit_matrix(group)
-            active_mesh = instance_view(group.mesh, world)
-            if active_mesh is not None:
-                frame = active_mesh._store.tool_placement()
-                if group.axes is not None:
-                    frame = frame * group.axes
-        share = entry_transaction = None
-        if active_mesh is None and (group.children or group.xform is not None):
-            attachments = self._attachment_swap()
-            from ingetrazo_core.command_protocol import enter_reference
-            from core.store_mesh import StoreMesh
-            # A singular placement needs the compatibility world copy. Keep
-            # the placement swaps on entry so its History step can replay them.
-            depth = _dm.begin() if type(entry_mesh) is StoreMesh else 0
-            try:
-                share, parts = enter_reference(self, group, frame)
-                if depth:
-                    entry_transaction = _dm.commit()
-            except Exception:
-                if depth:
-                    _dm.rollback()
-                raise
-        if not self._edit_stack:
-            self._loose_mesh = anterior
-        level = {"group": group, "mesh": anterior, "affine": active_mesh is not None, "session": object(),
-                 "share": share, "entry_transaction": entry_transaction,
-                 "frame": frame, "definition": definition, "parts": parts,
-                 "world_copy": group.mesh if entry_mesh is not group.mesh else None}
-        self._root._enter_edit(group, level)
-        self._placement_context_bumps += 1
-        self.mesh = active_mesh if active_mesh is not None else group.mesh
-        self.edit_group = group
-        self._restore_attachments(attachments)
-        self._refresh_dimension_holds()
-        self.selection.clear()
-        self.version += 1
-
-    def _attachment_swap(self):
-        refs = [(label, "attachment") for label in self.text_labels]
-        from core.composition import sheet_holds
-        for sheet in self.compositions:
-            for item in (*sheet.cotas, *sheet.etiquetas, *sheet.niveles):
-                for name, (_point, ref) in sheet_holds(item):
-                    if not isinstance(ref, dict):
-                        refs.append((item, "hold_" + name))
-        refs.extend((sign, "attachment") for sign in self.text_placement_anchors)
-        refs.extend((dim, name) for dim in self.dimensions
-                    for name in ("attachment_a", "attachment_b"))
-        result = []
-        for obj, name in refs:
-            value = getattr(obj, name, None)
-            if value is not None:
-                ref = value[1] if name.startswith("hold_") else value
-                result.append((obj, name, ref, ref.before_mesh_swap()))
-        return result
-
-    @staticmethod
-    def _restore_attachments(refs):
-        for obj, name, ref, saved in refs:
-            replacement = ref.after_mesh_swap(saved)
-            if replacement is not ref:
-                if name.startswith("hold_"):
-                    replacement = (getattr(obj, name)[0], replacement)
-                setattr(obj, name, replacement)
-
-    def _refresh_dimension_holds(self) -> None:
-        """Read every dimension's endpoints once, either side of an edit
-        context swapping a group's mesh (#621). Before the swap, the last
-        known spots are made current; after it, a hold on the mesh that
-        went away finds the vertex now standing there — before any edit
-        can move it out from under that spot."""
-        for d in self.dimensions:
-            d.a, d.b
+        double-click-into-group). Entering a child of the group already
+        open pushes a level; anything else closes what is open first
+        (``model/edit_context.rs``)."""
+        ingetrazo_core.scene_begin_group_edit(self, group)
 
     def end_one_group_edit(self) -> None:
-        """Leave the INNERMOST group only — Esc, which steps out
-        one level and leaves you inside the parent."""
-        self._leave_level()
+        """Leave the INNERMOST group only — Esc, which steps out one level
+        and leaves you inside the parent."""
+        ingetrazo_core.scene_end_one_group_edit(self)
 
     def end_group_edit(self) -> None:
-        """Leave every open group-edit context, back to the loose mesh. The
-        contract the whole app relies on before saving, exporting or
-        switching documents: when this returns, nothing is open."""
-        while self._edit_stack:
-            self._leave_level()
-
-    def _leave_level(self) -> None:
-        if not self._edit_stack:
-            return
-        self._refresh_dimension_holds()
-        attachments = self._attachment_swap() if self._edit_stack[-1].get("share") else ()
-        nivel = self._root._leave_edit()
-        unchanged = True
-        share = nivel.pop("share", None)
-        if share is not None:
-            from ingetrazo_core.command_protocol import finish_reference
-            unchanged = finish_reference(share, nivel.get("parts"))
-        if unchanged:
-            self._placement_context_bumps += 1
-        self.mesh = nivel["mesh"]
-        self.edit_group = (self._edit_stack[-1]["group"] if self._edit_stack
-                           else None)
-        if not self._edit_stack:
-            self._loose_mesh = None
-        self._restore_attachments(attachments)
-        self._refresh_dimension_holds()
-        self.selection.clear()
-        self.version += 1
+        """Leave every open group-edit context, back to the loose mesh: when
+        this returns, nothing is open (before saving, exporting or switching
+        documents)."""
+        ingetrazo_core.scene_end_group_edit(self)
 
     @property
     def drawing_frame(self):
@@ -844,77 +707,9 @@ class Scene:
         return len(new)
 
     def clear(self) -> None:
-        self.end_group_edit()
-        if (self.mesh.edges or self.mesh.faces or self.selection
-                or self.groups or self.dimensions or self.georef
-                or self.tile_layer or self.geo_paths or self.terrain
-                or self.guides or self.geo_points or self.text_labels
-                or self.saved_views or self.compositions
-                or self.scene_folders
-                or self.image_planes or self.plugin_data or self.link_registry
-                or self.kept_components or self.section_planes
-                or self.materials or self.animation.to_dict()
-                or not self.show_section_planes
-                or not self.show_section_cuts
-                or self.show_hidden_objects or self.show_hidden_geometry
-                or self.custom_scales or self.back_face_color is not None
-                or len(self.layers) > 1 or self.layer_folders
-                or self.active_layer or self.hatch_patterns
-                or self.line_types or self.linetype_colors
-                or self.bricks or self.north_deg):
-            self.mesh.clear()
-            self.groups.clear()
-            self.dimensions.clear()
-            self.text_labels.clear()
-            self.text_placement_anchors.clear()
-            self.geo_paths.clear()
-            self.geo_points.clear()
-            self.guides.clear()
-            self.image_planes.clear()
-            self.saved_views.clear()
-            self.scene_folders = []
-            self.scene_folder_parents = {}
-            self.compositions.clear()
-            self.custom_scales.clear()
-            self.kept_components.clear()
-            self.materials.clear()
-            self.plugin_data = {}
-            self.link_registry = {}
-            self.selection.clear()
-            from core.layers import DEFAULT_LAYER, Layer
-            self.layers = [Layer(DEFAULT_LAYER)]
-            self.active_layer = None
-            self.layer_folders = []
-            self.folder_parents = {}
-            self.folder_visibility = {}
-            self.layer_folder_uids = {}
-            self.layer_folder_names = {}
-            self.hatch_patterns = {}
-            self.line_types = {}
-            self.linetype_colors = {}
-            self.bricks = {}
-            self.georef = None
-            self.tile_layer = None
-            self.terrain = None
-            self.back_face_color = None
-            self.active_ifc = None
-            self.display_style = _make_style()
-            self.shadows = _make_shadows()
-            self.animation = _make_animation()
-            self.section_planes.clear()
-            self.show_section_planes = True
-            self.show_section_cuts = True
-            self.show_hidden_objects = False
-            self.show_hidden_geometry = False
-            self.show_axes = True
-            self.north_deg = 0.0
-            self.version += 1
-        # Outside the guard: an empty document has a camera to forget too.
-        self.camera_home = None
-        self.views_home = None
-        self.units = {"length": "m", "precision": 2}
-        self.plugin_data = {}
-        self.link_registry = {}
+        """Leave every open group edit, then reset every table, flag and
+        record to a new document's (``model/scene_clear.rs``)."""
+        ingetrazo_core.scene_clear(self)
 
     # ---- Queries ------------------------------------------------------------
 
