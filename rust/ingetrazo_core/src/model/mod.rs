@@ -9,6 +9,7 @@ use pyo3::prelude::*;
 
 pub mod anchor_broad;
 pub mod camera_live;
+mod orbit_camera;
 pub mod dimension_frame;
 pub mod group_frame;
 pub mod hlr_view;
@@ -50,6 +51,7 @@ pub fn register_model(m: &Bound<'_, PyModule>) -> PyResult<()> {
     linetypes::register(m)?;
     selection::register(m)?;
     camera_live::register(m)?;
+    orbit_camera::register(m)?;
     section_cut::register(m)?;
     section_fill::register(m)?;
     group_frame::register(m)?;

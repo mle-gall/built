@@ -1,27 +1,28 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Binary64 navigation in the model's Z-up frame. Screen deltas are logical pixels.
 use crate::math::{xyz, Vec3};
+use crate::model::pyfloat::{cos, sin};
 use glam::{DQuat, DVec3};
 use pyo3::prelude::*;
 
 fn eye_offset(yaw: f64, pitch: f64, distance: f64) -> DVec3 {
-    let horizontal = distance * pitch.cos();
+    let horizontal = distance * cos(pitch);
     DVec3::new(
-        horizontal * yaw.cos(),
-        horizontal * yaw.sin(),
-        distance * pitch.sin(),
+        horizontal * cos(yaw),
+        horizontal * sin(yaw),
+        distance * sin(pitch),
     )
 }
 
 #[pyfunction]
-fn orbit_angles(yaw: f64, pitch: f64, dx: f64, dy: f64, height: f64) -> (f64, f64) {
+pub(crate) fn orbit_angles(yaw: f64, pitch: f64, dx: f64, dy: f64, height: f64) -> (f64, f64) {
     let scale = std::f64::consts::PI / height.max(1.0);
     let limit = 89_f64.to_radians();
     (yaw - dx * scale, (pitch + dy * scale).clamp(-limit, limit))
 }
 
 #[pyfunction]
-fn orbit_target(
+pub(crate) fn orbit_target(
     target: &Vec3,
     pivot: &Bound<'_, PyAny>,
     old_yaw: f64,
@@ -34,18 +35,21 @@ fn orbit_target(
     if !pivot.is_finite() || ((yaw - old_yaw).abs() < 1e-12 && (pitch - old_pitch).abs() < 1e-12) {
         return Ok(target.into());
     }
-    let yaw_turn = DQuat::from_rotation_z(yaw - old_yaw);
+    let yaw_half = (yaw - old_yaw) * 0.5;
+    let yaw_turn = DQuat::from_xyzw(0., 0., sin(yaw_half), cos(yaw_half));
     let axis = eye_offset(yaw, old_pitch, 1.0).cross(DVec3::Z);
     let turn = if axis.length() < 1e-9 {
         yaw_turn
     } else {
-        DQuat::from_axis_angle(axis.normalize(), pitch - old_pitch) * yaw_turn
+        let pitch_half = (pitch - old_pitch) * 0.5;
+        let v = axis.normalize() * sin(pitch_half);
+        DQuat::from_xyzw(v.x, v.y, v.z, cos(pitch_half)) * yaw_turn
     };
     Ok((pivot + turn * (target - pivot)).into())
 }
 
 #[pyfunction]
-fn pan_target(
+pub(crate) fn pan_target(
     target: &Vec3,
     up: &Vec3,
     yaw: f64,
@@ -66,12 +70,12 @@ fn pan_target(
 }
 
 #[pyfunction]
-fn zoom_distance(distance: f64, steps: f64, minimum: f64, maximum: f64) -> f64 {
+pub(crate) fn zoom_distance(distance: f64, steps: f64, minimum: f64, maximum: f64) -> f64 {
     (distance * 0.9_f64.powf(steps)).min(maximum).max(minimum)
 }
 
 #[pyfunction]
-fn zoom_focus(
+pub(crate) fn zoom_focus(
     target: &Vec3,
     focus: &Bound<'_, PyAny>,
     eye: &Vec3,
@@ -199,7 +203,7 @@ impl Frame {
 #[pyfunction]
 #[pyo3(signature = (lo, hi, target, distance, right, up, forward, fov_deg, aspect, perspective, shift, free, margin, floor, maximum))]
 #[allow(clippy::too_many_arguments)]
-fn frame_box(
+pub(crate) fn frame_box(
     lo: &Bound<'_, PyAny>, hi: &Bound<'_, PyAny>, target: &Bound<'_, PyAny>, distance: f64,
     right: &Bound<'_, PyAny>, up: &Bound<'_, PyAny>, forward: &Bound<'_, PyAny>,
     fov_deg: f64, aspect: f64, perspective: bool, shift: (f64, f64), free: [f64; 4],

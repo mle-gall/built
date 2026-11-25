@@ -20,7 +20,7 @@ pub(super) const REBASE_DISTANCE: f64 = 512.;
 
 /// `core.coordinate_frame.choose_origin`: keep the frame while the centre
 /// stays within reach of it, else move it to the centre's whole metres.
-pub(super) fn choose_origin(center: [f64; 3], previous: [f64; 3]) -> [f64; 3] {
+pub(crate) fn choose_origin(center: [f64; 3], previous: [f64; 3]) -> [f64; 3] {
     let reach = (0..3).map(|k| (center[k] - previous[k]).abs()).fold(0., f64::max);
     if !center.iter().all(|v| v.is_finite()) || reach <= REBASE_DISTANCE {
         previous
