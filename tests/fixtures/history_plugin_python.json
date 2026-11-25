@@ -1,0 +1,137 @@
+{
+  "states": [
+    {
+      "undo": [
+        "CompoundCommand"
+      ],
+      "redo": [],
+      "data": {
+        "a": 1,
+        "b": 2
+      },
+      "changes": {
+        "revision": 1,
+        "complete": true,
+        "changes": [
+          {
+            "revision": 1,
+            "phase": "execute",
+            "command": "CompoundCommand"
+          }
+        ]
+      }
+    },
+    {
+      "undo": [],
+      "redo": [
+        "CompoundCommand"
+      ],
+      "data": {},
+      "changes": {
+        "revision": 2,
+        "complete": true,
+        "changes": [
+          {
+            "revision": 1,
+            "phase": "execute",
+            "command": "CompoundCommand"
+          },
+          {
+            "revision": 2,
+            "phase": "undo",
+            "command": "CompoundCommand"
+          }
+        ]
+      }
+    },
+    {
+      "undo": [
+        "CompoundCommand"
+      ],
+      "redo": [],
+      "data": {
+        "a": 1,
+        "b": 2
+      },
+      "changes": {
+        "revision": 3,
+        "complete": true,
+        "changes": [
+          {
+            "revision": 1,
+            "phase": "execute",
+            "command": "CompoundCommand"
+          },
+          {
+            "revision": 2,
+            "phase": "undo",
+            "command": "CompoundCommand"
+          },
+          {
+            "revision": 3,
+            "phase": "redo",
+            "command": "CompoundCommand"
+          }
+        ]
+      }
+    },
+    {
+      "undo": [
+        "PluginCommand"
+      ],
+      "redo": [],
+      "data": {
+        "c": 3
+      },
+      "changes": {
+        "revision": 5,
+        "complete": true,
+        "changes": [
+          {
+            "revision": 1,
+            "phase": "execute",
+            "command": "CompoundCommand"
+          },
+          {
+            "revision": 2,
+            "phase": "undo",
+            "command": "CompoundCommand"
+          },
+          {
+            "revision": 3,
+            "phase": "redo",
+            "command": "CompoundCommand"
+          },
+          {
+            "revision": 4,
+            "phase": "undo",
+            "command": "CompoundCommand"
+          },
+          {
+            "revision": 5,
+            "phase": "execute",
+            "command": "PluginCommand"
+          }
+        ]
+      }
+    }
+  ],
+  "events": [
+    [
+      "CompoundCommand",
+      "execute",
+      true
+    ],
+    [
+      "CompoundCommand",
+      "undo",
+      true
+    ],
+    [
+      "CompoundCommand",
+      "redo",
+      true
+    ]
+  ],
+  "plugin_command": true
+}
