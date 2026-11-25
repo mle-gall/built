@@ -106,6 +106,10 @@ def _store_of(m):
 class _ViewMixin:
     __slots__ = ()
 
+    def __init__(self, m, key):
+        self._m = m
+        self.key = key
+
     def __eq__(self, other):
         if other is self:
             return True
@@ -139,10 +143,6 @@ def _unpickle_view(cls, mesh, local_key):
 class VertexView(_ViewMixin, Vertex):
     __slots__ = ("_m",)
 
-    def __init__(self, m, key):
-        self._m = m
-        self.key = key
-
     @property
     def position(self):
         m = self._m
@@ -157,41 +157,16 @@ class VertexView(_ViewMixin, Vertex):
     def position(self, value):
         self._m.place_vertex(self, value)
 
-    @property
-    def edges(self):
-        m = self._m
-        st = m._store
-        keys = st.vertex_edges(self.key)
-        return _MutSet(EdgeView(m, k) for k in keys)
-
-    @edges.setter
-    def edges(self, value):
-        if set(value) != set(self.edges):
-            raise ValueError("vertex.edges is determined by the endpoints of live edges")
+    edges = property(store_views.vertex_edges, store_views.set_vertex_edges)
 
 
 class EdgeView(_ViewMixin, Edge):
     __slots__ = ("_m",)
 
-    def __init__(self, m, key):
-        self._m = m
-        self.key = key
-
     v0 = property(partial(store_views.endpoint, 0), partial(store_views.set_endpoint, 0))
     v1 = property(partial(store_views.endpoint, 1), partial(store_views.set_endpoint, 1))
 
-    @property
-    def faces(self):
-        m = self._m
-        st = m._store
-        keys = st.edge_faces(self.key)
-        return _MutList(self, ("faces",), [FaceView(m, k) for k in keys])
-
-    @faces.setter
-    def faces(self, value):
-        keys = [self._m._incidence_key(f, 2) for f in value]
-        self._m._store.order_edge_faces(self.key, keys)
-        self._m._dirty()
+    faces = property(store_views.edge_faces, store_views.set_edge_faces)
 
     soft = property(partial(store_views.edge_flag, "soft"), partial(store_views.set_edge_flag, "soft"))
     hidden = property(partial(store_views.edge_flag, "hidden"), partial(store_views.set_edge_flag, "hidden"))
@@ -230,45 +205,8 @@ class EdgeView(_ViewMixin, Edge):
 class FaceView(_ViewMixin, Face):
     __slots__ = ("_m",)
 
-    def __init__(self, m, key):
-        self._m = m
-        self.key = key
-
-    def _rings(self):
-        m = self._m
-        return [[VertexView(m, k) for k in r]
-                for r in m._store.face_rings(self.key)]
-
-    @property
-    def loop(self):
-        m = self._m
-        st = m._store
-        rings = st.face_rings(self.key)
-        return _MutList(self, ("loop",), [VertexView(m, k) for k in rings[0]])
-
-    @loop.setter
-    def loop(self, value):
-        rings = self._m._store.face_rings(self.key)
-        rings[0] = [self._m._incidence_key(v, 0) for v in value]
-        self._m._store.replace_rings(self.key, rings)
-        self._m._dirty()
-
-    @property
-    def hole_loops(self):
-        m = self._m
-        st = m._store
-        rings = st.face_rings(self.key)
-        return _MutList(self, ("hole_loops",), [
-            _MutList(self, ("hole_loops", i),
-                     [VertexView(m, k) for k in r])
-            for i, r in enumerate(rings[1:])])
-
-    @hole_loops.setter
-    def hole_loops(self, value):
-        outer = self._m._store.face_rings(self.key)[0]
-        holes = [[self._m._incidence_key(v, 0) for v in ring] for ring in value]
-        self._m._store.replace_rings(self.key, [outer, *holes])
-        self._m._dirty()
+    loop = property(partial(store_views.face_loops, False), partial(store_views.set_face_loops, False))
+    hole_loops = property(partial(store_views.face_loops, True), partial(store_views.set_face_loops, True))
 
     def _positions(self):
         return store_views.ring_positions(self._m, self.key)
@@ -639,7 +577,7 @@ class StoreMesh(_mesh._MeshState):
     def textured_faces(self) -> list:
         """The faces whose attrs hold a texture (own dict or table row),
         without giving the others a dict."""
-        table, fa = attr_columns(self)
+        table, fa = store_views.attr_columns(self)
         rows = {i for i, a in enumerate(table) if a and a.get("texture")}
         if not rows:
             return []
@@ -1628,147 +1566,6 @@ class _EdgeMap(Mapping):
 
     def __len__(self):
         return len(self._dict())
-
-
-def store_from_source(src, hooks=(), *, precise=False):
-    """The store a deferred mesh's ``_deferred_source`` builds, with its
-    attribute table. ``hooks`` are the after-build functions links attached
-    (``core.links._retable_deferred``): per-element relabels of attrs and
-    edge tags, applied here to the table rows and tag names once instead of
-    to every face — the same result, since every face of one row has the
-    same attrs."""
-    from formats.igz import _face_attrs_from_json
-    import ingetrazo_core as mod
-    meta = src.get("meta") or {}
-    raw = meta.get("face_attrs") or []
-    table = [_face_attrs_from_json(row) or {} for row in raw]
-    names = list(meta.get("edge_layers") or [])
-    n_e = len(src["edges"]) if src.get("edges") is not None else 0
-    from ingetrazo_core import document_native_io as native_io
-    direct = native_io() is not None
-    def indices(data):
-        a = np.asarray(data)
-        dtype = a.dtype if direct and a.dtype in (np.int32, np.int64) else np.int64
-        return np.ascontiguousarray(a, dtype=dtype)
-    fa = src.get("face_attr")
-    nfaces = len(src["counts"])
-    fa = (np.full(nfaces, -1, dtype=np.int64) if fa is None
-          else indices(fa))
-    layers = src.get("layers")
-    layers = None if layers is None else indices(layers)
-    if hooks:
-        table, fa, names, layers = _apply_hooks(hooks, table, fa, names,
-                                                layers, n_e)
-    w = _weld_args()
-    ns = next(_mesh._KEY_NAMESPACES)
-    pos = (np.ascontiguousarray(src["pos"], dtype=np.float64).reshape(-1, 3)
-           if precise else _input_positions(src["pos"]))
-    edges = indices(src["edges"]).reshape(-1, 2)
-    flags = src.get("flags")
-    curves = src.get("curves")
-    store = mod.MeshStore.from_block(
-        ns, pos, edges,
-        None if flags is None else np.ascontiguousarray(flags, np.uint8),
-        None if curves is None else indices(curves),
-        layers,
-        names,
-        indices(src["rings"]),
-        indices(src["sizes"]),
-        indices(src["counts"]),
-        fa,
-        sequential=bool(src.get("sequential", False)), **w)
-    return store, table
-
-
-class _RowFace:
-    __slots__ = ("attrs",)
-
-    def __init__(self, attrs):
-        self.attrs = attrs
-
-
-class _RowEdge:
-    __slots__ = ("layer",)
-
-    def __init__(self, layer):
-        self.layer = layer
-
-
-def _apply_hooks(hooks, table, fa, names, layers, n_e):
-    """Run per-element after-build hooks on one stand-in per table row and
-    per tag name (plus one for the untagged / attribute-less elements)."""
-    from types import SimpleNamespace
-    rows = [_RowFace(dict(t)) for t in table] + [_RowFace({})]
-    tags = [_RowEdge(n) for n in names] + [_RowEdge(None)]
-    stand_in = SimpleNamespace(faces=rows, edges=tags)
-    for hook in hooks:
-        hook(stand_in)
-    table = [r.attrs for r in rows]
-    fa = np.where(fa < 0, len(table) - 1, fa)
-    new_names: list = []
-    ix: dict = {}
-    remap = []
-    for t in tags:
-        if t.layer is None:
-            remap.append(-1)
-        else:
-            j = ix.get(t.layer)
-            if j is None:
-                j = ix[t.layer] = len(new_names)
-                new_names.append(t.layer)
-            remap.append(j)
-    remap = np.asarray(remap, dtype=np.int64)
-    if layers is None:
-        layers = np.full(n_e, -1, dtype=np.int64)
-    layers = remap[np.where(layers < 0, len(tags) - 1, layers)]
-    return table, fa, new_names, layers
-
-
-def face_attrs(m):
-    """``core.mesh.face_attrs`` of a store-backed mesh: the first face of
-    each distinct attribute row, and every face that has its own dict —
-    without giving the others one."""
-    st = m.__dict__["_store"]
-    attrs = _attribute_owner(m)
-    own = attrs["_attr_own"]
-    table = attrs["_attr_table"]
-    fa = st.arrays()["face_attr"]
-    keys = st.keys("face") if own else None
-    seen = set()
-    for i, k in enumerate(fa.tolist()):
-        if own:
-            d = own.get(keys[i])
-            if d is not None:
-                yield d
-                continue
-        if k in seen:
-            continue
-        seen.add(k)
-        yield store_views.copy_attrs(table[k]) if k >= 0 else {}
-
-
-def attr_columns(m, overrides=None, *, face_attr=None):
-    """``(table, face_attr)`` of a store-backed mesh for array readers
-    (pack, takeoff): every face's attrs as an index into ``table`` (-1:
-    none). Faces with their own dict (touched through a view) or an entry
-    in ``overrides`` (face key → attrs) get a row of their own; the others
-    share the attribute table's rows."""
-    d = m.__dict__
-    st = d["_store"]
-    fa = st.arrays()["face_attr"].copy() if face_attr is None else face_attr.copy()
-    attrs = _attribute_owner(m)
-    table = list(attrs["_attr_table"])
-    own = attrs["_attr_own"]
-    if own or overrides:
-        keys = st.keys("face")
-        for i, k in enumerate(keys):
-            a = (overrides or {}).get(k)
-            if a is None:
-                a = own.get(k)
-            if a is not None:
-                fa[i] = len(table)
-                table.append(a)
-    return table, fa
 
 
 def faces_arrays(m):

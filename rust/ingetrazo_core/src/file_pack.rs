@@ -98,11 +98,7 @@ fn igz_store_columns<'p>(mesh: &Obj<'p>, precise: bool) -> PyResult<Option<Obj<'
     }
     let arrays = p.get_item(0)?;
     let layers = p.get_item(1)?;
-    let kw = PyDict::new(py);
-    kw.set_item("face_attr", arrays.get_item("face_attr")?)?;
-    let (attrs, rows): (Obj<'p>, Obj<'p>) = store
-        .call_method("attr_columns", (mesh,), Some(&kw))?
-        .extract()?;
+    let (attrs, rows) = crate::kernel::store_views::attributes::attr_columns(mesh, None, Some(&arrays.get_item("face_attr")?))?;
     let (table, indices) = face_table(&rows, &attrs, false)?;
     arrays.set_item("face_attr", indices.into_pyarray(py))?;
     Ok(Some((arrays, table, layers).into_pyobject(py)?.into_any()))

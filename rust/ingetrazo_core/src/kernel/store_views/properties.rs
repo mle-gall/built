@@ -144,7 +144,7 @@ fn set_interior(view: &Obj<'_>, value: &Obj<'_>) -> PyResult<()> {
     Ok(())
 }
 
-fn attribute_owner<'py>(mesh: &Obj<'py>) -> PyResult<Obj<'py>> {
+pub(super) fn attribute_owner<'py>(mesh: &Obj<'py>) -> PyResult<Obj<'py>> {
     Ok(mesh
         .getattr_opt("_instance_definition")?
         .unwrap_or_else(|| mesh.clone()))

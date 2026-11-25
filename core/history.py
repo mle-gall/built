@@ -219,40 +219,6 @@ class SetPluginDataCommand(Command):
         scene.version += 1
 
 
-def _geometry_plan(cmd, scene, targets):
-    """Enlist all known stores for rollback. Use transaction replay only
-    when it also covers the other commands in the step."""
-    if isinstance(cmd, CompoundCommand):
-        coverage = [_geometry_plan(c, scene, targets) for c in cmd.commands]
-        return all(coverage) and (type(cmd) is CompoundCommand or cmd.journal_parts)
-    if isinstance(cmd, GroupInContextCommand):
-        return _geometry_plan(cmd.inner, scene, targets)
-    if isinstance(cmd, MakeComponentOfCommand):
-        return _geometry_plan(cmd._nest, scene, targets)
-    if isinstance(cmd, MakeNestedGroupCommand) and cmd._inner is not None:
-        return _geometry_plan(cmd._inner, scene, targets)
-    if isinstance(cmd, MeshCommand):
-        from core.store_mesh import StoreMesh
-        meshes = cmd.geometry_meshes(scene)
-        stores = [m for m in meshes if type(m) is StoreMesh]
-        if stores:
-            targets.append((cmd, stores))
-        return len(stores) == len(meshes)
-    return _uses_doc_undo(cmd, scene)
-
-
-def _uses_doc_undo(cmd, scene) -> bool:
-    if getattr(cmd, "_journal_geometry", False):
-        return True
-    flag = getattr(cmd, "doc_undo", False)
-    if callable(flag):
-        try:
-            return bool(flag(scene))
-        except Exception:  # noqa: BLE001 — undecided: its own undo
-            return False
-    return bool(flag)
-
-
 # ---- Concrete commands ------------------------------------------------------
 
 def _dirty_group_chunks(scene) -> None:
@@ -293,10 +259,6 @@ def _dirty_placements(groups) -> None:
         mesh = getattr(g, "mesh", None)
         if mesh is not None:
             mesh.invalidate_placement_chunks()
-
-
-#: The placement fields a viewport chunk depends on (see _dirty_placements).
-_RENDER_FIELDS = ["layer", "hidden", "material"]
 
 
 def _unselect(scene, items) -> None:
@@ -907,8 +869,7 @@ class CompoundCommand(Command):
 
     def doc_undo(self, scene) -> bool:
         """By its transaction when every part would be."""
-        return bool(self.commands) and all(
-            _uses_doc_undo(c, scene) for c in self.commands)
+        return DocumentHistory.transaction_covers(self.commands, scene)
 
     def doc_after(self, scene, phase) -> None:
         parts = reversed(self.commands) if phase == "undo" else self.commands
@@ -1246,82 +1207,12 @@ class History:
             return False
         return self._native.run(self, self.redo_stack[-1], "redo")
 
-    def _keep_geometry_caches(self, cmd, before) -> None:
-        cv = getattr(self.scene, "content_version", None)
-        # Layer counts and dimension anchors can reuse their placement scans
-        # after edits confined to the active mesh or construction annotations.
-        if isinstance(cmd, (
-                SnapshotMutation, SnapshotCompound, AddEdgeCommand, AddFaceCommand,
-                AddDimensionCommand, AddTextLabelCommand, AddGuideCommand)):
-            rest = getattr(self, "layer_count_rest", None)
-            if (rest and rest[0] == (id(self.scene), before, id(self.scene.mesh))
-                    and getattr(cmd, "_history_mesh", None) is self.scene.mesh
-                    and (not isinstance(cmd, SnapshotMutation) or cmd._target(self.scene) is self.scene.mesh)):
-                self.layer_count_rest = (id(self.scene), cv, id(self.scene.mesh)), rest[1]
-            # Placement transforms did not change. Prototype bounds in the
-            # dimension broad phase are checked by mesh revision on lookup.
-            anchors = self.scene.__dict__.get("_anchor_placements")
-            if anchors and anchors[0] == (before, len(self.scene.groups),
-                                          id(self.scene.edit_group), id(self.scene.mesh)):
-                self.scene._anchor_placements = (cv, *anchors[0][1:]), anchors[1]
-
     def context_changed(self, before) -> None:
         if not isinstance(before, tuple):
             return  # A caller without a pre-transition serial needs a fresh scan.
         version, serial = before
         if version is not None:
             self.feed.readers.context_changed(version, serial, self.scene.content_version)
-
-    def _execute(self, cmd: Command, nested=False) -> None:
-        _t0 = _time_mod.perf_counter() if _PERF else 0.0
-        self.last_rejected = None
-        before = getattr(self.scene, "content_version", None)
-        # Geometry-only commands cannot create groups, even on an active tag.
-        include_groups = not cmd.keeps_rows
-        objs_before = self._objects_before(include_groups=include_groups)
-        self.last_txn = None
-
-        def tag_objects():
-            self._tag_new_objects(objs_before, include_groups=include_groups)
-
-        try:
-            self._native.execute(self, cmd, tag_objects)
-        except Exception as exc:
-            self.scene.version += 1
-            if isinstance(exc, CommandRejected):
-                self.last_error = None
-                self.last_rejected = str(exc)
-            else:
-                self.scene.selection.clear()
-                self.last_error = f"{type(cmd).__name__}: {exc}"
-                self._log_failure(cmd, exc)
-            return
-        self._dirty_from_txn()
-        self.last_error = None
-        if _PERF:
-            _plog("command", (_time_mod.perf_counter() - _t0) * 1000.0,
-                  extra=type(cmd).__name__)
-        # Remember which mesh was active (the loose one, or a group being
-        # edited): undo/redo re-enter that context so a snapshot restore never
-        # lands on the wrong mesh after the user exits the group.
-        cmd._history_mesh = self.scene.mesh
-        if self.scene.edit_group is not None:
-            cmd._occurrences = tuple(level["session"] for level in self.scene._edit_stack)
-        self._keep_geometry_caches(cmd, before)
-        if nested:
-            return
-        cap = max(0, int(self.max_steps or 0))
-        self._native.push(cmd, cap)
-        self._native.refresh_dimensions(self.scene)
-
-    def _follow_text_placements(self):
-        anchors = getattr(self.scene, "text_placement_anchors", None)
-        if anchors:
-            from core.coordinate_frame import model_frame
-            with model_frame():
-                for anchor in anchors:
-                    if anchor.follow(self.scene):
-                        self._moved_signs.append(anchor.path[-1])
 
     def _log_failure(self, cmd: Command, exc: Exception) -> None:
         import datetime
@@ -1344,59 +1235,6 @@ class History:
                 fh.write(text)
         except OSError:
             pass
-
-    def _replay(self, undo):
-        source = self.undo_stack if undo else self.redo_stack
-        before = getattr(self.scene, "content_version", None)
-        cmd = source[-1]
-        self._native.replay(self, undo, False)
-        self._dirty_from_txn()
-        self._keep_geometry_caches(cmd, before)
-        self._native.refresh_dimensions(self.scene)
-        return True
-
-    def _dirty_from_txn(self) -> None:
-        """The renderer's dirtiness from the step's transaction: the meshes
-        of the placements whose tag, Hide or paint it changed, and of their
-        subtrees, re-validate their chunks (docs/rust-document-model.md
-        §5). Commands that touch only placements no longer flag every mesh
-        themselves."""
-        rec = self.last_txn
-        if rec is None or rec[0] is None:
-            return
-        touched = rec[0].placements(_RENDER_FIELDS)
-        if touched:
-            _dirty_placements(touched)
-
-    def _objects_before(self, *, include_groups=True):
-        """The objects in the document before a command runs. With no
-        layer active only the guides, dimensions and texts (they go to
-        their automatic layers), so the default case never walks the
-        groups."""
-        from core.layers import (DEFAULT_LAYER, active_layer, auto_ids,
-                                 object_ids)
-        if active_layer(self.scene) == DEFAULT_LAYER:
-            return auto_ids(self.scene)
-        return object_ids(self.scene, include_groups=include_groups)
-
-    def _tag_new_objects(self, before, *, include_groups=True) -> None:
-        """The objects a command made go onto the active layer
-        (core.layers) — groups, components, dimensions and texts; loose
-        lines and faces stay on the default layer, so hiding a layer never
-        leaves half a solid. Done here, after the command, so every tool
-        gets it without knowing about layers."""
-        if before is None:
-            return
-        from core.layers import tag_new_objects
-        from core.purge import iter_groups
-        tagged = []
-        if tag_new_objects(self.scene, before, include_groups=include_groups, tagged_groups=tagged):
-            # Only these new placements now inherit a different tag. Dirtying
-            # all meshes turns adding one part into a full Metal scene bake.
-            for group in iter_groups(tagged):
-                group.mesh._chunk_dirty = True
-                group.mesh._attrs_dirty = True
-            self.scene.version += 1
 
     def clear(self) -> None:
         self._native.clear_stacks()

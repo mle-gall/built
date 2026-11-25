@@ -6,7 +6,7 @@ use pyo3::{
 };
 type Obj<'py> = Bound<'py, PyAny>;
 
-fn in_frame<T>(frame: &Obj<'_>, f: impl FnOnce() -> PyResult<T>) -> PyResult<T> {
+pub(super) fn in_frame<T>(frame: &Obj<'_>, f: impl FnOnce() -> PyResult<T>) -> PyResult<T> {
     let py = frame.py();
     frame.call_method0("__enter__")?;
     let result = f();
@@ -80,12 +80,12 @@ fn dispatch<'py>(host: &Obj<'py>, cmd: &Obj<'py>, phase: &str) -> PyResult<Obj<'
     let mut ran = false;
     let result = (|| {
         let value = if phase == "execute" {
-            let v = host.call_method1("_execute", (cmd, nested))?;
+            let v = super::lifecycle::execute(host,cmd,nested)?;
             ran = !host.getattr("last_error")?.is_truthy()?
                 && !host.getattr("last_rejected")?.is_truthy()?;
             v
         } else {
-            let v = host.call_method1("_replay", (phase == "undo",))?;
+            let v = super::lifecycle::replay(host,cmd,phase=="undo")?;
             ran = v.is_truthy()?;
             v
         };

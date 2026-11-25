@@ -298,8 +298,8 @@ def face_attributes(mesh):
         table = [_face_attrs_from_json(a) or {} for a in src['meta'].get('face_attrs') or []]
         return [table[k] if k >= 0 else {} for k in src['face_attr']]
     if type(mesh).__name__ == 'StoreMesh':
-        from core.store_mesh import attr_columns
-        table, fa = attr_columns(mesh)
+        from ingetrazo_core import store_views
+        table, fa = store_views.attr_columns(mesh)
         return [table[k] if k >= 0 else {} for k in fa.tolist()]
     return [f.attrs for f in mesh.faces]
 

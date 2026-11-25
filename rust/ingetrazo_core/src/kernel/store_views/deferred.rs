@@ -56,11 +56,11 @@ fn materialize(mesh: &Obj<'_>) -> PyResult<()> {
         let built = match hooks.filter(|x| !x.is_none()) {
             Some(h) if h.is_truthy()? => {
                 let original = state.get_item("_deferred_hook_source")?.unwrap_or(source);
-                api.call_method1("store_from_source", (original, h))?
+                super::block::store_from_source(&original, Some(&h), false)?
             }
-            _ => api.call_method1("store_from_source", (source,))?,
+            _ => super::block::store_from_source(&source, None, false)?,
         };
-        Some((built.get_item(0)?, built.get_item(1)?))
+        Some(built)
     } else {
         None
     };

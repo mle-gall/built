@@ -386,8 +386,6 @@ impl Builder {
             )?;
         } else {
             let store = py.import("core.store_mesh")?;
-            let kw = PyDict::new(py);
-            kw.set_item("precise", self.precise)?;
             let empty = || -> PyResult<bool> {
                 for k in ["vertices", "edges", "faces"] {
                     if mesh.getattr(k)?.is_truthy()? {
@@ -397,9 +395,7 @@ impl Builder {
                 Ok(true)
             };
             if self.precise || empty()? {
-                let (st, table): (Obj<'_>, Obj<'_>) = store
-                    .call_method("store_from_source", (s,), Some(&kw))?
-                    .extract()?;
+                let (st, table) = crate::kernel::store_views::block::store_from_source(s, None, self.precise)?;
                 store.call_method1("become_store", (mesh, st, table))?;
             } else if get(s, "sequential")?.is_truthy()? {
                 codec.call_method1(

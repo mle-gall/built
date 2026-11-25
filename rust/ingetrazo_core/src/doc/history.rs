@@ -3,6 +3,7 @@
 //! still implement Python inverses. Existing scripting clients edit these
 //! lists directly when folding a group-edit session or cancelling a preview.
 mod dispatch;
+pub(crate) mod lifecycle;
 use super::py::PyTransaction;
 use std::collections::VecDeque;
 
@@ -37,20 +38,14 @@ fn replay_direct(
     undo: bool,
 ) -> PyResult<()> {
     let scene = host.getattr("scene")?;
-    let keywords = pyo3::types::PyDict::new(py);
-    keywords.set_item("include_groups", !cmd.getattr("keeps_rows")?.is_truthy()?)?;
-    let objects = if undo {
-        None
-    } else {
-        Some(host.call_method("_objects_before", (), Some(&keywords))?)
-    };
+    let objects = if undo {None} else {Some(lifecycle::objects_before(&scene,!cmd.getattr("keeps_rows")?.is_truthy()?)?)};
     let action = cmd.getattr(if undo { "undo" } else { "do" })?;
     let doc = py.import("core.doc_model")?;
     doc.call_method1("begin", (scene.getattr("_root")?.getattr("_doc_key")?,))?;
     host.setattr("last_txn", py.None())?;
     let result = (|| {
         in_command_mesh(&scene, cmd, &action, (&scene,))?;
-        host.call_method0("_follow_text_placements")?;
+        lifecycle::follow_text(host)?;
         doc.call_method0("commit")
     })();
     match result {
@@ -62,7 +57,7 @@ fn replay_direct(
         }
     }
     if let Some(objects) = objects {
-        host.call_method("_tag_new_objects", (objects,), Some(&keywords))?;
+        objects.apply(&scene)?;
     }
     Ok(())
 }
@@ -104,6 +99,15 @@ impl DocumentHistory {
     }
 
     #[staticmethod]
+    fn transaction_covers(commands:&Bound<'_,PyAny>, scene:&Bound<'_,PyAny>) -> PyResult<bool> {
+        if !commands.is_truthy()? {return Ok(false);}
+        for c in commands.try_iter()? {
+            if !super::journal_plan::uses_transaction(&c?,scene)? {return Ok(false);}
+        }
+        Ok(true)
+    }
+
+    #[staticmethod]
     fn refresh_dimensions(scene: &Bound<'_,PyAny>) -> PyResult<()> {
         if let Some(dims) = scene.getattr_opt("dimensions")?.filter(|v| !v.is_none()) {
             for dim in dims.try_iter()? {
@@ -116,13 +120,9 @@ impl DocumentHistory {
     }
 
     #[staticmethod]
-    fn execute(
-        py: Python<'_>,
-        host: &Bound<'_, PyAny>,
-        cmd: &Bound<'_, PyAny>,
-        tag_objects: &Bound<'_, PyAny>,
-    ) -> PyResult<()> {
-        super::execute::execute(py, host, cmd, tag_objects)
+    #[pyo3(signature=(scene,include_groups=true))]
+    fn objects_before<'py>(scene:&Bound<'py,PyAny>,include_groups:bool)->PyResult<Bound<'py,PyAny>> {
+        Ok(lifecycle::objects_before(scene,include_groups)?.before)
     }
 
     fn push(&self, py: Python<'_>, command: &Bound<'_, PyAny>, limit: usize) -> PyResult<()> {

@@ -368,9 +368,9 @@ def face_attrs(mesh):
         for k in fa[np.sort(first)].tolist():
             yield (_face_attrs_from_json(table[k]) or {}) if k >= 0 else {}
         return
-    from core import store_mesh
-    if type(mesh) is store_mesh.StoreMesh:
-        yield from store_mesh.face_attrs(mesh)
+    from core.store_mesh import StoreMesh
+    if isinstance(mesh, StoreMesh):
+        yield from store_views.attribute_rows(mesh)
         return
     for f in mesh.faces:
         yield f.attrs

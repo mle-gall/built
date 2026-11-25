@@ -7,6 +7,8 @@ use pyo3::{
 };
 mod placements;
 mod document;
+mod materials;
+mod annotations;
 
 type Obj<'py> = Bound<'py, PyAny>;
 type Reply<'py> = PyResult<Bound<'py, PyDict>>;
@@ -129,6 +131,8 @@ pub(crate) fn register(root: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(move_vertices, &m)?)?;
     m.add_function(wrap_pyfunction!(undo, &m)?)?;
     m.add_function(wrap_pyfunction!(redo, &m)?)?;
+    annotations::register(&m)?;
+    materials::register(&m)?;
     document::register(&m)?;
     placements::register(&m)?;
     py.import("sys")?

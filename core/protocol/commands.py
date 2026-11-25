@@ -15,6 +15,8 @@ from ingetrazo_core import command_protocol
 from ingetrazo_core.command_protocol import (hide, lock, make_unique, move_vertices, redo,
     rename_placement, rename_placements, set_tag, undo, unhide)
 from ingetrazo_core.command_protocol import (
+    add_geo_path, move_geo_path_node, add_text_label, add_dimension, place_section_plane, set_north, add_image_plane,
+    set_material_pbr, set_material_base, rename_material, edit_material, duplicate_material, delete_material, create_material, name_unnamed_colours,
     edit_loose_geometry, promote_tag, file_placements, edit_structure_node,
     reset_link_tags, delete_placements, unlink_placements, edit_tag,
 )
@@ -237,7 +239,7 @@ def paint_material(history, *, placement=None, mesh=None, faces=(), seed=None, m
         clicked = command_protocol.need(target_mesh, "face", [seed])[0] if seed is not None else targets[0]
     mat = None
     if isinstance(material, str):
-        mat = _material(history, material)
+        mat = command_protocol.material(history, material)
         if color is None and texture is None:
             color, texture = mat.color, mat.texture
         if opacity is None:
@@ -707,80 +709,6 @@ def erase_stroke(history, hide=False, edges=(), placements=(), guides=(), dimens
     return command_protocol.answer(history, before)
 
 
-def add_geo_path(history, points, closed=False):
-    from ingetrazo_core import Vec3
-    from georef.geopath import GeoPath
-    from core.history import AddGeoPathCommand
-    if len(points) < 2:
-        raise ValueError("expected at least two path nodes")
-    return command_protocol.execute(history, AddGeoPathCommand(GeoPath([Vec3(*p) for p in points], closed=closed)))
-
-
-def move_geo_path_node(history, path, node, point):
-    from ingetrazo_core import Vec3
-    from core.history import MoveGeoPathNodeCommand
-    paths = history.scene.geo_paths
-    if not 0 <= path < len(paths) or not 0 <= node < len(paths[path].points):
-        raise KeyError("unknown path node")
-    return command_protocol.execute(history, MoveGeoPathNodeCommand(paths[path], node, Vec3(*point)))
-
-
-def add_text_label(history, anchor, offset, text, attachment=None):
-    from ingetrazo_core import Vec3
-    from core.annotation_anchor import Attachment
-    from core.history import AddTextLabelCommand
-    from core.textlabel import TextLabel
-    point = Vec3(*anchor)
-    label = TextLabel(point, Vec3(*offset), text, attachment=Attachment.restore(history.scene, attachment, point))
-    return command_protocol.execute(history, AddTextLabelCommand(label))
-
-
-def add_dimension(history, a, b, offset, axis=None, attachments=(None, None)):
-    from ingetrazo_core import Vec3
-    from core.annotation_anchor import Attachment
-    from core.dimension import Dimension
-    from core.history import AddDimensionCommand
-    dim = Dimension(Vec3(*a), Vec3(*b), Vec3(*offset), axis=axis)
-    dim.attachment_a, dim.attachment_b = (Attachment.restore(history.scene, raw, pos)
-                                          for raw, pos in zip(attachments, (dim.a, dim.b), strict=True))
-    return command_protocol.execute(history, AddDimensionCommand(dim))
-
-
-def place_section_plane(history, point, normal, name=None, symbol=None):
-    from ingetrazo_core import Vec3
-    from core.i18n import tr
-    from core.history import PlaceSectionPlaneCommand
-    from core.section import SectionPlane
-    planes = history.scene.section_planes
-    plane = SectionPlane(Vec3(*point), Vec3(*normal),
-                         name=tr("Section {n}", n=len(planes) + 1) if name is None else name,
-                         symbol=ingetrazo_core.section_next_symbol(planes) if symbol is None else symbol)
-    return command_protocol.execute(history, PlaceSectionPlaneCommand(plane))
-
-
-def set_north(history, degrees):
-    import math
-    from core.history import SetNorthCommand
-    from core.sun import wrap_north_deg, scene_north_deg
-    if not math.isfinite(degrees):
-        raise ValueError("expected a finite north angle")
-    deg = wrap_north_deg(degrees)
-    before = history.revision
-    if abs(deg - scene_north_deg(history.scene)) > 1e-9:
-        history.execute(SetNorthCommand(deg))
-    return command_protocol.answer(history, before)
-
-
-def add_image_plane(history, path, origin, u, v, aspect=1.0, name=""):
-    from ingetrazo_core import Vec3
-    from core.history import AddImagePlaneCommand
-    from core.image_plane import ImagePlane
-    before = history.revision
-    plane = ImagePlane(path, Vec3(*origin), Vec3(*u), Vec3(*v), aspect=aspect, name=name)
-    history.execute(AddImagePlaneCommand(plane))
-    return command_protocol.answer(history, before)
-
-
 def set_group_scale(history, placement, factors):
     """Set absolute scale along a placement's local axes."""
     import math
@@ -1207,201 +1135,6 @@ def purge_debris(history):
     (``Mesh.purge_debris``, one snapshot step)."""
     from core.history import SnapshotMutation
     return command_protocol.execute(history, SnapshotMutation(lambda scene: scene.mesh.purge_debris()))
-
-
-def _material(history, name):
-    mat = (getattr(history.scene, "materials", None) or {}).get(name)
-    if mat is None:
-        raise KeyError(f"no material called {name!r}")
-    return mat
-
-
-def rename_material(history, name, new_name):
-    """Rename a registry material (its name is its key, §2) on every face
-    and container that wears it: ``RestampMaterialCommand``. A name another
-    material has is refused (that would merge two materials)."""
-    from dataclasses import replace
-    from core.history import RestampMaterialCommand
-    mat = _material(history, name)
-    new_name = str(new_name).strip()
-    if not new_name:
-        raise ValueError("a material needs a name")
-    before = history.revision
-    if new_name == name:
-        return command_protocol.answer(history, before, ok=False)
-    if new_name in history.scene.materials:
-        raise ValueError(f"there is already a material called {new_name!r}")
-    history.execute(RestampMaterialCommand(name, replace(mat, name=new_name)))
-    return command_protocol.answer(history, before)
-
-
-def edit_material(history, name, color=None, opacity=None, tile=None):
-    """Change a registry material everywhere it is worn. ``color`` is
-    ``[r, g, b]`` 0–1 (a textured material takes it as its tint),
-    ``opacity`` 0–1 (1 = opaque), ``tile`` ``[width, height]`` in metres
-    (textured only). Plain: ``RestampMaterialCommand``; textured:
-    ``EditTexturedMaterialCommand`` (each face keeps its own placement)."""
-    from dataclasses import replace
-    from core.history import EditTexturedMaterialCommand, RestampMaterialCommand
-    mat = _material(history, name)
-    before = history.revision
-    if mat.texture and (color is not None or tile is not None) and opacity is None:
-        tex = mat.texture
-        size = None
-        if tile is not None:
-            size = (float(tile[0]), float(tile[1]), float(tex.get("rot", 0.0)))
-        tint = tuple(color) if color is not None else tex.get("tint")
-        history.execute(EditTexturedMaterialCommand(name, tint, size=size))
-        return command_protocol.answer(history, before)
-    if tile is not None and not mat.texture:
-        raise ValueError("only a textured material has a tile size")
-    changes = {}
-    if color is not None:
-        changes["color"] = tuple(float(c) for c in color[:3])
-    if opacity is not None:
-        o = float(opacity)
-        changes["opacity"] = None if o >= 0.999 else max(0.0, o)
-    if not changes:
-        return command_protocol.answer(history, before, ok=False)
-    history.execute(RestampMaterialCommand(name, replace(mat, **changes)))
-    return command_protocol.answer(history, before)
-
-
-def duplicate_material(history, name, new_name=None):
-    """A copy of a registry material under a new name (``"<name> copy"``,
-    numbered when taken), worn by nothing yet: ``AddMaterialCommand``. The
-    answer adds ``name``."""
-    from copy import deepcopy
-    from dataclasses import replace
-    from core.material_commands import AddMaterialCommand
-    mat = _material(history, name)
-    taken = history.scene.materials
-    if new_name is None:
-        new_name, n = f"{name} copy", 2
-        while new_name in taken:
-            new_name, n = f"{name} copy {n}", n + 1
-    elif new_name in taken:
-        raise ValueError(f"there is already a material called {new_name!r}")
-    before = history.revision
-    history.execute(AddMaterialCommand(replace(deepcopy(mat), name=new_name)))
-    out = command_protocol.answer(history, before)
-    out["name"] = new_name
-    return out
-
-
-def delete_material(history, name):
-    """Remove a registry material; what wore it shows the default
-    material: ``DeleteMaterialCommand``."""
-    from core.material_commands import DeleteMaterialCommand
-    _material(history, name)
-    return command_protocol.execute(history, DeleteMaterialCommand(name))
-
-
-def create_material(history, name=None, color=None, texture=None, opacity=None, pbr=None, finish=None,
-                    reuse=True):
-    """Add a material: a colour base (``color`` ``[r,g,b]`` 0–1) or an image
-    base (``texture`` ``{"path", "sw", "sh"}``), with optional ``opacity``,
-    ``pbr`` and ``finish``. With ``reuse`` and no ``pbr``, a material with
-    the same plain recipe is answered instead (``reused`` true, no step).
-    Unnamed, it is named after its colour (``Colour #A0703C``) or image.
-    The answer adds ``name``."""
-    from core.material_commands import AddMaterialCommand, find_material, fresh_name, material_for_paint
-    from core.materials import Material
-    if (color is None) == (texture is None):
-        raise ValueError("a material has one base: a colour or an image")
-    materials = history.scene.materials
-    rgb = tuple(float(c) for c in color[:3]) if color is not None else None
-    before = history.revision
-    if reuse and pbr is None:
-        found = find_material(materials, color=rgb, texture=texture, opacity=opacity)
-        if found is not None and (name is None or name == found):
-            return {"ok": True, "step": None, "error": None, "rejected": None, "name": found, "reused": True}
-    if name is None:
-        name = material_for_paint(history.scene, color=rgb, texture=texture, opacity=opacity).name
-        name = fresh_name(materials, name)
-    elif name in materials:
-        raise ValueError(f"there is already a material called {name!r}")
-    mat = Material(name, color=rgb, texture=dict(texture) if texture else None,
-                   opacity=None if opacity is None or float(opacity) >= 0.999 else float(opacity),
-                   pbr=dict(pbr) if pbr else None, finish=finish)
-    history.execute(AddMaterialCommand(mat))
-    out = command_protocol.answer(history, before)
-    out.update(name=name, reused=False)
-    return out
-
-
-def set_material_base(history, name, base, color=None, texture=None):
-    """Switch a material's base between a colour (``base="color"``,
-    ``color`` or its current colour) and an image (``base="image"``,
-    ``texture`` ``{"path", "sw", "sh"}``, or the image it had). Its PBR
-    values, opacity and finish are kept; what wears it follows
-    (``RestampMaterialCommand``)."""
-    from dataclasses import replace
-    from core.history import RestampMaterialCommand
-    mat = _material(history, name)
-    before = history.revision
-    if base == "color":
-        rgb = tuple(float(c) for c in (color if color is not None else (mat.color or (0.8, 0.8, 0.8)))[:3])
-        new = replace(mat, color=rgb, texture=None)
-    elif base == "image":
-        tex = dict(texture) if texture else (dict(mat.texture) if mat.texture else None)
-        if not tex or not tex.get("path"):
-            raise ValueError("an image base needs an image")
-        tex.setdefault("sw", 1.0)
-        tex.setdefault("sh", tex["sw"])
-        new = replace(mat, texture=tex, color=mat.color if mat.pbr is not None else None)
-    else:
-        raise ValueError("base is 'color' or 'image'")
-    if new == mat:
-        return command_protocol.answer(history, before, ok=False)
-    history.execute(RestampMaterialCommand(name, new))
-    return command_protocol.answer(history, before)
-
-
-def set_material_pbr(history, name, **channels):
-    """Set PBR channels of a material, whatever its base: ``metallic``,
-    ``roughness``, ``ao_strength`` (0–1), ``normal_scale`` (≥ 0), and maps
-    ``metallic_map``, ``roughness_map``, ``normal_map``, ``ao_map`` (a
-    path or ``{"path", "flip_y"?}``). ``None`` removes a channel; with none
-    left the material has no PBR. ``RestampMaterialCommand``."""
-    from dataclasses import replace
-    from core.history import RestampMaterialCommand
-    from core.material_commands import PBR_KEYS, PBR_MAPS
-    mat = _material(history, name)
-    unknown = sorted(set(channels) - set(PBR_KEYS))
-    if unknown:
-        raise ValueError(f"unknown PBR channel {unknown[0]!r}; one of {list(PBR_KEYS)}")
-    pbr = dict(mat.pbr or {})
-    for key, value in channels.items():
-        if value is None:
-            pbr.pop(key, None)
-        elif key in PBR_MAPS:
-            pbr[key] = {"path": value} if isinstance(value, str) else dict(value)
-        else:
-            v = float(value)
-            pbr[key] = max(v, 0.0) if key == "normal_scale" else min(max(v, 0.0), 1.0)
-    before = history.revision
-    new = replace(mat, pbr=pbr or None)
-    if new == mat:
-        return command_protocol.answer(history, before, ok=False)
-    history.execute(RestampMaterialCommand(name, new))
-    return command_protocol.answer(history, before)
-
-
-def name_unnamed_colours(history):
-    """"Name these": each distinct colour painted without a material
-    (older files) becomes a material, reusing one with the same recipe;
-    the faces and containers take its name (``NameColoursCommand``). The
-    answer adds ``named``, the number of colours."""
-    from core.material_commands import NameColoursCommand
-    cmd = NameColoursCommand()
-    before = history.revision
-    n = cmd.count(history.scene)
-    if n:
-        history.execute(cmd)
-    out = command_protocol.answer(history, before, ok=bool(n))
-    out["named"] = n
-    return out
 
 
 def rename_component(history, placement, name):
