@@ -232,6 +232,7 @@ def test_link_selection_header_preserves_occurrence_and_nested_choice(win, tmp_p
 def test_project_header_moves_the_registry_next_to_the_host(win, tmp_path, monkeypatch):
     from core import bim_registry
     from ingetrazo_core import project
+    from formats import project as manifest
     from tests.test_tree_links import _View
     from views import wgpu_ui
     from ingetrazo_render import shell_files
@@ -240,4 +241,4 @@ def test_project_header_moves_the_registry_next_to_the_host(win, tmp_path, monke
     monkeypatch.setattr(shell_files.ShellFileDialog, "getSaveFileName", lambda *args: (str(path), ""))
     wgpu_ui._tree_action(win, _View(), "linkregistry" + wgpu_ui.SEP)
     assert path.is_file() and Path(project.path_for(win.viewport.scene)) == path
-    assert project.storage.load(path)["bim_registry"] == bim_registry.get(win.viewport.scene)
+    assert manifest.load(path)["bim_registry"] == bim_registry.get(win.viewport.scene)
