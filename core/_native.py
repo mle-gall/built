@@ -103,7 +103,7 @@ def start_guard(argv) -> bool:
         return False                    # tests and benches choose for us
     try:
         from core.settings import settings as native_settings
-        from core import general_settings
+        from ingetrazo_core import general_settings
         from core.version import __version__
         st = native_settings()
         off_by = str(general_settings.value(OFF_BY_GUARD, "", st))
@@ -138,7 +138,7 @@ def start_ok() -> None:
     """The window is up and has drawn: this start with the engine worked."""
     try:
         from core.settings import settings as native_settings
-        from core import general_settings
+        from ingetrazo_core import general_settings
         st = native_settings()
         if _count(general_settings.value(STARTING, "0", st)):
             general_settings.set_value(STARTING, "0", st)

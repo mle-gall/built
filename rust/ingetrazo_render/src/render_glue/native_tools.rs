@@ -1769,7 +1769,7 @@ impl NativeTools {
         let tool = s.getattr("tool")?;
         if mode.eq("mesh")? {
             if class_name(&tool)? == "MoveTool" && tool.getattr("start_point")?.is_none() {
-                let control = py.import("core.input_codes")?.getattr("Input")?.getattr("ControlModifier")?;
+                let control = py.import("ingetrazo_core")?.getattr("Input")?.getattr("ControlModifier")?;
                 if ctx.getattr("modifiers")?.bitand(control)?.is_truthy()? && !tool.getattr("_copy")?.is_truthy()? {
                     let kw = PyDict::new(py);
                     kw.set_item("say", false)?;
@@ -2012,7 +2012,7 @@ impl NativeTools {
             };
             if !revision.eq(&notified)? {
                 if let Some(notify) = some(&view.getattr("source_viewport")?, "notify_scene_changed")? {
-                    let frame = py.import("core.coordinate_frame")?.call_method0("model_frame")?;
+                    let frame = py.import("ingetrazo_core.coordinate_frame")?.call_method0("model_frame")?;
                     within(&frame, || notify.call0())?;
                 }
             }

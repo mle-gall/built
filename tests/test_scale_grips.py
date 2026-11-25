@@ -189,7 +189,7 @@ def test_mirror_by_preview_through_the_anchor():
 
 
 def test_scaling_a_selection_with_an_image_carries_it_undistorted():
-    from core.image_plane import ImagePlane
+    from ingetrazo_core.image_plane import ImagePlane
 
     scene = Scene()
     vp = _Stub(scene)

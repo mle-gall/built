@@ -110,7 +110,7 @@ fn subset<'py>(py: Python<'py>, src: &Obj<'py>, path: &Obj<'py>, select: &Obj<'p
     }
     let requested = targets.call_method0("copy")?;
     if refs.is_none() {
-        let facets = module(py, "core.facets")?;
+        let facets = module(py, "ingetrazo_core.facets")?;
         let index = facets.call_method1("build", (src,))?;
         let found = index.getattr("groups")?;
         for k in facets.call_method1("evaluate", (&index, select.get_item("filter")?))?.try_iter()? {
@@ -247,7 +247,7 @@ pub fn load_source<'py>(path: &Obj<'py>, select: Option<&Obj<'py>>, include_nest
         let materials = dict_of("materials")?;
         let select = select.filter(|s| !s.is_none());
         links::validate_select(&select.map_or_else(|| none(py), |s| s.clone()))?;
-        let figure = module(py, "core.insert")?.getattr("is_scale_figure")?;
+        let figure = module(py, "ingetrazo_core.document_insert")?.getattr("is_scale_figure")?;
         let mut groups = Vec::new();
         for g in src.getattr("groups")?.try_iter()? {
             let g = g?;

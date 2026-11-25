@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 from weakref import proxy
 
-from core.input_codes import Type
+from ingetrazo_core import Type
 from ingetrazo_core import WindowInput
 from ingetrazo_render import SurveyRaster, WindowTimers
 from views.document_interaction import DocumentInteraction

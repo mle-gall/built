@@ -4,7 +4,7 @@
 //! its key and ancestors, which is all `core.agent_facets.set_display`
 //! needs for an "occurrence in [...]" filter.
 //!
-//! The keys are `core.facets.build`'s: a placement's UID, or, for a UID that
+//! The keys are `ingetrazo_core.facets.build`'s: a placement's UID, or, for a UID that
 //! repeats in the tree or starts with `@[`, the address `link_structure.row_id`
 //! gives it ("@" and the JSON list of UIDs from the root). The walk is the same
 //! pre-order over every path, so a shared definition is walked under each of

@@ -1,8 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The selection's storage moved to Rust (``ingetrazo_core.SelectionStore``,
-``rust/ingetrazo_core/src/selection.rs``) and ``core.element_set.ElementSet``
-is its facade: a seeded run of set operations must read exactly as the
+"""A seeded run of native set operations must read exactly as the
 pure-Python ``ElementSet`` read (``core/element_set.py`` at ``0a553619``).
 
 ``tests/fixtures/selection_golden.json.gz`` holds those answers; regenerate
@@ -132,7 +130,7 @@ def run(ElementSet):
 
 
 def test_element_sets_read_as_the_python_ones_did():
-    from core.element_set import ElementSet
+    from ingetrazo_core import ElementSet
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     got = json.loads(json.dumps(run(ElementSet)))
     assert len(got) == len(want)
@@ -142,7 +140,7 @@ def test_element_sets_read_as_the_python_ones_did():
 
 
 def test_the_snapshot_counts_by_kind_and_moves_with_the_content():
-    from core.element_set import ElementSet
+    from ingetrazo_core import ElementSet
     scene, pool, labels = _pool()
     faces = [v for v in pool if labels[id(v)].startswith("face")]
     groups = [v for v in pool if labels[id(v)].startswith("group")]
@@ -172,8 +170,21 @@ def test_the_snapshot_counts_by_kind_and_moves_with_the_content():
 
 if __name__ == "__main__" and "--write" in sys.argv:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from core.element_set import ElementSet as _ElementSet
+    from ingetrazo_core import ElementSet as _ElementSet
     rows = run(_ElementSet)
     GOLDEN.write_bytes(gzip.compress(json.dumps(
         rows, separators=(",", ":")).encode(), mtime=0))
     print(len(rows), "answers ->", GOLDEN)
+
+
+def test_collecting_a_selection_cycle_releases_its_handles():
+    import gc
+    import weakref
+    from ingetrazo_core import ElementSet
+
+    selection = ElementSet()
+    selection.add(selection)
+    ref = weakref.ref(selection)
+    del selection
+    gc.collect()
+    assert ref() is None

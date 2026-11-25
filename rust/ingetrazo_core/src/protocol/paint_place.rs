@@ -202,7 +202,7 @@ fn place_group<'py>(
         .call(PyTuple::new(py, rows)?, None)?;
     let anchor = match attachment {
         Some(a) if a.is_instance_of::<PyDict>() => Some(
-            py.import("core.annotation_anchor")?
+            py.import("ingetrazo_core.annotation_anchor")?
                 .getattr("Attachment")?
                 .call_method1("restore", (&scene, a, vec3(point.unwrap_or(offset))?))?,
         ),

@@ -9,7 +9,7 @@ Every file is synthetic or from tests/fixtures; settings go to tmp_path.
 from pathlib import Path
 
 import pytest
-from core.input_codes import StandardButton
+from ingetrazo_core import StandardButton
 from ingetrazo_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401  (autouse)
 

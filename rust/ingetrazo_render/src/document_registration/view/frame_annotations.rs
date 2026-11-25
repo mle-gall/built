@@ -412,7 +412,7 @@ pub(super) fn install_annotations(module: &Bound<PyModule>) -> PyResult<()> {
     )?;
     modules::import_names(module, "copy", &[("copy", "copy")])?;
     module.add("np", py.import("numpy")?)?;
-    modules::import_names(module, "core.input_codes", &[("Input", "Qt")])?;
+    modules::import_names(module, "ingetrazo_core", &[("Input", "Qt")])?;
     modules::import_names(module, "ingetrazo_core", &[("ScreenPoint", "QPointF"), ("Vec3", "QVector3D")])?;
     modules::import_names(module, "ingetrazo_render", &[("PaintColor", "QColor"), ("PaintPen", "QPen")])?;
     modules::import_names(

@@ -560,7 +560,7 @@ def test_pasted_image_attaches_with_thumbnail(panel, monkeypatch):
 
 def test_sent_photo_opens_its_preview(panel, tmp_path, monkeypatch):
     from tests.plugin_images import write_png
-    from core import desktop_open
+    from ingetrazo_core import desktop_open
     photo = tmp_path / "photo.png"
     write_png(photo, 64, 32)
     panel.event("photo", "commit", str(photo))

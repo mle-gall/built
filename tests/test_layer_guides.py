@@ -35,7 +35,7 @@ from core.history import (AddDimensionCommand, AddGuideCommand,
                           AddTextLabelCommand, AssignLayerCommand,
                           DeleteLayerCommand, History, MakeGroupCommand)
 from core.textlabel import TextLabel
-from core.image_plane import ImagePlane
+from ingetrazo_core.image_plane import ImagePlane
 from core.layers import DEFAULT_LAYER, Layer, layer_of
 from core.purge import layer_carriers, used_layers
 from core.scene import Scene

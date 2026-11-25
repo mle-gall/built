@@ -81,7 +81,7 @@ pub fn igz_load_annotations(
         return Ok(());
     };
     let destination = scene.getattr(table)?;
-    let attachment = py.import("core.annotation_anchor")?.getattr("Attachment")?;
+    let attachment = py.import("ingetrazo_core.annotation_anchor")?.getattr("Attachment")?;
     let (module, class) = if labels {
         ("core.textlabel", "TextLabel")
     } else {

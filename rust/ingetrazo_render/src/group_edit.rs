@@ -115,7 +115,7 @@ fn explode_group(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let sel = vp.getattr("scene")?.getattr("selection")?;
     let groups = matching(&sel, "core.group", "Group")?;
     if groups.is_empty() {
-        if !matching(&sel, "core.image_plane", "ImagePlane")?.is_empty() {
+        if !matching(&sel, "ingetrazo_core.image_plane", "ImagePlane")?.is_empty() {
             win.call_method0("_on_explode_image")?;
         }
     } else {
@@ -137,7 +137,7 @@ fn explode_images(vp: &Bound<'_, PyAny>) -> PyResult<()> {
     let sel = scene.getattr("selection")?;
     let images = PyList::empty(py);
     let groups = PyList::empty(py);
-    for im in matching(&sel, "core.image_plane", "ImagePlane")?.iter() {
+    for im in matching(&sel, "ingetrazo_core.image_plane", "ImagePlane")?.iter() {
         let group = im.call_method0("as_group")?;
         if !group.is_none() {
             images.append(im)?;
@@ -304,7 +304,7 @@ fn make_component(win: &Bound<'_, PyAny>) -> PyResult<()> {
         }
     } else {
         let taken = py
-            .import("core.kept_components")?
+            .import("ingetrazo_core.kept_components")?
             .call_method1("names_in_use", (&scene,))?;
         let kw = PyDict::new(py);
         let mut n = 1;

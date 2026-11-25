@@ -27,7 +27,7 @@ def _photo_share(img) -> float:
 
 
 def test_a_box_below_an_opaque_image_does_not_paint_over_it(native_gpu_host, tmp_path):
-    from core.image_plane import ImagePlane
+    from ingetrazo_core.image_plane import ImagePlane
 
     win = native_gpu_host.window
     vp = win.viewport

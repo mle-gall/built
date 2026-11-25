@@ -8,7 +8,7 @@ fn gather_dimensions<'py>(a: &Args<'py>) -> Reply<'py> {
     let ctx = a.get_item(0)?;
     let groups = a.get_item(1)?;
     let vertices = a.get_item(2)?;
-    let dimension_modes = imported(py, "core.move_ops")?.getattr("dimension_modes")?;
+    let dimension_modes = imported(py, "ingetrazo_core.move_ops")?.getattr("dimension_modes")?;
     dimension_modes.call1((
         module.call_method1("transform_records", (&ctx, "dimension"))?,
         &groups,

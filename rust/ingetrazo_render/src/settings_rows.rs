@@ -129,14 +129,14 @@ pub fn key_set(py: Python<'_>, key: &'static str, kind: Kind) -> Res {
     })
 }
 
-/// `_gkey`: a getter for a `core.general_settings` key.
+/// `_gkey`: a getter for a `ingetrazo_core.general_settings` key.
 pub fn gkey_get(py: Python<'_>, name: &'static str, default: Py<PyAny>, kind: Kind) -> Res {
     func(py, move |py, a| gkey_value(&a.get_item(0)?, name, default.bind(py), kind))
 }
 
 pub fn gkey_value(env: &Bound<'_, PyAny>, name: &str, default: &Bound<'_, PyAny>, kind: Kind) -> Res {
     let py = env.py();
-    let raw = py.import("core.general_settings")?.call_method1("value", (name, default, env.getattr("st")?))?;
+    let raw = py.import("ingetrazo_core.general_settings")?.call_method1("value", (name, default, env.getattr("st")?))?;
     shaped(&raw, default, kind, &default.str()?.to_string())
 }
 

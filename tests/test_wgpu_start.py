@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from tests.shell_isolation import native_host, restore_shell_patches  # noqa: F401
 import pytest
 import numpy as np
-from core.input_codes import Input as Qt
+from ingetrazo_core import Input as Qt
 from ingetrazo_render import KeyEvent, SurveyRaster, blank_picture
 from tests.raster_samples import pixels, solid_raster
 

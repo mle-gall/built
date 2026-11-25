@@ -640,7 +640,7 @@ impl<'a, 'py> Row<'a, 'py> {
             }
         } else if self.is(&["linkregistry"]) {
             if let Some(path) = chosen(py, "getSaveFileName", (win, "Move registry to project", "", "Built project (*.builtproject)"))? {
-                py.import("core.project")?.call_method1("create", (&scene, path, win.getattr("_current_path")?))?;
+                py.import("ingetrazo_core.project")?.call_method1("create", (&scene, path, win.getattr("_current_path")?))?;
                 win.call_method1("_relink_done", ("Project registry updated",))?;
             }
         } else if self.is(&["eye", "lock"]) && rk == "geometry:loose" {
@@ -878,7 +878,7 @@ impl<'a, 'py> Row<'a, 'py> {
             self.select(self.members()?)?;
         } else if self.is(&["linkfinder"]) && self.linked {
             if self.tnode.call_method1("get", ("path",))?.is_truthy()? {
-                py.import("core.desktop_open")?.call_method1("reveal", (self.tnode.get_item("path")?,))?;
+                py.import("ingetrazo_core.desktop_open")?.call_method1("reveal", (self.tnode.get_item("path")?,))?;
             }
         } else if self.is(&["linkopen", "linkreload", "linkunlink", "linkrelink", "linkresettags", "linksubset", "linknested", "linkpack"]) && self.linked {
             let groups = self.placements()?;

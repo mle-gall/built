@@ -12,7 +12,7 @@ fn local<'py>(history: &Obj<'py>, point: &Obj<'py>) -> PyResult<Obj<'py>> {
         .cast::<PyDict>()?
         .get_item("_store")?;
     if let Some(s) = st.filter(|s| !s.is_none()) {
-        py.import("core.coordinate_frame")?
+        py.import("ingetrazo_core.coordinate_frame")?
             .call_method1("point_in_frame", (point, s.getattr("frame_origin")?))
     } else {
         vec3(point)

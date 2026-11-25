@@ -703,7 +703,7 @@ impl ExtensionsSheet {
             slf.as_any().call_method1("confirm", (&win, title, text))?.is_truthy()
         };
         let open_url = |target: Bound<'_, PyAny>| -> PyResult<()> {
-            py.import("core.desktop_open")?.call_method1("open_url", (target,))?;
+            py.import("ingetrazo_core.desktop_open")?.call_method1("open_url", (target,))?;
             Ok(())
         };
         let result = (|| -> PyResult<bool> {

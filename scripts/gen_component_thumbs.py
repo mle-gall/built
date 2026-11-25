@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT))
 
 
 def generate(components: Path, output: Path):
-    from core.insert import component_from_scene
+    from ingetrazo_core.document_insert import component_from_scene
     from core.scene import Scene
     from formats import igz
     from ingetrazo_render import component_thumbnail

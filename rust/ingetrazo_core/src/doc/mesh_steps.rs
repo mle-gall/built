@@ -247,7 +247,7 @@ fn run_simplify(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()>
         }
         None => {
             me.setattr("before", snapshot(s, py, &mesh)?)?;
-            let element_set = py.import("core.element_set")?.getattr("ElementSet")?;
+            let element_set = py.import("ingetrazo_core")?.getattr("ElementSet")?;
             me.setattr("before_selection", element_set.call1((scene.getattr("selection")?,))?)?;
             let removed = py.import("formats.fuse")?.getattr("simplify_mesh")?.call1((&mesh, s.arg(py, 0)))?;
             me.setattr("faces_removed", removed)?;

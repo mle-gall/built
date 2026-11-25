@@ -1,7 +1,8 @@
 """Filing, recipe editing, and bootstrap through the Project tree and protocol."""
 import pytest
 
-from core import bim_registry, facets, structure
+from core import bim_registry, structure
+from ingetrazo_core import facets
 from core.agent_facets import set_display
 from core.group import Group
 from core.layers import Layer

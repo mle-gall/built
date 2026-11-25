@@ -267,7 +267,7 @@ def _visible(scene, g):
 
 @at_scale
 def test_isolate_link_row_mounted_node_host_group_and_mixed_then_show_all(ui, monkeypatch):
-    from core import facets
+    from ingetrazo_core import facets
     from core.agent_facets import set_display
     import views.wgpu_ui as wu
     scene, win, view, rows, act = ui
@@ -318,7 +318,7 @@ def test_isolate_link_row_mounted_node_host_group_and_mixed_then_show_all(ui, mo
 def test_native_isolation_matches_the_facet_index(ui):
     """The native closure (doc/occurrences.rs) shows, and draws through,
     exactly what the Python facet index gives for the same keys."""
-    from core import facets
+    from ingetrazo_core import facets
     scene, win, view, rows, act = ui
     index = facets.build(scene)
     tree = view._ui_tree["tree"]

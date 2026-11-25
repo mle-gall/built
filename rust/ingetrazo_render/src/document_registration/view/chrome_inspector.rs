@@ -661,7 +661,7 @@ fn link_verb<'py>(win: &Obj<'py>, view: &Obj<'py>, group: &Obj<'py>, key: &str, 
     let path = || record.get_item("path");
     match key {
         "linkfinder" => {
-            py.import("core.desktop_open")?.call_method1("reveal", (path()?,))?;
+            py.import("ingetrazo_core.desktop_open")?.call_method1("reveal", (path()?,))?;
             return Ok(false);
         }
         "linkunlink" => {

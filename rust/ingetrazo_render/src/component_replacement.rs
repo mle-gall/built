@@ -233,7 +233,7 @@ fn replace_groups(
         return Ok(0);
     }
     let orphans = py
-        .import("core.kept_components")?
+        .import("ingetrazo_core.kept_components")?
         .call_method1("orphaned_by", (&scene, &affected))?;
     let steps = PyList::empty(py);
     if orphans.is_truthy()? {

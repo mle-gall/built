@@ -54,7 +54,7 @@ pub(super) fn run<'py>(host: &Obj<'py>, cmd: &Obj<'py>, phase: &str) -> PyResult
             if !frame.is_none() && current.ne(&frame)? {
                 let kw = PyDict::new(py);
                 kw.set_item("matrix", frame.get_item(1)?)?;
-                let context = py.import("core.coordinate_frame")?.call_method(
+                let context = py.import("ingetrazo_core.coordinate_frame")?.call_method(
                     "mesh_frame",
                     (target, frame.get_item(0)?),
                     Some(&kw),
@@ -75,7 +75,7 @@ fn notify(
 ) -> PyResult<()> {
     let py = listeners.py();
     let frame = py
-        .import("core.coordinate_frame")?
+        .import("ingetrazo_core.coordinate_frame")?
         .call_method0("model_frame")?;
     in_frame(&frame, || {
         for entry in listeners.try_iter()? {

@@ -11,7 +11,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.group import Group
 from core.history import History
-from core.insert import used_layers
+from ingetrazo_core.document_insert import used_layers
 from core.layers import Layer, folder_parent, folders_of, layer_of
 from core.mesh import Mesh
 from core.scene import Scene

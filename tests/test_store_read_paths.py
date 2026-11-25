@@ -17,7 +17,7 @@ import random                                                     # noqa: E402
 from types import SimpleNamespace                                 # noqa: E402
 
 import pytest                                                     # noqa: E402
-from core.input_codes import Input
+from ingetrazo_core import Input
 from ingetrazo_core import ScreenPoint, Vec3 as QVector3D
 
 import core._native as _native                                    # noqa: E402

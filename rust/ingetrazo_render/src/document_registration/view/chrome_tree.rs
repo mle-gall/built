@@ -40,7 +40,7 @@ fn current_path(win: &Obj<'_>) -> PyResult<String> {
 pub(super) fn waiting<'py, T>(viewport: &Obj<'py>, body: impl FnOnce() -> PyResult<T>) -> PyResult<T> {
     let py = viewport.py();
     let previous = viewport.call_method0("cursor")?;
-    viewport.call_method1("setCursor", (py.import("core.input_codes")?.getattr("Input")?.getattr("WaitCursor")?,))?;
+    viewport.call_method1("setCursor", (py.import("ingetrazo_core")?.getattr("Input")?.getattr("WaitCursor")?,))?;
     let result = body();
     viewport.call_method1("setCursor", (previous,))?;
     result
@@ -671,7 +671,7 @@ pub(super) fn component_verb<'py>(a: &Args<'py>) -> Reply<'py> {
     let verb: String = verb.extract()?;
     match verb.as_str() {
         "cplace" => {
-            let components = py.import("core.kept_components")?;
+            let components = py.import("ingetrazo_core.kept_components")?;
             let template = if kept.is_none() { components.call_method1("make_template", (&definition,))? } else { kept };
             win.call_method1("_start_place", (components.call_method1("place_copy", (template,))?,))?;
         }

@@ -47,7 +47,7 @@ impl<'py> Drawing<'py> {
         let py = h.py();
         let scene = h.getattr("scene")?;
         let mesh = scene.getattr("mesh")?;
-        let frames = py.import("core.coordinate_frame")?;
+        let frames = py.import("ingetrazo_core.coordinate_frame")?;
         let stored = mesh
             .getattr("__dict__")?
             .cast::<PyDict>()?
