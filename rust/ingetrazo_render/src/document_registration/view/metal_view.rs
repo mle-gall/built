@@ -468,5 +468,7 @@ pub(super) fn register(cls: &Obj, module: &Bound<PyModule>) -> PyResult<()> {
     install(cls, &module.dict(), METHODS)?;
     install(cls, &module.dict(), metal_view_scene::METHODS)?;
     install(cls, &module.dict(), metal_view_frame::METHODS)?;
+    metal_view_capture::register(cls, module)?;
+    install(cls, &module.dict(), metal_view_selection::METHODS)?;
     modules::method(cls, "_schedule_tool_sync", wrap_pyfunction!(schedule_tool_sync, module)?.as_any())
 }
