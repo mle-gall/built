@@ -131,7 +131,7 @@ def test_restamp_keeps_uv_and_legacy_corner_bytes(tmp_path):
 
 
 def test_cross_document_paste_registers_recipe_and_undoes_collision(tmp_path):
-    from formats.clip import encode, decode
+    from formats.clip_payload import encode, decode
     from tests.test_paste import _VP, _paste_at
     from core.history import History
     from tests.controller_surface import ControllerSurface as Viewport

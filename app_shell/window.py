@@ -906,8 +906,8 @@ class ShellWindow(WindowDocumentCommands):
 
     @staticmethod
     def _clipboard_available():
-        from ingetrazo_render import ModelClipboard
-        return ModelClipboard.available()
+        from app_shell import files
+        return files._clipboard.available()
 
     def _sync_foreign_clipboard(self):
         from app_shell import files

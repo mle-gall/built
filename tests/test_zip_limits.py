@@ -116,7 +116,7 @@ def test_a_bomb_kmz_is_refused(tmp_path):
 
 
 def test_a_bomb_on_the_clipboard_is_not_a_clipboard(tmp_path):
-    from formats import clip
+    from formats import clip_payload as clip
     data = _bomb(tmp_path / "clip.zip", "scene.igz",
                  extra=[("clip.json", b"{}")]).read_bytes()
     assert clip.decode(data) is None
