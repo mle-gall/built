@@ -174,7 +174,97 @@ pub(crate) fn scene_mesh_states(py: Python<'_>, scene: &Bound<'_, PyAny>, mesh: 
     Ok(((fv, fs), (ev, es, esel)))
 }
 
+/// What the scene state that decides placements is, read once per batch:
+/// the navigator's allowed set, Hide Similar and the definition being
+/// edited, Hide shown.
+struct PlacementRules<'py> {
+    allowed: Option<Bound<'py, PyAny>>,
+    similar: Option<(Bound<'py, PyAny>, Bound<'py, PyAny>)>,
+    show_hidden: bool,
+    group_type: Bound<'py, PyAny>,
+}
+
+impl<'py> PlacementRules<'py> {
+    fn read(py: Python<'py>, scene: &Bound<'py, PyAny>) -> PyResult<Self> {
+        let allowed = scene.getattr_opt("_navigator_allowed")?.filter(|a| !a.is_none());
+        let similar = if scene.getattr("hide_similar_components")?.is_truthy()? && scene.getattr("_edit_stack")?.is_truthy()? {
+            let def = scene.call_method0("edit_definition")?;
+            if def.is_none() { None } else { Some((scene.getattr("edit_group")?, def)) }
+        } else {
+            None
+        };
+        Ok(PlacementRules {
+            allowed,
+            similar,
+            show_hidden: scene.getattr("show_hidden_objects")?.is_truthy()?,
+            group_type: super::module(py, "core.group")?.getattr("Group")?,
+        })
+    }
+
+    /// `similar_hidden(g)`.
+    fn similar(&self, g: &Bound<'py, PyAny>) -> PyResult<bool> {
+        let Some((edit, def)) = &self.similar else { return Ok(false) };
+        if !g.hasattr("children")? || g.is(edit) {
+            return Ok(false);
+        }
+        for x in [Some(g.clone()), g.getattr_opt("owner")?.filter(|o| !o.is_none())].into_iter().flatten() {
+            if !x.is(edit) && x.getattr_opt("xform")?.is_some_and(|m| !m.is_none())
+                && x.getattr_opt("mesh")?.is_some_and(|m| m.is(def)) {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+}
+
+/// `scene_group_states(scene, groups)`: for each placement of `groups` the
+/// triple `(entity_visible, group_snappable, entity_selectable)`, as the
+/// scene's rules answer one by one, the tags and the context read once.
+#[pyfunction]
+pub(crate) fn scene_group_states(py: Python<'_>, scene: &Bound<'_, PyAny>, groups: &Bound<'_, PyAny>)
+    -> PyResult<Vec<(bool, bool, bool)>> {
+    let tags = Tags::read(py, scene)?;
+    let rules = PlacementRules::read(py, scene)?;
+    let default = super::module(py, "core.layers")?.getattr("DEFAULT_LAYER")?.extract::<String>()?;
+    let mut out = Vec::new();
+    for g in groups.try_iter()? {
+        let g = g?;
+        let out_of_view = match &rules.allowed {
+            Some(a) if g.is_instance(&rules.group_type)? => !a.contains(scene.call_method1("navigator_key", (&g,))?)?,
+            _ => false,
+        };
+        if out_of_view {
+            out.push((false, false, false));
+            continue;
+        }
+        let has_children = g.hasattr("children")?;
+        if !has_children || g.hasattr("attrs")? || g.hasattr("v0")? {
+            // Not a placement: the scene's rules, one by one.
+            let v = scene.call_method1("entity_visible", (&g,))?.is_truthy()?;
+            let s = scene.call_method1("entity_selectable", (&g,))?.is_truthy()?;
+            out.push((v, v || s, s));
+            continue;
+        }
+        let hidden = g.getattr_opt("hidden")?.map(|h| h.is_truthy()).transpose()?.unwrap_or(false);
+        let similar = rules.similar(&g)?;
+        let tag = g.getattr_opt("layer")?.filter(|l| l.is_truthy().unwrap_or(false));
+        let name = match tag { Some(t) => t.extract::<String>()?, None => default.clone() };
+        let (shown, tag_locked) = tags.state(&name);
+        let mut locked = false;
+        for x in [Some(g.clone()), g.getattr_opt("owner")?.filter(|o| !o.is_none())].into_iter().flatten() {
+            if x.getattr_opt("locked")?.is_some_and(|l| l.is_truthy().unwrap_or(false)) && x.hasattr("children")? {
+                locked = true;
+            }
+        }
+        let visible = !hidden && !similar && shown;
+        let selectable = !similar && !(hidden && !rules.show_hidden) && !locked && shown && !tag_locked;
+        out.push((visible, visible || selectable, selectable));
+    }
+    Ok(out)
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(scene_mesh_states, m)?)?;
+    m.add_function(wrap_pyfunction!(scene_group_states, m)?)?;
     Ok(())
 }
