@@ -134,7 +134,7 @@ def test_depth_fit_keeps_all_editing_rays_exact(two_point):
 
 def test_metal_view_fits_the_shown_box_and_refuses_a_mesh_preview():
     from types import SimpleNamespace as NS
-    from views.wgpu_view import WgpuView
+    from tests.headless_gpu import HeadlessView as WgpuView
     c = camera()
     source = NS(camera=c, scene=NS(edit_group=None, guides=[], shadows=NS(enabled=False)),
                 _base_map_showing=lambda: False, _terrain_showing=lambda: False,

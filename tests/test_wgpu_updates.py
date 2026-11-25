@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 from core.group import Group
 from core.history import MoveGroupCommand, CompoundCommand
@@ -273,7 +273,7 @@ def test_native_move_preview_then_history_commit(completion):
     native.hover(event)
     assert scene.groups[0].xform.column(3).x() == 0
     assert view.packed.instances['world'][0, 3, 0] == 2
-    from views.wgpu_view import WgpuView
+    from tests.headless_gpu import HeadlessView as WgpuView
     view.tools = native
     if completion == 'escape':
         WgpuView.keyPressEvent(view, SimpleNamespace(key=lambda: Qt.Key_Escape))
@@ -397,14 +397,25 @@ def test_history_insert_undo_redo_keeps_one_row(monkeypatch):
 
 
 def test_tool_change_signal_reports_unsupported_tool_without_mouse_input():
-    from PySide6.QtCore import QObject, Signal
-    from PySide6.QtWidgets import QApplication
-    from views.wgpu_view import WgpuView
-    app = QApplication.instance() or QApplication([])
+    from tests.headless_gpu import HeadlessView as WgpuView
     messages = []
-    class Source(QObject):
-        measurementChanged = Signal(str)
+
+    class Signal:
+        def __init__(self):
+            self.slots = []
+
+        def connect(self, slot):
+            self.slots.append(slot)
+
+        def emit(self, *args):
+            for slot in self.slots:
+                slot(*args)
+
+    class Source:
         active_tool = None
+
+        def __init__(self):
+            self.measurementChanged = Signal()
 
         def flash_status(self, message):
             messages.append(message)
@@ -413,10 +424,10 @@ def test_tool_change_signal_reports_unsupported_tool_without_mouse_input():
     view = WgpuView()
     view.source_viewport = source
     view._observe_tool_source()
-    view.show()
+    view.isVisible = lambda: True            # shown: the sync is only for a visible view
     source.active_tool = SimpleNamespace()
     source.measurementChanged.emit('')
-    app.processEvents()
+    view.run_timers()
     assert view.tools.mode == 'inert'
     assert messages == ['Unsupported document tool']
     view.close()
@@ -435,11 +446,10 @@ def test_prototype_bake_does_not_consume_document_group_names(monkeypatch):
 
 
 def test_replacement_preserves_full_material_rows_and_resident_texture_ids(tmp_path):
-    from PySide6.QtGui import QImage, QColor
+    from ingetrazo_render import SurveyRaster
     meshes = []
-    for name in ('red', 'blue'):
-        image = QImage(2, 2, QImage.Format_RGBA8888)
-        image.fill(QColor(name))
+    for name, rgba in (('red', (255, 0, 0, 255)), ('blue', (0, 0, 255, 255))):
+        image = SurveyRaster(2, 2, bytes(rgba) * 4)
         path = tmp_path / (name + '.png')
         assert image.save(str(path))
         mesh = Mesh()
@@ -771,7 +781,7 @@ def test_older_module_gets_the_whole_list_when_an_exclusion_moved():
 def test_an_edit_keeps_the_container_boxes_it_did_not_touch():
     """Every set_scene used to drop the container boxes measured after the
     open (0.9 s each on the ride, measured again at the next double-click)."""
-    from views.wgpu_view import WgpuView
+    from tests.headless_gpu import HeadlessView as WgpuView
     scene, updates = fixture_scene()
     view = SimpleNamespace(packed=updates.packed, _container_boxes={}, _container_box_rows={})
     far, near = object(), object()

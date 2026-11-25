@@ -3,7 +3,8 @@
 """Generate the bundled texture library (procedural, tileable, ours).
 
 Commercial modellers ship material libraries whose images are copyrighted, so
-IngeTrazo's are generated here with QPainter — deterministic (fixed seed),
+IngeTrazo's are generated here on the renderer's annotation canvas
+(``ingetrazo_render.AnnotationCanvas``; gradients with numpy) — deterministic (fixed seed),
 seamlessly tileable (every speckle/line is drawn with toroidal wrap), and
 licence-clean. Re-run to regenerate:
 
@@ -16,12 +17,13 @@ sizes (metres) and category/display names (translated at display time).
 from __future__ import annotations
 
 import json
+import math
 import random
-import sys
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QGuiApplication, QImage, QLinearGradient, QPainter, QPen
+import numpy as np
+from ingetrazo_core import ScreenPoint as QPointF, ScreenRect as QRectF
+from ingetrazo_render import AnnotationCanvas, PaintColor, PaintPen, SurveyRaster
 
 PX = 256
 ROOT = Path(__file__).resolve().parent.parent
@@ -30,17 +32,57 @@ OUT = ROOT / "resources" / "textures" / "library"
 rng = random.Random(20260711)
 
 
-def _canvas(base) -> tuple[QImage, QPainter]:
-    img = QImage(PX, PX, QImage.Format_RGB32)
-    img.fill(QColor(*base))
-    p = QPainter(img)
-    p.setRenderHint(QPainter.Antialiasing, True)
-    return img, p
+def QColor(r, g, b, a=255):
+    return PaintColor(int(r), int(g), int(b), int(a))
+
+
+def QPen(color, width=1.0):
+    return PaintPen(color, float(width))
+
+
+class _Tile:
+    """A tile being drawn: an opaque background (H×W×3) under the canvas."""
+
+    def __init__(self, background):
+        self.background = np.ascontiguousarray(background, np.uint8)
+        self.canvas = AnnotationCanvas(PX, PX, float(PX))
+
+    def save(self, path):
+        rgba = np.dstack([self.background, np.full((PX, PX), 255, np.uint8)])
+        pixels = self.canvas.composite(rgba.tobytes())
+        return SurveyRaster(PX, PX, pixels).save(path)
+
+
+def _canvas(base) -> tuple[_Tile, AnnotationCanvas]:
+    tile = _Tile(np.broadcast_to(np.array(base, np.uint8), (PX, PX, 3)))
+    return tile, tile.canvas
+
+
+def _ramp(t, stops):
+    """Colours along ``t`` (0..1 per pixel) through evenly spaced ``stops``."""
+    stops = np.array(stops, float)
+    at = np.clip(t, 0., 1.) * (len(stops) - 1)
+    i = np.minimum(at.astype(int), len(stops) - 2)
+    f = (at - i)[..., None]
+    return np.rint(stops[i] * (1 - f) + stops[i + 1] * f).astype(np.uint8)
+
+
+def _rounded(rect_xywh, rx, ry, steps=8):
+    """A rounded rectangle's outline as points (the canvas draws polygons)."""
+    x, y, w, h = rect_xywh
+    rx, ry = min(rx, w / 2), min(ry, h / 2)
+    points = []
+    for cx, cy, start in ((x + w - rx, y + ry, -90), (x + w - rx, y + h - ry, 0),
+                          (x + rx, y + h - ry, 90), (x + rx, y + ry, 180)):
+        for k in range(steps + 1):
+            a = math.radians(start + 90 * k / steps)
+            points.append(QPointF(cx + rx * math.cos(a), cy + ry * math.sin(a)))
+    return points
 
 
 def _wrap_rect(p, x, y, w, h, color):
     """Fill a rect with toroidal wrap so the tile stays seamless."""
-    p.setPen(Qt.NoPen)
+    p.setPen(None)
     p.setBrush(color)
     for dx in (-PX, 0, PX):
         for dy in (-PX, 0, PX):
@@ -51,9 +93,7 @@ def _speckle(p, count, size, colors, alpha=255):
     for _ in range(count):
         x, y = rng.uniform(0, PX), rng.uniform(0, PX)
         s = rng.uniform(size * 0.5, size * 1.5)
-        c = QColor(*rng.choice(colors))
-        c.setAlpha(alpha)
-        _wrap_rect(p, x, y, s, s, c)
+        _wrap_rect(p, x, y, s, s, QColor(*rng.choice(colors), alpha))
 
 
 def _tone(base, spread):
@@ -87,7 +127,6 @@ def brick(base, mortar, dark):
             _wrap_rect(p, x + gap / 2, y + gap / 2, bw - gap, bh - gap,
                        QColor(*tone))
     _speckle(p, 300, 2, [dark], alpha=40)
-    p.end()
     return img
 
 
@@ -101,10 +140,9 @@ def concrete(base, speck_dark, speck_light, panels=False):
         _vline(p, 0, speck_dark, 2)
         for cx, cy in ((PX / 4, PX / 4), (3 * PX / 4, PX / 4),
                        (PX / 4, 3 * PX / 4), (3 * PX / 4, 3 * PX / 4)):
-            p.setPen(Qt.NoPen)
+            p.setPen(None)
             p.setBrush(QColor(*speck_dark))
             p.drawEllipse(QPointF(cx, cy), 3.5, 3.5)
-    p.end()
     return img
 
 
@@ -119,7 +157,6 @@ def blocks(base, joint):
             _wrap_rect(p, c * bw + off + gap / 2, r * bh + gap / 2,
                        bw - gap, bh - gap, QColor(*tone))
     _speckle(p, 500, 2, [(90, 90, 92)], alpha=22)
-    p.end()
     return img
 
 
@@ -137,7 +174,6 @@ def ashlar(base, joint):
             _wrap_rect(p, x + 2, r * bh + 2, w - 4, bh - 4, QColor(*tone))
             x += w
     _speckle(p, 400, 2, [(70, 66, 60)], alpha=30)
-    p.end()
     return img
 
 
@@ -150,12 +186,9 @@ def wood(base, grain, dark):
         _wrap_rect(p, i * pw + 1, 0, pw - 2, PX, QColor(*tone))
         for _ in range(7):
             x = i * pw + rng.uniform(3, pw - 3)
-            c = QColor(*grain)
-            c.setAlpha(70)
-            p.setPen(QPen(c, rng.uniform(0.6, 1.4)))
+            p.setPen(QPen(QColor(*grain, 70), rng.uniform(0.6, 1.4)))
             p.drawLine(QPointF(x, -PX), QPointF(x + rng.uniform(-6, 6), 2 * PX))
         _vline(p, i * pw, dark, 1.6)
-    p.end()
     return img
 
 
@@ -168,29 +201,19 @@ def roof_colonial(base, shade):
         for c in range(-1, cols + 1):
             tone = _tone(base, 14)
             for dx in (-PX, 0, PX):
-                rect = QRectF(c * tw + off + dx, r * th - th * 0.15,
-                              tw - 2, th * 1.15)
+                rect = (c * tw + off + dx, r * th - th * 0.15, tw - 2, th * 1.15)
                 p.setPen(QPen(QColor(*shade), 2))
                 p.setBrush(QColor(*tone))
-                p.drawRoundedRect(rect, tw * 0.45, th * 0.35)
-    p.end()
+                p.drawPolygon(_rounded(rect, tw * 0.45, th * 0.35))
     return img
 
 
 def corrugated(base, dark, light):
-    img, p = _canvas(base)
     waves = 8
     ww = PX / waves
-    for i in range(waves):
-        g = QLinearGradient(i * ww, 0, (i + 1) * ww, 0)
-        g.setColorAt(0.0, QColor(*dark))
-        g.setColorAt(0.5, QColor(*light))
-        g.setColorAt(1.0, QColor(*dark))
-        p.setPen(Qt.NoPen)
-        p.setBrush(g)
-        p.drawRect(QRectF(i * ww, 0, ww, PX))
-    p.end()
-    return img
+    # Across each wave: dark, light at its crest, dark (pixel centres).
+    t = ((np.arange(PX) + .5) % ww) / ww
+    return _Tile(np.broadcast_to(_ramp(t, [dark, light, dark]), (PX, PX, 3)))
 
 
 def floor_tiles(base, joint, n):
@@ -201,7 +224,6 @@ def floor_tiles(base, joint, n):
             tone = _tone(base, 6)
             _wrap_rect(p, c * tw + 1.5, r * tw + 1.5, tw - 3, tw - 3,
                        QColor(*tone))
-    p.end()
     return img
 
 
@@ -212,7 +234,6 @@ def checker(a, b, n=4):
         for c in range(n):
             if (r + c) % 2:
                 _wrap_rect(p, c * tw, r * tw, tw, tw, QColor(*b))
-    p.end()
     return img
 
 
@@ -227,14 +248,12 @@ def pavers(base, joint):
             _wrap_rect(p, c * bw + off + 1.5, r * bh + 1.5,
                        bw - 3, bh - 3, QColor(*tone))
     _speckle(p, 400, 2, [(96, 96, 96)], alpha=26)
-    p.end()
     return img
 
 
 def noise(base, tones, count=1400, size=3):
     img, p = _canvas(base)
     _speckle(p, count, size, tones, alpha=60)
-    p.end()
     return img
 
 
@@ -242,25 +261,16 @@ def metal_brushed(base, line):
     img, p = _canvas(base)
     for _ in range(220):
         y = rng.uniform(0, PX)
-        c = QColor(*line)
-        c.setAlpha(rng.randint(14, 40))
-        p.setPen(QPen(c, rng.uniform(0.5, 1.2)))
+        alpha = rng.randint(14, 40)
+        p.setPen(QPen(QColor(*line, alpha), rng.uniform(0.5, 1.2)))
         p.drawLine(QPointF(0, y), QPointF(PX, y))
-    p.end()
     return img
 
 
 def glass(base, hi):
-    img, p = _canvas(base)
-    g = QLinearGradient(0, 0, PX, PX)
-    g.setColorAt(0.0, QColor(*hi))
-    g.setColorAt(0.5, QColor(*base))
-    g.setColorAt(1.0, QColor(*hi))
-    p.setPen(Qt.NoPen)
-    p.setBrush(g)
-    p.drawRect(QRectF(0, 0, PX, PX))
-    p.end()
-    return img
+    # Along the diagonal: highlight, base at the middle, highlight.
+    y, x = np.mgrid[0:PX, 0:PX] + .5
+    return _Tile(_ramp((x + y) / (2 * PX), [hi, base, hi]))
 
 
 # category → [(name, recipe, tile_w, tile_h)]
@@ -308,24 +318,27 @@ LIBRARY = {
 }
 
 
-def main() -> None:
-    app = QGuiApplication.instance() or QGuiApplication(sys.argv)  # noqa: F841
+def main(out: Path = OUT) -> None:
+    """Write the library under ``out`` and its manifest beside it (a folder
+    given on the command line: to look at a run without touching the
+    bundled files)."""
     manifest: dict = {"categories": []}
     for cat, entries in LIBRARY.items():
-        (OUT / cat).mkdir(parents=True, exist_ok=True)
+        (out / cat).mkdir(parents=True, exist_ok=True)
         items = []
         for name, recipe, sw, sh in entries:
             img = recipe()
             rel = f"{cat}/{name}.png"
-            img.save(str(OUT / rel))
+            assert img.save(str(out / rel)), rel
             items.append({"file": rel, "name": name, "sw": sw, "sh": sh})
             print("wrote", rel)
         manifest["categories"].append({"id": cat, "items": items})
-    (ROOT / "resources" / "textures" / "library.json").write_text(
+    (out.parent / "library.json").write_text(
         json.dumps(manifest, indent=1), encoding="utf-8")
     print("manifest ok:",
           sum(len(c["items"]) for c in manifest["categories"]), "textures")
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    main(Path(sys.argv[1]) if len(sys.argv) > 1 else OUT)

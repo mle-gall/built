@@ -15,9 +15,8 @@ from __future__ import annotations
 import math
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core.edits import build_add_edges
 from tools.base import ToolContext
@@ -27,9 +26,6 @@ from tools.texture_position import (PIN_MOVE, PIN_SCALE_ROTATE,
 
 @pytest.fixture(scope="module")
 def viewport():
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
     from tests.controller_surface import ControllerSurface as Viewport
     from tests.qt_window_lifetime import close_window
     vp = Viewport(None)

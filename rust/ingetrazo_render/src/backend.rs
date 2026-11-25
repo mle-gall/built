@@ -19,6 +19,13 @@ pub fn surface(
     if window == 0 {
         return Err(PyValueError::new_err("null native window"));
     }
+    // A bare Core Animation layer (`headless_layer`): GPU tests and probes
+    // without a window or a toolkit.
+    #[cfg(target_os = "macos")]
+    if platform == "layer" {
+        return unsafe { instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::CoreAnimationLayer(window as *mut _)) }
+            .map_err(|e| PyValueError::new_err(format!("GPU surface unavailable: {e}")));
+    }
     let (display_handle, window_handle) = handles(window, display, platform)?;
     unsafe {
         instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
