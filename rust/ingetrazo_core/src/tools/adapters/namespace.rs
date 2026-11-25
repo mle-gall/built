@@ -25,7 +25,7 @@ const MODULES: &[Module] = &[
     Module {name:"offset_host",imports:&[("ingetrazo_core", &["register_tool_adapter", "register_tool_functions"]), ("tools.overlay_painter", &["draw_overlay"]), ("ingetrazo_core", &["Vec3 as QVector3D", "ordered_edge_path as _run_from_edges", "outline_normal as _newell"]), ("core.i18n", &["tr"]), ("core.mesh", &["Edge"]), ("core.units", &["fmt_len"]), ("tools.rust_tool_base", &["_point_property"])],doc:"Offset viewport bindings. The machine owns the source geometry and gesture."},
     Module {name:"rust_tool_base",imports:&[("__future__", &["annotations"]), ("ingetrazo_core", &["register_tool_adapter", "register_tool_functions"]), ("ingetrazo_core", &["ToolBounds", "ToolMachine", "ToolHandles", "Vec3", "ViewportToolHost"]), ("tools.base", &["Tool"])],doc:"ToolMachine event conversion, viewport queries and protocol dispatch."},
     Module {name:"base",imports:&[("__future__", &["annotations"]), ("ingetrazo_core", &["register_tool_adapter", "register_tool_functions"]), ("abc", &["ABC", "abstractmethod"]), ("dataclasses", &["dataclass"]), ("ingetrazo_core", &["ScreenPoint as QPointF", "Input as Qt"]), ("ingetrazo_core", &["Vec3 as QVector3D", "cursor_pixel_scale", "cursor_plane_reference", "cursor_plane_color", "plane_input"]), ("core.snap", &["POINT_SNAP_KINDS", "SnapResult"]), ("core.axes", &["AXES as PLANE_LOCK_AXES"])],doc:"Base class for IngeTrazo tools and the per-event ``ToolContext`` they receive.\n\nA tool is anything the user activates from the toolbar to interact with the\nviewport: draw, modify, select. Both built-in tools and third-party plugins\ninherit from :class:`Tool` so they can be registered uniformly.\n\nSpatial tools (line, rectangle, push/pull, select, ...) override\n:meth:`on_click`, :meth:`on_hover` and :meth:`on_cancel`. The viewport\nraycasts the mouse pixel against the working plane and produces a\n:class:`ToolContext` that combines the snapped world point, the raw screen\nposition, keyboard modifiers and the snap metadata."},
-    Module {name:"pushpull", imports:&[("__future__", &["annotations"]), ("ingetrazo_core", &["register_tool_adapter"]), ("ingetrazo_core", &["Input as Qt"]), ("ingetrazo_core", &["Vec3 as QVector3D", "push_reference_target"]), ("ingetrazo_core", &["window_input"]), ("core.i18n", &["tr"]), ("core.mesh", &["_STITCH_TOL"]), ("core.mesh", &["Face as MeshFace"]), ("core.orient", &["orient_outward"]), ("core.topology", &["_key"]), ("tools.base", &["ToolContext", "ctrl_clause"]), ("tools.rust_tools", &["RustTool", "_mods"]), ("core.units", &["fmt_len"]), ("core", &["push_scans"]), ("core.push_pull", &["PushPullOperation", "_GroupScene", "_MIN_EXTRUDE", "_face_shape", "_loops_overlap_2d", "_made_since", "_paint_of", "_project_loop_2d"])], doc:"Push/Pull tool: extrude a face along its normal.\n\nUX (the usual push/pull convention):\n- Hover a face; the cursor picks the front-most face under it.\n- First click: lock onto that face and start a drag along its normal.\n- Subsequent mouse motion slides the extrusion preview (wireframe of\n  the future box) along the normal axis. Length is shown near the\n  midpoint, same overlay as the line tool.\n- Second click commits at the current distance.\n- Typing a number + Enter (VCB) commits at exactly that distance,\n  preserving the current direction's sign; a negative value (\"-2\")\n  reverses it, and unit suffixes (\"30cm\", \"1500mm\") are understood.\n- **Ctrl** = push/pull a copy: the start face stays in place (a slab\n  division) and the extrusion stacks as a new segment — how floors are\n  stacked.\n- **Double-click** repeats the last committed distance on the face under\n  the cursor (with Ctrl, as a copy).\n- **Several faces selected**: pushing or pulling any one of them moves them\n  all the same distance, each along its own normal, as one undo step.\n- Esc cancels without committing.\n\nCommit pipeline (the deterministic root-fix, no case tree):\n1. Orient the mesh outward (entry invariant; no-op on open sheets).\n2. Build the *naive* extrusion: consumed/kept base, moved cap (with holes),\n   one wall quad per boundary/hole edge — even where a quad lands on an\n   existing face's plane.\n3. Stitch connectivity (T-junctions, collinear vertices).\n4. On a solid: deterministically rebuild every touched plane (seams, overlaps,\n   cracks) from its edges via ``Store::rebuild_push_planes``; on a flat sheet, fall back\n   to the seeded coplanar merge (no outward side exists there).\n5. Orient outward again — every committed solid upholds the invariant.\n\nA bordered (embedded) base face is consumed either direction — pushing in\ncarves a recess / step / through-hole (the far face is punched when the push\nreaches it); pushing out grows the solid. A free-standing face keeps its base\nas the cap of the new box."},
+    Module {name:"pushpull", imports:&[("__future__", &["annotations"]), ("ingetrazo_core", &["register_tool_adapter"]), ("ingetrazo_core", &["Input as Qt"]), ("ingetrazo_core", &["Vec3 as QVector3D", "push_reference_target"]), ("ingetrazo_core", &["window_input"]), ("core.i18n", &["tr"]), ("core.mesh", &["_STITCH_TOL"]), ("core.mesh", &["Face as MeshFace"]), ("core.orient", &["orient_outward"]), ("core.topology", &["_key"]), ("tools.base", &["ToolContext", "ctrl_clause"]), ("tools.rust_tools", &["RustTool", "_mods"]), ("core.units", &["fmt_len"]), ("core", &["push_scans"]), ("core.push_pull", &["PushPullOperation", "_MIN_EXTRUDE"])], doc:"Push/Pull tool: extrude a face along its normal.\n\nUX (the usual push/pull convention):\n- Hover a face; the cursor picks the front-most face under it.\n- First click: lock onto that face and start a drag along its normal.\n- Subsequent mouse motion slides the extrusion preview (wireframe of\n  the future box) along the normal axis. Length is shown near the\n  midpoint, same overlay as the line tool.\n- Second click commits at the current distance.\n- Typing a number + Enter (VCB) commits at exactly that distance,\n  preserving the current direction's sign; a negative value (\"-2\")\n  reverses it, and unit suffixes (\"30cm\", \"1500mm\") are understood.\n- **Ctrl** = push/pull a copy: the start face stays in place (a slab\n  division) and the extrusion stacks as a new segment — how floors are\n  stacked.\n- **Double-click** repeats the last committed distance on the face under\n  the cursor (with Ctrl, as a copy).\n- **Several faces selected**: pushing or pulling any one of them moves them\n  all the same distance, each along its own normal, as one undo step.\n- Esc cancels without committing.\n\nCommit pipeline (the deterministic root-fix, no case tree):\n1. Orient the mesh outward (entry invariant; no-op on open sheets).\n2. Build the *naive* extrusion: consumed/kept base, moved cap (with holes),\n   one wall quad per boundary/hole edge — even where a quad lands on an\n   existing face's plane.\n3. Stitch connectivity (T-junctions, collinear vertices).\n4. On a solid: deterministically rebuild every touched plane (seams, overlaps,\n   cracks) from its edges via ``Store::rebuild_push_planes``; on a flat sheet, fall back\n   to the seeded coplanar merge (no outward side exists there).\n5. Orient outward again — every committed solid upholds the invariant.\n\nA bordered (embedded) base face is consumed either direction — pushing in\ncarves a recess / step / through-hole (the far face is punched when the push\nreaches it); pushing out grows the solid. A free-standing face keeps its base\nas the cap of the new box."},
     Module {name:"scale_host", imports:&[("__future__", &["annotations"]), ("ingetrazo_core", &["register_tool_adapter"]), ("ingetrazo_core", &["Input as Qt"]), ("ingetrazo_core", &["MatrixGesture", "ScaleGripSpec", "scale_grab", "Vec3 as QVector3D"]), ("core.i18n", &["tr"])], doc:"Scale grip picking and resident-row previews for the Rust machine."},
     Module {name:"fillet_host", imports:&[("__future__", &["annotations"]), ("ingetrazo_core", &["register_tool_adapter"]), ("ingetrazo_core", &["Input as Qt"]), ("ingetrazo_core", &["Vec3 as QVector3D", "bevel_nearest_end", "bevel_selection", "bevel_targets"]), ("core.fillet", &["CIRCULAR", "plan_fillet"]), ("core.units", &["fmt_len_fine"]), ("core.i18n", &["tr"]), ("core.mesh", &["Edge"]), ("core.vertex_bevel", &["plan_vertex_bevel"]), ("tools.base", &["Tool"])], doc:"Resident bevel targets, preview mesh and panel bindings for the Fillet machine."},
     Module {name:"move_host", imports:&[("__future__", &["annotations"]), ("ingetrazo_core", &["register_tool_adapter", "register_tool_functions"]), ("tools.overlay_painter", &["draw_overlay"]), ("ingetrazo_core", &["Input as Qt"]), ("ingetrazo_core", &["Vec3 as QVector3D"]), ("core.i18n", &["tr"]), ("tools.base", &["ToolContext"]), ("tools.rust_tool_base", &["RustTool", "_mods", "_point_property", "_tuple"]), ("core.units", &["fmt_len"]), ("ingetrazo_core", &["CopyWire", "GripTurn", "MoveGesture", "TransformPose", "moving_faces", "rotation_handles as rotation_grips", "snap_exclusions", "track_move_grips", "transform_records", "transform_targets as gather_targets"])], doc:"Viewport bindings for the Rust Move tool, including live deformation and grips."},
@@ -87,116 +87,91 @@ const HOST_CLASSES: &[(&str, &str, &str)] = &[
 pub(super) fn tool_module_classes() -> Vec<(&'static str, &'static str, &'static str)> {
     let mut classes = HOST_CLASSES.to_vec();
     classes.extend_from_slice(&[
-        ("tools.texture_position", "TexturePositionTool", "Tool"),
-        ("tools.scale_manager_host", "ScaleManagerTool", "RustTool"),
-        (
-            "tools.annotation_host",
-            "_AnnotationTool",
-            "AxisMagnet,RustTool",
-        ),
-        ("tools.annotation_host", "TextTool", "_AnnotationTool"),
-        ("tools.annotation_host", "DimensionTool", "_AnnotationTool"),
-        ("tools.walkthrough_host", "EyeHost", "object"),
-        ("tools.walkthrough_host", "PositionCameraHost", "EyeHost"),
-        ("tools.walkthrough_host", "WalkHost", "EyeHost"),
-        ("tools.walkthrough_host", "FirstPersonHost", "EyeHost"),
-        ("tools.protractor_host", "ProtractorBase", "ToolDisc,Tool"),
-        ("tools.protractor_host", "ProtractorHost", "ProtractorBase"),
-        ("tools.offset_host", "OffsetHost", "object"),
-        ("tools.rust_tool_base", "_Host", "ViewportToolHost"),
-        ("tools.rust_tool_base", "RustTool", "Tool"),
-        ("tools.base", "AxisMagnet", "object"),
-        ("tools.base", "PlaneLock", "object"),
-        ("tools.base", "ToolContext", "object"),
-        ("tools.base", "Tool", "ABC"),
-        (
-            "tools.pushpull",
-            "PushPullTool",
-            "PushPullOperation,RustTool",
-        ),
-        ("tools.scale_host", "_Grip", "object"),
-        ("tools.scale_host", "ScaleHost", "object"),
-        ("tools.fillet_host", "FilletHost", "Tool"),
-        ("tools.move_host", "CopyPreview", "object"),
-        ("tools.move_host", "MoveHost", "CopyPreview,RustTool"),
-        (
-            "tools.rotate_host",
-            "RotateHost",
-            "CopyPreview,ProtractorBase",
-        ),
-        ("tools.solid_host", "SolidTool", "RustTool"),
-        ("tools.solid_host", "OuterShellTool", "SolidTool"),
-        ("tools.solid_host", "UnionTool", "SolidTool"),
-        ("tools.solid_host", "SubtractTool", "SolidTool"),
-        ("tools.solid_host", "TrimTool", "SolidTool"),
-        ("tools.solid_host", "IntersectTool", "SolidTool"),
-        ("tools.solid_host", "SplitTool", "SolidTool"),
-        ("tools.followme_host", "FollowMeHost", "object"),
-        ("tools.tape_host", "TapeHost", "Tool"),
-        ("tools.paint_host", "PaintHost", "object"),
-        ("tools.eraser_host", "EraserHost", "object"),
-        ("tools.north_host", "NorthTool", "RustTool"),
-        ("tools.section_host", "SectionPlaneTool", "RustTool"),
-        ("tools.image_host", "ImageTool", "RustTool"),
-        ("tools.geopath_host", "GeoPathTool", "RustTool"),
-        ("tools.place_group_host", "PlaceGroupHost", "object"),
-        ("tools.rust_tools", "LineTool", "RustTool"),
-        ("tools.rust_tools", "SelectTool", "RustTool"),
-        ("tools.rust_tools", "_PlanarMachine", "PlaneLock,RustTool"),
-        ("tools.rust_tools", "RectangleTool", "_PlanarMachine"),
-        (
-            "tools.rust_tools",
-            "_RadialTool",
-            "AxisMagnet,_PlanarMachine",
-        ),
-        ("tools.rust_tools", "CircleTool", "_RadialTool"),
-        ("tools.rust_tools", "PolygonTool", "_RadialTool"),
-        (
-            "tools.rust_tools",
-            "RotatedRectangleTool",
-            "AxisMagnet,_PlanarMachine",
-        ),
-        ("tools.rust_tools", "_ArcBase", "AxisMagnet,_PlanarMachine"),
-        ("tools.rust_tools", "_LastFillet", "type(RustTool)"),
-        ("tools.rust_tools", "ArcTool", "_ArcBase"),
-        ("tools.rust_tools", "ThreePointArcTool", "_ArcBase"),
-        ("tools.rust_tools", "CenterArcTool", "_ArcBase"),
-        ("tools.rust_tools", "PieTool", "CenterArcTool"),
-        ("tools.rust_tools", "ScaleTool", "ScaleHost,RustTool"),
-        ("tools.rust_tools", "RotateTool", "RotateHost,RustTool"),
-        (
-            "tools.rust_tools",
-            "PositionCameraTool",
-            "PositionCameraHost,RustTool",
-        ),
-        ("tools.rust_tools", "LookAroundTool", "EyeHost,RustTool"),
-        ("tools.rust_tools", "WalkTool", "WalkHost,RustTool"),
-        (
-            "tools.rust_tools",
-            "FirstPersonTool",
-            "FirstPersonHost,RustTool",
-        ),
-        ("tools.rust_tools", "OffsetTool", "OffsetHost,RustTool"),
-        ("tools.rust_tools", "PaintTool", "PaintHost,RustTool"),
-        (
-            "tools.rust_tools",
-            "ProtractorTool",
-            "ProtractorHost,RustTool",
-        ),
-        ("tools.rust_tools", "FilletTool", "FilletHost,RustTool"),
-        ("tools.rust_tools", "TapeMeasureTool", "TapeHost,RustTool"),
-        ("tools.rust_tools", "PasteTool", "PasteHost,RustTool"),
-        ("tools.rust_tools", "FlipTool", "FlipHost,RustTool"),
-        ("tools.rust_tools", "FreehandTool", "RustTool"),
-        ("tools.rust_tools", "ChangeAxesTool", "RustTool"),
-        ("tools.rust_tools", "FollowMeTool", "FollowMeHost,RustTool"),
-        ("tools.rust_tools", "EraserTool", "EraserHost,RustTool"),
-        (
-            "tools.rust_tools",
-            "PlaceGroupTool",
-            "PlaceGroupHost,RustTool",
-        ),
-        ("tools.rust_tools", "MoveTool", "MoveHost"),
+
+    ("tools.texture_position","TexturePositionTool","Tool"),
+
+
+
+    ("tools.scale_manager_host","ScaleManagerTool","RustTool"),
+
+    ("tools.annotation_host","_AnnotationTool","AxisMagnet,RustTool"),
+    ("tools.annotation_host","TextTool","_AnnotationTool"),
+    ("tools.annotation_host","DimensionTool","_AnnotationTool"),
+
+    ("tools.walkthrough_host","EyeHost","object"),
+    ("tools.walkthrough_host","PositionCameraHost","EyeHost"),
+    ("tools.walkthrough_host","WalkHost","EyeHost"),
+    ("tools.walkthrough_host","FirstPersonHost","EyeHost"),
+
+    ("tools.protractor_host","ProtractorBase","ToolDisc,Tool"),
+    ("tools.protractor_host","ProtractorHost","ProtractorBase"),
+
+    ("tools.offset_host","OffsetHost","object"),
+
+    ("tools.rust_tool_base","_Host","ViewportToolHost"),
+    ("tools.rust_tool_base","RustTool","Tool"),
+
+    ("tools.base","AxisMagnet","object"),
+    ("tools.base","PlaneLock","object"),
+    ("tools.base","ToolContext","object"),
+    ("tools.base","Tool","ABC"),
+
+    ("tools.pushpull","PushPullTool","PushPullOperation,RustTool"),
+    ("tools.scale_host","_Grip","object"),
+    ("tools.scale_host","ScaleHost","object"),
+    ("tools.fillet_host","FilletHost","Tool"),
+    ("tools.move_host","CopyPreview","object"),
+    ("tools.move_host","MoveHost","CopyPreview,RustTool"),
+    ("tools.rotate_host","RotateHost","CopyPreview,ProtractorBase"),
+    ("tools.solid_host","SolidTool","RustTool"),
+    ("tools.solid_host","OuterShellTool","SolidTool"),
+    ("tools.solid_host","UnionTool","SolidTool"),
+    ("tools.solid_host","SubtractTool","SolidTool"),
+    ("tools.solid_host","TrimTool","SolidTool"),
+    ("tools.solid_host","IntersectTool","SolidTool"),
+    ("tools.solid_host","SplitTool","SolidTool"),
+    ("tools.followme_host","FollowMeHost","object"),
+    ("tools.tape_host","TapeHost","Tool"),
+    ("tools.paint_host","PaintHost","object"),
+    ("tools.eraser_host","EraserHost","object"),
+    ("tools.north_host","NorthTool","RustTool"),
+    ("tools.section_host","SectionPlaneTool","RustTool"),
+    ("tools.image_host","ImageTool","RustTool"),
+    ("tools.geopath_host","GeoPathTool","RustTool"),
+    ("tools.place_group_host","PlaceGroupHost","object"),
+    ("tools.rust_tools","LineTool","RustTool"),
+    ("tools.rust_tools","SelectTool","RustTool"),
+    ("tools.rust_tools","_PlanarMachine","PlaneLock,RustTool"),
+    ("tools.rust_tools","RectangleTool","_PlanarMachine"),
+    ("tools.rust_tools","_RadialTool","AxisMagnet,_PlanarMachine"),
+    ("tools.rust_tools","CircleTool","_RadialTool"),
+    ("tools.rust_tools","PolygonTool","_RadialTool"),
+    ("tools.rust_tools","RotatedRectangleTool","AxisMagnet,_PlanarMachine"),
+    ("tools.rust_tools","_ArcBase","AxisMagnet,_PlanarMachine"),
+    ("tools.rust_tools","_LastFillet","type(RustTool)"),
+    ("tools.rust_tools","ArcTool","_ArcBase"),
+    ("tools.rust_tools","ThreePointArcTool","_ArcBase"),
+    ("tools.rust_tools","CenterArcTool","_ArcBase"),
+    ("tools.rust_tools","PieTool","CenterArcTool"),
+    ("tools.rust_tools","ScaleTool","ScaleHost,RustTool"),
+    ("tools.rust_tools","RotateTool","RotateHost,RustTool"),
+    ("tools.rust_tools","PositionCameraTool","PositionCameraHost,RustTool"),
+    ("tools.rust_tools","LookAroundTool","EyeHost,RustTool"),
+    ("tools.rust_tools","WalkTool","WalkHost,RustTool"),
+    ("tools.rust_tools","FirstPersonTool","FirstPersonHost,RustTool"),
+    ("tools.rust_tools","OffsetTool","OffsetHost,RustTool"),
+    ("tools.rust_tools","PaintTool","PaintHost,RustTool"),
+    ("tools.rust_tools","ProtractorTool","ProtractorHost,RustTool"),
+    ("tools.rust_tools","FilletTool","FilletHost,RustTool"),
+    ("tools.rust_tools","TapeMeasureTool","TapeHost,RustTool"),
+    ("tools.rust_tools","PasteTool","PasteHost,RustTool"),
+    ("tools.rust_tools","FlipTool","FlipHost,RustTool"),
+    ("tools.rust_tools","FreehandTool","RustTool"),
+    ("tools.rust_tools","ChangeAxesTool","RustTool"),
+    ("tools.rust_tools","FollowMeTool","FollowMeHost,RustTool"),
+    ("tools.rust_tools","EraserTool","EraserHost,RustTool"),
+    ("tools.rust_tools","PlaceGroupTool","PlaceGroupHost,RustTool"),
+    ("tools.rust_tools","MoveTool","MoveHost"),
     ]);
     classes
 }
@@ -235,6 +210,7 @@ fn definition(name: &str) -> Option<&'static Module> {
     MODULES.iter().find(|m| m.name == leaf)
 }
 
+const CORE_MODULES: &[&str] = &["composition", "push_pull", "solids"];
 const VIEW_MODULES: &[&str] = &[
     "document_interaction",
     "documents",
@@ -272,7 +248,7 @@ impl ToolModules {
         let _ = target;
         let py = slf.py();
         let found = if slf.get().package == "core" {
-            fullname == "core.composition"
+            fullname.strip_prefix("core.").is_some_and(|name| CORE_MODULES.contains(&name))
         } else if slf.get().package == "views" {
             fullname
                 .strip_prefix("views.")
@@ -295,7 +271,12 @@ impl ToolModules {
         let py = module.py();
         let full: String = module.name()?.extract()?;
         if self.package == "core" {
-            return crate::sheets::composition::install(module);
+            return match full.as_str() {
+                "core.composition" => crate::sheets::composition::install(module),
+                "core.push_pull" => crate::push_operation::install(module),
+                "core.solids" => crate::solids::install(module),
+                _ => Err(PyImportError::new_err(full)),
+            };
         }
         if self.package == "views" {
             py.import("ingetrazo_render")?
@@ -337,7 +318,9 @@ impl ToolModules {
     #[pyo3(signature=(prefix=""))]
     fn iter_modules(&self, prefix: &str) -> Vec<(String, bool)> {
         if self.package == "core" {
-            return vec![(format!("{prefix}composition"), false)];
+            return CORE_MODULES.iter()
+                .map(|name| (format!("{prefix}{name}"), false))
+                .collect();
         }
         if self.package == "views" {
             return VIEW_MODULES
