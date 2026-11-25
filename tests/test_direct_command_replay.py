@@ -100,3 +100,22 @@ def test_rejected_mixed_edit_restores_each_geometry_owner(occurrence):
         scene.end_group_edit()
         assert scene.mesh is loose and not loose.edges
         assert [edge.curve for edge in group.mesh.edges] == [17]
+
+def test_plugin_reordering_keeps_the_store_and_held_edges():
+    from core.store_mesh import StoreMesh
+    scene = Scene()
+    mesh = scene.mesh
+    mesh.add_face(ring(0, 2))
+    held = list(mesh.edges)
+    mesh.edges.reverse()
+    assert list(mesh.edges) == held[::-1]
+    mesh.edges.sort(key=lambda edge: edge.key)
+    assert list(mesh.edges) == sorted(held, key=lambda edge: edge.key)
+    mesh.edges[:] = held[::-1]
+    mesh.edges = held
+    assert type(mesh) is StoreMesh and list(mesh.edges) == held
+    cmd = AddEdgeCommand(Vec3(3, 0, 0), Vec3(4, 0, 0))
+    cmd.do(scene)
+    assert mesh.edges[-1] == cmd.edge
+    cmd.undo(scene)
+    assert list(mesh.edges) == held

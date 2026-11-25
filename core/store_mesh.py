@@ -943,10 +943,41 @@ class _Seq:
     remove = _write("remove")
     pop = _write("pop")
     clear = _write("clear")
-    reverse = _write("reverse")
-    sort = _write("sort")
-    __setitem__ = _write("__setitem__")
     __delitem__ = _write("__delitem__")
+
+    def _reorder(self, items):
+        keys = [getattr(item, "key", None) for item in items]
+        if len(keys) != len(self) or set(keys) != set(self._keys()):
+            return False
+        self._m._store.reorder(self._kind, keys)
+        self._m.__dict__.pop("_bulk", None)
+        return True
+
+    def reverse(self):
+        real = self._real()
+        if real is not None:
+            return real.reverse()
+        self._m._store.reorder(self._kind, self._keys()[::-1])
+        self._m.__dict__.pop("_bulk", None)
+
+    def sort(self, *, key=None, reverse=False):
+        real = self._real()
+        if real is not None:
+            return real.sort(key=key, reverse=reverse)
+        items = sorted(self, key=key, reverse=reverse)
+        if not self._reorder(items):
+            raise ValueError("mesh list modified during sort")
+
+    def __setitem__(self, index, value):
+        real = self._real()
+        if real is not None:
+            real[index] = _resolve(value, self._m)
+            return
+        items = list(self)
+        items[index] = value
+        if not self._reorder(items):
+            self._m._materialise()
+            self._m.__dict__[self._name][:] = _resolve(items, self._m)
 
     def __iadd__(self, other):
         self.extend(other)
@@ -1159,8 +1190,10 @@ def _seq_property(kind, name, cls, idx):
         return _Seq(self, kind, name, cls, idx)
 
     def put(self, value):
-        self._materialise()
-        setattr(self, name, value)
+        items = list(value)
+        if not get(self)._reorder(items):
+            self._materialise()
+            setattr(self, name, _resolve(items, self))
     return property(get, put)
 
 

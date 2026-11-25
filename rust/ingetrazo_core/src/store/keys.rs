@@ -401,6 +401,11 @@ impl Order {
             return;
         }
         let live = self.live(slots);
+        self.set_order(live, slots);
+    }
+
+    /// Install a validated permutation of the live slots.
+    pub fn set_order(&mut self, live: Vec<u32>, slots: &Slots) {
         if live.windows(2).all(|w| w[0] < w[1]) {
             self.explicit = None;
             return;

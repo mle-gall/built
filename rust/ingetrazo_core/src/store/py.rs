@@ -815,6 +815,25 @@ impl PyMeshStore {
         Ok(live.iter().map(|&s| self.inner.key(k, s)).collect())
     }
 
+    /// Replace only the iteration order, preserving the slots and all incidence.
+    fn reorder(&mut self, kind: &str, keys: Vec<u128>) -> PyResult<()> {
+        let kind = kind_of(kind)?;
+        let current = self.inner.live_slots(kind);
+        let next: Vec<_> = keys.into_iter().map(|key| live_of(&self.inner, kind, key))
+            .collect::<PyResult<_>>()?;
+        if next == current {
+            return Ok(());
+        }
+        let unique: std::collections::HashSet<_> = next.iter().copied().collect();
+        if unique.len() != current.len() || next.len() != current.len() {
+            return Err(PyValueError::new_err("expected each live element exactly once"));
+        }
+        let state = &mut self.inner.state;
+        state.order[kind as usize].set_order(next, &state.slots[kind as usize]);
+        self.inner.finish(Change::default());
+        Ok(())
+    }
+
     /// `Vertex.position` as a float64 triple.
     fn vertex_position(&self, key: u128) -> PyResult<(f64, f64, f64)> {
         let v = any_of(&self.inner, Kind::Vertex, key)?;
