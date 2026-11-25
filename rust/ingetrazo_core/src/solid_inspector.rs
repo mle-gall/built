@@ -237,7 +237,6 @@ pub(crate) fn solid_problem_targets<'py>(
     let py = scene.py();
     let plugin = py.import("core.solid_analysis")?;
     let lazy = py.import("core.lazy_mesh")?;
-    let solids = py.import("core.solids")?;
     let links = py.import("core.links")?;
     let active = scene.getattr("mesh")?;
     let mut seen = HashSet::from([active.as_ptr()]);
@@ -269,8 +268,9 @@ pub(crate) fn solid_problem_targets<'py>(
         if index > 0 && start.elapsed().as_secs_f64() >= budget {
             return Ok((broken, index, total));
         }
-        let bad = if !lazy.call_method1("plan_of", (&mesh,))?.is_none() {
-            solids.call_method1("_lazily_open", (&mesh,))?.is_truthy()?
+        let plan = lazy.call_method1("plan_of", (&mesh,))?;
+        let bad = if !plan.is_none() {
+            crate::solids::open_plan(&plan)?
         } else if mesh.getattr("edges")?.len()? == 0 {
             false
         } else {

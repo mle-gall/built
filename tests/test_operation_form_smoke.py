@@ -184,7 +184,7 @@ def test_native_about_copies_diagnostics(tmp_path):
     copied = tmp_path / "copied.txt"
     venv = fixture_venv(tmp_path,
         "import built_shell\nfrom pathlib import Path\n"
-        f"built_shell.pasteboard_write = lambda items: Path({str(copied)!r}).write_bytes(items[0][1])\n")
+        f"built_shell.pasteboard_write = lambda items: Path({str(copied)!r}).write_bytes(items[0][1]) == len(items[0][1])\n")
     home = tmp_path / "home"
     home.mkdir()
     steps = tmp_path / "steps"
@@ -726,7 +726,7 @@ def dispatch(self, command):
         act("tagfolder","batch",dict(owner=id(scene),parent=folder,folders=[detail],tags=["Paths"]))
         self.fixture_mixed_folder=scene.folder_parents.get(detail)==folder
     elif command=="fixture-tag-controls":
-        from core.layers import add_folder
+        from ingetrazo_core import tag_edits
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("tagcolours","1")))
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("modellines","0")))
         template={str(tmp_path / "drawing.json")!r}
@@ -734,7 +734,7 @@ def dispatch(self, command):
         ShellFileDialog.getOpenFileName=lambda *args: (template,"")
         for verb in ("exporttags","importtags"):
             wgpu_ui._tree_action(self.window,self.view,verb+wgpu_ui.SEP)
-        folder=add_folder(scene,"Temporary tags")
+        folder=tag_edits.add_folder(scene,"Temporary tags")
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("newtag","preview-folder:"+folder)))
         tag=scene.layers[-1]
         self.fixture_tag=tag.key

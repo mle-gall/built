@@ -176,9 +176,8 @@ fn stitch(mesh: &Obj, ss: &[Station]) -> PyResult<()> {
     let py = mesh.py();
     let keys = PySet::empty(py)?;
     for p in ss.iter().flatten().flatten() {
-        keys.add(crate::kernel::object_incidence::mesh_key(
-            &p.into_bound_py_any(py)?,
-        )?)?;
+        let [x, y, z] = crate::store::commands::cell(*p).map(f64::from_bits);
+        keys.add((x, y, z))?;
     }
     let kw = PyDict::new(py);
     kw.set_item("coplanar_merge", false)?;

@@ -47,7 +47,28 @@ fn lazily_open(mesh: &Obj) -> PyResult<bool> {
     if plan.is_none() {
         return Ok(false);
     }
-    let starts = plan.getattr("ef_start")?.extract::<Vec<i64>>()?;
+    open_plan(&plan)
+}
+
+pub(crate) fn open_plan(plan: &Obj) -> PyResult<bool> {
+    let offsets = plan.getattr("ef_start")?;
+    use numpy::PyReadonlyArray1;
+    macro_rules! open_offsets {
+        ($ty:ty) => {
+            if let Ok(array) = offsets.extract::<PyReadonlyArray1<$ty>>() {
+                let offsets = array.as_array();
+                return Ok(offsets
+                    .iter()
+                    .zip(offsets.iter().skip(1))
+                    .any(|(&a, &b)| i128::from(b) - i128::from(a) != 2));
+            }
+        };
+    }
+    open_offsets!(i32);
+    open_offsets!(i64);
+    open_offsets!(u32);
+    open_offsets!(u64);
+    let starts = offsets.extract::<Vec<i64>>()?;
     Ok(starts.windows(2).any(|w| w[1] - w[0] != 2))
 }
 fn store(mesh: &Obj) -> PyResult<bool> {
