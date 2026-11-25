@@ -105,7 +105,9 @@ fn table<'py>(a: &Args<'py>) -> Reply<'py> {
             },
         );
     }
-    source_classes(py, &root, &mut classes)?;
+    if root.join("tools").is_dir() {
+        source_classes(py, &root, &mut classes)?;
+    }
     let dispatch = imported(py, "built_render")?.getattr("TOOL_DISPATCH")?;
     let registered = imported(py, "tools.metal_coverage")?
         .call_method1("registry", (&root,))?
