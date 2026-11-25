@@ -24,7 +24,7 @@ pub(super) fn install(module: &Bound<PyModule>) -> PyResult<()> {
     )?;
     module.setattr(
         "draw_overlay",
-        py.import("tools")?
+        py.import("views")?
             .call_method1("_plugin_method", (module.getattr("draw_overlay")?,))?,
     )?;
     Ok(())

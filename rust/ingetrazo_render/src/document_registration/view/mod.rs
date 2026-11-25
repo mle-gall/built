@@ -147,7 +147,7 @@ pub(crate) mod calls {
 fn install(owner: &Obj, namespace: &Bound<PyDict>, entries: &[Method]) -> PyResult<()> {
     let py = owner.py();
     let registrar = Bindings::new(py)?
-        .with_plugin_method(py.import("tools")?.getattr("_plugin_method")?)
+        .with_plugin_method(py.import("views")?.getattr("_plugin_method")?)
         .with_module_annotations(namespace)?;
     for &(name, mode, action, args, result, doc) in entries {
         registrar.define(

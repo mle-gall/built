@@ -212,6 +212,7 @@ fn definition(name: &str) -> Option<&'static Module> {
 
 const CORE_MODULES: &[&str] = &["plugin_panels", "protocol", "protocol.commands", "protocol.feed", "protocol.keys", "protocol.records", "protocol.queries", "purge", "bridge", "lazy_mesh", "reference_edit", "material_commands", "link_structure", "hlr", "vista_caras", "units", "composition", "push_pull", "solids", "sweep", "make_faces", "intersect", "pieces", "inference", "geometry_arrays", "outliner", "solid_analysis", "offset", "text3d", "render_blender", "extensions", "input_codes"];
 const VIEW_MODULES: &[&str] = &[
+    "viewport", "chrome_forms", "chrome_dialogs",
     "document_interaction",
     "documents",
     "document_tools",
@@ -320,6 +321,11 @@ impl ToolModules {
             };
         }
         if self.package == "views" {
+            if let Some(name @ ("chrome_forms" | "chrome_dialogs")) = full.strip_prefix("views.") {
+                let native = py.import("ingetrazo_render")?.getattr(name)?;
+                py.import("sys")?.getattr("modules")?.set_item(&full, native)?;
+                return Ok(());
+            }
             py.import("ingetrazo_render")?
                 .call_method1("install_interaction_module", (module,))?;
             return Ok(());
@@ -384,7 +390,17 @@ pub(super) fn install_tool_modules(paths: &Bound<'_, PyList>) -> PyResult<()> {
 }
 #[pyfunction]
 pub(super) fn install_view_modules(paths: &Bound<PyList>) -> PyResult<()> {
-    install_modules(paths, "views")
+    install_modules(paths, "views")?;
+    let py = paths.py();
+    let views = py.import("sys")?.getattr("modules")?.get_item("views")?;
+    views.setattr("__getattr__", wrap_pyfunction!(plugin_view_attr, py)?)
+}
+#[pyfunction]
+fn plugin_view_attr<'py>(py: Python<'py>, name: &str) -> Reply<'py> {
+    match name {
+        "chrome_forms" | "chrome_dialogs" => Ok(py.import(format!("views.{name}"))?.into_any()),
+        _ => Err(pyo3::exceptions::PyAttributeError::new_err(name.to_owned())),
+    }
 }
 #[pyfunction]
 pub(super) fn install_core_modules(paths: &Bound<PyList>) -> PyResult<()> {
@@ -393,7 +409,7 @@ pub(super) fn install_core_modules(paths: &Bound<PyList>) -> PyResult<()> {
 fn install_modules(paths: &Bound<PyList>, package: &'static str) -> PyResult<()> {
     let py = paths.py();
     let sys = py.import("sys")?;
-    let first = paths.get_item(0)?.extract::<String>()?;
+    let first = if paths.is_empty() { package.to_owned() } else { paths.get_item(0)?.extract::<String>()? };
     let key = std::path::Path::new(&first)
         .join(format!("__built_native_{package}__"))
         .to_string_lossy()
