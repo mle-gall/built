@@ -275,12 +275,7 @@ pub(crate) fn structure_proposal<'py>(
         )?;
     }
     let mut top = HashSet::<String>::new();
-    for r in py
-        .import("core.link_structure")?
-        .call_method1("walk", (scene,))?
-        .try_iter()?
-    {
-        let r = r?;
+    for r in crate::link_tree::link_placements(scene)?.iter() {
         let chain = r.get_item(1)?;
         let inner = r.get_item(2)?;
         if !inner.eq(&chain)? && !chain.is_truthy()? {

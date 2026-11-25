@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Geometry, flags and history from the tool paths against the Python kernel."""
+from ingetrazo_core import store_views
 import math
 from types import SimpleNamespace
 
@@ -25,7 +26,7 @@ def scenes(monkeypatch):
     for backed in (False, True):
         scene = Scene()
         if backed:
-            S.become_store(scene.mesh, native.MeshStore(next(_KEY_NAMESPACES), **S._weld_args()), [])
+            store_views.become_store(scene.mesh, native.MeshStore(next(_KEY_NAMESPACES), **S._weld_args()), [])
         yield scene
 
 
@@ -268,7 +269,7 @@ def test_piercing_slab_partitions_both_solids(monkeypatch, placed):
                 mesh = Mesh()
                 if isinstance(scene.mesh, S.StoreMesh):
                     import ingetrazo_core as native
-                    S.become_store(mesh, native.MeshStore(next(_KEY_NAMESPACES), **S._weld_args()), [])
+                    store_views.become_store(mesh, native.MeshStore(next(_KEY_NAMESPACES), **S._weld_args()), [])
                 group = Group(mesh)
                 group.xform = QMatrix4x4()
                 group.xform.translate(i, 0, 0)

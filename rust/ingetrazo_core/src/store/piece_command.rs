@@ -71,11 +71,8 @@ impl Topology {
 }
 fn parts<'p>(mesh: &Obj<'p>, solid: bool) -> PyResult<Obj<'p>> {
     let py = mesh.py();
-    let found = py
-        .import("core.store_parts")?
-        .call_method1("parts", (mesh, solid))?;
-    if !found.is_none() {
-        return Ok(found);
+    if let Some(found) = crate::kernel::store_views::pieces::mesh_parts(mesh, solid)? {
+        return Ok(found.into_any());
     }
     let faces = items(&mesh.getattr("faces")?)?;
     let edges = items(&mesh.getattr("edges")?)?;
@@ -129,10 +126,7 @@ fn _is_solid(faces: &Obj) -> PyResult<bool> {
 #[pyfunction]
 fn copy_part<'p>(faces: &Obj<'p>, edges: &Obj<'p>) -> PyResult<Obj<'p>> {
     let py = faces.py();
-    let made = py
-        .import("core.store_parts")?
-        .call_method1("copy_part", (faces, edges))?;
-    if !made.is_none() {
+    if let Some(made) = crate::kernel::store_views::pieces::copy_mesh_part(faces, edges)? {
         return Ok(made);
     }
     let api = py.import("core.mesh")?;

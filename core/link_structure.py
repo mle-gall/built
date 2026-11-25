@@ -41,10 +41,9 @@ read-only (``structure.file`` refuses linked structure anyway).
 from __future__ import annotations
 
 import ingetrazo_core
-from collections import defaultdict
 import json
 
-from core import links, structure
+from core import links
 
 LINKED = "linked"          # the former «Linked files» row (keys stay read-only)
 LINKED_NAME = links.LINKED_FOLDER
@@ -66,61 +65,6 @@ def is_linked_key(key) -> bool:
     return isinstance(key, str) and (key == LINKED or key.startswith("link:"))
 
 
-def _children_of(table):
-    kids = defaultdict(list)
-    for k, n in table.items():
-        kids[n.get("parent")].append(k)
-    return kids
-
-
-def _own(table):
-    """A file's own nodes: neither mounted from another file nor the
-    «Linked files» folder that only holds such mounts."""
-    own = {k: n for k, n in table.items()
-           if isinstance(n, dict) and "source" not in n and not str(k).startswith("link:")}
-    kids = _children_of(table)
-    for k in [k for k, n in own.items() if n.get("name") == LINKED_NAME]:
-        if not any(c in own for c in kids.get(k, ())):
-            own.pop(k)
-    return own
-
-
-def _subtable(table, stem):
-    """The structure a file mounted for its link ``stem``, in that link's
-    own key space (``link:<stem>/x`` → ``x``)."""
-    pre, top = f"link:{stem}/", f"link:{stem}"
-    out = {}
-    for k, n in table.items():
-        if isinstance(k, str) and k.startswith(pre) and isinstance(n, dict):
-            p = n.get("parent")
-            p = None if p in (None, top) else p[len(pre):] if isinstance(p, str) and p.startswith(pre) else None
-            node = {f: v for f, v in n.items() if f not in ("source", "source_node", "mount")}
-            node["parent"] = p
-            if "recipe" not in node and "source_recipe" in n:
-                node["recipe"] = n["source_recipe"]
-            out[k[len(pre):]] = node
-    return out
-
-
-def walk(scene):
-    """Every placement once: ``(group, chain, inner, file_root)`` where
-    ``chain`` is the ``(stem, path)`` links above it, ``inner`` the same
-    with the group itself when it is a link, and ``file_root`` whether it
-    is a top placement of the file it is in (the host or a linked file)."""
-    seen = set()
-    stack = [(g, (), True) for g in reversed(getattr(scene, "groups", None) or ())]
-    while stack:
-        g, chain, root = stack.pop()
-        if id(g) in seen:
-            continue
-        seen.add(id(g))
-        link = links.link_of(g)
-        inner = chain + ((ingetrazo_core.link_stem(link["path"]), ingetrazo_core.link_norm(link["path"])),) if link else chain
-        yield g, chain, inner, root
-        kids = getattr(g, "children", None) or ()
-        stack.extend((c, inner, bool(link)) for c in reversed(kids))
-
-
 class Tree:
     """``nodes``: display key → {name, parent, order, kind ("host",
     "link", "node", "tag", "tagfolder"), path, stems, recipe,
@@ -135,58 +79,7 @@ class Tree:
     ``unfiled``: the host's own unsorted placements."""
 
     def __init__(self, scene, registry):
-        self.scene = scene
-        self.nodes, self.direct = {}, defaultdict(list)
-        self.member, self.links = {}, defaultdict(list)
-        self.unfiled, self.tables, self._mk = [], {}, {}
-        #: Keys standing for another row: a merged single top node → its
-        #: file row; a second chain to a file already shown → its row.
-        self.alias = {}
-        self._host(registry)
-        placements = list(walk(scene))
-        self._qualified = scene.repeated_uids()
-
-        files = {}
-        for g, chain, inner, root in placements:
-            if inner != chain:
-                files.setdefault(tuple(s for s, _p in inner), inner)
-        seen = list(files)                        # depth first: a file, then what it links
-        shown = {}                                # normalised path → canonical stems
-        for stems, inner in sorted(files.items(), key=lambda kv: (len(kv[0]), seen.index(kv[0]))):
-            path = inner[-1][1]
-            first = shown.get(path)
-            if first is None:
-                shown[path] = stems
-                self._file(stems, path)
-            else:
-                self._same_file(stems, first)
-        # Files after the host's roots, each right after the file placing it.
-        rank = {stems: n for n, stems in enumerate(seen)}
-        files_in_order = sorted((k for k, n in self.nodes.items() if n["kind"] == "link"),
-                                key=lambda k: rank.get(self.nodes[k]["stems"], 0))
-        for n, k in enumerate(files_in_order):
-            self.nodes[k]["order"] = self._host_roots + 1 + n
-        recipes = {k: n["recipe"] for k, n in self.nodes.items()}
-        for g, chain, inner, root in placements:
-            key = self._membership(g, chain, inner, root)
-            if inner != chain:
-                # A link placement is its file's row itself, not one of
-                # the items counted or listed under it.
-                self.member[id(g)] = key
-                continue
-            if not chain:
-                if structure._is_unsorted(g, None, root, key if key in recipes else None, recipes):
-                    self.unfiled.append(g)
-            if key is not None:
-                self.member[id(g)] = key
-                self.direct[key].append(g)
-        self.children = {None: []}
-        for k in self.nodes:
-            self.children.setdefault(k, [])
-        for k, n in self.nodes.items():
-            self.children.setdefault(n["parent"], []).append(k)
-        for sib in self.children.values():
-            sib.sort(key=lambda k: (self.nodes[k]["order"], self.nodes[k]["name"].casefold()))
+        ingetrazo_core.build_project_tree(self, scene, registry)
 
     def address(self, group):
         """Keep legacy row UIDs when they identify a single occurrence."""
@@ -197,17 +90,6 @@ class Tree:
     def row_id(self, group):
         return row_id(self.address(group))
 
-    # -- the host ----------------------------------------------------------
-    def _host(self, registry):
-        table = structure._nodes(registry)
-        own = _own(table)
-        for k, n in own.items():
-            parent = n.get("parent") if n.get("parent") in own else None
-            self.nodes[k] = dict(name=n["name"], parent=parent, order=n.get("order", 0), kind="host",
-                                 path=None, stems=(), recipe=structure.resolve(registry, k), tag=None, folder=None)
-        self._host_roots = max((n["order"] for n in self.nodes.values() if n["parent"] is None), default=-1)
-
-    # -- linked files ------------------------------------------------------
     def resolve(self, key):
         """The row a display key stands for (aliases followed)."""
         seen = 0
@@ -215,134 +97,13 @@ class Tree:
             key, seen = self.alias[key], seen + 1
         return key
 
-    def _same_file(self, stems, first):
-        """A second chain to a file already shown: its placements and parts
-        count on the first chain's row, and its folder joins the row's."""
-        key, canon = mount_key(stems), mount_key(first)
-        self.alias[key] = canon
-        self.tables[stems] = self.tables.get(first, {})
-        base = links.SEP.join(stems)
-        if base not in self.nodes[canon]["folders"]:
-            self.nodes[canon]["folders"].append(base)
-
-    def _file(self, stems, path):
-        key = mount_key(stems)
-        base = links.SEP.join(stems)              # the file's tag folder in the host
-        self.nodes[key] = dict(name=stems[-1], parent=None, order=len(self.nodes),
-                               kind="link", path=path, stems=stems, recipe={}, tag=None, folder=base,
-                               via=stems[-2] if len(stems) > 1 else None, folders=[base], merged=None)
-        if len(stems) == 1:
-            entry = self.scene.link_registry.get(path)
-            table = (entry or {}).get("structure") or {}
-        else:
-            table = _subtable(self.tables.get(stems[:-1], {}), stems[-1])
-        self.tables[stems] = table
-        own = _own(table)
-        pre = key + "/"
-        tops = [k for k, n in own.items() if n.get("parent") not in own]
-        single = tops[0] if len(tops) == 1 else None
-        for k, n in own.items():
-            recipe = dict(n.get("recipe") or n.get("source_recipe") or {})
-            tag = recipe.get("tag")
-            host_tag = base + links.SEP + tag if tag else None
-            if host_tag is not None and self.scene.layer_by_key(host_tag) is None:
-                host_tag = None
-            if k == single:
-                # One top node: it is the file («Ride» in Ride.igz). Merge
-                # it into the row; its children and items hang from the row.
-                self.alias[pre + k] = key
-                self.nodes[key].update(merged=n.get("name") or k, recipe=recipe, tag=host_tag)
-                continue
-            parent = n.get("parent")
-            parent = key if parent not in own or parent == single else pre + parent
-            self.nodes[pre + k] = dict(name=n.get("name") or k, parent=parent, order=n.get("order", 0), kind="node",
-                                       path=path, stems=stems, recipe=recipe, tag=host_tag, folder=None)
-        if not own:
-            self._tags(stems, path, key, base)
-
-    def _tags(self, stems, path, key, base):
-        """A file without a structure: its tag folders and tags as mirrored."""
-        scene = self.scene
-        parents = getattr(scene, "folder_parents", {}) or {}
-        nested = base + links.SEP + LINKED_NAME
-        folders, todo = {}, [base]
-        while todo:
-            f = todo.pop()
-            for c in [c for c, p in parents.items() if p == f]:
-                if c == nested or c in folders:
-                    continue
-                folders[c] = f
-                todo.append(c)
-        pre = key + "/"
-        mine = [ly for ly in scene.layers
-                if ly.key.startswith(base + links.SEP) and (ly.folder == base or ly.folder in folders)]
-        tops = [f for f, parent in folders.items() if parent == base]
-        # The file's «Untagged» tag (its loose geometry) does not count as a
-        # second top: one top folder is still the file itself.
-        untagged = base + links.SEP + "Untagged"
-        single = tops[0] if len(tops) == 1 and not any(ly.folder == base and ly.key != untagged
-                                                        for ly in mine) else None
-
-        def under(f):
-            return key if f in (base, single) else pre + "tf:" + f
-        for n, (f, parent) in enumerate(folders.items()):
-            label = ingetrazo_core.tag_edits.folder_label(scene, f) or f
-            label = label[len(base) + len(links.SEP):] if label.startswith(base + links.SEP) else label
-            if f == single:
-                self.alias[pre + "tf:" + f] = key
-                self.nodes[key]["merged"] = label
-                continue
-            self.nodes[pre + "tf:" + f] = dict(name=label, parent=under(parent),
-                                               order=n, kind="tagfolder", path=path, stems=stems, recipe={},
-                                               tag=None, folder=f)
-        for n, ly in enumerate(scene.layers):
-            if not ly.key.startswith(base + links.SEP) or not (ly.folder == base or ly.folder in folders):
-                continue
-            parent = under(ly.folder)
-            self.nodes[pre + "tag:" + ly.key] = dict(name=(ly.name or ly.key).removeprefix(base + links.SEP), parent=parent, order=1000 + n,
-                                                    kind="tag", path=path, stems=stems,
-                                                    recipe={"tag": ly.key}, tag=ly.key, folder=None)
-
-    # -- membership --------------------------------------------------------
-    def _membership(self, g, chain, inner, root):
-        if inner != chain:                         # a link placement: its file's row
-            key = self._mk.get(inner)
-            if key is None:
-                key = self._mk[inner] = self.resolve(mount_key(tuple(s for s, _p in inner)))
-            self.links[key].append(g)
-            return key
-        own = structure.node_of(g)
-        if not chain:
-            return own if own in self.nodes else None
-        mk = self._mk.get(chain)
-        if mk is None:
-            mk = self._mk[chain] = self.resolve(mount_key(tuple(s for s, _p in chain)))
-        if own is not None:
-            k = self.resolve(mk + "/" + own)
-            if k in self.nodes:
-                return k
-        layer = getattr(g, "layer", None)
-        if root and layer and mk + "/tag:" + layer in self.nodes:
-            return mk + "/tag:" + layer
-        return mk if root else None
-
     # -- reads -------------------------------------------------------------
     def order(self):
         """``(key, depth)`` in display order."""
-        out, stack = [], [(k, 0) for k in reversed(self.children[None])]
-        while stack:
-            k, d = stack.pop()
-            out.append((k, d))
-            stack.extend((c, d + 1) for c in reversed(self.children.get(k, ())))
-        return out
+        return ingetrazo_core.tree_order(self.children)
 
     def subtree(self, key):
-        out, stack = [], [key]
-        while stack:
-            k = stack.pop()
-            out.append(k)
-            stack.extend(self.children.get(k, ()))
-        return out
+        return ingetrazo_core.tree_subtree(self.children, key)
 
     def members(self, key):
         return [g for k in self.subtree(key) for g in self.direct.get(k, ())]

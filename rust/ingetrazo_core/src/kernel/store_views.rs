@@ -1,11 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Position lookups and face metrics used by public store views.
-pub(crate) mod properties;
 pub(crate) mod block;
+mod copy_mesh;
 mod deferred;
+mod edits;
+pub(crate) mod properties;
+mod state;
+pub(crate) use state::snapshot_attr;
+pub(crate) mod attributes;
+pub(crate) mod bulk;
 mod geometry;
 mod incidence;
-pub(crate) mod attributes;
+pub(crate) mod lifecycle;
+mod merge;
+mod mesh_queries;
+mod paint_classes;
+pub(crate) mod pieces;
+pub(crate) mod provenance;
+mod push;
 use crate::{math::Vec3, object_outline::positions, polygon::raw_newell, store::py::PyMeshStore};
 use glam::DVec3;
 use pyo3::{
@@ -125,6 +137,16 @@ pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     s.add_function(wrap_pyfunction!(face_area, &s)?)?;
     s.add_function(wrap_pyfunction!(vertices_in_cells, &s)?)?;
     s.add_function(wrap_pyfunction!(cells_of, &s)?)?;
+    s.add_function(wrap_pyfunction!(paint_classes::paint_classes, &s)?)?;
+    provenance::register(&s)?;
+    s.add_class::<state::MeshSnapshotRecord>()?;
+    bulk::register(&s)?;
+    lifecycle::register(&s)?;
+    merge::register(&s)?;
+    mesh_queries::register(&s)?;
+    push::register(&s)?;
+    copy_mesh::register(&s)?;
+    edits::register(&s)?;
     block::register(&s)?;
     attributes::register(&s)?;
     incidence::register(&s)?;

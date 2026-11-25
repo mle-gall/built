@@ -352,11 +352,11 @@ def test_more_than_two_faces_is_refused_at_once():
 def test_three_loose_lines_are_refused_before_sorting(monkeypatch):
     # The right-click menu asks on every click: a third line is enough to
     # say no, without ordering thousands of pieces first.
-    import core.bridge
+    import core.topology
     mesh = Mesh()
     for i in range(3):
         mesh.add_edge(V(i, 0), V(i, 1))
-    monkeypatch.setattr(core.bridge, "_key", lambda *_a: pytest.fail(
+    monkeypatch.setattr(core.topology, "_key", lambda *_a: pytest.fail(
         "the pieces were sorted"))
     with pytest.raises(BridgeError):
         profiles_from_selection(mesh, list(mesh.edges))

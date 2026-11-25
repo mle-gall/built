@@ -2,7 +2,7 @@
 //! Coplanar union and edge dissolves against a materialised mesh's live handles.
 use crate::{
     math::xyz,
-    store::stitch::{splice_loops, trace_loops},
+    store::stitch::splice_loops,
 };
 use pyo3::{
     exceptions::PyIndexError,
@@ -11,36 +11,6 @@ use pyo3::{
 };
 use std::collections::HashMap;
 type PyObj<'py> = Bound<'py, PyAny>;
-
-#[pyfunction]
-pub fn trace_object_loops<'py>(outline: &PyObj<'py>) -> PyResult<Option<Vec<Vec<PyObj<'py>>>>> {
-    let indices = PyDict::new(outline.py());
-    let mut nodes = Vec::new();
-    let mut edges = Vec::new();
-    for pair in outline.try_iter()? {
-        let pair = pair?;
-        let mut ends = [0; 2];
-        for (i, slot) in ends.iter_mut().enumerate() {
-            let v = pair.get_item(i)?;
-            let k = v.getattr("key")?;
-            *slot = if let Some(n) = indices.get_item(&k)? {
-                n.extract()?
-            } else {
-                let n = nodes.len() as u32;
-                indices.set_item(k, n)?;
-                nodes.push(v);
-                n
-            };
-        }
-        edges.push((ends[0], ends[1]));
-    }
-    Ok(trace_loops(&edges).map(|rings| {
-        rings
-            .into_iter()
-            .map(|r| r.into_iter().map(|v| nodes[v as usize].clone()).collect())
-            .collect()
-    }))
-}
 
 fn add_union<'py>(
     mesh: &PyObj<'py>,

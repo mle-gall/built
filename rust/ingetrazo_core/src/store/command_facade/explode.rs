@@ -109,29 +109,12 @@ pub(crate) fn command_explode_geometry(
 ) -> PyResult<Option<Exploded>> {
     let hypot = store_hypot(mesh.py())?;
     let h = crate::hypot_of(&hypot)?;
-    let py = mesh.py();
     let start: usize = mesh.getattr("_mut_serial")?.extract()?;
     let matrix = transform.map(|v| DMat4::from_cols_array(&v));
     let inverse = matrix
         .filter(|m| m.determinant() != 0.)
         .map(|m| Matrix4::from(m.inverse()));
-    let invertible = inverse.is_some();
-    let transfer = py.import("core.store_parts")?.call_method1(
-        "explode_geometry",
-        (
-            mesh,
-            group_mesh,
-            matrix.map(Matrix4::from),
-            inverse,
-            invertible,
-            paint,
-        ),
-    )?;
-    if transfer.is_none() {
-        return Ok(None);
-    }
-    let added: Vec<u128> = transfer.get_item(0)?.getattr("_keys")?.extract()?;
-    let mut copies = transfer.get_item(2)?;
+    let (added, mut copies) = super::transfer::paste(mesh, group_mesh, matrix.map(Matrix4::from), inverse, paint)?;
     mesh.call_method0("resplit_curves")?;
     let store = mesh.getattr("_store")?;
     let planes = overlapping_planes(&PyMeshStore::read(&store)?.inner, &added, h);

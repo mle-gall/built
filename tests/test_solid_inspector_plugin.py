@@ -5,6 +5,7 @@
 The verdicts and volumes come from the same primitives the BIM layer
 uses, so whatever this dialog says must match what the takeoff would do."""
 from __future__ import annotations
+from ingetrazo_core import store_views
 
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
@@ -832,7 +833,7 @@ def test_same_count_group_edit_invalidates_inspection(win, monkeypatch, backend,
         from core._native import available
         native = available()
         assert native is not None and hasattr(native, "MeshStore")
-        store_mesh.become_store(mesh, native.MeshStore(
+        store_views.become_store(mesh, native.MeshStore(
             next(meshes._KEY_NAMESPACES), **store_mesh._weld_args()), [])
     _box(mesh)
     # Nested meshes matter too, even when the loose mesh never changes.

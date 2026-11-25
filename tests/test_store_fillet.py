@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Differential tests of the keyed fillet command and both affected-element modes."""
+from ingetrazo_core import store_views
 from collections import defaultdict
 from types import SimpleNamespace
 
@@ -22,7 +23,7 @@ pytestmark = [pytest.mark.skipif(
 
 def store_copy(mesh):
     copy = M.Mesh()
-    S.become_store(copy, native.MeshStore(next(M._KEY_NAMESPACES), **S._weld_args()), [])
+    store_views.become_store(copy, native.MeshStore(next(M._KEY_NAMESPACES), **S._weld_args()), [])
     for face in mesh.faces:
         f = copy.add_face(face.vertices, face.holes)
         f.attrs = dict(face.attrs)

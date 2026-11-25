@@ -5,7 +5,7 @@ from collections import Counter
 from ingetrazo_core import Vec3
 
 from core.mesh import Mesh
-from core.store_parts import layer_tally, material_names
+from ingetrazo_core import store_layer_tally, store_material_names
 
 
 def _mesh():
@@ -28,7 +28,7 @@ def _mesh():
 def test_the_tag_tally_counts_every_face_and_edge():
     mesh = _mesh()
     got = Counter()
-    assert layer_tally(mesh, got) is True
+    assert store_layer_tally(mesh, got) is True
     want = Counter((f.attrs.get("layer") or None) for f in mesh.faces)
     want.update((getattr(e, "layer", None) or None) for e in mesh.edges)
     assert got == want
@@ -37,11 +37,11 @@ def test_the_tag_tally_counts_every_face_and_edge():
 def test_material_names_leave_out_empties():
     mesh = _mesh()
     want = {f.attrs.get("mat") for f in mesh.faces} - {None, ""}
-    assert material_names(mesh) == want == {"Oak", "Steel"}
+    assert store_material_names(mesh) == want == {"Oak", "Steel"}
 
 
 def test_a_mesh_without_a_store_is_not_counted():
     class Plain:
         pass
-    assert layer_tally(Plain(), Counter()) is False
-    assert material_names(Plain()) is None
+    assert store_layer_tally(Plain(), Counter()) is False
+    assert store_material_names(Plain()) is None

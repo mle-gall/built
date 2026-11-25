@@ -185,7 +185,7 @@ fn cached<'py>(scene: &Bound<'py, PyAny>, attr: &str) -> PyResult<(Bound<'py, Py
 }
 
 fn mesh_names<'py>(py: Python<'py>, mesh: &Bound<'py, PyAny>, with_back: bool) -> PyResult<Bound<'py, PyAny>> {
-    let names = py.import("core.store_parts")?.call_method1("material_names", (mesh,))?;
+    let names = py.import("ingetrazo_core")?.call_method1("store_material_names", (mesh,))?;
     if !names.is_none() {
         return Ok(names);
     }

@@ -180,9 +180,18 @@ mod sheets;
 mod stl;
 mod alignment;
 mod formats;
+mod bridge_profiles;
+mod link_tree;
+mod deferred_plan;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    link_tree::register(m)?;
+    m.add_function(wrap_pyfunction!(deferred_plan::deferred_weld, m)?)?;
+    m.add_function(wrap_pyfunction!(deferred_plan::planned_face_areas, m)?)?;
+    deferred_plan::api::register(m)?;
+    bridge_profiles::register(m)?;
+    m.add_function(wrap_pyfunction!(deferred_plan::deferred_incidence, m)?)?;
     formats::register_formats(m)?;
     m.add_class::<takeoff::InspectorTakeoff>()?;
     m.add("TAG_PALETTE", pyo3::types::PyTuple::new(m.py(), doc::drawing::PALETTE)?)?;
@@ -234,7 +243,6 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(object_merge::revert_recorded_union, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::merge_seeded_edges, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::revert_seeded_merges, m)?)?;
-    m.add_function(wrap_pyfunction!(object_merge::trace_object_loops, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::dissolve_object_edge, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::dissolve_object_region, m)?)?;
     m.add_function(wrap_pyfunction!(object_weld::weld_object_mesh, m)?)?;

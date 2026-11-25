@@ -10,7 +10,8 @@ import math
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.bridge import Profile, _centre, _pairs, bridge, strips
+from core.bridge import Profile, bridge, strips
+from ingetrazo_core import bridge_centre, bridge_pairs
 from core.mesh import Mesh
 
 _GAP = 3.0
@@ -30,7 +31,7 @@ def _arch(x, up, n=8):
 
 def _sides(a, b):
     p, q = Profile([a], True), Profile([b], True)
-    return [poly for ra, rb, closed in _pairs(p, q)
+    return [poly for ra, rb, closed in bridge_pairs(p, q)
             for poly in strips(ra, rb, closed)]
 
 
@@ -85,13 +86,13 @@ def test_opposite_arches_join_by_the_shortest_way(first_up):
 
 def test_the_middle_of_a_profile_does_not_follow_its_points():
     # The same outline, its curve in 4 or in 64 segments.
-    coarse, fine = _centre(_arch(0, True, 4)), _centre(_arch(0, True, 64))
+    coarse, fine = bridge_centre(_arch(0, True, 4)), bridge_centre(_arch(0, True, 64))
     assert abs(coarse.z() - fine.z()) < 0.05
 
 
 def test_a_profile_with_no_length_still_has_a_middle():
     p = QVector3D(1, 2, 3)
-    assert (_centre([p, QVector3D(p), QVector3D(p)]) - p).length() < 1e-6
+    assert (bridge_centre([p, QVector3D(p), QVector3D(p)]) - p).length() < 1e-6
 
 
 def test_opposite_arches_make_a_closed_solid():
