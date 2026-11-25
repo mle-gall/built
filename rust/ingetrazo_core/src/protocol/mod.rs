@@ -6,6 +6,7 @@ use pyo3::{
     types::{PyDict, PyList, PyModule, PyTuple},
 };
 mod placements;
+mod document;
 
 type Obj<'py> = Bound<'py, PyAny>;
 type Reply<'py> = PyResult<Bound<'py, PyDict>>;
@@ -128,6 +129,7 @@ pub(crate) fn register(root: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(move_vertices, &m)?)?;
     m.add_function(wrap_pyfunction!(undo, &m)?)?;
     m.add_function(wrap_pyfunction!(redo, &m)?)?;
+    document::register(&m)?;
     placements::register(&m)?;
     py.import("sys")?
         .getattr("modules")?

@@ -293,24 +293,6 @@ class CopiedKeys(Mapping):
         return len(self._columns)
 
 
-def merge_candidates(mesh, added, tol):
-    """The broad phase of ``_merge_overlapping_planes`` when its ``before``
-    is every face the mesh had besides ``added``: ``(new, pairs)`` with
-    ``new`` the added faces with a normal and ``pairs`` ``[(old face,
-    [indices into new])]`` in Python's order; None to run the Python scan."""
-    m = _store_mesh(mesh)
-    h = _hypot()
-    if m is None or h is None or not hasattr(m._store, "plane_merge_candidates"):
-        return None
-    from core.store_mesh import FaceView, _Indexed
-    keys = getattr(added, "_keys", None)
-    if keys is None:
-        keys = [f.key for f in added]
-    new, pairs = m._store.plane_merge_candidates(list(keys), tol, h)
-    return (_Indexed(m, new, FaceView),
-            [(FaceView(m, k), hits) for k, hits in pairs])
-
-
 # ---------------------------------------------------------------- purge
 
 def material_names(mesh):

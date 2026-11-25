@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Position lookups and face metrics used by public store views.
+pub(crate) mod properties;
+mod deferred;
+mod geometry;
 use crate::{math::Vec3, object_outline::positions, polygon::raw_newell, store::py::PyMeshStore};
 use glam::DVec3;
 use pyo3::{
@@ -119,5 +122,8 @@ pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     s.add_function(wrap_pyfunction!(face_area, &s)?)?;
     s.add_function(wrap_pyfunction!(vertices_in_cells, &s)?)?;
     s.add_function(wrap_pyfunction!(cells_of, &s)?)?;
+    geometry::register(&s)?;
+    deferred::register(&s)?;
+    properties::register(&s)?;
     m.add_submodule(&s)
 }

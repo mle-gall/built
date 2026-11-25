@@ -2,12 +2,31 @@
 //! Per-document history. Stack entries are host commands while some tools
 //! still implement Python inverses. Existing scripting clients edit these
 //! lists directly when folding a group-edit session or cancelling a preview.
+mod dispatch;
 use super::py::PyTransaction;
 use std::collections::VecDeque;
 
 use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
+
+/// Re-enter the geometry on which a step was recorded, even after the
+/// editor has left that placement. Restore the active mesh on exceptions.
+fn in_command_mesh<'py>(
+    scene: &Bound<'py,PyAny>, cmd: &Bound<'py,PyAny>, action: &Bound<'py,PyAny>,
+    args: impl pyo3::call::PyCallArgs<'py>,
+) -> PyResult<()> {
+    let current = scene.getattr("mesh")?;
+    let Some(target) = cmd.getattr_opt("_history_mesh")?.filter(|m| !m.is_none() && !m.is(&current)) else {
+        action.call1(args)?;
+        return Ok(());
+    };
+    target.setattr("_mut_serial",target.getattr("_mut_serial")?.add(1)?)?;
+    scene.setattr("mesh",target)?;
+    let result = action.call1(args);
+    scene.setattr("mesh",current)?;
+    result.map(|_| ())
+}
 
 /// Journal a direct inverse for the change feed. Commands with host-owned
 /// effects run in their original editor mesh just like transaction replays.
@@ -30,7 +49,7 @@ fn replay_direct(
     doc.call_method1("begin", (scene.getattr("_root")?.getattr("_doc_key")?,))?;
     host.setattr("last_txn", py.None())?;
     let result = (|| {
-        host.call_method1("_in_command_mesh", (cmd, action, scene))?;
+        in_command_mesh(&scene, cmd, &action, (&scene,))?;
         host.call_method0("_follow_text_placements")?;
         doc.call_method0("commit")
     })();
@@ -77,6 +96,23 @@ impl DocumentHistory {
             steps: VecDeque::new(),
             journal: VecDeque::new(),
         }
+    }
+
+    #[staticmethod]
+    fn run<'py>(host:&Bound<'py,PyAny>, command:&Bound<'py,PyAny>, phase:&str) -> PyResult<Bound<'py,PyAny>> {
+        dispatch::run(host, command, phase)
+    }
+
+    #[staticmethod]
+    fn refresh_dimensions(scene: &Bound<'_,PyAny>) -> PyResult<()> {
+        if let Some(dims) = scene.getattr_opt("dimensions")?.filter(|v| !v.is_none()) {
+            for dim in dims.try_iter()? {
+                if let Some(refresh) = dim?.getattr_opt("refresh_anchors")?.filter(|v| !v.is_none()) {
+                    refresh.call1((scene,))?;
+                }
+            }
+        }
+        Ok(())
     }
 
     #[staticmethod]
@@ -207,23 +243,14 @@ impl DocumentHistory {
                     txn.cast::<PyTransaction>()?.try_borrow()?.run(py, undo)?;
                 } else {
                     let scene = host.getattr("scene")?;
-                    host.call_method1(
-                        "_in_command_mesh",
-                        (&cmd, txn.getattr("replay_editor")?, &cmd, scene, undo),
-                    )?;
+                    in_command_mesh(&scene, &cmd, &txn.getattr("replay_editor")?, (&cmd, &scene, undo))?;
                     host.setattr("last_txn", (txn, undo))?;
                 }
             } else if let Some(group) = cmd.getattr_opt("_mixed_group")? {
                 let doc = py.import("core.doc_model")?;
                 doc.call_method0("flush")?;
-                host.call_method1(
-                    "_in_command_mesh",
-                    (
-                        &cmd,
-                        group.getattr(if undo { "undo" } else { "do" })?,
-                        host.getattr("scene")?,
-                    ),
-                )?;
+                let scene = host.getattr("scene")?;
+                in_command_mesh(&scene, &cmd, &group.getattr(if undo { "undo" } else { "do" })?, (&scene,))?;
                 doc.call_method0("flush")?;
                 host.setattr("last_txn", (cmd.getattr("_group_diff")?, undo))?;
             } else if sheet {

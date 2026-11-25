@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Polar array command planning and the lazy overlap checkpoint. History still
 //! publishes ordinary document commands, including placements and IFC records.
+mod planes;
+use std::collections::HashSet;
 use crate::math::{mat, xyz, Vec3};
 use pyo3::{
     prelude::*,
@@ -84,33 +86,16 @@ impl PolarMerge {
                 })
                 .collect::<PyResult<Vec<_>>>()?
         };
-        let pending = PySet::empty(py)?;
+        let mut pending = HashSet::new();
         for face in batches.iter().flatten().filter(|f| !f.is_none()) {
-            pending.add(face)?;
+            pending.insert(face.getattr("key")?.extract::<u128>()?);
         }
-        let kwargs = PyDict::new(py);
-        kwargs.set_item(
-            "on_rebuild",
-            py.import("functools")?
-                .call_method1("partial", (slf.getattr("checkpoint")?, scene))?,
-        )?;
-        let merge = py
-            .import("core.history")?
-            .getattr("_merge_overlapping_planes")?;
         let mesh = scene.getattr("mesh")?;
         for batch in batches {
-            let added = PySet::new(py, batch.iter().filter(|f| !f.is_none()))?;
-            pending.call_method1("difference_update", (&added,))?;
-            // Earlier members may already have rebuilt regions of the mesh.
-            // Faces yet to be stamped and faces from this member stay separate.
-            let others = PyList::empty(py);
-            for face in mesh.getattr("faces")?.try_iter()? {
-                let face = face?;
-                if !pending.contains(&face)? && !added.contains(&face)? {
-                    others.append(face)?;
-                }
+            for f in batch.iter().filter(|f| !f.is_none()) {
+                pending.remove(&f.getattr("key")?.extract::<u128>()?);
             }
-            if let Err(error) = merge.call((scene, others, batch), Some(&kwargs)) {
+            if let Err(error) = planes::merge(scene, &mesh, &batch, &pending, || slf.borrow_mut().checkpoint(scene)) {
                 slf.borrow().undo(scene)?;
                 return Err(error);
             }

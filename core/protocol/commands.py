@@ -14,6 +14,10 @@ import ingetrazo_core
 from ingetrazo_core import command_protocol
 from ingetrazo_core.command_protocol import (hide, lock, make_unique, move_vertices, redo,
     rename_placement, rename_placements, set_tag, undo, unhide)
+from ingetrazo_core.command_protocol import (
+    edit_loose_geometry, promote_tag, file_placements, edit_structure_node,
+    reset_link_tags, delete_placements, unlink_placements, edit_tag,
+)
 from core.history import Command
 from core.protocol.records import patch_record_field, set_filing_rule
 from core.protocol.keys import elements, from_json_key, store_of
@@ -1007,40 +1011,10 @@ def edit_link_subset(history, placement, text):
     return command_protocol.answer(history, before)
 
 
-def reset_link_tags(history, path):
-    from ingetrazo_core import reset_source_tags
-    command = reset_source_tags(history.scene, path)
-    return command_protocol.execute(history, command)
-
-
-def unlink_placements(history, placements):
-    from core.history import UnlinkCommand
-    command = UnlinkCommand(command_protocol.resolve_placements(history, placements))
-    before = history.revision
-    if command.groups:
-        history.execute(command)
-    return command_protocol.answer(history, before)
-
-
 def edit_section_plane(history, uid, field, value=""):
     from ingetrazo_core import section_edit
     command = section_edit(history.scene, uid, field, value)
     return command_protocol.execute(history, command)
-
-
-def edit_loose_geometry(history, field):
-    from ingetrazo_core import loose_edit
-    return command_protocol.execute(history, loose_edit(history.scene, field))
-
-
-def promote_tag(history, tag, ifc_class):
-    from ingetrazo_core import promote_tag as plan
-    return command_protocol.execute(history, plan(history.scene, tag, ifc_class))
-
-
-def file_placements(history, placements, node):
-    from core import structure
-    return command_protocol.execute(history, structure.file(history.scene, placements, node))
 
 
 def edit_assembly_part(history, placement, child=None, visible=None, name=None):
@@ -1073,19 +1047,6 @@ def edit_saved_scene(history, verb, **args):
     if result["ok"] and verb in ("add", "duplicate"):
         result["index"] = history.scene.saved_views.index(command.view)
     return result
-
-
-def edit_structure_node(history, node, field, value):
-    from ingetrazo_core import plan_node_edit
-    return command_protocol.execute(history, plan_node_edit(history.scene, node, field, value))
-
-
-def edit_tag(history, tags, field, value):
-    edit = history.scene._root._tag_edit(tags, field, value)
-    before = history.revision
-    if edit is not None:
-        history.execute(EditTagCommand(edit))
-    return command_protocol.answer(history, before)
 
 
 class SetTagStateCommand(Command):
@@ -1334,17 +1295,6 @@ def delete_material(history, name):
     from core.material_commands import DeleteMaterialCommand
     _material(history, name)
     return command_protocol.execute(history, DeleteMaterialCommand(name))
-
-
-def delete_placements(history, placements):
-    """Delete placements (uids, nested included) with their geometry: one
-    ``DeleteGroupCommand`` each, as one step."""
-    from core.history import CompoundCommand, DeleteGroupCommand
-    groups = command_protocol.resolve_placements(history, placements)
-    before = history.revision
-    if groups:
-        history.execute(CompoundCommand([DeleteGroupCommand(g) for g in groups]))
-    return command_protocol.answer(history, before)
 
 
 def create_material(history, name=None, color=None, texture=None, opacity=None, pbr=None, finish=None,
