@@ -12,7 +12,8 @@
 from __future__ import annotations
 
 
-from PySide6.QtCore import QPointF, Qt
+from core.input_codes import Input as Qt
+from ingetrazo_core import ScreenPoint as QPointF
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, copy_group, effective_material

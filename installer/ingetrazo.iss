@@ -152,6 +152,26 @@ Root: HKA; Subkey: "Software\Classes\IngeTrazo.Document\DefaultIcon"; \
 Root: HKA; Subkey: "Software\Classes\IngeTrazo.Document\shell\open\command"; \
     ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
 
+; Native project and document files use the same open verb as .igz.
+; Advertise the registered handler and let Explorer keep the user's default.
+Root: HKA; Subkey: "Software\Classes\.built\OpenWithProgids"; ValueType: string; \
+    ValueName: "IngeTrazo.Document"; ValueData: ""; Flags: uninsdeletevalue uninsdeletekeyifempty
+Root: HKA; Subkey: "Software\Classes\.builtproject\OpenWithProgids"; ValueType: string; \
+    ValueName: "IngeTrazo.Document"; ValueData: ""; Flags: uninsdeletevalue uninsdeletekeyifempty
+
+Root: HKA; Subkey: "Software\RegisteredApplications"; ValueType: string; \
+    ValueName: "IngeTrazo.Built"; ValueData: "Software\IngeTrazo\Built\Capabilities"; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\IngeTrazo\Built\Capabilities"; ValueType: string; \
+    ValueName: "ApplicationName"; ValueData: "{#MyAppName}"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\IngeTrazo\Built\Capabilities"; ValueType: string; \
+    ValueName: "ApplicationDescription"; ValueData: "{#MyAppName} 3D CAD"
+Root: HKA; Subkey: "Software\IngeTrazo\Built\Capabilities\FileAssociations"; ValueType: string; \
+    ValueName: ".built"; ValueData: "IngeTrazo.Document"
+Root: HKA; Subkey: "Software\IngeTrazo\Built\Capabilities\FileAssociations"; ValueType: string; \
+    ValueName: ".builtproject"; ValueData: "IngeTrazo.Document"
+Root: HKA; Subkey: "Software\IngeTrazo\Built\Capabilities\FileAssociations"; ValueType: string; \
+    ValueName: ".igz"; ValueData: "IngeTrazo.Document"
+
 ; ── .dae / .skp — standard interchange formats: "Open with" only ────────────
 ; We DO NOT take over the default program or the file icon (Windows ties the
 ; shown icon to the default handler, and stealing .dae/.skp from the

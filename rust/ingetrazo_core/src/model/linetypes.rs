@@ -101,9 +101,9 @@ pub fn clean_values(values: &[f64]) -> Option<Vec<f64>> {
         if !v.is_finite() || v.abs() > 1000.0 {
             return None;
         }
-        out.push(crate::pyfloat::round(v, 4));
+        out.push(crate::model::pyfloat::round(v, 4));
     }
-    if out.is_empty() || crate::pyfloat::sum(out.iter().map(|v| v.abs())) < 0.05 {
+    if out.is_empty() || crate::model::pyfloat::sum(out.iter().map(|v| v.abs())) < 0.05 {
         return None;
     }
     if !out.iter().any(|v| *v < 0.0) || !out.iter().any(|v| *v >= 0.0) {
@@ -148,8 +148,8 @@ pub fn file_dashes(drawn: &[f64]) -> Vec<f64> {
 
 /// Where along one drawn period the middle of piece `at` falls, in mm.
 pub fn text_offset(pattern: &[f64], at: usize) -> f64 {
-    let period = crate::pyfloat::sum(pattern.iter().map(|v| v.abs()));
-    let raw = crate::pyfloat::sum(pattern[..at].iter().map(|v| v.abs())) + pattern[at].abs() / 2.0;
+    let period = crate::model::pyfloat::sum(pattern.iter().map(|v| v.abs()));
+    let raw = crate::model::pyfloat::sum(pattern[..at].iter().map(|v| v.abs())) + pattern[at].abs() / 2.0;
     let mut lead = 0.0;
     for v in pattern {
         if *v >= 0.0 {
@@ -157,7 +157,7 @@ pub fn text_offset(pattern: &[f64], at: usize) -> f64 {
         }
         lead += v.abs();
     }
-    if period > 0.0 { crate::pyfloat::modulo(raw - lead, period) } else { 0.0 }
+    if period > 0.0 { crate::model::pyfloat::modulo(raw - lead, period) } else { 0.0 }
 }
 
 /// The text of a line type: its words (printable, stripped, at most 24),
@@ -178,7 +178,7 @@ fn clean_spec(text: String, size: f64, at: i64, pattern: &[f64]) -> Option<TextS
     if at < 0 || at as usize >= pattern.len() || pattern[at as usize] >= 0.0 {
         return None;
     }
-    Some(TextSpec { text, size: crate::pyfloat::round(size, 3), at: at as usize })
+    Some(TextSpec { text, size: crate::model::pyfloat::round(size, 3), at: at as usize })
 }
 
 /// `text` with only the characters Python counts printable.
@@ -203,8 +203,8 @@ pub fn with_text_room(pattern: &[f64], text: &str, size: f64) -> Vec<f64> {
     let room = text_width(text, size) + 2.0 * 0.6f64.max(0.4 * size);
     let mut out = pattern.to_vec();
     match out.last_mut() {
-        Some(last) if *last < 0.0 => *last = crate::pyfloat::round(*last - room, 3),
-        _ => out.push(-crate::pyfloat::round(room, 3)),
+        Some(last) if *last < 0.0 => *last = crate::model::pyfloat::round(*last - room, 3),
+        _ => out.push(-crate::model::pyfloat::round(room, 3)),
     }
     out
 }
@@ -227,7 +227,7 @@ pub fn with_text(py: Python<'_>, pattern: &[f64], text: &str, size: f64) -> PyRe
 /// fits whole, kept reading upright.
 pub fn text_marks(p0: (f64, f64), p1: (f64, f64), text: &str, size: f64, offset: f64, period: f64) -> Vec<(f64, f64, f64)> {
     let (dx, dy) = (p1.0 - p0.0, p1.1 - p0.1);
-    let length = crate::pyfloat::hypot(&[dx, dy]);
+    let length = crate::model::pyfloat::hypot(&[dx, dy]);
     if length <= 1e-9 || period <= 1e-9 {
         return Vec::new();
     }
@@ -264,7 +264,7 @@ pub fn dash_segments(segs: &[[[f64; 3]; 2]], pattern: &[f64], unit: f64) -> (Vec
     if lengths.len() % 2 == 1 {
         lengths.push(0.0);
     }
-    let period = crate::pyfloat::sum(lengths.iter().copied());
+    let period = crate::model::pyfloat::sum(lengths.iter().copied());
     let (mut dashes, mut gaps) = (Vec::new(), Vec::new());
     for [a, b] in segs {
         let d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
@@ -462,17 +462,17 @@ pub fn to_lin(entries: &[(String, String, Vec<f64>, Option<TextSpec>)]) -> Strin
         let safe = safe.trim_matches('_');
         let safe = if safe.is_empty() { "LINE" } else { safe };
         lines.push(format!("*{safe},{}", label.replace(',', " ")));
-        let mut pieces: Vec<String> = pattern.iter().map(|v| crate::pyfloat::g(*v)).collect();
+        let mut pieces: Vec<String> = pattern.iter().map(|v| crate::model::pyfloat::g(*v)).collect();
         if let Some(s) = spec {
             let half = pattern[s.at] / 2.0;
             let words = s.text.replace('"', "'");
             let mark = format!(
                 "[\"{words}\",STANDARD,S={},R=0.0,X={},Y={}]",
-                crate::pyfloat::g(s.size),
-                crate::pyfloat::g(-text_width(&words, s.size) / 2.0),
-                crate::pyfloat::g(-s.size / 2.0)
+                crate::model::pyfloat::g(s.size),
+                crate::model::pyfloat::g(-text_width(&words, s.size) / 2.0),
+                crate::model::pyfloat::g(-s.size / 2.0)
             );
-            pieces.splice(s.at..s.at + 1, [crate::pyfloat::g(half), mark, crate::pyfloat::g(half)]);
+            pieces.splice(s.at..s.at + 1, [crate::model::pyfloat::g(half), mark, crate::model::pyfloat::g(half)]);
         }
         lines.push(format!("A,{}", pieces.join(",")));
     }

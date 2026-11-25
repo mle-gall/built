@@ -53,9 +53,9 @@ def run(kind, steps):
         vp.pick_edge = lambda x, y: edges[int(x != 0)]
     dialogs = []
     call_dialog = lambda *args, **kwargs: kwargs["done"]("Label")
-    schedule = lambda delay, callback: callback()
+    schedule = lambda owner, delay, callback: callback()
     with patch("ingetrazo_render.chrome_forms.ask_text", side_effect=call_dialog), \
-         patch("PySide6.QtCore.QTimer.singleShot", side_effect=schedule), \
+         patch("core.timers.later", side_effect=schedule), \
          patch.object(ScaleManagerTool, "_run", staticmethod(lambda vp, g: dialogs.append(g.name))):
         if kind != "scale_manager":
             tool.on_activate(vp)

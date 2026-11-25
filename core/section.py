@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from core.doc_model import Record, record_fields
 
+import ingetrazo_core as _NATIVE
 from ingetrazo_core import Vec3 as QVector3D
 
 _last_uid = 0
@@ -37,19 +38,10 @@ LAYER_HATCH_SCALE = 50.0
 LAYER_HATCH_MOST = 250000
 
 
-def effective_fill(plane, style) -> tuple:
-    """``(pattern, (r, g, b), spacing)`` the cut of ``plane`` is filled
-    with: the plane's own settings over the style's. The style's Section
-    Fill switch is the master — off, nothing is filled."""
-    own = getattr(plane, "fill", None) or {}
-    if not getattr(style, "section_fill", True):
-        pattern = "none"
-    else:
-        pattern = own.get("pattern", "solid")
-    color = tuple(own.get("color") or getattr(
-        style, "section_fill_color", (0.35, 0.37, 0.41)))
-    spacing = float(own.get("spacing") or DEFAULT_HATCH_SPACING)
-    return pattern, color, spacing
+#: ``effective_fill(plane, style)``: ``(pattern, (r, g, b), spacing)`` the cut
+#: of ``plane`` is filled with, the plane's own settings over the style's; the
+#: style's Section Fill switch is the master (off, nothing is filled).
+effective_fill = _NATIVE.section_effective_fill
 
 
 def _take_uid(wanted: int | None) -> int:
@@ -65,27 +57,10 @@ def _take_uid(wanted: int | None) -> int:
     return wanted
 
 
-def next_symbol(planes) -> str:
-    """The letter the next section plane takes: A, B, C… then AA, AB.
-
-    Sections are named by letter and the mark reads «A … A» across the
-    plan — «las secciones se nombran así, no suele ser un 1, sino A-A,
-    B-B» (Rafael, 2026-09-16, 50:45). They used to be numbered, so his
-    sheets said «1 … 1» and he could not find where to change it.
-    """
-    taken = {str(getattr(p, "symbol", "") or "").strip().upper()
-             for p in (planes or [])}
-    i = 0
-    while True:
-        n, label = i, ""
-        while True:
-            label = chr(ord("A") + n % 26) + label
-            n = n // 26 - 1
-            if n < 0:
-                break
-        if label not in taken:
-            return label
-        i += 1
+#: ``next_symbol(planes)``: the letter the next section plane takes, A, B, C…
+#: then AA, AB. Sections are named by letter and the mark reads «A … A» across
+#: the plan (Rafael, 2026-09-16: «no suele ser un 1, sino A-A, B-B»).
+next_symbol = _NATIVE.section_next_symbol
 
 
 @record_fields('point', 'normal', 'name', 'symbol', 'active', 'uid', 'hidden', 'fill', 'layer')
@@ -133,47 +108,14 @@ class SectionPlane(Record):
 
     # ---- Serialisation (.igz) ------------------------------------------------
     def to_dict(self) -> dict:
-        entry = {
-            "point": [self.point.x(), self.point.y(), self.point.z()],
-            "normal": [self.normal.x(), self.normal.y(), self.normal.z()],
-            "uid": self.uid,
-        }
-        if self.name:
-            entry["name"] = self.name
-        if self.symbol:
-            entry["symbol"] = self.symbol
-        if self.active:
-            entry["active"] = True
-        if self.hidden:
-            entry["hidden"] = True          # older readers ignore it
-        if self.layer:
-            entry["layer"] = self.layer   # older readers ignore it
-        if self.fill:
-            entry["fill"] = {k: (list(v) if k == "color" else v)
-                             for k, v in self.fill.items()}
-        return entry
+        """The .igz entry, defaults left out (older readers ignore what they
+        do not know: hidden, layer, fill)."""
+        return _NATIVE.section_plane_archive(self)
 
     @classmethod
     def from_dict(cls, raw: dict) -> "SectionPlane":
-        sp = cls(QVector3D(*raw["point"]), QVector3D(*raw["normal"]),
-                 name=raw.get("name", ""), symbol=raw.get("symbol", ""),
-                 active=bool(raw.get("active", False)),
-                 uid=raw.get("uid"), hidden=bool(raw.get("hidden", False)))
-        if isinstance(raw.get("layer"), str) and raw["layer"]:
-            sp.layer = raw["layer"]
-        fill = raw.get("fill")
-        if isinstance(fill, dict):
-            clean = {}
-            if fill.get("pattern") in FILL_PATTERNS:
-                clean["pattern"] = fill["pattern"]
-            if isinstance(fill.get("color"), (list, tuple)) \
-                    and len(fill["color"]) >= 3:
-                clean["color"] = tuple(float(c) for c in fill["color"][:3])
-            if isinstance(fill.get("spacing"), (int, float)) \
-                    and fill["spacing"] > 0:
-                clean["spacing"] = float(fill["spacing"])
-            sp.fill = clean or None
-        return sp
+        """A plane from its entry, its fill read defensively."""
+        return _NATIVE.section_plane_load(cls, raw)
 
     def __repr__(self) -> str:  # pragma: no cover — debug aid
         state = " ACTIVE" if self.active else ""
@@ -181,265 +123,31 @@ class SectionPlane(Record):
 
 
 # ---- The cut, as geometry --------------------------------------------------
-
-def cut_chords(v0, e1, e2, normal, point, visible=None, rows=False,
-               reach=None):
-    """The chords the plane cuts out of triangles given as ``v0`` + edge
-    vectors ``e1``/``e2`` ((N, 3) arrays, as the pick index keeps them):
-    an (K, 2, 3) float32 array, or ``None`` when the plane misses them all.
-    ``visible`` (N bools) leaves hidden triangles out. ``rows=True`` returns
-    ``(chords, triangle index of each)`` — whose layer each chord is.
-    ``reach``: a :class:`PlaneReach` of these very triangles and this
-    normal, kept between calls — a plane slid along its normal (a section
-    dragged by its arrow) then only measures where it now stands."""
-    if v0 is None or not len(v0):
-        return (None, None) if rows else None
-    if reach is None or not reach.fits(v0, normal, e1, e2):
-        reach = PlaneReach(v0, e1, e2, normal)
-    return reach.cut(point, visible, rows)
-
-
-class PlaneReach:
-    """The corners of a set of triangles and how far along one normal each
-    stands — what every cut by a plane of that normal starts from. Sliding
-    the plane only moves the offset: the triangles it crosses are found by
-    comparing three arrays with it, and only those are cut.
-
-    The chords are those :func:`cut_chords` always made, in the same order
-    and to the bit: the same products, the same differences."""
-
-    __slots__ = ("_v0", "_e1", "_e2", "_n", "p0", "p1", "p2", "h0", "h1", "h2", "lo",
-                 "hi", "_nv")
-
-    def __init__(self, v0, e1, e2, normal) -> None:
-        import numpy as np
-        self._v0, self._e1, self._e2 = v0, e1, e2
-        self._n = (normal.x(), normal.y(), normal.z())
-        self._nv = np.array(self._n, dtype=np.float64)
-        self.p0 = np.asarray(v0, dtype=np.float64)
-        self.p1 = self.p0 + e1
-        self.p2 = self.p0 + e2
-        self.h0 = self.p0 @ self._nv
-        self.h1 = self.p1 @ self._nv
-        self.h2 = self.p2 @ self._nv
-        self.lo = np.minimum(np.minimum(self.h0, self.h1), self.h2)
-        self.hi = np.maximum(np.maximum(self.h0, self.h1), self.h2)
-
-    def fits(self, v0, normal, e1=None, e2=None) -> bool:
-        """Made from these very arrays (the pick index never writes into
-        its own: a changed model is new arrays) and this normal."""
-        return (v0 is self._v0
-                and (e1 is None or e1 is self._e1)
-                and (e2 is None or e2 is self._e2)
-                and (normal.x(), normal.y(), normal.z()) == self._n)
-
-    def cut(self, point, visible=None, rows=False):
-        import numpy as np
-        c = float(np.dot(self._nv, [point.x(), point.y(), point.z()]))
-        # Only a triangle with corners on both sides can have an edge that
-        # crosses: the rest is never cut, whatever the plane's offset.
-        near = np.nonzero((self.lo - c < 0) & (self.hi - c > 0))[0]
-        if visible is not None and len(near):
-            near = near[np.asarray(visible)[near]]
-        if not len(near):
-            return (None, None) if rows else None
-        p0, p1, p2 = self.p0[near], self.p1[near], self.p2[near]
-        d0 = self.h0[near] - c
-        d1 = self.h1[near] - c
-        d2 = self.h2[near] - c
-        pts = []
-        for (a, b, da, db) in ((p0, p1, d0, d1), (p1, p2, d1, d2),
-                               (p2, p0, d2, d0)):
-            cross = (da * db) < 0
-            t = np.zeros(len(da))
-            np.divide(da, da - db, out=t, where=cross)
-            pts.append((cross, a + (b - a) * t[:, None]))
-        two = (pts[0][0].astype(np.int8) + pts[1][0] + pts[2][0]) == 2
-        if not two.any():
-            return (None, None) if rows else None
-        acc = np.zeros((int(two.sum()), 2, 3))
-        slot = np.zeros(int(two.sum()), dtype=np.int64)
-        for cross, p in pts:
-            m = cross[two]
-            where = np.where(m)[0]
-            acc[where, np.minimum(slot[where], 1)] = p[two][m]
-            slot[where] += 1
-        if rows:
-            return acc.astype(np.float32), near[two]
-        return acc.astype(np.float32)
-
-
-def _plane_basis(normal):
-    import numpy as np
-    n = np.array([normal.x(), normal.y(), normal.z()], dtype=np.float64)
-    n /= np.linalg.norm(n) or 1.0
-    helper = (np.array([1.0, 0.0, 0.0]) if abs(n[0]) < 0.9
-              else np.array([0.0, 1.0, 0.0]))
-    u = np.cross(n, helper)
-    u /= np.linalg.norm(u)
-    return u, np.cross(n, u)
-
-
-def _inside(points, poly):
-    """Even-odd point-in-polygon for many points: (K,) bools."""
-    import numpy as np
-    x = points[:, 0][:, None]
-    y = points[:, 1][:, None]
-    x1, y1 = poly[:, 0][None, :], poly[:, 1][None, :]
-    x2 = np.roll(poly[:, 0], -1)[None, :]
-    y2 = np.roll(poly[:, 1], -1)[None, :]
-    straddle = (y1 > y) != (y2 > y)
-    dy = np.where(y2 == y1, 1.0, y2 - y1)
-    xint = x1 + (y - y1) * (x2 - x1) / dy
-    return ((straddle & (x < xint)).sum(axis=1) % 2) == 1
-
-
-def _fill_groups(chords, normal):
-    """The filled areas of a cut: ``([(rings3d, rings2d)], (u, v))`` —
-    each area an outer ring followed by its holes, in world and in plane
-    coordinates — or ``([], None)``. See :func:`fill_triangles` for the
-    rule."""
-    import numpy as np
-    from core.hlr import section_loops
-    if chords is None or not len(chords):
-        return [], None
-    rings = section_loops(chords)
-    if not rings:
-        return [], None
-    u, v = _plane_basis(normal)
-    flat = [np.stack([r @ u, r @ v], axis=1) for r in rings]
-    area = np.array([abs(0.5 * float(np.dot(f[:, 0], np.roll(f[:, 1], -1))
-                                     - np.dot(f[:, 1], np.roll(f[:, 0], -1))))
-                     for f in flat])
-    lo = np.array([f.min(axis=0) for f in flat])
-    hi = np.array([f.max(axis=0) for f in flat])
-    count = len(rings)
-    # Which rings hold ring i: a larger ring whose box holds i's box (one
-    # vectorised pass over all of them), then i's vertices inside it — a
-    # ring touching another only along a wall face is not nested in it.
-    holders: list = [[] for _ in range(count)]
-    for i in range(count):
-        cand = np.nonzero((area > area[i]) & (lo <= lo[i]).all(axis=1)
-                          & (hi >= hi[i]).all(axis=1))[0]
-        for j in cand:
-            if _inside(flat[i], flat[j]).mean() >= 0.9:
-                holders[i].append(int(j))
-    depth = [len(h) for h in holders]
-    parent = [min(h, key=lambda j: area[j]) if h else None for h in holders]
-    holes_of: dict = {}
-    for k in range(count):
-        if depth[k] % 2 and parent[k] is not None:
-            holes_of.setdefault(parent[k], []).append(k)
-    groups = []
-    for i in range(count):
-        if depth[i] % 2:
-            continue                        # a hole, cut out of its parent
-        members = [i] + holes_of.get(i, [])
-        groups.append(([rings[k] for k in members],
-                       [flat[k] for k in members]))
-    return groups, (u, v)
-
-
-def fill_triangles(chords, normal):
-    """The section fill as triangles ((T, 3, 3) float32): ONLY the cut
-    geometry — the closed outlines the plane slices out of solids, with
-    their holes left open (a hollow wall, a ring of walls around a room).
-
-    Built like the composer's poché (``core.hlr.section_loops``): chords
-    chained into closed rings, an open chain (a lone face, an open surface)
-    dropped instead of filled. A ring inside another is a hole, and one
-    inside that hole is solid again; rings that merely overlap (two walls
-    crossing at a corner) are both filled — their union."""
-    groups, _basis = _fill_groups(chords, normal)
-    return _group_triangles(groups)
-
-
-def _group_triangles(groups):
-    """The areas of :func:`_fill_groups` as triangles ((T, 3, 3) float32)."""
-    import numpy as np
-    from core.triangulate import earcut
-    empty = np.zeros((0, 3, 3), dtype=np.float32)
-    parts: list = []
-    for rings3, rings2 in groups:
-        pts2: list = []
-        starts: list = []
-        for k, f in enumerate(rings2):
-            if k:
-                starts.append(len(pts2))
-            pts2.extend(f.tolist())
-        idx = earcut(pts2, starts)
-        if idx:
-            parts.append(np.concatenate(rings3)[np.asarray(idx)])
-    if not parts:
-        return empty
-    return np.concatenate(parts).astype(np.float32)
-
-
-def hatch_segments(chords, normal, spacing: float, cross: bool = False):
-    """Hatching for the cut: (L, 2, 3) float32 world segments at 45° in the
-    plane (and at 135° too when ``cross``), ``spacing`` apart, clipped to
-    the same areas :func:`fill_triangles` fills — each with its holes,
-    even-odd, so the lines stop at a hollow and at the room."""
-    import numpy as np
-    empty = np.zeros((0, 2, 3), dtype=np.float32)
-    groups, basis = _fill_groups(chords, normal)
-    if not groups or spacing <= 0:
-        return empty
-    u, v = basis
-    n = np.cross(u, v)
-    # Every ring point lies in the plane: they share their offset along n.
-    off = float(np.dot(groups[0][0][0][0], n)) * n
-    out: list = []
-    for ang in ((45.0, 135.0) if cross else (45.0,)):
-        t = np.radians(ang)
-        d = np.array([np.cos(t), np.sin(t)])         # along a line
-        m = np.array([-d[1], d[0]])                  # across, line to line
-        for _rings3, rings2 in groups:
-            # Lines at multiples of ``spacing`` from the plane's origin:
-            # neighbouring areas hatch as one pattern.
-            s_all = np.concatenate(rings2) @ m
-            k0 = int(np.ceil(s_all.min() / spacing))
-            k1 = int(np.floor(s_all.max() / spacing))
-            if k1 - k0 > 20000:
-                continue                     # too fine to mean anything
-            edges = [(f, np.roll(f, -1, axis=0)) for f in rings2]
-            for k in range(k0, k1 + 1):
-                s = k * spacing
-                hits: list = []
-                for a, b in edges:
-                    sa, sb = a @ m - s, b @ m - s
-                    crossing = (sa > 0) != (sb > 0)
-                    if not crossing.any():
-                        continue
-                    tt = sa[crossing] / (sa[crossing] - sb[crossing])
-                    p = a[crossing] + (b[crossing] - a[crossing]) * tt[:, None]
-                    hits.extend((p @ d).tolist())
-                hits.sort()
-                for j in range(0, len(hits) - 1, 2):
-                    p0 = d * hits[j] + m * s
-                    p1 = d * hits[j + 1] + m * s
-                    out.append((p0[0] * u + p0[1] * v + off,
-                                p1[0] * u + p1[1] * v + off))
-    if not out:
-        return empty
-    return np.asarray(out, dtype=np.float32)
-
-
-def _sheet_basis(normal):
-    """``(u, v)`` across a cut as a sheet looks at it: a plan with x east
-    and y north, a section with v straight up — so courses of brick lie
-    level and a pattern keeps the turn the sheet gives it."""
-    import numpy as np
-    n = np.array([normal.x(), normal.y(), normal.z()], dtype=np.float64)
-    n /= np.linalg.norm(n) or 1.0
-    if abs(n[2]) >= 0.7:                             # a plan
-        u = np.array([1.0, 0.0, 0.0]) - n * n[0]
-        u /= np.linalg.norm(u) or 1.0
-        return u, np.cross(n, u)
-    v = np.array([0.0, 0.0, 1.0]) - n * n[2]
-    v /= np.linalg.norm(v) or 1.0
-    u = np.cross(v, n)
-    return u / (np.linalg.norm(u) or 1.0), v
+# In Rust (``rust/ingetrazo_core/src/model/section_fill.rs``):
+#
+# ``cut_chords(v0, e1, e2, normal, point, visible=None, rows=False,
+# reach=None)``: the chords the plane cuts out of triangles given as ``v0`` +
+# edge vectors ``e1``/``e2`` ((N, 3) arrays, as the pick index keeps them), an
+# (K, 2, 3) float32 array or ``None``; ``rows=True`` also gives the triangle
+# of each chord. ``PlaneReach(v0, e1, e2, normal)`` keeps how far along the
+# normal each corner stands, so a plane slid along it (a section dragged by
+# its arrow) only cuts the triangles it now crosses (``fits``, ``cut``).
+#
+# ``fill_triangles(chords, normal)``: the section fill as (T, 3, 3) float32
+# triangles, ONLY the cut geometry: chords chained into closed rings
+# (``core.hlr.section_loops``), an open chain dropped, a ring inside another
+# a hole and one inside that hole solid again, rings that merely overlap
+# both filled. ``hatch_segments(chords, normal, spacing, cross=False)``:
+# (L, 2, 3) float32 lines at 45° (and 135°) clipped to those same areas.
+PlaneReach = _NATIVE.PlaneReach
+cut_chords = _NATIVE.section_cut_chords
+fill_triangles = _NATIVE.section_fill_triangles
+hatch_segments = _NATIVE.section_hatch_segments
+_fill_groups = _NATIVE.section_fill_groups
+_group_triangles = _NATIVE.section_group_triangles
+#: ``(u, v)`` across a cut as a sheet looks at it: a plan with x east and y
+#: north, a section with v straight up.
+_sheet_basis = _NATIVE.section_sheet_basis
 
 
 def layer_fills(chords, tags, normal, scene, color,

@@ -21,9 +21,10 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from PySide6.QtCore import QPointF, Qt  # noqa: E402
+from core.input_codes import Input as Qt  # noqa: E402
+from ingetrazo_core import ScreenPoint as QPointF
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
+
 
 from core import links  # noqa: E402
 from core.group import Group, copy_group  # noqa: E402
@@ -33,8 +34,6 @@ from core.purge import iter_groups  # noqa: E402
 from core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402
 from tools.base import ToolContext  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
 
 
 def _square(x=0.0, z=0.0):
