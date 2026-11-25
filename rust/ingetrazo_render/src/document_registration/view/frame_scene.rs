@@ -5,7 +5,7 @@
 //! (`views.wgpu_style`) and the section cut (`views.wgpu_sections`)
 //! (render-glue lane; from the Python modules of those names).
 use super::*;
-use numpy::{ndarray::ArrayView3, PyArray1, PyReadonlyArray3};
+use numpy::{ndarray::ArrayView3, PyArray1, PyArrayMethods, PyReadonlyArray3};
 use pyo3::exceptions::PyValueError;
 use pyo3::basic::CompareOp;
 use pyo3::types::PySlice;
@@ -341,49 +341,32 @@ fn capture_rows<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(rows)
 }
 
-/// The rows whose prototype box comes near the plane, `None` when the
-/// arrays are not the pack's own (then every row is asked).
+/// A point through an instance matrix (stored column by column), in
+/// binary32: `fma(p1, w1, p0 * w0) + p2 * w2`, then the translation.
 ///
-/// A first sieve in binary64 with a margin: the rows it keeps are then
-/// tested as before, so which rows are cut does not change.
-fn rows_near_plane<'py>(worlds: &Obj<'py>, bounds: &Obj<'py>, codes: &[i64], normal: &Obj<'py>, point: &Obj<'py>) -> PyResult<Option<Vec<bool>>> {
-    let (Ok(worlds), Ok(bounds)) = (worlds.extract::<PyReadonlyArray3<'_, f32>>(), bounds.extract::<PyReadonlyArray3<'_, f32>>()) else {
-        return Ok(None);
-    };
-    let (worlds, bounds) = (worlds.as_array(), bounds.as_array());
-    if worlds.dim().0 != codes.len() || worlds.dim().1 != 4 || worlds.dim().2 != 4 || bounds.dim().1 != 2 || bounds.dim().2 < 3 {
-        return Ok(None);
-    }
-    let (n, o): ([f64; 3], [f64; 3]) = (normal.extract()?, point.extract()?);
-    let mut near = vec![true; codes.len()];
-    for (row, code) in codes.iter().enumerate() {
-        if *code < 0 || *code as usize >= bounds.dim().0 {
-            continue;
-        }
-        let code = *code as usize;
-        // Instance matrices are stored column by column: the transpose's
-        // linear part is `w[j][i]`, its translation `w[3][i]`.
-        let w = |j: usize, i: usize| worlds[[row, j, i]] as f64;
-        let (mut distance, mut radius) = (0f64, 0f64);
-        let mut scale = 0f64;
-        for i in 0..3 {
-            let mut centre = w(3, i);
-            for j in 0..3 {
-                centre += w(j, i) * (bounds[[code, 0, j]] as f64 + bounds[[code, 1, j]] as f64) * 0.5;
-            }
-            distance += n[i] * (centre - o[i]);
-            scale += centre.abs() + o[i].abs();
-        }
+/// That is the order the Python modules' NumPy product had on the Mac (its
+/// BLAS); written out here it is the same on every platform.
+pub(super) fn through(point: [f32; 3], w: &impl Fn(usize, usize) -> f32) -> [f32; 3] {
+    std::array::from_fn(|axis| (point[1].mul_add(w(1, axis), point[0] * w(0, axis)) + point[2] * w(2, axis)) + w(3, axis))
+}
+
+/// Whether a prototype's box, placed by `w`, reaches the plane: the
+/// distance of its centre against its extent along the normal.
+fn box_reaches_plane(w: &impl Fn(usize, usize) -> f32, low: [f32; 3], high: [f32; 3], normal: [f64; 3], point: [f64; 3]) -> bool {
+    let (mut distance, mut radius) = (0f64, 0f64);
+    for i in 0..3 {
+        let mut centre = w(3, i) as f64;
         for j in 0..3 {
-            let along: f64 = (0..3).map(|i| n[i] * w(j, i)).sum();
-            radius += along.abs() * (bounds[[code, 1, j]] as f64 - bounds[[code, 0, j]] as f64) * 0.5;
+            centre += w(j, i) as f64 * ((low[j] as f64 + high[j] as f64) * 0.5);
         }
-        // Not a number: let the exact test decide.
-        if distance.abs() > radius + 1e-4 * (radius + scale + 1.) {
-            near[row] = false;
-        }
+        distance += normal[i] * (centre - point[i]);
     }
-    Ok(Some(near))
+    for j in 0..3 {
+        let along: f64 = (0..3).map(|i| normal[i] * w(j, i) as f64).sum();
+        radius += along.abs() * ((high[j] as f64 - low[j] as f64) * 0.5);
+    }
+    // Not a number: cut it.
+    !(distance.abs() > radius)
 }
 
 /// The camera and the plane the cut's lines are widened for.
@@ -485,11 +468,21 @@ fn fill_vertices(fill: &Obj<'_>, rgb: [f64; 3], out: &mut Vec<f32>) -> PyResult<
     if fill.is_none() || fill.len()? == 0 {
         return Ok(());
     }
+    let colour = rgb.map(|channel| channel as f32);
+    if let Ok(single) = fill.extract::<PyReadonlyArray3<'_, f32>>() {
+        let single = single.as_array();
+        out.reserve(single.len() * 2);
+        for triangle in single.outer_iter() {
+            for corner in triangle.outer_iter() {
+                out.extend([corner[0], corner[1], corner[2]]);
+                out.extend(colour);
+            }
+        }
+        return Ok(());
+    }
     let np = np(fill.py())?;
     let points: numpy::PyReadonlyArray2<'_, f64> = np.call_method1("asarray", (fill, np.getattr("float64")?))?.call_method1("reshape", (-1, 3))?.extract()?;
-    let points = points.as_array();
-    out.reserve(points.dim().0 * 6);
-    for point in points.outer_iter() {
+    for point in points.as_array().outer_iter() {
         push_vertex(out, [point[0], point[1], point[2]], rgb);
     }
     Ok(())
@@ -521,38 +514,49 @@ fn geometry<'py>(a: &Args<'py>) -> Reply<'py> {
     let key = (id(&packed), scene.getattr("version")?, tuple_of(&n)?, tuple_of(&o)?, flags.call_method0("tobytes")?).into_bound_py_any(py)?;
     let mut cache = attr(&view, "_section_geometry_cache")?;
     if cache.is_none() || cache.get_item(0)?.ne(&key)? {
-        let chunks = PyList::empty(py);
         let hidden: Vec<u32> = flags.extract()?;
         let codes: Vec<i64> = info.get_item((all(py), 0))?.extract()?;
-        let worlds = rows.get_item("world")?;
-        let (bounds, commands, positions) = (packed.getattr("bounds")?, packed.getattr("commands")?, packed.getattr("vertices")?.get_item("pos")?);
-        let three = span(py, 0, 3);
-        let near = rows_near_plane(&worlds, &bounds, &codes, &n, &o)?;
+        let float32 = numpy.getattr("float32")?;
+        let single = |array: Obj<'py>| numpy.call_method1("asarray", (array, &float32));
+        let worlds: PyReadonlyArray3<'_, f32> = single(rows.get_item("world")?)?.extract()?;
+        let bounds: PyReadonlyArray3<'_, f32> = single(packed.getattr("bounds")?)?.extract()?;
+        let positions: numpy::PyReadonlyArray2<'_, f32> = single(packed.getattr("vertices")?.get_item("pos")?)?.extract()?;
+        let (worlds, bounds, positions) = (worlds.as_array(), bounds.as_array(), positions.as_array());
+        let commands = packed.getattr("commands")?;
+        let starts: Vec<i64> = commands.get_item("base")?.call_method0("tolist")?.extract()?;
+        let counts: Vec<i64> = commands.get_item("count")?.call_method0("tolist")?.extract()?;
+        let (plane_normal, plane_point): ([f64; 3], [f64; 3]) = (n.extract()?, o.extract()?);
+        // Every triangle of the rows whose box reaches the plane, in the
+        // rows' order: its first corner and its two edges from it.
+        let (mut first, mut edge1, mut edge2): (Vec<f32>, Vec<f32>, Vec<f32>) = (Vec::new(), Vec::new(), Vec::new());
         for (row, (flags, code)) in hidden.iter().zip(&codes).enumerate() {
-            if flags & 1 != 0 || near.as_ref().is_some_and(|near| !near[row]) {
+            let code = *code as usize;
+            if flags & 1 != 0 || code >= starts.len() {
                 continue;
             }
-            let world = worlds.get_item(row)?.getattr("T")?;
-            let linear = world.get_item((&three, &three))?;
-            let shift = world.get_item((&three, 3))?;
-            let (low, high) = (bounds.get_item((*code, 0, &three))?, bounds.get_item((*code, 1, &three))?);
-            let center = linear.matmul(low.add(&high)?.mul(0.5)?)?.add(&shift)?;
-            let radius = numpy.call_method1("abs", (n.matmul(&linear)?,))?.matmul(high.sub(&low)?.mul(0.5)?)?;
-            if n.matmul(center.sub(&o)?)?.abs()?.gt(radius)? {
+            let w = |from: usize, to: usize| worlds[[row, from, to]];
+            if !box_reaches_plane(&w, [bounds[[code, 0, 0]], bounds[[code, 0, 1]], bounds[[code, 0, 2]]], [bounds[[code, 1, 0]], bounds[[code, 1, 1]], bounds[[code, 1, 2]]], plane_normal, plane_point) {
                 continue;
             }
-            let command = commands.get_item(*code)?;
-            let start: isize = command.get_item("base")?.call_method0("__int__")?.extract()?;
-            let count: isize = command.get_item("count")?.call_method0("__int__")?.extract()?;
-            let triangles = positions.get_item(span(py, start, start + count))?.call_method1("reshape", (-1, 3, 3))?.matmul(linear.getattr("T")?)?.add(&shift)?;
-            let corner = |at: usize| triangles.get_item((all(py), at));
-            let first = corner(0)?;
-            let chords = core.call_method1("section_cut_chords", (&first, corner(1)?.sub(&first)?, corner(2)?.sub(&first)?, &normal, &point))?;
-            if !chords.is_none() && chords.len()? != 0 {
-                chunks.append(chords)?;
+            let (start, count) = (starts[code].max(0) as usize, counts[code] as usize);
+            let end = (start + count).min(positions.dim().0);
+            for triangle in (start..end).step_by(3).take_while(|at| at + 2 < end) {
+                let corner = |at: usize| through([positions[[triangle + at, 0]], positions[[triangle + at, 1]], positions[[triangle + at, 2]]], &w);
+                let (a, b, c) = (corner(0), corner(1), corner(2));
+                first.extend(a);
+                edge1.extend([b[0] - a[0], b[1] - a[1], b[2] - a[2]]);
+                edge2.extend([c[0] - a[0], c[1] - a[1], c[2] - a[2]]);
             }
         }
-        let chords = if chunks.is_empty() { numpy.call_method1("empty", ((0, 2, 3),))? } else { numpy.call_method1("concatenate", (chunks,))? };
+        let triangles = first.len() / 3;
+        let mut chords = none(py);
+        if triangles != 0 {
+            let rows_of = |values: Vec<f32>| PyArray1::from_vec(py, values).reshape([triangles, 3]);
+            chords = core.call_method1("section_cut_chords", (rows_of(first)?, rows_of(edge1)?, rows_of(edge2)?, &normal, &point))?;
+        }
+        if chords.is_none() || chords.len()? == 0 {
+            chords = numpy.call_method1("empty", ((0, 2, 3),))?;
+        }
         let fill = core.call_method1("section_fill_triangles", (&chords, &normal))?;
         cache = (&key, chords, fill, PyDict::new(py)).into_bound_py_any(py)?;
         view.setattr("_section_geometry_cache", &cache)?;

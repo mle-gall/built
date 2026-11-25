@@ -316,9 +316,8 @@ fn selected_hidden<'py>(a: &Args<'py>) -> Reply<'py> {
         records.reserve(pairs.as_array().dim().0 * 40);
         for pair in pairs.as_array().outer_iter() {
             for end in 0..2 {
-                for axis in 0..3 {
-                    let moved = ((pair[[end, 0]] * w(0, axis) + pair[[end, 1]] * w(1, axis)) + pair[[end, 2]] * w(2, axis)) + w(3, axis);
-                    records.extend_from_slice(&moved.to_le_bytes());
+                for value in super::frame_scene::through([pair[[end, 0]], pair[[end, 1]], pair[[end, 2]]], &w) {
+                    records.extend_from_slice(&value.to_le_bytes());
                 }
             }
             records.extend_from_slice(&rgba);
