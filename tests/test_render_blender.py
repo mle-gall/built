@@ -6,16 +6,10 @@ real render end to end."""
 from __future__ import annotations
 
 import json
-import os
 import py_compile
 from pathlib import Path
-import re
-import shutil
-import signal
 import struct
 import subprocess
-import sys
-import time
 
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
@@ -151,117 +145,17 @@ def _png_size(path):
     return struct.unpack(">II", head[16:24])
 
 
-_KERNEL_SYMBOL = "ccl::MetalKernelPipeline::compile()"
-# An Objective-C exception prints numbered frames. The malloc abort only
-# leaves the symbolized stack in macOS's diagnostic report.
-_KERNEL_FRAME = re.compile(
-    r"^\s*\d+\s+\S+\s+0x[0-9a-fA-F]+\s+"
-    r"(?:ccl::MetalKernelPipeline::compile\(\)|_+ZN3ccl19MetalKernelPipeline7compileEv)"
-    r"(?:\s+\+\s+\d+)?\s*$", re.MULTILINE)
-
-
-def _reported_compiler_abort(directory, pid, started):
-    for path in directory.glob("Blender-*.ips"):
-        try:
-            if path.stat().st_mtime < started:
-                continue
-            with path.open() as report:
-                header = json.loads(report.readline())
-                if header.get("app_version") != "5.2.3":
-                    continue
-                crash = json.load(report)
-        except (OSError, ValueError):
-            continue  # ReportCrash may still be writing this report.
-        if (crash.get("pid") != pid or crash.get("procName") != "Blender"
-                or crash.get("exception", {}).get("signal") != "SIGABRT"):
-            continue
-        stacks = [t.get("frames", []) for t in crash.get("threads", []) if t.get("triggered")]
-        stacks.append(crash.get("lastExceptionBacktrace", []))
-        return any(frame.get("symbol") == _KERNEL_SYMBOL for stack in stacks for frame in stack)
-    return False
-
-
-def _crash_reports():
-    import pwd
-    return Path(pwd.getpwuid(os.getuid()).pw_dir) / "Library/Logs/DiagnosticReports"
-
-
-def _cycles_metal_kernel_abort(code, stdout, stderr, pid, started):
-    if (sys.platform != "darwin" or code != -signal.SIGABRT
-            or "Blender 5.2.3 LTS " not in stdout
-            or "INGETRAZO device METAL" not in stdout or "INGETRAZO engine CYCLES" not in stdout):
-        return False
-    if _KERNEL_FRAME.search(stderr):
-        return True
-    # macOS writes the report to the login user's Library even when the
-    # test launches Blender with an isolated HOME.
-    directory = _crash_reports()
-    deadline = time.monotonic() + 3
-    while not _reported_compiler_abort(directory, pid, started):
-        if time.monotonic() >= deadline:
-            return False
-        time.sleep(0.1)
-    return True
-
-
-def test_only_the_known_macos_kernel_compiler_abort_is_skippable(monkeypatch, tmp_path):
-    monkeypatch.setattr(sys, "platform", "darwin")
-    monkeypatch.setattr(sys.modules[__name__], "_crash_reports", lambda: tmp_path)
-    monkeypatch.setattr(time, "monotonic", iter(range(0, 100, 4)).__next__)
-    stdout = "Blender 5.2.3 LTS (hash e13b728c6880)\nINGETRAZO device METAL\nINGETRAZO engine CYCLES"
-    frame = "8   Blender    0x0000000103ab0000 ccl::MetalKernelPipeline::compile() + 42"
-
-    def matches(output, trace, code=-signal.SIGABRT):
-        return _cycles_metal_kernel_abort(code, output, trace, 123, 0)
-
-    assert matches(stdout, frame)
-    assert not matches(stdout, frame.replace("compile()", "load()"))
-    assert not matches(stdout, "log message mentioning " + _KERNEL_SYMBOL)
-    assert not matches(stdout.replace("5.2.3", "5.2.4"), frame)
-    assert not matches(stdout.replace("METAL", "CPU"), frame)
-    assert not matches(stdout, frame, 1)
-
-
-def test_malloc_abort_requires_the_crashed_blender_thread(tmp_path):
-    report = tmp_path / "Blender-test.ips"
-    header = {"app_version": "5.2.3"}
-    frames = [{"symbol": "ccl::path_cache_get(...)"}, {"symbol": _KERNEL_SYMBOL}]
-    thread = {"triggered": True, "frames": frames}
-    crash = {"pid": 789, "procName": "Blender", "exception": {"signal": "SIGABRT"}, "threads": [thread]}
-
-    def write():
-        report.write_text(json.dumps(header) + "\n" + json.dumps(crash))
-
-    write()
-    assert _reported_compiler_abort(tmp_path, 789, 0)
-    assert not _reported_compiler_abort(tmp_path, 123, 0)
-    assert not _reported_compiler_abort(tmp_path, 789, report.stat().st_mtime + 1)
-    thread["triggered"] = False
-    write()
-    assert not _reported_compiler_abort(tmp_path, 789, 0)
-
-
 @pytest.mark.slow
-@pytest.mark.skipif(shutil.which("blender") is None,
-                    reason="no Blender on this machine")
+@pytest.mark.blender
 def test_a_real_render_through_the_users_blender(tmp_path):
     scene = _box_scene()
     job = rb.write_job(scene, _camera(scene), tmp_path, engine="cycles",
                        quality=0, width=160, height=90)
     found = rb.find_blender()
-    started = time.time()
-    with subprocess.Popen(rb.command(found, job), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                          text=True, env=rb.clean_env()) as child:
-        try:
-            stdout, stderr = child.communicate(timeout=600)
-        except subprocess.TimeoutExpired:
-            child.kill()
-            child.communicate()
-            raise
-    if _cycles_metal_kernel_abort(child.returncode, stdout, stderr, child.pid, started):
-        pytest.skip("Blender 5.2.3 aborted inside the Cycles Metal kernel compiler")
-    assert child.returncode == 0, (stdout + stderr)[-4000:]
-    assert "INGETRAZO done" in stdout
+    result = subprocess.run(rb.command(found, job), capture_output=True, text=True,
+                            env=rb.clean_env(), timeout=600)
+    assert result.returncode == 0, (result.stdout + result.stderr)[-4000:]
+    assert "INGETRAZO done" in result.stdout
     assert _png_size(tmp_path / "render.png") == (160, 90)
 
 
