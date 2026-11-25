@@ -67,27 +67,3 @@ def test_the_open_cube_itself_is_left_as_it_was():
             assert V.dotProduct(f.normal(), before[f.key]) > 0.999
 
 
-def test_a_misread_flip_through_an_open_mesh_is_taken_back(monkeypatch):
-    """The parity rays can misread a solid (plaza.igz has a 51-face one
-    they would have spoiled). Through an open mesh a flip that leaves the
-    solid's shared edges LESS consistent is put back, paint included."""
-    import core.orient as orient
-    scene = Scene()
-    hist = History(scene)
-    _open_cube(scene, hist)
-    _push(scene, hist, _rect_face(scene, hist, 3.0), 1.0)
-    cube = [f for f in scene.mesh.faces
-            if all(v.x() >= 3 - 1e-6 for v in f.vertices)]
-    assert _faces_pointing_in(scene, 3.0) == []          # fixed above
-    victim = cube[0]
-    victim.attrs = {"color": [200, 10, 10, 255]}
-    loop = list(victim.loop)
-    real = orient._face_side_state
-
-    def misread(f, *a, **k):
-        return "inward" if f is victim else real(f, *a, **k)
-
-    monkeypatch.setattr(orient, "_face_side_state", misread)
-    assert orient.orient_outward(scene.mesh, only=[victim]) == []
-    assert victim.loop == loop
-    assert victim.attrs == {"color": [200, 10, 10, 255]}

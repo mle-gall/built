@@ -80,20 +80,23 @@ def reversed_faces(mesh) -> list:
     :func:`core.orient.orient_outward` would turn. Asked on a copy, so
     inspecting never changes the model. An open mesh has no inside, so
     nothing on it is reversed."""
-    from core.orient import (_face_components, _incoherent_edges, is_closed,
-                             orient_outward)
+    import ingetrazo_core as native
+    from core.orient import is_closed, orient_outward
     if not is_closed(mesh):
         return []
     # The parity pass costs seconds on thousands of faces, and almost every
     # piece is fine: one whose shared edges all agree and whose signed
     # volume is positive already looks out. Only the others are asked.
     pieces: dict = {}
-    for f, c in _face_components(mesh).items():
+    # Edge-connected pieces and their edge agreement, from the store
+    # (``model/solid_checks.rs``).
+    every = list(mesh.faces)
+    for f, c in zip(every, native.solid_face_components(mesh, every)):
         pieces.setdefault(c, []).append(f)
     suspect = []
     for faces in pieces.values():
         skin = [f for f in faces if _live(f)]
-        if _incoherent_edges(skin) or _signed_volume(skin) <= 0.0:
+        if native.solid_incoherent_edges(mesh, skin) or _signed_volume(skin) <= 0.0:
             suspect.extend(faces)
     if not suspect:
         return []

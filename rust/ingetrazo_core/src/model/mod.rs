@@ -19,6 +19,7 @@ pub mod saved_view;
 pub mod saved_view_state;
 pub mod scene_bounds;
 pub mod scene_mesh_states;
+pub mod solid_checks;
 pub mod section_cut;
 pub mod section_fill;
 pub mod selection;
@@ -61,6 +62,7 @@ pub fn register_model(m: &Bound<'_, PyModule>) -> PyResult<()> {
     saved_view_state::register(m)?;
     scene_bounds::register(m)?;
     scene_mesh_states::register(m)?;
+    solid_checks::register(m)?;
     placement_walks::register(m)?;
     Ok(())
 }

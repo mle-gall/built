@@ -33,6 +33,7 @@ import sys
 
 import numpy as np
 import pytest
+from pathlib import Path
 from tests import fuzz
 from ingetrazo_core import Vec3 as QVector3D
 
@@ -214,25 +215,29 @@ def test_face_geometry_is_pythons(store, seed):
         assert c[i] == f.centroid().toTuple()
         assert [tuple(p) for p in tris[i]] == [
             tuple(q.toTuple() for q in t) for t in f.triangulate()]
-        assert probes[i] == O._interior_probe(f).toTuple()
 
 
 # ---- orient_outward, differentially -----------------------------------------------
 
+#: The Python pass's answers on these scenes, recorded at ``85a5b81b`` with
+#: the scans off, before the Python pass was deleted (``core/orient.py``).
+_ORIENT_GOLDEN = Path(__file__).parent / "fixtures" / "push_native_orient_golden.json.gz"
+
+
 def _orient_both(oracle, store, seed, scope):
-    out = []
-    for off in (True, False):
-        oracle(off)
-        m = _scene(store, seed)
-        faces = list(m.faces)
-        only = None
-        if scope == "one":
-            only = [faces[seed % len(faces)]]
-        elif scope == "some":
-            only = faces[::5]
-        got = O.orient_outward(m, only=only)
-        out.append((_index(m, got), _state(m)))
-    return out
+    import gzip
+    import json
+    want = json.loads(gzip.decompress(_ORIENT_GOLDEN.read_bytes()))[f"{store}:{seed}:{scope}"]
+    oracle(False)
+    m = _scene(store, seed)
+    faces = list(m.faces)
+    only = None
+    if scope == "one":
+        only = [faces[seed % len(faces)]]
+    elif scope == "some":
+        only = faces[::5]
+    got = O.orient_outward(m, only=only)
+    return want, json.loads(json.dumps((_index(m, got), _state(m))))
 
 
 @pytest.mark.parametrize("store", [False, True])
@@ -297,25 +302,6 @@ def _cluttered(store, seed):
     return m
 
 
-@pytest.mark.parametrize("rays,jitter", [(7, 0.5), (5, 1.0), (9, 0.5)])
-@pytest.mark.parametrize("store", [False, True])
-@pytest.mark.parametrize("seed", range(8))
-def test_orient_jitter_dependent_votes_match(oracle, monkeypatch, rays,
-                                             jitter, store, seed):
-    """With rays spread wide, a face's vote depends on its exact jittered
-    directions — so on Python's random stream, on each face's offset in it
-    and on the float32 ray arithmetic: the native pass must still agree."""
-    monkeypatch.setattr(O, "_RAYS", rays)
-    monkeypatch.setattr(O, "_JITTER", jitter)
-    out = []
-    for off in (True, False):
-        oracle(off)
-        m = _cluttered(store, seed)
-        got = O.orient_outward(m)
-        out.append((_index(m, got), _state(m)))
-    assert out[1] == out[0]
-
-
 def test_wide_jitter_votes_do_depend_on_the_stream():
     """The test above has teeth: on these scenes another seed gives
     another decision somewhere."""
@@ -332,7 +318,7 @@ def test_wide_jitter_votes_do_depend_on_the_stream():
 
 def test_orient_fixtures(oracle):
     """Which faces flip and which wall is a partition, pinned."""
-    for off in (True, False):
+    for off in (False,):
         oracle(off)
         for store in (False, True):
             m = _mesh(store)
@@ -372,56 +358,6 @@ def _poking_boxes(m, angle, size):
     m.add_face([V(9, 0, 0), V(10, 0, 0), V(10, 1, 0)])
 
 
-@pytest.mark.parametrize("angle,size", [(30, 0.5), (45, 1.0), (60, 1.5)])
-def test_a_flip_that_worsens_an_open_solid_is_never_made(oracle, monkeypatch,
-                                                         angle, size):
-    """Through an open mesh, flips that leave a solid's shared edges less
-    consistent are taken back (Python) / never made (native): the same
-    model either way, and the oracle does take the rollback here."""
-    real = O._incoherent_edges
-    seen = []
-    results = []
-    for off in (True, False):
-        oracle(off)
-        for store in (False, True):
-            m = _mesh(store)
-            _poking_boxes(m, angle, size)
-            m.faces[7].attrs = {"color": [1, 2, 3, 255]}
-            if off:
-                monkeypatch.setattr(O, "_incoherent_edges",
-                                    lambda fs: seen.append(real(fs))
-                                    or seen[-1])
-            got = O.orient_outward(m, only=[m.faces[0]])
-            monkeypatch.setattr(O, "_incoherent_edges", real)
-            if off:
-                assert seen[-1] > seen[-2]          # worse: rolled back
-                assert type(m) is S.StoreMesh
-            results.append((_index(m, got), _state(m)))
-    assert all(r == results[0] for r in results)
-
-
-def test_orient_python_rollback_on_a_store_mesh_stays_in_the_store(
-        oracle, monkeypatch):
-    """The Python pass's rollback reverses a store-backed face's rings with
-    one store op (it used to write the loop back and materialise)."""
-    monkeypatch.setattr(S.StoreMesh, "_materialise",
-                        lambda mesh: pytest.fail("orientation materialised the mesh"))
-    oracle(True)
-    m = _mesh(True)
-    _box(m, (3, 0, 0), (1, 1, 1))
-    m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0)])
-    victim = m.faces[0]
-    loop = [v.key for v in victim.loop]
-    real = O._face_side_state
-
-    def misread(f, *a, **k):
-        return "inward" if f == victim else real(f, *a, **k)
-    monkeypatch.setattr(O, "_face_side_state", misread)
-    assert O.orient_outward(m, only=[victim]) == []
-    assert type(m) is S.StoreMesh
-    assert [v.key for v in m.faces[0].loop] == loop
-
-
 # ---- the push tool's searches ------------------------------------------------------
 
 def _random_points_on_edges(m, rng, n):
@@ -455,12 +391,41 @@ def test_segment_prefilter_is_a_superset(store, seed):
         assert set(want) <= set(keys)
 
 
+
+# The ray-triangle test the deleted Python orientation pass used (Moller-
+# Trumbore as Qt computes it), kept as this test's oracle for the lateral exit.
+_EPS = 1e-7
+_T_MIN = 1e-6
+
+
+def _ray_triangle(origin: QVector3D, direction: QVector3D, tri: tuple) -> float | None:
+    """Möller–Trumbore. Returns the ray parameter ``t > 0`` of the intersection
+    with ``tri``, or ``None`` (miss / parallel / behind)."""
+    a, b, c = tri
+    e1 = b - a
+    e2 = c - a
+    p = QVector3D.crossProduct(direction, e2)
+    det = QVector3D.dotProduct(e1, p)
+    if abs(det) < _EPS:
+        return None  # parallel
+    inv = 1.0 / det
+    tvec = origin - a
+    u = QVector3D.dotProduct(tvec, p) * inv
+    if u < -_EPS or u > 1.0 + _EPS:
+        return None
+    q = QVector3D.crossProduct(tvec, e1)
+    v = QVector3D.dotProduct(direction, q) * inv
+    if v < -_EPS or u + v > 1.0 + _EPS:
+        return None
+    t = QVector3D.dotProduct(e2, q) * inv
+    return t if t > _T_MIN else None
+
+
 @pytest.mark.parametrize("store", [False, True])
 @pytest.mark.parametrize("seed", range(5))
 def test_parallel_overlap_prefilter_and_lateral_exit(store, seed, oracle):
     """The parallel-overlap candidates hold every face the inward limit and
     the levels can take; the lateral exit is the Python loop's, exactly."""
-    from core.orient import _ray_triangle
     from core.push_pull import _loops_overlap_2d, _project_loop_2d
     rng = random.Random(seed)
     m = _scene(store, seed)
@@ -653,14 +618,3 @@ def test_engine_certifier_native_matches_oracle_fuzz(monkeypatch, oracle,
     _certify_both(monkeypatch, oracle, scenario, seed, store)
 
 
-def test_native_orientation_is_used(monkeypatch):
-    """Guard against the native pass silently falling back: on a store mesh
-    with the scans on, the Python pass never runs."""
-    m = _mesh(True)
-    _box(m, (0, 0, 0), (1, 1, 1), flip=(2,))
-    monkeypatch.setattr(O, "_face_components", lambda *_: (_ for _ in ()).throw(
-        AssertionError("the Python pass ran")))
-    # A replaced helper makes the pass Python: undo that for this check.
-    monkeypatch.setitem(O._REPRODUCED, "_face_components", O._face_components)
-    assert len(O.orient_outward(m)) == 1
-    assert os.environ.get("INGETRAZO_SCANS") != "0"
