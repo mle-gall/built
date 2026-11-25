@@ -210,7 +210,7 @@ fn definition(name: &str) -> Option<&'static Module> {
     MODULES.iter().find(|m| m.name == leaf)
 }
 
-const CORE_MODULES: &[&str] = &["composition", "push_pull", "solids", "sweep", "make_faces", "intersect", "pieces"];
+const CORE_MODULES: &[&str] = &["composition", "push_pull", "solids", "sweep", "make_faces", "intersect", "pieces", "inference"];
 const VIEW_MODULES: &[&str] = &[
     "document_interaction",
     "documents",
@@ -279,6 +279,7 @@ impl ToolModules {
                 "core.make_faces" => crate::make_faces::install(module),
                 "core.intersect" => crate::store::face_intersections::install(module),
                 "core.pieces" => crate::store::piece_command::install(module),
+                "core.inference" => crate::inference::install(module),
                 _ => Err(PyImportError::new_err(full)),
             };
         }

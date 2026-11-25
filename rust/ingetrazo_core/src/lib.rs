@@ -153,7 +153,7 @@ mod view_culling;
 mod units;
 mod model;
 mod value_field;
-mod inference_state;
+mod inference;
 mod snap_boundary;
 mod snap_curve;
 mod snap_planes;
@@ -321,7 +321,6 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(snap::face_center, m)?)?;
     m.add_function(wrap_pyfunction!(snap_curve::circle_tangents, m)?)?;
     m.add_function(wrap_pyfunction!(snap_curve::snap_circle, m)?)?;
-    m.add_class::<inference_state::InferenceMemory>()?;
     m.add_class::<tools::py::ToolMachine>()?;
     m.add_class::<tools::py::ScaleGripSpec>()?;
     m.add_function(wrap_pyfunction!(tools::host_geometry::protractor_metrics, m)?)?;
