@@ -188,6 +188,9 @@ struct Scene {
     commands: wgpu::Buffer,
     template: wgpu::Buffer,
     hard_template: wgpu::Buffer,
+    /// The index buffer of every edge row (`quad_indices`), as long as the
+    /// widest row.
+    quad_index: wgpu::Buffer,
     compute: wgpu::BindGroup,
     draw: wgpu::BindGroup,
     edge_draw: wgpu::BindGroup,
@@ -340,6 +343,54 @@ fn row_runs(ids: Vec<usize>) -> Vec<(usize, usize)> {
     match (ids.iter().min(), ids.iter().max()) {
         (Some(&first), Some(&last)) => vec![(first, last + 1)],
         _ => Vec::new(),
+    }
+}
+
+/// The command rows as the GPU draws them. The scene keeps an edge row as
+/// `[vertices, 0, first vertex, first instance, hard vertices]`, six
+/// vertices a quad. The GPU draws a quad from four vertices through the
+/// shared quad indices, so its row is the indexed command `[indices, 0, 0,
+/// base vertex, first instance]`. `hard` leaves the soft edges out.
+fn gpu_commands(template: &[u8], prototypes: usize, hard: bool) -> Vec<u8> {
+    let mut out = template.to_vec();
+    for row in out.chunks_exact_mut(20).skip(prototypes) {
+        let [count, _, first, instance, hard_count]: [u32; 5] = bytemuck::pod_read_unaligned(row);
+        let drawn = [if hard { hard_count } else { count }, 0, 0, first / 6 * 4, instance];
+        row.copy_from_slice(bytemuck::bytes_of(&drawn));
+    }
+    out
+}
+
+/// Two triangles a quad over its four corners, first corner first in both
+/// (the corner whose flat values a quad of six vertices took).
+fn quad_indices(quads: usize) -> Vec<u8> {
+    let indices: Vec<u32> = (0..quads as u32).flat_map(|q| [0, 1, 2, 0, 2, 3].map(|k| q * 4 + k)).collect();
+    bytemuck::cast_slice(&indices).to_vec()
+}
+
+/// The most quads one edge row draws.
+fn widest_edge_row(template: &[u8], prototypes: usize) -> usize {
+    template.chunks_exact(20).skip(prototypes)
+        .map(|row| u32::from_le_bytes(row[..4].try_into().unwrap()) as usize / 6).max().unwrap_or(0)
+}
+
+#[cfg(test)]
+mod edge_command_tests {
+    #[test]
+    fn an_edge_row_becomes_an_indexed_command_over_four_vertices_a_quad() {
+        let face = [36u32, 0, 12, 7, 5];
+        let edge = [60u32, 0, 120, 5, 24];      // ten quads from the twentieth, four of them hard
+        let template: Vec<u8> = bytemuck::cast_slice(&[face, edge]).to_vec();
+        let rows = |hard| -> Vec<[u32; 5]> { bytemuck::pod_collect_to_vec(&super::gpu_commands(&template, 1, hard)) };
+        assert_eq!(rows(false), [face, [60, 0, 0, 80, 5]]);
+        assert_eq!(rows(true), [face, [24, 0, 0, 80, 5]]);
+        assert_eq!(super::widest_edge_row(&template, 1), 10);
+    }
+
+    #[test]
+    fn a_quad_is_two_triangles_that_start_at_its_first_corner() {
+        let indices: Vec<u32> = bytemuck::pod_collect_to_vec(&super::quad_indices(2));
+        assert_eq!(indices, [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7]);
     }
 }
 
@@ -1047,13 +1098,9 @@ impl Renderer {
                 | wgpu::BufferUsages::INDIRECT
                 | wgpu::BufferUsages::COPY_DST,
         );
-        let template = capacity_buffer(&self.device, cmd, prototype_capacity * 40, wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST);
-        let mut hard_cmd = cmd.to_vec();
-        for row in hard_cmd.chunks_exact_mut(20).skip(count) {
-            let hard_count = row[16..20].to_vec();
-            row[..4].copy_from_slice(&hard_count);
-        }
-        let hard_template = capacity_buffer(&self.device, &hard_cmd, prototype_capacity * 40, wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST);
+        let template = capacity_buffer(&self.device, &gpu_commands(cmd, count, false), prototype_capacity * 40, wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST);
+        let hard_template = capacity_buffer(&self.device, &gpu_commands(cmd, count, true), prototype_capacity * 40, wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST);
+        let quad_index = buffer(&self.device, &quad_indices(widest_edge_row(cmd, count).max(1)), wgpu::BufferUsages::INDEX);
         let survivors = buffer(&self.device, &vec![0; capacity * 4], wgpu::BufferUsages::STORAGE);
         let viewpoints = buffer(&self.device, &vec![0; capacity * 80], wgpu::BufferUsages::STORAGE);
         let counters = buffer(&self.device, &[0; 32], wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST);
@@ -1120,6 +1167,7 @@ impl Renderer {
             commands,
             template,
             hard_template,
+            quad_index,
             compute,
             draw,
             edge_draw,
@@ -1218,13 +1266,15 @@ impl Renderer {
             s.template_data[offset..offset+4].copy_from_slice(&start.to_le_bytes());
             start += count;
         }
-        let mut hard = s.template_data.clone();
-        for row in hard.chunks_exact_mut(20).skip(s.p as usize) { let count = row[16..20].to_vec(); row[..4].copy_from_slice(&count); }
+        let soft = gpu_commands(&s.template_data, s.p as usize, false);
+        let hard = gpu_commands(&s.template_data, s.p as usize, true);
+        let quads = quad_indices(widest_edge_row(&s.template_data, s.p as usize).max(1));
+        if quads.len() as u64 > s.quad_index.size() { s.quad_index = buffer(&self.device, &quads, wgpu::BufferUsages::INDEX); }
         for (target, data, usage) in [
             (&mut s.protos, &s.prototype_data, wgpu::BufferUsages::STORAGE),
-            (&mut s.template, &s.template_data, wgpu::BufferUsages::COPY_SRC),
+            (&mut s.template, &soft, wgpu::BufferUsages::COPY_SRC),
             (&mut s.hard_template, &hard, wgpu::BufferUsages::COPY_SRC),
-            (&mut s.commands, &s.template_data, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT)] {
+            (&mut s.commands, &soft, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT)] {
             if data.len() as u64 > target.size() { *target = capacity_buffer(&self.device, data, grown_capacity(target.size() as usize, data.len()), usage | wgpu::BufferUsages::COPY_DST); }
             else { self.queue.write_buffer(target, 0, data); }
         }
@@ -1394,10 +1444,8 @@ impl Renderer {
                 let offset = if i < s.p as usize { 16 } else { 12 };
                 command[offset..offset+4].copy_from_slice(&starts[i % starts.len()].to_le_bytes());
             }
-            self.queue.write_buffer(&s.template, 0, &s.template_data);
-            let mut hard = s.template_data.clone();
-            for row in hard.chunks_exact_mut(20).skip(s.p as usize) { let count = row[16..20].to_vec(); row[..4].copy_from_slice(&count); }
-            self.queue.write_buffer(&s.hard_template, 0, &hard);
+            self.queue.write_buffer(&s.template, 0, &gpu_commands(&s.template_data, s.p as usize, false));
+            self.queue.write_buffer(&s.hard_template, 0, &gpu_commands(&s.template_data, s.p as usize, true));
         }
         Ok(())
     }
@@ -1650,12 +1698,8 @@ impl Renderer {
                 self.queue.write_buffer(&s.edge_records, range.start as u64, &s.edge_data[range]);
             }
         }
-        let mut hard = s.template_data.clone();
-        for row in hard.chunks_exact_mut(20).skip(s.p as usize) {
-            let count = row[16..20].to_vec(); row[..4].copy_from_slice(&count);
-        }
-        self.queue.write_buffer(&s.template, 0, &s.template_data);
-        self.queue.write_buffer(&s.hard_template, 0, &hard);
+        self.queue.write_buffer(&s.template, 0, &gpu_commands(&s.template_data, s.p as usize, false));
+        self.queue.write_buffer(&s.hard_template, 0, &gpu_commands(&s.template_data, s.p as usize, true));
         Ok(())
     }
     /// Per-prototype hidden COMMAND rows and original vertex/index streams.
@@ -1979,7 +2023,13 @@ impl Renderer {
         let tq = self.queries.as_ref().filter(|_| self.detailed_timestamps);
         self.sun.prepare(&self.device, &self.queue, &mut e, s, &self.textures, &self.look.buffer);
         self.axes.welcome_grid = self.ui.as_ref().is_some_and(ui::Ui::empty_start_shown);
-        self.background.draw(&mut e, &color, tq);
+        // The multisampled path draws its own background and resolves over
+        // every pixel of this target: a background here was drawn to be
+        // overwritten.
+        let background_drawn = !(PassPlan::new(self.antialias && self.samples.count() > 1, self.style, self.look.data[6][2] != 0., self.ao.active(self.style)).msaa && !self.pick_pending);
+        if background_drawn {
+            self.background.draw(&mut e, &color, tq);
+        }
         e.clear_buffer(&s.counters, 0, None);
         e.copy_buffer_to_buffer(if self.look.data[6][0] > 0. { &s.template } else { &s.hard_template }, 0, &s.commands, 0, s.p as u64 * 40);
         {
@@ -2101,18 +2151,17 @@ impl Renderer {
                     pass.set_pipeline(if hidden { &self.xray_edge } else if self.look.data[6][0] == 0. { &self.hard_edge } else { &self.edge });
                     pass.set_bind_group(0, if hidden { &s.xray_edge_draw } else { &s.edge_draw }, &[]);
                     pass.set_bind_group(1, &self.look_groups[if hidden { 3 } else { 2 }], &[]);
-                    if self.multi {
-                        for k in s.p..s.p*2 { pass.draw_indirect(&s.commands, k as u64*20); }
-                    } else {
-                        for k in s.p..s.p * 2 { pass.draw_indirect(&s.commands, k as u64 * 20); }
-                    }
+                    pass.set_index_buffer(s.quad_index.slice(..), wgpu::IndexFormat::Uint32);
+                    if self.multi { pass.multi_draw_indexed_indirect(&s.commands, s.p as u64 * 20, s.p); }
+                    else { for k in s.p..s.p * 2 { pass.draw_indexed_indirect(&s.commands, k as u64 * 20); } }
                 }
                 if self.style == 1 && self.look.data[6][0] > 0. {
                     pass.set_pipeline(&self.profile_top);
                     pass.set_bind_group(0, &s.profile_draw, &[]);
                     pass.set_bind_group(1, &self.look_groups[4], &[]);
-                    if self.multi { for k in s.p..s.p*2 { pass.draw_indirect(&s.commands, k as u64*20); } }
-                    else { for k in s.p..s.p*2 { pass.draw_indirect(&s.commands, k as u64*20); } }
+                    pass.set_index_buffer(s.quad_index.slice(..), wgpu::IndexFormat::Uint32);
+                    if self.multi { pass.multi_draw_indexed_indirect(&s.commands, s.p as u64 * 20, s.p); }
+                    else { for k in s.p..s.p*2 { pass.draw_indexed_indirect(&s.commands, k as u64*20); } }
                 }
             }
             drop(pass);
@@ -2270,7 +2319,8 @@ impl Renderer {
                     let _ = tx.send(r);
                 });
             self.timings[k].pending = Some(rx);
-            let mut active = vec!["background", "culling", "overlay", "frame"];
+            let mut active = vec!["culling", "overlay", "frame"];
+            if background_drawn { active.push("background"); }
             if self.sections.count > 0 { active.push("section_caps"); }
             if !msaa { active.push("faces"); if !msaa && (self.edges || self.style == 4) { active.push("edge_quads"); } }
             if msaa && !self.pick_pending { active.push("antialias"); if ao_active || self.edges || self.style == 4 { active.push("antialias_edges"); } }
@@ -2885,6 +2935,10 @@ impl Renderer {
         let mut counters = self.last_counters.clone();
         counters.insert("texture_layers".into(), self.textures.layers as u64);
         counters.insert("instances_input".into(), self.scene.as_ref().map_or(0, |s| s.n as u64));
+        // The resident geometry all prototypes share: 28 bytes a vertex, 4 an index.
+        counters.insert("vertices_resident".into(), self.scene.as_ref().map_or(0, |s| s.vertex_bytes as u64 / 28));
+        counters.insert("indices_resident".into(), self.scene.as_ref().map_or(0, |s| s.index_data.len() as u64 / 4));
+        counters.insert("prototypes".into(), self.scene.as_ref().map_or(0, |s| s.p as u64));
         counters.insert("depth_prepass".into(), 0);
         let mut passes: std::collections::BTreeMap<_, _> = self.pass_gpu.iter().map(|(n,v)| (n.clone(), Some(*v))).collect();
         passes.insert("id".into(), self.last_pick_gpu);
@@ -2957,9 +3011,10 @@ impl Renderer {
                     pass.set_pipeline(&self.edge);
                     pass.set_bind_group(0, &s.edge_draw, &[]);
                     pass.set_bind_group(1, &self.look_groups[2], &[]);
+                    pass.set_index_buffer(s.quad_index.slice(..), wgpu::IndexFormat::Uint32);
                     for k in 0..s.p as usize {
                         if s.template_data[k*20..k*20+4] == [0; 4] {
-                            pass.draw_indirect(&s.commands, (s.p as usize+k) as u64 * 20);
+                            pass.draw_indexed_indirect(&s.commands, (s.p as usize+k) as u64 * 20);
                         }
                     }
                 }
@@ -3041,7 +3096,7 @@ impl Renderer {
     fn gpu_memory(&self) -> u64 {
         self.scene.as_ref().map_or(0, |s| {
             [&s.vertex, &s.index, &s.edge_records, &s.inst, &s.protos,
-             &s.survivors, &s.viewpoints, &s.commands, &s.template, &s.hard_template]
+             &s.survivors, &s.viewpoints, &s.commands, &s.template, &s.hard_template, &s.quad_index]
                 .iter().map(|b| b.size()).sum::<u64>() + 112 + 416
         }) + self.textures.bytes + self.textures.materials.size()
     }

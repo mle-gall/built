@@ -1,0 +1,69 @@
+{
+ "machine": {
+  "capture": [
+   2880,
+   1800
+  ],
+  "cpu": "Apple M5 Max",
+  "system": "macOS-27.2.1-arm64-arm-64bit-Mach-O"
+ },
+ "models": {
+  "city-M": {
+   "frames": {
+    "plain": "f4c349391c6a855c413d8fa9",
+    "rest": "c479e77d06d1f5e55a64822a",
+    "zoom0a": "52520f04f5bbcdc8ce999a1d",
+    "zoom0b": "384b5722202460fb963ca29f",
+    "zoom0c": "c479e77d06d1f5e55a64822a",
+    "zoom0d": "01b63e331438a8309518c63a",
+    "zoom1a": "2243d877e47ab672a2fbb9a0",
+    "zoom1b": "3bd39ea628eb47439f4cf80d",
+    "zoom1c": "01b63e331438a8309518c63a",
+    "zoom1d": "998108a504f64810a184cf9d",
+    "zoom2a": "0fc93123133d8855eb527488",
+    "zoom2b": "c0234234ef03e5b06e458e97",
+    "zoom2c": "998108a504f64810a184cf9d",
+    "zoom2d": "afcd6b6fc598876456918f9c"
+   },
+   "model": "bde626b10e3afcc8be145ffc"
+  },
+  "city-XL": {
+   "frames": {
+    "plain": "e3808a96e9b605c31673d265",
+    "rest": "0d5e8d10a86b1c75cce635dc",
+    "zoom0a": "3d68e06a404ac9fd2a85051e",
+    "zoom0b": "c741e251fd14f1f1f29db724",
+    "zoom0c": "bb52cb3949850d879ef67685",
+    "zoom0d": "e1b84713fe7bd8159067745e",
+    "zoom1a": "a6b9fa3c471d735093883909",
+    "zoom1b": "db54dc4d3fd310aff4de616b",
+    "zoom1c": "e1b84713fe7bd8159067745e",
+    "zoom1d": "e49101363c3c8f86801914de",
+    "zoom2a": "4dd8cdbf10192d432f38c4cb",
+    "zoom2b": "8b076afa15de3625f9660f89",
+    "zoom2c": "e49101363c3c8f86801914de",
+    "zoom2d": "2522ce6208f6b698c35315c6"
+   },
+   "model": "e302a4111a1c15bdaa93239d"
+  },
+  "slab-and-cube": {
+   "frames": {
+    "plain": "58ae03e7c10d228be06c0931",
+    "rest": "6f07ef8bfd0e34ba1966ec97",
+    "zoom0a": "48372be34f5bcbb05d05e452",
+    "zoom0b": "4947889ac898f6f27cd26dc2",
+    "zoom0c": "6f07ef8bfd0e34ba1966ec97",
+    "zoom0d": "a5a534327b2e744c7ea7ed15",
+    "zoom1a": "903d4717e87b29a454ecf036",
+    "zoom1b": "de5a7afdc121f52ca24f4d96",
+    "zoom1c": "a5a534327b2e744c7ea7ed15",
+    "zoom1d": "0c81af5d94a8025fa0e5724a",
+    "zoom2a": "e1b640d86400fd47c5ab329b",
+    "zoom2b": "07dc15fb80fdc85d9383480f",
+    "zoom2c": "0c81af5d94a8025fa0e5724a",
+    "zoom2d": "c60e3487a4a5e919efce45a2"
+   },
+   "model": "f195e098cff673d80749aded"
+  }
+ }
+}

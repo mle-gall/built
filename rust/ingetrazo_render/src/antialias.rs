@@ -260,7 +260,9 @@ impl Antialias {
             pass.set_bind_group(1, &self.groups[k].1, &[]);
             let first = if edge { scene.p } else { 0 };
             if edge {
-                for j in first..first + scene.p { pass.draw_indirect(&scene.commands, j as u64 * 20); }
+                pass.set_index_buffer(scene.quad_index.slice(..), wgpu::IndexFormat::Uint32);
+                if multi { pass.multi_draw_indexed_indirect(&scene.commands, first as u64 * 20, scene.p); }
+                else { for j in first..first + scene.p { pass.draw_indexed_indirect(&scene.commands, j as u64 * 20); } }
             } else {
                 for &(first, count, plain) in &scene.face_ranges {
                     let face = if plain { 6 + usize::from(mode == 1) } else { k };
