@@ -203,11 +203,12 @@ def test_pack_never_builds_plan_and_calls_native_once(tmp_path, monkeypatch):
     monkeypatch.setattr(core.lazy_mesh, 'plan', forbidden)
     monkeypatch.setattr(packing, 'plan_of', forbidden)
     calls = []
-    original = native.bake_scene
+    original = packing.assemble_scene
     def once(*args):
         calls.append(True)
         return original(*args)
-    monkeypatch.setattr(native, 'bake_scene', once)
+    # One assembly, which runs the one scene bake (resident/assemble.rs).
+    monkeypatch.setattr(packing, 'assemble_scene', once)
     pack_scene(scene)
     assert calls == [True]
     for group in scene.groups:
@@ -343,14 +344,18 @@ def test_pack_weld_matches_numpy_first_rows():
 
 def test_profile_endpoints_keep_edit_sequence_semantics():
     from array import array
-    from views.wgpu_scene import _profile_endpoints
-    mesh = (np.array([[0, 0, 0], [1, 2, 3]], np.float32), None, None, None,
-            np.array([[0, 1]]), np.array([1], np.uint8))
-    result = _profile_endpoints(mesh)
-    assert isinstance(result, array)
+
+    def endpoints():
+        mesh = triangle()
+        mesh.edges[0].soft = True
+        (code, result), = pack_scene(Scene(groups=[Group(mesh)])).profile_exclusions
+        assert code == 0
+        return result
+    result = endpoints()
+    assert isinstance(result, array) and result.typecode == 'f'
     assert bool(result)
-    assert result == _profile_endpoints(mesh)
-    assert list(result) == [0, 0, 0, 1, 2, 3]
+    assert result == endpoints()
+    assert len(result) == 6                    # the soft edge's two ends
     assert memoryview(result).nbytes == 24
 
 

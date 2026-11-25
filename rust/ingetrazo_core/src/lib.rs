@@ -27,6 +27,7 @@ mod earcut;
 mod polygon;
 mod facegeom;
 mod render_bake;
+mod resident;
 mod scene_bake;
 mod smooth;
 mod facesview;
@@ -548,6 +549,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(not(test))]
     store::py::register(m)?;
     doc::py::register(m)?;
+    resident::register(m)?;
     m.add_class::<scans::MeshScan>()?;
     kernel::register_kernel(m)?;
     Ok(())

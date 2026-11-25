@@ -12,7 +12,6 @@ pub mod headless;
 pub mod svg_raster;
 pub mod icon_art;
 pub mod native_tools;
-pub mod packed_scene;
 
 pub fn register_render_glue(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(icon_art::icon_art, m)?)?;
@@ -27,6 +26,5 @@ pub fn register_render_glue(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(billboards::billboard_worlds, m)?)?;
     m.add_function(wrap_pyfunction!(billboards::sprite_mapping, m)?)?;
     native_tools::register(m)?;
-    packed_scene::register(m)?;
     Ok(())
 }
