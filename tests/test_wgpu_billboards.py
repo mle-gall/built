@@ -119,7 +119,7 @@ def test_axes_state_toggle_context_and_export():
 
 
 def test_billboard_inference_uses_turned_geometry():
-    from views.wgpu_inference import prepare, surface
+    from ingetrazo_core import resident_prepare as prepare, surface
     g = figure()
     packed = pack_scene(Scene(groups=[g]), texture_images=False)
     index = prepare(packed)

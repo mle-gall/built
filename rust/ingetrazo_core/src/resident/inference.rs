@@ -9,6 +9,7 @@ mod lease;
 mod picking;
 mod prepare;
 mod screen;
+mod snap;
 use numpy::{IntoPyArray, PyReadonlyArray2};
 use pyo3::{exceptions::PyValueError, prelude::*};
 fn project_box(
@@ -70,7 +71,8 @@ pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     picking::register(m)?;
     context::register(m)?;
     crossing::register(m)?;
-    acquisition::register(m)
+    acquisition::register(m)?;
+    snap::register(m)
 }
 
 /// The front triangle and its normal, using the same barycentric slack as picking.

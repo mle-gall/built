@@ -29,7 +29,7 @@ pub(super) fn hit_rows<'p>(
 }
 
 #[pyfunction(signature=(index,row,origin,direction,limit=f64::INFINITY))]
-fn surface_hit<'p>(
+pub(super) fn surface_hit<'p>(
     index: &Obj<'p>,
     row: &Obj<'p>,
     origin: &Obj<'p>,

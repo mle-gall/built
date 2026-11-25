@@ -61,7 +61,7 @@ def _z_locked_from(view, corner):
 def test_metal_z_lock_from_the_top_corner_goes_up(view):
     _iso(view)
     corner = V(2, 2, 2)
-    from views.wgpu_inference import _occluded
+    from ingetrazo_core import occluded as _occluded
     # The trap is real in this view: the far edge is hidden.
     assert _occluded(view.inference_index, view, V(0, 0, 1.0))
     a = _z_locked_from(view, corner)

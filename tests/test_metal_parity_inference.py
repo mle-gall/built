@@ -43,7 +43,7 @@ from core.mesh import Mesh
 from core.group import Group
 from core.guide import Guide
 from ingetrazo_core import pack_scene
-from views.wgpu_inference import (prepare, snap, nearby_edges, reference_edge,
+from ingetrazo_core import (resident_prepare as prepare, resident_snap as snap, nearby_edges, reference_edge,
                                   tangent_direction, eligible_rows, surface)
 
 

@@ -110,7 +110,7 @@ def test_shader_rest_bits_are_preserved_and_shared():
 
 
 def test_hidden_row_never_reaches_inference(context):
-    from views.wgpu_inference import snap
+    from ingetrazo_core import resident_snap as snap
     view, source, a, b, _, _, calls = context
     view.scene.begin_group_edit(a)
     view.scene.begin_group_edit(b)

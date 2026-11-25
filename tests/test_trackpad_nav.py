@@ -400,7 +400,7 @@ def test_the_metal_view_orbits_and_pinches_too(native_host, monkeypatch):
     from core.mesh import Mesh
     from core.scene import Scene
     from tests.controller_surface import ControllerSurface as Viewport
-    from views.wgpu_inference import prepare
+    from ingetrazo_core import resident_prepare as prepare
     from ingetrazo_core import pack_scene
 
     scene = Scene()

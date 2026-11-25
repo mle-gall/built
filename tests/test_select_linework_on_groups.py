@@ -117,7 +117,7 @@ class Metal:
     renderer's ID pass, otherwise the CPU ray test stands in for it."""
 
     def __init__(self, scene, host, native=False):
-        from views.wgpu_inference import prepare
+        from ingetrazo_core import resident_prepare as prepare
         host.resize(800, 600, 1.)
         self.source = _gl(scene, host.window.viewport)
         self.flashed = self.source.flashed
@@ -136,7 +136,7 @@ class Metal:
         self.picks.sync()
 
     def _cpu_row(self, x, y):
-        from views.wgpu_inference import _front_at, eligible_rows
+        from ingetrazo_core import front_at as _front_at, eligible_rows
         v = self.view
         mvp = v.camera.projection_matrix() * v.camera.view_matrix()
         hit = _front_at(v.inference_index, v, x, y,

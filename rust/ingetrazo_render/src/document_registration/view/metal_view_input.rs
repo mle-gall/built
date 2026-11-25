@@ -489,7 +489,7 @@ fn depth_world_at<'py>(a: &Args<'py>) -> Reply<'py> {
     if row.is_none() {
         return miss();
     }
-    let inference = py.import("views.wgpu_inference")?;
+    let inference = py.import("ingetrazo_core")?;
     let [origin, direction] = unpack::<2>(&view.call_method1("_pixel_to_ray", (&x, &y))?)?;
     let mut point = none(py);
     let index = view.getattr("inference_index")?;
