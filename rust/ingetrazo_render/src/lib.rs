@@ -121,6 +121,8 @@ mod survey_raster;
 mod text_outlines;
 mod svg_texture;
 mod view_export;
+mod font_picker_host;
+mod scale_editor;
 mod material_png;
 mod survey_import;
 mod material_textures;
@@ -3458,6 +3460,9 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<render_result::RenderResult>()?;
     m.add_function(wrap_pyfunction!(font_lengths::font_length, m)?)?;
     shell_window::open::register(m)?;
+    font_picker_host::register(m)?;
+    m.add_function(wrap_pyfunction!(scale_editor::ask_scale,m)?)?;
+    m.add_function(wrap_pyfunction!(release::service::start_check,m)?)?;
     view_export::register(m)?;
     m.add_class::<svg_options::SvgOptions>()?;
     m.add_class::<tag_counts::TagCounts>()?;

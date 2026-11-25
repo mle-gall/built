@@ -31,6 +31,13 @@ pub struct FontLengths {
 }
 
 impl FontLengths {
+    pub(crate) fn new(unit: String, text: [String; 2]) -> Self {
+        Self {
+            unit,
+            text,
+            errors: Default::default(),
+        }
+    }
     pub fn edit(&mut self, index: usize, ui: &mut egui::Ui, value: &mut f64, min: f64, max: f64) {
         if ui
             .add(crate::ui::kit::field(&mut self.text[index]).desired_width(115.))

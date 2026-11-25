@@ -39,7 +39,7 @@ fn run_editor<'py>(a: &Args<'py>) -> Reply<'py> {
     let done = py
         .import("functools")?
         .call_method1("partial", (wrap_pyfunction!(closed, py)?, vp, &win))?;
-    imported(py, "views.scale_editor")?.call_method(
+    imported(py, "ingetrazo_render")?.call_method(
         "ask_scale",
         (win, a.get_item(1)?),
         Some(&fields!(py;"done"=>done)),

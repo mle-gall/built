@@ -401,7 +401,7 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
         }
         "_on_check_updates" | "check_updates_quietly" => {
             let kw = kwargs(py, &[("quiet", obj(py, name == "check_updates_quietly")?.into_bound(py))])?;
-            done!(py.import("views.release_check")?.getattr("start_check")?.call((win,), Some(&kw)))
+            done!(py.import("ingetrazo_render")?.getattr("start_check")?.call((win,), Some(&kw)))
         }
         "open_preferences" => {
             let kw = kwargs(py, &[("page", a.or_none(1, "page")?), ("shortcut_of", a.or_none(0, "shortcut_of")?)])?;
@@ -545,7 +545,7 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
         "_apply_stl_import" => call!("import_file", (win, a.req(0, "path")?, "stl", a.req(1, "scale")?, a.req(2, "simplify_mode")?)),
         "_start_place" => done!(call!("start_placement", (win, a.req(0, "group")?, a.or(1, "align_to_face", false)?, a.or_none(2, "anchor")?))),
         "import_igz_path" => call!("insert_document", (win, a.req(0, "path")?, a.or_none(1, "at")?)),
-        "_on_insert_3d_text" => done!(py.import("views.font_picker")?.call_method1("text3d", (win, py.None(), win.getattr("_place_text3d")?))),
+        "_on_insert_3d_text" => done!(py.import("ingetrazo_render.font_picker")?.call_method1("text3d", (win, py.None(), win.getattr("_place_text3d")?))),
         "_place_text3d" => done!(call!("place_text", (win, a.req(0, "params")?))),
         "_on_import_image" => done!(call!("import_picture", (win,))),
         "_on_import_obj" => done!(call!("pick_mesh_file", (win, false))),
