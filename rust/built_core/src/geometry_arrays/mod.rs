@@ -66,7 +66,7 @@ fn packed<'p>(
         ),
     )
 }
-#[pyclass(module = "core.geometry_arrays", get_all, set_all)]
+#[pyclass(module = "built_core.geometry_arrays", get_all, set_all)]
 struct Arrays {
     pos: Py<PyAny>,
     corners: Py<PyAny>,

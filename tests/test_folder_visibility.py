@@ -5,10 +5,10 @@ import json
 from tests.test_project_drawing_filters import Project
 from views.wgpu_ui import SEP
 
-from core import layers as L
-from core.scene import Scene
-from core.history import History
-from core.protocol import commands
+from built_core import layers as L
+from built_core.scene import Scene
+from built_core.history import History
+from built_core.protocol import commands
 
 
 def document():

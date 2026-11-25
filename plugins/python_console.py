@@ -9,7 +9,7 @@ prototype the next plugin — against the running application, no restart.
 What makes this one a good citizen of Built (and where it differs from
 the original contribution, PR #3):
 
-- **Every execution runs as a Command** (:class:`core.history.SnapshotImport`
+- **Every execution runs as a Command** (:class:`built_core.history.SnapshotImport`
   via ``viewport.history.execute``): geometry a script creates is undoable
   with Ctrl+Z, marks the document dirty (so closing warns about unsaved
   work), and repaints immediately — the version bump the raw ``exec`` never
@@ -45,9 +45,9 @@ class _ConsoleExecution:
         open when the console appeared (documents change under New/Open)."""
         from built_core import Vec3 as QVector3D
         from core import bim
-        from core.group import Group
+        from built_core.group import Group
         from built_core.mesh import Edge, Face, Mesh, Vertex
-        from core.scene import Scene
+        from built_core.scene import Scene
 
         vp = self._viewport
         app = getattr(vp.window(), "_host", None)
@@ -136,7 +136,7 @@ class PythonConsoleTool(Tool):
 
     def on_activate(self, viewport) -> None:
         window = viewport.window()
-        from core.plugin_panels import open_panel
+        from built_core.plugin_panels import open_panel
         if not open_panel(window, "python_console"):
             viewport.flash_status(tr("Python Console requires the native view."), 3000)
 
@@ -158,7 +158,7 @@ class ConsolePanel(_ConsoleExecution):
         self.lines = self.lines[-400:]
 
     def sections(self):
-        from core.plugin_panels import section, item
+        from built_core.plugin_panels import section, item
         return [section("session", "", item("log", "output", lines=self.lines),
                         item("console", "prompt", history=self.history),
                         item("button", "help", "API help"), item("button", "script", "Run script file…"),

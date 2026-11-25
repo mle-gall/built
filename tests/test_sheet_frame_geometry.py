@@ -3,7 +3,7 @@
 """What a vector sheet frame draws (built_core sheets::geometry, from
 the document and the mesh stores) is what the composer collected by
 applying the frame's saved view to the live scene and walking every face
-and edge in Python (``core.hlr.collect_geometry``): loose faces and edges
+and edge in Python (``built_core.hlr.collect_geometry``): loose faces and edges
 by their tags and Hide, placements through their world matrices (turned,
 mirrored, nested), hidden subtrees and forced tags, billboards left out,
 tags that do not print left out, each line inked with its own tag or its
@@ -24,7 +24,7 @@ import built_core as NATIVE  # noqa: E402
 
 def _box(x, y=0.0, z=0.0, *, layer=None, soft=False, hide_top=False):
     from built_core import Vec3 as V
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     m = Mesh()
     p = [V(x + a, y + b, z + c) for c in (0, 1) for b in (0, 1) for a in (0, 1)]
     for loop in ((0, 2, 3, 1), (4, 5, 7, 6), (0, 1, 5, 4), (2, 6, 7, 3), (0, 4, 6, 2), (1, 3, 7, 5)):
@@ -53,10 +53,10 @@ def _xf(tx, ty, turn=0.0, mirror=False):
 
 def _scene():
     from built_core import Vec3 as V
-    from core.group import Group
-    from core.layers import Layer
+    from built_core.group import Group
+    from built_core.layers import Layer
     from built_core.saved_views import SavedView
-    from core.scene import Scene
+    from built_core.scene import Scene
     s = Scene()
     for name, folder in (("Muros", "Arq"), ("Losa", "Arq"), ("Mobiliario", "Int"), ("Ejes", None),
                          ("Notas", None), ("Bloq", None)):
@@ -117,7 +117,7 @@ def _canon(tris, hard, soft, soft_n, tags=None):
 
 def _reference(name):
     """The composer's way, on a second identical scene."""
-    from core.hlr import collect_geometry
+    from built_core.hlr import collect_geometry
     import built_core
     scene = _scene()
     view = next((v for v in scene.saved_views if v.name == name), None)
@@ -164,9 +164,9 @@ def test_a_vector_frame_draws_what_the_composer_drew(view_key, name, hidden):
     applied to the scene, the camera pointed by ``apply_frame_camera``,
     ``collect_geometry``'s walk, the same hidden-line pass."""
     from types import SimpleNamespace
-    from core.camera import OrbitCamera
-    from core.composition import MarcoVista, apply_frame_camera, model_height_for_frame
-    from core.hlr import hlr_drawing
+    from built_core.camera import OrbitCamera
+    from built_core.composition import MarcoVista, apply_frame_camera, model_height_for_frame
+    from built_core.hlr import hlr_drawing
     import built_core
     from built_core.saved_views import SavedView
     from built_render import sheet_frames

@@ -5,7 +5,7 @@ import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from built_core import Vec3 as V
 from built_core import autosave
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import igz
 from built_core import snapshot_steps
 from tests.test_project_tabs import win, _edit
@@ -140,7 +140,7 @@ def test_failed_write_keeps_previous_recovery(win, monkeypatch):
 
 def test_deferred_mesh_snapshot_does_not_materialize_source(tmp_path, monkeypatch):
     from tests.test_igz_format3 import _scene
-    from core.mesh import DeferredMesh
+    from built_core.mesh import DeferredMesh
     monkeypatch.setattr(igz,'_LARGE_DOCUMENT',0)
     monkeypatch.setattr(igz,'_BULK_MIN',1)
     scene=_scene(tmp_path)
@@ -158,8 +158,8 @@ def test_deferred_mesh_snapshot_does_not_materialize_source(tmp_path, monkeypatc
 
 
 def test_snapshot_while_editing_preserves_root_and_group(tmp_path):
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     scene=Scene()
     scene.mesh.add_edge(V(0,0,9),V(1,0,9))
     g=Group(Mesh(),'edited')

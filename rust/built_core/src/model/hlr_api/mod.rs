@@ -405,7 +405,7 @@ fn draw<'p>(
     }
     let ns = edges.len() - nh;
     edges.extend(rows::<2>(&cuts)?);
-    let class = py.import("core.hlr")?.getattr("HlrDrawing")?;
+    let class = py.import("built_core.hlr")?.getattr("HlrDrawing")?;
     if edges.is_empty() {
         return class.call1((
             arr::<f64>(py, vec![], &[0, 4])?,
@@ -538,7 +538,7 @@ fn hlr_perspective<'p>(
     else {
         return arr::<f64>(py, vec![], &[0, 4]);
     };
-    let top = py.import("core.camera")?.call_method0("OrbitCamera")?;
+    let top = py.import("built_core.camera")?.call_method0("OrbitCamera")?;
     top.setattr("perspective", false)?;
     top.setattr(
         "target",
@@ -591,7 +591,7 @@ fn len_record(record: &Obj<'_>) -> PyResult<usize> {
 pub(crate) fn install(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
     let ns = PyDict::new(py);
-    ns.set_item("__module__", "core.hlr")?;
+    ns.set_item("__module__", "built_core.hlr")?;
     ns.set_item("__doc__", "Visible segments, their world endpoints and line classes, with section loops and optional layer metadata.")?;
     ns.set_item(
         "__slots__",

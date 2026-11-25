@@ -12,12 +12,12 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import numpy as np  # noqa: E402
 from built_core import Vec3 as V
 
-from core.layers import Layer  # noqa: E402
+from built_core.layers import Layer  # noqa: E402
 
 
 def _box(scene, layer, x0):
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     group = Group(Mesh(), name=f"box {layer}")
     group.layer = layer
     p = [V(x0, 0, 0), V(x0 + 6, 0, 0), V(x0 + 6, 2, 0), V(x0, 2, 0),
@@ -42,7 +42,7 @@ def _area(tris):
 
 
 def test_the_arrays_match_the_walk_with_the_layers_switched_now(native_host):
-    from core.hlr import collect_geometry
+    from built_core.hlr import collect_geometry
     win = native_host.window
     vp = win.viewport
     scene = vp.scene
@@ -81,8 +81,8 @@ def test_copies_not_baked_yet_come_out_as_their_bakes(native_host):
     triangles, edges and soft edges with their normals that baking each
     copy gives — turned, mirrored and scaled ones too."""
     from built_core import Matrix4 as QMatrix4x4
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     win = native_host.window
     vp = win.viewport
     scene = vp.scene

@@ -6,7 +6,7 @@ from built_core import ScreenPoint as QPointF
 from built_core import Vec3 as QVector3D
 from tools.base import ToolContext
 from tools.rotate import RotateTool
-from core.camera import OrbitCamera
+from built_core.camera import OrbitCamera
 from tests.test_wgpu_mesh_tools import harness, click, event, geometry
 
 
@@ -187,8 +187,8 @@ def test_annotation_history_and_cancel(tool_type, points, collection, monkeypatc
     assert not native.view.overlay_primitives
 
 def test_annotations_rasterize_without_gl(monkeypatch):
-    from core.dimension import Dimension
-    from core.textlabel import TextLabel
+    from built_core.dimension import Dimension
+    from built_core.textlabel import TextLabel
     from views.wgpu_overlay import rasterize, pixels
     scene, _, native, _ = prepare(DimensionTool())
     scene.dimensions.append(Dimension(QVector3D(10, 10, 0), QVector3D(70, 10, 0),
@@ -228,8 +228,8 @@ def test_followme_preselected_path_undo():
 
 
 def test_container_paint_updates_instance_without_bake():
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from built_core import pack_scene
     from built_core import InstanceUpdates
     scene, history, native, _ = prepare(PaintTool())
@@ -258,8 +258,8 @@ def test_container_paint_updates_instance_without_bake():
 
 
 def test_face_paint_inside_group_rebakes_mesh():
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from built_core import pack_scene
     from built_core import InstanceUpdates
 
@@ -285,8 +285,8 @@ def test_face_paint_inside_group_rebakes_mesh():
 
 def test_rotate_placement_preview_cancels_without_document_mutation():
     import numpy as np
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from built_core import Matrix4 as QMatrix4x4
     from built_core import pack_scene
     scene, history, native, _ = prepare(RotateTool())

@@ -3,9 +3,9 @@ import numpy as np
 import pytest
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from core.group import Group
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from core import _native
 from built_core import pack_scene, VERTEX, INSTANCE, COMMAND
 
@@ -67,7 +67,7 @@ def test_prototype_offsets():
 
 def test_lazy_arrays_stay_deferred(tmp_path, monkeypatch):
     from formats import igz
-    from core.mesh import DeferredMesh
+    from built_core.mesh import DeferredMesh
     monkeypatch.setattr(_native, 'wanted', lambda: True)
     monkeypatch.setattr(_native, 'native', _native.available())
     monkeypatch.setattr(igz, '_LARGE_DOCUMENT', 0)
@@ -154,8 +154,8 @@ def test_native_bake_rejects_invalid_ring_shape():
 def bake_mesh(mesh):
     """The reference a pack's vertices are compared with: the array bake's
     kernel outputs for one mesh, hole triangulation included."""
-    from core.geometry_arrays import arrays_of
-    from core.lazy_mesh import plan_of
+    from built_core.geometry_arrays import arrays_of
+    from built_core.lazy_mesh import plan_of
     from views.array_bake import _attrs_table
     plan = plan_of(mesh)
     if plan is not None:
@@ -229,8 +229,8 @@ def test_batch_matches_reference_with_holes_concavity_and_legacy(tmp_path, monke
 
 def test_pack_never_builds_plan_and_calls_native_once(tmp_path, monkeypatch):
     from formats import igz
-    from core.mesh import DeferredMesh
-    import core.lazy_mesh
+    from built_core.mesh import DeferredMesh
+    import built_core.lazy_mesh
     native = _native.available()
     monkeypatch.setattr(_native, 'wanted', lambda: True)
     monkeypatch.setattr(igz, '_LARGE_DOCUMENT', 0)
@@ -240,8 +240,8 @@ def test_pack_never_builds_plan_and_calls_native_once(tmp_path, monkeypatch):
     igz.load_into(scene, path)
     def forbidden(*args, **kwargs):
         raise AssertionError('renderer built a Plan')
-    monkeypatch.setattr(core.lazy_mesh, 'plan', forbidden)
-    monkeypatch.setattr(core.lazy_mesh, 'plan_of', forbidden)
+    monkeypatch.setattr(built_core.lazy_mesh, 'plan', forbidden)
+    monkeypatch.setattr(built_core.lazy_mesh, 'plan_of', forbidden)
     # The pack reads the file's own arrays (resident/sources.rs) and bakes
     # them in one pass (resident/assemble.rs): no Plan on the way.
     packed = pack_scene(scene)
@@ -277,7 +277,7 @@ def test_nested_placements_inherit_hidden_state_and_tag_visibility():
     """A child of a hidden group, and a grandchild below it, carry the hidden
     flag; a child on a switched-off tag inside a visible root does too; a
     visible sibling does not."""
-    from core.layers import Layer
+    from built_core.layers import Layer
     root = Group(triangle(), 'root')
     hidden_child = Group(triangle(), 'hidden child'); hidden_child.hidden = True
     grandchild = Group(triangle(), 'grandchild')

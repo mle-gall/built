@@ -4,7 +4,7 @@ import json
 import pickle
 from pathlib import Path
 
-from core.mesh import Edge, Face, Mesh, Vertex
+from built_core.mesh import Edge, Face, Mesh, Vertex
 from built_core import Vec3
 
 

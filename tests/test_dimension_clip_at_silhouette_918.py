@@ -64,7 +64,7 @@ def _seen_length(vp, x_edge, left=False):
 
 
 def test_the_line_ends_at_the_silhouette_and_follows_it(win):
-    from core.dimension import Dimension
+    from built_core.dimension import Dimension
     vp = win.viewport
     vp.scene.groups[:] = []                  # the scale figure stands in front
     # A dimension in the scene: the frame then keeps its depth for the

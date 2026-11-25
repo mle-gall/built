@@ -14,7 +14,7 @@ def _activate(win, name):
 
 
 def _window_with_two_scenes(native_host):
-    from core.layers import Layer
+    from built_core.layers import Layer
     from built_core.saved_views import SavedView
 
     win = native_host.window

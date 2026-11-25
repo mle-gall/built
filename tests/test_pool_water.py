@@ -9,7 +9,7 @@ from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Vec3 as QVector3D
 
 from built_core.i18n import tr
-from core.scene import Scene
+from built_core.scene import Scene
 from formats.igz import load_into, save_scene
 from tools.base import ToolContext
 from tools.paint import PaintTool

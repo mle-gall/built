@@ -188,7 +188,7 @@ def test_failed_recipe_leaves_no_orphan_groups(native_host):
     scope: dict = {"__name__": "__ai__"}
     r = ai.run_transactional(vp, (
         "extrude([(0, 0), (1, 0), (1, 1), (0, 1)], 0.0, 0.5, name='Caja')\n"
-        "from core.layers import Layer\n"
+        "from built_core.layers import Layer\n"
         "scene.layers.append(Layer('Huérfana'))\n"
         "raise ValueError('boom')"), scope)
     assert r["error"] is not None and not r["changed"]
@@ -510,7 +510,7 @@ def test_box_helper_builds_a_closed_box(native_host):
         "gs = house(6, 4, origin=(30, 0))\ngroups.append(gs)"),
         {"__name__": "__ai__"})
     assert r["error"] is None
-    from core.group import Group
+    from built_core.group import Group
     added = vp.scene.groups[n0:]
     assert all(isinstance(x, Group) for x in vp.scene.groups)
     # box + house walls, floor, roof (no openings → no carpentry).

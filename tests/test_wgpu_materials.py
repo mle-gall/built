@@ -7,7 +7,7 @@ from built_core import source_arrays
 from built_render import material_texture_array
 from built_render import SurveyRaster
 from built_core import Vec3 as QVector3D
-from core.mesh import Mesh
+from built_core.mesh import Mesh
 
 
 def mesh_with(attrs):

@@ -147,7 +147,7 @@ def test_import_places_the_orthomosaic_on_the_datum(monkeypatch, tmp_path):
     src = DATA / "orto_jpeg_tile.tif"
     monkeypatch.setattr(ShellFileDialog, "getOpenFileName",
                         lambda *a, **k: (str(src), ""))
-    monkeypatch.setattr("core.texture.texture_cache_root", lambda: tmp_path)
+    monkeypatch.setattr("built_core.texture.texture_cache_root", lambda: tmp_path)
     host = Host(0, 900, 600, 1., settings=str(tmp_path / "settings"))
     win = host.window
     win.new_document()
@@ -195,7 +195,7 @@ def test_failed_survey_cache_write_preserves_the_document(tmp_path, monkeypatch)
         def fail(*args):
             raise OSError("cache full")
         monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *args: (str(tile), ""))
-        monkeypatch.setattr("core.texture.cache_image", fail)
+        monkeypatch.setattr("built_core.texture.cache_image", fail)
         monkeypatch.setattr("built_render.chrome_dialogs.critical", lambda *args: messages.append(args[-1]))
         host.menu("import:orthomosaic")
         assert messages == ["cache full"] and not host.errors

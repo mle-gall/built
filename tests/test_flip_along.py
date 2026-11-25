@@ -10,8 +10,8 @@ from tests.shell_isolation import native_window, restore_shell_patches  # noqa: 
 import pytest  # noqa: E402
 from built_core import Vec3 as QVector3D
 
-from core.group import Group  # noqa: E402
-from core.mesh import Mesh  # noqa: E402
+from built_core.group import Group  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
 
 
 def V(x, y, z=0.0):

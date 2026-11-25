@@ -5,8 +5,8 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.layers import DEFAULT_LAYER, Layer, assign_layer, layer_of
-from core.scene import Scene
+from built_core.layers import DEFAULT_LAYER, Layer, assign_layer, layer_of
+from built_core.scene import Scene
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from formats import igz
 
@@ -56,8 +56,8 @@ def test_locked_layer_visible_but_unselectable():
 
 
 def test_group_layer_hides_whole_group():
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     scene = Scene()
     g = Group(Mesh())
     g.mesh.add_face([V(0, 0), V(1, 0), V(1, 1), V(0, 1)])
@@ -110,10 +110,10 @@ def test_annotations_take_layers_like_any_entity(tmp_path):
     fountain, Marco 2026-09-02), unselectable when locked, and the layer
     survives the .igz round trip."""
     from built_core import Vec3 as QVector3D
-    from core.camera import OrbitCamera
-    from core.dimension import Dimension
+    from built_core.camera import OrbitCamera
+    from built_core.dimension import Dimension
     from built_core.saved_views import SavedView
-    from core.textlabel import TextLabel
+    from built_core.textlabel import TextLabel
     from formats import igz as igz_format
 
     scene = Scene()
@@ -166,8 +166,8 @@ def test_hidden_layer_hides_annotations_from_picks():
     (or locked) layer is not under the cursor, exactly like a face."""
     from built_render import AnnotationFont
     from built_core import Vec3 as QVector3D
-    from core.dimension import Dimension
-    from core.textlabel import TextLabel
+    from built_core.dimension import Dimension
+    from built_core.textlabel import TextLabel
     from tests.controller_surface import ControllerSurface as Viewport
 
     scene = Scene()
@@ -212,8 +212,8 @@ def test_hidden_layer_hides_annotations_from_picks():
 
 
 def test_assigning_and_releasing_annotations_in_the_native_document(native_question_host):
-    from core.dimension import Dimension
-    from core.textlabel import TextLabel
+    from built_core.dimension import Dimension
+    from built_core.textlabel import TextLabel
     from tests.native_tree import action
     from built_render import chrome_dialogs
     win = native_question_host.window

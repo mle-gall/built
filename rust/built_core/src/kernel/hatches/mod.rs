@@ -267,7 +267,7 @@ fn known(m: &Module<'_>, key: Option<&Obj<'_>>) -> PyResult<bool> {
 }
 
 pub(super) fn register(root: &Module<'_>) -> PyResult<()> {
-    let m = PyModule::new(root.py(), "core.hatches")?;
+    let m = PyModule::new(root.py(), "built_core.hatches")?;
     catalog(&m)?;
     macro_rules! add {($($f:path),*)=>{$(m.add_function(wrap_pyfunction!($f,&m)?)?;)*};}
     add!(

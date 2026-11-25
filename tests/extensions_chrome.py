@@ -1,27 +1,19 @@
 """Drive the real Extensions provider against a private plugin folder and catalogue."""
 from types import SimpleNamespace
 
-from core import extensions
+from built_core import extensions
 from built_core import extension_manager as manager
 from built_render import chrome_sheet
 from built_render import ExtensionsSheet as Extensions
 
 
 class Browser:
-    def __init__(self, monkeypatch, root, entries=(), *, reviewed=None, bundled=(), window=None):
-        def unexpected(url, *_):
-            raise AssertionError(f"Unexpected fixture download {url}")
-
-        monkeypatch.setattr(manager, "download", unexpected)
-        monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: root)
+    def __init__(self, monkeypatch, root, bundled=(), *, window=None):
+        monkeypatch.setattr("built_core.extensions.user_plugins_dir", lambda: root)
         monkeypatch.setattr(extensions, "plugin_dirs", lambda: [root / ".shipped", root])
-        snapshot = manager.CatalogSnapshot(list(entries), reviewed or {}, "2026-10-07", True)
-        monkeypatch.setattr(manager, "load_cached_catalog", lambda: snapshot)
-        monkeypatch.setattr(manager, "refresh_catalog", lambda: snapshot)
         monkeypatch.setattr(manager, "bundled_extensions", lambda: bundled)
         self.ctx = chrome_sheet.Ctx(window or SimpleNamespace(), None)
         self.provider = Extensions()
-        self.provider.cache = root / ".artwork"
         self.read()
 
     def read(self):

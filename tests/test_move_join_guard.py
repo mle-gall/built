@@ -7,12 +7,12 @@ from __future__ import annotations
 
 from built_core import Vec3 as V
 
-from core.group import Group
-from core.history import (CompoundCommand, History, MoveGroupCommand,
+from built_core.group import Group
+from built_core.history import (CompoundCommand, History, MoveGroupCommand,
                           MoveVerticesCommand)
-from core.mesh import Mesh
-from core.scene import Scene
-from core.topology import defects_near, new_defects
+from built_core.mesh import Mesh
+from built_core.scene import Scene
+from built_core.topology import defects_near, new_defects
 
 P = [V(0, 0, 0), V(3, 0, 0), V(3, 4, 0), V(0, 4, 0),
      V(0, 0, 2.6), V(3, 0, 2.6), V(3, 4, 2.6), V(0, 4, 2.6)]

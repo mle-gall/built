@@ -109,7 +109,7 @@ def test_standalone_plugin_can_import_the_native_viewport_and_tool_packages():
     subprocess.run([sys.executable, "-c", """
 from tools.line import LineTool
 from views.viewport import Viewport, DocumentInteraction
-from core.plugin_panels import field
+from built_core.plugin_panels import field
 from views.extension_api import ExtensionApp
 from views import document_controller, document_interaction
 assert Viewport is document_controller.DocumentController

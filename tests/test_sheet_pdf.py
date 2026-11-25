@@ -25,7 +25,7 @@ PT = 72.0 / 25.4
 
 
 def _sheets():
-    from core.composition import (BarraEscala, Composicion, CotaItem, MarcoVista, TextoItem)
+    from built_core.composition import (BarraEscala, Composicion, CotaItem, MarcoVista, TextoItem)
     a = Composicion(name="Plans", paper="A3", landscape=True, border=True, border_style="double")
     a.frames.append(MarcoVista(x_mm=20, y_mm=20, w_mm=120, h_mm=90, scale_n=100.0, view_key="std:top",
                                style="vectorial", show_title=True, title_number="1", title_sheet="A-01",
@@ -71,7 +71,7 @@ def written(tmp_path):
 
 
 def _display(item, contents):
-    from core.composition import MarcoVista
+    from built_core.composition import MarcoVista
     if isinstance(item, MarcoVista):
         return json.loads(NATIVE.sheet_frame_display(item, contents.get(item._doc_key)))
     return json.loads(NATIVE.sheet_item_display(item))
@@ -210,7 +210,7 @@ def test_the_image_export_draws_the_same_page(tmp_path):
 def test_an_image_item_shows_its_shape_and_opacity_in_the_files(tmp_path):
     """sheets::picture: an image item cut to an ellipse at half opacity
     leaves its box's corners paper and blends its middle with the paper."""
-    from core.composition import Composicion, ImagenItem
+    from built_core.composition import Composicion, ImagenItem
     pic = tmp_path / "red.png"
     red = np.zeros((200, 400, 4), np.uint8)
     red[..., 0] = red[..., 3] = 255

@@ -13,9 +13,9 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from core import layers as L
-from core.layers import Layer
-from core.scene import Scene
+from built_core import layers as L
+from built_core.layers import Layer
+from built_core.scene import Scene
 
 
 @pytest.fixture

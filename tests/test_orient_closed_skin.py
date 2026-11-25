@@ -17,11 +17,11 @@ from __future__ import annotations
 from built_core import Vec3 as QVector3D
 
 from built_core import orient
-from core.history import History, MoveVerticesCommand
-from core.mesh import Mesh
+from built_core.history import History, MoveVerticesCommand
+from built_core.mesh import Mesh
 from built_core.orient import orient_outward, signed_volume
-from core.scene import Scene
-from core.topology import _key
+from built_core.scene import Scene
+from built_core.topology import _key
 from tests.test_pushpull_large_solid_cost import (_circle,
                                                   _slab_with_cylinders)
 from tests.test_pushpull_ux import _cube, _push

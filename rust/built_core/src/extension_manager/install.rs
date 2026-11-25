@@ -2,7 +2,7 @@
 //! Validate and stage every member before publishing the new package. Retain
 //! hand-installed copies and restore their original names on a failed update.
 use super::*;
-const MAX_DOWNLOAD: usize = 64 << 20;
+
 const MAX_UNPACKED: u64 = 128 << 20;
 struct Staging(PathBuf);
 impl Drop for Staging {
@@ -132,7 +132,10 @@ fn extract(zip: &Obj, stage: &Path, id: &str) -> PyResult<()> {
 }
 fn payload(py: Python, ext: &Obj, stage: &Path, id: &str) -> PyResult<()> {
     let bundled = ext.getattr("bundled")?.extract::<Option<PathBuf>>()?;
-    let download = s(ext, "download")?;
+    let zipped = bundled
+        .as_ref()
+        .and_then(|p| p.extension())
+        .is_some_and(|e| e.eq_ignore_ascii_case("zip"));
     let data = if let Some(local) = bundled {
         if !local.exists() {
             return Err(err(format!("'{id}' is not shipped with this Built.")));
@@ -148,17 +151,13 @@ fn payload(py: Python, ext: &Obj, stage: &Path, id: &str) -> PyResult<()> {
             }
             return Ok(());
         }
-        PyBytes::new(py, &fs::read(local)?)
-    } else {
-        let data = module(py)?
-            .call_method1("download", (&download, MAX_DOWNLOAD))?
-            .cast_into::<PyBytes>()?;
-        if digest(py, data.as_bytes())? != s(ext, "sha256")? {
-            return Err(err(format!(
-                "Checksum mismatch for '{id}'; nothing was installed."
-            )));
+        let bytes = fs::read(local)?;
+        if digest(py, &bytes)? != s(ext, "sha256")? {
+            return Err(err("Checksum mismatch for local extension"));
         }
-        data
+        PyBytes::new(py, &bytes)
+    } else {
+        return Err(err("A local extension file or directory is required."));
     };
     let stream = py.import("io")?.call_method1("BytesIO", (&data,))?;
     let zip = py.import("zipfile")?;
@@ -168,14 +167,8 @@ fn payload(py: Python, ext: &Obj, stage: &Path, id: &str) -> PyResult<()> {
         archive.call_method0("close")?;
         return result;
     }
-    if download
-        .split(['?', '#'])
-        .next()
-        .unwrap_or("")
-        .to_ascii_lowercase()
-        .ends_with(".zip")
-    {
-        return Err(err(format!("'{id}' did not download a valid ZIP package.")));
+    if zipped {
+        return Err(err("Invalid local ZIP package."));
     }
     if data.as_bytes().is_empty() || data.as_bytes().contains(&0) {
         return Err(err(format!("'{id}' is not a Python extension file.")));
@@ -183,16 +176,11 @@ fn payload(py: Python, ext: &Obj, stage: &Path, id: &str) -> PyResult<()> {
     fs::write(stage.join("__init__.py"), data.as_bytes())?;
     Ok(())
 }
-fn perform(
-    extension: &Obj,
-    confirm: Option<&Obj>,
-    catalog: Option<&Obj>,
-    moves: &mut Moves,
-) -> PyResult<()> {
+fn perform(extension: &Obj, confirm: Option<&Obj>, moves: &mut Moves) -> PyResult<()> {
     let py = extension.py();
     let id = s(extension, "id")?;
     require_id(&id)?;
-    if !catalog::compatible_with_current(extension)? {
+    if !metadata::compatible_with_current(extension)? {
         return Err(err(format!(
             "'{id}' requires Built {} or later.",
             s(extension, "minimum_version")?
@@ -212,7 +200,7 @@ fn perform(
     let stage = Staging(dir.join(format!(".{id}-{}", crate::builtproject::manifest::new_id())));
     fs::create_dir(&stage.0)?;
     payload(py, extension, &stage.0, &id)?;
-    let copies = files::copies(py, &id, &stage.0, catalog)?;
+    let copies = files::copies(py, &id, &stage.0)?;
     if !copies.is_empty() {
         let accept = match confirm {
             None => false,
@@ -232,7 +220,7 @@ fn perform(
             moves.move_aside(&p)?;
         }
     }
-    let metadata = serde_json::json!({"id":id,"version":s(extension,"version")?,"sha256":s(extension,"sha256")?,"download":s(extension,"download")?});
+    let metadata = serde_json::json!({"id":id,"version":s(extension,"version")?,"sha256":s(extension,"sha256")?});
     fs::write(
         stage.0.join("extension.json"),
         serde_json::to_vec_pretty(&metadata).unwrap(),
@@ -255,7 +243,7 @@ fn perform(
     moves.done = true;
     if backup.exists() {
         if let Err(e) = fs::remove_dir_all(&backup) {
-            catalog::warn(
+            metadata::warn(
                 py,
                 &format!(
                     "could not remove replaced extension backup {}: {e}",
@@ -266,25 +254,15 @@ fn perform(
     }
     Ok(())
 }
-#[pyfunction(signature=(extension,confirm_manual_copies=None,catalog_ids=None))]
-fn install_extension(
-    extension: &Obj,
-    confirm_manual_copies: Option<&Obj>,
-    catalog_ids: Option<&Obj>,
-) -> PyResult<()> {
+#[pyfunction(signature=(extension,confirm_manual_copies=None))]
+fn install_extension(extension: &Obj, confirm_manual_copies: Option<&Obj>) -> PyResult<()> {
     let _guard = edit_lock(extension.py())?;
-    perform(
-        extension,
-        confirm_manual_copies,
-        catalog_ids,
-        &mut Moves::new(),
-    )
+    perform(extension, confirm_manual_copies, &mut Moves::new())
 }
-#[pyfunction(signature=(extension,confirm_manual_copies=None,catalog_ids=None))]
+#[pyfunction(signature=(extension,confirm_manual_copies=None))]
 fn replace_hand_installed<'p>(
     extension: &Obj<'p>,
     confirm_manual_copies: Option<&Obj>,
-    catalog_ids: Option<&Obj>,
 ) -> PyResult<Vec<Obj<'p>>> {
     let _guard = edit_lock(extension.py())?;
     let py = extension.py();
@@ -297,10 +275,38 @@ fn replace_hand_installed<'p>(
         }
     }
     let own = moves.entries.iter().map(|(_, p)| p.clone()).collect();
-    perform(extension, confirm_manual_copies, catalog_ids, &mut moves)?;
+    perform(extension, confirm_manual_copies, &mut moves)?;
     paths(py, own)
 }
+#[pyfunction]
+fn install_local_file(py: Python<'_>, source: PathBuf) -> PyResult<()> {
+    if !source.is_file()
+        || !source
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("zip"))
+    {
+        return Err(err("Choose a local Python file or ZIP package."));
+    }
+    let id = source
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| err("Invalid filename"))?;
+    require_id(id)?;
+    let class = module(py)?.getattr("Extension")?;
+    let record = class.call1((
+        id,
+        "local",
+        examples::bundle_hash(py, &source)?,
+        version(py)?,
+        PyDict::new(py),
+        PyDict::new(py),
+        &source,
+    ))?;
+    install_extension(&record, None)
+}
 pub(super) fn register(m: &Bound<PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(install_local_file, m)?)?;
     m.add_function(wrap_pyfunction!(install_extension, m)?)?;
     m.add_function(wrap_pyfunction!(replace_hand_installed, m)?)
 }

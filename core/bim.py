@@ -217,7 +217,7 @@ def _group_signature(g, base=None, placements=None) -> tuple:
     that mesh's mutation serial, the composed matrix and whether it is
     tagged (a tagged descendant is left out). Equal signatures measure the
     same."""
-    from core.geometry_arrays import owned_placements
+    from built_core.geometry_arrays import owned_placements
     if placements is None:
         placements = owned_placements(g, base)
     tag = tuple(sorted((k, repr(v)) for k, v in (g.ifc or {}).items()))
@@ -232,7 +232,7 @@ def _group_signature(g, base=None, placements=None) -> tuple:
 
 def _untagged_part(g, excluded=()):
     """``g`` with its tagged descendants pruned — a stand-in
-    :func:`core.group.world_mesh` folds like the group itself."""
+    :func:`built_core.group.world_mesh` folds like the group itself."""
     from types import SimpleNamespace
     return SimpleNamespace(
         mesh=g.mesh, xform=getattr(g, "xform", None),
@@ -248,7 +248,7 @@ def _tagged_group_faces(g, base, excluded=()) -> list:
         return list(g.mesh.faces)
     from types import SimpleNamespace
 
-    from core.group import world_mesh
+    from built_core.group import world_mesh
     from built_core.mesh import Mesh
     part = _untagged_part(g, excluded)
     if base is not None:
@@ -288,7 +288,7 @@ def _face_tags_in(mesh, memo, seen) -> dict:
         cached = mesh.__dict__.get('_bim_tag_indices')
         if cached is not None and cached[0] == facts_key:
             return cached[1]
-        from core.geometry_arrays import face_attributes
+        from built_core.geometry_arrays import face_attributes
         for index, attrs in enumerate(face_attributes(mesh)):
             tag = attrs.get("ifc")
             if tag:
@@ -338,7 +338,7 @@ def collect_objects(scene, memo: dict | None = None) -> list[dict]:
             if not found:
                 continue            # most groups: no matrix to compose
             m = _compose(base, getattr(g, "xform", None))
-            from core.geometry_arrays import selected_arrays, quantities, face_attributes
+            from built_core.geometry_arrays import selected_arrays, quantities, face_attributes
             attributes = face_attributes(g.mesh)
             for obj_id, (ftag, indices) in sorted(
                     found.items(), key=lambda kv: kv[0] or 0):
@@ -356,7 +356,7 @@ def collect_objects(scene, memo: dict | None = None) -> list[dict]:
                     "tag_id": obj_id,
                 })
             continue
-        from core.geometry_arrays import owned_placements
+        from built_core.geometry_arrays import owned_placements
         placements = list(owned_placements(g, base))
         sig = None
         if memo is not None:
@@ -368,7 +368,7 @@ def collect_objects(scene, memo: dict | None = None) -> list[dict]:
                 continue
         # Quantities are world-space, and a component's nested placements
         # are part of the object being measured.
-        from core.geometry_arrays import world_arrays, placement_quantities
+        from built_core.geometry_arrays import world_arrays, placement_quantities
         geometry = lambda g=g, placements=placements: world_arrays(g, placements=placements)
         area, _, volume, _, _ = placement_quantities(placements)
         obj = {
@@ -589,7 +589,7 @@ def class_quantities(ifc_class: str, faces):
 def class_quantities_arrays(ifc_class, arrays):
     """Class quantities from placed rings; no Python geometry is constructed."""
     import numpy as np
-    from core.geometry_arrays import Arrays, assembled, measurements
+    from built_core.geometry_arrays import Arrays, assembled, measurements
     a = arrays if isinstance(arrays, Arrays) else assembled(arrays)
     unit = METRADO_UNIT.get(ifc_class, "m2")
     data = measurements(a)

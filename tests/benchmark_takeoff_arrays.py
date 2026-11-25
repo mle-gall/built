@@ -22,7 +22,7 @@ def main():
     parser.add_argument('--reference', type=Path, help='baseline quantity JSON to compare')
     parser.add_argument('--inspector-repeats', '--tray-repeats', type=int, default=1)
     args = parser.parse_args()
-    from core.scene import Scene
+    from built_core.scene import Scene
     from core.bim import collect_objects, object_quantities
     from formats.igz import load_into
     scene = Scene()
@@ -60,7 +60,7 @@ def main():
         print('quantity mismatches:', mismatches, flush=True)
         if mismatches:
             raise AssertionError('quantities differ from the reference')
-    from core.history import History
+    from built_core.history import History
     from built_core import InspectorTakeoff
     history = History(scene)
     for repeat in range(args.inspector_repeats):

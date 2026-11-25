@@ -18,10 +18,10 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.history import History
-from core.mesh import Mesh
-from core.scene import Scene
-from core.topology import (_interior_point, _loop_inside_loop,
+from built_core.history import History
+from built_core.mesh import Mesh
+from built_core.scene import Scene
+from built_core.topology import (_interior_point, _loop_inside_loop,
                            _point_inside_2d, heal_overlapping_faces)
 from built_core.triangulate import plane_axes
 from tools.offset import OffsetTool

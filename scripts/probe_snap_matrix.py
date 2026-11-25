@@ -127,7 +127,7 @@ def _round(v: float) -> float:
 
 
 def _build_scene(vp, kind: str) -> None:
-    from core.scene import Scene
+    from built_core.scene import Scene
     if getattr(vp.scene, "edit_group", None) is not None:
         vp.end_group_edit()
     vp.scene = Scene()
@@ -175,7 +175,7 @@ def _build_turned_edit(vp, kind: str) -> None:
     """A turned context open for editing: its own slab (a face) and an
     edge 1.5 m out along its local +X, both built in local coordinates and
     placed by the turn — the geometry a local-axes change must answer to."""
-    from core.group import Group
+    from built_core.group import Group
     from built_core.mesh import Mesh
     P = QVector3D
     local = Mesh()
@@ -284,7 +284,7 @@ def run(out_path: str, radii=RADII_PX, directions: int = 16,
                                               vp._acquired_point = QVector3D(*acq)
                                               vp._encouraged = [QVector3D(*acq)]
                                           if lock == "shift-x":
-                                              from core.snap import COLOR_AXIS_X
+                                              from built_core.snap import COLOR_AXIS_X
                                               vp._shift_lock = (QVector3D(1.0, 0.0, 0.0),
                                                                 COLOR_AXIS_X)
                                           elif lock is not None:

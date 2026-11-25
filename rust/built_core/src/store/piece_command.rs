@@ -149,7 +149,7 @@ fn copy_part<'p>(faces: &Obj<'p>, edges: &Obj<'p>) -> PyResult<Obj<'p>> {
         let mut holes = f.getattr("holes")?;
         if holes.len()? > 1 {
             holes = py
-                .import("core.topology")?
+                .import("built_core.topology")?
                 .call_method1("_maximal_holes", (holes,))?;
         }
         counts.push(1 + holes.len()?);
@@ -281,7 +281,7 @@ fn inherited(children: &[Obj], parts: &[(Obj, Obj)]) -> PyResult<Vec<Option<Stri
 #[pyfunction]
 fn split_into_pieces<'p>(group: &Obj<'p>) -> PyResult<Vec<Obj<'p>>> {
     let py = group.py();
-    let api = py.import("core.group")?;
+    let api = py.import("built_core.group")?;
     let mesh = group.getattr("mesh")?;
     let children = items(&group.getattr("children")?)?;
     let frame = api.call_method1("PlacementProxy", (&mesh,))?;

@@ -1,9 +1,9 @@
 import built_core
 """Link identities belong to source placements, independent of labels and reloads."""
 import pytest
-from core import links
-from core.group import Group, iter_placements
-from core.scene import Scene
+from built_core import links
+from built_core.group import Group, iter_placements
+from built_core.scene import Scene
 from formats import igz
 from built_core import Matrix4 as QMatrix4x4
 
@@ -172,7 +172,7 @@ def test_source_only_skips_nested_file_before_selecting(tmp_path, monkeypatch):
 def test_bridge_source_save_updates_one_binary_mesh_in_resident_scene(tmp_path, monkeypatch):
     from types import SimpleNamespace
     from built_core import Vec3 as V
-    from core.history import History
+    from built_core.history import History
     from plugins.ai_bridge import _Bridge
     from tests.test_wgpu_updates import assert_matches_fresh_pack
     from built_core import pack_scene

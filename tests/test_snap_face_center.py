@@ -13,8 +13,8 @@ from types import SimpleNamespace
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.mesh import Mesh
-from core.snap import COLOR_ON_FACE, compute_snap, face_center_of_face
+from built_core.mesh import Mesh
+from built_core.snap import COLOR_ON_FACE, compute_snap, face_center_of_face
 
 
 def V(x, y, z=0.0):
@@ -193,7 +193,7 @@ def test_an_l_shaped_face_offers_no_centre():
 
 
 def test_a_groups_face_offers_its_centre_where_the_group_stands():
-    from core.group import Group
+    from built_core.group import Group
     from tools.rust_tools import LineTool
     vp = _offscreen_vp()
     vp.camera.target = V(6, 5, 0)
@@ -214,7 +214,7 @@ def test_a_groups_face_offers_its_centre_where_the_group_stands():
 
 
 def test_face_center_is_named_everywhere_it_must_be():
-    from core.inference import InferenceEngine
+    from built_core.inference import InferenceEngine
     from tools.scale import ScaleTool
     from tests.controller_surface import ControllerSurface as Viewport
     import json
@@ -278,7 +278,7 @@ def test_selected_faces_show_their_centres_as_dots():
 
 
 def test_a_selected_l_and_a_selected_group_offer_no_dots():
-    from core.group import Group
+    from built_core.group import Group
     vp = _offscreen_vp()
     el = vp.scene.mesh.add_face([V(0, 0), V(3, 0), V(3, 1), V(1, 1), V(1, 3), V(0, 3)])
     mesh = Mesh()
@@ -310,7 +310,7 @@ def _marker_box(vp, kind):
     ``kind`` (its tip left out)."""
     from built_core import Input
     from built_render import AnnotationCanvas
-    from core.snap import SnapResult
+    from built_core.snap import SnapResult
     vp._SNAP_LABELS = {}                               # no tip text
     painter = AnnotationCanvas(200, 200, 200)
     vp._world_to_pixel = lambda _p: (100.0, 100.0)

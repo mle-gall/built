@@ -12,10 +12,10 @@ from __future__ import annotations
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core.group import Group, copy_group
-from core.history import ExplodeGroupCommand, History
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group, copy_group
+from built_core.history import ExplodeGroupCommand, History
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 UVW = [0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0]
 
@@ -69,8 +69,8 @@ def test_explode_of_a_classic_group_leaves_the_texture_map_alone():
 
 def test_exploded_copy_preserves_projected_pbr_on_both_sides():
     import pytest
-    from core.materials import Material
-    from core.texture import face_uv_axes
+    from built_core.materials import Material
+    from built_core.texture import face_uv_axes
 
     g = _textured_group()
     face = g.mesh.faces[0]

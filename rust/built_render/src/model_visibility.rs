@@ -81,7 +81,7 @@ fn change_visibility(win: &Bound<'_, PyAny>, verb: &str) -> PyResult<()> {
             for (module, name) in [
                 ("built_core.mesh", "Edge"),
                 ("built_core.mesh", "Face"),
-                ("core.group", "Group"),
+                ("built_core.group", "Group"),
             ] {
                 add_hidden(&out, matching(&selection, module, name)?.as_any(), &hidden)?;
             }
@@ -110,7 +110,7 @@ fn change_visibility(win: &Bound<'_, PyAny>, verb: &str) -> PyResult<()> {
     vp.call_method0("update")?;
     let vars = PyDict::new(py);
     let (msg, ms) = if hide {
-        let objs = matching(&targets, "core.group", "Group")?.len();
+        let objs = matching(&targets, "built_core.group", "Group")?.len();
         let faces = matching(&targets, "built_core.mesh", "Face")?.len();
         vars.set_item("objects", objs)?;
         vars.set_item("faces", faces)?;

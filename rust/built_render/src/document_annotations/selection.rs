@@ -219,7 +219,7 @@ fn draw_selected_face_centers(v: &Obj, painter: &Obj) -> PyResult<()> {
     p.pen(&p.rgba([255, 255, 255, 230])?, 2.5)?;
     p.brush(
         &p.tint(
-            py.import("core.snap")?
+            py.import("built_core.snap")?
                 .getattr("COLOR_ON_FACE")?
                 .extract()?,
             0.85,
@@ -286,7 +286,7 @@ fn ghost_edge_points<'py>(scene: &Obj<'py>) -> PyResult<Obj<'py>> {
 fn box_edges<'py>(frame: &Obj<'py>, lo: &Obj<'py>, hi: &Obj<'py>) -> PyResult<Bound<'py, PyBytes>> {
     let py = frame.py();
     let corners = py
-        .import("core.group")?
+        .import("built_core.group")?
         .call_method1("oriented_box_corners", (frame, lo, hi))?;
     let mut out = Vec::with_capacity(72);
     for i in 0..8 {

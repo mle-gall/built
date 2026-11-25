@@ -19,11 +19,11 @@ import built_core as NATIVE  # noqa: E402
 
 def _scene():
     from built_core import Vec3 as V
-    from core.group import Group
-    from core.layers import Layer
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.layers import Layer
+    from built_core.mesh import Mesh
     from built_core.saved_views import SavedView
-    from core.scene import Scene
+    from built_core.scene import Scene
     s = Scene()
     for name, folder in (("Muros", "Arq"), ("Losa", "Arq"), ("Mobiliario", "Int"), ("Ejes", None),
                          ("Rejas", "Int"), ("Notas", None)):

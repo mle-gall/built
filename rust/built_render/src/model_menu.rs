@@ -189,7 +189,7 @@ pub fn run_model_menu(win: &Bound<'_, PyAny>, id: &str) -> PyResult<bool> {
     match entry.handler {
         Handler::PluginsFolder => {
             let py = win.py();
-            let folder = py.import("core.extensions")?.call_method0("user_plugins_dir")?;
+            let folder = py.import("built_core.extensions")?.call_method0("user_plugins_dir")?;
             std::fs::create_dir_all(folder.extract::<std::path::PathBuf>()?)?;
             py.import("built_core.desktop_open")?.call_method1("open_url", (folder,))?
         }

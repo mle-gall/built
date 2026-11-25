@@ -74,7 +74,7 @@ def answers(L):
 
 
 def test_the_tag_constructor_cleans_as_the_python_did():
-    from core import layers
+    from built_core import layers
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     got = json.loads(json.dumps(answers(layers)))
     bad = [i for i, (g, w) in enumerate(zip(got, want)) if g != w]
@@ -83,7 +83,7 @@ def test_the_tag_constructor_cleans_as_the_python_did():
 
 if __name__ == "__main__" and "--write" in sys.argv:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from core import layers
+    from built_core import layers
     data = answers(layers)
     GOLDEN.parent.mkdir(exist_ok=True)
     GOLDEN.write_bytes(gzip.compress(json.dumps(data).encode(), mtime=0))

@@ -16,7 +16,7 @@ from built_core import Input as Qt  # noqa: E402
 from built_core import Vec3 as QVector3D, Vec4 as QVector4D
 
 
-from core.camera import (OrbitCamera, focal_from_fov,  # noqa: E402
+from built_core.camera import (OrbitCamera, focal_from_fov,  # noqa: E402
                          fov_from_focal, frame_rect)
 from built_core.saved_views import SavedView  # noqa: E402
 
@@ -182,7 +182,7 @@ def test_frame_is_the_largest_centred_rectangle():
 # ---- Kept by scenes and by the document -------------------------------------------
 
 def _Scene():
-    from core.scene import Scene
+    from built_core.scene import Scene
     return Scene()
 
 
@@ -423,7 +423,7 @@ def test_scene_menus_offer_camera_settings(native_host):
 
 
 def test_take_camera_keeps_only_the_camera():
-    from core.scene import Scene
+    from built_core.scene import Scene
     scene = Scene()
     cam = _level_camera()
     view = SavedView("Vista", hidden_layers=["Muebles"])
@@ -447,7 +447,7 @@ def test_replaced_scene_with_same_name_ends_writeback(native_host):
     assert not a.lens and not any(v.lens for v in scene.saved_views)
 
 def test_a_picture_uses_the_largest_part_of_the_sensor_of_its_shape():
-    from core.camera import FULL_FRAME, sensor_picture_height
+    from built_core.camera import FULL_FRAME, sensor_picture_height
     # Narrower than 3:2 (the usual view): the whole height.
     assert sensor_picture_height(FULL_FRAME, 1.4) == 24.0
     # 16:9 on a 3:2 sensor: the whole width, less height — as a camera films.
@@ -456,7 +456,7 @@ def test_a_picture_uses_the_largest_part_of_the_sensor_of_its_shape():
 
 
 def test_the_same_lens_sees_narrower_on_a_smaller_sensor():
-    from core.camera import SENSORS
+    from built_core.camera import SENSORS
     cam = OrbitCamera()
     cam.set_aspect(1400, 1000)                     # narrower than 3:2
     ff = cam.fov_for_focal(50.0)
@@ -476,7 +476,7 @@ def test_the_same_lens_sees_narrower_on_a_smaller_sensor():
 
 
 def test_the_sensor_is_kept_with_the_lens():
-    from core.camera import SENSORS
+    from built_core.camera import SENSORS
     cam = OrbitCamera()
     assert "sensor" not in cam.lens_dict()           # full frame: nothing
     cam.set_sensor(SENSORS["micro_four_thirds"])
@@ -485,7 +485,7 @@ def test_the_sensor_is_kept_with_the_lens():
     other.apply_lens(cam.lens_dict())
     assert other.sensor_size() == (17.3, 13.0)
     # A scene keeps it, and an old scene goes back to full frame.
-    from core.scene import Scene
+    from built_core.scene import Scene
     raw = SavedView.capture("V", Scene(), cam).to_dict()
     assert raw["lens"]["sensor"] == [17.3, 13.0]
     SavedView.from_dict(raw).apply(Scene(), other)
@@ -544,7 +544,7 @@ def test_typing_the_lens_with_zoom_on(native_host):
     _type(native_host, "72,5°")
     assert cam.fov_deg == pytest.approx(72.5)
     # The sensor counts: 35mm on APS-C is a narrower view.
-    from core.camera import SENSORS
+    from built_core.camera import SENSORS
     cam.set_sensor(SENSORS["aps_c"])
     _type(native_host, "35mm")
     assert cam.focal_mm == pytest.approx(35.0, abs=0.01)

@@ -12,8 +12,8 @@ from __future__ import annotations
 from built_core import ScreenPoint, Input
 from built_core import Vec3 as QVector3D
 
-from core.history import AddEdgeCommand, History
-from core.scene import Scene
+from built_core.history import AddEdgeCommand, History
+from built_core.scene import Scene
 from tools.base import ToolContext
 
 _FAILED = ("Follow Me: could not sweep along that path "
@@ -102,10 +102,10 @@ def test_a_sweep_that_raises_keeps_the_previous_step_and_redo(
         mesh.add_edge(V(5, 5, 5), V(5, 5, 5))       # …and the engine raises
 
     # Both backends enter the same keyed command.
-    import core.sweep
-    from core.history import SnapshotMutation
+    import built_core.sweep
+    from built_core.history import SnapshotMutation
     monkeypatch.setattr(
-        core.sweep, "build_sweep_face",
+        built_core.sweep, "build_sweep_face",
         lambda mesh, key, pts, closed, failed: SnapshotMutation(
             lambda scene: broken(scene.mesh, next(
                 f for f in scene.mesh.faces if f.key == key), pts, closed)))

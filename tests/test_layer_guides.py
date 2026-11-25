@@ -28,17 +28,17 @@ from types import SimpleNamespace
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core import layers as L
-from core.guide import Guide
-from core.dimension import Dimension
-from core.history import (AddDimensionCommand, AddGuideCommand,
+from built_core import layers as L
+from built_core.guide import Guide
+from built_core.dimension import Dimension
+from built_core.history import (AddDimensionCommand, AddGuideCommand,
                           AddTextLabelCommand, AssignLayerCommand,
                           DeleteLayerCommand, History, MakeGroupCommand)
-from core.textlabel import TextLabel
+from built_core.textlabel import TextLabel
 from built_core.image_plane import ImagePlane
-from core.layers import DEFAULT_LAYER, Layer, layer_of
-from core.purge import layer_carriers, used_layers
-from core.scene import Scene
+from built_core.layers import DEFAULT_LAYER, Layer, layer_of
+from built_core.purge import layer_carriers, used_layers
+from built_core.scene import Scene
 
 
 def V(x, y, z=0.0):
@@ -228,7 +228,7 @@ def test_select_content_of_a_layer_takes_its_guides_and_images(native_host):
 
 @pytest.mark.parametrize("circle", [False, True])
 def test_inspector_moves_a_guide_to_a_tag_and_undoes_it(native_host, circle):
-    from core.guide import GuideCircle
+    from built_core.guide import GuideCircle
     from tests.native_tree import action, tag_picker
     scene = native_host.viewport.scene
     scene.layers.append(Layer("Guías"))
@@ -357,18 +357,18 @@ def test_the_automatic_layers_take_the_interface_language():
 
 
 def test_active_layer_small_edits_never_walk_existing_groups(monkeypatch):
-    from core.history import AddEdgeCommand, SnapshotCompound
+    from built_core.history import AddEdgeCommand, SnapshotCompound
     scene = _scene_with('Work')
     built_core.tag_edits.set_active(scene, 'Work')
     history = History(scene)
-    from core.purge import iter_groups
+    from built_core.purge import iter_groups
     def bounded(groups):
         assert not groups, 'per-edit scan of existing groups'
         return iter_groups(groups)
     # A sentinel group makes the old all-document path fail regardless of speed.
-    from core.group import Group
+    from built_core.group import Group
     scene.groups.append(Group(name='unrelated'))
-    monkeypatch.setattr('core.purge.iter_groups', bounded)
+    monkeypatch.setattr('built_core.purge.iter_groups', bounded)
     for command in (SnapshotCompound([AddEdgeCommand(V(0, 0, 0), V(1, 0, 0))]),
                     AddGuideCommand(Guide(V(0, 0, 0)))):
         history.execute(command)

@@ -96,7 +96,7 @@ impl GroupGeometry {
 
     fn build<'py>(&self, scene: &Obj<'py>, component: bool, name: &Obj<'py>) -> PyResult<Obj<'py>> {
         let py = scene.py();
-        let facade = py.import("core.group")?;
+        let facade = py.import("built_core.group")?;
         let mesh_api = py.import("built_core.mesh")?;
         let frame = scene.getattr("drawing_frame").ok();
         let mut origin = DVec3::ZERO;
@@ -284,7 +284,7 @@ fn copy_children<'py>(api: &Obj<'py>, group: &Obj<'py>) -> PyResult<Vec<Obj<'py>
 
 #[pyfunction]
 pub(crate) fn unique_placement(group: &Obj<'_>) -> PyResult<()> {
-    let api = group.py().import("core.group")?.into_any();
+    let api = group.py().import("built_core.group")?.into_any();
     if api.call_method1("_is_link", (group,))?.is_truthy()? {
         return Ok(());
     }
@@ -374,7 +374,7 @@ pub(crate) fn lift_placements<'py>(
     } else {
         rows(&children)?
     };
-    let api = py.import("core.group")?;
+    let api = py.import("built_core.group")?;
     let mut lifted = Vec::with_capacity(children.len());
     for c in &children {
         lifted.push((

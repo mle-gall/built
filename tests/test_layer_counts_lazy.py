@@ -12,10 +12,10 @@ from collections import Counter
 import pytest
 
 import core._native as _native
-from core import mesh as M
-from core.layers import DEFAULT_LAYER, layer_of
-from core.purge import layer_carriers, layer_counts, used_layers
-from core.scene import Scene
+from built_core import mesh as M
+from built_core.layers import DEFAULT_LAYER, layer_of
+from built_core.purge import layer_carriers, layer_counts, used_layers
+from built_core.scene import Scene
 from formats import igz
 from tests.test_deferred_mesh import _meshes, _random_scene
 
@@ -71,7 +71,7 @@ def test_an_eager_document_counts_as_before(tmp_path):
 
 def test_welded_duplicate_last_layer_and_missing_boundary_edges():
     import numpy as np
-    from core.purge import _count_edges
+    from built_core.purge import _count_edges
 
     pos = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 0]])
     edges = np.array([[0, 1], [1, 3], [0, 3], [0, 1]])
@@ -84,8 +84,8 @@ def test_welded_duplicate_last_layer_and_missing_boundary_edges():
 
 def test_native_inspector_publishes_only_a_complete_current_count(monkeypatch):
     from time import sleep
-    from core import purge
-    from core.history import History
+    from built_core import purge
+    from built_core.history import History
     from built_render import TagCounts
 
     def steps(scene, *, history):

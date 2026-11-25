@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """A guide, a line or an arc facet that pierces the face under the cursor
-snaps as «Intersection» (``core.snap._edge_face_snap``). Before, only edge
+snaps as «Intersection» (``built_core.snap._edge_face_snap``). Before, only edge
 with edge and face with face crossings were offered."""
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 from built_core import Vec3 as V
 
-from core.snap import compute_snap
+from built_core.snap import compute_snap
 
 # The floor z = 0, a square of 4 with a 1x1 hole in the middle.
 OUTER = [V(-2, -2, 0), V(2, -2, 0), V(2, 2, 0), V(-2, 2, 0)]

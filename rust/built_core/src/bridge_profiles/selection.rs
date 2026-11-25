@@ -46,7 +46,7 @@ fn chains<'py>(edges: &[Obj<'py>], limit: usize, py: Python<'py>) -> PyResult<Ve
         pieces.push(piece);
     }
     if pieces.len() > 1 {
-        let key = crate::model::module(py, "core.topology")?.getattr("_key")?;
+        let key = crate::model::module(py, "built_core.topology")?.getattr("_key")?;
         let mut ordered = vec![];
         for piece in pieces {
             let mut first: Option<Obj> = None;
@@ -113,7 +113,7 @@ pub(super) fn profiles_from_selection<'py>(
             loose.push(v)
         }
     }
-    let profile = crate::model::module(py, "core.bridge")?.getattr("Profile")?;
+    let profile = crate::model::module(py, "built_core.bridge")?.getattr("Profile")?;
     let out = PyList::empty(py);
     for f in selected {
         let loops = PyList::empty(py);
@@ -121,7 +121,7 @@ pub(super) fn profiles_from_selection<'py>(
         loops.call_method1("extend", (f.getattr("holes")?,))?;
         out.append(profile.call1((loops, true, f))?)?;
     }
-    let order = crate::model::module(py, "core.sweep")?.getattr("order_path_edges")?;
+    let order = crate::model::module(py, "built_core.sweep")?.getattr("order_path_edges")?;
     for chain in chains(&loose, 2 - out.len(), py)? {
         let result = order.call1((chain,))?;
         if result.is_none() {

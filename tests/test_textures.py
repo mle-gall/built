@@ -11,9 +11,9 @@ from built_render import SurveyRaster
 from tests.raster_samples import solid_raster
 from built_core import Vec3 as QVector3D
 
-from core.history import History, SetFaceColorCommand, SetFaceTextureCommand
-from core.scene import Scene
-from core.texture import Texture
+from built_core.history import History, SetFaceColorCommand, SetFaceTextureCommand
+from built_core.scene import Scene
+from built_core.texture import Texture
 from formats import igz
 from formats import obj as obj_format
 import tests.test_fuzz_engine as F
@@ -322,7 +322,7 @@ def test_planar_uv_rotation_and_scale():
 def test_texture_rotation_round_trips_igz(tmp_path):
     from built_core import Vec3 as QVector3D
 
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
 
     scene = Scene()
@@ -479,8 +479,8 @@ def test_a_face_without_texture_coordinates_still_gets_its_texture(tmp_path):
 
 def _textured_group(offset=0.0):
     """A one-face group whose texture carries its own world→UV map."""
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     mesh = Mesh()
     face = mesh.add_face([V(offset, 0, 0), V(offset + 1, 0, 0),
                           V(offset + 1, 1, 0), V(offset, 1, 0)])
@@ -499,7 +499,7 @@ def test_moving_a_group_takes_its_texture_with_it():
     # The map says WHERE IN THE WORLD the image sits, so moving the geometry
     # without it leaves the image behind — and every little facet of a person
     # or a car wheel then samples a different scrap of the photo.
-    from core.history import MoveGroupCommand
+    from built_core.history import MoveGroupCommand
     scene = Scene()
     group, face = _textured_group()
     scene.groups.append(group)
@@ -509,7 +509,7 @@ def test_moving_a_group_takes_its_texture_with_it():
 
 
 def test_rotating_and_scaling_a_group_keep_its_texture():
-    from core.history import RotateGroupCommand, ScaleGroupCommand
+    from built_core.history import RotateGroupCommand, ScaleGroupCommand
     scene = Scene()
     group, face = _textured_group()
     scene.groups.append(group)
@@ -523,7 +523,7 @@ def test_rotating_and_scaling_a_group_keep_its_texture():
 def _rendered_uvs(face):
     """The UVs the viewport computes for ``face`` — fitted map when the
     face carries one, else the planar projection of its CURRENT normal."""
-    from core.texture import face_uv_axes
+    from built_core.texture import face_uv_axes
     gu, cu, gv, cv = face_uv_axes(face.attrs["texture"], face.normal())
     return [(round(QVector3D.dotProduct(gu, p) + cu, 6),
              round(QVector3D.dotProduct(gv, p) + cv, 6))
@@ -538,9 +538,9 @@ def test_rotating_a_group_keeps_a_planar_texture_on_its_face():
     # report's setup: V range 0..1 became -0.933..-0.433). The rotation
     # must pin the projection the face is showing into a fitted map and
     # carry it, like it already does for imported maps.
-    from core.group import Group
-    from core.history import RotateGroupCommand
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.history import RotateGroupCommand
+    from built_core.mesh import Mesh
     mesh = Mesh()
     face = mesh.add_face([V(0.1, 0, 0), V(0.2, 0, 0),
                           V(0.2, 0.2, 0), V(0.1, 0.2, 0)])
@@ -559,7 +559,7 @@ def test_rotating_a_group_keeps_a_planar_texture_on_its_face():
 
 
 def test_undoing_the_move_puts_the_texture_back():
-    from core.history import RotateGroupCommand
+    from built_core.history import RotateGroupCommand
     scene = Scene()
     group, face = _textured_group()
     scene.groups.append(group)
@@ -700,7 +700,7 @@ def test_a_document_bloated_by_old_saves_opens_and_heals(tmp_path, monkeypatch):
 
 
 def test_cache_names_stay_short_and_keep_their_extension(tmp_path, monkeypatch):
-    from core.texture import NAME_LIMIT, cache_image, texture_file_name
+    from built_core.texture import NAME_LIMIT, cache_image, texture_file_name
 
     monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "cache"))
     long_name = "x" * 200 + ".jpeg"
@@ -721,7 +721,7 @@ def test_projection_basis_snaps_to_the_world_axes_like_the_skp_format():
     pool's small countertops: up to 6e-4) must project like the exact
     plane the original program reads back, not turn 90° with the direction of the
     noise."""
-    from core.texture import projection_basis
+    from built_core.texture import projection_basis
     exact = projection_basis((0.0, 0.0, 1.0))
     assert exact == ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0))
     assert projection_basis((2.9e-6, 0.0, 1.0)) == exact           # float32 noise

@@ -97,7 +97,7 @@ impl Store {
         self.revision
     }
 
-    /// The faces `core.topology.fold_nonplanar_faces` folds: more than 3
+    /// The faces `built_core.topology.fold_nonplanar_faces` folds: more than 3
     /// corners over all rings and not `is_planar` at `tolerance`, in list
     /// order. `is_planar`'s double arithmetic, step for step (plane through
     /// the first corner, the farthest one and the one spanning the widest
@@ -128,7 +128,7 @@ impl Store {
     }
 }
 
-/// `core.topology.is_planar` for more than three points.
+/// `built_core.topology.is_planar` for more than three points.
 pub(crate) fn is_planar(pts: &[[f64; 3]], tolerance: f64) -> bool {
     let a = pts[0];
     let rel: Vec<[f64; 3]> = pts.iter().map(|p| [p[0] - a[0], p[1] - a[1], p[2] - a[2]]).collect();

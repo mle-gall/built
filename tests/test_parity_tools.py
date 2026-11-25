@@ -9,7 +9,7 @@ import math
 from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Vec3 as QVector3D
 
-from core.history import (
+from built_core.history import (
     FlipGroupsCommand,
     FlipVerticesCommand,
     History,
@@ -17,9 +17,9 @@ from core.history import (
     MakeUniqueCommand,
     mirror_matrix,
 )
-from core.group import Group
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from tools.base import ToolContext
 
 
@@ -105,7 +105,7 @@ def test_arc_radius_suffix_parses_and_commits():
 # ---- Make Component / Make Unique -------------------------------------------
 
 def test_make_component_shares_definition_with_copies():
-    from core.group import copy_group
+    from built_core.group import copy_group
     scene = Scene()
     hist = History(scene)
     f = scene.mesh.add_face([V(2, 3), V(4, 3), V(4, 5), V(2, 5)])
@@ -239,10 +239,10 @@ def test_group_converts_to_component_in_place():
     # mesh becomes the shared definition under an identity transform (no
     # explode detour, no geometry copied).
     from built_core import Vec3 as QVector3D
-    from core.group import Group
-    from core.history import GroupToComponentCommand, History
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.history import GroupToComponentCommand, History
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
 
     scene = Scene()
     hist = History(scene)

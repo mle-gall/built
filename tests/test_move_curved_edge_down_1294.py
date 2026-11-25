@@ -22,12 +22,12 @@ import math
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edges
-from core.history import (AddFaceCommand, History, MoveVerticesCommand,
+from built_core.edits import build_add_edges
+from built_core.history import (AddFaceCommand, History, MoveVerticesCommand,
                           TagCurveCommand)
 from built_core.orient import is_closed
-from core.scene import Scene
-from core.topology import defects_near
+from built_core.scene import Scene
+from built_core.topology import defects_near
 from tests.test_fuzz_engine import _push, _up
 
 L, W, H = 6.0, 2.0, 3.376

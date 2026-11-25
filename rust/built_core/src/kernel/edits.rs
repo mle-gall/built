@@ -31,7 +31,7 @@ fn list_copy<'p>(items: &Obj<'p>) -> PyResult<List<'p>> {
         .call1((items,))?
         .cast_into()?)
 }
-#[pyclass(name = "_PlanEdges", module = "core.edits")]
+#[pyclass(name = "_PlanEdges", module = "built_core.edits")]
 struct PlanEdges {
     rows: Py<PyList>,
     #[pyo3(get, set)]
@@ -62,7 +62,7 @@ impl PlanEdges {
     }
     fn graph<'p>(&mut self, py: Python<'p>) -> PyResult<Obj<'p>> {
         if self.graph.is_none() {
-            let top = py.import("core.topology")?;
+            let top = py.import("built_core.topology")?;
             let key = match &self.key {
                 Some(k) => k.bind(py).clone(),
                 None => top.getattr("_key")?,
@@ -122,7 +122,7 @@ fn plan_edge_commands<'p>(
         let near = objects(py)?.call_method1("Nearby", (&rows, &faces))?;
         (rows, faces, near)
     };
-    let memo = py.import("core.topology")?.call_method0("KeyMemo")?;
+    let memo = py.import("built_core.topology")?.call_method0("KeyMemo")?;
     edges.setattr("key", &memo)?;
     if !near.is_none() {
         near.setattr("key", &memo)?;
@@ -507,7 +507,7 @@ fn __getattr__<'p>(m: &Bound<'p, PyModule>, name: &str) -> PyResult<Obj<'p>> {
         | "find_duplicate_edge"
         | "is_planar"
         | "plan_edge_split"
-        | "split_edge_in_faces" => "core.topology",
+        | "split_edge_in_faces" => "built_core.topology",
         _ => return Err(PyAttributeError::new_err(name.to_owned())),
     };
     let value = py.import(source)?.getattr(name)?;
@@ -515,7 +515,7 @@ fn __getattr__<'p>(m: &Bound<'p, PyModule>, name: &str) -> PyResult<Obj<'p>> {
     Ok(value)
 }
 pub(super) fn register(root: &Bound<'_, PyModule>) -> PyResult<()> {
-    let m = PyModule::new(root.py(), "core.edits")?;
+    let m = PyModule::new(root.py(), "built_core.edits")?;
     let d = root.getattr("object_drawing")?;
     for (alias, name) in [
         ("_Nearby", "Nearby"),

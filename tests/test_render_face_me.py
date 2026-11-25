@@ -18,9 +18,9 @@ from built_core import Input as Qt
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from built_render import SurveyRaster
 
-from core.group import Group, make_billboard_group  # noqa: E402
-from core.mesh import Mesh  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core.group import Group, make_billboard_group  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from formats.gltf import save_glb  # noqa: E402
 from formats.meshexport import world_faces  # noqa: E402
 

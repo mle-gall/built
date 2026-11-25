@@ -17,9 +17,9 @@ from built_core import ScreenPoint as QPointF, Input as Qt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from built_core import Vec3 as V
 
-from core import render_blender as rb  # noqa: E402
-from core.camera import OrbitCamera  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core import render_blender as rb  # noqa: E402
+from built_core.camera import OrbitCamera  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 
 
 # ---- The data ----------------------------------------------------------------
@@ -104,7 +104,7 @@ def test_a_light_clicked_onto_the_model_is_kept_and_undone(window, tmp_path):
     panel.event("spot", "invoke", None)
     tool = vp.active_tool
     assert tool.uses_snap
-    from core.snap import SnapResult
+    from built_core.snap import SnapResult
     from tools.base import ToolContext
     tool.on_click(ToolContext(viewport=vp, world=V(3, 4, 5.2),
                               screen=QPointF(0, 0), modifiers=Qt.NoModifier,

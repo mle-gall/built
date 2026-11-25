@@ -95,7 +95,7 @@ impl SheetHost {
             let args = PyDict::new(py);
             args.set_item("name", name)?;
             let comp = py
-                .import("core.composition")?
+                .import("built_core.composition")?
                 .getattr("Composicion")?
                 .call((), Some(&args))?;
             comp.getattr("frames")?

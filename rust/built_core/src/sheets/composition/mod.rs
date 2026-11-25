@@ -13,7 +13,7 @@ mod history;
 mod records;
 
 fn api(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("core.composition")
+    py.import("built_core.composition")
 }
 fn num(record: &Obj, key: &str) -> PyResult<f64> {
     record.getattr(key)?.extract()
@@ -53,7 +53,7 @@ pub(crate) fn install(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
     let builtin = py.import("builtins")?;
     let dc = py.import("dataclasses")?;
-    let doc = py.import("core.doc_model")?;
+    let doc = py.import("built_core.doc_model")?;
     let definitions = py
         .import("json")?
         .call_method1("loads", (include_str!("schema.json"),))?
@@ -85,7 +85,7 @@ pub(crate) fn install(m: &Bound<'_, PyModule>) -> PyResult<()> {
         let name: String = name.extract()?;
         let ns = PyDict::new(py);
         let annotations = PyDict::new(py);
-        ns.set_item("__module__", "core.composition")?;
+        ns.set_item("__module__", "built_core.composition")?;
         ns.set_item("__annotations__", &annotations)?;
         for entry in fields.try_iter()? {
             let [k, t, v]: [Obj; 3] = entry?.extract()?;

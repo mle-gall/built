@@ -28,7 +28,7 @@ import pytest
 from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Vec3 as QVector3D
 
-from core.snap import AXIS_COLORS, face_plane_world
+from built_core.snap import AXIS_COLORS, face_plane_world
 
 
 SIZE = 2.0
@@ -63,8 +63,8 @@ def _scene(native_host, grouped=False):
     native_host.resize(1200, 800, 1.0)
     vp = win.viewport
     if grouped:
-        from core.group import Group
-        from core.mesh import Mesh
+        from built_core.group import Group
+        from built_core.mesh import Mesh
         mesh = Mesh()
         _cube(mesh)
         vp.scene.groups.append(Group(mesh, "cubo"))
@@ -478,7 +478,7 @@ def test_shift_holds_the_axis_aligned_from_a_dwelt_point_before_the_first_click(
     assert (snap.guide[0] - centre).length() < 1e-3
     # The base (#1095) draws the kept guide in the colour of the dwelt
     # point's own axis line, not in the colour of the lock.
-    from core.snap import AXIS_COLORS
+    from built_core.snap import AXIS_COLORS
     assert snap.guide_color == AXIS_COLORS["x"]
 
 

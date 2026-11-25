@@ -13,7 +13,7 @@ import pytest
 import built_core as native
 from core import bim_registry
 from built_core import project
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import igz
 from formats import project as storage
 

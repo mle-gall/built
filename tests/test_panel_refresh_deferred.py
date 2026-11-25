@@ -57,7 +57,7 @@ def test_a_burst_of_edits_refreshes_the_visible_panels_once(win, monkeypatch):
 
 
 def test_a_selection_leaves_the_in_model_lists_as_they_are(win, monkeypatch):
-    from core.group import Group
+    from built_core.group import Group
     scene = win.viewport.scene
     group = Group(name="Placed")
     group.xform = Matrix4()
@@ -99,7 +99,7 @@ def test_component_selection_changes_actions_without_rescanning_either_provider(
 
 
 def test_hidden_panels_let_the_previous_document_go(win):
-    from core.group import Group
+    from built_core.group import Group
     from views import wgpu_ui
     group = Group(name="previous-document-marker")
     group.xform = Matrix4()
@@ -125,8 +125,8 @@ def test_hidden_panels_let_the_previous_document_go(win):
 
 
 def browser_model():
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from built_core import Vec3 as V
     from tests.test_project_drawing_filters import Project
 
@@ -151,10 +151,10 @@ def test_a_selection_notice_leaves_the_browser_rows_as_they_are(monkeypatch):
 
 
 def test_a_move_leaves_the_material_swatches_as_they_are(win, monkeypatch):
-    from core import geometry_arrays
-    from core.group import Group
-    from core.mesh import Mesh
-    from core.history import MoveGroupCommand, SetFaceColorCommand
+    from built_core import geometry_arrays
+    from built_core.group import Group
+    from built_core.mesh import Mesh
+    from built_core.history import MoveGroupCommand, SetFaceColorCommand
     from built_core import material_survey
     vp = win.viewport
     mesh = Mesh()
@@ -176,7 +176,7 @@ def test_a_move_leaves_the_material_swatches_as_they_are(win, monkeypatch):
 
 
 def test_a_move_leaves_the_browser_rows_as_they_are(monkeypatch):
-    from core.history import MoveGroupCommand, SetFaceColorCommand
+    from built_core.history import MoveGroupCommand, SetFaceColorCommand
     from built_core import Vec3 as V
     from views import wgpu_ui
     p, group, face = browser_model()
@@ -203,7 +203,7 @@ def test_a_move_leaves_the_browser_rows_as_they_are(monkeypatch):
 
 
 def test_a_geometry_edit_leaves_the_browser_rows_as_they_are(monkeypatch):
-    from core.history import AddEdgeCommand, NativeCommand, SnapshotMutation
+    from built_core.history import AddEdgeCommand, NativeCommand, SnapshotMutation
     from built_core import Vec3 as V
     from views import wgpu_ui
     p, group, _ = browser_model()
@@ -222,7 +222,7 @@ def test_a_geometry_edit_leaves_the_browser_rows_as_they_are(monkeypatch):
 
 
 def test_two_browser_panes_each_receive_a_change_seen_by_the_other():
-    from core.history import MoveGroupCommand, NativeCommand
+    from built_core.history import MoveGroupCommand, NativeCommand
     from built_core import Vec3 as V
     from tests.test_tree_links import _View
     from views import wgpu_ui

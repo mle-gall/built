@@ -8,9 +8,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from core.group import Group, new_uid
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group, new_uid
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from views.document_interaction import _paint_of, _proto_wrapper
 
 

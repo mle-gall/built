@@ -172,7 +172,7 @@ fn face_plane<'py>(a: &Args<'py>) -> Reply<'py> {
     if face.is_none() {
         return Ok(none(py));
     }
-    let face_plane_world = imported(py, "core.snap")?.getattr("face_plane_world")?;
+    let face_plane_world = imported(py, "built_core.snap")?.getattr("face_plane_world")?;
     [_point, normal] = unpack::<2>(&face_plane_world.call1((&face, optional(&group, "xform")?))?)?;
     if normal.is_none() || normal.call_method0("lengthSquared")?.lt(0.5)? {
         return Ok(none(py));
@@ -424,8 +424,8 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     if label.is_none() {
         return Ok(none(py));
     }
-    let fmt_len = imported(py, "core.units")?.getattr("fmt_len")?;
-    let fmt_pair = imported(py, "core.units")?.getattr("fmt_pair")?;
+    let fmt_len = imported(py, "built_core.units")?.getattr("fmt_len")?;
+    let fmt_pair = imported(py, "built_core.units")?.getattr("fmt_pair")?;
     if label.get_item(0)?.eq("edge")? {
         {
             let [part0, part1, part2, part3] = unpack::<4>(&label)?;

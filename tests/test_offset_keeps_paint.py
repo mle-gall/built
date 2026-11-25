@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.history import History
-from core.scene import Scene
+from built_core.history import History
+from built_core.scene import Scene
 from tools.offset import OffsetTool
 
 
@@ -137,16 +137,16 @@ def test_an_impossible_offset_says_so_instead_of_going_silent():
 
 
 def test_the_message_names_the_room_that_is_left():
-    from core.topology import max_offset_distance
+    from built_core.topology import max_offset_distance
     scene = Scene()
     face = _kerb(scene, width=0.5)
     room = max_offset_distance([QVector3D(v) for v in face.vertices],
                                face.normal(), 1.0)
     assert 0.2 < room < 0.26, room          # half of 0.5, minus the tolerance
-    # the readouts format with the units of the BOUND scene (core.units):
+    # the readouts format with the units of the BOUND scene (built_core.units):
     # bind this one (metres), or a millimetre scene an earlier test left
     # bound turns 0.24 m into "240 mm"
-    from core import units
+    from built_core import units
     units.bind_scene(scene)
     try:
         vp = _LoudVP(scene)

@@ -7,10 +7,10 @@ import pytest
 from built_core import Matrix4 as QMatrix4x4
 from core.agent_inspection import InspectionTools
 from core.agent_records import RecordTools
-from core.group import Group
-from core.mesh import Mesh
-from core.scene import Scene
-from core.history import History
+from built_core.group import Group
+from built_core.mesh import Mesh
+from built_core.scene import Scene
+from built_core.history import History
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 

@@ -15,7 +15,7 @@ import pytest
 from built_core import Vec3 as V
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 
-from core.history import GroupToComponentCommand, MakeGroupCommand
+from built_core.history import GroupToComponentCommand, MakeGroupCommand
 
 
 def _box(scene):

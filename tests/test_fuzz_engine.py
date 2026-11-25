@@ -38,12 +38,12 @@ from pathlib import Path
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edges
-from core.group import Group
-from core.history import AddFaceCommand, History
+from built_core.edits import build_add_edges
+from built_core.group import Group
+from built_core.history import AddFaceCommand, History
 from built_core.orient import is_closed, orient_outward, signed_volume
-from core.scene import Scene
-from core.topology import _mesh_is_flat, _on_segment_2d, _strictly_inside_2d
+from built_core.scene import Scene
+from built_core.topology import _mesh_is_flat, _on_segment_2d, _strictly_inside_2d
 from built_core.triangulate import plane_axes
 from tools.pushpull import PushPullTool
 

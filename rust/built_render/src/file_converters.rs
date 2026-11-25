@@ -177,7 +177,7 @@ fn import_skp(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<bool>
 #[pyfunction]
 fn clear_texture_cache(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
-    let backend = py.import("core.texture")?;
+    let backend = py.import("built_core.texture")?;
     let dialogs = py.import("built_render.chrome_dialogs")?;
     let (count, size): (u64, u64) = backend.call_method0("texture_cache_stats")?.extract()?;
     let args = PyDict::new(py);

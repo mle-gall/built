@@ -15,7 +15,7 @@ import pytest  # noqa: E402
 
 pytest.importorskip("openskp")
 
-from core.scene import Scene  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from formats import skp, skp_reader  # noqa: E402
 
 _ID = [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]

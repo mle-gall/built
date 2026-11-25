@@ -8,7 +8,7 @@ lines to the pen by redrawing them at sub-pixel offsets."""
 from types import SimpleNamespace
 
 
-from core.composition import RENDER_DPI, pen_px
+from built_core.composition import RENDER_DPI, pen_px
 from tests.test_composer_canvas import _FakeViewport
 from tests.controller_surface import ControllerSurface as Viewport
 

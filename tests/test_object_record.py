@@ -3,10 +3,10 @@ from copy import deepcopy
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from core import record, bim_registry
-from core.group import Group, copy_group
-from core.mesh import Mesh
-from core.scene import Scene
-from core.history import (History, SetRecordCommand, TagGroupsCommand,
+from built_core.group import Group, copy_group
+from built_core.mesh import Mesh
+from built_core.scene import Scene
+from built_core.history import (History, SetRecordCommand, TagGroupsCommand,
                           UntagGroupsCommand, SetRegistryCommand, SetFaceTagsCommand)
 from core.ifc_identity import ensure_guid
 from formats import igz

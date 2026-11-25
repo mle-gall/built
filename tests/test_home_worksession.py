@@ -9,8 +9,8 @@ from built_core import Input as Qt
 from built_core import Vec3 as QVector3D
 from built_core import project
 from built_core import recent
-from core.scene import Scene
-from core.history import AddEdgeCommand
+from built_core.scene import Scene
+from built_core.history import AddEdgeCommand
 from formats import igz
 from formats import project as storage
 

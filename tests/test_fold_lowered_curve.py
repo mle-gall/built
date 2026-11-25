@@ -14,9 +14,9 @@ import math
 import numpy as np
 from built_core import Vec3 as V
 
-from core.history import History, MoveVerticesCommand
-from core.scene import Scene
-from core.topology import fold_nonplanar_faces
+from built_core.history import History, MoveVerticesCommand
+from built_core.scene import Scene
+from built_core.topology import fold_nonplanar_faces
 
 H, L, D = 2.0, 4.0, 1.5
 

@@ -18,8 +18,8 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.history import AddFaceCommand, History
-from core.scene import Scene
+from built_core.history import AddFaceCommand, History
+from built_core.scene import Scene
 from tools.pushpull import PushPullTool
 
 
@@ -158,15 +158,15 @@ def test_standalone_face_keeps_base():
 # ---- face_is_bordered -------------------------------------------------------
 
 def test_face_is_bordered_detects_embedded():
-    from core.topology import face_is_bordered
+    from built_core.topology import face_is_bordered
     scene, big, small = _embedded_scene()
     assert face_is_bordered(small, scene.faces) is True
     assert face_is_bordered(big, scene.faces) is False  # has free outer edges
 
 
 def test_face_is_bordered_standalone_false():
-    from core.topology import face_is_bordered
-    from core.geometry import Face
+    from built_core.topology import face_is_bordered
+    from built_core.geometry import Face
     f = Face([V(0, 0), V(2, 0), V(2, 2), V(0, 2)])
     assert face_is_bordered(f, [f]) is False
 
@@ -174,7 +174,7 @@ def test_face_is_bordered_standalone_false():
 # ---- faithful end to end: cube → rect on a face → push in = recess ---------
 
 def test_recess_on_real_cube_end_to_end():
-    from core.edits import build_add_edges
+    from built_core.edits import build_add_edges
 
     scene = Scene()
     hist = History(scene)
@@ -216,7 +216,7 @@ def test_repush_top_extends_walls_no_seam():
     """Extrude a square into a box, then push the top up again. The box should
     just get taller — the walls extend in place, leaving no ring of edges at
     the old cap level (the seam the naive 'stack a coplanar strip' produced)."""
-    from core.edits import build_add_edges
+    from built_core.edits import build_add_edges
 
     scene = Scene()
     hist = History(scene)
@@ -254,7 +254,7 @@ def test_repush_top_extends_holed_wall_keeping_opening():
     carrying the window must extend with the rest — keeping its hole and
     leaving no seam at the old cap level (the bug: a holed wall fell back to
     stacking a coplanar strip)."""
-    from core.edits import build_add_edges
+    from built_core.edits import build_add_edges
 
     scene = Scene()
     hist = History(scene)
@@ -305,7 +305,7 @@ def test_repush_top_extends_holed_wall_keeping_opening():
 # ---- solid-aware: a corner step carves the cube ----------------------------
 
 def test_corner_step_notches_adjacent_walls():
-    from core.edits import build_add_edges
+    from built_core.edits import build_add_edges
 
     scene = Scene()
     hist = History(scene)
@@ -353,8 +353,8 @@ def test_corner_step_notches_adjacent_walls():
 
 
 def test_corner_step_leaves_no_orphan_edges():
-    from core.edits import build_add_edges
-    from core.topology import _key, _loop_edges
+    from built_core.edits import build_add_edges
+    from built_core.topology import _key, _loop_edges
 
     scene = Scene()
     hist = History(scene)
@@ -386,8 +386,8 @@ def test_corner_step_leaves_no_orphan_edges():
 
 
 def test_corner_step_splits_corner_vertical_not_deletes_it():
-    from core.edits import build_add_edges
-    from core.topology import same_position
+    from built_core.edits import build_add_edges
+    from built_core.topology import same_position
 
     scene = Scene()
     hist = History(scene)
@@ -426,8 +426,8 @@ def test_stacked_block_side_pushes_stay_clean():
     # base edge sits on that hole (a perpendicular neighbour) and deform the
     # solid cleanly — no leftover strips, no dangling edges — so a second push
     # on the adjacent wall is just as clean.
-    from core.edits import build_add_edges
-    from core.topology import _key, _loop_edges
+    from built_core.edits import build_add_edges
+    from built_core.topology import _key, _loop_edges
 
     scene = Scene()
     hist = History(scene)
@@ -475,7 +475,7 @@ def test_push_through_wall_makes_a_real_hole():
     # A wall (thin box), a window on its front face, pushed past the thickness:
     # the opening punches clean through — the back face gains the same hole and
     # tunnel walls join the two, with no blind floor left inside.
-    from core.edits import build_add_edges
+    from built_core.edits import build_add_edges
 
     scene = Scene()
     hist = History(scene)
@@ -528,7 +528,7 @@ def test_bump_pushed_flush_back_dissolves_to_clean_cube():
     """Extrude a bump out of a wall, then push its front face back level with
     the wall. The pane must merge into the host wall (no seam, no hole, no
     zero-area side walls, no stale vertices) — a pristine cube again."""
-    from core.edits import build_add_edges
+    from built_core.edits import build_add_edges
     from built_core.orient import signed_volume
 
     scene = Scene()

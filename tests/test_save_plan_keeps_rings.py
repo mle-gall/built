@@ -14,8 +14,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest  # noqa: E402
 
 import core._native as _native  # noqa: E402
-from core import mesh as M  # noqa: E402
-from core import topology  # noqa: E402
+from built_core import mesh as M  # noqa: E402
+from built_core import topology  # noqa: E402
 from formats import igz  # noqa: E402
 from tests.test_deferred_mesh import _open  # noqa: E402
 

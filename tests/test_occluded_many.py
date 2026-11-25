@@ -52,8 +52,8 @@ def _scene_points(sc, rng, n):
 def viewport(native_host, request):
     # 4 blocks: the pick index's spans stay under 64 (``_ray_aabb`` per
     # span); 80: past it (the vectorised slab) — both prefilters covered.
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     win = native_host.window
     vp = win.viewport          # rays ask the pick index: no GL needed
     sc = vp.scene
@@ -163,7 +163,7 @@ def test_empty_batch():
 # ---- compute_snap ------------------------------------------------------------
 
 def _snap_scene():
-    from core.scene import Scene
+    from built_core.scene import Scene
     s = Scene()
     for x in range(6):
         s.mesh.add_face([V(x * 0.05, 0, 0), V(x * 0.05 + 0.02, 0, 0),
@@ -173,7 +173,7 @@ def _snap_scene():
 
 @pytest.mark.parametrize("hidden_below", [-1.0, 0.06, 0.13, 0.3])
 def test_compute_snap_picks_the_same_candidate_with_the_batch(hidden_below):
-    from core.snap import compute_snap
+    from built_core.snap import compute_snap
     s = _snap_scene()
     w2p = lambda p: (p.x() * 400.0, p.y() * 400.0)  # noqa: E731
     hidden = lambda p: p.x() < hidden_below          # noqa: E731
@@ -201,7 +201,7 @@ def test_the_kill_switch_keeps_the_rays_one_by_one(native_window, monkeypatch):
     # BUILT_NO_SNAP_FAST=1: compute_snap gets no batch to ask.
     import views.document_interaction as vv
     monkeypatch.setattr(vv, "_NO_SNAP_FAST", True)
-    import core.snap as cs
+    import built_core.snap as cs
     seen = {}
     real = cs.compute_snap
 
@@ -212,7 +212,7 @@ def test_the_kill_switch_keeps_the_rays_one_by_one(native_window, monkeypatch):
     if getattr(vv, "compute_snap", None) is real:
         monkeypatch.setattr(vv, "compute_snap", spy)
     # The snap search lives in the inference engine since the refactor.
-    import core.inference as ci
+    import built_core.inference as ci
     if getattr(ci, "compute_snap", None) is real:
         monkeypatch.setattr(ci, "compute_snap", spy)
     win = native_window

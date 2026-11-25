@@ -7,7 +7,7 @@ cues it never ran:
 * face meets face with no edge between them (#819, «Intersection» along
   the line where a box sinks into a floor) — GL's
   ``Viewport._face_crossing_point``; Metal handed no ``face_crossing``;
-* an edge piercing the face under the cursor (``core.snap._edge_face_snap``)
+* an edge piercing the face under the cursor (``built_core.snap._edge_face_snap``)
   — Metal handed no ``face_outline``;
 * the «Arc midpoint» of an open arc — GL's ``Viewport._arc_midpoints``;
   the Metal snap index fitted the arcs' centres only;
@@ -30,9 +30,9 @@ import pytest
 from built_core import Input
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core.group import Group
-from core.mesh import Mesh
-from core.snap import SnapResult
+from built_core.group import Group
+from built_core.mesh import Mesh
+from built_core.snap import SnapResult
 from tests.headless_gpu import mouse
 from tests.test_.skp_inference_gaps import (  # noqa: F401
     click, move, refresh, use, view)

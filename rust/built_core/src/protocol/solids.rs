@@ -33,7 +33,7 @@ fn intersect_faces<'py>(
     placements: Option<&Obj<'py>>,
 ) -> Reply<'py> {
     let py = history.py();
-    let module = py.import("core.intersect")?;
+    let module = py.import("built_core.intersect")?;
     let scene = history.getattr("scene")?;
     let known = [
         module.getattr("WITH_CONTEXT")?,
@@ -72,7 +72,7 @@ fn intersect_faces<'py>(
 #[pyfunction]
 fn solid_operation<'py>(history: &Obj<'py>, operation: &str, placements: &Obj<'py>) -> Reply<'py> {
     let py = history.py();
-    let m = py.import("core.solids")?;
+    let m = py.import("built_core.solids")?;
     if !m.getattr("OPS")?.contains(operation)? {
         return Err(PyValueError::new_err(operation.to_owned()));
     }
@@ -151,7 +151,7 @@ fn split_into_pieces<'py>(history: &Obj<'py>, placement: &Obj<'py>) -> Reply<'py
     let g = one(history, placement)?;
     let py = history.py();
     let pieces = py
-        .import("core.pieces")?
+        .import("built_core.pieces")?
         .call_method1("split_into_pieces", (&g,))?;
     if !pieces.is_truthy()? {
         return answer(history, &history.getattr("revision")?, false);

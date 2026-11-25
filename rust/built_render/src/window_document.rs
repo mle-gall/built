@@ -383,7 +383,7 @@ impl Bounds {
 #[pyfunction]
 pub fn figure_bounds(scene: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     let py = scene.py();
-    let placement = py.import("core.group")?.getattr("placement_points")?;
+    let placement = py.import("built_core.group")?.getattr("placement_points")?;
     let marked = py.import("built_core.scale_figure")?.getattr("is_marked")?;
     let limit: f64 = py
         .import("built_core.coordinate_frame")?

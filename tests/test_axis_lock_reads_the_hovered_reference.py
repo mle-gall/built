@@ -13,7 +13,7 @@ import pytest
 from built_core import ScreenPoint, Input
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edges
+from built_core.edits import build_add_edges
 from tools.tape import TapeMeasureTool
 
 

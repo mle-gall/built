@@ -19,8 +19,8 @@ import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from built_core import Vec3 as V
 
-from core.history import History, SetPluginDataCommand
-from core.scene import Scene
+from built_core.history import History, SetPluginDataCommand
+from built_core.scene import Scene
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "extensions"
 
@@ -55,7 +55,7 @@ def test_setting_extension_data_is_one_undo_step():
 
 
 def test_a_setup_only_plugin_is_discovered(tmp_path):
-    from core.extensions import discover_plugins
+    from built_core.extensions import discover_plugins
     (tmp_path / "solo_panel.py").write_text(
         "def setup(app):\n    app.called = True\n")
     plugins, errors = discover_plugins([tmp_path])
@@ -66,7 +66,7 @@ def test_a_setup_only_plugin_is_discovered(tmp_path):
 
 @pytest.fixture
 def levels(monkeypatch, request):
-    from core import extensions
+    from built_core import extensions
     monkeypatch.setattr(extensions, "plugin_dirs", lambda: [EXAMPLES])
     return request.getfixturevalue("native_host").window
 
@@ -105,7 +105,7 @@ def _front_parallel(vp):
 
 
 def test_levels_snap_in_a_parallel_elevation_and_say_which(levels):
-    from core.snap import SnapResult
+    from built_core.snap import SnapResult
     win = levels
     vp = win.viewport
     _app(win).set_document_data({"levels": [{"name": "PA", "z": 2.6}],
@@ -128,7 +128,7 @@ def test_levels_snap_in_a_parallel_elevation_and_say_which(levels):
 
 
 def test_levels_guides_turn_off_with_their_checkbox(levels):
-    from core.snap import SnapResult
+    from built_core.snap import SnapResult
     win = levels
     vp = win.viewport
     _app(win).set_document_data({"levels": [{"name": "PA", "z": 2.6}],
@@ -141,7 +141,7 @@ def test_levels_guides_turn_off_with_their_checkbox(levels):
 
 
 def test_a_raising_provider_cannot_take_the_cursor(native_host):
-    from core.snap import SnapResult
+    from built_core.snap import SnapResult
     vp = native_host.window.viewport
 
     def broken(*_a):
@@ -155,7 +155,7 @@ def test_a_provider_is_handed_the_viewport_not_the_engine(native_host):
     """The provider signature stayed ``fn(viewport, snap, px, py)`` across
     the extraction (the rule now lives in ``InferenceEngine``): a plugin
     never learns that there is an engine."""
-    from core.snap import SnapResult
+    from built_core.snap import SnapResult
     vp = native_host.window.viewport
     seen = []
 
@@ -188,14 +188,14 @@ def test_the_example_extensions_ship_but_install_only_on_request(tmp_path,
     (the Extensions menu no longer has a submenu of its own for them), as
     managed extensions: disable and uninstall work on them like on any."""
     from built_core import extension_manager as manager
-    from core import extensions
+    from built_core import extensions
     examples = manager.example_extension_files()
     assert any(p.name == "niveles.py" and title == "Niveles"
                for p, title, _blurb in examples)
     user = tmp_path / "plugins"
     monkeypatch.setattr(extensions, "user_plugins_dir", lambda: user)
     monkeypatch.setattr(extensions, "plugin_dirs", lambda: [user])
-    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: user)
+    monkeypatch.setattr("built_core.extensions.user_plugins_dir", lambda: user)
     assert not extensions.discover_plugins([user])[0]
     niveles = next(e for e in manager.bundled_extensions()
                    if e.id == "niveles")
@@ -226,7 +226,7 @@ def test_an_example_extension_can_be_a_package(tmp_path, monkeypatch):
     (pkg / "__pycache__" / "junk.pyc").write_bytes(b"x")
     monkeypatch.setattr(paths, "app_root", lambda: root)
     user = tmp_path / "plugins"
-    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: user)
+    monkeypatch.setattr("built_core.extensions.user_plugins_dir", lambda: user)
     assert [(p.name, t, b) for p, t, b in manager.example_extension_files()] \
         == [("demo", "Demo", "Two files and a subfolder.")]
     demo, = manager.bundled_extensions()

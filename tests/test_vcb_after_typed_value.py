@@ -13,7 +13,7 @@ import pytest
 from built_core import Vec3 as QVector3D
 
 from built_render import KeyEvent
-from core import units
+from built_core import units
 from built_core import ScreenPoint as QPointF, Input as Qt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 

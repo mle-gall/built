@@ -41,7 +41,7 @@ use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::sync::Arc;
 
-/// `core.mesh._STITCH_TOL`.
+/// `built_core.mesh._STITCH_TOL`.
 pub const STITCH_TOL: f64 = 1e-4;
 
 #[inline]
@@ -110,7 +110,7 @@ fn insert_into_face_loops(rings: &mut [Vec<u32>], v0: u32, v1: u32, mid: u32) ->
     false
 }
 
-/// `core.mesh._shared_edge_index`.
+/// `built_core.mesh._shared_edge_index`.
 pub fn shared_edge_index(lp: &[u32], v0: u32, v1: u32) -> Option<usize> {
     let n = lp.len();
     (0..n).find(|&i| {
@@ -119,7 +119,7 @@ pub fn shared_edge_index(lp: &[u32], v0: u32, v1: u32) -> Option<usize> {
     })
 }
 
-/// `core.mesh._splice_loops`.
+/// `built_core.mesh._splice_loops`.
 pub fn splice_loops(a: &[u32], b: &[u32], v0: u32, v1: u32) -> Option<Vec<u32>> {
     let ia = shared_edge_index(a, v0, v1)?;
     let ib = shared_edge_index(b, v0, v1)?;
@@ -141,7 +141,7 @@ pub fn splice_loops(a: &[u32], b: &[u32], v0: u32, v1: u32) -> Option<Vec<u32>> 
     Some(merged)
 }
 
-/// `core.mesh._trace_loops`: undirected boundary segments into closed
+/// `built_core.mesh._trace_loops`: undirected boundary segments into closed
 /// loops, each started at the first segment (in outline order) no loop
 /// has walked yet, in that segment's direction. None when a vertex has
 /// valence other than 2 or a segment runs onto itself.
@@ -293,7 +293,7 @@ impl Store {
         self.ring_normal(&self.outer_ring(f), h)
     }
 
-    /// `core.mesh._loop_area`: the Newell terms summed in a QVector3D.
+    /// `built_core.mesh._loop_area`: the Newell terms summed in a QVector3D.
     fn loop_area(&self, ring: &[u32], h: Hypot) -> f64 {
         let mut sum = [0.; 3];
         for (&a, &b) in ring.iter().zip(ring.iter().cycle().skip(1)) {
@@ -313,7 +313,7 @@ impl Store {
         }
     }
 
-    /// `core.mesh._orient_union_loops`.
+    /// `built_core.mesh._orient_union_loops`.
     fn orient_union_loops(&self, outer: &mut [u32], holes: &mut [Vec<u32>], n0: V3, h: Hypot) {
         if (self.ring_normal(outer, h).dot(n0, h) as f64) < 0.0 {
             outer.reverse();

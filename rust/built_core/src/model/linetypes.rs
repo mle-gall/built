@@ -2,7 +2,7 @@
 //! a pattern is drawn — dashes cut along a segment, the words a line type
 //! writes along it (`docs/model-port.md`, layers).
 //!
-//! `core.layers` was the implementation; it keeps the same names as a
+//! `built_core.layers` was the implementation; it keeps the same names as a
 //! facade over these functions. A pattern is kept as a line type file has
 //! it (dash > 0, gap < 0, dot 0, millimetres on paper) and drawn as
 //! `drawn_dashes` turns it (dash, gap, dash… all ≥ 0). Answers match the

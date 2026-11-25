@@ -17,7 +17,7 @@ fn plan<'p>(mesh: &Obj<'p>) -> PyResult<Obj<'p>> {
 fn part_points<'p>(part: &Obj<'p>, cache: Cache<'p>) -> PyResult<Obj<'p>> {
     let py = part.py();
     let np = py.import("numpy")?;
-    let groups = py.import("core.group")?;
+    let groups = py.import("built_core.group")?;
     let chunks = PyList::empty(py);
     for row in groups
         .call_method1("iter_placements", (part,))?
@@ -225,7 +225,7 @@ fn paint_areas<'p>(mesh: &Obj<'p>, cache: Cache<'p>) -> PyResult<Obj<'p>> {
             table.append(decode.call1((row?,))?)?;
         }
         let sizes = py
-            .import("core.lazy_mesh")?
+            .import("built_core.lazy_mesh")?
             .call_method1("face_net_areas", (plan,))?;
         let empty = PyDict::new(py).into_any();
         for (key, size) in source
@@ -296,7 +296,7 @@ fn part_row<'p>(part: &Obj<'p>, cache: Cache<'p>) -> PyResult<Bound<'p, PyDict>>
     let face_count = py.import("built_core.mesh")?.getattr("face_count")?;
     let mut faces = 0usize;
     for row in py
-        .import("core.group")?
+        .import("built_core.group")?
         .call_method1("iter_placements", (part,))?
         .try_iter()?
     {

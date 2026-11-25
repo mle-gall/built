@@ -39,7 +39,7 @@ fn sync(m: &Module<'_>, frame: &Obj<'_>) -> PyResult<()> {
         m.setattr("_current", py.None())
     } else {
         let row = py
-            .import("core.group")?
+            .import("built_core.group")?
             .call_method1("frame_axes", (frame,))?;
         for (i, n) in ["x", "y", "z"].iter().enumerate() {
             axes.set_item(*n, row.get_item(i + 1)?)?;

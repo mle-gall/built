@@ -2,7 +2,7 @@
 """Occurrence row actions emitted by the native sidebar."""
 import pytest
 
-from core import outliner
+from built_core import outliner
 from tests.native_tree import action
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_project_occurrences import _building, _group, _two_planes

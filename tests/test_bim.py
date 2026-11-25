@@ -15,9 +15,9 @@ from core.bim import (
     tag_faces,
     tag_group,
 )
-from core.edits import build_add_edges
-from core.history import AddFaceCommand, History, MakeGroupCommand
-from core.scene import Scene
+from built_core.edits import build_add_edges
+from built_core.history import AddFaceCommand, History, MakeGroupCommand
+from built_core.scene import Scene
 from formats import igz
 from tools.base import ToolContext
 from tools.pushpull import PushPullTool

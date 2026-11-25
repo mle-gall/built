@@ -125,7 +125,7 @@ def compare(ground: dict, candidate: dict, tol: float = 1e-3) -> list[str]:
 
 def load_ground_truth(dae: Path):
     """Load the reference COLLADA export of the model into a fresh Scene."""
-    from core.scene import Scene
+    from built_core.scene import Scene
     from built_core.formats import dae as dae_format
 
     if not dae.exists():
@@ -140,7 +140,7 @@ def load_ground_truth(dae: Path):
 def load_candidate(skp: Path):
     """Load ``skp`` through the pure-backend seam, or ``None`` when no backend
     can read it yet (``NeedsConverter``)."""
-    from core.scene import Scene
+    from built_core.scene import Scene
     from built_core.formats import skp as skp_format
 
     scene = Scene()

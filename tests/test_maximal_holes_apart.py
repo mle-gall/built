@@ -7,7 +7,7 @@ import random
 import pytest
 from built_core import Vec3 as V
 
-from core.topology import _HolesApart, _loop_inside_loop, _maximal_holes
+from built_core.topology import _HolesApart, _loop_inside_loop, _maximal_holes
 
 
 def plain_answer(holes):

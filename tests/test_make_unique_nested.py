@@ -6,10 +6,10 @@ from __future__ import annotations
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core.group import Group, copy_group, world_mesh
-from core.history import History, MakeUniqueCommand
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group, copy_group, world_mesh
+from built_core.history import History, MakeUniqueCommand
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 
 def _quad(z=0.0):

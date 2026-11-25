@@ -57,7 +57,7 @@ def test_the_selection_bar_follows_a_change_in_the_middle(host):
 
 
 def test_the_summary_counts_groups_and_items_from_the_snapshot(host):
-    from core.group import Group
+    from built_core.group import Group
     from views import wgpu_ui
     assert host.open(SLAB)
     scene = host.viewport.scene

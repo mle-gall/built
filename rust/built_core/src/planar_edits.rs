@@ -247,7 +247,7 @@ fn install(
         }
     }
     mesh.py()
-        .import("core.topology")?
+        .import("built_core.topology")?
         .call_method1("prune_collinear_orphan_edges", (mesh,))?;
     mesh.call_method0("resplit_curves")?;
     Ok(count)
@@ -309,7 +309,7 @@ pub(crate) fn rebuild_selected<'py>(
         segs.push((a, b));
     }
     let result = py
-        .import("core.arrangement")?
+        .import("built_core.arrangement")?
         .call_method1("planar_rebuild", (segs, origin, normal))?;
     let triangulate = py.import("built_core.triangulate")?.getattr("triangulate")?;
     let mut outlines = HashMap::new();

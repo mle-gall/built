@@ -111,7 +111,7 @@ impl DrawingSnapshotStep {
         if !transaction_captured_before {
             capture(s, "before", &mesh)?;
         }
-        let topology = s.py().import("core.topology")?;
+        let topology = s.py().import("built_core.topology")?;
         let heal = s.getattr("_heal")?.is_truthy()?;
         let footprint = if heal {
             Some(topology.call_method1("winding_footprint", (&mesh,))?)
@@ -158,7 +158,7 @@ impl StitchSnapshotStep {
         let fresh = set
             .call1((mesh.getattr("faces")?,))?
             .call_method1("difference", (before,))?;
-        let key = py.import("core.topology")?.getattr("_key")?;
+        let key = py.import("built_core.topology")?.getattr("_key")?;
         let seeds = PySet::empty(py)?;
         for p in s.getattr("seed")?.try_iter()? {
             seeds.add(key.call1((p?,))?)?;

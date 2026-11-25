@@ -110,7 +110,7 @@ fn close(view: &Obj<'_>, event: Option<&Obj<'_>>) -> PyResult<()> {
 #[pyfunction]
 fn document_init(doc: &Obj<'_>) -> PyResult<()> {
     let py = doc.py();
-    doc.setattr("tab_id", py.import("core.group")?.call_method0("new_uid")?)?;
+    doc.setattr("tab_id", py.import("built_core.group")?.call_method0("new_uid")?)?;
     for key in ["viewport", "path", "import_name", "autosaved_version", "composer", "stand_in", "front_view"] {
         doc.setattr(key, py.None())?;
     }

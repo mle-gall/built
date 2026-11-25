@@ -50,55 +50,43 @@ def test_about_and_clipboard(monkeypatch, native_host, pasteboard):
     assert copied[-1] == "https://github.com/ingelibre/ingetrazo"
 
 
-def test_extensions_install_update_toggle_safe_reset_remove(tmp_path, monkeypatch):
-    from core import extensions
+def test_extensions_install_toggle_safe_reset_remove(tmp_path, monkeypatch):
+    from built_core import extensions
     from built_core import extension_manager as em
     root = tmp_path / "plugins"
     root.mkdir()
-    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: root)
+    monkeypatch.setattr("built_core.extensions.user_plugins_dir", lambda: root)
     monkeypatch.setattr(extensions, "plugin_dirs", lambda: [tmp_path, root])
-    monkeypatch.setattr(em, "load_cached_catalog", lambda: None)
-    monkeypatch.setattr(em, "refresh_catalog", lambda: em.CatalogSnapshot([], {}, "", True))
     example = em.bundled_extensions()[0]
     monkeypatch.setattr(em, "bundled_extensions", lambda: [example])
     sheet = Extensions()
     ctx = SimpleNamespace(win=SimpleNamespace(_running_extensions=set()))
-    assert build(sheet, ctx)["tabs"][0]["on"]
-    sheet.act(ctx, "tab", ["Browse"])
+    assert not build(sheet, ctx).get("tabs")
     build(sheet, ctx)
     sheet.act(ctx, "verb", ["install"])
     assert em.installed_info(example.id)
-    sheet.act(ctx, "tab", ["Installed"])
     sheet.act(ctx, "focus", [example.id])
     spec = build(sheet, ctx)
-    assert spec["detail"]["title"] == em.display_name(example, "en")
+    assert spec["detail"]["title"] == example.name["en"]
     for enabled in (False, True):
         sheet.act(ctx, "verb", ["toggle"])
         assert em.is_extension_enabled(example.id) is enabled
         build(sheet, ctx)
-    marker = root / example.id / "extension.json"
-    metadata = json.loads(marker.read_text())
-    marker.write_text(json.dumps(dict(metadata, sha256="stale")))
-    sheet.act(ctx, "tab", ["Updates"])
-    assert build(sheet, ctx)["focus"] == example.id
-    sheet.act(ctx, "verb", ["install"])
-    assert em.installed_info(example.id)["sha256"] == example.sha256
     sheet.act(ctx, "verb", ["safe"])
     assert em.safe_mode()
     assert extensions.discover_plugins([root]) == ([], [])
     monkeypatch.setattr(sheet, "confirm", lambda *args: True)
     sheet.act(ctx, "verb", ["reset"])
     assert not em.safe_mode()
-    sheet.act(ctx, "tab", ["Installed"])
     build(sheet, ctx)
     sheet.act(ctx, "verb", ["remove"])
     assert em.installed_info(example.id) is None
 
 
 def test_cut_list_group_copy_export(tmp_path, monkeypatch, pasteboard):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from tests.test_parts import _box, _part
-    from core.group import Group
+    from built_core.group import Group
     from built_render.shell_files import ShellFileDialog
     assembly = Group(name="Assembly")
     assembly.adopt([_part(_box(.2, .8, .4, color=color), name)

@@ -12,9 +12,9 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from built_core import ScreenPoint, Input
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.group import Group, world_mesh
-from core.history import ExplodeViewCommand
-from core.mesh import Mesh
+from built_core.group import Group, world_mesh
+from built_core.history import ExplodeViewCommand
+from built_core.mesh import Mesh
 from tools.base import ToolContext
 from tools.paint import PaintTool
 

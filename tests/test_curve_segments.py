@@ -196,7 +196,7 @@ def test_a_painted_face_shows_a_swatch_and_its_code(native_host):
 def test_a_small_circle_far_from_the_origin_is_still_read(offset, r):
     """Positions are single precision: the centre is worked out from the
     first vertex, and the rounding of far coordinates is allowed for."""
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     mesh = Mesh()
     c = V(offset, offset, 0)
     pts = [c + V(math.cos(2 * math.pi * k / 24),

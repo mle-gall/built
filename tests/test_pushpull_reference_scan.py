@@ -12,7 +12,7 @@ from built_core import ScreenPoint  # noqa: E402
 from built_core import Vec3 as V
 
 
-from core.topology import _key  # noqa: E402
+from built_core.topology import _key  # noqa: E402
 from tools.pushpull import PushPullTool  # noqa: E402
 from types import SimpleNamespace  # noqa: E402
 
@@ -227,7 +227,7 @@ def test_the_engine_answers_as_the_questions_did():
 
 
 def test_native_grab_snapshot_tracks_the_camera_through_a_topology_change():
-    from core.scene import Scene
+    from built_core.scene import Scene
 
     class NativeView(_Vp):
         def _camera_px(self):

@@ -9,9 +9,9 @@ import pytest
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from built_core import Vec3 as QVector3D
 
-from core.scene import Scene
-from core.layers import Layer
-from core.materials import Material
+from built_core.scene import Scene
+from built_core.layers import Layer
+from built_core.materials import Material
 from built_core.kept_components import definitions_of
 from core.bim_registry import get
 from formats.rfa import apply_payload, read_rfa, RfaImport, ZONE_TAG_KEY

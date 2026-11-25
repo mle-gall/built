@@ -102,7 +102,7 @@ def test_mixed_numbers_the_usual_way():
 
 
 def test_fractional_inches_read_like_a_carpenter_writes_them():
-    from core.units import format_length
+    from built_core.units import format_length
     assert format_length(1.5 * IN, "in-frac", 2) == '1 1/2"'
     assert format_length(0.75 * IN, "in-frac", 2) == '3/4"'
     assert format_length(6 * IN, "in-frac", 2) == '6"'
@@ -119,7 +119,7 @@ def test_fractional_inches_read_like_a_carpenter_writes_them():
 def test_a_length_spin_edits_decimal_feet_for_feet_and_inches():
     """Feet-and-inches and fractional feet edit as decimal feet; fractional
     inches edit as decimal inches. The sheet text keeps the carpenter form."""
-    from core.units import length_number, length_suffix, metres_from_number
+    from built_core.units import length_number, length_suffix, metres_from_number
     assert length_number(0.3048, "ft") == pytest.approx(1.0)
     assert length_number(0.3048, "ft-in") == pytest.approx(1.0)
     assert length_number(0.3048, "ft-in-frac") == pytest.approx(1.0)
@@ -137,7 +137,7 @@ def test_a_length_spin_edits_decimal_feet_for_feet_and_inches():
 
 
 def test_sheet_cotas_take_units():
-    from core.composition import CotaItem, Composicion
+    from built_core.composition import CotaItem, Composicion
     c = CotaItem(x_mm=10.0, y_mm=10.0, dx_mm=38.1, scale_n=1.0, units="in-frac",
                  decimals=2)                                    # 38.1 mm = 1.5"
     assert c.auto_label() == '1 1/2"'

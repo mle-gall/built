@@ -11,14 +11,14 @@ from pathlib import Path
 from built_render import SurveyRaster
 from built_core import Vec3 as QVector3D
 
-from core.history import (
+from built_core.history import (
     AddImagePlaneCommand,
     DeleteImagePlanesCommand,
     History,
     TransformImagePlaneCommand,
 )
 from built_core.image_plane import IMAGE_LAYER, ImagePlane, image_aspect
-from core.scene import Scene
+from built_core.scene import Scene
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 
 
@@ -106,7 +106,7 @@ def test_add_lands_on_its_own_layer_and_undo_takes_the_layer_back():
 
 def test_add_undo_keeps_a_layer_the_document_already_had():
     scene = Scene()
-    from core.layers import Layer
+    from built_core.layers import Layer
     scene.layers.append(Layer(IMAGE_LAYER))
     hist = History(scene)
     hist.execute(AddImagePlaneCommand(_image()))
@@ -246,7 +246,7 @@ def test_an_unarmed_tool_places_nothing():
 
 # ---- Move / Rotate / Scale --------------------------------------------------
 def test_move_shifts_the_corner_and_nothing_else():
-    from core.history import MoveImagePlanesCommand
+    from built_core.history import MoveImagePlanesCommand
 
     scene = Scene()
     hist = History(scene)
@@ -260,7 +260,7 @@ def test_move_shifts_the_corner_and_nothing_else():
 
 
 def test_rotate_turns_the_picture_without_resizing_it():
-    from core.history import RotateImagePlanesCommand
+    from built_core.history import RotateImagePlanesCommand
 
     scene = Scene()
     hist = History(scene)
@@ -276,7 +276,7 @@ def test_rotate_turns_the_picture_without_resizing_it():
 
 def test_rotate_about_a_horizontal_axis_stands_the_picture_up():
     """A facade photo lying on the ground, tipped onto a wall."""
-    from core.history import RotateImagePlanesCommand
+    from built_core.history import RotateImagePlanesCommand
 
     scene = Scene()
     hist = History(scene)
@@ -289,7 +289,7 @@ def test_rotate_about_a_horizontal_axis_stands_the_picture_up():
 
 
 def test_scale_keeps_the_picture_undistorted():
-    from core.history import ScaleImagePlanesCommand
+    from built_core.history import ScaleImagePlanesCommand
 
     scene = Scene()
     hist = History(scene)
@@ -304,7 +304,7 @@ def test_scale_keeps_the_picture_undistorted():
 
 
 def test_scale_moves_the_image_relative_to_its_anchor():
-    from core.history import ScaleImagePlanesCommand
+    from built_core.history import ScaleImagePlanesCommand
 
     scene = Scene()
     hist = History(scene)
@@ -317,7 +317,7 @@ def test_scale_moves_the_image_relative_to_its_anchor():
 
 
 def test_a_degenerate_scale_undo_is_a_no_op_instead_of_a_crash():
-    from core.history import ScaleImagePlanesCommand
+    from built_core.history import ScaleImagePlanesCommand
 
     scene = Scene()
     im = _image()
@@ -404,7 +404,7 @@ def test_right_click_reaches_a_locked_image_for_unlock_and_delete():
     orthomosaic, which arrives locked) can never be unlocked or deleted
     again (Marco, 2026-09-14)."""
     from types import SimpleNamespace
-    from core.scene import Scene
+    from built_core.scene import Scene
     from tests.controller_surface import ControllerSurface as Viewport
 
     scene = Scene()
@@ -419,7 +419,7 @@ def test_right_click_reaches_a_locked_image_for_unlock_and_delete():
     im.locked = False
     assert Viewport.pick_locked_image_plane(fake, 5.0, 5.0) is None   # plain pick
     im.locked = True
-    from core.layers import Layer
+    from built_core.layers import Layer
     scene.layers.append(Layer(im.layer, locked=True))                  # layer lock wins
     assert Viewport.pick_locked_image_plane(fake, 5.0, 5.0) is None
 

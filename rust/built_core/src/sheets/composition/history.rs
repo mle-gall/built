@@ -15,7 +15,7 @@ pub(super) fn install(m: &Bound<PyModule>) -> PyResult<()> {
         ("ComposerHistory", "object"),
     ] {
         let ns = PyDict::new(py);
-        ns.set_item("__module__", "core.composition")?;
+        ns.set_item("__module__", "built_core.composition")?;
         match name {
             "ComposerCommand" => {
                 methods!(ns,py;"journalled"=>unjournalled,"restore_preview"=>no_preview,"do"=>abstract_command,"undo"=>abstract_command)
@@ -97,7 +97,7 @@ fn init_item(cmd: &Obj, comp: &Obj, item: &Obj) -> PyResult<()> {
     cmd.setattr("item", item)
 }
 fn is_record(item: &Obj) -> PyResult<bool> {
-    item.is_instance(&item.py().import("core.doc_model")?.getattr("Record")?)
+    item.is_instance(&item.py().import("built_core.doc_model")?.getattr("Record")?)
 }
 #[pyfunction]
 fn sheet_record(cmd: &Obj) -> PyResult<bool> {
@@ -234,7 +234,7 @@ fn execute(history: &Obj, cmd: &Obj, notify: bool, coalesce: bool) -> PyResult<(
     let mut txn = py.None().into_bound(py);
     if cmd.call_method0("journalled")?.is_truthy()? {
         cmd.call_method0("restore_preview")?;
-        let doc = py.import("core.doc_model")?;
+        let doc = py.import("built_core.doc_model")?;
         let depth = doc.call_method0("begin")?.is_truthy()?;
         let result = cmd.call_method0("do").and_then(|_| {
             if depth {

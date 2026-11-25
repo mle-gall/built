@@ -13,10 +13,10 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.history import (AddFaceCommand, CompoundCommand, DeleteFaceCommand,
+from built_core.history import (AddFaceCommand, CompoundCommand, DeleteFaceCommand,
                           EraseSelectionCommand, History)
-from core.scene import Scene
-from core.topology import offset_loop
+from built_core.scene import Scene
+from built_core.topology import offset_loop
 
 
 def V(x: float, y: float, z: float = 0.0) -> QVector3D:

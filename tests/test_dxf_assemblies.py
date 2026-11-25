@@ -13,8 +13,8 @@ import pytest
 
 ezdxf = pytest.importorskip("ezdxf")
 
-from core.group import world_mesh                         # noqa: E402
-from core.scene import Scene                              # noqa: E402
+from built_core.group import world_mesh                         # noqa: E402
+from built_core.scene import Scene                              # noqa: E402
 from formats.dxf_in import load_dxf                       # noqa: E402
 
 

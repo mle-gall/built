@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.history import History, MakeGroupCommand
-from core.scene import Scene
+from built_core.history import History, MakeGroupCommand
+from built_core.scene import Scene
 from tests.controller_surface import ControllerSurface as Viewport
 
 
@@ -121,7 +121,7 @@ def test_snap_reaches_group_geometry():
     """Dimensioning/drawing over an imported reference model must snap to the
     group's corners and edges: pick_vertex sees group endpoints, and the snap
     scene carries the group edges near the cursor as pseudo-edges."""
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
 
     scene = Scene()
     hist = History(scene)
@@ -156,9 +156,9 @@ def test_instance_groups_pick_through_transformed_chunks():
     from built_core import Matrix4 as QMatrix4x4
 
     scene = Scene()
-    proto = __import__("core.mesh", fromlist=["Mesh"]).Mesh()
+    proto = __import__("built_core.mesh", fromlist=["Mesh"]).Mesh()
     proto.add_face([V(0, 0), V(1, 0), V(1, 1), V(0, 1)])
-    from core.group import Group
+    from built_core.group import Group
     g1, g2 = Group(proto, name="i1"), Group(proto, name="i2")
     m1 = QMatrix4x4()
     m2 = QMatrix4x4(); m2.translate(10, 0, 0)
@@ -189,7 +189,7 @@ def test_selected_group_offers_its_box_corners_to_the_snap_engine():
     """A selected group's bounding-box corners are grabbable — they
     are what you take hold of to move it somewhere exact. The box is already
     the selection cue here; this puts its corners in reach of the snap."""
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
 
     scene = Scene()
     hist = History(scene)

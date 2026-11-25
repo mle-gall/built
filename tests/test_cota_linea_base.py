@@ -24,7 +24,7 @@ import math
 import pytest
 from built_core import ScreenPoint as QPointF
 
-from core.composition import CotaItem
+from built_core.composition import CotaItem
 
 
 # ---- rule 4 -------------------------------------------------------------

@@ -653,7 +653,7 @@ pub(crate) fn add_template_layers<'py>(
     scene: &Obj<'py>,
     template: &Obj<'py>,
 ) -> PyResult<LayerUids<'py>> {
-    let api = scene.py().import("core.layers")?;
+    let api = scene.py().import("built_core.layers")?;
     let added = crate::model::module(api.py(), "built_core")?.getattr("tag_edits")?.call_method1("add_missing", (scene, template))?;
     let mut layers = Vec::new();
     for name in added.get_item(0)?.try_iter()? {

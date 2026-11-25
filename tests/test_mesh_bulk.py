@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.mesh import Mesh
+from built_core.mesh import Mesh
 from built_core.store_mesh import StoreMesh
 
 
@@ -116,7 +116,7 @@ def _reference_bulk_weld(mesh, points):
     from built_core import object_replay
 
     if isinstance(mesh, StoreMesh):
-        from core.mesh import _KEY_SCALE
+        from built_core.mesh import _KEY_SCALE
         points = np.asarray(points, dtype=np.float64).tolist()
         keys = [tuple(round(x * _KEY_SCALE) for x in p) for p in points]
         registry = set(map(tuple, mesh._store.registry()[0].tolist()))
@@ -178,7 +178,7 @@ def test_bulk_weld_preserves_exact_order_at_cell_boundaries(seed, existing):
 
 
 def test_bulk_weld_resave_matches_scalar_oracle(tmp_path, monkeypatch):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     from tests.test_deferred_mesh import _painted_scene
     from tests.test_igz_format3 import _canonical

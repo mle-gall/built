@@ -17,8 +17,8 @@ import math
 
 from built_core import Vec3 as QVector3D
 
-from core.camera import OrbitCamera
-from core.scene import Scene
+from built_core.camera import OrbitCamera
+from built_core.scene import Scene
 from formats import igz
 
 

@@ -9,12 +9,12 @@ from __future__ import annotations
 import built_core
 from built_core import Vec3 as QVector3D
 
-from core.group import Group
-from core.history import History
+from built_core.group import Group
+from built_core.history import History
 from built_core.document_insert import used_layers
-from core.layers import Layer, folder_parent, folders_of, layer_of
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.layers import Layer, folder_parent, folders_of, layer_of
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from tools.paste import PasteTool
 
 

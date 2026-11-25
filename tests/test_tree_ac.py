@@ -46,7 +46,7 @@ def site(tmp_path_factory):
 
 
 def _open(path):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     scene = Scene()
     igz.load_into(scene, Path(path))
@@ -108,8 +108,8 @@ def test_file_row_states_found_changed_missing(site, tmp_path):
 
 
 def test_file_state_reads_without_writing_the_link_registry(ui):
-    from core import links
-    from core.link_structure import file_state
+    from built_core import links
+    from built_core.link_structure import file_state
     scene = ui[0]
     before = {k: dict(v) for k, v in scene.link_registry.items()}
     nested = next(n["path"] for n in ui[2]._ui_tree["nodes"].values() if n.get("via"))
@@ -135,7 +135,8 @@ def test_a_single_top_node_is_merged_into_its_file_row(ui):
 
 
 def test_a_file_without_structure_merges_its_single_top_tag_folder(ui):
-    from core import bim_registry, link_structure, links
+    from core import bim_registry
+    from built_core import link_structure, links
     scene, win, view, rows, act = ui
     reg = scene.link_registry
     path = next(p for p in reg if p.endswith("Show building.igz"))
@@ -305,9 +306,9 @@ def _verbs(win, sel):
 
 
 def test_inspector_verbs_follow_the_selection_kind(ui):
-    from core import links
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core import links
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from built_core import Vec3 as QVector3D
     from built_render import selection_kind
     scene, win, view, rows, act = ui
@@ -377,7 +378,7 @@ def test_rows_stay_fast_on_the_bigger_fixture(ui):
 
 
 def test_drawing_cell_edits_run_without_a_layer_panel_and_undo(ui):
-    from core.protocol import commands
+    from built_core.protocol import commands
     scene, win, view, _, act = ui
     view._ui_lens = 1
     node = "n:" + _key(view, "Paths")
@@ -406,7 +407,8 @@ def test_drawing_cell_edits_run_without_a_layer_panel_and_undo(ui):
 
 
 def test_rename_and_move_keep_node_and_membership_and_undo(ui):
-    from core import bim_registry, structure
+    from core import bim_registry
+    from built_core import structure
     scene, win, view, rows, act = ui
     key, parent, root = (_key(view, n) for n in ("Paths", "Fences", "Site works"))
 
@@ -435,8 +437,8 @@ def test_rename_and_move_keep_node_and_membership_and_undo(ui):
 
 def test_unstructured_host_shows_read_only_drawing_rows_without_writing():
     from core import bim_registry
-    from core.layers import Layer
-    from core.scene import Scene
+    from built_core.layers import Layer
+    from built_core.scene import Scene
     scene = Scene()
     scene.layer_folders = ["site", "empty"]
     scene.layer_folder_names = {"site": "Site works"}
@@ -474,7 +476,8 @@ def test_drawing_row_changes_visibility_and_lock_in_undo_order(ui):
 
 
 def test_filing_selected_items_to_active_node_is_one_undo_step(ui):
-    from core import bim_registry, structure
+    from core import bim_registry
+    from built_core import structure
     scene, win, view, rows, act = ui
     src, dest = (_key(view, n) for n in ("Paths", "Fences"))
     act("active", "n:" + dest)
@@ -544,9 +547,10 @@ def test_imported_hatch_angle_and_scale_are_undoable_in_drawing(ui, tmp_path, mo
 
 @pytest.mark.parametrize("operation", ["group", "insert", "paste", "link", "group_selection"])
 def test_created_placement_inherits_the_active_node_in_its_creation_step(ui, site, operation):
-    from core import bim_registry, links, structure
-    from core.group import Group
-    from core.history import InsertGroupCommand, MakeGroupCommand, MakeNestedGroupCommand
+    from core import bim_registry
+    from built_core import links, structure
+    from built_core.group import Group
+    from built_core.history import InsertGroupCommand, MakeGroupCommand, MakeNestedGroupCommand
     from built_core import Vec3
     scene, win, view, _, act = ui
     dest = _key(view, "Fences")
@@ -611,9 +615,9 @@ def test_dropped_item_uses_its_own_address_and_rejects_read_only_nodes(ui):
 
 
 def test_unstructured_filters_and_tag_toggles_use_the_document(tmp_path):
-    from core.group import Group
-    from core.layers import Layer
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.layers import Layer
+    from built_core.scene import Scene
     from built_core.section import SectionPlane
     from built_core import Vec3
     scene = Scene()
@@ -717,7 +721,7 @@ def test_reveal_expands_only_the_selected_occurrences_branch_and_page(ui, monkey
 
 
 def test_unlink_from_a_file_row_runs_as_one_undoable_protocol_step(site):
-    from core import links
+    from built_core import links
     scene, win, view, _, act = _open(site["host"])
     key = "link:Show building"
     group, = view._ui_tree["tree"].links[key]
@@ -729,8 +733,8 @@ def test_unlink_from_a_file_row_runs_as_one_undoable_protocol_step(site):
 
 
 def test_locate_repairs_the_source_and_its_problem_entry(tmp_path, monkeypatch):
-    from core import links
-    from core.scene import Scene
+    from built_core import links
+    from built_core.scene import Scene
     from tests.composite_fixture import _file
     from built_render.shell_files import ShellFileDialog
     source = _file(tmp_path / "Source.built", {}, {"Steel": None}, 2)
@@ -760,7 +764,7 @@ def test_locate_repairs_the_source_and_its_problem_entry(tmp_path, monkeypatch):
 
 
 def test_source_visibility_restored_from_the_file_inspector_undoes(ui):
-    from core import links
+    from built_core import links
     scene, win, view, rows, act = ui
     tree = view._ui_tree["tree"]
     key = _key(view, "Rails")
@@ -780,11 +784,11 @@ def test_source_visibility_restored_from_the_file_inspector_undoes(ui):
 
 
 def test_identity_separates_physical_parent_filing_and_surface_material(tmp_path):
-    from core.group import Group
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
     from built_core import Vec3, selection_identity
-    from core.link_structure import Tree
+    from built_core.link_structure import Tree
     from core import bim_registry
 
     mesh = Mesh()
@@ -807,9 +811,9 @@ def test_identity_separates_physical_parent_filing_and_surface_material(tmp_path
 
 def test_bulk_drawing_patch_validates_every_field_and_undoes_as_one_edit():
     import json
-    from core.layers import Layer
-    from core.protocol import commands
-    from core.scene import Scene
+    from built_core.layers import Layer
+    from built_core.protocol import commands
+    from built_core.scene import Scene
     scene = Scene()
     a, b = Layer("Walls"), Layer("Floors")
     scene.layers.extend((a, b))
@@ -828,11 +832,12 @@ def test_bulk_drawing_patch_validates_every_field_and_undoes_as_one_edit():
 
 
 def test_promoting_one_tag_files_only_its_members_and_undoes():
-    from core import bim_registry, structure
-    from core.group import Group
-    from core.layers import Layer
-    from core.protocol import commands
-    from core.scene import Scene
+    from core import bim_registry
+    from built_core import structure
+    from built_core.group import Group
+    from built_core.layers import Layer
+    from built_core.protocol import commands
+    from built_core.scene import Scene
     scene = Scene()
     scene.layer_folders = ["Building"]
     walls = Layer("Walls", folder="Building")
@@ -854,7 +859,7 @@ def test_promoting_one_tag_files_only_its_members_and_undoes():
 
 def test_drawing_line_types_and_file_round_trip(ui, tmp_path, monkeypatch):
     import json
-    from core.layers import parse_lin
+    from built_core.layers import parse_lin
     from built_render.shell_files import ShellFileDialog
     scene, win, view, _, act = ui
     tag = scene.layer("Paths")
@@ -909,7 +914,7 @@ def test_drawing_folders_keep_keys_and_undo_as_one_step(ui):
 
 def test_drawing_detailed_hatch_and_atomic_pat_export(ui, tmp_path, monkeypatch):
     import json
-    from core.hatches import parse_pat
+    from built_core.hatches import parse_pat
     from built_render.shell_files import ShellFileDialog
     scene, win, _, _, act = ui
     tag = scene.layer("Paths")

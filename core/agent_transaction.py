@@ -2,8 +2,8 @@
 """Extend recipe snapshots to edits of existing objects made by agent tools."""
 from copy import deepcopy
 
-from core import doc_model as _dm
-from core.group import iter_placements
+from built_core import doc_model as _dm
+from built_core.group import iter_placements
 from built_core.history import SnapshotImport
 
 

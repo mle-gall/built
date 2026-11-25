@@ -16,8 +16,8 @@ import pytest
 from built_core import Vec3 as V
 
 from core import _native
-from core.group import Group
-from core.scene import Scene
+from built_core.group import Group
+from built_core.scene import Scene
 from formats import igz
 
 pytestmark = pytest.mark.skipif(

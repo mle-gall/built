@@ -541,7 +541,7 @@ impl<'a> Dae<'a> {
                             if path.is_file() {
                                 paint.image = Some(path.to_string_lossy().into_owned());
                                 let avg = py
-                                    .import("core.vista_caras")?
+                                    .import("built_core.vista_caras")?
                                     .call_method1("texture_average", (path,))?;
                                 paint.color = avg.extract()?;
                             }
@@ -893,7 +893,7 @@ fn editable(mesh: &Obj<'_>, faces: &[Face], lines: &[(DVec3, DVec3)]) -> PyResul
     let py = mesh.py();
     let seed = PySet::empty(py)?;
     let added = PySet::empty(py)?;
-    let key = py.import("core.topology")?.getattr("_key")?;
+    let key = py.import("built_core.topology")?.getattr("_key")?;
     for face in faces {
         let pts = verts(py, &face.points)?;
         let Ok(f) = mesh.call_method1("add_face", (&pts,)) else {
@@ -1765,12 +1765,12 @@ fn dae_load<'p>(
         if known.insert(l.clone()) {
             layers.call_method1(
                 "append",
-                (py.import("core.layers")?.call_method1("Layer", (l,))?,),
+                (py.import("built_core.layers")?.call_method1("Layer", (l,))?,),
             )?;
         }
     }
     if !staged.names.is_empty() {
-        py.import("core.group")?
+        py.import("built_core.group")?
             .call_method1("reserve_group_names", (&staged.names,))?;
     }
     if let Some([lat, lon, alt]) = staged.datum {

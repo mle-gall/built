@@ -21,7 +21,7 @@ pub(crate) fn fill<'py>(
         return Ok(Some("not a link".into()));
     };
     let py = scene.py();
-    let io = py.import("core.links")?;
+    let io = py.import("built_core.links")?;
     let Some(found) = crate::model::link_io::locate(&record, host_path)? else {
         return Ok(Some(format!("{} was not found", record.get_item("path")?)));
     };
@@ -106,7 +106,7 @@ pub(super) fn move_holds<'py>(
         .try_iter()?
         .map(|p| Ok(p?.as_ptr() as usize))
         .collect::<PyResult<HashSet<_>>>()?;
-    let ctor = py.import("core.dimension")?.getattr("VertexAnchor")?;
+    let ctor = py.import("built_core.dimension")?.getattr("VertexAnchor")?;
     let remap = |hold: Obj<'py>| -> PyResult<Obj<'py>> {
         if hold.is_none() {
             return Ok(hold);

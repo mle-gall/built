@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! `core.dimension`, served from here (`core/dimension.py` is gone): the
+//! `built_core.dimension`, served from here (`core/dimension.py` is gone): the
 //! linear dimension, a measured annotation between two world points.
 //!
 //! A `Dimension` records two endpoints `a`/`b` and an `offset` vector
@@ -47,7 +47,7 @@ use super::py_class::{class, method, property, static_method, FastAttr};
 
 type Obj<'py> = Bound<'py, PyAny>;
 
-const MODULE: &str = "core.dimension";
+const MODULE: &str = "built_core.dimension";
 /// Holds an endpoint remembers (see `live`).
 const MAX_HOLDS: i64 = 8;
 
@@ -695,7 +695,7 @@ fn dim_value<'py>(me: &Obj<'py>) -> PyResult<Obj<'py>> {
 fn dim_label<'py>(me: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = me.py();
     let v = dim_value(me)?;
-    py.import("core.units")?.call_method1(intern!(py, "fmt_len"), (v,))
+    py.import("built_core.units")?.call_method1(intern!(py, "fmt_len"), (v,))
 }
 
 /// The offset squared to the measured segment (the geometry may have
@@ -775,11 +775,11 @@ fn dim_carried<'py>(me: &Obj<'py>, m: &Obj<'py>, ends: &Obj<'py>) -> PyResult<Ob
     Ok(c)
 }
 
-/// Fill the module `core.dimension`.
+/// Fill the module `built_core.dimension`.
 pub(crate) fn install(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
     m.add("__doc__", "Linear dimension: a measured annotation between two world points (rust/built_core/src/model/dimension_api.rs).")?;
-    let dm = py.import("core.doc_model")?;
+    let dm = py.import("built_core.doc_model")?;
     let record = dm.getattr("Record")?;
     let record_fields = dm.getattr("record_fields")?;
     m.add("_MAX_HOLDS", MAX_HOLDS)?;

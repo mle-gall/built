@@ -10,7 +10,7 @@ def test_one_command_of_each_kind_for_scenes():
     """AddSceneCommand (with a place and the folder) and RenameSceneCommand
     are the native steps: no Python class of the same name beside them."""
     import built_core
-    import core.history as H
+    import built_core.history as H
     import built_core.saved_views as S
     from built_core import history as commands
     assert H is commands
@@ -65,9 +65,9 @@ def test_a_scene_shown_from_the_menu_is_marked_in_the_chooser(native_host):
 
 
 def test_insert_scene_clamps_large_integer_positions():
-    from core.history import AddSceneCommand
+    from built_core.history import AddSceneCommand
     from built_core.saved_views import SavedView
-    from core.scene import Scene
+    from built_core.scene import Scene
 
     scene = Scene()
     centre, first, last = [SavedView(name) for name in ("Centre", "First", "Last")]

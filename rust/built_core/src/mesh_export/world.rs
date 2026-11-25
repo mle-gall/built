@@ -111,7 +111,7 @@ fn billboard<'p>(group: &Obj<'p>) -> PyResult<Obj<'p>> {
 fn has_billboard(group: &Obj<'_>) -> PyResult<bool> {
     for pair in group
         .py()
-        .import("core.group")?
+        .import("built_core.group")?
         .call_method1("iter_placements", (group,))?
         .try_iter()?
     {
@@ -155,7 +155,7 @@ pub fn faceme_figures<'p>(scene: &Obj<'p>, toward: &Obj<'p>) -> PyResult<Bound<'
             continue;
         }
         for p in py
-            .import("core.group")?
+            .import("built_core.group")?
             .call_method1("iter_placements", (&g,))?
             .try_iter()?
         {
@@ -284,7 +284,7 @@ impl Faces {
             {
                 continue;
             }
-            let api = py.import("core.group")?;
+            let api = py.import("built_core.group")?;
             self.orient = self.camera.is_some() && has_billboard(&group)?;
             if self.orient {
                 self.pieces = Some(

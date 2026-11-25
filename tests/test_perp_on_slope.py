@@ -22,7 +22,7 @@ import math
 
 from built_core import Vec3 as QVector3D
 
-from core.snap import _direction_from_edge
+from built_core.snap import _direction_from_edge
 
 
 class _Arista:
@@ -105,7 +105,7 @@ SUBIDA = 0.35        # 5° sobre 4 m
 
 def _rampa():
     """Una rampa de 4×4 que sube 0,35 m hacia +Y, con sus cuatro aristas."""
-    from core.scene import Scene
+    from built_core.scene import Scene
     scene = Scene()
     esquinas = [V(0, 0, 0), V(4, 0, 0), V(4, 4, SUBIDA), V(0, 4, SUBIDA)]
     for i in range(4):
@@ -115,7 +115,7 @@ def _rampa():
 
 
 def _snap_en_la_rampa(scene, normal, inicio, cursor):
-    from core.snap import compute_snap
+    from built_core.snap import compute_snap
 
     def w2p(p):
         return (p.x() * 100.0, p.y() * 100.0)

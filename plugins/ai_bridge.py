@@ -372,7 +372,7 @@ class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
                 raise ValueError("status is too deeply nested")
             if type(value) in (str, int, float, bool, type(None)):
                 return value
-            from core.doc_model import JSON_DICTS, JSON_LISTS
+            from built_core.doc_model import JSON_DICTS, JSON_LISTS
             if type(value) in JSON_LISTS:
                 return [copy(v, depth + 1) for v in value]
             if type(value) in JSON_DICTS and all(type(k) is str for k in value):
@@ -540,7 +540,7 @@ class BridgeSection:
         self.invalidate()
 
     def sections(self):
-        from core.plugin_panels import item, section
+        from built_core.plugin_panels import item, section
         controls = [item("button", "toggle", tr("Stop bridge") if self.running else tr("Start bridge"))]
         if self.running:
             controls.append(item("log", "instructions", lines=[

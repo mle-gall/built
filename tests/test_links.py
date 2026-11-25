@@ -9,9 +9,9 @@ import built_core
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core import links
-from core.layers import Layer, folder_parent, layer_of
-from core.scene import Scene
+from built_core import links
+from built_core.layers import Layer, folder_parent, layer_of
+from built_core.scene import Scene
 from formats import igz
 
 
@@ -39,7 +39,7 @@ def _host_with_link(tmp_path, src):
 
 
 def _faces(group):
-    from core.group import iter_placements
+    from built_core.group import iter_placements
     return sum(len(g.mesh.faces) for g, _m in iter_placements(group))
 
 
@@ -54,7 +54,7 @@ def test_linking_brings_the_tags_namespaced_in_their_folders(tmp_path):
     assert folder_parent(host, "Site") == links.LINKED_FOLDER
     assert host.layer_by_key("Wood") is None         # never mixed with ours
     assert wood.name == "Wood"                       # shown as in the source
-    from core.group import iter_placements
+    from built_core.group import iter_placements
     names = {layer_of(f) for g, _m in iter_placements(comp)
              for f in g.mesh.faces}
     assert names == {"Site / Wood"}
@@ -73,7 +73,7 @@ def test_saved_as_a_placeholder_and_filled_again_on_open(tmp_path):
 
 
 def test_a_changed_source_reloads_into_every_copy(tmp_path):
-    from core.group import copy_group
+    from built_core.group import copy_group
     src = _source(tmp_path / "Site.igz", faces=1)
     host, comp = _host_with_link(tmp_path, src)
     host.groups.append(copy_group(comp, V(10, 0)))
@@ -177,7 +177,7 @@ def test_a_deferred_mesh_is_relabelled_without_being_built():
     """Big documents load their meshes deferred: linking relabels their
     tables, and a later build comes out with the same names."""
     import numpy as np
-    from core.mesh import DeferredMesh, Mesh
+    from built_core.mesh import DeferredMesh, Mesh
     built = []
 
     def build(m):
@@ -193,7 +193,7 @@ def test_a_deferred_mesh_is_relabelled_without_being_built():
            "edges": np.zeros((3, 2), dtype=np.int32),
            "layers": np.array([0, -1, -1], dtype=np.int32)}
     assert DeferredMesh.defer(mesh, build, 2, src)
-    from core.group import Group
+    from built_core.group import Group
     comp = Group(name="Site")
     part = Group(mesh, name="P")
     comp.children = [part]
@@ -217,10 +217,10 @@ def test_a_links_untagged_pieces_take_their_owners_tag_colour():
     colour that stand-in reads as none, so a nested untagged piece takes
     its owner's tag, as in its own file — the facilities model came up in
     one green instead of its tags' colours (Maxence, 2026-11-09)."""
-    from core.group import Group
-    from core.layers import DEFAULT_LAYER
-    from core.materials import effective_attrs
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.layers import DEFAULT_LAYER
+    from built_core.materials import effective_attrs
+    from built_core.mesh import Mesh
     owner = Group(Mesh(), name="Beam")
     owner.layer = "Site / Steel"
     piece = Group(Mesh(), name="Flange")

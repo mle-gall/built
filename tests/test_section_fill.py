@@ -13,7 +13,7 @@ import built_core
 import numpy as np
 from built_core import Vec3 as QVector3D
 
-from core.mesh import Mesh
+from built_core.mesh import Mesh
 import built_core
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
@@ -142,7 +142,7 @@ def test_a_box_cut_on_a_slant_fills_in_its_own_plane():
 
 
 def test_the_viewport_fills_the_cut_and_keeps_it_across_a_selection(native_host):
-    from core.group import Group
+    from built_core.group import Group
     from built_core.section import SectionPlane
     vp = native_host.viewport
     scene = vp.scene
@@ -229,7 +229,7 @@ def test_the_plane_fill_over_the_style():
 
 
 def test_the_viewport_hatches_the_cut_it_fills(native_host):
-    from core.group import Group
+    from built_core.group import Group
     from built_core.section import SectionPlane
     vp = native_host.viewport
     scene = vp.scene
@@ -264,7 +264,7 @@ def test_the_viewer_fills_the_cut_by_layer_and_keeps_it(native_host):
 
 def test_the_viewer_draws_each_layers_cut_weight_with_its_hatches(native_host):
     from tests.test_layer_cut import _wall_and_door
-    from core.layers import DEFAULT_LAYER
+    from built_core.layers import DEFAULT_LAYER
     import pytest
     vp = native_host.viewport
     scene = _wall_and_door(vp.scene)                 # Muros at 0.70
@@ -313,11 +313,11 @@ def test_the_model_draws_the_line_types_by_default(native_host):
 def test_the_model_writes_a_line_types_words(native_host):
     """GAS along a gas line in the 3D view too: the letters' outlines in
     the gaps the pattern leaves for them, lying along the edge."""
-    from core.layers import Layer
-    from core.group import Group
+    from built_core.layers import Layer
+    from built_core.group import Group
     from built_core import Vec3 as V
     import numpy as np
-    from core.layers import with_text
+    from built_core.layers import with_text
     vp = native_host.viewport
     scene = vp.scene
     drawn, spec = with_text([10.0, -2.0], "GAS", 2.0)

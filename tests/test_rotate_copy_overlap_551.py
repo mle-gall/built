@@ -7,10 +7,10 @@ from types import SimpleNamespace
 import pytest
 from built_core import Vec3 as V
 
-from core.group import Group
-from core.history import EraseSelectionCommand, History, rotation_matrix
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.history import EraseSelectionCommand, History, rotation_matrix
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from tests.test_explode_merges_shared_walls_721 import _covers
 from tests.test_rotate_array import _rotate_copy, _Vp
 from tools.rotate import RotateTool
@@ -177,7 +177,7 @@ def test_the_new_shared_edges_can_be_erased_and_both_edits_undo():
 
 def test_a_disjoint_complex_copy_keeps_all_supplied_faces():
     from pathlib import Path
-    from core.geometry import Face
+    from built_core.geometry import Face
     from formats.igz import load_into
 
     document = Scene()

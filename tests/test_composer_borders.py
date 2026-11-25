@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from built_core import Input as Qt
 
-from core.composition import (Composicion, CotaItem, MarcoVista,
+from built_core.composition import (Composicion, CotaItem, MarcoVista,
                               PAPER_SIZES_MM, TextoItem)
 
 
@@ -18,7 +18,7 @@ def test_legacy_fixed_scale_labels_load_as_bound_texts():
     """Documents saved before the movable scale label carried it as a frame
     flag the panel no longer exposes — the user had no way to switch it
     off. Loading converts each one into a text block bound to its frame."""
-    from core.composition import PT_TO_MM, expand_fields, set_field_context
+    from built_core.composition import PT_TO_MM, expand_fields, set_field_context
     c = Composicion()
     for i, pos in enumerate(("under-right", "under-left", "inside-br",
                              "inside-bl")):

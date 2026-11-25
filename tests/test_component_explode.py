@@ -10,9 +10,9 @@ from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 import pytest
 
 from tests.native_tree import group_rows
-from core.group import Group, copy_group, iter_placements
-from core.history import ExplodeGroupCommand
-from core.mesh import Mesh
+from built_core.group import Group, copy_group, iter_placements
+from built_core.history import ExplodeGroupCommand
+from built_core.mesh import Mesh
 
 
 def square():

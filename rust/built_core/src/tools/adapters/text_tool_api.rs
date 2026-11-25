@@ -31,7 +31,7 @@ fn describe<'py>(a: &Args<'py>) -> Reply<'py> {
     let ctx = a.get_item(1)?;
     let vp = ctx.getattr("viewport")?;
     let (x, y) = screen(&ctx)?;
-    let units = imported(py, "core.units")?;
+    let units = imported(py, "built_core.units")?;
     if let Ok(edge) = vp.call_method1("pick_edge", (&x, &y)) {
         if !edge.is_none() {
             let len = crate::math::xyz(&edge.getattr("b")?)?

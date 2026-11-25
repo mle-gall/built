@@ -229,7 +229,7 @@ pub fn import_line_file(
 ) -> PyResult<(usize, Vec<String>)> {
     let py = history.py();
     let text = crate::hatch_file::read_pattern(path)?;
-    let layers = py.import("core.layers")?;
+    let layers = py.import("built_core.layers")?;
     let (found, skipped) = crate::model::linetypes::py_parse_lin(py, &text)?;
     let scene = history.getattr("scene")?;
     let work = py.import("types")?.getattr("SimpleNamespace")?.call0()?;
@@ -270,7 +270,7 @@ pub fn edit_tag_folder(history: &Bound<'_, PyAny>, verb: &str, draft: &str) -> P
             "The active document changed during the drag",
         ));
     }
-    let backend = py.import("core.layers")?;
+    let backend = py.import("built_core.layers")?;
     let namespace = py.import("types")?.getattr("SimpleNamespace")?;
     let work = namespace.call0()?;
     let attrs = [
@@ -414,7 +414,7 @@ pub fn edit_tag_folder(history: &Bound<'_, PyAny>, verb: &str, draft: &str) -> P
 #[pyfunction]
 pub fn document_piece(history: &Bound<'_, PyAny>, kind: &str, size: Vec<f64>) -> PyResult<()> {
     let scene = history.getattr("scene")?;
-    let h = scene.py().import("core.hatches")?;
+    let h = scene.py().import("built_core.hatches")?;
     if !h.getattr("PIECE_DEFAULT")?.contains(kind)? {
         return Err(PyValueError::new_err("Unknown piece kind"));
     }

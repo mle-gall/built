@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Exports speak material NAMES: Concreto_visto, not mat0.
 
-A face whose attrs carry a registry identity (attrs["mat"], core.materials)
+A face whose attrs carry a registry identity (attrs["mat"], built_core.materials)
 must export under that name in all three interchange formats — sanitized to
 the least common denominator (OBJ's .mtl chokes on whitespace) and unique.
 Anonymous paints keep the classic matN, so old documents export unchanged."""
@@ -16,7 +16,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.scene import Scene                                      # noqa: E402
+from built_core.scene import Scene                                      # noqa: E402
 from formats import dae as dae_format                             # noqa: E402
 from formats import gltf as gltf_format                           # noqa: E402
 from formats import obj as obj_format                             # noqa: E402

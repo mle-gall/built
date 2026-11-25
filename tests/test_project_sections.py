@@ -2,7 +2,7 @@
 """Section frame, cut and fill controls in the Project tree and inspector."""
 import pytest
 
-from core.group import Group
+from built_core.group import Group
 from tests.test_project_drawing_filters import Project
 from tests.test_project_occurrences import _two_planes
 from views import view_commands, wgpu_ui

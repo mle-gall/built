@@ -27,7 +27,7 @@ def folders(win):
 
 
 def test_scenes_keep_their_folder_order_through_save(win, tmp_path):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
 
     ground, first, north = [add(win, name) for name in ("Ground", "First", "North")]

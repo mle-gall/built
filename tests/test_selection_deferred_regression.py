@@ -2,9 +2,9 @@
 import pytest
 from built_core import Matrix4 as QMatrix4x4
 from core import _native
-from core.mesh import Mesh, DeferredMesh
-from core.group import Group
-from core.scene import Scene
+from built_core.mesh import Mesh, DeferredMesh
+from built_core.group import Group
+from built_core.scene import Scene
 from formats import igz
 from tests.controller_surface import live_image
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
@@ -97,8 +97,8 @@ def test_model_info_only_loads_deferred_meshes_when_visible(native_gpu_host, mon
     from types import SimpleNamespace
     from unittest.mock import Mock
     from built_core import Vec3
-    from core import plugin_panels
-    from core.mesh import on_mesh_materialized
+    from built_core import plugin_panels
+    from built_core.mesh import on_mesh_materialized
     from plugins import model_info
 
     win, view = native_gpu_host.window, native_gpu_host.view

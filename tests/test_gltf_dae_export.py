@@ -13,8 +13,8 @@ from pathlib import Path
 from built_render import SurveyRaster
 from built_core import Vec3 as QVector3D
 
-from core.history import History
-from core.scene import Scene
+from built_core.history import History
+from built_core.scene import Scene
 from formats import dae as dae_format
 from formats import gltf as gltf_format
 from georef.datum import SceneDatum

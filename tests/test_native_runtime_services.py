@@ -22,12 +22,12 @@ def setup(app):
     def exercise():
         import threading
         import numpy as np
-        from core.protocol.commands import add_image_plane
+        from built_core.protocol.commands import add_image_plane
         from built_render import background_autosave
         from built_core.scale_figure import store_picture
-        from core.text3d import build_text_letters
+        from built_core.text3d import build_text_letters
         from built_core.paths import cache_directory
-        from core.texture import texture_cache_root
+        from built_core.texture import texture_cache_root
         from georef import transport
         from georef.tiles import PRESETS, TileCache
         from georef.tile_fetcher import TileFetcher

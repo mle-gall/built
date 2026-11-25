@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.history import AddFaceCommand, CompoundCommand, DeleteFaceCommand, History
-from core.scene import Scene
-from core.topology import offset_loop
+from built_core.history import AddFaceCommand, CompoundCommand, DeleteFaceCommand, History
+from built_core.scene import Scene
+from built_core.topology import offset_loop
 
 
 def V(x: float, y: float, z: float = 0.0) -> QVector3D:
@@ -80,7 +80,7 @@ def test_offset_split_makes_ring_and_inner():
 
 
 def test_pushing_an_offset_ring_raises_walls_with_thickness():
-    from core.history import History
+    from built_core.history import History
     from tools.pushpull import PushPullTool
 
     class _VP:
@@ -156,7 +156,7 @@ def test_offset_value_label_and_vcb():
     vl = tool.value_label()
     assert vl is not None
     text, mid = vl
-    from core.units import fmt_len
+    from built_core.units import fmt_len
     assert text == fmt_len(abs(tool.distance))
     assert mid is not None
 
@@ -192,7 +192,7 @@ def test_offset_viewport_measurement_text():
     tool.distance = 0.25
     # In the document's own unit and precision, whatever an earlier test
     # left them at: the box shows what fmt_len shows.
-    from core.units import fmt_len
+    from built_core.units import fmt_len
     assert vp._measurement_text() == fmt_len(0.25)
 
 
@@ -201,7 +201,7 @@ def test_offset_drag_snaps_to_endpoint_and_midpoint():
     midpoint — the offset stays in the face's plane, it only takes its
     distance from the point."""
     from built_core import ScreenPoint, Input
-    from core.snap import SnapResult
+    from built_core.snap import SnapResult
     from tools.base import ToolContext
     from tools.offset import OffsetTool
 
@@ -256,8 +256,8 @@ def test_offset_engine_refuses_on_edge_and_on_face():
     """``allowed_snap_kinds`` makes the engine drop ``on_edge``/``on_face``
     (they follow the cursor and are not reliable), so the Offset never hears
     them — no distance change, no marker."""
-    from core import inference as _inference
-    from core.snap import SnapResult
+    from built_core import inference as _inference
+    from built_core.snap import SnapResult
     from tools.offset import OffsetTool
 
     engine = _inference.InferenceEngine.__new__(_inference.InferenceEngine)

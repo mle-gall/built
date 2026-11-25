@@ -10,11 +10,11 @@ import pytest
 from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core import solids
-from core.group import Group, world_mesh
-from core.history import History
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core import solids
+from built_core.group import Group, world_mesh
+from built_core.history import History
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from tools.base import ToolContext
 
 pytest.importorskip("manifold3d")
@@ -157,7 +157,7 @@ def test_a_component_is_read_through_its_placement_and_left_alone():
 
 def test_a_smooth_side_stays_smooth():
     """A cylinder with a bite out of it keeps soft seams on its side."""
-    import core.edits  # noqa: F401  (Mesh helpers)
+    import built_core.edits  # noqa: F401  (Mesh helpers)
     m = Mesh()
     n, r, h = 24, 1.0, 2.0
     ring = [V(r * math.cos(2 * math.pi * k / n), r * math.sin(2 * math.pi * k / n))
@@ -179,7 +179,7 @@ def test_a_smooth_side_stays_smooth():
 def _curved_cylinder(n=24, r=1.0, h=2.0):
     """A cylinder as Push/Pull leaves it: soft side seams, and each rim one
     curve (one click selects the whole circle)."""
-    import core.edits  # noqa: F401  (Mesh helpers)
+    import built_core.edits  # noqa: F401  (Mesh helpers)
     m = Mesh()
     ring = [V(r * math.cos(2 * math.pi * k / n), r * math.sin(2 * math.pi * k / n))
             for k in range(n)]

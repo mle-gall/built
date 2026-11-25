@@ -75,8 +75,8 @@ def test_deleting_a_group_is_one_undo_step(console, win):
     """A run that only removed a group looked unchanged (nothing added, the
     loose mesh untouched), so it left no undo step and the group was gone
     for good."""
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     scene = win.viewport.scene
     history = win.viewport.history
     scene.groups.append(Group(Mesh(), name="doomed"))
@@ -114,7 +114,7 @@ def test_scope_rebinds_to_the_current_mesh(console, win):
     """PR #3 regression: the scope captured scene.mesh once at open; after
     entering a group (or New/Open) it pointed at the wrong mesh."""
     scene = win.viewport.scene
-    from core.group import Group
+    from built_core.group import Group
     group = Group(name="Console edit context")
     scene.groups.append(group)
     scene.begin_group_edit(group)
@@ -137,7 +137,7 @@ def test_expression_result_shown_and_kept(console):
 def test_one_console_per_document(win, monkeypatch):
     from unittest.mock import Mock
     from types import SimpleNamespace
-    from core import plugin_panels
+    from built_core import plugin_panels
     view = win._doc.stand_in
     monkeypatch.setattr(view, "_ui_attached", True, raising=False)
     monkeypatch.setattr(view, "renderer", Mock())

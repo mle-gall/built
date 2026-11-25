@@ -5,7 +5,7 @@ from time import perf_counter
 from types import SimpleNamespace
 
 from built_core import Vec3 as V
-from core import arrangement, push_scans, snap_query, topology
+from built_core import arrangement, push_scans, snap_query, topology
 from built_core.mesh import Mesh
 
 

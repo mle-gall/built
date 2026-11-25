@@ -178,7 +178,7 @@
   true,
   false,
   "Texture",
-  "core.texture",
+  "built_core.texture",
   [
    "path",
    "sw",

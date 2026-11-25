@@ -16,10 +16,10 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.plugin_images import write_png
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core import render_blender as rb  # noqa: E402
-from core.camera import OrbitCamera  # noqa: E402
-from core.group import make_billboard_group  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core import render_blender as rb  # noqa: E402
+from built_core.camera import OrbitCamera  # noqa: E402
+from built_core.group import make_billboard_group  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 
 def _box(scene):
     pts = [V(0, 0, 0), V(2, 0, 0), V(2, 2, 0), V(0, 2, 0),

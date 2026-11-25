@@ -3,12 +3,12 @@
 import numpy as np
 import pytest
 from built_core import Vec3 as V, Matrix4 as QMatrix4x4
-from core.group import Group
-from core.scene import Scene
+from built_core.group import Group
+from built_core.scene import Scene
 from core.bim import (collect_objects, class_quantities, class_quantities_arrays,
                       face_set_area, face_set_volume, face_net_area,
                       _tagged_group_faces, tag_faces)
-from core.geometry_arrays import arrays_of, world_arrays, merged, quantities
+from built_core.geometry_arrays import arrays_of, world_arrays, merged, quantities
 
 
 CUBE = [
@@ -236,7 +236,7 @@ def test_deferred_face_tags_inside_group_and_identity(tmp_path, monkeypatch):
 
 
 def test_separately_closed_placements_skip_weld(monkeypatch):
-    import core.geometry_arrays as ga
+    import built_core.geometry_arrays as ga
     root = Group()
     root.children = [cube(), cube()]
     for i, child in enumerate(root.children):
@@ -245,7 +245,7 @@ def test_separately_closed_placements_skip_weld(monkeypatch):
         child.xform.translate(i * 3, 0, 0)
     def fail(*args):
         raise AssertionError('closed placements must not weld')
-    monkeypatch.setattr('core.lazy_mesh.weld', fail)
+    monkeypatch.setattr('built_core.lazy_mesh.weld', fail)
     assert ga.quantities(ga.world_arrays(root))[2:4] == (2., True)
 
 
@@ -357,7 +357,7 @@ def test_mapping_tiny_scales_preserve_uniformity_and_scale(tmp_path):
 
 @pytest.mark.parametrize('scale', [(2,2,2), (-2,2,2), (2,3,4), (1e-6,2e-6,1e-6)])
 def test_prototype_placement_quantities_match_world(scale):
-    from core.geometry_arrays import owned_placements, placement_quantities
+    from built_core.geometry_arrays import owned_placements, placement_quantities
     g = cube()
     g.xform = QMatrix4x4()
     g.xform.scale(*scale)
@@ -371,9 +371,9 @@ def test_prototype_placement_quantities_match_world(scale):
 
 
 def test_direct_source_preserves_distinct_coincident_points(monkeypatch):
-    from core.mesh import Mesh, DeferredMesh
-    from core.geometry_arrays import Arrays
-    import core.lazy_mesh as lazy
+    from built_core.mesh import Mesh, DeferredMesh
+    from built_core.geometry_arrays import Arrays
+    import built_core.lazy_mesh as lazy
     # Two coincident triangles with distinct saved vertex identities are two
     # open sheets, not a welded closed two-sided surface.
     mesh = Mesh()
@@ -390,7 +390,7 @@ def test_direct_source_preserves_distinct_coincident_points(monkeypatch):
 
 
 def test_collect_reuses_prototype_measurements_and_split_closure():
-    import core.geometry_arrays as ga
+    import built_core.geometry_arrays as ga
     prototype = cube()
     scene = Scene()
     for i in range(5):
@@ -421,7 +421,7 @@ def test_tag_cache_invalidates_on_tag_epoch():
 
 @pytest.mark.parametrize('closed', [False, True])
 def test_uniform_far_from_origin_preserves_volume(closed):
-    from core.geometry_arrays import owned_placements, placement_quantities
+    from built_core.geometry_arrays import owned_placements, placement_quantities
     g = cube() if closed else Group()
     if not closed:
         g.mesh.add_face([V(*p) for p in CUBE[0]])
@@ -439,7 +439,7 @@ def test_uniform_far_from_origin_preserves_volume(closed):
 
 
 def test_inconsistent_winding_preserves_assembled_volume():
-    from core.geometry_arrays import owned_placements, placement_quantities
+    from built_core.geometry_arrays import owned_placements, placement_quantities
     root = Group()
     for i in range(2):
         g = cube()

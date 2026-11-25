@@ -122,7 +122,7 @@ fn delete_entities(vp: &Bound<'_, PyAny>) -> PyResult<()> {
     if !edges.is_empty() || !faces.is_empty() {
         commands.append(history.call_method1("EraseSelectionCommand", (edges, faces))?)?;
     }
-    for g in matching(&sel, "core.group", "Group")?.iter() {
+    for g in matching(&sel, "built_core.group", "Group")?.iter() {
         commands.append(history.call_method1("DeleteGroupCommand", (g,))?)?;
     }
     let guides = PyList::empty(py);
@@ -139,7 +139,7 @@ fn delete_entities(vp: &Bound<'_, PyAny>) -> PyResult<()> {
     for (module, class, command) in [
         ("built_core.image_plane", "ImagePlane", "DeleteImagePlanesCommand"),
         ("built_core.section", "SectionPlane", "DeleteSectionPlanesCommand"),
-        ("core.dimension", "Dimension", "DeleteDimensionsCommand"),
+        ("built_core.dimension", "Dimension", "DeleteDimensionsCommand"),
         ("built_core.textlabel", "TextLabel", "DeleteTextLabelsCommand"),
         ("built_core.georef.geopath", "GeoPath", "DeleteGeoPathsCommand"),
     ] {
@@ -196,7 +196,7 @@ fn hideable<'py>(entities: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
     let types = (
         mesh.getattr("Edge")?,
         mesh.getattr("Face")?,
-        py.import("core.group")?.getattr("Group")?,
+        py.import("built_core.group")?.getattr("Group")?,
     )
         .into_pyobject(py)?;
     let hidden = py.import("built_core")?.getattr("is_hidden")?;
@@ -234,7 +234,7 @@ fn bridgeable(mesh: &Bound<'_, PyAny>, sel: &Bound<'_, PyAny>) -> PyResult<bool>
     if at_least(sel, "Face", 3)? {
         return Ok(false);
     }
-    let bridge = sel.py().import("core.bridge")?;
+    let bridge = sel.py().import("built_core.bridge")?;
     match bridge.call_method1("profiles_from_selection", (mesh, sel)) {
         Ok(_) => Ok(true),
         Err(e) if e.matches(sel.py(), bridge.getattr("BridgeError")?)? => Ok(false),

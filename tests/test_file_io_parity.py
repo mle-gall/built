@@ -5,7 +5,7 @@ import uuid
 
 import pytest
 
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import igz
 from tests.fixtures.shell.make_composite import make
 
@@ -65,7 +65,7 @@ def test_saved_bytes(source, suffix, tmp_path, request, monkeypatch):
     else:
         src = request.getfixturevalue("composite")[source]
     dest = tmp_path / ("saved" + suffix)
-    from core import group, layers
+    from built_core import group, layers
     expected = None
     for mode in ("0", "1"):
         # Older files acquire missing identities at open. Give both readers
@@ -182,12 +182,12 @@ def test_sheet_view_annotation_and_style_records(tmp_path, monkeypatch):
     from built_core import Vec3
     import json
     import zipfile
-    from core.composition import Composicion, TextoItem
-    from core.dimension import Dimension
-    from core.layers import Layer
-    from core.materials import Material
+    from built_core.composition import Composicion, TextoItem
+    from built_core.dimension import Dimension
+    from built_core.layers import Layer
+    from built_core.materials import Material
     from built_core.saved_views import SavedView
-    from core.textlabel import TextLabel
+    from built_core.textlabel import TextLabel
 
     scene = Scene()
     extension = {"records": [{"class": "IfcWall", "name": "Mûr"}],

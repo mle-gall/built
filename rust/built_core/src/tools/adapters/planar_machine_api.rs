@@ -11,7 +11,7 @@ fn frame<'py>(a: &Args<'py>) -> Reply<'py> {
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
     let axes = imported(py, "built_core.axes")?.into_any();
-    let point_snap_kinds = imported(py, "core.snap")?.getattr("POINT_SNAP_KINDS")?;
+    let point_snap_kinds = imported(py, "built_core.snap")?.getattr("POINT_SNAP_KINDS")?;
     let kind = optional(&tool, "snap_kind")?;
     tool.call_method1("_send", (&viewport, fields!(py; "type" => "frame", "axes" => axes.call_method0("frame")?, "names_point" => if kind.is_none() { none(py) } else { (point_snap_kinds.contains(&kind)?).into_bound_py_any(py)? }).into_any(),))?;
     Ok(none(py))

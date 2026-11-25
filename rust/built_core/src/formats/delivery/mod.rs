@@ -232,7 +232,7 @@ fn delivery_scoped<'p>(py: Python<'p>, scene: &Obj<'p>, record: &Obj<'p>) -> PyR
     };
     match scope.as_str() {
         "node" => {
-            let tree = py.import("core.link_structure")?.call_method1(
+            let tree = py.import("built_core.link_structure")?.call_method1(
                 "Tree",
                 (
                     scene,
@@ -270,7 +270,7 @@ fn delivery_scoped<'p>(py: Python<'p>, scene: &Obj<'p>, record: &Obj<'p>) -> PyR
     let out = copy.call_method1("copy", (scene,))?;
     let tables = PyDict::new(py);
     for field in py
-        .import("core.scene")?
+        .import("built_core.scene")?
         .getattr("ROOT_TABLES")?
         .try_iter()?
     {
@@ -293,7 +293,7 @@ fn delivery_scoped<'p>(py: Python<'p>, scene: &Obj<'p>, record: &Obj<'p>) -> PyR
         .call1((scene.getattr("kept_components")?,))?;
     out.setattr(
         "_root",
-        py.import("core.doc_model")?
+        py.import("built_core.doc_model")?
             .call_method0("new_scene_root")?,
     )?;
     for (k, v) in tables.iter() {

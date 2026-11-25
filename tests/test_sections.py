@@ -9,7 +9,7 @@ import math
 from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Vec3 as QVector3D
 
-from core.history import (
+from built_core.history import (
     DeleteSectionPlanesCommand,
     History,
     MoveSectionPlanesCommand,
@@ -18,7 +18,7 @@ from core.history import (
     RotateSectionPlanesCommand,
     SetActiveSectionCommand,
 )
-from core.scene import Scene
+from built_core.scene import Scene
 from built_core.section import SectionPlane
 from tools.base import ToolContext
 from tools.section import SectionPlaneTool
@@ -141,7 +141,7 @@ def test_tool_arrow_keys_and_ground_default():
 # ---- Persistence + scenes ---------------------------------------------------
 
 def test_igz_roundtrip_and_scene_recall(tmp_path):
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     from built_core.saved_views import SavedView
     from formats import igz as igz_format
 
@@ -178,7 +178,7 @@ def test_igz_roundtrip_and_scene_recall(tmp_path):
 # ---- HLR (the composer's cut) ----------------------------------------------
 
 def test_hlr_clip_cuts_triangles_edges_and_adds_cut_lines():
-    from core.hlr import clip_to_section
+    from built_core.hlr import clip_to_section
     plane = SectionPlane(V(0, 0, 1), V(0, 0, 1))   # hide z > 1
     tris = [((0, 0, 0), (2, 0, 0), (0, 0, 2)),     # straddles the plane
             ((0, 0, 5), (1, 0, 5), (0, 1, 5)),     # fully hidden
@@ -204,8 +204,8 @@ def test_hlr_clip_cuts_triangles_edges_and_adds_cut_lines():
 
 
 def test_hlr_view_honours_the_active_section():
-    from core.camera import OrbitCamera
-    from core.hlr import hlr_view
+    from built_core.camera import OrbitCamera
+    from built_core.hlr import hlr_view
     scene = Scene()
     # A 2 m vertical wall in the XZ plane.
     scene.mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(2, 0, 2), V(0, 0, 2)])
@@ -293,7 +293,7 @@ def test_scene_made_before_any_section_switches_the_cut_off(tmp_path):
     a section activated later never bleeds into it (Marco: "cada escena
     debería ir separada", 2026-09-02). Views from documents older than
     sections (no "section" entry at all) stay hands-off."""
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     from built_core.saved_views import SavedView
     from formats import igz as igz_format
 

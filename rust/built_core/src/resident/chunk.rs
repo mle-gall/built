@@ -185,7 +185,7 @@ impl Mapping {
         let mut distinct: Vec<[u64; 4]> = faces.iter().map(|face| key(*face)).collect();
         distinct.sort_unstable();
         distinct.dedup();
-        let axes = py.import("core.texture")?.getattr("face_uv_axes")?;
+        let axes = py.import("built_core.texture")?.getattr("face_uv_axes")?;
         let vector = py.import("built_core")?.getattr("Vec3")?;
         let mut maps = Vec::with_capacity(distinct.len());
         for entry in &distinct {

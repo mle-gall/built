@@ -10,7 +10,7 @@ pub(super) enum Source<'a, 'p> {
 
 /// Store plugin objects in Python's instance dictionary, including callbacks
 /// that refer back to this binding. The cyclic collector can see those edges.
-#[pyclass(dict, weakref, module = "core.plugin_panels")]
+#[pyclass(dict, weakref, module = "built_core.plugin_panels")]
 pub(super) struct Binding {
     #[pyo3(get)]
     instance: String,

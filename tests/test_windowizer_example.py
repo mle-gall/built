@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 from built_core import Vec3 as V
-from core import extensions
-from core.history import AddFaceCommand
+from built_core import extensions
+from built_core.history import AddFaceCommand
 from examples.extensions import windowizer
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from built_render import chrome_dialogs
@@ -75,7 +75,7 @@ def test_retagging_in_bim_keeps_the_window_editable(native_window, monkeypatch):
 
 
 def test_copies_keep_their_own_parameters(native_window, monkeypatch):
-    from core.group import copy_group
+    from built_core.group import copy_group
     mod, vp, g = _windowize(native_window, monkeypatch)
     c = copy_group(g)
     assert mod.window_data(c) == mod.window_data(g)
@@ -99,7 +99,7 @@ def test_edit_rebuilds_in_place(native_window, monkeypatch):
 
 
 def test_a_saved_window_reopens_editable(native_window, monkeypatch, tmp_path):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     mod, vp, g = _windowize(native_window, monkeypatch)
     path = tmp_path / "wall.igz"

@@ -19,10 +19,10 @@ import random
 import numpy as np
 from built_core import Vec3 as QVector3D
 
-from core import topology
-from core.edits import build_add_edges
-from core.geometry import Edge
-from core.topology import CycleGraph, find_cycles_through
+from built_core import topology
+from built_core.edits import build_add_edges
+from built_core.geometry import Edge
+from built_core.topology import CycleGraph, find_cycles_through
 from tests.test_pushpull_large_solid_cost import _slab_with_cylinders
 
 
@@ -38,7 +38,7 @@ def _circle_segments(cx, cy, z=3.0, r=0.4, n=32):
 
 def test_a_stroke_lays_the_edge_graph_out_once(monkeypatch):
     # The Python planner's edge list is the one laid out once; with the
-    # scans on, the fork plans over the mesh scan (core.edits._ScanEdges),
+    # scans on, the fork plans over the mesh scan (built_core.edits._ScanEdges),
     # whose adjacency is built node by node and never as a CycleGraph.
     monkeypatch.setenv("BUILT_SCANS", "0")
     scene, _hist = _slab_with_cylinders(3)

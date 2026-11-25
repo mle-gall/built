@@ -66,7 +66,7 @@ fn inspect<'py>(
     if mesh.getattr("edges")?.len()? == 0 || (!explicit && mesh.getattr("faces")?.len()? > 20_000) {
         return Ok(None);
     }
-    let plugin = py.import("core.solid_analysis")?;
+    let plugin = py.import("built_core.solid_analysis")?;
     let report = plugin.call_method1("inspect_mesh", (&mesh,))?;
     Ok(Some((mesh, report)))
 }
@@ -81,7 +81,7 @@ pub(crate) fn solid_inspector_sections(
     let Some((mesh, report)) = inspect(scene, group, explicit)? else {
         return Ok(Vec::new());
     };
-    let plugin = scene.py().import("core.solid_analysis")?;
+    let plugin = scene.py().import("built_core.solid_analysis")?;
     if plugin.call_method1("is_sound", (&report,))?.is_truthy()? {
         let volume: Option<f64> = report.get_item("volume")?.extract()?;
         let value = volume
@@ -167,7 +167,7 @@ pub(crate) fn plan_solid_fault<'py>(
         return Ok(None);
     };
     let py = scene.py();
-    let plugin = py.import("core.solid_analysis")?;
+    let plugin = py.import("built_core.solid_analysis")?;
     for item in plugin
         .call_method1("problem_items", (&report,))?
         .try_iter()?
@@ -232,7 +232,7 @@ pub(crate) fn solid_problem_targets<'py>(
 ) -> PyResult<(Vec<Obj<'py>>, usize, usize)> {
     use std::{collections::HashSet, time::Instant};
     let py = scene.py();
-    let plugin = py.import("core.solid_analysis")?;
+    let plugin = py.import("built_core.solid_analysis")?;
     let lazy = py.import("built_core")?;
     let active = scene.getattr("mesh")?;
     let mut seen = HashSet::from([active.as_ptr()]);

@@ -19,10 +19,10 @@ import numpy as np
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.camera import OrbitCamera
-from core.composition import MarcoVista, apply_frame_camera
-from core.hlr import KIND_CUT, hlr_drawing
-from core.scene import Scene
+from built_core.camera import OrbitCamera
+from built_core.composition import MarcoVista, apply_frame_camera
+from built_core.hlr import KIND_CUT, hlr_drawing
+from built_core.scene import Scene
 from built_core.section import SectionPlane
 
 V = QVector3D

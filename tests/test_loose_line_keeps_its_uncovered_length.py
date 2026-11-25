@@ -17,10 +17,10 @@ from __future__ import annotations
 from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edge
-from core.history import EraseSelectionCommand, History
-from core.scene import Scene
-from core.topology import prune_collinear_orphan_edges
+from built_core.edits import build_add_edge
+from built_core.history import EraseSelectionCommand, History
+from built_core.scene import Scene
+from built_core.topology import prune_collinear_orphan_edges
 
 
 def V(x: float, y: float, z: float = 0.0) -> QVector3D:

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from built_core import Vec3 as V
 
-from core.history import FlipFacesCommand
-from core.mesh import Mesh
+from built_core.history import FlipFacesCommand
+from built_core.mesh import Mesh
 from built_core import connected_count, faces_to_flip
 
 

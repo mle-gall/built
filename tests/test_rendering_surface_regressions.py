@@ -5,8 +5,8 @@ import math
 import numpy as np
 import pytest
 from built_core import Vec3 as V, Matrix4 as QMatrix4x4
-from core.mesh import Mesh
-from core.group import Group
+from built_core.mesh import Mesh
+from built_core.group import Group
 from built_core import group_transformed_mesh as transformed_mesh
 from formats.meshexport import SmoothNormals
 from tests.controller_surface import ControllerSurface

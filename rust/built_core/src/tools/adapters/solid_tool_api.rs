@@ -22,7 +22,7 @@ fn host_solid_selection<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
-    let group = imported(py, "core.group")?.getattr("Group")?;
+    let group = imported(py, "built_core.group")?.getattr("Group")?;
     tool.setattr("_viewport", &vp)?;
     return Ok({
         let items = PyList::empty(py);
@@ -52,7 +52,7 @@ fn is_solid<'py>(a: &Args<'py>) -> Reply<'py> {
     let group = a.get_item(2)?;
     let scene = a.get_item(1)?;
     let tool = a.get_item(0)?;
-    let is_solid = imported(py, "core.solids")?.getattr("is_solid")?;
+    let is_solid = imported(py, "built_core.solids")?.getattr("is_solid")?;
     if tool
         .getattr("_cache_version")?
         .ne(scene.getattr("version")?)?

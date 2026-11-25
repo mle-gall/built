@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Paint offered by the Project row menu includes recent and model swatches."""
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from core.materials import Material
+from built_core.materials import Material
 from tests.test_material_popup import choose, open_picker, rebuild, rows, tiles
 from tools.paint import PaintTool
 

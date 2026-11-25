@@ -7,7 +7,7 @@ import pytest
 from built_core import Vec3
 from built_core import ScreenPoint, Input
 
-from core.geometry import Face
+from built_core.geometry import Face
 from tests.tool_parity import FIXTURES, _pt, _r
 from tools.base import ToolContext
 from tools.texture_position import TexturePositionTool

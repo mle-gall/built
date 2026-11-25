@@ -18,14 +18,14 @@ import pytest
 from built_core import Vec3 as QVector3D
 
 
-from core import layers as L
-from core.camera import OrbitCamera
-from core.composition import MarcoVista, apply_frame_camera
-from core.group import Group
-from core.hlr import KIND_CUT, KIND_EDGE, hlr_drawing
-from core.layers import DEFAULT_LAYER, Layer
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core import layers as L
+from built_core.camera import OrbitCamera
+from built_core.composition import MarcoVista, apply_frame_camera
+from built_core.group import Group
+from built_core.hlr import KIND_CUT, KIND_EDGE, hlr_drawing
+from built_core.layers import DEFAULT_LAYER, Layer
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from built_core.section import SectionPlane
 
 V = QVector3D
@@ -172,7 +172,7 @@ def test_a_layer_set_on_a_face_inside_the_object_wins():
 
 
 def test_the_frame_keeps_its_fill_by_layer_switch():
-    from core.composition import Composicion
+    from built_core.composition import Composicion
     comp = Composicion()
     comp.frames.append(MarcoVista(cut_fill_by_layer=True))
     back = Composicion.from_dict(json.loads(json.dumps(comp.to_dict())))
@@ -195,7 +195,7 @@ def test_drawing_sets_the_cut_weight():
 # ---- Hatches by layer --------------------------------------------------------
 
 def test_every_hatch_has_a_name_and_marks_inside_any_box():
-    from core.hatches import HATCH_LABELS, HATCH_ORDER, hatch_marks
+    from built_core.hatches import HATCH_LABELS, HATCH_ORDER, hatch_marks
     assert set(HATCH_ORDER) == set(HATCH_LABELS)
     for key in HATCH_ORDER:
         marks = hatch_marks(key, (0.0, 0.0, 20.0, 10.0))
@@ -207,7 +207,7 @@ def test_every_hatch_has_a_name_and_marks_inside_any_box():
 def test_a_hatch_is_locked_to_the_paper_not_to_the_box():
     """Two pieces of one wall side by side: the pattern runs on unbroken —
     the courses of a small box are courses of a bigger one."""
-    from core.hatches import hatch_marks
+    from built_core.hatches import hatch_marks
     small = hatch_marks("brick", (0.0, 0.0, 6.0, 6.0))["lines"]
     big = hatch_marks("brick", (-10.0, -10.0, 20.0, 20.0))["lines"]
     rows_small = {round(s[1], 6) for s in small if abs(s[1] - s[3]) < 1e-9}
@@ -217,7 +217,7 @@ def test_a_hatch_is_locked_to_the_paper_not_to_the_box():
 
 
 def test_the_hatch_scales_with_the_frame_spacing():
-    from core.hatches import hatch_marks
+    from built_core.hatches import hatch_marks
     box = (0.0, 0.0, 30.0, 30.0)
     assert (len(hatch_marks("diagonal", box, 2.0)["lines"])
             < len(hatch_marks("diagonal", box, 1.0)["lines"]))
@@ -320,7 +320,7 @@ def test_only_hatched_layers_give_their_ink_and_the_legend_shows_it():
 # ---- The catalogue -----------------------------------------------------------
 
 def test_every_pattern_sits_in_exactly_one_group():
-    from core.hatches import HATCH_GROUPS, HATCH_LABELS, HATCH_ORDER
+    from built_core.hatches import HATCH_GROUPS, HATCH_LABELS, HATCH_ORDER
     listed = [k for _t, keys in HATCH_GROUPS for k in keys]
     assert sorted(listed) == sorted(HATCH_LABELS)
     assert len(listed) == len(set(listed)) == len(HATCH_ORDER)
@@ -328,7 +328,7 @@ def test_every_pattern_sits_in_exactly_one_group():
 
 def test_the_first_patterns_keep_their_names():
     """Documents saved with the first set still load their hatches."""
-    from core.hatches import known
+    from built_core.hatches import known
     for key in ("solid", "diagonal", "crosshatch", "brick", "block",
                 "concrete", "reinforced", "insulation", "earth", "gravel",
                 "sand", "stone", "wood", "steel"):
@@ -339,7 +339,7 @@ def test_the_first_patterns_keep_their_names():
 def test_every_pattern_marks_inside_its_box_and_tells_apart():
     """Each pattern leaves marks near the box (the clip trims the rest),
     and no two patterns draw the very same marks."""
-    from core.hatches import HATCH_ORDER, SAME_FACE, hatch_marks
+    from built_core.hatches import HATCH_ORDER, SAME_FACE, hatch_marks
     box = (0.0, 0.0, 12.0, 8.0)
     seen = {}
     for key in HATCH_ORDER:
@@ -373,7 +373,7 @@ _PAT = """;%UNITS=MM
 
 
 def test_a_pattern_file_is_read_and_bad_lines_are_dropped():
-    from core.hatches import parse_pat
+    from built_core.hatches import parse_pat
     found = parse_pat(_PAT)
     assert set(found) == {"TEST-HEX"}
     assert found["TEST-HEX"]["label"] == "hexagons"
@@ -383,7 +383,7 @@ def test_a_pattern_file_is_read_and_bad_lines_are_dropped():
 
 
 def test_turning_a_pattern_turns_its_lines():
-    from core.hatches import hatch_marks
+    from built_core.hatches import hatch_marks
     flat = hatch_marks("grid", (0, 0, 10, 10))["lines"]
     turned = hatch_marks("grid", (0, 0, 10, 10), angle=45.0)["lines"]
     def slopes(lines):
@@ -423,7 +423,7 @@ def test_a_material_is_drawn_at_its_real_size_by_itself():
     """A brick's course is 6.5 cm in reality: 6.5 mm on paper at 1:10,
     1.3 mm at 1:50 — whatever the sheet, with no box to tick; a stipple
     keeps its size on paper; the layer can force either."""
-    from core.hatches import REAL_SIZE, real_scale
+    from built_core.hatches import REAL_SIZE, real_scale
     unit, metres = REAL_SIZE["brick"]
     for n in (10, 20, 50, 100):
         assert unit * real_scale("brick", n) == pytest.approx(
@@ -455,7 +455,7 @@ def test_the_size_rule_is_saved_only_when_the_layer_chose_it():
 
 
 def test_imported_patterns_live_in_the_document(tmp_path):
-    from core.hatches import parse_pat
+    from built_core.hatches import parse_pat
     from formats import igz
     scene = Scene()
     scene.hatch_patterns = parse_pat(_PAT)
@@ -479,7 +479,7 @@ def test_imported_patterns_live_in_the_document(tmp_path):
 # ---- The catalogue's entries, the pattern file out, the frame's hatch pen ---
 
 def test_every_pattern_has_its_catalogue_entry():
-    from core.hatches import HATCH_INFO, HATCH_LABELS
+    from built_core.hatches import HATCH_INFO, HATCH_LABELS
     assert set(HATCH_INFO) == set(HATCH_LABELS)
     aliases = [info[0] for info in HATCH_INFO.values()]
     assert len(aliases) == len(set(aliases))          # no two codes alike
@@ -494,7 +494,7 @@ def _inked(key, families=None, size=(120, 90), scale=10.0, shift=(0.37, 0.29)):
     a ``size`` grid at ``scale`` px/mm, shifted off the pixel grid (a line
     lying exactly between two pixels lands on either for a millionth of a
     millimetre): the test's own drawing, the comparison is of the marks."""
-    from core.hatches import hatch_marks
+    from built_core.hatches import hatch_marks
     w, h = size
     box = (0.0, 0.0, w / scale, h / scale)
     marks = hatch_marks(key, box, 1.0, 0.0, families, None)
@@ -532,7 +532,7 @@ def test_a_line_pattern_goes_to_a_pattern_file_and_back_unchanged():
     """Out to .pat and read again, every line pattern draws the same — the
     herringbone's built-in turn included (compared as drawn: six decimals
     in the file may move a line that the clip throws away anyway)."""
-    from core.hatches import HATCH_ORDER, line_families, parse_pat, to_pat
+    from built_core.hatches import HATCH_ORDER, line_families, parse_pat, to_pat
     keys = [k for k in HATCH_ORDER if line_families(k)]
     assert {"brick", "brick_flemish", "hexagon", "parquet"} <= set(keys)
     assert line_families("concrete") is None          # a stipple: no .pat
@@ -545,8 +545,8 @@ def test_a_line_pattern_goes_to_a_pattern_file_and_back_unchanged():
 
 
 def test_export_includes_standard_line_patterns_and_imported_patterns(tmp_path):
-    from core.history import History
-    from core.hatches import line_families, HATCH_ORDER, parse_pat
+    from built_core.history import History
+    from built_core.hatches import line_families, HATCH_ORDER, parse_pat
     from built_core import import_hatch_file, export_style_file
     scene = Scene()
     pat = tmp_path / "mine.pat"
@@ -562,7 +562,7 @@ def test_export_includes_standard_line_patterns_and_imported_patterns(tmp_path):
 
 
 def test_the_frame_keeps_its_hatch_pen():
-    from core.composition import Composicion
+    from built_core.composition import Composicion
     comp = Composicion()
     comp.frames.append(MarcoVista(pen_hatch_mm=0.13))
     back = Composicion.from_dict(json.loads(json.dumps(comp.to_dict())))
@@ -582,7 +582,7 @@ def _band(cx, cy, length, thick, angle):
 
 @pytest.mark.parametrize("angle", [0, 30, 90, 135])
 def test_a_piece_is_measured_along_its_length_and_across_its_thickness(angle):
-    from core.hatches import fit_band
+    from built_core.hatches import fit_band
     origin, along, across, length, thick = fit_band(_band(10, 20, 50, 6,
                                                           angle))
     assert length == pytest.approx(50) and thick == pytest.approx(6)
@@ -595,7 +595,7 @@ def test_the_insulation_reads_as_teardrops_up_and_down():
     """Half circles touching against each face, and from the ends of each
     one straight legs to where two half circles meet on the other face —
     teardrops pointing up and down, side by side, from face to face."""
-    from core.hatches import batt_marks, _BATT_RADIUS
+    from built_core.hatches import batt_marks, _BATT_RADIUS
     polys = batt_marks((0.0, 0.0), (1.0, 0.0), (0.0, 1.0), 40.0, 8.0)
     ys = [y for pts in polys for _x, y in pts]
     assert min(ys) == pytest.approx(0.0, abs=1e-6)
@@ -737,7 +737,7 @@ def test_drawing_imports_and_exports_line_type_files(tmp_path, monkeypatch):
 # ---- Bonds: brick by brick, by the wall's thickness and the brick's size -----
 
 def test_english_bond_alternates_headers_and_stretchers():
-    from core.hatches import bond_course
+    from built_core.hatches import bond_course
     depth, height, rects = bond_course("brick_bond", 0, 215.0, None, 0, 1000)
     assert {(b0, b1) for _a0, _a1, b0, b1, _k in rects} == {(0.0, 225.0)}
     assert rects[1][1] - rects[1][0] == pytest.approx(112.5)   # headers
@@ -748,7 +748,7 @@ def test_english_bond_alternates_headers_and_stretchers():
 
 
 def test_one_and_a_half_swaps_its_faces_course_by_course():
-    from core.hatches import bond_course
+    from built_core.hatches import bond_course
     _d, _h, a = bond_course("brick_one_half", 0, 330.0, None, 0, 500)
     _d, _h, b = bond_course("brick_one_half", 1, 330.0, None, 0, 500)
     assert min(r[3] - r[2] for r in a if r[2] == 0.0) == pytest.approx(112.5)
@@ -756,7 +756,7 @@ def test_one_and_a_half_swaps_its_faces_course_by_course():
 
 
 def test_the_bond_by_thickness_follows_each_wall():
-    from core.hatches import bond_course
+    from built_core.hatches import bond_course
     for thick, depth in ((60.0, 75.0),        # brick on edge
                          (102.5, 112.5),      # half a brick, stretchers
                          (215.0, 225.0),      # one brick, English
@@ -767,7 +767,7 @@ def test_the_bond_by_thickness_follows_each_wall():
 def test_paved_areas_and_walls_cut_along_show_the_face():
     """No wall: a paved area or a wall cut along shows the bond's face —
     courses the whole width, staggered head joints."""
-    from core.hatches import bond_marks
+    from built_core.hatches import bond_marks
     wall = ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0), 60.0, 2.4)
     assert bond_marks("brick", wall, "plan", 0.5, 100.0)["lines"]
     yard = ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0), 60.0, 30.0)
@@ -785,7 +785,7 @@ def test_paved_areas_and_walls_cut_along_show_the_face():
 
 
 def test_the_joints_follow_the_scale():
-    from core.hatches import joints_mode
+    from built_core.hatches import joints_mode
     assert joints_mode(None, 100) == joints_mode(None, 75) == "hatch"
     assert joints_mode(None, 50) == joints_mode(None, 20) == "single"
     assert joints_mode(None, 15) == joints_mode(None, 5) == "double"
@@ -795,7 +795,7 @@ def test_the_joints_follow_the_scale():
 
 
 def test_double_joints_part_every_brick_by_its_real_joint():
-    from core.hatches import bond_marks, fit_band
+    from built_core.hatches import bond_marks, fit_band
     wall = [(0.0, 0.0), (60.0, 0.0), (60.0, 21.5), (0.0, 21.5)]   # 1:10
     marks = bond_marks("brick_bond", fit_band(wall), "plan", 5.0, 10.0,
                        None, "double")
@@ -827,7 +827,7 @@ def test_a_layer_keeps_its_joints_and_mortar(tmp_path):
 
 
 def test_a_gap_of_the_honeycomb_bond_is_crossed():
-    from core.hatches import bond_course
+    from built_core.hatches import bond_course
     _d, _h, rects = bond_course("brick_honeycomb", 0, 102.5, None, 0, 1000)
     gaps = [r for r in rects if r[4] == "gap"]
     bricks = [r for r in rects if r[4] == "brick"]
@@ -837,7 +837,7 @@ def test_a_gap_of_the_honeycomb_bond_is_crossed():
 
 
 def test_a_layer_keeps_its_own_brick(tmp_path):
-    from core.hatches import clean_brick, real_scale
+    from built_core.hatches import clean_brick, real_scale
     from formats import igz
     assert clean_brick((290, 140, 71, 10)) == (290.0, 140.0, 71.0, 10.0)
     for bad in ((100, 200, 50, 10), (290, 140, 71), ("x", 1, 1, 1),
@@ -863,7 +863,7 @@ def test_a_layer_keeps_its_own_brick(tmp_path):
 
 
 def test_the_brick_families_follow_the_brick():
-    from core.hatches import brick_families
+    from built_core.hatches import brick_families
     usual = brick_families("brick")
     chile = brick_families("brick", (290, 140, 71, 10))
     assert usual[0][4] == chile[0][4] == 1.5          # the course
@@ -873,7 +873,7 @@ def test_the_brick_families_follow_the_brick():
 
 
 def test_the_zigzag_insulation_runs_face_to_face():
-    from core.hatches import FITTED, fitted_marks
+    from built_core.hatches import FITTED, fitted_marks
     assert "insulation_zigzag" in FITTED
     (pts,) = fitted_marks("insulation_zigzag", (0.0, 0.0), (1.0, 0.0),
                           (0.0, 1.0), 12.0, 3.0)
@@ -887,7 +887,7 @@ def test_the_zigzag_insulation_runs_face_to_face():
 
 
 def test_timber_cut_across_is_crossed_corner_to_corner():
-    from core.hatches import FITTED, fit_band, fitted_marks
+    from built_core.hatches import FITTED, fit_band, fitted_marks
     assert "wood_cross" in FITTED
     stud = [(10.0, 0.0), (15.0, 0.0), (15.0, 10.0), (10.0, 10.0)]
     a, b = fitted_marks("wood_cross", *fit_band(stud))
@@ -898,7 +898,7 @@ def test_timber_cut_across_is_crossed_corner_to_corner():
 
 
 def test_a_piece_is_cut_across_when_short_and_stocky():
-    from core.hatches import WOOD, cut_across, fit_band
+    from built_core.hatches import WOOD, cut_across, fit_band
     assert "wood_grain" in WOOD and "wood_cross" not in WOOD
     stud = [(0, 0), (1.5, 0), (1.5, 0.5), (0, 0.5)]        # 15 × 5 cm, 1:10
     board = [(0, 0), (40, 0), (40, 0.5), (0, 0.5)]         # 4 m × 5 cm
@@ -915,7 +915,7 @@ def test_a_piece_is_cut_across_when_short_and_stocky():
 def test_the_pieces_of_one_wall_share_their_joints():
     """A wall split by a door: the head joints of both pieces fall on one
     grid, whichever way round each piece was traced."""
-    from core.hatches import bond_marks, fit_band
+    from built_core.hatches import bond_marks, fit_band
     left = [(0.0, 0.0), (30.0, 0.0), (30.0, 2.15), (0.0, 2.15)]
     right = [(70.0, 2.15), (40.0, 2.15), (40.0, 0.0), (70.0, 0.0)]  # reversed
     xs = set()
@@ -931,7 +931,7 @@ def test_the_pieces_of_one_wall_share_their_joints():
 
 
 def test_the_courses_of_two_pieces_line_up_in_a_section():
-    from core.hatches import bond_marks, vertical_band
+    from built_core.hatches import bond_marks, vertical_band
     a = [(0.0, 0.0), (2.15, 0.0), (2.15, 40.0), (0.0, 40.0)]
     b = [(30.0, 13.0), (32.15, 13.0), (32.15, 40.0), (30.0, 40.0)]
     beds = []
@@ -944,7 +944,7 @@ def test_the_courses_of_two_pieces_line_up_in_a_section():
 
 
 def test_clip_keeps_what_is_inside_even_odd():
-    from core.hatches import clip_segments
+    from built_core.hatches import clip_segments
     outer = [(0, 0), (10, 0), (10, 10), (0, 10)]
     hole = [(4, 4), (6, 4), (6, 6), (4, 6)]
     parts = clip_segments([(-5, 5, 15, 5)], [outer, hole])
@@ -955,7 +955,7 @@ def test_clip_keeps_what_is_inside_even_odd():
 
 
 def test_hatch_lines_draw_as_the_sheet_does():
-    from core.hatches import hatch_lines
+    from built_core.hatches import hatch_lines
     wall = [(0.0, 0.0), (60.0, 0.0), (60.0, 2.15), (0.0, 2.15)]
     plan = {"scale": 5.0, "cut": "plan", "scale_n": 10.0}
     lines = hatch_lines("brick", [wall], plan)
@@ -994,7 +994,7 @@ def _timber(scene):
 
 
 def test_a_solid_runs_through_the_plane_as_deep_as_it_is():
-    from core.hlr import hlr_drawing
+    from built_core.hlr import hlr_drawing
     scene = _timber(Scene())
     d = hlr_drawing(scene, _top_camera(scene), profiles=False, fills=True,
                     layers=True, depth_layers=["Madera"])
@@ -1012,7 +1012,7 @@ def test_a_solid_runs_through_the_plane_as_deep_as_it_is():
 
 
 def test_the_grain_settles_the_cross_when_the_piece_is_known():
-    from core.hatches import cut_across, fit_band
+    from built_core.hatches import cut_across, fit_band
     beam = [(0, 0), (60, 0), (60, 2.5), (0, 2.5)]       # 6 m cut along: 1:10
     stocky = [(0, 0), (1.5, 0), (1.5, 0.5), (0, 0.5)]
     assert not cut_across(fit_band(beam), 10.0)
@@ -1025,8 +1025,8 @@ def test_only_the_timber_cut_across_its_grain_is_crossed(monkeypatch):
     """The stud gets the cross; the beam and the block — cut along — their
     grain, though the block is short and stocky in the cut and its shape
     alone would have crossed it."""
-    import core.hatches as H
-    from core.hlr import hlr_drawing
+    import built_core.hatches as H
+    from built_core.hlr import hlr_drawing
     scene = _timber(Scene())
     d = hlr_drawing(scene, _top_camera(scene), profiles=False, fills=True,
                     layers=True, depth_layers=["Madera"])
@@ -1051,7 +1051,7 @@ def test_only_the_timber_cut_across_its_grain_is_crossed(monkeypatch):
 # ---- Solid fills and both DXF exports --------------------------------------------
 
 def test_a_region_cuts_into_strips_even_odd():
-    from core.hatches import fill_quads
+    from built_core.hatches import fill_quads
     outer = [(0, 0), (10, 0), (10, 10), (0, 10)]
     hole = [(4, 4), (6, 4), (6, 6), (4, 6)]
     quads = fill_quads([outer, hole])
@@ -1167,7 +1167,7 @@ def test_the_document_pieces_draw_every_layer_without_its_own(tmp_path):
 
 
 def test_a_block_and_a_ticholo_are_drawn_their_own_size():
-    from core.hatches import bond_course, piece_kind, real_unit
+    from built_core.hatches import bond_course, piece_kind, real_unit
     assert piece_kind("block") == "block"
     assert piece_kind("hollow_brick") == "hollow"
     assert piece_kind("brick_bond") == "brick"
@@ -1189,7 +1189,7 @@ def test_a_block_and_a_ticholo_are_drawn_their_own_size():
 # ---- Bed joint and head joint ------------------------------------------------------
 
 def test_a_brick_may_have_two_joints():
-    from core.hatches import brick_dims, clean_brick
+    from built_core.hatches import brick_dims, clean_brick
     assert clean_brick((290, 140, 71, 10, 10)) == (290.0, 140.0, 71.0, 10.0)
     assert clean_brick((290, 140, 71, 12, 8)) == (290.0, 140.0, 71.0, 12.0,
                                                   8.0)
@@ -1200,7 +1200,7 @@ def test_a_brick_may_have_two_joints():
 
 
 def test_the_bed_joint_sets_the_courses_the_head_joint_the_bricks():
-    from core.hatches import bond_course, brick_families
+    from built_core.hatches import bond_course, brick_families
     brick = (240.0, 115.0, 50.0, 15.0, 5.0)        # 15 bed, 5 head
     depth, course, rects = bond_course("brick", 0, 115.0, brick, 0, 1000)
     assert course == pytest.approx(65.0)           # height + bed joint
@@ -1210,7 +1210,7 @@ def test_the_bed_joint_sets_the_courses_the_head_joint_the_bricks():
 
 
 def test_double_joints_show_each_joint_its_own_width():
-    from core.hatches import bond_marks
+    from built_core.hatches import bond_marks
     brick = (240.0, 115.0, 50.0, 20.0, 6.0)
     # A paved area at 1:10 (2 m: no wall, the bond's face), × 1 the
     # course (70 mm → 1.5 paper mm): per_mm known.
@@ -1228,7 +1228,7 @@ def test_double_joints_show_each_joint_its_own_width():
 # ---- Aerated concrete, load-bearing ceramic blocks, Uruguay ----------------------
 
 def test_aerated_concrete_is_big_glued_and_porous():
-    from core.hatches import bond_course, bond_marks, piece_kind
+    from built_core.hatches import bond_course, bond_marks, piece_kind
     assert piece_kind("aac_block") == "aac"
     _d, course, rects = bond_course("aac_block", 0, 150.0, None, 0, 2000)
     assert course == pytest.approx(203.0)          # 200 and a 3 mm joint
@@ -1240,12 +1240,12 @@ def test_aerated_concrete_is_big_glued_and_porous():
 
 
 def hatch_marks_have_circles(key):
-    from core.hatches import hatch_marks
+    from built_core.hatches import hatch_marks
     return bool(hatch_marks(key, (0.0, 0.0, 20.0, 20.0))["circles"])
 
 
 def test_a_load_bearing_ceramic_block_shows_its_upright_holes():
-    from core.hatches import bond_course, bond_marks, piece_kind
+    from built_core.hatches import bond_course, bond_marks, piece_kind
     assert piece_kind("perforated_block") == "perforated"
     _d, course, rects = bond_course("perforated_block", 0, 120.0, None,
                                     0, 1000)
@@ -1262,7 +1262,7 @@ def test_a_load_bearing_ceramic_block_shows_its_upright_holes():
 
 
 def test_uruguay_and_the_new_pieces_are_in_the_lists():
-    from core.hatches import PIECE_SIZES
+    from built_core.hatches import PIECE_SIZES
     names = {k: [n for n, _s in v] for k, v in PIECE_SIZES.items()}
     assert "Uruguay" in names["brick"]
     assert "Rejillón" in names["perforated"]
@@ -1271,7 +1271,7 @@ def test_uruguay_and_the_new_pieces_are_in_the_lists():
 
 
 def test_a_precast_concrete_brick_shows_its_holes():
-    from core.hatches import PIECE_SIZES, bond_course, bond_marks, piece_kind
+    from built_core.hatches import PIECE_SIZES, bond_course, bond_marks, piece_kind
     assert piece_kind("concrete_brick") == "cored"
     assert PIECE_SIZES["cored"][0][0] == "Concrete brick 12"
     _d, course, rects = bond_course("concrete_brick", 0, 120.0, None, 0, 1000)
@@ -1287,7 +1287,7 @@ def test_a_precast_concrete_brick_shows_its_holes():
 def _model_cut(scene):
     """The active plane through ``scene``: its chords and each one's layer,
     as the viewer tags them."""
-    from core.hlr import collect_geometry
+    from built_core.hlr import collect_geometry
     tris, _h, _s, _hl, _sl, tags = collect_geometry(scene, layers=True)
     t = np.asarray(tris, dtype=np.float64)
     sp = scene.active_section()
@@ -1349,7 +1349,7 @@ def _shifted(marks, dx, dy):
 
 
 def test_a_wall_starts_with_a_whole_brick_wherever_it_stands():
-    from core.hatches import bond_marks
+    from built_core.hatches import bond_marks
     here = ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0), 60.0, 12.0)
     there = ((7.3, 4.1), (1.0, 0.0), (0.0, 1.0), 60.0, 12.0)
     a = bond_marks("brick_bond", here, "plan", 5.0, 10.0)
@@ -1362,7 +1362,7 @@ def test_a_wall_starts_with_a_whole_brick_wherever_it_stands():
 
 
 def test_a_section_starts_its_first_course_at_the_foot():
-    from core.hatches import bond_marks
+    from built_core.hatches import bond_marks
     # A wall cut across, 12 mm thick on paper, 40 mm tall, its foot at y=40.
     band = ((0.0, 40.0), (0.0, -1.0), (1.0, 0.0), 40.0, 12.0)
     marks = bond_marks("brick", band, "vertical", 5.0, 10.0)
@@ -1375,7 +1375,7 @@ def test_a_section_starts_its_first_course_at_the_foot():
 
 
 def test_the_offset_moves_the_first_joint_and_the_first_course():
-    from core.hatches import bond_marks, real_scale
+    from built_core.hatches import bond_marks, real_scale
     wall = ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0), 60.0, 12.0)
     a = bond_marks("brick_bond", wall, "plan", 5.0, 10.0)
     b = bond_marks("brick_bond", wall, "plan", 5.0, 10.0, offset=(50.0, 0.0))
@@ -1394,7 +1394,7 @@ def test_the_offset_moves_the_first_joint_and_the_first_course():
 
 
 def test_a_pattern_of_pieces_moves_and_a_texture_does_not():
-    from core.hatches import PLACED, hatch_lines, hatch_marks
+    from built_core.hatches import PLACED, hatch_lines, hatch_marks
     box = (0.0, 0.0, 40.0, 40.0)
     a = hatch_marks("tile", box, 1.0)
     b = hatch_marks("tile", box, 1.0, offset=(1.5, -2.0))
@@ -1473,7 +1473,7 @@ def test_document_line_ink_is_kept_until_changed_back_to_by_tag():
 
 def test_a_dash_pattern_cuts_an_edge_as_a_sheet_at_1_50():
     import numpy as np
-    from core.layers import dash_segments
+    from built_core.layers import dash_segments
     seg = np.array([[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]])
     dashes, gaps = dash_segments(seg, (6.0, 2.0))       # 0.30 m, 0.10 m
     assert len(dashes) == 3 and len(gaps) == 2
@@ -1520,7 +1520,7 @@ def test_standard_and_custom_line_inks_are_independent():
 def test_an_open_cell_of_a_honeycomb_bond_is_closed_on_both_sides():
     """Palomero: each open cell is crossed and closed — the side after a
     brick too (a brick draws only the joint before it)."""
-    from core.hatches import bond_marks
+    from built_core.hatches import bond_marks
     wall = ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0), 80.0, 12.0)    # 1:10
     marks = bond_marks("brick_honeycomb", wall, "plan", 5.0, 10.0)
     uprights = {round(x0, 3) for x0, y0, x1, y1 in marks["lines"]

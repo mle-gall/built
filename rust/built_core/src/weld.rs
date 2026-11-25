@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! `core.lazy_mesh.weld` — what `Mesh.bulk_weld` makes of a batch of
+//! `built_core.lazy_mesh.weld` — what `Mesh.bulk_weld` makes of a batch of
 //! points on an EMPTY mesh — with a hash map in place of the NumPy sorts:
 //! the same cells (`np.round`, ties to even, of the float32 positions ×
 //! 10⁴), the same "candidate" cells (a neighbouring cell in the batch),

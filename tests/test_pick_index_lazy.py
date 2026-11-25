@@ -16,7 +16,7 @@ from built_core import ScreenPoint as QPointF
 
 
 def _cube():
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     m = Mesh()
     p = [V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0),
          V(0, 0, 1), V(1, 0, 1), V(1, 1, 1), V(0, 1, 1)]
@@ -28,7 +28,7 @@ def _cube():
 
 @pytest.fixture
 def vp(native_host):
-    from core.group import Group
+    from built_core.group import Group
     native_host.resize(1000, 700, 1.)
     v = native_host.viewport
     v.scene.guides.clear()
@@ -236,7 +236,7 @@ def test_the_snap_edges_come_from_the_index_they_were_measured_on(vp):
         for e in vp._nearby_group_edges(x, y):
             assert _owner_holds(e)
             pa, pb = vp._world_to_pixel(e.a), vp._world_to_pixel(e.b)
-            from core.snap import _closest_on_segment_2d
+            from built_core.snap import _closest_on_segment_2d
             assert _closest_on_segment_2d((x, y), pa, pb)[0] < 48.0 + 1e-6
 
 
@@ -385,7 +385,7 @@ def test_a_change_of_the_lazy_set_keeps_the_static_triangles_and_the_loose_part(
     # Each change of the lazy set rebuilds the index (#158): it joined the
     # static triangles again (~100 MB on the plant) and walked the loose
     # faces again. Kept while they are the same; the answers do not move.
-    from core.group import Group
+    from built_core.group import Group
     vp.scene.mesh.add_face([V(-1, -1, 0), V(-0.5, -1, 0), V(-0.5, -0.5, 0),
                             V(-1, -0.5, 0)])
     big = Group(_cube(), name="fijo")                 # a group: static

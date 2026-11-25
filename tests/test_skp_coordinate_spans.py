@@ -7,8 +7,8 @@ import numpy as np
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from formats import igz, skp
 from built_core import PointRows, skp_flatten_rings as flatten_rings
 

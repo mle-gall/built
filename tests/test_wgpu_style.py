@@ -44,7 +44,7 @@ def test_profile_width_and_dash_defaults():
 
 
 def test_section_plane_keeps_gl_half_space_and_resets():
-    from core.scene import Scene
+    from built_core.scene import Scene
     from built_core.section import SectionPlane
     from built_core import Vec3 as QVector3D
     scene = Scene()

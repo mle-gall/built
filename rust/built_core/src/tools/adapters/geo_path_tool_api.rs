@@ -85,7 +85,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let run: Obj<'py>;
     let tool = a.get_item(0)?;
     let mut v: Obj<'py>;
-    let fmt_len = imported(py, "core.units")?.getattr("fmt_len")?;
+    let fmt_len = imported(py, "built_core.units")?.getattr("fmt_len")?;
     let label = tool.call_method1("_state", ("label",))?;
     if label.is_none() {
         return Ok(none(py));

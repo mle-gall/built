@@ -16,8 +16,8 @@ from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 
 import views.document_interaction as viewport  # noqa: E402
-from core.group import Group  # noqa: E402
-from core.mesh import Mesh  # noqa: E402
+from built_core.group import Group  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
 
 DRAW_ONLY = ("dback", "vcol", "by_texture", "tcol", "ttex", "back_vcol",
              "back_tex", "back_tcol", "back_ttex", "fvcol", "soft_pts",

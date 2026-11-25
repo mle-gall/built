@@ -64,7 +64,7 @@ impl Paper {
         let h = number(frame, "h_mm")?;
         let height = frame
             .py()
-            .import("core.composition")?
+            .import("built_core.composition")?
             .call_method1("model_height_for_frame", (h, frame.getattr("scale_n")?))?
             .extract::<f64>()?;
         Ok(Self {
@@ -109,7 +109,7 @@ fn run_hlr<'py>(pass: &FramePass<'py>, tags: bool, kw: &Bound<'py, PyDict>) -> P
     kw.set_item("geometry", &pass.geometry)?;
     kw.set_item("layers", tags)?;
     kw.py()
-        .import("core.hlr")?
+        .import("built_core.hlr")?
         .getattr("hlr_drawing")?
         .call((&pass.scene, &pass.camera), Some(kw))
 }
@@ -126,7 +126,7 @@ pub(super) fn drawing<'py>(
     }
     let facade = frame_scene(&scene, frame, &view)?;
     let styles = core(py)?.getattr("tag_styles")?;
-    let layers = py.import("core.layers")?;
+    let layers = py.import("built_core.layers")?;
     let coloured = flag(frame, "layer_colours", false)?;
     let filled = !opt(frame, "cut_fill").is_some_and(|v| v.eq("none").unwrap_or(false));
     let fill_layer = filled && flag(frame, "cut_fill_by_layer", false)?;
@@ -360,7 +360,7 @@ fn circles<'py>(source: &Obj<'py>, frame: &Obj<'py>) -> PyResult<Obj<'py>> {
     let stamp = (scene.as_ptr() as usize, opt(&scene, "version")).into_pyobject(py)?;
     if !cache.call_method1("get", ("stamp",))?.eq(&stamp)? {
         let data = py
-            .import("core.hlr")?
+            .import("built_core.hlr")?
             .call_method1("collect_circles", (&scene,))?;
         cache.set_item("values", data)?;
         cache.set_item("stamp", stamp)?;

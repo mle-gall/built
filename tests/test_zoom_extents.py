@@ -14,7 +14,7 @@ import math
 import pytest
 from built_core import Vec3 as V, Vec4 as QVector4D
 
-from core.camera import MAX_DISTANCE, OrbitCamera
+from built_core.camera import MAX_DISTANCE, OrbitCamera
 
 
 def _screen(cam, lo, hi):
@@ -120,7 +120,7 @@ def test_zoom_extents_frames_the_scale_figure_in_a_new_document(native_window):
 
 def _image_window(native_host):
     from built_core.image_plane import ImagePlane
-    from core.layers import Layer
+    from built_core.layers import Layer
 
     win = native_host.window
     scene = win.viewport.scene

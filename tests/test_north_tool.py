@@ -13,9 +13,9 @@ from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Vec3 as QVector3D
 
 from built_core import sun
-from core.history import History, SetNorthCommand
-from core.render_blender import sun_toward
-from core.scene import Scene
+from built_core.history import History, SetNorthCommand
+from built_core.render_blender import sun_toward
+from built_core.scene import Scene
 from formats import igz
 from georef.datum import SceneDatum
 from tools.base import ToolContext

@@ -9,8 +9,8 @@ from types import SimpleNamespace
 from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Vec3 as QVector3D
 
-from core.history import History
-from core.scene import Scene
+from built_core.history import History
+from built_core.scene import Scene
 from tools.base import ToolContext
 from tools.paste import PasteTool
 
@@ -99,8 +99,8 @@ def test_paste_keeps_face_attrs_and_reanchors_texture():
 # ---- Groups in the clipboard (the "can't copy a group" report) --------------
 
 def _make_group(scene, x0=0.0):
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     m = Mesh()
     f = m.add_face([V(x0, 0), V(x0 + 2, 0), V(x0 + 2, 2), V(x0, 2)])
     f.attrs["color"] = (0.5, 0.5, 0.5, 1.0)
@@ -158,8 +158,8 @@ def test_copy_paste_group():
 
 
 def test_copy_paste_instance_shares_prototype():
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from built_core import Matrix4 as QMatrix4x4
     scene = Scene()
     vp = _VP(scene, History(scene), None)
@@ -327,10 +327,10 @@ def test_cut_group_removes_it_and_paste_restores():
 
 def test_preview_faces_survive_viewport_memo_helpers():
     # The memoised _tris_of/_normal_of/_area_of assumed mesh faces (.loop);
-    # a PREVIEW face (core.geometry) crashed every paint of a loose paste
+    # a PREVIEW face (built_core.geometry) crashed every paint of a loose paste
     # preview — nothing followed the cursor (user report). Duck-typed now.
-    from core.geometry import Face as PreviewFace
-    from core.scene import Scene
+    from built_core.geometry import Face as PreviewFace
+    from built_core.scene import Scene
     from tests.controller_surface import ControllerSurface as Viewport
 
     class _MemoVP:
@@ -352,8 +352,8 @@ def test_copy_paste_container_whose_own_mesh_is_empty():
     corner was read from each group's OWN mesh, and an imported component
     is a container whose own mesh is empty — nothing to hold the set by,
     so copy_selection returned False and the old clipboard stayed."""
-    from core.group import Group, placement_points
-    from core.mesh import Mesh
+    from built_core.group import Group, placement_points
+    from built_core.mesh import Mesh
     from built_core import Matrix4 as QMatrix4x4
     scene = Scene()
     vp = _VP(scene, History(scene), {"faces": [], "edges": [],
@@ -382,8 +382,8 @@ def test_a_face_pasted_over_another_merges_with_it():
     splits the plane into its regions."""
     from types import SimpleNamespace
     from built_core import Vec3 as V
-    from core.history import History
-    from core.scene import Scene
+    from built_core.history import History
+    from built_core.scene import Scene
     from tools.paste import PasteTool
     sc = Scene()
     hist = History(sc)
@@ -439,8 +439,8 @@ def test_paste_in_place_menu_action_keeps_the_active_tool(native_host, monkeypat
 def test_undoing_a_paste_leaves_no_loose_edges_behind():
     # Paste in Place inside a group: undo removed the faces but the edges
     # they had created stayed as debris in the group.
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     scene = Scene()
     hist = History(scene)
     g = Group(Mesh(), name="B")
@@ -474,8 +474,8 @@ def test_undoing_a_paste_over_the_original_keeps_the_original_edges():
 def test_undoing_a_paste_shrinks_the_group_back_and_redo_restores_it():
     # The group's edit box wraps its vertices: leftovers of an undone paste
     # kept it at the pasted size («quedó como si aún estuviera el cubo»).
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     scene = Scene()
     hist = History(scene)
     g = Group(Mesh(), name="B")
@@ -523,8 +523,8 @@ def test_a_mixed_paste_leaves_everything_it_pasted_selected():
     assert _copy(vp)
     _paste_at(vp, 10, 10)
     assert face not in scene.selection and g not in scene.selection
-    from core.mesh import Edge, Face
-    from core.group import Group
+    from built_core.mesh import Edge, Face
+    from built_core.group import Group
     assert [sum(isinstance(x, cls) for x in scene.selection)
             for cls in (Edge, Face, Group)] == [4, 1, 1]
     groups, points = _move_targets(vp)

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The plugin discovery engine (core.extensions) and its Extensions menu.
+"""The plugin discovery engine (built_core.extensions) and its Extensions menu.
 
 Each test below pins one clause of the engine's contract — most of them are
 regression tests for the failure modes the original contribution (PR #1)
@@ -18,8 +18,8 @@ from pathlib import Path
 import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
-import core.extensions as extensions                              # noqa: E402
-from core.extensions import (                                     # noqa: E402
+import built_core.extensions as extensions                              # noqa: E402
+from built_core.extensions import (                                     # noqa: E402
     discover_plugins, plugin_dirs, user_plugins_dir)
 
 

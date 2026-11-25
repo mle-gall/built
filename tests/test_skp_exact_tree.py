@@ -17,7 +17,7 @@ import pytest  # noqa: E402
 
 pytest.importorskip("openskp")
 
-from core.scene import Scene  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from formats import skp, skp_reader  # noqa: E402
 
 from tests.test_skp_nested_parts_866 import _ID, _box  # noqa: E402

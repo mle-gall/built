@@ -26,7 +26,7 @@ pub fn set_new_tags_hidden(py: Python<'_>, on: bool) -> PyResult<()> {
 
 pub(super) fn editable_tag_selection(scene: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = scene.py();
-    let group = py.import("core.group")?.getattr("Group")?;
+    let group = py.import("built_core.group")?.getattr("Group")?;
     let links = crate::host_context::core_module(py)?;
     let filing = py.import("built_core.structure")?;
     for entity in scene.getattr("selection")?.try_iter()? {
@@ -48,7 +48,7 @@ pub fn inspector_tag_row(scene: &Bound<'_, PyAny>) -> PyResult<Vec<(String, Stri
     if !super::row_actions::writable(scene)? || !editable_tag_selection(scene)? {
         return Ok(vec![]);
     }
-    let layers = scene.py().import("core.layers")?;
+    let layers = scene.py().import("built_core.layers")?;
     let picked = layers.call_method1("taggable", (scene.getattr("selection")?,))?;
     if picked.len()? == 0 {
         return Ok(vec![]);
@@ -119,7 +119,7 @@ pub fn tree_edit_tag(
         vp.call_method1("flash_status", (translated(py, READ_ONLY, None)?, 4000))?;
         return Ok(None);
     }
-    let layers = py.import("core.layers")?;
+    let layers = py.import("built_core.layers")?;
     let key = row.strip_prefix("preview-tag:");
     let tag = scene.call_method1("layer_by_key", (key.unwrap_or(""),))?;
     if key.is_some() && tag.is_none() {

@@ -22,9 +22,9 @@ from built_core import ScreenPoint, Vec3 as QVector3D
 
 import core._native as _native                                    # noqa: E402
 from built_core import store_mesh as S                                  # noqa: E402
-from core.history import History                                  # noqa: E402
-from core.mesh import Edge, Face                                  # noqa: E402
-from core.scene import Scene                                      # noqa: E402
+from built_core.history import History                                  # noqa: E402
+from built_core.mesh import Edge, Face                                  # noqa: E402
+from built_core.scene import Scene                                      # noqa: E402
 from formats import igz                                           # noqa: E402
 from tests.test_fuzz_engine import V, _draw_rect, _push           # noqa: E402
 from tools.base import ToolContext                                # noqa: E402
@@ -156,7 +156,7 @@ def test_hover_over_a_selected_face(doc):
 
 
 def test_snap_to_an_endpoint_of_a_selected_edge(doc):
-    from core.snap import compute_snap
+    from built_core.snap import compute_snap
     scene = doc.scene
     edge = _corner_edge(scene)
     scene.select([edge])
@@ -231,7 +231,7 @@ def test_edges_found_between_loop_vertices(doc):
 
 def test_a_drawn_circle_reads_as_one_closed_curve(doc):
     from built_core.curve_segments import read_curve
-    from core.snap import _boundary_runs
+    from built_core.snap import _boundary_runs
     scene = doc.scene
     disc = next(f for f in scene.mesh.faces if len(f.loop) == 16)
     edge = scene.mesh.find_edge(disc.loop[0], disc.loop[1])

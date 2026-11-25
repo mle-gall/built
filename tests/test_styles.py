@@ -6,7 +6,7 @@ from __future__ import annotations
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 
 
-from core.scene import Scene
+from built_core.scene import Scene
 from built_core.style import BUILTIN_STYLES, FACE_MODES, Style
 
 
@@ -66,7 +66,7 @@ def test_igz_roundtrip_keeps_the_style(tmp_path):
 
 
 def test_saved_view_remembers_the_style():
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     from built_core.saved_views import SavedView
     scene = Scene()
     cam = OrbitCamera()

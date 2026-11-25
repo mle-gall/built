@@ -7,7 +7,7 @@ from built_core import Vec3 as V
 
 @pytest.fixture
 def setup(native_host):
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     native_host.resize(800, 600, 1.)
     vp = native_host.viewport
     vp.scene.mesh = Mesh()

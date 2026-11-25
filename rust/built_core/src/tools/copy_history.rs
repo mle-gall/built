@@ -291,7 +291,7 @@ impl MoveCopies {
             edges.call_method1("extend", (&other.edges,))?;
             faces.call_method1("extend", (&other.faces,))?;
         }
-        py.import("core.edits")?
+        py.import("built_core.edits")?
             .call_method1("touching_segments", (hard, edges, faces))
     }
 }
@@ -334,15 +334,15 @@ impl MoveCopies {
             .collect::<PyResult<Vec<_>>>()?;
         let history = py.import("built_core.history")?;
         let ops = py.import("built_core.move_ops")?;
-        let group = py.import("core.group")?;
+        let group = py.import("built_core.group")?;
         let new_attrs = py
             .import("core.ifc_identity")?
             .getattr("copied_face_attrs")?;
         let next_curve = py
-            .import("core.mesh")?
+            .import("built_core.mesh")?
             .getattr("Mesh")?
             .getattr("next_curve_id")?;
-        let key = py.import("core.topology")?.getattr("_key")?;
+        let key = py.import("built_core.topology")?.getattr("_key")?;
         let segments = PyList::empty(py);
         let (mut commands, mut groups, mut guides, mut faces) = (vec![], vec![], vec![], vec![]);
         for (i, (&d, member)) in deltas.iter().zip(&members).enumerate() {

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.scene import Scene
+from built_core.scene import Scene
 from tools.rust_tools import SelectTool
 
 
@@ -78,8 +78,8 @@ def test_box_select_additive_keeps_previous():
 # ---- Groups (the "box select skips groups" report) --------------------------
 
 def _group_at(scene, x0, y0, size=2.0):
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     m = Mesh()
     m.add_face([V(x0, y0), V(x0 + size, y0),
                 V(x0 + size, y0 + size), V(x0, y0 + size)])
@@ -114,8 +114,8 @@ def test_crossing_box_selects_touched_groups():
 
 def test_crossing_box_catches_group_edge_straddling_it():
     # No vertex lands inside the box; a wireframe edge passes through it.
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     scene = Scene()
     vp = _StubViewport(scene)
     m = Mesh()
@@ -130,8 +130,8 @@ def test_box_select_maps_instances_to_world():
     # The prototype lives at the origin; only the instance whose TRANSFORM
     # puts it inside the box may be selected.
     from built_core import Matrix4 as QMatrix4x4
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     scene = Scene()
     vp = _StubViewport(scene)
     proto = Mesh()
@@ -155,7 +155,7 @@ def test_box_select_maps_instances_to_world():
 def test_crossing_box_selects_guides_window_does_not():
     # An infinite guide line can never be fully enclosed → only a crossing box
     # takes it. Guide points behave like any point.
-    from core.guide import Guide
+    from built_core.guide import Guide
     scene = Scene()
     vp = _StubViewport(scene)
     line = Guide(V(2, 2), V(1, 0, 0))                 # crosses the box
@@ -175,8 +175,8 @@ def test_crossing_box_selects_guides_window_does_not():
 
 def test_delete_key_erases_selected_guides():
     from built_core import Input as Qt
-    from core.guide import Guide
-    from core.history import History
+    from built_core.guide import Guide
+    from built_core.history import History
     scene = Scene()
     vp = _StubViewport(scene)
     vp.history = History(scene)

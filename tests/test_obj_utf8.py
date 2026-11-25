@@ -17,7 +17,7 @@ import io
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import obj as obj_format
 
 

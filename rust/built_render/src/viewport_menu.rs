@@ -75,10 +75,10 @@ fn guide(py: Python<'_>, e: &Bound<'_, PyAny>) -> bool {
         .unwrap_or(false)
 }
 
-/// `core.units.<fmt>(value)`, "" when the value or the format fails.
+/// `built_core.units.<fmt>(value)`, "" when the value or the format fails.
 fn measure(py: Python<'_>, fmt: &str, value: PyResult<f64>) -> String {
     value
-        .and_then(|v| py.import("core.units")?.call_method1(fmt, (v,))?.extract::<String>())
+        .and_then(|v| py.import("built_core.units")?.call_method1(fmt, (v,))?.extract::<String>())
         .unwrap_or_default()
 }
 
@@ -103,7 +103,7 @@ fn repeat_value(py: Python<'_>, win: &Bound<'_, PyAny>, label: &Bound<'_, PyAny>
 
 /// Where loose geometry lives: the groups open for editing, else Model.
 fn context_path(py: Python<'_>, scene: &Bound<'_, PyAny>) -> PyResult<String> {
-    let open = py.import("core.outliner")?.call_method1("open_path", (scene,))?;
+    let open = py.import("built_core.outliner")?.call_method1("open_path", (scene,))?;
     let mut names = Vec::new();
     for g in open.try_iter()? {
         let g = g?;
@@ -142,8 +142,8 @@ pub fn read_facts(
     locked_image: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<Facts> {
     let py = scene.py();
-    let links = py.import("core.links")?;
-    let group_cls = class(py, "core.group", "Group")?;
+    let links = py.import("built_core.links")?;
+    let group_cls = class(py, "built_core.group", "Group")?;
     let face_cls = class(py, "built_core.mesh", "Face")?;
     let edge_cls = class(py, "built_core.mesh", "Edge")?;
     let pick = |cls: &Bound<'_, PyAny>| -> Vec<Bound<'_, PyAny>> {
@@ -261,7 +261,7 @@ pub fn read_facts(
         }
     }
     if groups.len() > 1 && groups.len() == sel.len() {
-        let solids = py.import("core.solids")?;
+        let solids = py.import("built_core.solids")?;
         f.solids = groups.iter().filter(|g| solids.call_method1("is_solid", (*g,)).and_then(|v| v.is_truthy()).unwrap_or(false)).count();
     }
     if faces.len() == 1 {
@@ -606,14 +606,14 @@ fn uids<'py>(sel: &[Bound<'py, PyAny>]) -> Vec<Bound<'py, PyAny>> {
 
 fn groups_of<'py>(sel: &[Bound<'py, PyAny>]) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let Some(first) = sel.first() else { return Ok(Vec::new()) };
-    let cls = class(first.py(), "core.group", "Group")?;
+    let cls = class(first.py(), "built_core.group", "Group")?;
     Ok(sel.iter().filter(|e| e.is_instance(&cls).unwrap_or(false)).cloned().collect())
 }
 
 /// The linked file a part or a link placement belongs to.
 fn link_host<'py>(sel: &[Bound<'py, PyAny>]) -> PyResult<Option<Bound<'py, PyAny>>> {
     let Some(part) = groups_of(sel)?.into_iter().next() else { return Ok(None) };
-    let links = part.py().import("core.links")?;
+    let links = part.py().import("built_core.links")?;
     if links.call_method1("is_linked", (&part,))?.is_truthy()? {
         return Ok(Some(part));
     }
@@ -690,7 +690,7 @@ fn glue(
         }
         "selectiontag" => crate::tree_grouping::tag_visibility::viewport_tag_menu(win, PyList::new(py, sel)?.as_any())?,
         "intersect" => {
-            let intersect = py.import("core.intersect")?;
+            let intersect = py.import("built_core.intersect")?;
             let mode = match arg {
                 "model" => "WITH_MODEL",
                 "selection" => "WITH_SELECTION",
@@ -991,7 +991,7 @@ fn context_menu_available(view: &Bound<'_, PyAny>) -> bool {
 /// makes one of each).
 fn demo_pick<'py>(scene: &Bound<'py, PyAny>, kind: &str) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py = scene.py();
-    let links = py.import("core.links")?;
+    let links = py.import("built_core.links")?;
     let groups = items(&scene.getattr("groups")?)?;
     let named = |name: &str| groups.iter().find(|g| text(g, "name") == name).cloned();
     let first = |obj: Bound<'py, PyAny>| -> PyResult<Vec<Bound<'py, PyAny>>> { Ok(items(&obj)?.into_iter().take(1).collect()) };

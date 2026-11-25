@@ -7,7 +7,7 @@ import numpy as np
 from built_core import Vec3
 
 from built_core.store_mesh import StoreMesh
-from core.topology import heal_overlapping_faces
+from built_core.topology import heal_overlapping_faces
 
 
 def test_seeded_store_relink_weld_and_face_recovery():
@@ -60,7 +60,7 @@ def test_seeded_store_relink_weld_and_face_recovery():
 
 
 def test_seeded_fold_keeps_winding_attributes_and_soft_edges():
-    from core.topology import fold_nonplanar_faces, _key
+    from built_core.topology import fold_nonplanar_faces, _key
 
     outline = [(5, 0), (4, 2), (2, 4), (-1, 5), (-4, 3),
                (-5, 0), (-4, -2), (-2, -4), (1, -5), (4, -3)]
@@ -87,7 +87,7 @@ def test_seeded_fold_keeps_winding_attributes_and_soft_edges():
 
 
 def test_seeded_orphan_trim_and_displaced_registry():
-    from core.topology import prune_collinear_orphan_edges
+    from built_core.topology import prune_collinear_orphan_edges
 
     rng = random.Random(19654)
     digest = hashlib.sha256()

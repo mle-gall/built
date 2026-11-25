@@ -7,7 +7,7 @@ import built_core
 from pathlib import Path
 
 from built_core.orient import is_closed, signed_volume
-from core.scene import Scene
+from built_core.scene import Scene
 from formats.dae import load_dae
 
 _NSDECL = 'xmlns="http://www.collada.org/2005/11/COLLADASchema"'
@@ -385,7 +385,7 @@ def test_repeated_components_share_one_prototype(tmp_path, monkeypatch):
     assert origins == [0.0, 10.0, 20.0]
 
     # moving ONE instance leaves the siblings (and the prototype) untouched
-    from core.history import History, MoveGroupCommand
+    from built_core.history import History, MoveGroupCommand
     hist = History(scene)
     hist.execute(MoveGroupCommand(inst[0], QVector3D(0, 5, 0)))
     assert round(inst[0].xform.map(QVector3D(0, 0, 0)).y(), 3) == 5.0
@@ -420,9 +420,9 @@ def test_instance_edit_flows_make_unique():
     """Editing uses world coordinates. Make Unique gives a placement an
     independent definition, and Explode lands geometry at its world position."""
     from built_core import Matrix4, Vec3
-    from core.group import Group
-    from core.mesh import Mesh
-    from core.history import AddEdgeCommand, ExplodeGroupCommand, History, MakeUniqueCommand
+    from built_core.group import Group
+    from built_core.mesh import Mesh
+    from built_core.history import AddEdgeCommand, ExplodeGroupCommand, History, MakeUniqueCommand
 
     scene = Scene()
     proto = Mesh()
@@ -544,7 +544,7 @@ def test_nested_groups_keep_their_structure(tmp_path):
     as the same tree with the same names, each piece of geometry in its own
     group, instead of melting into the loose mesh."""
     from built_core import Vec3 as QVector3D
-    from core.group import group_frame, world_mesh
+    from built_core.group import group_frame, world_mesh
 
     scene = Scene()
     load_dae(scene, DATA / "test_export.dae")

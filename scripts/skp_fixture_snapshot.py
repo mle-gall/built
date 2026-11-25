@@ -30,8 +30,8 @@ def main():
         os.environ["BUILT_SETTINGS_DIR"] = cache
         from built_core.settings import use_native
         use_native(cache)
-        from core import group, layers
-        from core.scene import Scene
+        from built_core import group, layers
+        from built_core.scene import Scene
         from built_core.formats import igz, skp
 
         # The document includes freshly generated group and tag IDs in

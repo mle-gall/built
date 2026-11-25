@@ -5,8 +5,8 @@ import random
 from types import SimpleNamespace
 
 from built_core import Vec3 as V
-from core import arrangement as ar, push_scans as scans, snap_query as sq, topology as top
-from core.mesh import Mesh
+from built_core import arrangement as ar, push_scans as scans, snap_query as sq, topology as top
+from built_core.mesh import Mesh
 
 
 def digest(rows):
@@ -166,14 +166,14 @@ def test_public_kernel_module_paths_round_trip():
     import pickle
     for name, fn in (('topology', top._key), ('snap_query', sq.make_query),
                      ('push_scans', scans.faces_on_segment), ('arrangement', ar.arc_command)):
-        assert importlib.import_module('core.' + name).__name__ == 'core.' + name
+        assert importlib.import_module('built_core.' + name).__name__ == 'built_core.' + name
         assert pickle.loads(pickle.dumps(fn)) is fn
 
 
 def test_two_argument_snap_resolver():
     from inspect import signature
-    from core.snap import compute_snap
-    from core.snap_frame import SnapFrame
+    from built_core.snap import compute_snap
+    from built_core.snap_frame import SnapFrame
     from built_core import resolve_snap
 
     scene = SimpleNamespace(edges=[SimpleNamespace(a=V(2, 0, 0), b=V(8, 0, 0))])
@@ -189,12 +189,12 @@ def test_two_argument_snap_resolver():
 def test_native_drawing_module_imports_and_pickle():
     import importlib
     import pickle
-    from core.snap import SnapResult
+    from built_core.snap import SnapResult
 
     for module, symbol in (("edits", "build_add_edges"), ("snap", "compute_snap"),
                            ("hatches", "hatch_lines")):
-        api = importlib.import_module("core." + module)
-        assert api.__name__ == "core." + module
+        api = importlib.import_module("built_core." + module)
+        assert api.__name__ == "built_core." + module
         function = getattr(api, symbol)
         assert pickle.loads(pickle.dumps(function)) is function
     assert pickle.loads(pickle.dumps(SnapResult(None, "none"))) == SnapResult(None, "none")

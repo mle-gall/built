@@ -9,9 +9,9 @@ import math
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.history import History, SnapshotImport
+from built_core.history import History, SnapshotImport
 from built_core.orient import is_closed, signed_volume
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import stl as stl_format
 import tests.test_fuzz_engine as F
 
@@ -269,7 +269,7 @@ def test_simplify_keeps_curved_facets_separate(tmp_path):
 
 
 def test_exploded_stl_group_can_be_simplified_as_an_undoable_edit(tmp_path):
-    from core.history import ExplodeGroupCommand, SimplifyMeshCommand
+    from built_core.history import ExplodeGroupCommand, SimplifyMeshCommand
 
     path = tmp_path / "large_flat_grid.stl"
     triangles = []

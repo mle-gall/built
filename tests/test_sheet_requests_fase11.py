@@ -13,7 +13,7 @@ import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from built_core import Vec3 as QVector3D
 
-from core.composition import (Composicion, MarcoVista, format_scale,
+from built_core.composition import (Composicion, MarcoVista, format_scale,
                               parse_scale)
 
 
@@ -47,14 +47,14 @@ def test_a_broken_scale_falls_back_instead_of_dividing_by_zero():
 
 
 def test_the_enlargements_are_in_the_list():
-    from core.composition import COMMON_SCALES
+    from built_core.composition import COMMON_SCALES
     shown = [format_scale(n) for n in COMMON_SCALES]
     for s in ("10:1", "5:1", "2:1", "1:1", "1:50", "1:100"):
         assert s in shown
 
 
 def test_the_title_block_field_says_it_too():
-    from core.composition import expand_fields, set_field_context
+    from built_core.composition import expand_fields, set_field_context
     c = Composicion()
     c.frames.append(MarcoVista(scale_n=0.1))
     set_field_context(comp=c)
@@ -84,7 +84,7 @@ def test_a_new_section_takes_a_LETTER_not_a_number():
 
 
 def test_the_section_tool_letters_the_plane_it_places():
-    from core.scene import Scene
+    from built_core.scene import Scene
     from tests.test_parity_tools import _Vp, _ctx
     from tools.section import SectionPlaneTool
 
@@ -97,7 +97,7 @@ def test_the_section_tool_letters_the_plane_it_places():
 
 
 def test_the_plane_can_be_renamed_after_it_is_placed(native_host):
-    from core.history import PlaceSectionPlaneCommand
+    from built_core.history import PlaceSectionPlaneCommand
     from built_core.section import SectionPlane
     from built_render import context_menu_build, context_menu_run
     from built_render import chrome_forms
@@ -124,7 +124,7 @@ def test_the_plane_can_be_renamed_after_it_is_placed(native_host):
 
 def test_the_north_arrow_keeps_its_box():
     """The letter moved, nothing else: a sheet's north arrow stays put."""
-    from core.composition import FlechaNorte
+    from built_core.composition import FlechaNorte
     a = FlechaNorte(size_mm=20.0)
     assert (a.w_mm, a.h_mm) == (20.0, 20.0)
     old = Composicion.from_dict({"nortes": [{"x_mm": 1.0, "size_mm": 20.0}]})

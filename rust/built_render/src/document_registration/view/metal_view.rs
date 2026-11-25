@@ -288,7 +288,7 @@ fn init<'py>(a: &Args<'py>) -> Reply<'py> {
     view.setattr("_timer_queue", a.get_item(2)?)?;
     view.setattr("_resize_timer", view.call_method1("_view_timer", (view.getattr("_finish_resize")?, 80))?)?;
     view.call_method0("_prepare_surface")?;
-    view.setattr("camera", py.import("core.camera")?.getattr("OrbitCamera")?.call0()?)?;
+    view.setattr("camera", py.import("built_core.camera")?.getattr("OrbitCamera")?.call0()?)?;
     view.setattr("source_viewport", py.None())?;
     view.call_method1("setFocusPolicy", (py.import("built_core")?.getattr("Input")?.getattr("StrongFocus")?,))?;
     view.call_method1("setMouseTracking", (true,))?;

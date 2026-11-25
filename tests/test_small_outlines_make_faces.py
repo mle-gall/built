@@ -11,11 +11,11 @@ import math
 
 from built_core import Vec3 as V
 
-from core.arrangement import _area_floor, planar_arrangement
-from core.edits import build_add_edges
-from core.history import (AddFaceCommand, History, RebuildPlaneFacesCommand,
+from built_core.arrangement import _area_floor, planar_arrangement
+from built_core.edits import build_add_edges
+from built_core.history import (AddFaceCommand, History, RebuildPlaneFacesCommand,
                           RebuildPlanarFacesCommand, TagCurveCommand)
-from core.scene import Scene
+from built_core.scene import Scene
 from tools.circle import busy_plane, flat_drawing
 
 UP = V(0, 0, 1)

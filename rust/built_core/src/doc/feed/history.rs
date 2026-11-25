@@ -126,7 +126,7 @@ impl HistoryFeed {
             return slf.setattr("_pending", py.None());
         }
         let serial = slf.getattr("readers")?.call_method0("stamp")?;
-        let limit = crate::model::module(py, "core.protocol.feed")?
+        let limit = crate::model::module(py, "built_core.protocol.feed")?
             .getattr("ATTRS_COPY_MAX")?
             .extract()?;
         let tokens = super::capture::tokens(cmd, &scene, phase, limit)?;

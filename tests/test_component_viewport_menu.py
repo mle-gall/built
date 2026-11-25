@@ -2,7 +2,7 @@
 from built_core import Vec3 as V
 from built_render import context_menu_build, context_menu_run
 
-from core.group import Group, copy_group
+from built_core.group import Group, copy_group
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_replace_component import _component, _model, _quad
 
@@ -42,7 +42,7 @@ def test_no_replace_entry_without_another_definition(native_host):
 
 
 def test_select_instances_stays_inside_the_group_being_edited(native_host):
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
 
     win = native_host.window
     scene = win.viewport.scene

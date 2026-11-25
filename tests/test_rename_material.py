@@ -15,12 +15,12 @@ import pytest
 from built_core import Vec3 as QVector3D
 
 
-from core.group import Group                                      # noqa: E402
-from core.history import (History, RestampMaterialCommand,        # noqa: E402
+from built_core.group import Group                                      # noqa: E402
+from built_core.history import (History, RestampMaterialCommand,        # noqa: E402
                           NativeCommand)
-from core.materials import Material, free_name                    # noqa: E402
-from core.mesh import Mesh                                        # noqa: E402
-from core.scene import Scene                                      # noqa: E402
+from built_core.materials import Material, free_name                    # noqa: E402
+from built_core.mesh import Mesh                                        # noqa: E402
+from built_core.scene import Scene                                      # noqa: E402
 from tools.paint import PaintTool, rename_recent                  # noqa: E402
 
 

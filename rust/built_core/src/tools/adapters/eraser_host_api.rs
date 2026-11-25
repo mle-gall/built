@@ -122,7 +122,7 @@ fn group_box_segments<'py>(a: &Args<'py>) -> Reply<'py> {
     let viewport = optional(&tool, "_viewport")?;
     let output = PyList::empty(py);
     if let Some(obb) = viewport.getattr_opt("_group_obb")?.filter(|v| !v.is_none()) {
-        let corners = imported(py, "core.group")?.getattr("oriented_box_corners")?;
+        let corners = imported(py, "built_core.group")?.getattr("oriented_box_corners")?;
         if let Ok(c) = obb
             .call1((group,))
             .and_then(|b| corners.call1(positional(&b)?))

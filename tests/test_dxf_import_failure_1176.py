@@ -18,7 +18,7 @@ ezdxf = pytest.importorskip("ezdxf")
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from built_core import Vec3 as V
 
-from core.history import AddEdgeCommand
+from built_core.history import AddEdgeCommand
 from formats import dwg_bridge, dxf_in
 
 
@@ -146,7 +146,7 @@ def test_the_untouched_tab_in_front_stays_untouched(win, errors, tmp_path):
 def test_import_from_the_menu_into_a_saved_project_keeps_it_saved(
         win, errors, tmp_path):
     from formats import igz as igz_format
-    from core.scene import Scene
+    from built_core.scene import Scene
     path = tmp_path / "model.igz"
     igz_format.save_scene(Scene(), path)
     assert win.open_path(path)

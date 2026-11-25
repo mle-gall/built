@@ -10,7 +10,7 @@ import pytest
 ezdxf = pytest.importorskip("ezdxf")
 
 from built_core import Vec3
-from core.scene import Scene                              # noqa: E402
+from built_core.scene import Scene                              # noqa: E402
 from formats.dxf_in import (                              # noqa: E402
     RECENTER_BEYOND_M, load_dxf, read_unit_scale)
 
@@ -229,7 +229,7 @@ def test_local_coordinates_are_left_alone(tmp_path):
 
 # ---- Undo -------------------------------------------------------------------
 def test_the_whole_import_is_one_undoable_step(tmp_path):
-    from core.history import History, SnapshotImport
+    from built_core.history import History, SnapshotImport
 
     doc = _doc()
     doc.layers.add("MUROS")
@@ -348,7 +348,7 @@ def _polyface_box(layout, layer="0", triangles=False):
 def test_a_polyface_box_arrives_as_a_closed_solid(tmp_path):
     """Joinery and stair programs export each 3D part as a POLYFACE mesh;
     it used to come in as nothing at all ("no importable geometry")."""
-    from core.solids import solid_volume
+    from built_core.solids import solid_volume
     doc = _doc()
     _polyface_box(doc.modelspace(), layer="Plateau")
     scene, stats = _load(tmp_path, doc)
@@ -359,7 +359,7 @@ def test_a_polyface_box_arrives_as_a_closed_solid(tmp_path):
 
 def test_a_triangulated_polyface_merges_back_to_its_six_faces(tmp_path):
     # many exporters write triangles with the diagonals flagged invisible
-    from core.solids import solid_volume
+    from built_core.solids import solid_volume
     doc = _doc()
     _polyface_box(doc.modelspace(), triangles=True)
     scene, _ = _load(tmp_path, doc)
@@ -369,7 +369,7 @@ def test_a_triangulated_polyface_merges_back_to_its_six_faces(tmp_path):
 
 
 def test_polyface_blocks_become_shared_solid_components(tmp_path):
-    from core.solids import is_solid
+    from built_core.solids import is_solid
     doc = _doc()
     _polyface_box(doc.blocks.new("PIED"))
     msp = doc.modelspace()
@@ -396,7 +396,7 @@ def test_a_polygon_mesh_grid_becomes_faces(tmp_path):
 
 
 def test_a_mesh_entity_becomes_faces(tmp_path):
-    from core.solids import solid_volume
+    from built_core.solids import solid_volume
     doc = _doc()
     mesh = doc.modelspace().add_mesh()
     with mesh.edit_data() as data:

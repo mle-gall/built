@@ -30,7 +30,7 @@ import pytest
 from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Vec3 as QVector3D
 
-from core.snap import compute_snap
+from built_core.snap import compute_snap
 
 
 #: The kinds that hold the point on a line through the first corner.
@@ -137,7 +137,7 @@ _HALF_PX = 0.005
 
 
 def _scene(native_host):
-    from core.edits import build_add_edges
+    from built_core.edits import build_add_edges
 
     win = native_host.window
     native_host.resize(1200, 800, 1.0)

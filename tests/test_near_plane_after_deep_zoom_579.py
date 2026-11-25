@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from built_core import Vec3 as V
 
-from core.camera import OrbitCamera
+from built_core.camera import OrbitCamera
 
 
 def _deep_zoom_then_out(cam: OrbitCamera, notches: int):

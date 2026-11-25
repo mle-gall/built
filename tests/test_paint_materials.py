@@ -15,11 +15,11 @@ from built_core import ScreenPoint, Input
 from built_core import Vec3 as QVector3D
 
 
-from core.group import Group                                      # noqa: E402
-from core.history import History, RestampMaterialCommand          # noqa: E402
-from core.materials import Material                               # noqa: E402
-from core.mesh import Mesh                                        # noqa: E402
-from core.scene import Scene                                      # noqa: E402
+from built_core.group import Group                                      # noqa: E402
+from built_core.history import History, RestampMaterialCommand          # noqa: E402
+from built_core.materials import Material                               # noqa: E402
+from built_core.mesh import Mesh                                        # noqa: E402
+from built_core.scene import Scene                                      # noqa: E402
 from tools.paint import PaintTool                                 # noqa: E402
 from tools.base import ToolContext                                # noqa: E402
 
@@ -172,7 +172,7 @@ def test_restamp_updates_registry_and_every_face():
 def test_restamp_reaches_groups_painted_whole():
     """Issue #155 (@fafecm): a colour painted on a loose face and on a group
     as a whole; editing the colour changed the face and left the group."""
-    from core.history import NativeCommand
+    from built_core.history import NativeCommand
     scene = Scene()
     history = History(scene)
     old = Material("Azul", color=(0.1, 0.6, 0.9))
@@ -228,7 +228,7 @@ def test_eyedropper_carries_a_positioned_texture_only_within_its_plane():
     means the same thing on the plane it was fitted for: handing it to a
     perpendicular face put the ``v`` axis along that face's normal and smeared
     the image into stripes."""
-    from core.texture import face_uv_axes
+    from built_core.texture import face_uv_axes
 
     vp = _FakeViewport()
     floor = _quad(vp.scene.mesh)                       # z = 0, normal +Z

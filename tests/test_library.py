@@ -101,7 +101,7 @@ def test_a_model_id_cannot_climb_out_of_the_cache(served, tmp_path):
 
 def _load(obj, entry):
     """The model as the tray inserts it, and the size it ends up."""
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import obj as _obj
     scene = Scene()
     _obj.load_obj(scene, obj, matrix=library.model_matrix(entry, obj))

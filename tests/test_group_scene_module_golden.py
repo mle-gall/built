@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""``core.group``, ``core.scene`` and ``core.links`` must answer as their
+"""``built_core.group``, ``built_core.scene`` and ``built_core.links`` must answer as their
 Python files did at ``5c6b50c1``.
 
-For ``core.group`` that covers:
+For ``built_core.group`` that covers:
 - frames of skewed, scaled and mirrored matrices, and frames from points;
 - oriented bounds and box corners;
 - a billboard group;
@@ -12,10 +12,10 @@ For ``core.group`` that covers:
 - the field tuples and the class layout (``__slots__``, public bases,
   module).
 
-For ``core.scene``: the dataclass's fields, in order, with their defaults
+For ``built_core.scene``: the dataclass's fields, in order, with their defaults
 and flags, then a scene's visibility, selectability and selection rules.
 
-For ``core.links``: the constants, ``LinkError`` and the registry step.
+For ``built_core.links``: the constants, ``LinkError`` and the registry step.
 
 Matrices and vectors read as rounded tuples. The golden is
 ``tests/fixtures/group_scene_module_golden.json``. Regenerate it only on
@@ -49,9 +49,9 @@ def answers():
     from built_core import Matrix4 as M, Vec3 as V
     from built_core.mesh import Mesh
 
-    import core.group as G
-    import core.links as L
-    from core.scene import Scene
+    import built_core.group as G
+    import built_core.links as L
+    from built_core.scene import Scene
 
     out = {}
     frames = []
@@ -140,7 +140,7 @@ def answers():
                                    if isinstance(t, dataclasses.InitVar) or "InitVar" in str(t))
     s = Scene()
     sq = s.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
-    from core.layers import Layer, assign_layer
+    from built_core.layers import Layer, assign_layer
     s.layers.append(Layer("Walls"))
     s.layers.append(Layer("Gone", visible=False))
     s.layers.append(Layer("Shut", locked=True))

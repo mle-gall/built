@@ -4,7 +4,7 @@
 presets, and user title-block templates."""
 from __future__ import annotations
 
-from core.composition import (CAJETIN_DESIGN_BASE, CAJETIN_DESIGNS, Cajetin,
+from built_core.composition import (CAJETIN_DESIGN_BASE, CAJETIN_DESIGNS, Cajetin,
                               Composicion)
 
 

@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core.group import Group, copy_group
-from core.mesh import Mesh
+from built_core.group import Group, copy_group
+from built_core.mesh import Mesh
 from formats import clip_payload as clip
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 

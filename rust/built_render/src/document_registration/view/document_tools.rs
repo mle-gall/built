@@ -8,7 +8,7 @@ fn document_tools_init_document<'py>(a: &Args<'py>) -> Reply<'py> {
     tool.setattr("camera", module.getattr("OrbitCamera")?.call0()?)?;
     tool.setattr("scene", module.getattr("Scene")?.call0()?)?;
     tool.call_method0("_bind_bake_store")?;
-    let _units = py.import("core.units")?.into_any();
+    let _units = py.import("built_core.units")?.into_any();
     _units.call_method1("bind_scene", (tool.getattr("scene")?,))?;
     tool.setattr(
         "history",
@@ -109,7 +109,7 @@ fn document_tools_begin_group_edit<'py>(a: &Args<'py>) -> Reply<'py> {
     let module = py.import("views.document_tools")?;
     let scene = view.getattr("scene")?;
     let ancestors = py
-        .import("core.outliner")?
+        .import("built_core.outliner")?
         .call_method1("path_to", (scene.getattr("groups")?, &group))?;
     let mut path = Vec::new();
     if ancestors.is_truthy()? {
@@ -129,7 +129,7 @@ fn document_tools_begin_group_edit<'py>(a: &Args<'py>) -> Reply<'py> {
             return Ok(none(py));
         }
     }
-    let links = py.import("core.links")?;
+    let links = py.import("built_core.links")?;
     let mut linked = crate::host_context::core_module(py)?.call_method1("link_linked_ancestor", (&group,))?;
     if !linked.is_truthy()? {
         for ancestor in path.iter().rev() {
@@ -225,7 +225,7 @@ fn document_tools_edit_path_text<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let scene = a.get_item(0)?.getattr("scene")?;
     let groups = py
-        .import("core.outliner")?
+        .import("built_core.outliner")?
         .call_method1("open_path", (scene,))?;
     let names = groups
         .try_iter()?
@@ -297,7 +297,7 @@ fn document_tools_set_document<'py>(a: &Args<'py>) -> Reply<'py> {
         )?;
     }
     view.call_method0("_bind_bake_store")?;
-    py.import("core.units")?
+    py.import("built_core.units")?
         .call_method1("bind_scene", (scene,))?;
     view.setattr("_edges_version", -1)?;
     for name in [
@@ -365,7 +365,7 @@ fn document_tools_leave_group_edit<'py>(a: &Args<'py>) -> Reply<'py> {
     view.setattr("_edges_version", -1)?;
     if !share.is_none()
         && py
-            .import("core.reference_edit")?
+            .import("built_core.reference_edit")?
             .call_method1("record_leave", (&history, &level, &share))?
             .is_truthy()?
     {

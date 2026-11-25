@@ -3800,7 +3800,7 @@ impl PyStoreSnapshot {
         (s[0].live, s[1].live, s[2].live)
     }
 
-    /// `core.pieces.connected_parts`: `[(face keys, edge keys)]`, largest
+    /// `built_core.pieces.connected_parts`: `[(face keys, edge keys)]`, largest
     /// first (store/pieces.rs).
     fn connected_parts(&self, py: Python<'_>) -> Vec<(Vec<u128>, Vec<u128>)> {
         let r = reader(&self.inner);
@@ -3808,7 +3808,7 @@ impl PyStoreSnapshot {
         super::pieces::keyed(&r, parts)
     }
 
-    /// `core.pieces.solid_parts`: the physical pieces, `[(face keys, edge
+    /// `built_core.pieces.solid_parts`: the physical pieces, `[(face keys, edge
     /// keys)]`, in Python's order (store/pieces.rs).
     fn solid_parts(&self, py: Python<'_>, hypot: &str) -> PyResult<Vec<(Vec<u128>, Vec<u128>)>> {
         let h = crate::hypot_of(hypot)?;
@@ -3829,7 +3829,7 @@ impl PyStoreSnapshot {
         rows.into_pyarray(py)
     }
 
-    /// `core.pieces.copy_part` (Split into Pieces): a new store in
+    /// `built_core.pieces.copy_part` (Split into Pieces): a new store in
     /// `namespace` holding the faces and edges named (keys of this
     /// snapshot, in order), `face_attr` their rows in the new table (-1 none).
     #[pyo3(signature = (namespace, faces, edges, face_attr, hole_filter, scale = 10_000.0, tol2 = 1e-8, fused = false))]

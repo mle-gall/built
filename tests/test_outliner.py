@@ -13,9 +13,9 @@ import pytest
 
 from built_core import Vec3 as QVector3D
 
-from core import outliner
-from core.group import Group
-from core.mesh import Mesh
+from built_core import outliner
+from built_core.group import Group
+from built_core.mesh import Mesh
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from tests.test_project_occurrences import _building, _group, _random_tree
 
@@ -40,7 +40,7 @@ def test_rows_update_in_place_and_rebuild_only_when_groups_change():
     p.scene.version += 1
     rows = p.rows()
     assert rows[key][0] == "Pine" and rows[key][1][5] == 0
-    from core.history import InsertGroupCommand
+    from built_core.history import InsertGroupCommand
     extra = _group("Fence", (9, 0, 0))
     p.win.viewport.history.execute(InsertGroupCommand(extra))
     rows = p.rows()
@@ -85,7 +85,7 @@ def test_ten_thousand_nodes_build_once_and_refresh_quickly():
 
 
 def _sheets_model(win):
-    from core.composition import Composicion, MarcoVista
+    from built_core.composition import Composicion, MarcoVista
     from built_core.saved_views import SavedView
     scene = win.viewport.scene
     cam = win.viewport.camera
@@ -268,9 +268,9 @@ def test_export_all_pdf_can_take_only_some_sheets(tmp_path, native_host):
 
 def test_the_scale_fits_the_model_in_the_frame():
     from built_core.saved_views import SavedView
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     building, tree = _building()                     # 5.1 m wide, 6 m tall
-    from core.scene import Scene
+    from built_core.scene import Scene
     scene = Scene()
     scene.groups[:] = [building, tree]
     cam = OrbitCamera()

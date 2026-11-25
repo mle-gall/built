@@ -53,7 +53,7 @@ def answers(monkeypatch):
 
 
 def _draw(host):
-    from core.history import AddFaceCommand
+    from built_core.history import AddFaceCommand
     loop = [QVector3D(5, 0, 0), QVector3D(6, 0, 0), QVector3D(6, 1, 0)]
     host.viewport.history.execute(AddFaceCommand(loop))
 
@@ -154,7 +154,7 @@ def test_quit_with_unsaved_work_asks_once_and_save_all_saves(host, tmp_path, ans
 
 def test_open_offers_the_auto_saved_copy(host, tmp_path, answers):
     from built_core import autosave
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     src = _copy(tmp_path)
     scene = Scene()
@@ -224,7 +224,7 @@ def test_dxf_asks_its_unit_on_the_sheet(host, tmp_path, answers):
 # ---- linked files ----------------------------------------------------------------------
 def test_composite_with_nested_links_opens_and_reloads(host, tmp_path):
     from tests.fixtures.shell.make_composite import make
-    from core import links
+    from built_core import links
     paths = make(tmp_path / "composite")
     assert host.open_path(paths["host"])
     scene = host.viewport.scene
@@ -382,7 +382,7 @@ def test_native_view_timers_release_callbacks_on_close(host):
 def test_cancelling_named_recovery_keeps_the_slot_and_active_tab(host, tmp_path, answers):
     from built_core import autosave
     from formats import igz
-    from core.scene import Scene
+    from built_core.scene import Scene
     source = _copy(tmp_path)
     scene = Scene()
     igz.load_into(scene, source)

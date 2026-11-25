@@ -360,7 +360,7 @@ impl RecordStep {
     fn execute(slf: &Bound<'_, Self>, scene: &Obj<'_>) -> PyResult<()> {
         let py = slf.py();
         let me = slf.get();
-        let doc = py.import("core.doc_model")?;
+        let doc = py.import("built_core.doc_model")?;
         // A stand-in scene without a document (a tool's preview, a test
         // fixture) runs the operation alone: there is nothing to journal.
         let key: Option<Key> = match scene.getattr_opt("_root")? {
@@ -430,7 +430,7 @@ impl RecordStep {
             None => slf.as_any().getattr_opt("_doc_txn")?.filter(|t| !t.is_none()),
         } };
         if let Some(txn) = txn {
-            py.import("core.doc_model")?.call_method0("flush")?;
+            py.import("built_core.doc_model")?.call_method0("flush")?;
             txn.call_method0("undo")?;
         }
         Self::read_journal(slf)?;

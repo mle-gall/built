@@ -12,10 +12,10 @@ from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from core.group import Group, copy_group, iter_placements
-from core.history import EditText3DCommand, History
-from core.scene import Scene
-from core.text3d import (build_text_letters, build_text_mesh,
+from built_core.group import Group, copy_group, iter_placements
+from built_core.history import EditText3DCommand, History
+from built_core.scene import Scene
+from built_core.text3d import (build_text_letters, build_text_mesh,
                          make_text_group, rebuild_text_group, text_params)
 from formats import igz
 
@@ -199,7 +199,7 @@ def test_text3d_glued_to_a_floor_sits_fully_on_top():
     """Regression: aligning a 3D text to a horizontal face planted the MIDDLE
     of its thickness on the face, so text lying on a slab came out half sunk.
     The back face must land on the face, the whole thickness proud of it."""
-    from core.group import placement_points
+    from built_core.group import placement_points
     from tools.place_group import PlaceGroupTool
 
     class Visor:
@@ -230,7 +230,7 @@ def test_text3d_stays_flush_after_editing_thickness():
     point that must not move is the local origin. That origin is now the BACK
     face, so a sign glued by its back keeps touching the face — only the front
     advances — instead of sinking or floating off."""
-    from core.group import placement_points
+    from built_core.group import placement_points
     from tools.place_group import PlaceGroupTool
 
     class Visor:
@@ -265,7 +265,7 @@ def test_text3d_plants_from_its_back_face_upright():
     """Consistency with the face glue: the insertion point is the BACK face in
     both cases. Standing on the ground (no face hovered) the cursor holds the
     back-bottom-centre, not the middle of the thickness."""
-    from core.group import placement_points
+    from built_core.group import placement_points
     from tools.place_group import PlaceGroupTool
 
     class Visor:
@@ -301,7 +301,7 @@ def _touch_vertex(letter):
 
 
 def test_a_fresh_text_is_pristine_and_stays_so_through_igz(tmp_path):
-    from core.text3d import text_is_pristine
+    from built_core.text3d import text_is_pristine
     scene = Scene()
     g = make_text_group(text_params("Yanque", "Sans"))
     scene.groups.append(g)
@@ -316,7 +316,7 @@ def test_a_fresh_text_is_pristine_and_stays_so_through_igz(tmp_path):
 def test_a_letter_pushed_painted_erased_or_moved_makes_the_text_plain():
     """Marco, 2026-09-18: once a letter is edited by hand, «Edit 3D Text…»
     must stop regenerating — it would throw the hand work away."""
-    from core.text3d import text_is_pristine
+    from built_core.text3d import text_is_pristine
 
     g = make_text_group(text_params("Ab", "Sans"))
     _touch_vertex(g.children[0])                       # pushed / reshaped
@@ -346,7 +346,7 @@ def test_a_letter_pushed_painted_erased_or_moved_makes_the_text_plain():
 
 
 def test_an_edit_command_leaves_the_new_letters_pristine():
-    from core.text3d import text_is_pristine
+    from built_core.text3d import text_is_pristine
     scene = Scene()
     history = History(scene)
     g = make_text_group(text_params("Ab", "Sans"))
@@ -380,7 +380,7 @@ def test_a_text_from_an_older_document_keeps_its_back_face_on_re_edit():
     """Letters laid out the older way (thickness toward +Y, back at
     y=+thickness) keep their back face where it was when the text is
     re-edited, instead of jumping by the thickness."""
-    from core.group import placement_points
+    from built_core.group import placement_points
 
     scene = Scene()
     history = History(scene)
@@ -407,8 +407,8 @@ def test_a_text_from_an_older_document_keeps_its_back_face_on_re_edit():
 
 def test_saved_letter_fingerprint_survives_the_native_port():
     from types import SimpleNamespace
-    from core.mesh import Mesh
-    from core.text3d import letters_fingerprint
+    from built_core.mesh import Mesh
+    from built_core.text3d import letters_fingerprint
 
     mesh = Mesh()
     face = mesh.add_face([QVector3D(-1.234567, 0.1, 0), QVector3D(0, -1, 0), QVector3D(0, 0, 1)])

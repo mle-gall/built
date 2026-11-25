@@ -241,7 +241,7 @@ fn deferred<'p>(m: &Module<'p>, name: &str) -> PyResult<Any<'p>> {
             py.import("built_render")?.getattr("DwgConverter")?
         }
         ("formats.skp_reader", "_colorize_image" | "_image_has_cutout" | "_plane_basis") => {
-            py.import("core.texture")?.getattr(match name {
+            py.import("built_core.texture")?.getattr(match name {
                 "_colorize_image" => "colorize_image",
                 "_image_has_cutout" => "image_has_cutout",
                 _ => "projection_basis",

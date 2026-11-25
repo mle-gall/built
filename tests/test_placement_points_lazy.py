@@ -11,9 +11,9 @@ import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 import core._native as _native
-from core import mesh as M
-from core.group import Group, iter_placements, placement_points
-from core.scene import Scene
+from built_core import mesh as M
+from built_core.group import Group, iter_placements, placement_points
+from built_core.scene import Scene
 from formats import igz
 from tests.controller_surface import ControllerSurface as Viewport
 
@@ -90,7 +90,7 @@ def test_store_mesh_points_come_from_the_store_arrays():
     """A store-backed mesh (any mesh touched since the open) gives the same
     points as walking its vertices, without a cached vector per vertex:
     selecting a linked file measures every mesh of it."""
-    from core.group import _local_points
+    from built_core.group import _local_points
     from built_core.store_mesh import StoreMesh
     m = M.Mesh()
     quads = np.array([[[x, y, 0.3], [x + 1.1, y, 0.3], [x + 1.1, y + 0.7, 0.3],

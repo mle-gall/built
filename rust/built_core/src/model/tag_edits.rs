@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! The tag (layer) edits of `core.layers`: the folder tree's edits (add,
+//! The tag (layer) edits of `built_core.layers`: the folder tree's edits (add,
 //! move, rename, remove, file tags in a folder), labels and paths, the
 //! display state (visibility, lock, isolate, the active tag, scenes hiding
 //! a tag), the templates an office carries from one project to the next,
@@ -9,7 +9,7 @@
 //! `folder_parents`, `layer_folder_names`, `layer_folder_uids`,
 //! `folder_visibility`, `active_layer`) and its tags, in the Python's order,
 //! so a journalled edit records the same writes. What stays Python is
-//! called back: the uid pool (`core.layers.new_uid`), the tag class, and the
+//! called back: the uid pool (`built_core.layers.new_uid`), the tag class, and the
 //! cleaners of line type entries, colours and bricks.
 //! `tests/test_tag_edits_parity.py`.
 
@@ -66,13 +66,13 @@ fn layer_by<'py>(scene: &Obj<'py>, name: &Obj<'py>) -> PyResult<Option<Obj<'py>>
     Ok(Some(scene.call_method1("layer", (name,))?).filter(|v| !v.is_none()))
 }
 
-/// `core.layers.new_uid`, looked up on every call as the Python did.
+/// `built_core.layers.new_uid`, looked up on every call as the Python did.
 fn new_uid<'py>(py: Python<'py>) -> PyResult<Obj<'py>> {
-    py.import("core.layers")?.call_method0("new_uid")
+    py.import("built_core.layers")?.call_method0("new_uid")
 }
 
 fn layers_module<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyModule>> {
-    py.import("core.layers")
+    py.import("built_core.layers")
 }
 
 fn deepcopy<'py>(v: &Obj<'py>) -> PyResult<Obj<'py>> {

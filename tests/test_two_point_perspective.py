@@ -10,7 +10,7 @@ import math
 
 from built_core import Vec3 as QVector3D, Vec4 as QVector4D
 
-from core.camera import OrbitCamera
+from built_core.camera import OrbitCamera
 from built_core.saved_views import SavedView
 
 
@@ -61,7 +61,7 @@ def test_parallel_turns_it_off_and_turning_it_on_brings_perspective():
 
 
 def test_a_scene_remembers_it():
-    from core.scene import Scene
+    from built_core.scene import Scene
 
     cam = _cam()
     cam.toggle_two_point()

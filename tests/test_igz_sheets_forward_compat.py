@@ -9,7 +9,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from core.composition import Composicion, MarcoVista
+from built_core.composition import Composicion, MarcoVista
 
 
 def test_unknown_sheet_fields_are_dropped_not_fatal():
@@ -30,7 +30,7 @@ def test_unknown_sheet_fields_are_dropped_not_fatal():
 
 def test_a_broken_sheet_is_skipped_and_the_others_load(tmp_path):
     import json
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     scene = Scene()
     scene.compositions.append(Composicion(name="buena"))

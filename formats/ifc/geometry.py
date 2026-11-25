@@ -49,7 +49,7 @@ def _brep(w: object, faces, context_id: int) -> int:
 def array_body(w, arrays, context_id, geometry='brep'):
     """Write array rings directly, batching coordinate formatting in NumPy."""
     import numpy as np
-    from core.geometry_arrays import Arrays, merged, quantities
+    from built_core.geometry_arrays import Arrays, merged, quantities
     a = arrays if isinstance(arrays, Arrays) else merged(arrays)
     closed = quantities(a)[3]
     pos, inverse = np.unique(np.round(a.pos[a.corners], 6), axis=0, return_inverse=True)
@@ -108,7 +108,7 @@ def mapped_body(w, group, base, excluded, context_id, geometry, cache, axis):
     import numpy as np
     from core.bim import _compose
     from built_core import group_np_affine as np_affine
-    from core.geometry_arrays import arrays_of, placed_arrays
+    from built_core.geometry_arrays import arrays_of, placed_arrays
 
     items = []
 

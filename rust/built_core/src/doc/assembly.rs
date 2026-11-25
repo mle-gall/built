@@ -271,7 +271,7 @@ pub fn sync(py: Python<'_>, owner: Key) -> PyResult<()> {
             let child = lock()
                 .handle_ref(py, member.source)
                 .ok_or_else(|| PyValueError::new_err("detached assembly member"))?;
-            let g = py.import("core.group")?.getattr("copy_group")?.call1((
+            let g = py.import("built_core.group")?.getattr("copy_group")?.call1((
                 &child,
                 py.None(),
                 true,

@@ -12,11 +12,11 @@ from built_core import Vec3 as V
 
 
 def _window(win, monkeypatch, segs):
-    import core.intersect
+    import built_core.intersect
     face = win.viewport.scene.mesh.add_face(
         [V(0, 0, 0), V(2, 0, 0), V(2, 2, 0), V(0, 2, 0)])
     win.viewport.scene.selection.add(face)
-    monkeypatch.setattr(core.intersect, "segments_for",
+    monkeypatch.setattr(built_core.intersect, "segments_for",
                         lambda scene, mode: list(segs))
     said = []
     monkeypatch.setattr(win.viewport, "flash_status",
@@ -28,7 +28,7 @@ def _window(win, monkeypatch, segs):
 
 
 def test_a_crossing_shorter_than_the_weld_is_left_out(native_host, monkeypatch):
-    from core.intersect import WITH_MODEL
+    from built_core.intersect import WITH_MODEL
     segs = [(V(1, 0, 0), V(1, 2, 0)),
             (V(1.5, 1, 0), V(1.5, 1.00005, 0))]       # 50 µm
     win, said, warned = _window(native_host.window, monkeypatch, segs)
@@ -41,7 +41,7 @@ def test_a_crossing_shorter_than_the_weld_is_left_out(native_host, monkeypatch):
 
 
 def test_a_refused_intersection_says_so(native_host, monkeypatch):
-    from core.intersect import WITH_MODEL
+    from built_core.intersect import WITH_MODEL
     win, said, warned = _window(native_host.window, monkeypatch, [(V(1, 0, 0), V(1, 2, 0))])
     history = win.viewport.history
 

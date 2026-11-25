@@ -4,10 +4,10 @@ import pytest
 from built_core import MeshElements, Vec3 as V
 from built_core import scan_index
 from built_core import store_mesh as S
-from core.history import History, SnapshotMutation
-from core.protocol.commands import run
-from core.edits import join_preview
-from core.topology import orient_coplanar_faces, winding_footprint
+from built_core.history import History, SnapshotMutation
+from built_core.protocol.commands import run
+from built_core.edits import join_preview
+from built_core.topology import orient_coplanar_faces, winding_footprint
 from tests.test_core_protocol import _scene, _read, _expected, _got, _inverse, needs_store
 from tests.test_scan_index import _fingerprint
 
@@ -87,9 +87,9 @@ def test_drawing_matches_python_and_change_feed(monkeypatch, case):
 @pytest.mark.parametrize("curved", [False, True])
 def test_store_rectangle_never_enumerates_face_views(monkeypatch, curved):
     from tests.test_scan_index import _grid_points
-    from core.edits import build_add_edges
-    from core.history import AddFaceCommand
-    from core.scene import Scene
+    from built_core.edits import build_add_edges
+    from built_core.history import AddFaceCommand
+    from built_core.scene import Scene
     import numpy as np
     sc = Scene()
     n = 4 if curved else 57
@@ -117,8 +117,8 @@ def test_store_rectangle_never_enumerates_face_views(monkeypatch, curved):
 
 @needs_store
 def test_cycle_graph_keeps_edge_order_across_planned_edits():
-    from core.topology import CycleGraph, find_cycles_through, find_smallest_cycle_through
-    from core.geometry import Edge
+    from built_core.topology import CycleGraph, find_cycles_through, find_smallest_cycle_through
+    from built_core.geometry import Edge
     results = []
     for store in (False, True):
         m = _scene().mesh
@@ -139,7 +139,7 @@ def test_cycle_graph_keeps_edge_order_across_planned_edits():
 
 @needs_store
 def test_store_ring_queries_match_the_position_kernel():
-    from core import topology as topo
+    from built_core import topology as topo
     results = []
     for store in (False, True):
         m = _scene().mesh

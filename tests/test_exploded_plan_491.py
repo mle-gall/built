@@ -19,13 +19,13 @@ import numpy as np  # noqa: E402
 from built_core import Vec3 as V
 
 
-import core.arrangement as ar  # noqa: E402
-from core.arrangement import planar_rebuild  # noqa: E402
+import built_core.arrangement as ar  # noqa: E402
+from built_core.arrangement import planar_rebuild  # noqa: E402
 from built_core import planar_edits
-from core.history import RebuildPlanarFacesCommand  # noqa: E402
-from core.mesh import Mesh  # noqa: E402
-from core.scene import Scene  # noqa: E402
-from core.topology import _point_on_seg_incl  # noqa: E402
+from built_core.history import RebuildPlanarFacesCommand  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
+from built_core.topology import _point_on_seg_incl  # noqa: E402
 
 # A square cut by two verticals whose feet land 0.02 mm apart, astride a
 # 0.1 mm line of the arrangement's grid: two keys, one welded vertex.

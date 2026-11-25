@@ -16,10 +16,10 @@ from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Vec3 as QVector3D
 
 
-from core.dimension import Dimension  # noqa: E402
-from core.history import History  # noqa: E402
-from core.scene import Scene  # noqa: E402
-from core.snap import SnapResult, compute_snap  # noqa: E402
+from built_core.dimension import Dimension  # noqa: E402
+from built_core.history import History  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
+from built_core.snap import SnapResult, compute_snap  # noqa: E402
 from tools.base import ToolContext  # noqa: E402
 from tools.dimension import DimensionTool  # noqa: E402
 from tests.controller_surface import ControllerSurface as Viewport

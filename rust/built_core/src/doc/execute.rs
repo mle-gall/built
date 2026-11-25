@@ -17,7 +17,7 @@ pub(super) fn execute<'py>(
     tag_objects: Option<&TagTargets<'py>>,
 ) -> PyResult<()> {
     let api = py.import("built_core.history")?;
-    let doc = py.import("core.doc_model")?;
+    let doc = py.import("built_core.doc_model")?;
     let scene = host.getattr("scene")?;
     let document = scene.getattr("_root")?.getattr("_doc_key")?.extract::<super::Key>()?;
     let _writer = super::Writer::acquire(py, Some(document))?;
@@ -179,7 +179,7 @@ fn execute_mixed(
             }
         }
         if let Some(tags)=tags {
-            let doc = py.import("core.doc_model")?;
+            let doc = py.import("built_core.doc_model")?;
             doc.call_method1("begin", (document,))?;
             let tail = follow_text(host)
                 .and_then(|_| tags.apply(&scene))

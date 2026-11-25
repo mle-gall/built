@@ -14,7 +14,7 @@ import pytest
 from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Vec3 as QVector3D
 
-from core.camera import OrbitCamera
+from built_core.camera import OrbitCamera
 from tools.base import ToolContext
 from tools import walkthrough as wt, walkthrough_host
 from tools.walkthrough import (LookAroundTool, PositionCameraTool, WalkTool,

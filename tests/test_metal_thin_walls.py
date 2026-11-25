@@ -19,8 +19,8 @@ import pytest
 from built_core import Vec3 as V
 
 
-from core.camera import OrbitCamera  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core.camera import OrbitCamera  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 
 HAS_RENDERER = importlib.util.find_spec("built_render") is not None
 SIZE = 256

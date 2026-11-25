@@ -3,7 +3,7 @@
 import json
 
 import pytest
-from core.group import Group
+from built_core.group import Group
 from built_core import browser_rename
 from tests.native_tree import action
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401

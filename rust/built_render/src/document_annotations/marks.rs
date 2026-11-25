@@ -180,7 +180,7 @@ fn palette<'py>(py: Python<'py>, kind: &str) -> PyResult<([f64; 3], &'static str
         "guide_point" => ("COLOR_ENDPOINT", "guide_point"),
         _ => ("COLOR_ENDPOINT", "endpoint"),
     };
-    Ok((py.import("core.snap")?.getattr(color)?.extract()?, label))
+    Ok((py.import("built_core.snap")?.getattr(color)?.extract()?, label))
 }
 #[pyfunction]
 fn draw_inference_marker(v: &Obj, p: &Obj) -> PyResult<()> {

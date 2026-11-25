@@ -20,9 +20,9 @@ import sys
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.dimension import Dimension
-from core.layers import Layer
-from core.scene import Scene
+from built_core.dimension import Dimension
+from built_core.layers import Layer
+from built_core.scene import Scene
 from built_core.section import SectionPlane
 from formats import igz
 from scripts.isolated_launch import run

@@ -230,7 +230,7 @@ impl Cam {
             }
         }
     }
-    /// core.composition.roll_camera: the drawing turned `deg` clockwise on paper.
+    /// built_core.composition.roll_camera: the drawing turned `deg` clockwise on paper.
     fn roll(&mut self, deg: f64) {
         if deg == 0.0 {
             return;
@@ -315,7 +315,7 @@ fn vec3(v: &Value) -> Option<DVec3> {
     }
 }
 
-/// core.composition.apply_frame_camera on `cam`: the frame's view (`view`
+/// built_core.composition.apply_frame_camera on `cam`: the frame's view (`view`
 /// when it shows a scene), at exact scale or as its perspective says.
 /// `bounds`: what the model holds, for a standard view's centre and a
 /// perspective frame's fit.
@@ -462,7 +462,7 @@ fn base_cam(base: Option<&Bound<'_, PyDict>>) -> PyResult<Cam> {
 pub fn sheet_frame_camera<'py>(py: Python<'py>, frame: &Bound<'py, PyAny>, view: Option<Bound<'py, PyAny>>,
                                base: Option<Bound<'py, PyDict>>, bounds: Option<((f64, f64, f64), (f64, f64, f64))>)
     -> PyResult<Bound<'py, PyDict>> {
-    py.import("core.doc_model")?.call_method0("flush")?;
+    py.import("built_core.doc_model")?.call_method0("flush")?;
     let f = super::model::read_fields(crate::doc::py::handle_key(frame)?)?;
     let v = match view.filter(|v| !v.is_none()) {
         Some(v) => Some(ViewCam::from_fields(&super::model::read_fields(crate::doc::py::handle_key(&v)?)?)),

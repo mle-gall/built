@@ -17,8 +17,8 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from built_core import Input
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core.group import Group
-from core.mesh import Mesh
+from built_core.group import Group
+from built_core.mesh import Mesh
 
 
 def _box(mesh, s=1.0):

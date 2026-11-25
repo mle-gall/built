@@ -90,10 +90,10 @@ def _sideways(viewport) -> bool:
 
 
 def _units():
-    """``core.units`` when the host has document units (0.5.8+), else None:
+    """``built_core.units`` when the host has document units (0.5.8+), else None:
     an older Built keeps the metre labels and field it always had."""
     try:
-        from core import units
+        from built_core import units
     except ImportError:
         return None
     return units if hasattr(units, "format_signed_level") else None
@@ -183,7 +183,7 @@ class LevelsPanel:
         self.selected = None
 
     def sections(self):
-        from core.plugin_panels import field, item, section
+        from built_core.plugin_panels import field, item, section
         state = _state(self.app)
         rows = [dict(key=str(i), cells=[lv["name"], _fmt_listed(lv["z"])])
                 for i, lv in reversed(list(enumerate(state["levels"])))]
@@ -309,7 +309,7 @@ def snap_to_levels(app, viewport, snap, px: float, py: float):
             best, best_d = (q, lv), d
     if best is None:
         return None
-    from core.snap import SnapResult
+    from built_core.snap import SnapResult
     q, lv = best
     return SnapResult(q, "reference", COLOR, label=lv["name"])
 

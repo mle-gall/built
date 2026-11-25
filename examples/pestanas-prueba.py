@@ -26,9 +26,9 @@ sys.path.insert(0, str(REPO))
 from built_core import Vec3 as V
 
 
-from core.camera import OrbitCamera  # noqa: E402
+from built_core.camera import OrbitCamera  # noqa: E402
 from built_core.saved_views import SavedView  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402
 
 AQUI = Path(__file__).resolve().parent

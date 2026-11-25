@@ -100,7 +100,7 @@ fn node<'py>(
 pub(super) fn host(tree: &Obj<'_>, registry: &Obj<'_>) -> PyResult<()> {
     let py = tree.py();
     let structure = crate::model::module(py, "built_core.structure")?;
-    let linked = crate::model::module(py, "core.links")?.getattr("LINKED_FOLDER")?;
+    let linked = crate::model::module(py, "built_core.links")?.getattr("LINKED_FOLDER")?;
     let own = own(&structure.call_method1("_nodes", (registry,))?, &linked)?;
     let nodes = tree.getattr("nodes")?;
     let nil = none(py);
@@ -142,7 +142,7 @@ pub(super) fn same(tree: &Obj<'_>, stems: &[String], first: &[String]) -> PyResu
     let py = tree.py();
     let mk = super::build::mount(stems);
     let canon = super::build::mount(first);
-    let sep = crate::model::module(py, "core.links")?
+    let sep = crate::model::module(py, "built_core.links")?
         .getattr("SEP")?
         .extract::<String>()?;
     tree.getattr("alias")?.set_item(mk, &canon)?;
@@ -164,7 +164,7 @@ pub(super) fn same(tree: &Obj<'_>, stems: &[String], first: &[String]) -> PyResu
 pub(super) fn file(tree: &Obj<'_>, s: &[String], path: &Obj<'_>) -> PyResult<()> {
     let py = tree.py();
     let scene = tree.getattr("scene")?;
-    let links = crate::model::module(py, "core.links")?;
+    let links = crate::model::module(py, "built_core.links")?;
     let sep = links.getattr("SEP")?.extract::<String>()?;
     let linked = links.getattr("LINKED_FOLDER")?;
     let base = s.join(&sep);

@@ -43,7 +43,7 @@ def _prism(m, V, rng, x, y):
 
 def cases():
     from built_core import Vec3 as V
-    from core.mesh import Mesh, turn_face_over
+    from built_core.mesh import Mesh, turn_face_over
     rng = random.Random(20261125)
     for k in range(70):
         m = Mesh()

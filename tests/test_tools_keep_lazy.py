@@ -14,7 +14,7 @@ import pytest  # noqa: E402
 from built_core import ScreenPoint, Input # noqa: E402
 from built_render import MouseEvent  # noqa: E402
 
-from core import mesh as M  # noqa: E402
+from built_core import mesh as M  # noqa: E402
 from tests.test_light_faces import (  # noqa: E402
     _hover, _window, _xyz, big_enough, binary)
 from tools.paint import PaintTool  # noqa: E402
@@ -147,8 +147,8 @@ def test_paint_paints_a_closed_group_whole_unbuilt(floor):
 
 @pytest.mark.parametrize("painted", [False, True])
 def test_every_face_painted_reads_the_document(big_enough, tmp_path, painted):
-    from core.group import Group
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.scene import Scene
     from formats import igz
     from built_core import Vec3 as V
     scene = Scene()
@@ -198,8 +198,8 @@ def test_a_centre_on_a_lazy_group_follows_it_unbuilt(native_window, big_enough, 
     """An edit elsewhere re-checks the acquired centre: the frame after it
     built the group under the centre, whatever the size."""
     import math
-    from core.group import Group
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.scene import Scene
     from formats import igz
     from views import array_bake
     from built_core import Matrix4 as QMatrix4x4, Vec3 as V
@@ -260,8 +260,8 @@ def test_a_view_moving_into_the_grid_keeps_its_bakes(floor):
 
 
 def _boxed_scene(tmp_path, closed, placed):
-    from core.group import Group
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.scene import Scene
     from formats import igz
     from built_core import Matrix4 as QMatrix4x4, Vec3 as V
     scene = Scene()
@@ -288,7 +288,7 @@ def _boxed_scene(tmp_path, closed, placed):
 
 @pytest.mark.parametrize("placed", [False, True])
 def test_an_open_group_says_no_volume_unbuilt(big_enough, tmp_path, placed):
-    from core.solids import solid_volume
+    from built_core.solids import solid_volume
     group = _boxed_scene(tmp_path, False, placed)
     mesh = group.mesh
     assert type(mesh) is M.DeferredMesh
@@ -300,7 +300,7 @@ def test_an_open_group_says_no_volume_unbuilt(big_enough, tmp_path, placed):
 
 @pytest.mark.parametrize("placed", [False, True])
 def test_a_closed_group_still_gets_its_volume(big_enough, tmp_path, placed):
-    from core.solids import solid_volume
+    from built_core.solids import solid_volume
     group = _boxed_scene(tmp_path, True, placed)
     assert type(group.mesh) is M.DeferredMesh
     assert solid_volume(group) == pytest.approx(24.0)

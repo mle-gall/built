@@ -89,7 +89,7 @@ pub(super) fn compute_snap<'p>(
     start_edges: Option<&Obj<'p>>,
 ) -> PyResult<Obj<'p>> {
     let py = scene.py();
-    let query = py.import("core.snap_query")?.call_method1(
+    let query = py.import("built_core.snap_query")?.call_method1(
         "make_query",
         (scene.getattr("edges")?, world_to_pixel, candidate_pixel),
     )?;
@@ -139,7 +139,7 @@ pub(super) fn compute_snap<'p>(
         start_edges
     );
     let frame = py
-        .import("core.snap_frame")?
+        .import("built_core.snap_frame")?
         .call_method1("SnapFrame", (options, &query))?;
     py.import("built_core")?
         .call_method1("resolve_snap", (query, &frame, frame.getattr("state")?))

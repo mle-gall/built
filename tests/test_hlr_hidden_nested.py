@@ -23,12 +23,12 @@ import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 
-from core.group import Group
-from core.history import HideCommand, History
-from core.hlr import collect_circles, collect_geometry
-from core.layers import Layer
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.history import HideCommand, History
+from built_core.hlr import collect_circles, collect_geometry
+from built_core.layers import Layer
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 
 def _box(x0: float, name: str) -> Group:

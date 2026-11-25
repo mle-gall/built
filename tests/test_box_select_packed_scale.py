@@ -19,10 +19,10 @@ import numpy as np
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.camera import OrbitCamera
-from core.group import Group
-from core.mesh import Edge, Face, Mesh, Vertex
-from core.scene import Scene
+from built_core.camera import OrbitCamera
+from built_core.group import Group
+from built_core.mesh import Edge, Face, Mesh, Vertex
+from built_core.scene import Scene
 import tools.select_host as select
 from tools.rust_tools import SelectTool
 from built_render import MeshToolAccess
@@ -267,7 +267,7 @@ def test_loose_store_mesh_matches_the_walk(crossing):
     scene = _loose_scene()
     if scene.mesh.__class__ is not StoreMesh:
         pytest.skip("mesh store off")
-    from core.mesh import element_identity
+    from built_core.mesh import element_identity
     vp = _Facade(scene, _camera(2, 2, 7.0))
     for rect in ((0, 0, W, H), (W * .3, H * .3, W * .6, H * .7)):
         _box_select(vp, rect, crossing)

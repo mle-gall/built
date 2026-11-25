@@ -5,8 +5,8 @@ import random
 
 from built_core import Vec3
 
-from core import topology
-from core.geometry import Face
+from built_core import topology
+from built_core.geometry import Face
 
 
 def test_materialised_subdivision_on_random_faces():
@@ -47,8 +47,8 @@ def test_materialised_subdivision_on_random_faces():
 
 
 def test_divide_join_preserve_materialised_handles_and_undo():
-    from core.edits import divide_edges, join_edges, join_preview
-    from core.mesh import Mesh, edge_flags
+    from built_core.edits import divide_edges, join_edges, join_preview
+    from built_core.mesh import Mesh, edge_flags
 
     class Materialised(Mesh):
         pass
@@ -82,9 +82,9 @@ def test_divide_join_preserve_materialised_handles_and_undo():
 
 
 def test_drawn_segments_preserve_the_ordered_command_plan(monkeypatch):
-    from core.edits import plan_edge_commands
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core.edits import plan_edge_commands
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
 
     class Materialised(Mesh):
         pass

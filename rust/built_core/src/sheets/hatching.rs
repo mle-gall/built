@@ -6,7 +6,7 @@
 //! layer's fill colour, hatch pattern, ground, ink and form (angle, scale,
 //! an imported pattern, masonry joints, timber grain) — grouped, and each
 //! group filled the frame's way or with its pattern. The pattern geometry
-//! (where each mark goes) is the model's hatch engine, `core.hatches`,
+//! (where each mark goes) is the model's hatch engine, `built_core.hatches`,
 //! asked here; what is drawn of it, with which pen and clip, is ported.
 
 use super::paint::{Cap, Painter, Pen, Rgba};
@@ -73,7 +73,7 @@ fn paint_hatch(py: Python<'_>, p: &mut Painter, rings: &[Ring], key: &str, ink: 
     }
     p.clip_path(rings);
     let [l, t, r, b] = bbox(rings);
-    let marks = py.import("core.hatches")?.getattr("hatch_marks")?
+    let marks = py.import("built_core.hatches")?.getattr("hatch_marks")?
         .call1((key, (l, t, r, b), scale, angle, families, offset))?;
     let w = width.max(0.03);
     p.set_pen(Pen::new(ink, w).cap(Cap::Round));
@@ -112,7 +112,7 @@ fn paint_fitted(py: Python<'_>, p: &mut Painter, rings: &[Ring], key: &str, ink:
     if rings.is_empty() {
         return Ok(());
     }
-    let h = py.import("core.hatches")?;
+    let h = py.import("built_core.hatches")?;
     p.save();
     if let Some(g) = ground {
         p.set_pen(Pen::none());
@@ -146,7 +146,7 @@ fn paint_fitted(py: Python<'_>, p: &mut Painter, rings: &[Ring], key: &str, ink:
 #[allow(clippy::too_many_arguments)]
 fn paint_bond<'py>(py: Python<'py>, p: &mut Painter, rings: &[Ring], key: &str, ink: Rgba, width: f64,
                    ground: Option<Rgba>, form: &Bound<'py, PyDict>, scale: f64, joints: &str) -> PyResult<Vec<Ring>> {
-    let h = py.import("core.hatches")?;
+    let h = py.import("built_core.hatches")?;
     let get = |k: &str| -> PyResult<Option<Bound<'py, PyAny>>> { Ok(form.get_item(k)?.filter(|v| !v.is_none())) };
     let cut: String = get("cut")?.map(|v| v.extract()).transpose()?.unwrap_or_default();
     let mortar = get("mortar")?.map(|v| v.is_truthy()).transpose()?.unwrap_or(false) && joints == "double";
@@ -212,7 +212,7 @@ fn fill_rings(py: Python<'_>, p: &mut Painter, f: &Fields, rings: &[Ring], look:
     }
     let frame_colour = { let c = f.text("cut_fill_color", ""); Rgba::parse(if c.is_empty() { "#595e69" } else { &c }) };
     let color = look.colour.map(rgb_of).unwrap_or(frame_colour);
-    let h = py.import("core.hatches")?;
+    let h = py.import("built_core.hatches")?;
     if let Some(hatch) = look.hatch.as_deref().filter(|s| !s.is_empty()) {
         // The layer's colour as QColor.getRgbF gives it back (not its 8 bits).
         let [cr, cg, cb] = look.colour.unwrap_or([0.0; 3]);

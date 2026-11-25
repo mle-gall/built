@@ -10,14 +10,14 @@ document is marked dirty, and the BIM tab / IFC export actually see the tags
 
 - geometry:   mesh.add_face(points)           (the live scope's mesh)
 - materials:  face.attrs["color"] = (r, g, b)  floats 0-1, the Paint idiom
-- layers:     core.layers.Layer + face.attrs["layer"] / group.layer
+- layers:     built_core.layers.Layer + face.attrs["layer"] / group.layer
 - BIM tags:   bim.tag_faces(...) / bim.tag_group(...)  — core.bim
 
 (The original showcase wrote attrs["ifc_class"], a key nothing in Built
 reads: the model LOOKED tagged in Model Info but exported no BIM objects.)
 """
 # The console injects: scene, mesh, QVector3D, Mesh, Group, bim, layers.
-from core.layers import Layer
+from built_core.layers import Layer
 
 CONCRETE = (0.62, 0.60, 0.58)
 GLASS = (0.55, 0.75, 0.85)

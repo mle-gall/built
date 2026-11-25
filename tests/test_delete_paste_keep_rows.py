@@ -18,7 +18,7 @@ from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 def _prisma(n=12, r=1.0, h=2.0):
     """A smooth n-sided prism: soft vertical edges, a curved side."""
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     m = Mesh()
     ring = [(r * math.cos(2 * math.pi * i / n), r * math.sin(2 * math.pi * i / n))
             for i in range(n)]
@@ -32,7 +32,7 @@ def _prisma(n=12, r=1.0, h=2.0):
 
 
 def _square(x0, y0, s=1.0, color=None, opacity=None):
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     m = Mesh()
     f = m.add_face([V(x0, y0, 0), V(x0 + s, y0, 0), V(x0 + s, y0 + s, 0),
                     V(x0, y0 + s, 0)])
@@ -46,7 +46,7 @@ def _square(x0, y0, s=1.0, color=None, opacity=None):
 
 
 def _placed(proto, name, x, y=0.0, turn=0.0):
-    from core.group import Group
+    from built_core.group import Group
     g = Group(proto, name=name)
     m = QMatrix4x4()
     m.translate(x, y, 0.0)
@@ -58,7 +58,7 @@ def _placed(proto, name, x, y=0.0, turn=0.0):
 def _scene(win):
     """Instanced prisms of two prototypes, a container holding two more
     (nested placements), and plain groups — one of them glass."""
-    from core.group import Group
+    from built_core.group import Group
     vp = win.viewport
     sc = vp.scene
     sc.guides.clear()
@@ -101,8 +101,8 @@ def _steps(vp, gs, box, plain):
     """Delete a placement, a container and a plain group; paste a copy of
     a placement and of the container; undo it all, one by one — yielding
     after each."""
-    from core.group import copy_group
-    from core.history import DeleteGroupCommand, InsertGroupCommand
+    from built_core.group import copy_group
+    from built_core.history import DeleteGroupCommand, InsertGroupCommand
     h = vp.history
     for cmd in (DeleteGroupCommand(gs[2]), DeleteGroupCommand(box),
                 DeleteGroupCommand(plain[1]),
@@ -148,8 +148,8 @@ def test_an_object_kept_is_one_whose_whole_subtree_reads_the_same(native_host):
 
 
 def test_the_browser_takes_rows_out_and_puts_them_in_as_a_rebuild_would(native_host):
-    from core.group import copy_group
-    from core.history import DeleteGroupCommand, InsertGroupCommand
+    from built_core.group import copy_group
+    from built_core.history import DeleteGroupCommand, InsertGroupCommand
     from tests.native_tree import FilingRows
     vp, groups, box, *_ = _scene(native_host)
     browser = FilingRows(native_host, ["i:" + box.uid])
@@ -167,7 +167,7 @@ def test_the_browser_takes_rows_out_and_puts_them_in_as_a_rebuild_would(native_h
         assert h.undo()
         assert browser.read() == browser.read(fresh=True)
         assert browser.model is model
-    from core.outliner import instance_counts
+    from built_core.outliner import instance_counts
     n = instance_counts(vp.scene.groups)[id(groups[1].mesh)]
     def badges():
         return {t[0]: t[3] for t, _ in browser.read()}
@@ -182,7 +182,7 @@ def test_the_browser_takes_rows_out_and_puts_them_in_as_a_rebuild_would(native_h
 
 
 def test_a_rename_between_two_deletes_makes_the_rows_read_again(native_host):
-    from core.history import DeleteGroupCommand
+    from built_core.history import DeleteGroupCommand
     from tests.test_tree_links import _View
     from views import wgpu_ui
     vp, groups, *_ = _scene(native_host)
@@ -200,9 +200,9 @@ def test_a_rename_between_two_deletes_makes_the_rows_read_again(native_host):
 
 
 def test_the_library_reads_only_new_or_repainted_meshes(native_host, monkeypatch):
-    from core import geometry_arrays
-    from core.group import copy_group
-    from core.history import DeleteGroupCommand, InsertGroupCommand, SetFaceColorCommand
+    from built_core import geometry_arrays
+    from built_core.group import copy_group
+    from built_core.history import DeleteGroupCommand, InsertGroupCommand, SetFaceColorCommand
     from built_render import wgpu_library as lib
 
     win = native_host.window
@@ -241,7 +241,7 @@ def test_the_library_reads_only_new_or_repainted_meshes(native_host, monkeypatch
 
 
 def test_unchanged_swatches_and_component_rows_keep_their_keys(native_host):
-    from core.history import DeleteGroupCommand
+    from built_core.history import DeleteGroupCommand
     from built_render import wgpu_library as lib
 
     win = native_host.window
@@ -263,8 +263,8 @@ def test_unchanged_swatches_and_component_rows_keep_their_keys(native_host):
 
 
 def test_only_groups_only_commands_carry_the_groups_mark_forward(native_host):
-    from core.group import copy_group
-    from core.history import (CompoundCommand, DeleteGroupCommand,
+    from built_core.group import copy_group
+    from built_core.history import (CompoundCommand, DeleteGroupCommand,
                               InsertGroupCommand, SetFaceColorCommand)
     vp, gs, box, plain, glass = _scene(native_host)
     h = vp.history
@@ -275,14 +275,14 @@ def test_only_groups_only_commands_carry_the_groups_mark_forward(native_host):
     h.undo()
     assert h.feed.readers.current("mesh_paint", cv())
     h.execute(SetFaceColorCommand(list(plain[0].mesh.faces), (1, 0, 0)))
-    from core.protocol.keys import mesh_key
+    from built_core.protocol.keys import mesh_key
     assert (not h.feed.readers.current("mesh_paint", cv())
             or mesh_key(plain[0].mesh) in h.feed.readers.dirty_paint_meshes())
 
 
 def test_inserting_a_nested_link_rebuilds_the_filing_projection(native_host, tmp_path):
-    from core.group import Group
-    from core.history import InsertGroupCommand
+    from built_core.group import Group
+    from built_core.history import InsertGroupCommand
     from tests.native_tree import FilingRows
     browser = FilingRows(native_host)
     browser.read()
@@ -301,8 +301,8 @@ def test_inserting_a_nested_link_rebuilds_the_filing_projection(native_host, tmp
 
 
 def test_two_panes_readdress_a_repeated_uid_and_undo_independently(native_host):
-    from core.group import Group
-    from core.history import InsertGroupCommand
+    from built_core.group import Group
+    from built_core.history import InsertGroupCommand
     from tests.native_tree import FilingRows
 
     def branch(name):
@@ -334,8 +334,8 @@ def test_two_panes_readdress_a_repeated_uid_and_undo_independently(native_host):
 
 
 def test_worker_prepared_tree_can_receive_edits_before_its_first_frame(native_host):
-    from core.group import Group
-    from core.history import InsertGroupCommand
+    from built_core.group import Group
+    from built_core.history import InsertGroupCommand
     from tests.native_tree import FilingRows
     from views.wgpu_ui import prepare_tree_model
 

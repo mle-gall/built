@@ -23,7 +23,7 @@ GOLDEN = Path(__file__).parent / "fixtures" / "camera_fit_golden.json.gz"
 def runs():
     """``(name, camera, action)`` seeded."""
     from built_core import Vec3 as V
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     rng = random.Random(20261124)
     out = []
     for k in range(120):

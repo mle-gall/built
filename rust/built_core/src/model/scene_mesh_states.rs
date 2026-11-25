@@ -70,14 +70,14 @@ pub(crate) fn scene_mesh_states(py: Python<'_>, scene: &Bound<'_, PyAny>, mesh: 
     let tags = Tags::read(py, scene)?;
     let reveal = scene.getattr("show_hidden_geometry")?.is_truthy()?;
     let loose_locked = scene.getattr("_root")?.call_method0("_loose_locked")?.is_truthy()?;
-    let default = super::module(py, "core.layers")?.getattr("DEFAULT_LAYER")?.extract::<String>()?;
+    let default = super::module(py, "built_core.layers")?.getattr("DEFAULT_LAYER")?.extract::<String>()?;
     // The tag an untagged element follows while its group is open, for the
     // elements whose key the open group's mesh (`scene.mesh`) holds: the
     // rule asks by key (`element_identity`), and a prototype's elements
     // share their keys with the world copy an open instance edits.
     let open_tag: Option<String> = if !scene.getattr("edit_group")?.is_none() {
         let mut tag = None;
-        let path = super::module(py, "core.outliner")?.getattr("open_path")?.call1((scene,))?;
+        let path = super::module(py, "built_core.outliner")?.getattr("open_path")?.call1((scene,))?;
         let path: Vec<Bound<'_, PyAny>> = path.try_iter()?.collect::<PyResult<_>>()?;
         for g in path.iter().rev() {
             let l = g.getattr_opt("layer")?;
@@ -197,7 +197,7 @@ impl<'py> PlacementRules<'py> {
             allowed,
             similar,
             show_hidden: scene.getattr("show_hidden_objects")?.is_truthy()?,
-            group_type: super::module(py, "core.group")?.getattr("Group")?,
+            group_type: super::module(py, "built_core.group")?.getattr("Group")?,
         })
     }
 
@@ -225,7 +225,7 @@ pub(crate) fn scene_group_states(py: Python<'_>, scene: &Bound<'_, PyAny>, group
     -> PyResult<Vec<(bool, bool, bool)>> {
     let tags = Tags::read(py, scene)?;
     let rules = PlacementRules::read(py, scene)?;
-    let default = super::module(py, "core.layers")?.getattr("DEFAULT_LAYER")?.extract::<String>()?;
+    let default = super::module(py, "built_core.layers")?.getattr("DEFAULT_LAYER")?.extract::<String>()?;
     let mut out = Vec::new();
     for g in groups.try_iter()? {
         let g = g?;

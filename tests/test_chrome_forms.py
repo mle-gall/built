@@ -186,7 +186,7 @@ def test_keys_reach_only_the_open_form_in_the_native_window(win, monkeypatch):
 
 
 def test_make_component_names_through_the_chrome(win):
-    from core.group import Group
+    from built_core.group import Group
     scene = win.viewport.scene
     from built_core import Vec3 as QVector3D
     face = scene.mesh.add_face([QVector3D(*p) for p in ((0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0))])

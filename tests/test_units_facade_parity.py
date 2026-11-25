@@ -4,7 +4,7 @@ from dataclasses import astuple
 from pathlib import Path
 from types import SimpleNamespace
 
-from core import units
+from built_core import units
 
 
 def observations():

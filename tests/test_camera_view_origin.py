@@ -105,7 +105,7 @@ def test_draw_and_orbit_beside_distant_scale_figure(view):
 
 
 def test_mixed_scene_metal_frame_and_id_buffer(native, view, tmp_path):
-    from core.protocol import commands
+    from built_core.protocol import commands
     window = _document(view)
     face = view.scene.mesh.add_face(BASE + CORNERS)
     assert commands.push_pull(view.source_viewport.history, face.key, .012345)["ok"]
@@ -145,9 +145,9 @@ def test_zoom_selection_across_one_wide_mesh(view):
 
 
 def test_nested_built_placement_framed_in_model_coordinates(view):
-    from core.group import Group
+    from built_core.group import Group
     from formats.built import placement
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     group = Group(Mesh())
     group.mesh.add_face(CORNERS)
     parent = Group(Mesh())

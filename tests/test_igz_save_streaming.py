@@ -9,7 +9,7 @@ import zipfile
 
 import pytest
 
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import igz
 from built_core import SaveStream
 import tempfile
@@ -31,9 +31,9 @@ def _old_container(path, doc, blobs, fast=False, deflated=None):
 
 
 def test_streamed_save_matches_retained_document_and_round_trips(tmp_path, monkeypatch):
-    from core import layers, links
-    from core.composition import Composicion
-    from core.materials import Material
+    from built_core import layers, links
+    from built_core.composition import Composicion
+    from built_core.materials import Material
     from built_core.saved_views import SavedView
     from tests.test_igz_format3 import _canonical
 

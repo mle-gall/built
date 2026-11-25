@@ -13,7 +13,7 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from core.scene import Scene
+from built_core.scene import Scene
 from core.bim import collect_objects
 from formats import igz
 from formats.ifc import save_ifc

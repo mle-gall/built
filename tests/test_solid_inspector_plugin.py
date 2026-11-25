@@ -12,9 +12,9 @@ from built_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from tests.solid_fixture import _box, _top
-from core.group import Group                                      # noqa: E402
-from core.mesh import Mesh                                        # noqa: E402
-from core.scene import Scene                                      # noqa: E402
+from built_core.group import Group                                      # noqa: E402
+from built_core.mesh import Mesh                                        # noqa: E402
+from built_core.scene import Scene                                      # noqa: E402
 from plugins.solid_inspector import (                             # noqa: E402
     SolidInspectorDialog, SolidInspectorPanel, SolidInspectorTool,
     inspect_mesh)
@@ -894,8 +894,8 @@ def test_hidden_panel_defers_construction_and_explicit_refresh(win, monkeypatch)
 
 
 def test_failed_custom_repair_restores_every_mesh_and_can_be_retried():
-    from core.solid_analysis import RepairSolidsCommand, repair_mesh
-    from core.scene import Scene
+    from built_core.solid_analysis import RepairSolidsCommand, repair_mesh
+    from built_core.scene import Scene
 
     scene = Scene()
     meshes = [scene.mesh, Mesh()]

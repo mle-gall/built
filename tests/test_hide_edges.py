@@ -15,9 +15,9 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edges
-from core.history import HideEdgesCommand, History
-from core.scene import Scene
+from built_core.edits import build_add_edges
+from built_core.history import HideEdgesCommand, History
+from built_core.scene import Scene
 
 
 def V(x: float, y: float, z: float = 0.0) -> QVector3D:

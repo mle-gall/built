@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 
 from built_core import Vec3 as V
 
-from core.scene import Scene
+from built_core.scene import Scene
 
 # A 2 m mitred strip, 0.1 m deep, with points along both long edges.
 STRIP = [V(0, 0, 0), V(0.5, 0, 0), V(1, 0, 0), V(1.5, 0, 0), V(2, 0, 0),

@@ -3,7 +3,7 @@
 """Opening a file handed to the running app preserves the user's drawing (#956)."""
 import pytest
 
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import igz
 from built_core import Vec3 as V
 from tests.shell_isolation import restore_shell_patches  # noqa: F401

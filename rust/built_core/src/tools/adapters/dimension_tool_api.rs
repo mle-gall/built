@@ -83,7 +83,7 @@ fn proposed<'py>(a: &Args<'py>) -> Reply<'py> {
     let cursor = a.get_item(1)?;
     let offset: Obj<'py>;
     let tool = a.get_item(0)?;
-    let dimension = imported(py, "core.dimension")?.getattr("Dimension")?;
+    let dimension = imported(py, "built_core.dimension")?.getattr("Dimension")?;
     tool.getattr("_machine")?.call_method1(
         "set",
         (
@@ -139,7 +139,7 @@ fn rubber_band_lines<'py>(a: &Args<'py>) -> Reply<'py> {
 fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
-    let fmt_len = imported(py, "core.units")?.getattr("fmt_len")?;
+    let fmt_len = imported(py, "built_core.units")?.getattr("fmt_len")?;
     if tool.getattr("a")?.is_none() || tool.getattr("hover_point")?.is_none() {
         return Ok(none(py));
     }
@@ -176,7 +176,7 @@ fn pointer<'py>(a: &Args<'py>) -> Reply<'py> {
         && (kind.eq("hover")? || tool.getattr("b")?.is_none())
     {
         let normal = camera.getattr("target")?.sub(camera.call_method0("eye")?)?;
-        let world = imported(py, "core.snap")?.call_method1(
+        let world = imported(py, "built_core.snap")?.call_method1(
             "project_to_view_plane",
             (ctx.getattr("world")?, origin, normal),
         )?;

@@ -8,7 +8,7 @@
 //! Each step is the Python's, call for call, over the same Python objects
 //! (the readers, `Scene`, `Group`, `LinkMeshes`), so the links goldens
 //! (`tests/test_links_golden.py`) hold. A source being read is on a
-//! per-thread stack, the cycle guard. `core.links.LinkError` is what a
+//! per-thread stack, the cycle guard. `built_core.links.LinkError` is what a
 //! source that cannot be linked raises.
 
 use std::cell::RefCell;
@@ -43,11 +43,11 @@ fn name_of(py: Python<'_>, p: &Obj<'_>) -> PyResult<String> {
 }
 
 fn link_error(py: Python<'_>, msg: String) -> PyResult<PyErr> {
-    Ok(PyErr::from_value(module(py, "core.links")?.getattr("LinkError")?.call1((msg,))?))
+    Ok(PyErr::from_value(module(py, "built_core.links")?.getattr("LinkError")?.call1((msg,))?))
 }
 
 fn is_link_error(py: Python<'_>, e: &PyErr) -> PyResult<bool> {
-    e.value(py).is_instance(&module(py, "core.links")?.getattr("LinkError")?)
+    e.value(py).is_instance(&module(py, "built_core.links")?.getattr("LinkError")?)
 }
 
 /// Where the source is: next to the host as last saved (`rel`), then the
@@ -149,7 +149,7 @@ fn subset<'py>(py: Python<'py>, src: &Obj<'py>, path: &Obj<'py>, select: &Obj<'p
         *counts.entry(g.getattr("uid")?.extract()?).or_default() += 1;
     }
     let repeated = if requested.is_truthy()? { src.call_method0("repeated_uids")? } else { PySet::empty(py)?.into_any() };
-    let row_id = module(py, "core.link_structure")?.getattr("row_id")?;
+    let row_id = module(py, "built_core.link_structure")?.getattr("row_id")?;
     let mut out = Vec::new();
     for (group, world) in selected {
         let part = detached(&group)?;
@@ -189,7 +189,7 @@ pub fn load_source<'py>(path: &Obj<'py>, select: Option<&Obj<'py>>, include_nest
     }
     LOADING.with(|s| s.borrow_mut().push(key.clone()));
     let read = (|| -> PyResult<(Obj<'py>, Obj<'py>, Obj<'py>)> {
-        let src = module(py, "core.scene")?.getattr("Scene")?.call0()?;
+        let src = module(py, "built_core.scene")?.getattr("Scene")?.call0()?;
         let kw = PyDict::new(py);
         kw.set_item("progress", progress.map_or_else(|| none(py), |p| p.clone()))?;
         kw.set_item("include_links", include_nested)?;
@@ -261,7 +261,7 @@ pub fn load_source<'py>(path: &Obj<'py>, select: Option<&Obj<'py>>, include_nest
         };
         let kw = PyDict::new(py);
         kw.set_item("name", path_of(py, path)?.getattr("stem")?)?;
-        let comp = module(py, "core.group")?.getattr("Group")?.call((mesh,), Some(&kw))?;
+        let comp = module(py, "built_core.group")?.getattr("Group")?.call((mesh,), Some(&kw))?;
         comp.call_method1("adopt", (PyList::new(py, groups)?,))?;
         Ok((comp, tags.into_any(), materials.into_any()))
     })();
@@ -360,7 +360,7 @@ pub fn make_link<'py>(scene: &Obj<'py>, path: &Obj<'py>, host_path: Option<&Obj<
     // placement is projected from it.
     let kw = PyDict::new(py);
     kw.set_item("name", path.getattr("stem")?)?;
-    let link = module(py, "core.group")?.getattr("Group")?.call((comp.getattr("mesh")?,), Some(&kw))?;
+    let link = module(py, "built_core.group")?.getattr("Group")?.call((comp.getattr("mesh")?,), Some(&kw))?;
     link.setattr("xform", module(py, "built_core")?.getattr("Matrix4")?.call0()?)?;
     link.setattr("component", true)?;
     let ext = PyDict::new(py);

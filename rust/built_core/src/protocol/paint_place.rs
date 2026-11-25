@@ -151,7 +151,7 @@ fn paint_material<'py>(
         kw.set_item("color", &color)?;
         kw.set_item("texture", &texture)?;
         kw.set_item("opacity", &opacity)?;
-        mat = Some(py.import("core.material_commands")?.call_method(
+        mat = Some(py.import("built_core.material_commands")?.call_method(
             "material_for_paint",
             (scene,),
             Some(&kw),
@@ -180,7 +180,7 @@ fn place_group<'py>(
     _pending: Option<&Obj<'py>>,
 ) -> Reply<'py> {
     let py = history.py();
-    let groups = py.import("core.group")?;
+    let groups = py.import("built_core.group")?;
     let scene = history.getattr("scene")?;
     let g = match _pending {
         Some(g) if g.getattr("uid")?.ne(template)? => {

@@ -19,11 +19,11 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edge, build_add_edges
-from core.geometry import Face
-from core.history import AddEdgeCommand, AddFaceCommand, History
-from core.scene import Scene
-from core.topology import (
+from built_core.edits import build_add_edge, build_add_edges
+from built_core.geometry import Face
+from built_core.history import AddEdgeCommand, AddFaceCommand, History
+from built_core.scene import Scene
+from built_core.topology import (
     find_chord_split,
     find_cycles_through,
     split_face_by_chord,
@@ -92,7 +92,7 @@ def _square_edges():
 
 
 def Edge_(a, b):
-    from core.geometry import Edge
+    from built_core.geometry import Edge
     return Edge(a, b)
 
 

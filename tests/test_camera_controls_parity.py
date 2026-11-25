@@ -8,7 +8,7 @@ GOLDEN = Path(__file__).parent / "fixtures" / "camera_controls.json.gz"
 
 
 def samples():
-    from core.camera import OrbitCamera, frame_rect
+    from built_core.camera import OrbitCamera, frame_rect
     from built_core import Vec3
 
     rng = random.Random(4367)
@@ -59,7 +59,7 @@ def test_camera_controls_match_python():
 
 def test_plugin_subclass_and_overrides_survive_copy():
     from copy import copy, deepcopy
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
 
     class CameraWithLabel(OrbitCamera):
         __slots__ = ("label",)

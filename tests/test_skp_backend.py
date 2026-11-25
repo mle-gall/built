@@ -12,8 +12,8 @@ from types import SimpleNamespace as NS
 
 import pytest
 
-from core.scene import Scene
-from core.texture import clear_texture_cache, texture_cache_stats
+from built_core.scene import Scene
+from built_core.texture import clear_texture_cache, texture_cache_stats
 from formats import skp as skp_format
 from formats import skp_reader
 
@@ -953,7 +953,7 @@ def test_resolve_face_layers_leaves_names_and_drops_the_default_tag():
 
 
 def test_apply_payload_registers_layers_and_assigns_groups():
-    from core.layers import Layer
+    from built_core.layers import Layer
     scene = Scene()
     scene.layers.append(Layer("Muros", visible=False))   # user's own state
     tri = [_V(0, 0), _V(1, 0), _V(1, 1)]
@@ -979,7 +979,7 @@ def test_apply_payload_registers_layers_and_assigns_groups():
 
 
 def test_snapshot_import_undo_reverts_added_layers():
-    from core.history import History, SnapshotImport
+    from built_core.history import History, SnapshotImport
     scene = Scene()
     payload = {
         "backend": "openskp",
@@ -1041,7 +1041,7 @@ def test_apply_payload_creates_saved_views_once():
 
 
 def test_snapshot_import_undo_reverts_added_views():
-    from core.history import History, SnapshotImport
+    from built_core.history import History, SnapshotImport
     scene = Scene()
     payload = {
         "backend": "openskp", "protos": [],
@@ -1112,7 +1112,7 @@ def test_apply_payload_skips_degenerate_dimension():
 
 
 def test_snapshot_import_undo_reverts_added_dimensions():
-    from core.history import History, SnapshotImport
+    from built_core.history import History, SnapshotImport
     scene = Scene()
     payload = {
         "backend": "openskp", "protos": [],

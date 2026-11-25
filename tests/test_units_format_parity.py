@@ -55,7 +55,7 @@ SETTINGS = (
     {"length": "ft-in", "precision": 0},
 )
 
-#: Raw ``units`` payloads :func:`core.units.model_units_of` cleans.
+#: Raw ``units`` payloads :func:`built_core.units.model_units_of` cleans.
 RAW_UNITS = (
     None, {}, {"length": "m"}, {"length": "parsec"}, {"length": "mm", "precision": 9},
     {"length": "cm", "precision": "3"}, {"length": "cm", "precision": None},
@@ -188,7 +188,7 @@ def _key(name, args):
 
 
 def test_formatters_read_as_the_python_ones_did():
-    from core import units
+    from built_core import units
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     cases = corpus()
     assert len(cases) == len(want)
@@ -202,7 +202,7 @@ def test_formatters_read_as_the_python_ones_did():
 
 if __name__ == "__main__" and "--write" in sys.argv:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from core import units as _units
+    from built_core import units as _units
     rows = [_jsonable(answer(_units, n, a)) for n, a in corpus()]
     GOLDEN.write_bytes(gzip.compress(json.dumps(
         rows, ensure_ascii=False, separators=(",", ":")).encode(), mtime=0))

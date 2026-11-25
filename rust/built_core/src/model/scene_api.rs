@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! `core.scene`, served from here (`core/scene.py` is gone): the scene
+//! `built_core.scene`, served from here (`core/scene.py` is gone): the scene
 //! container.
 //!
 //! `edges` and `faces` are read-only views onto the mesh, so render, bounds
@@ -32,7 +32,7 @@ use super::py_class::{method, property, static_method, FastAttr};
 
 type Obj<'py> = Bound<'py, PyAny>;
 
-const MODULE: &str = "core.scene";
+const MODULE: &str = "built_core.scene";
 
 /// The scene fields that live on the root node (their dataclass defaults
 /// still apply: `__init__` assigns them through these).
@@ -59,7 +59,7 @@ fn cache(py: Python<'_>) -> PyResult<&Cache> {
     CACHE.get_or_try_init(py, || -> PyResult<Cache> {
         let mesh = py.import("built_core.mesh")?;
         Ok(Cache {
-            group: py.import("core.group")?.getattr("Group")?.unbind(),
+            group: py.import("built_core.group")?.getattr("Group")?.unbind(),
             element_set: py.import("built_core")?.getattr("ElementSet")?.unbind(),
             effective_visible: native(py)?.getattr("tag_edits")?.getattr("effective_visible")?.unbind(),
             edge: mesh.getattr("Edge")?.unbind(),
@@ -291,7 +291,7 @@ fn scene_layer_state<'py>(me: &Obj<'py>, entity: &Obj<'py>) -> PyResult<Bound<'p
 
 fn open_path<'py>(me: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
     let py = me.py();
-    py.import("core.outliner")?.call_method1(intern!(py, "open_path"), (me,))?.try_iter()?.collect()
+    py.import("built_core.outliner")?.call_method1(intern!(py, "open_path"), (me,))?.try_iter()?.collect()
 }
 
 /// The layer a face or edge with none of its own follows while its group
@@ -926,7 +926,7 @@ fn root_property<'py>(py: Python<'py>, attr: &'static str) -> PyResult<Obj<'py>>
 /// A scene table kept on the scene's root node as a document attribute:
 /// the tag folders and their tables, the active tag, plugin data. A dict or
 /// a list reads as a tracked container that writes back when edited in
-/// place (`core.doc_model`).
+/// place (`built_core.doc_model`).
 fn root_table<'py>(py: Python<'py>, name: &'static str) -> PyResult<Obj<'py>> {
     let track = name != "active_layer";
     let get = PyCFunction::new_closure(py, None, None, move |args, _kw| -> PyResult<Py<PyAny>> {
@@ -960,7 +960,7 @@ fn build_scene<'py>(m: &Bound<'py, PyModule>) -> PyResult<Obj<'py>> {
     let object = builtins.getattr("object")?;
     let mesh = py.import("built_core.mesh")?.getattr("Mesh")?;
     let element_set = py.import("built_core")?.getattr("ElementSet")?;
-    let new_root = py.import("core.doc_model")?.getattr("new_scene_root")?;
+    let new_root = py.import("built_core.doc_model")?.getattr("new_scene_root")?;
     let fld = |kw: &[(&str, Obj<'py>)]| -> PyResult<Obj<'py>> {
         let d = PyDict::new(py);
         for (k, v) in kw {
@@ -1146,7 +1146,7 @@ fn build_scene<'py>(m: &Bound<'py, PyModule>) -> PyResult<Obj<'py>> {
     Ok(cls)
 }
 
-/// Fill the module `core.scene`.
+/// Fill the module `built_core.scene`.
 pub(crate) fn install(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
     m.add("__doc__", "Scene container, backed by a shared-vertex mesh (rust/built_core/src/model/scene_api.rs).")?;

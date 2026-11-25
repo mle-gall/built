@@ -13,8 +13,8 @@ from __future__ import annotations
 from built_core import Vec3 as QVector3D
 
 
-from core.layers import Layer
-from core.scene import Scene
+from built_core.layers import Layer
+from built_core.scene import Scene
 from views.document_interaction import _ghost_edge_points
 
 

@@ -12,10 +12,10 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core import layers as L
-from core.group import Group
-from core.layers import DEFAULT_LAYER, Layer
-from core.mesh import Mesh
+from built_core import layers as L
+from built_core.group import Group
+from built_core.layers import DEFAULT_LAYER, Layer
+from built_core.mesh import Mesh
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.native_tree import action
 from tests.test_project_drawing_filters import Project
@@ -152,7 +152,7 @@ def test_sort_choice_is_restored_and_returning_to_project_order_keeps_the_model(
 
 
 def test_tag_assignment_and_drop_resolve_the_same_placement_after_sort(native_host):
-    from core.protocol.commands import set_tag
+    from built_core.protocol.commands import set_tag
     vp = native_host.viewport
     wall, desk = _group("Wall", "Walls"), _group("Desk")
     room = _container("Room", [wall], layer="Walls")

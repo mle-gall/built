@@ -6,10 +6,10 @@ in DXF, templates."""
 from __future__ import annotations
 
 import built_core
-from core import layers as L
-from core.group import Group
-from core.layers import DEFAULT_LAYER, Layer, assign_layer
-from core.mesh import Mesh
+from built_core import layers as L
+from built_core.group import Group
+from built_core.layers import DEFAULT_LAYER, Layer, assign_layer
+from built_core.mesh import Mesh
 from built_core.saved_views import SavedView
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from tests.test_drawing_records import _square

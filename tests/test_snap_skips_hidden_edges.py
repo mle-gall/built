@@ -21,7 +21,7 @@ from __future__ import annotations
 from built_core import Vec3 as V
 
 
-from core.snap import compute_snap  # noqa: E402
+from built_core.snap import compute_snap  # noqa: E402
 from views import document_interaction as viewport_mod  # noqa: E402
 from tests.controller_surface import ControllerSurface as Viewport
 
@@ -97,7 +97,7 @@ def test_an_edge_on_a_hidden_layer_does_not_snap():
     either — the layer panel is how a whole drawing is put aside."""
     vp, visible, hidden = _vp_with_two_edges()
     hidden.hidden = False
-    from core.layers import Layer, assign_layer
+    from built_core.layers import Layer, assign_layer
     vp.scene.layers.append(Layer("Anotaciones"))
     assign_layer(hidden, "Anotaciones")
     vp.scene.layer("Anotaciones").visible = False
@@ -132,7 +132,7 @@ def test_the_nearby_path_filters_hidden_edges_too(monkeypatch):
 def _top_view(visible, hidden):
     """A real viewport looking straight down, so a corner is a pixel."""
     import numpy as np
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     vp = Viewport(None)
     vp.resize(800, 600)
     vp.camera = OrbitCamera()

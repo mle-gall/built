@@ -3,11 +3,11 @@ remember which folders were switched off."""
 import built_core
 from built_core import Vec3 as QVector3D
 
-from core import layers as L
-from core.layers import Layer
-from core.scene import Scene
+from built_core import layers as L
+from built_core.layers import Layer
+from built_core.scene import Scene
 from built_core.saved_views import SavedView
-from core.camera import OrbitCamera
+from built_core.camera import OrbitCamera
 
 
 def _scene():
@@ -19,9 +19,9 @@ def _scene():
 
 
 def test_visible_placements_follow_the_folder():
-    from core.group import Group
+    from built_core.group import Group
     from built_core import group_visible_placements as visible_placements
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     scene, f = _scene()
     child = Group(Mesh(), name="child")
     child.layer = "Muro"

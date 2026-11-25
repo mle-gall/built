@@ -91,7 +91,7 @@ pub(crate) fn command_erase_selection(
     let hypot = store_hypot(mesh.py())?;
     let py = mesh.py();
     let footprint = py
-        .import("core.topology")?
+        .import("built_core.topology")?
         .call_method1("winding_footprint", (mesh,))?;
     let loops = loops
         .into_iter()
@@ -131,7 +131,7 @@ fn heal_keys(mesh: &Bound<'_, PyAny>, footprint: &Bound<'_, PyAny>) -> PyResult<
     let kw = PyDict::new(py);
     kw.set_item("footprint", footprint)?;
     let healed = py
-        .import("core.topology")?
+        .import("built_core.topology")?
         .getattr("heal_overlapping_faces")?
         .call((mesh,), Some(&kw))?;
     healed
@@ -149,7 +149,7 @@ pub(crate) fn command_heal_overlaps(mesh: &Bound<'_, PyAny>) -> PyResult<Option<
     let before: usize = mesh.getattr("_mut_serial")?.extract()?;
     let footprint = mesh
         .py()
-        .import("core.topology")?
+        .import("built_core.topology")?
         .call_method1("winding_footprint", (mesh,))?;
     let faces = heal_keys(mesh, &footprint)?;
     let after: usize = mesh.getattr("_mut_serial")?.extract()?;

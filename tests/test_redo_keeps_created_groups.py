@@ -14,13 +14,13 @@ from __future__ import annotations
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from built_core import Vec3 as V
 
-from core.group import Group
-from core.history import (ExplodeGroupCommand, GroupInContextCommand,
+from built_core.group import Group
+from built_core.history import (ExplodeGroupCommand, GroupInContextCommand,
                           History, MakeComponentOfCommand, MakeGroupCommand,
                           MakeNestedGroupCommand, MoveGroupCommand,
                           ReplaceComponentCommand)
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 
 def _loose_box(scene, x=0.0):
@@ -208,8 +208,8 @@ def test_window_loose_geometry_and_one_group_then_explode_redoes_both(native_win
 
 
 def test_split_into_pieces_then_explode_redoes_both():
-    from core.history import SplitIntoPiecesCommand
-    from core.pieces import split_into_pieces
+    from built_core.history import SplitIntoPiecesCommand
+    from built_core.pieces import split_into_pieces
     scene = Scene()
     hist = History(scene)
     m = Mesh()

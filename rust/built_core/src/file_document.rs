@@ -276,7 +276,7 @@ fn igz_load_into_inner<'p>(
             last = Instant::now()
         }
     }
-    let group_api = py.import("core.group")?;
+    let group_api = py.import("built_core.group")?;
     let groups = py.import("built_core")?.getattr("FileGroups")?;
     let names = PyList::empty(py);
     for r in groups.call_method1("records", (&payload,))?.try_iter()? {

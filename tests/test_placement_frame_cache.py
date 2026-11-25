@@ -1,8 +1,8 @@
 """Opening must retain placement bounds for the first interaction."""
 from types import SimpleNamespace
 from built_core import Matrix4 as QMatrix4x4
-from core.group import Group
-from core.mesh import Mesh
+from built_core.group import Group
+from built_core.mesh import Mesh
 from tests.controller_surface import ControllerSurface as Viewport
 
 

@@ -54,7 +54,7 @@ from tools.base import Tool
 # Diagnosis (pure data, no GUI — see tests/test_solid_inspector_plugin.py)
 # ---------------------------------------------------------------------------
 
-from core.solid_analysis import (
+from built_core.solid_analysis import (
     _live, _steps, _step_key, _face_key,
     internal_faces, _copy_faces, reversed_faces, _signed_volume,
     inspect_mesh, is_sound, _problem_text, _edge_clusters,
@@ -109,7 +109,7 @@ def _matrix_of(scene, group):
     coordinates), wherever it is nested."""
     if group is None:
         return None
-    from core.group import iter_placements
+    from built_core.group import iter_placements
     for top in scene.groups:
         for g, m in iter_placements(top):
             if g is group:
@@ -223,8 +223,8 @@ class SolidInspectorPanel:
             return self._rows[self.selected]
 
     def sections(self):
-        from core.plugin_panels import section, item
-        from core.units import fmt_volume
+        from built_core.plugin_panels import section, item
+        from built_core.units import fmt_volume
         if not self.visible:
             return [section("inspector", self.title, item("button", "inspect", tr("Inspect")))]
         self.show()
@@ -526,7 +526,7 @@ class SolidInspectorTool(Tool):
     uses_snap = False
 
     def on_activate(self, viewport):
-        from core.plugin_panels import open_panel
+        from built_core.plugin_panels import open_panel
         open_panel(viewport.window(), "solid_inspector")
 
     def on_deactivate(self, viewport):

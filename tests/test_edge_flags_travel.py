@@ -12,18 +12,18 @@ la usa. `soft` ya se había olvidado una vez (agrupar un cilindro enseñaba toda
 las costuras); `hidden` llegó a `Edge` después y solo algunas copias se
 enteraron. Tres comandos se lo dejaban: crear grupo, deshacer grupo y
 reconstruir caras. Ahora las cuatro banderas viajan en una tupla, de un solo
-sitio (`core.mesh.edge_flags`), así que la próxima que se añada no se puede
+sitio (`built_core.mesh.edge_flags`), así que la próxima que se añada no se puede
 olvidar.
 """
 from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edges
-from core.history import (ExplodeGroupCommand, HideEdgesCommand, History,
+from built_core.edits import build_add_edges
+from built_core.history import (ExplodeGroupCommand, HideEdgesCommand, History,
                           MakeGroupCommand, RebuildPlanarFacesCommand)
-from core.mesh import EDGE_FLAG_NAMES, edge_flags, edge_is_plain
-from core.scene import Scene
+from built_core.mesh import EDGE_FLAG_NAMES, edge_flags, edge_is_plain
+from built_core.scene import Scene
 
 
 def V(x, y, z=0.0):

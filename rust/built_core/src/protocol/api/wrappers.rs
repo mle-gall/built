@@ -167,7 +167,7 @@ fn file_tags<'p>(this: &Obj<'p>, key: &Obj<'p>) -> PyResult<Obj<'p>> {
     let out = PyList::empty(py);
     let n = this.getattr("nodes")?.call_method1("get", (key,))?;
     if !n.is_none() && n.get_item("kind")?.eq("link")? {
-        let sep: String = py.import("core.links")?.getattr("SEP")?.extract()?;
+        let sep: String = py.import("built_core.links")?.getattr("SEP")?.extract()?;
         let bases: Vec<String> = n.get_item("folders")?.extract()?;
         let pre = bases
             .iter()
@@ -188,7 +188,7 @@ fn file_state<'p>(scene: &Obj<'p>, path: &Obj<'p>, nested: bool) -> PyResult<Obj
     let _ = nested;
     scene
         .py()
-        .import("core.links")?
+        .import("built_core.links")?
         .call_method1("link_state", (scene, path))
 }
 fn share_init(
@@ -293,12 +293,13 @@ fn session(
 pub(super) fn install(m: &Module<'_>, name: &str, core: &Module<'_>) -> PyResult<()> {
     let py = m.py();
     match name {
-        "core.bridge" => {
+        "built_core.bridge" => {
             exports(
                 m,
                 core.as_any(),
-                "align_chain align_loop bridge follow_neighbours profiles_from_selection strips",
+                "align_chain align_loop follow_neighbours profiles_from_selection strips",
             )?;
+            crate::bridge_profiles::register_bridge(m)?;
             m.add("plan", core.getattr("bridge_plan")?)?;
             class(
                 m,
@@ -311,7 +312,7 @@ pub(super) fn install(m: &Module<'_>, name: &str, core: &Module<'_>) -> PyResult
             prop(&ns, "points", wrap_pyfunction!(points, m)?.into_any())?;
             class(m, "Profile", vec![], &ns)?;
         }
-        "core.lazy_mesh" => {
+        "built_core.lazy_mesh" => {
             exports(m, core.as_any(), "PlannedVertices entity_count plan_of")?;
             m.add("plan", core.getattr("deferred_plan")?)?;
             m.add("weld", core.getattr("deferred_weld")?)?;
@@ -349,7 +350,7 @@ pub(super) fn install(m: &Module<'_>, name: &str, core: &Module<'_>) -> PyResult
             m.add("Plan", c)?;
             m.add_function(wrap_pyfunction!(face_net_areas, m)?)?;
         }
-        "core.purge" => {
+        "built_core.purge" => {
             let mut names = Vec::new();
             for n in "iter_groups iter_meshes layer_carriers layers_held_by_scenes unused_layers unused_materials used_layers used_materials _annotations _count_edges _document_groups".split_whitespace(){m.add(n,core.getattr(format!("purge_{}",n.trim_start_matches('_')))?)?;names.push(n)}
             m.add_function(wrap_pyfunction!(layer_count_steps, m)?)?;
@@ -357,7 +358,7 @@ pub(super) fn install(m: &Module<'_>, name: &str, core: &Module<'_>) -> PyResult
             names.extend(["layer_count_steps", "layer_counts"]);
             m.add("__all__", names)?;
         }
-        "core.reference_edit" => {
+        "built_core.reference_edit" => {
             let p = core.getattr("command_protocol")?;
             let h = py.import("built_core.history")?;
             for (n, b, c, flag, init) in [
@@ -392,11 +393,11 @@ pub(super) fn install(m: &Module<'_>, name: &str, core: &Module<'_>) -> PyResult
             }
             m.add("record_leave", p.getattr("record_leave")?)?;
         }
-        "core.link_structure" => {
+        "built_core.link_structure" => {
             m.add("LINKED", "linked")?;
             m.add(
                 "LINKED_NAME",
-                py.import("core.links")?.getattr("LINKED_FOLDER")?,
+                py.import("built_core.links")?.getattr("LINKED_FOLDER")?,
             )?;
             m.add("STATES", ("resolved", "modified", "missing", "packed"))?;
             let ns = PyDict::new(py);

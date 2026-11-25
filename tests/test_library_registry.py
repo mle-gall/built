@@ -6,8 +6,8 @@ from unittest.mock import Mock
 import pytest
 
 from core import bim_registry
-from core.history import History
-from core.scene import Scene
+from built_core.history import History
+from built_core.scene import Scene
 from built_render import chrome_sheet
 from built_render import wgpu_library
 

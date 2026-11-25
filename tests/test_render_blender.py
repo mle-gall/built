@@ -15,9 +15,9 @@ import pytest
 from built_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
-from core import render_blender as rb  # noqa: E402
-from core.camera import OrbitCamera  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core import render_blender as rb  # noqa: E402
+from built_core.camera import OrbitCamera  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 
 
 def _box_scene():

@@ -7,11 +7,11 @@ from __future__ import annotations
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.group import Group, world_mesh
-from core.history import History, SnapshotMutation
-from core.reference_edit import ReshareInstanceCommand
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group, world_mesh
+from built_core.history import History, SnapshotMutation
+from built_core.reference_edit import ReshareInstanceCommand
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 
 def V(x, y, z=0.0):

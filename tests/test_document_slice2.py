@@ -9,16 +9,16 @@ import numpy as np
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core import doc_model
-from core.group import Group, PlacementProxy
+from built_core import doc_model
+from built_core.group import Group, PlacementProxy
 from built_core import group_model_placements as model_placements
-from core.history import (AssignLayerCommand, HideCommand, History,
+from built_core.history import (AssignLayerCommand, HideCommand, History,
                           NativeCommand, SetPluginDataCommand, SetRecordCommand,
                           SetStructureNodeCommand)
-from core.layers import STYLE_FIELDS, Layer, layer_values
-from core.materials import Material
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.layers import STYLE_FIELDS, Layer, layer_values
+from built_core.materials import Material
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from formats import built
 
 N = doc_model.NATIVE
@@ -356,7 +356,7 @@ def test_doc_tree_composes_turned_and_scaled_chains_as_model_placements():
 
 
 def test_doc_walk_is_iter_groups():
-    from core import purge
+    from built_core import purge
     roots = _tree()
     roots.append(roots[0])                   # a root listed twice: once
     fast = list(N.doc_walk(roots))

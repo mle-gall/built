@@ -688,7 +688,7 @@ fn note(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>, doc: Option<Bound<'_, P
                 data.set_item("project", pathlib.call1((proj_path,))?.getattr("stem")?)?;
             }
         }
-        data.set_item("links", py.import("core.links")?.call_method1("sources", (&scene,))?.len()?)?;
+        data.set_item("links", py.import("built_core.links")?.call_method1("sources", (&scene,))?.len()?)?;
         if let Some(name) = opt(&doc, "import_name").filter(|n| n.is_truthy().unwrap_or(false)) {
             let suffix: String = pathlib.call1((name.str()?,))?.getattr("suffix")?.extract()?;
             data.set_item("imported", suffix.to_lowercase().trim_start_matches('.'))?;
@@ -997,7 +997,7 @@ fn new_project(win: &Bound<'_, PyAny>) -> PyResult<()> {
     }
     let path = py.import("pathlib")?.getattr("Path")?.call1((name,))?.call_method1("with_suffix", (".builtproject",))?;
     let made = (|| -> PyResult<()> {
-        let scene = py.import("core.scene")?.getattr("Scene")?.call0()?;
+        let scene = py.import("built_core.scene")?.getattr("Scene")?.call0()?;
         py.import("built_core.project")?.call_method1("create", (scene, &path))?;
         win.call_method1("open_project", (&path,))?;
         Ok(())
@@ -1100,7 +1100,7 @@ fn from_template(win: &Bound<'_, PyAny>, tid: &str) -> PyResult<()> {
     let vp = win.getattr("viewport")?;
     let scene = vp.getattr("scene")?;
     if units.is_truthy()? {
-        py.import("core.units")?.call_method1("apply_units", (&scene, units))?;
+        py.import("built_core.units")?.call_method1("apply_units", (&scene, units))?;
     }
     if nodes.is_truthy()? {
         apply_structure(py, &scene, &nodes, Some(active))?;

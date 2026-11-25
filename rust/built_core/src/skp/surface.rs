@@ -105,7 +105,7 @@ fn coords(
         };
         let (x, y) = face
             .py()
-            .import("core.texture")?
+            .import("built_core.texture")?
             .call_method1("projection_basis", (normal,))?
             .extract::<([f64; 3], [f64; 3])>()?;
         (DVec3::from_array(x), DVec3::from_array(y))

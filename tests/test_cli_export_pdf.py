@@ -1,6 +1,6 @@
 """Exercise the installed command-line entry point with an on-disk document."""
-from core.composition import Composicion, MarcoVista
-from core.scene import Scene
+from built_core.composition import Composicion, MarcoVista
+from built_core.scene import Scene
 from formats.igz import save_scene
 from tests.launcher_binary import run
 

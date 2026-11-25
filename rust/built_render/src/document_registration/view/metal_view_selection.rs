@@ -153,7 +153,7 @@ fn hover_frame<'py>(view: &Obj<'py>, x: &Obj<'py>, y: &Obj<'py>, modifiers: &Obj
             if tools.getattr("mode")?.eq("mesh")? && work_point.is_truthy()? {
                 point = work_point.clone();
             }
-            let snap = py.import("core.snap")?.getattr("compute_snap")?.call(
+            let snap = py.import("built_core.snap")?.getattr("compute_snap")?.call(
                 (point, (x, y), namespace(py, fields!(py; "edges" => PyList::empty(py)))?, view.getattr("_world_to_pixel")?, 12.),
                 Some(&options),
             )?;
@@ -307,9 +307,9 @@ fn sync_selection<'py>(a: &Args<'py>) -> Reply<'py> {
     if renderer.is_none() {
         return Ok(none(py));
     }
-    let mesh = py.import("core.mesh")?;
+    let mesh = py.import("built_core.mesh")?;
     let (face, edge, identity) = (mesh.getattr("Face")?, mesh.getattr("Edge")?, mesh.getattr("element_identity")?);
-    let group = py.import("core.group")?.getattr("Group")?;
+    let group = py.import("built_core.group")?.getattr("Group")?;
     let parity = py.import("views.wgpu_parity")?;
     let np = py.import("numpy")?;
     let (tools, packed) = (view.getattr("tools")?, view.getattr("packed")?);
@@ -407,7 +407,7 @@ fn draw_selection_marks<'py>(a: &Args<'py>) -> Reply<'py> {
     if view.getattr("tools")?.getattr("mode")?.ne("mesh")? && view.getattr("renderer")?.hasattr("set_preview_mesh")? {
         return Ok(none(py));
     }
-    let edge = py.import("core.mesh")?.getattr("Edge")?;
+    let edge = py.import("built_core.mesh")?.getattr("Edge")?;
     let point = py.import("built_core")?.getattr("ScreenPoint")?;
     let render = py.import("built_render")?;
     let (pen, colour) = (render.getattr("PaintPen")?, render.getattr("PaintColor")?);

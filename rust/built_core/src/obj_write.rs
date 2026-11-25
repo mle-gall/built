@@ -92,7 +92,7 @@ fn copy_texture(src: &Path, path: &Path, texture: &Bound<'_, PyModule>) {
 #[pyfunction]
 fn obj_save(py: Python<'_>, scene: &Obj<'_>, path: PathBuf) -> PyResult<()> {
     let helpers = py.import("built_core.formats.meshexport")?;
-    let texture = py.import("core.texture")?;
+    let texture = py.import("built_core.texture")?;
     let smooth = helpers.call_method0("SmoothNormals")?;
     let ids = PyDict::new(py);
     let mut materials: Vec<Material> = Vec::new();

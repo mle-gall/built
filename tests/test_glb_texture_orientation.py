@@ -21,7 +21,7 @@ import pytest  # noqa: E402
 from built_core import Vec3 as V
 from built_render import SurveyRaster  # noqa: E402
 
-from core.scene import Scene  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 import built_core  # noqa: E402
 from formats.glb import load_glb, read_triangles  # noqa: E402
 from formats.gltf import save_glb  # noqa: E402

@@ -12,10 +12,10 @@ from __future__ import annotations
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core.group import Group
+from built_core.group import Group
 from built_core import group_transformed_attrs as transformed_attrs
 from built_core import group_transformed_mesh as transformed_mesh
-from core.mesh import Mesh
+from built_core.mesh import Mesh
 from built_core.parts import part_points
 
 
@@ -101,6 +101,6 @@ def test_a_parts_points_follow_its_placement():
 
 
 def test_identity_check_accepts_noncallable_matrices():
-    from core.history import placement_is_identity
+    from built_core.history import placement_is_identity
     assert placement_is_identity(_NoCall())
     assert not placement_is_identity(_turn_and_move())

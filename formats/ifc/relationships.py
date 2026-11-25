@@ -63,7 +63,7 @@ class Appearance:
             for occurrence in item if isinstance(item, list) else [item]:
                 w.entity('IfcStyledItem', Item=ref(occurrence), Styles=refs([self.styles[key]]))
         if representation is not None:
-            from core.layers import DEFAULT_LAYER
+            from built_core.layers import DEFAULT_LAYER
             names = {a.get('layer') or getattr(group, 'layer', None) or DEFAULT_LAYER for a in attributes}
             if group is not None:
                 names.add(group.layer or DEFAULT_LAYER)

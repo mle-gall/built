@@ -11,9 +11,9 @@ import pytest
 from built_core import Vec3 as V
 
 import core._native as _native
-from core import mesh as M
-from core.group import Group
-from core.scene import Scene
+from built_core import mesh as M
+from built_core.group import Group
+from built_core.scene import Scene
 from formats import igz
 from tests.controller_surface import ControllerSurface as Viewport
 

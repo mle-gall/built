@@ -8,11 +8,11 @@ import math
 from built_core import ScreenPoint, Input
 from built_core import Vec3 as QVector3D
 
-from core.history import History
-from core.mesh import Mesh
+from built_core.history import History
+from built_core.mesh import Mesh
 from built_core.orient import is_closed, signed_volume
-from core.scene import Scene
-from core.sweep import order_path_edges, sweep_profile
+from built_core.scene import Scene
+from built_core.sweep import order_path_edges, sweep_profile
 from tools.base import ToolContext
 
 
@@ -90,7 +90,7 @@ def _curve_sizes(mesh):
 def test_a_circle_profile_ends_in_a_circle_curve():
     """The far cap of a pipe is one curve again, like the circle it came
     from — not 24 loose segments."""
-    import core.edits  # noqa: F401  (Mesh helpers)
+    import built_core.edits  # noqa: F401  (Mesh helpers)
     m = Mesh()
     n = 24
     circ = [V(0, 0.3 * math.cos(2 * math.pi * k / n),
@@ -109,8 +109,8 @@ def test_a_circle_profile_ends_in_a_circle_curve():
 
 def test_rails_along_a_circle_path_are_curves():
     """A rectangle around a circle: each corner draws a circle, one curve."""
-    from core.sweep import orient_closed_path
-    import core.edits  # noqa: F401
+    from built_core.sweep import orient_closed_path
+    import built_core.edits  # noqa: F401
     m = Mesh()
     n = 24
     face = m.add_face([V(2, 0, 0), V(2.3, 0, 0), V(2.3, 0, 0.5), V(2, 0, 0.5)])
@@ -249,7 +249,7 @@ def test_manual_drag_previews_live_and_a_click_finishes():
 
 
 def test_manual_drag_bridges_skipped_segments_and_backs_up():
-    from core.sweep import manual_path_extend
+    from built_core.sweep import manual_path_extend
     scene = Scene()
     m = scene.mesh
     pts = [V(0, 0, 0), V(0, 1, 0), V(0, 2, 0), V(0, 3, 0), V(0, 4, 0)]

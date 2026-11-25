@@ -209,7 +209,7 @@ fn follow_point<'py>(py: Python<'py>, item: &Bound<'py, PyAny>, attr: &str, proj
 pub fn sheet_follow_anchors<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, frames: Vec<Bound<'py, PyDict>>,
                                  snaps: Bound<'py, PyAny>, follow: Bound<'py, PyAny>, memo: Bound<'py, PyDict>)
     -> PyResult<usize> {
-    py.import("core.doc_model")?.call_method0("flush")?;
+    py.import("built_core.doc_model")?.call_method0("flush")?;
     let mut by_uid: Vec<(String, Projector, Snaps<'py>)> = Vec::new();
     for d in &frames {
         let frame = d.get_item("frame")?.ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("frame"))?;

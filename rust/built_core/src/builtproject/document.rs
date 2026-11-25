@@ -210,7 +210,7 @@ fn sync_files(scene: &Obj, host_path: Option<PathBuf>) -> PyResult<()> {
     };
     let mut files = vec![file(&host, "host")?];
     let mut edges = vec![];
-    let links = py.import("core.links")?;
+    let links = py.import("built_core.links")?;
     for g in links.call_method1("linked_groups", (scene,))?.try_iter()? {
         let g = g?;
         let r = links.call_method1("link_of", (&g,))?;

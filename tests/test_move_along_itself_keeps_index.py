@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from built_core import Vec3 as V
 
-from core.history import (DeleteEdgesCommand, History, MoveVerticesCommand,
+from built_core.history import (DeleteEdgesCommand, History, MoveVerticesCommand,
                           RotateVerticesCommand)
-from core.scene import Scene
+from built_core.scene import Scene
 
 
 def _chain():

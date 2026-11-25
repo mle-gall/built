@@ -265,7 +265,7 @@ impl ExtensionApp {
         Ok(key)
     }
     fn show_panel<'p>(&self, py: Python<'p>, key: &str) -> PyResult<Obj<'p>> {
-        py.import("core.plugin_panels")?
+        py.import("built_core.plugin_panels")?
             .call_method1("open_panel", (self.win(py)?, key))
     }
     #[pyo3(signature=(text, r#fn, shortcut=None, tip=None))]

@@ -1,7 +1,5 @@
-# Plugins
+# Built plugins
 
-This folder is for **third-party plugins** that extend Built at runtime.
+This directory contains the first-party plugins bundled with Built. Plugins use `views.extension_api` for the application interface, `built_core` for native model types, and `built_render` for forms and dialogs.
 
-Drop a Python file or package here, and Built will pick it up at startup.
-
-See [../docs/plugins.md](../docs/plugins.md) for the API.
+Install a local Python file or ZIP package through **Extensions ▸ Manage extensions**. Restart Built to load it. See the [plugin API](../docs/plugins.md).

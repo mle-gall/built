@@ -15,8 +15,8 @@ from __future__ import annotations
 import pytest
 from built_core import Vec3 as V
 
-from core.history import History
-from core.scene import Scene
+from built_core.history import History
+from built_core.scene import Scene
 from tests import test_pushpull_ux as T
 
 _FACES = [

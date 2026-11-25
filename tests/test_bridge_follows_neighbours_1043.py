@@ -15,8 +15,8 @@ from __future__ import annotations
 import pytest
 from built_core import Vec3 as Q
 
-from core.bridge import bridge, follow_neighbours, profiles_from_selection
-from core.mesh import Mesh
+from built_core.bridge import bridge, follow_neighbours, profiles_from_selection
+from built_core.mesh import Mesh
 from built_core.orient import is_closed, signed_volume
 
 
@@ -101,7 +101,7 @@ def test_follow_neighbours_never_turns_an_old_face():
     side = m.add_face([Q(0, 0, 0), Q(0, 0, 1), Q(1, 0, 1), Q(1, 0, 0)])
     # Make ``side`` disagree with ``old`` on purpose, then let it follow.
     if _incoherent([old, side]) == 0:
-        from core.mesh import turn_face_over
+        from built_core.mesh import turn_face_over
         turn_face_over(side)
     n_old = old.normal()
     turned = follow_neighbours(m, [side], [old])

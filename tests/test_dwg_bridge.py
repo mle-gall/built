@@ -100,7 +100,7 @@ def test_dwg_round_trip_through_the_real_converters(tmp_path):
     went in comes out, through the actual satellite binaries."""
     import ezdxf
 
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats.dxf_in import load_dxf
 
     doc = ezdxf.new("R2000")              # the version our build writes

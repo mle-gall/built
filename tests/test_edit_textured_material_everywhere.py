@@ -15,9 +15,16 @@ back."""
 from __future__ import annotations
 
 import pytest
-from tests.test_extension_previews import png
+import struct
+import zlib
+
+def png(rgb=(255, 0, 0)):
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress((b"\x00" + bytes(rgb) * 2) * 2)) + chunk(b"IEND", b""))
 from built_core import Vec3 as V
-from core.group import Group
+from built_core.group import Group
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_paint_hover_container import _ctx
 from tools.paint import PaintTool

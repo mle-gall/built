@@ -19,7 +19,7 @@ fn attr<'p>(obj: &Obj<'p>, key: &str) -> PyResult<Obj<'p>> {
 fn flag(obj: &Obj, key: &str) -> PyResult<bool> {
     attr(obj, key)?.is_truthy()
 }
-#[pyclass(module = "core.inference", dict, weakref, subclass)]
+#[pyclass(module = "built_core.inference", dict, weakref, subclass)]
 #[derive(Default)]
 pub(crate) struct InferenceEngine {
     #[pyo3(get, set)]

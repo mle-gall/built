@@ -10,7 +10,7 @@ use crate::doc::{self, value::Value, Key};
 use pyo3::prelude::*;
 use std::collections::HashMap;
 
-/// core.composition.PAPER_SIZES_MM (portrait width, height).
+/// built_core.composition.PAPER_SIZES_MM (portrait width, height).
 pub const PAPER_SIZES_MM: [(&str, f64, f64); 5] = [
     ("A4", 210.0, 297.0),
     ("A3", 297.0, 420.0),
@@ -25,7 +25,7 @@ pub fn page_size_mm(paper: &str, landscape: bool) -> (f64, f64) {
     if landscape { (h, w) } else { (w, h) }
 }
 
-/// core.composition.format_scale: `1:50`, `10:1`, `1:1`.
+/// built_core.composition.format_scale: `1:50`, `10:1`, `1:1`.
 pub fn format_scale(n: f64) -> String {
     if !(n > 0.0) {
         return String::new();
@@ -88,7 +88,7 @@ impl Fields {
     }
 }
 
-/// The record kinds a sheet holds, by their `core.composition` class.
+/// The record kinds a sheet holds, by their `built_core.composition` class.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ItemKind {
     Frame,
@@ -109,7 +109,7 @@ pub enum ItemKind {
 }
 
 impl ItemKind {
-    /// The kind of a `core.composition` record class, and the sheet list
+    /// The kind of a `built_core.composition` record class, and the sheet list
     /// that holds it (`Composicion.all_items` order).
     pub const LISTS: [(&'static str, ItemKind); 14] = [
         ("frames", ItemKind::Frame),
@@ -128,7 +128,7 @@ impl ItemKind {
         ("llamadas", ItemKind::Callout),
     ];
 
-    /// The kind of a `core.composition` record class.
+    /// The kind of a `built_core.composition` record class.
     pub fn of_class(class: &str) -> Option<ItemKind> {
         Some(match class {
             "MarcoVista" => ItemKind::Frame,
@@ -243,7 +243,7 @@ impl Sheet {
     pub fn read(comp: &Bound<'_, PyAny>, profiles: Option<&Bound<'_, PyAny>>) -> PyResult<Sheet> {
         let py = comp.py();
         // In-place list edits (`comp.frames.append(f)`) reach the arena on flush.
-        py.import("core.doc_model")?.call_method0("flush")?;
+        py.import("built_core.doc_model")?.call_method0("flush")?;
         let key = doc::py::handle_key(comp)?;
         let fields = read_fields(key)?;
         let mut items = Vec::new();
@@ -264,7 +264,7 @@ impl Sheet {
     }
 }
 
-/// core.composition.format_scale in Rust (the native page's labels).
+/// built_core.composition.format_scale in Rust (the native page's labels).
 #[pyfunction]
 #[pyo3(name = "sheet_format_scale")]
 fn format_scale_py(n: f64) -> String {

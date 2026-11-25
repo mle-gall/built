@@ -13,7 +13,7 @@ import pytest
 from built_core import Vec3 as QVector3D
 
 
-from core.composition import CotaAngularItem, CotaItem, CotaRadialItem  # noqa: E402
+from built_core.composition import CotaAngularItem, CotaItem, CotaRadialItem  # noqa: E402
 
 
 class _Recorder:
@@ -50,7 +50,7 @@ def _is_slash(line):
 
 
 def test_3d_view_draws_oblique_ticks_not_square_ones(native_window, monkeypatch):
-    from core.dimension import Dimension
+    from built_core.dimension import Dimension
     win = native_window
     vp = win.viewport
     scene = vp.scene

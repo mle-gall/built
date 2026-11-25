@@ -9,8 +9,8 @@ import math
 import pytest
 from built_core import Vec3 as V
 
-from core import solids
-from core.history import MakeGroupCommand
+from built_core import solids
+from built_core.history import MakeGroupCommand
 from tests import test_pushpull_ux as T
 from tests.test_solid_tools import BLUE, _box
 from tools.circle import CircleTool
@@ -84,7 +84,7 @@ def test_a_copied_cylinder_keeps_its_circles(viewport):
     vertex has a side seam on it: the copy's circles came out as 24 curves
     of one segment each, and a Subtract on the copy kept them broken."""
     from built_core import Matrix4 as QMatrix4x4
-    from core.group import Group
+    from built_core.group import Group
     from built_core import group_transformed_mesh as transformed_mesh
     cyl = _cylinder_group(viewport)
     m = QMatrix4x4()
@@ -107,7 +107,7 @@ def test_a_copied_cylinder_keeps_its_circles(viewport):
 
 
 def test_an_exploded_cylinder_keeps_its_circles(viewport):
-    from core.history import ExplodeGroupCommand
+    from built_core.history import ExplodeGroupCommand
     cyl = _cylinder_group(viewport)
     viewport.history.execute(ExplodeGroupCommand(cyl))
     mesh = viewport.scene.mesh

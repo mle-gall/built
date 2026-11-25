@@ -1128,7 +1128,7 @@ impl SettingsSheet {
         }
         let envb = env(w)?;
         envb.getattr("st")?.call_method1("setValue", (crate::settings_rows::live::NEW_UNITS, "1"))?;
-        py.import("core.units")?.call_method1("set_ask_at_start", (true,))?;
+        py.import("built_core.units")?.call_method1("set_ask_at_start", (true,))?;
         chrome(py)?.call_method1("refresh", (w,))?;
         Ok(())
     }

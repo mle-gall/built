@@ -4,7 +4,7 @@ from contextlib import contextmanager
 
 import pytest
 
-from core import extensions
+from built_core import extensions
 from built_core import settings
 from built_core import NativeSettings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401

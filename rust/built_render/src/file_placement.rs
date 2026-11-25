@@ -88,7 +88,7 @@ fn insert_document<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = win.py();
     let p = py.import("pathlib")?.call_method1("Path", (path,))?;
-    let temp = py.import("core.scene")?.call_method0("Scene")?;
+    let temp = py.import("built_core.scene")?.call_method0("Scene")?;
     py.import("built_core.formats.igz")?
         .call_method1("load_into", (&temp, &p))?;
     let vp = win.getattr("viewport")?;
@@ -117,7 +117,7 @@ fn place_text(win: &Bound<'_, PyAny>, params: &Bound<'_, PyAny>) -> PyResult<()>
     let py = win.py();
     win.getattr("viewport")?.call_method0("end_group_edit")?;
     let group = py
-        .import("core.text3d")?
+        .import("built_core.text3d")?
         .call_method1("make_text_group", (params,))?;
     if group.is_none() {
         py.import("built_render.chrome_dialogs")?.call_method1(
@@ -172,7 +172,7 @@ fn import_picture(win: &Bound<'_, PyAny>) -> PyResult<()> {
     }
     let cache = || -> PyResult<Bound<'_, PyAny>> {
         let bytes = std::fs::read(path.extract::<PathBuf>()?)?;
-        py.import("core.texture")?.call_method1(
+        py.import("built_core.texture")?.call_method1(
             "cache_image",
             (PyBytes::new(py, &bytes), path.getattr("name")?, "imported"),
         )
@@ -529,7 +529,7 @@ fn billboard_answer(
         return Ok(());
     };
     if win.getattr("viewport")?.getattr("scene")?.is(scene) {
-        let group = win.py().import("core.group")?.call_method1(
+        let group = win.py().import("built_core.group")?.call_method1(
             "make_billboard_group",
             (path.str()?, height, path.getattr("stem")?, aspect),
         )?;

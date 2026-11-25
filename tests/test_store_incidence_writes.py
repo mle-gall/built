@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 import pytest
 from built_core import Vec3 as V
-from core.mesh import Mesh
+from built_core.mesh import Mesh
 
 
 @pytest.mark.parametrize("side", ["v0", "v1"])

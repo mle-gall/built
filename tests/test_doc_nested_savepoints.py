@@ -1,8 +1,8 @@
 import pytest
 
 from built_core import Matrix4
-from core import doc_model as doc
-from core.group import Group
+from built_core import doc_model as doc
+from built_core.group import Group
 
 
 @pytest.mark.parametrize("same", [True, False])

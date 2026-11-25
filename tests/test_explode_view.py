@@ -7,12 +7,12 @@ import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from built_core import placement_transform
-from core.group import Group, copy_group, world_mesh
-from core.history import (ExplodeGroupCommand, ExplodeViewCommand,
+from built_core.group import Group, copy_group, world_mesh
+from built_core.history import (ExplodeGroupCommand, ExplodeViewCommand,
                           MoveGroupCommand, SplitIntoPiecesCommand)
-from core.mesh import Mesh
+from built_core.mesh import Mesh
 from built_core.parts import part_points
-from core.scene import Scene
+from built_core.scene import Scene
 
 
 _QUADS = ((0, 2, 3, 1), (4, 5, 7, 6), (0, 1, 5, 4),
@@ -140,7 +140,7 @@ def test_a_copy_reassembles_on_its_own():
 
 
 def test_split_starts_a_fresh_assembly():
-    from core.pieces import split_into_pieces
+    from built_core.pieces import split_into_pieces
     scene, box = _assembly(placed=False)
     ExplodeViewCommand(box, 1.0).do(scene)
     cmd = SplitIntoPiecesCommand(box, split_into_pieces(box))
@@ -179,7 +179,7 @@ def test_plain_groups_pulled_apart_stay_groups():
     matrix; the explosion gives each one, and a group with a matrix read
     as a component — the walls of a building came back components, whose
     parts could no longer be grouped or exploded."""
-    from core.outliner import in_component
+    from built_core.outliner import in_component
     kids = [_cube((0, 0, 0)), _cube((3, 0, 0))]
     for k in kids:
         k.mesh = world_mesh(k)          # classic groups: world mesh, no matrix

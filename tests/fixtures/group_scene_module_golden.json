@@ -534,7 +534,7 @@
   ]
  ],
  "classes": [
-  "core.group",
+  "built_core.group",
   "Group",
   [
    "owner",
@@ -545,7 +545,7 @@
    "Placement",
    "object"
   ],
-  "core.group",
+  "built_core.group",
   [
    "name",
    "layer",
@@ -1306,7 +1306,7 @@
   true,
   true,
   null,
-  "core.scene",
+  "built_core.scene",
   true,
   false
  ],
@@ -1337,7 +1337,7 @@
   "links",
   "Linked files",
   " / ",
-  "core.links",
+  "built_core.links",
   true
  ],
  "link_step": [

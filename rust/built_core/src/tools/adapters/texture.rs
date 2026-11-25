@@ -391,7 +391,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     if tool.getattr("_sweep_deg")?.is_none() || !(tool.getattr("active")?.is_truthy()?) {
         return Ok(none(py));
     }
-    let fmt_angle_deg = imported(py, "core.units")?.getattr("fmt_angle_deg")?;
+    let fmt_angle_deg = imported(py, "built_core.units")?.getattr("fmt_angle_deg")?;
     Ok((
         fmt_angle_deg.call(
             (tool.getattr("_sweep_deg")?,),

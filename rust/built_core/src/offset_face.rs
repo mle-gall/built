@@ -140,7 +140,7 @@ fn build_offset_face<'p>(
         .collect::<PyResult<Vec<_>>>()?;
     if outlines.is_empty() {
         let fallback = py
-            .import("core.topology")?
+            .import("built_core.topology")?
             .call_method1("offset_loop", (&outline, &normal, distance))?;
         if fallback.is_none() {
             return Ok(None);

@@ -25,7 +25,7 @@ ALTURA = 0.825
 
 @pytest.fixture
 def vp(native_host):
-    from core.guide import Guide
+    from built_core.guide import Guide
     win = native_host.window
     v = win.viewport
     native_host.resize(1200, 800, 1.)

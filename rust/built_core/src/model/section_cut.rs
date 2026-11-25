@@ -1,4 +1,4 @@
-//! A section plane's cut through collected geometry (`core.hlr`): the
+//! A section plane's cut through collected geometry (`built_core.hlr`): the
 //! triangles, hard and soft edges clipped to the kept side, the chords where
 //! the plane crosses the triangles, and those chords chained into the closed
 //! rings a drafter fills with poché (`docs/model-port.md`, hidden lines).
@@ -81,7 +81,7 @@ fn clip_seg<'py>(plane: &Plane, a: Bound<'py, PyAny>, b: Bound<'py, PyAny>) -> P
 }
 
 /// `clip_to_section(tris, hard, soft, plane, split_cuts=False)`: see
-/// `core.hlr.clip_to_section`.
+/// `built_core.hlr.clip_to_section`.
 #[pyfunction]
 #[pyo3(signature = (tris, hard, soft, plane, split_cuts=false))]
 pub fn section_clip<'py>(py: Python<'py>, tris: &Bound<'py, PyAny>, hard: &Bound<'py, PyAny>, soft: &Bound<'py, PyAny>,
@@ -275,7 +275,7 @@ pub fn chain_loops(edges: &[[P; 2]], tol: Option<f64>) -> (Vec<P>, Vec<(Vec<usiz
 }
 
 /// `section_loops(cut_edges, tol=None, members=None)`: see
-/// `core.hlr.section_loops`.
+/// `built_core.hlr.section_loops`.
 #[pyfunction]
 #[pyo3(signature = (cut_edges, tol=None, members=None))]
 pub fn section_loops<'py>(py: Python<'py>, cut_edges: &Bound<'py, PyAny>, tol: Option<f64>,

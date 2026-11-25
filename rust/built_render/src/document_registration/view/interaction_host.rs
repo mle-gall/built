@@ -41,7 +41,7 @@ fn configure_surface(_v: &Obj) {}
 fn offer_link_source(v: &Obj, group: &Obj) -> PyResult<()> {
     let py = v.py();
     let dialogs = py.import("built_render.chrome_dialogs")?;
-    let link = py.import("core.links")?.call_method1("link_of", (group,))?;
+    let link = py.import("built_core.links")?.call_method1("link_of", (group,))?;
     let path = py
         .import("pathlib")?
         .call_method1("Path", (link.get_item("path")?,))?;
@@ -350,7 +350,7 @@ fn dependencies(m: &Bound<PyModule>) -> PyResult<()> {
     m.add("types", py.import("types")?)?;
     m.add("np", py.import("numpy")?)?;
     m.add("built_render", py.import("built_render")?)?;
-    m.add("_layers", py.import("core.layers")?)?;
+    m.add("_layers", py.import("built_core.layers")?)?;
     m.add("weakref", py.import("weakref")?)?;
     let groups: &[(&str, &[(&str, &str)])] = &[
         (
@@ -367,7 +367,7 @@ fn dependencies(m: &Bound<PyModule>) -> PyResult<()> {
         ("pathlib", &[("Path", "Path")]),
         ("typing", &[("Optional", "Optional")]),
         (
-            "core.units",
+            "built_core.units",
             &[
                 ("fmt_len", "_fmt_len"),
                 ("typed_value_text", "_typed_value_text"),
@@ -402,10 +402,10 @@ fn dependencies(m: &Bound<PyModule>) -> PyResult<()> {
                 ("document_value_key", "_value_key"),
             ],
         ),
-        ("core.camera", &[("OrbitCamera", "OrbitCamera")]),
+        ("built_core.camera", &[("OrbitCamera", "OrbitCamera")]),
         ("built_core.i18n", &[("tr", "tr")]),
         (
-            "core.group",
+            "built_core.group",
             &[
                 ("Group", "Group"),
                 ("PlacementProxy", "PlacementProxy"),
@@ -421,7 +421,7 @@ fn dependencies(m: &Bound<PyModule>) -> PyResult<()> {
                 ("History", "History"),
             ],
         ),
-        ("core.scene", &[("Scene", "Scene")]),
+        ("built_core.scene", &[("Scene", "Scene")]),
         (
             "built_core.style",
             &[
@@ -439,19 +439,19 @@ fn dependencies(m: &Bound<PyModule>) -> PyResult<()> {
             ],
         ),
         (
-            "core.snap",
+            "built_core.snap",
             &[
                 ("SnapResult", "SnapResult"),
                 ("_AXIS_VECTORS", "_AXIS_VECTORS"),
             ],
         ),
-        ("core.texture", &[("face_uv_axes", "face_uv_axes")]),
+        ("built_core.texture", &[("face_uv_axes", "face_uv_axes")]),
         ("built_core.triangulate", &[("plane_axes", "plane_axes")]),
         (
             "tools.base",
             &[("Tool", "Tool"), ("ToolContext", "ToolContext")],
         ),
-        ("core.inference", &[("InferenceEngine", "InferenceEngine")]),
+        ("built_core.inference", &[("InferenceEngine", "InferenceEngine")]),
         ("core._native", &[("qt_hypot", "qt_hypot")]),
         (
             "views.document_tools",

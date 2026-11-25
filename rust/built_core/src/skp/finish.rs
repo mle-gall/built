@@ -176,7 +176,7 @@ pub fn skp_texture_dir(py: Python<'_>, skp_path: PathBuf) -> PyResult<Obj<'_>> {
         .call_method0("hexdigest")?
         .extract::<String>()?;
     let root = py
-        .import("core.texture")?
+        .import("built_core.texture")?
         .call_method0("texture_cache_root")?
         .extract::<PathBuf>()?;
     let stem: String = skp_path

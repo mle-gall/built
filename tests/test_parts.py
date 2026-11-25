@@ -7,8 +7,8 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.group import Group
-from core.mesh import Mesh
+from built_core.group import Group
+from built_core.mesh import Mesh
 from built_core.parts import part_material, part_points, part_rows, part_size
 
 
@@ -175,8 +175,8 @@ def test_copy_cut_list_fills_the_clipboard(native_host, monkeypatch):
 def test_part_sizes_resolve_the_millimetre_whatever_the_display_precision():
     """A 4 mm hinge leaf in a document shown to the centimetre read
     «0.03 × 0.02 × 0.00 m» — a part that looked like it had no thickness."""
-    from core import units
-    from core.scene import Scene
+    from built_core import units
+    from built_core.scene import Scene
     scene = Scene()
     scene.units = {"length": "m", "precision": 2}
     units.bind_scene(scene)
@@ -278,9 +278,9 @@ def test_shared_reading_gives_the_rows_reading_one_by_one_gave():
 def test_parts_read_lazy_shared_prototypes_without_building(monkeypatch, tmp_path):
     import numpy as np
     from built_core import parts
-    from core.group import iter_placements
-    from core.mesh import DeferredMesh
-    from core.scene import Scene
+    from built_core.group import iter_placements
+    from built_core.mesh import DeferredMesh
+    from built_core.scene import Scene
     from formats import igz
     from tests.test_deferred_mesh import _open
     monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)

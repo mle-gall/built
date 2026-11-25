@@ -43,7 +43,7 @@ fn retain_components(
         let commands = PyList::empty(py);
         let selection = view.getattr("scene")?.getattr("selection")?;
         let mut meshes = HashSet::new();
-        for group in matching(&selection, "core.group", "Group")?.iter() {
+        for group in matching(&selection, "built_core.group", "Group")?.iter() {
             if group.call_method0("is_component")?.is_truthy()?
                 && meshes.insert(group.getattr("mesh")?.as_ptr())
             {
@@ -217,7 +217,7 @@ fn lens_angle(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, degrees: f64) -> 
     }
     let (lo, hi): (f64, f64) = win
         .py()
-        .import("core.camera")?
+        .import("built_core.camera")?
         .getattr("FOV_RANGE")?
         .extract()?;
     camera.setattr("fov_deg", degrees.clamp(lo, hi))?;

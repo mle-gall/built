@@ -1,6 +1,6 @@
 //! Vector geometry of an 8 × 3 mm sample at the tag's angle and paper scale.
 //! The catalogue contains clipped material marks and, for ruled patterns, the
-//! original line definitions from core.hatches.line_families (PAT format).
+//! original line definitions from built_core.hatches.line_families (PAT format).
 use egui::{emath::Rot2, vec2, Vec2};
 use serde::Deserialize;
 use std::{collections::HashMap, sync::LazyLock};

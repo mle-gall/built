@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from core.history import History
-from core.scene import Scene
+from built_core.history import History
+from built_core.scene import Scene
 import built_core as native
 
 DATA = Path(__file__).parent / "data"
@@ -13,7 +13,7 @@ PANEL = DATA / "skp_nested_panel_2021.skp"
 
 def test_worker_can_open_while_another_document_is_being_edited():
     current = Scene()
-    from core.group import Group
+    from built_core.group import Group
     current.groups.append(Group(name="original"))
     native.doc_begin()
     try:

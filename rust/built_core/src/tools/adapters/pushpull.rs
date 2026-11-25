@@ -320,7 +320,7 @@ fn compute_plane_levels<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     let unit = normal.call_method0("normalized")?;
     let m = module(py)?;
-    let arrangement=py.import("core.arrangement")?;
+    let arrangement=py.import("built_core.arrangement")?;
     let project = arrangement.getattr("project_loop")?;
     let footprint = project.call1((base.getattr("vertices")?, &unit))?;
     let near = m.getattr("push_scans")?.call_method1(
@@ -389,7 +389,7 @@ fn take_extras<'py>(a: &Args<'py>) -> Reply<'py> {
         return Ok(none(py));
     }
     let mesh = scene.getattr("mesh")?;
-    let id = imported(py, "core.mesh")?.getattr("element_identity")?;
+    let id = imported(py, "built_core.mesh")?.getattr("element_identity")?;
     let order = PyDict::new(py);
     for (i, f) in mesh.getattr("faces")?.try_iter()?.enumerate() {
         order.set_item(id.call1((f?,))?, i)?;

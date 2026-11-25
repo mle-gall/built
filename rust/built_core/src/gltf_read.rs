@@ -241,7 +241,7 @@ impl Document {
             .take(40)
             .collect();
         let root: PathBuf = py
-            .import("core.texture")?
+            .import("built_core.texture")?
             .call_method0("texture_cache_root")?
             .extract()?;
         let dir = root.join("glb").join(format!("{stem}-{}", &sha[..10]));

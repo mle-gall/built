@@ -2,12 +2,12 @@
 import pytest
 
 from built_core import Matrix4, Vec3
-from core.group import Group
-from core.mesh import Mesh
-from core.history import (AddEdgeCommand, AddFaceCommand, Command, CommandRejected, CompoundCommand,
+from built_core.group import Group
+from built_core.mesh import Mesh
+from built_core.history import (AddEdgeCommand, AddFaceCommand, Command, CommandRejected, CompoundCommand,
                           DeleteEdgesCommand, DeleteFaceCommand, EraseSelectionCommand,
                           ExplodeCurvesCommand, History, SetNorthCommand)
-from core.scene import Scene
+from built_core.scene import Scene
 
 
 def ring(low, high):

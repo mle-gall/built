@@ -12,7 +12,7 @@ import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from built_core import Vec3 as QVector3D
-from core.scene import Scene  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402
 
 
@@ -68,8 +68,8 @@ def test_open_restores_the_authors_view_and_new_resets_it(native_host, tmp_path)
 def test_the_loader_reports_progress(tmp_path):
     """Issue #59: opening a document reports milestones for the bar."""
     from built_core import Matrix4 as QMatrix4x4
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     scene = Scene()
     for i in range(3):
         m = Mesh()
@@ -112,7 +112,7 @@ def test_a_broken_camera_never_blocks_the_save(native_host, tmp_path):
 def test_document_camera_precision(tmp_path, extension):
     from types import SimpleNamespace
     import numpy as np
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     from built_render import camera_record, apply_camera_record
     cam = OrbitCamera()
     cam.target = (650000.012345678, 6860000.023456789, .01)

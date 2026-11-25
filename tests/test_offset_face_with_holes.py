@@ -11,9 +11,9 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.history import History
-from core.scene import Scene
-from core.topology import offset_loop
+from built_core.history import History
+from built_core.scene import Scene
+from built_core.topology import offset_loop
 from tools.offset import OffsetTool
 
 

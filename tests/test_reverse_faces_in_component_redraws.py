@@ -24,11 +24,11 @@ from tests.controller_surface import live_image
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.group import Group, world_mesh
+from built_core.group import Group, world_mesh
 from built_core import group_transformed_mesh as transformed_mesh
-from core.history import FlipFacesCommand, History
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.history import FlipFacesCommand, History
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from tests.test_chunk_stale_materials import _stub
 from views.document_interaction import _proto_wrapper
 from tests.controller_surface import ControllerSurface as Viewport
@@ -96,7 +96,7 @@ def _reverse_inside_and_leave(scene, history, group, face_index):
     share = level.pop("share", None)
     scene.end_group_edit()
     if share is not None:
-        from core.reference_edit import record_leave
+        from built_core.reference_edit import record_leave
         record_leave(history, level, share)
 
 

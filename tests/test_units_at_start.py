@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from core import units
+from built_core import units
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from built_render import chrome_forms, units_question
 
@@ -117,7 +117,7 @@ def test_preferences_turn_it_back_on(win):
 
 def test_a_document_already_open_is_not_asked_about(win, tmp_path):
     from built_render import shell_files as files
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     from built_core import Vec3
     from built_render import wgpu_start

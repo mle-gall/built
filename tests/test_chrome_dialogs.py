@@ -203,7 +203,7 @@ def test_warning_before_the_first_frame_is_kept_in_the_chrome_history(native_hos
     ("_on_clear_texture_cache", "Texture cache"),
 ])
 def test_information_call_sites_post_toasts(win, tmp_path, monkeypatch, method, title):
-    from core import texture
+    from built_core import texture
     from built_core import autosave
     from formats import rfa
     from built_render.shell_files import ShellFileDialog
@@ -344,9 +344,9 @@ def test_the_background_autosave_shows_as_a_quiet_job(win):
 
 @pytest.fixture
 def plan(tmp_path):
-    from core.group import Group
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
     from formats.igz import save_scene
     scene = Scene()
     for i in range(4):
@@ -383,7 +383,7 @@ def test_cancel_while_opening_stops_the_load_and_keeps_the_window(win, plan, mon
 
 
 def test_open_with_missing_sources_has_one_banner_and_problem_rows(win, tmp_path, monkeypatch):
-    from core import links
+    from built_core import links
     from formats import igz
     from tests.test_links import _source, _host_with_link
     from views import wgpu_ui
@@ -420,7 +420,7 @@ def test_open_with_missing_sources_has_one_banner_and_problem_rows(win, tmp_path
 
 def test_open_preserves_recovery_as_a_separate_copy(win, tmp_path, monkeypatch):
     from built_core import autosave
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     from views import wgpu_ui
     disk = tmp_path / "original.built"

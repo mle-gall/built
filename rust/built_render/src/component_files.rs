@@ -64,7 +64,7 @@ fn new_group<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let kw = PyDict::new(py);
     kw.set_item("name", name)?;
-    py.import("core.group")?
+    py.import("built_core.group")?
         .getattr("Group")?
         .call((mesh,), Some(&kw))
 }
@@ -83,7 +83,7 @@ fn bundled_component<'py>(
         .extract::<PathBuf>()?
         .join("resources")
         .join("components");
-    let scene = py.import("core.scene")?.call_method0("Scene")?;
+    let scene = py.import("built_core.scene")?.call_method0("Scene")?;
     let default_name = py
         .import("builtins")?
         .call_method1("str", (key,))?
@@ -169,7 +169,7 @@ fn catalogue_component<'py>(
         )?;
         return Ok(None);
     }
-    let scene = py.import("core.scene")?.call_method0("Scene")?;
+    let scene = py.import("built_core.scene")?.call_method0("Scene")?;
     let read = || -> PyResult<()> {
         let kw = PyDict::new(py);
         kw.set_item(
@@ -239,7 +239,7 @@ fn place_shared(
             if !g.getattr("mesh")?.is(&mesh) || !g.call_method0("is_component")?.is_truthy()? {
                 continue;
             }
-            let group = py.import("core.group")?.call_method1("copy_group", (g,))?;
+            let group = py.import("built_core.group")?.call_method1("copy_group", (g,))?;
             group.setattr("xform", matrix.call1((known.get_item(1)?,))?)?;
             for flag in ["hidden", "locked"] {
                 group.setattr(flag, false)?;
@@ -306,7 +306,7 @@ fn place_catalogue(
 #[pyfunction]
 fn import_kept_components(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<usize> {
     let py = win.py();
-    let src = py.import("core.scene")?.call_method0("Scene")?;
+    let src = py.import("built_core.scene")?.call_method0("Scene")?;
     let file = py.import("pathlib")?.call_method1("Path", (path,))?;
     py.import("built_core.formats.igz")?.call_method1("load_into", (&src, file))?;
     let templates = py.import("built_core.kept_components")?.call_method1("definitions_of", (&src,))?;
@@ -336,7 +336,7 @@ fn import_kept_components(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> Py
     for name in names.try_iter()? {
         let name = name?;
         if dst.call_method1("layer_by_key", (&name,))?.is_none() {
-            layers.append(py.import("core.layers")?.call_method1("Layer", (name,))?)?;
+            layers.append(py.import("built_core.layers")?.call_method1("Layer", (name,))?)?;
         }
     }
     let step = py.import("built_core")?.call_method1("AddKeptComponentsCommand", (templates, additions, layers))?;

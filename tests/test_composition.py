@@ -7,7 +7,7 @@ import math
 
 import pytest
 
-from core.composition import (Composicion, MarcoVista, apply_frame_camera,
+from built_core.composition import (Composicion, MarcoVista, apply_frame_camera,
                               mm_to_px, model_height_for_frame,
                               ortho_distance_for_height)
 
@@ -129,7 +129,7 @@ class TestStdViewCentering:
 
 # ── C2: items, serialisation, history ───────────────────────────────────────
 
-from core.composition import (AddItemCommand, Cajetin, ComposerHistory,
+from built_core.composition import (AddItemCommand, Cajetin, ComposerHistory,
                               EditItemCommand, ImagenItem,
                               RemoveItemCommand, TextoItem, snap_mm)
 
@@ -263,7 +263,7 @@ class TestDefaultCajetin:
 
 class TestFieldNames:
     def test_english_and_german_names_expand_like_the_spanish_one(self):
-        from core.composition import expand_fields, set_field_context
+        from built_core.composition import expand_fields, set_field_context
         c = Composicion(name="A-01")
         c.cajetin = c.default_cajetin()
         c.cajetin.set_field("PROYECTO", "Plaza")
@@ -278,7 +278,7 @@ class TestFieldNames:
             set_field_context()
 
     def test_tooltips_name_the_fields_in_the_language_running(self):
-        from core.composition import local_field_names
+        from built_core.composition import local_field_names
         from built_core.i18n import current_language, set_language
         text = "Fields like {escala}, {lamina} and {n} expand."
         before = current_language()
@@ -297,7 +297,7 @@ class TestFieldNames:
 
 class TestIgzPersistence:
     def test_compositions_survive_the_igz_round_trip(self, tmp_path):
-        from core.scene import Scene
+        from built_core.scene import Scene
         from formats.igz import load_into, save_scene
         scene = Scene()
         scene.compositions.append(_full_comp())
@@ -313,7 +313,7 @@ class TestIgzPersistence:
         assert b.name == "Lámina 2" and b.paper == "A3"
 
     def test_clear_drops_compositions(self):
-        from core.scene import Scene
+        from built_core.scene import Scene
         scene = Scene()
         scene.compositions.append(Composicion())
         scene.clear()
@@ -322,7 +322,7 @@ class TestIgzPersistence:
 
 # ── C3: technical style, scale bar, titles ──────────────────────────────────
 
-from core.composition import BarraEscala
+from built_core.composition import BarraEscala
 
 
 class TestBarraEscala:
@@ -448,9 +448,9 @@ class TestHLR:
 class TestHLRScene:
     def test_box_from_top_shows_four_edges(self):
         from built_core import Vec3 as QVector3D
-        from core.camera import OrbitCamera
-        from core.hlr import hlr_view
-        from core.scene import Scene
+        from built_core.camera import OrbitCamera
+        from built_core.hlr import hlr_view
+        from built_core.scene import Scene
 
         scene = Scene()
         m = scene.mesh
@@ -528,7 +528,7 @@ class TestDxfOut:
 
 # ── C5: QGIS-parity items ───────────────────────────────────────────────────
 
-from core.composition import CotaItem, FlechaNorte, FormaItem, Leyenda
+from built_core.composition import CotaItem, FlechaNorte, FormaItem, Leyenda
 
 
 class TestC5Items:

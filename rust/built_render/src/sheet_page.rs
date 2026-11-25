@@ -21,7 +21,7 @@ use std::collections::HashMap;
 /// Points per paper millimetre at 100 % (true size on a 72-dpi point grid,
 /// as the composer's `logicalDpiX() / 25.4` on macOS).
 pub const PT_PER_MM: f32 = 72.0 / 25.4;
-/// Snapping reach in paper mm (core.composition.snap_mm).
+/// Snapping reach in paper mm (built_core.composition.snap_mm).
 const SNAP_MM: f64 = 2.0;
 /// Handle half-size in points.
 const HANDLE: f32 = 4.0;

@@ -12,7 +12,7 @@
 use crate::hlr::Occluders;
 use std::collections::HashMap;
 
-/// core.hlr._T_EPS.
+/// built_core.hlr._T_EPS.
 const T_EPS: f64 = 1e-6;
 
 pub const KIND_EDGE: i8 = 0;
@@ -108,7 +108,7 @@ fn interval_from_linear(c0: f64, c1: f64) -> Option<(f64, f64)> {
     if c1 > 0.0 { Some((t, 1.0)) } else { Some((0.0, t)) }
 }
 
-/// core.hlr.subtract_spans.
+/// built_core.hlr.subtract_spans.
 pub fn subtract_spans(spans: &[(f64, f64)], hidden: &[(f64, f64)]) -> Vec<(f64, f64)> {
     if hidden.is_empty() {
         return spans.to_vec();
@@ -135,7 +135,7 @@ pub fn subtract_spans(spans: &[(f64, f64)], hidden: &[(f64, f64)]) -> Vec<(f64, 
     out
 }
 
-/// core.hlr._inside_cap: even-odd over the stacked ring edges.
+/// built_core.hlr._inside_cap: even-odd over the stacked ring edges.
 fn inside_cap(px: f64, py: f64, cap: &Cap) -> bool {
     let mut count = 0usize;
     for (p, q) in cap.p.iter().zip(&cap.q) {
@@ -151,7 +151,7 @@ fn inside_cap(px: f64, py: f64, cap: &Cap) -> bool {
     count & 1 == 1
 }
 
-/// core.hlr.cap_hidden_spans.
+/// built_core.hlr.cap_hidden_spans.
 fn cap_hidden_spans(a2: [f64; 2], b2: [f64; 2], az: f64, bz: f64, cap: &Cap, eps: f64) -> Vec<(f64, f64)> {
     let d2 = [b2[0] - a2[0], b2[1] - a2[1]];
     let abg = cap.abg;
@@ -348,7 +348,7 @@ fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 
-/// core.hlr._merge_collinear.
+/// built_core.hlr._merge_collinear.
 fn merge_collinear(d: &Drawing, tol: f64, tag_of: &dyn Fn(&Drawing, usize) -> Option<i64>) -> Drawing {
     let n = d.segs.len();
     let inv = 1.0 / tol;
@@ -430,7 +430,7 @@ fn merge_collinear(d: &Drawing, tol: f64, tag_of: &dyn Fn(&Drawing, usize) -> Op
     out
 }
 
-/// core.hlr._drop_hidden_under_visible.
+/// built_core.hlr._drop_hidden_under_visible.
 fn drop_hidden_under_visible(d: &Drawing, tol: f64) -> Drawing {
     if !d.kinds.contains(&KIND_HIDDEN) {
         return d.clone();

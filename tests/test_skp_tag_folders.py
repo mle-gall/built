@@ -9,8 +9,8 @@ from __future__ import annotations
 import built_core
 import struct
 
-from core.layers import folder_parent, folders_of
-from core.scene import Scene
+from built_core.layers import folder_parent, folders_of
+from built_core.scene import Scene
 from built_core import skp_tag_folders as parse_tag_folders
 from formats.skp import _import_tag_folders
 
@@ -98,7 +98,7 @@ def test_a_name_taken_elsewhere_gets_a_folder_of_its_own():
 
 def test_load_creates_the_tags_in_their_folders(monkeypatch):
     """Through the importer's payload path (formats.skp)."""
-    from core.layers import Layer  # noqa: F401
+    from built_core.layers import Layer  # noqa: F401
     scene = Scene()
     payload_layers = [{"name": "Dome - Roof", "visible": True},
                       {"name": "Old mesh", "visible": True},
@@ -106,7 +106,7 @@ def test_load_creates_the_tags_in_their_folders(monkeypatch):
     from formats import skp
     folder_of, hidden = skp._import_tag_folders(scene, _records())
     # The same steps load_skp takes for payload["layers"].
-    from core.layers import Layer as L
+    from built_core.layers import Layer as L
     for raw in payload_layers:
         scene.layers.append(L(raw["name"],
                               visible=raw["visible"],

@@ -17,9 +17,9 @@ import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 
-from core.group import Group                                      # noqa: E402
-from core.mesh import Mesh                                        # noqa: E402
-from core.scene import Scene                                      # noqa: E402
+from built_core.group import Group                                      # noqa: E402
+from built_core.mesh import Mesh                                        # noqa: E402
+from built_core.scene import Scene                                      # noqa: E402
 from formats import dae as dae_format                             # noqa: E402
 from formats import glb as glb_format                             # noqa: E402
 from formats import gltf as gltf_format                           # noqa: E402
@@ -37,7 +37,7 @@ QUADS = [(0, 2, 3, 1), (4, 5, 7, 6), (0, 1, 5, 4),
 def _points(scene):
     pts = [v.position for v in scene.mesh.vertices]
     for g in scene.groups:
-        from core.group import world_mesh
+        from built_core.group import world_mesh
         pts += [v.position for v in world_mesh(g).vertices]
     return pts
 

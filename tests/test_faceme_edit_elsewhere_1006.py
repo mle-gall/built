@@ -17,8 +17,8 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 
-from core.group import Group  # noqa: E402
-from core.mesh import DeferredMesh, Mesh  # noqa: E402
+from built_core.group import Group  # noqa: E402
+from built_core.mesh import DeferredMesh, Mesh  # noqa: E402
 
 
 def V(x, y, z=0.0):

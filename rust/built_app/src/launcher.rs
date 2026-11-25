@@ -383,7 +383,20 @@ pub fn check_extensions(host: &python::Host) -> bool {
             .getattr("_extension_load_errors")
             .and_then(|errors| Ok((errors.is_truthy()?, errors.str()?.to_string())));
         match result {
-            Ok((false, _)) => true,
+            Ok((false, _)) => {
+                let running = window.bind(py).getattr("_running_extensions")
+                    .and_then(|plugins| plugins.extract::<std::collections::BTreeSet<String>>());
+                match running {
+                    Ok(names) => {
+                        println!("Loaded extensions: {}", names.into_iter().collect::<Vec<_>>().join(", "));
+                        true
+                    }
+                    Err(error) => {
+                        eprintln!("built: reading loaded extensions: {error}");
+                        false
+                    }
+                }
+            },
             Ok((true, errors)) => {
                 eprintln!("built: extension loading failed: {errors}");
                 false

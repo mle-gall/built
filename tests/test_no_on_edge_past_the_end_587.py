@@ -13,7 +13,7 @@ from built_core import Input as Qt
 from built_core import Vec3 as V
 
 
-from core.edits import build_add_edges  # noqa: E402
+from built_core.edits import build_add_edges  # noqa: E402
 from tools.rust_tools import LineTool  # noqa: E402
 from tests.controller_surface import ControllerSurface as Viewport
 

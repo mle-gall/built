@@ -5,13 +5,13 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.guide import Guide
-from core.history import (
+from built_core.guide import Guide
+from built_core.history import (
     AddGuideCommand,
     DeleteGuidesCommand,
     History,
 )
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import igz
 
 
@@ -86,7 +86,7 @@ class _FakeViewport:
 
 def test_eraser_release_erases_marked_edges_one_undo():
     from tools.eraser import EraserTool
-    from core.edits import build_add_edges
+    from built_core.edits import build_add_edges
     scene = Scene()
     hist = History(scene)
     sq = [V(0, 0), V(2, 0), V(2, 2), V(0, 2)]
@@ -143,8 +143,8 @@ class _GroupPickingViewport(_FakeViewport):
 
 def _grouped_square(scene):
     from built_core import Vec3 as QVector3D
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     g = Group(Mesh(), name="caja")
     g.mesh.add_face([QVector3D(0, 0, 0), QVector3D(2, 0, 0),
                      QVector3D(2, 2, 0), QVector3D(0, 2, 0)])
@@ -200,7 +200,7 @@ class _LabelPickingViewport(_GroupPickingViewport):
 
 
 def test_the_eraser_erases_a_leader_text_before_what_is_behind_it():
-    from core.textlabel import TextLabel
+    from built_core.textlabel import TextLabel
     from tools.eraser import EraserTool
     scene = Scene()
     g = _grouped_square(scene)
@@ -218,7 +218,7 @@ def test_the_eraser_erases_a_leader_text_before_what_is_behind_it():
 
 
 def test_a_hide_stroke_leaves_texts_alone():
-    from core.textlabel import TextLabel
+    from built_core.textlabel import TextLabel
     from tools.eraser import EraserTool
     scene = Scene()
     g = _grouped_square(scene)

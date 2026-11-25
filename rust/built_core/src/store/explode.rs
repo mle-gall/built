@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 //! Explode as a store op: a group's geometry copied into the mesh it sits
-//! in, through its placement (`core.history.ExplodeGroupCommand`), plus
+//! in, through its placement (`built_core.history.ExplodeGroupCommand`), plus
 //! the broad phase of the coplanar merge that follows
 //! (`_merge_overlapping_planes`).
 //!

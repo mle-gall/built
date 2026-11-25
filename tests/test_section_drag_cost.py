@@ -129,7 +129,7 @@ def test_the_heights_are_kept_only_for_the_same_arrays_and_normal():
 
 def _viewport_with_a_cut():
     import os
-    from core.history import History, PlaceSectionPlaneCommand
+    from built_core.history import History, PlaceSectionPlaneCommand
     from built_core.section import SectionPlane
     from tests.test_pushpull_ux import _cube
     from tests.controller_surface import ControllerSurface as Viewport
@@ -142,7 +142,7 @@ def _viewport_with_a_cut():
 
 
 def test_a_moved_section_keeps_the_pick_index_and_edits_the_document():
-    from core.history import (MoveSectionPlanesCommand,
+    from built_core.history import (MoveSectionPlanesCommand,
                               RotateSectionPlanesCommand)
     vp, hist, plane = _viewport_with_a_cut()
     scene = vp.scene
@@ -167,8 +167,8 @@ def test_a_moved_section_keeps_the_pick_index_and_edits_the_document():
 
 
 def test_an_edit_of_the_model_still_rebuilds_the_index():
-    from core.history import MoveVerticesCommand
-    from core.topology import _key
+    from built_core.history import MoveVerticesCommand
+    from built_core.topology import _key
     vp, _hist, _plane = _viewport_with_a_cut()
     idx = vp._pick_index(near="all")
     top = {_key(v.position) for v in vp.scene.mesh.vertices

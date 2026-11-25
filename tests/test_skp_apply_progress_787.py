@@ -14,7 +14,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from core.scene import Scene  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from formats import skp as skp_format  # noqa: E402
 
 

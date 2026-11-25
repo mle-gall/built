@@ -10,8 +10,8 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 def test_make_component_shows_once_with_loose_geometry_and_a_group(native_host):
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from built_core import Vec3
     from built_render import context_menu_build
 
@@ -90,8 +90,8 @@ def test_raw_plugin_action_tracks_live_changes():
 
 def test_window_registry_isolation_and_setup_rollback(tmp_path, monkeypatch):
     from built_render import Host
-    from core import extensions
-    from core.extensions import LoadedPlugin
+    from built_core import extensions
+    from built_core.extensions import LoadedPlugin
 
     events = []
     def setup(app):

@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.history import History, ScaleVerticesCommand
-from core.scene import Scene
+from built_core.history import History, ScaleVerticesCommand
+from built_core.scene import Scene
 from tools.scale import ScaleTool
 
 

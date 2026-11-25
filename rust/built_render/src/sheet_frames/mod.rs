@@ -477,7 +477,7 @@ fn render_target<'py>(
     let facade = frame_scene(&scene, frame, &view)?;
     let style = frame_style(&source, &facade, frame)?;
     let module = this(py)?;
-    let comp = py.import("core.composition")?;
+    let comp = py.import("built_core.composition")?;
     let dpi = comp.getattr("RENDER_DPI")?;
     let kwargs = PyDict::new(py);
     kwargs.set_item("scene", facade)?;

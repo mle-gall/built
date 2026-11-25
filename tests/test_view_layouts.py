@@ -113,7 +113,7 @@ def test_replacing_a_split_document_with_no_valid_layout_resets_it(home):
 
 
 def test_archive_round_trip_preserves_both_row_fractions(native_host, tmp_path):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     scene = Scene()
     scene.views_home = dict(layout="four", columns=.625, rows=[.25,.75])
@@ -154,8 +154,8 @@ def test_layout_changes_preserve_peer_cameras_but_fit_only_visible_views(grid):
 
 
 def test_extension_workspace_and_edit_state_stay_with_the_document(grid):
-    from core.history import History
-    from core.scene import Scene
+    from built_core.history import History
+    from built_core.scene import Scene
     win = grid.win
     doc = win._doc
     main = doc.viewport

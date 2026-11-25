@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! The broad phase of a dimension's vertex anchor (`core.dimension`):
+//! The broad phase of a dimension's vertex anchor (`built_core.dimension`):
 //! whether a deferred mesh can hold a vertex near a point without building
 //! it (`_may_hold`), and the placements worth asking (`_AnchorPlacements`),
 //! with the prototypes placed 32 times or more tested by box first.
@@ -113,7 +113,7 @@ pub struct AnchorPlacements {
 impl AnchorPlacements {
     #[new]
     fn new(py: Python<'_>, groups: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let iter_placements = super::module(py, "core.group")?.getattr("iter_placements")?;
+        let iter_placements = super::module(py, "built_core.group")?.getattr("iter_placements")?;
         let entries = PyList::empty(py);
         let by_mesh = PyDict::new(py);
         for root in groups.try_iter()? {
@@ -196,7 +196,7 @@ impl AnchorPlacements {
         let t: [f64; 3] = point.call_method0("toTuple")?.extract()?;
         let p = [t[0], t[1], t[2], 1.0];
         let boxes = self.boxes.bind(py);
-        let group = super::module(py, "core.group")?;
+        let group = super::module(py, "built_core.group")?;
         let builtins = super::module(py, "builtins")?;
         for batch in &self.batches {
             let mesh = batch.mesh.bind(py);

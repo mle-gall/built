@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! The geometry of every face of a view, for `core.vista_caras.view_faces`:
+//! The geometry of every face of a view, for `built_core.vista_caras.view_faces`:
 //! each face's rings taken to the world through its placement, its normal
 //! (Newell, turned where the placement mirrors), cut to the kept side of
 //! the section, drawn by the camera — parallel, or perspective through
@@ -119,7 +119,7 @@ fn clip_to_section(pts: &[[f64; 3]], sp: &Section) -> Ring3 {
 }
 
 /// The view pyramid in clip space, rows `a` with the kept side `a·p >= 0`:
-/// left, right, bottom, top, near (`core.hlr._PYRAMID`).
+/// left, right, bottom, top, near (`built_core.hlr._PYRAMID`).
 const PYRAMID: [[f64; 4]; 5] = [
     [1.0, 0.0, 0.0, 1.0],
     [-1.0, 0.0, 0.0, 1.0],
@@ -129,7 +129,7 @@ const PYRAMID: [[f64; 4]; 5] = [
 ];
 
 /// Sutherland–Hodgman against the view pyramid, in clip space
-/// (`core.hlr._clip_polygon`).
+/// (`built_core.hlr._clip_polygon`).
 fn clip_polygon(mut poly: Vec<[f64; 4]>) -> Vec<[f64; 4]> {
     for a in PYRAMID.iter() {
         let n = poly.len();

@@ -15,8 +15,8 @@ from types import SimpleNamespace
 
 from built_core import Vec3 as QVector3D
 
-from core.scene import Scene
-from core.snap import compute_snap
+from built_core.scene import Scene
+from built_core.snap import compute_snap
 
 
 def V(x: float, y: float, z: float = 0.0) -> QVector3D:

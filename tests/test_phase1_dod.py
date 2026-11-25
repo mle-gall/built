@@ -17,10 +17,10 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edge, build_add_edges
-from core.geometry import Face
-from core.history import AddFaceCommand, History
-from core.scene import Scene
+from built_core.edits import build_add_edge, build_add_edges
+from built_core.geometry import Face
+from built_core.history import AddFaceCommand, History
+from built_core.scene import Scene
 from tools.pushpull import PushPullTool
 
 

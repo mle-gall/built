@@ -2,9 +2,9 @@
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 import pytest
 
-from core.group import Group
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from tests.test_metal_parity_inference import at, harness
 from tests.test_.skp_inference_gaps import view  # noqa: F401
 
@@ -12,7 +12,7 @@ from tests.test_.skp_inference_gaps import view  # noqa: F401
 @pytest.fixture(params=["callback", "matrix"], autouse=True)
 def snap_projection(request, monkeypatch):
     if request.param == "callback":
-        from core import snap_query
+        from built_core import snap_query
         make_query = snap_query.make_query
         def callback_query(edges, projector, cursor):
             return make_query(edges, lambda point: projector(point), cursor)
@@ -91,7 +91,7 @@ def test_recorded_lambert(view):
 
 
 def test_reference_keeps_store_edge_key():
-    from core.snap import compute_snap
+    from built_core.snap import compute_snap
     scene = Scene()
     edge = scene.mesh.add_edge((1., 1., 0.), (3., 1., 0.))
     view, _ = harness(scene)
@@ -135,7 +135,7 @@ def test_recorded_feature_precedence(scene_type, point, kind):
     ((1., 1., 1.), None),
 ])
 def test_recorded_first_work_plane(forward, normal):
-    from core.snap import first_point_work_plane
+    from built_core.snap import first_point_work_plane
     center = V(.02, .03, 0.)
     plane = first_point_work_plane(V(*forward), center)
     if normal is None:
@@ -147,7 +147,7 @@ def test_recorded_first_work_plane(forward, normal):
 
 def test_projection_callback_error_reaches_the_tool():
     from types import SimpleNamespace
-    from core.snap import compute_snap
+    from built_core.snap import compute_snap
 
     def project(point):
         raise ValueError("camera disconnected")

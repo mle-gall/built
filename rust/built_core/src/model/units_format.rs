@@ -1,7 +1,7 @@
 //! How a stored value is shown: lengths, areas, volumes and angles in the
 //! document's units (`docs/model-port.md`, units).
 //!
-//! `core.units` was the formatter; it is now a facade over these
+//! `built_core.units` was the formatter; it is now a facade over these
 //! functions, which read the same unit table as the parser (`units.rs`).
 //! Each function answers exactly what the Python one did
 //! (`tests/test_units_format_parity.py` holds its answers):

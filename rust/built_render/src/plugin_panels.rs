@@ -245,7 +245,7 @@ pub(crate) fn sync(view: &Obj, win: &Obj) -> PyResult<()> {
                 let kw = PyDict::new(py);
                 kw.set_item("exc_info", e.value(py))?;
                 py.import("logging")?
-                    .call_method1("getLogger", ("core.plugin_panels",))?
+                    .call_method1("getLogger", ("built_core.plugin_panels",))?
                     .call_method("error", ("Plugin panel %s failed to load", key), Some(&kw))?;
             }
             Err(e) => return Err(e),

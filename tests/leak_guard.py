@@ -9,6 +9,6 @@ def pytest_runtest_teardown(item, nextitem):
     depth = doc_depth()
     if depth:
         print(f"\nOPEN-TRANSACTION depth={depth} after {item.nodeid}")
-        from core import doc_model
+        from built_core import doc_model
         while doc_model.NATIVE.doc_depth():
             doc_model.rollback()

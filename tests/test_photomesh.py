@@ -482,7 +482,7 @@ def test_profile_csv_states_its_vertical_reference():
 
 def _round_trip(tmp_path, mesh):
     """Save a scene holding ``mesh`` to an .igz and load it back."""
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
 
     scene = Scene()
@@ -559,8 +559,8 @@ def test_layer_survives_the_round_trip(tmp_path):
 def test_the_survey_answers_to_the_layer_system(tmp_path):
     """A survey is tagged like a Group, so hiding its layer hides it through
     exactly the same machinery as everything else in the document."""
-    from core.layers import Layer, layer_of
-    from core.scene import Scene
+    from built_core.layers import Layer, layer_of
+    from built_core.scene import Scene
 
     obj = _write_odm_tree(tmp_path)
     mesh = load_odm_obj(obj, _datum_at_anchor())
@@ -589,7 +589,7 @@ def test_visibility_is_remembered(tmp_path):
 
 def test_document_without_a_survey_stays_plain_json(tmp_path):
     """No survey must not turn every document into a ZIP container."""
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
 
     out = tmp_path / "plain.igz"

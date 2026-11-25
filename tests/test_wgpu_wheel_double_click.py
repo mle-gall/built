@@ -13,8 +13,8 @@ from types import SimpleNamespace
 import pytest
 from built_core import Vec3 as V
 
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from built_core import resident_prepare as prepare
 from built_core import pack_scene
 from built_core import MouseButton

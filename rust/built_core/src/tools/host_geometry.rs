@@ -142,7 +142,7 @@ impl ToolBounds {
         Ok(())
     }
     fn add_group(&mut self, group: &Bound<'_, PyAny>) -> PyResult<()> {
-        let api = group.py().import("core.group")?;
+        let api = group.py().import("built_core.group")?;
         let walk = crate::model::module(group.py(), "built_core")?.getattr("group_model_placements")?;
         for placement in walk.call1((group,))?.try_iter()? {
             let pair = placement?;

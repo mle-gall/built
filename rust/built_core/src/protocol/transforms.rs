@@ -123,7 +123,7 @@ fn copy_placements<'py>(
         .import("built_core")?
         .getattr("Vec3")?
         .call(PyTuple::new(py, floats(delta)?)?, None)?;
-    let copier = py.import("core.group")?.getattr("copy_group")?;
+    let copier = py.import("built_core.group")?.getattr("copy_group")?;
     let parts = PyList::empty(py);
     let clones = PyList::empty(py);
     for offset in copy_offsets(&d, count, mode)?.iter() {
@@ -353,10 +353,10 @@ fn move_selection<'py>(
         es = PyList::empty(py);
         fs = PyList::empty(py);
         let classes = [
-            ("core.group", "Group", &groups),
+            ("built_core.group", "Group", &groups),
             ("built_core.mesh", "Edge", &es),
             ("built_core.mesh", "Face", &fs),
-            ("core.dimension", "Dimension", &dims),
+            ("built_core.dimension", "Dimension", &dims),
             ("built_core.section", "SectionPlane", &planes),
             ("built_core.textlabel", "TextLabel", &labels),
         ];
@@ -408,7 +408,7 @@ fn move_selection<'py>(
                 .collect::<PyResult<Vec<_>>>()?,
         );
     }
-    let key = py.import("core.topology")?.getattr("_key")?;
+    let key = py.import("built_core.topology")?.getattr("_key")?;
     let seen = pyo3::types::PySet::empty(py)?;
     let positions = PyList::empty(py);
     let attached = PyList::empty(py);
@@ -466,7 +466,7 @@ fn flip_selection<'py>(
     let edges = need(&mesh, "edge", &empty(py, edges))?;
     let cmds = PyList::empty(py);
     if copy {
-        let group = py.import("core.group")?;
+        let group = py.import("built_core.group")?;
         let attrs = py
             .import("core.ifc_identity")?
             .call_method1("copied_face_attrs", (&scene,))?;

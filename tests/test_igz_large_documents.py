@@ -7,7 +7,7 @@ from tests.raster_samples import solid_raster
 import json
 import zipfile
 
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import igz
 
 
@@ -79,8 +79,8 @@ def test_a_large_textured_container_reads_back_the_same(
 
 
 def test_the_count_includes_the_loose_mesh_and_each_prototype_once():
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from built_core import Matrix4 as QMatrix4x4, Vec3 as V
     scene = Scene()
     scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0)])   # 1 + 3
@@ -95,7 +95,7 @@ def test_the_count_includes_the_loose_mesh_and_each_prototype_once():
 
 def test_native_format_choice_uses_known_face_count_before_building_edges(tmp_path, monkeypatch):
     import pytest
-    from core.mesh import DeferredMesh
+    from built_core.mesh import DeferredMesh
 
     if not hasattr(igz.native_io(), "igz_large_document"):
         pytest.skip("native format classifier unavailable")

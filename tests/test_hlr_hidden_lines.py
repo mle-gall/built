@@ -11,8 +11,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 
-from core.hlr import KIND_HIDDEN, hlr_drawing
-from core.scene import Scene
+from built_core.hlr import KIND_HIDDEN, hlr_drawing
+from built_core.scene import Scene
 from tests.test_hlr_line_classes import _box, _camera
 
 

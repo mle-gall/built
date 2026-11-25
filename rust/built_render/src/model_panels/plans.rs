@@ -13,7 +13,7 @@ fn unique<'p>(base: &Obj<'p>, collection: &Obj<'p>) -> PyResult<Obj<'p>> {
         names.append(entry?.getattr("name")?)?;
     }
     base.py()
-        .import("core.outliner")?
+        .import("built_core.outliner")?
         .call_method1("unique_name", (base, names))
 }
 
@@ -45,7 +45,7 @@ fn finish(
     let vec = |p: Point| vector.call1((p[0], p[1], p[2]));
     let title_args = PyDict::new(py);
     let sections = scene.getattr("section_planes")?;
-    let cam = py.import("core.camera")?.call_method0("OrbitCamera")?;
+    let cam = py.import("built_core.camera")?.call_method0("OrbitCamera")?;
     let mut outside = false;
     let (base, plane, centre, span) = if group {
         if !scene
@@ -55,7 +55,7 @@ fn finish(
             return Ok(());
         }
         let bounds = py
-            .import("core.outliner")?
+            .import("built_core.outliner")?
             .call_method1("world_bounds", (scene.getattr("groups")?, target))?;
         let Some((lo, hi)) = bounds.extract::<Option<(Point, Point)>>()? else {
             vp.call_method1(
@@ -142,7 +142,7 @@ fn finish(
         kwargs.set_item("name", unique(&base, &scene.getattr("compositions")?)?)?;
         kwargs.set_item("paper", "A3")?;
         let page = py
-            .import("core.composition")?
+            .import("built_core.composition")?
             .getattr("Composicion")?
             .call((), Some(&kwargs))?;
         let frame = page.call_method0("default_frame")?;

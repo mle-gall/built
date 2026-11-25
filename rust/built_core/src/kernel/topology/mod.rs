@@ -135,7 +135,7 @@ fn __getattr__<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
 }
 
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    let sub = PyModule::new(m.py(), "core.topology")?;
+    let sub = PyModule::new(m.py(), "built_core.topology")?;
     let s = &sub;
     let drawing = m.getattr("object_drawing")?;
     cycles::register(s)?;

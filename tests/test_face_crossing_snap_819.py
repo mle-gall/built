@@ -14,7 +14,7 @@ from built_core import Input as Qt
 from built_core import Vec3 as V
 
 
-from core.snap import compute_snap  # noqa: E402
+from built_core.snap import compute_snap  # noqa: E402
 
 
 class _Edge:
@@ -64,8 +64,8 @@ def test_a_real_edge_or_point_still_wins_and_open_air_asks_nothing():
 
 
 def _sunk_box_window(native_host):
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     win = native_host.window
     native_host.resize(900, 600, 1.)
     vp = win.viewport
@@ -103,7 +103,7 @@ def test_the_line_tool_snaps_where_a_sunk_box_meets_the_floor(native_host):
 def _sunk_copies_window(native_host):
     """The sunk box as component copies along the floor, in the pick
     index's lazy mode (the plant of #158)."""
-    from core.group import Group
+    from built_core.group import Group
     from built_core import Matrix4 as QMatrix4x4
     win, vp = _sunk_box_window(native_host)
     box = vp.scene.groups.pop()

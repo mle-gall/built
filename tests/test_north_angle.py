@@ -13,12 +13,12 @@ import math
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.dimension import Dimension
-from core.group import Group
-from core.history import History, StraightenModelCommand, placement_rotation_deg
-from core.mesh import Mesh
+from built_core.dimension import Dimension
+from built_core.group import Group
+from built_core.history import History, StraightenModelCommand, placement_rotation_deg
+from built_core.mesh import Mesh
 from built_core.saved_views import SavedView
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import igz
 from georef.datum import SceneDatum
 from georef.tiles import PRESETS, DEFAULT_SOURCE_ID, TileLayer
@@ -209,7 +209,7 @@ def test_placement_is_identity_spots_a_group_that_was_never_turned():
     """The Straighten button on a group at identity is a silent no-op —
     Marco pressed it eleven times on the DWG instead of the plaza he had
     turned (2026-09-14); the panel now says which group to pick."""
-    from core.history import placement_is_identity
+    from built_core.history import placement_is_identity
     assert placement_is_identity(None)
     assert placement_is_identity(QMatrix4x4())
     turned = QMatrix4x4()
@@ -221,7 +221,7 @@ def test_placement_is_identity_spots_a_group_that_was_never_turned():
 
 
 def test_straighten_reframes_sheet_anchors_camera_and_survey_path():
-    from core.composition import Composicion, CotaItem, MarcoVista
+    from built_core.composition import Composicion, CotaItem, MarcoVista
     from georef.geopath import GeoPath
 
     scene, group, _ = _placed_scene()

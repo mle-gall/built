@@ -14,7 +14,7 @@ import pytest
 from built_core import Vec3 as QVector3D
 
 
-from core.scene import Scene  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402
 from views.document_interaction import _parse_length_field
 from tests.controller_surface import ControllerSurface as Viewport
@@ -27,7 +27,7 @@ def test_the_value_box_refuses_a_number_too_long_for_a_float(typed):
 
 
 def test_ordinary_numbers_still_parse():
-    from core import units
+    from built_core import units
     units.bind_scene(Scene())                         # metres, whatever ran before
     try:
         assert Viewport._parse_value_buffer("2.5") == pytest.approx(2.5)

@@ -16,10 +16,10 @@ import math
 
 from built_core import Vec3 as V
 
-from core.history import History
+from built_core.history import History
 from built_core import planar_edits
-from core.scene import Scene
-from core.topology import _point_in_face_solid
+from built_core.scene import Scene
+from built_core.topology import _point_in_face_solid
 from tools.circle import CircleTool
 from tools.rust_tools import RectangleTool
 
@@ -113,5 +113,5 @@ def test_redrawing_the_whole_top_fills_the_hole_as_in_538():
 
 def _add_face(history, corners):
     """The Rectangle's commit: the protocol's add_face over the ring."""
-    from core.protocol.commands import run
+    from built_core.protocol.commands import run
     run(history, "add_face", outer=[c.toTuple() for c in corners])

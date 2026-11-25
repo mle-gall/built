@@ -321,7 +321,7 @@ fn get_class<'p>(m: &Module<'p>, name: &str) -> PyResult<Obj<'p>> {
         return Err(pyo3::exceptions::PyAttributeError::new_err(name.to_owned()));
     }
     let py = m.py();
-    let dm = py.import("core.doc_model")?;
+    let dm = py.import("built_core.doc_model")?;
     let ns = PyDict::new(py);
     let builtins = py.import("builtins")?;
     let fields = match name {
@@ -418,9 +418,9 @@ fn get_class<'p>(m: &Module<'p>, name: &str) -> PyResult<Obj<'p>> {
     ns.set_item(
         "__module__",
         if label {
-            "core.textlabel"
+            "built_core.textlabel"
         } else {
-            "core.guide"
+            "built_core.guide"
         },
     )?;
     let cls = builtins.call_method1("type", (name, (dm.getattr("Record")?,), ns))?;

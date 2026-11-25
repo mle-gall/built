@@ -8,10 +8,10 @@ import pytest
 from built_core import Vec3 as V
 
 import built_core.store_mesh as S
-from core.history import AddFaceCommand, History
-from core.protocol.commands import push_pull
-from core.protocol.keys import to_json_key
-from core.scene import Scene
+from built_core.history import AddFaceCommand, History
+from built_core.protocol.commands import push_pull
+from built_core.protocol.keys import to_json_key
+from built_core.scene import Scene
 from tests.test_pushpull_cases import _box, _face
 
 
@@ -52,7 +52,7 @@ def test_push_retains_selection_and_history():
 
 def test_annotations_survive_a_push():
     from built_core.annotation_anchor import Attachment
-    from core.textlabel import TextLabel
+    from built_core.textlabel import TextLabel
     scene = Scene()
     hist = History(scene)
     _box(hist, 0, 0, 0, 2, 2, 2)

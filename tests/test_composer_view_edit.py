@@ -9,7 +9,7 @@ import math
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.composition import MarcoVista, apply_frame_camera
+from built_core.composition import MarcoVista, apply_frame_camera
 
 
 class _Cam:
@@ -52,7 +52,7 @@ def test_frame_camera_overrides_apply_after_the_view():
 
 
 def test_view_edits_travel_in_the_document(tmp_path):
-    from core.composition import Composicion
+    from built_core.composition import Composicion
     c = Composicion()
     f = MarcoVista(cam_target=[1.0, 2.0, 3.0], cam_yaw=0.1, scale_n=75.0)
     c.frames.append(f)

@@ -12,9 +12,9 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.group import Group
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 
 def V(x, y, z=0.0):
@@ -127,7 +127,7 @@ def test_the_shortcut_and_the_button_run_the_action(native_host):
 def test_a_guide_line_counts_by_its_point_not_its_10_km_segment():
     """Ctrl+A takes the guides (#627); an infinite guide line must not make
     Zoom Selection frame ±10 km around the model."""
-    from core.guide import Guide
+    from built_core.guide import Guide
     scene = Scene()
     face = _square(scene.mesh, 0)
     scene.guides.append(Guide(V(5, 0), V(1, 0)))
@@ -137,7 +137,7 @@ def test_a_guide_line_counts_by_its_point_not_its_10_km_segment():
 
 
 def test_only_guides_selected_frames_their_points():
-    from core.guide import Guide
+    from built_core.guide import Guide
     scene = Scene()
     _square(scene.mesh, 0)
     g = Guide(V(2, 4), V(0, 1))
@@ -147,7 +147,7 @@ def test_only_guides_selected_frames_their_points():
 
 
 def test_select_all_with_a_guide_then_zoom_selection_stays_close(native_host):
-    from core.guide import Guide
+    from built_core.guide import Guide
     win = _window(native_host)
     scene = win.viewport.scene
     scene.guides.append(Guide(V(0, 0), V(1, 0)))

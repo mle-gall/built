@@ -21,9 +21,9 @@ import numpy as np                                                # noqa: E402
 import pytest                                                     # noqa: E402
 from built_core import Vec3 as QVector3D
 
-from core.group import Group                                      # noqa: E402
-from core.mesh import Mesh                                        # noqa: E402
-from core.scene import Scene                                      # noqa: E402
+from built_core.group import Group                                      # noqa: E402
+from built_core.mesh import Mesh                                        # noqa: E402
+from built_core.scene import Scene                                      # noqa: E402
 from views.document_interaction import DocumentInteraction
 
 SIDES = 12

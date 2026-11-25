@@ -146,7 +146,7 @@ fn zoom_box(v: &Obj, start: &Obj, end: &Obj) -> PyResult<()> {
     let scale = (w / width.max(1.)).max(h / height.max(1.)).max(0.04);
     let distance = number(&cam, "distance")?;
     let min: f64 = cam.call_method0("min_distance")?.extract()?;
-    let max = number(v.py().import("core.camera")?.as_any(), "MAX_DISTANCE")?;
+    let max = number(v.py().import("built_core.camera")?.as_any(), "MAX_DISTANCE")?;
     cam.setattr("distance", min.max((scale * distance).min(max)))?;
     v.call_method0("update")?;
     Ok(())
@@ -280,7 +280,7 @@ fn retreat_step(v: &Obj) -> PyResult<f64> {
     if diag <= 0. {
         return Ok(floor);
     }
-    let far = number(v.py().import("core.camera")?.as_any(), "MIN_DISTANCE_FAR")?;
+    let far = number(v.py().import("built_core.camera")?.as_any(), "MIN_DISTANCE_FAR")?;
     Ok((floor * (number(&v.getattr("camera")?, "distance")? / far).min(1.)).max(0.01 * diag))
 }
 

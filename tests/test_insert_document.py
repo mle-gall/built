@@ -13,14 +13,14 @@ from __future__ import annotations
 from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.group import Group, iter_placements, placement_points
-from core.history import History
+from built_core.group import Group, iter_placements, placement_points
+from built_core.history import History
 from built_core.document_insert import (component_from_scene, ensure_layers,
                          import_document_as_component, merge_materials)
-from core.layers import Layer, assign_layer
-from core.materials import Material
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.layers import Layer, assign_layer
+from built_core.materials import Material
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 
 def V(x, y, z=0.0):
@@ -197,7 +197,7 @@ def test_el_igz_conserva_los_nombres_de_los_grupos(tmp_path):
     escribía el nombre, así que una «Pérgola» volvía como «Group 7». Y el
     contador de nombres automáticos salta por encima de los guardados,
     para que un grupo nuevo no repita uno que el documento ya usa."""
-    from core.group import Group as _G
+    from built_core.group import Group as _G
     from formats.igz import load_into, save_scene
     src = Scene()
     src.groups.append(Group(_cuadrado(Mesh()), name="Pérgola"))

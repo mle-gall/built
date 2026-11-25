@@ -4,7 +4,7 @@ import importlib.util
 import os
 import numpy as np
 import pytest
-from core.scene import Scene
+from built_core.scene import Scene
 from views.wgpu_style import style_payload, sun_payload
 
 HAS_RENDERER = importlib.util.find_spec("built_render") is not None
@@ -507,10 +507,10 @@ def test_hidden_object_readback_survives_gpu_growth(native):
 def test_intersected_wall_occludes_loose_slab_edges(native, monkeypatch):
     import math
     from built_core import Vec3 as QVector3D
-    from core.camera import OrbitCamera
-    from core.history import History
-    from core.intersect import WITH_CONTEXT
-    from core.protocol.commands import run
+    from built_core.camera import OrbitCamera
+    from built_core.history import History
+    from built_core.intersect import WITH_CONTEXT
+    from built_core.protocol.commands import run
     from built_core.store_mesh import StoreMesh
     from tests.test_intersect_faces import _box, RED, BLUE
     from built_core import pack_scene
@@ -780,9 +780,9 @@ def test_selection_marks_follow_the_grab_and_leave_hover_marks_in_place(native):
 def test_clipboard_group_preview_moves_nested_texture_and_preserves_scene(native, tmp_path, aa):
     from types import SimpleNamespace
     from built_core import Vec3, Matrix4
-    from core.scene import Scene
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.scene import Scene
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from built_render import MeshToolAccess
 
     upload(native, 255)

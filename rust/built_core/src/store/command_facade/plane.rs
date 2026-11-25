@@ -242,7 +242,7 @@ pub(crate) fn command_rebuild_planar(mesh: &Obj<'_>) -> PyResult<Option<RebuiltP
     };
     let start = serial(mesh)?;
     let snapshot = mesh.call_method0("capture_state")?;
-    let topo = py.import("core.topology")?;
+    let topo = py.import("built_core.topology")?;
     let winding = topo.call_method1("winding_footprint", (mesh,))?;
     let faces = mesh.getattr("faces")?;
     if !faces.is_empty()? {

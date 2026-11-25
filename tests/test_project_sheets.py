@@ -2,9 +2,9 @@
 """Saved scenes and sheet frames in the native Project browser."""
 import pytest
 
-from core.camera import OrbitCamera
-from core.composition import Composicion, MarcoVista
-from core.group import Group
+from built_core.camera import OrbitCamera
+from built_core.composition import Composicion, MarcoVista
+from built_core.group import Group
 from built_core.saved_views import SavedView
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_project_drawing_filters import Project

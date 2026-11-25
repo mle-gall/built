@@ -14,10 +14,10 @@ from __future__ import annotations
 from built_core import ScreenPoint, Input  # noqa: E402
 from built_core import Vec3 as QVector3D
 
-from core.guide import Guide  # noqa: E402
-from core.history import History  # noqa: E402
-from core.scene import Scene  # noqa: E402
-from core.snap import SnapResult  # noqa: E402
+from built_core.guide import Guide  # noqa: E402
+from built_core.history import History  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
+from built_core.snap import SnapResult  # noqa: E402
 from formats import igz  # noqa: E402
 from tools.base import ToolContext  # noqa: E402
 from tools.tape import TapeMeasureTool  # noqa: E402
@@ -171,7 +171,7 @@ def test_supported_drawing_tools_snap_to_a_visible_axis_at_first_point():
 
 def test_drawing_axis_source_only_replaces_an_empty_space_snap():
     from types import SimpleNamespace
-    from core.inference import InferenceEngine
+    from built_core.inference import InferenceEngine
 
     class DrawingTool:
         axis_source = True
@@ -196,7 +196,7 @@ def test_drawing_axis_source_only_replaces_an_empty_space_snap():
 
 def test_drawing_axis_source_ignores_hidden_or_end_on_axes():
     from types import SimpleNamespace
-    from core.inference import InferenceEngine
+    from built_core.inference import InferenceEngine
 
     class DrawingTool:
         axis_source = True

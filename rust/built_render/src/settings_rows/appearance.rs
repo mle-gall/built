@@ -32,7 +32,7 @@ pub(super) fn groups<'py>(
         .import("built_core.style")?
         .getattr("AO_DISTANCE_RANGE")?
         .extract()?;
-    let units = py.import("core.units")?;
+    let units = py.import("built_core.units")?;
     let unit: String = units.call_method0("model_unit")?.extract()?;
     let symbol = if unit.starts_with("ft") {
         "ft".to_owned()
@@ -117,7 +117,7 @@ pub(super) fn groups<'py>(
                 "fmt",
                 func(py, move |py, _| {
                     Ok(py
-                        .import("core.units")?
+                        .import("built_core.units")?
                         .call_method1("localized", (format!("{shown:.2}"),))?
                         .unbind())
                 })?,
@@ -142,7 +142,7 @@ pub(super) fn groups<'py>(
                 func(py, |py, a| {
                     let value: f64 = a.get_item(0)?.extract()?;
                     Ok(py
-                        .import("core.units")?
+                        .import("built_core.units")?
                         .call_method1("localized", (format!("{value:.2}"),))?
                         .unbind())
                 })?,

@@ -41,7 +41,7 @@ pub fn render_scene_photo(window: &Obj<'_>, request: &str) -> PyResult<Option<Pi
     opts.set_item("style", "sombreado")?;
     opts.set_item("paper_bg", true)?;
     let frame = py
-        .import("core.composition")?
+        .import("built_core.composition")?
         .getattr("MarcoVista")?
         .call((), Some(&opts))?;
     let frames = py.import("built_render.sheet_frames")?;
@@ -50,7 +50,7 @@ pub fn render_scene_photo(window: &Obj<'_>, request: &str) -> PyResult<Option<Pi
         return Ok(None);
     }
     let scale = py
-        .import("core.outliner")?
+        .import("built_core.outliner")?
         .call_method1("fit_scale", (&scene, saved, 36., 24., 0.95))?;
     frame.setattr("scale_n", scale)?;
     let picture = frames.call_method1("picture", (display, frame))?;

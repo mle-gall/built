@@ -6,8 +6,8 @@ import math
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.history import History, SimplifyMeshCommand
-from core.mesh import Mesh
+from built_core.history import History, SimplifyMeshCommand
+from built_core.mesh import Mesh
 from formats.fuse import simplify_mesh
 
 
@@ -99,7 +99,7 @@ def test_simplify_preserves_face_attributes_and_holes():
 
 
 def test_simplify_mesh_command_can_be_undone_and_redone():
-    from core.scene import Scene
+    from built_core.scene import Scene
 
     scene = Scene(mesh=_grid("XZ"))
     history = History(scene)

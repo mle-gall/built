@@ -4,10 +4,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from core.group import Group
-from core.history import History, CompoundCommand, SetFaceMaterialTagCommand, NativeCommand
-from core.materials import Material
-from core.scene import Scene
+from built_core.group import Group
+from built_core.history import History, CompoundCommand, SetFaceMaterialTagCommand, NativeCommand
+from built_core.materials import Material
+from built_core.scene import Scene
 from tools.paint import PaintTool
 from built_render import wgpu_library as library
 from views import wgpu_ui

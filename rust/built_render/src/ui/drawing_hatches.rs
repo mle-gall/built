@@ -118,7 +118,7 @@ impl Hatches {
     pub fn sync(&mut self, scene: &Bound<'_, PyAny>) -> PyResult<()> {
         if self.sizes.is_empty() {
             let py = scene.py();
-            let domain = py.import("core.hatches")?;
+            let domain = py.import("built_core.hatches")?;
             let names: BTreeMap<String, String> = domain.getattr("HATCH_LABELS")?.extract()?;
             let translate = py.import("built_core.i18n")?.getattr("tr")?;
             let groups = domain
@@ -195,7 +195,7 @@ impl Hatches {
                 let (kind, raw): (String, Vec<f64>) = serde_json::from_str(payload)
                     .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
                 let value = py
-                    .import("core.hatches")?
+                    .import("built_core.hatches")?
                     .call_method1("clean_brick", (raw,))?;
                 let size: Vec<f64> = value.extract().map_err(|_| {
                     pyo3::exceptions::PyValueError::new_err("Invalid piece dimensions")

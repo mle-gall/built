@@ -15,11 +15,11 @@ import built_core
 from built_core import Vec3 as QVector3D
 
 
-from core import layers as L  # noqa: E402
-from core.group import Group  # noqa: E402
-from core.layers import DEFAULT_LAYER, Layer  # noqa: E402
-from core.mesh import Mesh  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core import layers as L  # noqa: E402
+from built_core.group import Group  # noqa: E402
+from built_core.layers import DEFAULT_LAYER, Layer  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 
 
 def _square():
@@ -93,7 +93,7 @@ def test_exports_name_tags_by_their_folder_path():
 
 
 def test_assign_by_label_lands_on_the_key():
-    from core.history import AssignLayerCommand, History
+    from built_core.history import AssignLayerCommand, History
     scene, a, b, *_ = _two_parts()
     g = Group(_square(), name="c")
     scene.groups.append(g)

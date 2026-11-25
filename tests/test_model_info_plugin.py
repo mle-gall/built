@@ -16,9 +16,9 @@ from built_core import Vec3 as QVector3D
 
 
 from core import bim                                              # noqa: E402
-from core.group import Group                                      # noqa: E402
-from core.mesh import Mesh                                        # noqa: E402
-from core.scene import Scene                                      # noqa: E402
+from built_core.group import Group                                      # noqa: E402
+from built_core.mesh import Mesh                                        # noqa: E402
+from built_core.scene import Scene                                      # noqa: E402
 from plugins.model_info import (                                  # noqa: E402
     ModelInfoTool, _collect_stats, _stats_to_text)
 

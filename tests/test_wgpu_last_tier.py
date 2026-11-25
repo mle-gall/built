@@ -77,7 +77,7 @@ def test_freehand_stroke_commit_and_escape():
 from tools.solid_tools import (OuterShellTool, UnionTool, SubtractTool,
                                TrimTool, IntersectTool, SplitTool)
 from tests.test_solid_tools import _pair, _box, RED
-from core import solids
+from built_core import solids
 
 @pytest.mark.parametrize('tool_type', [OuterShellTool, UnionTool, SubtractTool,
                                       TrimTool, IntersectTool, SplitTool])

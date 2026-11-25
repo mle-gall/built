@@ -26,7 +26,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 
-from core.composition import CotaRadialItem, readable_deg
+from built_core.composition import CotaRadialItem, readable_deg
 
 
 def _r(**kw) -> CotaRadialItem:
@@ -136,7 +136,7 @@ def test_whatever_quadrant_it_is_in_the_text_stays_readable(deg):
 # ---- it survives the file ------------------------------------------------
 
 def test_it_travels_in_the_sheet_and_an_older_one_simply_has_none():
-    from core.composition import Composicion
+    from built_core.composition import Composicion
     c = Composicion()
     c.cotas_rad.append(_r(kind="diameter", radius_mm=7.0))
     back = Composicion.from_dict(c.to_dict())

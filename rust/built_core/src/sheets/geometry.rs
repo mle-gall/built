@@ -3,7 +3,7 @@
 //! What a vector sheet frame draws, read from the document and the mesh
 //! stores (docs/rust-sheets.md step 4): world-space triangles, hard edges
 //! and soft edges with their faces' normals, each with the tag it is inked
-//! with. It is `core.hlr.collect_geometry` under the frame's saved view,
+//! with. It is `built_core.hlr.collect_geometry` under the frame's saved view,
 //! without the view ever being applied to the live scene:
 //!
 //! * the loose geometry: a face shows when it is not hidden and its tag
@@ -222,7 +222,7 @@ fn eat(py: Python<'_>, part: &Part, tags: &Tags, h: Hypot, out: &mut Collected) 
             continue;
         }
         let mut pos = Vec::new();
-        // A mirrored copy runs its rings backwards (core.group._ring), so
+        // A mirrored copy runs its rings backwards (built_core.group._ring), so
         // its front stays the front.
         let local: Vec<Vec<u32>> = rings.iter().map(|ring| {
             let mut r: Vec<u32> = ring.iter().map(|&v| {
@@ -299,7 +299,7 @@ fn stack<'py, const N: usize>(py: Python<'py>, rows: Vec<[[f64; 3]; N]>) -> PyRe
     Ok(PyArray1::from_vec(py, rows.into_iter().flatten().flatten().collect()).reshape([n, N, 3])?.into_any())
 }
 
-/// ``core.hlr.collect_geometry`` for a sheet frame, as the arrays
+/// ``built_core.hlr.collect_geometry`` for a sheet frame, as the arrays
 /// ``DocumentInteraction.hlr_geometry`` hands out: ``(tris (T,3,3),
 /// hard (E,2,3), soft (S,2,3), soft_n (S,2,3))`` (``soft_n[:, 1]`` NaN for
 /// a soft edge with one face), plus with ``tags`` the tag of each
@@ -313,7 +313,7 @@ pub fn sheet_frame_geometry<'py>(py: Python<'py>, root: &Bound<'py, PyAny>, root
                                  loose: Option<Bound<'py, PyAny>>, view: Option<Bound<'py, PyAny>>,
                                  hypot: &str, tags: bool)
     -> PyResult<(Arrays<'py>, Option<(Vec<String>, Vec<String>, Vec<String>)>)> {
-    py.import("core.doc_model")?.call_method0("flush")?;
+    py.import("built_core.doc_model")?.call_method0("flush")?;
     let state = match view.filter(|v| !v.is_none()) {
         Some(v) => ViewState::of_view(&super::model::read_fields(doc::py::handle_key(&v)?)?),
         None => ViewState::default(),

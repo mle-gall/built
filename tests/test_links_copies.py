@@ -28,12 +28,12 @@ from built_core import ScreenPoint as QPointF
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 
-from core import links  # noqa: E402
-from core.group import Group, copy_group  # noqa: E402
-from core.history import History  # noqa: E402
-from core.mesh import Mesh  # noqa: E402
-from core.purge import iter_groups  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core import links  # noqa: E402
+from built_core.group import Group, copy_group  # noqa: E402
+from built_core.history import History  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
+from built_core.purge import iter_groups  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402
 from tools.base import ToolContext  # noqa: E402
 
@@ -78,7 +78,7 @@ def _state(g):
 
 
 def _faces(g):
-    from core.group import iter_placements
+    from built_core.group import iter_placements
     return sum(len(p.mesh.faces) for p, _m in iter_placements(g))
 
 
@@ -278,7 +278,7 @@ def test_copy_and_paste(win, tmp_path):
 
 
 def test_make_unique_of_what_holds_a_link_and_of_the_link(win, tmp_path):
-    from core.history import MakeUniqueCommand
+    from built_core.history import MakeUniqueCommand
     scene, link, src = _place(win, tmp_path)
     vp = win.viewport
     holder = Group(Mesh(), name="holder")
@@ -313,7 +313,7 @@ def test_make_unique_of_what_holds_a_link_and_of_the_link(win, tmp_path):
 
 
 def test_explode_of_a_copied_holder_keeps_the_link(win, tmp_path):
-    from core.history import ExplodeGroupCommand
+    from built_core.history import ExplodeGroupCommand
     scene, link, src = _place(win, tmp_path)
     vp = win.viewport
     holder = Group(Mesh(), name="holder")

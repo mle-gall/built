@@ -273,7 +273,7 @@ pub(crate) fn plane_split_graph<'py>(
 
 /// The planar arrangement of `lines` (plane coordinates, already free of
 /// zero-length segments): every split edge when `include_edges`, and the
-/// minimal faces with their holes (`core.arrangement.planar_rebuild`).
+/// minimal faces with their holes (`built_core.arrangement.planar_rebuild`).
 #[allow(clippy::type_complexity)]
 pub(super) fn arrange(
     lines: &[Segment],

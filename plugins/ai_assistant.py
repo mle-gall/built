@@ -11,6 +11,6 @@ AsistentePanel = AsistenteDialog = AssistantPanel
 
 
 def setup(app):
-    from core.plugin_panels import open_panel
+    from built_core.plugin_panels import open_panel
     app.add_menu_action(tr("AI Assistant"), lambda: open_panel(app.window, app.key),
                         "Ctrl+Shift+A", tr("Open the AI assistant"))

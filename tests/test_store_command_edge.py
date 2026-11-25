@@ -4,10 +4,10 @@ from types import SimpleNamespace
 import pytest
 from built_core import Matrix4, MeshStore, Vec3
 
-from core.history import AddEdgeCommand, History, SnapshotMutation
-from core.layers import DEFAULT_LAYER
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.history import AddEdgeCommand, History, SnapshotMutation
+from built_core.layers import DEFAULT_LAYER
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from built_core import store_mesh
 
 

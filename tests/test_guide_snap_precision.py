@@ -24,8 +24,8 @@ def _exact_crossing(g1, g2):
 
 
 def test_guide_crossings_are_exact_in_top_view(native_window):
-    from core.guide import Guide
-    from core.topology import segment_intersection
+    from built_core.guide import Guide
+    from built_core.topology import segment_intersection
     win = native_window
     vp = win.viewport
     win._host.resize(1200, 800, 1.0)
@@ -59,7 +59,7 @@ def test_guide_crossings_are_exact_in_top_view(native_window):
 
 
 def test_clipped_guide_stays_on_its_line_and_off_screen(native_window):
-    from core.guide import Guide
+    from built_core.guide import Guide
     win = native_window
     vp = win.viewport
     win._host.resize(1200, 800, 1.0)

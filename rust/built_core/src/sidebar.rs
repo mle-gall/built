@@ -107,7 +107,7 @@ pub(crate) fn project_sidebar(
             *counts.entry(tag).or_default() += 1;
         }
         let selected: HashSet<String> = if drawing_lens {
-            scene.py().import("core.layers")?.call_method1("selection_layers", (scene,))?.extract()?
+            scene.py().import("built_core.layers")?.call_method1("selection_layers", (scene,))?.extract()?
         } else {
             HashSet::new()
         };

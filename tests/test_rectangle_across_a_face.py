@@ -11,10 +11,10 @@ from collections import Counter
 import pytest
 from built_core import Vec3 as V
 
-from core.edits import build_add_edges
-from core.history import AddFaceCommand, History
+from built_core.edits import build_add_edges
+from built_core.history import AddFaceCommand, History
 from built_core.orient import is_closed, signed_volume
-from core.scene import Scene
+from built_core.scene import Scene
 from tests import test_pushpull_ux as T
 
 

@@ -16,7 +16,7 @@ pub(crate) fn objects_before<'py>(
     include_groups: bool,
 ) -> PyResult<TagTargets<'py>> {
     let py = scene.py();
-    let layers = py.import("core.layers")?;
+    let layers = py.import("built_core.layers")?;
     let before = if layers
         .call_method1("active_layer", (scene,))?
         .eq(layers.getattr("DEFAULT_LAYER")?)?
@@ -43,7 +43,7 @@ impl TagTargets<'_> {
         kw.set_item("include_groups", self.include_groups)?;
         kw.set_item("tagged_groups", &tagged)?;
         if py
-            .import("core.layers")?
+            .import("built_core.layers")?
             .call_method("tag_new_objects", (scene, &self.before), Some(&kw))?
             .is_truthy()?
         {

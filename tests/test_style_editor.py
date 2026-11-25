@@ -15,7 +15,7 @@ from tests.preferences_chrome import Controls
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 import built_core.style as style_mod  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from built_core.style import (  # noqa: E402
     Style,
     delete_user_style,

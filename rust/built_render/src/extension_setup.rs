@@ -73,6 +73,6 @@ pub(crate) fn log_failure(py: Python<'_>, message: &str, error: &PyErr) {
     // PyErr_PrintEx interprets SystemExit as a request to exit the process.
     error.display(py);
     let info = (error.get_type(py), error.value(py), error.traceback(py));
-    let _ = py.import("core.extensions")
+    let _ = py.import("built_core.extensions")
         .and_then(|backend| backend.call_method1("note_failure", (message, info)));
 }

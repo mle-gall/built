@@ -161,7 +161,7 @@ pub(super) fn preview_faces<'py>(
                     };
                     if truth("path")? && !truth("uvw")? {
                         let axes = py
-                            .import("core.texture")?
+                            .import("built_core.texture")?
                             .call_method1("face_uv_axes", (&t, f.call_method0("normal")?))?;
                         let mut uvw = vec![];
                         for axis in [0, 2] {

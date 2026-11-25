@@ -27,7 +27,7 @@ def test_scale_figure_left_of_origin_and_175(native_window):
 
 def test_billboard_group_position_offsets_anchor():
     from built_core import Vec3 as QVector3D
-    from core.group import make_billboard_group
+    from built_core.group import make_billboard_group
     g = make_billboard_group("x.png", 2.0, "P", 0.5,
                              position=QVector3D(-3.0, 1.0, 0.0))
     xs = [v.position.x() for v in g.mesh.vertices]

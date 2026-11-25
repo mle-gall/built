@@ -32,7 +32,7 @@ fn query<'p>(
     }
     scene
         .py()
-        .import("core.snap_query")?
+        .import("built_core.snap_query")?
         .call_method1("make_query", (scene.getattr("edges")?, project, (x, y)))
 }
 #[pyfunction(pass_module,signature=(refs,candidate,cx,cy,world_to_pixel,threshold_px,is_occluded=None))]
@@ -450,7 +450,7 @@ pub(super) fn _lock_line_snaps<'p>(
     }
     let q = self::query(scene, world_to_pixel, cx, cy, query)?;
     let line = (coords(start_point)?, coords(line_dir)?);
-    let point_result = py.import("core.snap_query")?.getattr("point_result")?;
+    let point_result = py.import("built_core.snap_query")?.getattr("point_result")?;
     let resolve = |midpoints: bool| -> PyResult<Option<Obj>> {
         let kw = PyDict::new(py);
         kw.set_item("midpoints", midpoints)?;

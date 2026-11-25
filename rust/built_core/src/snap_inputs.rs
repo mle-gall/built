@@ -211,7 +211,7 @@ fn point_result<'py>(
     } else {
         None
     };
-    let api = py.import("core.snap")?;
+    let api = py.import("built_core.snap")?;
     let color = api.getattr(match kind.as_str() {
         "midpoint" | "quadrant" | "arc_midpoint" => "COLOR_MIDPOINT",
         "face_center" => "COLOR_ON_FACE",
@@ -230,7 +230,7 @@ fn point_result<'py>(
     )?))
 }
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    let sub = PyModule::new(m.py(), "core.snap_query")?;
+    let sub = PyModule::new(m.py(), "built_core.snap_query")?;
     sub.add_function(wrap_pyfunction!(edge_tag, &sub)?)?;
     sub.add_function(wrap_pyfunction!(edge_columns, &sub)?)?;
     sub.add_function(wrap_pyfunction!(make_query, &sub)?)?;

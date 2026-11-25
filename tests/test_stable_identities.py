@@ -7,11 +7,11 @@ import uuid
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core import layers as L
+from built_core import layers as L
 from core.bim import tag_group, tag_faces
-from core.group import Group, copy_group
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group, copy_group
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from core.ifc_identity import compressed_guid, copied_face_attrs
 from formats import igz, clip_payload as clip
 from formats.ifc import save_ifc
@@ -136,7 +136,7 @@ def test_layer_folder_rename_save_and_template(tmp_path):
 
 def test_clipboard_keeps_tag_identity_and_paste_resolves_renames():
     from tools.paste import PasteTool
-    from core.history import History
+    from built_core.history import History
     from types import SimpleNamespace
     source = Scene()
     source.layers.append(L.Layer('Old'))
@@ -170,7 +170,7 @@ def test_legacy_file_gets_identities_on_export(tmp_path):
 
 
 def test_undo_added_tags_uses_identity_after_rename():
-    from core.history import EnsureLayersCommand
+    from built_core.history import EnsureLayersCommand
     src, dst = Scene(), Scene()
     folder = built_core.tag_edits.add_folder(src, 'Folder')
     src.layers.append(L.Layer('Wall', folder=folder))

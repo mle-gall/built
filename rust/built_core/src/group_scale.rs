@@ -18,7 +18,7 @@ fn scale(frame: &Obj<'_>) -> PyResult<[f64; 3]> {
 pub(crate) fn group_scale(group: &Obj<'_>) -> PyResult<(f64, f64, f64)> {
     let frame = group
         .py()
-        .import("core.group")?
+        .import("built_core.group")?
         .call_method1("group_frame", (group,))?;
     Ok(scale(&frame)?.into())
 }
@@ -31,7 +31,7 @@ pub(crate) fn group_scale_command<'p>(
         return Ok(None);
     }
     let py = group.py();
-    let api = py.import("core.group")?;
+    let api = py.import("built_core.group")?;
     let frame = api.call_method1("group_frame", (group,))?;
     let now = scale(&frame)?;
     let ratios = std::array::from_fn::<_, 3, _>(|i| {

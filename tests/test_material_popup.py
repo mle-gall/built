@@ -3,8 +3,8 @@
 import pytest
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from core.group import Group
-from core.materials import Material
+from built_core.group import Group
+from built_core.materials import Material
 from tests.native_tree import action, group_rows
 from built_render import chrome_sheet as sheets
 from built_render import wgpu_library as library

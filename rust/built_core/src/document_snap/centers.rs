@@ -157,7 +157,7 @@ fn center_of_edge<'py>(v: &Obj<'py>, edge: &Obj<'py>, mesh: &Obj<'py>) -> PyResu
         return Ok(none(py));
     }
     let fit = py
-        .import("core.snap")?
+        .import("built_core.snap")?
         .call_method1("fit_circle", (pts.values(),))?;
     if fit.is_none() {
         return Ok(fit);
@@ -185,7 +185,7 @@ fn center_of_face<'py>(
 ) -> PyResult<Obj<'py>> {
     let py = v.py();
     let centers = py
-        .import("core.snap")?
+        .import("built_core.snap")?
         .call_method1("curve_centers_of_face", (face, opt(group, "xform")?))?;
     let mut best = none(py);
     let mut distance = f64::INFINITY;
@@ -269,7 +269,7 @@ fn valid_center_ref<'py>(v: &Obj<'py>) -> PyResult<Obj<'py>> {
             let key = old.get_item(2)?;
             let arc = key.get_item(1)?;
             for c in py
-                .import("core.snap")?
+                .import("built_core.snap")?
                 .call_method1("curve_centers_of_face", (&src, opt(&group, "xform")?))?
                 .try_iter()?
             {

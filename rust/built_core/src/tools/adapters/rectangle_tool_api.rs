@@ -214,7 +214,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     if label.is_none() {
         return Ok(none(py));
     }
-    let fmt_pair = imported(py, "core.units")?.getattr("fmt_pair")?;
+    let fmt_pair = imported(py, "built_core.units")?.getattr("fmt_pair")?;
     [du, dv, square, mid] = unpack::<4>(&label)?;
     let text = fmt_pair.call1((&du, &dv))?.add(if square.is_truthy()? {
         ("  (Cuadrado)").into_bound_py_any(py)?

@@ -17,10 +17,10 @@ from __future__ import annotations
 import pytest
 from built_core import Vec3 as V
 
-from core.edits import build_add_edges
-from core.history import AddFaceCommand, History
+from built_core.edits import build_add_edges
+from built_core.history import AddFaceCommand, History
 from built_core.orient import is_closed, orient_outward, signed_volume
-from core.scene import Scene
+from built_core.scene import Scene
 from formats.igz import load_into, save_scene
 from tests import test_pushpull_ux as T
 
@@ -546,7 +546,7 @@ def test_1083_ring_pushed_through(past):
 
 
 def test_1083_round_ring_pushed_through():
-    from core.edits import build_add_edges as _bae  # noqa: F401
+    from built_core.edits import build_add_edges as _bae  # noqa: F401
     import math
     scene, hist = _boxed(0, 0, 0, 4, 4, 0.3)
     P = V

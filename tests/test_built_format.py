@@ -8,8 +8,8 @@ import pytest
 
 from core import _native
 from built_core import store_mesh
-from core.group import Group
-from core.scene import Scene
+from built_core.group import Group
+from built_core.scene import Scene
 from formats import built, igz
 from built_core import snapshot_steps, store_views
 

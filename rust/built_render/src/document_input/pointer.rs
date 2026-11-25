@@ -45,7 +45,7 @@ fn dispatch_tool_click(v: &Obj, event: &Obj, double: bool) -> PyResult<()> {
     {
         active.setattr(
             "work_plane",
-            py.import("core.snap")?
+            py.import("built_core.snap")?
                 .call_method1("face_plane_world", (face, opt(&group, "xform")?))?,
         )?
     }

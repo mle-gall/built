@@ -49,7 +49,7 @@ fn include(registry: &Obj<'_>, mats: &Obj<'_>, attrs: &Obj<'_>) -> PyResult<()> 
 }
 #[pyfunction]
 fn clip_encode<'p>(py: Python<'p>, clip: &Obj<'p>) -> PyResult<Obj<'p>> {
-    let scene = py.import("core.scene")?.call_method0("Scene")?;
+    let scene = py.import("built_core.scene")?.call_method0("Scene")?;
     let mesh = scene.getattr("mesh")?;
     for row in seq(clip, "faces")?.try_iter()? {
         let row = row?;
@@ -76,7 +76,7 @@ fn clip_encode<'p>(py: Python<'p>, clip: &Obj<'p>) -> PyResult<Obj<'p>> {
     }
     if registry.is_truthy()? {
         let mats = scene.getattr("materials")?;
-        let placements = py.import("core.group")?.getattr("iter_placements")?;
+        let placements = py.import("built_core.group")?.getattr("iter_placements")?;
         let face_attrs = py.import("built_core.mesh")?.getattr("face_attrs")?;
         let mut seen = HashSet::new();
         for root in groups.try_iter()? {
@@ -185,7 +185,7 @@ fn clip_decode<'p>(py: Python<'p>, data: &Obj<'p>) -> PyResult<Option<Obj<'p>>> 
     if !val(&head, "format")?.eq(1)? {
         return Ok(None);
     }
-    let scene = py.import("core.scene")?.call_method0("Scene")?;
+    let scene = py.import("built_core.scene")?.call_method0("Scene")?;
     scene_file(py, |path| {
         path.call_method1("write_bytes", (doc,))?;
         py.import("built_core.formats.igz")?

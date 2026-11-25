@@ -234,7 +234,7 @@ fn host_measured_angle<'py>(a: &Args<'py>) -> Reply<'py> {
     let degrees = a.get_item(2)?;
     let viewport = a.get_item(1)?;
     let tr = imported(py, "built_core.i18n")?.getattr("tr")?;
-    let fmt_angle_deg = imported(py, "core.units")?.getattr("fmt_angle_deg")?;
+    let fmt_angle_deg = imported(py, "built_core.units")?.getattr("fmt_angle_deg")?;
     viewport.call_method1("flash_status", (tr.call1(("Angle: {a}",))?.call_method("format", (), Some(&fields!(py; "a" => fmt_angle_deg.call((&degrees,), Some(&fields!(py; "signed" => true)))?)))?, 4000,))?;
     Ok(none(py))
 }
@@ -281,7 +281,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     if deg.is_none() {
         return Ok(none(py));
     }
-    let fmt_angle_deg = imported(py, "core.units")?.getattr("fmt_angle_deg")?;
+    let fmt_angle_deg = imported(py, "built_core.units")?.getattr("fmt_angle_deg")?;
     Ok((
         fmt_angle_deg.call((&deg,), Some(&fields!(py; "signed" => true)))?,
         tool.getattr("hover_point")?,

@@ -1,8 +1,8 @@
 """Overlap healing returns the exact removed keys in the command's order."""
 import pytest
 from built_core import MeshStore
-from core.scene import Scene
-from core.topology import heal_overlapping_faces, winding_footprint
+from built_core.scene import Scene
+from built_core.topology import heal_overlapping_faces, winding_footprint
 from tests.test_store_mesh import fingerprint
 
 

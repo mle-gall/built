@@ -43,7 +43,7 @@ fn attachment_swap<'py>(scene: &Obj<'py>) -> PyResult<Vec<(Obj<'py>, String, Obj
     for label in scene.getattr("text_labels")?.try_iter()? {
         refs.push((label?, "attachment".into()));
     }
-    let holds = module(py, "core.composition")?.getattr("sheet_holds")?;
+    let holds = module(py, "built_core.composition")?.getattr("sheet_holds")?;
     for sheet in scene.getattr("compositions")?.try_iter()? {
         let sheet = sheet?;
         for list in ["cotas", "etiquetas", "niveles"] {
@@ -124,7 +124,7 @@ pub fn begin_group_edit<'py>(scene: &Obj<'py>, group: &Obj<'py>) -> PyResult<()>
     if !nesting {
         // Tree and protocol actions can open a nested row directly.
         let parent = group.getattr("_parent")?;
-        if parent.is_instance(&module(py, "core.group")?.getattr("Group")?)? {
+        if parent.is_instance(&module(py, "built_core.group")?.getattr("Group")?)? {
             begin_group_edit(scene, &parent)?;
         }
     }
@@ -133,7 +133,7 @@ pub fn begin_group_edit<'py>(scene: &Obj<'py>, group: &Obj<'py>) -> PyResult<()>
     let entry_mesh = group.getattr("mesh")?;
     let before = scene.getattr("mesh")?;
     // The context's own axes, read before anything rewrites the placement.
-    let mut frame = module(py, "core.group")?.call_method1("group_frame", (group,))?;
+    let mut frame = module(py, "built_core.group")?.call_method1("group_frame", (group,))?;
     // The definition its sibling instances share (Hide Similar).
     let is_comp = group.getattr_opt("is_component")?;
     let definition = match is_comp {
@@ -164,7 +164,7 @@ pub fn begin_group_edit<'py>(scene: &Obj<'py>, group: &Obj<'py>) -> PyResult<()>
         attachments = attachment_swap(scene)?;
         // A singular placement needs the compatibility world copy; keep the
         // placement swaps on entry so its History step can replay them.
-        let dm = module(py, "core.doc_model")?;
+        let dm = module(py, "built_core.doc_model")?;
         let store_mesh = module(py, "built_core.store_mesh")?.getattr("StoreMesh")?;
         let depth: i64 = if entry_mesh.get_type().is(&store_mesh) { dm.call_method0("begin")?.extract()? } else { 0 };
         let entered = module(py, "built_core")?.getattr("command_protocol")?

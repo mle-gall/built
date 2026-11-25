@@ -47,7 +47,7 @@ fn error(v: &Obj, error: &Obj, word: &Obj) -> PyResult<()> {
     kw.set_item("error", error)?;
     kw.set_item("word", word)?;
     let message = py
-        .import("core.units")?
+        .import("built_core.units")?
         .getattr("Parsed")?
         .call((), Some(&kw))?
         .call_method0("message")?;
@@ -140,7 +140,7 @@ fn expression_text<'py>(
 }
 fn enter(v: &Obj, t: &Obj, buffer: &str) -> PyResult<bool> {
     let py = v.py();
-    let units = py.import("core.units")?;
+    let units = py.import("built_core.units")?;
     let unitless = opt(t, "value_is_unitless")?;
     let plain = unitless.is_callable() && unitless.call0()?.is_truthy()?;
     let length = units.call_method1("typed_context", ("length",))?;
@@ -281,7 +281,7 @@ fn pending_tool_value(tool: &Obj, buffer: &str) -> PyResult<String> {
     if unitless.is_callable() && unitless.call0()?.is_truthy()? {
         return Ok(buffer.to_owned());
     }
-    tool.py().import("core.units")?.call_method1("typed_value_text", (buffer,))?.extract()
+    tool.py().import("built_core.units")?.call_method1("typed_value_text", (buffer,))?.extract()
 }
 
 pub(super) fn register(m: &Bound<PyModule>) -> PyResult<()> {

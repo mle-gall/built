@@ -94,7 +94,7 @@ fn hits(a: &Polys, b: &Polys, same: bool) -> Vec<Segment> {
 fn placements<'p>(group: &Obj<'p>) -> PyResult<Vec<(Obj<'p>, Obj<'p>)>> {
     group
         .py()
-        .import("core.group")?
+        .import("built_core.group")?
         .call_method1("iter_placements", (group,))?
         .try_iter()?
         .map(|r| r?.extract())
@@ -135,7 +135,7 @@ fn placed_rings(group: &Obj) -> PyResult<Vec<WorldRings>> {
 fn segments_for(scene: &Obj, mode: &str, selection: Option<&Obj>) -> PyResult<Vec<(Vec3, Vec3)>> {
     let py = scene.py();
     let mesh = scene.getattr("mesh")?;
-    let group = py.import("core.group")?.getattr("Group")?;
+    let group = py.import("built_core.group")?.getattr("Group")?;
     let face = py.import("built_core.mesh")?.getattr("Face")?;
     let entities = match selection {
         Some(v) => v.clone(),
@@ -218,7 +218,7 @@ struct Mutation {
 impl Mutation {
     fn __call__(&self, scene: &Obj) -> PyResult<()> {
         let py = scene.py();
-        py.import("core.intersect")?.call_method1(
+        py.import("built_core.intersect")?.call_method1(
             "_partition_faces",
             (self.mesh.bind(py), self.segments.bind(py)),
         )?;
@@ -327,7 +327,7 @@ fn placement_cuts<'p>(py: Python<'p>, groups: &[Obj<'p>]) -> PyResult<(usize, Op
         None
     } else {
         Some(
-            py.import("core.intersect")?
+            py.import("built_core.intersect")?
                 .call_method1("_PlacementCuts", (commands,))?,
         )
     };
@@ -346,7 +346,7 @@ fn build_intersect_faces<'p>(
         None => scene.getattr("selection")?,
     };
     let sel = sel.try_iter()?.collect::<PyResult<Vec<_>>>()?;
-    let group = py.import("core.group")?.getattr("Group")?;
+    let group = py.import("built_core.group")?.getattr("Group")?;
     let mut groups = true;
     for e in &sel {
         groups &= e.is_instance(&group)?;
@@ -362,7 +362,7 @@ fn build_intersect_faces<'p>(
         return placement_cuts(py, &sel);
     }
     let mesh = scene.getattr("mesh")?;
-    let api = py.import("core.intersect")?;
+    let api = py.import("built_core.intersect")?;
     let segs = if let Some(keys) = face_keys {
         let found = py
             .import("built_core.command_protocol")?
@@ -395,7 +395,7 @@ fn build_intersect_faces<'p>(
 pub(crate) fn install(m: &Bound<PyModule>) -> PyResult<()> {
     let py = m.py();
     let ns = PyDict::new(py);
-    ns.set_item("__module__", "core.intersect")?;
+    ns.set_item("__module__", "built_core.intersect")?;
     ns.set_item("journal_parts", true)?;
     ns.set_item(
         "do",

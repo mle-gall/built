@@ -32,7 +32,7 @@ def test_an_operation_puts_the_tool_cursor_back(native_window, monkeypatch):
     vp = native_window.viewport
     native_window._activate_tool("pushpull")
     tool = vp.active_tool
-    from core.history import AddEdgeCommand
+    from built_core.history import AddEdgeCommand
     from built_core import Vec3 as V
     monkeypatch.setattr(tool, "on_click", lambda ctx: vp.history.execute(
         AddEdgeCommand(V(0, 0, 0), V(1, 0, 0))))

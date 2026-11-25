@@ -6,8 +6,8 @@ from __future__ import annotations
 import random
 
 import pytest
-from core import units  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core import units  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from examples.extensions.niveles import LengthSpinBox  # noqa: E402
 from tests.controller_surface import ControllerSurface as Viewport
 

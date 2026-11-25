@@ -12,8 +12,8 @@ from __future__ import annotations
 from built_core import ScreenPoint, Input
 from built_core import Vec3 as QVector3D
 
-from core.history import History
-from core.scene import Scene
+from built_core.history import History
+from built_core.scene import Scene
 from tests.test_fuzz_engine import V, _draw_rect
 from tools.base import ToolContext
 from tools.rust_tools import SelectTool
@@ -39,7 +39,7 @@ def _hover_over(entity, monkeypatch):
     _draw_rect(scene, vp.history, [V(0, 0), V(4, 0), V(4, 4), V(0, 4)], [])
     target = entity(scene)
     tool = SelectTool()
-    from core.mesh import Face
+    from built_core.mesh import Face
     method = "pick_face" if isinstance(target, Face) else "pick_visible_edge"
     monkeypatch.setattr(vp, method, lambda _x, _y: target, raising=False)
     tool.on_hover(ToolContext(viewport=vp, world=QVector3D(),

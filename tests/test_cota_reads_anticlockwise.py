@@ -18,7 +18,7 @@ from __future__ import annotations
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.composition import CotaItem, readable_deg
+from built_core.composition import CotaItem, readable_deg
 
 
 # ---- the rule itself ------------------------------------------------------
@@ -55,7 +55,7 @@ def test_the_standard_lives_in_the_document_and_defaults_to_iso(tmp_path):
     """It travels in the .igz, and an older file — which has no such key —
     opens as ISO, which is what those drawings were made to."""
     from pathlib import Path
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats.igz import load_into, save_scene
     assert Scene().dimension_style["norma"] == "iso"
 

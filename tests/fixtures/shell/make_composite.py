@@ -15,8 +15,8 @@ HERE = Path(__file__).resolve().parent
 def make(out: Path) -> dict:
     """Write the three files under ``out``; their paths by name."""
     from built_core import Matrix4 as QMatrix4x4
-    from core import links
-    from core.scene import Scene
+    from built_core import links
+    from built_core.scene import Scene
     from formats import igz
     out.mkdir(parents=True, exist_ok=True)
     leaf = out / "leaf.built"

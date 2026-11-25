@@ -46,8 +46,8 @@ def build_scope(viewport, scope: dict | None = None) -> dict:
     """(Re)bind the live objects an agent scripts against."""
     from built_core import Vec3 as QVector3D
     from core import bim
-    from core.group import Group
-    from core.layers import Layer
+    from built_core.group import Group
+    from built_core.layers import Layer
     from built_core.mesh import Edge, Face, Mesh, Vertex
     scope = scope if scope is not None else {"__name__": "__ai__"}
     scope.update(
@@ -67,9 +67,9 @@ def _check_scene_lists(scene) -> None:
     raised «'str' object has no attribute 'name'» until the user undid it.
     Raising here rolls the step back whole and
     tells the model what each list takes."""
-    from core.composition import Composicion
-    from core.group import Group
-    from core.layers import Layer
+    from built_core.composition import Composicion
+    from built_core.group import Group
+    from built_core.layers import Layer
     for attr, cls, hint in (
             ("layers", Layer, "Layer('nombre') (una CAPA/etiqueta)"),
             ("groups", Group, "Group(mesh, name=...)"),
@@ -88,7 +88,7 @@ def _recipe_helpers(scene) -> dict:
     error-prone lines and a token bill each time, with faceted results
     (no soft edges, wrong winding). These build correct solids instead."""
     from built_core import Vec3 as QVector3D
-    from core.group import Group
+    from built_core.group import Group
     from built_core.mesh import Mesh
     from built_core.orient import orient_outward
 
@@ -382,7 +382,7 @@ def _recipe_helpers(scene) -> dict:
         """A new sheet of the composer (a page for printing, NOT a layer)
         with one view frame filling it; the composer and the sheet tabs
         pick it up on their own."""
-        from core.composition import Composicion
+        from built_core.composition import Composicion
         comps = scene.compositions
         c = Composicion(name=name or f"Lámina {len(comps) + 1}",
                         paper=paper, landscape=landscape)
@@ -418,7 +418,7 @@ def _tidy_groups(scene) -> None:
     listed twice, or the LIST house() returns sitting in scene.groups,
     where the next paint dies on ``'list' object has no attribute
     'mesh'``. Flatten and drop repeats instead of failing the recipe."""
-    from core.group import Group
+    from built_core.group import Group
     seen, tidy = set(), []
 
     def add(item) -> None:

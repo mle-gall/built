@@ -13,9 +13,9 @@ from __future__ import annotations
 
 from built_core import Vec3 as V
 
-from core.history import MakeGroupCommand, History
-from core.layers import Layer
-from core.scene import Scene
+from built_core.history import MakeGroupCommand, History
+from built_core.layers import Layer
+from built_core.scene import Scene
 
 
 def _scene():

@@ -210,7 +210,7 @@ fn box_select<'py>(a: &Args<'py>) -> Reply<'py> {
                     module.call_method1("_box_group_fast", (&vp, &group, &rect, &crossing))?;
                 if verdict.is_none() {
                     let placements =
-                        imported(py, "core.group")?.call_method1("iter_placements", (&group,))?;
+                        imported(py, "built_core.group")?.call_method1("iter_placements", (&group,))?;
                     module
                         .call_method1("box_placements", (&vp, &rect, &crossing, placements))?
                         .is_truthy()?

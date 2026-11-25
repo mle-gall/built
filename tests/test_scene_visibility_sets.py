@@ -3,11 +3,11 @@
 import built_core
 import pytest
 
-from core import layers
-from core.group import Group
-from core.history import History
-from core.protocol.commands import run
-from core.scene import Scene
+from built_core import layers
+from built_core.group import Group
+from built_core.history import History
+from built_core.protocol.commands import run
+from built_core.scene import Scene
 from formats import igz
 from built_core import visibility_set_rows
 
@@ -85,7 +85,7 @@ def test_saved_set_edits_and_noops():
 
 
 def test_linked_tag_uses_a_host_override_and_leaves_the_source_alone(tmp_path):
-    from core import links
+    from built_core import links
     from tests.test_links import _source, _host_with_link
 
     path = _source(tmp_path / "Source.igz")

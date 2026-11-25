@@ -137,7 +137,7 @@ pub fn extra(py: Python<'_>, handle: &Bound<'_, PyAny>, kind: ItemKind, f: &Fiel
             put("label".into(), Value::Str(handle.call_method0("label")?.extract()?));
         }
         ItemKind::Label => {
-            let expand = py.import("core.composition")?.getattr("expand_fields")?;
+            let expand = py.import("built_core.composition")?.getattr("expand_fields")?;
             put("text".into(), Value::Str(expand.call1((f.text("text", ""),))?.extract()?));
         }
         ItemKind::Profile => {
@@ -146,7 +146,7 @@ pub fn extra(py: Python<'_>, handle: &Bound<'_, PyAny>, kind: ItemKind, f: &Fiel
         ItemKind::Frame => {
             // view_title_texts: the title's strings, fields expanded;
             // {escala} always reads this frame's scale.
-            let comp = py.import("core.composition")?;
+            let comp = py.import("built_core.composition")?;
             let expand = comp.getattr("expand_fields")?;
             let uid = f.text("uid", "");
             let persp = f.flag("perspective", false);
@@ -188,14 +188,14 @@ pub fn extra(py: Python<'_>, handle: &Bound<'_, PyAny>, kind: ItemKind, f: &Fiel
             put("placeholder".into(), Value::Str(tr(py, "Update the view to render", &[])?));
         }
         ItemKind::Text => {
-            let expand = py.import("core.composition")?.getattr("expand_fields")?;
+            let expand = py.import("built_core.composition")?.getattr("expand_fields")?;
             let s: String = expand.call1((f.text("text", ""), f.text("frame_uid", "")))?.extract()?;
             put("text".into(), Value::Str(s));
         }
         ItemKind::TitleBlock => {
             // The rows (its own, else the class's labelled fields), expanded;
             // an empty scale row reads the sheet's main frame.
-            let expand = py.import("core.composition")?.getattr("expand_fields")?;
+            let expand = py.import("built_core.composition")?.getattr("expand_fields")?;
             // `str(value or "")`, as Python reads them.
             let as_str = |v: Bound<'_, PyAny>| -> PyResult<String> {
                 Ok(if v.is_truthy()? { v.str()?.to_string() } else { String::new() })
@@ -224,7 +224,7 @@ pub fn extra(py: Python<'_>, handle: &Bound<'_, PyAny>, kind: ItemKind, f: &Fiel
             put("rows".into(), Value::List(out));
         }
         ItemKind::Callout => {
-            let expand = py.import("core.composition")?.getattr("expand_fields")?;
+            let expand = py.import("built_core.composition")?.getattr("expand_fields")?;
             let uid = f.text("frame_uid", "");
             for k in ["number", "sheet"] {
                 let s: String = expand.call1((f.text(k, ""), uid.clone()))?.extract()?;
@@ -265,7 +265,7 @@ pub fn paint(kind: ItemKind, f: &Fields, x: &Extra) -> Option<Vec<Op>> {
 }
 
 /// The item's box in paper mm, as its record class states it (the
-/// ``w_mm``/``h_mm`` fields, or the properties core.composition derives).
+/// ``w_mm``/``h_mm`` fields, or the properties built_core.composition derives).
 pub fn size(kind: ItemKind, f: &Fields) -> (f64, f64) {
     let field = |w: f64, h: f64| (f.num("w_mm", w), f.num("h_mm", h));
     match kind {
@@ -291,13 +291,13 @@ pub fn size(kind: ItemKind, f: &Fields) -> (f64, f64) {
     }
 }
 
-/// The primitives of sheet item ``item`` (a record of core.composition), as
+/// The primitives of sheet item ``item`` (a record of built_core.composition), as
 /// tests/sheet_paint_recorder.py records the Python painter's: a JSON list.
 /// ``profile``: a terrain profile item's ``(profile, path_name, message)``.
 #[pyfunction]
 #[pyo3(signature = (item, profile=None))]
 pub fn sheet_item_display(py: Python<'_>, item: &Bound<'_, PyAny>, profile: Option<Bound<'_, PyAny>>) -> PyResult<String> {
-    py.import("core.doc_model")?.call_method0("flush")?;
+    py.import("built_core.doc_model")?.call_method0("flush")?;
     let class = item.get_type().name()?.to_string();
     if class == "Composicion" {
         // The sheet itself: its border on the margin rectangle.
@@ -327,7 +327,7 @@ pub fn sheet_item_display(py: Python<'_>, item: &Bound<'_, PyAny>, profile: Opti
 #[pyo3(signature = (frame, content=None, content_only=false))]
 pub fn sheet_frame_display(py: Python<'_>, frame: &Bound<'_, PyAny>, content: Option<Bound<'_, pyo3::types::PyDict>>,
                            content_only: bool) -> PyResult<String> {
-    py.import("core.doc_model")?.call_method0("flush")?;
+    py.import("built_core.doc_model")?.call_method0("flush")?;
     let key = crate::doc::py::handle_key(frame)?;
     let f = super::model::read_fields(key)?;
     let x = extra(py, frame, ItemKind::Frame, &f, None)?;
@@ -453,7 +453,7 @@ pub fn frame_content(d: Option<&Bound<'_, pyo3::types::PyDict>>, key: crate::doc
 /// The box of sheet item ``item`` in paper mm: ``(w, h)``.
 #[pyfunction]
 pub fn sheet_item_size(py: Python<'_>, item: &Bound<'_, PyAny>) -> PyResult<(f64, f64)> {
-    py.import("core.doc_model")?.call_method0("flush")?;
+    py.import("built_core.doc_model")?.call_method0("flush")?;
     let class = item.get_type().name()?.to_string();
     let kind = ItemKind::of_class(&class)
         .ok_or_else(|| pyo3::exceptions::PyValueError::new_err(format!("not a sheet item: {class}")))?;

@@ -262,7 +262,7 @@ fn run_make_nested(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<
                 let mesh = py.import("built_core.mesh")?.getattr("Mesh")?.call0()?;
                 let kw = pyo3::types::PyDict::new(py);
                 kw.set_item("name", s.arg(py, 2))?;
-                py.import("core.group")?.getattr("Group")?.call((mesh,), Some(&kw))?
+                py.import("built_core.group")?.getattr("Group")?.call((mesh,), Some(&kw))?
             }
         }
     };

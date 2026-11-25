@@ -6,9 +6,9 @@ from types import SimpleNamespace
 
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
-from core.group import Group
-from core.mesh import Mesh
-from core.layers import Layer
+from built_core.group import Group
+from built_core.mesh import Mesh
+from built_core.layers import Layer
 from plugins.ai_bridge import _Bridge
 from views.extension_api import ExtensionApp
 from tests.test_ai_bridge import _ask
@@ -231,9 +231,9 @@ def test_noop_mutating_tool_preserves_redo(model):
 def test_tree_walk_is_cached_until_the_document_changes():
     from types import SimpleNamespace
     from core.agent_inspection import InspectionTools
-    from core.group import Group
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
     scene = Scene()
     scene.groups.append(Group(Mesh(), 'A'))
     tools = InspectionTools()

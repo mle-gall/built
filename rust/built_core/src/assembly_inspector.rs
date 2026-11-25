@@ -11,7 +11,7 @@ type Obj<'py> = Bound<'py, PyAny>;
 /// Resolve locks and source ownership on the persisted occurrence. The
 /// viewport's transient owner is only populated for some display proxies.
 pub(crate) fn writable(scene: &Obj<'_>, group: &Obj<'_>) -> PyResult<bool> {
-    let group_type = scene.py().import("core.group")?.getattr("Group")?;
+    let group_type = scene.py().import("built_core.group")?.getattr("Group")?;
     let mut at = group.clone();
     while at.is_instance(&group_type)? {
         if scene.call_method1("entity_locked", (&at,))?.is_truthy()?
@@ -78,7 +78,7 @@ pub(crate) fn assembly_selection<'py>(
 pub(crate) fn part_measures<'py>(group: &Obj<'py>) -> PyResult<Bound<'py, PyDict>> {
     let py = group.py();
     let reader = py.import("built_core.parts")?;
-    let units = py.import("core.units")?;
+    let units = py.import("built_core.units")?;
     let out = PyDict::new(py);
     for row in reader.call_method1("part_rows", (group,))?.try_iter()? {
         let row = row?;
@@ -175,7 +175,7 @@ impl AssemblyPreview {
             .collect::<PyResult<Vec<_>>>()?;
         let offsets = explode_offsets(centres, 1., mode)?;
         let frame = py
-            .import("core.outliner")?
+            .import("built_core.outliner")?
             .call_method1("world_matrix", (scene.getattr("groups")?, group))?;
         let world = |v: glam::DVec3| -> PyResult<glam::DVec3> {
             if frame.is_none() {

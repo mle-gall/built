@@ -81,7 +81,7 @@ fn texture_average<'p>(path: &Obj<'p>, cache: Option<&Obj<'p>>) -> PyResult<Obj<
     let py = path.py();
     let cache = match cache {
         Some(c) => c.clone(),
-        None => py.import("core.vista_caras")?.getattr("_texture_cache")?,
+        None => py.import("built_core.vista_caras")?.getattr("_texture_cache")?,
     };
     if cache.contains(path)? {
         return cache.get_item(path);
@@ -103,7 +103,7 @@ type Item<'p> = (Obj<'p>, Obj<'p>, Obj<'p>, Obj<'p>);
 fn _faces_of<'p>(scene: &Obj<'p>) -> PyResult<Vec<Item<'p>>> {
     let py = scene.py();
     let tags = py.import("built_core")?.getattr("tag_styles")?;
-    let layers = py.import("core.layers")?;
+    let layers = py.import("built_core.layers")?;
     let layer_of = layers.getattr("layer_of")?;
     let default = layers.getattr("DEFAULT_LAYER")?;
     let none = py.None().into_bound(py);
@@ -363,7 +363,7 @@ fn view_faces<'p>(
     let mut casters = Vec::new();
     let tick = progress(py)?;
     let mats = py.import("built_core.materials")?;
-    let class = py.import("core.vista_caras")?.getattr("FaceFill")?;
+    let class = py.import("built_core.vista_caras")?.getattr("FaceFill")?;
     for ((face, m, paint, layer), g) in items.into_iter().zip(geo) {
         tick.call0()?;
         let Some(g) = g else { continue };
@@ -433,7 +433,7 @@ fn view_faces<'p>(
                     .getattr("Vec3")?
                     .call1((n[0], n[1], n[2]))?;
                 let axes = py
-                    .import("core.texture")?
+                    .import("built_core.texture")?
                     .call_method1("face_uv_axes", (&texture, vec))?;
                 if let Some(pins) = pins(&g.world[0], n, &proj, &axes)? {
                     let t = PyDict::new(py);
@@ -549,7 +549,7 @@ pub(crate) fn install(m: &Bound<'_, PyModule>) -> PyResult<()> {
         field(0_f64.into_pyobject(py)?.into_any())?,
     ))?;
     let cls = dc.call_method1("make_dataclass", ("FaceFill", fields))?;
-    cls.setattr("__module__", "core.vista_caras")?;
+    cls.setattr("__module__", "built_core.vista_caras")?;
     m.add("FaceFill", cls)?;
     m.add("MATTE_LIGHT", array1(py, &light())?)?;
     m.add("SHADOW_OPACITY_MIN", 0.7)?;

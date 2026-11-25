@@ -14,10 +14,10 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edges
-from core.history import CoplanarMergeCommand, History
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.edits import build_add_edges
+from built_core.history import CoplanarMergeCommand, History
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from tools.pushpull import PushPullTool
 
 
@@ -194,7 +194,7 @@ def test_overhang_push_consumes_base_despite_unsplit_host_wall():
     # Pushing the cubito's front wall outward must still consume the base (treat
     # the coplanar host wall as carrying the edge as a sub-segment) — otherwise a
     # free extrusion leaves the base as an internal partition wall.
-    from core.topology import classify_push_edge
+    from built_core.topology import classify_push_edge
 
     X0, X1, XC = 0.0, 4.0, 2.0
     Y0, Y1, YC = 0.0, 6.0, 1.5
@@ -233,7 +233,7 @@ def test_overhang_push_consumes_base_despite_unsplit_host_wall():
 
 
 def test_stitch_resolves_t_junction_then_merges_coplanar():
-    from core.history import StitchSolidCommand
+    from built_core.history import StitchSolidCommand
 
     # Three coplanar quads tile a 4×2 rectangle, but the left quad carries the
     # shared boundary as one edge while the right side splits it at a midpoint —
@@ -259,7 +259,7 @@ def test_stitch_resolves_t_junction_then_merges_coplanar():
 
 
 def test_refine_loop_inserts_collinear_t_junction():
-    from core.topology import refine_loop_with_points
+    from built_core.topology import refine_loop_with_points
 
     loop = [V(0, -2, 3), V(0, 2, 3), V(0, 2, 5), V(0, -2, 5)]
     refined = refine_loop_with_points(loop, [V(0, 0, 3), V(9, 9, 9)])
@@ -307,7 +307,7 @@ def test_push_wall_whose_base_edge_spans_a_t_junction():
 # ---- erase a coplanar divider edge → faces merge ----------------------------
 
 def test_erase_coplanar_divider_merges_faces():
-    from core.history import EraseSelectionCommand
+    from built_core.history import EraseSelectionCommand
 
     scene = Scene()
     hist = History(scene)
@@ -329,7 +329,7 @@ def test_erase_coplanar_divider_merges_faces():
 
 
 def test_erase_non_coplanar_edge_cascades_faces():
-    from core.history import EraseSelectionCommand
+    from built_core.history import EraseSelectionCommand
 
     scene = Scene()
     hist = History(scene)
@@ -357,7 +357,7 @@ def test_stitch_leaves_a_t_junction_outside_the_operation_alone():
     re-topologise distant geometry — on an imported barbecue, pushing one brick
     split eight edges a metre off, and a drag preview (which reverts each frame)
     redid that work on every mouse move."""
-    from core.history import StitchSolidCommand
+    from built_core.history import StitchSolidCommand
 
     scene = Scene()
     hist = History(scene)

@@ -9,12 +9,12 @@ from __future__ import annotations
 import pytest
 from built_core import Vec3 as V
 
-from core import mesh as M
-from core.group import Group
-from core.history import History, InsertGroupCommand
-from core.materials import Material
-from core.protocol import commands as C
-from core.scene import Scene
+from built_core import mesh as M
+from built_core.group import Group
+from built_core.history import History, InsertGroupCommand
+from built_core.materials import Material
+from built_core.protocol import commands as C
+from built_core.scene import Scene
 from built_render import wgpu_library as L
 
 
@@ -290,7 +290,7 @@ def test_create_material_reuses_the_same_recipe():
 
 
 def test_raw_colour_paint_creates_or_reuses_a_named_material():
-    from core.material_commands import material_for_paint
+    from built_core.material_commands import material_for_paint
     sc, _h = _painted_scene()
     same = material_for_paint(sc, color=(0.4, 0.42, 0.45))
     assert same is sc.materials["Steel grey"]
@@ -322,7 +322,7 @@ def test_paint_tool_stamps_a_name_on_a_raw_colour(monkeypatch):
 
 
 def test_unnamed_colours_and_name_these():
-    from core.material_commands import unnamed_colours
+    from built_core.material_commands import unnamed_colours
     sc, h = _painted_scene()
     a = sc.mesh.add_face([V(0, 8, 0), V(1, 8, 0), V(1, 9, 0)])
     b = sc.mesh.add_face([V(3, 8, 0), V(4, 8, 0), V(4, 9, 0)])

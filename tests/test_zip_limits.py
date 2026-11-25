@@ -13,7 +13,7 @@ import pytest
 
 from built_core import ArchiveTooLarge, check_archive
 from built_core.paths import app_root
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import igz
 
 #: Enough to be over RATIO_FROM, as uniform as a bomb's: about 40 KB packed.

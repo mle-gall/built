@@ -13,9 +13,9 @@ import math
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.group import Group
-from core.mesh import Edge, Face, Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.mesh import Edge, Face, Mesh
+from built_core.scene import Scene
 from built_core import resident_prepare as prepare
 from built_core import pack_scene
 from tests.headless_gpu import HeadlessView, mouse

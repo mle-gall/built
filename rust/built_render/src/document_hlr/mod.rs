@@ -61,7 +61,7 @@ impl<'py> Parts<'py> {
         let mut normals = Vec::new();
         let mut htags = Vec::new();
         let mut stags = Vec::new();
-        let layer = py.import("core.layers")?.getattr("layer_of")?;
+        let layer = py.import("built_core.layers")?.getattr("layer_of")?;
         for e in scene.getattr("loose_mesh")?.getattr("edges")?.try_iter()? {
             let e = e?;
             if opt(&e, "hidden")?.is_truthy()? || !visible(scene, &e)? {
@@ -414,7 +414,7 @@ fn hlr_geometry<'py>(v: &Obj<'py>, tags: bool) -> PyResult<Obj<'py>> {
         tri_tags = Some(np.call_method1("empty", (0, "object"))?)
     }
     let ga = opt(&idx, "gedge_a")?;
-    let layer = py.import("core.layers")?.getattr("layer_of")?;
+    let layer = py.import("built_core.layers")?.getattr("layer_of")?;
     if !ga.is_none() && ga.len()? > 0 {
         let groups = idx.getattr("gedge_groups")?;
         let gi = idx.getattr("gedge_gi")?;
@@ -442,7 +442,7 @@ fn hlr_geometry<'py>(v: &Obj<'py>, tags: bool) -> PyResult<Obj<'py>> {
             for g in groups.try_iter()? {
                 owners.push(layer.call1((g?,))?)
             }
-            owners.push(py.import("core.layers")?.getattr("DEFAULT_LAYER")?);
+            owners.push(py.import("built_core.layers")?.getattr("DEFAULT_LAYER")?);
             let t = objects(py, owners)?.get_item(gi.get_item(&sel)?)?;
             let own = opt(&idx, "gedge_layer")?;
             if !own.is_none() {

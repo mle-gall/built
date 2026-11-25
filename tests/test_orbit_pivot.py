@@ -98,7 +98,7 @@ def test_an_empty_scene_turns_about_the_target(native_host):
 
 
 def test_orbit_about_keeps_distance_level_horizon_and_the_pivot():
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     cam = OrbitCamera()
     cam.target = V(10, 0, 0)
     cam.distance = 30.0

@@ -226,7 +226,7 @@ impl EditTexturedMaterial {
             return Ok(tex);
         }
         let s: &RecordStep = &*slf.as_super();
-        let texture = py.import("core.texture")?;
+        let texture = py.import("built_core.texture")?;
         let out = py.get_type::<PyDict>().call1((tex,))?;
         let size = s.arg(py, 3);
         if !size.is_none() {

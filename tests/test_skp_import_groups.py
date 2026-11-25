@@ -21,7 +21,7 @@ from built_core import Matrix4 as QMatrix4x4
 
 pytest.importorskip("openskp")
 
-from core.scene import Scene  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from formats.skp import load_skp  # noqa: E402
 
 _FILE = Path(__file__).parent / "data" / "test_export.skp"

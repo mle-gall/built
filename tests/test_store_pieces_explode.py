@@ -18,17 +18,17 @@ from pathlib import Path
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core import mesh as M
+from built_core import mesh as M
 from built_core import store_mesh as S
-from core.group import Group, world_mesh
-from core.history import (DeleteEdgesCommand, ExplodeGroupCommand, History,
+from built_core.group import Group, world_mesh
+from built_core.history import (DeleteEdgesCommand, ExplodeGroupCommand, History,
                           SplitIntoPiecesCommand)
-from core.layers import Layer
-from core.pieces import connected_parts, solid_parts, split_into_pieces
-from core.protocol import commands as C
-from core.protocol.keys import mesh_key
-from core.purge import layer_counts, used_layers, used_materials
-from core.scene import Scene
+from built_core.layers import Layer
+from built_core.pieces import connected_parts, solid_parts, split_into_pieces
+from built_core.protocol import commands as C
+from built_core.protocol.keys import mesh_key
+from built_core.purge import layer_counts, used_layers, used_materials
+from built_core.scene import Scene
 from tests.test_core_protocol import _expected, _got, _inverse, _read
 from tests.test_store_mesh import fingerprint, pytestmark as store_required
 from core._native import available, qt_hypot
@@ -476,7 +476,7 @@ def test_random_pieces_match_python(seed):
     assert fingerprint(py) == fingerprint(st)
     for fn in (solid_parts, connected_parts):
         assert _by_index(py, fn(py)) == _by_index(st, fn(st)), fn.__name__
-    from core.pieces import copy_part
+    from built_core.pieces import copy_part
     for (fa, ea), (fb, eb) in zip(solid_parts(py), solid_parts(st)):
         assert fingerprint(copy_part(fa, ea)) == fingerprint(copy_part(fb, eb))
 

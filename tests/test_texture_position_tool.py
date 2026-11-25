@@ -17,8 +17,8 @@ import pytest
 from built_core import ScreenPoint, Input
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edges
-from core.texture import face_uv_axes
+from built_core.edits import build_add_edges
+from built_core.texture import face_uv_axes
 from tools.base import ToolContext
 from tools.texture_position import (PIN_MOVE, PIN_SCALE_ROTATE,
                                     PIN_SCALE_SHEAR, TexturePositionTool)

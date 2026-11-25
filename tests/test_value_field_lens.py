@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from built_core import PixelPoint as QPoint
 
-from core.camera import OrbitCamera
+from built_core.camera import OrbitCamera
 
 
 class _Renderer:

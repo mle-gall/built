@@ -21,9 +21,9 @@ from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Vec3 as QVector3D
 
 
-from core.history import History, SetFaceBackCommand              # noqa: E402
-from core.materials import Material, back_is_default, is_translucent  # noqa: E402
-from core.scene import Scene                                      # noqa: E402
+from built_core.history import History, SetFaceBackCommand              # noqa: E402
+from built_core.materials import Material, back_is_default, is_translucent  # noqa: E402
+from built_core.scene import Scene                                      # noqa: E402
 from tools.base import ToolContext                                # noqa: E402
 from tools.paint import PaintTool, clicked_back_side              # noqa: E402
 
@@ -217,8 +217,8 @@ def test_el_trozo_lleva_los_triangulos_del_reves_por_defecto():
     a partir de ``chunk["dback"]``: solo las caras con reverso por defecto y
     frente opaco entran."""
     from tests.test_pick_index import _VP, _bind
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     scene = Scene()
     m = Mesh()
     defecto = m.add_face([V(0, 0), V(1, 0), V(1, 1), V(0, 1)])
@@ -247,7 +247,7 @@ def test_la_huella_del_trozo_ve_el_reves_la_opacidad_y_el_mapa():
     solo miraba color, textura y capa, así que el trozo viejo se daba por
     bueno. El reverso, la translucidez y un mapa posicionado también son
     lo que el trozo hornea."""
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     from tests.controller_surface import ControllerSurface as Viewport
     m = Mesh()
     f = _quad(m)
@@ -270,8 +270,8 @@ def test_los_trozos_se_distinguen_por_numero_de_construccion_no_por_id():
     instancia y la entrada GL derivadas del viejo se daban por vigentes.
     Cada construcción lleva ahora su número."""
     from built_core import Matrix4 as QMatrix4x4
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from tests.test_pick_index import _VP, _bind
     scene = Scene()
     proto = Mesh()
@@ -307,8 +307,8 @@ def test_el_tinte_del_reves_viaja_con_la_instancia_al_moverla():
     donde el arco estaba."""
     import numpy as np
     from built_core import Matrix4 as QMatrix4x4
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from tests.test_pick_index import _VP, _bind
     from tests.controller_surface import ControllerSurface as Viewport
     scene = Scene()
@@ -346,8 +346,8 @@ def test_una_instancia_espejada_conserva_el_frente_de_sus_caras():
     trozo horneado (selección, siluetas) sigue con el giro corregido."""
     import numpy as np
     from built_core import Matrix4 as QMatrix4x4
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from tests.test_pick_index import _VP, _bind
     from tests.controller_surface import ControllerSurface as Viewport
     scene = Scene()

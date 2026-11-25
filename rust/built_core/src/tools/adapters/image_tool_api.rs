@@ -75,7 +75,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let tool = a.get_item(0)?;
     let u: Obj<'py>;
     let v: Obj<'py>;
-    let fmt_pair = imported(py, "core.units")?.getattr("fmt_pair")?;
+    let fmt_pair = imported(py, "built_core.units")?.getattr("fmt_pair")?;
     if tool.getattr("armed")?.is_truthy()?
         && !tool.getattr("start_point")?.is_none()
         && !tool.getattr("hover_point")?.is_none()

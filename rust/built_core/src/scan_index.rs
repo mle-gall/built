@@ -160,7 +160,7 @@ impl Scan {
             return Ok(hit);
         }
         let hit = py
-            .import("core.topology")?
+            .import("built_core.topology")?
             .call_method1("_key", (self.vec(py, v)?,))?;
         dict.set_item(v, &hit)?;
         Ok(hit)

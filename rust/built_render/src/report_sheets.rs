@@ -5,7 +5,7 @@
 //!
 //! What stays Python is what each one reports on or acts through: the
 //! extension installer and discovery (`built_core.extension_manager`,
-//! `core.extensions`), the parts of an assembly (`built_core.parts`) and the
+//! `built_core.extensions`), the parts of an assembly (`built_core.parts`) and the
 //! document's units, history and selection.
 use pyo3::{
     exceptions::PyValueError,
@@ -231,7 +231,7 @@ impl AboutSheet {
 /// group with children, else the group open for editing.
 pub fn assembly_of<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
     let py = scene.py();
-    let group_cls = py.import("core.group")?.getattr("Group")?;
+    let group_cls = py.import("built_core.group")?.getattr("Group")?;
     let sel: Vec<Bound<'py, PyAny>> = scene.getattr("selection")?.try_iter()?.collect::<PyResult<_>>()?;
     let group = if sel.len() == 1 && sel[0].is_instance(&group_cls)? { Some(sel[0].clone()) } else { None };
     let has_children = |g: &Bound<'py, PyAny>| opt(g, "children").is_some_and(|c| c.is_truthy().unwrap_or(false));
@@ -300,7 +300,7 @@ impl CutListSheet {
         }
         let assembly = assembly_of(&scene)?;
         self.built_for = Some(sig);
-        let fine = py.import("core.units")?.getattr("fmt_len_fine")?;
+        let fine = py.import("built_core.units")?.getattr("fmt_len_fine")?;
         let parts = PyList::empty(py);
         let rows = py.import("built_core.parts")?.call_method1("part_rows", (assembly.as_ref().map_or_else(|| py.None().into_bound(py), |a| a.clone()),))?;
         for r in rows.try_iter()? {
@@ -419,28 +419,15 @@ fn cut_list_csv(table: &Bound<'_, PyAny>, tab: bool) -> PyResult<String> {
 
 // ---- Extensions -----------------------------------------------------------------------
 
-/// The Extension Manager: the installed, browse and update lists of the
-/// Rust `ExtensionBrowser`, previews fetched on a host worker pool, and the
-/// installer's operations, which stay Python (plugins).
+/// Manage installed extensions and bundled examples.
 #[pyclass(module = "built_render", dict)]
 pub struct ExtensionsSheet {
     #[pyo3(get)]
     model: Py<PyAny>,
-    #[pyo3(get, set)]
-    catalog: Py<PyAny>,
     #[pyo3(get)]
     bundled: Py<PyAny>,
     #[pyo3(get, set)]
-    cache: Py<PyAny>,
-    #[pyo3(get)]
-    pool: Py<PyAny>,
-    #[pyo3(get, set)]
-    refreshing: Option<Py<PyAny>>,
-    #[pyo3(get)]
-    requests: Py<PyDict>,
-    #[pyo3(get, set)]
     reload: bool,
-    timer: Option<Py<PyAny>>,
     #[pyo3(get)]
     entries: Py<PyDict>,
     #[pyo3(get)]
@@ -456,11 +443,6 @@ fn manager(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
     py.import("built_core.extension_manager")
 }
 
-fn now_ms(py: Python<'_>) -> PyResult<u64> {
-    let t: f64 = py.import("time")?.call_method0("monotonic")?.extract()?;
-    Ok((t * 1000.0) as u64)
-}
-
 impl ExtensionsSheet {
     /// What the installer and discovery know now, for the model.
     fn snapshot(&self, py: Python<'_>, win: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -471,14 +453,6 @@ impl ExtensionsSheet {
             let e = e?;
             entries.set_item(e.getattr("id")?, e)?;
         }
-        let catalog = self.catalog.bind(py);
-        let has_catalog = catalog.is_truthy()?;
-        if has_catalog {
-            for e in catalog.getattr("extensions")?.try_iter()? {
-                let e = e?;
-                entries.set_item(e.getattr("id")?, e)?;
-            }
-        }
         let states = em.call_method0("extension_startup_state")?;
         let hands = self.hands.bind(py);
         hands.clear();
@@ -487,18 +461,8 @@ impl ExtensionsSheet {
             hands.set_item(em.call_method1("hand_installed_ident", (&p,))?, p)?;
         }
         let vars = py.import("builtins")?.getattr("vars")?;
-        let catalog_rows = PyDict::new(py);
-        let incompatible = PyList::empty(py);
-        let old = PyList::empty(py);
-        for (k, e) in entries.iter() {
-            catalog_rows.set_item(&k, vars.call1((&e,))?)?;
-            if !em.call_method1("compatible_with_current", (&e,))?.is_truthy()? {
-                incompatible.append(&k)?;
-            }
-            if em.call_method1("tested_version_is_old", (&e,))?.is_truthy()? {
-                old.append(&k)?;
-            }
-        }
+        let bundled_rows = PyDict::new(py);
+        for (k,e) in entries.iter() { bundled_rows.set_item(k, vars.call1((e,))?)?; }
         let managed = PyDict::new(py);
         for k in states.try_iter()? {
             let k = k?;
@@ -508,7 +472,7 @@ impl ExtensionsSheet {
         for (k, p) in hands.iter() {
             hand_paths.set_item(k, p.str()?)?;
         }
-        let exts = py.import("core.extensions")?;
+        let exts = py.import("built_core.extensions")?;
         let shipped = PyDict::new(py);
         let first_dir = exts.call_method0("plugin_dirs")?.get_item(0)?;
         for row in exts.call_method1("installed_candidates", (first_dir,))?.try_iter()? {
@@ -516,25 +480,20 @@ impl ExtensionsSheet {
             shipped.set_item(row.get_item(0)?, row.get_item(1)?.str()?)?;
         }
         let d = PyDict::new(py);
-        d.set_item("catalog", catalog_rows)?;
+        d.set_item("bundled_info", bundled_rows)?;
         d.set_item("states", &states)?;
         d.set_item("managed", managed)?;
         d.set_item("hands", hand_paths)?;
         d.set_item("shipped", shipped)?;
         d.set_item("startup", opt(win, "_extension_startup_state").unwrap_or_else(|| states.clone()))?;
-        d.set_item("fetched", if has_catalog { catalog.getattr("fetched_at")? } else { "".into_pyobject(py)?.into_any() })?;
         d.set_item("safe", em.call_method0("safe_mode")?)?;
         d.set_item("disabled", PyList::new(py, em.call_method0("disabled_overrides")?.try_iter()?.collect::<PyResult<Vec<_>>>()?)?)?;
-        d.set_item("reviewed", if has_catalog { catalog.getattr("reviewed")? } else { PyDict::new(py).into_any() })?;
         let running = match opt(win, "_running_extensions") {
             Some(r) => PyList::new(py, r.try_iter()?.collect::<PyResult<Vec<_>>>()?)?,
             None => PyList::empty(py),
         };
         d.set_item("running", running)?;
         d.set_item("errors", opt(win, "_extension_load_errors").unwrap_or_else(|| PyDict::new(py).into_any()))?;
-        d.set_item("incompatible", incompatible)?;
-        d.set_item("old", old)?;
-        d.set_item("cache", self.cache.bind(py).str()?)?;
         d.set_item("lang", py.import("built_core.i18n")?.call_method0("current_language")?)?;
         d.set_item("build", py.import("built_core.version")?.getattr("__version__")?)?;
         let text = py.import("json")?.getattr("dumps")?.call((d,), Some(&[("default", py.import("builtins")?.getattr("str")?)].into_py_dict(py)?))?;
@@ -570,19 +529,10 @@ impl ExtensionsSheet {
     fn new(py: Python<'_>) -> PyResult<Self> {
         let em = manager(py)?;
         let model = py.import("built_render")?.getattr("ExtensionBrowser")?.call0()?;
-        let pool_kwargs = [("max_workers", 3i32.into_pyobject(py)?.into_any()), ("thread_name_prefix", "catalog".into_pyobject(py)?.into_any())].into_py_dict(py)?;
-        let pool = py.import("concurrent.futures")?.getattr("ThreadPoolExecutor")?.call((), Some(&pool_kwargs))?;
-        let cache = py.import("built_core.autosave")?.call_method0("_app_data_base")?.div("extension-screenshots")?;
         Ok(Self {
             model: model.unbind(),
-            catalog: em.call_method0("load_cached_catalog")?.unbind(),
             bundled: em.call_method0("bundled_extensions")?.unbind(),
-            cache: cache.unbind(),
-            pool: pool.unbind(),
-            refreshing: None,
-            requests: PyDict::new(py).unbind(),
             reload: true,
-            timer: None,
             entries: PyDict::new(py).unbind(),
             hands: PyDict::new(py).unbind(),
         })
@@ -593,83 +543,19 @@ impl ExtensionsSheet {
         "extensions"
     }
 
-    fn closed(&mut self, py: Python<'_>, _ctx: &Bound<'_, PyAny>) -> PyResult<()> {
-        let kwargs = [("wait", false), ("cancel_futures", true)].into_py_dict(py)?;
-        self.pool.bind(py).call_method("shutdown", (), Some(&kwargs))?;
-        if let Some(timer) = self.timer.take() {
-            timer.bind(py).call_method0("stop")?;
-            timer.bind(py).call_method0("deleteLater")?;
-        }
-        Ok(())
-    }
-
-    fn signature(&mut self, py: Python<'_>, ctx: &Bound<'_, PyAny>) -> PyResult<(u64, bool)> {
-        let em = manager(py)?;
-        let now = now_ms(py)?;
-        let model = self.model.bind(py);
-        let requests = self.requests.bind(py);
-        for (icon, job) in requests.copy()?.iter() {
-            if job.call_method0("done")?.is_truthy()? {
-                requests.del_item(&icon)?;
-                let result = if job.call_method0("exception")?.is_none() { job.call_method0("result")? } else { py.None().into_bound(py) };
-                model.call_method1("preview_done", (icon, now, result))?;
-            }
-        }
-        for job in model.call_method1("jobs", (now,))?.try_iter()? {
-            let job = job?;
-            let fut = self.pool.bind(py).call_method1("submit", (job.getattr("run")?, em.getattr("download")?))?;
-            requests.set_item(job.getattr("icon")?, fut)?;
-        }
-        if model.call_method0("pending")?.is_truthy()? || self.refreshing.is_some() {
-            if let Some(host) = opt(&ctx.getattr("win")?, "_host") {
-                host.call_method1("wake_after", (100,))?;
-            } else if let Some(view) = opt(ctx, "view") {
-                if self.timer.is_none() {
-                    let timer = py.import("built_core.timers")?.call_method1("timer", (&view, view.getattr("update")?))?;
-                    self.timer = Some(timer.unbind());
-                }
-                let timer = self.timer.as_ref().expect("made above").bind(py);
-                if !timer.call_method0("isActive")?.is_truthy()? {
-                    timer.call_method1("start", (100,))?;
-                }
-            }
-        }
-        let done = match &self.refreshing {
-            Some(r) => r.bind(py).call_method0("done")?.is_truthy()?,
-            None => false,
-        };
-        Ok((model.getattr("revision")?.extract()?, done))
+    fn signature(&self, py: Python<'_>, _ctx: &Bound<'_, PyAny>) -> PyResult<(u64,bool)> {
+        Ok((self.model.bind(py).getattr("revision")?.extract()?, self.reload))
     }
 
     fn build<'py>(&mut self, py: Python<'py>, ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         let t = tr(py)?;
         let model = self.model.bind(py).clone();
-        if let Some(refreshing) = self.refreshing.as_ref().map(|r| r.bind(py).clone()) {
-            if refreshing.call_method0("done")?.is_truthy()? {
-                match refreshing.call_method0("result") {
-                    Ok(catalog) => {
-                        let cached = catalog.getattr("from_cache")?.is_truthy()?;
-                        model.setattr("notice", t.call1((if cached { "Cached catalog" } else { "Catalog refreshed" },))?)?;
-                        self.catalog = catalog.unbind();
-                    }
-                    Err(e) => {
-                        let kwargs = [("error", e.value(py).str()?)].into_py_dict(py)?;
-                        model.setattr("notice", t.call(("Could not refresh catalog: {error}",), Some(&kwargs))?)?;
-                    }
-                }
-                self.refreshing = None;
-                self.reload = true;
-            }
-        }
         if self.reload {
             self.snapshot(py, &ctx.getattr("win")?)?;
             self.reload = false;
         }
         let spec: String = model.call_method1("sheet", (&t,))?.extract()?;
         let sheet = spec_sheet(py, &spec)?;
-        for icon in model.call_method0("icons")?.try_iter()? {
-            sheet.getattr("icon")?.call1(icon?.cast_into::<pyo3::types::PyTuple>()?)?;
-        }
         Ok(sheet)
     }
 
@@ -689,13 +575,8 @@ impl ExtensionsSheet {
         let model = slf.borrow().model.bind(py).clone();
         let win = ctx.getattr("win")?;
         let action = if verb != "verb" {
-            if verb == "tab" {
-                slf.borrow_mut().reload = true;
-            }
-            if !model.call_method1("receive", (verb, args))?.is_truthy()? {
-                return Ok(());
-            }
-            "refresh".to_owned()
+            model.call_method1("receive", (verb, args))?;
+            return Ok(());
         } else {
             args.first().cloned().unwrap_or_default()
         };
@@ -708,13 +589,13 @@ impl ExtensionsSheet {
         };
         let result = (|| -> PyResult<bool> {
             match action.as_str() {
-                "refresh" => {
-                    let mut me = slf.borrow_mut();
-                    if me.refreshing.is_none() {
-                        me.refreshing = Some(me.pool.bind(py).call_method1("submit", (em.getattr("refresh_catalog")?,))?.unbind());
-                        model.setattr("notice", t.call1(("Refreshing catalog…",))?)?;
-                    }
-                    return Ok(false);
+                "local_file" => {
+                    let title = t.call1(("Install local extension",))?;
+                    let path = py.import("built_render.shell_files")?.getattr("ShellFileDialog")?
+                        .call_method1("getOpenFileName", (&win, &title, "", "Extensions (*.py *.zip)"))?.get_item(0)?;
+                    if !path.is_truthy()? { return Ok(false); }
+                    if !ask(&title, &path)? { return Ok(false); }
+                    em.call_method1("install_local_file", (path,))?;
                 }
                 "safe" => {
                     let safe = em.call_method0("safe_mode")?.is_truthy()?;
@@ -742,10 +623,8 @@ impl ExtensionsSheet {
                     match op.as_str() {
                         "install" | "replace" => {
                             let copies = Py::new(py, ConfirmCopies { sheet: slf.clone().into_any().unbind(), win: win.clone().unbind(), ident: ident.clone() })?;
-                            let ids = pyo3::types::PySet::new(py, entries.keys().iter())?;
                             let kwargs = PyDict::new(py);
                             kwargs.set_item("confirm_manual_copies", copies)?;
-                            kwargs.set_item("catalog_ids", ids)?;
                             let installer = em.getattr(if op == "install" { "install_extension" } else { "replace_hand_installed" })?;
                             installer.call((need(&entries, &ident)?,), Some(&kwargs))?;
                         }
@@ -762,10 +641,6 @@ impl ExtensionsSheet {
                         "uninstall" => {
                             em.call_method1("uninstall_extension", (&ident,))?;
                         }
-                        "repository" => {
-                            open_url(need(&entries, &ident)?.getattr("repository")?)?;
-                            return Ok(false);
-                        }
                         "logs" => {
                             open_url(py.import("built_core.paths")?.call_method0("user_log_dir")?)?;
                             return Ok(false);
@@ -773,7 +648,7 @@ impl ExtensionsSheet {
                         "folder" => {
                             let folder = match hands.get_item(&ident)? {
                                 Some(f) => f,
-                                None => py.import("core.extensions")?.call_method0("user_plugins_dir")?.div(&ident)?,
+                                None => py.import("built_core.extensions")?.call_method0("user_plugins_dir")?.div(&ident)?,
                             };
                             let target = if folder.call_method0("is_dir")?.is_truthy()? { folder } else { folder.getattr("parent")? };
                             open_url(target)?;

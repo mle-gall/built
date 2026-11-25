@@ -12,7 +12,7 @@ use readouts::*;
 
 type Obj<'p> = Bound<'p, PyAny>;
 fn module(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("core.units")
+    py.import("built_core.units")
 }
 fn setting_store(py: Python<'_>) -> PyResult<Obj<'_>> {
     py.import("built_core.settings")?.call_method0("settings")
@@ -157,7 +157,7 @@ fn bare_number_scale(py: Python<'_>) -> PyResult<f64> {
             .extract()
     }
 }
-#[pyclass(module = "core.units")]
+#[pyclass(module = "built_core.units")]
 struct Unitless {
     previous: Option<Py<PyAny>>,
 }

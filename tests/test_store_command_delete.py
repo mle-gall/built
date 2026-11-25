@@ -3,8 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 from built_core import MeshStore
-from core.history import DeleteEdgesCommand, DeleteFaceCommand
-from core.mesh import Mesh
+from built_core.history import DeleteEdgesCommand, DeleteFaceCommand
+from built_core.mesh import Mesh
 from tests.test_store_mesh import fingerprint
 
 

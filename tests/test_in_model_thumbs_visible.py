@@ -12,8 +12,8 @@ import pytest
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core.group import Group
-from core.mesh import Mesh
+from built_core.group import Group
+from built_core.mesh import Mesh
 from built_render import component_thumbnail, component_signature
 
 
@@ -49,8 +49,8 @@ def test_only_rows_on_screen_are_drawn(win, monkeypatch):
 
 def test_nested_lazy_thumbnail_matches_eager_without_materialization(monkeypatch, tmp_path):
     import pytest
-    from core.scene import Scene
-    from core.mesh import DeferredMesh
+    from built_core.scene import Scene
+    from built_core.mesh import DeferredMesh
     from formats import igz
     from tests.test_deferred_mesh import _open
     monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)

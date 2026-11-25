@@ -21,8 +21,8 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.group import Group
-from core.mesh import Mesh
+from built_core.group import Group
+from built_core.mesh import Mesh
 
 
 def V(x, y, z=0.0):
@@ -89,7 +89,7 @@ def test_an_endpoint_of_the_group_actually_snaps(native_host):
     """What the report literally says — "no Snap points available when we
     try to get a point from the group". Not the plumbing this time: the
     real inference, asked at the corner where the two lines meet."""
-    from core.snap import compute_snap
+    from built_core.snap import compute_snap
 
     win, vp, _group = _viewport_with_a_lines_only_group(native_host)
     corner = V(2.0, 0.0, 0.0)             # where the two lines meet

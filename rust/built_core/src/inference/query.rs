@@ -103,7 +103,7 @@ pub(super) fn options<'p>(
         !tool.is_instance(&py.import("tools.base")?.getattr("PlaneLock")?)?
             && !flag(tool, "prefers_vertical_drag")?,
     )?;
-    let api = py.import("core.inference")?;
+    let api = py.import("built_core.inference")?;
     d.set_item(
         "sticky_axis",
         if api.getattr("_STICKY_AXIS")?.is_truthy()? {
@@ -128,7 +128,7 @@ pub(super) fn snap<'p>(
         return Ok(point);
     }
     let tool = vp.getattr("active_tool")?;
-    let api = py.import("core.snap")?;
+    let api = py.import("built_core.snap")?;
     if !tool.is_none() && !flag(&tool, "uses_snap")? {
         return api.call_method1("SnapResult", (point, "none"));
     }
@@ -248,7 +248,7 @@ pub(super) fn axis_cue<'p>(vp: &Obj<'p>, snap: &Obj<'p>, x: f64, y: f64) -> PyRe
         let d = xyz(&axis)?;
         Vec3::from(o + d * (xyz(&snap.getattr("point")?)? - o).dot(d)).into_bound_py_any(py)?
     };
-    let api = py.import("core.snap")?;
+    let api = py.import("built_core.snap")?;
     let kw = PyDict::new(py);
     kw.set_item("axis", &name)?;
     api.getattr("SnapResult")?.call(
@@ -299,7 +299,7 @@ pub(super) fn limit<'p>(snap: &Obj<'p>, tool: &Obj) -> PyResult<Obj<'p>> {
     if !snap.is_none() && !allowed.is_none() {
         let kind = snap.getattr("kind")?;
         if !kind.eq("none")? && !allowed.contains(kind)? {
-            let api = snap.py().import("core.snap")?;
+            let api = snap.py().import("built_core.snap")?;
             return api.call_method1(
                 "SnapResult",
                 (snap.getattr("point")?, "none", api.getattr("COLOR_NONE")?),

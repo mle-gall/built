@@ -1,6 +1,6 @@
 //! Units and typed values (R2.5 slice 3, `docs/rust-tools.md` §16).
 //!
-//! The one table of units (Python's `core.units` reads it from here), the
+//! The one table of units (Python's `built_core.units` reads it from here), the
 //! reading of one typed measurement (`parse`), calculations after `=`
 //! (`parse_expression`) and the value box's grammar (`parse_value_buffer`:
 //! several fields, arrays, radius, profile, segments, slopes). What a bare
@@ -607,7 +607,7 @@ fn tuple(nums: &[f64]) -> Option<Typed> {
 
 // ---- Python -------------------------------------------------------------
 
-/// `(code, kind, factor, symbol, aliases)` per unit: `core.units` builds
+/// `(code, kind, factor, symbol, aliases)` per unit: `built_core.units` builds
 /// `UNITS` and the alias table from it.
 #[pyfunction]
 pub fn units_table() -> Vec<(&'static str, &'static str, f64, &'static str, Vec<&'static str>)> {

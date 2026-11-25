@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 from built_core import Vec3 as V
 
-from core.mesh import Face
+from built_core.mesh import Face
 from tests.shell_isolation import restore_shell_patches  # noqa: F401 (autouse)
 
 

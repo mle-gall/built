@@ -69,7 +69,7 @@ fn add_item(s: &Bound<'_, Workspace>, comp: &Obj<'_>, item: &Obj<'_>) -> PyResul
     Workspace::_run(
         s,
         &s.py()
-            .import("core.composition")?
+            .import("built_core.composition")?
             .call_method1("AddItemCommand", (comp, item))?,
     )?;
     s.setattr("_page", s.py().None())
@@ -302,7 +302,7 @@ impl Workspace {
         Ok(())
     }
     fn _forget_render(s: &Bound<'_, Self>, model: &Obj<'_>) -> PyResult<()> {
-        if model.is_instance(&s.py().import("core.composition")?.getattr("MarcoVista")?)? {
+        if model.is_instance(&s.py().import("built_core.composition")?.getattr("MarcoVista")?)? {
             let key = model.getattr("_doc_key")?;
             for name in ["_content", "_tried", "_annotated"] {
                 s.getattr(name)?
@@ -479,7 +479,7 @@ impl Workspace {
         let tr = |label: &str| i18n.call_method1("tr", (label,))?.extract::<String>();
         let mut views = vec![vec!["__current__".to_string(), tr("Current view")?]];
         for v in py
-            .import("core.composition")?
+            .import("built_core.composition")?
             .getattr("STD_VIEWS")?
             .try_iter()?
         {
@@ -782,7 +782,7 @@ impl Workspace {
     fn _edit(s: &Bound<'_, Self>, edits: &Obj<'_>) -> PyResult<()> {
         let py = s.py();
         let commands = PyList::empty(py);
-        let composition = py.import("core.composition")?;
+        let composition = py.import("built_core.composition")?;
         for pair in edits.try_iter()? {
             let (model, input): (Obj, Bound<PyDict>) = pair?.extract()?;
             let fields = model.getattr("_record_fields")?;
@@ -881,7 +881,7 @@ impl Workspace {
         let py = s.py();
         let comp = s.getattr("composer")?.getattr("comp")?;
         let cmds = PyList::empty(py);
-        let model = py.import("core.composition")?;
+        let model = py.import("built_core.composition")?;
         for item in Self::_selected_models(s)?.bind(py).iter() {
             if !item.is(&comp)
                 && !item
@@ -907,7 +907,7 @@ impl Workspace {
         if copies.is_truthy()? {
             let cmds = PyList::empty(py);
             let keys = PyList::empty(py);
-            let model = py.import("core.composition")?;
+            let model = py.import("built_core.composition")?;
             for item in copies.try_iter()? {
                 let item = item?;
                 keys.append(item.getattr("_doc_key")?)?;
@@ -1020,7 +1020,7 @@ impl Workspace {
                 after.set_item("leaders", updated)?;
                 Self::_run(
                     s,
-                    &py.import("core.composition")?
+                    &py.import("built_core.composition")?
                         .call_method1("EditItemCommand", (target, after, before))?,
                 )?;
                 select_item(s, target)?;
@@ -1611,7 +1611,7 @@ impl Workspace {
         let sel = Self::_selected_models(s)?.into_bound(s.py());
         if sel.len() == 1 {
             let item = sel.get_item(0)?;
-            if item.is_instance(&s.py().import("core.composition")?.getattr("MarcoVista")?)? {
+            if item.is_instance(&s.py().import("built_core.composition")?.getattr("MarcoVista")?)? {
                 return Ok(Some(item.unbind()));
             }
         }
@@ -1654,7 +1654,7 @@ impl Workspace {
             {
                 "No scale".into()
             } else {
-                py.import("core.composition")?
+                py.import("built_core.composition")?
                     .call_method1("format_scale", (f.getattr("scale_n")?,))?
                     .extract()?
             }
@@ -1901,7 +1901,7 @@ impl Workspace {
                 .call_method1("sheet_from_template", (path.to_string_lossy().as_ref(),))?;
         }
         if sheet.is_none() {
-            sheet = py.import("core.composition")?.call_method0("Composicion")?;
+            sheet = py.import("built_core.composition")?.call_method0("Composicion")?;
             sheet
                 .getattr("frames")?
                 .call_method1("append", (sheet.call_method0("default_frame")?,))?;
@@ -1929,7 +1929,7 @@ impl Workspace {
         }
         let src = sheets.get_item(index)?;
         let dup = py
-            .import("core.composition")?
+            .import("built_core.composition")?
             .getattr("Composicion")?
             .call_method1("from_dict", (src.call_method0("to_dict")?,))?;
         dup.setattr(

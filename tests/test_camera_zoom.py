@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from built_core import Vec3 as QVector3D
 
-from core.camera import OrbitCamera
+from built_core.camera import OrbitCamera
 
 
 def test_zoom_to_keeps_focus_under_cursor():
@@ -27,7 +27,7 @@ def test_zoom_to_keeps_focus_under_cursor():
 
 
 def test_zoom_to_respects_distance_clamp():
-    from core.camera import MIN_DISTANCE
+    from built_core.camera import MIN_DISTANCE
     cam = OrbitCamera()
     cam.distance = MIN_DISTANCE * 1.2
     cam.zoom_to(5.0, QVector3D(0, 0, 0))   # would go through the floor
@@ -38,7 +38,7 @@ def test_you_can_get_close_enough_to_look_at_a_component():
     # A library component is centimetres. The old half-metre floor meant a
     # figure's face or a wheel rim could not be looked at at all: the wheel
     # stopped turning while the model was still small on screen.
-    from core.camera import MIN_DISTANCE
+    from built_core.camera import MIN_DISTANCE
     cam = OrbitCamera()
     cam.distance = 2.0
     for _ in range(200):
@@ -73,7 +73,7 @@ def test_zooming_out_forever_stays_a_real_camera():
     # x1.11 per notch — 125 km after a hundred notches, then inf and NaN,
     # and the document refused to save over the camera.
     import math
-    from core.camera import MAX_DISTANCE
+    from built_core.camera import MAX_DISTANCE
     cam = OrbitCamera()
     focus = QVector3D(3, 2, 0)
     for _ in range(2000):

@@ -12,8 +12,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from built_core import Vec3 as QVector3D
 
 from core import ai  # noqa: E402
-from core.group import Group  # noqa: E402
-from core.mesh import Mesh  # noqa: E402
+from built_core.group import Group  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
 
 
 def _tri(x=0.0):
@@ -24,8 +24,8 @@ def _tri(x=0.0):
 
 def _nested():
     from types import SimpleNamespace
-    from core.history import History
-    from core.scene import Scene
+    from built_core.history import History
+    from built_core.scene import Scene
     leaf = Group(_tri(), name="old part")
     holder = Group(name="holder")
     holder.adopt([leaf])

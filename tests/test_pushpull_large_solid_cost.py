@@ -17,10 +17,10 @@ import math
 
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edges
-from core.history import History
-from core.mesh import Face
-from core.scene import Scene
+from built_core.edits import build_add_edges
+from built_core.history import History
+from built_core.mesh import Face
+from built_core.scene import Scene
 from tests.test_pushpull_ux import _cube, _push
 
 
@@ -53,7 +53,7 @@ def _raise(scene, hist, face):
 
 
 def test_a_push_lists_each_neighbours_edges_once_per_question():
-    from core import topology
+    from built_core import topology
 
     scene, hist = _slab_with_cylinders(4)
     face = _circle(scene, hist, 4)
@@ -81,7 +81,7 @@ def test_a_push_lists_each_neighbours_edges_once_per_question():
 
 def test_the_memo_answers_what_the_plain_question_answers():
     """Same verdict, edge by edge and hole by hole, with and without it."""
-    from core import topology
+    from built_core import topology
 
     scene, hist = _slab_with_cylinders(3)
     face = _circle(scene, hist, 3)

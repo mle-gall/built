@@ -3,7 +3,7 @@ import time
 
 import numpy as np
 
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import igz
 from built_core import DocumentOpen
 from tests.fixtures.shell.make_composite import make

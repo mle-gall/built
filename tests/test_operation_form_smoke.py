@@ -27,9 +27,9 @@ def english(profile):
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_soften_and_export(tmp_path):
     from built_render import SurveyRaster
-    from core.group import Group
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
     from formats.igz import save_scene
     from tests.test_viewport_smooth_shading import _cylinder
 
@@ -88,7 +88,7 @@ def fixture_venv(tmp_path, code):
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_release_review(tmp_path):
     """Install a release backend fixture in the embedded interpreter only."""
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats.igz import save_scene
     opened = tmp_path / "download-url"
     release_url = "https://example.invalid/releases/test"
@@ -207,7 +207,7 @@ def test_native_about_copies_diagnostics(tmp_path):
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_section_name_question(tmp_path):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats.igz import save_scene
 
     model = tmp_path / "empty.igz"
@@ -234,10 +234,9 @@ def test_native_extensions_open_painted_and_apply(tmp_path):
     home.mkdir()
     plugins = tmp_path / "plugins"
     venv = fixture_venv(tmp_path,
-        "from pathlib import Path\nfrom built_core import extension_manager as em\n"
-        f"from core import extensions\nextensions.user_plugins_dir = lambda: Path({str(plugins)!r})\n"
-        "em.load_cached_catalog = lambda: None\n"
-        "em.refresh_catalog = lambda: em.CatalogSnapshot([], {}, '', False)\n")
+        "from pathlib import Path\n"
+        f"from built_core import extensions\nextensions.user_plugins_dir = lambda: Path({str(plugins)!r})\n"
+    )
     steps = tmp_path / "commands"
     steps.write_text("wait 600\nmenu extensions\nwait 450\nstate\nclick 96 648\nwait 300\n"
                      "key escape\nwait 300\nstate\nquit\n")
@@ -255,7 +254,7 @@ def test_native_extensions_open_painted_and_apply(tmp_path):
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_location_coordinates_map_apply_and_cancel(tmp_path):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats.igz import save_scene, load_into
     from georef.datum import SceneDatum
 
@@ -299,7 +298,7 @@ def test_native_location_coordinates_map_apply_and_cancel(tmp_path):
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_online_catalogue_places_the_credited_component(tmp_path):
     import zipfile
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats.igz import save_scene, load_into
 
     src = tmp_path / "catalogue"
@@ -335,7 +334,7 @@ def test_native_online_catalogue_places_the_credited_component(tmp_path):
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_f3_finds_and_runs_a_misspelled_command(tmp_path):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats.igz import save_scene
     path = tmp_path / "empty.built"
     save_scene(Scene(), path)
@@ -359,7 +358,7 @@ def test_native_f3_finds_and_runs_a_misspelled_command(tmp_path):
                     or __import__("sys").platform != "darwin", reason="requires the native macOS menu")
 def test_native_menu_search_and_persisted_keyboard_binding(tmp_path):
     from built_core import NativeSettings
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats.igz import save_scene
     from built_render.keyboard_bindings import settings_key
     model = tmp_path / "empty.built"
@@ -410,8 +409,8 @@ def test_native_ai_connection_edits_plugin_model(tmp_path):
 def test_native_svg_preview_and_delivery_edit(tmp_path):
     from built_render import SurveyRaster
     from built_core import deliveries
-    from core.history import History
-    from core.scene import Scene
+    from built_core.history import History
+    from built_core.scene import Scene
     from formats.igz import load_into, save_scene
     from tests.test_ifc_export import _tagged_wall_scene
 
@@ -565,7 +564,7 @@ Host.state = bevel_state
 def test_camera_registry_text_and_plugin_utilities(tmp_path):
     """Use renderer verbs for controls without a native menu-script spelling."""
     from built_render import SurveyRaster
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats.igz import save_scene
 
     initial = tmp_path / "empty.built"
@@ -577,7 +576,7 @@ def test_camera_registry_text_and_plugin_utilities(tmp_path):
     venv = fixture_venv(tmp_path, f"""from built_render import Host
 from core import bim_registry
 from built_render import RenderResult
-from core.plugin_panels import show_utility
+from built_core.plugin_panels import show_utility
 from built_render import chrome_sheet
 from views import wgpu_ui
 from pathlib import Path
@@ -744,14 +743,14 @@ def dispatch(self, command):
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("purgetags","")))
     elif command=="fixture-selection-tag":
         from built_render import context_menu_build, context_menu_run
-        from core.group import Group
+        from built_core.group import Group
         group=Group(name="Loose tag target")
         scene.groups.append(group)
         scene.select([group])
         menu_state=context_menu_build(self.window,self.view)
         context_menu_run(self.window,self.view,menu_state.kind,"selectiontag",menu_state.sel)
     elif command=="fixture-rename":
-        from core.group import Group
+        from built_core.group import Group
         if not hasattr(self,"fixture_rename"):
             self.fixture_rename=[Group(name="Panel A"), Group(name="Panel B")]
             scene.groups.extend(self.fixture_rename)
@@ -759,7 +758,7 @@ def dispatch(self, command):
         order=[[g.uid,False] for g in self.fixture_rename]
         wgpu_ui._tree_action(self.window,self.view,"batchrename"+wgpu_ui.SEP+json.dumps([id(scene),True,"",order]))
     elif command=="fixture-merge-tag":
-        from core.layers import Layer
+        from built_core.layers import Layer
         if scene.layer_by_key("Merge me") is None:
             scene.layers.append(Layer("Merge me"))
             scene.groups[0].layer="Merge me"
@@ -772,7 +771,7 @@ def dispatch(self, command):
         form.receive("item",str(next(i for i, label in enumerate(options) if label.endswith("Paths"))))
         form.press("ok")
     elif command=="fixture-delete-tag":
-        from core.layers import Layer
+        from built_core.layers import Layer
         if scene.layer_by_key("Disposable") is None:
             scene.layers.append(Layer("Disposable"))
             scene.groups[0].layer="Disposable"
@@ -964,9 +963,9 @@ def test_native_mesh_units_and_model_menu(tmp_path, suffix):
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires the native window")
 def test_native_animation_forms_and_video_file(tmp_path):
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     from built_core.saved_views import SavedView
-    from core.scene import Scene
+    from built_core.scene import Scene
     from built_core import SceneAnimation
     from formats.igz import save_scene
 
@@ -1004,7 +1003,7 @@ def test_native_animation_forms_and_video_file(tmp_path):
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_orthomosaic_import_and_undo(tmp_path):
     from tests.geotiff_fixture import write_geotiff
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats.igz import save_scene
     import numpy as np
 
@@ -1031,7 +1030,7 @@ def test_native_orthomosaic_import_and_undo(tmp_path):
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires the native window")
 def test_native_survey_imports_share_datum_and_save(tmp_path):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats.igz import load_into, save_scene
     from tests.test_photomesh import _write_odm_tree
 
@@ -1071,8 +1070,8 @@ def test_native_survey_imports_share_datum_and_save(tmp_path):
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_takeoff_picks_tagged_faces_in_their_edit_context(tmp_path):
     from core.bim import tag_faces
-    from core.history import History
-    from core.scene import Scene
+    from built_core.history import History
+    from built_core.scene import Scene
     from formats.igz import save_scene
     from tests.test_bim_grouped_tags import _box, _group
 

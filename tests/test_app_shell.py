@@ -68,7 +68,7 @@ def test_tool_shortcut_restored_in_new_shell(host, tmp_path):
 def test_undo_from_the_menu(host):
     host.open(FIXTURE)
     from built_core import Vec3 as QVector3D
-    from core.history import AddFaceCommand
+    from built_core.history import AddFaceCommand
     vp = host.viewport
     before = len(vp.scene.mesh.faces)
     loop = [QVector3D(5, 0, 0), QVector3D(6, 0, 0), QVector3D(6, 1, 0)]

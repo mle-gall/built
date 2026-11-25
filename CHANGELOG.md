@@ -4883,7 +4883,7 @@ revisa el PR #266 que lo lleva todo.
   Built: la proyección por defecto del visor usaba otra base que la del
   formato y en muros que miran a +Y o −X la textura se veía girada 180°
   respecto de lo que sale en el archivo. Ahora hay una sola receta
-  (`core.texture.projection_basis`, la del formato) para el visor, los
+  (`built_core.texture.projection_basis`, la del formato) para el visor, los
   exportadores OBJ/glTF/DAE, la vista previa de pegar y el importador.
 - **Un `.skp` exportado ya no muestra caras lavanda.** Built
   pinta las dos caras de una superficie y el formato solo la que nombra el

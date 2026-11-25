@@ -3303,7 +3303,7 @@ fn large_sheet_check(spec: &str) -> String {
 
 mod surfaces;
 mod component_catalogue;
-mod extension_previews;
+mod image_io;
 mod extensions;
 mod release;
 mod units_start;

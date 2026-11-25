@@ -221,7 +221,7 @@ pub(crate) fn rings<'py>(row: &Dict<'py>) -> PyResult<Vec<Obj<'py>>> {
             loops.append(vectors(&h?)?)?;
         }
         let kept = py
-            .import("core.topology")?
+            .import("built_core.topology")?
             .call_method1("_maximal_holes", (loops,))?;
         for ring in kept.try_iter()? {
             let coords = PyList::empty(py);
@@ -756,7 +756,7 @@ pub(crate) fn maximal_vertex_holes<'py>(holes: &Obj<'py>) -> PyResult<Vec<Obj<'p
         positions.append(vs)?;
     }
     let kept = py
-        .import("core.topology")?
+        .import("built_core.topology")?
         .call_method1("_maximal_holes", (&positions,))?;
     let ids = kept
         .try_iter()?

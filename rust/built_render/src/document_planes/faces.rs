@@ -94,7 +94,7 @@ fn face_center_under<'py>(v: &Obj<'py>, x: f64, y: f64) -> PyResult<Obj<'py>> {
         .into_any()
     };
     let c = py
-        .import("core.snap")?
+        .import("built_core.snap")?
         .call_method1("face_center_of_face", (face, opt(&place, "xform")?))?;
     if !c.is_none() && near(v, &c, x, y)? {
         Ok((c, ctx).into_pyobject(py)?.into_any())
@@ -137,7 +137,7 @@ fn selected_face_centers<'py>(v: &Obj<'py>) -> PyResult<Obj<'py>> {
     if !cached.is_none() && cached.get_item(0)?.eq(&key)? {
         return cached.get_item(1);
     }
-    let center = py.import("core.snap")?.getattr("face_center_of_face")?;
+    let center = py.import("built_core.snap")?.getattr("face_center_of_face")?;
     for (f, i) in faces.iter().zip(ids) {
         if !moving.contains(i)? {
             let c = center.call1((f,))?;

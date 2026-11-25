@@ -9,7 +9,7 @@ fn init(cmd: &Obj<'_>, meshes: &Obj<'_>, fix: Option<&Obj<'_>>) -> PyResult<()> 
     cmd.setattr("meshes", rows(meshes)?)?;
     let fix = match fix {
         Some(f) if f.is_truthy()? => f.clone(),
-        _ => py.import("core.solid_analysis")?.getattr("repair_mesh")?,
+        _ => py.import("built_core.solid_analysis")?.getattr("repair_mesh")?,
     };
     cmd.setattr("fix", fix)?;
     for attr in ["before", "after", "interior_before", "interior_after"] {
@@ -127,7 +127,7 @@ fn undo(cmd: &Obj<'_>, scene: &Obj<'_>) -> PyResult<()> {
 pub(super) fn install(m: &Bound<PyModule>) -> PyResult<()> {
     let py = m.py();
     let ns = PyDict::new(py);
-    ns.set_item("__module__", "core.solid_analysis")?;
+    ns.set_item("__module__", "built_core.solid_analysis")?;
     let bind = py.import("functools")?.getattr("partialmethod")?;
     for (name, func) in [
         ("__init__", wrap_pyfunction!(init, py)?),

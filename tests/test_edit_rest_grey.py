@@ -16,8 +16,8 @@ from tests.controller_surface import live_image
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core.group import Group
-from core.mesh import Mesh
+from built_core.group import Group
+from built_core.mesh import Mesh
 from views.document_interaction import edit_fade_color
 
 
@@ -80,7 +80,7 @@ def test_people_and_images_go_grey_with_the_rest(native_gpu_host, tmp_path, mode
     """The face-me figures and the reference images are drawn by passes of
     their own: they kept their full colour on a grey model («al editar un
     grupo o componente las imágenes no se ponen en gris», 20-10)."""
-    from core.group import make_billboard_group
+    from built_core.group import make_billboard_group
     from built_core.image_plane import ImagePlane
     red = solid_raster(16, 16, (220, 20, 20))
     path = str(tmp_path / "red.png")

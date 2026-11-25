@@ -185,7 +185,7 @@ pub(crate) fn apply_document_units(window: &Obj, chosen: &Obj) -> PyResult<bool>
         return Ok(false);
     };
     if chosen.eq(py
-        .import("core.units")?
+        .import("built_core.units")?
         .call_method1("model_units_of", (scene,))?)?
     {
         return Ok(false);

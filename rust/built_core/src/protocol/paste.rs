@@ -180,7 +180,7 @@ fn groups<'py>(
     let py = clip.py();
     let groups = PyList::empty(py);
     let src = clip.call_method1("get", ("groups", &groups))?;
-    let api = py.import("core.group")?;
+    let api = py.import("built_core.group")?;
     let native = py.import("built_core")?;
     let mut remap = !renamed.is_empty();
     for (a, b) in names.iter() {

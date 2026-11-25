@@ -40,7 +40,7 @@ fn cache<'py>(
         .call1((w, h, PyBytes::new(py, pixels)))?
         .call_method0("png")?;
     Ok(py
-        .import("core.texture")?
+        .import("built_core.texture")?
         .call_method1("cache_image", (png, name, "pbr"))?
         .str()?
         .into_any())

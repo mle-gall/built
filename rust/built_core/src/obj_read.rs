@@ -375,7 +375,7 @@ fn editable(mesh: &Obj<'_>, rows: &Bound<'_, PyList>, error: Option<&str>) -> Py
     let py = mesh.py();
     let seed = PySet::empty(py)?;
     let added = PySet::empty(py)?;
-    let key = py.import("core.topology")?.getattr("_key")?;
+    let key = py.import("built_core.topology")?.getattr("_key")?;
     for row in rows.iter() {
         let (pts, attrs): (Bound<'_, PyList>, Obj<'_>) = row.extract()?;
         if let Ok(f) = mesh.call_method1("add_face", (&pts,)) {
@@ -508,7 +508,7 @@ fn obj_load<'p>(
                     g.setattr("component", false)?;
                     kids.append(g)?;
                 } else {
-                    group_out = Some(py.import("core.group")?.call_method1("Group", (m,))?);
+                    group_out = Some(py.import("built_core.group")?.call_method1("Group", (m,))?);
                 }
             }
             if multi {

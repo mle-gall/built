@@ -3,7 +3,7 @@
 """Issue #149 (@xyont): with the document in millimetres the rectangle read
 in mm, but circle and polygon showed metres while a typed «500» still meant
 500 mm -- and the side count read «lados» in the English UI. Every length a
-tool shows goes through core.units (fmt_len), in the document's units."""
+tool shows goes through built_core.units (fmt_len), in the document's units."""
 from __future__ import annotations
 
 import os
@@ -18,10 +18,10 @@ from built_core import ScreenPoint as QPointF
 from built_core import Vec3 as QVector3D
 
 
-from core import units  # noqa: E402
-from core.history import History  # noqa: E402
+from built_core import units  # noqa: E402
+from built_core.history import History  # noqa: E402
 from built_core.i18n import tr  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from tools.base import ToolContext  # noqa: E402
 from tools.circle import CircleTool, PolygonTool  # noqa: E402
 from tests.controller_surface import ControllerSurface as Viewport

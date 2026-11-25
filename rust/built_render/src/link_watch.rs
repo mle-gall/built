@@ -102,7 +102,7 @@ impl LinkWatch {
 
     fn reload(&self, win: &Bound<'_, PyAny>, paths: &[PathBuf]) -> PyResult<()> {
         let py = win.py();
-        let links = py.import("core.links")?;
+        let links = py.import("built_core.links")?;
         let mut names = BTreeSet::new();
         let mut failures = Vec::new();
         for doc in win.call_method0("documents")?.try_iter()? {
@@ -180,7 +180,7 @@ impl LinkWatch {
         if win.is_none() {
             return Ok(());
         }
-        let links = py.import("core.links")?;
+        let links = py.import("built_core.links")?;
         let mut paths = BTreeSet::new();
         for doc in win.call_method0("documents")?.try_iter()? {
             let vp = doc?.getattr("viewport")?;

@@ -53,7 +53,7 @@ pub(crate) fn insert_placement<'py>(
                     group.setattr("component", false)?;
                     group.setattr("xform", inverse)?;
                 } else {
-                    let facade = py.import("core.group")?;
+                    let facade = py.import("built_core.group")?;
                     group.setattr(
                         "mesh",
                         crate::model::module(py, "built_core")?
@@ -122,7 +122,7 @@ pub(crate) fn reparent<'py>(
     discard: &Obj<'py>,
 ) -> PyResult<(Option<TargetState<'py>>, Vec<Moved<'py>>)> {
     let py = roots.py();
-    let outliner = py.import("core.outliner")?;
+    let outliner = py.import("built_core.outliner")?;
     let up = outliner.call_method1("parents", (roots,))?;
     let moving = outliner.call_method1("topmost", (roots, groups))?;
     let state = if target.is_none() {

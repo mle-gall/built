@@ -3,7 +3,7 @@
 """Sheet cotas: double-click edits the text, <> stands for the value."""
 from __future__ import annotations
 
-from core.composition import CotaItem
+from built_core.composition import CotaItem
 
 
 def test_cota_text_placeholder_expands_to_the_value():

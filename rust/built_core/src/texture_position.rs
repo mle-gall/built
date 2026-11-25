@@ -134,7 +134,7 @@ impl TextureMap {
         let normal = face.call_method0("normal")?;
         let n = xyz(&normal)?;
         let axes = py
-            .import("core.texture")?
+            .import("built_core.texture")?
             .call_method1("face_uv_axes", (tex, normal))?;
         let (gu, cu, gv, cv): (PyRef<'_, Vec3>, f64, PyRef<'_, Vec3>, f64) = axes.extract()?;
         if n.length_squared() < 1e-18 {

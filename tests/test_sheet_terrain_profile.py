@@ -52,7 +52,7 @@ class _Dem:
 
 def _scene(paths, datum=True):
     from built_core import Vec3 as V
-    from core.scene import Scene
+    from built_core.scene import Scene
     from georef.datum import SceneDatum as Datum
     from georef.geopath import GeoPath
     s = Scene()
@@ -63,7 +63,7 @@ def _scene(paths, datum=True):
 
 
 def _comp(items):
-    from core.composition import Composicion, PerfilTerreno
+    from built_core.composition import Composicion, PerfilTerreno
     c = Composicion(name="Perfiles")
     for kw in items:
         c.perfiles.append(PerfilTerreno(**kw))

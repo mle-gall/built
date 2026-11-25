@@ -22,13 +22,13 @@ fn none(py: Python<'_>) -> Obj<'_> {
     py.None().into_bound(py)
 }
 fn scans(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("core.push_scans")
+    py.import("built_core.push_scans")
 }
 fn core(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
     py.import("built_core")
 }
 fn module(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("core.push_pull")
+    py.import("built_core.push_pull")
 }
 fn tol(py: Python<'_>) -> PyResult<f64> {
     py.import("built_core.mesh")?.getattr("_STITCH_TOL")?.extract()
@@ -44,7 +44,7 @@ fn target_group_mesh<'p>(op: &Obj<'p>) -> PyResult<Obj<'p>> {
         group.getattr("mesh")
     }
 }
-#[pyclass(module = "core.push_pull")]
+#[pyclass(module = "built_core.push_pull")]
 struct GroupScene {
     scene: Py<PyAny>,
     #[pyo3(get)]
@@ -288,7 +288,7 @@ fn clamp_extrusion(op: &Obj, viewport: Option<&Obj>) -> PyResult<()> {
                     &[(
                         "value",
                         vp.py()
-                            .import("core.units")?
+                            .import("built_core.units")?
                             .call_method1("fmt_len", (limit,))?,
                     )],
                 )?;
@@ -326,7 +326,7 @@ fn outward_normal<'p>(cls: &Obj<'p>, face: &Obj<'p>, mesh: &Obj<'p>) -> PyResult
         .call_method1("is_closed", (mesh,))?
         .is_truthy()?
         || py
-            .import("core.topology")?
+            .import("built_core.topology")?
             .call_method1("_mesh_is_flat", (mesh,))?
             .is_truthy()?
     {
@@ -440,7 +440,7 @@ fn commit(op: &Obj, viewport: &Obj) -> PyResult<()> {
                 4000,
                 &[(
                     "d",
-                    py.import("core.units")?
+                    py.import("built_core.units")?
                         .call_method1("fmt_len", (number(op, "extrusion")?.abs(),))?,
                 )],
             )?;
@@ -481,7 +481,7 @@ pub(crate) fn install(m: &Bound<PyModule>) -> PyResult<()> {
     m.add("_REPROS", PySet::empty(py)?)?;
     m.add("_MIN_EXTRUDE", MIN_EXTRUDE)?;
     let ns = PyDict::new(py);
-    ns.set_item("__module__", "core.push_pull")?;
+    ns.set_item("__module__", "built_core.push_pull")?;
     ns.set_item("last_distance", py.None())?;
     ns.set_item("_store_refusal", py.None())?;
     ns.set_item("_CURVE_FACET_COS", 0.85)?;

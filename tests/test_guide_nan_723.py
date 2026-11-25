@@ -16,9 +16,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from built_core import Vec3 as QVector3D
 
-from core.guide import Guide  # noqa: E402
-from core.history import History  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core.guide import Guide  # noqa: E402
+from built_core.history import History  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402
 from tools.tape import TapeMeasureTool  # noqa: E402
 

@@ -64,7 +64,7 @@ def test_a_document_with_a_nan_corner_opens_without_it(tmp_path):
     import math
     import zipfile
     from pathlib import Path
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     good = Scene()
     from built_core import Vec3 as V3

@@ -12,10 +12,10 @@ from __future__ import annotations
 
 from built_core import Vec3 as V
 
-from core.edits import build_add_edge
-from core.history import History
-from core.scene import Scene
-from core.topology import _point_in_face_solid
+from built_core.edits import build_add_edge
+from built_core.history import History
+from built_core.scene import Scene
+from built_core.topology import _point_in_face_solid
 
 HOLE = [[V(4, 4, 0), V(4, 6, 0), V(6, 6, 0), V(6, 4, 0)]]
 CENTRE = V(5, 5, 0)

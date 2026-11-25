@@ -219,7 +219,7 @@ pub(super) fn mutate_guarded(op: &Obj, scene: &Obj, preview: bool) -> PyResult<(
         },
         number(op, "extrusion")?.abs() >= MIN_EXTRUDE,
         &py.import("built_core.orient")?.getattr("is_closed")?,
-        &py.import("core.topology")?.getattr("_mesh_is_flat")?,
+        &py.import("built_core.topology")?.getattr("_mesh_is_flat")?,
         &py.import("built_core.store_mesh")?.getattr("_store_of")?,
     )?;
     op.setattr("_refused", refused)?;

@@ -8,9 +8,9 @@ from __future__ import annotations
 from built_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
-from core.layers import assign_layer
-from core.mesh import Edge, Face
-from core.scene import Scene
+from built_core.layers import assign_layer
+from built_core.mesh import Edge, Face
+from built_core.scene import Scene
 from built_core import (all_connected, bounding_edges, same_layer,
                              same_material)
 
@@ -88,7 +88,7 @@ def test_the_triple_click_still_selects_the_whole_piece(monkeypatch):
 
     vp = _Vp()
     tool = SelectTool()
-    from core.mesh import Face
+    from built_core.mesh import Face
     method = "pick_face" if isinstance(a, Face) else "pick_visible_edge"
     monkeypatch.setattr(vp, method, lambda _x, _y: a, raising=False)
     tool.on_triple_click(ToolContext(viewport=vp, world=V(0, 0),

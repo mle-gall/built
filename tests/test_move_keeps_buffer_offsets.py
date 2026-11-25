@@ -24,7 +24,7 @@ AMARILLO = (1.0, 0.85, 0.0)
 
 
 def _square(x0, y0, s=1.0, color=None):
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     m = Mesh()
     f = m.add_face([V(x0, y0, 0), V(x0 + s, y0, 0), V(x0 + s, y0 + s, 0),
                     V(x0, y0 + s, 0)])
@@ -36,7 +36,7 @@ def _square(x0, y0, s=1.0, color=None):
 
 
 def _cube():
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     m = Mesh()
     p = [V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0),
          V(0, 0, 1), V(1, 0, 1), V(1, 1, 1), V(0, 1, 1)]
@@ -48,7 +48,7 @@ def _cube():
 
 @pytest.fixture
 def placed(native_host):
-    from core.group import Group
+    from built_core.group import Group
     win = native_host.window
     v = win.viewport
     native_host.resize(1000, 700, 1.)
@@ -72,7 +72,7 @@ def placed(native_host):
 
 
 def test_the_lazy_pick_table_is_kept_on_pick_up_and_its_rows_follow_a_drop(placed):
-    from core.history import MoveGroupCommand
+    from built_core.history import MoveGroupCommand
     vp = placed
     g = next(g for g in vp.scene.groups if g.name == "C21")
     table = vp._pick_lazy_table()
@@ -128,7 +128,7 @@ def test_an_eviction_keeps_the_bakes_the_static_buffers_draw(placed,
 
 def test_arc_midpoints_are_kept_per_mesh_however_many_and_follow_the_content(native_host,
         monkeypatch):
-    from core.group import Group
+    from built_core.group import Group
     from tests.controller_surface import ControllerSurface as Viewport
     win = native_host.window
     vp = win.viewport
@@ -168,8 +168,8 @@ def test_arc_midpoints_are_kept_per_mesh_however_many_and_follow_the_content(nat
 
 
 def test_a_moved_container_moves_the_rows_of_the_placements_inside_it(placed):
-    from core.group import Group
-    from core.history import MoveGroupCommand
+    from built_core.group import Group
+    from built_core.history import MoveGroupCommand
     vp = placed
     inner = Group(_cube(), name="dentro")
     inner.xform = QMatrix4x4()

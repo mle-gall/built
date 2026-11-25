@@ -624,7 +624,7 @@ fn stitch(mesh: &Obj<'_>, faces: &[Ring], scale: f64, offset: DVec3) -> PyResult
     }
     let added = PySet::empty(py)?;
     let keys = PySet::empty(py)?;
-    let key = py.import("core.topology")?.getattr("_key")?;
+    let key = py.import("built_core.topology")?.getattr("_key")?;
     for (i, ring) in faces.iter().enumerate() {
         if i % 256 == 0 {
             checkpoint(py)?;
@@ -730,7 +730,7 @@ fn build<'p>(py: Python<'p>, b: &Bucket, scale: f64, offset: DVec3) -> PyResult<
         }
     }
     if !b.parts.is_empty() {
-        let key = py.import("core.topology")?.getattr("_key")?;
+        let key = py.import("built_core.topology")?.getattr("_key")?;
         let seen = PySet::empty(py)?;
         for rings in &b.parts {
             let part = new_mesh(py)?;
@@ -763,7 +763,7 @@ fn outlines(mesh: &Obj<'_>, make: bool) -> usize {
         return 0;
     }
     mesh.py()
-        .import("core.make_faces")
+        .import("built_core.make_faces")
         .and_then(|m| m.call_method1("faces_from_linework", (mesh,))?.extract())
         .unwrap_or(0)
 }
@@ -1011,7 +1011,7 @@ fn dxf_load<'p>(
         if scene.call_method1("layer", (&t,))?.is_none() {
             scene.getattr("layers")?.call_method1(
                 "append",
-                (py.import("core.layers")?.call_method1("Layer", (t,))?,),
+                (py.import("built_core.layers")?.call_method1("Layer", (t,))?,),
             )?;
         }
     }

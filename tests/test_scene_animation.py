@@ -141,7 +141,7 @@ def test_settings_round_trip_and_refuse_nonsense():
 
 
 def test_the_document_keeps_its_transition_times(tmp_path):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     scene = Scene()
     assert scene.animation == SceneAnimation()
@@ -154,7 +154,7 @@ def test_the_document_keeps_its_transition_times(tmp_path):
 
 
 def test_an_old_document_opens_with_the_default_times(tmp_path):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from formats import igz
     path = tmp_path / "sin-ajustes.igz"
     igz.save_scene(Scene(), path)
@@ -165,7 +165,7 @@ def test_an_old_document_opens_with_the_default_times(tmp_path):
 
 
 def test_a_new_drawing_forgets_the_times():
-    from core.scene import Scene
+    from built_core.scene import Scene
     scene = Scene()
     scene.animation = SceneAnimation(pause=5.0)
     scene.clear()
@@ -194,9 +194,9 @@ def rig(native_host, monkeypatch):
 def _view(name, view="top", x=0.0):
     from built_core import Vec3 as QVector3D
 
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     from built_core.saved_views import SavedView
-    from core.scene import Scene
+    from built_core.scene import Scene
     cam = OrbitCamera()
     cam.set_view(view)
     cam.target = QVector3D(x, 0, 0)
@@ -365,7 +365,7 @@ def _visible(win):
 
 
 def _with_layer(win, name):
-    from core.layers import Layer
+    from built_core.layers import Layer
     win.viewport.scene.layers.append(Layer(name))
 
 
@@ -440,8 +440,8 @@ def test_the_window_s_esc_stops_a_glide_and_keeps_the_selection(win):
     choose(win, 1)
     assert win.scene_player.is_active()
     scene = win.viewport.scene
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     group = Group(Mesh(), "Esc selection")
     scene.groups.append(group)
     win.view.set_scene(scene)

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Frames and views of the frame-camera parity goldens
-(tests/test_sheet_camera_parity.py): the camera ``core.composition.
+(tests/test_sheet_camera_parity.py): the camera ``built_core.composition.
 apply_frame_camera`` points at each frame, from a default OrbitCamera, in a
 scene of three boxes. Written before the camera moved to Rust
 (docs/rust-sheets.md step 4)."""
@@ -13,7 +13,7 @@ import math
 def scene():
     from built_core import Vec3 as V
     from built_core.saved_views import SavedView
-    from core.scene import Scene
+    from built_core.scene import Scene
     s = Scene()
     for (x0, y0, z0, x1, y1, z1) in ((0, 0, 0, 12, 8, 0.3), (1, 1, 0.3, 5, 4, 3.2), (6, 1.5, 0.3, 11, 6, 2.6)):
         p = [V(x, y, z) for z in (z0, z1) for y in (y0, y1) for x in (x0, x1)]
@@ -56,8 +56,8 @@ def frames():
 
 def python_camera(scn, kw):
     """``(view 16, projection 16, fields)`` of the frame's camera."""
-    from core.camera import OrbitCamera
-    from core.composition import MarcoVista, apply_frame_camera
+    from built_core.camera import OrbitCamera
+    from built_core.composition import MarcoVista, apply_frame_camera
     frame = MarcoVista(**kw)
     view = None
     if frame.view_key.startswith("scene:"):

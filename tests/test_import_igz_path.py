@@ -10,7 +10,7 @@ from tests.shell_isolation import native_window, restore_shell_patches  # noqa: 
 import pytest  # noqa: E402
 from built_core import Vec3 as QVector3D
 
-from core.scene import Scene  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402
 
 
@@ -35,7 +35,7 @@ def window(native_window):
 
 
 def _bounds(group):
-    from core.group import world_mesh
+    from built_core.group import world_mesh
     mesh = world_mesh(group)
     xs = [v.position.x() for v in mesh.vertices]
     ys = [v.position.y() for v in mesh.vertices]

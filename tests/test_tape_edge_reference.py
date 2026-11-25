@@ -3,8 +3,8 @@
 from types import SimpleNamespace
 from built_core import ScreenPoint, Input
 from built_core import Vec3 as V
-from core.history import History
-from core.scene import Scene
+from built_core.history import History
+from built_core.scene import Scene
 from tools.base import ToolContext
 from tools.tape import TapeMeasureTool
 

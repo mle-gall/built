@@ -28,7 +28,7 @@ fn attr_or_none<'py>(o: &Obj<'py>, name: &str) -> PyResult<Obj<'py>> {
     Ok(o.getattr_opt(name)?.unwrap_or_else(|| o.py().None().into_bound(o.py())))
 }
 
-/// `core.layers.layer_of`: the tag an entity carries (the default when unlabelled).
+/// `built_core.layers.layer_of`: the tag an entity carries (the default when unlabelled).
 fn layer_of<'py>(e: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = e.py();
     let value = match e.getattr_opt("attrs")?.filter(|a| !a.is_none()) {
@@ -134,7 +134,7 @@ fn bump(tally: &Obj<'_>, name: &Obj<'_>, n: i64) -> PyResult<()> {
 }
 
 /// A lazy mesh's edges by tag, without building it: the same welded keys
-/// `core.lazy_mesh.plan` makes, ring-only edges included; the last tag
+/// `built_core.lazy_mesh.plan` makes, ring-only edges included; the last tag
 /// assigned to a repeated edge wins.
 fn count_edges(py: Python<'_>, src: &Obj<'_>, tally: &Obj<'_>) -> PyResult<()> {
     let welded = py.import("built_core")?.getattr("deferred_weld")?.call1((src.get_item("pos")?,))?;
@@ -263,7 +263,7 @@ enum Stage {
     Done,
 }
 
-/// `core.purge.layer_count_steps`: None between meshes and group batches,
+/// `built_core.purge.layer_count_steps`: None between meshes and group batches,
 /// then one complete `{tag: count}`. With a History, the counts outside
 /// the edited mesh are kept while History accounts for every edit since.
 #[pyclass(module = "built_core", name = "LayerCountSteps")]
@@ -480,7 +480,7 @@ fn used_materials<'py>(py: Python<'py>, scene: &Obj<'py>) -> PyResult<Bound<'py,
         }
     }
     // A group's own paint lives on the group, not on its faces.
-    let placements = py.import("core.group")?.getattr("iter_placements")?;
+    let placements = py.import("built_core.group")?.getattr("iter_placements")?;
     for top in list_of(&document_groups(py, scene)?)? {
         for row in placements.call1((top,))?.try_iter()? {
             let paint = attr_or_none(&row?.get_item(0)?, "material")?;

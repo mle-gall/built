@@ -12,13 +12,13 @@
 //! the tag's own switch), or a folder of its tag switched off (the view's
 //! when it lists folders, else the document's), or a parent hidden. A tag
 //! set not to print (`printable` False) stays out of every sheet, as
-//! `core.layers.hide_unprinted` left it.
+//! `built_core.layers.hide_unprinted` left it.
 
 use crate::doc::{self, value::Value, Data, Key};
 use pyo3::prelude::*;
 use std::collections::{HashMap, HashSet};
 
-/// `core.layers.DEFAULT_LAYER`.
+/// `built_core.layers.DEFAULT_LAYER`.
 pub const DEFAULT_LAYER: &str = "Layer 0";
 
 /// What a view says about visibility (None: the document's own state).
@@ -158,7 +158,7 @@ pub fn hidden(root: Key, roots: &[Key], view: &ViewState) -> PyResult<HashMap<Ke
 #[pyo3(signature = (root, roots, rows, view=None))]
 pub fn sheet_frame_hidden(py: Python<'_>, root: &Bound<'_, PyAny>, roots: Vec<Bound<'_, PyAny>>,
                           rows: Vec<Option<Bound<'_, PyAny>>>, view: Option<Bound<'_, PyAny>>) -> PyResult<Vec<u8>> {
-    py.import("core.doc_model")?.call_method0("flush")?;
+    py.import("built_core.doc_model")?.call_method0("flush")?;
     let state = match view.filter(|v| !v.is_none()) {
         Some(v) => ViewState::of_view(&super::model::read_fields(doc::py::handle_key(&v)?)?),
         None => ViewState::default(),
@@ -180,7 +180,7 @@ pub fn sheet_frame_hidden(py: Python<'_>, root: &Bound<'_, PyAny>, roots: Vec<Bo
 #[pyfunction]
 pub fn sheet_frame_hidden_tags(py: Python<'_>, root: &Bound<'_, PyAny>,
                               view: Option<&Bound<'_, PyAny>>) -> PyResult<HashSet<String>> {
-    py.import("core.doc_model")?.call_method0("flush")?;
+    py.import("built_core.doc_model")?.call_method0("flush")?;
     let state = match view {
         Some(view) => ViewState::of_view(&super::model::read_fields(doc::py::handle_key(view)?)?),
         None => ViewState::default(),

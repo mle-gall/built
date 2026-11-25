@@ -28,7 +28,7 @@ from types import SimpleNamespace
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.snap import _detect_axis_on_screen
+from built_core.snap import _detect_axis_on_screen
 
 
 def V(x, y, z=0.0):
@@ -170,7 +170,7 @@ def test_move_finds_x_and_y_from_an_oblique_view_through_the_screen():
     does, from where the cursor points, and the lock lands on the world
     axis."""
     from types import SimpleNamespace
-    from core.snap import compute_snap
+    from built_core.snap import compute_snap
     from tools.move import MoveTool
     # the camera-facing vertical plane through the origin, seen from _iso:
     # a cursor "along X on screen" lands in that plane OFF the X axis
@@ -203,7 +203,7 @@ def test_the_point_may_not_run_to_the_other_side_of_the_county():
     falls through to what it would have been without screen detection at
     all — never to something new.
     """
-    import core.snap as snap
+    import built_core.snap as snap
 
     start = V(0, 0, 0)
     cand = V(0.0, 0.5, 0.0)
@@ -239,5 +239,5 @@ def test_the_point_may_not_run_to_the_other_side_of_the_county():
 def test_the_cap_is_loose_enough_for_the_real_cases():
     """It must not cost anything that works: the worst honest ratio
     measured over the 57,024-cell grid was 4.01x."""
-    from core.snap import _MAX_AXIS_REACH
+    from built_core.snap import _MAX_AXIS_REACH
     assert _MAX_AXIS_REACH > 4.01

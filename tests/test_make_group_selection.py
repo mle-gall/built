@@ -15,8 +15,8 @@ from built_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from built_render import context_menu_build
 
-from core.group import Group
-from core.mesh import Mesh
+from built_core.group import Group
+from built_core.mesh import Mesh
 
 
 def V(x, y, z=0.0):

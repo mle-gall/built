@@ -3,9 +3,9 @@ import time
 
 from tests.test_project_drawing_filters import Project
 
-from core.group import Group
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from built_core import Vec3 as QVector3D
 
 

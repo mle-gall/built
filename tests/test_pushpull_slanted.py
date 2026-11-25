@@ -16,10 +16,10 @@ import itertools
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.edits import build_add_edge
-from core.history import History, MoveVerticesCommand
+from built_core.edits import build_add_edge
+from built_core.history import History, MoveVerticesCommand
 from built_core.orient import is_closed, orient_outward, signed_volume
-from core.scene import Scene
+from built_core.scene import Scene
 from built_core.triangulate import plane_axes
 from tests.test_fuzz_engine import V, _draw_rect, _push, _up
 

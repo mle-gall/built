@@ -116,7 +116,7 @@ impl PlacementState {
             }
         };
         let materials = py.import("built_core.materials")?;
-        let material = py.import("core.group")?.call_method1("effective_material", (group,))?;
+        let material = py.import("built_core.group")?.call_method1("effective_material", (group,))?;
         let layer = py.import("built_core")?.getattr("tag_styles")?.call_method1("object_layer", (group,))?;
         let key = (layer, materials.call_method1("material_sig", (material,))?);
         let memo = self.paints.bind(py);
@@ -263,7 +263,7 @@ fn bools(array: &Obj<'_>) -> PyResult<Vec<bool>> {
 /// (tag, paint, Hide, the tag's visibility) resolved in the document, the
 /// paint resolved here once per distinct tag and paint, not per placement.
 pub fn native_records<'py>(py: Python<'py>, scene: &Obj<'py>, roots: &Obj<'py>) -> PyResult<Vec<Record<'py>>> {
-    let layers = py.import("core.layers")?;
+    let layers = py.import("built_core.layers")?;
     let effective = py.import("built_core")?.getattr("tag_edits")?.getattr("effective_visible")?;
     let invisible = PySet::empty(py)?;
     let blocked = PySet::empty(py)?;
@@ -276,7 +276,7 @@ pub fn native_records<'py>(py: Python<'py>, scene: &Obj<'py>, roots: &Obj<'py>) 
             blocked.add(layer.getattr("key")?)?;
         }
     }
-    let cols = py.import("core.doc_model")?.getattr("NATIVE")?.call_method1(
+    let cols = py.import("built_core.doc_model")?.getattr("NATIVE")?.call_method1(
         "doc_render_rows",
         (roots, invisible, blocked, layers.getattr("LINK_UNTAGGED_SUFFIX")?, layers.getattr("DEFAULT_LAYER")?),
     )?;
@@ -284,7 +284,7 @@ pub fn native_records<'py>(py: Python<'py>, scene: &Obj<'py>, roots: &Obj<'py>) 
     let parent = integers(&column("parent")?)?;
     let (world, defined) = compose(&floats(&column("local")?)?, &bools(&column("has")?)?, &parent)?;
     let (names, materials) = (column("names")?, column("materials")?);
-    let proxy = py.import("core.group")?.getattr("PlacementProxy")?;
+    let proxy = py.import("built_core.group")?.getattr("PlacementProxy")?;
     let stand_ins = PyDict::new(py);
     let stand_in = |layer: i64, material: i64| -> Reply<'py> {
         if let Some(seen) = stand_ins.get_item((layer, material))? {
@@ -330,7 +330,7 @@ pub fn native_records<'py>(py: Python<'py>, scene: &Obj<'py>, roots: &Obj<'py>) 
 /// the document in one call (`doc_tree`), the editor's proxies deciding
 /// what is hidden and filtered.
 pub fn proxy_records<'py>(py: Python<'py>, scene: &Obj<'py>, roots: &Obj<'py>, vp: &Obj<'py>, state: &PlacementState) -> PyResult<Vec<Record<'py>>> {
-    let tree = py.import("core.doc_model")?.getattr("NATIVE")?.call_method1("doc_tree", (roots,))?;
+    let tree = py.import("built_core.doc_model")?.getattr("NATIVE")?.call_method1("doc_tree", (roots,))?;
     let handles = tree.get_item(0)?;
     let parent = integers(&tree.get_item(1)?)?;
     let (world, defined) = compose(&floats(&tree.get_item(2)?)?, &bools(&tree.get_item(3)?)?, &parent)?;
@@ -644,7 +644,7 @@ pub fn pack_scene<'py>(
             linked |= uid.call_method1("startswith", ("@[",))?.is_truthy()?;
         }
         if repeated.is_truthy()? || linked {
-            let row_id = py.import("core.link_structure")?.getattr("row_id")?;
+            let row_id = py.import("built_core.link_structure")?.getattr("row_id")?;
             for (i, group) in groups.iter().enumerate() {
                 if group.is_none() {
                     continue;

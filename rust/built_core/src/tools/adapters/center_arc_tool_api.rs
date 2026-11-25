@@ -39,7 +39,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     [kind, value, at] = unpack::<3>(&label)?;
     if kind.eq("radius")? {
-        let fmt_len = imported(py, "core.units")?.getattr("fmt_len")?;
+        let fmt_len = imported(py, "built_core.units")?.getattr("fmt_len")?;
         return (
             ("R ")
                 .into_bound_py_any(py)?
@@ -48,7 +48,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
         )
             .into_bound_py_any(py);
     }
-    let fmt_angle_deg = imported(py, "core.units")?.getattr("fmt_angle_deg")?;
+    let fmt_angle_deg = imported(py, "built_core.units")?.getattr("fmt_angle_deg")?;
     Ok((
         fmt_angle_deg.call((&value,), Some(&fields!(py; "signed" => true)))?,
         module.call_method1("Vec3", positional(&at)?)?,

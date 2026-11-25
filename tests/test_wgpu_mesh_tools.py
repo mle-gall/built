@@ -4,10 +4,10 @@ import pytest
 from built_core import Input as Qt
 from built_core import ScreenPoint as QPointF
 from built_core import Vec3 as QVector3D
-from core.scene import Scene
-from core.mesh import Mesh
-from core.group import Group
-from core.history import History
+from built_core.scene import Scene
+from built_core.mesh import Mesh
+from built_core.group import Group
+from built_core.history import History
 from tools.rust_tools import LineTool
 from tools.rust_tools import RectangleTool
 from tools.base import ToolContext

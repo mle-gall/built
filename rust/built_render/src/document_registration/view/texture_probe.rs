@@ -5,7 +5,7 @@ use std::time::Instant;
 
 fn first_textured<'py>(scene: &Obj<'py>, tool: &Obj<'py>) -> PyResult<(Obj<'py>, Obj<'py>)> {
     let py = scene.py();
-    let placements = py.import("core.group")?.getattr("iter_placements")?;
+    let placements = py.import("built_core.group")?.getattr("iter_placements")?;
     for root in scene.getattr("groups")?.try_iter()? {
         for placement in placements.call1((root?,))?.try_iter()? {
             let group = placement?.get_item(0)?;
@@ -25,7 +25,7 @@ fn first_textured<'py>(scene: &Obj<'py>, tool: &Obj<'py>) -> PyResult<(Obj<'py>,
 #[pyfunction]
 pub(super) fn measure_texture_position(py: Python<'_>, path: &Obj) -> PyResult<()> {
     let path = py.import("pathlib")?.call_method1("Path", (path,))?;
-    let scene = py.import("core.scene")?.call_method0("Scene")?;
+    let scene = py.import("built_core.scene")?.call_method0("Scene")?;
     py.import("built_core.formats.igz")?
         .call_method1("load_into", (&scene, &path))?;
     let tool = py

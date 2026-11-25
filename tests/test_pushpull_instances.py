@@ -24,8 +24,8 @@ import pytest
 from built_core import ScreenPoint, Input
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.group import Group, world_mesh
-from core.mesh import Mesh
+from built_core.group import Group, world_mesh
+from built_core.mesh import Mesh
 from built_core.orient import is_closed, signed_volume
 from built_core.store_mesh import StoreMesh
 from tools.base import ToolContext

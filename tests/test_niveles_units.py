@@ -10,7 +10,7 @@ import os
 
 import pytest  # noqa: E402
 
-from core import units  # noqa: E402
+from built_core import units  # noqa: E402
 
 
 EXAMPLE = os.path.join(os.path.dirname(__file__), os.pardir, "examples",

@@ -15,8 +15,8 @@ import math
 
 from built_core import Vec3 as QVector3D
 
-from core.scene import Scene
-from core.snap import AXIS_COLORS, compute_snap
+from built_core.scene import Scene
+from built_core.snap import AXIS_COLORS, compute_snap
 
 
 def V(x, y, z=0.0):
@@ -200,7 +200,7 @@ def test_guides_read_on_line_and_group_points_keep_their_colours():
     a model made of components turned magenta everywhere — Marco.)"""
     from types import SimpleNamespace
     from views.document_interaction import _SnapEdge
-    from core.snap import COLOR_ENDPOINT, COLOR_MIDPOINT, COLOR_ON_EDGE
+    from built_core.snap import COLOR_ENDPOINT, COLOR_MIDPOINT, COLOR_ON_EDGE
     scene = SimpleNamespace(edges=[                           # (an elevation: x, z)
         _SnapEdge(V(0, 0, 0), V(4, 0, 0), guide=True),          # a guide line
         _SnapEdge(V(0, 0, 2), V(4, 0, 2), in_group=True),       # a group's edge
@@ -232,8 +232,8 @@ def test_the_viewport_offers_an_arcs_sweep_midpoint_and_a_groups_origin():
     from tools.arc import ArcTool
     from tools.rust_tools import LineTool
     from tools.base import ToolContext
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     vp = Viewport(None)
     vp.resize(1000, 600)
     vp.camera.set_aspect(1000, 600)
@@ -276,7 +276,7 @@ def test_an_arc_started_at_another_arcs_end_snaps_tangent_to_it():
     from tests.controller_surface import ControllerSurface as Viewport
     from tools.arc import ArcTool
     from tools.base import ToolContext
-    from core.snap import COLOR_TANGENT
+    from built_core.snap import COLOR_TANGENT
     vp = Viewport(None)
     vp.resize(1000, 600)
     vp.camera.set_aspect(1000, 600)
@@ -327,8 +327,8 @@ def _arc_mesh():
     """A mesh holding one half-circle arc (0,0)→(2,0) over (1,1), drawn with
     the real tool into a scratch scene."""
     from built_core import ScreenPoint, Input
-    from core.scene import Scene
-    from core.history import History
+    from built_core.scene import Scene
+    from built_core.history import History
     from tools.arc import ArcTool
     from tools.base import ToolContext
 
@@ -353,7 +353,7 @@ def _arc_mesh():
 
 def _placed(vp, mesh, dx, dy):
     from built_core import Matrix4 as QMatrix4x4
-    from core.group import Group
+    from built_core.group import Group
     g = Group(mesh, "pieza")
     xf = QMatrix4x4()
     xf.translate(dx, dy, 0)
@@ -365,7 +365,7 @@ def _placed(vp, mesh, dx, dy):
 
 def test_the_hovered_edge_can_be_a_components_and_the_tip_says_so():
     from built_core import ScreenPoint, Input
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     from tools.rust_tools import LineTool
     vp = _offscreen_vp()
     vp.camera.target = V(6, 5, 0)
@@ -414,8 +414,8 @@ def test_the_centre_of_a_components_circle_comes_from_its_rim():
     from built_core import ScreenPoint, Input
     from tools.circle import CircleTool
     from tools.base import ToolContext
-    from core.scene import Scene
-    from core.history import History
+    from built_core.scene import Scene
+    from built_core.history import History
     vp = _offscreen_vp()
     vp.camera.target = V(7, 6, 0)
     vp.camera.distance = 12
@@ -450,7 +450,7 @@ def test_a_loose_edge_and_a_components_edge_under_the_cursor_together():
     raised NameError inside pick_edge_any — the hover died and clicks «no
     hacían nada». The nearer of the two must simply win."""
     from built_core import ScreenPoint, Input
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     from tools.rust_tools import LineTool
     vp = _offscreen_vp()
     vp.camera.target = V(6, 5, 0)

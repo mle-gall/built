@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! A linear dimension's frame maths (`core.dimension`): the frame of a
+//! A linear dimension's frame maths (`built_core.dimension`): the frame of a
 //! linear dimension, its measured value, the offset squared to the segment,
 //! the dimension line's ends, and what the cursor asks for while placing
 //! one. The record and its anchors stay Python.

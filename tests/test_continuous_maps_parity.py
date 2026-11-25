@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""``core.texture.continuous_maps`` (a texture walked across soft edges)
+"""``built_core.texture.continuous_maps`` (a texture walked across soft edges)
 moved to Rust (``model/texture_maths.rs``) and must answer as the Python
 did at ``fff1954a``: seeded prisms and rounded corners of 3 to 24 facets,
 some edges hard, holes, folds sharper than the hinge allows, degenerate
@@ -23,7 +23,7 @@ GOLDEN = Path(__file__).parent / "fixtures" / "continuous_maps_golden.json.gz"
 
 def _prism(rng):
     from built_core import Vec3 as V
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     m = Mesh()
     n = rng.randint(3, 24)
     r, h = rng.uniform(0.2, 5), rng.uniform(0.5, 4)

@@ -2,9 +2,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from core.history import History
-from core.protocol.commands import run
-from core.scene import Scene
+from built_core.history import History
+from built_core.protocol.commands import run
+from built_core.scene import Scene
 from views.wgpu_ui import _sync_units
 
 

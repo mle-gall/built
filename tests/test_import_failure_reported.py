@@ -16,7 +16,7 @@ import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from built_core import Vec3 as V
 
-from core.history import AddEdgeCommand
+from built_core.history import AddEdgeCommand
 from formats import dae, glb, obj, skp, stl
 from built_render.shell_files import ShellFileDialog
 

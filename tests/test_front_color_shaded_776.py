@@ -100,8 +100,8 @@ def test_back_faces_keep_the_back_tint(win):
 
 
 def test_a_group_takes_it_and_a_painted_group_keeps_its_paint(win):
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     vp = win.viewport
     sc = vp.scene
     plain = Mesh()

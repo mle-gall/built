@@ -20,9 +20,9 @@ from built_core import PixelPoint, Input  # noqa: E402
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 
-from core.group import Group  # noqa: E402
-from core.history import MakeGroupCommand  # noqa: E402
-from core.mesh import Mesh  # noqa: E402
+from built_core.group import Group  # noqa: E402
+from built_core.history import MakeGroupCommand  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
 from tools.rust_tools import SelectTool  # noqa: E402
 from tests.controller_surface import ControllerSurface as Viewport
 

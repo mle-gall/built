@@ -22,7 +22,7 @@ HERE = Path(__file__).resolve().parent
 def _box(history, x, y, size=1.0, h=1.0):
     """Six faces of a box at (x, y); returns them."""
     from built_core import Vec3 as V
-    from core.history import AddFaceCommand
+    from built_core.history import AddFaceCommand
     mesh = history.scene.mesh
     a, b = (x, y), (x + size, y + size)
     loops = [
@@ -44,7 +44,7 @@ def _box(history, x, y, size=1.0, h=1.0):
 
 
 def _group(history, faces, name, component=False):
-    from core.history import GroupToComponentCommand, MakeGroupCommand
+    from built_core.history import GroupToComponentCommand, MakeGroupCommand
     scene = history.scene
     edges = {e for f in faces for e in getattr(f, "edges", ())}
     before = list(scene.groups)
@@ -59,12 +59,12 @@ def _group(history, faces, name, component=False):
 def make(out: Path) -> dict:
     """Write ``parts.built`` and ``kinds.built`` under ``out``; their paths."""
     from built_core import Matrix4 as QMatrix4x4, Vec3 as V
-    from core import links
-    from core.dimension import Dimension
-    from core.guide import Guide
-    from core.history import AddDimensionCommand, AddGuideCommand, AddTextLabelCommand, History
-    from core.scene import Scene
-    from core.textlabel import TextLabel
+    from built_core import links
+    from built_core.dimension import Dimension
+    from built_core.guide import Guide
+    from built_core.history import AddDimensionCommand, AddGuideCommand, AddTextLabelCommand, History
+    from built_core.scene import Scene
+    from built_core.textlabel import TextLabel
     from formats import igz
     out.mkdir(parents=True, exist_ok=True)
     leaf = out / "parts.built"

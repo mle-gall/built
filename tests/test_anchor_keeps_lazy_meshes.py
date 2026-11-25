@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from built_core import Vec3 as V
 
-from core import mesh as M
-from core.dimension import resolve_vertex_anchor
+from built_core import mesh as M
+from built_core.dimension import resolve_vertex_anchor
 from tests.test_deferred_mesh import _open, binary  # noqa: F401
 from tests.test_igz_format3 import _scene
 from formats import igz
@@ -40,8 +40,8 @@ def test_an_anchor_builds_only_the_mesh_it_sits_on(binary, monkeypatch,
 
 def test_shared_placements_are_filtered_before_vertex_lookup(monkeypatch):
     from built_core import Matrix4 as QMatrix4x4
-    from core.group import Group
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.scene import Scene
     mesh = M.Mesh()
     mesh.add_edge(V(0, 0, 0), V(1, 0, 0))
     scene = Scene()

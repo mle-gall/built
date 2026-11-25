@@ -490,7 +490,7 @@ pub(super) fn controller(r: &Registrar, cls: &Obj) -> PyResult<()> {
     // -- Snapping inference, delegated to self.inference -----------------
     // The reference state (the hover / acquired edges and points, the centre
     // reference, the axis and reference locks, the last snap) lives in
-    // core.inference.InferenceEngine, and so do the rules that used to be the
+    // built_core.inference.InferenceEngine, and so do the rules that used to be the
     // two post-processors of the search (the axis-source cue, the extension
     // hooks). These properties and thin wrappers keep the surface the tools,
     // the extensions, the probe and the tests read and write, so the

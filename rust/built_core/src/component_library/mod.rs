@@ -26,7 +26,7 @@ fn valid(id: &str) -> bool {
 }
 fn cache(py: Python) -> PyResult<PathBuf> {
     let p: PathBuf = py
-        .import("core.texture")?
+        .import("built_core.texture")?
         .call_method0("texture_cache_root")?
         .extract()?;
     Ok(p.parent().unwrap_or(Path::new(".")).join("library"))

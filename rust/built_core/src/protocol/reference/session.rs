@@ -9,7 +9,7 @@ use pyo3::{
 pub(super) fn record_leave(history: &Obj<'_>, level: &Obj<'_>, share: &Obj<'_>) -> PyResult<bool> {
     let py = history.py();
     let h = crate::model::module(py, "built_core.history")?;
-    let steps = crate::model::module(py, "core.reference_edit")?;
+    let steps = crate::model::module(py, "built_core.reference_edit")?;
     let parts = level.call_method1("get", ("parts",))?;
     let g = share.get_item(0)?;
     let proto = share.get_item(1)?;
@@ -36,7 +36,7 @@ pub(super) fn record_leave(history: &Obj<'_>, level: &Obj<'_>, share: &Obj<'_>) 
     let entry = level.call_method1("get", ("entry_transaction",))?;
     let inner = stack.get_item(PySlice::new(py, mark, n, 1))?;
     let step = if !entry.is_none()
-        && !crate::model::module(py, "core.doc_model")?
+        && !crate::model::module(py, "built_core.doc_model")?
             .getattr("NATIVE")?
             .call_method0("doc_depth")?
             .is_truthy()?

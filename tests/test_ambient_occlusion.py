@@ -160,7 +160,7 @@ def corner_blocks(native_gpu_host):
     """Two blocks meeting in an inner vertical corner, the view of the
     0.5.11 round: a block hanging against the side of a taller one. Returns
     a function that builds it with the faces in the colour given."""
-    from core.materials import Material
+    from built_core.materials import Material
     def build(color):
         vp = native_gpu_host.viewport
         vp.scene.clear()

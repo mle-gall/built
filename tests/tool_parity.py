@@ -41,8 +41,8 @@ class LineView:
     """The viewport a Line commit needs: scene, history, a camera eye."""
 
     def __init__(self, far=False):
-        from core.history import History
-        from core.scene import Scene
+        from built_core.history import History
+        from built_core.scene import Scene
         self.scene = Scene()
         self.history = History(self.scene)
         self.offset = (650000.0, 6860000.0, 0.0) if far else (0.0, 0.0, 0.0)
@@ -169,10 +169,10 @@ class SelectView:
     calls; the selection is the scene's own."""
 
     def __init__(self):
-        from core.group import Group
-        from core.history import History
-        from core.mesh import Mesh
-        from core.scene import Scene
+        from built_core.group import Group
+        from built_core.history import History
+        from built_core.mesh import Mesh
+        from built_core.scene import Scene
         self.scene = Scene()
         self.history = History(self.scene)
         mesh = self.scene.mesh
@@ -527,7 +527,7 @@ class RotView(RectView):
 
     def __init__(self):
         super().__init__()
-        from core.protocol.commands import run
+        from built_core.protocol.commands import run
         run(self.history, "add_face", outer=[[5, 0, 0], [5, 2, 0], [5, 2, 2], [5, 0, 2]])
         self.history.undo_stack.clear()
         self.axis_lock = None
@@ -651,7 +651,7 @@ class ArcView(RotView):
 
     def __init__(self):
         super().__init__()
-        from core.protocol.commands import run
+        from built_core.protocol.commands import run
         run(self.history, "add_face", outer=[[0, 0, 0], [4, 0, 0], [4, 4, 0], [0, 4, 0]])
         self.history.undo_stack.clear()
 
@@ -790,8 +790,8 @@ class MoveView(RectView):
     def __init__(self):
         super().__init__()
         from built_core import Matrix4, Vec3
-        from core.group import Group
-        from core.mesh import Mesh
+        from built_core.group import Group
+        from built_core.mesh import Mesh
         square = [Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(1, 1, 0), Vec3(0, 1, 0)]
         self.scene.mesh.add_face(square)
         box = Mesh()
@@ -1009,8 +1009,8 @@ CHANGE_AXES_SCENARIOS = {
 
 
 def run_change_axes(steps):
-    from core.group import frame_axes, group_frame
-    from core.scene import Scene
+    from built_core.group import frame_axes, group_frame
+    from built_core.scene import Scene
     from tests.test_parity_tools import _Vp, _ctx
     from tests.test_group_axes import _slab
     from tools.change_axes import ChangeAxesTool
@@ -1048,7 +1048,7 @@ FOLLOWME_SCENARIOS = {
 
 def run_followme(steps):
     from built_core import Input
-    from core.scene import Scene
+    from built_core.scene import Scene
     from tests.test_followme import _Vp2, _ctx, V
     from tools.followme import FollowMeTool
     vp, tool = _Vp2(Scene()), FollowMeTool()
@@ -1092,7 +1092,7 @@ FREEHAND_SCENARIOS = {
 
 
 def run_freehand(steps):
-    from core.scene import Scene
+    from built_core.scene import Scene
     from tests.test_parity_tools import _Vp, _ctx
     from tools.freehand import FreehandTool
     vp, tool = _Vp(Scene()), FreehandTool()
@@ -1125,8 +1125,8 @@ FLIP_SCENARIOS = {
 def run_flip(steps):
     from types import SimpleNamespace
     from built_core import Input
-    from core.scene import Scene
-    from core.group import placement_points
+    from built_core.scene import Scene
+    from built_core.group import placement_points
     from tests.test_flip_nested_groups import _vp, _cabinet, V
     from tools.flip import FlipTool
     scene = Scene()
@@ -1172,8 +1172,8 @@ PASTE_SCENARIOS = {
 
 def run_paste(steps):
     from built_core import ScreenPoint, Input
-    from core.history import History
-    from core.scene import Scene
+    from built_core.history import History
+    from built_core.scene import Scene
     from tests.test_paste import _PreviewVP, _make_group, V
     from tools.base import ToolContext
     from tools.paste import PasteTool
@@ -1221,8 +1221,8 @@ TAPE_SCENARIOS = {
 
 def run_tape(steps):
     from built_core import Input
-    from core.guide import Guide
-    from core.scene import Scene
+    from built_core.guide import Guide
+    from built_core.scene import Scene
     from tests.test_tape_axis_source_and_guide_segment import _Vp, _ctx, V
     from tools.tape import TapeMeasureTool
     view, tool = _Vp(Scene()), TapeMeasureTool()
@@ -1323,7 +1323,7 @@ PROTRACTOR_SCENARIOS = {
 
 def run_protractor(steps):
     from built_core import Input
-    from core.scene import Scene
+    from built_core.scene import Scene
     from tests.test_protractor import _VpScreen, _ctx
     from tools.protractor import ProtractorTool
     view, tool = _VpScreen(Scene()), ProtractorTool()
@@ -1366,8 +1366,8 @@ def run_paint(steps):
     from unittest.mock import patch
     from built_core import Input, ScreenPoint
     from built_core import Vec3
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from tests.test_paint_recent import _FakeViewport, _quad, _use
     from tools.base import ToolContext
     from tools.paint import PaintTool
@@ -1484,7 +1484,7 @@ def run_walkthrough(tool_name, steps):
     from unittest.mock import patch
     from built_core import ScreenPoint, Input
     from built_core import Vec3
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     from tools.base import ToolContext
     from tools import walkthrough
 

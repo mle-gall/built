@@ -14,12 +14,12 @@ from __future__ import annotations
 from built_core import Vec3 as QVector3D
 
 from built_core.store_mesh import plan_cap_plane as rebuild_plane
-from core.mesh import Mesh
+from built_core.mesh import Mesh
 from built_core.orient import orient_outward
-from core.scene import Scene
-from core.history import History
+from built_core.scene import Scene
+from built_core.history import History
 from tools.pushpull import PushPullTool
-from core.topology import classify_push_edge, refine_loop_with_points
+from built_core.topology import classify_push_edge, refine_loop_with_points
 
 
 def V(x, y, z=0.0):
@@ -245,8 +245,8 @@ def test_rebuild_order_independent_on_overhang():
     no order leaves a seam or an internal partition."""
     import itertools
     from built_core import Vec3 as QVector3D
-    from core.scene import Scene
-    from core.history import History
+    from built_core.scene import Scene
+    from built_core.history import History
     from tools.pushpull import PushPullTool
 
     def build():
@@ -317,7 +317,7 @@ def test_plane_cycle_keeps_the_first_minimum_and_unbounded_grid_coordinates():
 
 
 def test_cap_coverage_counts_a_fresh_face_outside_the_seeded_scope():
-    from core.arrangement import plane_basis
+    from built_core.arrangement import plane_basis
     from built_core import object_cap_coverage
 
     mesh = Mesh()

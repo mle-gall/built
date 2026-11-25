@@ -14,8 +14,8 @@ from built_core import Vec3 as V
 
 from core import bim
 from core.bim import collect_objects, next_object_id, tag_faces, tag_group
-from core.history import History, MakeGroupCommand, MakeNestedGroupCommand
-from core.scene import Scene
+from built_core.history import History, MakeGroupCommand, MakeNestedGroupCommand
+from built_core.scene import Scene
 from formats import igz
 
 

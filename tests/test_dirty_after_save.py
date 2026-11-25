@@ -15,9 +15,9 @@ from built_core import Vec3 as QVector3D
 
 @pytest.fixture
 def doc(tmp_path):
-    from core.group import Group
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core.group import Group
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
     from formats.igz import save_scene
 
     scene = Scene()

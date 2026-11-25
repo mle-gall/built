@@ -52,7 +52,7 @@ fn capture<'py>(scene: &Obj<'py>) -> PyResult<Bound<'py, PyDict>> {
     let folders = PyDict::new(py);
     let visibility = scene.getattr("folder_visibility")?;
     for f in py
-        .import("core.layers")?
+        .import("built_core.layers")?
         .call_method1("folders_of", (scene,))?
         .try_iter()?
     {
@@ -93,7 +93,7 @@ fn recall<'py>(scene: &Obj<'py>, data: &Obj<'py>) -> PyResult<Option<Obj<'py>>> 
     }
     let visibility = scene.getattr("folder_visibility")?;
     for f in py
-        .import("core.layers")?
+        .import("built_core.layers")?
         .call_method1("folders_of", (scene,))?
         .try_iter()?
     {
@@ -185,7 +185,7 @@ pub(crate) fn visibility_set_command<'py>(
         ("save", _) => {
             let snapshot = capture(scene)?;
             snapshot.set_item("name", name)?;
-            records.set_item(py.import("core.group")?.call_method0("new_uid")?, snapshot)?;
+            records.set_item(py.import("built_core.group")?.call_method0("new_uid")?, snapshot)?;
         }
         ("update", Some(r)) => {
             let snapshot = capture(scene)?;

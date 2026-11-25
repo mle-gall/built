@@ -53,7 +53,7 @@ fn replay_direct(
         )?)
     };
     let action = cmd.getattr(if undo { "undo" } else { "do" })?;
-    let doc = py.import("core.doc_model")?;
+    let doc = py.import("built_core.doc_model")?;
     doc.call_method1("begin", (scene.getattr("_root")?.getattr("_doc_key")?,))?;
     host.setattr("last_txn", py.None())?;
     let result = (|| {
@@ -275,7 +275,7 @@ impl DocumentHistory {
         let result: PyResult<()> = (|| {
             let record = cmd.getattr(if sheet { "_txn" } else { "_doc_txn" });
             if let Some(txn) = record.ok().filter(|v| !v.is_none()) {
-                py.import("core.doc_model")?.call_method0("flush")?;
+                py.import("built_core.doc_model")?.call_method0("flush")?;
                 if sheet {
                     txn.cast::<PyTransaction>()?.try_borrow()?.run(py, undo)?;
                 } else {
@@ -289,7 +289,7 @@ impl DocumentHistory {
                     host.setattr("last_txn", (txn, undo))?;
                 }
             } else if let Some(group) = cmd.getattr_opt("_mixed_group")? {
-                let doc = py.import("core.doc_model")?;
+                let doc = py.import("built_core.doc_model")?;
                 doc.call_method0("flush")?;
                 let scene = host.getattr("scene")?;
                 in_command_mesh(
@@ -340,7 +340,7 @@ impl DocumentHistory {
                 Ok(())
             };
             if !hooks_only && cmd.getattr_opt("_doc_txn")?.is_some_and(|v| !v.is_none()) {
-                scene.py().import("core.doc_model")?.call_method0("flush")?;
+                scene.py().import("built_core.doc_model")?.call_method0("flush")?;
             }
             let active = scene.getattr("mesh")?;
             let mesh = cmd

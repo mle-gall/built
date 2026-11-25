@@ -38,7 +38,7 @@ pub(crate) fn command_draw_edge(
     curve: Option<i128>,
     layer: Option<&str>,
 ) -> PyResult<Option<DrawnEdge>> {
-    let default_layer = mesh.py().import("core.layers")?.getattr("DEFAULT_LAYER")?;
+    let default_layer = mesh.py().import("built_core.layers")?.getattr("DEFAULT_LAYER")?;
     let a = input_point(mesh, a)?;
     let b = input_point(mesh, b)?;
     let key: Option<u128> = mesh

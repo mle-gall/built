@@ -26,17 +26,17 @@ GOLDEN = Path(__file__).parent / "fixtures" / "placement_walks_golden.json.gz"
 
 def _walks():
     import built_core as N
-    from core import group as G
+    from built_core import group as G
     return (N.group_iter_placements, N.group_iter_painted_placements,
             N.group_visible_placements, N.group_model_placements)
 
 
 def _scene(rng):
     from built_core import Matrix4 as M
-    from core import layers as L
-    from core.group import Group
-    from core.mesh import Mesh
-    from core.scene import Scene
+    from built_core import layers as L
+    from built_core.group import Group
+    from built_core.mesh import Mesh
+    from built_core.scene import Scene
     scene = Scene()
     for t in ("A", "B", "C"):
         scene.layers.append(L.Layer(t, visible=rng.random() < 0.6, locked=rng.random() < 0.3))
@@ -80,7 +80,7 @@ def _m(m):
 def answers():
     import itertools
     from built_core import Matrix4 as M
-    from core import layers as L
+    from built_core import layers as L
     plain, painted, visible, model = _walks()
     counter = itertools.count()
     real = L.new_uid
@@ -119,8 +119,8 @@ def test_the_walks_answer_as_the_generators_did():
 def test_the_walks_stay_lazy():
     """One placement per step, and a node's children read when the walk
     comes back to it."""
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     plain, painted, _visible, model = _walks()
     for walk in (plain, painted, model):
         root, late = Group(Mesh(), name="root"), Group(Mesh(), name="late")

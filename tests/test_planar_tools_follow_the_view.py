@@ -159,7 +159,7 @@ def _plane_of(segments):
 )
 def test_empty_space_selects_camera_and_cursor_aligned_global_plane(
         viewport, monkeypatch, ray_origin, ray_direction, normal_axis):
-    from core import axes
+    from built_core import axes
     from tools.circle import CircleTool
 
     viewport.active_tool = CircleTool()
@@ -192,7 +192,7 @@ def test_empty_space_selects_camera_and_cursor_aligned_global_plane(
 def test_planar_preview_uses_selected_plane_color(
         viewport, monkeypatch, ray_origin, ray_direction, normal_axis,
         tool_name):
-    from core.snap import AXIS_COLORS
+    from built_core.snap import AXIS_COLORS
     from tools.circle import CircleTool
     from tools.rust_tools import RectangleTool
 
@@ -220,7 +220,7 @@ def test_planar_preview_uses_selected_plane_color(
 
 def test_empty_space_camera_plane_can_be_hit_at_a_near_grazing_angle(
         viewport, monkeypatch):
-    from core import axes
+    from built_core import axes
     from tools.circle import CircleTool
 
     viewport.active_tool = CircleTool()
@@ -284,7 +284,7 @@ def test_planar_preview_stays_bounded_when_cursor_moves_along_x_view(
 def test_circle_shows_a_ring_on_the_cursor_in_the_locked_plane_colour(viewport):
     from tools.base import PLANE_LOCK_KEYS
     from tools.circle import CircleTool
-    from core.snap import AXIS_COLORS
+    from built_core.snap import AXIS_COLORS
     viewport.camera.set_view("iso")
     tool = CircleTool()
     viewport.active_tool = tool
@@ -320,7 +320,7 @@ def test_rectangle_shows_a_square_on_the_cursor_and_keeps_the_colour_while_drawi
     tool.on_hover(_ctx(viewport, world, px))
     segs = tool.rubber_band_lines()
     assert len(segs) == 4 and _plane_of(segs).z() < 1e-6          # flat square glyph
-    from core.snap import AXIS_COLORS
+    from built_core.snap import AXIS_COLORS
     assert tool.wireframe_color[:3] == tuple(AXIS_COLORS["z"][:3])
     key = next(k for k, a in PLANE_LOCK_KEYS.items() if a == "x")   # Right = red
     tool.on_key(viewport, key, None)
@@ -360,8 +360,8 @@ def test_a_first_click_on_a_components_face_captures_its_world_plane(viewport):
     post. The captured plane must be the world one."""
     from built_core import ScreenPoint as QPointF, Input as Qt
     from built_core import Matrix4 as QMatrix4x4
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from tools.rust_tools import RectangleTool
     viewport.camera.set_view("iso")
     mesh = Mesh()
@@ -408,9 +408,9 @@ def test_a_nested_components_face_plane_comes_through_its_placement(viewport):
     composed matrix puts the face in the world."""
     from built_core import ScreenPoint as QPointF, Input as Qt
     from built_core import Matrix4 as QMatrix4x4
-    from core.group import Group
-    from core.mesh import Mesh
-    from core.snap import face_plane_world
+    from built_core.group import Group
+    from built_core.mesh import Mesh
+    from built_core.snap import face_plane_world
     from tools.rust_tools import RectangleTool
     mesh = Mesh()
     mesh.add_face([QVector3D(0, 0, 0), QVector3D(0, 2, 0), QVector3D(0, 2, 3), QVector3D(0, 0, 3)])  # local normal ±X
@@ -464,8 +464,8 @@ def test_opening_a_container_lets_the_pick_resolve_to_its_children(viewport):
     "the plaza" (a stale index: the owner a hit resolves to depends on the
     open context)."""
     from built_core import Matrix4 as QMatrix4x4
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     mesh = Mesh()
     mesh.add_face([QVector3D(0, 0, 0), QVector3D(2, 0, 0), QVector3D(2, 2, 0), QVector3D(0, 2, 0)])
     child = Group(mesh, "arco")
@@ -500,8 +500,8 @@ def test_escape_steps_out_of_the_open_group_from_the_window_action_too(viewport)
     window's «Cancel current tool» action owns the Esc shortcut and fires
     before the viewport's key event; its own cascade never stepped out of
     a group. One cascade now: Viewport.escape()."""
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     from tools.rust_tools import SelectTool
     mesh = Mesh()
     mesh.add_face([QVector3D(0, 0, 0), QVector3D(2, 0, 0), QVector3D(2, 2, 0), QVector3D(0, 2, 0)])
@@ -559,9 +559,9 @@ def test_a_group_inserted_while_editing_a_container_becomes_its_child(viewport):
     place, import) appends to the container's children; undo removes it
     from there."""
     from built_core import Matrix4 as QMatrix4x4
-    from core.group import Group
-    from core.history import InsertGroupCommand
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.history import InsertGroupCommand
+    from built_core.mesh import Mesh
     scene = viewport.scene
     mesh = Mesh()
     mesh.add_face([QVector3D(0, 0, 0), QVector3D(1, 0, 0), QVector3D(1, 1, 0), QVector3D(0, 1, 0)])

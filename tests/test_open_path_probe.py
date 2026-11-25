@@ -9,10 +9,10 @@ from pathlib import Path
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core.group import Group
-from core.history import History
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.history import History
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "open_path_probe.py"

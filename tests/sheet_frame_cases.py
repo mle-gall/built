@@ -32,7 +32,7 @@ def plan_cut(scene, plan, by_layer: bool) -> None:
     """A plan cut through the fixture's boxes: the box east of x = 6 is
     concrete, the rest brick walls."""
     from built_core import Vec3
-    from core.layers import Layer
+    from built_core.layers import Layer
     from built_core.section import SectionPlane
     plan.cut_fill_by_layer = by_layer
     scene.layers.append(Layer("Muros", hatch="brick", color=(0.8, 0.4, 0.3)))
@@ -50,10 +50,10 @@ def annotated(scene, plan, window) -> None:
     chainages, two section planes, an extension's items, three dimensions
     (one on a hidden tag) with oblique ticks, two leader texts (one hidden)."""
     from built_core import Vec3
-    from core.dimension import Dimension
-    from core.layers import Layer
+    from built_core.dimension import Dimension
+    from built_core.layers import Layer
     from built_core.section import SectionPlane
-    from core.textlabel import TextLabel
+    from built_core.textlabel import TextLabel
     from georef.geopath import GeoPath
     plan.annotations = plan.km_marks = plan.section_marks = True
     plan.annot_text_mm = 3.0
@@ -80,7 +80,7 @@ def annotated(scene, plan, window) -> None:
 def dxf_layers(scene) -> None:
     """Two tags, one hatched, and a plan cut: the DXF goes layer by layer."""
     from built_core import Vec3
-    from core.layers import Layer
+    from built_core.layers import Layer
     from built_core.section import SectionPlane
     scene.layers.append(Layer("Muros", hatch="brick", color=(0.8, 0.4, 0.3)))
     scene.layers.append(Layer("Ejes", linetype="center", color=(0.2, 0.4, 0.9)))

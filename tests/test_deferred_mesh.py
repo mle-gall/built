@@ -13,9 +13,9 @@ import pytest
 from built_core import Vec3 as V
 
 import core._native as _native
-from core import mesh as M
-from core.group import Group
-from core.scene import Scene
+from built_core import mesh as M
+from built_core.group import Group
+from built_core.scene import Scene
 from formats import igz
 from tests.test_igz_format3 import _canonical, _scene
 
@@ -245,11 +245,11 @@ def _painted_scene(seed, tmp_path):
 def test_saving_a_lazy_document_is_byte_identical(binary, monkeypatch,
                                                   tmp_path, seed):
     path = tmp_path / "doc.igz"
-    import core.topology
+    import built_core.topology
     with monkeypatch.context() as mp:
         # A document that kept a nested hole (an older or foreign writer):
         # rewriting it drops the hole, both ways.
-        mp.setattr(core.topology, "_maximal_holes", lambda holes: holes)
+        mp.setattr(built_core.topology, "_maximal_holes", lambda holes: holes)
         igz.save_scene(_painted_scene(seed, tmp_path), path)
     eager = _open(monkeypatch, path, False)
     lazy = _open(monkeypatch, path, True)
@@ -274,7 +274,7 @@ def json_doc(request, monkeypatch):
 @pytest.mark.parametrize("seed", range(5))
 def test_json_meshes_defer_and_build_the_same(json_doc, monkeypatch,
                                               tmp_path, seed):
-    from core import lazy_mesh
+    from built_core import lazy_mesh
     from tests.test_lazy_mesh_plan import _compare
     path = tmp_path / "doc.igz"
     scene = _painted_scene(seed, tmp_path)

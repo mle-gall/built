@@ -12,15 +12,15 @@ from __future__ import annotations
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
-from core.group import Group
-from core.history import History, PurgeUnusedCommand
-from core.layers import DEFAULT_LAYER, Layer, assign_layer
-from core.materials import Material
-from core.mesh import Mesh
-from core.purge import (unused_layers, unused_materials, used_layers,
+from built_core.group import Group
+from built_core.history import History, PurgeUnusedCommand
+from built_core.layers import DEFAULT_LAYER, Layer, assign_layer
+from built_core.materials import Material
+from built_core.mesh import Mesh
+from built_core.purge import (unused_layers, unused_materials, used_layers,
                         used_materials)
 from built_core.saved_views import SavedView
-from core.scene import Scene
+from built_core.scene import Scene
 
 
 def V(x, y, z=0.0):
@@ -182,7 +182,7 @@ def test_flags_scope_the_sweep():
 
 
 def test_deleting_a_layer_reassigns_faces_INSIDE_groups(native_question_host):
-    from core.layers import layer_of
+    from built_core.layers import layer_of
     from tests.native_tree import action
     from built_render import chrome_dialogs
     scene = native_question_host.viewport.scene

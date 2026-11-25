@@ -71,7 +71,7 @@ fn component_from_scene<'p>(src: &Obj<'p>, name: &str) -> PyResult<Option<Obj<'p
     let args = PyDict::new(py);
     args.set_item("name", name)?;
     let group = py
-        .import("core.group")?
+        .import("built_core.group")?
         .call_method("Group", (mesh,), Some(&args))?;
     if !groups.is_empty() {
         group.call_method1("adopt", (groups,))?;
@@ -81,7 +81,7 @@ fn component_from_scene<'p>(src: &Obj<'p>, name: &str) -> PyResult<Option<Obj<'p
 fn placements<'p>(comp: &Obj<'p>) -> PyResult<impl Iterator<Item = PyResult<Obj<'p>>>> {
     Ok(comp
         .py()
-        .import("core.group")?
+        .import("built_core.group")?
         .call_method1("iter_placements", (comp,))?
         .try_iter()?
         .map(|row| row?.get_item(0)))
@@ -144,7 +144,7 @@ impl Tags {
         }
     }
     fn component(&mut self, comp: &Obj) -> PyResult<()> {
-        let layer = comp.py().import("core.layers")?.getattr("layer_of")?;
+        let layer = comp.py().import("built_core.layers")?.getattr("layer_of")?;
         for group in placements(comp)? {
             let group = group?;
             self.add(layer.call1((&group,))?.extract()?);
@@ -162,7 +162,7 @@ impl Tags {
             seen: HashSet::new(),
             ordered: vec![],
             default: py
-                .import("core.layers")?
+                .import("built_core.layers")?
                 .getattr("DEFAULT_LAYER")?
                 .extract()?,
         })
@@ -193,7 +193,7 @@ fn ensure_layers(dst_scene: &Obj, comp: &Obj) -> PyResult<Vec<String>> {
         tags.seen.insert(layer?.getattr("key")?.extract()?);
     }
     tags.component(comp)?;
-    let cls = comp.py().import("core.layers")?.getattr("Layer")?;
+    let cls = comp.py().import("built_core.layers")?.getattr("Layer")?;
     for name in &tags.ordered {
         layers.call_method1("append", (cls.call1((name,))?,))?;
     }
@@ -209,7 +209,7 @@ fn import_document_as_component<'p>(
         return Ok(None);
     };
     let py = comp.py();
-    let uid = py.import("core.group")?.getattr("new_uid")?;
+    let uid = py.import("built_core.group")?.getattr("new_uid")?;
     for group in placements(&comp)? {
         let group = group?;
         group.setattr("uid", uid.call0()?)?;

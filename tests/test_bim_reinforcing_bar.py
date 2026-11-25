@@ -13,9 +13,9 @@ import pytest
 from built_core import Vec3 as V
 
 from core.bim import (IFC_CLASSES, STEEL_DENSITY, class_quantities, tag_group)
-from core.group import Group
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from formats.ifc import save_ifc
 
 D, L = 0.016, 6.0          # a Ø16 bar, 6 m long

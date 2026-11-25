@@ -37,7 +37,7 @@ fn number(value: Obj<'_>) -> PyResult<f64> {
 
 // ---- views.wgpu_axes --------------------------------------------------------
 
-/// Small axes uniform, independent of global core.axes state across
+/// Small axes uniform, independent of global built_core.axes state across
 /// documents.
 fn axes_state<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
@@ -629,7 +629,7 @@ fn functions(module: &Bound<PyModule>, functions: &[Method]) -> PyResult<()> {
 }
 
 pub(super) fn install_axes(module: &Bound<PyModule>) -> PyResult<()> {
-    module.add("__doc__", "Small axes uniform, independent of global core.axes state across documents.")?;
+    module.add("__doc__", "Small axes uniform, independent of global built_core.axes state across documents.")?;
     functions(module, &[("axes_state", Mode::Function, axes_state, &["scene", "camera", "source=None", "origin=(0.0, 0.0, 0.0)"], "", "")])
 }
 

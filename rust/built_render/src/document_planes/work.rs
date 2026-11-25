@@ -211,7 +211,7 @@ fn current_work_plane<'py>(v: &Obj<'py>, cursor: &Obj<'py>) -> PyResult<Obj<'py>
             lo.add(hi)?.mul(0.5)?
         };
         let first = py
-            .import("core.snap")?
+            .import("built_core.snap")?
             .call_method1("first_point_work_plane", (forward, center))?;
         if !first.is_none() {
             return Ok(first);
@@ -240,7 +240,7 @@ fn current_work_plane<'py>(v: &Obj<'py>, cursor: &Obj<'py>) -> PyResult<Obj<'py>
             }
             if hit.is_none()
                 || py
-                    .import("core.snap")?
+                    .import("built_core.snap")?
                     .call_method1("_detect_axis_alignment", (start, hit, deg))?
                     .is_none()
             {

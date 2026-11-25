@@ -11,8 +11,8 @@ import built_core
 import pytest
 from built_core import Vec3 as QVector3D
 
-from core.mesh import Mesh
-from core.texture import face_uv_axes
+from built_core.mesh import Mesh
+from built_core.texture import face_uv_axes
 from built_core import paint_face_plane, texture_commands
 
 

@@ -14,8 +14,8 @@ from built_render.shell_files import do_save
 from built_core.settings import settings as preferences
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
-from core import units
-from core.scene import Scene
+from built_core import units
+from built_core.scene import Scene
 from formats import igz
 from built_render import chrome_forms
 from built_render import chrome_sheet as cs

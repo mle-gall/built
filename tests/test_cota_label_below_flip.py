@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, replace
 
-from core.composition import Composicion, CotaItem
+from built_core.composition import Composicion, CotaItem
 
 PX = 20
 

@@ -28,7 +28,7 @@ def viewport():
 
 
 def _box(vp):
-    from core.edits import build_add_edges
+    from built_core.edits import build_add_edges
     sc = vp.scene
     sc.mesh.clear()
     vp.history.undo_stack.clear()

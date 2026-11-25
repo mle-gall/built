@@ -98,7 +98,7 @@ def test_tab_strip_lists_the_projects_with_front_and_unsaved(host, tmp_path):
     for p in paths:
         assert host.open_path(p)
     win = host.window
-    from core.history import AddFaceCommand
+    from built_core.history import AddFaceCommand
     from built_core import Vec3 as V
     host.viewport.history.execute(AddFaceCommand([V(5, 0, 0), V(6, 0, 0), V(6, 1, 0)]))
     tabs = wgpu_tabs.tabs(win)
@@ -228,7 +228,7 @@ def test_new_window_is_made_in_this_process(host, second):
 
 def test_move_to_new_window_takes_the_project_and_its_history(host, second, tmp_path):
     from views import wgpu_tabs
-    from core.history import AddFaceCommand
+    from built_core.history import AddFaceCommand
     from built_core import Vec3 as V
     a, b = _copies(tmp_path, 2)
     host.open_path(a)
@@ -278,7 +278,7 @@ def test_open_source_makes_a_link_tab_right_of_its_host(host, tmp_path):
     assert [t[4] for t in tabs] == [False, False, True]
     assert "linked in host.built · 2 placements" in tabs[2][5]
     assert host.state()["link_tabs"] == ["mid.built"]
-    from core.layers import Layer
+    from built_core.layers import Layer
     from views import wgpu_ui
     parent, mount = wgpu_tabs.source_context(host.window)
     assert parent.path == paths["host"] and mount in parent.viewport.scene.groups
@@ -299,7 +299,7 @@ def test_open_source_makes_a_link_tab_right_of_its_host(host, tmp_path):
 def kinds(host, tmp_path):
     """The model with one of each kind, open, its links loaded; what to
     select for each kind."""
-    from core import links
+    from built_core import links
     from tests.fixtures.shell.make_kinds import make
     paths = make(tmp_path / "kinds")
     assert host.open_path(paths["kinds"])
@@ -529,7 +529,7 @@ def test_with_the_chrome_the_menu_goes_to_it(host, kinds, monkeypatch):
 
 def test_feed_changes_follow_the_document_across_windows(host, second):
     from built_render import shell_windows as windows
-    from core.history import SetPluginDataCommand
+    from built_core.history import SetPluginDataCommand
     from views.extension_api import ExtensionApp
 
     src = host.window
@@ -562,8 +562,8 @@ def test_feed_changes_follow_the_document_across_windows(host, second):
 
 
 def test_replacing_the_viewport_history_detaches_the_old_feed(host):
-    from core.history import History, SetPluginDataCommand
-    from core.scene import Scene
+    from built_core.history import History, SetPluginDataCommand
+    from built_core.scene import Scene
     from views.extension_api import ExtensionApp
 
     vp = host.viewport

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Make Unique of a linked file's placement breaks the link and keeps the
-geometry (core.history.UnlinkCommand).
+geometry (built_core.history.UnlinkCommand).
 
 The placement becomes the host's own component: meshes of its own (none
 shared with the source or with the file's other placements), parts that
@@ -23,14 +23,15 @@ from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 from tests.native_tree import action
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
-from core import _native, links  # noqa: E402
-from core.group import Group, copy_group, iter_placements  # noqa: E402
-from core.history import History, MakeUniqueCommand, UnlinkCommand  # noqa: E402
-from core.layers import Layer, layer_of  # noqa: E402
-from core.materials import Material  # noqa: E402
-from core.mesh import DeferredMesh, Mesh  # noqa: E402
-from core.purge import iter_groups  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from core import _native
+from built_core import links  # noqa: E402
+from built_core.group import Group, copy_group, iter_placements  # noqa: E402
+from built_core.history import History, MakeUniqueCommand, UnlinkCommand  # noqa: E402
+from built_core.layers import Layer, layer_of  # noqa: E402
+from built_core.materials import Material  # noqa: E402
+from built_core.mesh import DeferredMesh, Mesh  # noqa: E402
+from built_core.purge import iter_groups  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402
 
 
@@ -265,7 +266,7 @@ def test_deferred_meshes_copy_without_building_and_build_the_same(
 
 
 def test_a_dimension_on_the_link_follows_its_own_copy(tmp_path):
-    from core.dimension import Dimension
+    from built_core.dimension import Dimension
     host, link, other, src = _host(tmp_path)
     dim = Dimension(V(0, 0, 1), V(3, 0, 1), V(0, -1, 0))
     host.dimensions.append(dim)
@@ -448,7 +449,7 @@ def _tag_state(scene):
 def _released(look, src):
     """``look`` with the file's «Untagged» read as the host's Untagged:
     what a last unlinked placement wears (they draw the same)."""
-    from core.layers import DEFAULT_LAYER
+    from built_core.layers import DEFAULT_LAYER
     u = built_core.link_tag_name(src, None)
     swap = {u: DEFAULT_LAYER, repr(u): repr(DEFAULT_LAYER)}
     who = {u: ""}                       # a placement's own tag: none
@@ -564,7 +565,7 @@ def test_tags_stay_in_their_folder_while_another_placement_links_the_file(tmp_pa
 @pytest.mark.parametrize("deferred", [False, True])
 def test_a_tag_and_folder_named_as_the_hosts_merge_into_them(
         tmp_path, monkeypatch, deferred):
-    from core.layers import folders_of
+    from built_core.layers import folders_of
     monkeypatch.setattr(_native, "wanted", lambda: deferred)
     host = Scene()
     host.layers.append(Layer("Wood", color=(0.9, 0.9, 0.0), visible=False))
@@ -630,7 +631,7 @@ def test_a_hidden_file_folder_leaves_its_tags_hidden(tmp_path):
 def test_the_nested_files_copies_of_their_tags_go(tmp_path):
     """Mid's own copies of Leaf's tags («Mid / Leaf / Steel», in Mid's
     «Linked files») are worn by nothing once Leaf is the host's own link."""
-    from core.layers import folders_of
+    from built_core.layers import folders_of
     host, link, other, mid_path, leaf_path = _nested_host(tmp_path)
     host.groups.remove(other)
     host.version += 1

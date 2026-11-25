@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Time the sheet's hidden-line pass (core.hlr.hlr_drawing) on a real
+"""Time the sheet's hidden-line pass (built_core.hlr.hlr_drawing) on a real
 document, view by view, and optionally save or compare its output.
 
     venv/bin/python scripts/bench_hlr.py ~/Descargas/plaza.igz \
@@ -21,9 +21,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import numpy as np  # noqa: E402
 
-from core.camera import OrbitCamera  # noqa: E402
-from core.hlr import collect_geometry, hlr_drawing  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core.camera import OrbitCamera  # noqa: E402
+from built_core.hlr import collect_geometry, hlr_drawing  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from built_core.formats import igz  # noqa: E402
 
 

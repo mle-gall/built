@@ -121,7 +121,7 @@ def pick_edit_target(scene, max_faces: int = 200):
     other group shares, not hidden, locked or linked. None when there is
     none. Reads face counts without building deferred meshes."""
     from built_core.mesh import face_count
-    from core import links
+    from built_core import links
     counts: dict = {}
     stack = list(scene.groups)
     while stack:

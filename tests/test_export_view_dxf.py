@@ -49,7 +49,7 @@ def test_the_view_goes_out_as_dxf_in_every_projection(native_host, tmp_path, mon
 
 
 def test_perspective_reads_the_same_from_the_caches_and_the_walk(native_window):
-    from core.hlr import hlr_perspective
+    from built_core.hlr import hlr_perspective
 
     win = native_window
     vp = win.viewport

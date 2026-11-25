@@ -174,7 +174,7 @@ def _jsonable(x):
 
 
 def test_line_types_answer_as_the_python_ones_did():
-    from core import layers
+    from built_core import layers
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     cases = corpus()
     assert len(cases) == len(want)
@@ -188,7 +188,7 @@ def test_line_types_answer_as_the_python_ones_did():
 
 if __name__ == "__main__" and "--write" in sys.argv:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from core import layers as _layers
+    from built_core import layers as _layers
     rows = [_jsonable(answer(_layers, n, a)) for n, a in corpus()]
     GOLDEN.write_bytes(gzip.compress(json.dumps(
         rows, ensure_ascii=False, separators=(",", ":")).encode(), mtime=0))

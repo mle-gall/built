@@ -1,10 +1,10 @@
 """Navigator expressions, atomic rules and display-only visibility."""
 import pytest
-from core.scene import Scene
-from core.group import Group
+from built_core.scene import Scene
+from built_core.group import Group
 from core import bim_registry
 from built_core import facets
-from core.history import History
+from built_core.history import History
 
 
 def model():
@@ -80,7 +80,7 @@ def test_registry_validation():
 def test_tint_overrides_face_material_and_nested_proxy():
     from types import SimpleNamespace
     from core.agent_facets import set_display
-    from core.materials import effective_attrs
+    from built_core.materials import effective_attrs
     from views.document_interaction import _paint_of
     from tests.controller_surface import ControllerSurface as Viewport
     scene, parent, child, other = model()

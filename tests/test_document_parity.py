@@ -139,9 +139,9 @@ def test_geometry_history_agrees(runs):
 
 def test_scene_folder_edits_match_archived_replay():
     from built_core import scene_tree
-    from core.history import History, SceneTreeCommand
+    from built_core.history import History, SceneTreeCommand
     from built_core.saved_views import SavedView
-    from core.scene import Scene
+    from built_core.scene import Scene
 
     scene = Scene()
     scene.scene_folders = ["A", "B", "C", "D", "E", "F", "A"]

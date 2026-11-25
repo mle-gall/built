@@ -1,7 +1,7 @@
 """Bundled Python panel implementations loaded by the native window."""
 import os
 
-from core import extensions
+from built_core import extensions
 
 
 def discover_plugins(*, native_panels):

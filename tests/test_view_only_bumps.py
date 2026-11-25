@@ -14,8 +14,8 @@ from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 
 def _window(native_host):
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
 
     win = native_host.window
     native_host.resize(800, 600, 1.0)

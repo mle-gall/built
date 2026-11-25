@@ -262,7 +262,7 @@ fn plane_basis(n: V3, h: Hypot) -> (V3, V3) {
     (u, facegeom::normalized(n.cross(u, h), h))
 }
 
-/// `core.arrangement._point_in_polygon`: even-odd ray cast.
+/// `built_core.arrangement._point_in_polygon`: even-odd ray cast.
 fn in_polygon(p: [f64; 2], poly: &[[f64; 2]]) -> bool {
     let (x, y) = (p[0], p[1]);
     let mut inside = false;
@@ -278,7 +278,7 @@ fn in_polygon(p: [f64; 2], poly: &[[f64; 2]]) -> bool {
     inside
 }
 
-/// `core.push_pull._loops_overlap_2d`: an interior point of one inside the
+/// `built_core.push_pull._loops_overlap_2d`: an interior point of one inside the
 /// other, or a vertex of either strictly inside the other.
 fn loops_overlap(py: Python<'_>, a: &[[f64; 2]], b: &[[f64; 2]]) -> PyResult<bool> {
     let ia = crate::store::planar::plane_interior_point(py, a.to_vec())?;
@@ -507,7 +507,7 @@ fn cell(p: V3) -> [i64; 3] {
     [(p.0 * 1e4).round_ties_even() as i64, (p.1 * 1e4).round_ties_even() as i64, (p.2 * 1e4).round_ties_even() as i64]
 }
 
-/// `core.topology._point_on_seg_incl` with its 1e-4 tolerance.
+/// `built_core.topology._point_on_seg_incl` with its 1e-4 tolerance.
 fn on_seg_incl(pt: V3, p: V3, q: V3, h: Hypot) -> bool {
     const TOL: f64 = 1e-4;
     let pq = q.sub(p);
@@ -528,7 +528,7 @@ fn unit(v: V3, h: Hypot) -> V3 { facegeom::normalized(v, h) }
 fn coplanar(a: V3, b: V3, h: Hypot) -> bool { unit(a, h).dot(unit(b, h), h).abs() > 0.999 }
 
 /// Whether `a`–`b` lies on a boundary edge of face `f`, holes included
-/// (`core.topology._segment_on_face_boundary`).
+/// (`built_core.topology._segment_on_face_boundary`).
 fn segment_on_boundary(s: &MeshScan, g: &Geom, f: usize, a: V3, b: V3) -> bool {
     s.rings_of(f).iter().any(|ring| {
         let n = ring.len();
@@ -593,7 +593,7 @@ impl Near {
     }
 }
 
-/// `core.topology.classify_push_edge(face, a, b, faces)`: the first
+/// `built_core.topology.classify_push_edge(face, a, b, faces)`: the first
 /// coplanar face carrying the edge, else the first other one, else free.
 fn classify_edge(s: &MeshScan, g: &Geom, near: &Near, face: usize, a: V3, b: V3) -> (&'static str, Option<usize>) {
     let n = g.normal[face];

@@ -17,8 +17,8 @@ from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Vec3 as V
 
 import core._native as _native  # noqa: E402
-from core import mesh as M  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core import mesh as M  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402
 from tests.test_deferred_mesh import _meshes, _random_scene  # noqa: E402
 from views import array_bake  # noqa: E402
@@ -84,7 +84,7 @@ def _sig(f):
 
 @pytest.mark.parametrize("seed", range(5))
 def test_a_light_face_reads_as_the_built_face(binary, tmp_path, seed):
-    from core.snap import curve_centers_of_face
+    from built_core.snap import curve_centers_of_face
     opened = _opened(tmp_path, seed)
     seen = 0
     for m in _meshes(opened):
@@ -126,7 +126,7 @@ def test_deferred_faces_answer_light_only_while_reading(binary, tmp_path):
 
 def _window(native_host, tmp_path):
 
-    from core.group import Group
+    from built_core.group import Group
     scene = Scene()
     m = M.Mesh()
     for i in range(30):                  # a floor of tiles, one group
@@ -186,8 +186,8 @@ def test_hovering_with_select_builds_no_mesh(native_host, big_enough, tmp_path):
 def test_a_centre_found_on_a_light_face_survives_an_edit(native_window, big_enough, tmp_path):
     """_valid_center_ref re-checks its source against the mesh's own faces:
     a light face is not one of them, and the centre would go at any edit."""
-    from core.mesh import Mesh
-    from core.group import Group
+    from built_core.mesh import Mesh
+    from built_core.group import Group
     import math
     scene = Scene()
     m = Mesh()
@@ -221,7 +221,7 @@ def _click(vp, x, y):
 
 def test_a_click_with_line_builds_nothing_and_takes_the_same_plane(
         native_host, big_enough, tmp_path):
-    from core.snap import face_plane_world
+    from built_core.snap import face_plane_world
     win, vp = _window(native_host, tmp_path)
     mesh = vp.scene.groups[0].mesh
     tool = win._activate_tool("line") or vp.active_tool

@@ -9,8 +9,8 @@ from pathlib import Path
 
 from built_core import Vec3 as QVector3D
 
-from core.history import History
-from core.scene import Scene
+from built_core.history import History
+from built_core.scene import Scene
 import tests.test_fuzz_engine as F
 
 _SPEC = importlib.util.spec_from_file_location(

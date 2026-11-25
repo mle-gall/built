@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 from built_core import Vec3 as QVector3D
 
-from core.snap import compute_snap
+from built_core.snap import compute_snap
 from tools.arc import ArcTool, CenterArcTool, ThreePointArcTool
 from tools.circle import CircleTool, PolygonTool
 from tools.dimension import DimensionTool

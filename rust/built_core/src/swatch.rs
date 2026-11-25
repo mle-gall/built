@@ -145,7 +145,7 @@ pub fn edit_swatch(
     } else if !active.is_none() {
         active.clone()
     } else {
-        py.import("core.material_commands")?.call_method1(
+        py.import("built_core.material_commands")?.call_method1(
             "material_for_paint",
             (
                 &scene,

@@ -201,7 +201,7 @@ def _close(g, w, rel):
 
 
 def test_the_texture_maths_answers_as_the_python_one_did():
-    from core import texture
+    from built_core import texture
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     got = json.loads(json.dumps(answers(texture)))
     wrong = []
@@ -217,7 +217,7 @@ def test_the_texture_maths_answers_as_the_python_one_did():
 
 
 def test_colorize_answers_as_the_numpy_one_did():
-    from core import texture
+    from built_core import texture
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     got = json.loads(json.dumps(colorize_answers(texture)))
     assert got == want["colorize"]
@@ -225,7 +225,7 @@ def test_colorize_answers_as_the_numpy_one_did():
 
 if __name__ == "__main__" and "--write" in sys.argv:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from core import texture
+    from built_core import texture
     data = {"maths": answers(texture), "colorize": colorize_answers(texture)}
     GOLDEN.parent.mkdir(exist_ok=True)
     GOLDEN.write_bytes(gzip.compress(json.dumps(data).encode(), mtime=0))

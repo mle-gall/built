@@ -32,7 +32,7 @@ fn mesh_face_arrays<'py>(mesh: &Obj<'py>) -> PyResult<Obj<'py>> {
         .collect::<Vec<_>>();
     let kw = PyDict::new(py);
     kw.set_item("model_f64", true)?;
-    let obj = crate::model::module(py, "core.geometry_arrays")?.call_method(
+    let obj = crate::model::module(py, "built_core.geometry_arrays")?.call_method(
         "Arrays",
         (
             crate::flat3(py, pos)?,

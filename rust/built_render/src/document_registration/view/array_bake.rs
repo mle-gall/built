@@ -744,12 +744,12 @@ pub(super) fn install_module(module: &Bound<PyModule>) -> PyResult<()> {
     let py = module.py();
     module.add(
         "__doc__",
-        "The drawing of a lazy mesh, baked from its arrays: the very chunk the object\nbake makes from the built mesh, field for field, with no vertex, edge or face\nobject made, so a model that is only looked at stays deferred\n(core.mesh.DeferredMesh).\n\nThe face geometry (Newell normal, area, centroid, triangles) comes from the\nkernel; the topology from core.lazy_mesh.plan. tests/test_array_bake.py holds\nthe result to the object bake.",
+        "The drawing of a lazy mesh, baked from its arrays: the very chunk the object\nbake makes from the built mesh, field for field, with no vertex, edge or face\nobject made, so a model that is only looked at stays deferred\n(built_core.mesh.DeferredMesh).\n\nThe face geometry (Newell normal, area, centroid, triangles) comes from the\nkernel; the topology from built_core.lazy_mesh.plan. tests/test_array_bake.py holds\nthe result to the object bake.",
     )?;
     module.add("np", py.import("numpy")?)?;
     modules::import_names(module, "built_core", &[("Vec3", "QVector3D"), ("bake_deferred_chunk", "_bake")])?;
     module.add("_native", py.import("core._native")?)?;
-    module.add("lazy_mesh", py.import("core.lazy_mesh")?)?;
+    module.add("lazy_mesh", py.import("built_core.lazy_mesh")?)?;
     modules::import_names(module, "built_core.mesh", &[("DeferredMesh", "DeferredMesh"), ("Face", "Face"), ("Vertex", "Vertex")])?;
     // While True, a face asked of a still-lazy mesh comes as a LightFace and
     // the mesh stays unbuilt: only the hover's read-only passes turn it on.

@@ -9,8 +9,8 @@ from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Vec3 as QVector3D
 
 
-from core.history import History  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core.history import History  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from tools.base import ToolContext  # noqa: E402
 from tools.section import SectionPlaneTool  # noqa: E402
 
@@ -63,7 +63,7 @@ from tests.shell_isolation import native_window, restore_shell_patches  # noqa: 
 def test_the_name_prompt_can_be_switched_off(monkeypatch, native_window):
     from built_core.settings import settings as current_settings
     from built_render import chrome_forms
-    from core.history import PlaceSectionPlaneCommand
+    from built_core.history import PlaceSectionPlaneCommand
     from built_core.section import SectionPlane
 
     forms = []
@@ -101,7 +101,7 @@ def test_the_name_prompt_can_be_switched_off(monkeypatch, native_window):
 # ---- #62, second round -------------------------------------------------
 
 def test_the_floating_plane_wears_the_inference_colours():
-    from core.snap import AXIS_COLORS, COLOR_REFERENCE
+    from built_core.snap import AXIS_COLORS, COLOR_REFERENCE
     tool = SectionPlaneTool()
     for axis, n in (("x", QVector3D(1, 0, 0)), ("y", QVector3D(0, -1, 0)),
                     ("z", QVector3D(0, 0, 1))):

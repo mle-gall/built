@@ -17,10 +17,10 @@ import random
 
 from built_core import Vec3 as QVector3D
 
-from core import arrangement, make_faces
-from core.arrangement import (_area_floor, _interior_point,
+from built_core import arrangement, make_faces
+from built_core.arrangement import (_area_floor, _interior_point,
                               _point_in_polygon, _signed_area)
-from core.mesh import Mesh
+from built_core.mesh import Mesh
 
 
 def _classify_plain(loops, coords) -> list:

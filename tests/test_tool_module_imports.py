@@ -71,7 +71,7 @@ def test_native_host_modules_preserve_public_class_and_subclass_binding():
 
 def test_native_tool_signatures_keep_evaluated_and_postponed_annotations():
     import inspect
-    from core.mesh import Edge
+    from built_core.mesh import Edge
     from tools.offset_host import _run_from_edge
     from tools.paint_host import recent_key
     from tools.walkthrough import look_deg_per_px

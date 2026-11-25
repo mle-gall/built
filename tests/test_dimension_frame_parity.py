@@ -74,7 +74,7 @@ def answer(dimension, case):
 
 
 def test_the_dimension_frames_answer_as_the_python_one_did():
-    from core import dimension
+    from built_core import dimension
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     got = json.loads(json.dumps([answer(dimension, c) for c in cases()]))
     assert len(got) == len(want)
@@ -91,7 +91,7 @@ def test_the_corpus_asks_for_every_kind():
 
 if __name__ == "__main__" and "--write" in sys.argv:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from core import dimension
+    from built_core import dimension
     data = [answer(dimension, c) for c in cases()]
     GOLDEN.parent.mkdir(exist_ok=True)
     GOLDEN.write_bytes(gzip.compress(json.dumps(data).encode(), mtime=0))

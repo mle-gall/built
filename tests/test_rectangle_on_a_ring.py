@@ -13,9 +13,9 @@ from collections import Counter
 
 from built_core import Vec3 as V
 
-from core.history import History
-from core.scene import Scene
-from core.topology import offset_loop
+from built_core.history import History
+from built_core.scene import Scene
+from built_core.topology import offset_loop
 from tests import test_pushpull_ux as T
 from tools.rust_tools import RectangleTool
 
@@ -109,5 +109,5 @@ def test_a_loose_rectangle_off_the_model_is_just_a_face():
 
 def _add_face(history, corners):
     """The Rectangle's commit: the protocol's add_face over the ring."""
-    from core.protocol.commands import run
+    from built_core.protocol.commands import run
     run(history, "add_face", outer=[c.toTuple() for c in corners])

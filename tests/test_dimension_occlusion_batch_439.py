@@ -128,7 +128,7 @@ def test_segment_draws_the_runs_the_per_point_walk_draws(vp_with_wall):
 
 def test_the_matrix_is_built_once_per_segment_not_per_sample(vp_with_wall,
                                                               monkeypatch):
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     vp = vp_with_wall
     calls = {"n": 0}
     orig = OrbitCamera.projection_matrix

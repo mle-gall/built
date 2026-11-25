@@ -16,7 +16,7 @@ import pytest
 from built_core import ScreenPoint as QPointF
 from built_core import Vec3 as QVector3D
 
-from core.composition import (Composicion, MarcoVista, apply_frame_camera,
+from built_core.composition import (Composicion, MarcoVista, apply_frame_camera,
                               roll_camera)
 
 

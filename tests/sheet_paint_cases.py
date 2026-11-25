@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 
-from core.composition import (BarraEscala, CotaAngularItem, CotaItem, CotaRadialItem,
+from built_core.composition import (BarraEscala, CotaAngularItem, CotaItem, CotaRadialItem,
                               EtiquetaItem, FlechaNorte, FormaItem, ImagenItem, Leyenda,
                               LlamadaItem, NivelItem, PerfilTerreno)
 
@@ -59,7 +59,7 @@ def cases(group: str = "a"):
 def cases_c():
     """Text blocks, title blocks and the sheet's border (the kinds the page
     drew its own way until rust/sheets-6)."""
-    from core.composition import Cajetin, Composicion, TextoItem
+    from built_core.composition import Cajetin, Composicion, TextoItem
     out = []
     texts = [
         dict(text="Planta baja"),
@@ -137,7 +137,7 @@ _ANNOTS = [
 
 def cases_d():
     """View frames (paint_frame_mm without layer styles or annotations)."""
-    from core.composition import MarcoVista
+    from built_core.composition import MarcoVista
     out = []
 
     def add(name, content, **kw):
@@ -231,7 +231,7 @@ def cases_d():
 
 def frame_content(name: str):
     """The content of a frame case as sheet_frame_display takes it."""
-    from core.layers import LINETYPES
+    from built_core.layers import LINETYPES
     missing, drawing, image = FRAME_CONTENT[name]
     out = {"missing": missing, "image": image}
     if drawing is not None:

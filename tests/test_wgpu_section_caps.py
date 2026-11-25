@@ -3,9 +3,9 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from built_core import Vec3 as QVector3D
-from core.scene import Scene
+from built_core.scene import Scene
 from built_core.section import SectionPlane
-from core.camera import OrbitCamera
+from built_core.camera import OrbitCamera
 from built_core import pack_scene
 from views.wgpu_sections import geometry, capture_rows
 from tests.test_section_fill import _box
@@ -71,8 +71,8 @@ def test_offscreen_supplies_cap_and_restores_after_failure():
 
 
 def test_saved_visibility_navigator_and_tint_do_not_modify_resident_rows():
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     mesh = Mesh()
     _box(mesh, 0, 0, 0, 2, 3, 2)
     groups = [Group(mesh), Group(mesh)]

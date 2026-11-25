@@ -21,7 +21,7 @@ pub(super) fn build<'py>(
     phase: &str,
     tokens: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let api = py.import("core.protocol.feed")?;
+    let api = py.import("built_core.protocol.feed")?;
     let scene = history.getattr("scene")?;
     let name = cmd
         .getattr("history_name")
@@ -167,7 +167,7 @@ impl FeedReaders {
         let Some(root) = self.root else {
             return Ok(0);
         };
-        py.import("core.doc_model")?.call_method0("flush")?;
+        py.import("built_core.doc_model")?.call_method0("flush")?;
         Ok(super::lock().reader_epochs.get(&root).copied().unwrap_or(0))
     }
 

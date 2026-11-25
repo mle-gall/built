@@ -199,7 +199,7 @@ fn kept_loops<'p>(
                 offset += n
             }
             let chosen = py
-                .import("core.topology")?
+                .import("built_core.topology")?
                 .call_method1("_maximal_holes", (&holes,))?;
             let ids = chosen
                 .try_iter()?

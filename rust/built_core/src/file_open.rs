@@ -144,7 +144,7 @@ fn prepare(
     let reading = report(0., 0.60);
     reading.__call__(py, 0., "Reading the document…".into())?;
     args.set_item("progress", Py::new(py, reading)?)?;
-    let scene = py.import("core.scene")?.getattr("Scene")?.call0()?;
+    let scene = py.import("built_core.scene")?.getattr("Scene")?.call0()?;
     if insert {
         let reader = py.import("built_core.formats.skp")?;
         let payload = reader

@@ -75,7 +75,7 @@ def answer(layers, scene):
 
 
 def test_the_folder_tree_answers_as_the_python_one_did():
-    from core import layers
+    from built_core import layers
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     got = [answer(layers, s) for s in scenes()]
     assert len(got) == len(want)
@@ -85,7 +85,7 @@ def test_the_folder_tree_answers_as_the_python_one_did():
 
 if __name__ == "__main__" and "--write" in sys.argv:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from core import layers as _layers
+    from built_core import layers as _layers
     rows = [answer(_layers, s) for s in scenes()]
     GOLDEN.write_bytes(gzip.compress(json.dumps(rows, separators=(",", ":")).encode(),
                                      mtime=0))

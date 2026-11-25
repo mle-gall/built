@@ -22,17 +22,17 @@ sys.path.insert(0, str(REPO))
 from built_core import Vec3 as V
 
 
-from core import layers as L  # noqa: E402
-from core.composition import Composicion, Leyenda, MarcoVista  # noqa: E402
-from core.dimension import Dimension  # noqa: E402
-from core.group import Group  # noqa: E402
-from core.guide import Guide  # noqa: E402
-from core.layers import DEFAULT_LAYER, Layer  # noqa: E402
-from core.mesh import Mesh  # noqa: E402
+from built_core import layers as L  # noqa: E402
+from built_core.composition import Composicion, Leyenda, MarcoVista  # noqa: E402
+from built_core.dimension import Dimension  # noqa: E402
+from built_core.group import Group  # noqa: E402
+from built_core.guide import Guide  # noqa: E402
+from built_core.layers import DEFAULT_LAYER, Layer  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
 from built_core.saved_views import SavedView  # noqa: E402
-from core.scene import Scene  # noqa: E402
+from built_core.scene import Scene  # noqa: E402
 from built_core.section import SectionPlane  # noqa: E402
-from core.textlabel import TextLabel  # noqa: E402
+from built_core.textlabel import TextLabel  # noqa: E402
 from formats import igz  # noqa: E402
 
 OUT = Path(__file__).with_name("capas-prueba.igz")
@@ -140,7 +140,7 @@ def build() -> Scene:
 
     # ---- Escenas -----------------------------------------------------
     # Planta: la orientación de la vista superior estándar (X a la derecha).
-    from core.camera import OrbitCamera
+    from built_core.camera import OrbitCamera
     cam = OrbitCamera()
     cam.set_view("top")
     top = dict(target=(14.0, 6.0, 0.0), distance=40.0, yaw=cam.yaw,

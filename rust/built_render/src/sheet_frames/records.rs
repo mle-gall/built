@@ -80,8 +80,8 @@ pub(super) fn annotations<'py>(
         let show = style
             .call_method1("get", ("show_unit", true))?
             .is_truthy()?;
-        let layers = py.import("core.layers")?;
-        let fmt = py.import("core.units")?.getattr("format_length")?;
+        let layers = py.import("built_core.layers")?;
+        let fmt = py.import("built_core.units")?.getattr("format_length")?;
         let hidden = |e: &Obj<'_>| -> PyResult<bool> {
             Ok(scene.call_method1("entity_hidden", (e,))?.is_truthy()?
                 || scene.call_method1("similar_hidden", (e,))?.is_truthy()?)
@@ -160,7 +160,7 @@ fn capture_hold(
         }
     }
     let hold = py
-        .import("core.dimension")?
+        .import("built_core.dimension")?
         .call_method1("resolve_vertex_anchor", (scene, &point))?;
     if hold.is_none() {
         return Ok(false);
@@ -241,7 +241,7 @@ fn follow_hold(scene: &Obj<'_>, item: &Obj<'_>, attr: &str, holds: &Obj<'_>) -> 
     let current = list(&cur)?;
     if held.is_none() || !held.get_item(0)?.eq(&current)? {
         let hold = py
-            .import("core.dimension")?
+            .import("built_core.dimension")?
             .call_method1("resolve_vertex_anchor", (scene, vec3(&cur)?))?;
         let found = !hold.is_none();
         holds.set_item(key, (current, hold))?;

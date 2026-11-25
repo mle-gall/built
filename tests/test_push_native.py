@@ -4,7 +4,7 @@
 
 The orientation pass (``built_core.orient.orient_outward``, now
 ``built_core.orient_decision``) and the push tool's searches over the
-whole mesh (``core.push_scans``) run natively whenever the scans do; with
+whole mesh (``built_core.push_scans``) run natively whenever the scans do; with
 ``scan_index._forced_off`` (``BUILT_SCANS=0``) the original Python runs:
 that is the oracle here.
 
@@ -39,9 +39,9 @@ from tests import fuzz
 from built_core import Vec3 as QVector3D
 
 import core._native as _native
-from core import mesh as M
+from built_core import mesh as M
 from built_core import orient as O
-from core import push_scans
+from built_core import push_scans
 from built_core import scan_index
 from built_core import store_mesh as S
 
@@ -379,7 +379,7 @@ def _random_points_on_edges(m, rng, n):
 @pytest.mark.parametrize("store", [False, True])
 @pytest.mark.parametrize("seed", range(5))
 def test_segment_prefilter_is_a_superset(store, seed):
-    from core.topology import _face_all_edges, _key, _segment_on_face_boundary
+    from built_core.topology import _face_all_edges, _key, _segment_on_face_boundary
     rng = random.Random(seed)
     m = _scene(store, seed)
     faces = list(m.faces)
@@ -428,7 +428,7 @@ def _ray_triangle(origin: QVector3D, direction: QVector3D, tri: tuple) -> float 
 def test_parallel_overlap_prefilter_and_lateral_exit(store, seed, oracle):
     """The parallel-overlap candidates hold every face the inward limit and
     the levels can take; the lateral exit is the Python loop's, exactly."""
-    from core.arrangement import loops_overlap, project_loop
+    from built_core.arrangement import loops_overlap, project_loop
     rng = random.Random(seed)
     m = _scene(store, seed)
     O.orient_outward(m)
@@ -462,7 +462,7 @@ def test_parallel_overlap_prefilter_and_lateral_exit(store, seed, oracle):
 
 @pytest.mark.parametrize("store", [False, True])
 def test_cracked_edges_and_nearby_vertices(store):
-    from core.topology import _key
+    from built_core.topology import _key
     m = _scene(store, 2)
     m.add_face([V(60, 0, 0), V(61, 0, 0), V(61, 1, 0)])
     edges = list(m.edges)

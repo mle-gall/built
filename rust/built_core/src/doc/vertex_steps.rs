@@ -23,7 +23,7 @@ fn host<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
 }
 
 fn topology<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
-    py.import("core.topology")?.getattr(name)
+    py.import("built_core.topology")?.getattr(name)
 }
 
 fn position<'py>(py: Python<'py>, p: Obj<'py>) -> PyResult<Obj<'py>> {

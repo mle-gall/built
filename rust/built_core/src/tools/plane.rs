@@ -12,7 +12,7 @@ use pyo3::prelude::*;
 
 use crate::math::{xyz, Vec3};
 
-/// The drawing axes: the world's, or the open group's (`core.axes`).
+/// The drawing axes: the world's, or the open group's (`built_core.axes`).
 #[derive(Clone, Copy, Debug)]
 pub struct Axes { pub o: DVec3, pub x: DVec3, pub y: DVec3, pub z: DVec3 }
 
@@ -150,7 +150,7 @@ pub(crate) fn vec(v: DVec3) -> Vec3 { v.into() }
 
 pub(crate) const AXIS: [&str; 3] = ["x", "y", "z"];
 
-/// `core.axes.plane_axes` / `built_core.triangulate.plane_axes`: `(u, v)` of a
+/// `built_core.axes.plane_axes` / `built_core.triangulate.plane_axes`: `(u, v)` of a
 /// plane normal against the drawing axes `(o, x, y, z)` (the world's when
 /// omitted).
 #[pyfunction]

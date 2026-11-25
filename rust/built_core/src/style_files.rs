@@ -34,7 +34,7 @@ pub fn export_style_file(scene: &Bound<'_, PyAny>, path: PathBuf, format: &str) 
     let rows = PyList::empty(py);
     let (backend, table, writer) = match format {
         "pat" => {
-            let h = py.import("core.hatches")?;
+            let h = py.import("built_core.hatches")?;
             let info = h.getattr("HATCH_INFO")?;
             let labels = h.getattr("HATCH_LABELS")?;
             for key in h.getattr("HATCH_ORDER")?.try_iter()? {
@@ -47,7 +47,7 @@ pub fn export_style_file(scene: &Bound<'_, PyAny>, path: PathBuf, format: &str) 
             }
             (h, "hatch_patterns", "to_pat")
         }
-        "lin" => (py.import("core.layers")?, "line_types", "to_lin"),
+        "lin" => (py.import("built_core.layers")?, "line_types", "to_lin"),
         _ => {
             return Err(pyo3::exceptions::PyValueError::new_err(
                 "Unknown pattern format",
@@ -80,7 +80,7 @@ pub fn export_style_file(scene: &Bound<'_, PyAny>, path: PathBuf, format: &str) 
 #[pyfunction]
 pub fn tag_template_file(scene: &Bound<'_, PyAny>, path: PathBuf, save: bool) -> PyResult<String> {
     let py = scene.py();
-    let backend = py.import("core.layers")?;
+    let backend = py.import("built_core.layers")?;
     let json = py.import("json")?;
     if save {
         let data = crate::model::module(backend.py(), "built_core")?.getattr("tag_edits")?.call_method1("template_of", (scene,))?;
@@ -104,7 +104,7 @@ pub fn tag_template_file(scene: &Bound<'_, PyAny>, path: PathBuf, save: bool) ->
     let data = json.call_method1("loads", (text,))?;
     // The existing importer applies folders and tables before it reaches individual tags.
     // Validate the entire input on an empty document before updating the open one.
-    let scratch = py.import("core.scene")?.call_method0("Scene")?;
+    let scratch = py.import("built_core.scene")?.call_method0("Scene")?;
     crate::model::module(backend.py(), "built_core")?.getattr("tag_edits")?
         .call_method1("apply_template", (&scratch, &data))
         .map_err(|e| {

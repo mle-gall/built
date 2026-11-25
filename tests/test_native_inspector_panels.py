@@ -4,7 +4,7 @@ import json
 import pytest
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from core.group import Group
+from built_core.group import Group
 from built_render import inspector_action as action
 
 
@@ -23,8 +23,8 @@ def run(h, verb, args=None):
 
 def test_records_provenance_patch_undo(host):
     from core import bim_registry
-    from core.protocol.records import occurrence
-    from core.protocol import commands
+    from built_core.protocol.records import occurrence
+    from built_core.protocol import commands
 
     vp = host.viewport
     s = vp.scene
@@ -163,8 +163,8 @@ def test_terrain_path_projects_cursor_samples_and_exports(host, tmp_path, monkey
 
 def test_filing_rule_preview_and_undo(host):
     from core import bim_registry
-    from core.protocol import commands
-    from core.protocol.records import filing_rule
+    from built_core.protocol import commands
+    from built_core.protocol.records import filing_rule
 
     vp = host.viewport
     registry = bim_registry.seed_defaults()
@@ -189,7 +189,7 @@ def test_filing_rule_preview_and_undo(host):
 
 
 def test_property_add_and_reset_without_losing_siblings(host):
-    from core.protocol import commands
+    from built_core.protocol import commands
 
     vp = host.viewport
     g = Group()
@@ -206,8 +206,6 @@ def test_report_sheet_commands_and_parts_inspector(host, monkeypatch):
     from built_render import chrome_sheet
     from views import wgpu_ui
     from tests.test_parts import _stool
-    from built_core import extension_manager
-    monkeypatch.setattr(extension_manager, "load_cached_catalog", lambda: None)
     win = host.window
     commands = {name: action for name, _, _, action in wgpu_ui._all_commands(win)}
     for name, sid in [("About Built", "about"), ("Extension Manager", "extensions"), ("Cut list", "cutlist")]:

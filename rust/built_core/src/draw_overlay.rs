@@ -211,7 +211,7 @@ impl ScanOverlay {
     }
     fn cycle_adjacency<'py>(&mut self, ka: &Obj<'py>, kb: &Obj<'py>) -> PyResult<Obj<'py>> {
         let py = ka.py();
-        py.import("core.topology")?
+        py.import("built_core.topology")?
             .call_method1("_cycle_adjacency", (self.all_elements(py)?, ka, kb))
     }
     #[pyo3(signature=(a,b,*,whole=false))]

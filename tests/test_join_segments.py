@@ -18,10 +18,10 @@ from built_core import Vec3 as QVector3D
 from built_render import chrome_forms
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
-from core.edits import divide_edges, join_edges, join_preview
-from core.history import AddEdgeCommand, History, SnapshotMutation
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.edits import divide_edges, join_edges, join_preview
+from built_core.history import AddEdgeCommand, History, SnapshotMutation
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 @pytest.fixture
 def host(tmp_path):

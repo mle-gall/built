@@ -79,7 +79,7 @@ fn chip<'py>(win: &Obj<'py>, view: &Obj<'py>, action: &str) -> PyResult<()> {
     let (verb, key) = partition(action, ':');
     let viewport = win.getattr("viewport")?;
     let scene = viewport.getattr("scene")?;
-    let group_type = py.import("core.group")?.getattr("Group")?;
+    let group_type = py.import("built_core.group")?.getattr("Group")?;
     let groups = empty(py);
     for entity in list(&scene.getattr("selection")?)?.iter() {
         if entity.is_instance(&group_type)? {
@@ -174,7 +174,7 @@ fn chip<'py>(win: &Obj<'py>, view: &Obj<'py>, action: &str) -> PyResult<()> {
         let (what, node) = partition(link, ':');
         again(format!("{what}{SEP}n:{node}"))?;
     } else if key.starts_with("link") && !groups.is_empty() {
-        py.import("core.links")?;
+        py.import("built_core.links")?;
         let first = groups.get_item(0)?;
         let holder = module.getattr("built_core")?.call_method1("link_linked_ancestor", (&first,))?;
         if key == "linkfile" {
@@ -226,7 +226,7 @@ impl<'a, 'py> Row<'a, 'py> {
             _ => PyDict::new(py).into_any(),
         };
         let tree = data.call_method1("get", ("tree",))?;
-        let linked = py.import("core.link_structure")?.call_method1("is_linked_key", (node.as_deref(),))?.is_truthy()?;
+        let linked = py.import("built_core.link_structure")?.call_method1("is_linked_key", (node.as_deref(),))?.is_truthy()?;
         let mut row = Self {
             py,
             module: ui(py)?,
@@ -486,7 +486,7 @@ impl<'a, 'py> Row<'a, 'py> {
         let glue = render(py)?;
         let core_module = py.import("built_core")?;
         let structure = py.import("built_core.structure")?;
-        let link_structure = py.import("core.link_structure")?;
+        let link_structure = py.import("built_core.link_structure")?;
         let execute = || glue.getattr("tree_navigation")?.getattr("execute");
         let (rk, extra, ident) = (self.rk.clone(), self.extra.clone(), self.ident.clone());
         let node = self.node.clone();
@@ -942,7 +942,7 @@ impl<'a, 'py> Row<'a, 'py> {
         } else if self.is(&["open"]) {
             let group = self.item()?;
             if !group.is_none() {
-                let parents = py.import("core.outliner")?.call_method1("path_to", (scene.getattr("groups")?, &group))?;
+                let parents = py.import("built_core.outliner")?.call_method1("path_to", (scene.getattr("groups")?, &group))?;
                 if !parents.is_none() {
                     let path = list(&parents)?;
                     path.append(group)?;
@@ -1051,7 +1051,7 @@ impl<'a, 'py> Row<'a, 'py> {
             } else {
                 Some(rk.clone())
             };
-            let group_type = py.import("core.group")?.getattr("Group")?;
+            let group_type = py.import("built_core.group")?.getattr("Group")?;
             let placements = empty(py);
             for entity in scene.getattr("selection")?.try_iter()? {
                 let entity = entity?;
@@ -1101,7 +1101,7 @@ impl<'a, 'py> Row<'a, 'py> {
                     order = sibling.get_item("order")?;
                 }
             }
-            let uid = py.import("core.group")?.call_method0("new_uid")?;
+            let uid = py.import("built_core.group")?.call_method0("new_uid")?;
             nodes.set_item(uid, fields!(py; "name" => "New node", "parent" => &parent, "order" => order.add(1)?))?;
             if parent.is_truthy()? {
                 self.expand(format!("n:{}", parent.str()?))?;

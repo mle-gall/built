@@ -7,11 +7,11 @@ import xml.etree.ElementTree as ET
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.group import Group
-from core.layers import Layer
-from core.materials import Material, register
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core.group import Group
+from built_core.layers import Layer
+from built_core.materials import Material, register
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 from formats import dae as dae_format
 
 _NS = "{http://www.collada.org/2005/11/COLLADASchema}"

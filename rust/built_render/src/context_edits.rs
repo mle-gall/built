@@ -37,7 +37,7 @@ fn status(
 
 #[pyfunction]
 pub fn unique_components(win: &Bound<'_, PyAny>) -> PyResult<()> {
-    unique_rows(win, &selected(win, "core.group", "Group")?, false)
+    unique_rows(win, &selected(win, "built_core.group", "Group")?, false)
 }
 
 pub(super) fn unique_rows(
@@ -47,7 +47,7 @@ pub(super) fn unique_rows(
 ) -> PyResult<()> {
     let py = win.py();
     let vp = win.getattr("viewport")?;
-    let links = py.import("core.links")?;
+    let links = py.import("built_core.links")?;
     let hist = py.import("built_core.history")?;
     let linked = PyList::empty(py);
     let kw = PyDict::new(py);
@@ -120,7 +120,7 @@ pub(super) fn unique_rows(
 
 #[pyfunction]
 fn merge_groups(win: &Bound<'_, PyAny>) -> PyResult<()> {
-    let groups = selected(win, "core.group", "Group")?;
+    let groups = selected(win, "built_core.group", "Group")?;
     if groups.len() < 2 {
         return Ok(());
     }
@@ -299,7 +299,7 @@ fn unlock_group(vp: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -> PyResult<()>
 pub(crate) fn assign_tag(win: &Bound<'_, PyAny>, name: &str) -> PyResult<()> {
     let vp = win.getattr("viewport")?;
     let py = win.py();
-    let layers = py.import("core.layers")?;
+    let layers = py.import("built_core.layers")?;
     let entities =
         layers.call_method1("taggable", (vp.getattr("scene")?.getattr("selection")?,))?;
     let targets = PyList::empty(py);

@@ -1,4 +1,4 @@
-//! The tag-folder tree's queries (`core.layers`): a folder's parent, the
+//! The tag-folder tree's queries (`built_core.layers`): a folder's parent, the
 //! folders inside one, and the order the Layers tab lists tags in, folders
 //! unfolded (`docs/model-port.md`, layers).
 //!

@@ -19,7 +19,7 @@ from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 
 def _box(x0=0.0, y0=0.0, s=1.0, curved=False):
-    from core.mesh import Mesh
+    from built_core.mesh import Mesh
     m = Mesh()
     p = [V(x0, y0, 0), V(x0 + s, y0, 0), V(x0 + s, y0 + s, 0),
          V(x0, y0 + s, 0), V(x0, y0, s), V(x0 + s, y0, s),
@@ -34,7 +34,7 @@ def _box(x0=0.0, y0=0.0, s=1.0, curved=False):
 
 
 def _placed(mesh, name, x, y):
-    from core.group import Group
+    from built_core.group import Group
     g = Group(mesh, name=name)
     xf = QMatrix4x4()
     xf.translate(x, y, 0.0)
@@ -44,7 +44,7 @@ def _placed(mesh, name, x, y):
 
 @pytest.fixture
 def vp(native_host):
-    from core.group import Group
+    from built_core.group import Group
     native_host.resize(1000, 700, 1.)
     v = native_host.viewport
     sc = v.scene
@@ -150,9 +150,9 @@ def test_hide_similar_components_makes_everything_again(vp):
 
 
 def test_the_library_keeps_its_material_scan_when_entering_and_leaving_a_group(native_host, monkeypatch):
-    from core import geometry_arrays
-    from core.group import Group
-    from core.history import SetFaceColorCommand
+    from built_core import geometry_arrays
+    from built_core.group import Group
+    from built_core.history import SetFaceColorCommand
     from built_render import wgpu_library as lib
 
     win = native_host.window
@@ -255,7 +255,7 @@ def test_the_static_list_across_a_group_opened_and_closed_reads_as_made_afresh(
         assert k == f, name
     # A component made translucent inside: on the way out its copies leave
     # the instanced passes for the static ones.
-    from core.history import SetFaceOpacityCommand
+    from built_core.history import SetFaceOpacityCommand
     lamps = {id(g) for g in sc.groups if g.name.startswith("L")}
     assert not lamps & set(k)
     vp.begin_group_edit(next(g for g in sc.groups if g.name == "L1"))
@@ -268,7 +268,7 @@ def test_the_static_list_across_a_group_opened_and_closed_reads_as_made_afresh(
 
 
 def test_the_browser_reads_only_the_rows_a_group_opened_or_closed_changes(native_host, vp):
-    from core.history import SetFaceColorCommand
+    from built_core.history import SetFaceColorCommand
     from tests.native_tree import FilingRows
     room = next(g for g in vp.scene.groups if g.name == "room")
     inner = room.children[0]
@@ -293,8 +293,8 @@ def test_the_browser_reads_only_the_rows_a_group_opened_or_closed_changes(native
 
 
 def test_plain_group_retention_counts_open_edits_as_one_step(vp):
-    from core.group import Group
-    from core.history import NativeCommand
+    from built_core.group import Group
+    from built_core.history import NativeCommand
 
     group = Group(name="before")
     vp.scene.groups.append(group)

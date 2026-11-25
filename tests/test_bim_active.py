@@ -8,9 +8,9 @@ from built_core import ScreenPoint as QPointF, Input as Qt
 from built_core import Vec3 as QVector3D
 
 from core.bim import collect_objects, tag_faces
-from core.edits import build_add_edges
-from core.history import AddFaceCommand, History
-from core.scene import Scene
+from built_core.edits import build_add_edges
+from built_core.history import AddFaceCommand, History
+from built_core.scene import Scene
 from tools.base import ToolContext
 from tools.pushpull import PushPullTool
 

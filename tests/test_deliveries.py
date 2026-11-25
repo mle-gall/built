@@ -6,11 +6,11 @@ from unittest.mock import Mock
 
 import pytest
 from built_core import deliveries
-from core.camera import OrbitCamera
-from core.group import Group
-from core.history import History
-from core.protocol.commands import run
-from core.scene import Scene
+from built_core.camera import OrbitCamera
+from built_core.group import Group
+from built_core.history import History
+from built_core.protocol.commands import run
+from built_core.scene import Scene
 from formats import igz
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_ifc_export import _tagged_wall_scene

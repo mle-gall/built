@@ -2,10 +2,10 @@
 """Tracked attribute values written as keyed patches (architecture review
 11), and the references plugins hold to them: a nested dict read once and
 kept, a plain dict stored in and kept, a container moved inside its value."""
-from core import doc_model
-from core.group import Group
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core import doc_model
+from built_core.group import Group
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 
 def txn(fn):

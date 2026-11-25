@@ -117,7 +117,7 @@ fn igz_load_links<'p>(
     progress: Option<&Obj<'p>>,
 ) -> PyResult<()> {
     let py = scene.py();
-    let links = py.import("core.links")?;
+    let links = py.import("built_core.links")?;
     let path = py.import("pathlib")?.call_method1("Path", (path,))?;
     scene.setattr("_project_host_path", path.call_method0("resolve")?.str()?)?;
     let read = (|| -> PyResult<()> {

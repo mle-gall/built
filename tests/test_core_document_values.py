@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from core.scene import Scene
+from built_core.scene import Scene
 from built_core import Vec3, coordinate_frame, kept_components, project
 from built_core.annotation_anchor import Attachment
 from built_core.image_plane import ImagePlane

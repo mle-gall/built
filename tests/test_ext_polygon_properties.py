@@ -95,7 +95,7 @@ def test_a_section_drawn_in_pieces_is_one_section():
 def test_it_reads_the_selected_faces_of_a_scene():
     """A vertical 2 × 3 m wall panel with a 1 × 1 m window: net area 5 m²,
     centroid in the model, u along red and v up."""
-    from core.scene import Scene
+    from built_core.scene import Scene
     sc = Scene()
     f = sc.mesh.add_face([V(0, 5, 0), V(2, 5, 0), V(2, 5, 3), V(0, 5, 3)])
     sc.mesh.add_hole(f, [V(0.5, 5, 1), V(1.5, 5, 1), V(1.5, 5, 2), V(0.5, 5, 2)])
@@ -113,7 +113,7 @@ def test_it_reads_the_selected_faces_of_a_scene():
 
 
 def test_faces_in_different_planes_are_refused():
-    from core.scene import Scene
+    from built_core.scene import Scene
     sc = Scene()
     a = sc.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
     b = sc.mesh.add_face([V(3, 0, 1), V(4, 0, 1), V(4, 1, 1), V(3, 1, 1)])
@@ -134,7 +134,7 @@ def test_it_is_listed_among_the_example_extensions():
 def test_installed_it_adds_its_entry_and_changes_nothing(tmp_path, monkeypatch, request):
     import shutil
     from unittest.mock import MagicMock
-    from core import extensions, plugin_panels
+    from built_core import extensions, plugin_panels
     from built_render import chrome_sheet
     from built_render import shell_services as native
 

@@ -9,7 +9,7 @@ import gc
 import pytest
 from built_core import Vec3 as V
 
-from core.scene import Scene
+from built_core.scene import Scene
 from formats import igz
 
 

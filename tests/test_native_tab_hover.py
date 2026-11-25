@@ -21,7 +21,7 @@ def test_background_picture_and_shortcuts_in_a_release_window(tmp_path):
 from pathlib import Path
 
 def setup(app):
-    from core import units
+    from built_core import units
     from built_core.settings import settings
     win = app.window
     def hover(index):

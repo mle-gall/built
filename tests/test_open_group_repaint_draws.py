@@ -19,11 +19,11 @@ from tests.controller_surface import live_image
 import pytest
 from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core.group import Group
-from core.history import (SetFaceBackCommand, SetFaceColorCommand,
+from built_core.group import Group
+from built_core.history import (SetFaceBackCommand, SetFaceColorCommand,
                           SetFaceOpacityCommand, SetFaceTextureCommand,
                           SetFaceMaterialTagCommand)
-from core.mesh import Mesh
+from built_core.mesh import Mesh
 
 
 def _box_mesh(x0=-1, y0=-1, z0=0, x1=1, y1=1, z1=2):
@@ -301,8 +301,8 @@ def test_undo_after_leaving_the_group_shows(win, layout):
 
 @every_layout
 def test_a_material_edited_with_the_group_closed_shows(win, layout):
-    from core.history import RestampMaterialCommand
-    from core.materials import Material
+    from built_core.history import RestampMaterialCommand
+    from built_core.materials import Material
     vp = win.viewport
     _open(vp, layout)
     f = _front_face(vp)

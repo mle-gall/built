@@ -9,9 +9,9 @@ from __future__ import annotations
 from built_core import ScreenPoint, Input
 from built_core import Vec3 as QVector3D
 
-from core.history import History
-from core.offset import offset_chain
-from core.scene import Scene
+from built_core.history import History
+from built_core.offset import offset_chain
+from built_core.scene import Scene
 from tools.base import ToolContext
 from tools.offset import OffsetTool
 from tools.offset_host import _run_from_edge, _run_from_edges

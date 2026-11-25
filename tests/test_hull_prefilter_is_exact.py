@@ -7,7 +7,7 @@ test let ~100k points reach the Python scan: 350 ms per box, paid on
 every edit inside the container (Marco, 2026-09-14)."""
 import numpy as np
 
-from core.group import _hull_2d
+from built_core.group import _hull_2d
 
 
 def _plain_hull(pts):
@@ -64,8 +64,8 @@ def test_the_containers_box_reuses_the_prototypes_point_arrays(tmp_path):
     import os
     from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
     from tests.controller_surface import ControllerSurface as Viewport
-    from core.group import Group
-    from core.mesh import Mesh
+    from built_core.group import Group
+    from built_core.mesh import Mesh
     vp = Viewport(None)
     proto = Mesh()
     proto.add_face([QVector3D(0, 0, 0), QVector3D(1, 0, 0), QVector3D(1, 1, 0), QVector3D(0, 1, 0)])

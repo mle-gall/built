@@ -33,7 +33,7 @@ pub(super) struct Cuts {
 
 impl CutSpec {
     fn read(&self, py: Python<'_>, vertical: bool) -> PyResult<Band> {
-        // The native module itself: `core.hatches` is the name the `core`
+        // The native module itself: `built_core.hatches` is the name the `core`
         // package gives it, and only exists once that package is imported.
         let h = py.import("built_core")?.getattr("hatches")?;
         let brick = h.call_method1("clean_brick", (&self.size,))?;

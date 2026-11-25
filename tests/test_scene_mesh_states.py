@@ -43,7 +43,7 @@ def _check(scene):
 
 
 def test_one_call_per_mesh_answers_as_the_rules_one_by_one():
-    from core import layers as L
+    from built_core import layers as L
     counter = itertools.count()
     real = L.new_uid
     L.new_uid = lambda: f"k{next(counter)}"

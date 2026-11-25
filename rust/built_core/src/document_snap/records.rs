@@ -202,7 +202,7 @@ fn mesh_arc_midpoints<'py>(mesh: &Obj<'py>) -> PyResult<Obj<'py>> {
         }
     }
     let out = PyList::empty(py);
-    let fit = py.import("core.snap")?.getattr("arc_sweep_midpoint")?;
+    let fit = py.import("built_core.snap")?.getattr("arc_sweep_midpoint")?;
     for (_, verts) in curves.iter() {
         if verts.len()? < 3 {
             continue;

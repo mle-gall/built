@@ -11,10 +11,10 @@ from collections import Counter
 
 from built_core import Vec3 as V
 
-from core.edits import build_add_edges
-from core.history import History
+from built_core.edits import build_add_edges
+from built_core.history import History
 from built_core.orient import is_closed
-from core.scene import Scene
+from built_core.scene import Scene
 from tests import test_pushpull_ux as T
 
 _RECT = [V(1.5, 3, 1), V(1.5, 3.6, 1), V(2.5, 3.6, 1), V(2.5, 3, 1)]

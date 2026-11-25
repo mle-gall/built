@@ -5,9 +5,9 @@ import random
 
 from built_core import Vec3 as V
 
-from core import edits, snap, topology
-from core.mesh import Mesh
-from core.scene import Scene
+from built_core import edits, snap, topology
+from built_core.mesh import Mesh
+from built_core.scene import Scene
 
 
 def digest(rows):
@@ -167,7 +167,7 @@ def test_circle_and_crossing_guides():
 
 
 def test_materialised_drawing_rollback_and_replay(monkeypatch):
-    from core.history import AddEdgeCommand, History, SnapshotCompound
+    from built_core.history import AddEdgeCommand, History, SnapshotCompound
     scene = Scene()
     mesh = scene.mesh
     history = History(scene)
@@ -200,7 +200,7 @@ def test_materialised_drawing_rollback_and_replay(monkeypatch):
 
 
 def test_plane_tolerance_and_small_input():
-    from core.arrangement import coplanar_plane
+    from built_core.arrangement import coplanar_plane
     o = V(0, 0, 0)
     ring = [o, V(1, 0, 0), V(0, 1, 0)]
     assert coplanar_plane([o, V(1e60, -1e60, 0)])[0] is o
