@@ -20,7 +20,6 @@ import traceback
 from pathlib import Path
 
 from app_shell import qt_host
-from core import timers as core_timers
 
 #: Qt cursor shape → winit CursorIcon name (rust/built_app/src/main.rs).
 _CURSORS = {
@@ -243,6 +242,7 @@ class Host:
     def idle(self):
         """Qt's posted events and timers; then what the window should do:
         ``(frame_wanted, wake_in_ms or None, cursor or None, title or None)``."""
+        from core import timers as core_timers  # after bootstrap: core needs the venv
         qt_host.pump()
         self._guard("window timers", self.timers.run_due)
         self._guard("hostless timers", core_timers.run_due)
@@ -345,6 +345,7 @@ class Host:
 
     def modal_frame(self):
         """A frame while a question or a job holds the loop (app_shell.modal)."""
+        from core import timers as core_timers
         self._guard("window timers", self.timers.run_due)
         self._guard("hostless timers", core_timers.run_due)
         if self._frame_wanted:
