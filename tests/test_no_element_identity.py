@@ -42,8 +42,6 @@ _ELEMENT = re.compile(
 _ALLOWED = {
     # Not elements: names that look like them.
     ("core/ai.py", "_tidy_groups"): "groups",
-    ("core/intersect.py", "intersect"): "polygons of two meshes",
-    ("core/outliner.py", "reparent_problem"): "groups",
 }
 
 

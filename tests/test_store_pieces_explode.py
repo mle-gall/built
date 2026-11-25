@@ -9,6 +9,7 @@ show the same model after do, undo and redo (``fingerprint``: positions,
 lists in order, edge flags and faces, rings, attrs, normals); and the
 store run's change-feed steps must be exactly what changed, by key."""
 from __future__ import annotations
+from ingetrazo_core import store_views
 
 import gzip
 import json
@@ -48,7 +49,7 @@ pytestmark = [store_required]
 def _mesh(store):
     m = M.Mesh()
     if store:
-        S.become_store(m, mod.MeshStore(next(M._KEY_NAMESPACES),
+        store_views.become_store(m, mod.MeshStore(next(M._KEY_NAMESPACES),
                                         **S._weld_args()), [])
     return m
 

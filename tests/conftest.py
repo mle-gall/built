@@ -25,9 +25,9 @@ os.environ.update(HOME=_home, CFFIXED_USER_HOME=_home, XDG_DATA_HOME=_data_dir,
 if sys.platform == "win32":
     os.environ.update(USERPROFILE=_home, APPDATA=_data_dir, LOCALAPPDATA=_data_dir)
 
-from core import worker_gc
+from ingetrazo_core import install_main_thread_collector
 
-worker_gc.install()
+install_main_thread_collector()
 
 import pytest  # noqa: E402
 from core import settings as product_settings  # noqa: E402

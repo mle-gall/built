@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from core import malloc_arenas
+import ingetrazo_core
 from views.document_interaction import _PickWarm
 
 
@@ -20,7 +20,7 @@ def _base(n=8):
 
 def test_the_last_thread_trims_once(monkeypatch):
     calls = []
-    monkeypatch.setattr(malloc_arenas, "trim", lambda: calls.append(1))
+    monkeypatch.setattr(ingetrazo_core, "trim_heap", lambda: calls.append(1))
     bases = [_base() for _ in range(40)]
     warm = _PickWarm(_Mod(), [], [], bases)
     warm.join()
@@ -30,7 +30,7 @@ def test_the_last_thread_trims_once(monkeypatch):
 
 def test_a_job_that_fails_does_not_lose_the_trim(monkeypatch):
     calls = []
-    monkeypatch.setattr(malloc_arenas, "trim", lambda: calls.append(1))
+    monkeypatch.setattr(ingetrazo_core, "trim_heap", lambda: calls.append(1))
     warm = _PickWarm(_Mod(), [("k", {})], [], [])   # no such arrays: raises
     warm.join()
     assert warm.protos == {}

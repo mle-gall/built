@@ -10,7 +10,7 @@ from core.group import Group, copy_group
 from core.history import History
 from core.mesh import Mesh
 from core.scene import Scene
-from core.soften import SoftenByAngleCommand, selected_edges
+from ingetrazo_core.soften import SoftenByAngleCommand, selected_edges
 from tests.test_viewport_smooth_shading import _cylinder, _stub
 
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401

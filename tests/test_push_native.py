@@ -26,6 +26,7 @@ that is the oracle here.
   store on and off: the same model at the end.
 """
 from __future__ import annotations
+from ingetrazo_core import store_views
 
 import os
 import random
@@ -57,7 +58,7 @@ def V(x, y, z=0.0):
 def _mesh(store: bool):
     m = M.Mesh()
     if store:
-        S.become_store(m, mod.MeshStore(next(M._KEY_NAMESPACES),
+        store_views.become_store(m, mod.MeshStore(next(M._KEY_NAMESPACES),
                                         **S._weld_args()), [])
     return m
 
@@ -426,19 +427,19 @@ def _ray_triangle(origin: QVector3D, direction: QVector3D, tri: tuple) -> float 
 def test_parallel_overlap_prefilter_and_lateral_exit(store, seed, oracle):
     """The parallel-overlap candidates hold every face the inward limit and
     the levels can take; the lateral exit is the Python loop's, exactly."""
-    from core.push_pull import _loops_overlap_2d, _project_loop_2d
+    from core.arrangement import loops_overlap, project_loop
     rng = random.Random(seed)
     m = _scene(store, seed)
     O.orient_outward(m)
     faces = list(m.faces)
     for base in rng.sample(faces, min(6, len(faces))):
         n = base.normal().normalized()
-        base_xy = _project_loop_2d(base.vertices, n)
+        base_xy = project_loop(base.vertices, n)
         got = {g.key for g in push_scans.parallel_overlapping(m, n, base_xy)}
         for g in faces:
             gn = g.normal().normalized()
-            if (abs(QVector3D.dotProduct(gn, n)) >= 0.999 and _loops_overlap_2d(
-                    base_xy, _project_loop_2d(g.vertices, n))):
+            if (abs(QVector3D.dotProduct(gn, n)) >= 0.999 and loops_overlap(
+                    base_xy, project_loop(g.vertices, n))):
                 assert g.key in got
         d = -n
         samples = [base.centroid()] + [p + (base.centroid() - p) * 1e-3
@@ -517,7 +518,7 @@ def _push_state(store, oracle, off, build, pick, dist):
     oracle(off)
     scene = Scene()
     if store:
-        S.become_store(scene.mesh, mod.MeshStore(
+        store_views.become_store(scene.mesh, mod.MeshStore(
             next(M._KEY_NAMESPACES), **S._weld_args()), [])
     hist = History(scene)
     build(scene.mesh)
@@ -583,7 +584,7 @@ def _certifier_run(monkeypatch, scenario, seed, store):
         def __init__(self, *a, **k):
             super().__init__(*a, **k)
             if store:
-                S.become_store(self.mesh, mod.MeshStore(
+                store_views.become_store(self.mesh, mod.MeshStore(
                     next(M._KEY_NAMESPACES), **S._weld_args()), [])
             made.append(self)
     monkeypatch.setattr(FE, "Scene", _Scene)

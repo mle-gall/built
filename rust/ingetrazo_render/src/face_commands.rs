@@ -37,7 +37,7 @@ fn face_winding(win: &Bound<'_, PyAny>, orient: bool) -> PyResult<()> {
         if faces.len() != 1 {
             return status(win, "Select the one face the others should match.", None);
         }
-        py.import("core.orient_faces")?
+        py.import("ingetrazo_core")?
             .call_method1("faces_to_flip", (faces.get_item(0)?,))?
     } else {
         if faces.is_empty() {

@@ -67,15 +67,9 @@ def test_plan_is_the_built_mesh(binary, tmp_path, seed):
     assert n >= 3
 
 
-@pytest.mark.parametrize("engine", ["numpy", "rust"])
 @pytest.mark.parametrize("dtype", [np.float32, np.float64])
-def test_weld_is_bulk_weld(monkeypatch, engine, dtype):
-    """The weld alone, on raw points crowded at cell borders — the NumPy
-    replay and the Rust one."""
-    mod = _native.available()
-    if engine == "rust" and mod is None:
-        pytest.skip("native module not built")
-    monkeypatch.setattr(_native, "native", mod if engine == "rust" else None)
+def test_weld_is_bulk_weld(dtype):
+    """Deferred planning and bulk insertion weld identically at cell borders."""
     rng = random.Random(5)
     for _ in range(30):
         pts = []
@@ -114,14 +108,9 @@ def test_duplicate_and_shut_edges(binary, tmp_path):
     _compare(lazy_mesh.plan_of(s2.mesh), s2.mesh)
 
 
-@pytest.mark.parametrize("engine", ["numpy", "rust"])
-def test_sequential_weld_is_vertex_by_vertex(monkeypatch, engine):
+def test_sequential_weld_is_vertex_by_vertex():
     """weld(sequential=True): the vertices Mesh.vertex makes point by point
     — the per-entity reader's order — on points crowded at cell borders."""
-    mod = _native.available()
-    if engine == "rust" and mod is None:
-        pytest.skip("native module not built")
-    monkeypatch.setattr(_native, "native", mod if engine == "rust" else None)
     rng = random.Random(8)
     for _ in range(30):
         pts = np.array([[rng.randrange(-3, 3) * 0.5 + rng.choice(
@@ -150,13 +139,8 @@ def test_planned_vertices_read_like_the_vertex_list(binary, tmp_path):
         assert got == [v.position.toTuple() for v in m.vertices]
 
 
-@pytest.mark.parametrize("engine", ["numpy", "rust"])
 @pytest.mark.parametrize("seed", range(12))
-def test_near_coincident_cloud_keeps_the_plan_vertex_order(monkeypatch, engine, seed):
-    mod = _native.available()
-    if engine == "rust" and mod is None:
-        pytest.skip("native module not built")
-    monkeypatch.setattr(_native, "native", mod if engine == "rust" else None)
+def test_near_coincident_cloud_keeps_the_plan_vertex_order(seed):
     rng = np.random.default_rng(seed)
     points = rng.integers(-4, 5, size=(300, 3)) * 0.1
     points += rng.choice([0, 4.9e-5, 5.1e-5, 9.9e-5, 1.01e-4], size=points.shape)

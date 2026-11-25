@@ -23,7 +23,7 @@ def setup(app):
         import threading
         import numpy as np
         from core.protocol.commands import add_image_plane
-        from core.background_autosave import BackgroundAutosave
+        from ingetrazo_render import background_autosave
         from core.scale_figure import store_picture
         from core.text3d import build_text_letters
         from core.paths import cache_directory
@@ -56,7 +56,7 @@ def setup(app):
         assert about_review("smoke", host=app.window._host).sheet(str)
         assert notice_text("<b>A</b><br>B") == "A\\nB"
         shared_input(app.window)
-        manager = BackgroundAutosave(app.window)
+        manager = background_autosave(app.window)
         manager.request([])
         manager.cancel()
         assert len(build_text_letters("AV")) == 2

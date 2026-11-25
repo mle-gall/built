@@ -235,10 +235,10 @@ class SheetHost:
 
 def composer_for(win):
     """Keep the workspace bound to the document it was created for across tab switches."""
-    from core.document_host import DocumentHost
+    from ingetrazo_render.shell_views import SheetDocumentHost
     win = getattr(win, "_host_window", win)
     if win._composer is None:
-        win._composer = SheetHost(DocumentHost(win, win._doc))
+        win._composer = SheetHost(SheetDocumentHost(win, win._doc))
         win._update_title()
     return win._composer
 

@@ -791,7 +791,7 @@ fn _load_one<'py>(py: Python<'py>, path: &str) -> PyResult<Bound<'py, PyDict>> {
         return Ok(entry);
     }
     entry.set_item("thumb", _thumbnail(py, &p, &st)?)?;
-    let links = py.import("core.link_scan").and_then(|m| m.call_method1("scan", (&p,)));
+    let links = py.import("ingetrazo_core").and_then(|m| m.call_method1("scan_document_links", (&p,)));
     entry.set_item("links", links.unwrap_or_else(|_| PyList::empty(py).into_any()))?; // the preview only loses its links
     let newer = (|| -> PyResult<bool> {
         let slot = py.import("core.autosave")?.call_method1("pending", (&p,))?;

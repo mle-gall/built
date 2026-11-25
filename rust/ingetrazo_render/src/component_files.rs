@@ -153,7 +153,7 @@ fn catalogue_component<'py>(
     obj: Option<&Bound<'py, PyAny>>,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
     let py = win.py();
-    let library = py.import("core.library")?;
+    let library = py.import("ingetrazo_core")?.getattr("component_library")?;
     let path = match obj {
         Some(x) => x.clone(),
         None => library.call_method1("model_file", (entry,))?,

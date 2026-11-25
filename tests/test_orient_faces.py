@@ -6,7 +6,7 @@ from ingetrazo_core import Vec3 as V
 
 from core.history import FlipFacesCommand
 from core.mesh import Mesh
-from core.orient_faces import connected_count, faces_to_flip
+from ingetrazo_core import connected_count, faces_to_flip
 
 
 def _normal(face):

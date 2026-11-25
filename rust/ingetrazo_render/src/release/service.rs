@@ -44,7 +44,7 @@ impl ReleaseSheet {
         if let Some((effect, value, close)) = args.first().and_then(|k| model.action(k)) {
             match effect {
                 "skip" => {
-                    py.import("core.update_check")?
+                    py.import("ingetrazo_render.release_check")?
                         .call_method1("skip_version", (settings(py)?, &value))?;
                 }
                 "open" => {
@@ -99,7 +99,7 @@ impl Check {
                 .call_method1("later", (s.win.bind(py), 100, slf.getattr("receive")?))?;
             return Ok(());
         }
-        let update = py.import("core.update_check")?;
+        let update = py.import("ingetrazo_render.release_check")?;
         let settings = s.settings.bind(py);
         let model = match future.call_method0("result") {
             Ok(release) => {
@@ -177,7 +177,7 @@ impl Check {
     fn review(&self, py: Python, model: Py<ReleaseReview>) -> PyResult<()> {
         if self.current(py)?
             && !py
-                .import("core.update_check")?
+                .import("ingetrazo_render.release_check")?
                 .call_method1(
                     "is_skipped",
                     (self.settings.bind(py), &model.borrow(py).version),
@@ -198,7 +198,7 @@ pub(crate) fn start_check(
     current: Option<String>,
 ) -> PyResult<()> {
     let py = window.py();
-    let update = py.import("core.update_check")?;
+    let update = py.import("ingetrazo_render.release_check")?;
     let settings = settings(py)?;
     let sys = py.import("sys")?;
     let frozen = sys

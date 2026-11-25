@@ -51,10 +51,11 @@ def test_about_and_clipboard(monkeypatch, native_host, pasteboard):
 
 
 def test_extensions_install_update_toggle_safe_reset_remove(tmp_path, monkeypatch):
-    from core import extensions, extension_manager as em
+    from core import extensions
+    from ingetrazo_core import extension_manager as em
     root = tmp_path / "plugins"
     root.mkdir()
-    monkeypatch.setattr(em, "user_plugins_dir", lambda: root)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: root)
     monkeypatch.setattr(extensions, "plugin_dirs", lambda: [tmp_path, root])
     monkeypatch.setattr(em, "load_cached_catalog", lambda: None)
     monkeypatch.setattr(em, "refresh_catalog", lambda: em.CatalogSnapshot([], {}, "", True))

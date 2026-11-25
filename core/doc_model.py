@@ -16,6 +16,7 @@ What lives here:
 from __future__ import annotations
 
 import os
+import sys
 import weakref
 
 import ingetrazo_core as NATIVE
@@ -215,17 +216,20 @@ parent_mode(os.environ.get("INGETRAZO_DOC_PARENT", "raise")
 #
 # An edit goes to the document as a keyed patch (architecture review 11):
 # the path from the attribute's top to the entry, and the entry's new value
-# (``doc_attr_patch``), journalled as that entry's before and after. Inside
-# a transaction it is written at once; outside, it waits for the next
-# boundary (:func:`flush`). Each container knows its parent (weakly) and its
-# key there, so its path is found without a scan of the value.
+# (``doc_attr_patch``), journalled as that entry's before and after, at
+# once, inside a transaction or not: what Rust reads of the document is
+# what Python sees. Each container knows its parent (weakly) and its key
+# there, so its path is found without a scan of the value.
 #
 # A plain dict or list stored INTO one (``reg = data["links"] = {}``) is
-# kept as that very object, as Python would. Edits made through the plain
-# reference are written back too: at every boundary that one subtree is
-# read again (``suspect``), not the whole attribute.
+# kept as that very object, as Python would, so edits made through it
+# cannot be seen as they happen: it is *suspect*, and re-read whole at
+# every boundary (:func:`flush`, which Rust readers call through
+# ``doc::py::fresh`` when any is waiting). Once nothing but its parent holds
+# it (and nothing outside holds a container inside it), the flush puts a
+# tracked copy in its place, which nobody can tell apart, and it is no
+# longer suspect: suspects live as long as a reference to them is kept.
 
-_PENDING: dict = {}     # id(anchor) -> (anchor, [(node, path from node, value, delete)])
 _SUSPECT: dict = {}     # id(plain container) -> (anchor, weakref(parent), key, container)
 _MISSING = object()
 
@@ -329,12 +333,9 @@ def _edited(node, rel, value=None, delete=False) -> None:
     anchor = node._doc_root
     if anchor.bind is None:
         return
-    if NATIVE.doc_depth():
-        path = _path(node)
-        if path is not None:
-            _send(anchor, [(path + rel, node if not rel and not delete else value, delete)])
-    else:
-        _PENDING.setdefault(id(anchor), (anchor, []))[1].append((node, rel, value, delete))
+    path = _path(node)
+    if path is not None:
+        _send(anchor, [(path + rel, node if not rel and not delete else value, delete)])
 
 
 def _stored(node, key, value):
@@ -349,21 +350,11 @@ def _stored(node, key, value):
 
 
 def flush() -> None:
-    """Write back every in-place edit since the last call (the waiting
-    patches, then the suspect subtrees as they are now); a container whose
-    attribute was replaced meanwhile becomes a plain one."""
-    if not (_PENDING or _SUSPECT):
+    """Write back the suspect subtrees as they are now (plain containers
+    stored into tracked ones; see above), and put a tracked copy in the
+    place of each one nothing else holds any more."""
+    if not _SUSPECT:
         return
-    pending = list(_PENDING.values())
-    _PENDING.clear()
-    for anchor, edits in pending:
-        out = []
-        for node, rel, value, delete in edits:
-            path = _path(node)
-            if path is not None:
-                out.append((path + rel, node if not rel and not delete else value, delete))
-        if out and anchor.bind is not None:
-            _send(anchor, out)
     by_anchor = {}
     for sid, (anchor, parent_ref, key, value) in list(_SUSPECT.items()):
         parent = parent_ref()
@@ -378,6 +369,38 @@ def flush() -> None:
         if anchor.bind is None:
             for sid in [sid for sid, entry in _SUSPECT.items() if entry[0] is anchor]:
                 del _SUSPECT[sid]
+    by_anchor = edits = parent = value = None   # no name holds a suspect
+    for sid in list(_SUSPECT):
+        _promote(sid)
+
+
+def _unshared(value) -> bool:
+    """Whether no container inside ``value`` is held outside it (each one
+    referenced once, by its parent)."""
+    items = dict.values(value) if isinstance(value, dict) else list.__iter__(value)
+    for v in items:
+        # The parent's slot, this loop's name and the call's argument.
+        if isinstance(v, (dict, list)) and (sys.getrefcount(v) > 3 or not _unshared(v)):
+            return False
+    return True
+
+
+def _promote(sid) -> None:
+    """Suspect ``sid`` tracked in place when nothing else holds it."""
+    anchor, parent_ref, key, value = _SUSPECT.pop(sid)
+    parent = parent_ref()
+    # The parent's slot, the name ``value`` and the call's argument.
+    if parent is None or sys.getrefcount(value) > 3 or not _unshared(value):
+        _SUSPECT[sid] = (anchor, parent_ref, key, value)
+        return
+    place = _index(parent, value, key)
+    if place is _MISSING:
+        return
+    tracked = _wrap(value, anchor, weakref.ref(parent), place if isinstance(parent, dict) else None)
+    if isinstance(parent, dict):
+        dict.__setitem__(parent, place, tracked)
+    else:
+        list.__setitem__(parent, place, tracked)
 
 
 class TrackedDict(dict):
@@ -580,7 +603,6 @@ def _refill(view, value) -> bool:
     if isinstance(view, TrackedDict) and type(value) is dict or (
             isinstance(view, TrackedList) and type(value) is list):
         _patch(view, value, view._doc_root)
-        _PENDING.pop(id(view._doc_root), None)
         return True
     return False
 
@@ -592,6 +614,7 @@ def plain(value):
 
 NATIVE.doc_set_track_hook(_track)
 NATIVE.doc_set_refill_hook(_refill)
+NATIVE.doc_set_suspects(_SUSPECT, flush)
 
 
 def attribute(name: str, track: bool = True):
@@ -646,9 +669,9 @@ def record_fields(*names, extra=()):
 # ----------------------------------------------------------- transactions
 
 def begin(document=None) -> int:
-    """Open the step's transaction (or a savepoint in the open one). In-place
-    edits of tracked containers made before it are written back first, so
-    they are not this step's."""
+    """Open the step's transaction (or a savepoint in the open one). The
+    suspect containers are written back first, so their edits made before
+    it are not this step's."""
     return NATIVE.doc_begin(document)
 
 

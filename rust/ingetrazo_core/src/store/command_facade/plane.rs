@@ -207,7 +207,11 @@ fn inherit_flat_paint(
         .extract()?;
     let view = mesh.py().import("core.store_mesh")?.getattr("FaceView")?;
     for (face, source, row) in owners {
-        let attrs = snapshot.call_method1("_face_attrs", (source, row))?;
+        let attrs = crate::kernel::store_views::snapshot_attr(
+            snapshot,
+            source,
+            &row.into_pyobject(mesh.py())?.into_any(),
+        )?;
         view.call1((mesh, face))?
             .getattr("attrs")?
             .call_method1("update", (attrs,))?;

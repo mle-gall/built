@@ -588,13 +588,13 @@ class Scene:
         share = entry_transaction = None
         if active_mesh is None and (group.children or group.xform is not None):
             attachments = self._attachment_swap()
-            from core.reference_edit import enter
+            from ingetrazo_core.command_protocol import enter_reference
             from core.store_mesh import StoreMesh
             # A singular placement needs the compatibility world copy. Keep
             # the placement swaps on entry so its History step can replay them.
             depth = _dm.begin() if type(entry_mesh) is StoreMesh else 0
             try:
-                share, parts = enter(self, group, frame)
+                share, parts = enter_reference(self, group, frame)
                 if depth:
                     entry_transaction = _dm.commit()
             except Exception:
@@ -674,8 +674,8 @@ class Scene:
         unchanged = True
         share = nivel.pop("share", None)
         if share is not None:
-            from core.reference_edit import finish
-            unchanged = finish(share, nivel.get("parts"))
+            from ingetrazo_core.command_protocol import finish_reference
+            unchanged = finish_reference(share, nivel.get("parts"))
         if unchanged:
             self._placement_context_bumps += 1
         self.mesh = nivel["mesh"]
@@ -806,34 +806,11 @@ class Scene:
 
     @property
     def revision(self) -> int:
-        """Monotonic observed document token, independent of renderer resets.
-
-        Mesh tokens are O(1); this walk costs placements and metadata, never
-        vertices or faces. Commands also bump content_version, so undoing
-        between observations cannot hide a change.
-        """
-        rows = [(id(self.loose_mesh), self.loose_mesh.revision)]
-        stack = [(g, None) for g in self.groups + self.kept_components]
-        seen = set()
-        while stack:
-            g, parent = stack.pop()
-            rows.append((id(g), parent, id(g.mesh), g.mesh.revision,
-                         repr(tuple(getattr(g, k) for k in (
-                             "uid", "name", "layer", "ifc", "ext", "material", "hidden",
-                             "locked", "billboard", "component", "text3d",
-                             "axes", "exploded", "explode_offset"))),
-                         tuple(g.xform.data()) if g.xform is not None else None))
-            if id(g) not in seen:
-                seen.add(id(g))
-                stack.extend((child, id(g)) for child in g.children or ())
-        from core.layers import layer_values
-        key = (self.content_version, rows, repr([layer_values(layer) for layer in self.layers]),
-               repr(self.layer_folders), repr(self.folder_parents),
-               repr(self.layer_folder_names), repr(self.folder_visibility))
-        if key != self.__dict__.get("_revision_key"):
-            self.__dict__["_revision_key"] = key
-            self.__dict__["_revision"] = self.__dict__.get("_revision", 0) + 1
-        return self.__dict__["_revision"]
+        """Monotonic observed document token, independent of renderer
+        resets: it moves when ``content_version``, a placement's fields or
+        tree, a mesh's revision, the tags or their folders moved since the
+        last read (``model/scene_revision.rs``, read from the document)."""
+        return ingetrazo_core.scene_revision(self)
 
     @property
     def content_version(self) -> int:

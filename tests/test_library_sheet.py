@@ -278,7 +278,7 @@ def test_the_inspector_edits_the_material_paint_holds(win, monkeypatch):
 
 
 def test_online_catalogue_search_preview_download_and_document_credit(win, tmp_path, monkeypatch):
-    from core import library
+    from ingetrazo_core import component_library as library
     from formats import igz
     from core.scene import Scene
     import zipfile
@@ -351,7 +351,7 @@ def test_online_catalogue_search_preview_download_and_document_credit(win, tmp_p
 
 
 def test_failed_or_abandoned_catalogue_download_never_places(win, monkeypatch):
-    from core import library
+    from ingetrazo_core import component_library as library
     from threading import Event
 
     entries = [{"id":"chair", "nombre":"Silla", "nombre_en":"Chair"}]

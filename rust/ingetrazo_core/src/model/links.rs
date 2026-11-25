@@ -285,12 +285,13 @@ fn field<'a>(d: &'a [(Value, Value)], key: &str) -> Option<&'a Value> {
     d.iter().find_map(|(k, v)| matches!(k, Value::Str(s) if s == key).then_some(v))
 }
 
-/// Whether the document says `group` is a placed link, without Python:
-/// Some(false) when it is not, Some(true) when its record has a path, None
-/// when only the Python attribute can tell (not a document placement, or
-/// an unusual value). The link key is only ever set with the record, never
-/// added to an `ext` in place, so the document's value answers this.
-fn doc_link(group: &Obj<'_>) -> Option<Option<()>> {
+/// What the document says of `group`'s link, without Python: Some(None)
+/// when it is not linked, Some(Some(path)) when it is (the path when it
+/// is a string), None when only the Python attribute can tell (not a
+/// document placement, or an unusual value). The document is current:
+/// in-place edits write through, and readers call `doc::py::fresh` for
+/// plain containers stored into tracked ones.
+fn doc_link(group: &Obj<'_>) -> Option<Option<Option<String>>> {
     static EXT: std::sync::OnceLock<Option<u16>> = std::sync::OnceLock::new();
     let ext = (*EXT.get_or_init(|| doc::attr_id("ext").ok()))?;
     let k = handle_key(group).ok()?;
@@ -309,7 +310,7 @@ fn doc_link(group: &Obj<'_>) -> Option<Option<()>> {
             None => Some(None),
             Some(p) => match truthy(p)? {
                 false => Some(None),
-                true => Some(Some(())),
+                true => Some(Some(if let Value::Str(s) = p { Some(s.clone()) } else { None })),
             },
         },
         Some(_) => Some(None),
@@ -320,6 +321,7 @@ fn doc_link(group: &Obj<'_>) -> Option<Option<()>> {
 /// of a placed linked file, or None.
 pub fn link_of<'py>(group: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
     let py = group.py();
+    crate::doc::py::fresh(py)?;
     if let Some(None) = doc_link(group) {
         return Ok(None);
     }
@@ -336,6 +338,7 @@ pub fn link_of<'py>(group: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
 }
 
 pub fn is_linked(group: &Obj<'_>) -> PyResult<bool> {
+    crate::doc::py::fresh(group.py())?;
     match doc_link(group) {
         Some(found) => Ok(found.is_some()),
         None => Ok(link_of(group)?.is_some()),
@@ -373,13 +376,14 @@ fn py_linked_ancestor<'py>(group: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
     linked_ancestor(group)
 }
 
-/// The path a linked copy's record names, normalised. Whether it is a link
-/// is read from the document; the path from the record itself, which may
-/// hold an in-place edit the document has not been sent yet
-/// (`core/doc_model.py`: tracked containers write back at boundaries).
+/// The path a linked copy's record names, normalised, read from the
+/// document (`doc::py::fresh` first: a plain record stored and edited in
+/// place is written back).
 fn norm_path_of(group: &Obj<'_>) -> PyResult<Option<String>> {
-    if let Some(None) = doc_link(group) {
-        return Ok(None);
+    match doc_link(group) {
+        Some(None) => return Ok(None),
+        Some(Some(Some(p))) if !cfg!(windows) && p.starts_with('/') => return Ok(Some(normpath(&p))),
+        _ => {}
     }
     match link_of(group)? {
         Some(rec) => Ok(Some(norm(&rec.get_item("path")?)?)),
@@ -389,6 +393,7 @@ fn norm_path_of(group: &Obj<'_>) -> PyResult<Option<String>> {
 
 fn all_groups<'py>(scene: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
     let py = scene.py();
+    crate::doc::py::fresh(py)?;
     let groups = match scene.getattr_opt(pyo3::intern!(py, "groups"))? {
         Some(g) if g.is_truthy()? => g,
         _ => return Ok(Vec::new()),

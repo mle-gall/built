@@ -201,15 +201,27 @@ fn write_pdf(job: &PdfExport, host: &python::Host) -> PyResult<i32> {
     })
 }
 
-pub fn register_launcher() {
+// Apply before startup allocates worker threads and their glibc arenas.
+fn limit_allocator_arenas() -> bool {
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     unsafe {
         extern "C" {
             fn mallopt(param: i32, value: i32) -> i32;
         }
         const M_ARENA_MAX: i32 = -8;
-        mallopt(M_ARENA_MAX, 2);
+        mallopt(M_ARENA_MAX, 2) != 0
     }
+    #[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+    { false }
+}
+
+#[test]
+fn arena_limit_applies_only_to_glibc() {
+    assert_eq!(limit_allocator_arenas(), cfg!(all(target_os = "linux", target_env = "gnu")));
+}
+
+pub fn register_launcher() {
+    limit_allocator_arenas();
     let args: Vec<_> = std::env::args().skip(1).collect();
     #[cfg(windows)]
     if args.iter().any(|a| a.starts_with('-')) {
@@ -304,7 +316,7 @@ pub fn register_launcher() {
 
 pub fn initialize(py: Python<'_>) -> PyResult<()> {
     py.import("core.tls")?.call_method0("ensure_once")?;
-    py.import("core.worker_gc")?.call_method0("install")?;
+    py.import("ingetrazo_core")?.call_method0("install_main_thread_collector")?;
     let log = py.import("core.paths")?.call_method0("open_crash_log")?;
     if !log.is_none() {
         let faults = py.import("faulthandler")?;
@@ -317,7 +329,7 @@ pub fn initialize(py: Python<'_>) -> PyResult<()> {
     }
     #[cfg(windows)]
     if std::env::var_os("BUILT_SETTINGS_DIR").is_none() {
-        py.import("core.gpu_prefs")?
+        py.import("ingetrazo_core")?
             .call_method0("ensure_high_performance_gpu")?;
     }
     Ok(())

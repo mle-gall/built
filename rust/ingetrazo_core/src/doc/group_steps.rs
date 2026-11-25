@@ -597,13 +597,10 @@ impl SplitIntoPieces {
         // Where the group's faces went, for the change feed: `[(source
         // mesh, piece mesh, {"face": [(key, key)]})]` for the pieces the
         // store cut (`core.store_parts.copy_part`).
-        let origin = py.import("core.store_parts")?.getattr("origin_of")?;
         let copies = PyList::empty(py);
         for piece in pieces.try_iter()? {
             let mesh = piece?.getattr("mesh")?;
-            let found = origin.call1((&mesh,))?;
-            let (source, keys) = (found.get_item(0)?, found.get_item(1)?);
-            if !source.is_none() {
+            if let (Some(source), Some(keys)) = crate::kernel::store_views::provenance::origin_of(&mesh)? {
                 copies.append(PyTuple::new(py, [source, mesh, keys])?)?;
             }
         }

@@ -16,6 +16,7 @@ use glam::DMat4;
 use pyo3::exceptions::{PyRuntimeError, PyStopIteration};
 use pyo3::prelude::*;
 use pyo3::types::PyTuple;
+use std::collections::HashMap;
 use pyo3::{PyTraverseError, PyVisit};
 
 use crate::doc::{self, py::handle_key, Data, Field, Key};
@@ -46,14 +47,80 @@ struct Frame {
     next: usize,
     world: World,
     paint: Py<PyAny>,
+    ctx: Ctx,
+}
+
+/// What `visible_placements` carries down to a node's children: whether a
+/// placement above is hidden, the tag a hidden or locked tag above forces
+/// on every instance below, the tag the node shows (its own or inherited),
+/// and the node's own tag.
+#[derive(Clone, Default)]
+struct Ctx {
+    hidden: bool,
+    forced: Option<String>,
+    inherited: Option<String>,
+    own: Option<String>,
+}
+
+/// The tags' (shown, locked), as `scene.layer(name)` finds them: by key
+/// (the first with it), else by label (the first with it).
+struct Vis {
+    by_key: HashMap<String, (bool, bool)>,
+    by_name: HashMap<String, (bool, bool)>,
+}
+
+impl Vis {
+    fn read(py: Python<'_>, scene: &Bound<'_, PyAny>) -> PyResult<Vis> {
+        let effective = super::module(py, "ingetrazo_core")?.getattr("tag_edits")?.getattr("effective_visible")?;
+        let (mut by_key, mut by_name) = (HashMap::new(), HashMap::new());
+        for ly in scene.getattr("layers")?.try_iter()? {
+            let ly = ly?;
+            let state = || -> PyResult<(bool, bool)> {
+                Ok((effective.call1((scene, &ly))?.is_truthy()?, ly.getattr("locked")?.is_truthy()?))
+            };
+            let st = state()?;
+            if let Ok(k) = ly.getattr("key")?.extract::<String>() {
+                by_key.entry(k).or_insert(st);
+            }
+            if let Ok(n) = ly.getattr("name")?.extract::<String>() {
+                by_name.entry(n).or_insert(st);
+            }
+        }
+        Ok(Vis { by_key, by_name })
+    }
+    fn of(&self, tag: &Option<String>) -> Option<(bool, bool)> {
+        let t = tag.as_ref()?;
+        self.by_key.get(t).or_else(|| self.by_name.get(t)).copied()
+    }
+    fn shown(&self, tag: &Option<String>) -> bool {
+        self.of(tag).is_none_or(|(shown, _)| shown)
+    }
+    fn blocking(&self, tag: &Option<String>) -> bool {
+        self.of(tag).is_some_and(|(shown, locked)| !shown || locked)
+    }
+}
+
+/// A placement's tag and Hide: from its node, else its attributes.
+fn tag_and_hide(node: &Node, obj: &Bound<'_, PyAny>) -> PyResult<(Option<String>, bool)> {
+    if let Node::Doc(k) = node {
+        let d = doc::lock();
+        if let Some(Data::Placement(p)) = d.node(*k).map(|n| &n.data) {
+            return Ok((p.tag.clone().filter(|t| !t.is_empty()), p.hidden));
+        }
+    }
+    let tag = obj.getattr_opt("layer")?.filter(|t| t.is_truthy().unwrap_or(false)).and_then(|t| t.extract::<String>().ok());
+    let hidden = obj.getattr_opt("hidden")?.is_some_and(|h| h.is_truthy().unwrap_or(false));
+    Ok((tag, hidden))
 }
 
 #[pyclass(module = "ingetrazo_core", name = "PlacementWalk")]
 pub struct PlacementWalk {
     painted: bool,
+    /// `visible_placements`: the tags' state (None: every placement).
+    vis: Option<Vis>,
     start: Option<(Py<PyAny>, World, Py<PyAny>)>,
     /// The node just yielded: its children are read on the next step.
-    pending: Option<(Node, Py<PyAny>, World, Py<PyAny>)>,
+    pending: Option<(Node, Py<PyAny>, World, Py<PyAny>, Ctx)>,
     stack: Vec<Frame>,
 }
 
@@ -151,14 +218,22 @@ impl PlacementWalk {
             let world = compose(py, &base, &group, &node)?;
             let paint = if self.painted { paint_of(&group, &paint)? } else { paint };
             let out = self.emit(py, group.clone(), &world, &paint)?;
-            self.pending = Some((node, group.unbind(), world, paint));
+            let ctx = match &self.vis {
+                None => Ctx::default(),
+                Some(vis) => {
+                    let (own, hidden) = tag_and_hide(&node, &group)?;
+                    let forced = if vis.blocking(&own) { own.clone() } else { None };
+                    Ctx { hidden, forced, inherited: None, own }
+                }
+            };
+            self.pending = Some((node, group.unbind(), world, paint, ctx));
             return Ok(out);
         }
         loop {
-            if let Some((node, obj, world, paint)) = self.pending.take() {
+            if let Some((node, obj, world, paint, ctx)) = self.pending.take() {
                 let children = children_of(py, &node, obj.bind(py))?;
                 if !children.is_empty() {
-                    self.stack.push(Frame { children, next: 0, world, paint });
+                    self.stack.push(Frame { children, next: 0, world, paint, ctx });
                 }
             }
             let Some(top) = self.stack.last_mut() else {
@@ -183,11 +258,28 @@ impl PlacementWalk {
             };
             let child = handle.into_bound(py);
             let (world, above) = (top.world.copy(py), top.paint.clone_ref(py));
+            let parent = top.ctx.clone();
             let world = compose(py, &world, &child, &node)?;
             let paint = if self.painted { paint_of(&child, &above)? } else { above };
-            let out = self.emit(py, child.clone(), &world, &paint)?;
-            self.pending = Some((node, child.unbind(), world, paint));
-            return Ok(out);
+            let Some(vis) = &self.vis else {
+                let out = self.emit(py, child.clone(), &world, &paint)?;
+                self.pending = Some((node, child.unbind(), world, paint, Ctx::default()));
+                return Ok(out);
+            };
+            // layer = forced or child.layer or inherited or node.layer
+            let (own, hidden) = tag_and_hide(&node, &child)?;
+            let own_tag = own.clone();
+            let tag = parent.forced.clone().or(own).or(parent.inherited.clone()).or(parent.own.clone());
+            let off = parent.hidden || hidden;
+            let show = !off && vis.shown(&tag);
+            let forced = parent.forced.clone().or_else(|| vis.blocking(&tag).then(|| tag.clone()).flatten());
+            let ctx = Ctx { hidden: off, forced, inherited: tag, own: own_tag };
+            if show {
+                let out = self.emit(py, child.clone(), &world, &paint)?;
+                self.pending = Some((node, child.unbind(), world, paint, ctx));
+                return Ok(out);
+            }
+            self.pending = Some((node, child.unbind(), world, paint, ctx));
         }
     }
 
@@ -198,7 +290,7 @@ impl PlacementWalk {
             world(w)?;
             visit.call(p)?;
         }
-        if let Some((_, o, w, p)) = &self.pending {
+        if let Some((_, o, w, p, _)) = &self.pending {
             visit.call(o)?;
             world(w)?;
             visit.call(p)?;
@@ -229,7 +321,21 @@ fn walk(py: Python<'_>, painted: bool, group: &Bound<'_, PyAny>, base: Option<Bo
         None => World { obj: None, m: None },
     };
     let paint = paint.map(Bound::unbind).unwrap_or_else(|| py.None());
-    Ok(PlacementWalk { painted, start: Some((group.clone().unbind(), base, paint)), pending: None, stack: Vec::new() })
+    Ok(PlacementWalk { painted, vis: None, start: Some((group.clone().unbind(), base, paint)), pending: None, stack: Vec::new() })
+}
+
+/// `visible_placements(scene, group)`: `iter_placements` without the
+/// nested placements the viewport does not draw, for a top-level `group`
+/// the caller already found visible. Hide on a group takes its subtree
+/// along; a nested group with no tag of its own takes the nearest one
+/// above it; a hidden or locked tag above puts every instance below it on
+/// that tag. The tags' state is read once per walk; each placement's tag
+/// and Hide from its node.
+#[pyfunction]
+fn group_visible_placements(py: Python<'_>, scene: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -> PyResult<PlacementWalk> {
+    let mut w = walk(py, false, group, None, None)?;
+    w.vis = Some(Vis::read(py, scene)?);
+    Ok(w)
 }
 
 /// `iter_placements(group, base=None)`: `(group, world_matrix)` for `group`
@@ -255,5 +361,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PlacementWalk>()?;
     m.add_function(wrap_pyfunction!(group_iter_placements, m)?)?;
     m.add_function(wrap_pyfunction!(group_iter_painted_placements, m)?)?;
+    m.add_function(wrap_pyfunction!(group_visible_placements, m)?)?;
     Ok(())
 }

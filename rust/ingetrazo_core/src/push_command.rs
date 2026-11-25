@@ -2,16 +2,16 @@
 //! Push distance and rollback decisions shared by staged previews and commits.
 use pyo3::prelude::*;
 
-#[pyfunction]
-pub fn push_top_out(
+pub(crate) fn push_top_out(
     mesh: &Bound<'_, PyAny>,
-    attempt: &Bound<'_, PyAny>,
+    run: impl Fn(f64) -> PyResult<Option<(f64, bool)>>,
     wanted: f64,
     minimum: f64,
     tries: usize,
 ) -> PyResult<(f64, bool, bool)> {
-    let run = |d| attempt.call1((d,))?.extract::<(f64, bool)>();
-    let (actual, refused) = run(wanted)?;
+    let Some((actual, refused)) = run(wanted)? else {
+        return Ok((wanted, true, false));
+    };
     if !refused {
         return Ok((actual, false, false));
     }
@@ -22,7 +22,9 @@ pub fn push_top_out(
         let save = mesh.call_method0("capture_state")?;
         let trial = run(actual * mid);
         mesh.call_method1("restore_state", (save,))?;
-        let (distance, rejected) = trial?;
+        let Some((distance, rejected)) = trial? else {
+            return Ok((wanted, true, false));
+        };
         if rejected || distance.abs() < minimum {
             hi = mid;
         } else {
@@ -33,7 +35,9 @@ pub fn push_top_out(
     match best {
         None => Ok((actual, true, false)),
         Some(d) => {
-            let (distance, refused) = run(d)?;
+            let Some((distance, refused)) = run(d)? else {
+                return Ok((wanted, true, false));
+            };
             Ok((distance, refused, true))
         }
     }
@@ -41,25 +45,24 @@ pub fn push_top_out(
 
 /// Secondary faces must travel the entire distance. A partial push is
 /// rolled back using a facade savepoint, which includes paint and IFC rows.
-#[pyfunction]
-pub fn push_secondary_faces(
+pub(crate) fn push_secondary_faces(
     mesh: &Bound<'_, PyAny>,
     count: usize,
     wanted: f64,
     minimum: f64,
     lead_refused: bool,
-    prepare: &Bound<'_, PyAny>,
-    apply: &Bound<'_, PyAny>,
+    prepare: impl Fn(usize) -> PyResult<Option<f64>>,
+    apply: impl Fn() -> PyResult<(bool, bool)>,
 ) -> PyResult<(bool, usize)> {
     let mut missed = usize::from(lead_refused);
     for index in 0..count {
-        let distance: Option<f64> = prepare.call1((index,))?.extract()?;
+        let distance: Option<f64> = prepare(index)?;
         if distance.is_none_or(|d| (d - wanted).abs() > minimum) {
             missed += 1;
             continue;
         }
         let before = mesh.call_method0("capture_state")?;
-        let (refused, partial): (bool, bool) = apply.call0()?.extract()?;
+        let (refused, partial): (bool, bool) = apply()?;
         if partial && !refused {
             mesh.call_method1("restore_state", (before,))?;
         }

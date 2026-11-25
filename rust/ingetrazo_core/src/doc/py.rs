@@ -10,8 +10,8 @@
 
 use super::value::Value;
 use super::{
-    attr_id, drain_pending, handle_dropped, lock, str_view, try_lock, FVal, Field, Key, Kind, ListId, Op, Trash,
-    Xform, VIEW_AXES, VIEW_MATERIAL, VIEW_XFORM,
+    attr_id, drain_pending, handle_dropped, lock, str_view, try_lock, FVal, Field, Key, Kind,
+    ListId, Op, Trash, Xform, VIEW_AXES, VIEW_MATERIAL, VIEW_XFORM,
 };
 use numpy::PyArrayMethods;
 use pyo3::exceptions::{PyIndexError, PyRuntimeError, PyTypeError, PyValueError};
@@ -37,7 +37,9 @@ fn err(e: String) -> PyErr {
 /// warnings (`PARENT_MODE` 1; see `doc_parent_mode`).
 fn parent_reports(py: Python<'_>) -> PyResult<()> {
     let msgs: Vec<String> = {
-        let mut r = super::PARENT_REPORTS.lock().unwrap_or_else(|e| e.into_inner());
+        let mut r = super::PARENT_REPORTS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if r.is_empty() {
             return Ok(());
         }
@@ -61,7 +63,9 @@ fn hooks(py: Python<'_>) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
     let h = HOOKS.lock().unwrap_or_else(|e| e.into_inner());
     match h.as_ref() {
         Some((a, b)) => Ok((a.clone_ref(py), b.clone_ref(py))),
-        None => Err(PyRuntimeError::new_err("document matrix hooks not installed (core.doc_model)")),
+        None => Err(PyRuntimeError::new_err(
+            "document matrix hooks not installed (core.doc_model)",
+        )),
     }
 }
 
@@ -76,11 +80,18 @@ pub(super) fn run_refills(py: Python<'_>) -> PyResult<()> {
     if todo.is_empty() {
         return Ok(());
     }
-    let hook = REFILL.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|h| h.clone_ref(py));
+    let hook = REFILL
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .map(|h| h.clone_ref(py));
     let mut first_err = None;
     for (k, a, view, val) in todo {
         let ok = match &hook {
-            Some(h) => match val.to_py(py).and_then(|v| h.bind(py).call1((view.bind(py), v))) {
+            Some(h) => match val
+                .to_py(py)
+                .and_then(|v| h.bind(py).call1((view.bind(py), v)))
+            {
                 Ok(r) => r.is_truthy().unwrap_or(false),
                 Err(e) => {
                     first_err.get_or_insert(e);
@@ -93,7 +104,10 @@ pub(super) fn run_refills(py: Python<'_>) -> PyResult<()> {
             let gone = {
                 let mut d = lock();
                 d.node_mut(k).and_then(|n| {
-                    let i = n.attr_views.iter().position(|(x, v)| *x == a && v.as_ptr() == view.as_ptr())?;
+                    let i = n
+                        .attr_views
+                        .iter()
+                        .position(|(x, v)| *x == a && v.as_ptr() == view.as_ptr())?;
                     Some(n.attr_views.swap_remove(i).1)
                 })
             };
@@ -110,19 +124,32 @@ pub(super) fn run_refills(py: Python<'_>) -> PyResult<()> {
 /// Install the refill hook (`core.doc_model._refill`).
 #[pyfunction]
 fn doc_set_refill_hook(refill: Py<PyAny>) {
-    let old = REFILL.lock().unwrap_or_else(|e| e.into_inner()).replace(refill);
+    let old = REFILL
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .replace(refill);
     drop(old);
 }
 
 fn track_hook(py: Python<'_>) -> Option<Py<PyAny>> {
-    TRACK.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|t| t.clone_ref(py))
+    TRACK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .map(|t| t.clone_ref(py))
 }
 
 // ------------------------------------------------------------- attributes
 
 /// An attribute's value as Python: the tracked container cached for it,
 /// or (a dict or a list, `track`) a new one, or a plain value.
-fn read_attr<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key, a: u16, track: bool) -> PyResult<Bound<'py, PyAny>> {
+fn read_attr<'py>(
+    py: Python<'py>,
+    me: &Bound<'py, PyAny>,
+    k: Key,
+    a: u16,
+    track: bool,
+) -> PyResult<Bound<'py, PyAny>> {
     let (v, serial) = {
         let mut d = lock();
         if !me.is_none() {
@@ -134,14 +161,20 @@ fn read_attr<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key, a: u16, track
         }
         (n.attr(a).cloned(), d.serial)
     };
-    let Some(v) = v else { return Ok(py.None().into_bound(py)) };
+    let Some(v) = v else {
+        return Ok(py.None().into_bound(py));
+    };
     let container = matches!(v, Value::Dict(_) | Value::List(_));
     let out = v.to_py(py)?;
     let view = if matches!(v, Value::Vector(_)) {
-        out.cast::<crate::math::Vec3>()?.borrow_mut().bind(k, a, out.as_ptr() as usize);
+        out.cast::<crate::math::Vec3>()?
+            .borrow_mut()
+            .bind(k, a, out.as_ptr() as usize);
         out
     } else if track && container {
-        let Some(hook) = track_hook(py) else { return Ok(out) };
+        let Some(hook) = track_hook(py) else {
+            return Ok(out);
+        };
         hook.bind(py).call1((k, a, out))?
     } else {
         return Ok(out);
@@ -168,7 +201,13 @@ fn read_attr<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key, a: u16, track
     Ok(view)
 }
 
-fn write_attr(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, a: u16, value: &Bound<'_, PyAny>) -> PyResult<()> {
+fn write_attr(
+    py: Python<'_>,
+    me: &Bound<'_, PyAny>,
+    k: Key,
+    a: u16,
+    value: &Bound<'_, PyAny>,
+) -> PyResult<()> {
     {
         let d = lock();
         if let Some(n) = d.node(k) {
@@ -207,7 +246,13 @@ pub(crate) fn vector_changed(key: Key, attr: u16, address: usize, xyz: [f64; 3])
         if !current.is_some_and(|view| view.as_ptr() as usize == address) {
             return Ok(false);
         }
-        let result = doc.write_keep_view(py, key, Field::Attr(attr), FVal::Val(Some(Value::Vector(xyz))), &mut trash);
+        let result = doc.write_keep_view(
+            py,
+            key,
+            Field::Attr(attr),
+            FVal::Val(Some(Value::Vector(xyz))),
+            &mut trash,
+        );
         drop(doc);
         drop(trash);
         result.map(|_| true).map_err(err)
@@ -227,7 +272,10 @@ pub(crate) fn handle_key(obj: &Bound<'_, PyAny>) -> PyResult<Key> {
     if let Ok(m) = obj.cast::<PyMaterial>() {
         return Ok(m.get().key);
     }
-    Err(PyTypeError::new_err(format!("{} is not a document handle", obj.get_type().name()?)))
+    Err(PyTypeError::new_err(format!(
+        "{} is not a document handle",
+        obj.get_type().name()?
+    )))
 }
 
 /// Identity for an annotation, saved view, sheet or sheet item. Its
@@ -249,7 +297,9 @@ impl DocRecord {
     #[pyo3(signature = (*_args, **_kwargs))]
     fn new(_args: &Bound<'_, PyTuple>, _kwargs: Option<&Bound<'_, PyDict>>) -> Self {
         drain_pending();
-        Self { key: lock().alloc(Kind::Record) }
+        Self {
+            key: lock().alloc(Kind::Record),
+        }
     }
 
     /// The record's document key (what the native sheet page names items by).
@@ -262,13 +312,25 @@ impl DocRecord {
         super::file_view::load(raw, |name, value| {
             let attr = attr_id(name).map_err(err)?;
             let v = (!matches!(value, Value::None)).then_some(value);
-            write(slf.py(), slf.as_any(), slf.get().key, Field::Attr(attr), FVal::Val(v))
+            write(
+                slf.py(),
+                slf.as_any(),
+                slf.get().key,
+                Field::Attr(attr),
+                FVal::Val(v),
+            )
         })
     }
 
     fn _file_view<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
         super::file_view::archive(slf.py(), |name| {
-            read_attr(slf.py(), slf.as_any(), slf.get().key, attr_id(name).map_err(err)?, false)
+            read_attr(
+                slf.py(),
+                slf.as_any(),
+                slf.get().key,
+                attr_id(name).map_err(err)?,
+                false,
+            )
         })
     }
 
@@ -298,7 +360,12 @@ impl DocAttr {
     #[new]
     #[pyo3(signature = (name, track = false, optional = false))]
     fn new(name: &str, track: bool, optional: bool) -> PyResult<Self> {
-        Ok(DocAttr { id: attr_id(name).map_err(PyValueError::new_err)?, name: name.to_owned(), track, optional })
+        Ok(DocAttr {
+            id: attr_id(name).map_err(PyValueError::new_err)?,
+            name: name.to_owned(),
+            track,
+            optional,
+        })
     }
 
     #[getter]
@@ -311,8 +378,14 @@ impl DocAttr {
         &self.name
     }
 
-    fn __get__<'py>(slf: &Bound<'py, Self>, obj: Option<&Bound<'py, PyAny>>, _owner: Option<&Bound<'py, PyAny>>) -> PyResult<Bound<'py, PyAny>> {
-        let Some(obj) = obj.filter(|o| !o.is_none()) else { return Ok(slf.clone().into_any()) };
+    fn __get__<'py>(
+        slf: &Bound<'py, Self>,
+        obj: Option<&Bound<'py, PyAny>>,
+        _owner: Option<&Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let Some(obj) = obj.filter(|o| !o.is_none()) else {
+            return Ok(slf.clone().into_any());
+        };
         let me = slf.get();
         let value = read_attr(slf.py(), obj, handle_key(obj)?, me.id, me.track)?;
         if me.optional && value.is_none() {
@@ -326,7 +399,13 @@ impl DocAttr {
     }
 
     fn __delete__(&self, obj: &Bound<'_, PyAny>) -> PyResult<()> {
-        write_attr(obj.py(), obj, handle_key(obj)?, self.id, &obj.py().None().into_bound(obj.py()))
+        write_attr(
+            obj.py(),
+            obj,
+            handle_key(obj)?,
+            self.id,
+            &obj.py().None().into_bound(obj.py()),
+        )
     }
 }
 
@@ -347,7 +426,9 @@ fn xform_of(data: &Bound<'_, PyAny>, src: &Bound<'_, PyAny>) -> PyResult<Xform> 
     } else {
         let (a, b): (Vec<f64>, Vec<f64>) = src.extract()?;
         if a.len() != 16 || b.len() != 16 {
-            return Err(PyValueError::new_err("_built_source: two 16-value sequences"));
+            return Err(PyValueError::new_err(
+                "_built_source: two 16-value sequences",
+            ));
         }
         let mut x = [0f64; 16];
         let mut y = [0f64; 16];
@@ -361,15 +442,26 @@ fn xform_of(data: &Bound<'_, PyAny>, src: &Bound<'_, PyAny>) -> PyResult<Xform> 
 pub(super) fn fval_to_py<'py>(py: Python<'py>, v: FVal) -> PyResult<Bound<'py, PyAny>> {
     Ok(match v {
         FVal::Definition(Some(d)) => d.0.get().geometry.clone_ref(py).into_bound(py),
-        FVal::Definition(None) | FVal::Str(None) | FVal::Val(None) | FVal::Xf(None) => py.None().into_bound(py),
+        FVal::Definition(None) | FVal::Str(None) | FVal::Val(None) | FVal::Xf(None) => {
+            py.None().into_bound(py)
+        }
         FVal::Str(Some(s)) => s.into_pyobject(py)?.into_any(),
         FVal::Bool(b) => b.into_pyobject(py)?.to_owned().into_any(),
         FVal::Val(Some(v)) => v.to_py(py)?,
-        FVal::Xf(Some(_)) => return Err(PyRuntimeError::new_err("matrix fields go through their views")),
+        FVal::Xf(Some(_)) => {
+            return Err(PyRuntimeError::new_err(
+                "matrix fields go through their views",
+            ))
+        }
     })
 }
 
-fn read<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key, f: Field) -> PyResult<Bound<'py, PyAny>> {
+fn read<'py>(
+    py: Python<'py>,
+    me: &Bound<'py, PyAny>,
+    k: Key,
+    f: Field,
+) -> PyResult<Bound<'py, PyAny>> {
     if f == Field::Material {
         return read_material(py, me, k);
     }
@@ -415,7 +507,11 @@ fn read<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key, f: Field) -> PyRes
 
 /// A placement's paint dict: built once per value and handed out again
 /// (as the attribute did) until the next write.
-fn read_material<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key) -> PyResult<Bound<'py, PyAny>> {
+fn read_material<'py>(
+    py: Python<'py>,
+    me: &Bound<'py, PyAny>,
+    k: Key,
+) -> PyResult<Bound<'py, PyAny>> {
     let (v, serial) = {
         let mut d = lock();
         d.set_handle(k, me.as_ptr());
@@ -458,14 +554,27 @@ fn write(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, f: Field, v: FVal) -> Py
 }
 
 fn view_slot(f: Field) -> usize {
-    if f == Field::Axes { VIEW_AXES } else { VIEW_XFORM }
+    if f == Field::Axes {
+        VIEW_AXES
+    } else {
+        VIEW_XFORM
+    }
 }
 
 fn which_of(f: Field) -> u8 {
-    if f == Field::Axes { 1 } else { 0 }
+    if f == Field::Axes {
+        1
+    } else {
+        0
+    }
 }
 
-pub(crate) fn read_matrix<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key, f: Field) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn read_matrix<'py>(
+    py: Python<'py>,
+    me: &Bound<'py, PyAny>,
+    k: Key,
+    f: Field,
+) -> PyResult<Bound<'py, PyAny>> {
     let slot = view_slot(f);
     let (x, serial) = {
         let mut d = lock();
@@ -480,7 +589,9 @@ pub(crate) fn read_matrix<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key, 
         };
         (x, d.serial)
     };
-    let Some(x) = x else { return Ok(py.None().into_bound(py)) };
+    let Some(x) = x else {
+        return Ok(py.None().into_bound(py));
+    };
     let (make, _) = hooks(py)?;
     let data = PyTuple::new(py, x.f)?;
     let src = match &x.src {
@@ -511,7 +622,13 @@ pub(crate) fn read_matrix<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key, 
     Ok(view)
 }
 
-fn write_matrix(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, f: Field, value: &Bound<'_, PyAny>) -> PyResult<()> {
+fn write_matrix(
+    py: Python<'_>,
+    me: &Bound<'_, PyAny>,
+    k: Key,
+    f: Field,
+    value: &Bound<'_, PyAny>,
+) -> PyResult<()> {
     if value.is_none() {
         return write(py, me, k, f, FVal::Xf(None));
     }
@@ -524,11 +641,15 @@ fn write_matrix(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, f: Field, value: 
                 let bound: (Key, u8) = b.extract()?;
                 if bound != (k, which_of(f)) {
                     let data = value.call_method0(pyo3::intern!(py, "data"))?;
-                    let src = dict.get_item("_built_source")?.unwrap_or_else(|| py.None().into_bound(py));
+                    let src = dict
+                        .get_item("_built_source")?
+                        .unwrap_or_else(|| py.None().into_bound(py));
                     let x = xform_of(&data, &src)?;
                     let d = lock();
                     if let Some(n) = d.node(k) {
-                        if n.views[view_slot(f)].is_some() && n.get(f).ok() == Some(FVal::Xf(Some(x))) {
+                        if n.views[view_slot(f)].is_some()
+                            && n.get(f).ok() == Some(FVal::Xf(Some(x)))
+                        {
                             return Ok(());
                         }
                     }
@@ -538,7 +659,8 @@ fn write_matrix(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, f: Field, value: 
     }
     let (_, bind) = hooks(py)?;
     let got = bind.bind(py).call1((value, k, which_of(f)))?;
-    let (view, data, src): (Bound<'_, PyAny>, Bound<'_, PyAny>, Bound<'_, PyAny>) = got.extract()?;
+    let (view, data, src): (Bound<'_, PyAny>, Bound<'_, PyAny>, Bound<'_, PyAny>) =
+        got.extract()?;
     let x = xform_of(&data, &src)?;
     let keep = view.unbind();
     let mut trash = Trash::default();
@@ -560,7 +682,12 @@ fn write_matrix(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, f: Field, value: 
     super::assembly::finish_result(py, r.map(|_| ()).map_err(err))
 }
 
-fn list_view<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key, list: ListId) -> PyResult<Bound<'py, PyAny>> {
+fn list_view<'py>(
+    py: Python<'py>,
+    me: &Bound<'py, PyAny>,
+    k: Key,
+    list: ListId,
+) -> PyResult<Bound<'py, PyAny>> {
     let l = list as usize;
     {
         let mut d = lock();
@@ -568,7 +695,10 @@ fn list_view<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key, list: ListId)
         let n = d.need(k).map_err(err)?;
         let allowed = list != ListId::Mats && list.owned_by(n.kind);
         if !allowed {
-            return Err(PyTypeError::new_err(format!("a {} has no such list", n.kind.name())));
+            return Err(PyTypeError::new_err(format!(
+                "a {} has no such list",
+                n.kind.name()
+            )));
         }
         let ptr = n.list_views[l].0;
         if !ptr.is_null() {
@@ -622,7 +752,9 @@ fn member_key(obj: &Bound<'_, PyAny>) -> PyResult<Key> {
     )))
 }
 
-pub(super) fn keys_of<'py>(items: &Bound<'py, PyAny>) -> PyResult<Vec<(Key, *mut pyo3::ffi::PyObject, Bound<'py, PyAny>)>> {
+pub(super) fn keys_of<'py>(
+    items: &Bound<'py, PyAny>,
+) -> PyResult<Vec<(Key, *mut pyo3::ffi::PyObject, Bound<'py, PyAny>)>> {
     // Snapshot first: `scene.groups = scene.groups[::-1]` or a generator
     // reading the list it replaces must see the list as it was.
     let mut out = Vec::new();
@@ -634,7 +766,13 @@ pub(super) fn keys_of<'py>(items: &Bound<'py, PyAny>) -> PyResult<Vec<(Key, *mut
     Ok(out)
 }
 
-fn set_list(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, list: ListId, items: &Bound<'_, PyAny>) -> PyResult<()> {
+fn set_list(
+    py: Python<'_>,
+    me: &Bound<'_, PyAny>,
+    k: Key,
+    list: ListId,
+    items: &Bound<'_, PyAny>,
+) -> PyResult<()> {
     let l = list as usize;
     // The list's own view assigned back (`g.children += [x]` ends that
     // way): nothing changes, and the view stays the list.
@@ -657,7 +795,8 @@ fn set_list(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, list: ListId, items: 
         // What the old list object held, for the view handed out before.
         let (view, old) = match d.node_mut(k) {
             Some(n) => {
-                let ptr = std::mem::replace(&mut n.list_views[l], super::HPtr(std::ptr::null_mut())).0;
+                let ptr =
+                    std::mem::replace(&mut n.list_views[l], super::HPtr(std::ptr::null_mut())).0;
                 if ptr.is_null() {
                     (None, Vec::new())
                 } else {
@@ -668,7 +807,13 @@ fn set_list(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, list: ListId, items: 
             None => (None, Vec::new()),
         };
         let old: Vec<Py<PyAny>> = old.iter().filter_map(|&c| d.handle_ref(py, c)).collect();
-        let r = d.list_replace(py, k, list, members.iter().map(|m| m.0).collect(), &mut trash);
+        let r = d.list_replace(
+            py,
+            k,
+            list,
+            members.iter().map(|m| m.0).collect(),
+            &mut trash,
+        );
         (r, view, old)
     };
     drop(members);
@@ -677,7 +822,12 @@ fn set_list(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, list: ListId, items: 
         let frozen = PyList::new(py, old_items)?.unbind();
         if let Ok(h) = view.bind(py).cast::<HandleList>() {
             h.get().cached.store(false, Ordering::Relaxed);
-            let prev = h.get().detached.lock().unwrap_or_else(|e| e.into_inner()).replace(frozen);
+            let prev = h
+                .get()
+                .detached
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .replace(frozen);
             drop(prev);
         }
     }
@@ -720,7 +870,9 @@ fn traverse_node(k: Key, visit: &PyVisit<'_>) -> Result<(), PyTraverseError> {
         }
     }
     if let super::Data::Root { edit_path } = &n.data {
-        for (_, level) in edit_path { visit.call(level)?; }
+        for (_, level) in edit_path {
+            visit.call(level)?;
+        }
     }
     for v in n.views.iter() {
         visit.call(v)?;
@@ -729,7 +881,11 @@ fn traverse_node(k: Key, visit: &PyVisit<'_>) -> Result<(), PyTraverseError> {
         visit.call(v)?;
     }
     for l in [&n.children, &n.tags, &n.kept, &n.mats] {
-        let mut seen: Option<HashSet<Key>> = if l.len() > 1 { Some(HashSet::new()) } else { None };
+        let mut seen: Option<HashSet<Key>> = if l.len() > 1 {
+            Some(HashSet::new())
+        } else {
+            None
+        };
         for &c in l {
             if let Some(s) = seen.as_mut() {
                 if !s.insert(c) {
@@ -780,7 +936,10 @@ impl PyPlacement {
     #[pyo3(signature = (*_args, **_kwargs))]
     fn new(_args: &Bound<'_, PyTuple>, _kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
         if let Some(kw) = _kwargs {
-            if kw.get_item("_detached")?.is_some_and(|v| v.is_truthy().unwrap_or(false)) {
+            if kw
+                .get_item("_detached")?
+                .is_some_and(|v| v.is_truthy().unwrap_or(false))
+            {
                 return Ok(PyPlacement { key: 0 });
             }
         }
@@ -800,7 +959,13 @@ impl PyPlacement {
     }
     #[setter]
     fn set_uid(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Uid, FVal::Str(str_of(v)?))
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Uid,
+            FVal::Str(str_of(v)?),
+        )
     }
     #[getter]
     fn name<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -808,7 +973,13 @@ impl PyPlacement {
     }
     #[setter]
     fn set_name(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Name, FVal::Str(str_of(v)?))
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Name,
+            FVal::Str(str_of(v)?),
+        )
     }
     /// The tag's KEY (`Layer.key`), None for the default tag.
     #[getter]
@@ -817,7 +988,13 @@ impl PyPlacement {
     }
     #[setter]
     fn set_layer(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Tag, FVal::Str(str_of(v)?))
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Tag,
+            FVal::Str(str_of(v)?),
+        )
     }
     #[getter]
     fn mesh<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -825,19 +1002,38 @@ impl PyPlacement {
     }
     #[setter]
     fn set_mesh(slf: &Bound<'_, Self>, mesh: &Bound<'_, PyAny>) -> PyResult<()> {
-        let definition = (!mesh.is_none()).then(|| super::DefinitionRef::for_geometry(mesh)).transpose()?;
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Definition, FVal::Definition(definition))
+        let definition = (!mesh.is_none())
+            .then(|| super::DefinitionRef::for_geometry(mesh))
+            .transpose()?;
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Definition,
+            FVal::Definition(definition),
+        )
     }
     #[getter]
     fn definition(&self, py: Python<'_>) -> PyResult<Option<Py<super::definition::Definition>>> {
         let d = lock();
-        let super::Data::Placement(p) = &d.need(self.key).map_err(err)?.data else { return Ok(None) };
+        let super::Data::Placement(p) = &d.need(self.key).map_err(err)?.data else {
+            return Ok(None);
+        };
         Ok(p.definition.as_ref().map(|v| v.0.clone_ref(py)))
     }
     #[setter]
-    fn set_definition(slf: &Bound<'_, Self>, def: Option<Py<super::definition::Definition>>) -> PyResult<()> {
+    fn set_definition(
+        slf: &Bound<'_, Self>,
+        def: Option<Py<super::definition::Definition>>,
+    ) -> PyResult<()> {
         let value = def.map(|d| std::sync::Arc::new(super::DefinitionRef(d)));
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Definition, FVal::Definition(value))
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Definition,
+            FVal::Definition(value),
+        )
     }
     #[getter]
     fn billboard<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -845,7 +1041,13 @@ impl PyPlacement {
     }
     #[setter]
     fn set_billboard(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Billboard, FVal::Val(Some(Value::from_py(v)?)))
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Billboard,
+            FVal::Val(Some(Value::from_py(v)?)),
+        )
     }
     #[getter]
     fn component<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -853,7 +1055,13 @@ impl PyPlacement {
     }
     #[setter]
     fn set_component(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Component, FVal::Bool(v.is_truthy()?))
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Component,
+            FVal::Bool(v.is_truthy()?),
+        )
     }
     #[getter]
     fn hidden<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -861,7 +1069,13 @@ impl PyPlacement {
     }
     #[setter]
     fn set_hidden(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Hidden, FVal::Bool(v.is_truthy()?))
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Hidden,
+            FVal::Bool(v.is_truthy()?),
+        )
     }
     #[getter]
     fn locked<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -869,7 +1083,13 @@ impl PyPlacement {
     }
     #[setter]
     fn set_locked(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Locked, FVal::Bool(v.is_truthy()?))
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Locked,
+            FVal::Bool(v.is_truthy()?),
+        )
     }
     /// The container's own paint dict, or None. A copy each read: edit it
     /// by assigning a new dict.
@@ -889,7 +1109,11 @@ impl PyPlacement {
                 }
             }
         }
-        let val = if v.is_none() { None } else { Some(Value::from_py(v)?) };
+        let val = if v.is_none() {
+            None
+        } else {
+            Some(Value::from_py(v)?)
+        };
         // The same paint again (the viewport hands every proxy its part's
         // dict on each pack): nothing changes, the cached dict stays.
         // The dict assigned is not kept: the document holds the value
@@ -1024,10 +1248,16 @@ impl PyPlacement {
 
     /// Read a file placement without creating a Python matrix view. The
     /// matrix handed out later is still bound to this journalled field.
-    fn _load_file_xform(slf: &Bound<'_, Self>, source: &Bound<'_, PyAny>, built: bool) -> PyResult<()> {
+    fn _load_file_xform(
+        slf: &Bound<'_, Self>,
+        source: &Bound<'_, PyAny>,
+        built: bool,
+    ) -> PyResult<()> {
         let values = if let Ok(m) = source.cast::<crate::file_json::FileMatrix>() {
             m.get().0
-        } else { source.extract()? };
+        } else {
+            source.extract()?
+        };
         if built && !values.iter().all(|n| n.is_finite()) {
             return Err(PyValueError::new_err("Invalid Built placement transform"));
         }
@@ -1080,24 +1310,38 @@ impl PyPlacement {
     }
     #[setter]
     fn set_children(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        let v = if v.is_none() { PyList::empty(slf.py()).into_any() } else { v.clone() };
+        let v = if v.is_none() {
+            PyList::empty(slf.py()).into_any()
+        } else {
+            v.clone()
+        };
         set_list(slf.py(), slf.as_any(), slf.get().key, ListId::Children, &v)
     }
     /// Resolve persisted placement UIDs one level at a time. Two branches
     /// may contain equal leaf UIDs without aliasing each other's overrides.
-    fn _resolve_occurrence(&self, py: Python<'_>, path: Vec<String>) -> PyResult<Option<Py<PyAny>>> {
+    fn _resolve_occurrence(
+        &self,
+        py: Python<'_>,
+        path: Vec<String>,
+    ) -> PyResult<Option<Py<PyAny>>> {
         let d = lock();
         let mut key = self.key;
-        if path.is_empty() { return Ok(None); }
+        if path.is_empty() {
+            return Ok(None);
+        }
         for uid in path {
             let parent = d.need(key).map_err(err)?;
             let mut children = parent.children.iter().copied().filter(|child| {
                 matches!(d.node(*child).map(|n| &n.data), Some(super::Data::Placement(p))
                     if p.uid.as_ref() == Some(&uid))
             });
-            let Some(child) = children.next() else { return Ok(None) };
+            let Some(child) = children.next() else {
+                return Ok(None);
+            };
             if children.next().is_some() {
-                return Err(PyValueError::new_err(format!("ambiguous placement UID {uid}")));
+                return Err(PyValueError::new_err(format!(
+                    "ambiguous placement UID {uid}"
+                )));
             }
             key = child;
         }
@@ -1114,7 +1358,9 @@ impl PyPlacement {
         let mut seen = HashSet::new();
         let mut repeated = HashSet::new();
         while let Some(key) = stack.pop() {
-            if !visited.insert(key) { continue; }
+            if !visited.insert(key) {
+                continue;
+            }
             let node = doc.need(key).map_err(err)?;
             if let super::Data::Placement(p) = &node.data {
                 if let Some(uid) = &p.uid {
@@ -1134,18 +1380,31 @@ impl PyPlacement {
     /// alone, without the Python facet index (doc/occurrences.rs).
     #[pyo3(signature = (wanted, exact=false))]
     #[allow(clippy::type_complexity)]
-    fn _occurrence_closure(&self, py: Python<'_>, wanted: HashSet<String>, exact: bool)
-        -> PyResult<(Vec<String>, HashSet<String>, HashSet<String>, Vec<(Py<PyAny>, String)>)> {
+    fn _occurrence_closure(
+        &self,
+        py: Python<'_>,
+        wanted: HashSet<String>,
+        exact: bool,
+    ) -> PyResult<(
+        Vec<String>,
+        HashSet<String>,
+        HashSet<String>,
+        Vec<(Py<PyAny>, String)>,
+    )> {
         let repeated = self._repeated_uids()?;
         let doc = lock();
         let roots = doc.need(self.key).map_err(err)?.children.clone();
         let node = |k: Key| {
             let n = doc.node(k)?;
-            let super::Data::Placement(p) = &n.data else { return None };
+            let super::Data::Placement(p) = &n.data else {
+                return None;
+            };
             Some((p.uid.clone().unwrap_or_default(), n.children.clone()))
         };
         let c = super::occurrences::closure(&roots, &node, &repeated, &wanted, exact);
-        let qualified = c.qualified.iter()
+        let qualified = c
+            .qualified
+            .iter()
             .filter_map(|(k, key)| doc.handle_ref(py, *k).map(|h| (h, key.clone())))
             .collect();
         Ok((c.matched, c.allowed, c.through, qualified))
@@ -1158,10 +1417,18 @@ impl PyPlacement {
         let mut key = self.key;
         let (mut hidden, mut locked) = (None, None);
         while let Some(parent) = doc.node(key).and_then(|n| n.owners.first()) {
-            let Some(super::Data::Placement(p)) = doc.node(*parent).map(|n| &n.data) else { break };
-            if p.hidden && hidden.is_none() { hidden = Some(p.name.clone().unwrap_or_default()); }
-            if p.locked && locked.is_none() { locked = Some(p.name.clone().unwrap_or_default()); }
-            if hidden.is_some() && locked.is_some() { break; }
+            let Some(super::Data::Placement(p)) = doc.node(*parent).map(|n| &n.data) else {
+                break;
+            };
+            if p.hidden && hidden.is_none() {
+                hidden = Some(p.name.clone().unwrap_or_default());
+            }
+            if p.locked && locked.is_none() {
+                locked = Some(p.name.clone().unwrap_or_default());
+            }
+            if hidden.is_some() && locked.is_some() {
+                break;
+            }
             key = *parent;
         }
         (hidden, locked)
@@ -1170,11 +1437,15 @@ impl PyPlacement {
     fn _occurrence_path(&self, placement: &PyPlacement) -> Option<Vec<String>> {
         let d = lock();
         let mut k = placement.key;
-        if super::assembly::root_of(&d, k, false) != Some(self.key) { return None; }
+        if super::assembly::root_of(&d, k, false) != Some(self.key) {
+            return None;
+        }
         let mut path = Vec::new();
         while k != self.key {
             let n = d.node(k)?;
-            let super::Data::Placement(p) = &n.data else { return None };
+            let super::Data::Placement(p) = &n.data else {
+                return None;
+            };
             path.push(p.uid.clone()?);
             k = *n.owners.first()?;
         }
@@ -1205,7 +1476,9 @@ impl PyPlacement {
         let mut matrix = None;
         while k != self.key {
             let node = doc.node(k)?;
-            let super::Data::Placement(p) = &node.data else { return None };
+            let super::Data::Placement(p) = &node.data else {
+                return None;
+            };
             if let Some(xform) = &p.xform {
                 let parent = glam::DMat4::from_cols_array(&xform.doubles());
                 matrix = Some(matrix.map_or(parent, |child| parent * child));
@@ -1241,7 +1514,8 @@ impl PyPlacement {
         if d.need(k).map_err(err)?.children.len() > 0 {
             super::assembly::bind(&mut d, self.key, k);
         }
-        let Some(super::Data::Root { edit_path }) = d.node_mut(self.key).map(|n| &mut n.data) else {
+        let Some(super::Data::Root { edit_path }) = d.node_mut(self.key).map(|n| &mut n.data)
+        else {
             return Err(PyTypeError::new_err("a scene root owns an edit path"));
         };
         edit_path.push((k, level));
@@ -1253,7 +1527,9 @@ impl PyPlacement {
     }
 
     fn _leave_edit(&self) -> Option<Py<PyAny>> {
-        if let Some(super::Data::Root { edit_path }) = lock().node_mut(self.key).map(|n| &mut n.data) {
+        if let Some(super::Data::Root { edit_path }) =
+            lock().node_mut(self.key).map(|n| &mut n.data)
+        {
             return edit_path.pop().map(|(_, level)| level);
         }
         None
@@ -1265,8 +1541,13 @@ impl PyPlacement {
         let super::Data::Root { edit_path } = &d.need(self.key).map_err(err)?.data else {
             return Err(PyTypeError::new_err("a scene root owns an edit path"));
         };
-        edit_path.iter().map(|(key, _)| d.handle_ref(py, *key)
-            .ok_or_else(|| PyRuntimeError::new_err("stale placement in edit path"))).collect()
+        edit_path
+            .iter()
+            .map(|(key, _)| {
+                d.handle_ref(py, *key)
+                    .ok_or_else(|| PyRuntimeError::new_err("stale placement in edit path"))
+            })
+            .collect()
     }
 
     #[getter]
@@ -1275,17 +1556,27 @@ impl PyPlacement {
         let super::Data::Root { edit_path } = &d.need(self.key).map_err(err)?.data else {
             return Err(PyTypeError::new_err("a scene root owns an edit path"));
         };
-        Ok(edit_path.iter().map(|(_, level)| level.clone_ref(py)).collect())
+        Ok(edit_path
+            .iter()
+            .map(|(_, level)| level.clone_ref(py))
+            .collect())
     }
 
     fn _loose_locked(&self) -> PyResult<bool> {
         let doc = lock();
         let root = doc.need(self.key).map_err(err)?;
-        let Some(Value::Dict(data)) = root.attr(super::attr_id("plugin_data").map_err(err)?) else { return Ok(false) };
-        let Some(Value::List(scopes)) = data.iter().find_map(|(k,v)| match k {
-            Value::Str(key) if key == "project_tree_loose_locks" => Some(v), _ => None,
-        }) else { return Ok(false) };
-        let super::Data::Root { edit_path } = &root.data else { return Ok(false) };
+        let Some(Value::Dict(data)) = root.attr(super::attr_id("plugin_data").map_err(err)?) else {
+            return Ok(false);
+        };
+        let Some(Value::List(scopes)) = data.iter().find_map(|(k, v)| match k {
+            Value::Str(key) if key == "project_tree_loose_locks" => Some(v),
+            _ => None,
+        }) else {
+            return Ok(false);
+        };
+        let super::Data::Root { edit_path } = &root.data else {
+            return Ok(false);
+        };
         Ok(scopes.iter().any(|scope| match scope {
             Value::List(uids) if uids.len() == edit_path.len() => edit_path.iter().zip(uids).all(|((id, _), uid)| {
                 matches!((doc.node(*id).map(|n| &n.data), uid), (Some(super::Data::Placement(p)), Value::Str(s)) if p.uid.as_ref() == Some(s))
@@ -1294,12 +1585,36 @@ impl PyPlacement {
         }))
     }
 
-    fn _tag_edit(&self, py: Python<'_>, tags: Vec<String>, field: &str, value: &str) -> PyResult<Option<super::drawing::TagEdit>> {
+    fn _tag_edit(
+        &self,
+        py: Python<'_>,
+        tags: Vec<String>,
+        field: &str,
+        value: &str,
+    ) -> PyResult<Option<super::drawing::TagEdit>> {
         super::drawing::prepare(py, self.key, tags, field, value)
     }
 
-    fn _drawing_preview(&self, expanded: HashSet<String>, filter: &str, has_links: bool, used: HashSet<String>, held: HashSet<String>, selected: HashSet<String>) -> PyResult<Vec<(Vec<String>, Vec<i64>)>> {
-        super::drawing::preview(&lock(), self.key, expanded, filter, has_links, &used, &held, &selected).map_err(err)
+    fn _drawing_preview(
+        &self,
+        expanded: HashSet<String>,
+        filter: &str,
+        has_links: bool,
+        used: HashSet<String>,
+        held: HashSet<String>,
+        selected: HashSet<String>,
+    ) -> PyResult<Vec<(Vec<String>, Vec<i64>)>> {
+        super::drawing::preview(
+            &lock(),
+            self.key,
+            expanded,
+            filter,
+            has_links,
+            &used,
+            &held,
+            &selected,
+        )
+        .map_err(err)
     }
 
     /// A root's tag list (`scene.layers`).
@@ -1365,10 +1680,18 @@ impl PyPlacement {
             d.set_handle(slf.get().key, slf.as_ptr());
             let n = d.need(slf.get().key).map_err(err)?;
             if n.kind != Kind::Root {
-                return Err(PyTypeError::new_err("only a scene root has a materials registry"));
+                return Err(PyTypeError::new_err(
+                    "only a scene root has a materials registry",
+                ));
             }
         }
-        Py::new(slf.py(), Registry { owner: slf.get().key, owner_ref: slf.clone().into_any().unbind() })
+        Py::new(
+            slf.py(),
+            Registry {
+                owner: slf.get().key,
+                owner_ref: slf.clone().into_any().unbind(),
+            },
+        )
     }
     #[setter(_materials)]
     fn set_materials(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -1454,7 +1777,13 @@ impl PyTag {
     }
     #[setter]
     fn set_uid(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Uid, FVal::Str(str_of(v)?))
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Uid,
+            FVal::Str(str_of(v)?),
+        )
     }
     #[getter]
     fn name<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1462,7 +1791,13 @@ impl PyTag {
     }
     #[setter]
     fn set_name(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Name, FVal::Str(str_of(v)?))
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Name,
+            FVal::Str(str_of(v)?),
+        )
     }
     #[getter]
     fn key<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1470,7 +1805,13 @@ impl PyTag {
     }
     #[setter]
     fn set_key(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Key, FVal::Str(str_of(v)?))
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Key,
+            FVal::Str(str_of(v)?),
+        )
     }
     #[getter]
     fn visible<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1478,7 +1819,13 @@ impl PyTag {
     }
     #[setter]
     fn set_visible(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Visible, FVal::Bool(v.is_truthy()?))
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Visible,
+            FVal::Bool(v.is_truthy()?),
+        )
     }
     #[getter]
     fn locked<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1486,7 +1833,13 @@ impl PyTag {
     }
     #[setter]
     fn set_locked(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Locked, FVal::Bool(v.is_truthy()?))
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Locked,
+            FVal::Bool(v.is_truthy()?),
+        )
     }
     #[getter]
     fn color<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1494,8 +1847,18 @@ impl PyTag {
     }
     #[setter]
     fn set_color(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        let val = if v.is_none() { None } else { Some(Value::from_py(v)?) };
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Color, FVal::Val(val))
+        let val = if v.is_none() {
+            None
+        } else {
+            Some(Value::from_py(v)?)
+        };
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Color,
+            FVal::Val(val),
+        )
     }
     #[getter]
     fn folder<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1503,14 +1866,24 @@ impl PyTag {
     }
     #[setter]
     fn set_folder(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Folder, FVal::Str(str_of(v)?))
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Folder,
+            FVal::Str(str_of(v)?),
+        )
     }
 }
 
 // --------------------------------------------------------------- Material
 
 fn opt_value(v: &Bound<'_, PyAny>) -> PyResult<FVal> {
-    Ok(FVal::Val(if v.is_none() { None } else { Some(Value::from_py(v)?) }))
+    Ok(FVal::Val(if v.is_none() {
+        None
+    } else {
+        Some(Value::from_py(v)?)
+    }))
 }
 
 /// A material's fields; `core.materials.Material` subclasses it.
@@ -1545,7 +1918,13 @@ impl PyMaterial {
     }
     #[setter]
     fn set_name(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Name, FVal::Str(str_of(v)?))
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Name,
+            FVal::Str(str_of(v)?),
+        )
     }
     #[getter]
     fn color<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1553,7 +1932,13 @@ impl PyMaterial {
     }
     #[setter]
     fn set_color(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Color, opt_value(v)?)
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Color,
+            opt_value(v)?,
+        )
     }
     #[getter]
     fn texture<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1561,7 +1946,13 @@ impl PyMaterial {
     }
     #[setter]
     fn set_texture(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Texture, opt_value(v)?)
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Texture,
+            opt_value(v)?,
+        )
     }
     #[getter]
     fn opacity<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1569,7 +1960,13 @@ impl PyMaterial {
     }
     #[setter]
     fn set_opacity(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Opacity, opt_value(v)?)
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Opacity,
+            opt_value(v)?,
+        )
     }
     #[getter]
     fn finish<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1577,7 +1974,13 @@ impl PyMaterial {
     }
     #[setter]
     fn set_finish(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Finish, FVal::Str(str_of(v)?))
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Finish,
+            FVal::Str(str_of(v)?),
+        )
     }
     #[getter]
     fn pbr<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1585,7 +1988,13 @@ impl PyMaterial {
     }
     #[setter]
     fn set_pbr(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Pbr, opt_value(v)?)
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Pbr,
+            opt_value(v)?,
+        )
     }
 }
 
@@ -1639,7 +2048,10 @@ impl HandleList {
         let n = d.need(self.owner).map_err(err)?;
         let mut out = Vec::with_capacity(n.list(self.l()).len());
         for &k in n.list(self.l()) {
-            out.push(d.handle_ref(py, k).ok_or_else(|| PyRuntimeError::new_err("a listed node lost its handle"))?);
+            out.push(
+                d.handle_ref(py, k)
+                    .ok_or_else(|| PyRuntimeError::new_err("a listed node lost its handle"))?,
+            );
         }
         Ok(out)
     }
@@ -1652,7 +2064,11 @@ impl HandleList {
 
     fn materialize<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
         if let Some(l) = self.det(py) {
-            return l.as_any().call_method0("copy")?.cast_into::<PyList>().map_err(Into::into);
+            return l
+                .as_any()
+                .call_method0("copy")?
+                .cast_into::<PyList>()
+                .map_err(Into::into);
         }
         let hs = self.handles(py)?;
         PyList::new(py, hs)
@@ -1674,12 +2090,18 @@ impl HandleList {
         let mut trash = Trash::default();
         let r = {
             let mut d = lock();
-            let k = d.need(self.owner).map_err(err)?.list(self.l()).get(at).copied();
+            let k = d
+                .need(self.owner)
+                .map_err(err)?
+                .list(self.l())
+                .get(at)
+                .copied();
             match k {
                 None => Err(PyIndexError::new_err("pop index out of range")),
                 Some(k) => {
                     let h = d.handle_ref(py, k);
-                    d.list_remove(py, self.owner, self.l(), at, &mut trash).map_err(err)?;
+                    d.list_remove(py, self.owner, self.l(), at, &mut trash)
+                        .map_err(err)?;
                     h.ok_or_else(|| PyRuntimeError::new_err("a listed node lost its handle"))
                 }
             }
@@ -1697,7 +2119,13 @@ impl HandleList {
             for (m, ptr, _) in &members {
                 d.set_handle(*m, *ptr);
             }
-            d.list_replace(py, self.owner, self.l(), members.iter().map(|m| m.0).collect(), &mut trash)
+            d.list_replace(
+                py,
+                self.owner,
+                self.l(),
+                members.iter().map(|m| m.0).collect(),
+                &mut trash,
+            )
         };
         drop(members);
         drop(trash);
@@ -1708,7 +2136,11 @@ impl HandleList {
 
     fn norm(&self, i: isize, len: usize) -> Option<usize> {
         let i = if i < 0 { i + len as isize } else { i };
-        if i < 0 || i as usize >= len { None } else { Some(i as usize) }
+        if i < 0 || i as usize >= len {
+            None
+        } else {
+            Some(i as usize)
+        }
     }
 
     /// Run `f` on a plain list copy and store the result (slice
@@ -1740,7 +2172,11 @@ impl HandleList {
         Ok(self.__len__(py)? > 0)
     }
 
-    fn __getitem__<'py>(&self, py: Python<'py>, idx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    fn __getitem__<'py>(
+        &self,
+        py: Python<'py>,
+        idx: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         if let Some(l) = self.det(py) {
             return l.as_any().get_item(idx);
         }
@@ -1752,13 +2188,22 @@ impl HandleList {
         let d = lock();
         let n = d.need(self.owner).map_err(err)?;
         let list = n.list(self.l());
-        let i = self.norm(i, list.len()).ok_or_else(|| PyIndexError::new_err("list index out of range"))?;
-        let h = d.handle_ref(py, list[i]).ok_or_else(|| PyRuntimeError::new_err("a listed node lost its handle"))?;
+        let i = self
+            .norm(i, list.len())
+            .ok_or_else(|| PyIndexError::new_err("list index out of range"))?;
+        let h = d
+            .handle_ref(py, list[i])
+            .ok_or_else(|| PyRuntimeError::new_err("a listed node lost its handle"))?;
         drop(d);
         Ok(h.into_bound(py))
     }
 
-    fn __setitem__(&self, py: Python<'_>, idx: &Bound<'_, PyAny>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn __setitem__(
+        &self,
+        py: Python<'_>,
+        idx: &Bound<'_, PyAny>,
+        value: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
         if let Some(l) = self.det(py) {
             return l.as_any().set_item(idx, value);
         }
@@ -1772,7 +2217,9 @@ impl HandleList {
         if !idx.is_instance_of::<PySlice>() {
             let i: isize = idx.extract()?;
             let len = self.__len__(py)?;
-            let i = self.norm(i, len).ok_or_else(|| PyIndexError::new_err("list assignment index out of range"))?;
+            let i = self
+                .norm(i, len)
+                .ok_or_else(|| PyIndexError::new_err("list assignment index out of range"))?;
             self.remove_at(py, i)?;
             return Ok(());
         }
@@ -1793,11 +2240,18 @@ impl HandleList {
         if let Some(l) = self.det(py) {
             return l.contains(obj);
         }
-        let Ok(k) = member_key(obj) else { return Ok(false) };
+        let Ok(k) = member_key(obj) else {
+            return Ok(false);
+        };
         Ok(self.keys()?.contains(&k))
     }
 
-    fn __richcmp__<'py>(&self, py: Python<'py>, other: &Bound<'py, PyAny>, op: pyo3::basic::CompareOp) -> PyResult<Bound<'py, PyAny>> {
+    fn __richcmp__<'py>(
+        &self,
+        py: Python<'py>,
+        other: &Bound<'py, PyAny>,
+        op: pyo3::basic::CompareOp,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let me = self.materialize(py)?;
         let other = match other.cast::<HandleList>() {
             Ok(h) => h.get().materialize(py)?.into_any(),
@@ -1806,7 +2260,11 @@ impl HandleList {
         me.as_any().rich_compare(other, op)
     }
 
-    fn __add__<'py>(&self, py: Python<'py>, other: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    fn __add__<'py>(
+        &self,
+        py: Python<'py>,
+        other: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let me = self.materialize(py)?;
         let other = match other.cast::<HandleList>() {
             Ok(h) => h.get().materialize(py)?.into_any(),
@@ -1815,7 +2273,11 @@ impl HandleList {
         me.as_any().add(other)
     }
 
-    fn __radd__<'py>(&self, py: Python<'py>, other: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    fn __radd__<'py>(
+        &self,
+        py: Python<'py>,
+        other: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let me = self.materialize(py)?;
         other.add(me)
     }
@@ -1888,7 +2350,11 @@ impl HandleList {
         }
         let missing = || PyValueError::new_err("list.remove(x): x not in list");
         let k = member_key(obj).map_err(|_| missing())?;
-        let at = self.keys()?.iter().position(|&x| x == k).ok_or_else(missing)?;
+        let at = self
+            .keys()?
+            .iter()
+            .position(|&x| x == k)
+            .ok_or_else(missing)?;
         self.remove_at(py, at)?;
         Ok(())
     }
@@ -1902,7 +2368,9 @@ impl HandleList {
         if len == 0 {
             return Err(PyIndexError::new_err("pop from empty list"));
         }
-        let at = self.norm(i, len).ok_or_else(|| PyIndexError::new_err("pop index out of range"))?;
+        let at = self
+            .norm(i, len)
+            .ok_or_else(|| PyIndexError::new_err("pop index out of range"))?;
         self.remove_at(py, at)
     }
 
@@ -1915,9 +2383,18 @@ impl HandleList {
     }
 
     #[pyo3(signature = (obj, start = 0, stop = isize::MAX))]
-    fn index(&self, py: Python<'_>, obj: &Bound<'_, PyAny>, start: isize, stop: isize) -> PyResult<usize> {
+    fn index(
+        &self,
+        py: Python<'_>,
+        obj: &Bound<'_, PyAny>,
+        start: isize,
+        stop: isize,
+    ) -> PyResult<usize> {
         if let Some(l) = self.det(py) {
-            return l.as_any().call_method1("index", (obj, start, stop))?.extract();
+            return l
+                .as_any()
+                .call_method1("index", (obj, start, stop))?
+                .extract();
         }
         let missing = || PyValueError::new_err("list.index(x): x not in list");
         let k = member_key(obj).map_err(|_| missing())?;
@@ -1962,7 +2439,11 @@ impl HandleList {
     }
 
     fn __clear__(&self) {
-        let old = self.detached.lock().unwrap_or_else(|e| e.into_inner()).take();
+        let old = self
+            .detached
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
         drop(old);
     }
 }
@@ -1975,7 +2456,11 @@ fn registry_pairs<'py>(v: &Bound<'py, PyAny>) -> PyResult<Vec<(String, Key, Boun
     if v.is_none() {
         return Ok(out);
     }
-    let items = if v.hasattr("items")? { v.call_method0("items")? } else { v.clone() };
+    let items = if v.hasattr("items")? {
+        v.call_method0("items")?
+    } else {
+        v.clone()
+    };
     for item in items.try_iter()? {
         let (name, mat): (String, Bound<'py, PyAny>) = item?.extract()?;
         let k = match mat.cast::<PyMaterial>() {
@@ -1992,7 +2477,11 @@ fn registry_pairs<'py>(v: &Bound<'py, PyAny>) -> PyResult<Vec<(String, Key, Boun
     Ok(out)
 }
 
-fn registry_set(py: Python<'_>, owner: Key, pairs: Vec<(String, Key, Bound<'_, PyAny>)>) -> PyResult<()> {
+fn registry_set(
+    py: Python<'_>,
+    owner: Key,
+    pairs: Vec<(String, Key, Bound<'_, PyAny>)>,
+) -> PyResult<()> {
     let mut trash = Trash::default();
     let r = {
         let mut d = lock();
@@ -2027,7 +2516,12 @@ impl Registry {
         let pairs = d.registry(self.owner).map_err(err)?;
         let mut out = Vec::with_capacity(pairs.len());
         for (n, k) in pairs {
-            out.push((n, d.handle_ref(py, k).ok_or_else(|| PyRuntimeError::new_err("a registered material lost its handle"))?));
+            out.push((
+                n,
+                d.handle_ref(py, k).ok_or_else(|| {
+                    PyRuntimeError::new_err("a registered material lost its handle")
+                })?,
+            ));
         }
         Ok(out)
     }
@@ -2040,7 +2534,12 @@ impl Registry {
         Ok(out)
     }
 
-    fn store(&self, py: Python<'_>, pairs: Vec<(String, Key)>, extra: &[Bound<'_, PyAny>]) -> PyResult<()> {
+    fn store(
+        &self,
+        py: Python<'_>,
+        pairs: Vec<(String, Key)>,
+        extra: &[Bound<'_, PyAny>],
+    ) -> PyResult<()> {
         let mut trash = Trash::default();
         let r = {
             let mut d = lock();
@@ -2078,17 +2577,23 @@ impl Registry {
     }
 
     fn __contains__(&self, name: &Bound<'_, PyAny>) -> PyResult<bool> {
-        let Ok(name) = name.extract::<String>() else { return Ok(false) };
+        let Ok(name) = name.extract::<String>() else {
+            return Ok(false);
+        };
         Ok(self.pairs()?.iter().any(|(n, _)| *n == name))
     }
 
     fn __getitem__<'py>(&self, py: Python<'py>, name: &Bound<'py, PyAny>) -> PyResult<Py<PyAny>> {
         let key_err = || pyo3::exceptions::PyKeyError::new_err(name.clone().unbind());
-        let Ok(want) = name.extract::<String>() else { return Err(key_err()) };
+        let Ok(want) = name.extract::<String>() else {
+            return Err(key_err());
+        };
         let d = lock();
         let n = d.need(self.owner).map_err(err)?;
         match n.mat_names.iter().position(|x| *x == want) {
-            Some(i) => d.handle_ref(py, n.mats[i]).ok_or_else(|| PyRuntimeError::new_err("a registered material lost its handle")),
+            Some(i) => d
+                .handle_ref(py, n.mats[i])
+                .ok_or_else(|| PyRuntimeError::new_err("a registered material lost its handle")),
             None => Err(key_err()),
         }
     }
@@ -2104,7 +2609,9 @@ impl Registry {
     }
 
     fn __delitem__(&self, py: Python<'_>, name: &Bound<'_, PyAny>) -> PyResult<()> {
-        let want: String = name.extract().map_err(|_| pyo3::exceptions::PyKeyError::new_err(name.clone().unbind()))?;
+        let want: String = name
+            .extract()
+            .map_err(|_| pyo3::exceptions::PyKeyError::new_err(name.clone().unbind()))?;
         let mut pairs = self.pairs()?;
         let Some(i) = pairs.iter().position(|(n, _)| *n == want) else {
             return Err(pyo3::exceptions::PyKeyError::new_err(name.clone().unbind()));
@@ -2131,22 +2638,36 @@ impl Registry {
     }
 
     #[pyo3(signature = (name, default = None))]
-    fn get<'py>(&self, py: Python<'py>, name: &Bound<'py, PyAny>, default: Option<Py<PyAny>>) -> PyResult<Py<PyAny>> {
+    fn get<'py>(
+        &self,
+        py: Python<'py>,
+        name: &Bound<'py, PyAny>,
+        default: Option<Py<PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
         match self.__getitem__(py, name) {
             Ok(v) => Ok(v),
-            Err(e) if e.is_instance_of::<pyo3::exceptions::PyKeyError>(py) => Ok(default.unwrap_or_else(|| py.None())),
+            Err(e) if e.is_instance_of::<pyo3::exceptions::PyKeyError>(py) => {
+                Ok(default.unwrap_or_else(|| py.None()))
+            }
             Err(e) => Err(e),
         }
     }
 
     #[pyo3(signature = (name, *default))]
-    fn pop<'py>(&self, py: Python<'py>, name: &Bound<'py, PyAny>, default: &Bound<'py, PyTuple>) -> PyResult<Py<PyAny>> {
+    fn pop<'py>(
+        &self,
+        py: Python<'py>,
+        name: &Bound<'py, PyAny>,
+        default: &Bound<'py, PyTuple>,
+    ) -> PyResult<Py<PyAny>> {
         match self.__getitem__(py, name) {
             Ok(v) => {
                 self.__delitem__(py, name)?;
                 Ok(v)
             }
-            Err(e) if e.is_instance_of::<pyo3::exceptions::PyKeyError>(py) && !default.is_empty() => {
+            Err(e)
+                if e.is_instance_of::<pyo3::exceptions::PyKeyError>(py) && !default.is_empty() =>
+            {
                 Ok(default.get_item(0)?.unbind())
             }
             Err(e) => Err(e),
@@ -2154,7 +2675,12 @@ impl Registry {
     }
 
     #[pyo3(signature = (name, default = None))]
-    fn setdefault<'py>(&self, py: Python<'py>, name: &Bound<'py, PyAny>, default: Option<&Bound<'py, PyAny>>) -> PyResult<Py<PyAny>> {
+    fn setdefault<'py>(
+        &self,
+        py: Python<'py>,
+        name: &Bound<'py, PyAny>,
+        default: Option<&Bound<'py, PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
         if let Ok(v) = self.__getitem__(py, name) {
             return Ok(v);
         }
@@ -2164,7 +2690,12 @@ impl Registry {
     }
 
     #[pyo3(signature = (other = None, **kw))]
-    fn update<'py>(&self, py: Python<'py>, other: Option<&Bound<'py, PyAny>>, kw: Option<&Bound<'py, PyDict>>) -> PyResult<()> {
+    fn update<'py>(
+        &self,
+        py: Python<'py>,
+        other: Option<&Bound<'py, PyAny>>,
+        kw: Option<&Bound<'py, PyDict>>,
+    ) -> PyResult<()> {
         let mut pairs = self.pairs()?;
         let mut items: Vec<(String, Key, Bound<'py, PyAny>)> = Vec::new();
         if let Some(o) = other {
@@ -2196,7 +2727,12 @@ impl Registry {
         self.dict(py)
     }
 
-    fn __richcmp__<'py>(&self, py: Python<'py>, other: &Bound<'py, PyAny>, op: pyo3::basic::CompareOp) -> PyResult<Bound<'py, PyAny>> {
+    fn __richcmp__<'py>(
+        &self,
+        py: Python<'py>,
+        other: &Bound<'py, PyAny>,
+        op: pyo3::basic::CompareOp,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let me = self.dict(py)?;
         let other = match other.cast::<Registry>() {
             Ok(r) => r.get().dict(py)?.into_any(),
@@ -2228,16 +2764,27 @@ pub struct PyTransaction {
 impl PyTransaction {
     /// A record of document ops only (a nested step's own slice).
     pub(super) fn from_parts(ops: Vec<Op>, pins: Vec<Py<PyAny>>) -> Self {
-        Self { geometry: Vec::new(), ops, pins }
+        Self {
+            geometry: Vec::new(),
+            ops,
+            pins,
+        }
     }
 }
 
 /// The record names of `keys` as Python strings: the nodes' cached `str`
 /// where they have one (an incref), new strings for the rest.
-fn record_names<'py>(py: Python<'py>, d: &super::Doc, keys: &[Key], into: &mut Vec<Result<Py<PyAny>, String>>) {
+fn record_names<'py>(
+    py: Python<'py>,
+    d: &super::Doc,
+    keys: &[Key],
+    into: &mut Vec<Result<Py<PyAny>, String>>,
+) {
     for &k in keys {
         let Some(n) = d.node(k) else { continue };
-        let Some((name, slot)) = n.record_name() else { continue };
+        let Some((name, slot)) = n.record_name() else {
+            continue;
+        };
         match &n.views[slot] {
             Some(v) => into.push(Ok(v.clone_ref(py))),
             None => into.push(Err(name.to_owned())),
@@ -2245,7 +2792,12 @@ fn record_names<'py>(py: Python<'py>, d: &super::Doc, keys: &[Key], into: &mut V
     }
 }
 
-fn changes_dict<'py>(py: Python<'py>, ops: &[Op], inverse: bool, root: Option<Key>) -> PyResult<Bound<'py, PyDict>> {
+fn changes_dict<'py>(
+    py: Python<'py>,
+    ops: &[Op],
+    inverse: bool,
+    root: Option<Key>,
+) -> PyResult<Bound<'py, PyDict>> {
     let records;
     let scene: Vec<&'static str>;
     let registry: [Vec<String>; 3];
@@ -2253,20 +2805,32 @@ fn changes_dict<'py>(py: Python<'py>, ops: &[Op], inverse: bool, root: Option<Ke
         let d = lock();
         let mut c = d.changes(ops, inverse, root);
         scene = c.scene_modified.clone();
-        records = c.records_modified.iter().filter_map(|&k| d.handle_ref(py, k).map(|h| (k, h))).collect::<Vec<_>>();
+        records = c
+            .records_modified
+            .iter()
+            .filter_map(|&k| d.handle_ref(py, k).map(|h| (k, h)))
+            .collect::<Vec<_>>();
         registry = [
             std::mem::take(&mut c.materials_created),
             std::mem::take(&mut c.materials_removed),
             std::mem::take(&mut c.materials_replaced),
         ];
-        [&c.created, &c.removed, &c.modified, &c.tags_created, &c.tags_removed, &c.tags_modified, &c.materials_modified]
-            .iter()
-            .map(|keys| {
-                let mut v = Vec::with_capacity(keys.len());
-                record_names(py, &d, keys, &mut v);
-                v
-            })
-            .collect()
+        [
+            &c.created,
+            &c.removed,
+            &c.modified,
+            &c.tags_created,
+            &c.tags_removed,
+            &c.tags_modified,
+            &c.materials_modified,
+        ]
+        .iter()
+        .map(|keys| {
+            let mut v = Vec::with_capacity(keys.len());
+            record_names(py, &d, keys, &mut v);
+            v
+        })
+        .collect()
     };
     let mut lists = Vec::with_capacity(groups.len());
     for g in groups {
@@ -2332,11 +2896,17 @@ impl PyTransaction {
     /// Fold committed entry, edit and exit steps into one occurrence edit.
     #[staticmethod]
     pub(super) fn compose(py: Python<'_>, steps: Vec<Py<PyTransaction>>) -> PyResult<Self> {
-        let mut result = Self { ops: Vec::new(), pins: Vec::new(), geometry: Vec::new() };
+        let mut result = Self {
+            ops: Vec::new(),
+            pins: Vec::new(),
+            geometry: Vec::new(),
+        };
         for step in steps {
             let step = step.bind(py).try_borrow()?;
             result.ops.extend_from_slice(&step.ops);
-            result.pins.extend(step.pins.iter().map(|p| p.clone_ref(py)));
+            result
+                .pins
+                .extend(step.pins.iter().map(|p| p.clone_ref(py)));
             for edit in &step.geometry {
                 edit.append_to(py, &mut result.geometry);
             }
@@ -2345,13 +2915,25 @@ impl PyTransaction {
     }
 
     /// Store face tools expose the same snapshots as their public change record.
-    fn geometry_states(&self, py: Python<'_>, mesh: &Bound<'_, PyAny>) -> Option<(Py<PyAny>, Py<PyAny>)> {
+    fn geometry_states(
+        &self,
+        py: Python<'_>,
+        mesh: &Bound<'_, PyAny>,
+    ) -> Option<(Py<PyAny>, Py<PyAny>)> {
         self.geometry.iter().find_map(|edit| edit.states(py, mesh))
     }
 
-    fn replay_editor(&self, py: Python<'_>, command: &Bound<'_, PyAny>, scene: &Bound<'_, PyAny>, undo: bool) -> PyResult<()> {
+    fn replay_editor(
+        &self,
+        py: Python<'_>,
+        command: &Bound<'_, PyAny>,
+        scene: &Bound<'_, PyAny>,
+        undo: bool,
+    ) -> PyResult<()> {
         self.run(py, undo)?;
-        if let Err(error) = command.call_method1("doc_after", (scene, if undo { "undo" } else { "redo" })) {
+        if let Err(error) =
+            command.call_method1("doc_after", (scene, if undo { "undo" } else { "redo" }))
+        {
             self.run(py, !undo)?;
             return Err(error);
         }
@@ -2372,7 +2954,12 @@ impl PyTransaction {
     /// key]}}`; `inverse` swaps created and removed (an undo's record).
     /// `root`: only that scene root's lists count for created/removed.
     #[pyo3(signature = (inverse = false, root = None))]
-    fn changes<'py>(&self, py: Python<'py>, inverse: bool, root: Option<Key>) -> PyResult<Bound<'py, PyDict>> {
+    fn changes<'py>(
+        &self,
+        py: Python<'py>,
+        inverse: bool,
+        root: Option<Key>,
+    ) -> PyResult<Bound<'py, PyDict>> {
         changes_dict(py, &self.ops, inverse, root)
     }
 
@@ -2381,10 +2968,18 @@ impl PyTransaction {
     /// value, or, with `lists`, a child list edited (the owner and the
     /// members that came or went). Each once.
     #[pyo3(signature = (fields = Vec::new(), lists = false))]
-    fn placements<'py>(&self, py: Python<'py>, fields: Vec<String>, lists: bool) -> PyResult<Bound<'py, PyList>> {
+    fn placements<'py>(
+        &self,
+        py: Python<'py>,
+        fields: Vec<String>,
+        lists: bool,
+    ) -> PyResult<Bound<'py, PyList>> {
         let mut fs = Vec::with_capacity(fields.len());
         for name in &fields {
-            fs.push(Field::from_name(name).ok_or_else(|| PyValueError::new_err(format!("no document field {name}")))?);
+            fs.push(
+                Field::from_name(name)
+                    .ok_or_else(|| PyValueError::new_err(format!("no document field {name}")))?,
+            );
         }
         let hs: Vec<Py<PyAny>> = {
             let d = lock();
@@ -2399,13 +2994,29 @@ impl PyTransaction {
         let out = PyList::empty(py);
         for op in &self.ops {
             let t = match op {
-                Op::Set { k, f, .. } => ("set", *k, f.name().to_string()).into_pyobject(py)?.into_any(),
-                Op::Patch { k, a, .. } => ("patch", *k, super::attr_name(*a).to_string()).into_pyobject(py)?.into_any(),
-                Op::SetMany { keys, f, .. } => ("set_many", keys.len(), f.name().to_string()).into_pyobject(py)?.into_any(),
-                Op::Ins { owner, at, k, .. } => ("insert", *owner, *at, *k).into_pyobject(py)?.into_any(),
-                Op::Rem { owner, at, k, .. } => ("remove", *owner, *at, *k).into_pyobject(py)?.into_any(),
-                Op::Rep { owner, old, new, .. } => ("replace", *owner, old.len(), new.len()).into_pyobject(py)?.into_any(),
-                Op::Reg { owner, old, new } => ("registry", *owner, old.len(), new.len()).into_pyobject(py)?.into_any(),
+                Op::Set { k, f, .. } => ("set", *k, f.name().to_string())
+                    .into_pyobject(py)?
+                    .into_any(),
+                Op::Patch { k, a, .. } => ("patch", *k, super::attr_name(*a).to_string())
+                    .into_pyobject(py)?
+                    .into_any(),
+                Op::SetMany { keys, f, .. } => ("set_many", keys.len(), f.name().to_string())
+                    .into_pyobject(py)?
+                    .into_any(),
+                Op::Ins { owner, at, k, .. } => {
+                    ("insert", *owner, *at, *k).into_pyobject(py)?.into_any()
+                }
+                Op::Rem { owner, at, k, .. } => {
+                    ("remove", *owner, *at, *k).into_pyobject(py)?.into_any()
+                }
+                Op::Rep {
+                    owner, old, new, ..
+                } => ("replace", *owner, old.len(), new.len())
+                    .into_pyobject(py)?
+                    .into_any(),
+                Op::Reg { owner, old, new } => ("registry", *owner, old.len(), new.len())
+                    .into_pyobject(py)?
+                    .into_any(),
             };
             out.append(t)?;
         }
@@ -2471,7 +3082,7 @@ fn doc_new_root(py: Python<'_>) -> PyResult<Py<PyPlacement>> {
 #[pyo3(signature=(document=None))]
 fn doc_begin(py: Python<'_>, document: Option<Key>) -> PyResult<usize> {
     let _writer = super::Writer::acquire(py, document)?;
-    py.import("core.doc_model")?.call_method0("flush")?;
+    fresh(py)?;
     let depth = { lock().begin(document) }
         .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Document writer reservation lost"))?;
     super::geometry::begin();
@@ -2497,7 +3108,14 @@ fn doc_commit(py: Python<'_>) -> PyResult<Option<Py<PyTransaction>>> {
     let got = { lock().commit() };
     match got {
         None => Ok(None),
-        Some((ops, pins)) => Ok(Some(Py::new(py, PyTransaction { ops, pins, geometry })?)),
+        Some((ops, pins)) => Ok(Some(Py::new(
+            py,
+            PyTransaction {
+                ops,
+                pins,
+                geometry,
+            },
+        )?)),
     }
 }
 
@@ -2522,14 +3140,56 @@ fn doc_rollback(py: Python<'_>) -> PyResult<()> {
 /// view; `bind(value, key, which)` → `(view, data16, src)`.
 #[pyfunction]
 fn doc_set_hooks(make: Py<PyAny>, bind: Py<PyAny>) {
-    let old = HOOKS.lock().unwrap_or_else(|e| e.into_inner()).replace((make, bind));
+    let old = HOOKS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .replace((make, bind));
     drop(old);
+}
+
+/// The suspect containers (`core.doc_model._SUSPECT`: plain containers
+/// stored into tracked ones, written back at boundaries) and the flush
+/// that writes them.
+static SUSPECTS: pyo3::sync::PyOnceLock<(Py<PyDict>, Py<PyAny>)> = pyo3::sync::PyOnceLock::new();
+
+#[pyfunction]
+fn doc_set_suspects(py: Python<'_>, suspects: Py<PyDict>, flush: Py<PyAny>) {
+    let _ = SUSPECTS.set(py, (suspects, flush));
+}
+
+/// Make the document's values what Python sees before Rust reads them
+/// directly: tracked containers write through already; plain ones stored
+/// into them are flushed, when any is waiting (a length check otherwise).
+pub(crate) fn fresh(py: Python<'_>) -> PyResult<()> {
+    if let Some((suspects, flush)) = SUSPECTS.get(py) {
+        if !suspects.bind(py).is_empty() {
+            flush.call0(py)?;
+        }
+    }
+    Ok(())
+}
+
+/// The document's own value of attribute `name` of a handle, read from
+/// the node (not its Python view): what Rust code sees.
+#[pyfunction]
+fn doc_attr_value<'py>(py: Python<'py>, handle: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyAny>> {
+    fresh(py)?;
+    let k = handle_key(handle)?;
+    let a = super::attr_id(name).map_err(err)?;
+    let v = { lock().need(k).map_err(err)?.attr(a).cloned() };
+    match v {
+        Some(v) => v.to_py(py),
+        None => Ok(py.None().into_bound(py)),
+    }
 }
 
 /// Install the tracked-container hook: `track(key, attr, container)`.
 #[pyfunction]
 fn doc_set_track_hook(track: Py<PyAny>) {
-    let old = TRACK.lock().unwrap_or_else(|e| e.into_inner()).replace(track);
+    let old = TRACK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .replace(track);
     drop(old);
 }
 
@@ -2537,8 +3197,18 @@ fn doc_set_track_hook(track: Py<PyAny>) {
 /// `attr` of `key` if it is still that attribute's view. Returns whether it
 /// was (False: it has been replaced; the container is a plain one now).
 #[pyfunction]
-fn doc_attr_changed(py: Python<'_>, key: Key, attr: u16, view: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let bound = |d: &super::Doc| d.node(key).and_then(|n| n.attr_view(attr)).map(|v| v.as_ptr()) == Some(view.as_ptr());
+fn doc_attr_changed(
+    py: Python<'_>,
+    key: Key,
+    attr: u16,
+    view: &Bound<'_, PyAny>,
+) -> PyResult<bool> {
+    let bound = |d: &super::Doc| {
+        d.node(key)
+            .and_then(|n| n.attr_view(attr))
+            .map(|v| v.as_ptr())
+            == Some(view.as_ptr())
+    };
     if !bound(&lock()) {
         return Ok(false);
     }
@@ -2547,7 +3217,8 @@ fn doc_attr_changed(py: Python<'_>, key: Key, attr: u16, view: &Bound<'_, PyAny>
     let r = {
         let mut d = lock();
         if bound(&d) {
-            d.write_keep_view(py, key, Field::Attr(attr), FVal::Val(Some(v)), &mut trash).map(|_| true)
+            d.write_keep_view(py, key, Field::Attr(attr), FVal::Val(Some(v)), &mut trash)
+                .map(|_| true)
         } else {
             Ok(false)
         }
@@ -2563,21 +3234,44 @@ fn doc_attr_changed(py: Python<'_>, key: Key, attr: u16, view: &Bound<'_, PyAny>
 /// ``view`` is still its view. Returns whether it was; Err when a path
 /// does not lead into the stored value (the caller writes it whole).
 #[pyfunction]
-fn doc_attr_patch(py: Python<'_>, key: Key, attr: u16, view: &Bound<'_, PyAny>,
-                  ops: Vec<(Vec<Bound<'_, PyAny>>, Bound<'_, PyAny>, bool)>) -> PyResult<bool> {
-    let bound = |d: &super::Doc| d.node(key).and_then(|n| n.attr_view(attr)).map(|v| v.as_ptr()) == Some(view.as_ptr());
+fn doc_attr_patch(
+    py: Python<'_>,
+    key: Key,
+    attr: u16,
+    view: &Bound<'_, PyAny>,
+    ops: Vec<(Vec<Bound<'_, PyAny>>, Bound<'_, PyAny>, bool)>,
+) -> PyResult<bool> {
+    let bound = |d: &super::Doc| {
+        d.node(key)
+            .and_then(|n| n.attr_view(attr))
+            .map(|v| v.as_ptr())
+            == Some(view.as_ptr())
+    };
     if !bound(&lock()) {
         return Ok(false);
     }
     let mut edits = Vec::with_capacity(ops.len());
     for (path, value, delete) in &ops {
-        let path = path.iter().map(Value::from_py).collect::<PyResult<Vec<_>>>()?;
-        edits.push((path, if *delete { None } else { Some(Value::from_py(value)?) }));
+        let path = path
+            .iter()
+            .map(Value::from_py)
+            .collect::<PyResult<Vec<_>>>()?;
+        edits.push((
+            path,
+            if *delete {
+                None
+            } else {
+                Some(Value::from_py(value)?)
+            },
+        ));
     }
     let r = {
         let mut d = lock();
         if bound(&d) {
-            edits.iter().try_for_each(|(path, new)| d.patch(py, key, attr, path, new.clone())).map(|_| true)
+            edits
+                .iter()
+                .try_for_each(|(path, new)| d.patch(py, key, attr, path, new.clone()))
+                .map(|_| true)
         } else {
             Ok(false)
         }
@@ -2589,8 +3283,19 @@ fn doc_attr_patch(py: Python<'_>, key: Key, attr: u16, view: &Bound<'_, PyAny>,
 /// A bound matrix view was edited in place: store its values if it is
 /// still the node's view. Returns whether it was.
 #[pyfunction]
-fn doc_view_changed(py: Python<'_>, key: Key, which: u8, view: &Bound<'_, PyAny>, data: &Bound<'_, PyAny>, src: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let f = if which == 1 { Field::Axes } else { Field::Xform };
+fn doc_view_changed(
+    py: Python<'_>,
+    key: Key,
+    which: u8,
+    view: &Bound<'_, PyAny>,
+    data: &Bound<'_, PyAny>,
+    src: &Bound<'_, PyAny>,
+) -> PyResult<bool> {
+    let f = if which == 1 {
+        Field::Axes
+    } else {
+        Field::Xform
+    };
     let slot = view_slot(f);
     let x = xform_of(data, src)?;
     let mut trash = Trash::default();
@@ -2601,7 +3306,8 @@ fn doc_view_changed(py: Python<'_>, key: Key, which: u8, view: &Bound<'_, PyAny>
             None => false,
         };
         if bound {
-            d.write_keep_view(py, key, f, FVal::Xf(Some(x)), &mut trash).map(|_| true)
+            d.write_keep_view(py, key, f, FVal::Xf(Some(x)), &mut trash)
+                .map(|_| true)
         } else {
             Ok(false)
         }
@@ -2614,12 +3320,22 @@ fn doc_view_changed(py: Python<'_>, key: Key, which: u8, view: &Bound<'_, PyAny>
 pub(super) fn fval_for(f: Field, v: &Bound<'_, PyAny>) -> PyResult<FVal> {
     Ok(match f {
         Field::Billboard => FVal::Val(Some(Value::from_py(v)?)),
-        Field::Component | Field::Hidden | Field::Locked | Field::Visible => FVal::Bool(v.is_truthy()?),
-        Field::Uid | Field::Name | Field::Tag | Field::Key | Field::Folder | Field::Finish => FVal::Str(str_of(v)?),
-        Field::Material | Field::Color | Field::Texture | Field::Opacity | Field::Pbr => opt_value(v)?,
+        Field::Component | Field::Hidden | Field::Locked | Field::Visible => {
+            FVal::Bool(v.is_truthy()?)
+        }
+        Field::Uid | Field::Name | Field::Tag | Field::Key | Field::Folder | Field::Finish => {
+            FVal::Str(str_of(v)?)
+        }
+        Field::Material | Field::Color | Field::Texture | Field::Opacity | Field::Pbr => {
+            opt_value(v)?
+        }
         Field::Definition => return Err(PyTypeError::new_err("use the mesh setter")),
         Field::Attr(_) => opt_value(v)?,
-        Field::Xform | Field::Axes => return Err(PyTypeError::new_err("matrices are written one placement at a time")),
+        Field::Xform | Field::Axes => {
+            return Err(PyTypeError::new_err(
+                "matrices are written one placement at a time",
+            ))
+        }
     })
 }
 
@@ -2627,8 +3343,14 @@ pub(super) fn fval_for(f: Field, v: &Bound<'_, PyAny>) -> PyResult<FVal> {
 /// journalled as one op: what a command writing one value over a
 /// selection uses (Lock, Hide, Tag of 20,000 placements).
 #[pyfunction]
-pub(super) fn doc_set_many(py: Python<'_>, handles: &Bound<'_, PyAny>, field: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
-    let f = Field::from_name(field).ok_or_else(|| PyValueError::new_err(format!("no document field {field}")))?;
+pub(super) fn doc_set_many(
+    py: Python<'_>,
+    handles: &Bound<'_, PyAny>,
+    field: &str,
+    value: &Bound<'_, PyAny>,
+) -> PyResult<()> {
+    let f = Field::from_name(field)
+        .ok_or_else(|| PyValueError::new_err(format!("no document field {field}")))?;
     let v = fval_for(f, value)?;
     let members = keys_of(handles)?;
     let keys: Vec<Key> = members.iter().map(|m| m.0).collect();
@@ -2649,10 +3371,17 @@ pub(super) fn doc_set_many(py: Python<'_>, handles: &Bound<'_, PyAny>, field: &s
 /// One field of every handle of `handles`, as a list (one call instead of
 /// one attribute read each). Matrices are not read this way.
 #[pyfunction]
-pub(super) fn doc_get_many<'py>(py: Python<'py>, handles: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<'py, PyList>> {
-    let f = Field::from_name(field).ok_or_else(|| PyValueError::new_err(format!("no document field {field}")))?;
+pub(super) fn doc_get_many<'py>(
+    py: Python<'py>,
+    handles: &Bound<'py, PyAny>,
+    field: &str,
+) -> PyResult<Bound<'py, PyList>> {
+    let f = Field::from_name(field)
+        .ok_or_else(|| PyValueError::new_err(format!("no document field {field}")))?;
     if matches!(f, Field::Xform | Field::Axes) {
-        return Err(PyTypeError::new_err("matrices are read one placement at a time"));
+        return Err(PyTypeError::new_err(
+            "matrices are read one placement at a time",
+        ));
     }
     let members = keys_of(handles)?;
     let vals: Vec<FVal> = {
@@ -2673,7 +3402,10 @@ pub(super) fn doc_get_many<'py>(py: Python<'py>, handles: &Bound<'py, PyAny>, fi
 /// The distinct placements of the trees under `roots`, in document order
 /// (`core.purge.iter_groups`): one call, no list view per node.
 #[pyfunction]
-pub(super) fn doc_walk<'py>(py: Python<'py>, roots: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
+pub(super) fn doc_walk<'py>(
+    py: Python<'py>,
+    roots: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyList>> {
     let members = keys_of(roots)?;
     let hs: Vec<Py<PyAny>> = {
         let mut d = lock();
@@ -2681,7 +3413,9 @@ pub(super) fn doc_walk<'py>(py: Python<'py>, roots: &Bound<'py, PyAny>) -> PyRes
             d.set_handle(*m, *ptr);
         }
         if let Some((m, _, _)) = members.iter().find(|m| d.node(m.0).is_none()) {
-            return Err(PyTypeError::new_err(format!("not a document placement: {m:#x}")));
+            return Err(PyTypeError::new_err(format!(
+                "not a document placement: {m:#x}"
+            )));
         }
         let mut seen: super::FastSet<Key> = super::FastSet::default();
         let mut out = Vec::new();
@@ -2801,8 +3535,17 @@ fn doc_render_rows<'py>(
     untagged: &str,
     default_tag: &str,
 ) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
-    struct Up { layer: Option<String>, tag: Option<String>, forced: Option<String>, hidden: bool, material: i64,
-                root: usize, flag_hidden: bool, obj: bool, filtered: bool }
+    struct Up {
+        layer: Option<String>,
+        tag: Option<String>,
+        forced: Option<String>,
+        hidden: bool,
+        material: i64,
+        root: usize,
+        flag_hidden: bool,
+        obj: bool,
+        filtered: bool,
+    }
     let members = keys_of(roots)?;
     let n_hint = members.len();
     let mut hs: Vec<Py<PyAny>> = Vec::with_capacity(n_hint);
@@ -2820,35 +3563,63 @@ fn doc_render_rows<'py>(
     let mut materials: Vec<Py<PyAny>> = Vec::new();
     let mut ups: Vec<Up> = Vec::with_capacity(n_hint);
     let tagged = |t: &Option<String>| t.as_ref().filter(|t| !t.is_empty()).cloned();
-    fn shown<'a>(t: &'a Option<String>, default_tag: &'a str) -> &'a str { t.as_deref().unwrap_or(default_tag) }
-    let real = |t: &Option<String>| t.as_ref().filter(|t| !t.is_empty() && !t.ends_with(untagged)).cloned();
+    fn shown<'a>(t: &'a Option<String>, default_tag: &'a str) -> &'a str {
+        t.as_deref().unwrap_or(default_tag)
+    }
+    let real = |t: &Option<String>| {
+        t.as_ref()
+            .filter(|t| !t.is_empty() && !t.ends_with(untagged))
+            .cloned()
+    };
     {
         let mut d = lock();
         for (m, ptr, _) in &members {
             d.set_handle(*m, *ptr);
         }
-        if let Some((m, _, _)) = members.iter().find(|m| d.node(m.0).is_none_or(|n| n.kind != Kind::Placement)) {
-            return Err(PyTypeError::new_err(format!("not a document placement: {m:#x}")));
+        if let Some((m, _, _)) = members
+            .iter()
+            .find(|m| d.node(m.0).is_none_or(|n| n.kind != Kind::Placement))
+        {
+            return Err(PyTypeError::new_err(format!(
+                "not a document placement: {m:#x}"
+            )));
         }
         let mut stack: Vec<(Key, i64)> = members.iter().rev().map(|m| (m.0, -1)).collect();
         while let Some((k, up)) = stack.pop() {
             let Some(n) = d.node(k) else { continue };
-            let super::Data::Placement(p) = &n.data else { continue };
+            let super::Data::Placement(p) = &n.data else {
+                continue;
+            };
             let i = hs.len();
-            hs.push(d.handle_ref(py, k).ok_or_else(|| PyRuntimeError::new_err("a listed node lost its handle"))?);
+            hs.push(
+                d.handle_ref(py, k)
+                    .ok_or_else(|| PyRuntimeError::new_err("a listed node lost its handle"))?,
+            );
             parent.push(up);
             match &p.xform {
-                Some(x) => { has.push(true); local.extend(x.doubles()); }
+                Some(x) => {
+                    has.push(true);
+                    local.extend(x.doubles());
+                }
                 None => {
                     has.push(false);
-                    for j in 0..16 { local.push(if j % 5 == 0 { 1.0 } else { 0.0 }); }
+                    for j in 0..16 {
+                        local.push(if j % 5 == 0 { 1.0 } else { 0.0 });
+                    }
                 }
             }
             uids.push(p.uid.clone());
-            meshes.push(p.definition.as_ref().map(|def| def.0.get().geometry.clone_ref(py)));
+            meshes.push(
+                p.definition
+                    .as_ref()
+                    .map(|def| def.0.get().geometry.clone_ref(py)),
+            );
             // As the handle reads it: False, True or a mode ("mesh").
             billboard.push(match p.billboard.as_deref() {
-                None | Some(Value::None) => pyo3::types::PyBool::new(py, false).to_owned().into_any().unbind(),
+                None | Some(Value::None) => pyo3::types::PyBool::new(py, false)
+                    .to_owned()
+                    .into_any()
+                    .unbind(),
                 Some(v) => v.to_py(py)?.unbind(),
             });
             let own_material = match &p.material {
@@ -2863,33 +3634,81 @@ fn doc_render_rows<'py>(
             let tag = tagged(&p.tag);
             let row = if up < 0 {
                 let layer = tag.clone();
-                let mat = match own_material { Some(v) => new_material(v)?, None => -1 };
-                let forced = if blocked.contains(shown(&layer, default_tag)) { layer.clone() } else { None };
+                let mat = match own_material {
+                    Some(v) => new_material(v)?,
+                    None => -1,
+                };
+                let forced = if blocked.contains(shown(&layer, default_tag)) {
+                    layer.clone()
+                } else {
+                    None
+                };
                 let invisible_here = invisible.contains(shown(&layer, default_tag));
-                Up { flag_hidden: p.hidden || invisible_here, obj: p.hidden, filtered: invisible_here,
-                     layer, tag: tag.clone(), forced, hidden: p.hidden, material: mat, root: i }
+                Up {
+                    flag_hidden: p.hidden || invisible_here,
+                    obj: p.hidden,
+                    filtered: invisible_here,
+                    layer,
+                    tag: tag.clone(),
+                    forced,
+                    hidden: p.hidden,
+                    material: mat,
+                    root: i,
+                }
             } else {
                 let a = &ups[up as usize];
                 let parent_tag = a.tag.clone();
-                let layer = a.forced.clone().or_else(|| real(&p.tag)).or_else(|| a.layer.clone())
-                    .or(parent_tag).or_else(|| tag.clone());
+                let layer = a
+                    .forced
+                    .clone()
+                    .or_else(|| real(&p.tag))
+                    .or_else(|| a.layer.clone())
+                    .or(parent_tag)
+                    .or_else(|| tag.clone());
                 let hidden = a.hidden || p.hidden;
-                let mat = match own_material { Some(v) => new_material(v)?, None => a.material };
+                let mat = match own_material {
+                    Some(v) => new_material(v)?,
+                    None => a.material,
+                };
                 let forced = a.forced.clone().or_else(|| {
-                    layer.as_ref().filter(|l| blocked.contains(l.as_str())).cloned()
+                    layer
+                        .as_ref()
+                        .filter(|l| blocked.contains(l.as_str()))
+                        .cloned()
                 });
                 let invisible_here = invisible.contains(shown(&layer, default_tag));
-                Up { flag_hidden: hidden || invisible_here || a.flag_hidden, obj: p.hidden || a.obj,
-                     filtered: invisible_here || a.filtered, layer, tag: tag.clone(), forced, hidden,
-                     material: mat, root: a.root }
+                Up {
+                    flag_hidden: hidden || invisible_here || a.flag_hidden,
+                    obj: p.hidden || a.obj,
+                    filtered: invisible_here || a.filtered,
+                    layer,
+                    tag: tag.clone(),
+                    forced,
+                    hidden,
+                    material: mat,
+                    root: a.root,
+                }
             };
-            flags.push(u32::from(row.flag_hidden) | if row.obj { 16 } else { 0 } | if row.filtered { 32 } else { 0 });
+            flags.push(
+                u32::from(row.flag_hidden)
+                    | if row.obj { 16 } else { 0 }
+                    | if row.filtered { 32 } else { 0 },
+            );
             // The tag the default faces take: its own, else its top-level
             // object's (a linked file's stand-in counts as none).
-            let paint = real(&row.layer).or_else(|| if up < 0 { None } else { real(&ups[row.root].layer) });
+            let paint = real(&row.layer).or_else(|| {
+                if up < 0 {
+                    None
+                } else {
+                    real(&ups[row.root].layer)
+                }
+            });
             paint_layer.push(match paint {
                 None => -1,
-                Some(t) => *name_ix.entry(t.clone()).or_insert_with(|| { names.push(t); names.len() as i64 - 1 }),
+                Some(t) => *name_ix.entry(t.clone()).or_insert_with(|| {
+                    names.push(t);
+                    names.len() as i64 - 1
+                }),
             });
             material.push(row.material);
             ups.push(row);
@@ -2903,7 +3722,10 @@ fn doc_render_rows<'py>(
     let out = pyo3::types::PyDict::new(py);
     out.set_item("handles", PyList::new(py, hs)?)?;
     out.set_item("parent", numpy::PyArray1::from_vec(py, parent))?;
-    out.set_item("local", numpy::PyArray1::from_vec(py, local).reshape([n, 16])?)?;
+    out.set_item(
+        "local",
+        numpy::PyArray1::from_vec(py, local).reshape([n, 16])?,
+    )?;
     out.set_item("has", numpy::PyArray1::from_vec(py, has))?;
     out.set_item("flags", numpy::PyArray1::from_vec(py, flags))?;
     out.set_item("uid", uids)?;
@@ -2945,15 +3767,25 @@ fn doc_tree<'py>(
         for (m, ptr, _) in &members {
             d.set_handle(*m, *ptr);
         }
-        if let Some((m, _, _)) = members.iter().find(|m| d.node(m.0).is_none_or(|n| n.kind != Kind::Placement)) {
-            return Err(PyTypeError::new_err(format!("not a document placement: {m:#x}")));
+        if let Some((m, _, _)) = members
+            .iter()
+            .find(|m| d.node(m.0).is_none_or(|n| n.kind != Kind::Placement))
+        {
+            return Err(PyTypeError::new_err(format!(
+                "not a document placement: {m:#x}"
+            )));
         }
         let mut stack: Vec<(Key, i64)> = members.iter().rev().map(|m| (m.0, -1)).collect();
         while let Some((k, up)) = stack.pop() {
             let Some(n) = d.node(k) else { continue };
-            let super::Data::Placement(p) = &n.data else { continue };
+            let super::Data::Placement(p) = &n.data else {
+                continue;
+            };
             let i = hs.len() as i64;
-            hs.push(d.handle_ref(py, k).ok_or_else(|| PyRuntimeError::new_err("a listed node lost its handle"))?);
+            hs.push(
+                d.handle_ref(py, k)
+                    .ok_or_else(|| PyRuntimeError::new_err("a listed node lost its handle"))?,
+            );
             parent.push(up);
             hidden.push(p.hidden);
             match &p.xform {
@@ -2997,8 +3829,20 @@ fn doc_parent_mode(mode: u8) -> u8 {
 fn doc_stats(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let (live, slots, free, depth, serial, owned) = {
         let d = lock();
-        let owned = d.slots.iter().filter_map(|s| s.node.as_ref()).filter(|n| n.strong.is_some()).count();
-        (d.live, d.slots.len(), d.free.len(), d.depth(), d.serial, owned)
+        let owned = d
+            .slots
+            .iter()
+            .filter_map(|s| s.node.as_ref())
+            .filter(|n| n.strong.is_some())
+            .count();
+        (
+            d.live,
+            d.slots.len(),
+            d.free.len(),
+            d.depth(),
+            d.serial,
+            owned,
+        )
     };
     let out = PyDict::new(py);
     out.set_item("roots", live[Kind::Root as usize])?;
@@ -3044,16 +3888,21 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(doc_set_many, m)?)?;
     m.add_function(wrap_pyfunction!(doc_parent_mode, m)?)?;
     m.add_function(wrap_pyfunction!(doc_set_track_hook, m)?)?;
+    m.add_function(wrap_pyfunction!(doc_set_suspects, m)?)?;
+    m.add_function(wrap_pyfunction!(doc_attr_value, m)?)?;
     m.add_function(wrap_pyfunction!(doc_set_refill_hook, m)?)?;
     m.add_function(wrap_pyfunction!(doc_attr_changed, m)?)?;
     m.add_function(wrap_pyfunction!(doc_attr_patch, m)?)?;
     m.add_class::<super::anchor::ElementAnchor>()?;
-    m.add_function(wrap_pyfunction!(super::unlink::fill,m)?)?;
+    m.add_function(wrap_pyfunction!(super::unlink::fill, m)?)?;
     super::snapshot_steps::register(m)?;
     super::inspector_steps::register(m)?;
     super::metadata_steps::register(m)?;
     super::history_support::register(m)?;
     m.add_class::<super::history::DocumentHistory>()?;
+    m.add_class::<super::feed::records::FeedMeshRecord>()?;
+    m.add_class::<super::feed::records::FeedStepRecord>()?;
+    m.add_class::<super::feed::history::HistoryFeed>()?;
     m.add_class::<super::feed::FeedReaders>()?;
     m.add_class::<DocRecord>()?;
     m.add_class::<DocAttr>()?;
