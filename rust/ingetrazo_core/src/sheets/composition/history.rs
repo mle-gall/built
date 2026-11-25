@@ -24,10 +24,10 @@ pub(super) fn install(m: &Bound<PyModule>) -> PyResult<()> {
                 methods!(ns,py;"__init__"=>init_compound,"journalled"=>journalled_children,"restore_preview"=>restore_children,"do"=>apply_children,"undo"=>undo_children)
             }
             "AddItemCommand" => {
-                methods!(ns,py;"__init__"=>init_item,"journalled"=>sheet_record,"do"=>append,"undo"=>restore_removed)
+                methods!(ns,py;"__init__"=>init_item,"_list"=>item_list,"journalled"=>sheet_record,"do"=>append,"undo"=>restore_removed)
             }
             "RemoveItemCommand" => {
-                methods!(ns,py;"__init__"=>init_item,"journalled"=>sheet_record,"do"=>remove,"undo"=>undo_remove)
+                methods!(ns,py;"__init__"=>init_item,"_list"=>item_list,"journalled"=>sheet_record,"do"=>remove,"undo"=>undo_remove)
             }
             "EditItemCommand" => {
                 methods!(ns,py;"__init__"=>init_edit,"journalled"=>journalled_edit,"restore_preview"=>restore_preview,"do"=>apply_edit,"undo"=>undo_edit)
@@ -103,12 +103,16 @@ fn is_record(item: &Obj) -> PyResult<bool> {
 fn sheet_record(cmd: &Obj) -> PyResult<bool> {
     is_record(&cmd.getattr("comp")?)
 }
+#[pyfunction]
+fn item_list<'p>(cmd: &Obj<'p>) -> PyResult<Option<Obj<'p>>> {
+    edit::sheet_container(&cmd.getattr("comp")?, &cmd.getattr("item")?)
+}
 fn objects<'p>(cmd: &Obj<'p>) -> PyResult<(Obj<'p>, Obj<'p>, Obj<'p>)> {
-    let comp = cmd.getattr("comp")?;
-    let item = cmd.getattr("item")?;
-    let ls = edit::sheet_container(&comp, &item)?
-        .unwrap_or_else(|| cmd.py().None().into_bound(cmd.py()));
-    Ok((comp, item, ls))
+    Ok((
+        cmd.getattr("comp")?,
+        cmd.getattr("item")?,
+        cmd.call_method0("_list")?,
+    ))
 }
 #[pyfunction]
 fn append(cmd: &Obj) -> PyResult<()> {

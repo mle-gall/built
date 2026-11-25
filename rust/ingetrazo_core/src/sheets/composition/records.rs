@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 use super::*;
-use crate::file_sheet::{igz_archive_sheet, igz_load_sheet, ITEMS};
+use crate::file_sheet::{igz_archive_sheet, load_sheet, ITEMS};
 
 pub(super) fn install_methods(name: &str, ns: &Bound<PyDict>) -> PyResult<()> {
     let py = ns.py();
@@ -10,7 +10,7 @@ pub(super) fn install_methods(name: &str, ns: &Bound<PyDict>) -> PyResult<()> {
             ns.set_item(
                 "from_dict",
                 py.import("builtins")?
-                    .call_method1("staticmethod", (wrap_pyfunction!(igz_load_sheet, py)?,))?,
+                    .call_method1("classmethod", (wrap_pyfunction!(from_dict, py)?,))?,
             )?;
         }
         "MarcoVista" => {
@@ -23,6 +23,10 @@ pub(super) fn install_methods(name: &str, ns: &Bound<PyDict>) -> PyResult<()> {
         _ => {}
     }
     Ok(())
+}
+#[pyfunction]
+fn from_dict<'p>(cls: &Obj<'p>, d: &Bound<'p, PyDict>) -> PyResult<Obj<'p>> {
+    load_sheet(cls, d)
 }
 #[pyfunction]
 fn page_size_mm(sheet: &Obj) -> PyResult<(f64, f64)> {

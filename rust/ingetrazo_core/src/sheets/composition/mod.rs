@@ -88,7 +88,9 @@ pub(crate) fn install(m: &Bound<'_, PyModule>) -> PyResult<()> {
         ns.set_item("__module__", "core.composition")?;
         ns.set_item("__annotations__", &annotations)?;
         for entry in fields.try_iter()? {
-            let (k, t, v): (String, String, Obj) = entry?.extract()?;
+            let [k, t, v]: [Obj; 3] = entry?.extract()?;
+            let k = k.extract::<String>()?;
+            let t = t.extract::<String>()?;
             annotations.set_item(&k, t)?;
             let value = if v.is_instance_of::<PyList>() || v.is_instance_of::<PyDict>() {
                 let kw = PyDict::new(py);
