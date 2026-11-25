@@ -33,14 +33,7 @@ fn cell(p: DVec3) -> [i64; 3] {
 type PointKey = [u64; 3];
 type RingKey = BTreeSet<PointKey>;
 fn key(p: DVec3) -> PointKey {
-    p.to_array().map(|v| {
-        let n = (v * 10000.).round_ties_even();
-        if n == 0. {
-            0
-        } else {
-            n.to_bits()
-        }
-    })
+    crate::store::commands::cell(p.to_array())
 }
 pub(super) fn ring_key(r: &Ring) -> RingKey {
     r.iter().map(|&p| key(p)).collect()

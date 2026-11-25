@@ -216,14 +216,7 @@ fn copy_part<'p>(faces: &Obj<'p>, edges: &Obj<'p>) -> PyResult<Obj<'p>> {
     Ok(mesh)
 }
 fn name_key(p: [f64; 3]) -> [u64; 3] {
-    p.map(|v| {
-        let r = (v * 1e5).round_ties_even();
-        if r == 0. {
-            0
-        } else {
-            r.to_bits()
-        }
-    })
+    super::commands::rounded_cell::<5>(p)
 }
 fn generic(name: &str) -> bool {
     let Some((base, i)) = name.rsplit_once(' ') else {

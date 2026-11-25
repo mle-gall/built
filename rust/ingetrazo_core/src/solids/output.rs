@@ -15,7 +15,7 @@ fn vertices<'p>(py: Python<'p>, ring: &Ring) -> PyResult<Bound<'p, PyList>> {
     PyList::new(py, ring.iter().copied().map(Vec3::from))
 }
 fn rounded(p: DVec3) -> [u64; 3] {
-    point_key((p * 1e7).round() / 1e7)
+    crate::store::commands::rounded_cell::<7>(p.to_array())
 }
 fn simplify(polygons: &mut [Polygon]) {
     let mut straight = HashMap::new();

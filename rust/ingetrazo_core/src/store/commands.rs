@@ -23,12 +23,17 @@ pub(crate) fn supplied_cell(p: Point) -> Cell {
 /// multiplication itself can change a rounding decision, round the original
 /// binary64 value directly to four decimal places.
 pub(crate) fn cell(point: Point) -> Cell {
+    rounded_cell::<4>(point)
+}
+
+pub(crate) fn rounded_cell<const DIGITS: usize>(point: Point) -> Cell {
+    let scale = 10_f64.powi(DIGITS as i32);
     point.map(|x| {
-        let scaled = x * 10000.;
+        let scaled = x * scale;
         let rounded = if scaled.abs() >= (1u64 << 52) as f64 || scaled.fract().abs() == 0.5 {
-            format!("{x:.4}").parse::<f64>().unwrap()
+            format!("{x:.DIGITS$}").parse::<f64>().unwrap()
         } else {
-            scaled.round_ties_even() / 10000.
+            scaled.round_ties_even() / scale
         };
         if rounded == 0. {
             0
