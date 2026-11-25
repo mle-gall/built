@@ -184,6 +184,6 @@ def test_the_windows_build_ships_truststore():
     root = Path(__file__).resolve().parent.parent
     workflow = (root / ".github/workflows/build-windows.yml").read_text(
         encoding="utf-8")
-    spec = (root / "ingetrazo.spec").read_text(encoding="utf-8")
+    spec = (root / "packaging/native.spec").read_text(encoding="utf-8")
     assert "truststore" in workflow
     assert "'truststore'" in spec

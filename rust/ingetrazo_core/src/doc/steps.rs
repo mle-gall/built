@@ -9,10 +9,9 @@
 //! `undo` outside History replays the transaction the step opened for itself.
 //! What a step does beside the document (the selection, the scene's version
 //! counters) is one of a few shared host effects.
-use crate::math::{xyz, Matrix4, Vec3};
+use crate::math::{xyz, Vec3};
 use crate::presentation as present;
 use crate::reference_layers as refs;
-use glam::{DMat4, DVec3};
 use super::py::{run_refills, PyTransaction};
 use super::{drain_pending, lock, Key, Trash};
 use pyo3::exceptions::{PyAttributeError, PyRuntimeError};
@@ -323,18 +322,9 @@ fn list<'py>(items: &Obj<'py>) -> PyResult<Obj<'py>> {
     Ok(PyList::new(items.py(), items.try_iter()?.collect::<PyResult<Vec<_>>>()?)?.into_any())
 }
 
-/// The rigid rotation about `centre`/`axis` that the Python helper
-/// `rotation_matrix` built, operation for operation.
+/// The rigid rotation about `centre`/`axis`, as a `Matrix4`.
 pub(super) fn rotation<'py>(py: Python<'py>, centre: &Obj<'py>, axis: &Obj<'py>, deg: f64) -> PyResult<Obj<'py>> {
-    let c = xyz(centre)?;
-    let a = xyz(axis)?.normalize_or_zero().normalize_or_zero();
-    let mut m = DMat4::IDENTITY;
-    m *= DMat4::from_translation(c);
-    if a != DVec3::ZERO {
-        m *= DMat4::from_axis_angle(a, deg.to_radians());
-    }
-    m *= DMat4::from_translation(-c);
-    Ok(Bound::new(py, Matrix4::from(m))?.into_any())
+    super::transform_math::rotation_matrix(py, centre, axis, deg)
 }
 
 #[pymethods]
@@ -743,11 +733,8 @@ fn run_rotate_images(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResul
 }
 
 fn run_scale_images(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
-    // The grip box's frame comes from `core.axes`; the matrix is the
-    // Python helper's, as the tools' previews build it.
-    let m = py
-        .import("core.history")?
-        .call_method1("scale_matrix", (s.arg(py, 1), s.arg(py, 2), s.arg(py, 3)))?;
+    let axes = s.arg(py, 3);
+    let m = super::transform_math::scale_matrix(py, &s.arg(py, 1), &s.arg(py, 2), Some(&axes))?;
     refs::transform_images(s.items(py, 0)?, &m)?;
     version(scene)
 }

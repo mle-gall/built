@@ -320,7 +320,7 @@ impl MatrixGesture {
         {
             return Ok(());
         }
-        let matrix = view.py().import("core.history")?.call_method1(
+        let matrix = view.py().import("ingetrazo_core")?.call_method1(
             "scale_matrix",
             (tool.getattr("_anchor")?, factors, tool.getattr("_axes")?),
         )?;
@@ -340,7 +340,7 @@ impl MatrixGesture {
         angle: f64,
     ) -> PyResult<()> {
         let scene = view.getattr("scene")?;
-        let matrix = view.py().import("core.history")?.call_method1(
+        let matrix = view.py().import("ingetrazo_core")?.call_method1(
             "rotation_matrix",
             (
                 tool.getattr("start_point")?,

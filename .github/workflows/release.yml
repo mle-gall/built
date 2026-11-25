@@ -166,7 +166,7 @@ jobs:
 
       - name: Build the PyInstaller bundle
         run: |
-          ./venv/bin/python -m PyInstaller --noconfirm ingetrazo.spec
+          ./venv/bin/python -m PyInstaller --noconfirm packaging/native.spec
           PYO3_PYTHON="$PWD/venv/bin/python" packaging/install-native-launcher.sh dist/ingetrazo
           python3 scripts/isolated_launch.py dist/ingetrazo/built --check
 
