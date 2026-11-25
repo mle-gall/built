@@ -91,7 +91,7 @@ def test_read_only_member_rejects_edits(host, tmp_path):
 
 
 def test_session_restores_order_editable_and_camera(tmp_path):
-    from app_shell import files
+    from ingetrazo_render import shell_files as files
     from app_shell.host import Host
     path = three_member_project(tmp_path / "job")
     host = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
@@ -144,7 +144,8 @@ def test_opening_an_igzproj_converts_it_in_place(host, tmp_path):
 
 
 def test_open_path_uses_the_native_project_session(host, tmp_path):
-    from app_shell import files, project
+    from app_shell import project
+    from ingetrazo_render import shell_files as files
     path = three_member_project(tmp_path / "job")
     assert files.open_path(host.window, path)
     assert Path(project.session(host.window).path) == path.resolve()

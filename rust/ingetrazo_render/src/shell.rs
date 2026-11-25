@@ -54,5 +54,7 @@ pub fn register_shell(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_function(f)?;
     }
     // The verbs read DOCUMENT_CAMERA_FIELDS, survey_note and dxf_failure.
-    crate::window_commands::register(m)
+    crate::window_commands::register(m)?;
+    // Documents: ModelClipboard, cold_start_document, request_close.
+    crate::shell_files::register(m)
 }

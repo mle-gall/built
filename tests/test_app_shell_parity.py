@@ -74,7 +74,7 @@ def test_save_as_built_clears_dirty_and_names_the_window(host, tmp_path):
     st = host.state()
     assert target.is_file() and st["path"] == str(target) and not st["dirty"]
     assert st["documents"] == ["saved.built"]
-    from app_shell import files
+    from ingetrazo_render import shell_files as files
     from formats import built
     assert built.is_built(target)
     assert str(target.resolve()) in [str(Path(p).resolve()) for p in host.window._recent_paths()]

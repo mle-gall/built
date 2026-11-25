@@ -482,7 +482,7 @@ impl App {
                 }
             }
             // Close Window (⇧⌘W): the window in front, after asking about
-            // its unsaved work (app_shell.files: the sheet, answered
+            // its unsaved work (shell_files.rs: the sheet, answered
             // through the modal pump). The last window closed ends the app.
             "close" => {
                 if let Some(id) = front {

@@ -116,7 +116,7 @@ def test_preferences_turn_it_back_on(win):
 
 
 def test_a_document_already_open_is_not_asked_about(win, tmp_path):
-    from app_shell import files
+    from ingetrazo_render import shell_files as files
     from core.scene import Scene
     from formats import igz
     from ingetrazo_core import Vec3

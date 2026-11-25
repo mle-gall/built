@@ -84,7 +84,8 @@ class Host:
         from views.document_controller import DocumentController
         from app_shell.view import ShellView
         from app_shell.window import new_shell_window
-        from app_shell import files, modal
+        from app_shell import modal
+        from ingetrazo_render import shell_files as files
         from ingetrazo_core import WindowInput
         self.input_state = WindowInput()
         self.window = new_shell_window(self)
@@ -297,7 +298,8 @@ class Host:
     def adopt(self, token):
         """This new window was asked for by ``token`` (app_shell.windows):
         the start page for New Window, or the project moved here."""
-        from app_shell import files, windows
+        from app_shell import windows
+        from ingetrazo_render import shell_files as files
         self._front()
         what = windows.take(token)
         if what is None:
@@ -360,7 +362,7 @@ class Host:
     def open_path(self, path):
         """A file from the command line, Finder (Open With, a double-click,
         the Dock), a drop on the window, or another `built` handing over."""
-        from app_shell import files
+        from ingetrazo_render import shell_files as files
         self._front()
         t0 = time.perf_counter()
         ok = bool(self._guard("open", files.open_path, self.window, Path(path)))
@@ -373,13 +375,13 @@ class Host:
     open = open_path
 
     def cold_start(self):
-        from app_shell import files
+        from ingetrazo_render import shell_files as files
         self._guard("cold start", files.cold_start, self.window)
 
     def request_close(self):
         """Close the window / quit: True once nothing unsaved stands in the
         way (the sheet asked, through the modal pump)."""
-        from app_shell import files
+        from ingetrazo_render import shell_files as files
         self._front()
         ok = self._guard("close", files.request_close, self.window)
         return bool(ok)

@@ -139,7 +139,7 @@ fn copy_selection(v: &Obj, publish: bool) -> PyResult<bool> {
     data.set_item("ref", vec3(py, lo)?)?;
     v.setattr("clipboard", &data)?;
     if publish {
-        py.import("app_shell.files")?
+        py.import("ingetrazo_render.shell_files")?
             .call_method1("publish_clipboard", (v.call_method0("window")?, data))?;
     }
     Ok(true)

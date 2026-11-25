@@ -91,7 +91,7 @@ def test_odm_uses_survey_altitude_and_keeps_a_missing_atlas(host, tmp_path, monk
 def test_odm_failure_or_cancel_preserves_unlocated_model(host, tmp_path, monkeypatch, outcome):
     from tests.test_photomesh import _write_odm_tree
     from ingetrazo_render import chrome_dialogs
-    from app_shell.files import NullBar
+    from ingetrazo_render.shell_files import NullBar
     pick(monkeypatch, _write_odm_tree(tmp_path))
     warnings = []
     monkeypatch.setattr(chrome_dialogs, "critical", lambda *args: warnings.append(args))
