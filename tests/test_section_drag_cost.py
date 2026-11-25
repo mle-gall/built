@@ -130,7 +130,7 @@ def test_the_heights_are_kept_only_for_the_same_arrays_and_normal():
 def _viewport_with_a_cut():
     import os
     from core.history import History, PlaceSectionPlaneCommand
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     from tests.test_pushpull_ux import _cube
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)

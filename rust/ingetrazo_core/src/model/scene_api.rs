@@ -60,7 +60,7 @@ fn cache(py: Python<'_>) -> PyResult<&Cache> {
         let mesh = py.import("ingetrazo_core.mesh")?;
         Ok(Cache {
             group: py.import("core.group")?.getattr("Group")?.unbind(),
-            element_set: py.import("core.element_set")?.getattr("ElementSet")?.unbind(),
+            element_set: py.import("ingetrazo_core")?.getattr("ElementSet")?.unbind(),
             effective_visible: native(py)?.getattr("tag_edits")?.getattr("effective_visible")?.unbind(),
             edge: mesh.getattr("Edge")?.unbind(),
             face: mesh.getattr("Face")?.unbind(),
@@ -959,7 +959,7 @@ fn build_scene<'py>(m: &Bound<'py, PyModule>) -> PyResult<Obj<'py>> {
     let dict = builtins.getattr("dict")?;
     let object = builtins.getattr("object")?;
     let mesh = py.import("ingetrazo_core.mesh")?.getattr("Mesh")?;
-    let element_set = py.import("core.element_set")?.getattr("ElementSet")?;
+    let element_set = py.import("ingetrazo_core")?.getattr("ElementSet")?;
     let new_root = py.import("core.doc_model")?.getattr("new_scene_root")?;
     let fld = |kw: &[(&str, Obj<'py>)]| -> PyResult<Obj<'py>> {
         let d = PyDict::new(py);
@@ -1153,8 +1153,8 @@ pub(crate) fn install(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("ROOT_TABLES", PyTuple::new(py, ROOT_TABLES)?)?;
     // The factories of the display style, shadows and animation a new scene
     // (and `clear`, `scene_clear.rs`) starts with.
-    m.add("_make_style", factory(py, |py| Ok(py.import("core.style")?.getattr("Style")?.call0()?.unbind()))?)?;
-    m.add("_make_shadows", factory(py, |py| Ok(py.import("core.sun")?.getattr("ShadowSettings")?.call0()?.unbind()))?)?;
+    m.add("_make_style", factory(py, |py| Ok(py.import("ingetrazo_core.style")?.getattr("Style")?.call0()?.unbind()))?)?;
+    m.add("_make_shadows", factory(py, |py| Ok(py.import("ingetrazo_core.sun")?.getattr("ShadowSettings")?.call0()?.unbind()))?)?;
     m.add("_make_animation", factory(py, |py| Ok(native(py)?.getattr("SceneAnimation")?.call0()?.unbind()))?)?;
     let scene = SCENE_CLASS.get_or_try_init(py, || -> PyResult<Py<PyAny>> { Ok(build_scene(m)?.unbind()) })?;
     m.add("Scene", scene.bind(py))?;

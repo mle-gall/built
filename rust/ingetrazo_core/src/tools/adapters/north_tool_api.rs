@@ -35,7 +35,7 @@ fn pending_deg<'py>(a: &Args<'py>) -> Reply<'py> {
 fn host_north_angle<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let vp = a.get_item(1)?;
-    let scene_north_deg = imported(py, "core.sun")?.getattr("scene_north_deg")?;
+    let scene_north_deg = imported(py, "ingetrazo_core.sun")?.getattr("scene_north_deg")?;
     scene_north_deg.call1((optional(&vp, "scene")?,))
 }
 fn host_north_done<'py>(a: &Args<'py>) -> Reply<'py> {
@@ -102,7 +102,7 @@ fn rubber_band_lines<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let module = imported(py, "tools.north_host")?;
     let tool = a.get_item(0)?;
-    let scene_north_deg = imported(py, "core.sun")?.getattr("scene_north_deg")?;
+    let scene_north_deg = imported(py, "ingetrazo_core.sun")?.getattr("scene_north_deg")?;
     if tool.getattr("_during")?.is_none() {
         tool.getattr("_machine")?.call_method1(
             "set",

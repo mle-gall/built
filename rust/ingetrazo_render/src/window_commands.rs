@@ -343,7 +343,7 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
         "prompt_section_name" => {
             let plane = a.req(0, "plane")?;
             let automatic = a.kw_or("automatic", true)?.is_truthy()?;
-            let asked = py.import("core.settings")?.call_method0("settings")?.call_method1("value", ("section/ask_name", "1"))?;
+            let asked = py.import("ingetrazo_core.settings")?.call_method0("settings")?.call_method1("value", ("section/ask_name", "1"))?;
             if automatic && asked.str()?.to_string() == "0" {
                 return nothing();
             }
@@ -359,7 +359,7 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
             if !sc.getattr("selection")?.is_truthy()? {
                 return done!(view.call_method1("flash_status", (tr(py, "Select faces, edges or groups to soften")?, 4000)));
             }
-            let saved = py.import("core.settings")?.call_method0("settings")?.call_method1("value", ("tools/soften_angle", 30.0))?;
+            let saved = py.import("ingetrazo_core.settings")?.call_method0("settings")?.call_method1("value", ("tools/soften_angle", 30.0))?;
             let (w, v, at) = (win.clone().unbind(), view.clone().unbind(), sc.unbind());
             let apply = func(py, move |py, args| {
                 let (win, view) = (w.bind(py), v.bind(py));
@@ -388,7 +388,7 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
         }
 
         // ---- help -----------------------------------------------------------------------
-        "_on_documentation" => done!(py.import("core.desktop_open")?.call_method1("open_url", ("https://ingetrazo-docs.pages.dev/",))),
+        "_on_documentation" => done!(py.import("ingetrazo_core.desktop_open")?.call_method1("open_url", ("https://ingetrazo-docs.pages.dev/",))),
         "_on_get_models" => {
             let text = format!(
                 "{}<br><br><b>Poly Haven</b> — <a href='https://polyhaven.com'>polyhaven.com</a> {}<br><b>ambientCG</b> — <a href='https://ambientcg.com'>ambientcg.com</a> {}<br><b>Sketchfab</b> — <a href='https://sketchfab.com'>sketchfab.com</a> {}",

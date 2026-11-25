@@ -18,7 +18,7 @@ from ingetrazo_core import Vec3 as QVector3D, Vec4 as QVector4D
 
 from core.camera import (OrbitCamera, focal_from_fov,  # noqa: E402
                          fov_from_focal, frame_rect)
-from core.saved_views import SavedView  # noqa: E402
+from ingetrazo_core.saved_views import SavedView  # noqa: E402
 
 
 def _ndc(cam, p: QVector3D):
@@ -349,7 +349,7 @@ def test_export_image_menu_crops_to_the_frame(monkeypatch, tmp_path, native_host
 # ---- Basic and advanced ----------------------------------------------------------
 
 def test_basic_settings_first_advanced_on_request(native_host):
-    from core.settings import settings
+    from ingetrazo_core.settings import settings
     win = native_host.window
     settings().remove("camera_settings/advanced")
     inspector = open_camera(win)

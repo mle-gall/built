@@ -30,7 +30,7 @@ fn billboard_person(
     let path = if image.is_absolute() {
         image
     } else {
-        py.import("core.paths")?
+        py.import("ingetrazo_core.paths")?
             .call_method0("app_root")?
             .extract::<PathBuf>()?
             .join("resources/components")
@@ -175,7 +175,7 @@ fn new_document_command(win: &Bound<'_, PyAny>, add_tab: bool) -> PyResult<()> {
     vp.getattr("inference")?.call_method0("reset")?;
     let args = PyDict::new(py);
     args.set_item("untitled", win.getattr("_doc")?.getattr("untitled_no")?)?;
-    py.import("core.autosave")?
+    py.import("ingetrazo_core.autosave")?
         .getattr("clear")?
         .call((win.getattr("_current_path")?,), Some(&args))?;
     win.setattr("_autosaved_version", py.None())?;

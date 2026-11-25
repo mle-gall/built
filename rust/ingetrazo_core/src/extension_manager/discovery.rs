@@ -126,7 +126,7 @@ fn installed_candidates(py: Python, directory: PathBuf) -> PyResult<Vec<Candidat
 
 fn bundled(py: Python) -> PyResult<PathBuf> {
     Ok(py
-        .import("core.paths")?
+        .import("ingetrazo_core.paths")?
         .call_method0("app_root")?
         .extract::<PathBuf>()?
         .join("plugins"))
@@ -177,7 +177,7 @@ fn note_failure(py: Python, what: &str, exc_info: Option<&Bound<'_, PyTuple>>) -
         .call_method1("strftime", ("%Y-%m-%d %H:%M:%S",))?
         .extract()?;
     let root = py
-        .import("core.paths")?
+        .import("ingetrazo_core.paths")?
         .call_method0("user_log_dir")?
         .extract::<PathBuf>()?;
     if let Ok(mut f) = fs::OpenOptions::new()

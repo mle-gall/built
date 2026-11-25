@@ -51,7 +51,7 @@ def test_push_retains_selection_and_history():
 
 
 def test_annotations_survive_a_push():
-    from core.annotation_anchor import Attachment
+    from ingetrazo_core.annotation_anchor import Attachment
     from core.textlabel import TextLabel
     scene = Scene()
     hist = History(scene)

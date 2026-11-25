@@ -27,7 +27,7 @@ def _contrast(before, after) -> int:
 
 
 def test_an_edge_under_a_face_is_fainter_than_one_in_the_open(native_gpu_host):
-    from core.style import style_by_name
+    from ingetrazo_core.style import style_by_name
     vp = native_gpu_host.viewport
     scene = vp.scene
     # A lid over the left half (x < 0), two metres up; nothing on the

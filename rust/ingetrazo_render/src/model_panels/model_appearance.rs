@@ -71,7 +71,7 @@ pub(crate) fn append<'p>(
         return Ok(());
     }
     let style = active(env)?;
-    let module = py.import("core.style")?;
+    let module = py.import("ingetrazo_core.style")?;
     let rows = PyList::empty(py);
     let names = PyList::empty(py);
     for coll in [
@@ -97,7 +97,7 @@ pub(crate) fn append<'p>(
         Some(func(py, |py, a| {
             let env = a.get_item(0)?;
             let style = py
-                .import("core.style")?
+                .import("ingetrazo_core.style")?
                 .call_method1("style_by_name", (a.get_item(1)?,))?;
             if !style.is_none() {
                 let win = env.getattr("win")?;
@@ -152,7 +152,7 @@ pub(crate) fn append<'p>(
             let env = a.get_item(0)?;
             let style = active(&env)?;
             let rgb = if k == "back_color" {
-                py.import("core.style")?
+                py.import("ingetrazo_core.style")?
                     .call_method1("effective_back_color", (style, env.getattr("scene")?))?
             } else {
                 style.getattr(k)?
@@ -203,7 +203,7 @@ pub(crate) fn append<'p>(
                         .filter(|s| !s.trim().is_empty())
                     {
                         style.bind(py).setattr("name", name.trim())?;
-                        let library = py.import("core.style")?;
+                        let library = py.import("ingetrazo_core.style")?;
                         if let Err(error) =
                             library.call_method1("save_user_style", (style.bind(py),))
                         {
@@ -260,7 +260,7 @@ pub(crate) fn append<'p>(
                 "press",
                 func(py, |py, a| {
                     let env = a.get_item(0)?;
-                    let lib = py.import("core.style")?;
+                    let lib = py.import("ingetrazo_core.style")?;
                     if lib
                         .call_method1("delete_user_style", (active(&env)?.getattr("name")?,))?
                         .is_truthy()?

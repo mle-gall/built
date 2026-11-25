@@ -28,11 +28,11 @@ def main():
     with tempfile.TemporaryDirectory() as cache:
         os.environ["INGETRAZO_TEXTURE_CACHE"] = cache
         os.environ["BUILT_SETTINGS_DIR"] = cache
-        from core.settings import use_native
+        from ingetrazo_core.settings import use_native
         use_native(cache)
         from core import group, layers
         from core.scene import Scene
-        from formats import igz, skp
+        from ingetrazo_core.formats import igz, skp
 
         # The document includes freshly generated group and tag IDs in
         # addition to stable file identities. Make only the allocators repeatable.

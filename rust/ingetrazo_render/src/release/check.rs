@@ -52,7 +52,7 @@ fn is_newer(py: Python<'_>, remote: &str, local: Option<&str>) -> PyResult<bool>
         Some(s) => s,
         None => {
             installed = py
-                .import("core.version")?
+                .import("ingetrazo_core.version")?
                 .getattr("__version__")?
                 .extract::<String>()?;
             &installed
@@ -111,7 +111,7 @@ fn fetch_latest(py: Python<'_>, timeout: f64) -> PyResult<Release> {
         let headers = PyDict::new(py);
         headers.set_item(
             "User-Agent",
-            py.import("core.version")?.getattr("USER_AGENT")?,
+            py.import("ingetrazo_core.version")?.getattr("USER_AGENT")?,
         )?;
         headers.set_item("Accept", "application/vnd.github+json")?;
         let kw = PyDict::new(py);

@@ -129,7 +129,7 @@ fn _point_in_face_solid(face: &Obj<'_>, point: &Obj<'_>) -> PyResult<bool> {
 #[pyfunction]
 fn __getattr__<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
     match name {
-        "Face" | "Edge" => py.import("core.geometry")?.getattr(name),
+        "Face" | "Edge" => py.import("ingetrazo_core.geometry")?.getattr(name),
         _ => Err(pyo3::exceptions::PyAttributeError::new_err(name.to_owned())),
     }
 }

@@ -45,7 +45,7 @@ fn _axis_tuples(m: &Module<'_>) -> PyResult<((f64, f64, f64), (f64, f64, f64), (
 fn work_axis(m: &Module<'_>, forward: &Obj<'_>, threshold: f64) -> PyResult<Option<P>> {
     let world = m
         .py()
-        .import("core.axes")?
+        .import("ingetrazo_core.axes")?
         .call_method0("is_world")?
         .is_truthy()?;
     Ok(snap::drawing_axis(
@@ -242,8 +242,8 @@ fn _pairs_that_may_meet<'p>(edges: &Obj<'p>) -> PyResult<Obj<'p>> {
 #[pyfunction(pass_module)]
 fn __getattr__<'p>(m: &Module<'p>, name: &str) -> PyResult<Obj<'p>> {
     let v = match name {
-        "_AXIS_VECTORS" => m.py().import("core.axes")?.getattr("AXES")?,
-        "Edge" => m.py().import("core.geometry")?.getattr("Edge")?,
+        "_AXIS_VECTORS" => m.py().import("ingetrazo_core.axes")?.getattr("AXES")?,
+        "Edge" => m.py().import("ingetrazo_core.geometry")?.getattr("Edge")?,
         "kernel" => m.py().import("ingetrazo_core")?.into_any(),
         _ => return Err(PyAttributeError::new_err(name.to_owned())),
     };

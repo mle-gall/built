@@ -14,7 +14,7 @@ use std::{
 type Obj<'p> = Bound<'p, PyAny>;
 fn error(py: Python<'_>, msg: impl Into<String>) -> PyErr {
     let msg = msg.into();
-    py.import("georef.geotiff")
+    py.import("ingetrazo_core.georef.geotiff")
         .and_then(|m| m.call_method1("GeoTiffError", (msg,)))
         .map(PyErr::from_value)
         .unwrap_or_else(|e| e)
@@ -295,7 +295,7 @@ fn geotiff_info<'p>(py: Python<'p>, path: PathBuf) -> PyResult<Obj<'p>> {
                     && affine.is_some_and(|a| a[2].abs() <= 180. && a[5].abs() <= 90.)),
         )?
     }
-    py.import("georef.geotiff")?
+    py.import("ingetrazo_core.georef.geotiff")?
         .getattr("GeoTiffInfo")?
         .call((), Some(&kw))
 }

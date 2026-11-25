@@ -86,8 +86,7 @@ fn offer_link_source(v: &Obj, group: &Obj) -> PyResult<()> {
                 .getattr_opt("open_path")?
                 .is_some_and(|f| f.is_callable())
             {
-                py.import("views.wgpu_tabs")?
-                    .call_method1("open_link_source", (win, path, group))?;
+                super::calls::open_link_source(&win, &path, group)?;
             }
         }
     }
@@ -363,7 +362,7 @@ fn dependencies(m: &Bound<PyModule>) -> PyResult<()> {
                 ("smooths", "smooths"),
             ],
         ),
-        ("core.element_set", &[("ElementSet", "ElementSet")]),
+        ("ingetrazo_core", &[("ElementSet", "ElementSet")]),
         ("array", &[("array", "array")]),
         ("pathlib", &[("Path", "Path")]),
         ("typing", &[("Optional", "Optional")]),
@@ -391,7 +390,7 @@ fn dependencies(m: &Bound<PyModule>) -> PyResult<()> {
         ),
         ("ingetrazo_render", &[("CallbackSlot", "CallbackSlot")]),
         (
-            "core.timers",
+            "ingetrazo_core.timers",
             &[("later", "later"), ("timer", "window_timer")],
         ),
         (
@@ -424,7 +423,7 @@ fn dependencies(m: &Bound<PyModule>) -> PyResult<()> {
         ),
         ("core.scene", &[("Scene", "Scene")]),
         (
-            "core.style",
+            "ingetrazo_core.style",
             &[
                 ("DEFAULT_BACK_COLOR", "DEFAULT_BACK_COLOR"),
                 ("DEFAULT_FACE_COLOR", "DEFAULT_FACE_COLOR"),
@@ -433,7 +432,7 @@ fn dependencies(m: &Bound<PyModule>) -> PyResult<()> {
             ],
         ),
         (
-            "core.materials",
+            "ingetrazo_core.materials",
             &[
                 ("effective_attrs", "effective_attrs"),
                 ("material_sig", "_material_sig"),
@@ -447,7 +446,7 @@ fn dependencies(m: &Bound<PyModule>) -> PyResult<()> {
             ],
         ),
         ("core.texture", &[("face_uv_axes", "face_uv_axes")]),
-        ("core.triangulate", &[("plane_axes", "plane_axes")]),
+        ("ingetrazo_core.triangulate", &[("plane_axes", "plane_axes")]),
         (
             "tools.base",
             &[("Tool", "Tool"), ("ToolContext", "ToolContext")],

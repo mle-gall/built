@@ -138,7 +138,7 @@ def test_filing_moves_only_the_tag_row_and_undo_restores_its_position():
 
 
 def test_sort_choice_is_restored_and_returning_to_project_order_keeps_the_model(native_host):
-    from core.settings import settings
+    from ingetrazo_core.settings import settings
     p = Project(Layer("Roof"), Layer("Walls"), scene=native_host.viewport.scene)
     p.scene.groups[:] = [_group("Site"), _group("House", "Walls")]
     original = list(p.scene.groups)

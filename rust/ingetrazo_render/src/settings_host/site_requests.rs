@@ -32,9 +32,9 @@ pub(super) fn create<'p>(
     win: Obj<'p>,
 ) -> PyResult<Bound<'p, SiteRequests>> {
     let py = draft.py();
-    let services = py.import("georef.geocode")?;
+    let services = py.import("ingetrazo_core.georef.geocode")?;
     let tiles = py
-        .import("georef.tile_fetcher")?
+        .import("ingetrazo_core.georef.tile_fetcher")?
         .getattr("TileFetcher")?
         .call((), Some(&[("parent", &win)].into_py_dict(py)?))?;
     let s = Bound::new(

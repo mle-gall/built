@@ -9,7 +9,7 @@ import pytest
 from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.orient import is_closed
+from ingetrazo_core.orient import is_closed
 from tools.base import ToolContext
 from tools.fillet import FilletTool
 from tests.test_fillet import box, edge_at

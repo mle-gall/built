@@ -21,7 +21,7 @@ from core.history import (
     RebuildPlanarFacesCommand,
     TagCurveCommand,
 )
-from core.orient import is_closed
+from ingetrazo_core.orient import is_closed
 from core.scene import Scene
 from tools.base import ToolContext
 from tools.pushpull import PushPullTool

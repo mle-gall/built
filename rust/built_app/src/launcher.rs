@@ -173,7 +173,7 @@ fn write_pdf(job: &PdfExport, host: &python::Host) -> PyResult<i32> {
         let scene = window.getattr("viewport")?.getattr("scene")?;
         // Batch export reads the supplied archive directly, without prompting
         // for recovery or deleting a newer autosave of the same document.
-        py.import("formats.igz")?
+        py.import("ingetrazo_core.formats.igz")?
             .call_method1("load_into", (&scene, &job.input))?;
         window.setattr("_current_path", &job.input)?;
         let sheets = scene.getattr("compositions")?;
@@ -290,7 +290,7 @@ pub fn initialize(py: Python<'_>) -> PyResult<()> {
     py.import("ingetrazo_core.python_tls")?.call_method0("ensure_once")?;
     let core = py.import("ingetrazo_core")?;
     core.call_method0("install_main_thread_collector")?;
-    let log = py.import("core.paths")?.call_method0("open_crash_log")?;
+    let log = py.import("ingetrazo_core.paths")?.call_method0("open_crash_log")?;
     if !log.is_none() {
         let faults = py.import("faulthandler")?;
         faults.call_method1("enable", (&log,))?;
@@ -348,12 +348,12 @@ pub fn self_check(layout: &python::Layout) -> i32 {
             println!(".rfa import: available");
         }
         let converter = py
-            .import("formats.dwg_bridge")?
+            .import("ingetrazo_core.formats.dwg_bridge")?
             .call_method0("find_dwg2dxf")?;
         if converter.is_none() {
             println!("DWG converter: MISSING");
             let frozen = py
-                .import("core.paths")?
+                .import("ingetrazo_core.paths")?
                 .call_method0("is_frozen")?
                 .is_truthy()?;
             if frozen && !cfg!(target_os = "macos") {
@@ -397,7 +397,7 @@ pub fn check_extensions(host: &python::Host) -> bool {
 pub fn exit_now(status: i32) -> ! {
     Python::attach(|py| {
         let flush = || -> PyResult<()> {
-            py.import("core.settings")?
+            py.import("ingetrazo_core.settings")?
                 .call_method0("settings")?
                 .call_method0("sync")?;
             py.import("logging")?.call_method0("shutdown")?;

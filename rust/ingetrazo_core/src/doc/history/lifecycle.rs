@@ -69,7 +69,7 @@ pub(crate) fn follow_text(host: &Obj<'_>) -> PyResult<()> {
     if anchors.is_truthy()? {
         let frame = host
             .py()
-            .import("core.coordinate_frame")?
+            .import("ingetrazo_core.coordinate_frame")?
             .call_method0("model_frame")?;
         in_frame(&frame, || {
             for anchor in anchors.try_iter()? {

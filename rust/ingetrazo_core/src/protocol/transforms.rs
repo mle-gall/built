@@ -357,14 +357,14 @@ fn move_selection<'py>(
             ("ingetrazo_core.mesh", "Edge", &es),
             ("ingetrazo_core.mesh", "Face", &fs),
             ("core.dimension", "Dimension", &dims),
-            ("core.section", "SectionPlane", &planes),
-            ("core.textlabel", "TextLabel", &labels),
+            ("ingetrazo_core.section", "SectionPlane", &planes),
+            ("ingetrazo_core.textlabel", "TextLabel", &labels),
         ];
         let classes = classes
             .into_iter()
             .map(|(m, c, l)| Ok((py.import(m)?.getattr(c)?, l)))
             .collect::<PyResult<Vec<_>>>()?;
-        let is_guide = py.import("core.guide")?.getattr("is_guide")?;
+        let is_guide = py.import("ingetrazo_core.guide")?.getattr("is_guide")?;
         for e in scene.getattr("selection")?.try_iter()? {
             let e = e?;
             for (class, list) in &classes {
@@ -382,15 +382,15 @@ fn move_selection<'py>(
     }
     let ctor = py.import("ingetrazo_core")?.getattr("Vec3")?;
     let d = ctor.call(PyTuple::new(py, floats(delta)?)?, None)?;
-    let ops = py.import("core.move_ops")?;
+    let ops = py.import("ingetrazo_core.move_ops")?;
     if copy {
         let n = match count {
             Some(c) => py.get_type::<PyInt>().call1((c,))?.extract()?,
             None => 1i64,
         };
         let steps = copy_offsets(&d, n, mode)?;
-        let cmd = ops
-            .call_method1("copy_builder", (&scene, groups, fs, es, guides))?
+        let cmd = py.import("ingetrazo_core")?
+            .call_method1("MoveCopies", (&scene, groups, fs, es, guides))?
             .call1((steps,))?;
         return execute(history, &cmd);
     }

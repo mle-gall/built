@@ -101,7 +101,7 @@ fn parse_hex(py: Python<'_>, text: &str) -> PyResult<(f64, f64, f64)> {
 }
 
 fn store(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    py.import("core.settings")?.call_method0("settings")
+    py.import("ingetrazo_core.settings")?.call_method0("settings")
 }
 
 /// A JSON value kept in the preferences, else `default`.
@@ -1094,7 +1094,7 @@ impl ComponentsProvider {
         let scene = ctx.getattr("scene")?;
         match verb {
             "apply" => {
-                let kc = py.import("core.kept_components")?;
+                let kc = py.import("ingetrazo_core.kept_components")?;
                 let template = if !kept.is_none() { kept.clone() } else { kc.call_method1("make_template", (&definition,))? };
                 win.call_method1("_start_place", (kc.call_method1("place_copy", (template,))?,))?;
             }
@@ -1235,7 +1235,7 @@ fn catalogue(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 
 #[pyfunction]
 fn _catalogue(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    let resources = py.import("core.paths")?.call_method0("app_root")?.div("resources")?;
+    let resources = py.import("ingetrazo_core.paths")?.call_method0("app_root")?.div("resources")?;
     let language = py.import("core.i18n")?.call_method0("current_language")?;
     lib(py)?.call_method1("_bundled_by_key", (resources, language))
 }

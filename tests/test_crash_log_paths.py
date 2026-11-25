@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from core import paths
+from ingetrazo_core import paths
 
 
 @pytest.fixture

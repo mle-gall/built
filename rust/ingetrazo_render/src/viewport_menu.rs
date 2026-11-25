@@ -69,7 +69,7 @@ fn record_file(rec: &Bound<'_, PyAny>) -> String {
 }
 
 fn guide(py: Python<'_>, e: &Bound<'_, PyAny>) -> bool {
-    py.import("core.guide")
+    py.import("ingetrazo_core.guide")
         .and_then(|m| m.call_method1("is_guide", (e,)))
         .and_then(|v| v.is_truthy())
         .unwrap_or(false)
@@ -115,7 +115,7 @@ fn context_path(py: Python<'_>, scene: &Bound<'_, PyAny>) -> PyResult<String> {
 /// The group's node path in the project tree, or "Unfiled".
 fn filed_path(py: Python<'_>, scene: &Bound<'_, PyAny>, g: &Bound<'_, PyAny>) -> String {
     let path = || -> PyResult<Option<String>> {
-        let structure = py.import("core.structure")?;
+        let structure = py.import("ingetrazo_core.structure")?;
         let key = structure.call_method1("node_of", (g,))?;
         if !key.is_truthy()? {
             return Ok(None);
@@ -241,7 +241,7 @@ pub fn read_facts(
     }
     if f.components > 0 && groups.len() == sel.len() && !f.linked_part && !f.all_links {
         f.replaceable = win.call_method1("_replacement_choices", (&selection,))?.is_truthy()?;
-        let kept = py.import("core.kept_components")?;
+        let kept = py.import("ingetrazo_core.kept_components")?;
         f.kept = true;
         for group in groups.iter().filter(|g| is_component(g)) {
             if kept.call_method1("kept_template", (scene, group.getattr("mesh")?))?.is_none() {

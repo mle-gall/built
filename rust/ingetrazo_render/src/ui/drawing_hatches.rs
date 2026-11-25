@@ -26,7 +26,7 @@ pub(super) struct Hatches {
 }
 
 fn settings(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    py.import("core.settings")?.getattr("settings")?.call0()
+    py.import("ingetrazo_core.settings")?.getattr("settings")?.call0()
 }
 
 fn keys(raw: Bound<'_, PyAny>, limit: usize) -> Vec<String> {

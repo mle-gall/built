@@ -272,7 +272,7 @@ pub(crate) fn browser_rename(
         .map(|(i, (k, problem))| (k.as_str(), (i, *problem)))
         .collect();
     let walk = py
-        .import("core.structure")?
+        .import("ingetrazo_core.structure")?
         .call_method1("_placements", (scene,))?;
     let row_id = py.import("core.link_structure")?.getattr("row_id")?;
     let repeated: HashSet<String> = root.call_method0("_repeated_uids")?.extract()?;

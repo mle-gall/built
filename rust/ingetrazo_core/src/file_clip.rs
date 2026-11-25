@@ -123,7 +123,7 @@ fn clip_encode<'p>(py: Python<'p>, clip: &Obj<'p>) -> PyResult<Obj<'p>> {
             .call1((seq(clip, "edge_layers")?,))?,
     )?;
     let doc = scene_file(py, |p| {
-        py.import("formats.igz")?
+        py.import("ingetrazo_core.formats.igz")?
             .call_method1("save_scene", (&scene, p))?;
         p.call_method0("read_bytes")
     })?;
@@ -188,7 +188,7 @@ fn clip_decode<'p>(py: Python<'p>, data: &Obj<'p>) -> PyResult<Option<Obj<'p>>> 
     let scene = py.import("core.scene")?.call_method0("Scene")?;
     scene_file(py, |path| {
         path.call_method1("write_bytes", (doc,))?;
-        py.import("formats.igz")?
+        py.import("ingetrazo_core.formats.igz")?
             .call_method1("load_into", (&scene, path))
     })?;
     let faces = PyList::empty(py);

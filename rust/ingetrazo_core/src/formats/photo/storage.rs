@@ -199,7 +199,7 @@ fn load_atlas(py: Python<'_>, path: PathBuf, target: (usize, usize)) -> PyResult
     if let Some(p) = cache.filter(|_| !img.is_none()) {
         let written = (|| -> PyResult<()> {
             fs::create_dir_all(p.parent().unwrap())?;
-            py.import("formats.igz")?
+            py.import("ingetrazo_core.formats.igz")?
                 .call_method1("_write_atomic", (p, img.call_method0("jpeg")?))?;
             Ok(())
         })();

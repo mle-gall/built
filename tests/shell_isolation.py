@@ -9,7 +9,7 @@ import pytest
 _ENV = ("XDG_DATA_HOME", "BUILT_ANSWERS", "BUILT_SETTINGS_DIR")
 
 _PATCHED = {
-    "core.settings": ("_store",),
+    "ingetrazo_core.settings": ("_store",),
 }
 _MISSING = object()
 

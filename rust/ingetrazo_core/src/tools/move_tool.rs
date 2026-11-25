@@ -17,7 +17,7 @@
 //!   window closes at the next action (the history token moves) or Esc.
 //!
 //! The host owns what is grabbed and the live preview (it is picking and
-//! resident rows); the commit is `core.move_ops`, the implementation the
+//! resident rows); the commit is `ingetrazo_core.move_ops`, the implementation the
 //! protocol's `move_selection` runs.
 
 use glam::DVec3;

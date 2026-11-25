@@ -10,8 +10,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(SPECPATH).resolve().parent
-from runpy import run_path
-built_extension = run_path(str(ROOT / "formats" / "built.py"))["BUILT_SUFFIX"][1:]
+from ingetrazo_core.formats.built import BUILT_SUFFIX
+built_extension = BUILT_SUFFIX[1:]
 
 # ── Bundled assets — destinations MIRROR the repo layout ─────────────────────
 datas = [
@@ -105,30 +105,20 @@ for _plat, _names in _DWG_FILES.items():
         datas.append(("vendor/libredwg/SOURCES.md", "vendor/libredwg"))
 
 # ── Hidden imports ───────────────────────────────────────────────────────────
-hiddenimports = [
-    # Lazily imported project modules (inside functions) — listed for safety.
-    'core.textlabel',
-]
-
 from PyInstaller.utils.hooks import collect_submodules
-# manifold3d (Solid Tools) is imported inside core.solids' functions — one
-# self-contained native extension module (libstdc++/libm/libc only).
-hiddenimports += ['manifold3d', 'core.solids', 'tools.solid_tools']
+
+# The solid tools in the Rust extension load this Python extension at runtime.
+hiddenimports = ['manifold3d']
 # truststore (#783): Python's HTTPS on Windows verifies through the system
 # verifier; imported inside ingetrazo_core.python_tls.https_context, and without it the
 # extension manager silently falls back to Python's own store.
 hiddenimports += ['truststore']
-# Copy/Paste between windows (#76): imported lazily by the viewport and
-# the main window.
-hiddenimports += ['formats.clip']
 # Binary64 model values and the acceleration kernels share one extension.
 import importlib.util as _ilu
 if _ilu.find_spec('ingetrazo_core') is None:
     raise SystemExit("Build ingetrazo_core before packaging the application")
-hiddenimports += ['core._native', 'ingetrazo_core']
-# Revit family import (File > Import > Revit family): formats.rfa loads the
-# native reader through importlib, which static analysis cannot follow.
-hiddenimports += ['formats.rfa']
+hiddenimports += ['core._native', 'ingetrazo_core', '_built_file_packages']
+# Collect the optional native Revit family reader when installed.
 omit_rfa = sys.platform == 'darwin' and os.environ.get('BUILT_PACKAGE_RFA') == '0'
 if not omit_rfa and _ilu.find_spec('ingetrazo_rfa') is not None:
     hiddenimports += collect_submodules('ingetrazo_rfa')
@@ -148,13 +138,7 @@ hiddenimports += [
     # probing the API, which is the very waste it exists to stop.
     'core.ai_recipes',
     'core.bim',
-    # Render with Blender (#181): the plugin's logic and the GLB it sends.
-    'formats.gltf',
-    'tools.place_group',
-    'tools.paste',
-    # Pure-Python .skp backend (upstream openskp: classic-MFC + VFF readers
-    # and the legacy writer) — imported lazily by formats/skp.py and
-    # formats/skp_out.py.
+    # The native model reader imports this Python package lazily.
     'openskp',
     'openskp.model',
     'openskp._core',
@@ -259,8 +243,6 @@ excludes = [
     'ifcopenshell',
     'pytest',
 ]
-
-hiddenimports.append('georef')  # Rust registers the survey modules on package import.
 
 for package in ('core', 'formats', 'views', 'tools'):
     hiddenimports += collect_submodules(package)
@@ -385,7 +367,7 @@ coll = COLLECT(
 # onedir the other platforms ship); nothing launches it but a stdio-speaking
 # MCP client that already knows its path, so it does not need its own bundle.
 if sys.platform == 'darwin':
-    from core.version import __version__ as _version
+    _version = (ROOT / 'rust/ingetrazo_core/VERSION').read_text().strip()
     mac_icon = ROOT / 'resources' / 'icons' / 'ingetrazo.icns'
     app = BUNDLE(
         coll,

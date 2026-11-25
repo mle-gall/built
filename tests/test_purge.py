@@ -19,7 +19,7 @@ from core.materials import Material
 from core.mesh import Mesh
 from core.purge import (unused_layers, unused_materials, used_layers,
                         used_materials)
-from core.saved_views import SavedView
+from ingetrazo_core.saved_views import SavedView
 from core.scene import Scene
 
 

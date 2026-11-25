@@ -52,7 +52,7 @@ fn xml(s: &str) -> String {
         .replace('\'', "&apos;")
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct AnnotationFont {
     family: String,

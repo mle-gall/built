@@ -44,7 +44,7 @@ fn define<'py>(
 fn install_methods(module: &Bound<PyModule>, cls: &Obj, methods: &[Method]) -> PyResult<()> {
     let py = module.py();
     let registrar = Registrar::new(py)?
-        .with_plugin_method(imported(py, "tools")?.getattr("_plugin_method")?)
+        .with_plugin_method(imported(py, "views")?.getattr("_plugin_method")?)
         .with_module_annotations(&module.dict())?;
     for &(name, mode, callback, args, result, doc) in methods {
         registrar.define(

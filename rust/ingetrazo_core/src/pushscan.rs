@@ -67,7 +67,7 @@ pub(crate) fn holds_point(b: &[f64; 6], p: [f64; 3]) -> bool {
 }
 
 /// Whether the mesh has faces and every listed edge borders at least two
-/// (`core.orient.is_closed`, exactly).
+/// (`ingetrazo_core.orient.is_closed`, exactly).
 #[pyfunction]
 pub fn scan_is_closed(py: Python<'_>, mut scan: PyRefMut<'_, MeshScan>) -> PyResult<bool> {
     scan.need_parts(py, 0)?;
@@ -163,7 +163,7 @@ pub fn scan_parallel_overlapping(
     }))
 }
 
-/// `core.orient._ray_triangle(origin, direction, tri)` in float32 through
+/// `ingetrazo_core.orient._ray_triangle(origin, direction, tri)` in float32 through
 /// Qt's operations (`crate::facegeom`'s products), its parameter `t` as the
 /// Python float it returns.
 #[inline]
@@ -498,46 +498,6 @@ pub fn store_keys_since(store: PyRef<'_, PyMeshStore>, snap: PyRef<'_, PyStoreSn
     let k = Kind::parse(kind).ok_or_else(|| pyo3::exceptions::PyValueError::new_err(format!("kind {kind:?}")))?;
     let st = &store.inner;
     Ok(st.new_slots_since(&snap.inner, k).into_iter().map(|slot| st.key(k, slot)).collect())
-}
-
-/// `core.topology._mesh_is_flat(mesh)` from face `start` on (the caller
-/// walked the ones before): `faces[0]`'s normal `n0` and plane offset
-/// `dot(n0, faces[0].vertices[0])`, then every face's normal coplanar with
-/// it (`|n0.normalized() · n.normalized()| > 0.999`) and its first corner
-/// within `tol` of that plane — in float32 through Qt's operations, as the
-/// Python test. None when a face has no corner (Python raises there).
-#[pyfunction]
-pub fn scan_mesh_is_flat(
-    py: Python<'_>,
-    mut scan: PyRefMut<'_, MeshScan>,
-    start: usize,
-    tol: f64,
-    hypot: &str,
-    compensated: bool,
-) -> PyResult<Option<bool>> {
-    let g = geom_of(py, &mut scan, hypot, compensated)?;
-    let s: &MeshScan = &scan;
-    let nf = s.n_faces();
-    if nf < 2 {
-        return Ok(Some(true));
-    }
-    let h = g.h;
-    let first = |f: usize| s.rings_of(f).first().and_then(|r| r.first().copied());
-    let Some(c0) = first(0) else { return Ok(None) };
-    let n0 = g.normal[0];
-    let d0 = n0.dot(g.pos[c0 as usize], h) as f64;
-    let u0 = facegeom::normalized(n0, h);
-    for f in start.max(1)..nf {
-        let un = facegeom::normalized(g.normal[f], h);
-        if !((u0.dot(un, h) as f64).abs() > 0.999) {
-            return Ok(Some(false));
-        }
-        let Some(c) = first(f) else { return Ok(None) };
-        if ((n0.dot(g.pos[c as usize], h) as f64) - d0).abs() > tol {
-            return Ok(Some(false));
-        }
-    }
-    Ok(Some(true))
 }
 
 // ---- The base's classification (`PushPullOperation`, R2.5 slice 9) ----------

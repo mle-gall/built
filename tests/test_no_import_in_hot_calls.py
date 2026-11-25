@@ -11,8 +11,7 @@ import pytest
 from core.group import Group, new_uid
 from core.mesh import Mesh
 from core.scene import Scene
-from views import array_bake  # noqa: F401 — the real one is imported by now
-from views.document_interaction import _array_bake, _paint_of, _proto_wrapper
+from views.document_interaction import _paint_of, _proto_wrapper
 
 
 @pytest.fixture
@@ -66,7 +65,3 @@ def test_a_new_uid_imports_nothing(imports):
     imports.clear()
     assert len(new_uid()) == 16
     assert imports == []
-
-
-def test_the_bake_module_is_the_module():
-    assert _array_bake() is array_bake

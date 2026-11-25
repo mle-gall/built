@@ -18,7 +18,7 @@ type Plane<'p> = (Obj<'p>, Obj<'p>);
 fn scan<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
     scene
         .py()
-        .import("core.scan_index")?
+        .import("ingetrazo_core.scan_index")?
         .call_method1("scan", (scene.getattr("mesh")?,))
 }
 fn objects<'p>(py: Python<'p>) -> PyResult<Obj<'p>> {
@@ -498,7 +498,7 @@ fn __getattr__<'p>(m: &Bound<'p, PyModule>, name: &str) -> PyResult<Obj<'p>> {
     let source = match name {
         "AddEdgeCommand" | "AddFaceCommand" | "DeleteFaceCommand" | "DeleteEdgesCommand"
         | "Command" | "CompoundCommand" | "SnapshotCompound" => "ingetrazo_core.history",
-        "Face" | "Edge" => "core.geometry",
+        "Face" | "Edge" => "ingetrazo_core.geometry",
         "element_identity" => "ingetrazo_core.mesh",
         "_point_in_face_solid"
         | "face_exists"

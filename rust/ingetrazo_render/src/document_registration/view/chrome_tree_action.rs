@@ -461,7 +461,7 @@ impl<'a, 'py> Row<'a, 'py> {
     }
     fn structure_nodes(&self) -> Reply<'py> {
         let registry = self.py.import("core.bim_registry")?.call_method1("get", (&self.scene,))?;
-        self.py.import("core.structure")?.call_method1("_nodes", (registry,))
+        self.py.import("ingetrazo_core.structure")?.call_method1("_nodes", (registry,))
     }
     /// Replace a node's filing rule with `recipe`, against the one it had.
     fn set_rule(&self, node: &str, recipe: Obj<'py>) -> PyResult<()> {
@@ -485,7 +485,7 @@ impl<'a, 'py> Row<'a, 'py> {
         let module = self.module.clone();
         let glue = render(py)?;
         let core_module = py.import("ingetrazo_core")?;
-        let structure = py.import("core.structure")?;
+        let structure = py.import("ingetrazo_core.structure")?;
         let link_structure = py.import("core.link_structure")?;
         let execute = || glue.getattr("tree_navigation")?.getattr("execute");
         let (rk, extra, ident) = (self.rk.clone(), self.extra.clone(), self.ident.clone());
@@ -640,7 +640,7 @@ impl<'a, 'py> Row<'a, 'py> {
             }
         } else if self.is(&["linkregistry"]) {
             if let Some(path) = chosen(py, "getSaveFileName", (win, "Move registry to project", "", "Built project (*.builtproject)"))? {
-                py.import("core.project")?.call_method1("create", (&scene, path, win.getattr("_current_path")?))?;
+                py.import("ingetrazo_core.project")?.call_method1("create", (&scene, path, win.getattr("_current_path")?))?;
                 win.call_method1("_relink_done", ("Project registry updated",))?;
             }
         } else if self.is(&["eye", "lock"]) && rk == "geometry:loose" {
@@ -728,7 +728,7 @@ impl<'a, 'py> Row<'a, 'py> {
             self.rebuild()?;
         } else if self.is(&["sort"]) {
             let order = py.get_type::<pyo3::types::PyInt>().call1((&rk,))?;
-            py.import("core.settings")?.call_method0("settings")?.call_method1("setValue", ("ui/project_tree_sort", order))?;
+            py.import("ingetrazo_core.settings")?.call_method0("settings")?.call_method1("setValue", ("ui/project_tree_sort", order))?;
         } else if self.is(&["item"]) && self.kind == "exportitem" {
             let group = self.item()?;
             if !group.is_none() {
@@ -878,7 +878,7 @@ impl<'a, 'py> Row<'a, 'py> {
             self.select(self.members()?)?;
         } else if self.is(&["linkfinder"]) && self.linked {
             if self.tnode.call_method1("get", ("path",))?.is_truthy()? {
-                py.import("core.desktop_open")?.call_method1("reveal", (self.tnode.get_item("path")?,))?;
+                py.import("ingetrazo_core.desktop_open")?.call_method1("reveal", (self.tnode.get_item("path")?,))?;
             }
         } else if self.is(&["linkopen", "linkreload", "linkunlink", "linkrelink", "linkresettags", "linksubset", "linknested", "linkpack"]) && self.linked {
             let groups = self.placements()?;
@@ -1283,7 +1283,7 @@ pub(super) fn core_command<'py>(vp: &Obj<'py>, command: &Obj<'py>, args: Option<
 pub(super) fn delete_node<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (viewport, key) = (a.get_item(0)?, a.get_item(1)?);
-    let structure = py.import("core.structure")?;
+    let structure = py.import("ingetrazo_core.structure")?;
     let history = py.import("ingetrazo_core.history")?;
     let scene = viewport.getattr("scene")?;
     let registry = py.import("core.bim_registry")?.call_method1("get", (&scene,))?;

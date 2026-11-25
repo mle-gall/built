@@ -304,6 +304,13 @@ mod perf {
         }
     }
 
+    static PASSES: Mutex<Vec<(String, f64)>> = Mutex::new(Vec::new());
+
+    /// One frame's GPU passes (`Host::gpu_passes`).
+    pub fn note_passes(passes: Vec<(String, f64)>) {
+        PASSES.lock().unwrap().extend(passes);
+    }
+
     /// A sample measured elsewhere, in milliseconds.
     pub fn note_ms(what: &'static str, ms: f64) {
         if on() {
@@ -317,7 +324,7 @@ mod perf {
         }
         let samples = std::mem::take(&mut *SAMPLES.lock().unwrap());
         let mut parts = Vec::new();
-        for what in ["move_ms", "wheel_ms", "gesture_ms", "frame_ms", "py_frame_ms", "open_stall_ms", "open_total_ms", "open_handover_ms"] {
+        for what in ["move_ms", "wheel_ms", "gesture_ms", "frame_ms", "py_frame_ms", "gpu_ms", "open_stall_ms", "open_total_ms", "open_handover_ms"] {
             let mut v: Vec<f64> = samples.iter().filter(|(w, _)| *w == what).map(|(_, x)| *x).collect();
             if v.is_empty() {
                 continue;
@@ -326,6 +333,35 @@ mod perf {
             let at = |q: f64| v[((q * v.len() as f64).ceil() as usize).clamp(1, v.len()) - 1];
             parts.push(format!("\"{what}\": {{\"n\": {}, \"median\": {:.3}, \"p95\": {:.3}, \"max\": {:.3}}}",
                                v.len(), at(0.5), at(0.95), v[v.len() - 1]));
+        }
+        // Each GPU pass that took time: its median over the frames.
+        let passes = std::mem::take(&mut *PASSES.lock().unwrap());
+        let mut by_pass = std::collections::BTreeMap::<&str, Vec<f64>>::new();
+        for (name, ms) in &passes {
+            by_pass.entry(name).or_default().push(*ms);
+        }
+        let (mut medians, mut counts) = (Vec::new(), Vec::new());
+        for (name, mut v) in by_pass {
+            v.sort_by(|a, b| a.total_cmp(b));
+            let median = v[(v.len() - 1) / 2];
+            if median <= 0. {
+                continue;
+            }
+            match name.strip_prefix('#') {
+                Some(counter) => counts.push(format!("\"{counter}\": {median:.0}")),
+                None => medians.push(format!("\"{name}\": {median:.3}")),
+            }
+        }
+        if !medians.is_empty() {
+            parts.push(format!("\"gpu_pass_ms\": {{{}}}", medians.join(", ")));
+        }
+        if !counts.is_empty() {
+            parts.push(format!("\"gpu_counts\": {{{}}}", counts.join(", ")));
+        }
+        // The time since the last report: frames over it is the frame rate.
+        static LAST: Mutex<Option<Instant>> = Mutex::new(None);
+        if let Some(last) = LAST.lock().unwrap().replace(Instant::now()) {
+            parts.push(format!("\"span_ms\": {:.1}", last.elapsed().as_secs_f64() * 1e3));
         }
         println!("[built] perf {{{}}}", parts.join(", "));
     }
@@ -1616,8 +1652,19 @@ impl App {
                 let t0 = Instant::now();
                 let out = self.win(id).and_then(|w| w.host.frame());
                 let drew = out.is_some();
-                if let Some((cpu, _, _)) = out {
+                if let Some((cpu, gpu, _)) = out {
                     perf::note("frame_ms", t0);
+                    // The GPU's own time for the frame, apart from the call
+                    // (which also waits for a drawable while the GPU still
+                    // owes earlier frames).
+                    if let Some(gpu) = gpu {
+                        perf::note_ms("gpu_ms", gpu);
+                    }
+                    if perf::on() {
+                        if let Some(w) = self.win(id) {
+                            perf::note_passes(w.host.gpu_passes());
+                        }
+                    }
                     // The frame call less the renderer's own encode: Python
                     // glue and the Rust calls it makes (docs/render-glue-port.md).
                     perf::note_ms("py_frame_ms", (t0.elapsed().as_secs_f64() * 1e3 - cpu).max(0.));

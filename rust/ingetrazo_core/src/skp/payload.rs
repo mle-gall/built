@@ -190,7 +190,7 @@ fn faces<'p>(mesh: &Obj<'p>, input: &Obj<'p>, soft: &Obj<'p>, tick: &Obj<'p>) ->
     }
     if soft.is_none() {
         let fused = py
-            .import("formats.fuse")?
+            .import("ingetrazo_core.formats.fuse")?
             .call_method1("fuse_coplanar_loops", (raw,))?;
         dae_add_fused(mesh, &fused)?;
     }
@@ -218,7 +218,7 @@ fn faces<'p>(mesh: &Obj<'p>, input: &Obj<'p>, soft: &Obj<'p>, tick: &Obj<'p>) ->
             Some(&kw),
         )?;
         if soft.is_truthy()? {
-            py.import("formats.skp")?
+            py.import("ingetrazo_core.formats.skp")?
                 .call_method1("_soften_bulk_edges", (mesh, v, map, soft, tick))?;
         }
     } else {
@@ -235,7 +235,7 @@ fn faces<'p>(mesh: &Obj<'p>, input: &Obj<'p>, soft: &Obj<'p>, tick: &Obj<'p>) ->
             }
         }
         if soft.is_none() {
-            py.import("formats.fuse")?
+            py.import("ingetrazo_core.formats.fuse")?
                 .call_method1("soften_smooth_edges", (mesh,))?;
         } else {
             let mut marked = HashSet::new();

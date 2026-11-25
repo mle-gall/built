@@ -217,7 +217,7 @@ pub(super) fn bridge<'py>(mesh: &Obj<'py>, profiles: &Obj<'py>) -> PyResult<Boun
         follow_neighbours(mesh, new.as_any(), Some(caps.as_any()))?;
         let kw = PyDict::new(py);
         kw.set_item("only", &new)?;
-        crate::model::module(py, "core.orient")?.call_method(
+        crate::model::module(py, "ingetrazo_core.orient")?.call_method(
             "orient_outward",
             (mesh,),
             Some(&kw),

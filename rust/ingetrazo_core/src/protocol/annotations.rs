@@ -51,7 +51,7 @@ fn add_geo_path<'py>(
     annotation(
         history,
         "AddGeoPathCommand",
-        py.import("georef.geopath")?
+        py.import("ingetrazo_core.georef.geopath")?
             .call_method("GeoPath", (nodes,), Some(&kw))?,
     )
 }
@@ -92,14 +92,14 @@ fn add_text_label<'py>(
     let point = vec3(anchor)?;
     let kw = PyDict::new(py);
     let attach = py
-        .import("core.annotation_anchor")?
+        .import("ingetrazo_core.annotation_anchor")?
         .getattr("Attachment")?
         .call_method1("restore", (history.getattr("scene")?, attachment, &point))?;
     kw.set_item("attachment", attach)?;
     annotation(
         history,
         "AddTextLabelCommand",
-        py.import("core.textlabel")?.call_method(
+        py.import("ingetrazo_core.textlabel")?.call_method(
             "TextLabel",
             (point, vec3(offset)?, text),
             Some(&kw),
@@ -125,7 +125,7 @@ fn add_dimension<'py>(
         (vec3(a)?, vec3(b)?, vec3(offset)?),
         Some(&kw),
     )?;
-    let factory = py.import("core.annotation_anchor")?.getattr("Attachment")?;
+    let factory = py.import("ingetrazo_core.annotation_anchor")?.getattr("Attachment")?;
     for (key, raw, point) in [
         ("attachment_a", attachments.0, "a"),
         ("attachment_b", attachments.1, "b"),
@@ -170,7 +170,7 @@ fn place_section_plane<'py>(
     annotation(
         history,
         "PlaceSectionPlaneCommand",
-        py.import("core.section")?.call_method(
+        py.import("ingetrazo_core.section")?.call_method(
             "SectionPlane",
             (vec3(point)?, vec3(normal)?),
             Some(&kw),
@@ -182,7 +182,7 @@ fn set_north<'py>(history: &Obj<'py>, degrees: f64) -> Reply<'py> {
     if !degrees.is_finite() {
         return Err(PyValueError::new_err("expected a finite north angle"));
     }
-    let sun = history.py().import("core.sun")?;
+    let sun = history.py().import("ingetrazo_core.sun")?;
     let deg = sun
         .call_method1("wrap_north_deg", (degrees,))?
         .extract::<f64>()?;
@@ -214,7 +214,7 @@ fn add_image_plane<'py>(
     let kw = PyDict::new(py);
     kw.set_item("aspect", aspect)?;
     kw.set_item("name", name)?;
-    let plane = py.import("core.image_plane")?.call_method(
+    let plane = py.import("ingetrazo_core.image_plane")?.call_method(
         "ImagePlane",
         (path, vec3(origin)?, vec3(u)?, vec3(v)?),
         Some(&kw),

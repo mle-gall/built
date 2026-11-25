@@ -8,7 +8,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 def test_imported_scenes_reach_the_next_frame_without_resizing_the_view(native_host, monkeypatch):
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     win = native_host.window
     display = win.view
     monkeypatch.setattr(display, "resizeEvent", lambda *_: pytest.fail("resized inside a frame"))

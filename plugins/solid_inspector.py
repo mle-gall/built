@@ -26,7 +26,7 @@ And per face:
 
 - **internal**: a second face over the same corners as another, or a
   partition whose every edge is overconnected — a wall inside the solid
-  that is not marked as one (:func:`core.orient.orient_outward` marks the
+  that is not marked as one (:func:`ingetrazo_core.orient.orient_outward` marks the
   ones the engine builds itself).
 - **reversed**: on a closed object, a face whose front looks inward — the
   faces the engine's own orientation pass would turn.

@@ -127,7 +127,7 @@ def test_recolouring_a_library_colour_makes_a_new_material(window,
                                                           monkeypatch):
     """«RAL 7035» in another colour would be a lie: the faces take a new
     material «… (modified)», the library file stays byte for byte."""
-    from core.paths import app_root
+    from ingetrazo_core.paths import app_root
     from ingetrazo_core import ral_rgb
     from tests.test_tree_links import _View
     from ingetrazo_render import wgpu_library as library

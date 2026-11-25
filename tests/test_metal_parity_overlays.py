@@ -13,7 +13,7 @@ from core.scene import Scene
 from core.dimension import Dimension
 from core.textlabel import TextLabel
 from core.guide import Guide
-from core.section import SectionPlane
+from ingetrazo_core.section import SectionPlane
 from core.snap import SnapResult
 from views.document_interaction import _guide_vertices, shown_guides
 from tests.controller_surface import ControllerSurface as Viewport

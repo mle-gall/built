@@ -11,7 +11,7 @@ import pytest
 from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.orient import is_closed, signed_volume
+from ingetrazo_core.orient import is_closed, signed_volume
 from tools.base import ToolContext
 from tools.fillet import FilletTool
 from tests.test_fillet import box, edge_at

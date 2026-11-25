@@ -32,7 +32,7 @@ import urllib.error
 import time
 import urllib.request
 
-from core.version import USER_AGENT as _UA, __version__
+from ingetrazo_core.version import USER_AGENT as _UA, __version__
 
 #: Cloudflare fronts several providers (Groq above all) and rejects
 #: urllib's default "Python-urllib/3.x" agent with HTTP 403 error 1010 —
@@ -90,7 +90,7 @@ def _recipe_helpers(scene) -> dict:
     from ingetrazo_core import Vec3 as QVector3D
     from core.group import Group
     from ingetrazo_core.mesh import Mesh
-    from core.orient import orient_outward
+    from ingetrazo_core.orient import orient_outward
 
     def _soften(mesh, deg=42.0):
         cos_t = math.cos(math.radians(deg))

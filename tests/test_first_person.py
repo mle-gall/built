@@ -240,7 +240,7 @@ def test_the_sensitivity_setting_scales_the_turn(win, monkeypatch,
 
 
 def test_a_stored_sensitivity_out_of_range_falls_back(monkeypatch):
-    from core.settings import settings
+    from ingetrazo_core.settings import settings
     settings().setValue("walk/look_sensitivity", "9999")
     assert wt.look_sensitivity() == wt.DEFAULT_LOOK_SENSITIVITY
 

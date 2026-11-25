@@ -237,7 +237,7 @@ fn parse_rows<'p>(py: Python<'p>, text: &str) -> PyResult<Obj<'p>> {
 #[pyfunction]
 fn points_from_rows<'p>(py: Python<'p>, rows: &Obj<'p>, datum: &Obj<'p>) -> PyResult<Obj<'p>> {
     let out = PyList::empty(py);
-    let cls = py.import("georef.points")?.getattr("GeoPoint")?;
+    let cls = py.import("ingetrazo_core.georef.points")?.getattr("GeoPoint")?;
     for r in rows.try_iter()? {
         let r = r?;
         let p = datum.call_method1(
@@ -263,7 +263,7 @@ fn datum_for_rows<'p>(
         northern,
     );
     let d = py
-        .import("georef.datum")?
+        .import("ingetrazo_core.georef.datum")?
         .call_method1("SceneDatum", (lat, lon, r.get_item("z")?))?;
     if d.getattr("zone")?.extract::<i32>()? != zone {
         d.setattr("zone", zone)?;
@@ -284,7 +284,7 @@ fn point_at_station(pts: &Obj<'_>, s: f64) -> PyResult<(f64, f64)> {
 }
 #[pyfunction]
 fn selected_geopath<'p>(py: Python<'p>, scene: &Obj<'p>) -> PyResult<Option<Obj<'p>>> {
-    let cls = py.import("georef.geopath")?.getattr("GeoPath")?;
+    let cls = py.import("ingetrazo_core.georef.geopath")?.getattr("GeoPath")?;
     let mut selected = None;
     for p in scene.getattr("selection")?.try_iter()? {
         let p = p?;
@@ -313,7 +313,7 @@ fn sample_profile<'p>(
 ) -> PyResult<Obj<'p>> {
     let pts = points(polyline)?;
     let len = length(&pts);
-    let module = py.import("georef.profile")?;
+    let module = py.import("ingetrazo_core.georef.profile")?;
     let samples = PyList::empty(py);
     if len <= 1e-9 {
         return module.call_method1("Profile", (samples, 0., true));
@@ -410,7 +410,7 @@ fn profile_to_csv(profile: &Obj<'_>, vertical: &str, datum_alt: Option<f64>) -> 
     use std::fmt::Write;
     let notes = profile
         .py()
-        .import("georef.profile")?
+        .import("ingetrazo_core.georef.profile")?
         .getattr("VERTICAL_NOTES")?;
     let note = notes.call_method1("get", (vertical, notes.get_item("local")?))?;
     let mut out = format!("# elevation reference: {note}\n");

@@ -124,7 +124,7 @@ jobs:
         run: |
           # El exe existe y los recursos críticos quedaron dentro.
           test -f dist/ingetrazo/built.exe
-          test -f dist/ingetrazo/_internal/resources/shaders/basic.vert
+          test -f dist/ingetrazo/_internal/resources/textures/library.json
           test -f dist/ingetrazo/_internal/i18n/es.json
           test -f dist/ingetrazo/_internal/resources/components/components.json
           # La plantilla .skp en blanco de openskp la generó una herramienta
@@ -240,14 +240,14 @@ jobs:
         run: |
           Compress-Archive -Path dist/ingetrazo -DestinationPath dist/ingetrazo-windows.zip
 
-      - name: Extraer versión (del tag o de core/version.py)
+      - name: Extraer versión (del tag o de rust/ingetrazo_core/VERSION)
         id: ver
         shell: bash
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
           else
-            VERSION=$(grep '^__version__' core/version.py | cut -d'"' -f2)
+            VERSION=$(cat rust/ingetrazo_core/VERSION)
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Version: $VERSION"

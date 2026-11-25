@@ -89,11 +89,11 @@ fn insert_document<'py>(
     let py = win.py();
     let p = py.import("pathlib")?.call_method1("Path", (path,))?;
     let temp = py.import("core.scene")?.call_method0("Scene")?;
-    py.import("formats.igz")?
+    py.import("ingetrazo_core.formats.igz")?
         .call_method1("load_into", (&temp, &p))?;
     let vp = win.getattr("viewport")?;
     vp.call_method0("end_group_edit")?;
-    let group = py.import("core.insert")?.call_method1(
+    let group = py.import("ingetrazo_core.document_insert")?.call_method1(
         "import_document_as_component",
         (vp.getattr("scene")?, temp, p.getattr("stem")?),
     )?;
@@ -149,7 +149,7 @@ fn import_picture(win: &Bound<'_, PyAny>) -> PyResult<()> {
         return Ok(());
     };
     let (aspect, w, h): (f64, i64, i64) = py
-        .import("core.image_plane")?
+        .import("ingetrazo_core.image_plane")?
         .call_method1("image_aspect", (&path,))?
         .extract()?;
     let dialogs = py.import("ingetrazo_render.chrome_dialogs")?;
@@ -230,7 +230,7 @@ fn ask_mesh_units(
         .eq_ignore_ascii_case(".stl");
     let model = py.import("ingetrazo_render")?.getattr("OperationForm")?;
     let model = if stl {
-        let store = py.import("core.settings")?.call_method0("settings")?;
+        let store = py.import("ingetrazo_core.settings")?.call_method0("settings")?;
         model.call_method1(
             "mesh_import",
             (
@@ -245,7 +245,7 @@ fn ask_mesh_units(
     } else {
         model.call_method1(
             "mesh_import",
-            (py.import("formats.obj")?
+            (py.import("ingetrazo_core.formats.obj")?
                 .call_method1("suggest_unit", (path,))?,),
         )?
     };
@@ -288,13 +288,13 @@ fn mesh_units_answer(
     let partial = py.import("functools")?.getattr("partial")?;
     let load = if stl {
         let mode = values.as_any().get_item("simplify")?;
-        let store = py.import("core.settings")?.call_method0("settings")?;
+        let store = py.import("ingetrazo_core.settings")?.call_method0("settings")?;
         store.call_method1("setValue", ("import/stl_unit", &unit))?;
         store.call_method1("setValue", ("import/stl_simplify_mode", &mode))?;
         partial.call1((
             win.getattr("_apply_stl_import")?,
             path,
-            py.import("formats.stl")?
+            py.import("ingetrazo_core.formats.stl")?
                 .getattr("STL_UNITS")?
                 .get_item(unit)?,
             mode,
@@ -303,7 +303,7 @@ fn mesh_units_answer(
         partial.call1((
             win.getattr("_apply_obj_import")?,
             path,
-            py.import("formats.obj")?
+            py.import("ingetrazo_core.formats.obj")?
                 .getattr("OBJ_UNITS")?
                 .get_item(unit)?,
         ))?

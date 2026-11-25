@@ -16,7 +16,7 @@
 //! so a rebaked prototype that outgrows its range is appended without
 //! copying the model.
 use numpy::{
-    ndarray::ArrayView1, PyArray1, PyArrayDescrMethods, PyArrayMethods, PyReadonlyArray2, PyUntypedArray,
+    ndarray::ArrayView1, PyArray1, PyArrayDescrMethods, PyReadonlyArray2, PyUntypedArray,
     PyUntypedArrayMethods,
 };
 use pyo3::{

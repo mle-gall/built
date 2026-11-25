@@ -8,7 +8,7 @@ fn setting<'py, T: IntoPyObject<'py>>(
     key: &str,
     default: T,
 ) -> PyResult<Obj<'py>> {
-    py.import("core.settings")?
+    py.import("ingetrazo_core.settings")?
         .call_method0("settings")?
         .call_method1("value", (key, default))
 }
@@ -229,7 +229,7 @@ fn apply_tool_cursor(v: &Obj) -> PyResult<()> {
 #[pyfunction]
 fn effective_style<'py>(v: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = v.py();
-    let style = py.import("core.style")?.getattr("Style")?;
+    let style = py.import("ingetrazo_core.style")?.getattr("Style")?;
     let mode = v.getattr("plano_style")?;
     if mode.eq("tecnico")? || mode.eq("lineas")? {
         let k = PyDict::new(py);
@@ -270,9 +270,9 @@ fn coplanar_eps(v: &Obj, o: &Obj, d: &Obj, t: f64) -> PyResult<f64> {
 #[pyfunction]
 fn pick_axis(v: &Obj, x: f64, y: f64) -> PyResult<Option<&'static str>> {
     let py = v.py();
-    let axes = py.import("core.axes")?;
+    let axes = py.import("ingetrazo_core.axes")?;
     let half = py
-        .import("core.guide")?
+        .import("ingetrazo_core.guide")?
         .getattr("GUIDE_HALF_LEN")?
         .extract::<f64>()?;
     let origin = axes.call_method0("origin")?;
@@ -303,7 +303,7 @@ fn pick_axis(v: &Obj, x: f64, y: f64) -> PyResult<Option<&'static str>> {
 fn axis_source_visible(v: &Obj, name: &str, p: &Obj) -> PyResult<bool> {
     let d = v
         .py()
-        .import("core.axes")?
+        .import("ingetrazo_core.axes")?
         .call_method1("axis", (name,))?
         .mul(0.25)?;
     let proj = |p: Obj| -> PyResult<Option<[f64; 2]>> {

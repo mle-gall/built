@@ -8,7 +8,7 @@ use pyo3::{
 };
 type Obj<'p> = Bound<'p, PyAny>;
 fn settings(py: Python) -> PyResult<Obj> {
-    py.import("core.settings")?.call_method0("settings")
+    py.import("ingetrazo_core.settings")?.call_method0("settings")
 }
 fn sheet(py: Python) -> PyResult<Bound<PyModule>> {
     py.import("ingetrazo_render.chrome_sheet")
@@ -48,7 +48,7 @@ impl ReleaseSheet {
                         .call_method1("skip_version", (settings(py)?, &value))?;
                 }
                 "open" => {
-                    py.import("core.desktop_open")?
+                    py.import("ingetrazo_core.desktop_open")?
                         .call_method1("open_url", (value,))?;
                 }
                 _ => {}
@@ -95,7 +95,7 @@ impl Check {
         }
         let future = s.result.bind(py);
         if !future.call_method0("done")?.is_truthy()? {
-            py.import("core.timers")?
+            py.import("ingetrazo_core.timers")?
                 .call_method1("later", (s.win.bind(py), 100, slf.getattr("receive")?))?;
             return Ok(());
         }
@@ -155,7 +155,7 @@ impl Check {
         match presentation {
             "silent" => {}
             "wait" => {
-                py.import("core.timers")?
+                py.import("ingetrazo_core.timers")?
                     .call_method1("later", (win, 5000, partial("present")?))?;
             }
             "review" => s.open(py, model.unbind())?,
@@ -238,7 +238,7 @@ pub(crate) fn start_check(
     let current = match current {
         Some(v) => v,
         None => py
-            .import("core.version")?
+            .import("ingetrazo_core.version")?
             .getattr("__version__")?
             .extract()?,
     };
@@ -252,7 +252,7 @@ pub(crate) fn start_check(
             quiet,
         },
     )?;
-    py.import("core.timers")?
+    py.import("ingetrazo_core.timers")?
         .call_method1("later", (window, 0, job.getattr("receive")?))?;
     Ok(())
 }

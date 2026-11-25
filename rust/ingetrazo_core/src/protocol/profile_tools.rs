@@ -18,7 +18,7 @@ fn origin<'py>(
     point: Option<&Obj<'py>>,
 ) -> PyResult<Obj<'py>> {
     let py = mesh.py();
-    let frames = py.import("core.coordinate_frame")?;
+    let frames = py.import("ingetrazo_core.coordinate_frame")?;
     if let Some(st) = store(mesh)? {
         let p = if let Some(face) = face {
             st.call_method1("face_positions", (face.getattr("key")?,))?
@@ -49,7 +49,7 @@ fn push_pull<'py>(
         .call_method0("PushPullOperation")?;
     op.setattr("base_face", &f)?;
     let frame = py
-        .import("core.coordinate_frame")?
+        .import("ingetrazo_core.coordinate_frame")?
         .call_method1("mesh_frame", (&mesh, origin(&mesh, Some(&f), None)?))?;
     in_frame(&frame, || {
         op.setattr("dragging", true)?;
@@ -112,7 +112,7 @@ fn offset_outline<'py>(
         ));
     }
     let offset = py.import("core.offset")?;
-    let frames = py.import("core.coordinate_frame")?;
+    let frames = py.import("ingetrazo_core.coordinate_frame")?;
     if let Some(face) = face {
         let target = one(history, "face", face)?;
         let frame =

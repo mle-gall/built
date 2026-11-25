@@ -36,7 +36,7 @@ def main() -> None:
     from tools.select_host import _box_group_fast, _local_bounds
     if args.instance:
         # Exclude module loading from the geometry scratch measurement.
-        import views.viewport  # noqa: F401
+        import views.document_controller  # noqa: F401
 
     n, width = args.triangles, min(1000, args.triangles)
     height = (n + width - 1) // width

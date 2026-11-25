@@ -5,7 +5,7 @@ while the composer frames already offered 10°–120°. Camera ▸ Field of
 View… sets it; the document and its scenes keep it."""
 from __future__ import annotations
 
-from core.saved_views import SavedView
+from ingetrazo_core.saved_views import SavedView
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 

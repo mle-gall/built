@@ -883,7 +883,7 @@ fn fused<'p>(py: Python<'p>, faces: &[Face]) -> PyResult<Obj<'p>> {
         let attrs = attr(py, f, &p)?;
         raw.append((p, (!attrs.is_empty()).then_some(attrs)))?
     }
-    let api = py.import("formats.fuse")?;
+    let api = py.import("ingetrazo_core.formats.fuse")?;
     dae_add_fused(&mesh, &api.call_method1("fuse_coplanar_loops", (raw,))?)?;
     api.call_method1("soften_smooth_edges", (&mesh,))?;
     Ok(mesh)
@@ -910,7 +910,7 @@ fn editable(mesh: &Obj<'_>, faces: &[Face], lines: &[(DVec3, DVec3)]) -> PyResul
         kw.set_item("coplanar_merge", true)?;
         py.import("ingetrazo_core")?
             .call_method("run_stitch", (mesh, seed, added), Some(&kw))?;
-        py.import("core.orient")?
+        py.import("ingetrazo_core.orient")?
             .call_method1("orient_outward", (mesh,))?;
     }
     for &(a, b) in lines {
@@ -943,7 +943,7 @@ struct Limits {
 }
 impl Limits {
     fn get(py: Python<'_>) -> PyResult<Self> {
-        let m = py.import("formats.dae")?;
+        let m = py.import("ingetrazo_core.formats.dae")?;
         let k = |s| m.getattr(s)?.extract::<usize>();
         Ok(Self {
             fuse: k("_MAX_FUSE_LOOPS")?,
@@ -1317,7 +1317,7 @@ impl<'p> Structured<'p> {
         } else {
             None
         };
-        let module = py.import("core.materials")?;
+        let module = py.import("ingetrazo_core.materials")?;
         let material = module.getattr("Material")?.call1((n, color, texture))?;
         let name: String = module
             .call_method1("register", (&self.registry, material))?
@@ -1443,7 +1443,7 @@ impl<'p> Structured<'p> {
         }
         if !tris.is_empty() {
             let fused = py
-                .import("formats.fuse")?
+                .import("ingetrazo_core.formats.fuse")?
                 .call_method1("fuse_coplanar_loops", (tris,))?;
             dae_add_fused(&mesh, &fused)?
         }
@@ -1777,7 +1777,7 @@ fn dae_load<'p>(
         if scene.getattr("georef")?.is_none() {
             scene.setattr(
                 "georef",
-                py.import("georef.datum")?
+                py.import("ingetrazo_core.georef.datum")?
                     .call_method1("SceneDatum", (lat, lon, alt))?,
             )?
         }

@@ -89,7 +89,7 @@ fn section_cut<'py>(view: &Obj<'py>) -> PyResult<Obj<'py>> {
     let v0 = idx.getattr("tri_v0")?;
     let (mut segs, mut tags) = (none(py), none(py));
     if !v0.is_none() && v0.len()? > 0 {
-        let sec = py.import("core.section")?;
+        let sec = py.import("ingetrazo_core.section")?;
         let e1 = idx.getattr("tri_e1")?;
         let e2 = idx.getattr("tri_e2")?;
         let reach = match cached(view, "_section_reach")? {
@@ -143,7 +143,7 @@ fn section_fill<'py>(view: &Obj<'py>) -> PyResult<Obj<'py>> {
     let last = cached(view, "_section_fill_changed")?.map_or(Ok(0.), |v| v.extract::<f64>())?;
     view.setattr("_section_fill_changed", now)?;
     if old.is_some() && now - last < 0.15 {
-        py.import("core.timers")?
+        py.import("ingetrazo_core.timers")?
             .call_method1("later", (view, 200, view.getattr("update")?))?;
         return Ok(none(py));
     }
@@ -187,7 +187,7 @@ fn section_layer_fills<'py>(view: &Obj<'py>, color: &Obj<'py>) -> PyResult<Obj<'
     if let Some(out) = hit(view, "_section_layer_cache", &key)? {
         return Ok(out);
     }
-    let out = py.import("core.section")?.call_method1(
+    let out = py.import("ingetrazo_core.section")?.call_method1(
         "layer_fills",
         (segs, cut.get_item(2)?, normal(view)?, scene, color),
     )?;

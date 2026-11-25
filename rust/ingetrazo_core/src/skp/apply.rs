@@ -30,7 +30,7 @@ pub(super) fn material_names(
     if !mats.is_truthy()? {
         return Ok(HashMap::new());
     }
-    let module = py.import("core.materials")?;
+    let module = py.import("ingetrazo_core.materials")?;
     let decode = module.getattr("Material")?.getattr("from_dict")?;
     let register = module.getattr("register")?;
     let registry = match scene.getattr_opt("materials")?.filter(|v| !v.is_none()) {
@@ -191,7 +191,7 @@ pub fn skp_apply_metadata(scene: &Bound<'_, PyAny>, payload: &Bound<'_, PyDict>)
     if views.is_truthy()? {
         let list = scene.getattr("saved_views")?;
         let existing = names(&list, "name")?;
-        let camera = py.import("core.saved_views")?.getattr("from_lookat")?;
+        let camera = py.import("ingetrazo_core.saved_views")?.getattr("from_lookat")?;
         for (i, row) in views.try_iter()?.enumerate() {
             if i % 128 == 0 && i > 0 {
                 crate::file_open::skp_checkpoint(py)?;
@@ -255,7 +255,7 @@ pub fn skp_apply_metadata(scene: &Bound<'_, PyAny>, payload: &Bound<'_, PyDict>)
     }
     let texts = rows(payload, "texts")?;
     if texts.is_truthy()? {
-        let class = py.import("core.textlabel")?.getattr("TextLabel")?;
+        let class = py.import("ingetrazo_core.textlabel")?.getattr("TextLabel")?;
         let list = scene.getattr("text_labels")?;
         for raw in texts.try_iter()? {
             let raw = raw?;

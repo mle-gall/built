@@ -614,7 +614,7 @@ def test_unstructured_filters_and_tag_toggles_use_the_document(tmp_path):
     from core.group import Group
     from core.layers import Layer
     from core.scene import Scene
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     from ingetrazo_core import Vec3
     scene = Scene()
     scene.layers.append(Layer("Steel"))

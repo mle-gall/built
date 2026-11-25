@@ -5,7 +5,7 @@ use super::chrome_frame::{own, render, truthy, ui};
 use super::*;
 
 fn input<'py>(py: Python<'py>, name: &str) -> Reply<'py> {
-    py.import("core.input_codes")?.getattr("Input")?.getattr(name)
+    py.import("ingetrazo_core")?.getattr("Input")?.getattr(name)
 }
 fn is_input(value: &Obj<'_>, name: &str) -> PyResult<bool> {
     value.eq(input(value.py(), name)?)
@@ -17,8 +17,11 @@ fn mods_of<'py>(py: Python<'py>, event: &Obj<'py>) -> Reply<'py> {
     ui(py)?.call_method1("_mods", (event,))
 }
 /// The chrome's name of the event's key, "" for one it does not take.
-fn key_name<'py>(py: Python<'py>, event: &Obj<'py>) -> Reply<'py> {
+pub(super) fn key_name<'py>(py: Python<'py>, event: &Obj<'py>) -> Reply<'py> {
     ui(py)?.getattr("_KEYS")?.call_method1("get", (event.call_method0("key")?, ""))
+}
+pub(super) fn pointer_button<'py>(button: &Obj<'py>) -> Reply<'py> {
+    ui(button.py())?.getattr("_BUTTONS")?.call_method1("get", (button, 1))
 }
 fn point(event: &Obj<'_>) -> PyResult<(f64, f64)> {
     let position = event.call_method0("position")?;
@@ -148,7 +151,7 @@ fn key<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(yes)
 }
 
-fn mods<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn mods<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let held = a.get_item(0)?.call_method0("modifiers")?;
     let mut bits = 0;
@@ -225,7 +228,6 @@ fn pointer<'py>(a: &Args<'py>) -> Reply<'py> {
     if !truthy(&view, "_ui_attached")? {
         return false.into_bound_py_any(py);
     }
-    let module = ui(py)?;
     let pages = sheets(py)?;
     if direct(py, held, (&view, &kind, &event))?.is_truthy()? {
         return true.into_bound_py_any(py);
@@ -241,7 +243,7 @@ fn pointer<'py>(a: &Args<'py>) -> Reply<'py> {
             view.call_method0("window")?.call_method0("start_system_move")?;
             return true.into_bound_py_any(py);
         }
-        renderer.call_method1("ui_pointer", (&kind, x, y, module.getattr("_BUTTONS")?.call_method1("get", (button, 1))?, mods_of(py, &event)?))?
+        renderer.call_method1("ui_pointer", (&kind, x, y, pointer_button(&button)?, mods_of(py, &event)?))?
     };
     let over = taken.is_truthy()?;
     let was = truthy(&view, "_ui_was_over")?;
@@ -330,8 +332,8 @@ pub(super) fn install_module(module: &Bound<PyModule>) -> PyResult<()> {
     module.add("ingetrazo_core", py.import("ingetrazo_core")?)?;
     module.add("os", py.import("os")?)?;
     modules::import_names(module, "pathlib", &[("Path", "Path")])?;
-    modules::import_names(module, "core.input_codes", &[("Input", "Qt")])?;
-    modules::import_names(module, "core.timers", &[("later", "later")])?;
+    modules::import_names(module, "ingetrazo_core", &[("Input", "Qt")])?;
+    modules::import_names(module, "ingetrazo_core.timers", &[("later", "later")])?;
     modules::import_names(module, "ingetrazo_render", &[("shortcut_text", "shortcut_text"), ("rail_icon", "_icon_rgba")])?;
     modules::import_names(module, "ingetrazo_render.keyboard_bindings", &[("action_keys", "action_keys")])?;
     modules::import_names(module, "plugins._widget_language", &[("FONT", "FONT")])?;

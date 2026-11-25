@@ -17,6 +17,17 @@ mod screen;
 mod texture_position;
 mod navigation;
 mod recents;
+mod general_settings;
+mod document_insert;
+mod kept_components;
+mod annotation_anchor;
+mod coordinate_frame;
+mod record_class;
+mod image_plane;
+mod scan_index;
+mod move_ops;
+mod desktop_open;
+mod facets;
 mod python_tls;
 mod material_finish;
 mod edge_grid;
@@ -163,6 +174,7 @@ mod snap_build;
 mod snap;
 mod snap_engine;
 mod kernel;
+mod core_bulk;
 mod protocol;
 mod tools;
 mod guide_vertices;
@@ -275,7 +287,6 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(store::arrangement::plane_segment_parameter, m)?)?;
     m.add_function(wrap_pyfunction!(store::arrangement::plane_intersections, m)?)?;
     m.add_function(wrap_pyfunction!(store::planar::plane_region_point, m)?)?;
-    m.add_function(wrap_pyfunction!(store::planar::plane_nesting, m)?)?;
     m.add_function(wrap_pyfunction!(store::planar::plane_interior_point, m)?)?;
     m.add_function(wrap_pyfunction!(store::planar::plane_scan_point, m)?)?;
     m.add_function(wrap_pyfunction!(store::planar::union_plane_regions, m)?)?;
@@ -286,7 +297,6 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(store::plane_repair::plane_fingerprint, m)?)?;
     m.add_function(wrap_pyfunction!(store::plane_repair::plane_cycle, m)?)?;
     m.add_function(wrap_pyfunction!(store::plane_repair::install_rebuilt_plane, m)?)?;
-    m.add_function(wrap_pyfunction!(store::plane_repair::prune_object_plane, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::revert_recorded_union, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::merge_seeded_edges, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::revert_seeded_merges, m)?)?;
@@ -301,6 +311,15 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     navigation::register(m)?;
     m.add_class::<edge_grid::EdgeGrid>()?;
     recents::register(m)?;
+    general_settings::register(m)?;
+    document_insert::register(m)?;
+    model::link_meshes::register(m)?;
+    model::saved_record::register(m)?;
+    builtproject::document::register(m)?;
+    kept_components::register(m)?;
+    annotation_anchor::register(m)?;
+    coordinate_frame::register(m)?;
+    image_plane::register(m)?;
     python_tls::register(m)?;
     m.add_function(wrap_pyfunction!(material_finish::guess_finish, m)?)?;
     m.add_function(wrap_pyfunction!(material_finish::resolve_finish, m)?)?;
@@ -338,7 +357,6 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pushscan::scan_cracked_edges, m)?)?;
     m.add_function(wrap_pyfunction!(pushscan::scan_faces_meeting_rings, m)?)?;
     m.add_function(wrap_pyfunction!(pushscan::store_keys_since, m)?)?;
-    m.add_function(wrap_pyfunction!(pushscan::scan_mesh_is_flat, m)?)?;
     m.add_function(wrap_pyfunction!(orient::scan_face_indices, m)?)?;
     m.add_function(wrap_pyfunction!(occlusion_span, m)?)?;
     m.add_function(wrap_pyfunction!(face_geometry, m)?)?;
@@ -346,10 +364,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(render_bake::bake_edges, m)?)?;
     m.add_function(wrap_pyfunction!(scene_bake::bake_scene, m)?)?;
     m.add_function(wrap_pyfunction!(qt_vector_probe, m)?)?;
-    m.add_function(wrap_pyfunction!(qt_dot_pairs, m)?)?;
     m.add_function(wrap_pyfunction!(smooth_corner_normals, m)?)?;
     m.add_function(wrap_pyfunction!(weld_points, m)?)?;
-    m.add_function(wrap_pyfunction!(store_weld_indices, m)?)?;
     m.add_function(wrap_pyfunction!(json_mesh_blocks, m)?)?;
     m.add_function(wrap_pyfunction!(boxes_near_px, m)?)?;
     m.add_function(wrap_pyfunction!(points_near_px, m)?)?;
@@ -439,9 +455,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tools::transform_queries::scale_grab, m)?)?;
     m.add_function(wrap_pyfunction!(tools::transform_queries::transform_records, m)?)?;
     m.add_class::<tools::host_geometry::ToolBounds>()?;
-    m.add_function(wrap_pyfunction!(tools::py::scale_box_geometry, m)?)?;
-    m.add_function(wrap_pyfunction!(tools::py::move_rotation_grips, m)?)?;
-    m.add_function(wrap_pyfunction!(tools::py::move_grip_region, m)?)?;
+
     m.add_function(wrap_pyfunction!(tools::arc::py_last_fillet_d, m)?)?;
     m.add_function(wrap_pyfunction!(tools::py::select_mode, m)?)?;
     m.add_function(wrap_pyfunction!(tools::py::select_pick, m)?)?;
@@ -471,8 +485,6 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pick::project_px, m)?)?;
     m.add_function(wrap_pyfunction!(pick::seg_rect_mask, m)?)?;
     m.add_function(wrap_pyfunction!(pick::box_mesh_arrays, m)?)?;
-    m.add_function(wrap_pyfunction!(pick::box_packed_rows, m)?)?;
-    m.add_function(wrap_pyfunction!(pick::nearest_segments_px, m)?)?;
     m.add_function(wrap_pyfunction!(snap_boundary::boundary_runs, m)?)?;
     m.add_function(wrap_pyfunction!(snap_boundary::curve_centers, m)?)?;
     m.add_function(wrap_pyfunction!(snap_curve::arc_midpoint, m)?)?;
@@ -535,9 +547,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // The commands lane (docs/lane-ownership.md): native History steps.
     doc::commands::register_commands(m)?;
     m.add_function(wrap_pyfunction!(structure::add_template_layers, m)?)?;
-    m.add_function(wrap_pyfunction!(structure::structure_folder_state, m)?)?;
     m.add_function(wrap_pyfunction!(structure::apply_folder_parents, m)?)?;
-    m.add_function(wrap_pyfunction!(structure::restore_structure_folders, m)?)?;
+
     m.add_class::<structure::StructurePlacements>()?;
     m.add_function(wrap_pyfunction!(structure::filing_choices, m)?)?;
     m.add_function(wrap_pyfunction!(structure::structure_lineage, m)?)?;
@@ -601,10 +612,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(structure::resync_filing, m)?)?;
     m.add_function(wrap_pyfunction!(structure::apply_structure_bootstrap, m)?)?;
     m.add_function(wrap_pyfunction!(structure::set_structure_nodes, m)?)?;
-    m.add_function(wrap_pyfunction!(structure::restore_structure_nodes, m)?)?;
     m.add_function(wrap_pyfunction!(group_geometry::unique_placement, m)?)?;
     m.add_function(wrap_pyfunction!(group_geometry::make_placement_unique, m)?)?;
-    m.add_function(wrap_pyfunction!(group_geometry::restore_unique_placement, m)?)?;
     m.add_function(wrap_pyfunction!(group_geometry::lift_placements, m)?)?;
     m.add_function(wrap_pyfunction!(group_geometry::lower_placements, m)?)?;
     // Unit tests link without libpython; this line made the test binary
@@ -618,6 +627,12 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     protocol::register(m)?;
     protocol::api::history::register(m)?;
     kernel::mesh_api::register(m)?;
+    core_bulk::register(m)?;
+    scan_index::register(m)?;
+    move_ops::register(m)?;
+    desktop_open::register(m)?;
+    facets::register(m)?;
+    m.py().import("_built_file_packages")?;
     Ok(())
 }
 
@@ -730,7 +745,7 @@ fn touching_boxes<'py>(
     Ok((PyArray1::from_vec(py, ii), PyArray1::from_vec(py, jj)))
 }
 
-/// A packed triangle set (core.orient._PackedTris) with a ray index, for
+/// A packed triangle set (ingetrazo_core.orient._PackedTris) with a ray index, for
 /// the parity queries of orientation and of the push/pull rebuild.
 #[pyclass(frozen)]
 struct ParityTris {
@@ -1051,24 +1066,6 @@ fn smooth_corner_normals<'py>(py: Python<'py>, pos: PyReadonlyArray2<'_, f64>,
     Ok((PyArray2::from_vec2(py, &out)?, PyArray1::from_vec(py, mask)))
 }
 
-/// Pairwise QVector3D dot products, including Apple's fused operations.
-#[pyfunction]
-fn qt_dot_pairs<'py>(py: Python<'py>, a: PyReadonlyArray2<'_, f32>,
-                     b: PyReadonlyArray2<'_, f32>, hypot: &str)
-    -> PyResult<Bound<'py, PyArray1<f32>>> {
-    let h = hypot_of(hypot)?;
-    let (a, b) = (a.as_array(), b.as_array());
-    if a.shape() != b.shape() || a.shape()[1] != 3 {
-        return Err(pyo3::exceptions::PyValueError::new_err("expected matching (N,3) arrays"));
-    }
-    let mut out = Vec::with_capacity(a.shape()[0]);
-    for i in 0..a.shape()[0] {
-        out.push(facegeom::V3(a[[i,0]], a[[i,1]], a[[i,2]])
-            .dot(facegeom::V3(b[[i,0]], b[[i,1]], b[[i,2]]), h));
-    }
-    Ok(PyArray1::from_vec(py, out))
-}
-
 /// ``flat`` (3 values a row) as an (N,3) array, without a Vec per row: making
 /// those was most of what a big mesh held the interpreter for (#1092).
 fn flat3<'py, T: numpy::Element>(py: Python<'py>, flat: Vec<T>) -> PyResult<Bound<'py, PyArray2<T>>> {
@@ -1079,7 +1076,7 @@ fn flat3<'py, T: numpy::Element>(py: Python<'py>, flat: Vec<T>) -> PyResult<Boun
 
 /// QVector3D's own arithmetic on each row of ``v`` (N,3) float32, for the
 /// start-up check that ``hypot`` is this Qt's: ``(length (N,), normalized
-/// (N,3), plane u (N,3), plane v (N,3))`` — core.triangulate.plane_axes.
+/// (N,3), plane u (N,3), plane v (N,3))`` — ingetrazo_core.triangulate.plane_axes.
 #[pyfunction]
 fn qt_vector_probe<'py>(
     py: Python<'py>,
@@ -1257,20 +1254,6 @@ fn weld_points<'py>(
         (flat, ids, origin)
     });
     Ok((flat3(py, flat)?, PyArray1::from_vec(py, ids), PyArray1::from_vec(py, origin)))
-}
-
-/// Stable input and representative indices for a double-precision bulk weld.
-#[pyfunction]
-fn store_weld_indices<'py>(
-    py: Python<'py>, pos: PyReadonlyArray2<'_, f64>, scale: f64, tol2: f64,
-) -> PyResult<(Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>)> {
-    use numpy::PyUntypedArrayMethods;
-    if pos.shape()[1] != 3 {
-        return Err(pyo3::exceptions::PyValueError::new_err("expected (P, 3) positions"));
-    }
-    let points = pos.as_slice()?.as_chunks::<3>().0;
-    let (_, ids, origin) = py.detach(|| weld::weld(points, scale, tol2));
-    Ok((PyArray1::from_vec(py, ids), PyArray1::from_vec(py, origin)))
 }
 
 /// `formats.igz._parse_native`'s kernel: ``(the document without its mesh
@@ -2008,7 +1991,7 @@ fn visible_parts<'py>(
     Ok((arr, PyArray1::from_vec(py, ring_out), PyArray1::from_vec(py, face_out)))
 }
 
-/// `core.triangulate.earcut` (see `earcut.rs`): `points` (N, 2), the outer
+/// `ingetrazo_core.triangulate.earcut` (see `earcut.rs`): `points` (N, 2), the outer
 /// ring then each hole's points, `holes` where each hole starts; the
 /// triangles as an (M, 3) array of indices into `points`, the same ones
 /// the Python port gives, in the same order.

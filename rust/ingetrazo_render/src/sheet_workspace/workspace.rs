@@ -1,4 +1,5 @@
 //! Sheet editing, page synchronization and input for one document.
+use crate::document_registration::view::calls;
 use super::tools::{mode, ANNOT_FIELDS, CONTENT_FIELDS, RAIL, SNAP_TOOLS, WINDOW_KEYS};
 use super::Obj;
 use pyo3::{
@@ -441,7 +442,7 @@ impl Workspace {
     fn set_auto_render(s: &Bound<'_, Self>, on: bool) -> PyResult<()> {
         s.getattr("composer")?.setattr("_auto_render", on)?;
         s.py()
-            .import("core.settings")?
+            .import("ingetrazo_core.settings")?
             .call_method0("settings")?
             .call_method1(
                 "setValue",
@@ -502,7 +503,7 @@ impl Workspace {
             ]);
         }
         let mut styles = vec![vec!["sombreado".to_string(), tr("Model style")?]];
-        let style = py.import("core.style")?;
+        let style = py.import("ingetrazo_core.style")?;
         for (items, translate) in [
             (style.getattr("BUILTIN_STYLES")?, true),
             (style.call_method0("user_styles")?, false),
@@ -1245,7 +1246,7 @@ impl Workspace {
             r.call_method1("page_pointer", ("leave", -1., -1., 0, 0))?;
             return Ok(());
         }
-        let codes = py.import("core.input_codes")?;
+        let codes = py.import("ingetrazo_core")?;
         let double = codes.getattr("Type")?.getattr("MouseButtonDblClick")?;
         let kind =
             if kind == "press" && enum_int(&event.call_method0("type")?)? == enum_int(&double)? {
@@ -1254,16 +1255,14 @@ impl Workspace {
                 kind
             };
         let p = event.call_method0("position")?;
-        let ui = py.import("views.wgpu_ui")?;
         let shape = r.call_method1(
             "page_pointer",
             (
                 kind,
                 p.call_method0("x")?,
                 p.call_method0("y")?,
-                ui.getattr("_BUTTONS")?
-                    .call_method1("get", (event.call_method0("button")?, 1))?,
-                ui.call_method1("_mods", (event,))?,
+                calls::pointer_button(&event.call_method0("button")?)?,
+                calls::mods(event)?,
             ),
         )?;
         let name = match shape.extract::<String>()?.as_str() {
@@ -1308,7 +1307,7 @@ impl Workspace {
         };
         let control = s
             .py()
-            .import("core.input_codes")?
+            .import("ingetrazo_core")?
             .getattr("Input")?
             .getattr("ControlModifier")?;
         let zoom = enum_int(&event.call_method0("modifiers")?)? & enum_int(&control)? != 0;
@@ -1325,7 +1324,7 @@ impl Workspace {
         Self::_touch(s)
     }
     fn gesture(s: &Bound<'_, Self>, event: &Obj<'_>) -> PyResult<bool> {
-        let qt = s.py().import("core.input_codes")?.getattr("Input")?;
+        let qt = s.py().import("ingetrazo_core")?.getattr("Input")?;
         let kind = event.call_method0("gestureType")?;
         if kind.eq(qt.getattr("ZoomNativeGesture")?)? {
             let p = event.call_method0("position")?;
@@ -1465,14 +1464,11 @@ impl Workspace {
                 return Self::_touch(s);
             }
         }
-        let ui = py.import("views.wgpu_ui")?;
-        let name = ui
-            .getattr("_KEYS")?
-            .call_method1("get", (event.call_method0("key")?, ""))?;
+        let name = calls::key_name(event)?;
         if name.is_truthy()?
             && s.getattr("view")?
                 .getattr("renderer")?
-                .call_method1("page_key", (name, ui.call_method1("_mods", (event,))?))?
+                .call_method1("page_key", (name, calls::mods(event)?))?
                 .is_truthy()?
         {
             Self::_touch(s)?;

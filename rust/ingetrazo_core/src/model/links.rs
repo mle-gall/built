@@ -635,7 +635,7 @@ pub fn validate_select(select: &Obj<'_>) -> PyResult<()> {
         }
         return Ok(());
     }
-    module(py, "core.facets")?.call_method1(pyo3::intern!(py, "validate_filter"), (select.get_item("filter")?,))?;
+    module(py, "ingetrazo_core.facets")?.call_method1(pyo3::intern!(py, "validate_filter"), (select.get_item("filter")?,))?;
     Ok(())
 }
 
@@ -1030,7 +1030,7 @@ fn restamp_faces<'py>(mesh: &Obj<'py>, renamed: &Bound<'py, PyDict>) -> PyResult
 }
 
 /// Move `mesh`'s faces onto the materials' new names (`renamed`, old →
-/// new, from `core.insert.merge_materials`): a deferred mesh in its face
+/// new, from `ingetrazo_core.document_insert.merge_materials`): a deferred mesh in its face
 /// attribute table, unbuilt; a built mesh's faces in place.
 #[pyfunction]
 #[pyo3(name = "link_restamp_materials")]

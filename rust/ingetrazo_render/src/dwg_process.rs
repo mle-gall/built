@@ -18,7 +18,7 @@ pub struct DwgConverter {
 
 fn bridge_error(py: Python<'_>, message: String, kind: &str) -> PyErr {
     match py
-        .import("formats.dwg_bridge")
+        .import("ingetrazo_core.formats.dwg_bridge")
         .and_then(|m| m.call_method1("DwgBridgeError", (message, kind)))
     {
         Ok(exception) => PyErr::from_value(exception),
@@ -115,7 +115,7 @@ impl DwgConverter {
         py: Python<'py>,
         drawing: &Bound<'py, PyAny>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let backend = py.import("formats.dwg_bridge")?;
+        let backend = py.import("ingetrazo_core.formats.dwg_bridge")?;
         let timeout = Duration::try_from_secs_f64(backend.getattr("_TIMEOUT")?.extract()?)
             .map_err(|_| PyRuntimeError::new_err("invalid DWG timeout"))?;
         if self.running.swap(true, Ordering::AcqRel) {

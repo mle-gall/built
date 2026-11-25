@@ -82,7 +82,7 @@ def test_line_styles_carry_each_tags_own_pen_and_line(scene):
 
 def test_the_view_inks_each_cut_with_its_tags_weight(scene):
     from tests.controller_surface import ControllerSurface as Viewport
-    from core.style import Style
+    from ingetrazo_core.style import Style
     keep = np.array([True, True, True, True])
     tags = np.array(["Muros", "corte-norte", "corte-sur", ""], dtype=object)
     vp = SimpleNamespace(scene=scene, _frame_style=Style(),

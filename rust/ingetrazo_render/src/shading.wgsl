@@ -144,17 +144,21 @@ fn face_pixel(i: Out, facing: bool) -> Pixel {
  var p: Pixel; p.color=vec4f(c,select(opacity,0.6,camera.size.z == 1)); p.id=i.id; return p;
 }
 
-fn edge_pixel(i: Out) -> Pixel { if i.section_distance < 0. { discard; } var p: Pixel; var c = style.edge.rgb; if (i.decorated & 2u) != 0u { c = vec3f(0.95,0.45,0.16); } else if (i.decorated & 4u) != 0u { c = vec3f(0.30,0.55,0.95); } if (i.decorated & 64u) != 0u { c = mix(c, style.fade.rgb, style.fade.a); } p.color=vec4f(c,1); p.id=i.id; return p; }
+// An edge carries only what its pixel reads. The faces' record on every
+// vertex of every edge quad was most of what the GPU stored for a frame of
+// a large model.
+struct EdgeOut { @builtin(position) position: vec4f, @location(1) @interpolate(flat) id: u32, @location(3) @interpolate(flat) decorated: u32, @location(7) @interpolate(linear) distance: f32, @location(8) section_distance: f32 }
+fn edge_pixel(i: EdgeOut) -> Pixel { if i.section_distance < 0. { discard; } var p: Pixel; var c = style.edge.rgb; if (i.decorated & 2u) != 0u { c = vec3f(0.95,0.45,0.16); } else if (i.decorated & 4u) != 0u { c = vec3f(0.30,0.55,0.95); } if (i.decorated & 64u) != 0u { c = mix(c, style.fade.rgb, style.fade.a); } p.color=vec4f(c,1); p.id=i.id; return p; }
 
 @fragment fn color_fs(i: Out, @builtin(front_facing) front: bool) -> @location(0) vec4f {
  let p = face_pixel(i,front);
  if style.raster.x > 0. && camera.size.z != 1. && p.color.a < 1. { discard; }
  return p.color;
 }
-@fragment fn color_edge_fs(i: Out) -> @location(0) vec4f { return edge_pixel(i).color; }
+@fragment fn color_edge_fs(i: EdgeOut) -> @location(0) vec4f { return edge_pixel(i).color; }
 
 @fragment fn fs(i: Out, @builtin(front_facing) front: bool) -> Pixel { let p = face_pixel(i,front); if style.raster.x > 0. && camera.size.z != 1. && p.color.a < 1. { discard; } return p; }
-@fragment fn edge_fs(i: Out) -> Pixel { return edge_pixel(i); }
+@fragment fn edge_fs(i: EdgeOut) -> Pixel { return edge_pixel(i); }
 
 // IDs require alpha rejection, never lighting, color conversion or selection dots.
 @fragment fn depth_fs(i: Out, @builtin(front_facing) facing: bool) -> Pixel {
@@ -170,14 +174,14 @@ fn edge_pixel(i: Out) -> Pixel { if i.section_distance < 0. { discard; } var p: 
  }
  var p: Pixel; p.id = i.id; return p;
 }
-@fragment fn hidden_edge_fs(i: Out) -> Pixel {
+@fragment fn hidden_edge_fs(i: EdgeOut) -> Pixel {
  var p = edge_pixel(i);
  if camera.size.z == 1. { var c = mix(style.edge.rgb,style.background.rgb,0.6); if (i.decorated & 64u) != 0u { c = mix(c, style.fade.rgb, style.fade.a); } p.color = vec4f(c,1.); }
  else { if (i.distance % max(style.profiles.w*2.,1.)) >= style.profiles.w { discard; } }
  return p;
 }
 
-@fragment fn profile_fs(i: Out) -> Pixel {
+@fragment fn profile_fs(i: EdgeOut) -> Pixel {
  if (i.decorated & 16u) == 0u { discard; }
  return edge_pixel(i);
 }

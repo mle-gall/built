@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from ingetrazo_core import ScreenPoint as QPointF
-from core.input_codes import Input as Qt
+from ingetrazo_core import Input as Qt
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from core.camera import OrbitCamera as Camera
 from core.group import Group

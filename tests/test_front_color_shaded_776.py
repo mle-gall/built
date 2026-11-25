@@ -125,7 +125,7 @@ def test_a_group_takes_it_and_a_painted_group_keeps_its_paint(win):
 
 
 def test_the_stock_white_bakes_nothing_new():
-    from core.style import Style
+    from ingetrazo_core.style import Style
     from views.document_interaction import _front_tint
     assert _front_tint(Style()) is None
     assert _front_tint(Style(face_mode="hidden_line",

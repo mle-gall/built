@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Old preference values cannot override the native design-system accent."""
 import pytest
-from core import general_settings
+from ingetrazo_core import general_settings
 from ingetrazo_render import chrome_token
 
 

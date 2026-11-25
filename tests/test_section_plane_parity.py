@@ -84,7 +84,7 @@ def answers(section):
 
 
 def test_the_section_plane_archive_answers_as_the_python_did():
-    from core import section
+    from ingetrazo_core import section
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     got = json.loads(json.dumps(answers(section)))
     for key in want:
@@ -94,7 +94,7 @@ def test_the_section_plane_archive_answers_as_the_python_did():
 
 if __name__ == "__main__" and "--write" in sys.argv:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from core import section
+    from ingetrazo_core import section
     data = answers(section)
     GOLDEN.parent.mkdir(exist_ok=True)
     GOLDEN.write_bytes(gzip.compress(json.dumps(data).encode(), mtime=0))

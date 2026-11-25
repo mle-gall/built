@@ -21,7 +21,7 @@ from ingetrazo_core import plane_region_point as _region_test_point
 from core.edits import build_add_edges
 from core.history import History
 from core.mesh import Mesh
-from core.orient import is_closed
+from ingetrazo_core.orient import is_closed
 from core.scene import Scene
 from tests.test_pushpull_ux import _StubViewport
 from tests.test_solid_tools import BLUE, RED, _box

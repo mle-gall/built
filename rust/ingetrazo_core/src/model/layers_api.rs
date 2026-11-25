@@ -323,17 +323,17 @@ fn taggable_kinds(py: Python<'_>) -> PyResult<&Bound<'_, PyTuple>> {
     Ok(TAGGABLE
         .get_or_try_init(py, || -> PyResult<Py<PyTuple>> {
             let mesh = py.import("ingetrazo_core.mesh")?;
-            let guide = py.import("core.guide")?;
+            let guide = py.import("ingetrazo_core.guide")?;
             let kinds = [
                 mesh.getattr("Face")?,
                 mesh.getattr("Edge")?,
                 py.import("core.group")?.getattr("Group")?,
                 py.import("core.dimension")?.getattr("Dimension")?,
-                py.import("core.textlabel")?.getattr("TextLabel")?,
-                py.import("core.section")?.getattr("SectionPlane")?,
+                py.import("ingetrazo_core.textlabel")?.getattr("TextLabel")?,
+                py.import("ingetrazo_core.section")?.getattr("SectionPlane")?,
                 guide.getattr("Guide")?,
                 guide.getattr("GuideCircle")?,
-                py.import("core.image_plane")?.getattr("ImagePlane")?,
+                py.import("ingetrazo_core.image_plane")?.getattr("ImagePlane")?,
             ];
             Ok(PyTuple::new(py, kinds)?.unbind())
         })?
@@ -546,7 +546,7 @@ fn tag_new_objects<'py>(scene: &Obj<'py>, before: &Obj<'py>, include_groups: boo
 #[pyfunction]
 fn grain_layers<'py>(scene: &Obj<'py>) -> PyResult<Bound<'py, PyList>> {
     let py = scene.py();
-    let wood = py.import("core.hatches")?.getattr("WOOD")?;
+    let wood = py.import("ingetrazo_core.hatches")?.getattr("WOOD")?;
     let out = PyList::empty(py);
     let layers = scene.attr_opt(intern!(py, "layers"))?.unwrap_or_else(|| PyTuple::empty(py).into_any());
     for ly in layers.try_iter()? {

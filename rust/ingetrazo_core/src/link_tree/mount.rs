@@ -99,7 +99,7 @@ fn node<'py>(
 }
 pub(super) fn host(tree: &Obj<'_>, registry: &Obj<'_>) -> PyResult<()> {
     let py = tree.py();
-    let structure = crate::model::module(py, "core.structure")?;
+    let structure = crate::model::module(py, "ingetrazo_core.structure")?;
     let linked = crate::model::module(py, "core.links")?.getattr("LINKED_FOLDER")?;
     let own = own(&structure.call_method1("_nodes", (registry,))?, &linked)?;
     let nodes = tree.getattr("nodes")?;

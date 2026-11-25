@@ -10,7 +10,7 @@ from core import layers as L
 from core.group import Group
 from core.layers import DEFAULT_LAYER, Layer, assign_layer
 from core.mesh import Mesh
-from core.saved_views import SavedView
+from ingetrazo_core.saved_views import SavedView
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from tests.test_drawing_records import _square
 
@@ -168,7 +168,7 @@ def test_drawing_quick_filters_and_inversion_follow_document_use_and_selection()
 
 def test_saved_scene_preference_and_make_active(native_host):
     from tests.native_tree import action
-    from core.settings import settings
+    from ingetrazo_core.settings import settings
     scene = native_host.viewport.scene
     scene.saved_views.append(SavedView("Planta"))
     action(native_host, "newtaghidden", "1")
@@ -185,7 +185,7 @@ def test_saved_scene_preference_and_make_active(native_host):
 
 
 def test_drawing_model_colours_belong_to_the_style(native_host):
-    from core.style import Style
+    from ingetrazo_core.style import Style
     from tests.native_tree import action
     scene = native_host.viewport.scene
     for on in (True, False):

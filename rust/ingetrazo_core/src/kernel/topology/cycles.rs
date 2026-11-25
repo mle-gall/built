@@ -71,7 +71,7 @@ fn _store_edge_plan<'py>(edges: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
         return Ok(None);
     }
     let scan = py
-        .import("core.scan_index")?
+        .import("ingetrazo_core.scan_index")?
         .call_method1("scan", (mesh,))?;
     if scan.is_none() {
         return Ok(None);

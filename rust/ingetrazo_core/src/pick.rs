@@ -44,19 +44,6 @@ pub fn ray_triangle(o: P, d: P, v0: P, e1: P, e2: P) -> Option<f64> {
     (u >= -BARY_EPS && u <= 1.0 + BARY_EPS && v >= -BARY_EPS && u + v <= 1.0 + BARY_EPS && t > 1e-6).then_some(t)
 }
 
-/// The nearest triangle the ray meets (the first one on a tie): `(index, t)`.
-pub fn ray_first(o: P, d: P, v0: &[P], e1: &[P], e2: &[P]) -> Option<(usize, f64)> {
-    let mut best: Option<(usize, f64)> = None;
-    for i in 0..v0.len() {
-        if let Some(t) = ray_triangle(o, d, v0[i], e1[i], e2[i]) {
-            if best.is_none_or(|(_, b)| t < b) {
-                best = Some((i, t));
-            }
-        }
-    }
-    best
-}
-
 /// A camera's projection to view pixels.
 #[derive(Clone, Copy, Debug)]
 pub struct Projector {
@@ -287,10 +274,6 @@ pub fn box_rows(world: &[[f64; 16]], code: &[i64], owner: &[i64], drawn: &[bool]
 
 /// The segments within `radius` pixels of `(x, y)`, nearest first:
 /// `(index, pixels, t along the segment)`; ends behind the eye skip it.
-pub fn nearest_segments(a: &[P], b: &[P], proj: &Projector, x: f64, y: f64, radius: f64) -> Vec<(usize, f64, f64)> {
-    nearest_projected(a.iter().zip(b).map(|(&a,&b)| (proj.px(a),proj.px(b))), x, y, radius)
-}
-
 pub(crate) fn nearest_projected(
     segments: impl Iterator<Item=((f64,f64,bool),(f64,f64,bool))>, x:f64, y:f64, radius:f64
 ) -> Vec<(usize, f64, f64)> {
@@ -408,59 +391,6 @@ pub fn box_mesh_arrays<'py>(py: Python<'py>, pos: PyReadonlyArray2<'py, f64>, ed
     Ok((e.into_pyarray(py), f.into_pyarray(py)))
 }
 
-/// The objects a box catches from a packed scene (`box_rows`).
-/// `world` (R, 16) row-major as packed; `bounds_lo`/`bounds_hi` (C, 3)
-/// per prototype; `points(code)` answers a prototype's triangle corners
-/// and edge ends `((K, 3), (M, 3))`, asked only for rows that straddle
-/// the box. Returns the caught owner ordinals.
-#[pyfunction]
-#[allow(clippy::too_many_arguments)]
-pub fn box_packed_rows<'py>(py: Python<'py>, world: PyReadonlyArray2<'py, f64>, code: PyReadonlyArray1<'py, i64>,
-                           owner: PyReadonlyArray1<'py, i64>, drawn: PyReadonlyArray1<'py, bool>,
-                           bounds_lo: PyReadonlyArray2<'py, f64>, bounds_hi: PyReadonlyArray2<'py, f64>,
-                           n_owners: usize, mvp: Vec<f64>, w: f64, h: f64, rect: [f64; 4], crossing: bool,
-                           points: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyArray1<i64>>> {
-    if world.shape()[1] != 16 {
-        return Err(pyo3::exceptions::PyValueError::new_err("world rows need 16 values"));
-    }
-    let proj = Projector::new(&mat16(mvp)?, w, h);
-    let world: Vec<[f64; 16]> = world.as_slice()?.chunks_exact(16).map(|c| c.try_into().unwrap()).collect();
-    let (lo, hi) = (rows3(&bounds_lo)?, rows3(&bounds_hi)?);
-    let (code, owner, drawn) = (code.as_slice()?, owner.as_slice()?, drawn.as_slice()?);
-    let mut err: Option<PyErr> = None;
-    let mut fetch = |c: usize| -> Proto {
-        let got = points.call1((c,)).and_then(|r| {
-            let (t, e): (PyReadonlyArray2<f64>, PyReadonlyArray2<f64>) = r.extract()?;
-            Ok(Proto { tris: rows3(&t)?, edges: rows3(&e)? })
-        });
-        got.unwrap_or_else(|e| {
-            err.get_or_insert(e);
-            Proto { tris: vec![], edges: vec![] }
-        })
-    };
-    let hit = box_rows(&world, code, owner, drawn, &lo, &hi, &mut fetch, n_owners, &proj, &rect, crossing);
-    if let Some(e) = err {
-        return Err(e);
-    }
-    let out: Vec<i64> = hit.iter().enumerate().filter(|(_, h)| **h).map(|(i, _)| i as i64).collect();
-    Ok(out.into_pyarray(py))
-}
-
-/// Segments `a[i]`–`b[i]` (N, 3) within `radius` pixels of `(x, y)`,
-/// nearest first: `(indices, pixels, t)`.
-#[pyfunction]
-#[allow(clippy::too_many_arguments)]
-pub fn nearest_segments_px<'py>(py: Python<'py>, a: PyReadonlyArray2<'py, f64>, b: PyReadonlyArray2<'py, f64>,
-                               mvp: Vec<f64>, w: f64, h: f64, x: f64, y: f64, radius: f64)
-    -> PyResult<(Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
-    let proj = Projector::new(&mat16(mvp)?, w, h);
-    let found = nearest_segments(&rows3(&a)?, &rows3(&b)?, &proj, x, y, radius);
-    let idx: Vec<i64> = found.iter().map(|f| f.0 as i64).collect();
-    let dist: Vec<f64> = found.iter().map(|f| f.1).collect();
-    let t: Vec<f64> = found.iter().map(|f| f.2).collect();
-    Ok((idx.into_pyarray(py), dist.into_pyarray(py), t.into_pyarray(py)))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -473,16 +403,6 @@ mod tests {
         m[10] = 1.0;
         m[15] = 1.0;
         Projector::new(&m, 100.0, 100.0)
-    }
-
-    #[test]
-    fn ray_meets_the_nearest_triangle() {
-        let v0 = [[0.0, 0.0, 0.0], [0.0, 0.0, -1.0]];
-        let e = [[1.0, 0.0, 0.0], [1.0, 0.0, 0.0]];
-        let f = [[0.0, 1.0, 0.0], [0.0, 1.0, 0.0]];
-        let hit = ray_first([0.2, 0.2, 5.0], [0.0, 0.0, -1.0], &v0, &e, &f);
-        assert_eq!(hit.map(|h| h.0), Some(0));
-        assert!(ray_first([2.0, 2.0, 5.0], [0.0, 0.0, -1.0], &v0, &e, &f).is_none());
     }
 
     #[test]
@@ -531,7 +451,9 @@ mod tests {
     fn nearest_segment_first() {
         let a = [[-1.0, 0.0, 0.0], [-1.0, 0.5, 0.0]];
         let b = [[1.0, 0.0, 0.0], [1.0, 0.5, 0.0]];
-        let found = nearest_segments(&a, &b, &ortho(), 50.0, 30.0, 30.0);
+        let proj = ortho();
+        let segments = a.into_iter().zip(b).map(|(a, b)| (proj.px(a), proj.px(b)));
+        let found = nearest_projected(segments, 50.0, 30.0, 30.0);
         assert_eq!(found.iter().map(|f| f.0).collect::<Vec<_>>(), vec![1, 0]);
     }
 }

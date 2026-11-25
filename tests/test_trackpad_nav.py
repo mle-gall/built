@@ -17,7 +17,7 @@ from ingetrazo_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from core.input_codes import DeviceType
+from ingetrazo_core import DeviceType
 from ingetrazo_render import WheelEvent, NativeGestureEvent
 from types import SimpleNamespace
 
@@ -232,7 +232,7 @@ def test_momentum_keeps_turning_with_inertia_on(vp):
 
 
 def test_inertia_off_drops_momentum(vp):
-    from core.settings import settings as preferences
+    from ingetrazo_core.settings import settings as preferences
     settings = preferences()
     settings.setValue("nav/trackpad_inertia", "0")
     try:

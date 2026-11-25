@@ -14,7 +14,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
 from core.history import AddFaceCommand, History
-from core.orient import is_closed
+from ingetrazo_core.orient import is_closed
 from core.scene import Scene
 from tools.base import ToolContext
 from tools.pushpull import PushPullTool

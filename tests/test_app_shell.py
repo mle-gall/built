@@ -238,7 +238,7 @@ def test_registered_shortcuts_use_rust_and_plugin_actions_still_trigger(host):
 
 
 def test_winit_tool_cursors_use_the_same_art_for_tools_and_navigation(host):
-    from core import general_settings
+    from ingetrazo_core import general_settings
     from ingetrazo_render import tool_cursor_art
 
     host.window._activate_tool("line")
@@ -288,7 +288,7 @@ def test_model_menu_uses_current_selection_history_and_tool(host):
 
 @pytest.mark.parametrize("suffix", ["obj", "stl"])
 def test_mesh_import_menu_waits_for_answer_then_imports_once(host, tmp_path, monkeypatch, suffix):
-    from core.settings import settings
+    from ingetrazo_core.settings import settings
     from tests.test_import_failure_reported import _CUBE_OBJ, _GOOD_STL
     from ingetrazo_render.shell_files import ShellFileDialog
     path = tmp_path / ("triangle." + suffix)

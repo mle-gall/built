@@ -276,7 +276,7 @@ impl MeshToolAccess {
         let py = slf.py();
         let s = slf.as_any();
         let picked = optional(&PyTuple::empty(py), kwargs, 0, "picked_row")?;
-        let axes = py.import("core.axes")?;
+        let axes = py.import("ingetrazo_core.axes")?;
         let tool = s.getattr("tool")?;
         let own = tool.call_method1("drag_plane", (s,))?;
         let mut plane = if own.is_truthy()? { own.clone() } else { attr(&tool, "work_plane")? };
@@ -1100,7 +1100,7 @@ impl MeshToolAccess {
             (painter, s.getattr("scene")?, s.getattr("camera")?, (width / scale, height / scale)),
             Some(&kw),
         )?;
-        py.import("core.plugin_panels")?.call_method1("draw_tool_feedback", (painter, s, &layout))?;
+        crate::plugin_panels::draw_tool_feedback(painter, s.as_any(), &layout)?;
         let snap = s.getattr("last_snap")?;
         if !snap.is_none() && attr(&snap, "kind")?.is_truthy()? && snap.hasattr("color")? {
             // With its tooltip ("Endpoint", "On Edge in group"), as GL.
@@ -1507,8 +1507,8 @@ fn start_of<'py>(tool: &Obj<'py>) -> Reply<'py> {
 impl NativeTools {
     #[new]
     #[pyo3(signature = (*_args, **_kwargs))]
-    fn new(_args: &Bound<'_, PyTuple>, _kwargs: Option<&Bound<'_, PyDict>>) -> (Self, MeshToolAccess) {
-        (Self, MeshToolAccess)
+    fn new(_args: &Bound<'_, PyTuple>, _kwargs: Option<&Bound<'_, PyDict>>) -> PyClassInitializer<Self> {
+        PyClassInitializer::from(MeshToolAccess).add_subclass(Self)
     }
 
     fn __init__(slf: &Bound<'_, Self>, view: &Obj<'_>) -> PyResult<()> {
@@ -1769,7 +1769,7 @@ impl NativeTools {
         let tool = s.getattr("tool")?;
         if mode.eq("mesh")? {
             if class_name(&tool)? == "MoveTool" && tool.getattr("start_point")?.is_none() {
-                let control = py.import("core.input_codes")?.getattr("Input")?.getattr("ControlModifier")?;
+                let control = py.import("ingetrazo_core")?.getattr("Input")?.getattr("ControlModifier")?;
                 if ctx.getattr("modifiers")?.bitand(control)?.is_truthy()? && !tool.getattr("_copy")?.is_truthy()? {
                     let kw = PyDict::new(py);
                     kw.set_item("say", false)?;
@@ -2012,7 +2012,7 @@ impl NativeTools {
             };
             if !revision.eq(&notified)? {
                 if let Some(notify) = some(&view.getattr("source_viewport")?, "notify_scene_changed")? {
-                    let frame = py.import("core.coordinate_frame")?.call_method0("model_frame")?;
+                    let frame = py.import("ingetrazo_core.coordinate_frame")?.call_method0("model_frame")?;
                     within(&frame, || notify.call0())?;
                 }
             }

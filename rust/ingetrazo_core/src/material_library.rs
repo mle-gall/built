@@ -161,7 +161,7 @@ pub(crate) fn pick_library_paint(
             .get_item("name")?
             .is_some_and(|v| v.is_truthy().unwrap_or(false))
         {
-            py.import("core.materials")?
+            py.import("ingetrazo_core.materials")?
                 .getattr("Material")?
                 .call_method1("from_dict", (recipe,))?
         } else {

@@ -116,7 +116,7 @@ fn rfa_triangle_mesh<'p>(
             "add_faces_welded",
             (v, inv, vec![3; n], vec![1; n], vec![None::<i32>; n]),
         )?;
-        py.import("formats.fuse")?
+        py.import("ingetrazo_core.formats.fuse")?
             .call_method1("soften_smooth_edges", (&mesh,))?;
     }
     Ok(mesh)
@@ -204,7 +204,7 @@ fn material<'p>(
     opacity: Option<f64>,
 ) -> PyResult<Obj<'p>> {
     let py = name.py();
-    let m = py.import("core.materials")?;
+    let m = py.import("ingetrazo_core.materials")?;
     let kw = PyDict::new(py);
     kw.set_item("opacity", opacity)?;
     let mat = m.call_method("Material", (name, color), Some(&kw))?;
@@ -351,7 +351,7 @@ fn build_family<'p>(
         def.setattr("ext", ext)?;
         def.setattr(
             "ifc",
-            py.import("formats.rfa")?
+            py.import("ingetrazo_core.formats.rfa")?
                 .call_method1("_family_record", (&typ, &family, &source, &params))?,
         )?;
         let solids = PyList::empty(py);
@@ -449,7 +449,7 @@ fn build_family<'p>(
         defs.append(def)?;
     }
     let placement = py
-        .import("core.kept_components")?
+        .import("ingetrazo_core.kept_components")?
         .call_method1("place_copy", (defs.get_item(0)?,))?;
     Ok((warnings, defs, placement))
 }

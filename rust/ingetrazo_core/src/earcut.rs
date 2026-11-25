@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 //! Ear-clipping triangulation of a polygon with holes —
-//! `core.triangulate.earcut`, the Mapbox earcut as that module ports it
+//! `ingetrazo_core.triangulate.earcut`, the Mapbox earcut as that module ports it
 //! (no z-order hashing), step for step: the same ring built the same way
 //! round, the same ears found in the same order, the same recoveries from
 //! degeneracies, so the triangles come out identical, index for index.
@@ -470,7 +470,7 @@ fn point_in_triangle(ax: f64, ay: f64, bx: f64, by: f64, cx: f64, cy: f64, px: f
         && (bx - px) * (cy - py) - (cx - px) * (by - py) >= 0.0
 }
 
-/// `core.triangulate.earcut`: the triangles of `pts` (the outer ring, then
+/// `ingetrazo_core.triangulate.earcut`: the triangles of `pts` (the outer ring, then
 /// each hole's points, `hole_indices` where each hole starts) as index
 /// triples into `pts`.
 pub fn earcut(pts: &[[f64; 2]], hole_indices: &[usize]) -> Vec<[usize; 3]> {

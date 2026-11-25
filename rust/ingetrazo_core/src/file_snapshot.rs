@@ -71,7 +71,7 @@ pub(crate) fn next(it: &Py<PyIterator>) -> PyResult<Option<Owned>> {
     })
 }
 fn api(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("formats.igz")
+    py.import("ingetrazo_core.formats.igz")
 }
 #[pyclass(get_all, set_all, module = "ingetrazo_core")]
 struct Geometry {
@@ -204,10 +204,6 @@ fn copy(value: Owned, depth: usize) -> Job {
             }
         }
     })
-}
-#[pyfunction]
-fn copy_steps(value: Owned) -> Steps {
-    steps(copy(value, 0))
 }
 fn geometry_record(geometry: Geometry) -> PyResult<Owned> {
     Python::attach(|py| {
@@ -642,7 +638,7 @@ fn resolve_geometry<'p>(payload: &Obj<'p>, sink: &Obj<'p>, encode_meta: &Obj<'p>
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Geometry>()?;
     m.add_class::<Survey>()?;
-    m.add_function(wrap_pyfunction!(copy_steps, m)?)?;
+
     m.add_function(wrap_pyfunction!(geometry_steps, m)?)?;
     m.add_function(wrap_pyfunction!(snapshot_steps, m)?)?;
     m.add_function(wrap_pyfunction!(survey_steps, m)?)?;

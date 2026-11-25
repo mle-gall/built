@@ -9,7 +9,7 @@ mod vertices;
 mod plane;
 pub(crate) use plane::{command_rebuild_plane, command_rebuild_planar, RebuiltPlane, RebuiltPlanar};
 pub(crate) use vertices::{command_move_vertices, command_transform_vertices, MovedVertices, VertexResult};
-pub(crate) use erase::{command_erase_cleanup, command_erase_selection, command_heal_overlaps, Healed, ErasedCleanup, ErasedSelection};
+pub(crate) use erase::{command_erase_cleanup, command_erase_selection, command_heal_overlaps, Healed};
 use pyo3::{prelude::*, types::PyDict};
 
 pub(crate) struct DrawnEdge {
@@ -114,7 +114,7 @@ pub(crate) fn command_add_face(
         .call_method1("_attribute_owner", (mesh,))?;
     let scan = divide
         && py
-            .import("core.scan_index")?
+            .import("ingetrazo_core.scan_index")?
             .call_method0("enabled")?
             .is_truthy()?;
     let store = mesh.getattr("_store")?;
@@ -170,7 +170,7 @@ fn candidate_keys(mesh: &Bound<'_, PyAny>, selection: Candidates<'_>) -> PyResul
     if use_scan {
         let scan = mesh
             .py()
-            .import("core.scan_index")?
+            .import("ingetrazo_core.scan_index")?
             .call_method1("scan", (mesh,))?;
         if !scan.is_none() {
             let native = scan.getattr("native")?;

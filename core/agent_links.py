@@ -2,7 +2,8 @@
 """Link and project inspection uses the same operations as the project browser."""
 import ingetrazo_core
 
-from core import links, project
+from core import links
+from ingetrazo_core import project
 
 
 class LinkTools:

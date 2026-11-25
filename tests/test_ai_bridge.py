@@ -257,14 +257,14 @@ def test_the_linux_packages_print_a_command_that_outlives_the_session():
 def test_the_flatpak_ships_the_mcp_script():
     # `flatpak run <id> --mcp` runs scripts/ingetrazo_mcp.py from /app; the
     # manifest must copy scripts/ with the rest of the tree.
-    from core.paths import app_root
+    from ingetrazo_core.paths import app_root
     manifest = (app_root() / "packaging" / "flatpak" / "com.ingetrazo.IngeTrazo.yml").read_text(encoding="utf-8")
     line = next(l for l in manifest.splitlines() if "cp -a core" in l)
     assert " scripts " in line + " "
 
 
 def test_the_mcp_script_ships_with_the_app_and_the_flag_finds_it():
-    from core.paths import app_root
+    from ingetrazo_core.paths import app_root
     assert (app_root() / "scripts" / "ingetrazo_mcp.py").is_file()
     spec = (app_root() / "packaging/native.spec").read_text(encoding="utf-8")
     assert "('scripts/ingetrazo_mcp.py',   'scripts')" in spec

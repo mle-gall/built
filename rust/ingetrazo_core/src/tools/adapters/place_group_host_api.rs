@@ -11,7 +11,7 @@ fn on_click<'py>(a: &Args<'py>) -> Reply<'py> {
         && tool.getattr("_group")?.getattr("text3d")?.is_truthy()?
     {
         let picked_attachment =
-            imported(py, "core.annotation_anchor")?.getattr("picked_attachment")?;
+            imported(py, "ingetrazo_core.annotation_anchor")?.getattr("picked_attachment")?;
         tool.setattr("_attachment", picked_attachment.call1((&ctx,))?)?;
     }
     tool.call_method1(

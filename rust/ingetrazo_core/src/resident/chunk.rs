@@ -224,7 +224,7 @@ fn shade_pairs(faces: &[usize], row_of: &[usize], shade_ix: &[usize]) -> (Vec<(u
 pub fn bake_deferred_chunk<'py>(py: Python<'py>, vp: &Obj<'py>, mesh: &Obj<'py>, paint: &Obj<'py>, msig: &Obj<'py>) -> PyResult<Bound<'py, PyDict>> {
     let np = numpy(py)?;
     let module = py.import("views.array_bake")?;
-    let materials = py.import("core.materials")?;
+    let materials = py.import("ingetrazo_core.materials")?;
     let builtins = py.import("builtins")?;
     let round3 = |value: f64| -> PyResult<f64> { builtins.call_method1("round", (value, 3))?.extract() };
     let bytes = |data: &[u8]| PyBytes::new(py, data);

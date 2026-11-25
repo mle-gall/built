@@ -23,7 +23,7 @@ from core.camera import OrbitCamera
 from core.composition import MarcoVista, apply_frame_camera
 from core.hlr import KIND_CUT, hlr_drawing
 from core.scene import Scene
-from core.section import SectionPlane
+from ingetrazo_core.section import SectionPlane
 
 V = QVector3D
 

@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import pytest
 from ingetrazo_render import shell_services as native
-from core import i18n, settings
+from core import i18n
+from ingetrazo_core import settings
 
 from tests.preferences_chrome import Controls, settings_file
 from ingetrazo_render.settings_sheet import _PENDING
@@ -108,7 +109,7 @@ def test_pinning_another_language_over_the_system_one_asks_a_restart(prefs):
 def test_startup_resolves_the_saved_choice(saved, tmp_path, monkeypatch,
                                            system_is_french):
     from ingetrazo_render import start_profile
-    from core import settings
+    from ingetrazo_core import settings
 
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
     monkeypatch.setattr(settings, "_store", None)

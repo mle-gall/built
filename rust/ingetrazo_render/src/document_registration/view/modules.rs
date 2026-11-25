@@ -72,6 +72,13 @@ pub(super) fn install_interaction_module(module: &Bound<PyModule>) -> PyResult<(
     let py = module.py();
     let full = module.name()?.extract::<String>()?;
     match full.trim_start_matches("views.") {
+        "viewport" => {
+            let interaction = py.import("views.document_interaction")?;
+            module.add("document_interaction", &interaction)?;
+            module.add("Viewport", py.import("views.document_controller")?.getattr("DocumentController")?)?;
+            module.add("__getattr__", py.import("functools")?.call_method1("partial",
+                (py.import("builtins")?.getattr("getattr")?, interaction))?)?;
+        }
         "extension_api" => crate::extension_api::register(module)?,
         "documents" => crate::extension_api::register_documents(module)?,
         "document_interaction" => super::interaction_host::install(module)?,

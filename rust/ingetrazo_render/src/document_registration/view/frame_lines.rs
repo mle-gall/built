@@ -436,7 +436,7 @@ fn rasterize<'py>(a: &Args<'py>) -> Reply<'py> {
 
 /// The document's annotations (`annotations(painter)`), then the tool
 /// primitives, on the annotation canvas (`AnnotationCanvas.draw_primitives`).
-fn paint_layer<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn paint_layer<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (painter, primitives, annotations) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?);
     if !annotations.is_none() {
@@ -520,7 +520,7 @@ fn selection_rectangle<'py>(a: &Args<'py>) -> Reply<'py> {
         "#3366c7"
     };
     let fill = format!("#{}{}", if zoom { "1a" } else { "1c" }, &colour[1..]);
-    let input = py.import("core.input_codes")?.getattr("Input")?;
+    let input = py.import("ingetrazo_core")?.getattr("Input")?;
     let pen = input.getattr(if zoom || crossing { "DashLine" } else { "SolidLine" })?;
     primitive(py, ("rectangle", (start, end), colour, 1.5), Some(fields!(py; "fill" => fill, "pen_style" => pen)))
 }
@@ -636,7 +636,7 @@ pub(super) fn install_overlay(module: &Bound<PyModule>) -> PyResult<()> {
         "__doc__",
         "Logical-pixel tool primitives and the snap marker on the annotation\ncanvas (``ingetrazo_render.AnnotationCanvas``), which the renderer\ncomposites over the scene.",
     )?;
-    modules::import_names(module, "core.input_codes", &[("Input", "Qt")])?;
+    modules::import_names(module, "ingetrazo_core", &[("Input", "Qt")])?;
     let input = module.getattr("Qt")?;
     let builtins = py.import("builtins")?;
     let (text, tuple, float, object) = (builtins.getattr("str")?, builtins.getattr("tuple")?, builtins.getattr("float")?, builtins.getattr("object")?);

@@ -158,7 +158,7 @@ def test_the_arrays_draw_the_lines_the_walk_draws_with_their_layers(
 
 def test_with_a_section_cut_too(tmp_path, lazy):
     from core.history import History, PlaceSectionPlaneCommand
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     scene = _scene(tmp_path, lazy)
     vp = _viewport(scene)
     hist = History(scene)

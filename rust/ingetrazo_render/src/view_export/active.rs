@@ -45,7 +45,7 @@ pub(super) fn view_line_groups<'p>(vp: &Obj<'p>, fast: bool) -> ResultObj<'p> {
                 .call_method1("line_styles", (scene, true))?,
         )?;
         return py
-            .import("formats.dxf_views")?
+            .import("ingetrazo_core.formats.dxf_views")?
             .getattr("dxf_groups_by_layer")?
             .call(
                 (drawing, "VISTA"),

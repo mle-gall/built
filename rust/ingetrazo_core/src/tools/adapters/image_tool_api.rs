@@ -10,7 +10,7 @@ fn set_work_plane<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
     let value = a.get_item(1)?;
-    let plane_axes = imported(py, "core.axes")?.getattr("plane_axes")?;
+    let plane_axes = imported(py, "ingetrazo_core.axes")?.getattr("plane_axes")?;
     tool.setattr("_plane", &value)?;
     tool.getattr("_machine")?.call_method1(
         "set",

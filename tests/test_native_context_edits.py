@@ -15,7 +15,7 @@ def invoke(win, verb):
 
 
 def test_reference_image_forms_keep_aspect_undo_and_reject_stale_answers(native_window, monkeypatch):
-    from core.image_plane import ImagePlane
+    from ingetrazo_core.image_plane import ImagePlane
     win = native_window
     vp = win.viewport
     image = ImagePlane("synthetic.png", Vec3(), Vec3(4, 0, 0), Vec3(0, 2, 0), aspect=0.5)
@@ -37,7 +37,7 @@ def test_reference_image_forms_keep_aspect_undo_and_reject_stale_answers(native_
 
 
 def test_section_and_view_commands_change_the_camera(native_window):
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     win = native_window
     vp = win.viewport
     plane = SectionPlane(Vec3(2, 3, 4), Vec3(0, 1, 0))

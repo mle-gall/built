@@ -4,7 +4,7 @@ use pyo3::{prelude::*, types::PyList};
 type Obj<'p> = Bound<'p, PyAny>;
 const MONTHS: [i32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 fn daylight(scene: &Obj<'_>, sh: &Obj<'_>) -> PyResult<Option<(i32, i32)>> {
-    let sun = scene.py().import("core.sun")?;
+    let sun = scene.py().import("ingetrazo_core.sun")?;
     let site = scene.getattr_opt("georef")?.filter(|v| !v.is_none());
     let coord = |k: &str, default: &str| match &site {
         Some(s) => s.getattr(k),

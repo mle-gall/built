@@ -64,7 +64,7 @@ fn front_tint<'py>(style: &Obj<'py>) -> PyResult<Obj<'py>> {
         return Ok(none(py));
     }
     let base = py
-        .import("core.style")?
+        .import("ingetrazo_core.style")?
         .getattr("DEFAULT_FACE_COLOR")?
         .extract::<[f64; 3]>()?;
     Ok(PyTuple::new(

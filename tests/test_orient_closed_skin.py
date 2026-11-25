@@ -16,10 +16,10 @@ from __future__ import annotations
 
 from ingetrazo_core import Vec3 as QVector3D
 
-from core import orient
+from ingetrazo_core import orient
 from core.history import History, MoveVerticesCommand
 from core.mesh import Mesh
-from core.orient import orient_outward, signed_volume
+from ingetrazo_core.orient import orient_outward, signed_volume
 from core.scene import Scene
 from core.topology import _key
 from tests.test_pushpull_large_solid_cost import (_circle,

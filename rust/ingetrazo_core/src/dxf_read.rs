@@ -857,7 +857,7 @@ fn prepare<'p>(
     }
     if groups.is_empty() {
         return Err(PyErr::from_value(
-            py.import("formats.dxf_in")?
+            py.import("ingetrazo_core.formats.dxf_in")?
                 .call_method1("NothingToImport", (&m.skipped,))?,
         ));
     }

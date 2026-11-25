@@ -251,7 +251,7 @@ fn rubber_band<'py>(a: &Args<'py>) -> Reply<'py> {
 /// text, flat grips) that dropped the colours telling you which axis a line
 /// follows. `layout` is the frame's AnnotationLayout (live camera at the
 /// overlay's logical size); `tools` is NativeTools.
-fn draw_tool_feedback<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn draw_tool_feedback<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (painter, tools, layout) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?);
     let module = annotations(py)?;
@@ -412,7 +412,7 @@ pub(super) fn install_annotations(module: &Bound<PyModule>) -> PyResult<()> {
     )?;
     modules::import_names(module, "copy", &[("copy", "copy")])?;
     module.add("np", py.import("numpy")?)?;
-    modules::import_names(module, "core.input_codes", &[("Input", "Qt")])?;
+    modules::import_names(module, "ingetrazo_core", &[("Input", "Qt")])?;
     modules::import_names(module, "ingetrazo_core", &[("ScreenPoint", "QPointF"), ("Vec3", "QVector3D")])?;
     modules::import_names(module, "ingetrazo_render", &[("PaintColor", "QColor"), ("PaintPen", "QPen")])?;
     modules::import_names(

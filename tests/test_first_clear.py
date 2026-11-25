@@ -141,7 +141,7 @@ def test_the_rays_it_cannot_call_are_asked_as_before(win, monkeypatch):
 
 def test_xray_answers_at_once_and_a_cut_is_left_to_the_batches(win,
                                                                monkeypatch):
-    from core.style import Style
+    from ingetrazo_core.style import Style
     vp = win
     _set_view(vp, VIEWS[0])
     pts = _points(np.random.default_rng(1), vp, 30)

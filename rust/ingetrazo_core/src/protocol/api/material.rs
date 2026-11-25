@@ -125,7 +125,7 @@ fn material_for_paint<'p>(
         kw.set_item("color", &rgb)?;
         colour_name(rgb.as_any())?
     };
-    py.import("core.materials")?
+    py.import("ingetrazo_core.materials")?
         .call_method("Material", (fresh_name(&mats, &base)?,), Some(&kw))
 }
 fn anonymous<'p>(
@@ -266,7 +266,7 @@ fn survey(this: &Obj<'_>, scene: &Obj<'_>) -> PyResult<()> {
             kw.set_item("color", rgb)?;
             kw.set_item("opacity", op)?;
             mat = py
-                .import("core.materials")?
+                .import("ingetrazo_core.materials")?
                 .call_method("Material", (&found,), Some(&kw))?;
             materials.set_item(&found, &mat)?
         }

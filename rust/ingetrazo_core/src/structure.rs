@@ -282,35 +282,6 @@ pub(crate) fn set_structure_nodes<'py>(
     Ok(prior)
 }
 #[pyfunction]
-pub(crate) fn restore_structure_nodes(targets: &Obj<'_>, prior: Vec<Prior<'_>>) -> PyResult<()> {
-    let py = targets.py();
-    let copy = py.import("copy")?.getattr("deepcopy")?;
-    for (group, (was_none, present, value)) in targets.try_iter()?.zip(prior) {
-        let group = group?;
-        let old = group.getattr("ext")?;
-        let ext = if old.is_truthy()? {
-            py.get_type::<PyDict>().call1((old,))?
-        } else {
-            empty(py)
-        };
-        if present {
-            ext.set_item("structure", copy.call1((value,))?)?;
-        } else {
-            ext.call_method1("pop", ("structure", py.None()))?;
-        }
-        group.setattr(
-            "ext",
-            if was_none && ext.is_empty()? {
-                none(py)
-            } else {
-                ext
-            },
-        )?;
-    }
-    Ok(())
-}
-
-#[pyfunction]
 pub(crate) fn plan_filing<'py>(
     scene: &Obj<'py>,
     groups: Vec<Obj<'py>>,
@@ -319,7 +290,7 @@ pub(crate) fn plan_filing<'py>(
     changes: &Obj<'py>,
 ) -> PyResult<Vec<Obj<'py>>> {
     let py = scene.py();
-    let api = py.import("core.structure")?;
+    let api = py.import("ingetrazo_core.structure")?;
     let recipe = api.call_method1("resolve", (registry, key))?;
     let nodes = api.call_method1("_nodes", (registry,))?;
     for k in structure_lineage(&nodes, key)? {
@@ -424,7 +395,7 @@ pub(crate) fn check_filing_paths(
     batches: &Obj<'_>,
 ) -> PyResult<()> {
     let py = scene.py();
-    let api = py.import("core.structure")?;
+    let api = py.import("ingetrazo_core.structure")?;
     let nodes = api.call_method1("_nodes", (registry,))?;
     // Error order follows the interpreter's occupied-node set.
     let pending = PySet::empty(py)?;
@@ -488,7 +459,7 @@ pub(crate) fn resync_filing<'py>(
     keys: &Obj<'py>,
 ) -> PyResult<(Obj<'py>, Bound<'py, PyDict>)> {
     let py = scene.py();
-    let api = py.import("core.structure")?;
+    let api = py.import("ingetrazo_core.structure")?;
     let nodes = api.call_method1("_nodes", (registry,))?;
     let chosen = PySet::new(py, list(if keys.is_none() { &nodes } else { keys })?)?;
     for key in chosen.iter() {
@@ -540,7 +511,7 @@ pub(crate) fn file_created_placement<'py>(
     if !data.contains("bim_registry")? && !data.contains("project")? {
         return Ok(None);
     }
-    let api = py.import("core.structure")?;
+    let api = py.import("ingetrazo_core.structure")?;
     let registry = api.getattr("bim_registry")?.call_method1("get", (scene,))?;
     let section = get(&registry, "structure")?;
     if !section.is_truthy()? {
@@ -570,7 +541,7 @@ pub(crate) fn plan_node_edit<'py>(
     value: &str,
 ) -> PyResult<Obj<'py>> {
     let py = scene.py();
-    let api = py.import("core.structure")?;
+    let api = py.import("ingetrazo_core.structure")?;
     let registry = api.getattr("bim_registry")?.call_method1("get", (scene,))?;
     let nodes = api.call_method1("_nodes", (&registry,))?;
     let node = nodes.get_item(key)?;
@@ -612,7 +583,7 @@ pub(crate) fn apply_structure_bootstrap<'py>(
     proposal: &Obj<'py>,
 ) -> PyResult<Obj<'py>> {
     let py = scene.py();
-    let api = py.import("core.structure")?;
+    let api = py.import("ingetrazo_core.structure")?;
     let registry = api.getattr("bim_registry")?.call_method1("get", (scene,))?;
     registry.set_item(
         "structure",
@@ -700,19 +671,6 @@ pub(crate) fn add_template_layers<'py>(
 }
 
 #[pyfunction]
-pub(crate) fn structure_folder_state<'py>(
-    scene: &Obj<'py>,
-) -> PyResult<(Obj<'py>, Obj<'py>, Vec<Obj<'py>>, Obj<'py>)> {
-    let dict = scene.py().get_type::<PyDict>();
-    Ok((
-        dict.call1((scene.getattr("folder_parents")?,))?,
-        dict.call1((scene.getattr("layer_folder_uids")?,))?,
-        list(&scene.getattr("layer_folders")?)?,
-        scene.getattr("active_layer")?,
-    ))
-}
-
-#[pyfunction]
 pub(crate) fn apply_folder_parents(scene: &Obj<'_>, template: &Obj<'_>) -> PyResult<()> {
     for (folder, parent) in items(&template.get_item("folder_parents")?)? {
         let parents = scene.getattr("folder_parents")?;
@@ -723,13 +681,4 @@ pub(crate) fn apply_folder_parents(scene: &Obj<'_>, template: &Obj<'_>) -> PyRes
         }
     }
     Ok(())
-}
-
-#[pyfunction]
-pub(crate) fn restore_structure_folders(scene: &Obj<'_>, before: &Obj<'_>) -> PyResult<()> {
-    scene.setattr("folder_parents", before.get_item(0)?)?;
-    scene.setattr("version", scene.getattr("version")?.add(1)?)?;
-    scene.setattr("layer_folder_uids", before.get_item(1)?)?;
-    scene.setattr("layer_folders", before.get_item(2)?)?;
-    scene.setattr("active_layer", before.get_item(3)?)
 }

@@ -13,7 +13,7 @@ import pytest
 from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as V
 
-from core.orient import is_closed
+from ingetrazo_core.orient import is_closed
 from tools.base import ToolContext
 from tools.pushpull import PushPullTool
 from tests.controller_surface import ControllerSurface as Viewport

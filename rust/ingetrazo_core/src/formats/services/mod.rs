@@ -8,7 +8,7 @@ use pyo3::{
     types::{PyBytes, PyDict, PyList, PySet, PyTuple},
 };
 fn module(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("georef.transport")
+    py.import("ingetrazo_core.georef.transport")
 }
 fn partial<'p>(py: Python<'p>, args: impl pyo3::call::PyCallArgs<'p>) -> PyResult<Obj<'p>> {
     py.import("functools")?.call_method1("partial", args)
@@ -110,7 +110,7 @@ fn survey_request<'p>(
         .call_method1("submit", (owner, future, ready, error))
 }
 fn user_agent(py: Python<'_>) -> PyResult<Bound<'_, PyBytes>> {
-    let version = py.import("core.version")?.getattr("__version__")?;
+    let version = py.import("ingetrazo_core.version")?.getattr("__version__")?;
     Ok(PyBytes::new(
         py,
         format!("IngeTrazo/{version} (https://github.com/ingelibre/ingetrazo)").as_bytes(),
@@ -139,7 +139,7 @@ fn geo_get<'p>(
 #[pyfunction(signature=(query,limit=8))]
 fn geocode_url(py: Python<'_>, query: &str, limit: i64) -> PyResult<String> {
     let q = py.import("urllib.parse")?.call_method1("quote", (query,))?;
-    let base = py.import("georef.geocode")?.getattr("NOMINATIM")?;
+    let base = py.import("ingetrazo_core.georef.geocode")?.getattr("NOMINATIM")?;
     Ok(format!("{base}?q={q}&format=jsonv2&limit={limit}"))
 }
 fn json<'p>(data: &Obj<'p>) -> Option<Obj<'p>> {
@@ -156,7 +156,7 @@ fn number(d: &Obj<'_>, key: &str) -> PyResult<f64> {
 #[pyfunction]
 fn parse_places<'p>(py: Python<'p>, data: &Obj<'p>) -> PyResult<Obj<'p>> {
     let list = PyList::empty(py);
-    let place = py.import("georef.geocode")?.getattr("Place")?;
+    let place = py.import("ingetrazo_core.georef.geocode")?.getattr("Place")?;
     if let Some(val) = json(data) {
         if let Ok(arr) = val.cast::<PyList>() {
             for d in arr {
@@ -227,7 +227,7 @@ fn geo_locate(o: &Obj<'_>) -> PyResult<()> {
     o.call_method1(
         "_get",
         (
-            o.py().import("georef.geocode")?.getattr("IPAPI")?,
+            o.py().import("ingetrazo_core.georef.geocode")?.getattr("IPAPI")?,
             o.getattr("_received")?,
             o.getattr("failed")?.getattr("emit")?,
         ),
@@ -235,7 +235,7 @@ fn geo_locate(o: &Obj<'_>) -> PyResult<()> {
     Ok(())
 }
 fn tile_api(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("georef.tile_fetcher")
+    py.import("ingetrazo_core.georef.tile_fetcher")
 }
 #[pyfunction(signature=(o,cache=None,parent=None))]
 fn fetch_init(o: &Obj<'_>, cache: Option<Obj<'_>>, parent: Option<&Obj<'_>>) -> PyResult<()> {

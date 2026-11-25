@@ -82,7 +82,7 @@ fn spnav_open<'py>(a: &Args<'py>) -> Reply<'py> {
     device.setattr("sock", &sock)?;
     let owner = device.getattr("owner")?;
     let read = device.getattr("_read")?;
-    let notifier = py.import("core.timers")?.call_method(
+    let notifier = py.import("ingetrazo_core.timers")?.call_method(
         "timer", (owner, read, 12), Some(&fields!(py;"repeat"=>true)),
     )?;
     notifier.call_method0("start")?;
@@ -238,7 +238,6 @@ fn raw_message<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 pub(super) fn install_devices(module: &Bound<PyModule>) -> PyResult<()> {
     let py = module.py();
-    let builtins = py.import("builtins")?;
     module.add("SPNAV_SOCKETS", ("/var/run/spnav.sock", "/run/spnav.sock"))?;
     module.add(
         "_SPNAV_PACKET",

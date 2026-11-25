@@ -16,7 +16,7 @@ from core.group import Group
 from core.history import DeleteLayerCommand, History, MakeGroupCommand
 from core.layers import DEFAULT_LAYER, Layer, assign_layer, layer_of
 from core.mesh import Mesh
-from core.saved_views import SavedView
+from ingetrazo_core.saved_views import SavedView
 from core.scene import Scene
 
 
@@ -265,7 +265,7 @@ def test_template_round_trip_adds_and_updates_without_removing():
 
 
 def test_a_section_plane_on_a_hidden_layer_cuts_nothing():
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     scene = Scene()
     scene.layers.append(Layer("Cortes"))
     sp = SectionPlane(V(0, 0, 1), V(0, 0, 1), active=True)
@@ -329,7 +329,7 @@ def test_no_look_means_no_change():
 
 def test_viewport_paint_follows_the_style_and_the_layers():
     from types import SimpleNamespace
-    from core.style import Style
+    from ingetrazo_core.style import Style
     from views.document_interaction import _paint_of
     scene = Scene()
     scene.layers += [Layer("A", color=(1, 0, 0))]
@@ -356,7 +356,7 @@ def test_the_group_bake_takes_the_layer_colour_and_comes_back():
     — and go back to the material when it is switched off (the chunk cache
     keys on the paint)."""
     import numpy as np
-    from core.style import Style
+    from ingetrazo_core.style import Style
     from tests.test_group_material import _stub, _vcol_colours
     scene = Scene()
     scene.display_style = Style()
@@ -390,7 +390,7 @@ def test_the_group_bake_takes_the_layer_colour_and_comes_back():
 
 
 def test_style_remembers_colour_by_layer_only_when_on():
-    from core.style import Style
+    from ingetrazo_core.style import Style
     assert "color_by_layer" not in Style().to_dict()
     s = Style(color_by_layer=True)
     assert Style.from_dict(s.to_dict()).color_by_layer
@@ -435,7 +435,7 @@ def test_hlr_tags_every_line_with_its_layer():
 
 def test_hlr_tags_survive_a_section_cut():
     from core.hlr import KIND_CUT, hlr_drawing
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     scene = _two_boxes_scene()
     for g in scene.groups:
         _square(g.mesh, x0=g.mesh.faces[0].loop[0].position.x(), z=1.0)

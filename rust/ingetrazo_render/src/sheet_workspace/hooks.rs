@@ -1,4 +1,5 @@
 //! Window entry points shared by the renderer, the shell and input dispatch.
+use crate::document_registration::view::calls;
 use super::{Obj, SheetHost};
 use pyo3::{prelude::*, types::PyDict};
 use std::time::Instant;
@@ -108,7 +109,7 @@ fn frame<'py>(view: &Obj<'py>) -> PyResult<(Obj<'py>, Obj<'py>, f64)> {
             .getattr("_ui_attached")
             .is_ok_and(|v| v.is_truthy().unwrap_or(false))
     {
-        ui.call_method1("_sheet_and_jobs", (view, &win))?;
+        calls::sheet_and_jobs(view, &win)?;
         for module in [
             "ingetrazo_render.wgpu_start",
             "ingetrazo_render.chrome_sheet",
@@ -119,15 +120,14 @@ fn frame<'py>(view: &Obj<'py>) -> PyResult<(Obj<'py>, Obj<'py>, f64)> {
         if !view.getattr("_ui_tools_sent")?.is_truthy()?
             && win.getattr("_tool_actions")?.is_truthy()?
         {
-            ui.call_method1("_send_tools", (view, &win))?;
+            calls::send_tools(view, &win)?;
         }
-        py.import("views.wgpu_tabs")?
-            .call_method1("document_tabs", (view,))?
+        calls::document_tabs(view)?
             .call_method1(
                 "sync_projects",
                 (&renderer, &win, ui.getattr("LIGHTS_ROOM")?),
             )?;
-        ui.call_method1("_tabs", (view, win))?;
+        calls::tabs(view, &win)?;
     }
     if let Err(e) = ws.call_method1("before_frame", (view,)) {
         e.print(py);

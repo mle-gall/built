@@ -4,7 +4,7 @@ import time
 import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as V
-from core import autosave
+from ingetrazo_core import autosave
 from core.scene import Scene
 from formats import igz
 from ingetrazo_core import snapshot_steps

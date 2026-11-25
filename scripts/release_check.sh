@@ -18,7 +18,7 @@ PY="${PYO3_PYTHON:-$HERE/.venv/bin/python}"
 [[ -x "$PY" ]] || PY="$HERE/venv/bin/python"
 export PYO3_PYTHON="$PY" RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
 cd "$HERE"
-VER="$("$PY" -c 'from core.version import __version__; print(__version__)')"
+VER="$("$PY" -c 'from ingetrazo_core.version import __version__; print(__version__)')"
 WORK="$(mktemp -d)"
 trap 'git -C "$HERE" worktree remove --force "$WORK/prev" 2>/dev/null || true; rm -rf "$WORK"' EXIT
 git worktree add --detach -q "$WORK/prev" "$PREV"

@@ -24,7 +24,7 @@ import numpy as np  # noqa: E402
 from core.camera import OrbitCamera  # noqa: E402
 from core.hlr import collect_geometry, hlr_drawing  # noqa: E402
 from core.scene import Scene  # noqa: E402
-from formats import igz  # noqa: E402
+from ingetrazo_core.formats import igz  # noqa: E402
 
 
 def camera_for(scene, view: str) -> OrbitCamera:

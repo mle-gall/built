@@ -72,7 +72,7 @@ def test_exported_in_mm_and_imported_as_mm_keeps_the_size(tmp_path):
     ("cm", "cm", (1.5, 2.5)),
 ])
 def test_stl_sheet_remembers_the_unit(native_host, tmp_path, last_unit, expected, size):
-    from core.settings import settings
+    from ingetrazo_core.settings import settings
 
     out = tmp_path / "part.stl"
     settings().remove("export/stl_unit")

@@ -35,7 +35,7 @@ fn ground_elevation(v: &Obj, x: f64, y: f64) -> PyResult<Option<f64>> {
 }
 #[pyfunction]
 fn vertical_reference<'py>(v: &Obj<'py>) -> PyResult<Obj<'py>> {
-    let m = v.py().import("georef.photomesh")?;
+    let m = v.py().import("ingetrazo_core.georef.photomesh")?;
     let s = v.getattr("scene")?;
     let photo = opt(&s, "photo_mesh")?;
     if truth(&photo, "visible")? {

@@ -6,7 +6,7 @@ from __future__ import annotations
 import ingetrazo_core
 from pathlib import Path
 
-from core.orient import is_closed, signed_volume
+from ingetrazo_core.orient import is_closed, signed_volume
 from core.scene import Scene
 from formats.dae import load_dae
 
@@ -205,7 +205,7 @@ def _textured_quad_dae(tmp_path, image_name="brick.png"):
     explicit TEXCOORDs (offsets 0=vertex, 1=uv) — the shape of the reference .dae."""
     import shutil
     img = tmp_path / image_name
-    from core.paths import app_root
+    from ingetrazo_core.paths import app_root
     shutil.copy(app_root() / "resources" / "textures" / "brick.png", img)
     body = f"""<?xml version="1.0"?>
 <COLLADA {_NSDECL} version="1.4.1">
@@ -303,7 +303,7 @@ def test_faceme_sprite_imports_as_mesh_billboard(tmp_path):
     the 'always face camera' flag, so the shape+alpha heuristic recovers it."""
     p, img = _textured_quad_dae(tmp_path, image_name="sprite.png")
     import shutil
-    from core.paths import app_root
+    from ingetrazo_core.paths import app_root
     shutil.copy(app_root() / "resources" / "components" / "person_billboard.png",
                 img)                              # a real cutout PNG
     # make the quad VERTICAL (xz plane) so it reads as a sprite

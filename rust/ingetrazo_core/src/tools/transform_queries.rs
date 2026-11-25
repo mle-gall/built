@@ -86,7 +86,7 @@ fn grab_geometry<'py>(
                 let class = match &vertex_type {
                     Some(class) => class,
                     None => vertex_type
-                        .insert(mesh.py().import("core.store_mesh")?.getattr("VertexView")?),
+                        .insert(mesh.py().import("ingetrazo_core.store_mesh")?.getattr("VertexView")?),
                 };
                 for v in slots {
                     let key = st.inner.key(Kind::Vertex, v);
@@ -524,7 +524,7 @@ pub fn transform_grab(
     let dims = if mode == "move" {
         let dims = transform_records(ctx, "dimension")?;
         let dims = py
-            .import("core.move_ops")?
+            .import("ingetrazo_core.move_ops")?
             .call_method1("dimension_modes", (dims, &groups, &verts))?;
         if direct && dims.is_truthy()? {
             groups.clear();

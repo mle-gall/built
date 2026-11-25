@@ -738,19 +738,3 @@ impl ScaleGripSpec {
         self.0.ray(grip.into(), origin.into(), direction.into()).map(Into::into)
     }
 }
-
-#[pyfunction]
-pub fn scale_box_geometry(extents: P3) -> (Vec<(P3, Vec<usize>)>, Vec<(P3, P3)>) {
-    let geometry = super::scale_grip::BoxGeometry::new(extents);
-    (geometry.grips, geometry.edges)
-}
-
-#[pyfunction]
-pub fn move_rotation_grips(axes: [P3; 3], lo: P3, hi: P3, eye: P3) -> Vec<(P3, P3, P3)> {
-    super::move_grips::rotation_grips(axes, lo, hi, eye)
-}
-
-#[pyfunction]
-pub fn move_grip_region(points: Vec<[f64; 2]>, cursor: [f64; 2], margin: f64) -> bool {
-    super::move_grips::hover_hull(points, cursor, margin)
-}

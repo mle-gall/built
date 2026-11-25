@@ -191,7 +191,7 @@ fn write(path: PathBuf, triangles: &Bound<'_, PyAny>, scale: f64) -> PyResult<()
 }
 
 fn threshold(py: Python<'_>) -> PyResult<usize> {
-    py.import("formats.dae")?
+    py.import("ingetrazo_core.formats.dae")?
         .getattr("_MAX_FUSE_LOOPS")?
         .extract()
 }
@@ -276,7 +276,7 @@ fn parse_stl<'py>(
     if simplify_mode != "none" {
         tick(0.75, "Merging flat surfaces…")?;
         kwargs.set_item("principal_planes", simplify_mode == "principal")?;
-        py.import("formats.fuse")?
+        py.import("ingetrazo_core.formats.fuse")?
             .call_method("simplify_mesh", (&mesh,), Some(&kwargs))?;
         kwargs.clear();
     }
@@ -303,7 +303,7 @@ fn parse_stl<'py>(
             kwargs.clear();
             kwargs.set_item("only", new_faces)?;
         }
-        py.import("core.orient")?
+        py.import("ingetrazo_core.orient")?
             .call_method("orient_outward", (&mesh,), Some(&kwargs))?;
     }
     tick(1.0, "Done")?;
@@ -414,7 +414,7 @@ fn faces<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 fn iter_triangles<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py = scene.py();
     let triangles = py
-        .import("formats.meshexport")?
+        .import("ingetrazo_core.formats.meshexport")?
         .getattr("export_triangles")?;
     let mapped = py
         .import("builtins")?

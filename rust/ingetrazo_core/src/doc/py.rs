@@ -2904,7 +2904,7 @@ fn changes_dict<'py>(
         let module = ty.getattr("__module__")?.extract::<String>()?;
         let family = match module.as_str() {
             "core.composition" => "sheets",
-            "core.saved_views" => "views",
+            "ingetrazo_core.saved_views" => "views",
             _ => "annotations",
         };
         let list = match record_keys.get_item(family)? {
@@ -3122,12 +3122,6 @@ fn doc_begin(py: Python<'_>, document: Option<Key>) -> PyResult<usize> {
         .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Document writer reservation lost"))?;
     super::geometry::begin();
     Ok(depth)
-}
-
-#[pyfunction]
-#[pyo3(signature=(mesh, before=None))]
-fn doc_touch_mesh(mesh: &Bound<'_, PyAny>, before: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
-    super::geometry::touch(mesh, before)
 }
 
 #[pyfunction]
@@ -3913,7 +3907,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyTransaction>()?;
     m.add_function(wrap_pyfunction!(doc_new_root, m)?)?;
     m.add_function(wrap_pyfunction!(doc_begin, m)?)?;
-    m.add_function(wrap_pyfunction!(doc_touch_mesh, m)?)?;
     m.add_function(wrap_pyfunction!(doc_depth, m)?)?;
     m.add_function(wrap_pyfunction!(doc_commit, m)?)?;
     m.add_function(wrap_pyfunction!(doc_rollback, m)?)?;

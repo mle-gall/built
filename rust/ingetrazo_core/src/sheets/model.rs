@@ -264,13 +264,6 @@ impl Sheet {
     }
 }
 
-/// The page size of a sheet record and its margin: ``(w, h, margin)``.
-#[pyfunction]
-fn sheet_page_size(comp: &Bound<'_, PyAny>) -> PyResult<(f64, f64, f64)> {
-    let s = Sheet::read(comp, None)?;
-    Ok((s.page.0, s.page.1, s.margin))
-}
-
 /// core.composition.format_scale in Rust (the native page's labels).
 #[pyfunction]
 #[pyo3(name = "sheet_format_scale")]
@@ -304,7 +297,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sheet_model_height, m)?)?;
     m.add_function(wrap_pyfunction!(sheet_ortho_distance, m)?)?;
     m.add_function(wrap_pyfunction!(sheet_readable_deg, m)?)?;
-    m.add_function(wrap_pyfunction!(sheet_page_size, m)?)?;
     m.add_function(wrap_pyfunction!(format_scale_py, m)?)?;
     Ok(())
 }

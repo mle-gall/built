@@ -25,7 +25,7 @@ from core.layers import (DEFAULT_LAYER, Layer, assign_layer, layer_of,
                          rename_layer)
 from core.mesh import Mesh
 from core.purge import layer_carriers
-from core.saved_views import SavedView
+from ingetrazo_core.saved_views import SavedView
 from core.scene import Scene
 
 

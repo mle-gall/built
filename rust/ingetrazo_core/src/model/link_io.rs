@@ -110,7 +110,7 @@ fn subset<'py>(py: Python<'py>, src: &Obj<'py>, path: &Obj<'py>, select: &Obj<'p
     }
     let requested = targets.call_method0("copy")?;
     if refs.is_none() {
-        let facets = module(py, "core.facets")?;
+        let facets = module(py, "ingetrazo_core.facets")?;
         let index = facets.call_method1("build", (src,))?;
         let found = index.getattr("groups")?;
         for k in facets.call_method1("evaluate", (&index, select.get_item("filter")?))?.try_iter()? {
@@ -194,7 +194,7 @@ pub fn load_source<'py>(path: &Obj<'py>, select: Option<&Obj<'py>>, include_nest
         kw.set_item("progress", progress.map_or_else(|| none(py), |p| p.clone()))?;
         kw.set_item("include_links", include_nested)?;
         kw.set_item("link_meshes", link_meshes.map_or_else(|| none(py), |p| p.clone()))?;
-        module(py, "formats.igz")?.getattr("load_into")?.call((&src, path_of(py, path)?), Some(&kw))?;
+        module(py, "ingetrazo_core.formats.igz")?.getattr("load_into")?.call((&src, path_of(py, path)?), Some(&kw))?;
         // A cycle further down is this link's failure too; a source of the
         // source that is merely missing is not (its copies show empty).
         if let Some(errors) = src.getattr_opt("link_errors")?.filter(|e| e.is_truthy().unwrap_or(false)) {
@@ -233,7 +233,7 @@ pub fn load_source<'py>(path: &Obj<'py>, select: Option<&Obj<'py>>, include_nest
         let vocabulary = module(py, "core.bim_registry")?.call_method1("get", (&src,))?;
         let nodes = vocabulary.call_method1("get", ("structure", PyDict::new(py)))?.call_method1("get", ("nodes", PyDict::new(py)))?;
         if nodes.is_truthy()? {
-            let resolve = module(py, "core.structure")?.getattr("resolve")?;
+            let resolve = module(py, "ingetrazo_core.structure")?.getattr("resolve")?;
             let structure = PyDict::new(py);
             for item in nodes.call_method0("items")?.try_iter()? {
                 let (k, node): (Obj<'py>, Obj<'py>) = item?.extract()?;
@@ -247,7 +247,7 @@ pub fn load_source<'py>(path: &Obj<'py>, select: Option<&Obj<'py>>, include_nest
         let materials = dict_of("materials")?;
         let select = select.filter(|s| !s.is_none());
         links::validate_select(&select.map_or_else(|| none(py), |s| s.clone()))?;
-        let figure = module(py, "core.insert")?.getattr("is_scale_figure")?;
+        let figure = module(py, "ingetrazo_core.document_insert")?.getattr("is_scale_figure")?;
         let mut groups = Vec::new();
         for g in src.getattr("groups")?.try_iter()? {
             let g = g?;
@@ -300,11 +300,11 @@ pub fn read_definition<'py>(registry: &Obj<'py>, path: &Obj<'py>, select: &Obj<'
     let filtered = !select.is_none() && select.contains("filter")?;
     let kw = PyDict::new(py);
     kw.set_item("filtered", filtered)?;
-    let reader = module(py, "core.link_meshes")?.getattr("LinkMeshes")?
+    let reader = module(py, "ingetrazo_core.link_meshes")?.getattr("LinkMeshes")?
         .call((path, registry, previous.map_or_else(|| none(py), |p| p.clone())), Some(&kw))?;
     let read = load_source(path, Some(select), include_nested.is_truthy()?, Some(&reader), progress)?;
     let (comp, tags, materials) = (read.get_item(0)?, read.get_item(1)?, read.get_item(2)?);
-    let register = module(py, "core.materials")?.getattr("register")?;
+    let register = module(py, "ingetrazo_core.materials")?.getattr("register")?;
     let renamed = PyDict::new(py);
     let items: Vec<(Obj<'py>, Obj<'py>)> = materials.call_method0("items")?.try_iter()?.map(|kv| kv?.extract()).collect::<PyResult<_>>()?;
     for (old, mat) in items {

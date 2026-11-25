@@ -14,7 +14,7 @@ from ingetrazo_core import Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_render import chrome_dialogs as cd
-from core.input_codes import StandardButton
+from ingetrazo_core import StandardButton
 
 
 @pytest.fixture
@@ -203,7 +203,8 @@ def test_warning_before_the_first_frame_is_kept_in_the_chrome_history(native_hos
     ("_on_clear_texture_cache", "Texture cache"),
 ])
 def test_information_call_sites_post_toasts(win, tmp_path, monkeypatch, method, title):
-    from core import autosave, texture
+    from core import texture
+    from ingetrazo_core import autosave
     from formats import rfa
     from ingetrazo_render.shell_files import ShellFileDialog
     args = ()
@@ -418,7 +419,7 @@ def test_open_with_missing_sources_has_one_banner_and_problem_rows(win, tmp_path
 
 
 def test_open_preserves_recovery_as_a_separate_copy(win, tmp_path, monkeypatch):
-    from core import autosave
+    from ingetrazo_core import autosave
     from core.scene import Scene
     from formats import igz
     from views import wgpu_ui
@@ -437,7 +438,7 @@ def test_open_preserves_recovery_as_a_separate_copy(win, tmp_path, monkeypatch):
 
 
 def test_failed_job_and_export_folder_are_retained(win, tmp_path, monkeypatch):
-    from core import desktop_open
+    from ingetrazo_core import desktop_open
     opened = []
     monkeypatch.setattr(desktop_open, "open_url", opened.append)
     with pytest.raises(OSError), cd.busy(win, "Saving"):

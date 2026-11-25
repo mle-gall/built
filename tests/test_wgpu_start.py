@@ -8,11 +8,11 @@ from types import SimpleNamespace
 from tests.shell_isolation import native_host, restore_shell_patches  # noqa: F401
 import pytest
 import numpy as np
-from core.input_codes import Input as Qt
+from ingetrazo_core import Input as Qt
 from ingetrazo_render import KeyEvent, SurveyRaster, blank_picture
 from tests.raster_samples import pixels, solid_raster
 
-from core.settings import settings
+from ingetrazo_core.settings import settings
 from ingetrazo_core import recent
 from core.scene import Scene
 from formats import igz
@@ -175,7 +175,7 @@ def test_the_preview_shows_project_problems_unfiled_and_where_it_was_left(win, m
     slot.write_bytes(a.read_bytes())
     import os
     os.utime(slot, (a.stat().st_mtime + 60, a.stat().st_mtime + 60))
-    monkeypatch.setattr("core.autosave.pending", lambda p, *k, **kw: slot)
+    monkeypatch.setattr("ingetrazo_core.autosave.pending", lambda p, *k, **kw: slot)
     ws.show(win)
     wait_loader(win)
     sh = sheet(win)

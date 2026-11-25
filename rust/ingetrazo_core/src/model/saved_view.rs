@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! A saved view from an eye/target/up camera (`core.saved_views.from_lookat`,
+//! A saved view from an eye/target/up camera (`ingetrazo_core.saved_views.from_lookat`,
 //! the importers' entry): the orbit camera's distance, yaw and pitch. The
 //! view's archive is the document's own (`doc/file_view.rs`).
 //!

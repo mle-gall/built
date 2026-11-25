@@ -13,7 +13,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
 from core.history import AddFaceCommand, History
-from core.orient import is_closed, signed_volume
+from ingetrazo_core.orient import is_closed, signed_volume
 from core.scene import Scene
 from tools.base import ToolContext
 from tools.pushpull import _MIN_EXTRUDE, PushPullTool
@@ -289,7 +289,7 @@ def test_corner_step_clamped_opens_notch_through_floor():
     # A corner rect pushed deeper than the cube is tall: clamp to the height,
     # landing flush on the floor plane — the notch opens clear through and the
     # result is a watertight L-section solid.
-    from core.orient import signed_volume
+    from ingetrazo_core.orient import signed_volume
 
     scene = Scene()
     hist = History(scene)
@@ -597,7 +597,7 @@ def test_autofold_pentagon_folds_minimally():
 def _boxed_group(scene, x0=0.0):
     """A 2×2×2 closed box living in its own Group, appended to the scene."""
     from core.group import Group
-    from core.orient import orient_outward
+    from ingetrazo_core.orient import orient_outward
 
     g = Group()
     m = g.mesh
@@ -631,7 +631,7 @@ def _push_group(scene, group, face, dist):
 
 
 def test_push_on_group_face_edits_only_the_group():
-    from core.orient import signed_volume
+    from ingetrazo_core.orient import signed_volume
 
     scene = Scene()
     hist = History(scene)

@@ -96,7 +96,7 @@ fn window_of<'py>(py: Python<'py>, parent: &Bound<'py, PyAny>) -> PyResult<Bound
 }
 
 #[pyfunction]
-fn view_of<'py>(py: Python<'py>, win: &Bound<'py, PyAny>) -> Bound<'py, PyAny> {
+pub(crate) fn view_of<'py>(py: Python<'py>, win: &Bound<'py, PyAny>) -> Bound<'py, PyAny> {
     opt(win, "_doc").and_then(|doc| opt(&doc, "stand_in")).unwrap_or_else(|| py.None().into_bound(py))
 }
 
@@ -233,7 +233,7 @@ fn ask<'py>(py: Python<'py>, parent: &Bound<'py, PyAny>, title: &Bound<'py, PyAn
             Ok(none(py))
         })?
     };
-    let dog = py.import("core.timers")?.call_method1("timer", (&win, watchdog))?;
+    let dog = py.import("ingetrazo_core.timers")?.call_method1("timer", (&win, watchdog))?;
     dog.call_method1("start", (m.getattr("WATCHDOG_MS")?,))?;
     let ran = if sheet.borrow().answer.is_none(py) { event_loop.call_method0("exec").map(|_| ()) } else { Ok(()) };
     let stopped = dog.call_method0("stop").map(|_| ());
@@ -362,7 +362,7 @@ fn offer_recovery(py: Python<'_>, win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny
     // Reserve the snapshot before auto-save can reuse this document's slot.
     let hex: String = py.import("uuid")?.call_method0("uuid4")?.getattr("hex")?.extract()?;
     let name = format!("{}-{}{}", path.getattr("stem")?.str()?, &hex[..12], slot.getattr("suffix")?.str()?);
-    let archived = py.import("core.autosave")?.call_method0("discarded_dir")?.div(name)?;
+    let archived = py.import("ingetrazo_core.autosave")?.call_method0("discarded_dir")?.div(name)?;
     let archived = match slot.call_method1("rename", (&archived,)) {
         Ok(_) => archived,
         Err(e) if e.is_instance_of::<pyo3::exceptions::PyOSError>(py) => slot.clone(),
@@ -612,7 +612,7 @@ const STANDARD: [(&str, &str, bool); 17] = [
 /// The standard buttons `critical`/`warning`/`information`/`question`
 /// answer with (`QMessageBox`'s values).
 fn message_box(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    py.import("core.input_codes")?.getattr("StandardButton")
+    py.import("ingetrazo_core")?.getattr("StandardButton")
 }
 
 fn button_key(py: Python<'_>, b: &Bound<'_, PyAny>) -> PyResult<String> {
@@ -1128,7 +1128,7 @@ impl Busy {
         if path.is_truthy()? && !failed {
             let folder = py.import("pathlib")?.getattr("Path")?.call1((path,))?.call_method0("resolve")?.getattr("parent")?.unbind();
             let action = func(py, move |py, _a| {
-                py.import("core.desktop_open")?.call_method1("open_url", (folder.bind(py),))?;
+                py.import("ingetrazo_core.desktop_open")?.call_method1("open_url", (folder.bind(py),))?;
                 Ok(none(py))
             })?;
             kw.set_item("action_label", "Open folder")?;

@@ -23,7 +23,7 @@ impl SheetHost {
 
     fn __init__(slf: &Bound<'_, Self>, main_window: &Obj<'_>) -> PyResult<()> {
         let py = slf.py();
-        let settings = py.import("core.settings")?.call_method0("settings")?;
+        let settings = py.import("ingetrazo_core.settings")?.call_method0("settings")?;
         let auto = settings
             .call_method1("value", ("composer/auto_render", "1"))?
             .str()?
@@ -250,7 +250,7 @@ pub fn register(parent: &Bound<'_, PyModule>) -> PyResult<()> {
 
 fn template_name(py: Python<'_>, setting: &str) -> PyResult<Option<String>> {
     let value = py
-        .import("core.settings")?
+        .import("ingetrazo_core.settings")?
         .call_method0("settings")?
         .call_method1("value", (setting, ""))?;
     Ok(if value.is_truthy()? {
@@ -260,7 +260,7 @@ fn template_name(py: Python<'_>, setting: &str) -> PyResult<Option<String>> {
     })
 }
 fn app_data(py: Python<'_>) -> PyResult<std::path::PathBuf> {
-    py.import("core.autosave")?
+    py.import("ingetrazo_core.autosave")?
         .call_method0("_app_data_base")?
         .extract()
 }

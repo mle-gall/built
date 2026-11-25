@@ -11,7 +11,7 @@ use std::path::PathBuf;
 fn offer_untitled_recovery(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let slots = win
         .py()
-        .import("core.autosave")?
+        .import("ingetrazo_core.autosave")?
         .call_method0("pending_untitled")?;
     for entry in slots.try_iter()? {
         let (n, slot): (usize, Bound<'_, PyAny>) = entry?.extract()?;
@@ -64,7 +64,7 @@ fn named_recovery(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<O
         return Ok(Some(true));
     }
     if answer.eq("no")? {
-        py.import("core.autosave")?.call_method1("clear", (path,))?;
+        py.import("ingetrazo_core.autosave")?.call_method1("clear", (path,))?;
         return Ok(Some(false));
     }
     Ok(None)
@@ -78,7 +78,7 @@ fn recover_untitled(win: &Bound<'_, PyAny>, n: usize, slot: &Bound<'_, PyAny>) -
     if answer.eq("no")? {
         let kw = PyDict::new(py);
         kw.set_item("untitled", n)?;
-        py.import("core.autosave")?
+        py.import("ingetrazo_core.autosave")?
             .getattr("clear")?
             .call((py.None(),), Some(&kw))?;
         return Ok(());
@@ -88,7 +88,7 @@ fn recover_untitled(win: &Bound<'_, PyAny>, n: usize, slot: &Bound<'_, PyAny>) -
     }
     let staged = py.import("core.scene")?.call_method0("Scene")?;
     if let Err(err) = py
-        .import("formats.igz")?
+        .import("ingetrazo_core.formats.igz")?
         .call_method1("load_into", (&staged, slot))
     {
         dialog.call_method1(
@@ -128,9 +128,9 @@ fn recover_untitled(win: &Bound<'_, PyAny>, n: usize, slot: &Bound<'_, PyAny>) -
 #[pyfunction]
 fn recover_discarded(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
-    let archive = py.import("formats.built")?;
+    let archive = py.import("ingetrazo_core.formats.built")?;
     let folder: PathBuf = py
-        .import("core.autosave")?
+        .import("ingetrazo_core.autosave")?
         .call_method0("discarded_dir")?
         .extract()?;
     let suffixes: Vec<String> = archive.getattr("DOCUMENT_SUFFIXES")?.extract()?;

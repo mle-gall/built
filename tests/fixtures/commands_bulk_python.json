@@ -1,0 +1,461 @@
+{
+  "plane_axes": [
+    [
+      0.9459053029269172,
+      -0.16692446522239718,
+      -0.2782074420373286
+    ],
+    [
+      0.0,
+      0.8574929257125442,
+      -0.5144957554275265
+    ]
+  ],
+  "geometry": {
+    "normal": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "area": 8.0,
+    "centroid": [
+      2.0,
+      1.4,
+      0.0
+    ],
+    "indices": [
+      [
+        3,
+        4,
+        0
+      ],
+      [
+        1,
+        2,
+        3
+      ],
+      [
+        3,
+        0,
+        1
+      ]
+    ],
+    "edge_length": 5.0
+  },
+  "label": {
+    "anchor": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "offset": [
+      4.0,
+      3.0,
+      0.0
+    ],
+    "text": "Wall",
+    "layer": "Notes"
+  },
+  "guides": [
+    {
+      "point": [
+        4.0,
+        0.0,
+        0.0
+      ],
+      "direction": [
+        0.6000000000000001,
+        0.8,
+        0.0
+      ]
+    },
+    {
+      "kind": "circle",
+      "center": [
+        4.0,
+        3.0,
+        0.0
+      ],
+      "normal": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "radius": 2.0
+    }
+  ],
+  "structure": {
+    "tag": "Wall",
+    "folder": [
+      "Envelope"
+    ],
+    "classifications": [],
+    "systems": [
+      "A",
+      "B"
+    ],
+    "psets": {
+      "P": {
+        "a": 1,
+        "b": 2
+      }
+    }
+  },
+  "styles": [
+    {
+      "name": "Default",
+      "face_mode": "textures",
+      "edges": true,
+      "profiles": true,
+      "back_edges": false,
+      "edge_color": [
+        0.13,
+        0.17,
+        0.23
+      ],
+      "front_color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "back_color": null,
+      "background": [
+        0.9,
+        0.91,
+        0.92
+      ],
+      "sky": true,
+      "sky_color": [
+        0.925,
+        0.935,
+        0.945
+      ],
+      "ground_color": [
+        0.815,
+        0.82,
+        0.815
+      ],
+      "section_fill": true,
+      "section_fill_color": [
+        0.35,
+        0.37,
+        0.41
+      ],
+      "ambient_occlusion": false,
+      "ao_distance": 0.5,
+      "ao_intensity": 1.0
+    },
+    {
+      "name": "Architectural",
+      "face_mode": "textures",
+      "edges": true,
+      "profiles": true,
+      "back_edges": false,
+      "edge_color": [
+        0.13,
+        0.17,
+        0.23
+      ],
+      "front_color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "back_color": null,
+      "background": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "sky": false,
+      "sky_color": [
+        0.925,
+        0.935,
+        0.945
+      ],
+      "ground_color": [
+        0.815,
+        0.82,
+        0.815
+      ],
+      "section_fill": true,
+      "section_fill_color": [
+        0.35,
+        0.37,
+        0.41
+      ],
+      "ambient_occlusion": false,
+      "ao_distance": 0.5,
+      "ao_intensity": 1.0
+    },
+    {
+      "name": "Shaded",
+      "face_mode": "shaded",
+      "edges": true,
+      "profiles": true,
+      "back_edges": false,
+      "edge_color": [
+        0.13,
+        0.17,
+        0.23
+      ],
+      "front_color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "back_color": null,
+      "background": [
+        0.9,
+        0.91,
+        0.92
+      ],
+      "sky": true,
+      "sky_color": [
+        0.925,
+        0.935,
+        0.945
+      ],
+      "ground_color": [
+        0.815,
+        0.82,
+        0.815
+      ],
+      "section_fill": true,
+      "section_fill_color": [
+        0.35,
+        0.37,
+        0.41
+      ],
+      "ambient_occlusion": false,
+      "ao_distance": 0.5,
+      "ao_intensity": 1.0
+    },
+    {
+      "name": "Hidden line",
+      "face_mode": "hidden_line",
+      "edges": true,
+      "profiles": true,
+      "back_edges": false,
+      "edge_color": [
+        0.13,
+        0.17,
+        0.23
+      ],
+      "front_color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "back_color": null,
+      "background": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "sky": false,
+      "sky_color": [
+        0.925,
+        0.935,
+        0.945
+      ],
+      "ground_color": [
+        0.815,
+        0.82,
+        0.815
+      ],
+      "section_fill": true,
+      "section_fill_color": [
+        0.35,
+        0.37,
+        0.41
+      ],
+      "ambient_occlusion": false,
+      "ao_distance": 0.5,
+      "ao_intensity": 1.0
+    },
+    {
+      "name": "Monochrome",
+      "face_mode": "monochrome",
+      "edges": true,
+      "profiles": true,
+      "back_edges": false,
+      "edge_color": [
+        0.13,
+        0.17,
+        0.23
+      ],
+      "front_color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "back_color": null,
+      "background": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "sky": false,
+      "sky_color": [
+        0.925,
+        0.935,
+        0.945
+      ],
+      "ground_color": [
+        0.815,
+        0.82,
+        0.815
+      ],
+      "section_fill": true,
+      "section_fill_color": [
+        0.35,
+        0.37,
+        0.41
+      ],
+      "ambient_occlusion": false,
+      "ao_distance": 0.5,
+      "ao_intensity": 1.0
+    },
+    {
+      "name": "Wireframe",
+      "face_mode": "wireframe",
+      "edges": true,
+      "profiles": true,
+      "back_edges": false,
+      "edge_color": [
+        0.13,
+        0.17,
+        0.23
+      ],
+      "front_color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "back_color": null,
+      "background": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "sky": false,
+      "sky_color": [
+        0.925,
+        0.935,
+        0.945
+      ],
+      "ground_color": [
+        0.815,
+        0.82,
+        0.815
+      ],
+      "section_fill": true,
+      "section_fill_color": [
+        0.35,
+        0.37,
+        0.41
+      ],
+      "ambient_occlusion": false,
+      "ao_distance": 0.5,
+      "ao_intensity": 1.0
+    },
+    {
+      "name": "X-ray",
+      "face_mode": "xray",
+      "edges": true,
+      "profiles": true,
+      "back_edges": false,
+      "edge_color": [
+        0.13,
+        0.17,
+        0.23
+      ],
+      "front_color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "back_color": null,
+      "background": [
+        0.9,
+        0.91,
+        0.92
+      ],
+      "sky": true,
+      "sky_color": [
+        0.925,
+        0.935,
+        0.945
+      ],
+      "ground_color": [
+        0.815,
+        0.82,
+        0.815
+      ],
+      "section_fill": true,
+      "section_fill_color": [
+        0.35,
+        0.37,
+        0.41
+      ],
+      "ambient_occlusion": false,
+      "ao_distance": 0.5,
+      "ao_intensity": 1.0
+    }
+  ],
+  "solar_position": [
+    64.53407667632632,
+    184.04394013501224
+  ],
+  "daylight": [
+    [
+      350,
+      1069
+    ],
+    [
+      470,
+      949
+    ],
+    null
+  ],
+  "shadows": {
+    "enabled": false,
+    "month": 3,
+    "day": 21,
+    "hour": 12,
+    "minute": 0,
+    "darkness": 0.55
+  },
+  "frame_matrix": [
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    -1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    3.0,
+    4.0,
+    5.0,
+    1.0
+  ],
+  "material": {
+    "name": "Oak",
+    "color": [
+      0.4,
+      0.2,
+      0.1
+    ]
+  },
+  "recovery_slots": [
+    "untitled.built",
+    "untitled.built",
+    "untitled-3.built"
+  ]
+}

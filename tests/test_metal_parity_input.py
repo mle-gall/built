@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from ingetrazo_core import PixelPoint as QPoint, ScreenPoint as QPointF
-from core.input_codes import Input as Qt
+from ingetrazo_core import Input as Qt
 from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 from core.scene import Scene
 from core.mesh import Mesh
@@ -113,7 +113,7 @@ def fixed_world(view, point):
 
 
 def test_section_place_move_toggle_undo(view):
-    from core.settings import settings
+    from ingetrazo_core.settings import settings
     from tools.section import SectionPlaneTool
     from tools.move import MoveTool
     settings().setValue("section/ask_name", "0")

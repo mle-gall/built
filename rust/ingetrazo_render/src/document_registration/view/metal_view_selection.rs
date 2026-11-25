@@ -13,7 +13,7 @@ fn id(o: &Obj<'_>) -> usize {
     o.as_ptr() as usize
 }
 fn input<'py>(py: Python<'py>, name: &str) -> Reply<'py> {
-    py.import("core.input_codes")?.getattr("Input")?.getattr(name)
+    py.import("ingetrazo_core")?.getattr("Input")?.getattr(name)
 }
 /// The modifiers given, `Qt.NoModifier` by default.
 fn modifiers_of<'py>(given: Obj<'py>) -> Reply<'py> {

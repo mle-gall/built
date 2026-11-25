@@ -53,7 +53,7 @@ impl Profile {
         if !same {
             detach(slf, view)?;
             let sampler = if let Some(survey) = &survey {
-                py.import("georef.photomesh")?
+                py.import("ingetrazo_core.georef.photomesh")?
                     .call_method1("PhotoMeshSampler", (survey, &datum))?
             } else {
                 let args = PyDict::new(py);
@@ -61,7 +61,7 @@ impl Profile {
                     args.set_item("parent", view)?;
                 }
                 let sampler = py
-                    .import("georef.dem")?
+                    .import("ingetrazo_core.georef.dem")?
                     .getattr("DEMSampler")?
                     .call((&datum,), Some(&args))?;
                 let changed = sampler.getattr("changed")?;
@@ -78,7 +78,7 @@ impl Profile {
         if slf.borrow().dirty || slf.borrow().version != Some(version) {
             slf.borrow_mut().dirty = false;
             let sampler = slf.borrow().sampler.as_ref().unwrap().clone_ref(py);
-            let profile = py.import("georef.profile")?.call_method1(
+            let profile = py.import("ingetrazo_core.georef.profile")?.call_method1(
                 "sample_profile",
                 (path.call_method0("profile_points")?, sampler),
             )?;
@@ -164,7 +164,7 @@ pub(super) fn action(view: &Obj, vp: &Obj, verb: &str) -> PyResult<()> {
         let path = match &previous {
             Some(p) => p.borrow().path.clone_ref(py).into_bound(py),
             None => py
-                .import("georef.profile")?
+                .import("ingetrazo_core.georef.profile")?
                 .call_method1("selected_geopath", (&scene,))?,
         };
         if path.is_none()
@@ -203,7 +203,7 @@ pub(super) fn action(view: &Obj, vp: &Obj, verb: &str) -> PyResult<()> {
         let (ext, data) = if verb == "csv" {
             (
                 "csv",
-                py.import("georef.profile")?
+                py.import("ingetrazo_core.georef.profile")?
                     .call_method1("profile_to_csv", (profile.bind(py), p.vertical, p.altitude))?
                     .extract::<String>()?
                     .into_bytes(),

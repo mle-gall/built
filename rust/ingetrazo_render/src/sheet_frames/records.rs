@@ -133,7 +133,7 @@ fn capture_hold(
         return Ok(false);
     };
     let py = item.py();
-    let anchors = py.import("core.annotation_anchor")?;
+    let anchors = py.import("ingetrazo_core.annotation_anchor")?;
     let point = vec3(&cur)?;
     let store = |hit: &Obj<'_>, owner: &Obj<'_>| -> PyResult<bool> {
         let attachment = anchors
@@ -214,7 +214,7 @@ fn follow_hold(scene: &Obj<'_>, item: &Obj<'_>, attr: &str, holds: &Obj<'_>) -> 
         if as_tuple(&saved.get_item(0)?)?.eq(&coord)? {
             let original = saved.get_item(1)?;
             let reference = if original.is_instance_of::<PyDict>() {
-                py.import("core.annotation_anchor")?
+                py.import("ingetrazo_core.annotation_anchor")?
                     .getattr("Attachment")?
                     .call_method1("restore", (scene, &original, vec3(&cur)?))?
             } else {
@@ -348,7 +348,7 @@ impl Ground {
                 kw.set_item("parent", owner)?;
             }
             dem = py
-                .import("georef.dem")?
+                .import("ingetrazo_core.georef.dem")?
                 .getattr("DEMSampler")?
                 .call((&datum,), Some(&kw))?;
             dem.getattr("changed")?
@@ -365,7 +365,7 @@ impl Ground {
                         || !sampler.getattr("datum")?.is(&datum)
                     {
                         sampler = py
-                            .import("georef.photomesh")?
+                            .import("ingetrazo_core.georef.photomesh")?
                             .call_method1("PhotoMeshSampler", (survey, datum))?;
                         s.setattr("_survey", &sampler)?;
                     }

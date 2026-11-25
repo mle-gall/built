@@ -11,7 +11,7 @@ import json
 
 import pytest
 from ingetrazo_render.shell_files import do_save
-from core.settings import settings as preferences
+from ingetrazo_core.settings import settings as preferences
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from core import units
@@ -189,7 +189,7 @@ def test_a_built_setting_applies_at_once(win):
     act(win, "side", "general")
     act(win, "v", "undo_steps", "37")
     assert win.viewport.history.max_steps == 37
-    from core import general_settings as gs
+    from ingetrazo_core import general_settings as gs
     assert int(gs.value("undo_steps")) == 37
 
 
@@ -253,7 +253,7 @@ def test_units_go_in_the_document_and_are_saved_with_it(win, tmp_path):
 
 
 def test_dimension_style_and_north_are_the_documents(win, tmp_path):
-    from core.sun import scene_north_deg
+    from ingetrazo_core.sun import scene_north_deg
     win.open_preferences(page="dimensions")
     frame(win)
     scene = win.viewport.scene
@@ -371,7 +371,7 @@ def test_the_shell_prefs_command_opens_the_sheet(win):
 
 
 def test_add_location_opens_coordinates_first_applies_to_the_document_and_undoes(win, tmp_path, monkeypatch):
-    from core.sun import scene_north_deg
+    from ingetrazo_core.sun import scene_north_deg
     from georef import tile_fetcher
     win.open_preferences(page="location")
     frame(win)
@@ -494,7 +494,7 @@ def test_ambient_occlusion_edits_the_active_style(win):
 
 
 def test_occlusion_distance_slider_preserves_off_step_file_values(win):
-    from core.style import AO_DISTANCE_RANGE
+    from ingetrazo_core.style import AO_DISTANCE_RANGE
     win.active_style().ao_distance = 0.37
     win.open_preferences(page="appearance")
     frame(win)

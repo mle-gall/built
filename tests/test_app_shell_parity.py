@@ -9,7 +9,7 @@ Every file is synthetic or from tests/fixtures; settings go to tmp_path.
 from pathlib import Path
 
 import pytest
-from core.input_codes import StandardButton
+from ingetrazo_core import StandardButton
 from ingetrazo_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401  (autouse)
 
@@ -153,7 +153,7 @@ def test_quit_with_unsaved_work_asks_once_and_save_all_saves(host, tmp_path, ans
 
 
 def test_open_offers_the_auto_saved_copy(host, tmp_path, answers):
-    from core import autosave
+    from ingetrazo_core import autosave
     from core.scene import Scene
     from formats import igz
     src = _copy(tmp_path)
@@ -292,7 +292,7 @@ def test_background_autosave_writes_a_recovery_slot(host, tmp_path):
     """The native clock schedules recovery. The retained writer slices finish on the UI thread."""
     import time
     from ingetrazo_render import WindowTimer
-    from core import autosave
+    from ingetrazo_core import autosave
     src = _copy(tmp_path)
     host.open_path(src)
     _draw(host)
@@ -380,7 +380,7 @@ def test_native_view_timers_release_callbacks_on_close(host):
 
 
 def test_cancelling_named_recovery_keeps_the_slot_and_active_tab(host, tmp_path, answers):
-    from core import autosave
+    from ingetrazo_core import autosave
     from formats import igz
     from core.scene import Scene
     source = _copy(tmp_path)

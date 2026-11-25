@@ -143,7 +143,7 @@ def test_a_box_cut_on_a_slant_fills_in_its_own_plane():
 
 def test_the_viewport_fills_the_cut_and_keeps_it_across_a_selection(native_host):
     from core.group import Group
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     vp = native_host.viewport
     scene = vp.scene
     m = Mesh()
@@ -207,8 +207,8 @@ def test_cross_hatching_draws_both_ways_and_spacing_counts():
 
 
 def test_the_plane_fill_over_the_style():
-    from core.section import SectionPlane
-    from core.style import Style
+    from ingetrazo_core.section import SectionPlane
+    from ingetrazo_core.style import Style
     style = Style(name="test")
     style.section_fill = True
     style.section_fill_color = (0.2, 0.3, 0.4)
@@ -230,7 +230,7 @@ def test_the_plane_fill_over_the_style():
 
 def test_the_viewport_hatches_the_cut_it_fills(native_host):
     from core.group import Group
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     vp = native_host.viewport
     scene = vp.scene
     m = Mesh()
@@ -287,7 +287,7 @@ def test_the_model_draws_the_line_types_by_default(native_host):
     """«Line types in the model», on unless a style says otherwise: a
     layer's edges come out dashed and in their line type's colour."""
     from tests.test_layer_cut import _gas_scene
-    from core.style import Style
+    from ingetrazo_core.style import Style
     vp = native_host.viewport
     scene = _gas_scene(vp.scene)
     scene.version += 1
@@ -364,7 +364,7 @@ def test_picking_does_not_dash_the_model_again(native_host, monkeypatch):
 def test_a_dragged_cut_defers_changed_fill_but_reuses_equal_segments(monkeypatch):
     from types import SimpleNamespace
     import time
-    from core import timers
+    from ingetrazo_core import timers
     import views.document_interaction as interaction
     old = np.zeros((2, 2, 3), dtype=np.float32)
     tris = object()

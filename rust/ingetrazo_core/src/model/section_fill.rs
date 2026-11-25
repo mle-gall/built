@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! The section cut as the viewport draws it (`core.section`): the chords a
+//! The section cut as the viewport draws it (`ingetrazo_core.section`): the chords a
 //! plane cuts out of the pick index's triangles (`PlaneReach`, kept while
 //! the plane slides along its normal), the filled areas they close (rings
 //! nested even-odd), those areas as triangles, their 45° hatching, and the
@@ -70,7 +70,7 @@ fn none<'py>(py: Python<'py>, rows: bool) -> PyResult<Bound<'py, PyAny>> {
 }
 
 /// The corners of a set of triangles and how far along one normal each
-/// stands (`core.section.PlaneReach`).
+/// stands (`ingetrazo_core.section.PlaneReach`).
 #[pyclass(module = "ingetrazo_core", name = "PlaneReach", frozen)]
 pub struct PlaneReach {
     v0: Py<PyAny>,
@@ -190,7 +190,7 @@ impl PlaneReach {
 }
 
 /// `cut_chords(v0, e1, e2, normal, point, visible=None, rows=False,
-/// reach=None)`: see `core.section.cut_chords`.
+/// reach=None)`: see `ingetrazo_core.section.cut_chords`.
 #[pyfunction]
 #[pyo3(signature = (v0, e1, e2, normal, point, visible=None, rows=false, reach=None))]
 #[allow(clippy::too_many_arguments)]
@@ -467,7 +467,7 @@ fn section_group_triangles<'py>(py: Python<'py>, groups: &Bound<'py, PyAny>) -> 
     tris_array(py, group_triangles(&areas))
 }
 
-/// `fill_triangles(chords, normal)`: see `core.section.fill_triangles`.
+/// `fill_triangles(chords, normal)`: see `ingetrazo_core.section.fill_triangles`.
 #[pyfunction]
 fn section_fill_triangles<'py>(py: Python<'py>, chords: &Bound<'py, PyAny>, normal: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let (groups, _) = fill_groups(&chords_of(chords)?, xyz(normal)?);
@@ -671,7 +671,11 @@ fn section_plane_load<'py>(py: Python<'py>, cls: &Bound<'py, PyAny>, raw: &Bound
     Ok(sp)
 }
 
+#[path = "section_layer_fills.rs"]
+mod section_layer_fills;
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    section_layer_fills::register(m)?;
     m.add_class::<PlaneReach>()?;
     m.add_class::<SectionAreas>()?;
     m.add_function(wrap_pyfunction!(section_cut_chords, m)?)?;

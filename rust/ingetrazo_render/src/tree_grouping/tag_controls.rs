@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 const NEW_HIDDEN: &str = "layers/new_hidden_in_scenes";
 
 pub fn new_hidden(py: Python<'_>) -> PyResult<bool> {
-    py.import("core.settings")?
+    py.import("ingetrazo_core.settings")?
         .call_method0("settings")?
         .call_method1("value", (NEW_HIDDEN, false, py.get_type::<PyBool>()))?
         .extract()
@@ -18,7 +18,7 @@ pub fn new_hidden(py: Python<'_>) -> PyResult<bool> {
 
 #[pyfunction]
 pub fn set_new_tags_hidden(py: Python<'_>, on: bool) -> PyResult<()> {
-    py.import("core.settings")?
+    py.import("ingetrazo_core.settings")?
         .call_method0("settings")?
         .call_method1("setValue", (NEW_HIDDEN, on))?;
     Ok(())
@@ -28,7 +28,7 @@ pub(super) fn editable_tag_selection(scene: &Bound<'_, PyAny>) -> PyResult<bool>
     let py = scene.py();
     let group = py.import("core.group")?.getattr("Group")?;
     let links = crate::host_context::core_module(py)?;
-    let filing = py.import("core.structure")?;
+    let filing = py.import("ingetrazo_core.structure")?;
     for entity in scene.getattr("selection")?.try_iter()? {
         let entity = entity?;
         if entity.is_instance(&group)?
