@@ -11,6 +11,7 @@ mod store_views;
 mod hatches;
 mod edits;
 mod snap_surfaces;
+mod snap_api;
 mod topology;
 use crate::{object_drawing, object_replay, snap, snap_engine, store};
 use pyo3::prelude::*;
@@ -26,6 +27,7 @@ pub(crate) fn register_kernel(m: &Bound<'_,PyModule>) -> PyResult<()> {
     hatches::register(m)?;
     edits::register(m)?;
     snap_surfaces::register(m)?;
+    snap_api::register(m)?;
     topology::register(m)?;
     store::planar_api::register(m)?;
     m.add_function(wrap_pyfunction!(snap::inputs::edge_tag,m)?)?;

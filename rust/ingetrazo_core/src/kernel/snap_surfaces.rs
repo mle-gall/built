@@ -36,7 +36,7 @@ enum Surface<'py> {
 }
 #[pyfunction]
 #[pyo3(signature=(outline,patch,scene,projector,cursor,et,is_occluded,query))]
-fn pierce<'py>(
+pub(super) fn pierce<'py>(
     outline: &Obj<'py>,
     patch: bool,
     scene: &Obj<'py>,
@@ -177,7 +177,7 @@ fn face_crossing_near_ray<'a>(
     Ok(Some((p, ((x + nx, y + ny), (x - nx, y - ny)))))
 }
 #[pyfunction]
-fn pairs_that_may_meet(edges: &Obj<'_>) -> PyResult<Vec<(usize, usize)>> {
+pub(super) fn pairs_that_may_meet(edges: &Obj<'_>) -> PyResult<Vec<(usize, usize)>> {
     let n = edges.len()?;
     let mut boxes = Vec::new();
     if n >= 8 {
@@ -213,7 +213,7 @@ fn closest_segment(p: XY, a: XY, b: XY) -> (f64, f64) {
     ((p[0] - (a[0] + t * dx)).hypot(p[1] - (a[1] + t * dy)), t)
 }
 #[pyfunction]
-fn point_on_segment(p: &Obj<'_>, a: &Obj<'_>, b: &Obj<'_>, tol: f64) -> PyResult<bool> {
+pub(super) fn point_on_segment(p: &Obj<'_>, a: &Obj<'_>, b: &Obj<'_>, tol: f64) -> PyResult<bool> {
     let (p, a, b) = (xyz(p)?, xyz(a)?, xyz(b)?);
     let d = b - a;
     let l = d.dot(d);
