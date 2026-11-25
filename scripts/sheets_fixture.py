@@ -61,7 +61,7 @@ def build(path: Path) -> None:
     from core.composition import Composicion, MarcoVista, TextoItem
     from core.saved_views import SavedView
     from core.scene import Scene
-    from formats.igz import save_scene
+    from ingetrazo_core.formats.igz import save_scene
     scene = Scene()
     _box(scene.mesh, 0, 0, 0, 12, 8, 0.3)
     _box(scene.mesh, 1, 1, 0.3, 5, 4, 3.2)

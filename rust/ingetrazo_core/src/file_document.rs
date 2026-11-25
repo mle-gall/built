@@ -9,7 +9,7 @@ use pyo3::{
 use std::time::{Duration, Instant};
 type Obj<'p> = Bound<'p, PyAny>;
 fn api(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("formats.igz")
+    py.import("ingetrazo_core.formats.igz")
 }
 fn seq<'p>(payload: &Obj<'p>, k: &str) -> PyResult<Obj<'p>> {
     let rows = payload.call_method1("get", (k,))?;
@@ -165,7 +165,7 @@ fn igz_load_into_inner<'p>(
     let read = (|| -> PyResult<_> {
         if built
             || py
-                .import("formats.built")?
+                .import("ingetrazo_core.formats.built")?
                 .call_method1("is_built", (path,))?
                 .is_truthy()?
         {

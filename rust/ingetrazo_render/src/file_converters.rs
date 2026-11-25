@@ -14,7 +14,7 @@ fn label(win: &Bound<'_, PyAny>, text: &str) -> PyResult<String> {
 #[pyfunction]
 fn import_dwg(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = win.py();
-    let backend = py.import("formats.dwg_bridge")?;
+    let backend = py.import("ingetrazo_core.formats.dwg_bridge")?;
     let dialogs = py.import("ingetrazo_render.chrome_dialogs")?;
     let title = label(win, "Import DWG failed")?;
     let help = label(win, DXF_HELP)?;
@@ -104,7 +104,7 @@ fn import_skp(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<bool>
             .call((win, path, ui.getattr("install_insertion")?), Some(&kw))?
             .is_truthy();
     }
-    let skp = py.import("formats.skp")?;
+    let skp = py.import("ingetrazo_core.formats.skp")?;
     let dialogs = py.import("ingetrazo_render.chrome_dialogs")?;
     let name = path.getattr("name")?;
     let args = PyDict::new(py);

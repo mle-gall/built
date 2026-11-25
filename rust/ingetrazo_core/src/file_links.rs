@@ -8,7 +8,7 @@ use pyo3::{
 use std::time::{Duration, Instant};
 type Obj<'p> = Bound<'p, PyAny>;
 fn api(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("formats.igz")
+    py.import("ingetrazo_core.formats.igz")
 }
 pyo3::create_exception!(ingetrazo_core, LinkInterrupted, PyBaseException);
 #[pyclass]
@@ -196,7 +196,7 @@ fn igz_unpack_photo_mesh<'p>(payload: &Obj<'p>, archive: &Obj<'p>) -> PyResult<O
     if !photo.is_truthy()? {
         return Ok(py.None().into_bound(py));
     }
-    py.import("georef.photomesh")?.call_method1(
+    py.import("ingetrazo_core.georef.photomesh")?.call_method1(
         "unpack_mesh",
         (
             photo,

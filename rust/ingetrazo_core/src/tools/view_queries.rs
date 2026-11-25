@@ -34,7 +34,7 @@ pub(super) fn classify(entity: &Bound<'_, PyAny>) -> PyResult<&'static str> {
             ("ingetrazo_core.image_plane", "ImagePlane", "image_plane"),
             ("ingetrazo_core.guide", "Guide", "guide"),
             ("ingetrazo_core.guide", "GuideCircle", "guide"),
-            ("georef.geopath", "GeoPath", "geopath"),
+            ("ingetrazo_core.georef.geopath", "GeoPath", "geopath"),
         ]
         .into_iter()
         .map(|(module, class, kind)| Ok((py.import(module)?.getattr(class)?.unbind(), kind)))

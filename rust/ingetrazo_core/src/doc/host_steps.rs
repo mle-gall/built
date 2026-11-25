@@ -17,7 +17,7 @@ fn none(py: Python<'_>) -> Obj<'_> {
 }
 
 fn datum_class(py: Python<'_>) -> PyResult<Obj<'_>> {
-    py.import("georef.datum")?.getattr("SceneDatum")
+    py.import("ingetrazo_core.georef.datum")?.getattr("SceneDatum")
 }
 
 /// A datum like `datum` with another north angle.

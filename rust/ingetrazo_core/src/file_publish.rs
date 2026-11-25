@@ -9,7 +9,7 @@ use pyo3::{
 use std::{collections::HashSet, path::PathBuf};
 type Obj<'p> = Bound<'p, PyAny>;
 fn codec(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("formats.igz")
+    py.import("ingetrazo_core.formats.igz")
 }
 
 #[pyclass(name = "DocumentOutput")]

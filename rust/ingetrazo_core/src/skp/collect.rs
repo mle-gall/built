@@ -136,7 +136,7 @@ fn segments(d: &Obj<'_>, xf: &Obj<'_>, out: &Obj<'_>, soft: bool) -> PyResult<()
         let mut hidden = none(py);
         if !soft {
             let cache = py
-                .import("formats.skp_reader")?
+                .import("ingetrazo_core.formats.skp_reader")?
                 .getattr("_geometry_cache")?
                 .call_method0("get")?;
             hidden = attr(&cache, "hidden_tags")?;

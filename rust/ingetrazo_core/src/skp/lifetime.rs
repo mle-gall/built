@@ -22,7 +22,7 @@ fn release(d: &Obj<'_>) -> PyResult<()> {
         d.setattr(k, PyDict::new(py))?;
     }
     let cache = py
-        .import("formats.skp_reader")?
+        .import("ingetrazo_core.formats.skp_reader")?
         .getattr("_geometry_cache")?
         .call_method0("get")?;
     for k in ["_geom", "_soft_arr", "_loose_arr", "_face_boxes"] {

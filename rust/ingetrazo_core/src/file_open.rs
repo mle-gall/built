@@ -99,7 +99,7 @@ fn read_skp<'py>(
     scene: &Bound<'py, PyAny>,
     args: &Bound<'py, PyDict>,
 ) -> PyResult<(Bound<'py, PyAny>, bool)> {
-    let reader = py.import("formats.skp")?;
+    let reader = py.import("ingetrazo_core.formats.skp")?;
     let payload = reader.getattr("parse_skp")?.call((path,), Some(args))?;
     let empty = payload.call_method1("get", ("empty", false))?.is_truthy()?;
     let history = py
@@ -146,7 +146,7 @@ fn prepare(
     args.set_item("progress", Py::new(py, reading)?)?;
     let scene = py.import("core.scene")?.getattr("Scene")?.call0()?;
     if insert {
-        let reader = py.import("formats.skp")?;
+        let reader = py.import("ingetrazo_core.formats.skp")?;
         let payload = reader
             .call_method("parse_skp", (path,), Some(&args))?
             .cast_into::<PyDict>()?;
@@ -167,7 +167,7 @@ fn prepare(
     {
         Some(read_skp(py, path.bind(py), &scene, &args)?)
     } else {
-        py.import("formats.igz")?
+        py.import("ingetrazo_core.formats.igz")?
             .getattr("load_into")?
             .call((&scene, path), Some(&args))?;
         None

@@ -174,7 +174,7 @@ fn line_groups<'py>(source: &Obj<'py>, frame: &Obj<'py>) -> PyResult<Option<Line
         .extract()?;
     let layer = name.split(" — ").next().unwrap_or_default();
     let texts = PyList::empty(py);
-    let dxf = py.import("formats.dxf_views")?;
+    let dxf = py.import("ingetrazo_core.formats.dxf_views")?;
     let groups = if !d.getattr("layers")?.is_none() {
         d.setattr(
             "styles",
@@ -224,7 +224,7 @@ fn export_dxf<'py>(
         let kw = PyDict::new(py);
         kw.set_item("geometry", lines.pass.geometry)?;
         let cut = py
-            .import("formats.dxf_views")?
+            .import("ingetrazo_core.formats.dxf_views")?
             .getattr("dxf_cut_layers")?
             .call(
                 (
@@ -239,7 +239,7 @@ fn export_dxf<'py>(
         lines.groups.call_method1("extend", (cut.get_item(0)?,))?;
         solids = cut.get_item(1)?;
     }
-    Ok(Some(py.import("formats.dxf_out")?.call_method1(
+    Ok(Some(py.import("ingetrazo_core.formats.dxf_out")?.call_method1(
         "save_dxf_layers",
         (path, lines.groups, solids, lines.texts),
     )?))
@@ -263,7 +263,7 @@ fn export_svg<'py>(
         pens.set_item(k, positive_default(frame, field, def)?.max(0.05))?;
     }
     let (text, n): (String, usize) = py
-        .import("formats.svg_out")?
+        .import("ingetrazo_core.formats.svg_out")?
         .call_method1(
             "svg_text",
             (

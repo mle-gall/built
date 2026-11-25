@@ -185,7 +185,7 @@ fn archive_styles(scene: &Obj<'_>, out: &Dict<'_>) -> PyResult<()> {
 
 fn archive_settings(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_>) -> PyResult<()> {
     let py = scene.py();
-    let codec = py.import("formats.igz")?;
+    let codec = py.import("ingetrazo_core.formats.igz")?;
     let style = attr(scene, "dimension_style")?;
     if style.is_truthy()? {
         out.set_item("dimension_style", style.call_method0("copy")?)?;
@@ -203,7 +203,7 @@ fn archive_settings(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_>) -> PyResu
                             {
                                 copy.set_item(
                                     k,
-                                    py.import("formats.built")?
+                                    py.import("ingetrazo_core.formats.built")?
                                         .call_method1("compact_values", (point,))?,
                                 )?;
                             }
@@ -637,7 +637,7 @@ pub fn igz_reset_scene(scene: &Obj<'_>, payload: &Dict<'_>, survey: &Obj<'_>) ->
     }
     let tile = data(payload, "tile_layer")?;
     if tile.is_truthy()? {
-        let class = py.import("georef.tiles")?.getattr("TileLayer")?;
+        let class = py.import("ingetrazo_core.georef.tiles")?.getattr("TileLayer")?;
         if let Ok(layer) = class.call_method1("from_dict", (tile,)) {
             scene.setattr("tile_layer", layer)?;
         }
@@ -833,14 +833,14 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
         if datum.is_instance_of::<PyDict>() {
             scene.setattr(
                 "georef",
-                py.import("georef.datum")?
+                py.import("ingetrazo_core.georef.datum")?
                     .getattr("SceneDatum")?
                     .call_method1("from_dict", (datum,))?,
             )?;
         }
     }
-    restore_records(scene, payload, "geo_paths", "georef.geopath", "GeoPath")?;
-    restore_records(scene, payload, "geo_points", "georef.points", "GeoPoint")?;
+    restore_records(scene, payload, "geo_paths", "ingetrazo_core.georef.geopath", "GeoPath")?;
+    restore_records(scene, payload, "geo_points", "ingetrazo_core.georef.points", "GeoPoint")?;
     py.import("core.composition")?
         .call_method1("bind_sheet_anchors", (scene,))?;
     let anchors = scene.getattr("text_placement_anchors")?;
@@ -863,7 +863,7 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
     for (key, circles) in [("guides", false), ("guide_circles", true)] {
         if let Some(seq) = payload.get_item(key)? {
             let factory = py.import("ingetrazo_core.guide")?.getattr("guide_from_dict")?;
-            let finite = py.import("formats.igz")?.getattr("_finite_points")?;
+            let finite = py.import("ingetrazo_core.formats.igz")?.getattr("_finite_points")?;
             for item in seq.try_iter()? {
                 let mut raw = item?.cast_into::<PyDict>()?;
                 if circles {

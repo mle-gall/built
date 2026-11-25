@@ -736,7 +736,7 @@ fn link_verb<'py>(win: &Obj<'py>, view: &Obj<'py>, group: &Obj<'py>, key: &str, 
         }
         "linkrelink" => {
             let source = py.import("pathlib")?.getattr("Path")?.call1((path()?,))?;
-            let filter = py.import("formats.built")?.getattr("DOCUMENT_FILTER")?;
+            let filter = py.import("ingetrazo_core.formats.built")?.getattr("DOCUMENT_FILTER")?;
             let chosen = render(py)?.getattr("shell_files")?.getattr("ShellFileDialog")?.call_method1(
                 "getOpenFileName",
                 (win, format!("Locate {}", source.getattr("name")?.str()?), source.getattr("parent")?.str()?, filter),

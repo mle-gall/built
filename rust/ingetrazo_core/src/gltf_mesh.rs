@@ -242,7 +242,7 @@ fn gltf_build_mesh<'py>(
     )?;
     if mesh.getattr("edges")?.len()? <= 500_000 {
         tick(progress, 0.9, "Smoothing edges…")?;
-        py.import("formats.fuse")?
+        py.import("ingetrazo_core.formats.fuse")?
             .call_method1("soften_smooth_edges", (&mesh,))?;
     }
     if textured {

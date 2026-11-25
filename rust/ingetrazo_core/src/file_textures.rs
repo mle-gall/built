@@ -197,7 +197,7 @@ pub fn igz_pack_textures<'p>(
             Ok(PyString::new(py, "").into_any())
         }
     };
-    let api = py.import("formats.igz")?;
+    let api = py.import("ingetrazo_core.formats.igz")?;
     if api.call_method0("native_io")?.is_none() {
         for pair in api.call_method1("_texture_slots", (payload,))?.try_iter()? {
             let (parent, key): (Bound<'p, PyDict>, Bound<'p, PyAny>) = pair?.extract()?;

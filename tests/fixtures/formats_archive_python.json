@@ -1,0 +1,54 @@
+{
+  "examples/banca-pergola-yanque.igz": {
+    "first_save": {
+      "format": 2,
+      "members": {
+        "textures/3c7fd1a55c44e5a4-beech.jpg": "c6df15b4d2d346f31982d62307662e7cffed3ef391e6296eeb6386913b45d7f4",
+        "textures/928cd77719565dde-sumari.png": "f8c694e25a390d31d9711e22bfca7a265b09def6dc35cf9caa6501ad8918241b",
+        "textures/ae1ad9f06706c193-metal_dark.png": "d0b86ccb4da60c1473129b0e17a3935137c153697567cd73c74dacebe68c2794",
+        "textures/ea4d38dd30369ad3-concrete_smooth.png": "0a8b529dc85842c9b67f55ce1500403e8d27074ae0bef60c270da4516c09ce2e"
+      },
+      "scene": "9483fb81c3b0409dd9113bf3ff021d48872620ac0eb942521dc7a9720d3192ef"
+    },
+    "original_format": 2,
+    "original_version": "0.3.12",
+    "reopened_save": {
+      "format": 2,
+      "members": {
+        "textures/3c7fd1a55c44e5a4-beech.jpg": "c6df15b4d2d346f31982d62307662e7cffed3ef391e6296eeb6386913b45d7f4",
+        "textures/928cd77719565dde-sumari.png": "f8c694e25a390d31d9711e22bfca7a265b09def6dc35cf9caa6501ad8918241b",
+        "textures/ae1ad9f06706c193-metal_dark.png": "d0b86ccb4da60c1473129b0e17a3935137c153697567cd73c74dacebe68c2794",
+        "textures/ea4d38dd30369ad3-concrete_smooth.png": "0a8b529dc85842c9b67f55ce1500403e8d27074ae0bef60c270da4516c09ce2e"
+      },
+      "scene": "9483fb81c3b0409dd9113bf3ff021d48872620ac0eb942521dc7a9720d3192ef"
+    }
+  },
+  "tests/fixtures/links/five-parts.igz": {
+    "first_save": {
+      "format": 1,
+      "members": {},
+      "scene": "3d97a17a4e327e3551abab0f92c7a9064abab368fa1d4a46979d9eb02ee8255a"
+    },
+    "original_format": 1,
+    "original_version": "0.6.0",
+    "reopened_save": {
+      "format": 1,
+      "members": {},
+      "scene": "3d97a17a4e327e3551abab0f92c7a9064abab368fa1d4a46979d9eb02ee8255a"
+    }
+  },
+  "tests/fixtures/nested_rings_0_1.igz": {
+    "first_save": {
+      "format": 1,
+      "members": {},
+      "scene": "49c09fafcba469a21e4d054b8f9b1761456aaea474a9418ca36c52d662fa671d"
+    },
+    "original_format": 3,
+    "original_version": "0.6.2",
+    "reopened_save": {
+      "format": 1,
+      "members": {},
+      "scene": "7d8e35cb0c3f5abbd32d6b06c56913c7b494121f1bc699f03ed1a1406f787b0c"
+    }
+  }
+}

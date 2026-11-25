@@ -348,7 +348,7 @@ impl Ground {
                 kw.set_item("parent", owner)?;
             }
             dem = py
-                .import("georef.dem")?
+                .import("ingetrazo_core.georef.dem")?
                 .getattr("DEMSampler")?
                 .call((&datum,), Some(&kw))?;
             dem.getattr("changed")?
@@ -365,7 +365,7 @@ impl Ground {
                         || !sampler.getattr("datum")?.is(&datum)
                     {
                         sampler = py
-                            .import("georef.photomesh")?
+                            .import("ingetrazo_core.georef.photomesh")?
                             .call_method1("PhotoMeshSampler", (survey, datum))?;
                         s.setattr("_survey", &sampler)?;
                     }

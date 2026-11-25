@@ -126,7 +126,7 @@ fn data_class(
     let kw = PyDict::new(py);
     kw.set_item("frozen", true)?;
     let class = dc.call_method("make_dataclass", (name, fields), Some(&kw))?;
-    class.setattr("__module__", "ingetrazo_core.extension_manager")?;
+    class.setattr("__module__", "extension_manager")?;
     m.add(name, class)
 }
 /// Catalogue records are constructed on first access. The modelling engine

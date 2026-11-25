@@ -86,7 +86,7 @@ fn face_attribute_rows<'py>(mesh: &Obj<'py>) -> PyResult<Obj<'py>> {
         let table = src.get_item("meta")?.call_method1("get", ("face_attrs",))?;
         let mut seen = std::collections::HashSet::new();
         let out = PyList::empty(py);
-        let parse = crate::model::module(py, "formats.igz")?.getattr("_face_attrs_from_json")?;
+        let parse = crate::model::module(py, "ingetrazo_core.formats.igz")?.getattr("_face_attrs_from_json")?;
         for k in src.get_item("face_attr")?.try_iter()? {
             let k = k?.extract::<i64>()?;
             if !seen.insert(k) {

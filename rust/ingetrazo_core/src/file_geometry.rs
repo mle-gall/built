@@ -13,7 +13,7 @@ pub fn source(py: Python<'_>, block: Block) -> PyResult<Bound<'_, PyAny>> {
     let vertices = block.pos.len() / 3;
     let ne = block.flags.len();
     let boundary = 2 * ne;
-    let format = py.import("formats.igz")?;
+    let format = py.import("ingetrazo_core.formats.igz")?;
     if !block.multi.is_empty() || vertices >= i32::MAX as usize {
         // Nested holes use the topology subsystem's maximal-hole policy.
         return format.call_method1("_native_blocks", (crate::mesh_tuple(py, block)?,));

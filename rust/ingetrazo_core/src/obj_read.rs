@@ -397,7 +397,7 @@ fn editable(mesh: &Obj<'_>, rows: &Bound<'_, PyList>, error: Option<&str>) -> Py
         .call_method("run_stitch", (mesh, seed, added), Some(&kw))?;
     py.import("core.orient")?
         .call_method1("orient_outward", (mesh,))?;
-    let fuse = py.import("formats.fuse")?;
+    let fuse = py.import("ingetrazo_core.formats.fuse")?;
     fuse.call_method1("soften_by_smoothing_group", (mesh,))?;
     fuse.call_method1("drop_smoothing_groups", (mesh,))?;
     Ok(())
@@ -427,7 +427,7 @@ fn obj_load<'p>(
     let dest = scene.getattr("mesh")?;
     let empty = dest.getattr("vertices")?.len()? == 0;
     let limit = py
-        .import("formats.dae")?
+        .import("ingetrazo_core.formats.dae")?
         .getattr("_MAX_FUSE_LOOPS")?
         .extract::<usize>()?;
     let error = if require_geometry {
@@ -479,7 +479,7 @@ fn obj_load<'p>(
             }
         } else {
             let kids = PyList::empty(py);
-            let fuse = py.import("formats.fuse")?;
+            let fuse = py.import("ingetrazo_core.formats.fuse")?;
             for (i, p) in model.pieces.iter().enumerate() {
                 cb.call1((
                     0.5 + 0.45 * i as f64 / model.pieces.len() as f64,

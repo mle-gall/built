@@ -10,7 +10,7 @@ use pyo3::{
 };
 type Obj<'p> = Bound<'p, PyAny>;
 fn api(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("formats.igz")
+    py.import("ingetrazo_core.formats.igz")
 }
 fn slice(py: Python<'_>, lo: usize, hi: usize) -> Bound<'_, PySlice> {
     PySlice::new(py, lo as isize, hi.min(isize::MAX as usize) as isize, 1)

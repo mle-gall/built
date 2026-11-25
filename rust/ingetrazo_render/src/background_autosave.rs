@@ -111,7 +111,7 @@ fn write_snapshot(prepared: &Obj<'_>, stage: &Obj<'_>, results: &Obj<'_>) -> PyR
     let result = (|| -> PyResult<()> {
         let kw = PyDict::new(py);
         kw.set_item("background", true)?;
-        py.import("formats.igz")?
+        py.import("ingetrazo_core.formats.igz")?
             .call_method("write_prepared", (prepared, stage), Some(&kw))?;
         Ok(())
     })();
