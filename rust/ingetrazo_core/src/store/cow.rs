@@ -26,7 +26,7 @@ const MASK: usize = CHUNK - 1;
 /// `clone()` is the snapshot: it shares every chunk. A write goes through
 /// `Arc::make_mut`, which copies the chunk only when a snapshot still holds
 /// it, so the snapshot never sees later edits.
-#[derive(Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct CowVec<T: Clone> {
     chunks: Vec<Arc<Vec<T>>>,
     len: usize,
@@ -220,7 +220,7 @@ pub type Cell = (i64, i64, i64);
 /// (the first vertex into a cell holds it; a later one waits), so undo has
 /// to snapshot it. Sharding makes that snapshot O(shards) and a later
 /// single-vertex move copy one shard (≈ n / shards entries).
-#[derive(Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct CellMap {
     shards: Vec<Arc<FxHashMap<Cell, u32>>>,
     mask: u64,

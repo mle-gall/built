@@ -38,20 +38,12 @@ def test_draw_edge_matches_command_on_creation_and_restamps(monkeypatch):
         MeshStore.command_draw_edge(mesh, a, b, curve=2**63)
 
 
-def test_draw_edge_refusal_precedes_mutation(monkeypatch):
-    a, b = (0., 0., 0.), (1., 0., 0.)
-    monkeypatch.setenv("INGETRAZO_STORE", "0")
-    detached = Mesh()
-    assert MeshStore.command_draw_edge(detached, a, b) is None
-    assert not detached.edges
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
+def test_draw_edge_uses_planned_binary64_endpoint():
     mesh = Mesh()
-    mesh._planned_points = {}
-    assert MeshStore.command_draw_edge(mesh, a, b) is None
-    del mesh._planned_points
-    monkeypatch.setattr(store_mesh, "_hypot", lambda: None)
-    assert MeshStore.command_draw_edge(mesh, a, b) is None
-    assert not mesh.vertices and mesh._mut_serial == 0
+    planned = (1.000000000000001, 0., 0.)
+    mesh._planned_points = {(1., 0., 0.): planned}
+    MeshStore.command_draw_edge(mesh, (0., 0., 0.), (1., 0., 0.))
+    assert tuple(mesh.vertices[1].position_tuple()) == planned
 
 
 def test_draw_edge_in_occurrence_restores_definition_key(monkeypatch):

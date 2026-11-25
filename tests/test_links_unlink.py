@@ -240,13 +240,11 @@ def test_a_part_or_a_host_component_is_not_unlinked(tmp_path):
     assert_live(link, src)
 
 
-@pytest.mark.parametrize("store", [False, True])
 def test_deferred_meshes_copy_without_building_and_build_the_same(
-        tmp_path, monkeypatch, store):
+        tmp_path, monkeypatch):
     """A mesh the document left deferred is copied deferred (nothing is
     built for Make Unique), and built later it shows what the link did."""
     monkeypatch.setattr(_native, "wanted", lambda: True)
-    monkeypatch.setattr(_native, "store_wanted", lambda: store)
     (tmp_path / "a").mkdir()
     (tmp_path / "b").mkdir()
     ref_host, ref, _o, _s = _host(tmp_path / "a")

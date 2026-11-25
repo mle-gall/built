@@ -15,7 +15,6 @@ from core.protocol.commands import push_pull
 from core.protocol.keys import to_json_key
 from tests.test_pushpull_cases import _boxed, _face
 
-pytestmark = pytest.mark.skipif(not S.enabled(), reason="store off")
 
 
 def _state(mesh):

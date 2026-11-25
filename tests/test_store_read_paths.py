@@ -52,24 +52,20 @@ def _box_and_disc() -> Scene:
     return scene
 
 
-@pytest.fixture(params=[False, True], ids=["python", "store"])
-def doc(request, monkeypatch, tmp_path):
+@pytest.fixture
+def doc(monkeypatch, tmp_path):
     """The same saved document, reopened with the store off or on."""
     monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)
     monkeypatch.setattr(igz, "_BULK_MIN", 1)
     monkeypatch.setattr(_native, "wanted", lambda: True)
     path = tmp_path / "doc.igz"
-    monkeypatch.setenv("INGETRAZO_STORE", "0")
     igz.save_scene(_box_and_disc(), path)
-    monkeypatch.setenv("INGETRAZO_STORE", "1" if request.param else "0")
     scene = Scene()
     igz.load_into(scene, path)
     len(scene.mesh.faces)                               # first touch
-    assert (type(scene.mesh) is S.StoreMesh) == request.param
-    yield SimpleNamespace(scene=scene, store=request.param)
-    if request.param:
-        # Every scenario is a read: none may have materialised the mesh.
-        assert type(scene.mesh) is S.StoreMesh
+    assert type(scene.mesh) is S.StoreMesh
+    yield SimpleNamespace(scene=scene)
+    assert type(scene.mesh) is S.StoreMesh
 
 
 def _top(scene):
@@ -142,7 +138,7 @@ def test_views_of_one_face_are_never_identical(doc):
     same object; on a Python mesh they are the same object."""
     a, b = _top(doc.scene), _top(doc.scene)
     assert a == b
-    assert (a is b) == (not doc.store)
+    assert a is not b
 
 
 def test_hover_over_a_selected_face(doc):

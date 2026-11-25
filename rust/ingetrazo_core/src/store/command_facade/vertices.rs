@@ -30,9 +30,7 @@ fn apply(
     matrix: [f64; 16],
     textures: bool,
 ) -> PyResult<Option<MovedVertices>> {
-    let Some(hypot) = store_hypot(mesh)? else {
-        return Ok(None);
-    };
+    let hypot = store_hypot(mesh.py())?;
     let mut source = Vec::with_capacity(positions.len());
     let mut landing = Vec::with_capacity(positions.len());
     for p in positions {

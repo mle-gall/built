@@ -25,8 +25,7 @@ one of the same lineage; restoring a Python snapshot turns a store-backed
 mesh into Python objects. One owner at any time: never a store and Python
 objects kept in sync.
 
-The Rust engine owns new meshes when its current extension is available.
-Tests and measurements can select the object oracle with INGETRAZO_STORE=0."""
+The Rust store owns new meshes."""
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -45,20 +44,6 @@ LOCAL_MASK = (1 << 40) - 1
 STORE_SIDE = ("_store", "_objmap", "_attr_table", "_attr_own", "_bulk",
               "_py_base", "_pos_cache", "_face_cache", "_frame_parent",
               "_tool_frame_cache", "_planned_points", "_instance_definition")
-
-
-def enabled() -> bool:
-    """Whether a new mesh gets a native geometry owner."""
-    from core import _native
-    if not _native.store_wanted():
-        return False
-    mod = _native.native
-    return mod is not None and hasattr(getattr(mod, "MeshStore", None), "_extend_bulk")
-
-
-def _module():
-    from core import _native
-    return _native.native
 
 
 def _weld_args():
@@ -234,8 +219,13 @@ class _ViewMixin:
         return type(self)(owner, key)
 
     def __reduce__(self):
-        # deepcopy / pickle of a view: the element it names.
+        if type(self._m) is StoreMesh:
+            return (_unpickle_view, (type(self), self._m, self.key & LOCAL_MASK))
         return (_identity, (self._obj(),))
+
+
+def _unpickle_view(cls, mesh, local_key):
+    return cls(mesh, mesh._store.key_base | local_key)
 
 
 def _identity(x):
@@ -1698,26 +1688,16 @@ class StoreMesh(Mesh):
         for key in flipped:
             swap_orientation_paint(FaceView(self, key))
 
-    def stitch_connect(self, seedkeys, dedupe: bool) -> bool:
-        """``run_stitch``'s phases 0–2 in one native call (weld, dedupe,
-        the scoped T-junction rounds, the collinear collapse). False when
-        the store refused a step: nothing changed."""
-        h = _hypot()
-        if h is None:
-            return False
+    def stitch_connect(self, seedkeys, dedupe: bool) -> None:
+        """Weld, deduplicate and stitch the seeded geometry atomically."""
         from core.mesh import _STITCH_TOL
-        try:
-            (pairs, n), _ch = self._store.stitch_connect(
-                sorted(seedkeys or ()), dedupe, _STITCH_TOL, h)
-        except _fallback():
-            _note_refusal("stitch_connect")
-            return False
+        (pairs, n), _ch = self._store.stitch_connect(
+            sorted(seedkeys or ()), dedupe, _STITCH_TOL, _hypot())
         self._dirty(n)
         for d, k in pairs:
             drop, keep = FaceView(self, d), FaceView(self, k)
             if drop.attrs and not keep.attrs:
                 keep.attrs = dict(drop.attrs)
-        return True
 
     def dedupe_faces(self) -> int:
         (pairs, n), _ch = self._store.dedupe_faces()
@@ -1977,8 +1957,18 @@ class StoreMesh(Mesh):
         return new
 
     def __reduce_ex__(self, protocol):
-        self._materialise()
-        return self.__reduce_ex__(protocol)
+        definition = self.__dict__.get("_instance_definition")
+        if definition is not None:
+            return instance_view, (definition, self._store.frame_matrix, self._store.frame_origin)
+        state = {k: v for k, v in self.__dict__.items() if k not in STORE_SIDE and k != "_keys"}
+        attrs = {k & LOCAL_MASK: v for k, v in self._attr_own.items()}
+        return _unpickle_mesh, (1, self._store.pickle_archive()), (state, self._attr_table, attrs)
+
+    def __setstate__(self, saved):
+        state, table, attrs = saved
+        self.__dict__.update(state)
+        self._attr_table = table
+        self._attr_own = {self._store.key_base | k: v for k, v in attrs.items()}
 
     # -- materialise on write
     def _materialise(self) -> None:
@@ -2067,8 +2057,7 @@ class MaterialisedMesh(Mesh):
 
     def clear(self):
         Mesh.clear(self)
-        if enabled():
-            initialise_store(self)
+        initialise_store(self)
 
     def __getstate__(self):
         # Pickle the compatibility object graph, without native handles.
@@ -2268,6 +2257,15 @@ def instance_view(mesh, matrix, origin=(0., 0., 0.)):
     return result
 
 
+def _unpickle_mesh(version, archive):
+    from ingetrazo_core import MeshStore
+    mesh = StoreMesh.__new__(StoreMesh)
+    mesh._keys = count(next(_mesh._KEY_NAMESPACES) << 40)
+    store = MeshStore.from_pickle_archive(version, archive, next(_mesh._KEY_NAMESPACES))
+    become_store(mesh, store, [])
+    return mesh
+
+
 def empty_store_mesh():
     """Fresh empty store for a result built from store-backed operands."""
     mesh = Mesh()
@@ -2451,7 +2449,7 @@ def store_from_source(src, hooks=(), *, precise=False):
     to every face — the same result, since every face of one row has the
     same attrs."""
     from formats.igz import _face_attrs_from_json
-    mod = _module()
+    import ingetrazo_core as mod
     meta = src.get("meta") or {}
     raw = meta.get("face_attrs") or []
     table = [_face_attrs_from_json(row) or {} for row in raw]
@@ -2544,8 +2542,6 @@ _BLOCK = ("pos", "edges", "rings", "sizes", "counts")
 def from_deferred(m) -> bool:
     """A ``DeferredMesh`` on first touch: store-backed instead of built.
     False when the store is off (the caller builds Python objects)."""
-    if not enabled():
-        return False
     d = m.__dict__
     src = d.get("_deferred_source")
     if src is None or any(src.get(k) is None for k in _BLOCK):

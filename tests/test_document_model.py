@@ -753,3 +753,20 @@ def test_reader_rescans_after_an_unversioned_plugin_write():
     history.feed.readers.mark("rows", scene.content_version)
     group.name = "direct edit"
     assert not history.feed.current("rows", scene.content_version)
+
+
+def test_mesh_pickle_preserves_handles_and_precision():
+    import pickle
+    from core.mesh import Mesh
+    from core.store_mesh import StoreMesh
+
+    mesh = Mesh()
+    corner = (1.000000000000001, 0., 0.)
+    face = mesh.add_face([(0., 0., 0.), corner, (0., 1., 0.)])
+    face.attrs["plugin"] = {"mesh": mesh}
+    restored, held = pickle.loads(pickle.dumps((mesh, face)))
+    assert type(restored) is type(mesh) is StoreMesh
+    assert held._m is restored and held == restored.faces[0]
+    assert held.attrs["plugin"]["mesh"] is restored
+    assert tuple(held.loop[1].position_tuple()) == corner
+    assert restored._store.namespace != mesh._store.namespace

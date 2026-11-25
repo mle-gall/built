@@ -73,7 +73,7 @@ from ingetrazo_core import (RecordStep, AddDimensionCommand, DeleteDimensionsCom
 from core.group import Group
 from core import doc_model as _doc
 from core.materials import has_own_material
-from core.mesh import (PAINT_KEYS, Edge, Face, Mesh, Vertex, edge_flags,
+from core.mesh import (Edge, Face, Mesh, Vertex, edge_flags,
                        edge_is_plain, stamp_edge_flags)
 from core.topology import (
     _key,
@@ -87,41 +87,9 @@ from core.topology import (
     loop_inside_face,
     new_defects,
     orient_coplanar_faces,
-    orphaned_edges_at,
     subtract_loop_from_face,
     winding_footprint,
 )
-
-
-def _find_face_by_loop(mesh, loop_positions) -> Optional[Face]:
-    """The mesh face whose outer loop matches ``loop_positions`` (by key), or
-    ``None``. Used to resolve a command's target face against the live mesh."""
-    target = frozenset(_key(p) for p in loop_positions)
-    for f in _faces_keyed_like(mesh, loop_positions):
-        if frozenset(_key(p) for p in f.vertices) == target:
-            return f
-    return None
-
-
-#: A point whose ``_key`` is one of a loop's lies within one key cell
-#: (1e-4) of that loop's corner; the scans look this far and a bit more.
-_KEY_REACH = 2e-4
-
-
-def _faces_keyed_like(mesh, loop_positions, sc=None) -> list:
-    """The faces, in list order, that can have the same corner keys as
-    ``loop_positions``: every corner of such a face lies within a key cell
-    of the loop's, so its box lies within the loop's grown by that. From
-    the mesh scan when there is one (``core.scan_index``), else every face
-    — the caller's key test decides either way. ``sc``: a scan taken
-    earlier (the faces of THAT revision)."""
-    pts = list(loop_positions)
-    from core import scan_index
-    if sc is None:
-        sc = scan_index.scan(mesh) if pts else None
-    if sc is None or not pts:
-        return mesh.faces
-    return sc.faces(sc.faces_within(scan_index.box_of(pts, _KEY_REACH)))
 
 
 class CommandRejected(Exception):
@@ -287,115 +255,6 @@ def _uses_doc_undo(cmd, scene) -> bool:
 
 # ---- Concrete commands ------------------------------------------------------
 
-def _faces_by_segments(mesh, segments) -> list:
-    """The faces, in list order, whose outer loop can run along one of
-    ``segments`` (``(a, b)`` points) by key: such a face has a corner
-    within a key cell of each end, so its box meets the segment's grown by
-    that. Every face when there is no scan (or too many segments for
-    single queries to beat one pass)."""
-    from core import scan_index
-    segs = list(segments)
-    sc = scan_index.scan(mesh) if 0 < len(segs) <= 256 else None
-    if sc is None:
-        return mesh.faces
-    hit: set = set()
-    for a, b in segs:
-        hit.update(sc.faces_meeting(scan_index.box_of((a, b), _KEY_REACH)))
-    return sc.faces(sorted(hit))
-
-
-def _inherit_paint(face, mother) -> None:
-    """Give ``face`` the paint of the ``mother`` it was drawn on, for the keys
-    it does not already carry itself.
-
-    A face drawn on a painted one is part of that surface: a door outlined on
-    a textured wall comes out textured, and lines up with the wall
-    because both keep the same world→UV map. Only the remainder of a carved
-    mother inherited here, so the cut-out itself came back bare (Marco,
-    2026-08-27). Verbatim, map included — the two are coplanar, so the image
-    has to run straight across the outline.
-
-    Whatever the face already declares wins: a rectangle drawn with a material
-    active, or one the caller stamped (the chord split hands its halves the
-    mother's attrs directly), keeps what it was given.
-    """
-    src = getattr(mother, "attrs", None)
-    if not src:
-        return
-    for k in PAINT_KEYS:
-        if k in src and k not in face.attrs:
-            v = src[k]
-            face.attrs[k] = dict(v) if isinstance(v, dict) else v
-
-
-#: How far off a face's plane its containment tests let a point sit
-#: (``topology._PLANAR_TOLERANCE``, 1e-3), with room to spare.
-_PLANE_REACH = 2e-3
-
-
-def _faces_holding(mesh, loop) -> list:
-    """The faces, in list order, that can hold ``loop`` the way the
-    containment tests ask (``loop_inside_face``, ``find_subdividing_chain``,
-    ``carve_loop_by_chords``): every corner of the loop on the face's plane
-    within the planar tolerance and projected inside it, or on its
-    boundary. Such a face's box, grown by that tolerance and by how far its
-    own corners stray from its plane, holds the loop's box. A list taken
-    now, as ``list(m.faces)`` was: the caller may edit the mesh as it goes.
-    Every face when there is no scan."""
-    from core import scan_index
-    pts = list(loop)
-    sc = scan_index.scan(mesh) if pts else None
-    if sc is None:
-        return list(mesh.faces)
-    # The loop's own box, not grown: the FACE's grows (a bigger loop box
-    # would hold fewer faces).
-    lo, hi = scan_index.raw_box(pts)
-    pad = _PLANE_REACH + 1e-6 * max(abs(c) for c in lo + hi)
-    return sc.faces(sc.native.faces_holding(lo, hi, pad))
-
-
-def _faces_inside(mesh, face) -> list:
-    """The faces, in list order, that can lie strictly inside ``face``
-    (``loop_inside_face(face, other.vertices)``): every corner of theirs
-    within the planar tolerance of its plane and projected inside its
-    outer loop, so within its box grown by that tolerance and by how far
-    its corners stray from its plane. A list taken now; every face without
-    a scan (or for a face whose plane Python may read differently)."""
-    from core import scan_index
-    pts = face.vertices
-    sc = scan_index.scan(mesh) if len(pts) >= 3 else None
-    reach = _plane_reach(face) if sc is not None else None
-    if reach is None:
-        return list(mesh.faces)
-    return sc.faces(sc.faces_within(scan_index.box_of(pts, reach)))
-
-
-def _plane_reach(face) -> Optional[float]:
-    """How far from ``face``'s box a point projected inside it can lie:
-    the planar tolerance plus the farthest corner off the face's plane,
-    with slack for float32. ``None`` when the Newell vector is too short
-    to be sure which normal Python picks."""
-    pts = face.vertices
-    nx = ny = nz = 0.0
-    k = len(pts)
-    for i in range(k):
-        p, q = pts[i], pts[(i + 1) % k]
-        nx += (p.y() - q.y()) * (p.z() + q.z())
-        ny += (p.z() - q.z()) * (p.x() + q.x())
-        nz += (p.x() - q.x()) * (p.y() + q.y())
-    length = (nx * nx + ny * ny + nz * nz) ** 0.5
-    if length < 1e-8:
-        return None
-    nx, ny, nz = nx / length, ny / length, nz / length
-    o = pts[0]
-    off = span = 0.0
-    for p in pts:
-        dx, dy, dz = p.x() - o.x(), p.y() - o.y(), p.z() - o.z()
-        off = max(off, abs(dx * nx + dy * ny + dz * nz))
-        span = max(span, (dx * dx + dy * dy + dz * dz) ** 0.5)
-    return _PLANE_REACH + off + 1e-5 * span + 1e-7
-
-
 def _dirty_group_chunks(scene) -> None:
     """Attr edits bypass the mesh mutation primitives — flag every group
     mesh so the viewport's cached chunks re-validate their materials.
@@ -458,18 +317,12 @@ def _unselect(scene, items) -> None:
 
 
 def _reverse_faces(faces):
-    from core.store_mesh import FaceView, StoreMesh
     batches = {}
-    object_keys = set()
     for face in faces:
-        if isinstance(face, FaceView) and isinstance(face._m, StoreMesh):
-            batches.setdefault(face._m, []).append(face.key)
-        else:
-            face.reverse_rings()
-            object_keys.add(face.key)
+        batches.setdefault(face._m, []).append(face.key)
     for mesh, keys in batches.items():
         mesh._store.reverse_faces(keys)
-    return batches, object_keys
+    return batches
 
 
 def _is_hidden(entity) -> bool:
@@ -488,97 +341,6 @@ def _set_hidden(entity, hidden: bool) -> None:
             attrs.pop("hidden", None)
     else:
         entity.hidden = hidden
-
-
-def translate_points(scene, keys: set, delta: QVector3D) -> None:
-    """Move every shared vertex whose position key is in ``keys`` by ``delta``.
-
-    Because vertices are shared, every edge and face referencing a moved vertex
-    follows for free — the mechanic behind raising a ridge into a gable roof.
-    Shared by :class:`MoveVerticesCommand` and the Push/Pull live preview.
-    """
-    moving = _vertices_at(scene.mesh, keys)
-    for v in moving:
-        scene.mesh.move_vertex(v, delta)
-    scene.version += 1
-
-
-def _vertices_at(mesh, cells) -> list:
-    """The mesh's vertices whose position key (``topology._key``) is in
-    ``cells``, in mesh order. A store-backed mesh answers from its position array
-    instead of a view per vertex (core/store_mesh.py)."""
-    fast = getattr(mesh, "vertices_in_cells", None)
-    if fast is not None:
-        return fast(cells, _key)
-    return [v for v in mesh.vertices if _key(v.position) in cells]
-
-
-def _cells_of(mesh, vertex_keys) -> set:
-    """The position keys (``topology._key``) of the vertices with these
-    element keys."""
-    fast = getattr(mesh, "cells_of", None)
-    if fast is not None:
-        return fast(vertex_keys, _key)
-    return {_key(v.position) for v in mesh.vertices if v.key in vertex_keys}
-
-
-def _weld_landed(mesh, moving: set) -> bool:
-    from core.store_mesh import StoreMesh
-    if type(mesh) is StoreMesh and not mesh.__dict__.get("_planned_points"):
-        result = mesh._store.weld_landing(list(moving))
-        if result is not None:
-            welded, bumps, copies = result
-            mesh._inherit_face_attrs(bumps, ((old, [new]) for old, new in copies))
-            return welded
-    from ingetrazo_core import MeshStore
-    cells = _cells_of(mesh, moving)
-    if not any(v.key not in moving for v in _vertices_at(mesh, cells)):
-        return False
-    mesh.weld_coincident()
-    for face in list(mesh.faces):
-        if face.hole_loops:
-            continue
-        loop = face.loop
-        kept = MeshStore.landing_ring([(v.key, _key(v.position) in cells) for v in loop])
-        if len(kept) != len(loop):
-            points = [QVector3D(loop[i].position) for i in kept]
-            attrs = dict(face.attrs)
-            mesh.remove_face(face)
-            if len(points) >= 3:
-                mesh.add_face(points).attrs = attrs
-    return True
-
-
-def _carried_faces(mesh, moving: set) -> list:
-    """Textured faces whose outer and inner rings move as a unit."""
-    from core.store_mesh import FaceView, StoreMesh
-    if type(mesh) is StoreMesh:
-        keys = [f.key for f in mesh.textured_faces() if f.attrs.get("texture")]
-        return [FaceView(mesh, k) for k in mesh._store.carried_faces(keys, list(moving))]
-    from ingetrazo_core import MeshStore
-    faces = [f for f in mesh.faces if f.attrs and f.attrs.get("texture")]
-    rings = [[v.key for ring in (f.loop, *f.hole_loops) for v in ring] for f in faces]
-    return [faces[i] for i in MeshStore.carried_object_faces(rings, set(moving))]
-
-
-def _map_selected_vertices(scene, keys, matrix, carry_textures):
-    from core.store_mesh import StoreMesh
-    from ingetrazo_core import Matrix4
-    mesh = scene.mesh
-    if type(mesh) is StoreMesh and type(matrix) is Matrix4:
-        count, ids = mesh._store.transform_vertices(list(keys), matrix.data(), carry_textures)
-        if count:
-            mesh._dirty(count)
-        carried = _carried_faces(mesh, ids) if carry_textures else []
-    else:
-        moving = [v for v in mesh.vertices if _key(v.position) in keys]
-        carried = _carried_faces(mesh, {v.key for v in moving}) if carry_textures else []
-        for v in moving:
-            mesh.move_vertex(v, matrix.map(v.position) - v.position)
-    if carried:
-        from core.group import _remap_uvws
-        _remap_uvws(mesh, matrix, carried)
-    scene.version += 1
 
 
 def _member_placement(scene, group):
@@ -629,57 +391,16 @@ def run_stitch(mesh, seedkeys: set, new_faces: Optional[set] = None,
     twice — material on both sides) or "drop both" (an emptied region) — by
     parity, where the pair's two crossings cancel. Deduping it early restores
     the material reading and the collapse never classifies."""
-    # A store does phases 0–2 in one native call (Store::stitch_connect).
-    if type(mesh).__name__ == "StoreMesh" and mesh.stitch_connect(seedkeys, dedupe):
-        if coplanar_merge:
-            _coplanar_phase(mesh, seedkeys, new_faces)
+    mesh.stitch_connect(seedkeys, dedupe)
+    if not coplanar_merge:
         return
-    # Phase 0 — weld coincident vertices (a translated cap landing flush on the
-    # ring it came from); merges duplicate edges, drops degenerated faces. Then
-    # drop faces stacked on an identical cycle (a shared wall built twice).
-    mesh.weld_coincident()
-    if dedupe:
-        mesh.dedupe_faces()
-    # Phase 1 — resolve T-junctions (global). Batch form: the per-edge
-    # ``interior_vertex_on`` walked EVERY vertex in Python and the loop
-    # restarted from edge zero after each split — O(splits × E × V). An
-    # imported brick barbecue (3k faces, T-junctions everywhere) hung the
-    # push preview for minutes per drag frame (SIGUSR1 autopsy: two stacks
-    # pinned at interior_vertex_on).
-    #
-    # Now the sweep is ONE vectorised pass, and it is **scoped to the
-    # operation**: only edges whose box meets the seed's box can be split.
-    #
-    # That scope is a correctness fix as much as a speed one. Sweeping every
-    # edge made a push *silently re-topologise geometry it never touched* —
-    # on an imported barbecue, pushing one brick split ten edges, eight of
-    # them a metre away on an unrelated plane, and since a drag preview
-    # reverts each frame it redid that same distant repair on every mouse
-    # move. A stitch repairs what its operation disturbed; a T-junction the
-    # op did not create is not its business.
-    #
-    # The scope is exact for what the op *can* create: a split needs the
-    # splitting vertex to lie on the edge, and either the vertex is the op's
-    # (so it is in the seed box, and the edge's box must reach it) or the
-    # edge is the op's (so its box is inside the seed box). Either way the
-    # edge's box meets the seed box.
-    from core.topology import sweep_tjunctions
-    sweep_tjunctions(mesh, seedkeys)
-    # Phase 2 — collapse redundant valence-2 collinear vertices (global): the
-    # first collapsible vertex in list order, until none is left
-    # (``Mesh.collapse_collinear``; a store-backed mesh does it natively).
-    mesh.collapse_collinear()
-    if coplanar_merge:
-        _coplanar_phase(mesh, seedkeys, new_faces)
-
-
-def _coplanar_phase(mesh, seedkeys, new_faces) -> None:
     # Phase 3 — coplanar-merge, seeded to the operation. Fuses the whole coplanar
     # component (every shared edge, any number of faces) at once, but only when it
     # includes a face this operation created (so user diagonals survive).
-    from core.store_mesh import FaceView, _hypot, _store_of
+    from core.store_mesh import FaceView, _hypot
     start = 0
-    while (store := _store_of(mesh)) is not None:
+    store = mesh._store
+    while True:
         fresh = None if new_faces is None else {f.key for f in new_faces}
         match = store.stitch_region(list(seedkeys or ()), fresh, start, _hypot())
         if match is None:
@@ -692,12 +413,6 @@ def _coplanar_phase(mesh, seedkeys, new_faces) -> None:
                 new_faces.difference_update(component)
                 new_faces.add(region)
             start = 0
-    _merge_object_regions(mesh, seedkeys, new_faces, start)
-
-
-def _merge_object_regions(mesh, seedkeys, new_faces, start):
-    from ingetrazo_core import merge_materialised_regions
-    return merge_materialised_regions(mesh, list(seedkeys), new_faces, start)
 
 
 class SnapshotMutation(MeshCommand):
@@ -1107,18 +822,8 @@ def _discard_removed_selection(scene):
 def _drop_dead_elements(scene, mesh) -> None:
     """Keep in the selection only the faces and edges still in ``mesh``
     (answered by the store for a store-backed mesh: no view per face)."""
-    from core.store_mesh import StoreMesh
-    st = mesh._store if type(mesh) is StoreMesh else None
-    if st is not None:
-        scene.selection = {s for s in ElementSet(scene.selection)
-                           if not isinstance(s, (Face, Edge))
-                           or st.is_live(s.key)}
-        return
-    live = set(map(element_identity, mesh.faces))
-    live_e = set(map(element_identity, mesh.edges))
     scene.selection = {s for s in ElementSet(scene.selection)
-                       if not isinstance(s, (Face, Edge))
-                       or s.key in (live if isinstance(s, Face) else live_e)}
+                       if not isinstance(s, (Face, Edge)) or mesh._store.is_live(s.key)}
 
 
 def _merge_overlapping_planes(scene, before, added, *, on_rebuild=None,

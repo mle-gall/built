@@ -70,6 +70,12 @@ pub(super) fn trim_spurs<T: Copy>(
     }
 }
 
+pub enum FaceDeletion {
+    Missing,
+    Blocked,
+    Removed(u128),
+}
+
 impl Store {
     /// Apply an affine point transform in mesh order. The facade moves by
     /// a delta, including its float32 rounding for older meshes.
@@ -145,12 +151,11 @@ impl Store {
     }
 
     /// Outer loop matching ignores winding, repeated corners and holes.
-    /// None requests the materialising facade for unusual incidence.
     pub fn delete_command_face(
         &mut self,
         points: &[Point],
         candidates: &[u32],
-    ) -> Option<Option<u128>> {
+    ) -> FaceDeletion {
         let target: HashSet<_> = points.iter().copied().map(cell).collect();
         let found = candidates.iter().copied().find(|&f| {
             let corners: HashSet<_> = self
@@ -161,12 +166,12 @@ impl Store {
             corners == target
         });
         match found {
-            None => Some(None),
-            Some(f) if self.remove_face_blocked(f) => None,
+            None => FaceDeletion::Missing,
+            Some(f) if self.remove_face_blocked(f) => FaceDeletion::Blocked,
             Some(f) => {
                 let key = self.key(Kind::Face, f);
                 self.command_remove_face(f);
-                Some(Some(key))
+                FaceDeletion::Removed(key)
             }
         }
     }

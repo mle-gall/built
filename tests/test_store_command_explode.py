@@ -45,12 +45,3 @@ def test_explode_copies_survive_transaction_replay(monkeypatch):
     assert history.undo() and history.redo()
     assert mesh._store.keys("face") == keys
     assert all(mesh._store.is_live(k) for pairs in expected.values() for _,k in pairs)
-
-
-def test_explode_refusal_preserves_both_meshes(monkeypatch):
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
-    scene, group, _ = _explode_scene(True)
-    scene.mesh._planned_points = {}
-    before = fingerprint(scene.mesh), fingerprint(group.mesh)
-    assert MeshStore.command_explode_geometry(scene.mesh, group.mesh) is None
-    assert before == (fingerprint(scene.mesh), fingerprint(group.mesh))

@@ -634,6 +634,26 @@ impl PyMeshStore {
         (self.inner.n(Kind::Vertex), self.inner.n(Kind::Edge), self.inner.n(Kind::Face))
     }
 
+    /// Preserve slot generations, incidence order and binary64 positions for pickle.
+    fn pickle_archive<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, pyo3::types::PyBytes>> {
+        let bytes = bincode::serialize(&self.inner)
+            .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        Ok(pyo3::types::PyBytes::new(py, &bytes))
+    }
+
+    #[staticmethod]
+    fn from_pickle_archive(version: u32, bytes: &[u8], namespace: u64) -> PyResult<Self> {
+        if version != 1 {
+            return Err(PyValueError::new_err("unknown mesh pickle archive version"));
+        }
+        let mut store: Store = bincode::deserialize(bytes)
+            .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        let fresh = Store::empty(namespace, store.weld);
+        store.state.ns = namespace;
+        store.lineage = fresh.lineage;
+        Ok(Self::wrap(store))
+    }
+
     /// Format-3 columns in the writer's first-use vertex and edge-tag order.
     /// Multiple holes need the legacy maximal-hole policy.
     fn igz_columns<'py>(
@@ -1820,16 +1840,9 @@ impl PyMeshStore {
     #[pyo3(signature = (mesh, positions, delta, carry_textures=false))]
     fn command_move_vertices(mesh: &Bound<'_, PyAny>, positions: &Bound<'_, PyAny>, delta: [f64;3], carry_textures: bool)
         -> PyResult<Option<super::command_facade::VertexResult>> {
-        let mut points = Vec::new();
-        for point in positions.try_iter()? {
-            let point = point?;
-            let row = if let Some(coords) = point.getattr_opt("toTuple")? { coords.call0()? } else { point };
-            let coords: Vec<Bound<'_,PyAny>> = row.extract()?;
-            if coords.iter().any(|n| !n.is_exact_instance_of::<pyo3::types::PyFloat>()) {
-                return Ok(None);
-            }
-            points.push(row.extract()?);
-        }
+        let points = positions.try_iter()?
+            .map(|p| Ok(crate::math::xyz(&p?)?.to_array()))
+            .collect::<PyResult<Vec<_>>>()?;
         Ok(super::command_facade::command_move_vertices(mesh, points, delta, carry_textures)?
             .map(super::command_facade::MovedVertices::fields))
     }
@@ -1957,13 +1970,16 @@ impl PyMeshStore {
         self.inner.tag_curve_path(&points, closed, id)
     }
 
-    fn explode_curves(&mut self, ids: std::collections::HashSet<i64>) -> usize {
-        for e in self.inner.state.order[1].live(&self.inner.state.slots[1]) {
-            if ids.contains(self.inner.state.ecurve.get(e as usize)) {
+    fn explode_curves(&mut self, ids: std::collections::HashSet<i64>, record: bool) -> Vec<(u128, i64)> {
+        let mut prior = Vec::new();
+        for e in self.inner.live_slots(Kind::Edge) {
+            let id = *self.inner.state.ecurve.get(e as usize);
+            if ids.contains(&id) {
+                if record { prior.push((self.inner.key(Kind::Edge, e), id)); }
                 self.inner.set_edge_curve(e, -1);
             }
         }
-        ids.len()
+        prior
     }
 
     /// Complete the auto-division of an inserted face. Keep one store revision
@@ -2043,10 +2059,14 @@ impl PyMeshStore {
     }
 
     fn delete_face_loop(&mut self, points: Vec<[f64; 3]>, candidates: Vec<u128>)
-        -> PyResult<(bool, Option<u128>)> {
+        -> PyResult<Option<u128>> {
         let candidates = self.drawing_candidates(Kind::Face, Some(candidates))?;
-        let deleted = self.inner.delete_command_face(&points, &candidates);
-        Ok((deleted.is_some(), deleted.flatten()))
+        use super::commands::FaceDeletion;
+        match self.inner.delete_command_face(&points, &candidates) {
+            FaceDeletion::Missing => Ok(None),
+            FaceDeletion::Removed(key) => Ok(Some(key)),
+            FaceDeletion::Blocked => Err(StoreFallback::new_err("deletion would leave the face listed on an edge")),
+        }
     }
 
     fn delete_edge_segments(&mut self, endpoints: Vec<[[f64; 3]; 2]>, candidates: Vec<u128>)

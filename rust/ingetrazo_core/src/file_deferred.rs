@@ -396,7 +396,7 @@ impl Builder {
                 }
                 Ok(true)
             };
-            if store.call_method0("enabled")?.is_truthy()? && (self.precise || empty()?) {
+            if self.precise || empty()? {
                 let (st, table): (Obj<'_>, Obj<'_>) = store
                     .call_method("store_from_source", (s,), Some(&kw))?
                     .extract()?;

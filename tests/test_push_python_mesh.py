@@ -21,7 +21,6 @@ from core.protocol.keys import to_json_key
 from core.scene import Scene
 from tests.test_pushpull_cases import _box, _face
 
-pytestmark = pytest.mark.skipif(not S.enabled(), reason="store off")
 
 
 def _shape(mesh):

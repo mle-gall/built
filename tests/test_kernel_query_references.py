@@ -80,7 +80,7 @@ def edge_rows():
         for j in range(48):
             a, b = rng.sample(verts, 2)
             e = m.add_edge(a.position, b.position)
-            events.append((keys.setdefault(e.key, len(keys)), e is m.find_edge(b, a),
+            events.append((keys.setdefault(e.key, len(keys)), e == m.find_edge(b, a),
                            verts.index(e.v0), verts.index(e.v1)))
             if j%5==0:
                 m.remove_edge(e)
@@ -200,7 +200,7 @@ def test_materialised_drawing_rollback_and_replay(monkeypatch):
     after = mesh.capture_state()
     assert history.undo() and mesh.capture_state() == before
     assert history.redo() and mesh.capture_state() == after
-    assert mesh.edges[-1] is edge and mesh.faces[0] is face
+    assert mesh.edges[-1] == edge and mesh.faces[0] == face
 
 
 def test_plane_tolerance_and_small_input():

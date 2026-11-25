@@ -334,17 +334,16 @@ def test_the_stores_warped_faces_are_is_planars(monkeypatch, seed):
 
 
 def test_cell_queries_are_the_python_scans(binary, monkeypatch, tmp_path):
-    from core.history import _cells_of, _vertices_at
     from core.topology import _key
     _scene, m = _store_mesh(monkeypatch, tmp_path)
     vs = list(m.vertices)
     for cells in ({_key(vs[0].position)},
                   {_key(v.position) for v in vs[::3]},
                   {_key(v.position + V(0, 0, 4.9e-5)) for v in vs[::2]}):
-        assert [v.key for v in _vertices_at(m, cells)] == [
+        assert [v.key for v in m.vertices_in_cells(cells, _key)] == [
             v.key for v in vs if _key(v.position) in cells]
     keys = {v.key for v in vs[::5]}
-    assert _cells_of(m, keys) == {_key(v.position) for v in vs
+    assert m.cells_of(keys, _key) == {_key(v.position) for v in vs
                                   if v.key in keys}
     m.faces[1].attrs["texture"] = {"path": "x.png"}
     assert [f.key for f in m.textured_faces()] == [m.faces[1].key]

@@ -39,11 +39,6 @@ def wanted() -> bool:
     return not _guard_disabled
 
 
-def store_wanted() -> bool:
-    """Use the engine's mesh store unless an oracle run explicitly opts out."""
-    return os.environ.get("INGETRAZO_STORE") != "0"
-
-
 def __getattr__(name):
     if name == "native":
         mod = available() if wanted() else None

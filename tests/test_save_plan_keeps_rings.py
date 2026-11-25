@@ -7,16 +7,15 @@ the engine."""
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from ingetrazo_core import Vec3 as V
 
 import core._native as _native  # noqa: E402
 from core import mesh as M  # noqa: E402
 from core import topology  # noqa: E402
-from core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402
 from tests.test_deferred_mesh import _open  # noqa: E402
 
@@ -37,31 +36,8 @@ def _real(face) -> bool:
     from views.array_bake import LightFace
     return isinstance(face, M.Face) and not isinstance(face, LightFace)
 
-def _square(x, y, s, z=0.0):
-    return [V(x, y, z), V(x + s, y, z), V(x + s, y + s, z), V(x, y + s, z)]
-
-
-def _doc(tmp_path, monkeypatch, curve=False, layer=False):
-    # On file with the nested hole still there: an older save could leave it.
-    with monkeypatch.context() as ctx:
-        ctx.setattr(topology, "_maximal_holes", lambda h: h)  # retain legacy rings on save
-        ctx.setattr(M, "_store_on", lambda: False)
-        scene = Scene()
-        m = scene.mesh
-        face = m.add_face(_square(0, 0, 10))
-        for ring in (_square(1, 1, 4), _square(2, 2, 1), _square(6, 6, 2)):
-            m.add_hole(face, ring)
-        assert len(face.hole_loops) == 3
-        m.add_face(_square(20, 0, 10), [_square(21, 1, 2)])
-        for k in range(4):
-            m.add_face(_square(0, 20 + 3 * k, 2))
-        if curve:
-            m.edges[3].curve = 40
-        if layer:
-            m.edges[5].layer = "Muros"
-        path = tmp_path / "doc.igz"
-        igz.save_scene(scene, path)
-    return path
+def _doc(curve=False, layer=False):
+    return Path(__file__).parent / "fixtures" / f"nested_rings_{int(curve)}_{int(layer)}.igz"
 
 
 @pytest.fixture
@@ -74,7 +50,7 @@ def binary(monkeypatch):
                                          (False, True), (True, True)])
 def test_the_bytes_are_those_of_the_built_mesh(binary, monkeypatch, tmp_path,
                                                curve, layer):
-    path = _doc(tmp_path, monkeypatch, curve, layer)
+    path = _doc(curve, layer)
     lazy = _open(monkeypatch, path, True)
     eager = _open(monkeypatch, path, False)
     assert type(lazy.mesh) is M.DeferredMesh and _built(eager.mesh)
@@ -89,7 +65,7 @@ def test_the_bytes_are_those_of_the_built_mesh(binary, monkeypatch, tmp_path,
 
 
 def test_the_second_save_does_not_ask_again(binary, monkeypatch, tmp_path):
-    path = _doc(tmp_path, monkeypatch)
+    path = _doc()
     lazy = _open(monkeypatch, path, True)
     calls = []
     real = topology._maximal_holes

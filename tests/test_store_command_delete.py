@@ -53,7 +53,4 @@ def test_delete_face_distinguishes_missing_from_refusal(monkeypatch, scan):
     assert fingerprint(m) == fingerprint(ref)
     after = m.revision
     assert MeshStore.command_delete_face(m, outer) == (None, 0)
-    m._planned_points = {}
-    assert MeshStore.command_delete_face(m, outer) is None
-    assert MeshStore.command_delete_edges(m, []) is None
     assert m.revision == after

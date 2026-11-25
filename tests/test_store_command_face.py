@@ -85,15 +85,12 @@ def test_add_face_occurrence_undo_redo_reuses_key_and_paint(monkeypatch):
     assert occurrence.faces[0].attrs["mat"] == "bronze"
 
 
-def test_add_face_refusal_precedes_edit(monkeypatch):
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
+def test_face_uses_planned_binary64_corner():
     mesh = Mesh()
-    mesh._planned_points = {}
-    assert MeshStore.command_add_face(mesh, rectangle(0,0,1,1)) is None
-    del mesh._planned_points
-    monkeypatch.setattr(store_mesh, "_hypot", lambda: None)
-    assert MeshStore.command_add_face(mesh, rectangle(0,0,1,1)) is None
-    assert not mesh.vertices and not mesh.faces and mesh._mut_serial == 0
+    planned = (1.000000000000001, 0., 0.)
+    mesh._planned_points = {(1., 0., 0.): planned}
+    MeshStore.command_add_face(mesh, rectangle(0, 0, 1, 1))
+    assert planned in [tuple(v.position_tuple()) for v in mesh.vertices]
 
 
 @pytest.mark.parametrize("bad", [float("nan"), float("inf")])

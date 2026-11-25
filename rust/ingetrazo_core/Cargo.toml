@@ -13,7 +13,8 @@ crate-type = ["cdylib"]
 [dependencies]
 built_python_bindings = { path = "../python_bindings" }
 encoding_rs = "0.8"
-glam = "0.29.3"
+glam = { version = "0.29.3", features = ["serde"] }
+bincode = "1.3"
 numpy = "0.29"
 # No `extension-module` here: maturin builds the wheel as an extension
 # (PYO3_BUILD_EXTENSION_MODULE) and `cargo test` links libpython. The
@@ -46,7 +47,7 @@ features = ["arbitrary_precision", "raw_value"]
 
 [dependencies.serde]
 version = "1"
-features = ["derive"]
+features = ["derive", "rc"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"

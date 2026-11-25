@@ -170,13 +170,13 @@ def test_a_moved_section_keeps_the_pick_index_and_edits_the_document():
 
 
 def test_an_edit_of_the_model_still_rebuilds_the_index():
-    from core.history import translate_points
+    from core.history import MoveVerticesCommand
     from core.topology import _key
     vp, _hist, _plane = _viewport_with_a_cut()
     idx = vp._pick_index(near="all")
     top = {_key(v.position) for v in vp.scene.mesh.vertices
            if abs(v.position.z() - 3.0) < 1e-6}
-    translate_points(vp.scene, top, QVector3D(0, 0, 1.0))
+    _hist.execute(MoveVerticesCommand(top, QVector3D(0, 0, 1.0)))
     assert vp._pick_index(near="all") is not idx
 
 
