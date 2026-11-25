@@ -150,8 +150,7 @@ def test_esc_while_placing_cancels(window):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(shutil.which("blender") is None,
-                    reason="no Blender on this machine")
+@pytest.mark.blender
 def test_a_night_render_with_lights(tmp_path):
     scene = _box()
     job = rb.write_job(scene, _cam(scene), tmp_path, engine="eevee",

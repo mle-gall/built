@@ -237,8 +237,16 @@ def pytest_collection_modifyitems(config, items):
     if _WINDOW_RE is None:
         _WINDOW_RE = re.compile(r"\b(MainWindow|ComposerWindow|ShellWindow|Host)\(|"
                                 r"\b(native_host|native_window|preferences_chrome)\b|isolated_launch|release/built\b|\bmain\.py\b")
+    import shutil
+    blender_skip = None
+    if os.environ.get("BUILT_BLENDER_TESTS") != "1":
+        blender_skip = pytest.mark.skip(reason="set BUILT_BLENDER_TESTS=1 to run Blender")
+    elif shutil.which("blender") is None:
+        blender_skip = pytest.mark.skip(reason="no Blender executable on PATH")
     seen = {}
     for item in items:
+        if blender_skip and item.get_closest_marker("blender"):
+            item.add_marker(blender_skip)
         if item.get_closest_marker("classic_pending"):
             item.add_marker(pytest.mark.skip(reason="Native coverage pending (docs/classic-pending.md)"))
         path = getattr(item, "path", None)
