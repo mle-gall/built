@@ -23,7 +23,6 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import numpy as np
 import pytest
 from tests.controller_surface import live_image
-from PySide6.QtGui import QImage
 from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 
@@ -128,11 +127,11 @@ def test_a_small_guide_circle_still_gets_enough_dashes():
 # ── The real thing: pixels ──────────────────────────────────────────────────
 
 
-def _pixels(img: QImage):
-    a = img.convertToFormat(QImage.Format_RGB32)
-    buf = np.frombuffer(a.constBits(), np.uint8).reshape(
-        a.height(), a.bytesPerLine())[:, :a.width() * 4]
-    return buf.reshape(a.height(), a.width(), 4)[..., :3].astype(int).copy()
+def _pixels(img):
+    """The image's pixels as Qt's RGB32 laid them out (B, G, R per pixel),
+    from a renderer image (``SurveyRaster``)."""
+    rgba = np.frombuffer(img.rgba(), np.uint8).reshape(img.height, img.width, 4)
+    return rgba[..., 2::-1].astype(int).copy()
 
 
 def _changed(before, after) -> int:

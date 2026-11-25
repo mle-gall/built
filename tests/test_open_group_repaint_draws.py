@@ -100,8 +100,8 @@ def win(native_gpu_host):
 
 def _pixel(vp):
     img = live_image(vp)
-    c = img.pixelColor(img.width() // 2 + 15, img.height() // 2 + 15)
-    return (c.red(), c.green(), c.blue())
+    from tests.headless_gpu import pixel
+    return pixel(img, img.width // 2 + 15, img.height // 2 + 15)[:3]
 
 
 def _red(rgb):
@@ -185,8 +185,8 @@ def test_a_paint_stays_on_screen_after_leaving_the_groups(win, layout):
     vp = win.viewport
     _open(vp, layout)
     img = live_image(vp)
-    x = (img.width() // 2 + 15) * vp.width() // img.width()
-    y = (img.height() // 2 + 15) * vp.height() // img.height()
+    x = (img.width // 2 + 15) * vp.width() // img.width
+    y = (img.height // 2 + 15) * vp.height() // img.height
     face = vp.pick_face_any(x, y)[0]
     assert face is not None
     vp.history.execute(SetFaceColorCommand([face], (1.0, 0.0, 0.0)))

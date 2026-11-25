@@ -110,7 +110,7 @@ def _alpha_bleed(img):
     black under alpha 0, and mip/bilinear sampling mixes it in — a tree
     canopy renders as a dark silhouette without this."""
     from ingetrazo_render import SurveyRaster
-    h, w = img.height(), img.width()
+    h, w = img.height, img.width
     a = np.frombuffer(img.rgba(), np.uint8).reshape(h, w, 4).copy()
     rgb = a[..., :3].astype(np.float64)
     known = a[..., 3] > 16
@@ -141,7 +141,7 @@ def _auto_exposure(img, target=125.0, max_gain=2.0):
     way (texel × orientation shade), so dark-baked foliage reads near black.
     Lift dark textures toward a mid luminance with a soft shoulder."""
     from ingetrazo_render import SurveyRaster
-    h, w = img.height(), img.width()
+    h, w = img.height, img.width
     a = np.frombuffer(img.rgba(), np.uint8).reshape(h, w, 4).copy()
     opaque = a[..., 3] > 128
     if not opaque.any():
@@ -161,8 +161,8 @@ def _shrink_texture(path, tex_size, out_dir):
     if img is None:
         return str(path)
     has_alpha = bool((np.frombuffer(img.rgba(), np.uint8)[3::4] < 255).any())
-    if max(img.width(), img.height()) > tex_size:
-        img = img.resized(min(img.width(), tex_size), min(img.height(), tex_size))
+    if max(img.width, img.height) > tex_size:
+        img = img.resized(min(img.width, tex_size), min(img.height, tex_size))
     img = _auto_exposure(img)
     if has_alpha:
         img = _alpha_bleed(img)

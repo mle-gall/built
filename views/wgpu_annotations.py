@@ -273,7 +273,7 @@ def composite_annotations(image, scene, camera, *, logical_size,
     """``composite_pixels`` for a caller holding a ``SurveyRaster``: a new
     one with the marks."""
     from ingetrazo_render import SurveyRaster
-    w, h = image.width(), image.height()
+    w, h = image.width, image.height
     if not overlays:
         return SurveyRaster(w, h, image.rgba())
     if not w or not h:

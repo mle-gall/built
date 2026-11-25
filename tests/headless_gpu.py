@@ -84,6 +84,14 @@ def __getattr__(name):
     raise AttributeError(name)
 
 
+def pixel(image, x, y):
+    """``(r, g, b, a)`` at ``(x, y)`` of a renderer image (``SurveyRaster``:
+    a capture, ``render_image``, ``rasterize``)."""
+    import numpy as np
+    w, h = image.width, image.height
+    return tuple(int(v) for v in np.frombuffer(image.rgba(), np.uint8).reshape(h, w, 4)[int(y), int(x)])
+
+
 def _code(value) -> int:
     """A Qt enum or flag, or the native code, as the int the shell sends."""
     return int(getattr(value, "value", value) or 0)

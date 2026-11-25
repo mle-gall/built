@@ -6,7 +6,6 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QImage
 from ingetrazo_core import Vec3 as V, Matrix4 as QMatrix4x4
 from PySide6.QtWidgets import QApplication
 from core.mesh import Mesh
@@ -54,10 +53,9 @@ def test_rotating_smooth_cpu_chunk_matches_baking_world_geometry():
 
 
 def pixels(image):
-    image = image.convertToFormat(QImage.Format_RGBA8888)
-    return np.frombuffer(image.constBits(), np.uint8).reshape(
-        image.height(), image.bytesPerLine())[:, :image.width()*4].copy().reshape(
-            image.height(), image.width(), 4)[..., :3].astype(int)
+    """RGB of a renderer image (``SurveyRaster``) as an (h, w, 3) int array."""
+    return np.frombuffer(image.rgba(), np.uint8).reshape(
+        image.height, image.width, 4)[..., :3].astype(int)
 
 
 @pytest.fixture
