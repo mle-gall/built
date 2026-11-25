@@ -15,6 +15,7 @@ through a command.
 """
 from __future__ import annotations
 
+import ingetrazo_core
 from pathlib import PurePath
 
 
@@ -159,9 +160,9 @@ def part_material(part, cache=None) -> str:
     so with a ``cache`` kept for one pass the copies of a shared
     definition are read once: 300 copies of a 3 000-face tree were
     300 × 3 000 face areas, 14 s with the container selected."""
-    from core.group import iter_painted_placements
+    import ingetrazo_core
     area: dict = {}
-    for g, _m, inherited in iter_painted_placements(part):
+    for g, _m, inherited in ingetrazo_core.group_iter_painted_placements(part):
         own, default = _mesh_paint_areas(g.mesh, cache)
         for label, a in own.items():
             area[label] = area.get(label, 0.0) + a

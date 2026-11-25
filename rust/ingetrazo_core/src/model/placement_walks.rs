@@ -33,8 +33,16 @@ impl World {
     }
 }
 
+/// A placement of the document, or any object with `xform` / `children`
+/// (records, test stand-ins, scoped copies), walked through its attributes
+/// as the generator did.
+enum Node {
+    Doc(Key),
+    Obj,
+}
+
 struct Frame {
-    children: Vec<Key>,
+    children: Vec<(Node, Option<Py<PyAny>>)>,
     next: usize,
     world: World,
     paint: Py<PyAny>,
@@ -45,23 +53,44 @@ pub struct PlacementWalk {
     painted: bool,
     start: Option<(Py<PyAny>, World, Py<PyAny>)>,
     /// The node just yielded: its children are read on the next step.
-    pending: Option<(Key, World, Py<PyAny>)>,
+    pending: Option<(Node, Py<PyAny>, World, Py<PyAny>)>,
     stack: Vec<Frame>,
 }
 
+/// What a node is: a document placement (by key) or another object.
+fn node_of(obj: &Bound<'_, PyAny>) -> Node {
+    match handle_key(obj) {
+        Ok(k) if matches!(doc::lock().node(k).map(|n| &n.data), Some(Data::Placement(_))) => Node::Doc(k),
+        _ => Node::Obj,
+    }
+}
+
 /// `m = xform; if base is not None: m = base if m is None else base * m`.
-fn compose(py: Python<'_>, base: &World, handle: &Bound<'_, PyAny>, k: Key) -> PyResult<World> {
-    let own = {
-        let d = doc::lock();
-        match d.node(k).map(|n| &n.data) {
-            Some(Data::Placement(p)) => p.xform.as_ref().map(|x| DMat4::from_cols_array(&x.f)),
-            _ => return Err(PyRuntimeError::new_err("not a document placement")),
+fn compose(py: Python<'_>, base: &World, handle: &Bound<'_, PyAny>, node: &Node) -> PyResult<World> {
+    let (own, own_obj) = match node {
+        Node::Doc(k) => {
+            let d = doc::lock();
+            match d.node(*k).map(|n| &n.data) {
+                Some(Data::Placement(p)) => (p.xform.as_ref().map(|x| DMat4::from_cols_array(&x.f)), None),
+                _ => return Err(PyRuntimeError::new_err("not a document placement")),
+            }
         }
+        Node::Obj => match handle.getattr_opt("xform")? {
+            Some(x) if !x.is_none() => (Some(crate::math::mat(&x)?), Some(x.unbind())),
+            _ => (None, None),
+        },
     };
     Ok(match (&base.obj, own) {
         (Some(_), None) => base.copy(py),
         (None, None) => World { obj: None, m: None },
-        (None, Some(m)) => World { obj: Some(doc::py::read_matrix(py, handle, k, Field::Xform)?.unbind()), m: Some(m) },
+        (None, Some(m)) => {
+            let obj = match (own_obj, node) {
+                (Some(o), _) => o,
+                (None, Node::Doc(k)) => doc::py::read_matrix(py, handle, *k, Field::Xform)?.unbind(),
+                (None, Node::Obj) => unreachable!(),
+            };
+            World { obj: Some(obj), m: Some(m) }
+        }
         (Some(_), Some(m)) => {
             let product = base.m.unwrap() * m;
             World { obj: Some(Py::new(py, Matrix4::from(product))?.into_any()), m: Some(product) }
@@ -69,9 +98,22 @@ fn compose(py: Python<'_>, base: &World, handle: &Bound<'_, PyAny>, k: Key) -> P
     })
 }
 
-fn children_of(k: Key) -> Vec<Key> {
-    let d = doc::lock();
-    d.node(k).map(|n| n.children.clone()).unwrap_or_default()
+/// A node's children as `(node, handle)`: from the document for a
+/// placement (the handle looked up when it is reached), else
+/// `getattr(obj, "children", None) or ()`.
+fn children_of(py: Python<'_>, node: &Node, obj: &Bound<'_, PyAny>) -> PyResult<Vec<(Node, Option<Py<PyAny>>)>> {
+    match node {
+        Node::Doc(k) => {
+            let d = doc::lock();
+            Ok(d.node(*k).map(|n| n.children.iter().map(|c| (Node::Doc(*c), None)).collect()).unwrap_or_default())
+        }
+        Node::Obj => {
+            let c = obj.getattr_opt("children")?;
+            let Some(c) = c.filter(|c| c.is_truthy().unwrap_or(false)) else { return Ok(Vec::new()) };
+            let _ = py;
+            c.try_iter()?.map(|g| { let g = g?; Ok((node_of(&g), Some(g.unbind()))) }).collect()
+        }
+    }
 }
 
 fn paint_of<'py>(group: &Bound<'py, PyAny>, above: &Py<PyAny>) -> PyResult<Py<PyAny>> {
@@ -105,16 +147,16 @@ impl PlacementWalk {
     fn __next__(&mut self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         if let Some((group, base, paint)) = self.start.take() {
             let group = group.into_bound(py);
-            let k = handle_key(&group)?;
-            let world = compose(py, &base, &group, k)?;
+            let node = node_of(&group);
+            let world = compose(py, &base, &group, &node)?;
             let paint = if self.painted { paint_of(&group, &paint)? } else { paint };
-            let out = self.emit(py, group, &world, &paint)?;
-            self.pending = Some((k, world, paint));
+            let out = self.emit(py, group.clone(), &world, &paint)?;
+            self.pending = Some((node, group.unbind(), world, paint));
             return Ok(out);
         }
         loop {
-            if let Some((k, world, paint)) = self.pending.take() {
-                let children = children_of(k);
+            if let Some((node, obj, world, paint)) = self.pending.take() {
+                let children = children_of(py, &node, obj.bind(py))?;
                 if !children.is_empty() {
                     self.stack.push(Frame { children, next: 0, world, paint });
                 }
@@ -126,18 +168,25 @@ impl PlacementWalk {
                 self.stack.pop();
                 continue;
             }
-            let k = top.children[top.next];
+            let i = top.next;
             top.next += 1;
-            let handle = doc::lock().handle_ref(py, k);
-            let Some(handle) = handle else {
-                return Err(PyRuntimeError::new_err("a child placement without its handle"));
+            let (node, handle) = {
+                let (node, handle) = &mut top.children[i];
+                let node = match node { Node::Doc(k) => Node::Doc(*k), Node::Obj => Node::Obj };
+                (node, handle.take())
+            };
+            let handle = match (handle, &node) {
+                (Some(h), _) => h,
+                (None, Node::Doc(k)) => doc::lock().handle_ref(py, *k)
+                    .ok_or_else(|| PyRuntimeError::new_err("a child placement without its handle"))?,
+                (None, Node::Obj) => unreachable!(),
             };
             let child = handle.into_bound(py);
             let (world, above) = (top.world.copy(py), top.paint.clone_ref(py));
-            let world = compose(py, &world, &child, k)?;
+            let world = compose(py, &world, &child, &node)?;
             let paint = if self.painted { paint_of(&child, &above)? } else { above };
-            let out = self.emit(py, child, &world, &paint)?;
-            self.pending = Some((k, world, paint));
+            let out = self.emit(py, child.clone(), &world, &paint)?;
+            self.pending = Some((node, child.unbind(), world, paint));
             return Ok(out);
         }
     }
@@ -149,13 +198,19 @@ impl PlacementWalk {
             world(w)?;
             visit.call(p)?;
         }
-        if let Some((_, w, p)) = &self.pending {
+        if let Some((_, o, w, p)) = &self.pending {
+            visit.call(o)?;
             world(w)?;
             visit.call(p)?;
         }
         for f in &self.stack {
             world(&f.world)?;
             visit.call(&f.paint)?;
+            for (_, h) in &f.children {
+                if let Some(h) = h {
+                    visit.call(h)?;
+                }
+            }
         }
         Ok(())
     }

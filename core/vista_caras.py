@@ -168,7 +168,7 @@ def _faces_of(scene):
     """``(face, matrix, paint, layer)`` for every face the line drawing
     sees: the loose model's visible faces and every visible object's
     placements, each with the paint its default faces wear."""
-    from core.group import iter_painted_placements
+    import ingetrazo_core
     from core.layers import DEFAULT_LAYER, layer_of
     style = getattr(scene, "display_style", None)
     by_layer = bool(getattr(style, "color_by_layer", False))
@@ -181,7 +181,7 @@ def _faces_of(scene):
             continue
         owner = ingetrazo_core.tag_styles.object_layer(g)
         top = ingetrazo_core.tag_styles.layer_paint(scene, g) if by_layer else None
-        for pg, m, paint in iter_painted_placements(g):
+        for pg, m, paint in ingetrazo_core.group_iter_painted_placements(g):
             for f in pg.mesh.faces:
                 own = layer_of(f)
                 yield (f, m, top if by_layer else paint,

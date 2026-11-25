@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The placement walks of ``core/group.py``, pinned for their move to
-Rust: whatever replaces them must walk as the Python generators did at
-``61fe6326`` (a by-call port through PyO3 was tried and was about twice as
-slow; see ``docs/model-port.md``): ``iter_placements``, ``iter_painted_placements``,
+"""The placement walks of ``core/group.py`` must walk as the Python
+generators did at ``61fe6326``. ``iter_placements`` and
+``iter_painted_placements`` are native iterators over the Rust document
+(``model/placement_walks.rs``); ``visible_placements`` and
+``model_placements`` are still Python, pinned for their move: ``iter_placements``, ``iter_painted_placements``,
 ``visible_placements`` and ``model_placements`` over seeded trees (classic
 groups and instances, three levels, hidden and locked tags, tags in a
 folder switched off, Hide, paints at any depth, a base matrix, a filter),
@@ -25,11 +26,9 @@ GOLDEN = Path(__file__).parent / "fixtures" / "placement_walks_golden.json.gz"
 
 def _walks():
     import ingetrazo_core as N
-    if hasattr(N, "group_iter_placements"):
-        return (N.group_iter_placements, N.group_iter_painted_placements,
-                N.group_visible_placements, N.group_model_placements)
-    from core import group as G     # the reference, before the move
-    return G.iter_placements, G.iter_painted_placements, G.visible_placements, G.model_placements
+    from core import group as G
+    return (N.group_iter_placements, N.group_iter_painted_placements,
+            G.visible_placements, G.model_placements)
 
 
 def _scene(rng):

@@ -288,7 +288,7 @@ impl Faces {
             self.orient = self.camera.is_some() && has_billboard(&group)?;
             if self.orient {
                 self.pieces = Some(
-                    api.call_method1("iter_painted_placements", (&group,))?
+                    crate::model::module(py, "ingetrazo_core")?.call_method1("group_iter_painted_placements", (&group,))?
                         .try_iter()?
                         .unbind(),
                 );
@@ -297,8 +297,8 @@ impl Faces {
             if self.camera.is_none() && billboard(&group)?.is_truthy()? {
                 continue;
             }
-            let pieces = api
-                .call_method1("iter_painted_placements", (&group,))?
+            let pieces = crate::model::module(py, "ingetrazo_core")?
+                .call_method1("group_iter_painted_placements", (&group,))?
                 .try_iter()?
                 .collect::<PyResult<Vec<_>>>()?;
             let mut painted = false;
