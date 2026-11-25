@@ -12,7 +12,9 @@ from __future__ import annotations
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
-from core.group import Group, transformed_attrs, transformed_mesh
+from core.group import Group
+from ingetrazo_core import group_transformed_attrs as transformed_attrs
+from ingetrazo_core import group_transformed_mesh as transformed_mesh
 from core.mesh import Mesh
 from ingetrazo_core.parts import part_points
 

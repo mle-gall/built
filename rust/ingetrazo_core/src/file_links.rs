@@ -157,7 +157,7 @@ fn igz_load_links<'p>(
         if let Some(cb) = progress {
             kw.set_item("progress", report(py, Some(cb), 0., 1., Some(&scope))?)?
         }
-        match links.call_method("resolve", (scene, path), Some(&kw)) {
+        match crate::model::module(py, "ingetrazo_core")?.call_method("link_resolve", (scene, path), Some(&kw)) {
             Ok(_) => (),
             Err(e) if e.is_instance_of::<LinkInterrupted>(py) => {
                 if e.value(py).getattr("scope")?.is(&scope) {

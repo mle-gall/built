@@ -451,8 +451,8 @@ impl<'py> Hierarchy<'py> {
                 let placed = if world.is_none() {
                     mesh
                 } else {
-                    py.import("core.group")?
-                        .call_method1("transformed_mesh", (mesh, &world))?
+                    py.import("ingetrazo_core")?
+                        .call_method1("group_transformed_mesh", (mesh, &world))?
                 };
                 let anchor = self.helper.call_method1("_feet", (&placed,))?;
                 if anchor.is_none() {

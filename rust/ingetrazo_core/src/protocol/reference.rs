@@ -61,8 +61,8 @@ fn bake_container_xform(group: &Obj<'_>) -> PyResult<()> {
     if mesh.getattr("vertices")?.is_truthy()? {
         group.setattr(
             "mesh",
-            py.import("core.group")?
-                .call_method1("transformed_mesh", (mesh, &matrix))?,
+            py.import("ingetrazo_core")?
+                .call_method1("group_transformed_mesh", (mesh, &matrix))?,
         )?;
     }
     group.setattr("xform", identity)
@@ -107,7 +107,7 @@ fn enter_reference<'py>(
     let proto = group.getattr("mesh")?;
     let xform = group.getattr_opt("xform")?.unwrap_or_else(|| null(py));
     let world = |m: &Obj<'py>| {
-        crate::model::module(py, "core.group")?.call_method1("transformed_mesh", (&proto, m))
+        crate::model::module(py, "ingetrazo_core")?.call_method1("group_transformed_mesh", (&proto, m))
     };
     if group
         .getattr_opt("children")?
@@ -247,8 +247,8 @@ fn share_back(
     } else {
         xform.clone()
     };
-    let local = crate::model::module(group.py(), "core.group")?
-        .call_method1("transformed_mesh", (edited, tr))?;
+    let local = crate::model::module(group.py(), "ingetrazo_core")?
+        .call_method1("group_transformed_mesh", (edited, tr))?;
     proto.call_method1("restore_state", (local.call_method0("capture_state")?,))?;
     proto.call_method0("note_rewound")?;
     restore_sharing(group, proto, xform, parts)
@@ -318,11 +318,9 @@ fn local_frame(step: &Obj<'_>, parts: Option<&str>) -> PyResult<()> {
     Ok(())
 }
 fn refresh(scene: &Obj<'_>) -> PyResult<()> {
-    if let Some(f) = scene
-        .getattr_opt("_refresh_dimension_holds")?
-        .filter(|v| !v.is_none())
-    {
-        f.call0()?;
+    // A scene's dimension holds (a stand-in without dimensions has none).
+    if scene.hasattr("dimensions")? {
+        crate::model::edit_context::refresh_dimension_holds(scene)?;
     }
     Ok(())
 }

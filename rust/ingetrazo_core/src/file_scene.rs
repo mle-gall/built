@@ -259,10 +259,7 @@ fn archive_settings(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_>) -> PyResu
                     p.call_method1("pop", ("rel", py.None()))?;
                     p.call_method1(
                         "update",
-                        (py.import("core.links")?.call_method1(
-                            "_link_record",
-                            (path, stream.getattr("destination")?),
-                        )?,),
+                        (crate::model::link_io::link_record(&path, Some(&stream.getattr("destination")?))?,),
                     )?;
                 }
             }
