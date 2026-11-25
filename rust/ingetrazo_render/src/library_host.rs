@@ -101,7 +101,7 @@ fn parse_hex(py: Python<'_>, text: &str) -> PyResult<(f64, f64, f64)> {
 }
 
 fn store(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    py.import("core.settings")?.call_method0("settings")
+    py.import("ingetrazo_core.settings")?.call_method0("settings")
 }
 
 /// A JSON value kept in the preferences, else `default`.

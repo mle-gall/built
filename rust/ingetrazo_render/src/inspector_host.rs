@@ -284,7 +284,7 @@ fn open_camera<'py>(win: &Bound<'py, PyAny>, target: Option<Bound<'py, PyAny>>) 
     leave_camera(&doc)?;
     let inspector = py.import("ingetrazo_render")?.getattr("CameraInspector")?.call0()?;
     let kwargs = [("type", py.import("builtins")?.getattr("bool")?)].into_py_dict(py)?;
-    let advanced = py.import("core.settings")?.call_method0("settings")?.getattr("value")?.call(("camera_settings/advanced", false), Some(&kwargs))?;
+    let advanced = py.import("ingetrazo_core.settings")?.call_method0("settings")?.getattr("value")?.call(("camera_settings/advanced", false), Some(&kwargs))?;
     inspector.setattr("advanced", advanced)?;
     let none = py.None().into_bound(py);
     inspector.call_method1("bind", (win.call_method0("_active_view")?.getattr("camera")?, target.as_ref().unwrap_or(&none)))?;
@@ -332,7 +332,7 @@ fn camera_edit(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, key: &str, v: &B
         }
         "advanced" => {
             inspector.setattr("advanced", v)?;
-            py.import("core.settings")?.call_method0("settings")?.call_method1("setValue", ("camera_settings/advanced", v))?;
+            py.import("ingetrazo_core.settings")?.call_method0("settings")?.call_method1("setValue", ("camera_settings/advanced", v))?;
         }
         "sensor" => {
             inspector.setattr("custom_sensor", v.is_none())?;

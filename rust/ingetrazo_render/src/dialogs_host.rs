@@ -233,7 +233,7 @@ fn ask<'py>(py: Python<'py>, parent: &Bound<'py, PyAny>, title: &Bound<'py, PyAn
             Ok(none(py))
         })?
     };
-    let dog = py.import("core.timers")?.call_method1("timer", (&win, watchdog))?;
+    let dog = py.import("ingetrazo_core.timers")?.call_method1("timer", (&win, watchdog))?;
     dog.call_method1("start", (m.getattr("WATCHDOG_MS")?,))?;
     let ran = if sheet.borrow().answer.is_none(py) { event_loop.call_method0("exec").map(|_| ()) } else { Ok(()) };
     let stopped = dog.call_method0("stop").map(|_| ());

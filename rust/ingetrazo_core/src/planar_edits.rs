@@ -311,7 +311,7 @@ pub(crate) fn rebuild_selected<'py>(
     let result = py
         .import("core.arrangement")?
         .call_method1("planar_rebuild", (segs, origin, normal))?;
-    let triangulate = py.import("core.triangulate")?.getattr("triangulate")?;
+    let triangulate = py.import("ingetrazo_core.triangulate")?.getattr("triangulate")?;
     let mut outlines = HashMap::new();
     let mut openings = HashMap::<Vec<Cell>, Vec<Vec<Cell>>>::new();
     let mut old = Vec::new();

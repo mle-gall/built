@@ -119,7 +119,7 @@ fn chosen(py: Python<'_>, settings: Option<&Bound<PyAny>>) -> PyResult<Option<Fi
     let st = match settings {
         Some(st) => st,
         None => {
-            owned = py.import("core.settings")?.call_method0("settings")?;
+            owned = py.import("ingetrazo_core.settings")?.call_method0("settings")?;
             &owned
         }
     };

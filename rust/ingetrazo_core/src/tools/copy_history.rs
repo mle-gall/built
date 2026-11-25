@@ -171,7 +171,7 @@ impl CopySelection {
                 }
                 store_edges(&store.inner, &self.segments)
             };
-            let class = py.import("core.store_mesh")?.getattr("EdgeView")?;
+            let class = py.import("ingetrazo_core.store_mesh")?.getattr("EdgeView")?;
             for key in edge_keys {
                 picked.add(class.call1((&mesh, key))?)?;
             }

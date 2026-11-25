@@ -31,7 +31,7 @@ fn box_loose_arrays<'py>(a: &Args<'py>) -> Reply<'py> {
     if camera.is_none()
         || !mesh
             .get_type()
-            .is(&imported(py, "core.store_mesh")?.getattr("StoreMesh")?)
+            .is(&imported(py, "ingetrazo_core.store_mesh")?.getattr("StoreMesh")?)
     {
         return Ok(none(py));
     }

@@ -59,7 +59,7 @@ pub fn bevel_selection<'py>(
                 Kind::Edge => st.inner.state.ends.get(slot as usize).to_vec(),
                 _ => st.inner.outer_ring(slot),
             };
-            let ctor = py.import("core.store_mesh")?.getattr("VertexView")?;
+            let ctor = py.import("ingetrazo_core.store_mesh")?.getattr("VertexView")?;
             for v in ids {
                 let key = st.inner.key(Kind::Vertex, v);
                 if seen.insert(key) {

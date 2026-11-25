@@ -211,7 +211,7 @@ pub(crate) fn apply_document_units(window: &Obj, chosen: &Obj) -> PyResult<bool>
 #[pyfunction]
 fn read_named_ndof_profiles(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let raw = py
-        .import("core.settings")?
+        .import("ingetrazo_core.settings")?
         .call_method0("settings")?
         .call_method1("value", ("ndof/named_profiles", "{}"))?;
     let parse = || -> PyResult<Bound<'_, PyDict>> {

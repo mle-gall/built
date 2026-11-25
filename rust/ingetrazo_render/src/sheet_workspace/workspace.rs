@@ -441,7 +441,7 @@ impl Workspace {
     fn set_auto_render(s: &Bound<'_, Self>, on: bool) -> PyResult<()> {
         s.getattr("composer")?.setattr("_auto_render", on)?;
         s.py()
-            .import("core.settings")?
+            .import("ingetrazo_core.settings")?
             .call_method0("settings")?
             .call_method1(
                 "setValue",

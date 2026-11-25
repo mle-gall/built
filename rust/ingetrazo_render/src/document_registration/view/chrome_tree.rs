@@ -399,7 +399,7 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
         renderer.call_method1("ui_set_proposal_available", (!mode.is_truthy()? && none_yet,))?;
     }
     if !own(&view, "_ui_sort_loaded")?.is_some_and(|loaded| loaded.is_truthy().unwrap_or(false)) && renderer.hasattr("ui_set_tree_sort")? {
-        let stored = py.import("core.settings")?.call_method0("settings")?.call_method(
+        let stored = py.import("ingetrazo_core.settings")?.call_method0("settings")?.call_method(
             "value",
             ("ui/project_tree_sort", 0),
             Some(&fields!(py; "type" => py.get_type::<pyo3::types::PyInt>())),

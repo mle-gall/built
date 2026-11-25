@@ -935,7 +935,7 @@ impl SettingsSheet {
                 let reset = func(py, move |py, _a| {
                     let me = me.bind(py);
                     let sc = shortcuts(py)?;
-                    let st = py.import("core.settings")?.call_method0("settings")?;
+                    let st = py.import("ingetrazo_core.settings")?.call_method0("settings")?;
                     st.call_method1("remove", (crate::keyboard_bindings::GROUP,))?;
                     st.call_method0("sync")?;
                     for a in me.call_method0("actions")?.try_iter()? {

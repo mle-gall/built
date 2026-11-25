@@ -219,7 +219,7 @@ pub(super) fn open_view_export<'p>(
             builder: builder.clone().unbind(),
         },
     )?;
-    let settings = py.import("core.settings")?.call_method0("settings")?;
+    let settings = py.import("ingetrazo_core.settings")?.call_method0("settings")?;
     settings.call_method1("beginGroup", ("export_svg/v5",))?;
     let prefs = PyDict::new(py);
     for key in settings.call_method0("childKeys")?.try_iter()? {

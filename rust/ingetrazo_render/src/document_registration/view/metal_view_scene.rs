@@ -9,7 +9,7 @@ fn perf_counter(py: Python<'_>) -> PyResult<f64> {
     py.import("time")?.call_method0("perf_counter")?.extract()
 }
 fn later<'py>(view: &Obj<'py>, delay: u32, callback: Obj<'py>) -> PyResult<()> {
-    view.py().import("core.timers")?.call_method1("later", (view, delay, callback))?;
+    view.py().import("ingetrazo_core.timers")?.call_method1("later", (view, delay, callback))?;
     Ok(())
 }
 fn any_of<'py>(py: Python<'py>, values: &Obj<'py>) -> PyResult<bool> {

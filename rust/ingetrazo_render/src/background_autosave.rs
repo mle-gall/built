@@ -348,7 +348,7 @@ pub(crate) fn background_autosave<'p>(win: &Obj<'p>) -> PyResult<Obj<'p>> {
             .call_method0("ChangeCallbacks")?,
     )?;
     let timer = py
-        .import("core.timers")?
+        .import("ingetrazo_core.timers")?
         .call_method1("timer", (&manager, manager.getattr("advance")?, 16, true))?;
     manager.setattr("timer", timer)?;
     Ok(manager.into_any())

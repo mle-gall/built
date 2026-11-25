@@ -3,7 +3,7 @@
 use super::*;
 
 fn preference(py: Python<'_>, key: &str, default: f64) -> PyResult<f64> {
-    let value = imported(py, "core.settings")?
+    let value = imported(py, "ingetrazo_core.settings")?
         .call_method0("settings")?
         .call_method1("value", (key, default))?;
     py.import("builtins")?
@@ -33,7 +33,7 @@ fn set_eye_height<'py>(a: &Args<'py>) -> Reply<'py> {
             .import("builtins")?
             .getattr("float")?
             .call1((a.get_item(0)?,))?;
-        imported(py, "core.settings")?
+        imported(py, "ingetrazo_core.settings")?
             .call_method0("settings")?
             .call_method1("setValue", ("walk/eye_height", n))?;
         Ok(())

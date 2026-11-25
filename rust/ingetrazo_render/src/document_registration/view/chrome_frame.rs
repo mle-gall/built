@@ -40,7 +40,7 @@ fn number(value: &Obj<'_>, type_error: bool) -> PyResult<Option<f64>> {
     }
 }
 fn settings<'py>(given: Obj<'py>) -> Reply<'py> {
-    if given.is_none() { given.py().import("core.settings")?.call_method0("settings") } else { Ok(given) }
+    if given.is_none() { given.py().import("ingetrazo_core.settings")?.call_method0("settings") } else { Ok(given) }
 }
 /// A callable of no arguments for a strip toggle: it lives as long as the
 /// frame's option list.

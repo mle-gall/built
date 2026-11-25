@@ -163,6 +163,7 @@ mod snap_build;
 mod snap;
 mod snap_engine;
 mod kernel;
+mod core_bulk;
 mod protocol;
 mod tools;
 mod guide_vertices;
@@ -618,6 +619,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     protocol::register(m)?;
     protocol::api::history::register(m)?;
     kernel::mesh_api::register(m)?;
+    core_bulk::register(m)?;
     Ok(())
 }
 

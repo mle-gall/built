@@ -11,7 +11,7 @@ from core.bim import (collect_objects, class_quantities, class_quantities_arrays
                       _placed_groups, _compose)
 from core.ifc_identity import object_guid, stable_guid
 from core.ifc_tables import TABLES, predefined_types
-from core.version import __version__
+from ingetrazo_core.version import __version__
 from .entities import Builder
 from core.ifc_tables_data import SCHEMA_DATA
 from .relationships import Appearance

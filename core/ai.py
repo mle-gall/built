@@ -32,7 +32,7 @@ import urllib.error
 import time
 import urllib.request
 
-from core.version import USER_AGENT as _UA, __version__
+from ingetrazo_core.version import USER_AGENT as _UA, __version__
 
 #: Cloudflare fronts several providers (Groq above all) and rejects
 #: urllib's default "Python-urllib/3.x" agent with HTTP 403 error 1010 —

@@ -19,7 +19,7 @@ there and nobody loses a setting on the way.
 """
 from __future__ import annotations
 
-from core.settings import settings as native_settings
+from ingetrazo_core.settings import settings as native_settings
 
 _GROUP = "General/"
 _OLD_GROUP = "general/"

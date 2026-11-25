@@ -397,7 +397,7 @@ pub fn check_extensions(host: &python::Host) -> bool {
 pub fn exit_now(status: i32) -> ! {
     Python::attach(|py| {
         let flush = || -> PyResult<()> {
-            py.import("core.settings")?
+            py.import("ingetrazo_core.settings")?
                 .call_method0("settings")?
                 .call_method0("sync")?;
             py.import("logging")?.call_method0("shutdown")?;

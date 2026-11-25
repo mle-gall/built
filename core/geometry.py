@@ -82,6 +82,6 @@ class Face:
         if len(self.vertices) < 3:
             return []
         # Imported lazily to keep geometry.py dependency-light at import time.
-        from core.triangulate import triangulate
+        from ingetrazo_core.triangulate import triangulate
 
         return triangulate(self.vertices, self.holes, self.normal())

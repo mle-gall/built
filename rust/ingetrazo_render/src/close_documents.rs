@@ -229,7 +229,7 @@ fn project_tab_menu(win: &Bound<'_, PyAny>, verb: &str, index: usize) -> PyResul
         "pictures" => {
             let key = "tabs/hover_picture";
             let previous = super::navigation::setting(win.py(), key, "1")?;
-            let settings = win.py().import("core.settings")?.call_method0("settings")?;
+            let settings = win.py().import("ingetrazo_core.settings")?.call_method0("settings")?;
             settings.call_method1("setValue", (key, if previous == "0" { "1" } else { "0" }))?;
         }
         _ => {}

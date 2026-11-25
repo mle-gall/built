@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 const NEW_HIDDEN: &str = "layers/new_hidden_in_scenes";
 
 pub fn new_hidden(py: Python<'_>) -> PyResult<bool> {
-    py.import("core.settings")?
+    py.import("ingetrazo_core.settings")?
         .call_method0("settings")?
         .call_method1("value", (NEW_HIDDEN, false, py.get_type::<PyBool>()))?
         .extract()
@@ -18,7 +18,7 @@ pub fn new_hidden(py: Python<'_>) -> PyResult<bool> {
 
 #[pyfunction]
 pub fn set_new_tags_hidden(py: Python<'_>, on: bool) -> PyResult<()> {
-    py.import("core.settings")?
+    py.import("ingetrazo_core.settings")?
         .call_method0("settings")?
         .call_method1("setValue", (NEW_HIDDEN, on))?;
     Ok(())

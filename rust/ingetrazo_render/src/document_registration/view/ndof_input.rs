@@ -232,7 +232,7 @@ fn load_settings<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let module = py.import("views.ndof_input")?;
     let ndof = py.import("ingetrazo_render.ndof")?;
-    let st = py.import("core.settings")?.call_method0("settings")?;
+    let st = py.import("ingetrazo_core.settings")?.call_method0("settings")?;
     let settings = ndof.call_method0("NdofSettings")?;
     for row in module.getattr("_KEYS")?.try_iter()? {
         let pair = row?;
@@ -296,7 +296,7 @@ fn save_settings<'py>(a: &Args<'py>) -> Reply<'py> {
     let settings = a.get_item(0)?;
     let module = py.import("views.ndof_input")?;
     module.setattr("_settings_cache", &settings)?;
-    let st = py.import("core.settings")?.call_method0("settings")?;
+    let st = py.import("ingetrazo_core.settings")?.call_method0("settings")?;
     let ndof = py.import("ingetrazo_render.ndof")?;
     let flag = |b| if b { "1" } else { "0" };
     for row in module.getattr("_KEYS")?.try_iter()? {

@@ -57,7 +57,7 @@ fn remote(py: Python, base: &str, rel: &str) -> PyResult<Vec<u8>> {
     let headers = PyDict::new(py);
     headers.set_item(
         "User-Agent",
-        py.import("core.version")?.getattr("USER_AGENT")?,
+        py.import("ingetrazo_core.version")?.getattr("USER_AGENT")?,
     )?;
     let kw = PyDict::new(py);
     kw.set_item("headers", headers)?;

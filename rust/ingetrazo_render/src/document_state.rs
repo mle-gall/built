@@ -8,7 +8,7 @@ fn setting<'py, T: IntoPyObject<'py>>(
     key: &str,
     default: T,
 ) -> PyResult<Obj<'py>> {
-    py.import("core.settings")?
+    py.import("ingetrazo_core.settings")?
         .call_method0("settings")?
         .call_method1("value", (key, default))
 }

@@ -391,7 +391,7 @@ fn dependencies(m: &Bound<PyModule>) -> PyResult<()> {
         ),
         ("ingetrazo_render", &[("CallbackSlot", "CallbackSlot")]),
         (
-            "core.timers",
+            "ingetrazo_core.timers",
             &[("later", "later"), ("timer", "window_timer")],
         ),
         (
@@ -447,7 +447,7 @@ fn dependencies(m: &Bound<PyModule>) -> PyResult<()> {
             ],
         ),
         ("core.texture", &[("face_uv_axes", "face_uv_axes")]),
-        ("core.triangulate", &[("plane_axes", "plane_axes")]),
+        ("ingetrazo_core.triangulate", &[("plane_axes", "plane_axes")]),
         (
             "tools.base",
             &[("Tool", "Tool"), ("ToolContext", "ToolContext")],

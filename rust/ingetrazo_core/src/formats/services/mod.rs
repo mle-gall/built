@@ -110,7 +110,7 @@ fn survey_request<'p>(
         .call_method1("submit", (owner, future, ready, error))
 }
 fn user_agent(py: Python<'_>) -> PyResult<Bound<'_, PyBytes>> {
-    let version = py.import("core.version")?.getattr("__version__")?;
+    let version = py.import("ingetrazo_core.version")?.getattr("__version__")?;
     Ok(PyBytes::new(
         py,
         format!("IngeTrazo/{version} (https://github.com/ingelibre/ingetrazo)").as_bytes(),

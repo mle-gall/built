@@ -85,7 +85,7 @@ type Obj<'py> = Bound<'py, PyAny>;
 fn store<'py>(py: Python<'py>, settings: Option<&Obj<'py>>) -> PyResult<Obj<'py>> {
     match settings {
         Some(st) => Ok(st.clone()),
-        None => py.import("core.settings")?.call_method0("settings"),
+        None => py.import("ingetrazo_core.settings")?.call_method0("settings"),
     }
 }
 

@@ -7,7 +7,7 @@ use pyo3::{
 use std::collections::HashSet;
 
 fn settings(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    py.import("core.settings")?.call_method0("settings")
+    py.import("ingetrazo_core.settings")?.call_method0("settings")
 }
 
 fn commit(view: &Bound<'_, PyAny>, command: &Bound<'_, PyAny>) -> PyResult<()> {

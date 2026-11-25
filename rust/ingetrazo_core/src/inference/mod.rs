@@ -136,7 +136,7 @@ impl InferenceEngine {
             .call_method1("partial", (wrap_pyfunction!(on_dwell, py)?, ref_))?;
         let vp = slf.getattr("viewport")?;
         let timer = py
-            .import("core.timers")?
+            .import("ingetrazo_core.timers")?
             .call_method1("timer", (&vp, cb, vp.getattr("ENCOURAGE_MS")?))?;
         slf.borrow_mut().timer = Some(timer.clone().unbind());
         Ok(timer)

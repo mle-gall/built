@@ -344,7 +344,7 @@ pub struct Env {
 impl Env {
     #[new]
     fn new(py: Python<'_>, win: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let st = py.import("core.settings")?.call_method0("settings")?;
+        let st = py.import("ingetrazo_core.settings")?.call_method0("settings")?;
         let vp = opt(win, "viewport");
         let scene = vp.as_ref().and_then(|v| opt(v, "scene"));
         Ok(Env { win: win.clone().unbind(), st: st.unbind(), vp: vp.map_or_else(|| none(py), Bound::unbind), scene: scene.map_or_else(|| none(py), Bound::unbind) })

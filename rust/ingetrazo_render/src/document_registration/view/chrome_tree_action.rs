@@ -728,7 +728,7 @@ impl<'a, 'py> Row<'a, 'py> {
             self.rebuild()?;
         } else if self.is(&["sort"]) {
             let order = py.get_type::<pyo3::types::PyInt>().call1((&rk,))?;
-            py.import("core.settings")?.call_method0("settings")?.call_method1("setValue", ("ui/project_tree_sort", order))?;
+            py.import("ingetrazo_core.settings")?.call_method0("settings")?.call_method1("setValue", ("ui/project_tree_sort", order))?;
         } else if self.is(&["item"]) && self.kind == "exportitem" {
             let group = self.item()?;
             if !group.is_none() {

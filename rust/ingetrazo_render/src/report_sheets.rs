@@ -182,7 +182,7 @@ impl AboutSheet {
 
     fn build<'py>(&mut self, py: Python<'py>, ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         if self.review.is_none() {
-            let version: String = py.import("core.version")?.getattr("__version__")?.extract()?;
+            let version: String = py.import("ingetrazo_core.version")?.getattr("__version__")?.extract()?;
             let host = if in_shell(py)? { opt(&ctx.getattr("win")?, "_host") } else { None };
             let renderer = opt(ctx, "view").and_then(|v| opt(&v, "renderer"));
             self.review = Some(about_review(py, &version, "", host, renderer)?.unbind());
@@ -215,7 +215,7 @@ impl AboutSheet {
             review.call_method0("acknowledge")?;
             let win = ctx.getattr("win")?;
             let later = Py::new(py, AboutCopied { win: win.clone().unbind(), sheet: slf.clone().unbind() })?;
-            py.import("core.timers")?.call_method1("later", (&win, 1510, later))?;
+            py.import("ingetrazo_core.timers")?.call_method1("later", (&win, 1510, later))?;
         } else if kind == "open" {
             py.import("webbrowser")?.call_method1("open", (value,))?;
         }
@@ -536,7 +536,7 @@ impl ExtensionsSheet {
         d.set_item("old", old)?;
         d.set_item("cache", self.cache.bind(py).str()?)?;
         d.set_item("lang", py.import("core.i18n")?.call_method0("current_language")?)?;
-        d.set_item("build", py.import("core.version")?.getattr("__version__")?)?;
+        d.set_item("build", py.import("ingetrazo_core.version")?.getattr("__version__")?)?;
         let text = py.import("json")?.getattr("dumps")?.call((d,), Some(&[("default", py.import("builtins")?.getattr("str")?)].into_py_dict(py)?))?;
         self.model.bind(py).call_method1("load", (text,))?;
         Ok(())
@@ -625,7 +625,7 @@ impl ExtensionsSheet {
                 host.call_method1("wake_after", (100,))?;
             } else if let Some(view) = opt(ctx, "view") {
                 if self.timer.is_none() {
-                    let timer = py.import("core.timers")?.call_method1("timer", (&view, view.getattr("update")?))?;
+                    let timer = py.import("ingetrazo_core.timers")?.call_method1("timer", (&view, view.getattr("update")?))?;
                     self.timer = Some(timer.unbind());
                 }
                 let timer = self.timer.as_ref().expect("made above").bind(py);

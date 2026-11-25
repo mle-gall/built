@@ -25,7 +25,7 @@ PYTHON=${PYTHON:-$ROOT/venv/bin/python}
 ARCH=${ARCH:-x86_64}
 
 cd "$ROOT"
-VERSION=$("$PYTHON" -c 'from core.version import __version__; print(__version__)')
+VERSION=$("$PYTHON" -c 'from ingetrazo_core.version import __version__; print(__version__)')
 APPDIR="$WORK/IngeTrazo.AppDir"
 APPIMAGE="$OUT/IngeTrazo-$VERSION-$ARCH.AppImage"
 

@@ -183,7 +183,7 @@ fn host_timer<'py>(a: &Args<'py>) -> Reply<'py> {
         return Ok(none(py));
     }
     if tool.getattr("_timer")?.is_none() {
-        let timer = imported(py, "core.timers")?.getattr("timer")?;
+        let timer = imported(py, "ingetrazo_core.timers")?.getattr("timer")?;
         tool.setattr(
             "_timer",
             timer.call(
