@@ -39,7 +39,7 @@ from ingetrazo_core import (Vec3 as QVector3D, context_hit, eligible_rows,
                             packed_surface, screen_boxes, screen_rows as _screen_rows, surface, surface_hit)
 from ingetrazo_core import (acquire as _acquire, acquire_rim as _acquire_rim, face_centers_near,
                             face_crossing, front_at as _front_at, nearby_edges, occluded as _occluded,
-                            occluded_many as _occluded_many, on_surface, placement_context,
+                            resident_occluded_many as _occluded_many, on_surface, placement_context,
                             reference_edge, scene_edges, snap_context, start_edges)
 from core.snap import SurfacePatch, compute_snap
 

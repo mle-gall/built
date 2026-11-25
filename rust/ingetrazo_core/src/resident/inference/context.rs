@@ -192,7 +192,7 @@ pub(super) fn occluded(
     }
 }
 
-#[pyfunction(signature=(index,view,points,rows=None))]
+#[pyfunction(name="resident_occluded_many", signature=(index,view,points,rows=None))]
 fn occluded_many(
     index: &Obj<'_>,
     view: &Obj<'_>,
