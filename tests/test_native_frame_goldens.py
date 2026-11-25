@@ -1,7 +1,7 @@
 """The model's pixels, at rest and after scripted zooms, against recorded hashes.
 
 A change to the renderer that is meant to cost less and draw the same
-(docs/render-glue-port.md, round 17) is checked here: the middle of the
+is checked here: the middle of the
 window, clear of the chrome, must come out byte for byte as recorded.
 
 The hashes belong to one GPU, system and window scale, so the record names

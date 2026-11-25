@@ -7,7 +7,7 @@ from built_render import KeyEvent, ShortcutOverride
 
 from built_core import Key, KeyboardModifier
 from tests.headless_gpu import _code
-from tests.test_.skp_inference_gaps import view  # noqa: F401  (fixture)
+from tests.test_inference_and_face_cutting import view  # noqa: F401  (fixture)
 
 CTRL = KeyboardModifier.ControlModifier
 

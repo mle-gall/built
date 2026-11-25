@@ -4,7 +4,7 @@
 the Python painters of views/composer.py drew it: the same primitives in
 the same order, with the same pens, brushes, texts and geometry. The
 goldens were recorded from the Python painters (tests/sheet_paint_recorder.py,
-scripts/sheet_paint_goldens.py) before they moved (docs/rust-sheets.md §6).
+scripts/sheet_paint_goldens.py) before they moved.
 
 Geometry matches within 1e-9 mm; flattened curves (paths) within 0.02 mm,
 since Qt and Rust flatten arcs with different steps."""

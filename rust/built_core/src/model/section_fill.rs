@@ -5,7 +5,7 @@
 //! nested even-odd), those areas as triangles, their 45° hatching, and the
 //! basis a sheet lays a cut's hatch in.
 //!
-//! Ported operation for operation from the NumPy (`docs/model-port.md`):
+//! Ported operation for operation from the NumPy:
 //! `(N, 3) @ (3,)` and `(N, 2) @ (2,)` are NumPy's plain left-to-right sums,
 //! measured. A ring's area went through a BLAS dot (its order unnamed): it
 //! only orders the rings for nesting, so a tie may break another way.

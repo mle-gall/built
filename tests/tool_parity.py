@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Tool parity scenarios (docs/rust-tools.md §11).
+"""Tool parity scenarios.
 
 Each scenario drives a tool through its public API (``on_click``,
 ``on_hover``, ``on_value``, ``on_undo``, ``on_cancel``, the box and the

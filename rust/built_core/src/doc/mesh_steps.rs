@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Native mesh-maintenance steps (docs/commands-port.md): curve tags, the
+//! Native mesh-maintenance steps: curve tags, the
 //! push/pull clean-ups (orphan edges, coplanar seams, stitching), Simplify,
 //! Reverse Faces and tag-as-you-draw.
 //!

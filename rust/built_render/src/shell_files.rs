@@ -29,11 +29,11 @@ const IMPORTS: [&str; 7] = [".skp", ".dae", ".dxf", ".dwg", ".rfa", ".glb", ".gl
 
 /// kind → (panel title, filter).
 const IMPORT_FILTERS: [(&str, &str, &str); 7] = [
-    ("skp", "Import .skp", ".skp (*.skp)"),
+    ("skp", "Import .skp", ".skp files (*.skp)"),
     ("dae", "Import COLLADA", "COLLADA (*.dae)"),
-    ("dxf", "Import DXF", "AutoCAD DXF (*.dxf)"),
-    ("dwg", "Import DWG", "AutoCAD DWG (*.dwg)"),
-    ("rfa", "Import Revit family", "Revit family (*.rfa)"),
+    ("dxf", "Import .dxf", ".dxf files (*.dxf)"),
+    ("dwg", "Import .dwg", ".dwg files (*.dwg)"),
+    ("rfa", "Import .rfa family", ".rfa family (*.rfa)"),
     ("glb", "Import glTF/GLB", "glTF (*.glb *.gltf)"),
     ("igz", "Import a model as a group", "Built documents (*.built *.igz)"),
 ];

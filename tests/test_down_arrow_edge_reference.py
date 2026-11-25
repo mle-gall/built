@@ -1,6 +1,6 @@
 """Down arrow over an edge: parallel, then perpendicular, then free.
 
-the modeller's Line tool: with the cursor over an edge, the Down arrow locks the
+With the Line tool active and the cursor over an edge, the Down arrow locks the
 line parallel to that edge (magenta); Down again turns the lock
 perpendicular to it, in the plane being drawn; a third Down frees it. The
 edge is the one under the cursor or, the cursor having left it, the last
@@ -17,7 +17,7 @@ import pytest
 from built_core import Input as Qt
 from built_core import Vec3 as V
 
-from tests.test_.skp_inference_gaps import (  # noqa: F401 (fixture)
+from tests.test_inference_and_face_cutting import (  # noqa: F401 (fixture)
     click, move, refresh, same, turned, view)
 
 

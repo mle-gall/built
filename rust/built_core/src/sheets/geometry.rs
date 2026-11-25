@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 //! What a vector sheet frame draws, read from the document and the mesh
-//! stores (docs/rust-sheets.md step 4): world-space triangles, hard edges
+//! stores: world-space triangles, hard edges
 //! and soft edges with their faces' normals, each with the tag it is inked
 //! with. It is `built_core.hlr.collect_geometry` under the frame's saved view,
 //! without the view ever being applied to the live scene:

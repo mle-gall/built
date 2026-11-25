@@ -6,7 +6,7 @@
 //! base weights in R, G and B with coverage in A; `icon_fixed.png` holds the
 //! premultiplied colour that does not follow the theme (two layer icons
 //! keep their own blue and green). Recolouring reproduces the painted
-//! pixmap exactly, up to rounding (docs/render-glue-port.md, icons).
+//! pixmap exactly, up to rounding.
 use image::RgbaImage;
 use pyo3::{prelude::*, types::PyBytes};
 use std::sync::OnceLock;

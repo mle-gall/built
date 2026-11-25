@@ -238,8 +238,7 @@ fn bind_matrix<'py>(value: &Obj<'py>, key: &Obj<'py>, which: &Obj<'py>) -> PyRes
     PyTuple::new(py, [value, data, src])
 }
 
-/// The tree invariant (one parent per placement, docs/rust-document-model.md
-/// §2): `raise` refuses a second list with `ValueError` (the default),
+/// Each placement has one parent. `raise` refuses a second list with `ValueError` (the default),
 /// `warn` reports it as a `UserWarning` and lets it be, `off` does not
 /// look. `BUILT_DOC_PARENT` chooses.
 const PARENT_MODES: [(&str, u8); 3] = [("off", 0), ("warn", 1), ("raise", 2)];

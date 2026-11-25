@@ -463,7 +463,7 @@ def test_a_verb_runs_the_same_command_as_the_tree(host, kinds):
 
 def test_right_click_selects_what_it_hit_first(host, kinds, monkeypatch):
     """Right-clicking an unselected group selects it, then the menu is the
-    group's (.skp). Picking needs the GPU, so the hit is given."""
+    group’s. Picking needs the GPU, so the hit is given."""
     box = kinds["group"][0]
     face = kinds["faces"][0]
     scene = host.viewport.scene

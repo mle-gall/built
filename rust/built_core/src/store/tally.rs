@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Tag and material tallies of a store-backed mesh (moved from
-//! `core/store_parts.py` for the purge survey, docs/commands-port.md).
+//! `core/store_parts.py` for the purge survey).
 //!
 //! The face attribute rows and the edge tags come from the store. The mesh
 //! facade still owns the attribute table (`_attr_table`) and the faces that

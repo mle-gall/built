@@ -1,4 +1,4 @@
-//! The model lane's Rust (`docs/lane-ownership.md`, `docs/model-port.md`):
+//! The model lane's Rust:
 //! what `core/units`, `layers`, `element_set`, `camera`, `hlr` (the section
 //! cut, the rest of the
 //! hidden-line maths), `section`, `dimension`, `saved_views`, `texture`,

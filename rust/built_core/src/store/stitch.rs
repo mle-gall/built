@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! Port step 3 (`docs/meshstore-design.md` §8 items 3–4, §16): the splits
+//! Port step 3: the splits
 //! and the stitch primitives of `core/mesh.py` as store ops —
 //! `split_edge`, `split_edge_at`, `_insert_at_every_use`,
 //! `_insert_into_face_loops`, `interior_vertex_on`, `weld_coincident`,
@@ -11,7 +11,7 @@
 //! `turn_face_over`.
 //!
 //! Each is its Python method step for step: the same list order (§4), the
-//! same weld lookups, the key rules of `docs/element-keys-implementation.md`
+//! same weld lookups and stable edge keys
 //! (a split's new first half and a weld's redirected edge take the old
 //! edge's key, i.e. its SLOT: a key is a slot and a generation), and the
 //! same model-unit tolerances. Geometric predicates use doubles.

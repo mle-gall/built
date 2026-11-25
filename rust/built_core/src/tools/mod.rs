@@ -1,4 +1,4 @@
-//! The modelling tools as state machines (R2.5, `docs/rust-tools.md`).
+//! The modelling tools as state machines.
 //!
 //! A tool receives [`ToolEvent`]s, keeps its state as an explicit enum,
 //! answers a [`Preview`] for the renderer and commits every edit as a

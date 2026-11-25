@@ -116,7 +116,7 @@ def test_the_last_one_wins_tool_or_command(win):
 
 
 def test_enter_on_select_is_not_a_repeat(win):
-    """Rhino and AutoCAD repeat on Enter; here it was tried and taken out."""
+    """Enter leaves the previous command inactive."""
     scene = win.viewport.scene
     face = _face(scene)
     normal = face.normal()

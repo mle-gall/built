@@ -6,7 +6,7 @@ Every case is rebuilt from a seed, so the golden files hold only what the
 drawing pass produced: segments, world points, kinds and layers. The
 goldens in ``tests/fixtures/hlr_parity/`` were written by the Python
 drawing pass of ``core/hlr.py`` (integ/built 60e017a8) before its loop
-moved to Rust (docs/rust-sheets.md §6)."""
+moved to Rust."""
 from __future__ import annotations
 
 import math

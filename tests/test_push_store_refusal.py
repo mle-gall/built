@@ -3,7 +3,7 @@
 """A store step that refuses during a push refuses the push: the model is
 left as it was, the push reads as refused (no shorter push is tried), and a
 repro of the mesh before and the push's arguments is written to the log
-folder (docs/rust-tools.md §22 decision 1, §24)."""
+folder."""
 from __future__ import annotations
 
 import json

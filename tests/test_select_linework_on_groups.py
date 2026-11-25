@@ -14,7 +14,7 @@ all and only a selection box gets them. The causes, reproduced here:
   angle, gone at the next — and the strict occlusion test gave the click to
   the slab.
 
-The lines now come first within the pick tolerance (the modeller's rule: an
+The lines now come first within the pick tolerance (an
 edge before the face under the cursor), with a small depth slack. Between
 the lines of a hatch the slab under the cursor still wins; a hatch with
 nothing under it is picked by its box. A plain click again at the same spot

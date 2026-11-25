@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-""".skp 2021+ tag folders: the folder manager (9B3A) openskp leaves
+"""Tag folders in 2021 and later .skp files: the folder manager (9B3A) openskp leaves
 unread is decoded by ``built_core.reader_compat`` and rebuilt by the importer
 as nested tag folders. The bytes here are written in the layout read from
 real production files (see the notes above ``parse_tag_folders``)."""

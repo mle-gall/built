@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """An engaged axis silences the derived linear inferences while the cursor
-stays inside its reach (issue #140; ``docs/snap-robustness-plan.md``, "The
-rule the fix has to implement"):
+stays inside its reach (issue #140):
 
     An engaged strong inference (an axis, a held lock, an acquired reference)
     silences the weak ones while the cursor stays inside its reach. The reach

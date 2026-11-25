@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Native Explode and Unlink (docs/commands-port.md). Explode dissolves one
+//! Native Explode and Unlink. Explode dissolves one
 //! level of a group; Unlink makes a linked file's placement the host's own.
 //! Its own geometry merges into the loose mesh and the groups nested in it
 //! come out whole, one level up.

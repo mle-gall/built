@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! The sheet page of the Sheets workspace, native (docs/rust-sheets.md §3–4).
+//! The sheet page of the Sheets workspace, native.
 //! It draws the document (paper, ink, the frames' contents): its colours
 //! are the drawing's, outside the chrome tokens; the selection, the desk
 //! and its labels use the window's tokens.
@@ -231,7 +231,7 @@ impl Page {
         crate::sheet_tools::snap_sep(a, b, axis, mm, &self.cota_lines(None), thr)
     }
     /// The one dimension selected, unlocked: where a chain or a baseline
-    /// run carries on from (`_seed_run_from`, AutoCAD's DIMCONTINUE and
+    /// run carries on from (`_seed_run_from`, DIMCONTINUE and
     /// DIMBASELINE) — its points, its line's offset, its axis.
     fn run_seed(&self) -> Option<([f64; 2], [f64; 2], f64, String)> {
         let [k] = self.selection.as_slice() else { return None };

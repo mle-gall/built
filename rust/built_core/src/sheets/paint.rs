@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! The sheet painters' display list (docs/rust-sheets.md §3, §5).
+//! The sheet painters' display list.
 //!
 //! `Painter` keeps the state a QPainter keeps for the mm-space painters of
 //! views/composer.py (transform stack, pen, brush, font) and records what

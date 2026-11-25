@@ -1,5 +1,5 @@
 //! How a stored value is shown: lengths, areas, volumes and angles in the
-//! document's units (`docs/model-port.md`, units).
+//! document's units.
 //!
 //! `built_core.units` was the formatter; it is now a facade over these
 //! functions, which read the same unit table as the parser (`units.rs`).

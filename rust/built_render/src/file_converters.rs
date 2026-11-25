@@ -5,7 +5,7 @@ use pyo3::{
     types::{PyDict, PyList},
 };
 
-const DXF_HELP: &str = "To work on the drawing anyway: save it as DXF from your CAD program (or convert it with a free DWG → DXF converter such as ODA File Converter), then File ▸ Import ▸ AutoCAD DXF.";
+const DXF_HELP: &str = "To work on the drawing anyway: save it as DXF from your CAD program (or convert it with a free DWG → DXF converter such as ODA File Converter), then File ▸ Import ▸ .dxf.";
 
 fn label(win: &Bound<'_, PyAny>, text: &str) -> PyResult<String> {
     translated(win.py(), text, None)?.extract()

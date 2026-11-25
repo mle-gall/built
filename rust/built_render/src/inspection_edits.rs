@@ -99,7 +99,7 @@ fn name_definition(
         return Ok(());
     }
     // The protocol verb renames every copy, the kept template and this
-    // definition as one native step (docs/commands-port.md).
+    // definition as one native step.
     py.import("built_core.command_protocol")?
         .call_method1("rename_component", (view.getattr("history")?, definition, name))?;
     view.call_method0("notify_scene_changed")?;

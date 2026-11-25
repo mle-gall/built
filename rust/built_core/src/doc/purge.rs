@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! The purge survey (moved from `core/purge.py`, docs/commands-port.md):
+//! The purge survey (moved from `core/purge.py`):
 //! which tags and materials the document uses, and what carries a tag.
 //!
 //! A tag is a label an entity carries, never its owner, so emptying one

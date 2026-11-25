@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Install Revit family geometry and materials. The IFC record belongs to the host.
+//! Install .rfa family geometry and materials. The IFC record belongs to the host.
 use glam::DVec3;
 use pyo3::{
     exceptions::{PyImportError, PyRuntimeError, PyValueError},
@@ -45,7 +45,7 @@ fn read<'p>(py: Python<'p>, path: &str) -> PyResult<Obj<'p>> {
             let err = PyRuntimeError::new_err(
                 tr(
                     py,
-                    "The Revit family reader is not built. Run scripts/build_native.sh.",
+                    "The .rfa family reader is not built. Run scripts/build_native.sh.",
                 )?
                 .str()?
                 .to_string(),
@@ -69,7 +69,7 @@ fn rfa_triangle_mesh<'p>(
         np.call_method1("asarray", (o, np.getattr(dtype)?))?
             .call_method1("reshape", (-1, 3))
     };
-    let bad = || invalid(py, "Invalid Revit triangle mesh.");
+    let bad = || invalid(py, "Invalid .rfa triangle mesh.");
     let positions = flat(positions, "float64").map_err(|_| bad())?;
     let indices = flat(indices, "int64").map_err(|_| bad())?;
     let pos = positions
@@ -92,7 +92,7 @@ fn rfa_triangle_mesh<'p>(
             let j = usize::try_from(j)
                 .ok()
                 .filter(|&j| j < pts.nrows())
-                .ok_or_else(|| invalid(py, "Invalid Revit triangle index."))?;
+                .ok_or_else(|| invalid(py, "Invalid .rfa triangle index."))?;
             tri[i] = DVec3::new(pts[[j, 0]], pts[[j, 1]], pts[[j, 2]]);
         }
         if (tri[1] - tri[0]).cross(tri[2] - tri[0]).length() > 1e-12 {
@@ -289,11 +289,11 @@ fn build_family<'p>(
     payload: &Obj<'p>,
 ) -> PyResult<(Bound<'p, PyList>, Bound<'p, PyList>, Obj<'p>)> {
     if !val(payload, "schema")?.eq("built.rfa/1")? {
-        return Err(invalid(py, "Unsupported Revit family JSON schema."));
+        return Err(invalid(py, "Unsupported .rfa family JSON schema."));
     }
     let types = rows(payload, "types")?;
     if !types.is_truthy()? {
-        return Err(invalid(py, "The Revit family contains no types."));
+        return Err(invalid(py, "The .rfa family contains no types."));
     }
     let warnings = py
         .get_type::<PyList>()
@@ -364,7 +364,7 @@ fn build_family<'p>(
             let geometry = payload.get_item("geometries")?.get_item(&key)?;
             let values = comp.get_item("transform")?.extract::<Vec<f64>>()?;
             if values.len() != 16 || !values.iter().all(|v| v.is_finite()) {
-                return Err(invalid(py, "Invalid Revit component transform."));
+                return Err(invalid(py, "Invalid .rfa component transform."));
             }
             let grouped = PyDict::new(py);
             for part in geometry.get_item("parts")?.try_iter()? {
@@ -377,7 +377,7 @@ fn build_family<'p>(
                         (m.getattr("name")?.str()?.to_string(), m.getattr("color")?)
                     } else {
                         (
-                            "Revit".into(),
+                            ".rfa".into(),
                             (0.3, 0.6, 0.9).into_pyobject(py)?.into_any(),
                         )
                     };

@@ -92,7 +92,7 @@ impl Overlay {
     /// Replace only what changed: this frame's drawn `region` and the ink the
     /// last one left, read by `pixels(x0, y0, x1, y1)` as straight RGBA
     /// (zero outside the drawing). A tool's few marks then move a few
-    /// thousand pixels, not the whole window's (docs/render-glue-port.md).
+    /// thousand pixels, not the whole window's.
     pub fn upload_changed(&mut self, d: &wgpu::Device, q: &wgpu::Queue, w: u32, h: u32,
                           region: Option<[u32; 4]>, pixels: impl FnOnce([u32; 4]) -> Vec<u8>) {
         self.ensure(d, w, h);

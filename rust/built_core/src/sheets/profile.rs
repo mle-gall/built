@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! The ground under a terrain profile item's path (docs/rust-sheets.md
-//! step 4), as `ComposerWindow.profile_for` and `georef.profile
+//! The ground under a terrain profile item's path, as `ComposerWindow.profile_for` and `georef.profile
 //! .sample_profile` worked it out: stations along the path, each point
 //! taken to latitude and longitude through the scene's datum and read off
 //! the decoded DEM tiles (`georef.dem.DEMSampler`, bilinear, in float32

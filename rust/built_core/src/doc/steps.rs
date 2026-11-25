@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Native record steps (docs/commands-port.md): annotations, section planes,
+//! Native record steps: annotations, section planes,
 //! guides, reference images, survey paths, saved scenes and sheets.
 //!
 //! Each command is a `RecordStep` subclass with the retired Python class's

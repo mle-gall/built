@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The chrome's selection providers key on the selection's native revision
-(docs/render-glue-port.md, round 4), and the INI preference store sees a
+"""The chrome's selection providers key on the selection's native revision,
+and the INI preference store sees a
 change made by another handle or process without re-reading on every
 read."""
 from pathlib import Path

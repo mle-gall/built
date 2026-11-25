@@ -48,7 +48,7 @@ def _primitive_set():
 def test_primitives_are_pinned(dpr):
     """The loop moved from Python to AnnotationCanvas.draw_primitives. The
     digests are of the Python loop on the same canvas with the native paint
-    types, before the port (docs/render-glue-port.md)."""
+    types, before the port."""
     import hashlib
     from built_render import AnnotationCanvas
     from views.wgpu_overlay import paint_layer, selection_rectangle

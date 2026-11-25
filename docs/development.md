@@ -17,7 +17,7 @@ rust/built_app/target/release/built
 
 `scripts/build_native.sh` builds both extensions in release mode, installs
 them into the virtual environment, and runs a short engine check. Run it
-again after any change under `rust/`. The optional Revit family reader
+again after any change under `rust/`. The optional .rfa family reader
 (`rust/built_rfa`) is built when an `rvt-rs` checkout sits beside this
 repository; without it, `.rfa` import reports the reader missing.
 

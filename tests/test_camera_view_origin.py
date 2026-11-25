@@ -8,7 +8,7 @@ from built_core import Vec3 as V
 
 from built_core import scale_figure
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from tests.test_.skp_inference_gaps import _pick, use, refresh
+from tests.test_inference_and_face_cutting import _pick, use, refresh
 from tests.test_wgpu_soft_shadows import native
 from built_core import Input as Qt
 

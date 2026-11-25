@@ -1,6 +1,6 @@
 //! The tag-folder tree's queries (`built_core.layers`): a folder's parent, the
 //! folders inside one, and the order the Layers tab lists tags in, folders
-//! unfolded (`docs/model-port.md`, layers).
+//! unfolded.
 //!
 //! The tree is the document's `folder_parents` table over its folder list.
 //! A parent that is not a folder, or one that would make a loop, reads as

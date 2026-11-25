@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! A sheet item made by a placement tool (docs/rust-sheets.md step 6):
+//! A sheet item made by a placement tool:
 //! `ComposerWindow.place_tool`'s defaults for the tools a click or a drag
 //! places, the record built through its class (built_core.composition) and not
 //! yet added: the caller runs it as one step of the history.

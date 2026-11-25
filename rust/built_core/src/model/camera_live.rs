@@ -1,6 +1,6 @@
 //! The live camera's pose and projection (`built_core.camera.OrbitCamera`), on the
 //! sheets' `Cam` (`sheets/camera.rs`), so the viewport and the sheets use one
-//! implementation (`docs/model-port.md`, camera).
+//! implementation.
 //!
 //! Each function reads the camera's fields from the Python object and
 //! answers what `OrbitCamera` computed: eye, sight line, up, view and

@@ -3,7 +3,7 @@
 """The Rust drawing pass (built_core sheets::drawing) draws what the
 Python pass drew: the same segments, world points, kinds and layers, for
 every synthetic case of tests/hlr_parity_cases.py. The goldens were written
-by core/hlr.py before its loop moved to Rust (docs/rust-sheets.md §6)."""
+by core/hlr.py before its loop moved to Rust."""
 from __future__ import annotations
 
 import gzip

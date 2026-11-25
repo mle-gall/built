@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Native group transform steps (docs/commands-port.md): move, rotate,
+//! Native group transform steps: move, rotate,
 //! scale and flip whole groups, and change a group's axes.
 //!
 //! An instance moves by its matrix, a document field: the step's

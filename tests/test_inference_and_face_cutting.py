@@ -1,8 +1,6 @@
-"""CAD-style inference and face cutting, as the Metal view delivers them.
+"""Inference and face cutting, as the Metal view delivers them.
 
-Reported 2026-11-18: «we're still missing some of .skp intelligence like
-perpendicular snapping, face cut detection», «snapping sometimes doesn't
-work (not finding points)». The rules existed in ``built_core.snap``; what was
+The November 2026 report identified missing perpendicular snaps, face cuts and point snaps. The rules existed in ``built_core.snap``; what was
 missing:
 
 * the Metal view handed ``compute_snap`` a short list of its keywords: no

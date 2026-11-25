@@ -4,7 +4,7 @@
 
 The goldens in ``tests/fixtures/svg_parity/`` hold the text
 ``formats.svg_out.svg_text`` wrote for these groups in Python (integ/built
-60e017a8), before the lines path moved to Rust (docs/rust-sheets.md §6)."""
+60e017a8), before the lines path moved to Rust."""
 from __future__ import annotations
 
 import math

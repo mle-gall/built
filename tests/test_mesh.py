@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Shared-vertex, non-manifold connectivity mesh (built_core.mesh).
 
-Phase M0 of the topology migration (docs/halfedge-migration-plan.md): the new
+Phase M0 of the topology migration: the new
 model is built and tested in parallel; the running app is not wired to it yet.
 
 The point of the new model: vertices are shared objects, edges carry a radial

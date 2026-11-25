@@ -4,7 +4,7 @@
 formats.svg_out.svg_text) writes what the Python writer wrote for a view's
 line groups: the same text, byte for byte, and the same chains. The
 goldens were taken from the Python writer before the lines path moved to
-Rust (docs/rust-sheets.md §6)."""
+Rust."""
 from __future__ import annotations
 
 import gzip

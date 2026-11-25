@@ -544,7 +544,7 @@ fn built_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     placement_transform::register(m)?;
     reference_layers::register(m)?;
     definition_edits::register(m)?;
-    // The commands lane (docs/lane-ownership.md): native History steps.
+    // The commands lane: native History steps.
     doc::commands::register_commands(m)?;
     m.add_function(wrap_pyfunction!(structure::add_template_layers, m)?)?;
     m.add_function(wrap_pyfunction!(structure::apply_folder_parents, m)?)?;

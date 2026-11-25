@@ -74,7 +74,7 @@ def test_damaged_member_fails_before_any_model_is_published(tmp_path):
     name, extra = struct.unpack_from("<HH", raw, offset + 26)
     raw[offset + 30 + name + extra] ^= 1
     path.write_bytes(raw)
-    with pytest.raises(OSError, match=".skp ZIP"):
+    with pytest.raises(OSError, match=r"\.skp ZIP"):
         skp_vff_model(path, SimpleNamespace())
 
 

@@ -2,8 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Synthetic sheet items for the painter parity goldens
 (tests/test_sheet_paint_parity.py), recorded from the Python painters of
-views/composer.py through a recording QPainter before both went
-(docs/rust-sheets.md)."""
+views/composer.py through a recording QPainter before both went."""
 from __future__ import annotations
 
 import math

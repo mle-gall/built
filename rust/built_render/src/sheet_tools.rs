@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! The Sheets page's drawing tools that catch the model (docs/rust-sheets.md
-//! step 6): what each frame offers to snap to (its drawn edges' ends and
+//! The Sheets page's drawing tools that catch the model: what each frame offers to snap to (its drawn edges' ends and
 //! middles with their model points, and the edges themselves, sent by
 //! built_render.sheet_frames `snaps`), the snap search (the composer's
 //! `nearest_snap_point`: a corner or a middle first, else a point along an

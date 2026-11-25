@@ -1,6 +1,5 @@
 //! The selection's storage: what `built_core.ElementSet` holds, with
-//! a native snapshot readers can use without walking Python handles
-//! (`docs/model-port.md`, selection).
+//! a native snapshot readers can use without walking Python handles.
 //!
 //! Membership is by identity, as it always was: a mesh element (a
 //! `built_core.mesh` Vertex, Edge or Face, store views included) by its `key`,

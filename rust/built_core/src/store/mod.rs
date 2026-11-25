@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 //! `MeshStore`: the geometry of one mesh as columns instead of Python
-//! objects (Rust core plan, phase 2 step 2; design in
-//! `docs/meshstore-design.md`).
+//! objects.
 //!
 //! Same model as `core/mesh.py` — shared vertices, edges with a radial
 //! (non-manifold, ordered, with multiplicity) face list, faces as an outer

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! Typed views of the sheet records (docs/rust-sheets.md §1).
+//! Typed views of the sheet records.
 //!
 //! The records live in the document arena (`DocRecord` + `DocAttr`,
 //! `core/composition.py` declares their fields); this reads them as Rust

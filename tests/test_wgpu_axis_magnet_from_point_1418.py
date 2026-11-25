@@ -5,12 +5,12 @@ ends exactly on the red axis without the arrow lock; away from every
 reference the magnet still slides.
 
 Drives an unshown ``WgpuView`` with the real Line tool (the fixture of
-``test_.skp_inference_gaps``)."""
+``test_inference_and_face_cutting``)."""
 import pytest
 from built_core import Vec3 as V
 
 from tests.headless_gpu import mouse
-from tests.test_.skp_inference_gaps import click, refresh, view  # noqa: F401
+from tests.test_inference_and_face_cutting import click, refresh, view  # noqa: F401
 
 
 def _open_rectangle(view):

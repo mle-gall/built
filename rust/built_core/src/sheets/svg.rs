@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! The SVG writer of a view's line groups (docs/export-svg.md §3, docs/rust-sheets.md §5).
+//! The SVG writer of a view's line groups (docs/export-svg.md §3).
 //!
 //! Byte for byte what `formats/svg_out.py`'s `svg_text` wrote for the
 //! lines: one Inkscape layer per non-empty group, its segments chained into

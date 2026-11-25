@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Native Hide and Tag steps (docs/commands-port.md): hide or show
+//! Native Hide and Tag steps: hide or show
 //! objects, faces and edges, and put entities on a tag.
 //!
 //! Placements are written as one document op over the selection. Faces

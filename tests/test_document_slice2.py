@@ -1,4 +1,4 @@
-"""Slice 2 of the Rust document (docs/rust-document-model.md §11): custom
+"""Slice 2 of the Rust document: custom
 attributes and scene tables as document values (tracked containers), the
 materials registry and kept components as document lists, tag styles, the
 tree invariant, bulk writes and reads, the viewport's detached proxies and

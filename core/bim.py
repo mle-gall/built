@@ -4,7 +4,7 @@
 
 The project's non-negotiable principle: the modeller is push/pull
 freedom, and BIM lives as *metadata applied to selected geometry* (the
-BlenderBIM pattern), never as rigid Revit-style primitives. A tag turns a set
+BlenderBIM pattern), never as rigid parametric primitives. A tag turns a set
 of faces (or a whole group) into a named IFC object; tagged objects feed the
 quantity takeoff — and later the IFC export to IngePresupuestos. Untagged
 geometry stays plain drawing.

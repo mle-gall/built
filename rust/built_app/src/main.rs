@@ -1,6 +1,6 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
-//! `built`: the Rust app shell (docs/rust-port-plan.md, R1.1).
+//! `built`: the Rust app shell.
 //!
 //! The event loop is winit's, on the main thread. The window's NSView goes
 //! to the wgpu renderer (linked in, see `python.rs`); the document, the
@@ -287,7 +287,7 @@ struct Win {
 
 /// `BUILT_PERF=1`: pointer-move, wheel (slide, notch) and gesture (pinch,
 /// rotate) handler times and frame times, reported (and
-/// reset) by each scripted `state` step (docs/rust-tools.md §13).
+/// reset) by each scripted `state` step.
 mod perf {
     use std::sync::Mutex;
     use std::time::Instant;
@@ -1673,7 +1673,7 @@ impl App {
                         }
                     }
                     // The frame call less the renderer's own encode: Python
-                    // glue and the Rust calls it makes (docs/render-glue-port.md).
+                    // glue and the Rust calls it makes.
                     perf::note_ms("py_frame_ms", (t0.elapsed().as_secs_f64() * 1e3 - cpu).max(0.));
                 }
                 if drew {

@@ -3,9 +3,9 @@
 pub const IMPORTS: &[(&str, &str)] = &[
     ("import:skp", ".skp…"),
     ("import:dae", "COLLADA (.dae)…"),
-    ("import:dxf", "DXF (.dxf)…"),
-    ("import:dwg", "DWG (.dwg)…"),
-    ("import:rfa", "Revit family (.rfa)…"),
+    ("import:dxf", ".dxf…"),
+    ("import:dwg", ".dwg…"),
+    ("import:rfa", ".rfa family…"),
     ("import:glb", "glTF (.glb, .gltf)…"),
     ("import:igz", "Built or Built model, as a group…"),
 ];

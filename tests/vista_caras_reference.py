@@ -5,7 +5,7 @@
 The faces a view shows were worked out twice: by the Rust engine
 (``faces_view``, ``visible_parts``) and by a Python pass of the same rules
 (``_face_geometry_py``, ``_visible_parts_py``, with its overlap grid and
-batched manifold3d unions). The Python pass is gone (``docs/model-port.md``);
+batched manifold3d unions). The Python pass is gone;
 the tests that held the engine to it compare with its answers here, taken at
 ``6f3a2576`` on the same scenes (``tests/fixtures/vista_caras_python.json.gz``).
 

@@ -56,7 +56,7 @@ def canvas_rgba(draw, size=(360, 100), dpr=1):
 def test_snap_marker_is_pinned(kind, dpr):
     """The marker moved from Python painting to AnnotationCanvas.draw_snap.
     The digests are of the Python marker on the same canvas with the
-    native paint types, before the port (docs/render-glue-port.md); the
+    native paint types, before the port; the
     Python marker in its turn matched GL's within one per channel. Labels
     are laid out once and placed by a transform since, which moves a few
     edge pixels; the pin is of the marker and its guides."""

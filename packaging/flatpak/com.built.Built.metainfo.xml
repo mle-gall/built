@@ -383,7 +383,7 @@
         centred, read head to the left, the line runs on under the text,
         arrows by default; radius and diameter with one click on the arc;
         the angular dimension finally snaps; the forced-straight and the
-        baseline dimensions of AutoCAD; and, in the model, dimensions that
+        baseline dimensions; and, in the model, dimensions that
         hold their vertices — scale the drawing and the dimension resizes
         and re-measures — the first thing a user of DriveMeca's video
         missed, with Move sliding the line and the ends a choice. Also the
@@ -399,7 +399,7 @@
         centrado, se lee girando la cabeza a la izquierda, la línea se
         prolonga bajo el texto, flechas por defecto—; radio y diámetro con
         un clic sobre el arco; la angular que por fin engancha; la cota
-        forzada recta y la línea base de AutoCAD; y en el modelo, cotas
+        forzada recta y la línea base; y en el modelo, cotas
         que siguen a la geometría —escalas el dibujo y la cota se
         redimensiona y vuelve a medir—, lo primero que echó en falta un
         usuario del vídeo de DriveMeca, con Mover desplazando la línea y

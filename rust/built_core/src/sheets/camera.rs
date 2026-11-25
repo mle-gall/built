@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! The camera a sheet frame looks through (docs/rust-sheets.md step 4):
+//! The camera a sheet frame looks through:
 //! core/camera.py's OrbitCamera (eye, up, view and projection) and
 //! core/composition.py's `apply_frame_camera` (the view or scene it shows,
 //! a true 90° plan, the frame's own orbit, its turn, exact scale or the

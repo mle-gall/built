@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Native vertex edits (docs/commands-port.md): move, flip, rotate and
+//! Native vertex edits: move, flip, rotate and
 //! scale shared vertices, then fold the faces they warped.
 //!
 //! On a store mesh the kernel's entry points (`command_move_vertices`,

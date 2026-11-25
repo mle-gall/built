@@ -265,15 +265,15 @@ def test_smoothing_inside_a_component_reaches_its_copies(native_window, monkeypa
     assert _soft(mesh) == 0
 
 
-def test_the_dialog_softens_across_materials_by_default_as_.skp():
-    """the modeller's Soften Edges has no material rule: the dialog starts
+def test_the_dialog_softens_across_materials_by_default():
+    """Soften Edges has no material rule: the dialog starts
     with «Soften between different materials» ticked."""
     from built_render import OperationForm
     options = OperationForm.soften("30").values()
     assert options["materials"] and options["coplanar"]
 
 
-# ---- «Smooth normals» (the modeller's Soften Edges): soft, and smooth or not ----
+# ---- «Smooth normals» (Soften Edges): soft, and smooth or not ----
 
 def _flat(mesh):
     return sum(bool(e.soft and e.flat) for e in mesh.edges)
@@ -356,7 +356,7 @@ def test_metal_shades_a_soft_only_edge_flat_without_its_line():
     assert lines(flat) == lines(smooth) < lines(hard)
 
 
-def test_the_dialog_has_smooth_normals_ticked_as_.skp():
+def test_the_dialog_has_smooth_normals_ticked():
     from built_render import OperationForm
     form = OperationForm.soften("30")
     assert form.values()["smooth"]

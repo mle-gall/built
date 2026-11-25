@@ -1,5 +1,5 @@
 //! A group's derived frame (the yaw about Z whose footprint is tightest)
-//! and its oriented box, from `built_core.group` (`docs/model-port.md`, bounds).
+//! and its oriented box, from `built_core.group`.
 //!
 //! `frame_from_points` picks the smallest of tied areas on symmetric shapes,
 //! so it is ported operation for operation, the convex hull's pruning

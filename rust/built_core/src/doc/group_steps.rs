@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Native group and component steps (docs/commands-port.md): replace,
+//! Native group and component steps: replace,
 //! keep and convert components, re-edit 3D text, reparent, merge, make
 //! unique, insert, delete, file into the structure and split into pieces.
 //! Each is a [`RecordStep`] subclass under the retired Python class's name,

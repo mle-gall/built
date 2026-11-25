@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! The page display list (docs/rust-sheets.md §3): one sheet as the
+//! The page display list: one sheet as the
 //! renderer paints it, in paper millimetres. The renderer
 //! (`built_render::ui::page`) parses this JSON; the two crates are
 //! separate Python extensions, so the snapshot crosses as a string.

@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 //! The document model: placements, scene roots and tags in one arena,
 //! known by `(slot, generation)` keys, with a journal that makes every
-//! History step a transaction (docs/rust-document-model.md).
+//! History step a transaction.
 //!
 //! One arena per process. Every write goes through [`Doc::write`] or the
 //! list ops, which journal it while a transaction is open on the thread
@@ -1618,7 +1618,7 @@ impl Doc {
     /// The placements whose `fields` (any field when empty) `ops` changed,
     /// or whose child list they edited when `lists` is set: each once, in
     /// the order first written. What the renderer re-validates after a
-    /// step (docs/rust-document-model.md §5).
+    /// step.
     pub fn written_placements(&self, ops: &[Op], fields: &[Field], lists: bool) -> Vec<Key> {
         let mut seen: FastSet<Key> = FastSet::default();
         let mut out = Vec::new();

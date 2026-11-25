@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """The composer's sacred math: paper mm × scale → metres of model, and the
-camera settings that realise it (docs/composer-plan.md)."""
+camera settings that realise it."""
 import built_core
 import math
 

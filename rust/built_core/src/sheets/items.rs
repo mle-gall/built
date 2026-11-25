@@ -7,7 +7,7 @@
 //!
 //! `Extra` carries the strings that still come from Python: translations,
 //! expanded fields (`{lamina}`), levels formatted in the document's units,
-//! line-type patterns (docs/python-glue.md).
+//! line-type patterns.
 
 use super::metrics::text_width_mm;
 use super::model::Fields;

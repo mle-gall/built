@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Linked files must answer as ``core/links.py``'s Python did before its
-logic moved to Rust (``docs/model-port.md``, Round 9).
+logic moved to Rust.
 
 ``tests/fixtures/links_golden.json.gz`` holds, for seeded source files and
 seeded runs of the link operations (link, copy, save and reopen, the source

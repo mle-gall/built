@@ -5,7 +5,7 @@ of a hidden back edge or of its midpoint. In X-ray nothing hides anything,
 so the back edge still lends its height there.
 
 Drives an unshown ``WgpuView`` with the real Line tool (the fixture of
-``test_.skp_inference_gaps``): the rules are ``built_core.snap``'s, the
+``test_inference_and_face_cutting``): the rules are ``built_core.snap``'s, the
 candidates and the occlusion test are the Metal view's own."""
 import math
 
@@ -13,7 +13,7 @@ import pytest
 from built_core import Vec3 as V
 from tests.headless_gpu import mouse
 
-from tests.test_.skp_inference_gaps import click, refresh, view  # noqa: F401
+from tests.test_inference_and_face_cutting import click, refresh, view  # noqa: F401
 
 
 def _box(mesh, x0, y0, z0, dx, dy, dz):

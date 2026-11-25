@@ -1,4 +1,4 @@
-//! The render-glue lane (docs/lane-ownership.md, docs/render-glue-port.md):
+//! The render-glue lane:
 //! what replaced `views/icons.py`, `views/tree_icons.py`'s marks,
 //! `views/wgpu_billboards.py`'s measuring, the per-frame document list and
 //! the tools' viewport on the resident view (`native_tools`).
