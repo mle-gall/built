@@ -596,7 +596,7 @@ pub(super) fn starter_components<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 
 /// Placed and retained component definitions for this document revision.
-fn components_in_model<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn components_in_model<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, win) = (a.get_item(0)?, a.get_item(1)?);
     let scene = win.getattr("viewport")?.getattr("scene")?;
@@ -832,7 +832,7 @@ pub(super) fn group_by_uid<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(none(py))
 }
 
-fn select<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn select<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let viewport = a.get_item(0)?.getattr("viewport")?;
     let scene = viewport.getattr("scene")?;

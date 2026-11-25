@@ -68,6 +68,7 @@ pub mod desktop_menu;
 pub mod extension_menu;
 mod extension_setup;
 mod extension_api;
+mod plugin_panels;
 mod status_hints;
 mod command_metadata;
 mod model_views;

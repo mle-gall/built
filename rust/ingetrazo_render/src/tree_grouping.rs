@@ -5,6 +5,7 @@ pub mod placement_controls;
 pub mod row_actions;
 pub mod tag_controls;
 pub mod tag_visibility;
+use crate::document_registration::view::calls;
 use super::model_edit::translated;
 use pyo3::{
     prelude::*,
@@ -300,7 +301,7 @@ pub fn tree_group_action(
         let scene = win.getattr("viewport")?.getattr("scene")?;
         let tree = Occurrences::read(&scene, clicked)?;
         let groups = PyList::new(win.py(), tree.targets.iter().map(|&i| &tree.rows[i].group))?;
-        win.py().import("views.wgpu_ui")?.call_method1("_isolate", (win, groups))?;
+        calls::isolate(win, groups.as_any())?;
         return Ok(());
     }
     if matches!(verb, "pickrow" | "toggleitem" | "roweye" | "rowlock") {

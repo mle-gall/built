@@ -100,3 +100,20 @@ def test_extension_import_paths_resolve_to_the_native_form_and_dialog_modules():
 
     assert import_module("views.chrome_forms") is chrome_forms
     assert import_module("views.chrome_dialogs") is chrome_dialogs
+
+
+def test_standalone_plugin_can_import_the_native_viewport_and_tool_packages():
+    import subprocess
+    import sys
+
+    subprocess.run([sys.executable, "-c", """
+from tools.line import LineTool
+from views.viewport import Viewport, DocumentInteraction
+from core.plugin_panels import field
+from views.extension_api import ExtensionApp
+from views import document_controller, document_interaction
+assert Viewport is document_controller.DocumentController
+assert DocumentInteraction is document_interaction.DocumentInteraction
+assert callable(LineTool)
+assert field("x", "Length", "number", 3)["value"] == 3
+"""], check=True, timeout=20)

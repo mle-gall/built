@@ -307,7 +307,7 @@ pub fn tool_preview_hooks(
 pub fn register_tool_adapter<'py>(cls: &Obj<'py>) -> Reply<'py> {
     let py = cls.py();
     let factory =
-        Registrar::new(py)?.with_plugin_method(py.import("tools")?.getattr("_plugin_method")?);
+        Registrar::new(py)?.with_plugin_method(py.import("views")?.getattr("_plugin_method")?);
     let module: String = cls.getattr("__module__")?.extract()?;
     let factory = factory.with_module_annotations(&py.import(&module)?.dict())?;
     let name: String = cls.getattr("__name__")?.extract()?;

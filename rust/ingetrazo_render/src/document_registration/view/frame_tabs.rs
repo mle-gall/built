@@ -187,7 +187,7 @@ fn can_move<'py>(a: &Args<'py>) -> Reply<'py> {
 /// (`ingetrazo_render.DocumentTabs`): `.sync(renderer, win, left)` sends
 /// what changed, once a frame. A stand-in renderer without one (tests)
 /// leaves the record on the view.
-fn document_tabs<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn document_tabs<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let view = a.get_item(0)?;
     let record = py.import("ingetrazo_render")?.getattr("DocumentTabs")?;
@@ -325,7 +325,7 @@ fn sync_host_context<'py>(a: &Args<'py>) -> Reply<'py> {
 
 /// "Open source": the linked file in a tab of its own, right of the
 /// project it is linked into (a ⛓ tab), or its tab brought to the front.
-fn open_link_source<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn open_link_source<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (win, path, mount) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?);
     let host = attr(&win, "_doc")?;
