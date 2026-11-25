@@ -230,8 +230,8 @@ def test_followme_preselected_path_undo():
 def test_container_paint_updates_instance_without_bake():
     from core.group import Group
     from core.mesh import Mesh
-    from views.wgpu_scene import pack_scene
-    from views.wgpu_updates import InstanceUpdates
+    from ingetrazo_core import pack_scene
+    from ingetrazo_core import InstanceUpdates
     scene, history, native, _ = prepare(PaintTool())
     mesh = Mesh()
     face = mesh.add_face([QVector3D(), QVector3D(2, 0, 0), QVector3D(0, 2, 0)])
@@ -260,8 +260,8 @@ def test_container_paint_updates_instance_without_bake():
 def test_face_paint_inside_group_rebakes_mesh():
     from core.group import Group
     from core.mesh import Mesh
-    from views.wgpu_scene import pack_scene
-    from views.wgpu_updates import InstanceUpdates
+    from ingetrazo_core import pack_scene
+    from ingetrazo_core import InstanceUpdates
 
     scene, history, native, _ = prepare(PaintTool())
     group = Group(Mesh())
@@ -288,7 +288,7 @@ def test_rotate_placement_preview_cancels_without_document_mutation():
     from core.group import Group
     from core.mesh import Mesh
     from ingetrazo_core import Matrix4 as QMatrix4x4
-    from views.wgpu_scene import pack_scene
+    from ingetrazo_core import pack_scene
     scene, history, native, _ = prepare(RotateTool())
     mesh = Mesh()
     mesh.add_face([QVector3D(), QVector3D(2, 0, 0), QVector3D(0, 2, 0)])

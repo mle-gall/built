@@ -11,7 +11,7 @@ from core.group import Group
 from core.layers import LINK_UNTAGGED_SUFFIX, Layer
 from core.mesh import Mesh
 from core.scene import Scene
-from views import wgpu_scene
+import ingetrazo_core
 from views.document_interaction import _paint_of
 
 
@@ -70,10 +70,10 @@ def _scene():
 def test_native_rows_match_the_proxy_walk(by_layer):
     scene = _scene()
     scene.display_style.color_by_layer = by_layer
-    state = wgpu_scene._placement_state(scene)
+    state = ingetrazo_core.PlacementState(scene)
     vp = SimpleNamespace(scene=scene)
-    native = list(wgpu_scene._native_records(scene, scene.groups))
-    proxied = list(wgpu_scene._proxy_records(scene, scene.groups, SimpleNamespace(scene=scene), state))
+    native = list(ingetrazo_core.native_records(scene, scene.groups))
+    proxied = list(ingetrazo_core.proxy_records(scene, scene.groups, SimpleNamespace(scene=scene), state))
     assert [r[0] for r in native] == [r[0] for r in proxied]
     for (g, world, rep, flags, (mesh, billboard, uid)), (_g, world2, proxy, flags2) in zip(native, proxied):
         assert flags == flags2, g.name
@@ -88,6 +88,6 @@ def test_native_rows_match_the_proxy_walk(by_layer):
 def test_an_open_group_keeps_the_proxy_walk():
     scene = _scene()
     scene.begin_group_edit(scene.groups[0])
-    state = wgpu_scene._placement_state(scene)
-    rows = list(wgpu_scene._placement_records(scene, scene.groups, SimpleNamespace(scene=scene), state))
+    state = ingetrazo_core.PlacementState(scene)
+    rows = list(ingetrazo_core.placement_records(scene, scene.groups, SimpleNamespace(scene=scene), state))
     assert all(r[4] is None for r in rows)

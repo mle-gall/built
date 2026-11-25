@@ -146,7 +146,7 @@ def test_a_level_widens_the_penumbra_on_metal(native):
     pixels sit between full shade and full sun than with the crisp map,
     and the core of the shadow stays as dark."""
     from ingetrazo_core import Matrix4 as QMatrix4x4
-    from views.wgpu_scene import pack_scene
+    from ingetrazo_core import pack_scene
     scene = _wall_scene()
     pack_scene(scene).upload(native)
     view = QMatrix4x4()

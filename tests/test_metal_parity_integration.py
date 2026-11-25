@@ -11,7 +11,7 @@ from core.scene import Scene
 from core.group import Group
 from core.layers import Layer
 from core.mesh import Mesh
-from views.wgpu_scene import pack_scene, VERTEX
+from ingetrazo_core import pack_scene, VERTEX
 from views.wgpu_parity import face_ranges, has_transparency, hidden_geometry, preview_mesh
 from views.wgpu_style import style_payload
 from tests.test_metal_parity_input import view, face, pixel

@@ -11,8 +11,8 @@ from core.mesh import Mesh
 from core.scene import Scene
 from tools.base import ToolContext
 from tools.tape import TapeMeasureTool
-from views.wgpu_scene import pack_scene
-from views.wgpu_updates import InstanceUpdates
+from ingetrazo_core import pack_scene
+from ingetrazo_core import InstanceUpdates
 from ingetrazo_render import TOOL_DISPATCH, move_command
 
 
@@ -98,7 +98,7 @@ def test_equal_leaf_uids_keep_distinct_metal_rows_on_hide():
     assert_matches_fresh_pack(tracker, scene)
     assert history.undo()
     from core.agent_facets import set_display
-    from views.wgpu_scene import VISIBILITY_FILTERED
+    from ingetrazo_core import VISIBILITY_FILTERED
     vp = SimpleNamespace(scene=scene, update=lambda: None)
     set_display(vp, {'facet': 'occurrence', 'eq': packed.row_key(right)})
     filtered = pack_scene(scene)
@@ -109,7 +109,7 @@ def test_equal_leaf_uids_keep_distinct_metal_rows_on_hide():
 
 def test_move_one_row_without_bake(monkeypatch):
     scene, updates = fixture_scene()
-    monkeypatch.setattr('views.wgpu_updates.pack_scene', lambda *a: (_ for _ in ()).throw(AssertionError('bake')))
+    monkeypatch.setattr('ingetrazo_core.pack_scene', lambda *a: (_ for _ in ()).throw(AssertionError('bake')))
     scene.groups[1].xform.translate(4, 5, 6)
     ids, rows = updates.diff(scene)
     assert ids.tolist() == [1]
@@ -138,7 +138,7 @@ def test_shared_mutation_bakes_once(monkeypatch):
     scene, updates = fixture_scene()
     calls = []
     original = pack_scene
-    monkeypatch.setattr('views.wgpu_updates.pack_scene', lambda scene, **kw: (calls.append(scene), original(scene, **kw))[1])
+    monkeypatch.setattr('ingetrazo_core.pack_scene', lambda scene, **kw: (calls.append(scene), original(scene, **kw))[1])
     mesh = scene.groups[0].mesh
     mesh.move_vertex(mesh.vertices[0], QVector3D(0, 0, 2))
     renderer = Renderer()
@@ -212,7 +212,7 @@ def test_history_journal_limits_move_discovery(monkeypatch):
     ids, rows = updates.diff(scene)
     assert ids.tolist() == [0]
     updates.apply(ids, rows)
-    monkeypatch.setattr('views.wgpu_updates.iter_groups', lambda *a: (_ for _ in ()).throw(AssertionError('scan')))
+    monkeypatch.setattr('core.purge.iter_groups', lambda *a: (_ for _ in ()).throw(AssertionError('scan')))
     history.execute(TagGroupsCommand(scene.groups, 'IfcWall'))
     renderer = Renderer()
     updates.apply(*updates.diff(scene), renderer)
@@ -470,7 +470,7 @@ def test_replacement_preserves_full_material_rows_and_resident_texture_ids(tmp_p
 
 def test_drag_preview_batches_rows_without_rendering_ids():
     from ingetrazo_render import NativeTools
-    from views.wgpu_scene import INSTANCE
+    from ingetrazo_core import INSTANCE
     renderer = Renderer()
     packed = SimpleNamespace(instances=np.zeros(2000, dtype=INSTANCE))
     view = SimpleNamespace(renderer=renderer, packed=packed)
@@ -496,7 +496,7 @@ def test_mesh_history_journal_does_not_walk_placements(monkeypatch):
     mesh = scene.mesh
     history.execute(SnapshotMutation(lambda s: s.mesh.move_vertex(
         s.mesh.vertices[0], QVector3D(0, 0, 1))))
-    monkeypatch.setattr('views.wgpu_updates.iter_groups',
+    monkeypatch.setattr('core.purge.iter_groups',
                         lambda *a: (_ for _ in ()).throw(AssertionError('placement scan')))
     updates.apply(*updates.diff(scene))
     assert len(updates.changed) == 1
@@ -597,7 +597,7 @@ def test_mesh_history_edit_inside_nested_container_does_not_repack(monkeypatch):
     scene.end_group_edit()
     calls = []
     original = pack_scene
-    monkeypatch.setattr('views.wgpu_updates.pack_scene',
+    monkeypatch.setattr('ingetrazo_core.pack_scene',
                         lambda s, **kw: (calls.append(len(s.groups)), original(s, **kw))[1])
     updates.apply(*updates.diff(scene))
     assert calls == [1]                       # one prototype, not the scene
@@ -677,15 +677,17 @@ def test_component_edit_deep_in_nested_groups_rewrites_one_row(monkeypatch):
     for group in (root, inner, leaf):
         scene.begin_group_edit(group)
     assert scene.mesh is not proto                       # the world copy
-    from views import wgpu_scene
+    import ingetrazo_core
+
+    walk = ingetrazo_core.placement_records
 
     def records(scene, roots, *rest):
         assert not roots, 'placement walk'
-        return wgpu_scene._placement_records(scene, roots, *rest)
-    monkeypatch.setattr('views.wgpu_updates._placement_records', records)
+        return walk(scene, roots, *rest)
+    monkeypatch.setattr('ingetrazo_core.placement_records', records)
     bakes = []
     original = pack_scene
-    monkeypatch.setattr('views.wgpu_updates.pack_scene',
+    monkeypatch.setattr('ingetrazo_core.pack_scene',
                         lambda s, **kw: (bakes.append(len(s.groups)), original(s, **kw))[1])
 
     def move():
@@ -729,12 +731,14 @@ def test_reserved_room_takes_the_first_append_without_a_copy():
     with ThreadPoolExecutor(1) as pool:
         updates.reserve(pool)
         old = updates.adopt_reserved(wait=True)
-    assert old is not None and updates._store is not None
-    store = updates._store[0]
+    assert old is not None and updates.packed.room is not None
+    room = updates.packed.room
     mesh = scene.groups[0].mesh
     mesh.add_face([QVector3D(0, 0, 1), QVector3D(1, 0, 1), QVector3D(0, 1, 1)])
     updates.apply(*updates.diff(scene))
-    assert updates.packed.vertices.base is store and len(updates.packed.vertices) > size
+    # Appended into the reserved room: the same allocation, not a copy.
+    assert updates.packed.room is room and len(updates.packed.vertices) > size
+    assert len(updates.packed.vertices) <= room.capacity
     assert_matches_fresh_pack(updates, scene)
 
 
@@ -806,14 +810,14 @@ def test_draw_snapshot_and_guides_do_not_scan_unrelated_placements(monkeypatch):
     scene.begin_group_edit(scene.groups[0])
     updates.remember_edit_path()
     updates.apply(*updates.diff(scene))
-    original = __import__('views.wgpu_updates', fromlist=['_placement_records'])._placement_records
+    original = __import__('ingetrazo_core').placement_records
 
     def bounded(scene, roots, *args):
         roots = list(roots)
         assert not roots, 'small edit traversed unrelated placements'
         return original(scene, roots, *args)
 
-    monkeypatch.setattr('views.wgpu_updates._placement_records', bounded)
+    monkeypatch.setattr('ingetrazo_core.placement_records', bounded)
     for command in (SnapshotCompound([AddEdgeCommand(QVector3D(8, 0, 0), QVector3D(9, 0, 0))]),
                     AddGuideCommand(Guide(QVector3D(), QVector3D(1, 0, 0)))):
         history.execute(command)

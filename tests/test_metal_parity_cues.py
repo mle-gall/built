@@ -20,7 +20,7 @@ from tests.controller_surface import ControllerSurface as Viewport
 from views.wgpu_annotations import AnnotationLayout, draw_tool_feedback
 from views.wgpu_overlay import draw_snap_indicator
 from tests.raster_samples import pixels
-from views.wgpu_scene import VERTEX, pack_scene
+from ingetrazo_core import VERTEX, pack_scene
 from tests.test_metal_parity_overlays import equal, painted
 
 SIZE = (360, 200)

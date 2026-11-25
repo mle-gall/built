@@ -119,7 +119,7 @@ def test_metal_visibility_uses_instance_updates_without_repack(monkeypatch):
     scene.groups[0].layer = 'A'
     updates.apply(*updates.diff(scene), Renderer())
     old_key, old_bounds = _paint_key(scene), scene._bounds_key()
-    monkeypatch.setattr('views.wgpu_updates.pack_scene', lambda *a, **k: (_ for _ in ()).throw(AssertionError('repack')))
+    monkeypatch.setattr('ingetrazo_core.pack_scene', lambda *a, **k: (_ for _ in ()).throw(AssertionError('repack')))
     history = History(scene)
     commands.set_tag_state(history, folders=['folder'], visible=False)
     assert scene._bounds_key() != old_bounds

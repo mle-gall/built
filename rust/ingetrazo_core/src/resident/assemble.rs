@@ -16,11 +16,11 @@ type Obj<'py> = Bound<'py, PyAny>;
 
 /// Beyond this distance from the frame origin f32 coordinates lose the
 /// precision the model needs (`core.coordinate_frame.REBASE_DISTANCE`).
-const REBASE_DISTANCE: f64 = 512.;
+pub(super) const REBASE_DISTANCE: f64 = 512.;
 
 /// `core.coordinate_frame.choose_origin`: keep the frame while the centre
 /// stays within reach of it, else move it to the centre's whole metres.
-fn choose_origin(center: [f64; 3], previous: [f64; 3]) -> [f64; 3] {
+pub(super) fn choose_origin(center: [f64; 3], previous: [f64; 3]) -> [f64; 3] {
     let reach = (0..3).map(|k| (center[k] - previous[k]).abs()).fold(0., f64::max);
     if !center.iter().all(|v| v.is_finite()) || reach <= REBASE_DISTANCE {
         previous
@@ -135,19 +135,16 @@ fn command(table: &mut [u8], code: usize, count: u32, first: u32, base: u32, sta
 
 /// The resident buffers of a pack.
 ///
-/// `meshes` are the prototypes' source arrays (`_source_arrays`), in code
-/// order; `codes`, `matrices`, `flags` and `paints` describe the placement
+/// `meshes` are the prototypes' source arrays (`source_arrays`), in code
+/// order; `codes`, `worlds`, `flags` and `paints` describe the placement
 /// rows; `coordinates` is `(origin, box, wide)` per prototype. Returns the
 /// fields of the `PackedScene` this side computes.
-#[pyfunction]
-#[pyo3(signature = (meshes, codes, matrices, flags, paints, tints, coordinates, billboard_codes, with_maps,
-    previous_origin, wide, hypot))]
 #[allow(clippy::too_many_arguments)]
-fn assemble_scene<'py>(
+pub(super) fn assemble<'py>(
     py: Python<'py>,
     meshes: &Bound<'py, PyList>,
     codes: Vec<usize>,
-    matrices: numpy::PyReadonlyArray3<'py, f64>,
+    mut worlds: Vec<[[f64; 4]; 4]>,
     flags: Vec<u32>,
     paints: Vec<u32>,
     tints: Vec<Option<Vec<f64>>>,
@@ -161,7 +158,7 @@ fn assemble_scene<'py>(
     let np = py.import("numpy")?;
     let prototype_count = meshes.len();
     let rows = codes.len();
-    if flags.len() != rows || paints.len() != rows || tints.len() != rows
+    if flags.len() != rows || paints.len() != rows || tints.len() != rows || worlds.len() != rows
         || coordinates.len() != prototype_count || codes.iter().any(|code| *code >= prototype_count)
     {
         return Err(PyValueError::new_err("placement rows do not match their prototypes"));
@@ -215,13 +212,6 @@ fn assemble_scene<'py>(
     }
 
     // The rows: world matrices in the model frame, then in the view frame.
-    let matrices = matrices.as_array();
-    if matrices.shape() != [rows, 4, 4] {
-        return Err(PyValueError::new_err("a placement matrix is 4×4"));
-    }
-    let mut worlds: Vec<[[f64; 4]; 4]> = (0..rows)
-        .map(|row| std::array::from_fn(|r| std::array::from_fn(|c| matrices[[row, r, c]])))
-        .collect();
     let mut origin: [f64; 3] = previous_origin.extract()?;
     let mut moved = false;
     let mut world_bounds = [[0.; 3]; 2];
@@ -336,10 +326,6 @@ fn assemble_scene<'py>(
 fn bytemuck_bytes(values: &[f32]) -> &[u8] {
     // SAFETY: f32 has no padding and any byte pattern is a valid u8.
     unsafe { std::slice::from_raw_parts(values.as_ptr().cast::<u8>(), std::mem::size_of_val(values)) }
-}
-
-pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(assemble_scene, m)?)
 }
 
 #[cfg(test)]

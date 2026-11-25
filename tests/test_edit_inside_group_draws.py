@@ -26,7 +26,7 @@ def _box_group():
 
 
 def _uploaded_edges(vp):
-    from views.wgpu_scene import pack_scene
+    from ingetrazo_core import pack_scene
     packed = pack_scene(vp.scene)
     return sum(int(cmd['count']) for cmd in packed.edge_commands) // 2
 

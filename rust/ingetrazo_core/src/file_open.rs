@@ -176,19 +176,19 @@ fn prepare(
     packing.__call__(py, 0., "Preparing the view…".into())?;
     args.set_item("progress", Py::new(py, packing)?)?;
     let focus = py
-        .import("views.wgpu_scene")?
+        .import("ingetrazo_core")?
         .getattr("open_focus")?
         .call1((&scene,))?;
     args.set_item("focus", focus)?;
     let packed = py
-        .import("views.wgpu_scene")?
+        .import("ingetrazo_core")?
         .getattr("pack_scene")?
         .call((&scene,), Some(&args))?;
     report(0.97, 0.).__call__(py, 0., "Preparing graphics buffers…".into())?;
     packed.call_method0("prepare_upload")?;
     report(0.98, 0.).__call__(py, 0., "Indexing the model…".into())?;
     let tracker = py
-        .import("views.wgpu_updates")?
+        .import("ingetrazo_core")?
         .getattr("InstanceUpdates")?
         .call1((&scene, &packed))?;
     let tree = py

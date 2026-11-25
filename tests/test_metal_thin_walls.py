@@ -62,7 +62,7 @@ def camera_at(distance, yaw_deg=-37.0):
 
 
 def render(renderer, scene, camera, fit=False):
-    from views.wgpu_scene import pack_scene
+    from ingetrazo_core import pack_scene
     from views.wgpu_style import style_payload
     packed = pack_scene(scene)
     packed.upload(renderer)

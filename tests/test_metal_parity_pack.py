@@ -13,8 +13,8 @@ from core.materials import effective_attrs
 from core.mesh import Mesh
 from core.scene import Scene
 from views.document_interaction import _paint_of
-from views.wgpu_scene import (pack_scene, _source_arrays, _texture_array, COMMAND,
-                              OBJECT_HIDDEN, VISIBILITY_FILTERED)
+from ingetrazo_core import pack_scene, source_arrays, COMMAND, OBJECT_HIDDEN, VISIBILITY_FILTERED
+from ingetrazo_render import material_texture_array
 
 
 def triangle(attrs=None):
@@ -80,7 +80,7 @@ def test_hidden_ranges_and_object_filter_bits():
 
 def test_no_hidden_visible_stream_is_byte_identical_to_legacy_kernel():
     mesh = triangle({'color': (.2, .4, .6)})
-    arrays = _source_arrays(mesh)
+    arrays = source_arrays(mesh)
     offsets = np.array([[0]*5, [len(a) for a in arrays[:5]]], np.int64)
     raw, indices, bounds, table, materials = _native.available().bake_scene(
         *arrays[:4], arrays[6], arrays[7], arrays[4], arrays[5], offsets,
@@ -102,16 +102,16 @@ def test_no_hidden_visible_stream_is_byte_identical_to_legacy_kernel():
 def test_texture_resolution_budget_mips_and_ids(tmp_path):
     path = str(tmp_path/'large.png')
     image = solid_raster(2048, 32, (18, 52, 86)); image.save(path)
-    w, h, layers, mips = _texture_array([path])
+    w, h, layers, mips = material_texture_array([path])
     assert (w, h, layers) == (2048, 32, 2)
     assert len(mips[-1]) == 8
     assert mips[0][:w*h*4] == b'\xff'*(w*h*4)
-    w, h, layers, mips = _texture_array([path], device_limit=4096, memory_budget=16384)
+    w, h, layers, mips = material_texture_array([path], device_limit=4096, memory_budget=16384)
     assert sum(map(len, mips)) <= 16384
     assert len(mips) == max(w, h).bit_length()
-    assert _texture_array([path], device_limit=512)[0] == 512
+    assert material_texture_array([path], device_limit=512)[0] == 512
     with pytest.raises(ValueError):
-        _texture_array([path], memory_budget=7)
+        material_texture_array([path], memory_budget=7)
 
 
 def test_audit_fixture_matches_gl_and_retains_hidden():
@@ -132,7 +132,7 @@ def test_audit_fixture_matches_gl_and_retains_hidden():
 
 
 def test_incremental_hidden_change_rebakes_hidden_ranges_without_repack():
-    from views.wgpu_updates import InstanceUpdates
+    from ingetrazo_core import InstanceUpdates
     from tests.test_wgpu_updates import assert_matches_fresh_pack
     g = Group(triangle()); scene = Scene(groups=[g]); updates = InstanceUpdates(scene, pack_scene(scene))
     g.mesh.faces[0].attrs['hidden'] = True
@@ -145,7 +145,7 @@ def test_incremental_hidden_change_rebakes_hidden_ranges_without_repack():
 
 
 def test_incremental_paint_alpha_and_hidden_transform():
-    from views.wgpu_updates import InstanceUpdates
+    from ingetrazo_core import InstanceUpdates
     g = Group(triangle({'color': (1, 0, 0)})); scene = Scene(groups=[g])
     updates = InstanceUpdates(scene, pack_scene(scene))
     g.mesh.faces[0].attrs['opacity'] = .3
@@ -162,11 +162,11 @@ def test_incremental_paint_alpha_and_hidden_transform():
 
 
 def test_texture_only_opacity_and_distinct_back():
-    arrays = _source_arrays(triangle({'texture': {'path': 'fake.png'}, 'opacity': .2,
+    arrays = source_arrays(triangle({'texture': {'path': 'fake.png'}, 'opacity': .2,
                                      'back': {'color': (1, 0, 0), 'opacity': .4}}))
     assert arrays[6][1, 3] == 51
     assert int(arrays[10][0, 0]) >> 24 == 102
-    textured_back = _source_arrays(triangle({
+    textured_back = source_arrays(triangle({
         'back': {'texture': {'path': 'back.png'}, 'opacity': .4}}))
     assert int(textured_back[10][0, 0]) >> 24 == 102
     assert textured_back[10][0, 2] == 1
@@ -194,33 +194,29 @@ def test_hidden_material_corners_follow_visible_edge_gap():
             assert np.all(packed.indices[first:first+count] + base < len(packed.vertices))
 
 
-def test_native_material_palette_matches_fallback(monkeypatch):
+def test_native_material_palette_matches_numpy():
     """Quantization must preserve truncation, opacity rounding and both sides."""
     native = _native.available()
-    if not hasattr(native, 'pack_materials'):
-        pytest.skip('new native palette kernel required')
-    from views.wgpu_scene import _material_columns
-    table = [{}, {'color': (-.1, .499, 1.2), 'opacity': .5},
-             {'back': {'color': (.2, .3, .4), 'opacity': .1}},
-             {'texture': {'path': 'missing.png', 'uvw': [1,0,0,0,0,1,0,0]}}]
-    pos = np.array([[0,0,0], [1,0,0], [0,1,0]], np.float32)
-    corners = np.tile(np.arange(3), 4)
-    sizes = np.full(4, 3, np.int64)
-    counts = np.ones(4, np.int64)
-    attributes = np.arange(4, dtype=np.int64)
-    monkeypatch.setattr(_native, 'native', native)
-    actual = _material_columns(pos, corners, sizes, counts, table, attributes, {})
-    monkeypatch.setattr(_native, 'native', None)
-    expected = _material_columns(pos, corners, sizes, counts, table, attributes, {})
-    for a, b in zip(actual, expected):
-        assert a.dtype == b.dtype and a.shape == b.shape
-        assert a.tobytes() == b.tobytes()
+    # (r, g, b, opacity byte) of each attribute row's back, and its front
+    # and back texture layers: what the pack hands the palette kernel.
+    colors = [None, (-.1, .499, 1.2, 128), (.2, .3, .4, 26), (210/255,)*3 + (255,)]
+    slots = [[0, 0], [0, 0], [0, 0], [1, 1]]
+    attributes = np.array([3, 0, 2, 1, 1], dtype=np.int64)
+    actual = native.pack_materials(colors, slots, attributes)
+    palette = np.zeros((len(colors), 3), np.uint32)
+    for k, color in enumerate(colors):
+        if color is not None:
+            palette[k, 0] = np.array([*np.clip(np.array(color[:3])*255, 0, 255), color[3]], np.uint8).view('<u4')[0]
+    palette[:, 1:] = slots
+    expected = palette[attributes]
+    assert actual.dtype == expected.dtype and actual.shape == expected.shape
+    assert actual.tobytes() == expected.tobytes()
     with pytest.raises(ValueError):
         native.pack_materials([None], [[0,0]], np.array([-1], np.int64))
 
 
 def test_mixed_material_pack_matches_python_palette(monkeypatch, tmp_path):
-    from views import wgpu_scene
+    import ingetrazo_core
     path = str(tmp_path / 'swatch.png')
     image = solid_raster(2, 2, (255, 0, 0))
     assert image.save(path)
@@ -238,7 +234,7 @@ def test_mixed_material_pack_matches_python_palette(monkeypatch, tmp_path):
     native = _native.available()
     assert hasattr(native, 'pack_materials')
     monkeypatch.setattr(_native, 'native', native)
-    actual = wgpu_scene.pack_scene(scene, face_overrides=overrides)
+    actual = ingetrazo_core.pack_scene(scene, face_overrides=overrides)
     # Disable only the new kernel so every other pack stage stays identical.
     class PreviousCore:
         def __getattr__(self, name):
@@ -246,7 +242,7 @@ def test_mixed_material_pack_matches_python_palette(monkeypatch, tmp_path):
                 raise AttributeError(name)
             return getattr(native, name)
     monkeypatch.setattr(_native, 'native', PreviousCore())
-    expected = wgpu_scene.pack_scene(scene, face_overrides=overrides)
+    expected = ingetrazo_core.pack_scene(scene, face_overrides=overrides)
     assert actual.materials.tobytes() == expected.materials.tobytes()
     assert actual.vertices.tobytes() == expected.vertices.tobytes()
     assert actual.texture_paths == expected.texture_paths
