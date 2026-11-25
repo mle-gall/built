@@ -147,7 +147,6 @@ struct Sources<'p> {
     attrs: Vec<Bound<'p, PyDict>>,
     soft: HashSet<(usize, usize)>,
     edges: Vec<EdgeFlag<'p>>,
-    store_result: bool,
 }
 fn order(a: usize, b: usize) -> (usize, usize) {
     (a.min(b), a.max(b))
@@ -277,7 +276,6 @@ fn run<'p>(op: &str, groups: &Obj<'p>) -> PyResult<(Bound<'p, PyList>, Bound<'p,
         if !is_solid(g)? {
             return Err(error(py, "not a solid"));
         }
-        sources.store_result |= store(&g.getattr("mesh")?)?;
     }
     let mans = gs
         .iter()

@@ -156,11 +156,10 @@ def test_folder_eye_sequence_is_three_undoable_toggles():
 
 
 def test_linked_tags_keep_folder_flags_separate(tmp_path):
-    from core.links import _apply_tags
     scene = Scene()
     tags = {'layers': [L.Layer('A', folder='f').to_dict()],
             'folders': ['f'], 'folder_visibility': {'f': False}}
-    _apply_tags(scene, str(tmp_path / 'synthetic.igz'), tags)
+    ingetrazo_core.link_sync_tags(scene, str(tmp_path / 'synthetic.igz'), tags)
     tag = next(ly for ly in scene.layers if ly.folder)
     assert tag.visible and not ingetrazo_core.tag_edits.effective_visible(scene, tag)
     scene.folder_visibility[tag.folder] = True

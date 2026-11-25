@@ -7,6 +7,7 @@ materialise-on-write with keys kept, store snapshots through history, bulk
 construction, copies and share-back."""
 from __future__ import annotations
 
+import ingetrazo_core
 import copy
 import gzip
 import json
@@ -262,7 +263,6 @@ def test_copies_and_share_back(binary, monkeypatch, tmp_path):
 
 def test_link_hooks_relabel_like_the_built_mesh(binary, monkeypatch,
                                                 tmp_path):
-    from core.links import _relabel_deferred
     path = tmp_path / "doc.igz"
     sc = _random_scene(random.Random(4))
     for f in sc.mesh.faces[::2]:
@@ -275,9 +275,12 @@ def test_link_hooks_relabel_like_the_built_mesh(binary, monkeypatch,
     igz.load_into(scene, path)
     mesh = scene.mesh
     assert type(mesh) is M.DeferredMesh
+    renames = {"A": "A2", "B": "B2"}
+
     def rename(name):
-        return {"A": "A2", "B": "B2", None: "Z", "Layer0": "Z"}.get(name, name)
-    assert _relabel_deferred(mesh, rename)
+        return renames.get(name, name)
+    ingetrazo_core.link_relabel([], [mesh], renames)
+    assert type(mesh) is M.DeferredMesh                     # relabelled unbuilt
     from core.layers import layer_of
     for actual, original in zip((*mesh.faces, *mesh.edges), (*before.faces, *before.edges), strict=True):
         assert layer_of(actual) == rename(layer_of(original))
@@ -333,3 +336,22 @@ def test_cell_queries_are_the_python_scans(binary, monkeypatch, tmp_path):
     m.faces[1].attrs["texture"] = {"path": "x.png"}
     assert [f.key for f in m.textured_faces()] == [m.faces[1].key]
     assert type(m) is S.StoreMesh
+
+class PluginMesh(M.Mesh):
+    pass
+
+
+def test_plugin_mesh_subclass_roundtrips_with_native_elements():
+    import pickle
+    from ingetrazo_core import MeshElements
+
+    mesh = PluginMesh()
+    mesh.plugin_label = "assembly"
+    mesh.add_edge(V(0, 0, 0), V(1, 0, 0))
+    for restored in (copy.deepcopy(mesh), pickle.loads(pickle.dumps(mesh))):
+        assert type(restored) is PluginMesh
+        assert restored.plugin_label == "assembly"
+        assert isinstance(restored.edges, MeshElements)
+        assert restored.edges[0].v1.position_tuple() == (1., 0., 0.)
+        restored.edges[0].hidden = True
+        assert not mesh.edges[0].hidden

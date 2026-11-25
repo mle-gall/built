@@ -344,9 +344,7 @@ impl FileGroupWriter {
         let matrix = group.call_method1("_file_xform", (self.precise,))?;
         let links = self.links.bind(py);
         let placeholder = !matrix.is_none()
-            && links
-                .call_method1("save_as_placeholder", (group, self.scene.bind(py)))?
-                .is_truthy()?;
+            && crate::model::links::save_as_placeholder(group, self.scene.bind(py))?;
         let mesh = if placeholder {
             self.empty.bind(py).call0()?
         } else {
@@ -376,11 +374,11 @@ impl FileGroupWriter {
         let ifc = if ifc.is_truthy()? { Some(ifc) } else { None };
         entry.call_method1("update", (group.call_method1("_file_fields", (ifc,))?,))?;
         if let Some(dest) = &self.destination {
-            if links.call_method1("link_of", (group,))?.is_truthy()? {
+            if crate::model::links::link_of(group)?.is_some() {
                 let ext = entry
                     .get_item("ext")?
                     .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("ext"))?;
-                let record = ext.get_item(links.getattr("LINK_KEY")?)?;
+                let record = ext.get_item(crate::model::links::LINK_KEY)?;
                 record.call_method1("pop", ("rel", py.None()))?;
                 let fields = links
                     .call_method1("_link_record", (record.get_item("path")?, dest.bind(py)))?;

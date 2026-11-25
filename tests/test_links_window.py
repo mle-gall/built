@@ -5,6 +5,8 @@ panel's folders, saving the source in another tab reloads the host, and
 going into the linked copy offers to open its file."""
 from __future__ import annotations
 
+import ingetrazo_core
+
 from pathlib import Path
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 
@@ -113,7 +115,7 @@ def test_project_link_subset_and_agent_surface(win, tmp_path):
     assert inspector()["Subset"] == "1 item" and inspector()["Stable UIDs"] == "1"
     assert view._ui_tree["nodes"][key]["path"] == str(path)
     wgpu_ui._tree_action(win, view, "linkpack" + wgpu_ui.SEP + "n:" + key)
-    assert links.is_packed(win.viewport.scene, path)
+    assert ingetrazo_core.link_is_packed(win.viewport.scene, path)
     assert {'query_links', 'link_document', 'reload_link', 'query_project', 'set_project'} <= {t['name'] for t in BUILTIN_TOOLS}
 
 

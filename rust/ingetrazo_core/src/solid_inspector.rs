@@ -46,10 +46,7 @@ fn inspect<'py>(
     };
     if !owner.is_none()
         && (owner.getattr("billboard")?.is_truthy()?
-            || !py
-                .import("core.links")?
-                .call_method1("linked_ancestor", (&owner,))?
-                .is_none())
+            || crate::model::links::linked_ancestor(&owner)?.is_some())
     {
         return Ok(None);
     }
@@ -237,7 +234,6 @@ pub(crate) fn solid_problem_targets<'py>(
     let py = scene.py();
     let plugin = py.import("core.solid_analysis")?;
     let lazy = py.import("core.lazy_mesh")?;
-    let links = py.import("core.links")?;
     let active = scene.getattr("mesh")?;
     let mut seen = HashSet::from([active.as_ptr()]);
     let mut candidates = vec![(py.None().into_bound(py), active)];
@@ -247,7 +243,7 @@ pub(crate) fn solid_problem_targets<'py>(
         .collect::<PyResult<_>>()?;
     stack.reverse();
     while let Some(g) = stack.pop() {
-        if g.getattr("billboard")?.is_truthy()? || !links.call_method1("link_of", (&g,))?.is_none()
+        if g.getattr("billboard")?.is_truthy()? || crate::model::links::link_of(&g)?.is_some()
         {
             continue;
         }

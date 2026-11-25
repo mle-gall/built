@@ -525,7 +525,7 @@ pub fn skp_apply<'py>(
             }
         }
     }
-    let create = py.import("core.store_mesh")?.getattr("empty_store_mesh")?;
+    let create = py.import("core.store_mesh")?.getattr("StoreMesh")?;
     let mut done = 0usize;
     let mut last = None;
     skp_apply_metadata(scene, payload)?;

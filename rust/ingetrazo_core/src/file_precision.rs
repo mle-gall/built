@@ -5,7 +5,7 @@ use numpy::{ndarray::Array2, IntoPyArray};
 use pyo3::{
     exceptions::PyValueError,
     prelude::*,
-    types::{PyDict, PyList, PyTuple},
+    types::{PyDict, PyList},
 };
 type Obj<'py> = Bound<'py, PyAny>;
 #[pyfunction]
@@ -105,41 +105,6 @@ fn built_point_array<'py>(points: &Obj<'py>, sink: &Obj<'py>) -> PyResult<Obj<'p
     }
     Ok(result)
 }
-#[pyfunction]
-fn built_python_vertices<'py>(
-    mesh: &Obj<'py>,
-    points: &Obj<'py>,
-    sequential: bool,
-) -> PyResult<(Obj<'py>, Obj<'py>)> {
-    let py = mesh.py();
-    let kw = PyDict::new(py);
-    kw.set_item("precise", true)?;
-    let (positions, inverse): (Obj<'_>, Obj<'_>) = py
-        .import("core.lazy_mesh")?
-        .call_method("weld", (points, sequential), Some(&kw))?
-        .extract()?;
-    let core = py.import("core.mesh")?;
-    let vertex = core.getattr("Vertex")?;
-    let scale: f64 = core.getattr("_KEY_SCALE")?.extract()?;
-    let keys = mesh.getattr("_keys")?;
-    let registry = mesh.getattr("_registry")?;
-    let vertices = mesh.getattr("vertices")?;
-    let args = PyDict::new(py);
-    let round = py.import("builtins")?.getattr("round")?;
-    for point in positions.call_method0("tolist")?.try_iter()? {
-        let point = point?;
-        args.set_item("key", keys.call_method0("__next__")?)?;
-        let v = vertex.call((&point,), Some(&args))?;
-        let coords = point.extract::<[f64; 3]>()?;
-        let key = coords
-            .into_iter()
-            .map(|x| round.call1((x * scale,)))
-            .collect::<PyResult<Vec<_>>>()?;
-        registry.set_item(PyTuple::new(py, key)?, &v)?;
-        vertices.call_method1("append", (v,))?;
-    }
-    Ok((vertices, inverse))
-}
 fn array(py: Python<'_>, m: DMat4) -> Obj<'_> {
     let a = m.to_cols_array();
     Array2::from_shape_fn((4, 4), |(r, c)| a[c * 4 + r])
@@ -158,7 +123,7 @@ fn built_export_placements<'py>(scene: &Obj<'py>) -> PyResult<Bound<'py, PyDict>
         Ok(())
     };
     placements(&mesh, identity, identity)?;
-    let placeholder = py.import("core.links")?.getattr("save_as_placeholder")?;
+    let placeholder = crate::model::module(py, "ingetrazo_core")?.getattr("link_save_as_placeholder")?;
     for key in ["groups", "kept_components"] {
         let Ok(groups) = scene.getattr(key) else {
             continue;
@@ -221,7 +186,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(built_placement_values, m)?)?;
     m.add_function(wrap_pyfunction!(built_point_array, m)?)?;
     m.add_function(wrap_pyfunction!(built_compact_values, m)?)?;
-    m.add_function(wrap_pyfunction!(built_python_vertices, m)?)?;
     m.add_function(wrap_pyfunction!(built_export_placements, m)?)?;
     Ok(())
 }

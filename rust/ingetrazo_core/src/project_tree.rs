@@ -367,16 +367,12 @@ pub(crate) fn reset_source_tags<'py>(
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
     use pyo3::types::{PyDict, PyList};
     let py = scene.py();
-    let links = py.import("core.links")?;
-    let registry_key = links.getattr("REGISTRY_KEY")?;
-    let data = scene
-        .getattr("plugin_data")?
-        .call_method1("get", (&registry_key,))?;
-    if data.is_none() {
+    let data = crate::model::links::registry_view(scene)?;
+    if !data.is_truthy()? {
         return Ok(None);
     }
     let saved = py.import("copy")?.call_method1("deepcopy", (data,))?;
-    let key = links.call_method1("_norm", (path,))?;
+    let key = crate::model::links::norm(&pyo3::types::PyString::new(py, path))?;
     let entry = saved.call_method1("get", (key,))?;
     if entry.is_none() {
         return Ok(None);
@@ -405,7 +401,7 @@ pub(crate) fn reset_source_tags<'py>(
         }
     }
     let history = py.import("core.history")?;
-    commands.append(history.call_method1("SetPluginDataCommand", (registry_key, saved))?)?;
+    commands.append(py.import("core.links")?.call_method1("set_registry_command", (saved,))?)?;
     Ok(Some(history.call_method1("CompoundCommand", (commands,))?))
 }
 
@@ -414,23 +410,13 @@ pub(crate) fn reset_source_tags<'py>(
 #[pyfunction]
 pub(crate) fn source_direct_count(copies: Vec<Bound<'_, PyAny>>) -> PyResult<usize> {
     let mut count = 0;
-    let links = copies
-        .first()
-        .map(|g| g.py().import("core.links"))
-        .transpose()?;
     for g in copies {
         let mesh = g.getattr("mesh")?;
         count += usize::from(mesh.getattr("faces")?.len()? + mesh.getattr("edges")?.len()? > 0);
         let children = g.getattr("children")?;
         if children.is_truthy()? {
             for child in children.try_iter()? {
-                count += usize::from(
-                    links
-                        .as_ref()
-                        .unwrap()
-                        .call_method1("is_linked", (child?,))?
-                        .is_truthy()?,
-                );
+                count += usize::from(crate::model::links::is_linked(&child?)?);
             }
         }
     }

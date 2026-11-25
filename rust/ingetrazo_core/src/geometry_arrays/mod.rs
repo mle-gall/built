@@ -242,11 +242,8 @@ fn face_attributes<'p>(mesh: &Obj<'p>) -> PyResult<Vec<Obj<'p>>> {
         }
         (table, indices(&src.get_item("face_attr")?)?)
     } else if ty.name()? == "StoreMesh" {
-        let (t, k): (Vec<Obj>, Obj) = py
-            .import("core.store_mesh")?
-            .call_method1("attr_columns", (mesh,))?
-            .extract()?;
-        (t, indices(&k)?)
+        let (table, keys) = crate::kernel::store_views::attributes::attr_columns(mesh, None, None)?;
+        (table.extract()?, indices(&keys)?)
     } else {
         return mesh
             .getattr("faces")?

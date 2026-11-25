@@ -50,7 +50,7 @@ def stamp_clipboard(history, clip, off):
     import ingetrazo_core
     names = ingetrazo_core.tag_edits.template_name_map(scene, clip.get("layers") or {})
 
-    from core.links import _renamed_paint, restamp_materials
+    from ingetrazo_core import link_renamed_paint as _renamed_paint, link_restamp_materials as restamp_materials
     from core.materials import register
     from core.history import SetFaceMaterialTagCommand
     commands: list = [_PruneOnUndo()]

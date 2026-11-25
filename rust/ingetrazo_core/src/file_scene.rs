@@ -222,11 +222,20 @@ fn archive_settings(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_>) -> PyResu
             out.set_item("units", v.copy()?)?;
         }
     }
-    let data = attr(scene, "plugin_data")?;
+    // The links registry is a root table of its own; the file keeps it in
+    // plugin_data, where older builds read it.
+    let data = PyDict::new(py);
+    let plugin = attr(scene, "plugin_data")?;
+    if plugin.is_truthy()? {
+        data.call_method1("update", (plugin,))?;
+    }
+    if let Some(reg) = scene.getattr_opt("link_registry")?.filter(|r| r.is_truthy().unwrap_or(false)) {
+        data.set_item("links", reg)?;
+    }
     if data.is_truthy()? {
         let json = py.import("json")?;
         let keep = PyDict::new(py);
-        for (k, v) in data.cast::<PyDict>()? {
+        for (k, v) in data.iter() {
             match json.call_method1("dumps", (v,)) {
                 Ok(js) => keep.set_item(k.str()?, json.call_method1("loads", (js,))?)?,
                 Err(e)
@@ -731,6 +740,14 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
         } else {
             py.None().into_bound(py)
         };
+        if key == "plugin_data" {
+            // The links registry is the document's root table.
+            let reg = value.call_method1("pop", ("links", py.None()))?;
+            let reg = if reg.is_instance_of::<PyDict>() { reg } else { PyDict::new(py).into_any() };
+            scene.setattr(to, value)?;
+            scene.setattr("link_registry", reg)?;
+            continue;
+        }
         scene.setattr(to, value)?;
     }
     scene.setattr(

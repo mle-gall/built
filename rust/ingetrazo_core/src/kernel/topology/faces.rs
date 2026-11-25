@@ -77,11 +77,11 @@ fn hole_merged_with_loop(face: &Obj<'_>, r#loop: &Obj<'_>) -> PyResult<Option<(u
     }
 }
 fn seq_mesh<'py>(seq: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
-    let Some(mesh) = seq.getattr_opt("_m")? else {
+    let Some(mesh) = seq.getattr_opt("owner")? else {
         return Ok(None);
     };
     Ok(
-        (exact_mesh(&mesh)? && seq.is_instance(&store_api(seq.py())?.getattr("_Seq")?)?)
+        (exact_mesh(&mesh)? && seq.is_instance(&seq.py().import("ingetrazo_core")?.getattr("MeshElements")?)?)
             .then_some(mesh),
     )
 }

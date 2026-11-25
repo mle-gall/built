@@ -169,12 +169,7 @@ pub(super) fn group<'p>(
         });
     }
     simplify(&mut polys);
-    let mesh = if sources.store_result {
-        py.import("core.store_mesh")?
-            .call_method0("empty_store_mesh")?
-    } else {
-        py.import("core.mesh")?.call_method0("Mesh")?
-    };
+    let mesh = py.import("core.mesh")?.call_method0("Mesh")?;
     let ids = PyDict::new(py);
     for p in polys {
         let attrs = p.attrs.copy()?;

@@ -123,7 +123,6 @@ struct Catalogue<'py> {
     tree: Obj<'py>,
     nodes: Obj<'py>,
     member: Obj<'py>,
-    links: Obj<'py>,
     expanded: HashSet<String>,
     pages: HashMap<String, usize>,
     cap: usize,
@@ -145,7 +144,7 @@ impl<'py> Catalogue<'py> {
     }
     fn kind(&self, g: &Obj<'py>) -> PyResult<&'static str> {
         Ok(
-            if self.links.call_method1("is_linked", (g,))?.is_truthy()? {
+            if crate::model::links::is_linked(g)? {
                 "link"
             } else if g.call_method0("is_component")?.is_truthy()? {
                 "component"
@@ -359,7 +358,7 @@ impl<'py> Catalogue<'py> {
         for g in groups {
             let name = text(&g.getattr("name")?)?;
             if g.call_method0("is_component")?.is_truthy()?
-                && !self.links.call_method1("is_linked", (&g,))?.is_truthy()?
+                && !crate::model::links::is_linked(&g)?
             {
                 let identity = (name.clone(), id(&g.getattr("mesh")?));
                 if let Some(&index) = definitions.get(&identity) {
@@ -550,13 +549,11 @@ pub(crate) fn filing_rows<'py>(
         }
         Ok(text(cls)?.trim_start_matches("Ifc").to_string())
     };
-    let py = scene.py();
     let mut c = Catalogue {
         scene,
         tree: tree.clone(),
         nodes: nodes.clone(),
         member: tree.getattr("member")?,
-        links: py.import("core.links")?.into_any(),
         expanded,
         pages,
         cap,
@@ -630,10 +627,7 @@ pub(crate) fn filing_rows<'py>(
                 }
             }
             if text(&node.get_item("kind")?)? == "link" {
-                let state: String = c
-                    .links
-                    .call_method1("link_state", (&c.scene, node.get_item("path")?))?
-                    .extract()?;
+                let state = crate::model::links::link_state(&c.scene, &node.get_item("path")?)?;
                 for g in copies(key)? {
                     if project_item_matches(
                         &c.scene,
@@ -677,10 +671,7 @@ pub(crate) fn filing_rows<'py>(
         let mut badge = String::new();
         let cls = node.get_item("recipe")?.call_method1("get", ("class",))?;
         let label = if kind == "link" {
-            let state: String = c
-                .links
-                .call_method1("link_state", (&c.scene, &path))?
-                .extract()?;
+            let state = crate::model::links::link_state(&c.scene, &pyo3::types::PyString::new(c.scene.py(), &path))?;
             let via = node
                 .call_method1("get", ("via",))?
                 .extract::<Option<String>>()?;

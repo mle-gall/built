@@ -6,7 +6,7 @@ import random
 import numpy as np
 from ingetrazo_core import Vec3
 
-from core.store_mesh import empty_store_mesh
+from core.store_mesh import StoreMesh
 from core.topology import heal_overlapping_faces
 
 
@@ -21,7 +21,7 @@ def test_seeded_store_relink_weld_and_face_recovery():
         return v.key & ((1 << 40) - 1)
 
     for i in range(48):
-        mesh = empty_store_mesh()
+        mesh = StoreMesh()
         x, y = rng.randint(-100, 100), rng.randint(-100, 100)
 
         def square(left, bottom, right, top):
@@ -68,7 +68,7 @@ def test_seeded_fold_keeps_winding_attributes_and_soft_edges():
     digest = hashlib.sha256()
     for seed in range(48):
         n = rng.randint(4, 10)
-        mesh = empty_store_mesh()
+        mesh = StoreMesh()
         points = [Vec3(*outline[i * len(outline) // n], rng.randrange(-128, 128) / 256)
                   for i in range(n)]
         face = mesh.add_face(points)
@@ -92,7 +92,7 @@ def test_seeded_orphan_trim_and_displaced_registry():
     rng = random.Random(19654)
     digest = hashlib.sha256()
     for seed in range(32):
-        mesh = empty_store_mesh()
+        mesh = StoreMesh()
         intervals = [(0, 12), (3, 6), (8, 10), (11, 16)]
         rng.shuffle(intervals)
         for a, b in intervals:

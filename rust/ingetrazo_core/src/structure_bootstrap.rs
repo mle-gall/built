@@ -181,8 +181,7 @@ pub(crate) fn structure_proposal<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py = scene.py();
     let api = py.import("core.structure")?;
-    let links = py.import("core.links")?;
-    let sep = links.getattr("SEP")?.extract::<String>()?;
+    let sep = crate::model::links::SEP.to_string();
     let default = api.getattr("DEFAULT_LAYER")?;
     let mut tree = Tree {
         nodes: PyDict::new(py),
@@ -198,7 +197,7 @@ pub(crate) fn structure_proposal<'py>(
         let src = item.get_item(1)?;
         let tag = g.getattr("layer")?;
         if src.is_truthy()? {
-            sources.set_item(links.call_method1("stem", (&src,))?, &src)?;
+            sources.set_item(crate::model::links::stem(&src)?, &src)?;
         }
         if tag.is_truthy()? && !tag.eq(&default)? {
             let bucket = tags.call_method1("setdefault", (tag, PyList::empty(py)))?;
@@ -231,9 +230,7 @@ pub(crate) fn structure_proposal<'py>(
         keys.insert(f.clone(), k);
     }
     let source_trees = PyDict::new(py);
-    let registered = scene
-        .getattr("plugin_data")?
-        .call_method1("get", (links.getattr("REGISTRY_KEY")?, PyDict::new(py)))?;
+    let registered = crate::model::links::registry_view(scene)?;
     for pair in registered.call_method0("items")?.try_iter()? {
         let pair = pair?;
         let structure = get(&pair.get_item(1)?, "structure")?;
@@ -288,9 +285,7 @@ pub(crate) fn structure_proposal<'py>(
         let inner = r.get_item(2)?;
         if !inner.eq(&chain)? && !chain.is_truthy()? {
             top.insert(
-                links
-                    .call_method1("stem", (inner.get_item(-1)?.get_item(1)?,))?
-                    .extract()?,
+                crate::model::links::stem(&inner.get_item(-1)?.get_item(1)?)?,
             );
         }
     }
@@ -333,7 +328,7 @@ pub(crate) fn structure_proposal<'py>(
         for r in pairs.try_iter()? {
             let r = r?;
             let g = r.get_item(0)?;
-            if r.get_item(1)?.eq(src)? && !links.call_method1("is_linked", (&g,))?.is_truthy()? {
+            if r.get_item(1)?.eq(src)? && !crate::model::links::is_linked(&g)? {
                 groups.push(g);
             }
         }

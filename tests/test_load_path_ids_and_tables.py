@@ -7,6 +7,8 @@ deferred meshes are never edited through one of them, and the collector
 stays off through link resolution without being left off."""
 from __future__ import annotations
 
+import ingetrazo_core
+
 import gc
 import random
 import uuid
@@ -37,12 +39,12 @@ def test_stable_uid_is_byte_identical_to_the_uuid5_definition():
         samples.append((uuid.UUID(int=rng.getrandbits(128)).hex[:16],
                         uuid.UUID(int=rng.getrandbits(128)).hex[:16]))
     for p, s in samples:
-        assert links.stable_uid(p, s) == _uuid5_uid(p, s), (p, s)
+        assert ingetrazo_core.link_stable_uid(p, s) == _uuid5_uid(p, s), (p, s)
 
 
 def test_stable_uid_known_value():
     # Pinned: a link copy's id is persisted and referenced by scenes.
-    assert links.stable_uid("0123456789abcdef", "fedcba9876543210") == \
+    assert ingetrazo_core.link_stable_uid("0123456789abcdef", "fedcba9876543210") == \
         "a3e4efbb4124549c"
 
 
@@ -112,7 +114,7 @@ def test_populate_clones_with_stable_ids_and_copied_records():
     src.children = [child]
     child.owner = src
     placement = Group(name="Copy")
-    links._populate(placement, src)
+    ingetrazo_core.link_populate(placement, src)
     (c,) = placement.children
     (l,) = c.children
     assert c.uid == _uuid5_uid(placement.uid, child.uid)
@@ -140,12 +142,12 @@ def test_populate_keeps_an_empty_record_a_copy_of_its_own():
     child.ext = {}
     src.children = [child]
     placement = Group(name="Copy")
-    links._populate(placement, src)
+    ingetrazo_core.link_populate(placement, src)
     (c,) = placement.children
     assert c.ext == {} and c.ext is not child.ext
 
 
-# ---- _rename_tags / _relabel_deferred sharing --------------------------------
+# ---- a definition renamed as it is read: tables shared ----------------------
 
 def _deferred_pair():
     """Two deferred meshes with the SAME table objects, as a document's
@@ -168,15 +170,21 @@ def _deferred_pair():
     return make(), make(), meta
 
 
-def _rename(n):
-    return links.tag_name("/x/Site.igz", n)
+def _install(*meshes):
+    """The meshes as one source's definition, renamed into a host."""
+    from core.group import Group
+    comp = Group(name="Site")
+    parts = [Group(m, name=f"P{i}") for i, m in enumerate(meshes)]
+    comp.children = parts
+    for p in parts:
+        p.owner = comp
+    ingetrazo_core.link_install_definition(comp, "/x/Site.igz", set(), {})
+    return comp, parts
 
 
 def test_meshes_with_one_table_share_the_renamed_one():
     a, b, meta = _deferred_pair()
-    shared = {}
-    assert links._relabel_deferred(a, _rename, shared)
-    assert links._relabel_deferred(b, _rename, shared)
+    _comp, (ga, gb) = _install(a, b)
     ta = a.__dict__["_deferred_source"]["meta"]["face_attrs"]
     tb = b.__dict__["_deferred_source"]["meta"]["face_attrs"]
     assert ta is tb and ta[0]["layer"] == "Site / Wood"
@@ -184,6 +192,7 @@ def test_meshes_with_one_table_share_the_renamed_one():
     # The per-mesh index arrays are each mesh's own.
     assert (a.__dict__["_deferred_source"]["face_attr"]
             is not b.__dict__["_deferred_source"]["face_attr"])
+    assert layer_of(ga) == layer_of(gb) == "Site / Untagged"
 
 
 def test_untagged_faces_do_not_share_a_table_with_tagged_ones():
@@ -196,9 +205,7 @@ def test_untagged_faces_do_not_share_a_table_with_tagged_ones():
                "face_attr": np.array(fa, dtype=np.int32)}
         assert DeferredMesh.defer(m, lambda m: None, len(fa), src)
         out.append(m)
-    shared = {}
-    for m in out:
-        links._relabel_deferred(m, _rename, shared)
+    _install(*out)
     t0, t1 = (m.__dict__["_deferred_source"]["meta"]["face_attrs"] for m in out)
     assert [r["layer"] for r in t0] == ["Site / Wood"]
     assert [r["layer"] for r in t1] == ["Site / Wood", "Site / Untagged"]
@@ -208,9 +215,7 @@ def test_untagged_faces_do_not_share_a_table_with_tagged_ones():
 
 def test_editing_a_tag_in_one_mesh_never_changes_another():
     a, b, _meta = _deferred_pair()
-    shared = {}
-    links._relabel_deferred(a, _rename, shared)
-    links._relabel_deferred(b, _rename, shared)
+    _install(a, b)
     table = b.__dict__["_deferred_source"]["meta"]["face_attrs"]
     # Build A and retag its face.
     (fa,) = a.faces
@@ -218,26 +223,12 @@ def test_editing_a_tag_in_one_mesh_never_changes_another():
     assign_layer(fa, "Other")
     assert table[0]["layer"] == "Site / Wood"
     # Repaint A's material while B is still deferred: B's table stays.
-    links.restamp_materials(a, {"x": "y"})
+    ingetrazo_core.link_restamp_materials(a, {"x": "y"})
     assert b.__dict__["_deferred_source"]["meta"]["face_attrs"] is table
     (fb,) = b.faces
     assert layer_of(fb) == "Site / Wood"
     assign_layer(fb, "Third")
     assert layer_of(fa) == "Other"
-
-
-def test_rename_tags_shares_tables_across_a_component():
-    from core.group import Group
-    a, b, _meta = _deferred_pair()
-    comp = Group(name="Site")
-    ga, gb = Group(a, name="A"), Group(b, name="B")
-    comp.children = [ga, gb]
-    ga.owner = gb.owner = comp
-    links._rename_tags(comp, "/x/Site.igz")
-    ta = a.__dict__["_deferred_source"]["meta"]["face_attrs"]
-    tb = b.__dict__["_deferred_source"]["meta"]["face_attrs"]
-    assert ta is tb and ta[0]["layer"] == "Site / Wood"
-    assert layer_of(ga) == layer_of(gb) == "Site / Untagged"
 
 
 # ---- the collector during link resolution ------------------------------------

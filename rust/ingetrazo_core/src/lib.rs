@@ -102,10 +102,6 @@ mod project_sheets;
 mod link_subset;
 mod presentation;
 mod object_replay;
-mod object_relink;
-mod object_registry;
-mod object_vertices;
-mod object_bulk;
 mod object_fold;
 mod object_curves;
 mod object_drawing;
@@ -143,6 +139,7 @@ mod snap_build;
 mod snap;
 mod snap_engine;
 mod kernel;
+mod protocol;
 mod tools;
 mod guide_vertices;
 mod pick;
@@ -551,6 +548,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     resident::register(m)?;
     m.add_class::<scans::MeshScan>()?;
     kernel::register_kernel(m)?;
+    protocol::register(m)?;
     Ok(())
 }
 
