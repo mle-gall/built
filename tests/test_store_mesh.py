@@ -333,3 +333,22 @@ def test_cell_queries_are_the_python_scans(binary, monkeypatch, tmp_path):
     m.faces[1].attrs["texture"] = {"path": "x.png"}
     assert [f.key for f in m.textured_faces()] == [m.faces[1].key]
     assert type(m) is S.StoreMesh
+
+class PluginMesh(M.Mesh):
+    pass
+
+
+def test_plugin_mesh_subclass_roundtrips_with_native_elements():
+    import pickle
+    from ingetrazo_core import MeshElements
+
+    mesh = PluginMesh()
+    mesh.plugin_label = "assembly"
+    mesh.add_edge(V(0, 0, 0), V(1, 0, 0))
+    for restored in (copy.deepcopy(mesh), pickle.loads(pickle.dumps(mesh))):
+        assert type(restored) is PluginMesh
+        assert restored.plugin_label == "assembly"
+        assert isinstance(restored.edges, MeshElements)
+        assert restored.edges[0].v1.position_tuple() == (1., 0., 0.)
+        restored.edges[0].hidden = True
+        assert not mesh.edges[0].hidden

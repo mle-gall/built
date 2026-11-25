@@ -12,6 +12,9 @@
 
 mod command_face;
 mod command_vertices;
+mod snapshot_fields;
+mod elements;
+mod weld_existing;
 
 use super::build::{Block, Points as BlockPoints};
 use super::edit::Change;
@@ -1305,6 +1308,17 @@ impl PyMeshStore {
     }
 
     /// `Mesh.vertex(position)`: `(key, change)`.
+    #[pyo3(signature=(points, supplied=None))]
+    fn weld_existing<'py>(&mut self, py: Python<'py>, points: PyReadonlyArray2<'py, f64>,
+                          supplied: Option<PyReadonlyArray2<'py, f64>>)
+        -> PyResult<(Vec<u128>, Bound<'py, PyArray1<i64>>)> {
+        let input = triples(&points)?;
+        let exact = supplied.as_ref().map(triples).transpose()?.unwrap_or(input);
+        if input.len() != exact.len() { return Err(PyValueError::new_err("supplied point count differs")); }
+        let (keys, indices) = weld_existing::insert(&mut self.inner, input, exact).map_err(op_err)?;
+        Ok((keys, indices.into_pyarray(py)))
+    }
+
     fn vertex(&mut self, position: (f64, f64, f64)) -> PyResult<(u128, PyChange)> {
         let (v, ch) = self.op(|s, ch| s.vertex(p3(position), ch))?;
         Ok((self.inner.key(Kind::Vertex, v), ch))
@@ -3746,6 +3760,11 @@ impl PyStoreSnapshot {
         Ok(PyChange { inner: ch })
     }
 
+    fn field<'py>(&self, name: &str, mesh: &Bound<'py, PyAny>, own: &Bound<'py, PyDict>,
+                  table: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+        snapshot_fields::field(&reader(&self.inner), name, mesh, own, table)
+    }
+
     /// Live keys of `kind` in the snapshot, list order, as ints.
     fn keys(&self, kind: &str) -> PyResult<Vec<u128>> {
         let k = kind_of(kind)?;
@@ -3847,6 +3866,8 @@ impl PyStoreSnapshot {
 #[cfg_attr(test, allow(dead_code))]
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMeshStore>()?;
+    m.add_class::<elements::Elements>()?;
+    m.add_function(wrap_pyfunction!(weld_existing::weld_candidates, m)?)?;
     m.add_class::<PyStoreSnapshot>()?;
     m.add_class::<PyRoundPlan>()?;
     m.add_class::<super::intersect::PyPolygon>()?;

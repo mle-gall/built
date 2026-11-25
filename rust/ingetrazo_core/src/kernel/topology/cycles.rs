@@ -60,11 +60,11 @@ fn same_position(p: &Obj<'_>, q: &Obj<'_>) -> PyResult<bool> {
 #[pyfunction]
 fn _store_edge_plan<'py>(edges: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
     let py = edges.py();
-    let Some(mesh) = edges.getattr_opt("_m")? else {
+    let Some(mesh) = edges.getattr_opt("owner")? else {
         return Ok(None);
     };
     let api = store_api(py)?;
-    if !edges.is_instance(&api.getattr("_Seq")?)?
+    if !edges.is_instance(&py.import("ingetrazo_core")?.getattr("MeshElements")?)?
         || !edges.getattr("_kind")?.eq("edge")?
         || !mesh.get_type().is(&api.getattr("StoreMesh")?)
     {

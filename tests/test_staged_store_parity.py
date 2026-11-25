@@ -4,7 +4,7 @@ import hashlib
 import json
 
 import numpy as np
-from core.store_mesh import empty_store_mesh
+from core.store_mesh import StoreMesh
 
 
 def staged_result():
@@ -14,7 +14,7 @@ def staged_result():
         dtype=np.float32 if seed % 2 else np.float64
         points=rng.integers(-3, 4, (72,3)).astype(dtype)
         points[1:6]=points[:5] + np.array([0.00004,0,0],dtype=dtype)
-        m=empty_store_mesh()
+        m=StoreMesh()
         verts, inv=m.bulk_weld(points)
         snapshot=m.capture_state()
         vkeys=[v.key for v in verts]

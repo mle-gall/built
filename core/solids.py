@@ -108,7 +108,6 @@ class _Sources:
     result triangle's ``face_id`` points back to."""
 
     def __init__(self) -> None:
-        self.store_result = False
         self.attrs: list[dict] = []
         #: Pairs of source face ids joined by a soft edge (curved surfaces).
         self.soft_pairs: set[tuple[int, int]] = set()
@@ -311,8 +310,7 @@ def _group_from_loops(loops, sources: _Sources, name: str, layer):
         a["_solid_src"] = f            # travels through the fuse, then goes
         tagged.append((pts, a))
     fused = fuse_coplanar_loops(tagged)
-    from core.store_mesh import empty_store_mesh
-    mesh = empty_store_mesh() if sources.store_result else Mesh()
+    mesh = Mesh()
     polys = []
     for outer, holes, attrs, originals in fused:
         polys.append((list(outer), [list(h) for h in (holes or [])],
@@ -458,9 +456,7 @@ def run(op: str, groups: list) -> tuple[list, list]:
         raise SolidError("two solids")
     for g in groups:
         _need_solid(g)
-    from core.store_mesh import StoreMesh
     sources = _Sources()
-    sources.store_result = any(isinstance(g.mesh, StoreMesh) for g in groups)
     mans = [_to_manifold(g, sources, i) for i, g in enumerate(groups)]
     first, second = groups[0], groups[1]
     from core.i18n import tr

@@ -1,29 +1,19 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""A :class:`~core.mesh.Mesh` whose geometry lives in the Rust ``MeshStore``
-(port step 1 of ``docs/meshstore-design.md``: snapshots, construction and
-the lazy-load path).
+"""Python mesh interfaces backed by the native MeshStore.
 
-Why: a Python mesh costs ~2 KB per face in ``Vertex`` / ``Edge`` / ``Face``
-objects, and every command snapshots the whole mesh it edits
-(``capture_state`` builds a dozen dicts over every element: 0.94 s on the
-ride's largest mesh, 0.27 s to restore). A store holds ~220 B per face and
-snapshots by sharing ``Arc`` chunks, in microseconds.
-
-Mesh() owns an empty store. Imports fill it in bulk and a deferred document
-block builds on first touch. Views identify elements by mesh and key.
-Incidence writes edit the store. A StoreState snapshot shares native
-chunks and preserves per-face Python attributes."""
+Deferred document blocks build on first geometry access. Element views
+resolve keys against the active coordinate frame. StoreState shares native
+snapshot chunks and preserves per-face Python attributes."""
 from __future__ import annotations
 
 from collections.abc import Mapping
-from itertools import count
 
 import numpy as np
-from ingetrazo_core import Vec3 as QVector3D, polygon_centroid, polygon_net_area, polygon_newell as _newell, store_views
+from ingetrazo_core import Vec3 as QVector3D, MeshElements, polygon_centroid, polygon_net_area, polygon_newell as _newell, store_views
 
 from core import mesh as _mesh
-from core.mesh import Edge, Face, Mesh, Vertex
+from core.mesh import Edge, Face, Vertex
 
 LOCAL_MASK = (1 << 40) - 1
 
@@ -119,7 +109,7 @@ def _attribute_owner(mesh):
 
 def _store_of(m):
     """The live store of a store-backed mesh, else None."""
-    return m.__dict__["_store"] if m.__class__ is StoreMesh else None
+    return m.__dict__.get("_store")
 
 
 class _ViewMixin:
@@ -141,7 +131,7 @@ class _ViewMixin:
 
     def __deepcopy__(self, memo):
         from copy import deepcopy
-        if _store_of(self._m) is None or not self._m._store.knows(self.key):
+        if not self._m._store.knows(self.key):
             raise KeyError(f"unknown mesh element {self.key}")
         owner = deepcopy(self._m, memo)
         key = (owner._store.namespace << 40) | (self.key & LOCAL_MASK)
@@ -169,7 +159,7 @@ class VertexView(_ViewMixin, Vertex):
 
     def position_tuple(self):
         """Model coordinates for geometry consumers, including sub-float32 edits."""
-        st = _store_of(self._m)
+        st = self._m._store
         return tuple(st.vertex_position(self.key))
 
     @position.setter
@@ -179,7 +169,7 @@ class VertexView(_ViewMixin, Vertex):
     @property
     def edges(self):
         m = self._m
-        st = _store_of(m)
+        st = m._store
         keys = st.vertex_edges(self.key)
         return _MutSet(EdgeView(m, k) for k in keys)
 
@@ -196,13 +186,10 @@ class EdgeView(_ViewMixin, Edge):
         self._m = m
         self.key = key
 
-    def _row(self):
-        return _store_of(self._m).edge(self.key)
-
     @property
     def v0(self):
         m = self._m
-        st = _store_of(m)
+        st = m._store
         return VertexView(m, st.edge_ends(self.key)[0])
 
     @v0.setter
@@ -213,7 +200,7 @@ class EdgeView(_ViewMixin, Edge):
     @property
     def v1(self):
         m = self._m
-        st = _store_of(m)
+        st = m._store
         return VertexView(m, st.edge_ends(self.key)[1])
 
     @v1.setter
@@ -224,7 +211,7 @@ class EdgeView(_ViewMixin, Edge):
     @property
     def faces(self):
         m = self._m
-        st = _store_of(m)
+        st = m._store
         keys = st.edge_faces(self.key)
         return _MutList(self, ("faces",), [FaceView(m, k) for k in keys])
 
@@ -235,7 +222,7 @@ class EdgeView(_ViewMixin, Edge):
         self._m._dirty()
 
     def _flag(self, name):
-        st = _store_of(self._m)
+        st = self._m._store
         _a, _b, flags, curve, layer = st.edge(self.key)
         if name == "soft":
             return bool(flags & 1)
@@ -249,7 +236,7 @@ class EdgeView(_ViewMixin, Edge):
 
     def _set_flag(self, name, value):
         m = self._m
-        st = _store_of(m)
+        st = m._store
         if name in ("soft", "hidden", "flat"):
             flags = st.edge(self.key)[2]
             bit = {"soft": 1, "hidden": 2, "flat": 4}[name]
@@ -299,7 +286,7 @@ class EdgeView(_ViewMixin, Edge):
         return v.key == self.v0.key or v.key == self.v1.key
 
     def length(self) -> float:
-        st = _store_of(self._m)
+        st = self._m._store
         a, b = st.edge_ends(self.key)
         from math import dist
         return dist(st.vertex_position(a), st.vertex_position(b))
@@ -360,12 +347,12 @@ class FaceView(_ViewMixin, Face):
     def _rings(self):
         m = self._m
         return [[VertexView(m, k) for k in r]
-                for r in _store_of(m).face_rings(self.key)]
+                for r in m._store.face_rings(self.key)]
 
     @property
     def loop(self):
         m = self._m
-        st = _store_of(m)
+        st = m._store
         rings = st.face_rings(self.key)
         return _MutList(self, ("loop",), [VertexView(m, k) for k in rings[0]])
 
@@ -379,7 +366,7 @@ class FaceView(_ViewMixin, Face):
     @property
     def hole_loops(self):
         m = self._m
-        st = _store_of(m)
+        st = m._store
         rings = st.face_rings(self.key)
         return _MutList(self, ("hole_loops",), [
             _MutList(self, ("hole_loops", i),
@@ -428,12 +415,12 @@ class FaceView(_ViewMixin, Face):
 
     @property
     def interior(self):
-        st = _store_of(self._m)
+        st = self._m._store
         return bool(st.face_info(self.key)[1] & 1)
 
     @interior.setter
     def interior(self, value):
-        st = _store_of(self._m)
+        st = self._m._store
         if not isinstance(value, bool):
             raise TypeError("face.interior requires a bool")
         flags = st.face_info(self.key)[1]
@@ -442,7 +429,7 @@ class FaceView(_ViewMixin, Face):
     @property
     def attrs(self):
         m = self._m
-        st = _store_of(m)
+        st = m._store
         attrs = _attribute_owner(m)
         own = attrs["_attr_own"]
         d = own.get(self.key)
@@ -465,7 +452,7 @@ class FaceView(_ViewMixin, Face):
         as one store op: a push/pull turning its base over no longer
         materialises the mesh. Python bumps no counter for it, neither
         does this (the store's own revision moves, for the view caches)."""
-        st = _store_of(self._m)
+        st = self._m._store
         st.reverse_face(self.key)
 
     # Geometry from one fetch of the rings' positions.
@@ -475,8 +462,8 @@ class FaceView(_ViewMixin, Face):
 
     def triangulate(self, normal=None):
         from core._native import qt_hypot
-        store = _store_of(self._m)
-        if store is not None and qt_hypot() and store.is_live(self.key):
+        store = self._m._store
+        if qt_hypot() and store.is_live(self.key):
             triangles = store.face_triangles(self.key, qt_hypot(),
                                              normal.toTuple() if normal is not None else None)
             return [tuple(QVector3D(*p) for p in t) for t in triangles]
@@ -562,117 +549,6 @@ class _MutSet(set):
     add = discard = remove = pop = clear = update = _readonly
     difference_update = intersection_update = symmetric_difference_update = _readonly
     __ior__ = __iand__ = __ixor__ = __isub__ = _readonly
-
-
-class _Seq:
-    """``mesh.vertices`` / ``edges`` / ``faces`` of a store-backed mesh: a
-    live list of keyed views in store order."""
-
-    __slots__ = ("_m", "_kind", "_name", "_cls", "_idx")
-
-    def __init__(self, m, kind, name, cls, idx):
-        self._m = m
-        self._kind = kind
-        self._name = name
-        self._cls = cls
-        self._idx = idx
-
-    def _keys(self):
-        return self._m.__dict__["_store"].keys(self._kind)
-
-    def __len__(self):
-        return self._m.__dict__["_store"].counts()[self._idx]
-
-    def __bool__(self):
-        return len(self) > 0
-
-    def __iter__(self):
-        m, cls = self._m, self._cls
-        return (cls(m, k) for k in self._keys())
-
-    def __reversed__(self):
-        return reversed(list(self))
-
-    def __getitem__(self, i):
-        if isinstance(i, slice):
-            m, cls = self._m, self._cls
-            return [cls(m, k) for k in self._keys()[i]]
-        st = self._m.__dict__["_store"]
-        n = st.counts()[self._idx]
-        if i < 0:
-            i += n
-        if not 0 <= i < n:
-            raise IndexError("list index out of range")
-        return self._cls(self._m, st.key_at(self._kind, i))
-
-    def __contains__(self, x):
-        if not isinstance(x, _BASE[self._cls]):
-            return False
-        try:
-            return self._m.__dict__["_store"].is_live(x.key)
-        except (OverflowError, TypeError):
-            return False
-
-    def index(self, x, *args):
-        if not args and x in self:
-            return self._m.__dict__["_store"].index_of(x.key)
-        return list(self).index(x, *args)
-
-    def count(self, x):
-        return 1 if x in self else 0
-
-    def copy(self):
-        return list(self)
-
-    def __eq__(self, other):
-        if isinstance(other, (list, _Seq)):
-            return list(self) == list(other)
-        return NotImplemented
-
-    def __add__(self, other):
-        return list(self) + list(other)
-
-    def __radd__(self, other):
-        return list(other) + list(self)
-
-    def __repr__(self):
-        return repr(list(self))
-
-    def _replace(self, items):
-        if any(not isinstance(item, self._cls) or not self._m._store.knows(item.key)
-               for item in items):
-            raise ValueError(f"{self._name} requires keyed elements belonging to this mesh")
-        self._m._store.set_members(self._kind, [item.key for item in items])
-        self._m._dirty()
-
-    def _write(name):
-        def method(self, *args, **kwargs):
-            items = list(self)
-            result = getattr(items, name)(*args, **kwargs)
-            self._replace(items)
-            return result
-        return method
-
-    append = _write("append")
-    extend = _write("extend")
-    insert = _write("insert")
-    remove = _write("remove")
-    pop = _write("pop")
-    clear = _write("clear")
-    reverse = _write("reverse")
-    sort = _write("sort")
-    __delitem__ = _write("__delitem__")
-    __setitem__ = _write("__setitem__")
-
-    def __iadd__(self, other):
-        self.extend(other)
-        return self
-
-    def __imul__(self, n):
-        self._replace(list(self) * n)
-        return self
-
-    del _write
 
 
 # ---- Snapshots --------------------------------------------------------------
@@ -780,70 +656,10 @@ class StoreState(Mapping):
             return hit
         if name not in self._KEYS:
             raise KeyError(name)
-        hit = self._cache[name] = self._build(name)
+        hit = (_SnapPositions(self.snap) if name == "vpos" else
+               self.snap.field(name, self.mesh, self.own, self.table))
+        self._cache[name] = hit
         return hit
-
-    def _build(self, name):
-        snap, m = self.snap, self.mesh
-        if name == "vpos":
-            return _SnapPositions(snap)
-        if name in ("vertices", "edges", "faces"):
-            kind = name[:-1] if name != "vertices" else "vertex"
-            cls = {"vertex": VertexView, "edge": EdgeView,
-                   "face": FaceView}[kind]
-            return [cls(m, k) for k in snap.keys(kind)]
-        a = snap.arrays()
-        vk = snap.keys("vertex")
-        ek = snap.keys("edge")
-        fk = snap.keys("face")
-        V = [VertexView(m, k) for k in vk]
-        F = [FaceView(m, k) for k in fk]
-        if name == "registry":
-            cells, vid = snap.registry()
-            return {tuple(c): V[i] for c, i in zip(cells.tolist(),
-                                                   vid.tolist())}
-        if name == "vedges":
-            out = {k: set() for k in vk}
-            for e, (i, j) in zip(ek, a["edges"].tolist()):
-                out[vk[i]].add(EdgeView(m, e))
-                out[vk[j]].add(EdgeView(m, e))
-            return out
-        if name == "efaces":
-            s = a["ef_start"].tolist()
-            ff = a["ef_face"].tolist()
-            return {e: [F[j] for j in ff[s[i]:s[i + 1]]]
-                    for i, e in enumerate(ek)}
-        fl = a["flags"].tolist()
-        if name == "esoft":
-            return {e: bool(f & 1) for e, f in zip(ek, fl)}
-        if name == "ehidden":
-            return {e: bool(f & 2) for e, f in zip(ek, fl)}
-        if name == "eflat":
-            return {e: bool(f & 4) for e, f in zip(ek, fl)}
-        if name == "ecurve":
-            return {e: (None if c < 0 else c)
-                    for e, c in zip(ek, a["curve"].tolist())}
-        if name == "elayer":
-            names = snap.layer_names()
-            return {e: (None if c < 0 else names[c])
-                    for e, c in zip(ek, a["layer"].tolist())}
-        corners, sizes = a["corners"].tolist(), a["ring_sizes"].tolist()
-        counts_ = a["ring_counts"].tolist()
-        if name in ("floop", "fholes"):
-            out = {}
-            c = r = 0
-            for f, nr in zip(fk, counts_):
-                loops = []
-                for _ in range(nr):
-                    loops.append([V[j] for j in corners[c:c + sizes[r]]])
-                    c += sizes[r]
-                    r += 1
-                out[f] = loops[0] if name == "floop" else loops[1:]
-            return out
-        if name == "fattrs":
-            return {f: dict(self._face_attrs(f, i))
-                    for f, i in zip(fk, a["face_attr"].tolist())}
-        return {f: bool(x & 1) for f, x in zip(fk, a["face_flags"].tolist())}
 
 
 class _SnapPositions(Mapping):
@@ -873,27 +689,26 @@ class _SnapPositions(Mapping):
 
 # ---- The store-backed mesh -------------------------------------------------
 
-def _seq_property(kind, name, cls, idx):
+def _seq_property(kind, cls):
     def get(self):
-        return _Seq(self, kind, name, cls, idx)
+        return MeshElements(self, kind, cls, _BASE[cls])
 
     def put(self, value):
-        get(self)._replace(list(value))
+        get(self).replace(value)
     return property(get, put)
 
 
-class StoreMesh(Mesh):
-    """A Mesh whose geometry is owned by one native MeshStore."""
+class StoreMesh(_mesh._MeshState):
+    """The public Mesh facade over a native geometry store."""
 
-    def __init__(self) -> None:
-        # ``StoreMesh()`` (as ``type(scene.mesh)()``) is a new empty mesh
-        # like ``Mesh()``.
-        self.__class__ = Mesh
-        Mesh.__init__(self)
+    def __init__(self):
+        self._mut_serial = 0
+        self._chunk_dirty = True
+        initialise_store(self)
 
-    vertices = _seq_property("vertex", "vertices", VertexView, 0)
-    edges = _seq_property("edge", "edges", EdgeView, 1)
-    faces = _seq_property("face", "faces", FaceView, 2)
+    vertices = _seq_property("vertex", VertexView)
+    edges = _seq_property("edge", EdgeView)
+    faces = _seq_property("face", FaceView)
     @property
     def _registry(self):
         cells, indices = self._store.registry()
@@ -925,7 +740,7 @@ class StoreMesh(Mesh):
 
     def surface_of(self, face):
         result = self.grow_pick(face, "natural")
-        return super().surface_of(face) if result is None else result
+        return [face] if result is None else result
 
     # -- what the store answers itself
     def _bump(self):
@@ -1264,14 +1079,14 @@ class StoreMesh(Mesh):
     def interior_vertex_on(self, edge):
         k, h = self._own(edge, 1), _hypot()
         if k is None:
-            return Mesh.interior_vertex_on(self, edge)
+            return None
         hit = self._store.interior_vertex_on(k, h)
         return None if hit is None else VertexView(self, hit)
 
     def collapsible_vertex(self, v) -> bool:
         k, h = self._own(v, 0), _hypot()
         if k is None:
-            return Mesh.collapsible_vertex(self, v)
+            return False
         return self._store.collapsible_vertex(k, h)
 
     def collapse_vertex(self, v) -> dict:
@@ -1499,20 +1314,25 @@ class StoreMesh(Mesh):
         self.restore_state(undo)
 
     def tag_curve(self, loop_points, closed=True):
-        if not self._store._model_frame:
-            return super().tag_curve(loop_points, closed)
         self._chunk_dirty = True
         self._mut_serial += 1
-        if self._store.tag_curve_path([p.toTuple() for p in loop_points], closed, _mesh._CURVE_COUNTER):
+        points = list(loop_points)
+        cid = _mesh._CURVE_COUNTER
+        if not self._store._model_frame:
+            matched = _mesh.object_drawing.tag_curve(self.edges, points, closed, cid)
+        else:
+            matched = self._store.tag_curve_path([p.toTuple() for p in points], closed, cid)
+        if matched:
             return self.next_curve_id()
         return None
 
     def resplit_curves(self) -> None:
-        if not self._store._model_frame:
-            return super().resplit_curves()
         self._chunk_dirty = True
         self._mut_serial += 1
-        _mesh._CURVE_COUNTER = self._store.resplit_curves(_mesh._CURVE_COUNTER)
+        if self._store._model_frame:
+            _mesh._CURVE_COUNTER = self._store.resplit_curves(_mesh._CURVE_COUNTER)
+        else:
+            _mesh._CURVE_COUNTER = _mesh.object_drawing.resplit_curves(self.edges, _mesh._CURVE_COUNTER)
 
     def clear(self) -> None:
         self._store.clear()
@@ -1544,7 +1364,15 @@ class StoreMesh(Mesh):
     def bulk_weld(self, pos):
         if self._store.revision == 0 and not any(self._store.counts()) and self._store._model_frame:
             return bulk_weld(self, pos)
-        return Mesh.bulk_weld(self, pos)
+        points = np.ascontiguousarray(pos, dtype=np.float64)
+        if not len(points):
+            return [], np.empty(0, dtype=np.int64)
+        planned = self.__dict__.get("_planned_points")
+        supplied = (np.asarray([planned.get(tuple(p), p) for p in points], dtype=np.float64)
+                    if planned else None)
+        keys, indices = self._store.weld_existing(points, supplied)
+        self.__dict__.pop("_bulk", None)
+        return [VertexView(self, k) for k in keys], indices
 
     def add_edges_welded(self, vobjs, ia, ib, flags=None):
         b = self.__dict__.get("_bulk")
@@ -1627,7 +1455,7 @@ class StoreMesh(Mesh):
             new = instance_view(deepcopy(definition, memo), store.frame_matrix, store.frame_origin)
             memo[id(self)] = new
             return new
-        new = StoreMesh.__new__(StoreMesh)
+        new = object.__new__(type(self))
         memo[id(self)] = new
         d = self.__dict__
         rest = {k: v for k, v in d.items()
@@ -1635,7 +1463,6 @@ class StoreMesh(Mesh):
                 and k not in ("vertices", "edges", "faces", "_registry",
                               "_displaced")}
         new.__dict__.update(deepcopy(rest, memo))
-        new.__dict__["_keys"] = count(next(_mesh._KEY_NAMESPACES) << 40)
         ns = next(_mesh._KEY_NAMESPACES)
         new.__dict__["_store"] = d["_store"].copy(ns)
         new.__dict__["_attr_table"] = d["_attr_table"]
@@ -1650,7 +1477,7 @@ class StoreMesh(Mesh):
             return instance_view, (definition, self._store.frame_matrix, self._store.frame_origin)
         state = {k: v for k, v in self.__dict__.items() if k not in STORE_SIDE and k != "_keys"}
         attrs = {k & LOCAL_MASK: v for k, v in self._attr_own.items()}
-        return _unpickle_mesh, (1, self._store.pickle_archive()), (state, self._attr_table, attrs)
+        return _unpickle_mesh, (1, self._store.pickle_archive(), type(self)), (state, self._attr_table, attrs)
 
     def __setstate__(self, saved):
         state, table, attrs = saved
@@ -1794,14 +1621,14 @@ def _restore_store_state(m, snap: StoreState) -> None:
     for name in ("vertices", "edges", "faces", "_registry", "_displaced",
                  "_bulk"):
         d.pop(name, None)
-    m.__class__ = StoreMesh
+    if type(m) is DeferredMesh:
+        m.__class__ = StoreMesh
     m._chunk_dirty = True
     m._mut_serial += 1
 
 
 def instance_view(mesh, matrix, origin=(0., 0., 0.)):
     """An occurrence facade over the definition store, with the same element keys."""
-    from core.mesh import DeferredMesh
     if isinstance(mesh, DeferredMesh):
         mesh._materialize()
     if type(mesh) is not StoreMesh:
@@ -1810,26 +1637,17 @@ def instance_view(mesh, matrix, origin=(0., 0., 0.)):
         view = mesh._store._instance_view(mesh, matrix, origin)
     except ValueError:  # a singular placement has no world-to-definition inverse
         return None
-    result = Mesh()
+    result = StoreMesh()
     become_store(result, view, mesh._attr_table, mesh._attr_own)
     result._instance_definition = mesh
     return result
 
 
-def _unpickle_mesh(version, archive):
+def _unpickle_mesh(version, archive, cls=StoreMesh):
     from ingetrazo_core import MeshStore
-    mesh = StoreMesh.__new__(StoreMesh)
-    mesh._keys = count(next(_mesh._KEY_NAMESPACES) << 40)
+    mesh = object.__new__(cls)
     store = MeshStore.from_pickle_archive(version, archive, next(_mesh._KEY_NAMESPACES))
     become_store(mesh, store, [])
-    return mesh
-
-
-def empty_store_mesh():
-    """Fresh empty store for a result built from store-backed operands."""
-    mesh = Mesh()
-    if type(mesh) is not StoreMesh:
-        initialise_store(mesh)
     return mesh
 
 
@@ -1847,7 +1665,8 @@ def become_store(m, store, table, own=None) -> None:
     d["_store"] = store
     d["_attr_table"] = table
     d["_attr_own"] = own if own is not None else {}
-    m.__class__ = StoreMesh
+    if type(m) is DeferredMesh:
+        m.__class__ = StoreMesh
 
 
 def _table_index(table, index, a):
@@ -1878,11 +1697,8 @@ def bulk_weld(m, pos):
     if not len(points):
         return [], np.empty(0, dtype=np.int64)
     store, indices = mod.MeshStore._bulk_points(next(_mesh._KEY_NAMESPACES), points, **_weld_args())
-    if type(m) is StoreMesh:
-        m._store._extend_bulk(store)
-        store = m._store
-    else:
-        become_store(m, store, [])
+    m._store._extend_bulk(store)
+    store = m._store
     vobjs = [VertexView(m, k) for k in store.keys("vertex")]
     m.__dict__["_bulk"] = dict(stage="points", vobjs=vobjs)
     return vobjs, indices
@@ -2180,3 +1996,99 @@ def plan_cap_plane(mesh, origin, normal):
     def ring(points):
         return [QVector3D(*p) for p in points]
     return [(ring(rings[0]), [ring(r) for r in rings[1:]], part) for rings, part in plan]
+
+
+def _deferred_state(name):
+    def get(self):
+        self._materialize()
+        return getattr(self, name)
+
+    def put(self, value):
+        self._materialize()
+        setattr(self, name, value)
+    return property(get, put)
+
+
+class DeferredMesh(StoreMesh):
+    """A document block whose native store is built on first geometry access."""
+
+    _store = _deferred_state("_store")
+    vertices = _deferred_state("vertices")
+    edges = _deferred_state("edges")
+    faces = _deferred_state("faces")
+    _registry = _deferred_state("_registry")
+    _displaced = _deferred_state("_displaced")
+
+    @staticmethod
+    def defer(mesh: StoreMesh, build, nfaces: int, source=None) -> bool:
+        """Turn ``mesh`` into a deferred one that runs ``build(mesh)`` on
+        first touch and makes exactly ``nfaces`` faces; ``source`` is what
+        it is built from, for :mod:`core.lazy_mesh` (kept until built).
+        Only an empty StoreMesh can accept a deferred build."""
+        d = mesh.__dict__
+        if type(mesh) is not StoreMesh or any(mesh._store.counts()):
+            return False
+        for name in STORE_SIDE:
+            d.pop(name, None)
+        d["_deferred"] = build
+        d["_deferred_nfaces"] = nfaces
+        d["_deferred_source"] = source
+        mesh.__class__ = DeferredMesh
+        return True
+
+    def _materialize(self) -> None:
+        """First touch: a store-backed mesh when the store is on
+        (``core.store_mesh.from_deferred``), else the Python objects the
+        loader's build makes."""
+        if not from_deferred(self):
+            self._build_from_callback()
+        observe = _mesh.on_mesh_materialized.get()
+        if observe is not None:
+            observe(self)
+
+    def _build_from_callback(self):
+        self.__dict__.pop("_deferred_hooks", None)
+        self.__dict__.pop("_deferred_hook_source", None)
+        build = self.__dict__.pop("_deferred")
+        del self.__dict__["_deferred_nfaces"]
+        del self.__dict__["_deferred_source"]
+        self.__dict__.pop("_deferred_plan", None)
+        self.__dict__.pop("_deferred_geom", None)
+        self.__dict__.pop("_drawing_staged", None)
+        self.__dict__.pop("_drawing_source_key", None)
+        self.__dict__.pop("_drawing_texture_paths", None)
+        self.__class__ = StoreMesh
+        initialise_store(self)
+        build(self)
+
+    def __deepcopy__(self, memo):
+        self._materialize()
+        return self.__deepcopy__(memo)
+
+    def __reduce_ex__(self, protocol):
+        # deepcopy / pickle copy the built mesh, never the pending build.
+        self._materialize()
+        return self.__reduce_ex__(protocol)
+
+
+def _first_touch(name):
+    """Build the deferred store before dispatching the geometry method."""
+    def method(self, *args, **kw):
+        # Python binds m.move_vertex before evaluating m.vertices[0]. The
+        # argument can therefore have materialised this very mesh already.
+        if isinstance(self, DeferredMesh):
+            self._materialize()
+        return getattr(self, name)(*args, **kw)
+    method.__name__ = name
+    return method
+
+
+# Every Mesh method that reads or writes the geometry first-touches it, so
+# a method never starts as a DeferredMesh and goes on as something else.
+for _name, _value in {**_mesh._MeshState.__dict__, **StoreMesh.__dict__}.items():
+    if (callable(_value) and not isinstance(_value, staticmethod)
+            and _name not in ("__init__", "__deepcopy__", "bump_revision",
+                              "mark_modified", "invalidate_placement_chunks")
+            and not (_name.startswith("__") and _name.endswith("__"))):
+        setattr(DeferredMesh, _name, _first_touch(_name))
+del _name, _value
