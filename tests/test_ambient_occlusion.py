@@ -187,12 +187,12 @@ def corner_blocks(native_gpu_host):
     return build
 
 
-def _corner_light(vp, monkeypatch, half_code=0.) -> float:
+def _corner_light(vp, monkeypatch) -> float:
     """How much light the darkest of the corner keeps, on over off."""
     off = _render_at(vp, monkeypatch, "0", 1000, 800)
     on = _render_at(vp, monkeypatch, "1", 1000, 800)
     lit = off > 20
-    return float(np.percentile((on[lit] + half_code) / off[lit], 0.1))
+    return float(np.percentile(on[lit] / off[lit], 0.1))
 
 
 def test_a_light_inner_corner_is_a_soft_grey_not_a_black_bar(
@@ -208,11 +208,21 @@ def test_a_dark_corner_stays_darker_than_a_light_one(
         corner_blocks, monkeypatch):
     """The bounce follows the face's colour: dark walls pass on little
     light, so their corner keeps more of its darkening."""
-    light = _corner_light(corner_blocks((0.85, 0.85, 0.82)), monkeypatch)
-    # Account for rounding the dark rendered sample to the nearest 8-bit
-    # code before measuring a five-percentage-point difference in light.
-    dark = _corner_light(corner_blocks((0.25, 0.25, 0.25)), monkeypatch, half_code=-0.5)
-    assert dark < light - 0.05, (dark, light)
+    def samples(color):
+        vp = corner_blocks(color)
+        return [_render_at(vp, monkeypatch, enabled, 1000, 800) for enabled in ("0", "1")]
+
+    light_off, light_on = samples((0.85, 0.85, 0.82))
+    dark_off, dark_on = samples((0.25, 0.25, 0.25))
+    # Compare the same wall pixels in both images. Selecting the darkest
+    # percentile independently can measure an unchanged ground or edge.
+    walls = (light_off > dark_off + 30) & (dark_off > 20)
+    light = light_on[walls] / light_off[walls]
+    dark = dark_on[walls] / dark_off[walls]
+    corner = light < 0.9
+    assert corner.sum() > 100
+    assert np.median(light[corner] - dark[corner]) > 0.025
+
 
 
 def test_intensity_zero_leaves_the_picture_untouched(

@@ -14,6 +14,7 @@ BINARY = ROOT / "rust/built_app/target/release/built"
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BINARY.is_file(),
                     reason="requires the native window")
+@pytest.mark.window_size(1280, 800)
 def test_split_edit_restore_and_release(tmp_path):
     model = ROOT / "tests/fixtures/shell/slab-and-cube.igz"
     script = tmp_path / "views.txt"

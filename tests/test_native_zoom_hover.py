@@ -24,6 +24,7 @@ def _moves(block):
     return block.get("move_ms", {"n": 0})["n"]
 
 
+@pytest.mark.window_size(1600, 1000)
 def test_pointer_moves_wait_for_the_end_of_a_zoom(tmp_path):
     root = Path(__file__).resolve().parents[1]
     binary = Path(os.environ.get("BUILT_BINARY", root / "rust/built_app/target/debug/built"))

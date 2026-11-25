@@ -7,7 +7,6 @@
 extern CFPropertyListRef _CFPreferencesCopyValueWithContainer(CFStringRef, CFStringRef, CFStringRef, CFStringRef, CFStringRef);
 extern CFArrayRef _CFPreferencesCopyKeyListWithContainer(CFStringRef, CFStringRef, CFStringRef, CFStringRef);
 extern void _CFPreferencesSetValueWithContainer(CFStringRef, CFPropertyListRef, CFStringRef, CFStringRef, CFStringRef, CFStringRef);
-extern void _CFPreferencesSetMultipleWithContainer(CFDictionaryRef, CFArrayRef, CFStringRef, CFStringRef, CFStringRef, CFStringRef);
 extern Boolean _CFPreferencesSynchronizeWithContainer(CFStringRef, CFStringRef, CFStringRef, CFStringRef);
 static CFStringRef container(void) {
     return CFAutorelease(CFStringCreateWithCString(NULL, getenv("HOME"), kCFStringEncodingUTF8));
@@ -22,8 +21,16 @@ static CFArrayRef read_keys(CFStringRef app, CFStringRef user, CFStringRef host)
 static void write_value(CFStringRef key, CFPropertyListRef value, CFStringRef app, CFStringRef user, CFStringRef host) {
     _CFPreferencesSetValueWithContainer(key, value, app, user, host, container());
 }
+struct domain { CFStringRef app, user, host; };
+static void put(const void *key, const void *value, void *context) {
+    struct domain *domain = context;
+    write_value(key, value, domain->app, domain->user, domain->host);
+}
 static void write_values(CFDictionaryRef values, CFArrayRef removed, CFStringRef app, CFStringRef user, CFStringRef host) {
-    _CFPreferencesSetMultipleWithContainer(values, removed, app, user, host, container());
+    struct domain domain = {app, user, host};
+    if (values) CFDictionaryApplyFunction(values, put, &domain);
+    if (removed) for (CFIndex i = 0; i < CFArrayGetCount(removed); ++i)
+        write_value(CFArrayGetValueAtIndex(removed, i), NULL, app, user, host);
 }
 static Boolean sync_domain(CFStringRef app, CFStringRef user, CFStringRef host) {
     return _CFPreferencesSynchronizeWithContainer(app, user, host, container());

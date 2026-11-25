@@ -120,6 +120,7 @@ def test_native_release_review(tmp_path):
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
+@pytest.mark.window_size(1000, 920)
 def test_native_first_run_custom_units(tmp_path):
     from built_core import NativeSettings
 
@@ -181,6 +182,7 @@ def test_native_settings_device_preferences(tmp_path):
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
+@pytest.mark.window_size(1000, 720)
 def test_native_about_copies_diagnostics(tmp_path):
     copied = tmp_path / "copied.txt"
     venv = fixture_venv(tmp_path,
@@ -229,6 +231,7 @@ def test_native_section_name_question(tmp_path):
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
+@pytest.mark.window_size(1000, 720)
 def test_native_extensions_open_painted_and_apply(tmp_path):
     home = tmp_path / "home"
     home.mkdir()
@@ -253,6 +256,7 @@ def test_native_extensions_open_painted_and_apply(tmp_path):
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
+@pytest.mark.window_size(1000, 920)
 def test_native_location_coordinates_map_apply_and_cancel(tmp_path):
     from built_core.scene import Scene
     from formats.igz import save_scene, load_into
@@ -296,6 +300,7 @@ def test_native_location_coordinates_map_apply_and_cancel(tmp_path):
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
+@pytest.mark.window_size(1000, 920)
 def test_native_online_catalogue_places_the_credited_component(tmp_path):
     import zipfile
     from built_core.scene import Scene
@@ -406,6 +411,7 @@ def test_native_ai_connection_edits_plugin_model(tmp_path):
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
+@pytest.mark.window_size(1280, 800)
 def test_native_svg_preview_and_delivery_edit(tmp_path):
     from built_render import SurveyRaster
     from built_core import deliveries
@@ -457,6 +463,7 @@ def test_native_svg_preview_and_delivery_edit(tmp_path):
     os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
     reason="requires a built window and BUILT_WINDOW_TESTS=1",
 )
+@pytest.mark.window_size(1280, 800)
 def test_current_view_svg_modes_stay_centred_and_export(tmp_path):
     from formats.igz import save_scene
     from tests.test_ifc_export import _tagged_wall_scene
@@ -517,6 +524,7 @@ Host.state = state
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
+@pytest.mark.window_size(1280, 800)
 def test_bevel_inspector_edit_apply_and_leave(tmp_path):
     from formats.igz import save_scene
     from tests.test_ifc_export import _tagged_wall_scene
@@ -561,6 +569,7 @@ Host.state = bevel_state
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
+@pytest.mark.window_size(1280, 800)
 def test_camera_registry_text_and_plugin_utilities(tmp_path):
     """Use renderer verbs for controls without a native menu-script spelling."""
     from built_render import SurveyRaster

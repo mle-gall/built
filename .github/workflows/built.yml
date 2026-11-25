@@ -96,7 +96,7 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           python -m venv .venv
-          .venv/bin/python -m pip install -r requirements.txt pillow
+          .venv/bin/python -m pip install -r requirements.txt pillow pymupdf ifctester
           if [[ "$RUNNER_OS" == macOS ]]; then
             test "$(uname -m)" = arm64
             .venv/bin/python -m pip install pyinstaller ifcopenshell
@@ -114,7 +114,8 @@ jobs:
       - name: Run the full macOS suite
         if: runner.os == 'macOS'
         run: |
-          if swift .github/ci/window-session.swift; then
+          if available=$(swift .github/ci/window-session.swift); then
+            export BUILT_CI_WINDOW_SIZE="$available"
             export BUILT_WINDOW_TESTS=1
           else
             code=$?

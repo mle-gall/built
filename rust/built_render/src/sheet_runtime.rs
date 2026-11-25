@@ -706,8 +706,10 @@ fn closed_now(win: &Bound<'_, PyAny>, st: &Bound<'_, SheetState>, replaced: bool
     let view = view_of(win).map(Bound::unbind).unwrap_or_else(|| py.None());
     let ctx = Py::new(py, Ctx { win: win.clone().unbind(), view, replaced })?;
     let provider = st.borrow().provider.clone_ref(py);
-    if let Err(e) = provider.bind(py).call_method1("closed", (ctx,)) {
-        e.print(py);
+    if let Some(closed) = provider.bind(py).getattr_opt("closed")? {
+        if let Err(e) = closed.call1((ctx,)) {
+            e.print(py);
+        }
     }
     Ok(())
 }

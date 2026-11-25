@@ -8,6 +8,7 @@ import pytest
 from scripts.isolated_launch import run
 
 
+@pytest.mark.window_size(1280, 800)
 def test_native_input_ownership(tmp_path):
     root = Path(__file__).resolve().parents[1]
     binary = root / "rust/built_app/target/release/built"

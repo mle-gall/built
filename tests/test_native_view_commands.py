@@ -7,6 +7,7 @@ import subprocess
 import pytest
 
 
+@pytest.mark.window_size(1600, 1000)
 def test_navigation_cluster(tmp_path):
     root = Path(__file__).resolve().parents[1]
     binary = Path(os.environ.get("BUILT_BINARY", root / "rust/built_app/target/debug/built"))

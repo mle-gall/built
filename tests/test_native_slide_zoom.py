@@ -21,6 +21,7 @@ def _states(stdout, tag):
             if line.startswith(f"[built] {tag} ")]
 
 
+@pytest.mark.window_size(1600, 1000)
 def test_slow_slide_and_inertia_zoom_like_a_fast_slide(tmp_path):
     root = Path(__file__).resolve().parents[1]
     binary = Path(os.environ.get("BUILT_BINARY", root / "rust/built_app/target/debug/built"))
