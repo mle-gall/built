@@ -43,7 +43,6 @@ def golden_state(mesh):
     ("placed", "5448b8fb93e4eb67f0be84fbf0c4b002deb7234a3239a887379fe3b5f9be74d5"),
 ])
 def test_store_commands_keep_historical_meshes(monkeypatch, operation, expected):
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     states = []
     for seed in range(16):
         if operation == "rooms":

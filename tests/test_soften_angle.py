@@ -396,7 +396,7 @@ def _half_soft_only_cylinder():
 
 
 @pytest.mark.parametrize("binary", [False, True])
-@pytest.mark.parametrize("engine", ["python", "native", "store"])
+@pytest.mark.parametrize("engine", ["python", "native"])
 def test_soft_only_edges_survive_save_and_reopen(tmp_path, monkeypatch,
                                                  binary, engine):
     from core import _native
@@ -405,7 +405,6 @@ def test_soft_only_edges_survive_save_and_reopen(tmp_path, monkeypatch,
         monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)
         monkeypatch.setattr(igz, "_BULK_MIN", 1)
     monkeypatch.setattr(_native, "wanted", lambda: engine != "python")
-    monkeypatch.setattr(_native, "store_wanted", lambda: engine == "store")
     group = Group(_half_soft_only_cylinder(), name="c")
     group.xform = QMatrix4x4()
     scene = Scene(groups=[group])
@@ -445,7 +444,6 @@ def test_a_store_backed_edge_keeps_its_soft_only_mark(tmp_path, monkeypatch):
     from core import _native
     from formats import igz
     monkeypatch.setattr(_native, "wanted", lambda: True)
-    monkeypatch.setattr(_native, "store_wanted", lambda: True)
     monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)
     monkeypatch.setattr(igz, "_BULK_MIN", 1)
     group = Group(_cylinder(Mesh(), soft=False), name="c")

@@ -515,7 +515,6 @@ def test_intersected_wall_occludes_loose_slab_edges(native, monkeypatch):
     from tests.test_intersect_faces import _box, RED, BLUE
     from views.wgpu_scene import pack_scene
 
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     scene = Scene()
     mesh = scene.mesh
     assert isinstance(mesh, StoreMesh)

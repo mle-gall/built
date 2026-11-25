@@ -22,14 +22,16 @@ pub(super) struct Shell {
 impl Shell {
     fn delete(&mut self, st: &mut Store, ring: &[Point]) -> Result<(), OpError> {
         let candidates = st.live_slots(Kind::Face);
-        let gone = st
-            .delete_command_face(ring, &candidates)
-            .ok_or(OpError::Fallback(
+        use super::commands::FaceDeletion;
+        match st.delete_command_face(ring, &candidates) {
+            FaceDeletion::Blocked => return Err(OpError::Fallback(
                 "push would leave a deleted face on an edge",
-            ))?;
-        if let Some(f) = gone {
-            self.dirty += 1;
-            self.removed_faces.push(f);
+            )),
+            FaceDeletion::Missing => {}
+            FaceDeletion::Removed(key) => {
+                self.dirty += 1;
+                self.removed_faces.push(key);
+            }
         }
         self.steps += 1;
         Ok(())

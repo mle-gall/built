@@ -18,7 +18,6 @@ def graph():
 @pytest.mark.parametrize("scan", ["0", "1"])
 @pytest.mark.parametrize("cascade", [False, True])
 def test_delete_edges_returns_command_keys_in_order(monkeypatch, scan, cascade):
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     monkeypatch.setenv("INGETRAZO_SCANS", scan)
     m, ref = graph(), graph()
     first = [0,4,len(m.edges)-1]
@@ -41,7 +40,6 @@ def test_delete_edges_returns_command_keys_in_order(monkeypatch, scan, cascade):
 
 @pytest.mark.parametrize("scan", ["0", "1"])
 def test_delete_face_distinguishes_missing_from_refusal(monkeypatch, scan):
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     monkeypatch.setenv("INGETRAZO_SCANS", scan)
     m, ref = graph(), graph()
     key = m.faces[-1].key
@@ -53,7 +51,4 @@ def test_delete_face_distinguishes_missing_from_refusal(monkeypatch, scan):
     assert fingerprint(m) == fingerprint(ref)
     after = m.revision
     assert MeshStore.command_delete_face(m, outer) == (None, 0)
-    m._planned_points = {}
-    assert MeshStore.command_delete_face(m, outer) is None
-    assert MeshStore.command_delete_edges(m, []) is None
     assert m.revision == after

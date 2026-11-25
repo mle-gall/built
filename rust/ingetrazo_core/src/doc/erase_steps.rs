@@ -55,32 +55,19 @@ fn run_delete_edges(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult
     let mesh = scene.getattr("mesh")?;
     let endpoints = s.arg(py, 0);
     let cascade: bool = s.arg(py, 1).extract()?;
-    if s.journalled() {
-        let segments = endpoints
-            .try_iter()?
-            .map(|pair| {
-                let pair = pair?;
-                Ok([point(&pair.get_item(0)?)?, point(&pair.get_item(1)?)?])
-            })
-            .collect::<PyResult<Vec<_>>>()?;
-        if let Some(removed) = command_delete_edges(&mesh, segments, cascade)? {
-            let edges = views(py, "EdgeView", &mesh, &removed.edges)?;
-            let faces = views(py, "FaceView", &mesh, &removed.faces)?;
-            discard_all(scene, &faces)?;
-            discard_all(scene, &edges)?;
-            me.setattr("removed_edges", edges)?;
-            me.setattr("removed_faces", faces)?;
-            return version(scene);
-        }
-    }
     snapshot(s, py, &mesh)?;
-    let removed = py
-        .import("ingetrazo_core")?
-        .getattr("object_drawing")?
-        .getattr("delete_edges")?
-        .call1((&mesh, &endpoints, cascade, scene.getattr("selection")?))?;
-    me.setattr("removed_edges", removed.get_item(0)?)?;
-    me.setattr("removed_faces", removed.get_item(1)?)?;
+    let segments = endpoints.try_iter()?.map(|pair| {
+        let pair = pair?;
+        Ok([point(&pair.get_item(0)?)?, point(&pair.get_item(1)?)?])
+    }).collect::<PyResult<Vec<_>>>()?;
+    let removed = command_delete_edges(&mesh, segments, cascade)?
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("edge deletion would leave inconsistent incidence"))?;
+    let edges = views(py, "EdgeView", &mesh, &removed.edges)?;
+    let faces = views(py, "FaceView", &mesh, &removed.faces)?;
+    discard_all(scene, &faces)?;
+    discard_all(scene, &edges)?;
+    me.setattr("removed_edges", edges)?;
+    me.setattr("removed_faces", faces)?;
     version(scene)
 }
 
@@ -88,26 +75,17 @@ fn run_delete_face(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<
     let me = running(py).expect("a running step");
     let mesh = scene.getattr("mesh")?;
     let ring = s.arg(py, 0);
-    if s.journalled() {
-        let outer = ring.try_iter()?.map(|p| point(&p?)).collect::<PyResult<Vec<_>>>()?;
-        if let Some(removed) = command_delete_face(&mesh, outer)? {
-            let face = match removed.face {
-                Some(key) => py.import("core.store_mesh")?.getattr("FaceView")?.call1((&mesh, key))?,
-                None => py.None().into_bound(py),
-            };
-            if !face.is_none() {
-                scene.getattr("selection")?.call_method1("discard", (&face,))?;
-            }
-            me.setattr("face", face)?;
-            return version(scene);
-        }
-    }
     snapshot(s, py, &mesh)?;
-    let face = py
-        .import("ingetrazo_core")?
-        .getattr("object_drawing")?
-        .getattr("delete_face")?
-        .call1((&mesh, &ring, scene.getattr("selection")?))?;
+    let outer = ring.try_iter()?.map(|p| point(&p?)).collect::<PyResult<Vec<_>>>()?;
+    let removed = command_delete_face(&mesh, outer)?
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("deletion requires a store mesh"))?;
+    let face = match removed.face {
+        Some(key) => py.import("core.store_mesh")?.getattr("FaceView")?.call1((&mesh, key))?,
+        None => py.None().into_bound(py),
+    };
+    if !face.is_none() {
+        scene.getattr("selection")?.call_method1("discard", (&face,))?;
+    }
     me.setattr("face", face)?;
     version(scene)
 }
@@ -178,38 +156,16 @@ fn run_erase(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
             Ok([point(&pair.get_item(0)?)?, point(&pair.get_item(1)?)?])
         })
         .collect::<PyResult<Vec<_>>>()?;
-    if let Some(erased) = command_erase_selection(&mesh, loops, segments)? {
-        discard_all(scene, &views(py, "FaceView", &mesh, &erased.faces)?)?;
-        discard_all(scene, &views(py, "EdgeView", &mesh, &erased.edges)?)?;
-        let slits = erased.slit_planes.iter().map(|(o, n)| (glam::DVec3::from_array(*o), glam::DVec3::from_array(*n))).collect();
-        let across = views(py, "FaceView", &mesh, &erased.across)?.try_iter()?.collect::<PyResult<Vec<_>>>()?;
-        rebuild_after_erase(py, scene, slits, across)?;
-        if let Some(cleanup) = command_erase_cleanup(&mesh, erased.footprint.bind(py))? {
-            discard_all(scene, &views(py, "FaceView", &mesh, &cleanup.healed_faces)?)?;
-        }
-        return version(scene);
-    }
-    // The object way, as the Python command ran it.
-    let topology = py.import("core.topology")?;
-    let footprint = topology.call_method1("winding_footprint", (&mesh,))?;
-    let drawing = py.import("ingetrazo_core")?.getattr("object_drawing")?;
-    let result = drawing.getattr("erase_selection")?.call1((&mesh, &loops_obj, &segments_obj, scene.getattr("selection")?))?;
-    let slits = result
-        .get_item(0)?
-        .try_iter()?
-        .map(|pair| {
-            let pair = pair?;
-            Ok((crate::math::xyz(&pair.get_item(0)?)?, crate::math::xyz(&pair.get_item(1)?)?))
-        })
-        .collect::<PyResult<Vec<_>>>()?;
-    let across = result.get_item(1)?.try_iter()?.collect::<PyResult<Vec<_>>>()?;
+    let erased = command_erase_selection(&mesh, loops, segments)?
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("erase would leave inconsistent incidence"))?;
+    discard_all(scene, &views(py, "FaceView", &mesh, &erased.faces)?)?;
+    discard_all(scene, &views(py, "EdgeView", &mesh, &erased.edges)?)?;
+    let slits = erased.slit_planes.iter().map(|(o, n)| (glam::DVec3::from_array(*o), glam::DVec3::from_array(*n))).collect();
+    let across = views(py, "FaceView", &mesh, &erased.across)?.try_iter()?.collect::<PyResult<Vec<_>>>()?;
     rebuild_after_erase(py, scene, slits, across)?;
-    drawing.getattr("prune_soft_edges")?.call1((&mesh,))?;
-    let kw = pyo3::types::PyDict::new(py);
-    kw.set_item("footprint", footprint)?;
-    let healed = topology.getattr("heal_overlapping_faces")?.call((&mesh,), Some(&kw))?;
-    discard_all(scene, &healed)?;
-    mesh.call_method0("prune_orphan_vertices")?;
+    let cleanup = command_erase_cleanup(&mesh, erased.footprint.bind(py))?
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("erase cleanup requires a store mesh"))?;
+    discard_all(scene, &views(py, "FaceView", &mesh, &cleanup.healed_faces)?)?;
     version(scene)
 }
 

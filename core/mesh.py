@@ -62,12 +62,6 @@ _STORE_SIDE = frozenset(("_store", "_objmap", "_attr_table", "_attr_own",
                          "_planned_points"))
 
 
-def _store_on() -> bool:
-    """Whether new meshes go to the Rust store."""
-    from core import store_mesh
-    return store_mesh.enabled()
-
-
 def _key(p: QVector3D) -> tuple[int, int, int]:
     # Integer grid cells (same partition as rounding to _KEY_DECIMALS):
     # neighbouring cells are ±1, so the boundary probes in _lookup and
@@ -294,7 +288,7 @@ class Mesh:
 
     def __init__(self) -> None:
         self._keys = count(next(_KEY_NAMESPACES) << 40)
-        if type(self) is Mesh and _store_on():
+        if type(self) is Mesh:
             from core.store_mesh import initialise_store
             self._mut_serial = 0
             self._chunk_dirty = True
@@ -558,13 +552,6 @@ class Mesh:
         subtle case where a probe welds a point WITHOUT claiming its cell,
         so a later, farther point of the same cell creates its own vertex."""
         import numpy as np
-        d = self.__dict__
-        if (type(self) is Mesh and not d["vertices"] and not d["edges"]
-                and not d["faces"] and not d["_registry"] and _store_on()):
-            # An empty mesh built in bulk (an import, a group, a copy):
-            # into the Rust store (core/store_mesh.py), same vertex order.
-            from core import store_mesh
-            return store_mesh.bulk_weld(self, pos)
         from core.store_mesh import StoreMesh
         store = self._store if isinstance(self, StoreMesh) else None
         pos = np.ascontiguousarray(pos, dtype=np.float64)
@@ -959,6 +946,7 @@ class DeferredMesh(Mesh):
     :meth:`defer` only takes an EMPTY mesh, so the deferred build welds
     against the same empty registry the eager one would."""
 
+    _store = _deferred_state("_store")
     vertices = _deferred_state("vertices")
     edges = _deferred_state("edges")
     faces = _deferred_state("faces")
@@ -993,12 +981,12 @@ class DeferredMesh(Mesh):
         loader's build makes."""
         from core import store_mesh
         if not store_mesh.from_deferred(self):
-            self._build_python_mesh()
+            self._build_from_callback()
         observe = on_mesh_materialized.get()
         if observe is not None:
             observe(self)
 
-    def _build_python_mesh(self):
+    def _build_from_callback(self):
         self.__dict__.pop("_deferred_hooks", None)
         self.__dict__.pop("_deferred_hook_source", None)
         build = self.__dict__.pop("_deferred")
@@ -1010,11 +998,8 @@ class DeferredMesh(Mesh):
         self.__dict__.pop("_drawing_source_key", None)
         self.__dict__.pop("_drawing_texture_paths", None)
         self.__class__ = Mesh
-        if _store_on():
-            from core.store_mesh import initialise_store
-            initialise_store(self)
-        elif "vertices" not in self.__dict__:
-            self._init_object_geometry()
+        from core.store_mesh import initialise_store
+        initialise_store(self)
         build(self)
 
     def __reduce_ex__(self, protocol):

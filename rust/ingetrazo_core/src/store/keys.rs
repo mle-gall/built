@@ -88,7 +88,7 @@ pub fn split_key(key: u128) -> Option<(u64, Kind, u32, u32)> {
 
 /// Per-kind slot table, part of the snapshot: generation and liveness per
 /// slot (`gen << 1 | alive`) and the free slots.
-#[derive(Clone, Debug, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
 pub struct Slots {
     pub state: CowVec<u32>,
     pub free: Arc<Vec<u32>>,
@@ -99,7 +99,7 @@ pub struct Slots {
 /// of a snapshot. Sparse: only slots whose highest generation ever
 /// exceeds what the current state shows (or that lie past its end) are
 /// listed, so a store that was never restored carries nothing here.
-#[derive(Clone, Debug, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
 pub struct Hwm {
     pub over: FxHashMap<u32, u32>,
     /// Slots ever used (a state may be shorter after a restore).
@@ -289,12 +289,12 @@ impl Slots {
 /// element relinked below the top) makes it explicit: `list` holds slots
 /// in list order with stale entries left in place and `at[slot]` the index
 /// of its current entry — O(1) removal, appending relinks.
-#[derive(Clone, Debug, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
 pub struct Order {
     pub explicit: Option<Explicit>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
 pub struct Explicit {
     pub list: CowVec<u32>,
     pub at: CowVec<u32>,
@@ -401,6 +401,11 @@ impl Order {
             return;
         }
         let live = self.live(slots);
+        self.set_order(live, slots);
+    }
+
+    /// Install a validated permutation of the live slots.
+    pub fn set_order(&mut self, live: Vec<u32>, slots: &Slots) {
         if live.windows(2).all(|w| w[0] < w[1]) {
             self.explicit = None;
             return;

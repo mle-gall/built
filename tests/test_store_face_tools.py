@@ -19,7 +19,6 @@ from tests.test_intersect_faces import _box, RED
 from tools.followme import FollowMeTool
 
 
-pytestmark = pytest.mark.usefixtures("explicit_store_meshes")
 
 def scenes(monkeypatch):
     native = pytest.importorskip("ingetrazo_core")

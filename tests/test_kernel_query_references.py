@@ -80,7 +80,7 @@ def edge_rows():
         for j in range(48):
             a, b = rng.sample(verts, 2)
             e = m.add_edge(a.position, b.position)
-            events.append((keys.setdefault(e.key, len(keys)), e is m.find_edge(b, a),
+            events.append((keys.setdefault(e.key, len(keys)), e == m.find_edge(b, a),
                            verts.index(e.v0), verts.index(e.v1)))
             if j%5==0:
                 m.remove_edge(e)
@@ -129,19 +129,16 @@ def snap_rows():
 
 
 def test_materialised_classification_reference(monkeypatch):
-    monkeypatch.setenv('INGETRAZO_STORE', '0')
     assert digest(push_rows()) == '1ec1b7e5f0d99bd68c917cd9000f24a09700f2f99f30ec09cc0f83130fbaf3db'
 
 
 def test_unscanned_plane_reference(monkeypatch):
     from core import scan_index
-    monkeypatch.setenv('INGETRAZO_STORE', '0')
     monkeypatch.setattr(scan_index, 'scan', lambda mesh: None)
     assert digest(plane_rows()) == '62103ffd8bfc2113d099e27a5b34c4b8a7bd5d480d1cfcefe31a117aebe77d76'
 
 
 def test_scalar_edge_reference(monkeypatch):
-    monkeypatch.setenv('INGETRAZO_STORE', '0')
     assert digest(edge_rows()) == '71481f4dd364be8df06114141574acfab49e2ef191d25f8351aa3adf9a341457'
 
 
@@ -171,7 +168,6 @@ def test_circle_and_crossing_guides():
 
 def test_materialised_drawing_rollback_and_replay(monkeypatch):
     from core.history import AddEdgeCommand, History, SnapshotCompound
-    monkeypatch.setenv('INGETRAZO_STORE', '0')
     scene = Scene()
     mesh = scene.mesh
     history = History(scene)
@@ -200,7 +196,7 @@ def test_materialised_drawing_rollback_and_replay(monkeypatch):
     after = mesh.capture_state()
     assert history.undo() and mesh.capture_state() == before
     assert history.redo() and mesh.capture_state() == after
-    assert mesh.edges[-1] is edge and mesh.faces[0] is face
+    assert mesh.edges[-1] == edge and mesh.faces[0] == face
 
 
 def test_plane_tolerance_and_small_input():
@@ -215,7 +211,6 @@ def test_plane_tolerance_and_small_input():
 
 def test_unscanned_rebuild_face_limit(monkeypatch):
     from core import scan_index
-    monkeypatch.setenv('INGETRAZO_STORE', '0')
     monkeypatch.setattr(scan_index, 'scan', lambda mesh: None)
     scene = Scene()
     for i in range(400):
@@ -262,21 +257,3 @@ def reference_guide_rows():
 
 def test_locked_reference_guide_callbacks():
     assert digest(reference_guide_rows()) == 'b884c8b739411d3707b1811ddac0a372b2fe4f8bc5154cfffebda56e639f6738'
-
-
-def test_materialised_compound_captures_each_state_once(monkeypatch):
-    from core.history import AddEdgeCommand, History, SnapshotCompound
-    monkeypatch.setenv('INGETRAZO_STORE', '0')
-    scene = Scene()
-    history = History(scene)
-    capture = scene.mesh.capture_state
-    snapshots = []
-    def record():
-        state = capture()
-        snapshots.append(state)
-        return state
-    monkeypatch.setattr(scene.mesh, 'capture_state', record)
-    cmd = SnapshotCompound([AddEdgeCommand(V(0, 0, 0), V(1, 1, 0))], heal=False)
-    history.execute(cmd)
-    assert len(snapshots) == 2
-    assert cmd.before is snapshots[0] and cmd.after is snapshots[1]

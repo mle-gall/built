@@ -286,8 +286,8 @@ class PushPullOperation:
         self._last: dict | None = None
 
     def _ensure_store(self, scene) -> bool:
-        """A push runs on a store: a Python mesh (one materialised after
-        another operation's refusal, or made with ``INGETRAZO_STORE=0``)
+        """A push runs on a store: a mesh materialised after
+        another operation's refusal
         becomes store-backed first (``store_mesh.to_store``), outside any
         History step, and what this operation and the selection hold is
         carried over to the new elements. False when the store refuses the

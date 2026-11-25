@@ -16,7 +16,6 @@ from tests.test_wgpu_soft_shadows import native  # noqa: F401
 
 @pytest.mark.parametrize("origin", [(0., 0.), (650000., 6860000.)])
 def test_store_coordinates_moves_weld_and_snapshots(origin, monkeypatch):
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     monkeypatch.setenv("INGETRAZO_RUST", "1")
     scene = Scene()
     mesh = scene.mesh
@@ -49,7 +48,6 @@ def test_georeferenced_draw_push_weld_pack_and_endpoint(view, monkeypatch):
     from tests.test_.skp_inference_gaps import move, refresh
     from ingetrazo_core import Vec3 as QVector3D
 
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     monkeypatch.setenv("INGETRAZO_RUST", "1")
     scene = view.scene
     mesh = scene.mesh
@@ -82,7 +80,6 @@ def test_format_three_rounds_only_the_saved_copy(tmp_path, monkeypatch):
     from formats import igz
 
     monkeypatch.setenv("INGETRAZO_RUST", "1")
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)
     scene = Scene()
     a = (650000.031, 6860000.249, 0.)
@@ -343,7 +340,6 @@ def test_camera_relative_edit_through_a_far_mirrored_occurrence(monkeypatch):
     from core.history import SnapshotMutation
     from ingetrazo_core import Matrix4, Vec3
 
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     scene = Scene()
     group = Group()
     origin = (float(2**48), -float(2**48), 42.)

@@ -101,7 +101,7 @@ pub const INTERIOR: u8 = 1;
 /// An edge's incident faces, `edge.faces` in order with multiplicity.
 /// Two inline (almost every edge); more spill into `ef_spill`, and then
 /// `a[0]` is the spill index.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Inc {
     pub len: u32,
     pub a: [u32; 2],
@@ -110,7 +110,7 @@ pub struct Inc {
 /// Where a face's rings live in the pools: `n_rings` sizes from
 /// `ring_start` in `ring_sizes`, their corners from `corner_start` in
 /// `corners` (outer ring first, then holes — `add_faces_welded`'s layout).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FaceRings {
     pub corner_start: u32,
     pub ring_start: u32,
@@ -119,7 +119,7 @@ pub struct FaceRings {
 
 /// The weld constants of `core/mesh.py`, passed in from Python so the
 /// float bits are Python's (`10.0 ** 4`, `(10.0 ** -4) ** 2`).
-#[derive(Clone, Copy, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug)]
 pub struct Weld {
     pub scale: f64,
     pub tol2: f64,
@@ -139,7 +139,7 @@ impl Default for Weld {
 /// Everything a snapshot holds (`Mesh.capture_state`) — cloning it IS the
 /// snapshot. Indices inside (`ends`, `corners`, incidence, disk links) are
 /// slots, never keys: generations only matter at the API boundary.
-#[derive(Clone, Debug, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
 pub struct State {
     pub frame: frame::Frame,
     /// Key namespace: `key = ns << 40 | local`.
@@ -156,7 +156,7 @@ pub struct State {
     pub enext: CowVec<[u32; 2]>,
     pub eflags: CowVec<u8>,
     /// Curve id, −1 for none (`Edge.curve`).
-    pub ecurve: CowVec<i64>,
+    pub ecurve: CowVec<i128>,
     /// Index into `layers`, NONE for none (`Edge.layer`).
     pub elayer: CowVec<u32>,
     pub efaces: CowVec<Inc>,
@@ -197,7 +197,7 @@ pub struct Snapshot {
 static LINEAGE: AtomicU64 = AtomicU64::new(1);
 
 /// The store: the state plus what must survive restores.
-#[derive(Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct Store {
     pub state: State,
     /// Highest generation per slot ever issued, per kind (never restored).

@@ -178,7 +178,6 @@ def test_deferred_weld_at_the_radius(monkeypatch, dtype, vertex_count):
 
     mod = pytest.importorskip("ingetrazo_core")
     monkeypatch.setattr(_native, "native", mod)
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     # The squared distance rounds below the threshold in f32 and above it in f64.
     points = np.array([[0, 0, 0], [3.0003e-8, 1e-4, 0]], dtype=np.float32)
     src = igz._json_arrays({"edges": [{"a": points[0], "b": points[1]}]})

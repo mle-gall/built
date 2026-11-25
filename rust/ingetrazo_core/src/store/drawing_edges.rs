@@ -11,7 +11,7 @@ use crate::store::geometry::{length, normalized, py_sum, Hypot};
 use std::collections::{HashMap, HashSet};
 
 impl Store {
-    fn drawing_flags(&self, e: u32) -> (u8, i64, u32) {
+    fn drawing_flags(&self, e: u32) -> (u8, i128, u32) {
         let i = e as usize;
         (
             *self.state.eflags.get(i),
@@ -19,14 +19,14 @@ impl Store {
             *self.state.elayer.get(i),
         )
     }
-    fn stamp(&mut self, e: u32, (flags, curve, layer): (u8, i64, u32), ch: &mut Change) {
+    fn stamp(&mut self, e: u32, (flags, curve, layer): (u8, i128, u32), ch: &mut Change) {
         let i = e as usize;
         self.state.eflags.set(i, flags);
         self.state.ecurve.set(i, curve);
         self.state.elayer.set(i, layer);
         ch.modified[1].push(self.key(Kind::Edge, e));
     }
-    fn curve_walk(&self, seed: u32, curve: i64) -> Vec<(u32, u32, u32)> {
+    fn curve_walk(&self, seed: u32, curve: i128) -> Vec<(u32, u32, u32)> {
         let [a, b] = *self.state.ends.get(seed as usize);
         if curve == -1 {
             return vec![(seed, a, b)];
@@ -140,7 +140,7 @@ impl Store {
             }
             for es in pieces.values() {
                 for &e in es {
-                    self.state.ecurve.set(e as usize, next);
+                    self.state.ecurve.set(e as usize, next.into());
                     ch.modified[1].push(self.key(Kind::Edge, e));
                 }
                 next = next.checked_add(1).ok_or(OpError::Full)?;

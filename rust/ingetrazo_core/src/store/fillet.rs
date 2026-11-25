@@ -196,7 +196,7 @@ impl RoundPlan {
                         .windows(2)
                         .any(|w| on_segment(a, w[0], w[1], h) && on_segment(b, w[0], w[1], h))
                     {
-                        s.state.ecurve.set(e as usize, id);
+                        s.state.ecurve.set(e as usize, id.into());
                         ch.modified[1].push(s.key(Kind::Edge, e));
                         break;
                     }

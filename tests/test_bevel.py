@@ -328,7 +328,7 @@ def test_a_turned_squashed_box_takes_the_flat_cut():
     assert is_closed(turned) and signed_volume(turned) > 0
 
 
-def test_caps_that_do_not_meet_get_a_centre_face(explicit_store_meshes):
+def test_caps_that_do_not_meet_get_a_centre_face():
     """A sheared box has three distinct bottoms. Every new side of its
     centre face must meet a cap, and the caps must meet the three strips."""
     from core.fillet import _key

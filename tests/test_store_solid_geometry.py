@@ -23,7 +23,7 @@ def forbid_materialisation(monkeypatch):
 
 
 def empty(store):
-    sc = _scene(store)
+    sc = _scene()
     sc.mesh.remove_face(sc.mesh.faces[0])
     for edge in list(sc.mesh.edges):
         sc.mesh.remove_edge(edge)
@@ -92,7 +92,7 @@ def test_orient_feed():
     from core.protocol.commands import run
     from tests.test_core_protocol import _expected, _got, _read
 
-    sc = _scene(True)
+    sc = _scene()
     sc.mesh.add_face([V(2, 0, 0), V(2, 2, 0), V(4, 2, 0), V(4, 0, 0)])
     history = History(sc)
     before = _read(sc.mesh)

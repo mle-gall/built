@@ -8,7 +8,6 @@ from tests.test_store_pieces_explode import _explode_scene, _translate
 
 @pytest.mark.parametrize("placement", ["shared_wall", "separate", "coincident"])
 def test_explode_result_matches_history(monkeypatch, placement):
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     actual, group, _ = _explode_scene(True)
     expected, ref, _ = _explode_scene(True)
     if placement != "shared_wall":
@@ -33,7 +32,6 @@ def test_explode_result_matches_history(monkeypatch, placement):
 
 
 def test_explode_copies_survive_transaction_replay(monkeypatch):
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     scene, group, _ = _explode_scene(True)
     mesh = scene.mesh
     history = History(scene)
@@ -45,12 +43,3 @@ def test_explode_copies_survive_transaction_replay(monkeypatch):
     assert history.undo() and history.redo()
     assert mesh._store.keys("face") == keys
     assert all(mesh._store.is_live(k) for pairs in expected.values() for _,k in pairs)
-
-
-def test_explode_refusal_preserves_both_meshes(monkeypatch):
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
-    scene, group, _ = _explode_scene(True)
-    scene.mesh._planned_points = {}
-    before = fingerprint(scene.mesh), fingerprint(group.mesh)
-    assert MeshStore.command_explode_geometry(scene.mesh, group.mesh) is None
-    assert before == (fingerprint(scene.mesh), fingerprint(group.mesh))

@@ -44,7 +44,6 @@ def test_precise_scene(tmp_path, monkeypatch, engine):
     path = tmp_path / "site.built"
     igz.save_scene(scene, path)
     monkeypatch.setattr(_native, "native", _native.available() if engine else None)
-    monkeypatch.setattr(store_mesh, "enabled", lambda: engine)
     monkeypatch.setattr(igz, "_NATIVE_JSON_MIN", 0)
     data = manifest(path)
     assert data["built_format"] == 1 and "igz_format" not in data

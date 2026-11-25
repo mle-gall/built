@@ -51,35 +51,19 @@ fn replay(py: Python<'_>, me: &Obj<'_>, scene: &Obj<'_>, mesh: &Obj<'_>) -> PyRe
     Ok(true)
 }
 
-fn geometry(py: Python<'_>, me: &Obj<'_>, scene: &Obj<'_>, mesh: &Obj<'_>, group: &Obj<'_>, transform: &Obj<'_>, paint: &Obj<'_>) -> PyResult<()> {
+fn geometry(py: Python<'_>, me: &Obj<'_>, mesh: &Obj<'_>, group: &Obj<'_>, transform: &Obj<'_>, paint: &Obj<'_>) -> PyResult<()> {
     let group_mesh = group.getattr("mesh")?;
     let data: Option<[f64; 16]> = if transform.is_none() { None } else { Some(transform.call_method0("data")?.extract()?) };
     let paint_arg = (!paint.is_none()).then_some(paint);
-    if let Some(exploded) = command_explode_geometry(mesh, &group_mesh, data, paint_arg)? {
-        let row = PyTuple::new(py, [group_mesh, mesh.clone(), exploded.copies.into_bound(py)])?;
-        me.setattr("copies", PyList::new(py, [row])?)?;
-        if let Some(snapshot) = optional(me, "snapshot")?.filter(|s| s.is_instance(&store_state(py).unwrap()).unwrap_or(false)) {
-            me.setattr("_before0", snapshot)?;
-            me.setattr("_after", mesh.call_method0("capture_state")?)?;
-        }
-        return Ok(());
+    let exploded = command_explode_geometry(mesh, &group_mesh, data, paint_arg)?
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("group geometry could not be transferred"))?;
+    let row = PyTuple::new(py, [group_mesh, mesh.clone(), exploded.copies.into_bound(py)])?;
+    me.setattr("copies", PyList::new(py, [row])?)?;
+    if let Some(snapshot) = optional(me, "snapshot")? {
+        me.setattr("_before0", snapshot)?;
+        me.setattr("_after", mesh.call_method0("capture_state")?)?;
     }
-    // The object way: a face landing on faces already there merges with
-    // them, as a pasted one does (two boxes that touch share one wall, #721).
-    let (inverse, invertible) = if transform.is_none() {
-        (none(py), false)
-    } else {
-        let inv = transform.call_method0("inverted")?;
-        (inv.get_item(0)?, inv.get_item(1)?.is_truthy()?)
-    };
-    let before = PyList::new(py, mesh.getattr("faces")?.try_iter()?.collect::<PyResult<Vec<_>>>()?)?;
-    let added = py
-        .import("ingetrazo_core")?
-        .getattr("explode_object_geometry")?
-        .call1((mesh, &group_mesh, transform, paint, inverse, invertible))?;
-    mesh.call_method0("resplit_curves")?;
-    host(py, "_merge_overlapping_planes")?.call1((scene, before, added))?;
-    me.setattr("copies", PyList::empty(py))
+    Ok(())
 }
 
 fn run_explode(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
@@ -102,7 +86,7 @@ fn run_explode(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> 
             let parent = mesh.getattr("_store")?.call_method0("tool_placement")?;
             transform = if placement.is_none() { parent } else { parent.mul(&placement)? };
         }
-        geometry(py, &me, scene, &mesh, &group, &transform, &paint)?;
+        geometry(py, &me, &mesh, &group, &transform, &paint)?;
         if !s.journalled() && optional(&me, "_after")?.is_none() {
             me.setattr("_after", mesh.call_method0("capture_state")?)?;
         }

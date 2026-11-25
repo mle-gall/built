@@ -54,9 +54,7 @@ def V(x, y, z=0.0):
 
 
 def _mesh(store: bool):
-    from unittest.mock import patch
-    with patch.dict(os.environ, INGETRAZO_STORE="0"):
-        m = M.Mesh()
+    m = M.Mesh()
     if store:
         S.become_store(m, mod.MeshStore(next(M._KEY_NAMESPACES),
                                         **S._weld_args()), [])
@@ -397,7 +395,7 @@ def test_a_flip_that_worsens_an_open_solid_is_never_made(oracle, monkeypatch,
             monkeypatch.setattr(O, "_incoherent_edges", real)
             if off:
                 assert seen[-1] > seen[-2]          # worse: rolled back
-                assert type(m) is (S.StoreMesh if store else M.Mesh)
+                assert type(m) is S.StoreMesh
             results.append((_index(m, got), _state(m)))
     assert all(r == results[0] for r in results)
 

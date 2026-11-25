@@ -279,7 +279,7 @@ impl Store {
             let rings = before.face_rings(face);
             for cap in [&stations[0], stations.last().unwrap()] {
                 for (ring, source) in cap.iter().zip(&rings) {
-                    let mut groups: Vec<(i64, Vec<u32>)> = Vec::new();
+                    let mut groups: Vec<(i128, Vec<u32>)> = Vec::new();
                     for (i, &v) in ring.iter().enumerate().take(source.len()) {
                         let c = curve(before.find_edge(source[i], source[(i + 1) % source.len()]));
                         if c < 0 {

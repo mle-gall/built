@@ -26,7 +26,6 @@ SEP = cs.SEP
 
 @pytest.fixture(autouse=True)
 def _throwaway_settings(monkeypatch):
-    monkeypatch.setenv("INGETRAZO_STORE", "0")
     ss._PENDING.clear()
     yield
     ss._PENDING.clear()

@@ -23,7 +23,6 @@ def _throwaway_settings(private_settings, monkeypatch):
     from ingetrazo_core import NativeSettings
     from core import settings
     monkeypatch.setattr(settings, "_store", NativeSettings(private_settings))
-    monkeypatch.setenv("INGETRAZO_STORE", "0")
 
 
 def _painted_scene():

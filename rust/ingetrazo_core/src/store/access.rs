@@ -51,7 +51,7 @@ impl Store {
     }
 
     /// `Edge.curve` (−1: none).
-    pub fn set_edge_curve(&mut self, e: u32, curve: i64) -> u64 {
+    pub fn set_edge_curve(&mut self, e: u32, curve: i128) -> u64 {
         if *self.state.ecurve.get(e as usize) != curve {
             self.state.ecurve.set(e as usize, curve);
         }

@@ -4,7 +4,7 @@ use super::{cow::CowVec, State};
 use glam::{DMat3, DMat4, DVec3};
 use std::sync::Arc;
 
-#[derive(Debug, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)]
 struct Placement {
     basis: DMat3,
     inverse: DMat3,
@@ -13,7 +13,7 @@ struct Placement {
 
 /// Stored points are in occurrence world coordinates relative to origin.
 /// Weld cells always belong to the underlying definition.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct Frame {
     pub origin: [f64; 3],
     placement: Option<Arc<Placement>>,
