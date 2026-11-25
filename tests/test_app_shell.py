@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from core.input_types import Qt
+from ingetrazo_render import shortcut_text
 from tests.shell_isolation import restore_shell_patches  # noqa: F401  (autouse)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "shell" / "slab-and-cube.igz"
@@ -57,7 +58,7 @@ def test_tool_shortcut_restored_in_new_shell(host, tmp_path):
     try:
         action = reopened.window._tool_actions["line"]
         assert action.portable_keys() == ["F11"]
-        reopened.key(True, Qt.Key_F11.value, 0, "")
+        reopened.key(True, shortcut_text("F11")[2], 0, "")
         assert type(reopened.viewport.active_tool).__name__ == "LineTool"
         assert not reopened.errors
     finally:
@@ -208,28 +209,31 @@ def test_registered_shortcuts_use_rust_and_plugin_actions_still_trigger(host):
     win = host.window
     assert all(isinstance(a, ShellAction) for a in win._registry_actions.values())
     line = win._registry_actions["tool:line"]
+    f9 = shortcut_text("F9")[2]
+    f10 = shortcut_text("F10")[2]
+    f12 = shortcut_text("F12")[2]
     line.setShortcuts(["F12", "Ctrl+X, Ctrl+C"])
     seen = []
     line.run = lambda: seen.append("registered")
-    assert host._shortcut(Qt.Key_F12, 0)
+    assert host._shortcut(f12, 0)
     assert not host._shortcut(Qt.Key_X, Qt.ControlModifier.value)
     line.setEnabled(False)
     menu = ExtensionApp(win, "fixture").add_menu("Fixture")
     plugin = menu.addAction("Plugin command", lambda: seen.append("plugin"))
     plugin.setShortcut("F10")
     win._extension_menus.refresh(win)
-    assert host._shortcut(Qt.Key_F10, 0)
+    assert host._shortcut(f10, 0)
     plugin.setEnabled(False)
-    host._shortcut(Qt.Key_F10, 0)
+    host._shortcut(f10, 0)
     assert seen == ["registered", "plugin"]
     plugin.setEnabled(True)
     plugin.setShortcut("F9")
     win._extension_menus.refresh(win)
-    assert not host._shortcut(Qt.Key_F10, 0)
-    assert host._shortcut(Qt.Key_F9, 0)
+    assert not host._shortcut(f10, 0)
+    assert host._shortcut(f9, 0)
     menu.removeAction(plugin)
     win._extension_menus.refresh(win)
-    assert not host._shortcut(Qt.Key_F9, 0)
+    assert not host._shortcut(f9, 0)
     assert seen == ["registered", "plugin", "plugin"]
 
 

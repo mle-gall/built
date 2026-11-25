@@ -12,32 +12,10 @@ class DocumentController(DocumentInteraction, WidgetShim):
         self.keys_stand_in.resize(*size)
 
     def setUpdatesEnabled(self, enabled):
-        if isinstance(self._host, QtViewHost):
-            self._host.display.setUpdatesEnabled(enabled)
-        else:
-            self._updates_enabled = enabled
+        self._updates_enabled = enabled
 
     def updatesEnabled(self):
-        if isinstance(self._host, QtViewHost):
-            return self._host.display.updatesEnabled()
         return getattr(self, '_updates_enabled', True)
-
-    def setFocus(self, *args):
-        display = getattr(self, 'keys_stand_in', None)
-        if isinstance(self._host, QtViewHost) and display is not None:
-            display.setFocus(*args)
-        else:
-            super().setFocus(*args)
-
-    def mapTo(self, target, point):
-        if isinstance(self._host, QtViewHost):
-            return self._host.display.mapTo(target, point)
-        return super().mapTo(target, point)
-
-    def cursor(self):
-        if isinstance(self._host, QtViewHost):
-            return self._host.display.cursor()
-        return super().cursor()
 
     def mapToGlobal(self, point):
         return self.keys_stand_in.mapToGlobal(point)
@@ -104,32 +82,3 @@ class DocumentController(DocumentInteraction, WidgetShim):
         return self.keys_stand_in.render_image(
             width_px, height_px, overlays=overlays, sharp_shadows=sharp_shadows,
             transparent=transparent, annotations_only=annotations_only)
-
-
-class QtViewHost:
-    """Window services used by tools attached to a Qt wgpu surface."""
-
-    def __init__(self, display):
-        self.display = display
-
-    @property
-    def window(self):
-        return self.display.window()
-
-    @property
-    def width(self):
-        return self.display.width()
-
-    @property
-    def height(self):
-        return self.display.height()
-
-    @property
-    def scale(self):
-        return self.display.devicePixelRatioF()
-
-    def request_frame(self):
-        self.display.update()
-
-    def cursor_changed(self, cursor):
-        self.display.setCursor(cursor)

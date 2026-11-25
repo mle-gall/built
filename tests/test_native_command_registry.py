@@ -1,6 +1,7 @@
 """The native Keyboard table edits the same bindings the window dispatches."""
 from core.input_types import Qt
 from core.settings import settings
+from ingetrazo_render import shortcut_text
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
@@ -10,6 +11,7 @@ def test_tools_views_and_menus_reassign_and_reset_across_windows(tmp_path, monke
     from core.shortcuts import action_key
     from ingetrazo_render import view_commands
 
+    f9 = shortcut_text("F9")[2]
     profile = str(tmp_path / "profile")
     hosts = [Host(0, 900, 700, 1.0, settings=profile)]
     try:
@@ -42,12 +44,12 @@ def test_tools_views_and_menus_reassign_and_reset_across_windows(tmp_path, monke
         fresh = hosts[-1]
         seen = []
         monkeypatch.setattr(fresh.window, "run_command", lambda command: seen.append(command))
-        assert fresh._shortcut(Qt.Key_F9, 0)
+        assert fresh._shortcut(f9, 0)
         assert seen == ["cutlist"]
         sheet.state.kb_focus = "sc:menu:cutlist"
         sheet._kb_verb("kb_default")
         assert not settings().contains("shortcuts/menu:cutlist")
-        assert not fresh._shortcut(Qt.Key_F9, 0)
+        assert not fresh._shortcut(f9, 0)
         sheet.state.kb_focus = "sc:view:orbit"
         sheet._kb_verb("kb_default")
         assert fresh.window._registry_actions["view:orbit"].portable_keys() == ["O"]
@@ -55,14 +57,14 @@ def test_tools_views_and_menus_reassign_and_reset_across_windows(tmp_path, monke
         sheet._kb_verb("kb_reset_all")
         forms.pop().press("ok")
         assert all(h.window._registry_actions["tool:line"].portable_keys() == ["L"] for h in hosts)
-        assert not fresh._shortcut(Qt.Key_F9, 0)
+        assert not fresh._shortcut(f9, 0)
     finally:
         for h in reversed(hosts):
             h.close()
 
 
 def test_keyboard_prompt_roundtrips_platform_text_and_reserved_keys():
-    from ingetrazo_render import shortcut_alternatives, shortcut_text
+    from ingetrazo_render import shortcut_alternatives
     from ingetrazo_render.settings_sheet import _keys_text, _parse_keys
 
     for source in ("⌥⇧⌘É", "Ctrl+Alt+Shift+É"):
