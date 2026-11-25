@@ -85,18 +85,22 @@ def test_undo_drops_acquired_inference_references(native_window):
     assert not vp.history.undo_stack
 
 
-def test_every_cache_filled_by_id_of_a_group_is_a_document_cache():
-    """The guard for the next cache: a dict the viewport fills with
-    ``cache[id(group)]`` (or a child, or a mesh) must be in the list."""
-    from tests.controller_surface import ControllerSurface as Viewport
-    src = (Path(__file__).resolve().parents[1] / "views" / "viewport.py"
-           ).read_text(encoding="utf-8")
-    listed = set(Viewport._DOCUMENT_CACHES)
-    missing = set()
-    for m in re.finditer(r"cache = self\.(_\w+) = \{\}", src):
-        name = m.group(1)
-        body = src[m.end():m.end() + 3000]
-        if re.search(r"\[id\((group|g|child|mesh)\)\]", body) \
-                and name not in listed:
-            missing.add(name)
-    assert not missing, missing
+def test_native_document_boundary_discards_each_placement_and_mesh_cache(native_window):
+    """Exercise the reset for every dictionary allocated by native placement cache helpers."""
+    crates = Path(__file__).resolve().parents[1] / "rust"
+    cache_helpers = {
+        "ingetrazo_core/src/document_snap": "dict_slot",
+        "ingetrazo_render/src/document_chunks": "memo",
+        "ingetrazo_render/src/document_placements": "cache",
+    }
+    caches = set()
+    for directory, helper in cache_helpers.items():
+        allocation = re.compile(rf'\b{helper}\(\s*\w+\s*,\s*"(_\w+)"\s*\)')
+        for source in (crates / directory).rglob("*.rs"):
+            caches.update(allocation.findall(source.read_text(encoding="utf-8")))
+    assert {"_proto_pts_store", "_group_chunks", "_placement_frames"} <= caches
+    view = native_window.viewport
+    for name in caches:
+        setattr(view, name, {12345: "from previous document"})
+    view.reset_document_caches()
+    assert not {name for name in caches if getattr(view, name, None)}
