@@ -353,7 +353,7 @@ fn open_dialog<'py>(py: Python<'py>, win: &Any<'py>) -> PyResult<Any<'py>> {
 #[pyfunction]
 fn open_recent_index<'py>(py: Python<'py>, win: &Any<'py>, arg: &str) -> PyResult<Any<'py>> {
     if arg == "clear" {
-        py.import("core.recent")?.call_method0("clear")?;
+        py.import("ingetrazo_core.recent")?.call_method0("clear")?;
         win.getattr("_host")?.call_method0("recent_changed")?;
         return Ok(b(py, true));
     }

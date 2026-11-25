@@ -13,7 +13,7 @@ from ingetrazo_render import KeyEvent, SurveyRaster, blank_picture
 from tests.raster_samples import pixels, solid_raster
 
 from core.settings import settings
-from core import recent
+from ingetrazo_core import recent
 from core.scene import Scene
 from formats import igz
 from ingetrazo_render import chrome_sheet as cs

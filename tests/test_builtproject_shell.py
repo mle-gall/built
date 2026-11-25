@@ -138,7 +138,7 @@ def test_opening_an_igzproj_converts_it_in_place(host, tmp_path):
     assert host.open_path(path)
     assert not path.exists() and path.with_suffix(".builtproject").is_file()
     assert (tmp_path / "job" / "a.igz").read_bytes() == model
-    from core import recent
+    from ingetrazo_core import recent
     rows = [r["path"] for r in recent.entries("projects")]
     assert str(path.with_suffix(".builtproject").resolve()) in rows and str(path.resolve()) not in rows
 
