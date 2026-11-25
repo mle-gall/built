@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Decode a deferred document block, applying link hooks once per attribute row.
+//! Decode a deferred document block into indexed geometry and its attribute table.
 use super::Obj;
 use pyo3::{
     prelude::*,
@@ -15,109 +15,10 @@ fn rows<'py>(meta: &Obj<'py>, key: &str) -> PyResult<Bound<'py, PyList>> {
     Ok(py.get_type::<PyList>().call1((value,))?.cast_into()?)
 }
 
-struct Labels<'py> {
-    table: Bound<'py, PyList>,
-    attr: Obj<'py>,
-    names: Bound<'py, PyList>,
-    layers: Obj<'py>,
-}
-
-impl<'py> Labels<'py> {
-    fn relabel(
-        self,
-        hooks: &Obj<'py>,
-        n_edges: usize,
-        np: &Bound<'py, PyModule>,
-    ) -> PyResult<Self> {
-        let py = np.py();
-        let namespace = py.import("types")?.getattr("SimpleNamespace")?;
-        let standin = namespace.call0()?;
-        let faces = PyList::empty(py);
-        let tags = PyList::empty(py);
-        for attrs in self
-            .table
-            .iter()
-            .chain(std::iter::once(PyDict::new(py).into_any()))
-        {
-            let face = namespace.call0()?;
-            face.setattr("attrs", py.get_type::<PyDict>().call1((attrs,))?)?;
-            faces.append(face)?;
-        }
-        for name in self
-            .names
-            .iter()
-            .chain(std::iter::once(py.None().into_bound(py)))
-        {
-            let edge = namespace.call0()?;
-            edge.setattr("layer", name)?;
-            tags.append(edge)?;
-        }
-        standin.setattr("faces", &faces)?;
-        standin.setattr("edges", &tags)?;
-        for hook in hooks.try_iter()? {
-            hook?.call1((&standin,))?;
-        }
-        let table = PyList::empty(py);
-        for face in &faces {
-            table.append(face.getattr("attrs")?)?;
-        }
-        let attr = np.call_method1(
-            "where",
-            (
-                self.attr.call_method1("__lt__", (0,))?,
-                table.len() - 1,
-                &self.attr,
-            ),
-        )?;
-        let ix = PyDict::new(py);
-        let names = PyList::empty(py);
-        let remap = PyList::empty(py);
-        for tag in &tags {
-            let layer = tag.getattr("layer")?;
-            if layer.is_none() {
-                remap.append(-1)?;
-            } else {
-                let index = if let Some(v) = ix.get_item(&layer)? {
-                    v.extract()?
-                } else {
-                    let i = names.len();
-                    ix.set_item(&layer, i)?;
-                    names.append(layer)?;
-                    i
-                };
-                remap.append(index)?;
-            }
-        }
-        let int = np.getattr("int64")?;
-        let layers = if self.layers.is_none() {
-            np.call_method1("full", (n_edges, -1, &int))?
-        } else {
-            self.layers
-        };
-        let indices = np.call_method1(
-            "where",
-            (
-                layers.call_method1("__lt__", (0,))?,
-                tags.len() - 1,
-                &layers,
-            ),
-        )?;
-        let layers = np
-            .call_method1("asarray", (remap, int))?
-            .get_item(indices)?;
-        Ok(Self {
-            table,
-            attr,
-            names,
-            layers,
-        })
-    }
-}
 #[pyfunction]
-#[pyo3(signature=(src,hooks=None,*,precise=false))]
+#[pyo3(signature=(src,*,precise=false))]
 pub(crate) fn store_from_source<'py>(
     src: &Obj<'py>,
-    hooks: Option<&Obj<'py>>,
     precise: bool,
 ) -> PyResult<(Obj<'py>, Bound<'py, PyList>)> {
     let py = src.py();
@@ -166,16 +67,6 @@ pub(crate) fn store_from_source<'py>(
         fa
     };
     let edges = indices(&src.get_item("edges")?)?.call_method1("reshape", (-1, 2))?;
-    let labels = Labels {
-        table,
-        attr,
-        names: rows(&meta, "edge_layers")?,
-        layers: optional("layers")?,
-    };
-    let labels = match hooks {
-        Some(h) if h.is_truthy()? => labels.relabel(h, edges.len()?, &np)?,
-        _ => labels,
-    };
     let points = np.call_method1("asarray", (src.get_item("pos")?,))?;
     let t = if !precise && points.getattr("dtype")?.eq(np.getattr("float32")?)? {
         "float32"
@@ -212,16 +103,16 @@ pub(crate) fn store_from_source<'py>(
             edges,
             flags,
             optional("curves")?,
-            labels.layers,
-            labels.names,
+            optional("layers")?,
+            rows(&meta, "edge_layers")?,
             indices(&src.get_item("rings")?)?,
             indices(&src.get_item("sizes")?)?,
             counts,
-            labels.attr,
+            attr,
         ),
         Some(&kw),
     )?;
-    Ok((store, labels.table))
+    Ok((store, table))
 }
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(store_from_source, m)?)?;

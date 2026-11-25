@@ -395,7 +395,7 @@ impl Builder {
                 Ok(true)
             };
             if self.precise || empty()? {
-                let (st, table) = crate::kernel::store_views::block::store_from_source(s, None, self.precise)?;
+                let (st, table) = crate::kernel::store_views::block::store_from_source(s, self.precise)?;
                 store.call_method1("become_store", (mesh, st, table))?;
             } else if get(s, "sequential")?.is_truthy()? {
                 codec.call_method1(

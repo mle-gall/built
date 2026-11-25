@@ -52,15 +52,7 @@ fn materialize(mesh: &Obj<'_>) -> PyResult<()> {
         }
     }
     let built = if block {
-        let hooks = state.get_item("_deferred_hooks")?;
-        let built = match hooks.filter(|x| !x.is_none()) {
-            Some(h) if h.is_truthy()? => {
-                let original = state.get_item("_deferred_hook_source")?.unwrap_or(source);
-                super::block::store_from_source(&original, Some(&h), false)?
-            }
-            _ => super::block::store_from_source(&source, None, false)?,
-        };
-        Some(built)
+        Some(super::block::store_from_source(&source,false)?)
     } else {
         None
     };
@@ -69,8 +61,6 @@ fn materialize(mesh: &Obj<'_>) -> PyResult<()> {
         "_deferred",
         "_deferred_nfaces",
         "_deferred_source",
-        "_deferred_hooks",
-        "_deferred_hook_source",
         "_deferred_geom",
         "_deferred_plan",
         "_drawing_staged",
