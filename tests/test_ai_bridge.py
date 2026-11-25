@@ -148,7 +148,7 @@ def test_a_dialog_opened_by_the_agent_is_cancelled_not_waited_for(native_host, m
     good and the next call ran inside that dialog. Now the dialog is
     cancelled at once, the reply names it, and nothing was deleted."""
     from plugins.ai_bridge import _Bridge
-    from views import chrome_forms, chrome_dialogs
+    from ingetrazo_render import chrome_forms, chrome_dialogs
 
     monkeypatch.setattr(chrome_dialogs, "async_host", lambda parent: native_host.window)
     monkeypatch.setenv("INGETRAZO_AI_PORT", "0")
@@ -156,7 +156,7 @@ def test_a_dialog_opened_by_the_agent_is_cancelled_not_waited_for(native_host, m
     try:
         bridge.start()
         reply = _ask(bridge, "run_python", {"code": (
-            "from views.chrome_forms import Form, show\n"
+            "from ingetrazo_render.chrome_forms import Form, show\n"
             "show(viewport.window(), Form('Delete', []))")})
         assert reply["ok"]
         assert reply["result"]["dialogs_cancelled"] == ["Delete"]

@@ -644,7 +644,7 @@ def test_chat_colours_are_owned_by_the_native_theme(panel):
 
 
 def test_each_provider_remembers_its_own_key_and_model(panel, monkeypatch):
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     forms = []
     monkeypatch.setattr(chrome_forms, "show", lambda _, form: forms.append(form))
     for provider, key in [("groq", "gsk_AAA"), ("gemini", "AIzaBBB")]:
