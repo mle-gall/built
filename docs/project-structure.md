@@ -17,7 +17,7 @@ one is maintained by hand:
    types, systems, export profiles, IDS (`project-registry.md`).
 
 Tags and classifications say nearly the same thing in different words, nothing
-keeps them consistent, and classifying the ride as-built model took one agent
+keeps them consistent, and classifying a large model took one agent
 run for records, another for tags, and a human to reconcile both. The Navigator
 added a fifth vocabulary (facet filters) on top instead of removing one.
 
