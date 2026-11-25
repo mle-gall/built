@@ -62,7 +62,7 @@ fn snapshot_class<'p>(py: Python<'p>, compound: bool) -> PyResult<&'p Obj<'p>> {
     };
     Ok(cache
         .get_or_try_init(py, || -> PyResult<Py<PyAny>> {
-            let base = py.import("core.history")?.getattr(base)?;
+            let base = py.import("ingetrazo_core.history")?.getattr(base)?;
             let builtins = py.import("builtins")?;
             let method = py.import("functools")?.getattr("partialmethod")?;
             let fields = PyDict::new(py);

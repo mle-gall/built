@@ -202,7 +202,7 @@ fn purge_unused<'py>(
     kw.set_item("layers", layers)?;
     kw.set_item("materials", materials)?;
     let cmd = py
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .call_method("PurgeUnusedCommand", (), Some(&kw))?;
     if cmd
         .call_method1("counts", (history.getattr("scene")?,))?

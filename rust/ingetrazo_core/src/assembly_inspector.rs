@@ -116,7 +116,7 @@ pub(crate) fn plan_part_edit<'py>(
     if !writable(scene, parent)? {
         return Ok(None);
     }
-    let history = scene.py().import("core.history")?;
+    let history = scene.py().import("ingetrazo_core.history")?;
     let mut changed = Vec::new();
     for child in parent.getattr("children")?.try_iter()? {
         let child = child?;

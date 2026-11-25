@@ -150,7 +150,7 @@ pub(super) fn install(m: &Bound<PyModule>) -> PyResult<()> {
             "type",
             (
                 "RepairSolidsCommand",
-                (py.import("core.history")?.getattr("Command")?,),
+                (py.import("ingetrazo_core.history")?.getattr("Command")?,),
                 ns,
             ),
         )?,

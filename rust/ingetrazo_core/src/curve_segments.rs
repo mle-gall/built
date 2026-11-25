@@ -350,7 +350,7 @@ fn mutate(edge: &Obj<'_>, n: isize, scene: &Obj<'_>) -> PyResult<()> {
     Err(pyo3::PyErr::from_value(
         scene
             .py()
-            .import("core.history")?
+            .import("ingetrazo_core.history")?
             .call_method1("CommandRejected", ("curve cannot be rebuilt",))?,
     ))
 }
@@ -365,7 +365,7 @@ fn init(cmd: &Obj<'_>, edge: &Obj<'_>, n: isize) -> PyResult<()> {
         .call_method1("partial", (wrap_pyfunction!(mutate, py)?, edge, n))?;
     cmd.setattr(
         "_inner",
-        py.import("core.history")?
+        py.import("ingetrazo_core.history")?
             .call_method1("SnapshotMutation", (edit,))?,
     )
 }
@@ -419,7 +419,7 @@ fn __getattr__<'p>(m: &Bound<'p, PyModule>, name: &str) -> PyResult<Obj<'p>> {
         "type",
         (
             name,
-            (py.import("core.history")?.getattr("MeshCommand")?,),
+            (py.import("ingetrazo_core.history")?.getattr("MeshCommand")?,),
             ns,
         ),
     )?;

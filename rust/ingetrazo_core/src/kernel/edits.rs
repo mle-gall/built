@@ -190,7 +190,7 @@ fn _whole_drawing_plane<'p>(scene: &Obj<'p>, points: &Obj<'p>) -> PyResult<Optio
         .transpose()
 }
 fn has_step(cmds: &List<'_>, names: &[&str]) -> PyResult<bool> {
-    let history = cmds.py().import("core.history")?;
+    let history = cmds.py().import("ingetrazo_core.history")?;
     let types = names
         .iter()
         .map(|n| history.getattr(*n))
@@ -207,7 +207,7 @@ const REBUILDS: &[&str] = &["RebuildPlanarFacesCommand", "RebuildPlaneFacesComma
 fn scoped(cmds: &List<'_>, plane: Plane<'_>) -> PyResult<()> {
     cmds.append(
         cmds.py()
-            .import("core.history")?
+            .import("ingetrazo_core.history")?
             .call_method1("RebuildPlaneFacesCommand", plane)?,
     )
 }
@@ -227,7 +227,7 @@ fn _append_flat_curve_rebuild(
     if _whole_drawing_plane(scene, points)?.is_some() {
         if curves && close_cycles {
             commands.append(
-                py.import("core.history")?
+                py.import("ingetrazo_core.history")?
                     .call_method0("RebuildPlanarFacesCommand")?,
             )?;
         } else {
@@ -298,7 +298,7 @@ fn _append_active_tag(scene: &Obj<'_>, commands: &List<'_>) -> PyResult<()> {
     if !tag.is_truthy()? {
         return Ok(());
     }
-    let h = scene.py().import("core.history")?;
+    let h = scene.py().import("ingetrazo_core.history")?;
     let cls = h.getattr("AddFaceCommand")?;
     let faces = PyList::empty(scene.py());
     for c in commands {
@@ -333,7 +333,7 @@ fn build_add_edge<'p>(
     if cmds.len() == 1 && soft.is_none() && tag.is_none() && !_scene_has_curves(scene)? {
         return cmds.get_item(0);
     }
-    py.import("core.history")?
+    py.import("ingetrazo_core.history")?
         .call_method1("SnapshotCompound", (cmds,))
 }
 #[pyfunction(signature=(scene,segments,detect_faces=true,extra=None,eye=None,plane_rebuild=false,*,preserve_faces=false))]
@@ -378,7 +378,7 @@ fn build_add_edges<'p>(
     }
     let kw = PyDict::new(py);
     kw.set_item("heal", !preserve_faces)?;
-    py.import("core.history")?
+    py.import("ingetrazo_core.history")?
         .getattr("SnapshotCompound")?
         .call((cmds,), Some(&kw))
 }
@@ -497,7 +497,7 @@ fn __getattr__<'p>(m: &Bound<'p, PyModule>, name: &str) -> PyResult<Obj<'p>> {
     let py = m.py();
     let source = match name {
         "AddEdgeCommand" | "AddFaceCommand" | "DeleteFaceCommand" | "DeleteEdgesCommand"
-        | "Command" | "CompoundCommand" | "SnapshotCompound" => "core.history",
+        | "Command" | "CompoundCommand" | "SnapshotCompound" => "ingetrazo_core.history",
         "Face" | "Edge" => "core.geometry",
         "element_identity" => "core.mesh",
         "_point_in_face_solid"

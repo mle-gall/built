@@ -73,7 +73,7 @@ fn capture<'py>(scene: &Obj<'py>) -> PyResult<Bound<'py, PyDict>> {
 
 fn recall<'py>(scene: &Obj<'py>, data: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
     let py = scene.py();
-    let history = py.import("core.history")?;
+    let history = py.import("ingetrazo_core.history")?;
     let switches = py
         .import("ingetrazo_core")?
         .getattr("SetTagStateCommand")?;
@@ -204,7 +204,7 @@ pub(crate) fn visibility_set_command<'py>(
         ("apply", Some(r)) => return recall(scene, &r),
         _ => return Err(PyValueError::new_err("Unknown visibility set command")),
     }
-    Ok(Some(py.import("core.history")?.call_method1(
+    Ok(Some(py.import("ingetrazo_core.history")?.call_method1(
         "SetPluginDataCommand",
         (
             STORE,

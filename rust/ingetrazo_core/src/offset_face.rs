@@ -186,7 +186,7 @@ fn build_offset_face<'p>(
         },
     )?)?;
     if outlines.len() == 1 && source.len() == outlines[0].len() {
-        let history = py.import("core.history")?;
+        let history = py.import("ingetrazo_core.history")?;
         let mut ids = Vec::new();
         for i in 0..source.len() {
             let a = mesh.call_method1("vertex_at", (outline.get_item(i)?,))?;

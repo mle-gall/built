@@ -130,7 +130,7 @@ fn curve_parts<'py>(
     closed: bool,
 ) -> PyResult<(Bound<'py, PyList>, bool)> {
     let py = scene.py();
-    let api = py.import("core.history")?;
+    let api = py.import("ingetrazo_core.history")?;
     let after = PyList::empty(py);
     let copy = || py.get_type::<PyList>().call1((pts,));
     let tag = || {
@@ -194,7 +194,7 @@ fn arc_command<'py>(
                 ))?)?;
             }
             remove = Some(
-                py.import("core.history")?
+                py.import("ingetrazo_core.history")?
                     .call_method1("DeleteEdgesCommand", (edges,))?,
             );
         }

@@ -136,7 +136,7 @@ pub fn rotation_command<'py>(
         .try_iter()?
         .map(|d| number.call1((d?,))?.extract::<f64>())
         .collect::<PyResult<Vec<_>>>()?;
-    let history = py.import("core.history")?;
+    let history = py.import("ingetrazo_core.history")?;
     let mut commands = Vec::new();
     if copy {
         let (faces, edges) = (elements(faces)?, elements(edges)?);

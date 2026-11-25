@@ -65,7 +65,7 @@ fn change_visibility(win: &Bound<'_, PyAny>, verb: &str) -> PyResult<()> {
     let vp = win.getattr("viewport")?;
     let scene = vp.getattr("scene")?;
     let history = vp.getattr("history")?;
-    let lib = py.import("core.history")?;
+    let lib = py.import("ingetrazo_core.history")?;
     let cmd = lib.getattr("HideCommand")?;
     let hide = verb == "hide";
     let (targets, empty, ms) = match verb {

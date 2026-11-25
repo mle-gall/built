@@ -616,6 +616,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<scans::MeshScan>()?;
     kernel::register_kernel(m)?;
     protocol::register(m)?;
+    protocol::api::history::register(m)?;
     Ok(())
 }
 

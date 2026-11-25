@@ -328,7 +328,7 @@ pub fn history_step(win: &Bound<'_, PyAny>, redo: bool) -> PyResult<()> {
             vp.getattr("history")?
                 .getattr(if redo { "undo_stack" } else { "redo_stack" })?;
         if stack.is_truthy()? {
-            let history = win.py().import("core.history")?;
+            let history = win.py().import("ingetrazo_core.history")?;
             if unlinks(
                 &stack.get_item(-1)?,
                 &history.getattr("CompoundCommand")?,

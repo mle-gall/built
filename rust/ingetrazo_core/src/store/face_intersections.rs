@@ -230,7 +230,7 @@ fn mutation<'p>(mesh: &Obj<'p>, segments: &Obj) -> PyResult<Obj<'p>> {
     let (module, ty) = if mesh.hasattr("_store")? {
         ("ingetrazo_core", "resident_face_mutation")
     } else {
-        ("core.history", "SnapshotMutation")
+        ("ingetrazo_core.history", "SnapshotMutation")
     };
     let kw = PyDict::new(py);
     kw.set_item("mesh", mesh)?;
@@ -402,7 +402,7 @@ pub(crate) fn install(m: &Bound<PyModule>) -> PyResult<()> {
         py.import("functools")?
             .call_method1("partialmethod", (wrap_pyfunction!(placement_do, py)?,))?,
     )?;
-    let base = py.import("core.history")?.getattr("CompoundCommand")?;
+    let base = py.import("ingetrazo_core.history")?.getattr("CompoundCommand")?;
     m.add(
         "_PlacementCuts",
         py.import("builtins")?

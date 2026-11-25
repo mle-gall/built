@@ -161,7 +161,7 @@ impl TreePaint {
         if !reason.is_empty() {
             return Err(PyValueError::new_err(reason));
         }
-        let history = py.import("core.history")?;
+        let history = py.import("ingetrazo_core.history")?;
         let cmds = PyList::empty(py);
         let materials = scene.getattr("materials")?;
         let brush = if key == "activepaint" {

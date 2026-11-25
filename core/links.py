@@ -383,7 +383,7 @@ def set_registry_command(value):
     global _SET_REGISTRY
     if _SET_REGISTRY is None:
         import json
-        from core.history import Command
+        from ingetrazo_core.history import Command
 
         def copy(v):
             return json.loads(json.dumps(v))

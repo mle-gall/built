@@ -21,7 +21,7 @@ fn none(py: Python<'_>) -> Obj<'_> {
 
 fn rejected(py: Python<'_>, why: &str) -> PyErr {
     match py
-        .import("core.history")
+        .import("ingetrazo_core.history")
         .and_then(|m| m.getattr("CommandRejected"))
         .and_then(|c| c.call1((why,)))
     {

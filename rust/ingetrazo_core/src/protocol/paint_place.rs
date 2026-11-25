@@ -238,7 +238,7 @@ fn place_group<'py>(
         let kw = PyDict::new(py);
         kw.set_item("attachment", anchor)?;
         let cmd = py
-            .import("core.history")?
+            .import("ingetrazo_core.history")?
             .call_method("InsertGroupCommand", (&g,), Some(&kw))?;
         history.call_method1("execute", (cmd,))?;
         Ok(())

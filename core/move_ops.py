@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from ingetrazo_core import CopySelection, MoveCopies as copy_builder, Matrix4 as QMatrix4x4
 
-from core.history import (Command, CompoundCommand, MoveDimensionsCommand,
+from ingetrazo_core.history import (Command, CompoundCommand, MoveDimensionsCommand,
                           MoveGroupCommand, MoveGuidesCommand,
                           MoveTextLabelsCommand, MoveVerticesCommand)
 
@@ -65,10 +65,10 @@ def move_commands(delta, *, groups=(), positions=(), labels=(), guides=(),
     if dims:
         commands.append(MoveDimensionsCommand(dims, delta))
     if splanes:
-        from core.history import MoveSectionPlanesCommand
+        from ingetrazo_core.history import MoveSectionPlanesCommand
         commands.append(MoveSectionPlanesCommand(list(splanes), delta))
     if images:
-        from core.history import MoveImagePlanesCommand
+        from ingetrazo_core.history import MoveImagePlanesCommand
         commands.append(MoveImagePlanesCommand(list(images), delta))
     return commands
 

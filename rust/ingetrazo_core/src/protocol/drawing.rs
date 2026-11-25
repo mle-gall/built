@@ -264,7 +264,7 @@ fn add_face<'py>(
         } else {
             let opts = PyDict::new(py);
             opts.set_item("holes", if inner.is_empty() { None } else { Some(&inner) })?;
-            let face = py.import("core.history")?.call_method(
+            let face = py.import("ingetrazo_core.history")?.call_method(
                 "AddFaceCommand",
                 (&points,),
                 Some(&opts),

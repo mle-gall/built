@@ -26,7 +26,7 @@ fn retain_components(
 ) -> PyResult<()> {
     let py = win.py();
     let view = win.getattr("viewport")?;
-    let history = py.import("core.history")?;
+    let history = py.import("ingetrazo_core.history")?;
     let cmd = history.getattr("KeepComponentCommand")?;
     let vars = PyDict::new(py);
     let (command, message) = if let Some(group) = definition {
@@ -131,7 +131,7 @@ fn name_section(
     if !plane.getattr("name")?.eq(&name)? || !plane.getattr("symbol")?.eq(&symbol)? {
         commit(
             &view,
-            &py.import("core.history")?
+            &py.import("ingetrazo_core.history")?
                 .call_method1("RenameSectionPlaneCommand", (plane, name, symbol))?,
         )?;
     }

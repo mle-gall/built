@@ -1054,7 +1054,7 @@ impl ComponentsProvider {
         if action != "purge" {
             return Ok(());
         }
-        let history = py.import("core.history")?;
+        let history = py.import("ingetrazo_core.history")?;
         let mut idle = Vec::new();
         for row in slf.call_method1("_model", (ctx,))?.try_iter()? {
             let row = row?;

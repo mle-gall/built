@@ -736,7 +736,7 @@ fn glue(
             }
         }
         "deleteguide" => {
-            let cmd = class(py, "core.history", "DeleteGuidesCommand")?.call1((PyList::new(py, sel)?,))?;
+            let cmd = class(py, "ingetrazo_core.history", "DeleteGuidesCommand")?.call1((PyList::new(py, sel)?,))?;
             vp.getattr("history")?.call_method1("execute", (cmd,))?;
             vp.call_method0("update")?;
         }

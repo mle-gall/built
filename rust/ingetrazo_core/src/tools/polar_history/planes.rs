@@ -64,7 +64,7 @@ pub(super) fn merge<'py>(
 ) -> PyResult<()> {
     let py = scene.py();
     let st = mesh.getattr("_store")?;
-    let api = py.import("core.history")?;
+    let api = py.import("ingetrazo_core.history")?;
     let class = api.getattr("RebuildPlaneFacesCommand")?;
     let tol = class.getattr("_TOL")?.extract::<f64>()?;
     let mut added = Vec::new();

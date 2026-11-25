@@ -5,7 +5,7 @@ from copy import deepcopy
 
 from core import bim_registry, structure
 from core.agent_records import page
-from core.history import CompoundCommand, SetRegistryCommand, SetStructureNodeCommand
+from ingetrazo_core.history import CompoundCommand, SetRegistryCommand, SetStructureNodeCommand
 
 
 class StructureTools:

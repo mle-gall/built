@@ -507,7 +507,7 @@ fn side_command<'py>(a: &Args<'py>) -> Reply<'py> {
     let side = a.get_item(1)?;
     let tex = a.get_item(2)?;
     if side.eq("back")? {
-        let set_face_back_command = imported(py, "core.history")?.getattr("SetFaceBackCommand")?;
+        let set_face_back_command = imported(py, "ingetrazo_core.history")?.getattr("SetFaceBackCommand")?;
         back = py.get_type::<pyo3::types::PyDict>().call1((({
             let value = face.getattr("attrs")?.call_method1("get", ("back",))?;
             if value.is_truthy()? {
@@ -530,7 +530,7 @@ fn side_command<'py>(a: &Args<'py>) -> Reply<'py> {
         ));
     }
     let set_face_texture_command =
-        imported(py, "core.history")?.getattr("SetFaceTextureCommand")?;
+        imported(py, "ingetrazo_core.history")?.getattr("SetFaceTextureCommand")?;
     set_face_texture_command.call1((PyList::new(py, [face.clone()])?.into_any(), &tex))
 }
 fn cancel<'py>(a: &Args<'py>) -> Reply<'py> {

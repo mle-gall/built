@@ -76,7 +76,7 @@ fn run_import<'py>(
     )?;
     let ty = match command_type {
         Some(c) => c,
-        None => py.import("core.history")?.getattr("SnapshotImport")?,
+        None => py.import("ingetrazo_core.history")?.getattr("SnapshotImport")?,
     };
     let command = ty.call1((guarded,))?;
     let clean = !win.call_method0("_is_dirty")?.is_truthy()?;

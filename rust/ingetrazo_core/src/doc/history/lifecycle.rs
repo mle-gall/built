@@ -113,7 +113,7 @@ pub(super) fn execute<'py>(host: &Obj<'py>, cmd: &Obj<'py>, nested: bool) -> PyR
     let before = content_version(&scene)?;
     let tags = objects_before(&scene, !cmd.getattr("keeps_rows")?.is_truthy()?)?;
     host.setattr("last_txn", py.None())?;
-    let api = py.import("core.history")?;
+    let api = py.import("ingetrazo_core.history")?;
     if let Err(e) = super::super::execute::execute(py, host, cmd, Some(&tags)) {
         if !e.is_instance_of::<pyo3::exceptions::PyException>(py) {
             return Err(e);
@@ -179,7 +179,7 @@ pub(super) fn replay<'py>(host: &Obj<'py>, cmd: &Obj<'py>, undo: bool) -> PyResu
 
 fn keep_geometry_caches(host: &Obj<'_>, cmd: &Obj<'_>, before: &Obj<'_>) -> PyResult<()> {
     let py = host.py();
-    let api = py.import("core.history")?;
+    let api = py.import("ingetrazo_core.history")?;
     let kinds = PyTuple::new(
         py,
         [
@@ -291,7 +291,7 @@ fn log_failure(host: &Obj<'_>, cmd: &Obj<'_>, err: &PyErr) -> PyResult<()> {
     }
     let mut path = host.getattr("error_log")?;
     if path.eq(py
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .getattr("History")?
         .getattr("error_log")?)?
     {

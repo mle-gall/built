@@ -154,7 +154,7 @@ fn dispatch_of(name: &str) -> Option<&'static str> {
 #[pyfunction]
 fn move_command<'py>(groups: &Obj<'py>, delta: &Obj<'py>) -> Reply<'py> {
     let py = groups.py();
-    let history = py.import("core.history")?;
+    let history = py.import("ingetrazo_core.history")?;
     let make = history.getattr("MoveGroupCommand")?;
     let commands = PyList::empty(py);
     for group in groups.try_iter()? {

@@ -213,7 +213,7 @@ pub fn edit_swatch(
             .call_method1("from_dict", (&data,))?;
         if !new.eq(&live)? {
             let cmd = py
-                .import("core.history")?
+                .import("ingetrazo_core.history")?
                 .call_method1("RestampMaterialCommand", (name, &new))?;
             let before: u64 = history.getattr("revision")?.extract()?;
             history.call_method1("execute", (cmd,))?;

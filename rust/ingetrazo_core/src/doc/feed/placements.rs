@@ -16,7 +16,7 @@ pub(super) fn known(
     journalled: bool,
 ) -> PyResult<bool> {
     let py = cmd.py();
-    let h = crate::model::module(py, "core.history")?;
+    let h = crate::model::module(py, "ingetrazo_core.history")?;
     let is = |name: &str| cmd.is_instance(&h.getattr(name)?);
     if is("CompoundCommand")? {
         for child in cmd.getattr("commands")?.try_iter()? {

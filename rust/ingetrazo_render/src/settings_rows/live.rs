@@ -170,7 +170,7 @@ pub(crate) fn document_history<'p>(viewport: &Obj<'p>) -> PyResult<Obj<'p>> {
     }
     let history = viewport
         .py()
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .call_method1("History", (viewport.getattr("scene")?,))?;
     viewport.setattr("history", &history)?;
     Ok(history)

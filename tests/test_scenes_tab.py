@@ -12,12 +12,10 @@ def test_one_command_of_each_kind_for_scenes():
     import ingetrazo_core
     import core.history as H
     import core.saved_views as S
-    import core.history as commands
+    from ingetrazo_core import history as commands
+    assert H is commands
     assert H.AddSceneCommand is commands.AddSceneCommand is ingetrazo_core.AddSceneCommand
     assert S.RenameSceneCommand is ingetrazo_core.RenameSceneCommand
-    src = open(commands.__file__, encoding="utf8").read()
-    assert "class AddSceneCommand(" not in src
-    assert "class RenameSceneCommand(" not in src
     assert hasattr(S, "RenameSceneCommand") and hasattr(S, "MoveSceneCommand")
 
 

@@ -111,7 +111,7 @@ fn create_profile_faces(win: &Bound<'_, PyAny>, bridge: bool) -> PyResult<()> {
         },
     )?;
     let cmd = py
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .call_method1("SnapshotMutation", (mutation.bind(py),))?;
     let history = vp.getattr("history")?;
     history.call_method1("execute", (cmd,))?;

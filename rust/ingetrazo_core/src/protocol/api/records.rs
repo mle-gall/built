@@ -166,7 +166,7 @@ fn patch_record_field<'p>(
         .import("core.bim_registry")?
         .call_method1("get", (&scene,))?;
     let rec = py.import("core.record")?;
-    let hist = py.import("core.history")?;
+    let hist = py.import("ingetrazo_core.history")?;
     let cmds = PyList::empty(py);
     for g in py
         .import("core.structure")?
@@ -325,7 +325,7 @@ fn filing_rule<'p>(
         }
     }
     node.set_item("recipe", copied(recipe)?)?;
-    let hist = py.import("core.history")?;
+    let hist = py.import("ingetrazo_core.history")?;
     let update = hist.call_method1("SetRegistryCommand", (&reg,))?;
     let (sync, report): (Obj, Obj) = structure
         .call_method1("_resync", (scene, reg, PyList::new(py, [key])?))?

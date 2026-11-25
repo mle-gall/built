@@ -229,7 +229,7 @@ pub(super) fn stamp(history: &Obj<'_>, clip: &Obj<'_>, offset: DVec3) -> PyResul
     let py = history.py();
     let scene = history.getattr("scene")?;
     let mesh = scene.getattr("mesh")?;
-    let api = py.import("core.history")?;
+    let api = py.import("ingetrazo_core.history")?;
     let native = py.import("ingetrazo_core")?;
     let off = vector(py, offset)?;
     let copy_attrs = py
