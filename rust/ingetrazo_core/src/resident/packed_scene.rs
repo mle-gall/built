@@ -66,7 +66,7 @@ fn empty_dict(py: Python<'_>, value: Option<Py<PyAny>>) -> Py<PyAny> {
     value.filter(|v| !v.is_none(py)).unwrap_or_else(|| PyDict::new(py).into_any().unbind())
 }
 
-#[pyclass(module = "ingetrazo_render", dict, get_all, set_all)]
+#[pyclass(module = "ingetrazo_core", dict, get_all, set_all)]
 pub struct PackedScene {
     vertices: Py<PyAny>,
     indices: Py<PyAny>,
@@ -357,7 +357,29 @@ impl PackedScene {
     }
 }
 
+/// The buffers' record layouts, as NumPy dtypes (`VERTEX`, `INSTANCE`,
+/// `COMMAND` on the module).
+pub fn dtype<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
+    py.import("ingetrazo_core")?.getattr(name)
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    let py = m.py();
+    let np = py.import("numpy")?;
+    let layout = |fields: Vec<(&str, &str, Option<Vec<usize>>)>| -> PyResult<Obj<'_>> {
+        let list = pyo3::types::PyList::empty(py);
+        for (name, kind, shape) in fields {
+            match shape {
+                Some(shape) if shape.len() == 1 => list.append((name, kind, shape[0]))?,
+                Some(shape) => list.append((name, kind, PyTuple::new(py, shape)?))?,
+                None => list.append((name, kind))?,
+            }
+        }
+        np.call_method1("dtype", (list,))
+    };
+    m.add("VERTEX", layout(vec![("pos", "<f4", Some(vec![3])), ("normal", "<f4", Some(vec![3])), ("color", "u1", Some(vec![4]))])?)?;
+    m.add("INSTANCE", layout(vec![("world", "<f4", Some(vec![4, 4])), ("info", "<u4", Some(vec![4]))])?)?;
+    m.add("COMMAND", layout(vec![("count", "<u4", None), ("instances", "<u4", None), ("first", "<u4", None), ("base", "<i4", None), ("start", "<u4", None)])?)?;
     m.add("OBJECT_HIDDEN", OBJECT_HIDDEN)?;
     m.add("VISIBILITY_FILTERED", VISIBILITY_FILTERED)?;
     m.add_class::<PackedScene>()
