@@ -43,7 +43,7 @@ raw = json.load(open(sys.argv[1]))
 faces = [FaceFill(rings=[np.array(r, float) for r in f["rings"]], rgb=(0, 0, 0),
                   layer="0", opacity=f["opacity"], depth=f["depth"],
                   extra={"near": tuple(f["near"])}) for f in raw]
-out = VC._visible_parts_native(faces, _native.available())
+out = VC._visible_parts(faces)
 print(json.dumps([[f.depth, sum(VC._area(r) for r in f.rings)] for f in out]))
 """
 
