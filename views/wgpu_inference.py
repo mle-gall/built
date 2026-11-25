@@ -35,7 +35,7 @@ from collections.abc import Sequence
 from types import SimpleNamespace
 import math
 
-import threading
+from ingetrazo_core import SceneLease, ResidentEdges
 import weakref
 import numpy as np
 from ingetrazo_core import Vec3 as QVector3D, project_boxes, nearest_inference_triangle, resident_curve_features as _curve_features
@@ -291,25 +291,6 @@ def rebase(index, packed):
     return result
 
 
-class SceneLease:
-    """The document a snap-index job reads, held only while it reads it.
-
-    The job runs on a worker and outlives a closed view; the document must
-    not wait for it. ``release()`` (the view closing) takes the document
-    back: a job not started reads nothing, one that is reading stops at the
-    prototype it is on. The native build that follows needs no document."""
-
-    def __init__(self, scene):
-        self.scene = scene
-        self.released = False
-        self._reading = threading.Lock()
-
-    def release(self):
-        self.released = True
-        with self._reading:
-            self.scene = None
-
-
 def prepare(packed, scene=None):
     """The snap index of ``packed``. ``scene`` may be a :class:`SceneLease`:
     then None is returned if the lease is released before the read ends."""
@@ -491,68 +472,6 @@ def context_hit(view, context, x, y):
     placements, *_ = index.edges_near(rows, mvp.data(), float(view.width()),
         float(view.height()), float(x), float(y), float(radius), 1)
     return int(placements[0]) if len(placements) else None
-
-
-class ResidentEdges(Sequence):
-    """Keep nearby placement/edge ordinals packed until a rule needs a Qt reference."""
-    def __init__(self, columns, groups, context):
-        self.rows, self.ids, self.a, self.b, self.distances = columns
-        self.groups = groups
-        self.context = context
-        self.prefix = []
-        self.features = []
-
-    def __len__(self):
-        return len(self.prefix) + len(self.rows) + len(self.features)
-
-    def __getitem__(self, index):
-        if isinstance(index, slice):
-            return [self[i] for i in range(*index.indices(len(self)))]
-        if index < 0:
-            index += len(self)
-        if index < 0 or index >= len(self):
-            raise IndexError(index)
-        if index < len(self.prefix):
-            return self.prefix[index]
-        i = index - len(self.prefix)
-        if i >= len(self.rows):
-            return self.features[i-len(self.rows)]
-        row = int(self.rows[i])
-        group = self.groups[row] if self.groups is not None else None
-        loose = group is self.context
-        word = None if loose else ('component' if group is not None and group.is_instance() else 'group')
-        return SimpleNamespace(a=QVector3D(*self.a[i]), b=QVector3D(*self.b[i]),
-            row=row, edge_id=int(self.ids[i]), distance=float(self.distances[i]), group=group,
-            in_group=not loose, context=word)
-
-    def keep(self, mask):
-        """The same edges less the masked-out placement ones (prefix and
-        features stay), still as columns."""
-        mask = np.asarray(mask, bool)
-        out = ResidentEdges(tuple(column[mask] for column in (self.rows, self.ids, self.a, self.b, self.distances)),
-                            self.groups, self.context)
-        out.prefix, out.features = self.prefix, self.features
-        return out
-
-    def in_group(self):
-        """Per edge: whether its placement is not the open context."""
-        if self.groups is None:
-            return np.full(len(self.rows), self.context is not None)
-        rows, inverse = np.unique(self.rows, return_inverse=True)
-        return np.asarray([self.groups[r] is not self.context for r in rows], bool)[inverse]
-
-    def snap_columns(self):
-        from core.snap_query import edge_columns
-        count = len(self.rows)
-        grouped = self.in_group().tolist()
-        tags = [0] * count
-        if not self.prefix and not self.features:
-            return self.a, self.b, tags, grouped
-        first_a, first_b, first_tags, first_groups = edge_columns(self.prefix)
-        last_a, last_b, last_tags, last_groups = edge_columns(self.features)
-        return (np.concatenate((first_a, self.a, last_a)),
-                np.concatenate((first_b, self.b, last_b)),
-                first_tags + tags + last_tags, first_groups + grouped + last_groups)
 
 
 def nearby_edges(index, packed, camera, width, height, x, y, *,

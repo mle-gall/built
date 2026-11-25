@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Screen-space bounds of resident instances for cursor queries.
+mod edges;
+mod lease;
 use numpy::{ndarray::Array2, IntoPyArray, PyArray2, PyReadonlyArray2};
 use pyo3::{exceptions::PyValueError, prelude::*};
 #[pyfunction]
@@ -67,6 +69,8 @@ fn project_boxes<'py>(
     Ok((lo.into_pyarray(py), hi.into_pyarray(py)))
 }
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<edges::ResidentEdges>()?;
+    m.add_class::<lease::SceneLease>()?;
     m.add_function(wrap_pyfunction!(nearest_inference_triangle, m)?)?;
     m.add_function(wrap_pyfunction!(resident_curve_features, m)?)?;
     m.add_function(wrap_pyfunction!(project_boxes, m)?)
