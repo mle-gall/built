@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Document-owned repeatable exports. Writers receive a scoped model view."""
+import ingetrazo_core
 import json
 from copy import copy, deepcopy
 from datetime import datetime, timezone
@@ -186,10 +187,10 @@ def _write_drawing(model, path, cam, label, record, svg_picture, screen_mm, geom
     if cam.perspective:
         groups = [(label, hlr_perspective(model, cam, geometry=geometry))]
     else:
-        from core.layers import export_labels, line_styles
+        from core.layers import export_labels
         from formats.dxf_views import dxf_cut_layers, dxf_groups_by_layer
         drawing = hlr_drawing(model, cam, layers=True, geometry=geometry)
-        drawing.styles = line_styles(model, True)
+        drawing.styles = ingetrazo_core.tag_styles.line_styles(model, True)
         drawing.labels = export_labels(model)
         if fmt == "dxf" and len(model.layers) == 1:
             drawing.labels[model.layers[0].key] = label

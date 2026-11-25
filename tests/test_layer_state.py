@@ -3,6 +3,7 @@
 """Layer state, selection membership and marks in the Drawing lens."""
 from __future__ import annotations
 
+import ingetrazo_core
 import random
 
 import pytest
@@ -30,13 +31,13 @@ def drawing():
 
 def test_is_isolated_reads_the_default_layer_as_always_on():
     scene = Scene()
-    assert not L.is_isolated(scene, DEFAULT_LAYER)
+    assert not ingetrazo_core.tag_edits.is_isolated(scene, DEFAULT_LAYER)
     scene.layers.append(Layer("Solo"))
-    assert not L.is_isolated(scene, "Solo")         # nothing else to hide
+    assert not ingetrazo_core.tag_edits.is_isolated(scene, "Solo")         # nothing else to hide
     scene.layers.append(Layer("Otra", visible=False))
-    assert L.is_isolated(scene, "Solo")
+    assert ingetrazo_core.tag_edits.is_isolated(scene, "Solo")
     scene.layer("Solo").visible = False
-    assert not L.is_isolated(scene, "Solo")
+    assert not ingetrazo_core.tag_edits.is_isolated(scene, "Solo")
 
 
 def marked(project):
@@ -60,7 +61,7 @@ def test_drawing_marks_selection_tags_without_changing_the_active_tag():
 def test_a_folded_folder_carries_the_mark():
     project, a, _ = drawing()
     scene = project.scene
-    L.move_to_folder(scene, ["A"], "Arq")
+    ingetrazo_core.tag_edits.move_to_folder(scene, ["A"], "Arq")
     scene.select([a])
     assert marked(project) == {"preview-folder:Arq": 1}
     project.action("toggle", "preview-folder:Arq")
@@ -98,13 +99,13 @@ def test_layer_state_round_trips(seed):
     for ly in scene.layers:
         ly.visible, ly.locked = rng.random() < 0.7, rng.random() < 0.3
     L.set_active(scene, rng.choice(names[1:]))
-    saved = L.layer_state(scene)
+    saved = ingetrazo_core.tag_edits.layer_state(scene)
     before = [(ly.name, ly.visible, ly.locked) for ly in scene.layers]
     active = scene.active_layer
     for ly in scene.layers:
         ly.visible, ly.locked = rng.random() < 0.5, rng.random() < 0.5
     scene.active_layer = None
-    L.apply_layer_state(scene, saved)
+    ingetrazo_core.tag_edits.apply_layer_state(scene, saved)
     assert [(ly.name, ly.visible, ly.locked) for ly in scene.layers] == before
     assert scene.active_layer == active
 
@@ -113,11 +114,11 @@ def test_layer_state_skips_layers_made_or_deleted_since():
     scene = Scene()
     scene.layers += [Layer("A", visible=False), Layer("B")]
     L.set_active(scene, "B")
-    saved = L.layer_state(scene)
+    saved = ingetrazo_core.tag_edits.layer_state(scene)
     scene.layers.remove(scene.layer("B"))
     scene.layers.append(Layer("C", visible=False))
     scene.layer("A").visible = True
-    L.apply_layer_state(scene, saved)
+    ingetrazo_core.tag_edits.apply_layer_state(scene, saved)
     assert not scene.layer("A").visible
     assert not scene.layer("C").visible               # untouched
     assert scene.active_layer is None                  # B is gone

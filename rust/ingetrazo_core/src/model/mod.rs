@@ -26,6 +26,19 @@ pub mod tag_styles;
 pub mod texture_maths;
 pub mod units_format;
 
+/// A module already imported, from `sys.modules`: `py.import` runs the
+/// import hooks every time (over a microsecond under PySide's), and these
+/// rules run per entity (`tests/test_no_import_in_hot_calls.py`). Imported
+/// the ordinary way when it is not loaded yet.
+pub(crate) fn module<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
+    static MODULES: pyo3::sync::PyOnceLock<Py<PyAny>> = pyo3::sync::PyOnceLock::new();
+    let modules = MODULES.get_or_try_init(py, || py.import("sys")?.getattr("modules").map(Bound::unbind))?.bind(py);
+    match modules.call_method1("get", (name,))? {
+        m if !m.is_none() => Ok(m),
+        _ => Ok(py.import(name)?.into_any()),
+    }
+}
+
 /// Every Python function and class of the model lane.
 pub fn register_model(m: &Bound<'_, PyModule>) -> PyResult<()> {
     units_format::register(m)?;

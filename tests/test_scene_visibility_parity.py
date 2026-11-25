@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The scene's visibility rules moved to Rust
-(``model/scene_visibility.rs``) and must answer as ``core/scene.py``'s
-Python did at ``61fe6326``: for every loose face and edge, every group and
+"""The scene's visibility rules, pinned for their move to Rust: whatever
+replaces them must answer as ``core/scene.py``'s Python did at ``61fe6326``
+(a by-call port through PyO3 was tried and was about twice as slow; see
+``docs/model-port.md``): for every loose face and edge, every group and
 nested placement, a dimension and a guide of seeded scenes — hidden,
 visible, selectable, locked, snappable, hidden as a similar component, the
 tag's state — at the model, inside an open group (on a tag, in a folder
@@ -36,8 +37,8 @@ def _scene(rng):
     for t in tags:
         scene.layers.append(L.Layer(t, visible=rng.random() < 0.7, locked=rng.random() < 0.25))
     if rng.random() < 0.6:
-        f = L.add_folder(scene, "F")
-        L.move_to_folder(scene, scene.layers[1].name, f)
+        f = __import__("ingetrazo_core").tag_edits.add_folder(scene, "F")
+        __import__("ingetrazo_core").tag_edits.move_to_folder(scene, scene.layers[1].name, f)
         scene.folder_visibility = {f: rng.random() < 0.5}
     pick = lambda: rng.choice([None, None] + tags + ["ghost"])  # noqa: E731
 

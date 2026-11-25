@@ -10,6 +10,7 @@ with, stable), and the name is only what the panels show: free to repeat
 («Beams» in every folder) and to change without relabelling anything."""
 from __future__ import annotations
 
+import ingetrazo_core
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -61,7 +62,7 @@ def test_labels_repeat_and_entities_keep_their_key():
 
 def test_hiding_one_beams_tag_leaves_the_other_shown():
     scene, a, b, *_ = _two_parts()
-    L.set_visible(scene, [a.layer], False)
+    ingetrazo_core.tag_edits.set_visible(scene, [a.layer], False)
     assert not scene._layer_state(a)[0] and scene._layer_state(b)[0]
 
 

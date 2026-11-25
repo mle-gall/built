@@ -38,7 +38,7 @@ def _scene(rng):
         scene.layers.append(L.Layer(f"T{i}", visible=rng.random() < 0.7))
     folders = []
     for i in range(rng.randint(0, 3)):
-        folders.append(L.add_folder(scene, f"F{i}"))
+        folders.append(__import__("ingetrazo_core").tag_edits.add_folder(scene, f"F{i}"))
     scene.folder_visibility = {f: rng.random() < 0.6 for f in L.folders_of(scene)}
     for i in range(rng.randint(0, 4)):
         g = Group(Mesh(), name=f"G{i}")

@@ -13,6 +13,8 @@ implementation: ``python tests/test_tag_styles_parity.py --write``."""
 from __future__ import annotations
 
 import gzip
+
+import ingetrazo_core
 import json
 import math
 import random
@@ -105,24 +107,24 @@ def answers(L):
         a = {}
         per = []
         for ly in s.layers:
-            per.append([L.hatch_ground_rgb(ly), L.hatch_ink_rgb(ly), L.light_layer_color(ly),
-                        L.layer_color(ly), L.is_link_untagged(ly.name), L.layer_brick(s, ly),
-                        L.layer_hatch_families(s, ly), L.hatch_label(s, ly.hatch),
-                        L.hatch_grows(ly), L.hatch_families(s, ly.hatch),
-                        L.linetype_pattern(ly.linetype, s), L.linetype_text(ly.linetype, s),
-                        L.linetype_color(ly.linetype, s)])
+            per.append([L.hatch_ground_rgb(ly), L.hatch_ink_rgb(ly), ingetrazo_core.tag_styles.light_layer_color(ly),
+                        L.layer_color(ly), L.is_link_untagged(ly.name), ingetrazo_core.tag_styles.layer_brick(s, ly),
+                        ingetrazo_core.tag_styles.layer_hatch_families(s, ly), ingetrazo_core.tag_styles.hatch_label(s, ly.hatch),
+                        ingetrazo_core.tag_styles.hatch_grows(ly), L.hatch_families(s, ly.hatch),
+                        ingetrazo_core.tag_styles.linetype_pattern(ly.linetype, s), L.linetype_text(ly.linetype, s),
+                        ingetrazo_core.tag_styles.linetype_color(ly.linetype, s)])
         a["per"] = per
         a["none_color"] = L.layer_color(None)
         a["object"] = [L.object_layer(g), L.object_layer(None)]
         a["paint"] = L.layer_paint(s, g)
         a["fx"] = L.layer_fx(s)
         a["look"] = L.layer_look(s, g, {"color": (1, 0, 0)})
-        a["wanted"] = [L.layer_lines_wanted(s), L.layer_lines_wanted(s, s.display_style)]
-        a["styles"] = [L.line_styles(s, True), L.line_styles(s, False)]
+        a["wanted"] = [ingetrazo_core.tag_styles.layer_lines_wanted(s), ingetrazo_core.tag_styles.layer_lines_wanted(s, s.display_style)]
+        a["styles"] = [ingetrazo_core.tag_styles.line_styles(s, True), ingetrazo_core.tag_styles.line_styles(s, False)]
         a["model_styles"] = L.model_line_styles(s)
         a["legend"] = L.legend_rows(s)
-        a["cut"] = [L.cut_hatches(s), L.cut_hatch_grounds(s), L.cut_hatch_inks(s),
-                    L.cut_fill_colours(s), L.cut_hatch_forms(s), L.cut_hatch_forms(s, 50.0),
+        a["cut"] = [L.cut_hatches(s), ingetrazo_core.tag_styles.cut_hatch_grounds(s), ingetrazo_core.tag_styles.cut_hatch_inks(s),
+                    ingetrazo_core.tag_styles.cut_fill_colours(s), L.cut_hatch_forms(s), L.cut_hatch_forms(s, 50.0),
                     L.cut_hatch_forms(s, 0)]
         a["unprinted"] = [ly.key for ly in L.unprinted(s)]
         a["offsets"] = [L.clean_offset(v) for v in
@@ -133,7 +135,7 @@ def answers(L):
         for key, rgb in (("dashed", (0, 1, 0)), ("dashed", None), ("lin:mine", (1, 1, 0)),
                          ("lin:mine", None), ("lin:gone", (1, 0, 0)), ("nope", (1, 0, 0)),
                          ("dot", (0.5, 0.5, 0.5)), ("dot", (0.5, 0.5, 0.5))):
-            changed.append([L.set_linetype_color(s, key, rgb), dict(s.linetype_colors),
+            changed.append([ingetrazo_core.tag_styles.set_linetype_color(s, key, rgb), dict(s.linetype_colors),
                             dict(s.line_types)])
         a["set_colour"] = changed
         L.load_linetype_colors(s, {"dashed": [0.2, 0.2, 0.2], "nope": [1, 1, 1], "dot": "x"})
@@ -141,7 +143,7 @@ def answers(L):
         L.load_bricks(s, {"brick": (230, 110, 50, 10), "block": "x", "nope": (1, 2, 3, 4)})
         L.load_bricks(s, [1])
         a["loaded"] = [dict(s.linetype_colors), dict(s.bricks)]
-        L.hide_unprinted(s)
+        ingetrazo_core.tag_styles.hide_unprinted(s)
         a["hidden"] = [ly.visible for ly in s.layers]
         out.append(_j(a))
     return out

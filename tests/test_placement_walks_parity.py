@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The placement walks of ``core/group.py`` became native iterators
-(``model/placement_walks.rs``) and must walk as the Python generators did
-at ``61fe6326``: ``iter_placements``, ``iter_painted_placements``,
+"""The placement walks of ``core/group.py``, pinned for their move to
+Rust: whatever replaces them must walk as the Python generators did at
+``61fe6326`` (a by-call port through PyO3 was tried and was about twice as
+slow; see ``docs/model-port.md``): ``iter_placements``, ``iter_painted_placements``,
 ``visible_placements`` and ``model_placements`` over seeded trees (classic
 groups and instances, three levels, hidden and locked tags, tags in a
 folder switched off, Hide, paints at any depth, a base matrix, a filter),
@@ -13,6 +14,7 @@ Regenerate only on purpose, against the reference implementation:
 ``python tests/test_placement_walks_parity.py --write``."""
 from __future__ import annotations
 
+import ingetrazo_core
 import gzip
 import json
 import random
@@ -28,7 +30,7 @@ def _walks():
         return (N.group_iter_placements, N.group_iter_painted_placements,
                 N.group_visible_placements, N.group_model_placements)
     from core import group as G     # the reference, before the move
-    return G.iter_placements, G.iter_painted_placements, G.visible_placements, G.model_placements
+    return G.iter_placements, ingetrazo_core.group_iter_painted_placements, ingetrazo_core.group_visible_placements, ingetrazo_core.group_model_placements
 
 
 def _scene(rng):
@@ -41,8 +43,8 @@ def _scene(rng):
     for t in ("A", "B", "C"):
         scene.layers.append(L.Layer(t, visible=rng.random() < 0.6, locked=rng.random() < 0.3))
     if rng.random() < 0.5:
-        f = L.add_folder(scene, "F")
-        L.move_to_folder(scene, "C", f)
+        f = __import__("ingetrazo_core").tag_edits.add_folder(scene, "F")
+        __import__("ingetrazo_core").tag_edits.move_to_folder(scene, "C", f)
         scene.folder_visibility = {f: rng.random() < 0.5}
     count = [0]
 

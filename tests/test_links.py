@@ -5,6 +5,7 @@ tags brought in namespaced and filed, saved as a placeholder, filled again
 from the source, overrides that survive the source's changes, packing."""
 from __future__ import annotations
 
+import ingetrazo_core
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
 
@@ -100,10 +101,10 @@ def test_a_host_override_survives_the_source_and_can_be_cleared(tmp_path):
 
 def test_any_host_switch_counts_as_an_override(tmp_path):
     """Isolate, a saved view, the panel: not through note_visibility."""
-    from core.layers import set_visible
+    import ingetrazo_core
     src = _source(tmp_path / "Site.igz")
     host, _comp = _host_with_link(tmp_path, src)
-    set_visible(host, ["Site / Wood"], False)
+    ingetrazo_core.tag_edits.set_visible(host, ["Site / Wood"], False)
     _source(src, faces=2)                  # any change to the source
     links.reload(host, src)
     assert host.layer("Site / Wood").visible is False

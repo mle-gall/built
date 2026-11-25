@@ -39,14 +39,14 @@ fn column_box(a: &PyReadonlyArray2<'_, f64>) -> ([f64; 3], [f64; 3]) {
 }
 
 fn float64_rows<'py>(py: Python<'py>, pos: &Bound<'py, PyAny>) -> PyResult<PyReadonlyArray2<'py, f64>> {
-    let np = py.import("numpy")?;
+    let np = super::module(py, "numpy")?;
     let kw = PyDict::new(py);
     kw.set_item("dtype", np.getattr("float64")?)?;
     Ok(np.getattr("asarray")?.call((pos,), Some(&kw))?.extract::<PyReadonlyArray2<'py, f64>>()?)
 }
 
 fn is_deferred(py: Python<'_>, mesh: &Bound<'_, PyAny>) -> PyResult<bool> {
-    Ok(mesh.get_type().is(&py.import("core.mesh")?.getattr("DeferredMesh")?))
+    Ok(mesh.get_type().is(&super::module(py, "core.mesh")?.getattr("DeferredMesh")?))
 }
 
 fn xyz(p: &Bound<'_, PyAny>) -> PyResult<[f64; 3]> {
@@ -113,7 +113,7 @@ pub struct AnchorPlacements {
 impl AnchorPlacements {
     #[new]
     fn new(py: Python<'_>, groups: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let iter_placements = py.import("core.group")?.getattr("iter_placements")?;
+        let iter_placements = super::module(py, "core.group")?.getattr("iter_placements")?;
         let entries = PyList::empty(py);
         let by_mesh = PyDict::new(py);
         for root in groups.try_iter()? {
@@ -196,8 +196,8 @@ impl AnchorPlacements {
         let t: [f64; 3] = point.call_method0("toTuple")?.extract()?;
         let p = [t[0], t[1], t[2], 1.0];
         let boxes = self.boxes.bind(py);
-        let group = py.import("core.group")?;
-        let builtins = py.import("builtins")?;
+        let group = super::module(py, "core.group")?;
+        let builtins = super::module(py, "builtins")?;
         for batch in &self.batches {
             let mesh = batch.mesh.bind(py);
             let d = mesh.getattr("__dict__")?;

@@ -13,10 +13,11 @@ Compared with the plain way of cutting, to the bit; counted, not timed.
 """
 from __future__ import annotations
 
+import ingetrazo_core
 import numpy as np
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.section import PlaneReach, cut_chords
+from core.section import PlaneReach
 
 
 def _cut_plain(v0, e1, e2, normal, point, visible=None, rows=False):
@@ -83,11 +84,11 @@ def test_the_kept_heights_cut_what_the_plain_cut_cuts():
         for z in (-6.0, -1.0, 0.0, 0.5, 1.0, 2.25, 3.0, 7.0):
             point = QVector3D(0.1, -0.2, 0.0) + normal * z
             for vis in (None, visible):
-                got = cut_chords(v0, e1, e2, normal, point, vis, rows=True,
+                got = ingetrazo_core.section_cut_chords(v0, e1, e2, normal, point, vis, rows=True,
                                  reach=reach)
                 want = _cut_plain(v0, e1, e2, normal, point, vis, rows=True)
                 assert _same(got[0], want[0]) and _same(got[1], want[1])
-                assert _same(cut_chords(v0, e1, e2, normal, point, vis),
+                assert _same(ingetrazo_core.section_cut_chords(v0, e1, e2, normal, point, vis),
                              _cut_plain(v0, e1, e2, normal, point, vis))
                 cut += 0 if want[0] is None else len(want[0])
     assert cut > 10000           # the comparison did see chords
@@ -118,7 +119,7 @@ def test_the_heights_are_kept_only_for_the_same_arrays_and_normal():
     assert not reach.fits(v0, QVector3D(0, 1, 0), e1, e2)
     # Handed a reach that does not fit, the cut makes its own and is right.
     other = QVector3D(1, 0, 0)
-    got = cut_chords(v0, e1, e2, other, QVector3D(0.5, 0, 0), rows=True,
+    got = ingetrazo_core.section_cut_chords(v0, e1, e2, other, QVector3D(0.5, 0, 0), rows=True,
                      reach=reach)
     want = _cut_plain(v0, e1, e2, other, QVector3D(0.5, 0, 0), rows=True)
     assert _same(got[0], want[0]) and _same(got[1], want[1])

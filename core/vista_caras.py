@@ -20,6 +20,7 @@ texture and three points that pin its UV map to the drawing.
 """
 from __future__ import annotations
 
+import ingetrazo_core
 import math
 from dataclasses import dataclass, field
 
@@ -108,8 +109,8 @@ def texture_average(path, cache={}) -> tuple | None:
 
 class _Parallel:
     def __init__(self, camera):
-        from core.hlr import camera_basis
-        self.eye, self.right, self.up, self.fwd = camera_basis(camera)
+        import ingetrazo_core
+        self.eye, self.right, self.up, self.fwd = ingetrazo_core.hlr_camera_basis(camera)
 
     def facing_back(self, normal, centre) -> bool:
         return float(np.asarray(normal) @ self.fwd) > 0.0
@@ -148,8 +149,8 @@ class _Perspective:
         return float(np.asarray(normal) @ (centre - self.eye_pt)) > 0.0
 
     def ring(self, pts):
-        from core.hlr import _clip_polygon
-        poly = _clip_polygon(list(self._clip(pts)))
+        import ingetrazo_core
+        poly = ingetrazo_core.hlr_clip_polygon(list(self._clip(pts)))
         if len(poly) < 3:
             return np.empty((0, 2)), np.empty((0,))
         c = np.asarray(poly)

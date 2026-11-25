@@ -10,6 +10,7 @@ tags that do not print left out, each line inked with its own tag or its
 object's. The live scene is never touched."""
 from __future__ import annotations
 
+import ingetrazo_core
 import math
 import os
 
@@ -120,12 +121,12 @@ def _canon(tris, hard, soft, soft_n, tags=None):
 def _reference(name):
     """The composer's way, on a second identical scene."""
     from core.hlr import collect_geometry
-    from core.layers import hide_unprinted
+    import ingetrazo_core
     scene = _scene()
     view = next((v for v in scene.saved_views if v.name == name), None)
     if view is not None:
         view.apply_state(scene)
-    hide_unprinted(scene)
+    ingetrazo_core.tag_styles.hide_unprinted(scene)
     tris, hard, soft, hard_l, soft_l, tri_l = collect_geometry(scene, layers=True)
     nan3 = (float("nan"),) * 3
     soft_p = [(p0, p1) for p0, p1, _a, _b in soft]
@@ -169,7 +170,7 @@ def test_a_vector_frame_draws_what_the_composer_drew(view_key, name, hidden):
     from core.camera import OrbitCamera
     from core.composition import MarcoVista, apply_frame_camera, model_height_for_frame
     from core.hlr import hlr_drawing
-    from core.layers import hide_unprinted
+    import ingetrazo_core
     from core.saved_views import SavedView
     from views import wgpu_sheet_frames
 
@@ -193,7 +194,7 @@ def test_a_vector_frame_draws_what_the_composer_drew(view_key, name, hidden):
     view = next((v for v in ref.saved_views if v.name == name), None)
     cam = OrbitCamera()
     apply_frame_camera(cam, frame, view, ref)
-    hide_unprinted(ref)
+    ingetrazo_core.tag_styles.hide_unprinted(ref)
     d = hlr_drawing(ref, cam, profiles=True, fills=True, hidden=hidden)
     model_h = model_height_for_frame(frame.h_mm, frame.scale_n)
     k = frame.h_mm / model_h

@@ -7,6 +7,7 @@ walk), without touching the scene: tags, tags that do not print, nested tag fold
 groups and nested placements, the view's hidden objects and folders."""
 from __future__ import annotations
 
+import ingetrazo_core
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -69,11 +70,11 @@ def _reference(scene, view):
     """The composer's way: apply the view, leave out what does not print,
     walk the placements."""
     from types import SimpleNamespace
-    from core.layers import hide_unprinted
+    import ingetrazo_core
     from views.wgpu_scene import _placement_records, _placement_state
     if view is not None:
         view.apply_state(scene)
-    hide_unprinted(scene)
+    ingetrazo_core.tag_styles.hide_unprinted(scene)
     vp = SimpleNamespace(scene=scene)
     state = _placement_state(scene)
     return {id(g): bool(flags & 1) for g, _, _, flags, _c in _placement_records(scene, scene.groups, vp, state)}

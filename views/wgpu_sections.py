@@ -1,7 +1,8 @@
 """Resident section polygons using GL's closed-ring and hatch algorithms."""
+import ingetrazo_core
 import math
 import numpy as np
-from core.section import cut_chords, fill_triangles, hatch_segments, effective_fill
+from core.section import fill_triangles, hatch_segments, effective_fill
 
 
 def capture_rows(packed, scene, tint):
@@ -48,7 +49,7 @@ def geometry(view, scene, style, camera, height, rows=None):
             cmd = packed.commands[code]
             start = int(cmd['base'])
             tri = packed.vertices['pos'][start:start+int(cmd['count'])].reshape(-1, 3, 3) @ world[:3, :3].T + world[:3, 3]
-            segs = cut_chords(tri[:, 0], tri[:, 1]-tri[:, 0], tri[:, 2]-tri[:, 0], sp.normal, sp.point)
+            segs = ingetrazo_core.section_cut_chords(tri[:, 0], tri[:, 1]-tri[:, 0], tri[:, 2]-tri[:, 0], sp.normal, sp.point)
             if segs is not None and len(segs):
                 chunks.append(segs)
         segs = np.concatenate(chunks) if chunks else np.empty((0, 2, 3))

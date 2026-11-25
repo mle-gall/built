@@ -11,6 +11,7 @@ from). Regenerate only on purpose, against the reference implementation:
 ``python tests/test_hlr_section_parity.py --write``."""
 from __future__ import annotations
 
+import ingetrazo_core
 import gzip
 import json
 import math
@@ -95,7 +96,7 @@ def answer(hlr, case):
     return {"tris": t, "hard": h, "soft": s, "split": [t2, h2, s2, cuts],
             "loops": [r.tolist() for r in loops], "members": members,
             "loops_tol": [r.tolist() for r in loops_tol],
-            "tags": hlr.closing_tags(cuts, [i % 3 for i in range(len(cuts))])}
+            "tags": ingetrazo_core.hlr_closing_tags(cuts, [i % 3 for i in range(len(cuts))])}
 
 
 def _jsonable(x):

@@ -14,7 +14,7 @@ use pyo3::types::{PyDict, PyTuple};
 type P3 = [f64; 3];
 
 fn float64_rows<'py>(py: Python<'py>, pos: &Bound<'py, PyAny>) -> PyResult<PyReadonlyArray2<'py, f64>> {
-    let np = py.import("numpy")?;
+    let np = super::module(py, "numpy")?;
     let kw = PyDict::new(py);
     kw.set_item("dtype", np.getattr("float64")?)?;
     Ok(np.getattr("ascontiguousarray")?.call((pos,), Some(&kw))?.extract::<PyReadonlyArray2<'py, f64>>()?)
@@ -55,7 +55,7 @@ fn vec_xyz(p: &Bound<'_, PyAny>) -> PyResult<P3> {
 }
 
 fn camera_point<'py>(py: Python<'py>, p: P3) -> PyResult<Bound<'py, PyAny>> {
-    py.import("core.camera_point")?.getattr("CameraPoint")?.call1((p[0], p[1], p[2]))
+    super::module(py, "core.camera_point")?.getattr("CameraPoint")?.call1((p[0], p[1], p[2]))
 }
 
 fn none_pair(py: Python<'_>) -> PyResult<Bound<'_, PyTuple>> {
@@ -66,9 +66,9 @@ fn none_pair(py: Python<'_>) -> PyResult<Bound<'_, PyTuple>> {
 /// `(None, None)`; a guide by its point only (a circle by 32 samples).
 #[pyfunction]
 fn scene_selection_bounds<'py>(py: Python<'py>, scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
-    let group = py.import("core.group")?;
-    let is_guide = py.import("core.guide")?.getattr("is_guide")?;
-    let mesh = py.import("core.mesh")?;
+    let group = super::module(py, "core.group")?;
+    let is_guide = super::module(py, "core.guide")?.getattr("is_guide")?;
+    let mesh = super::module(py, "core.mesh")?;
     let (face_cls, edge_cls) = (mesh.getattr("Face")?, mesh.getattr("Edge")?);
     let mut b = NanBox::new();
     for ent in scene.getattr("selection")?.try_iter()? {
@@ -210,9 +210,9 @@ fn scene_bounds<'py>(py: Python<'py>, scene: &Bound<'py, PyAny>) -> PyResult<Bou
         _ => PyDict::new(py).into_any(),
     };
     let kept = PyDict::new(py);
-    let plan_of = py.import("core.lazy_mesh")?.getattr("plan_of")?;
-    let local_points = py.import("core.group")?.getattr("_local_points")?;
-    let builtins = py.import("builtins")?;
+    let plan_of = super::module(py, "core.lazy_mesh")?.getattr("plan_of")?;
+    let local_points = super::module(py, "core.group")?.getattr("_local_points")?;
+    let builtins = super::module(py, "builtins")?;
     let kw = PyDict::new(py);
     kw.set_item("precise", true)?;
     for item in scene.call_method("placements", (), Some(&kw))?.try_iter()? {

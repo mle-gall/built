@@ -7,6 +7,7 @@ edges apart, chains the cut chords into closed rings, and the composer
 inks each class with its own pen and fills the rings under the lines."""
 from __future__ import annotations
 
+import ingetrazo_core
 import math
 import os
 
@@ -176,12 +177,12 @@ def test_chords_across_a_triangle_diagonal_merge_and_end_on_verticals_vanish():
     # the two short ends one each
     assert cut == [0.25, 0.25, 10.0, 10.0]
     # world endpoints still re-project onto the merged 2D segments
-    from core.hlr import _to_cam, camera_basis
+    import ingetrazo_core
     cam = _camera(scene, "std:top")
-    eye, right, up, fwd = camera_basis(cam)
+    eye, right, up, fwd = ingetrazo_core.hlr_camera_basis(cam)
     for (x0, y0, x1, y1), (w0, w1) in zip(d.segs, d.world):
-        c0 = _to_cam(np.asarray([w0]), eye, right, up, fwd)[0]
-        c1 = _to_cam(np.asarray([w1]), eye, right, up, fwd)[0]
+        c0 = ingetrazo_core.hlr_to_cam(np.asarray([w0]), eye, right, up, fwd)[0]
+        c1 = ingetrazo_core.hlr_to_cam(np.asarray([w1]), eye, right, up, fwd)[0]
         assert (c0[0], c0[1]) == pytest.approx((x0, y0), abs=1e-9)
         assert (c1[0], c1[1]) == pytest.approx((x1, y1), abs=1e-9)
 

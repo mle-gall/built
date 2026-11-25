@@ -3,6 +3,7 @@
 """Drawing records, history, archive and sheet export on synthetic models."""
 from __future__ import annotations
 
+import ingetrazo_core
 from tests.shell_isolation import one_off_export, restore_shell_patches  # noqa: F401
 import json
 import random
@@ -156,12 +157,12 @@ def test_hiding_or_locking_the_active_layer_hands_back_to_the_default():
     scene = Scene()
     scene.layers += [Layer("A"), Layer("B")]
     L.set_active(scene, "A")
-    assert L.set_visible(scene, ["B"], False) is False
-    assert L.set_visible(scene, ["A"], False) is True
+    assert ingetrazo_core.tag_edits.set_visible(scene, ["B"], False) is False
+    assert ingetrazo_core.tag_edits.set_visible(scene, ["A"], False) is True
     assert scene.active_layer is None
     L.set_active(scene, "A")                         # shows it again
     assert scene.layer("A").visible and scene.active_layer == "A"
-    assert L.set_locked(scene, ["A"], True) is True
+    assert ingetrazo_core.tag_edits.set_locked(scene, ["A"], True) is True
     assert L.active_layer(scene) == DEFAULT_LAYER
 
 
@@ -222,7 +223,7 @@ def test_folders_add_rename_move_and_remove():
     scene.layers += [Layer("A"), Layer("B")]
     name = L.add_folder(scene, "Carpeta")
     assert name == "Carpeta 1" and L.add_folder(scene, "Carpeta") == "Carpeta 2"
-    L.move_to_folder(scene, ["A", "B", DEFAULT_LAYER], name)
+    ingetrazo_core.tag_edits.move_to_folder(scene, ["A", "B", DEFAULT_LAYER], name)
     assert scene.layer("A").folder == name and scene.layer(DEFAULT_LAYER).folder is None
     assert L.rename_folder(scene, name, "Arq")
     assert scene.layer("B").folder == name           # layers name its key
@@ -448,14 +449,14 @@ def test_hlr_tags_survive_a_section_cut():
 
 def test_line_styles_and_wanted():
     scene = _two_boxes_scene()
-    assert L.layer_lines_wanted(scene)
-    st = L.line_styles(scene, colored=False)
+    assert ingetrazo_core.tag_styles.layer_lines_wanted(scene)
+    st = ingetrazo_core.tag_styles.line_styles(scene, colored=False)
     assert st["A"] == (None, "dashed", 0.5, None, (3.0, 1.5), None)
     assert st["B"][0] is None
-    assert L.line_styles(scene, colored=True)[DEFAULT_LAYER][0] is None
+    assert ingetrazo_core.tag_styles.line_styles(scene, colored=True)[DEFAULT_LAYER][0] is None
     plain = Scene()
     plain.layers.append(Layer("X"))
-    assert not L.layer_lines_wanted(plain)
+    assert not ingetrazo_core.tag_styles.layer_lines_wanted(plain)
 
 
 def test_legend_snapshots_colour_and_line():
@@ -543,7 +544,7 @@ def test_a_layer_not_printed_round_trips_and_leaves_the_legend():
     rows, _sw = L.legend_rows(scene)
     assert "Muros" in rows and "Ref" not in rows
     assert [ly.name for ly in L.unprinted(scene)] == ["Ref"]
-    L.hide_unprinted(scene)
+    ingetrazo_core.tag_styles.hide_unprinted(scene)
     assert not scene.layer("Ref").visible and scene.layer("Muros").visible
 
 

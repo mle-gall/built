@@ -12,6 +12,7 @@ with seeded offsets and cursors. Regenerate only on purpose, against the
 reference implementation: ``python tests/test_dimension_frame_parity.py --write``."""
 from __future__ import annotations
 
+import ingetrazo_core
 import gzip
 import json
 import math
@@ -61,7 +62,7 @@ def answer(dimension, case):
     got = {}
     for axis in (None, "x", "y", "z", "w"):
         d = dimension.Dimension(A, B, V(*off), axis=axis)
-        frame = dimension._linear_frame(A, B, d.axis)
+        frame = ingetrazo_core.dimension_linear_frame(A, B, d.axis)
         lp = d.line_points()
         got[str(axis)] = [None if frame is None else [_v(frame[0]), _v(frame[1])],
                           d.value(), _v(d.perpendicular_offset()), [_v(lp[0]), _v(lp[1])],

@@ -140,14 +140,8 @@ class SectionPlane(Record):
 # both filled. ``hatch_segments(chords, normal, spacing, cross=False)``:
 # (L, 2, 3) float32 lines at 45° (and 135°) clipped to those same areas.
 PlaneReach = _NATIVE.PlaneReach
-cut_chords = _NATIVE.section_cut_chords
 fill_triangles = _NATIVE.section_fill_triangles
 hatch_segments = _NATIVE.section_hatch_segments
-_fill_groups = _NATIVE.section_fill_groups
-_group_triangles = _NATIVE.section_group_triangles
-#: ``(u, v)`` across a cut as a sheet looks at it: a plan with x east and y
-#: north, a section with v straight up.
-_sheet_basis = _NATIVE.section_sheet_basis
 
 
 def layer_fills(chords, tags, normal, scene, color,
@@ -164,15 +158,15 @@ def layer_fills(chords, tags, normal, scene, color,
     sheet)."""
     import numpy as np
     from core.hatches import hatch_lines
-    from core.hlr import closing_tags, section_loops
+    from core.hlr import section_loops
     from core.layers import cut_hatch_forms, cut_hatches, hatch_ground_rgb,         hatch_ink_rgb
     if chords is None or not len(chords):
         return []
     # A solid of more than one layer is filled as the layer of most of it.
-    tags = np.asarray(closing_tags(chords, tags), dtype=object)
+    tags = np.asarray(_NATIVE.hlr_closing_tags(chords, tags), dtype=object)
     hatches = cut_hatches(scene)
     forms = cut_hatch_forms(scene, scale_n)
-    u, v = _sheet_basis(normal)
+    u, v = _NATIVE.section_sheet_basis(normal)
     n = np.cross(u, v)
     k = 1000.0 / float(scale_n or LAYER_HATCH_SCALE)    # paper mm per metre
     cut = "plan" if abs(normal.z()) >= 0.7 else "vertical"
@@ -186,8 +180,8 @@ def layer_fills(chords, tags, normal, scene, color,
         if not key:
             plain.append(mine)
             continue
-        groups, _basis = _fill_groups(mine, normal)
-        tris = _group_triangles(groups)
+        groups, _basis = _NATIVE.section_fill_groups(mine, normal)
+        tris = _NATIVE.section_group_triangles(groups)
         if not len(tris):
             continue
         ly = scene.layer(tag) if hasattr(scene, "layer") else None
@@ -218,7 +212,7 @@ def layer_fills(chords, tags, normal, scene, color,
             lines = lines.astype(np.float32)
         out.append((tris, ground, lines, ink))
     if plain:
-        tris = _group_triangles(_fill_groups(np.concatenate(plain),
+        tris = _NATIVE.section_group_triangles(_NATIVE.section_fill_groups(np.concatenate(plain),
                                              normal)[0])
         if len(tris):
             out.insert(0, (tris, color, None, color))

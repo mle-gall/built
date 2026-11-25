@@ -70,7 +70,7 @@ def known_linetype(key) -> bool:
 # on paper, the families and brick), ``hatch_families``, ``layer_brick``,
 # ``load_bricks``, ``layer_hatch_families``, ``hatch_label``, ``hatch_grows``,
 # ``clean_offset``, ``unprinted``, ``hide_unprinted``.
-for _name in ("linetype_pattern", "linetype_text", "clean_line_colour", "linetype_color", "set_linetype_color", "load_linetype_colors", "model_line_styles", "hatch_ground_rgb", "hatch_ink_rgb", "light_layer_color", "layer_color", "is_link_untagged", "object_layer", "layer_paint", "layer_fx", "layer_look", "layer_lines_wanted", "line_styles", "legend_rows", "cut_hatches", "cut_hatch_grounds", "hatch_families", "layer_brick", "load_bricks", "layer_hatch_families", "hatch_label", "hatch_grows", "cut_hatch_forms", "clean_offset", "cut_hatch_inks", "cut_fill_colours", "unprinted", "hide_unprinted"):
+for _name in ("linetype_text", "clean_line_colour", "load_linetype_colors", "model_line_styles", "hatch_ground_rgb", "hatch_ink_rgb", "layer_color", "is_link_untagged", "object_layer", "layer_paint", "layer_fx", "layer_look", "legend_rows", "cut_hatches", "hatch_families", "load_bricks", "cut_hatch_forms", "clean_offset", "unprinted", ):
     globals()[_name] = getattr(_rs.tag_styles, _name)
 del _name
 
@@ -364,13 +364,9 @@ TEMPLATE_KEY = "ingetrazo_layers"
 # ``load_line_types``.
 _te = _rs.tag_edits
 for _name in ("folders_of", "folder_parent", "folder_visible", "effective_visible",
-              "folder_label", "layer_label", "path_label", "export_labels", "unique_name",
+              "folder_label", "path_label", "export_labels", "unique_name",
               "layers_in_folder", "add_folder", "move_folder", "rename_folder",
-              "remove_folder", "move_to_folder", "active_layer", "set_visible", "set_locked",
-              "isolate", "is_isolated", "set_active", "layer_state", "apply_layer_state",
-              "hide_in_scenes", "template_of", "matched_template", "template_name_map",
-              "apply_template", "template_for", "add_missing", "remove_added",
-              "load_line_types"):
+              "remove_folder", "active_layer", "isolate", "set_active", "hide_in_scenes", "template_of", "apply_template", "template_for", "add_missing", "load_line_types"):
     globals()[_name] = getattr(_te, _name)
 del _name
 subfolders = _te.tag_scene_subfolders

@@ -16,6 +16,7 @@ map, is held to 1e-9 relative. Regenerate only on purpose, against the
 reference implementation: ``python tests/test_texture_maths_parity.py --write``."""
 from __future__ import annotations
 
+import ingetrazo_core
 import gzip
 import json
 import math
@@ -103,7 +104,7 @@ def answers(texture):
     normals, polys, texes, colours = cases()
     out = {}
     out["basis"] = [_r(texture.projection_basis(n)) for n in normals]
-    out["axes"] = [_r(texture.projection_axes(QV(*n), rot))
+    out["axes"] = [_r(ingetrazo_core.texture_projection_axes(QV(*n), rot))
                    for n in normals for rot in (0.0, 30.0, -122.5)]
     pts0 = [QV(1.5, -2.25, 3.0), QV(0, 0, 0), QV(-10.1, 4.4, 0.7)]
     out["planar"] = [_r(texture.planar_uv(QV(*n), pts0, sw, sh, rot))
@@ -128,13 +129,13 @@ def answers(texture):
         uvw = texture.fit_uv_affine(pts, uvs)
         if uvw:
             maps.append(_r(texture.face_uv_axes({"uvw": uvw}, QV(*nrm))))
-            maps.append(_r(texture.placement_of({"uvw": uvw}, QV(*nrm))))
-            maps.append(_r(texture.placement_of({"uvw": uvw}, QV(*n))))
-            maps.append(_r(texture.flattened_texture({"uvw": uvw, "path": "x.png", "rot": 3},
+            maps.append(_r(ingetrazo_core.texture_placement_of({"uvw": uvw}, QV(*nrm))))
+            maps.append(_r(ingetrazo_core.texture_placement_of({"uvw": uvw}, QV(*n))))
+            maps.append(_r(ingetrazo_core.texture_flattened({"uvw": uvw, "path": "x.png", "rot": 3},
                                                      QV(*nrm))))
-    maps.append(_r(texture.placement_of({"uvw": [0] * 8}, QV(0, 0, 1))))
-    maps.append(_r(texture.placement_of({"uvw": [1, 2]}, QV(0, 0, 1))))
-    maps.append(_r(texture.placement_of({"uvw": [1, 0, 0, 0, 0, 1, 0, 0]}, QV(0, 0, 0))))
+    maps.append(_r(ingetrazo_core.texture_placement_of({"uvw": [0] * 8}, QV(0, 0, 1))))
+    maps.append(_r(ingetrazo_core.texture_placement_of({"uvw": [1, 2]}, QV(0, 0, 1))))
+    maps.append(_r(ingetrazo_core.texture_placement_of({"uvw": [1, 0, 0, 0, 0, 1, 0, 0]}, QV(0, 0, 0))))
     out["maps"] = maps
     rot = []
     rng = random.Random(7)
@@ -148,16 +149,16 @@ def answers(texture):
     out["rotated"] = rot
     refs = []
     for pts, _uvs, nrm in polys:
-        refs.append(_r(texture.uv_reference_points(pts, None)))
-        refs.append(_r(texture.uv_reference_points([QV(*p) for p in pts], QV(*nrm))))
-    refs.append(_r(texture.uv_reference_points([(0, 0, 0)] * 4)))
+        refs.append(_r(ingetrazo_core.texture_uv_reference_points(pts, None)))
+        refs.append(_r(ingetrazo_core.texture_uv_reference_points([QV(*p) for p in pts], QV(*nrm))))
+    refs.append(_r(ingetrazo_core.texture_uv_reference_points([(0, 0, 0)] * 4)))
     out["refs"] = refs
     rgb = np.array(colours, dtype=np.float64)
-    h, l, s = texture.rgb_to_hls(rgb)
+    h, l, s = ingetrazo_core.texture_rgb_to_hls(rgb)
     out["hls"] = _r([h, l, s])
-    out["hls_img"] = _r(list(texture.rgb_to_hls(rgb.reshape(-1, 11, 3))))
-    out["rgb"] = _r(texture.hls_to_rgb(h, l, s))
-    out["rgb_wrap"] = _r(texture.hls_to_rgb(h * 3 - 1.2, l, s))
+    out["hls_img"] = _r(list(ingetrazo_core.texture_rgb_to_hls(rgb.reshape(-1, 11, 3))))
+    out["rgb"] = _r(ingetrazo_core.texture_hls_to_rgb(h, l, s))
+    out["rgb_wrap"] = _r(ingetrazo_core.texture_hls_to_rgb(h * 3 - 1.2, l, s))
     return out
 
 

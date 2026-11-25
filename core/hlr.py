@@ -34,12 +34,6 @@ import ingetrazo_core as NATIVE
 from core import progress as _progress
 
 # ── Camera basis ────────────────────────────────────────────────────────────
-# Rust (``rust/ingetrazo_core/src/model/hlr_view.rs``): ``camera_basis(camera)``
-# gives the right/up/forward unit vectors and the eye as NumPy rows (the
-# orbit camera's lookAt); ``_to_cam(points, eye, right, up, fwd)`` takes
-# world (N, 3) to camera space: x right, y up, z the depth AWAY from the eye.
-camera_basis = NATIVE.hlr_camera_basis
-_to_cam = NATIVE.hlr_to_cam
 
 
 # ── Scene collection ────────────────────────────────────────────────────────
@@ -181,13 +175,6 @@ def clip_to_section(tris, hard, soft, plane, split_cuts: bool = False):
     return tuple(out)
 
 
-#: ``solid_depth(ring, tris, normal)``: how far the solid around section ring
-#: ``ring`` ((M, 3) world) runs through the plane, square to it — from the
-#: ring's centre, the nearest of ``tris`` ((T, 3, 3)) along ``normal`` and the
-#: nearest against it, added; ``None`` when a ray finds nothing. In Rust.
-solid_depth = NATIVE.hlr_solid_depth
-
-
 def section_loops(cut_edges, tol: float | None = None,
                   members: list | None = None) -> list:
     """Chain the plane∩triangle chords of a section cut into CLOSED loops —
@@ -212,16 +199,6 @@ def section_loops(cut_edges, tol: float | None = None,
     return native(cut_edges, None if tol is None else float(tol), members)
 
 
-#: ``closing_tags(cut_edges, cut_tags)``: ``cut_tags`` with each chord given
-#: the layer of the ring it closes. Rings are chained one layer at a time, so
-#: a wall's cut takes the wall's fill and the door's beside it its own; but a
-#: solid of more than one layer (a wall with one face moved to another) closes
-#: in neither, and lost its fill. The chords that close no ring within their
-#: own layer are chained together, and each ring found that way goes to the
-#: layer most of its outline belongs to (names break a tie). In Rust.
-closing_tags = NATIVE.hlr_closing_tags
-
-
 # ── The section cap: the poché covers ───────────────────────────────────────
 #
 # A section cut leaves the solid OPEN: the clipper throws the hidden half
@@ -236,18 +213,6 @@ closing_tags = NATIVE.hlr_closing_tags
 # behind the cut plane and inside the poché is inside solid material, and
 # solid material is not see-through. The cut chords themselves sit ON the
 # plane, so they are never their own victims and the outline always survives.
-
-
-#: ``cap_depth_affine(plane, eye, right, up, fwd)``: ``(alpha, beta, gamma)``
-#: with the cut plane's camera depth ``alpha·x + beta·y + gamma`` over the
-#: camera plane (a parallel camera maps a plane to a plane), ``None`` when the
-#: cut is seen edge-on. ``cap_ring_edges(loops)``: every ring of the cap as one
-#: pair of (K, 2) endpoint arrays ``P→Q``; stacking all the rings together IS
-#: the even-odd rule. ``_geometry_as_lists``: array geometry to the tuple lists
-#: ``clip_to_section`` walks. In Rust.
-cap_depth_affine = NATIVE.hlr_cap_depth_affine
-cap_ring_edges = NATIVE.hlr_cap_ring_edges
-_geometry_as_lists = NATIVE.hlr_geometry_lists
 
 
 #: Line classes of a drawing, per segment (``HlrDrawing.kinds``).
@@ -370,7 +335,7 @@ def hlr_drawing(scene, camera, geometry=None, profiles: bool = True,
     cut_edges: list = []
     if sp is not None:
         if soft_n is not None:          # the clipper walks tuple lists
-            tris, hard, soft = _geometry_as_lists(tris, hard, soft, soft_n)
+            tris, hard, soft = NATIVE.hlr_geometry_lists(tris, hard, soft, soft_n)
             soft_n = None
         if htags is None:
             tris, hard, soft, cut_edges = clip_to_section(
@@ -382,7 +347,7 @@ def hlr_drawing(scene, camera, geometry=None, profiles: bool = True,
             tris, cut_edges, cut_tags = _clip_tris_tagged(tris, ttags, sp)
             hard, htags = _clip_tagged(hard, htags, sp, soft=False)
             soft, stags = _clip_tagged(soft, stags, sp, soft=True)
-    _e, _r, _u, fwd = camera_basis(camera)
+    _e, _r, _u, fwd = NATIVE.hlr_camera_basis(camera)
 
     def empty_drawing():
         return HlrDrawing(np.empty((0, 4)), np.empty((0, 2, 3)),
@@ -425,12 +390,12 @@ def hlr_drawing(scene, camera, geometry=None, profiles: bool = True,
     parts = [np.asarray(hard, dtype=np.float64).reshape(-1, 2, 3)]
     if len(cut_edges):
         parts.append(np.asarray(cut_edges, dtype=np.float64).reshape(-1, 2, 3))
-    eye, right, up, fwd = camera_basis(camera)
+    eye, right, up, fwd = NATIVE.hlr_camera_basis(camera)
     E = np.concatenate(parts) if len(parts) > 1 else parts[0]   # (E,2,3)
-    A = _to_cam(E[:, 0, :], eye, right, up, fwd)
-    B = _to_cam(E[:, 1, :], eye, right, up, fwd)
+    A = NATIVE.hlr_to_cam(E[:, 0, :], eye, right, up, fwd)
+    B = NATIVE.hlr_to_cam(E[:, 1, :], eye, right, up, fwd)
     T = np.asarray(tris, dtype=np.float64).reshape(-1, 3, 3)
-    TC = _to_cam(T.reshape(-1, 3), eye, right, up, fwd).reshape(-1, 3, 3)
+    TC = NATIVE.hlr_to_cam(T.reshape(-1, 3), eye, right, up, fwd).reshape(-1, 3, 3)
     # The section cap: the rings the composer fills also COVER (see above).
     loops: list = []
     loop_tags: list | None = [] if htags is not None else None
@@ -444,14 +409,14 @@ def hlr_drawing(scene, camera, geometry=None, profiles: bool = True,
             # its ring takes its layer's fill.
             by_tag: dict = {}
             for edge, tag in zip(cut_edges,
-                                 closing_tags(cut_edges, cut_tags)):
+                                 NATIVE.hlr_closing_tags(cut_edges, cut_tags)):
                 by_tag.setdefault(tag, []).append(edge)
             rings = [(ring, tag) for tag, edges in by_tag.items()
                      for ring in section_loops(edges)]
         wanted = set(depth_layers or ()) if loop_tags is not None else set()
         by_layer_tris: dict = {}
         for ring, tag in rings:
-            loops.append(_to_cam(ring, eye, right, up, fwd)[:, :2])
+            loops.append(NATIVE.hlr_to_cam(ring, eye, right, up, fwd)[:, :2])
             if loop_tags is not None:
                 loop_tags.append(tag)
             if wanted:
@@ -465,14 +430,14 @@ def hlr_drawing(scene, camera, geometry=None, profiles: bool = True,
                                 t for t, g in zip(whole_tris, whole_tags)
                                 if g == tag]
                     n = sp.normal
-                    loop_depths.append(solid_depth(
+                    loop_depths.append(NATIVE.hlr_solid_depth(
                         ring, by_layer_tris[tag], (n.x(), n.y(), n.z())))
                 else:
                     loop_depths.append(None)
         if loops and caps:
-            cap_abg = cap_depth_affine(sp, eye, right, up, fwd)
+            cap_abg = NATIVE.hlr_cap_depth_affine(sp, eye, right, up, fwd)
         if cap_abg is not None:
-            cap_P, cap_Q = cap_ring_edges(loops)
+            cap_P, cap_Q = NATIVE.hlr_cap_ring_edges(loops)
     # Spans, the hidden remainder, the cap, Profiles, the collinear merge
     # and the hidden-under-visible drop: one pass in Rust
     # (ingetrazo_core sheets::drawing, docs/rust-sheets.md §2).
@@ -558,13 +523,6 @@ def hlr_view(scene, camera, return_world: bool = False, geometry=None):
 # and planes stay planes, and 1/w orders the depth. Clipped to the view
 # pyramid first — a point beside or behind the eye has no picture.
 
-# The pyramid's sides (left, right, bottom, top, near) and the clips against
-# it, Sutherland–Hodgman for polygons, in Rust: ``_clip_polygon(poly)``,
-# ``_clip_triangles((T, 3, 4))``, ``_clip_segments(A, B)``.
-_clip_polygon = NATIVE.hlr_clip_polygon
-_clip_triangles = NATIVE.hlr_clip_triangles
-_clip_segments = NATIVE.hlr_clip_segments
-
 
 def hlr_perspective(scene, camera, geometry=None) -> np.ndarray:
     """Visible edge segments of *scene* in *camera*'s PERSPECTIVE (the
@@ -588,7 +546,7 @@ def hlr_perspective(scene, camera, geometry=None) -> np.ndarray:
     cut: list = []
     if sp is not None:
         if soft_n is not None:
-            tris, hard, soft = _geometry_as_lists(tris, hard, soft, soft_n)
+            tris, hard, soft = NATIVE.hlr_geometry_lists(tris, hard, soft, soft_n)
             soft_n = None
         tris, hard, soft, cut = clip_to_section(tris, hard, soft, sp,
                                                 split_cuts=True)
