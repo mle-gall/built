@@ -87,7 +87,7 @@ fn ground<'py>(ws: &Bound<'py, Workspace>) -> PyResult<Obj<'py>> {
     }
     let g = ws
         .py()
-        .import("views.wgpu_sheet_frames")?
+        .import("ingetrazo_render.sheet_frames")?
         .call_method1("Ground", (ws.getattr("_touch")?, ws.getattr("view")?))?;
     ws.setattr("_ground", &g)?;
     Ok(g)
@@ -527,7 +527,7 @@ impl Workspace {
     fn _send_contents(s: &Bound<'_, Self>, renderer: &Obj<'_>) -> PyResult<()> {
         let py = s.py();
         let comp = s.getattr("composer")?;
-        let frames = py.import("views.wgpu_sheet_frames")?;
+        let frames = py.import("ingetrazo_render.sheet_frames")?;
         let content = s.getattr("_content")?;
         let tried = s.getattr("_tried")?;
         let page = s.getattr("_page")?;
@@ -629,7 +629,7 @@ impl Workspace {
             return Ok(());
         }
         s.setattr("_followed", sig)?;
-        if let Err(e) = py.import("views.wgpu_sheet_frames")?.call_method1(
+        if let Err(e) = py.import("ingetrazo_render.sheet_frames")?.call_method1(
             "follow_anchors",
             (
                 s.getattr("view")?.getattr("source_viewport")?,
@@ -672,7 +672,7 @@ impl Workspace {
             }
             annotated.set_item(&key, sig)?;
             let result = (|| -> PyResult<()> {
-                let data = py.import("views.wgpu_sheet_frames")?.call_method1(
+                let data = py.import("ingetrazo_render.sheet_frames")?.call_method1(
                     "annotations",
                     (
                         s.getattr("view")?.getattr("source_viewport")?,
@@ -713,7 +713,7 @@ impl Workspace {
                 continue;
             }
             snapped.set_item(&key, sig)?;
-            let got = py.import("views.wgpu_sheet_frames")?.call_method1(
+            let got = py.import("ingetrazo_render.sheet_frames")?.call_method1(
                 "snaps",
                 (s.getattr("view")?.getattr("source_viewport")?, &f),
             );
@@ -981,7 +981,7 @@ impl Workspace {
         let composer = s.getattr("composer")?;
         let comp = composer.getattr("comp")?;
         let scene = composer.call_method0("_scene")?;
-        let frames = py.import("views.wgpu_sheet_frames")?;
+        let frames = py.import("ingetrazo_render.sheet_frames")?;
         let binding = match hit {
             Some(h) if h.call_method1("get", ("world",))?.is_truthy()? => Self::_models(s)?
                 .bind(py)
@@ -1116,7 +1116,7 @@ impl Workspace {
                 && a.call_method1("get", ("world",))?.is_truthy()?
                 && b.call_method1("get", ("world",))?.is_truthy()?
             {
-                py.import("views.wgpu_sheet_frames")?.call_method1(
+                py.import("ingetrazo_render.sheet_frames")?.call_method1(
                     "anchor",
                     (&item, &f, scene, vec![("a_world", a), ("b_world", b)]),
                 )?;
@@ -2076,7 +2076,7 @@ impl Workspace {
                 .call((&parent, format!("{label} · {name}")), Some(&kw))?;
             busy.call_method0("__enter__")?;
             let result = (|| -> PyResult<Vec<String>> {
-                let frames = py.import("views.wgpu_sheet_frames")?;
+                let frames = py.import("ingetrazo_render.sheet_frames")?;
                 let view = s.getattr("view")?;
                 let sheet = comp.getattr("comp")?;
                 let current = parent.getattr("_current_path").ok();

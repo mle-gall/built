@@ -233,19 +233,19 @@ def test_the_page_follows_the_document_and_only_then(host):
 
 def test_frames_show_the_vector_pass_and_the_renders(host, monkeypatch):
     import numpy as np
-    from views import wgpu_sheet_frames
+    from ingetrazo_render import sheet_frames
     def drawing(source, frame):
         assert frame.style == "vectorial"
         return {"segs": np.array([[0, 0, 10, 0], [0, 0, 0, 5]], float), "kinds": np.array([0, 1], np.int8),
                 "fills": []}
-    monkeypatch.setattr(wgpu_sheet_frames, "drawing", drawing)
+    monkeypatch.setattr(sheet_frames, "drawing", drawing)
     shaded = []
 
     def native(view, frame, key):
         shaded.append(frame)
         view.renderer.page_frame_render(key)
         return True
-    monkeypatch.setattr(wgpu_sheet_frames, "render", native)
+    monkeypatch.setattr(sheet_frames, "render", native)
     ws = _sheets(host)
     rec = host.view.renderer
     for _ in range(3):
@@ -590,11 +590,11 @@ def test_a_dimension_measured_on_the_page_is_bound_to_the_model(host):
     that frame's model points and holds them; one step of the history; the
     tool stays armed."""
     import numpy as np
-    from views import wgpu_sheet_frames
+    from ingetrazo_render import sheet_frames
     ws = _sheets(host)
     comp = ws.composer
     plan = comp.comp.frames[0]
-    pts, wpts, _e, _w, _c = wgpu_sheet_frames.snaps(host.view.source_viewport, plan)
+    pts, wpts, _e, _w, _c = sheet_frames.snaps(host.view.source_viewport, plan)
     i = int(np.argmin(pts[:, 0] + pts[:, 1]))
     j = int(np.argmax(pts[:, 0] - pts[:, 1]))
     pt = lambda k: {"p": pts[k].tolist(), "world": wpts[k].tolist(), "frame": plan._doc_key, "segment": None}  # noqa: E731
@@ -616,11 +616,11 @@ def test_a_bound_dimension_follows_its_frame_and_the_model(host):
     reprojected when the frame moves or rescales, and its ends follow the
     model's vertices when the model moves."""
     import numpy as np
-    from views import wgpu_sheet_frames
+    from ingetrazo_render import sheet_frames
     ws = _sheets(host)
     comp = ws.composer
     plan = comp.comp.frames[0]
-    pts, wpts, _e, _w, _c = wgpu_sheet_frames.snaps(host.view.source_viewport, plan)
+    pts, wpts, _e, _w, _c = sheet_frames.snaps(host.view.source_viewport, plan)
     i = int(np.argmin(pts[:, 0] + pts[:, 1]))
     j = int(np.argmax(pts[:, 0] - pts[:, 1]))
     pt = lambda k: {"p": pts[k].tolist(), "world": wpts[k].tolist(), "frame": plan._doc_key, "segment": None}  # noqa: E731
@@ -656,7 +656,7 @@ def test_a_frame_offers_and_draws_what_the_composer_did(host, tmp_path, case):
     """What a frame offers the drawing tools (snap points with their model
     points, edges, circles), its plan cut ring by ring with each ring's
     look, its model annotations and its DXF — worked out with the Rust
-    camera and geometry (views/wgpu_sheet_frames.py) — are what the
+    camera and geometry (ingetrazo_render.sheet_frames) — are what the
     composer answered (goldens: scripts/sheet_frame_goldens.py, the scenes
     in tests/sheet_frame_cases.py)."""
     from tests.sheet_frame_cases import canon, native, set_up
@@ -682,11 +682,11 @@ def test_a_plan_cut_is_filled_with_its_layers_patterns(host):
     filled with their layers' patterns (sheets::hatching), brick and
     concrete, in the frame's display list."""
     from tests.sheet_frame_cases import plan_cut
-    from views import wgpu_sheet_frames
+    from ingetrazo_render import sheet_frames
     ws = _sheets(host)
     plan = ws.composer.comp.frames[0]
     plan_cut(ws.composer._scene(), plan, True)
-    got = wgpu_sheet_frames.drawing(host.view.source_viewport, plan)
+    got = sheet_frames.drawing(host.view.source_viewport, plan)
     assert {h for _c, h, _g, _i, _f in got["fill_looks"]} == {"brick", "concrete"}
     ops = json.loads(NATIVE_display(plan, got))
     assert sum(o["op"] == "line" for o in ops) > len(got["segs"]) + 10       # the patterns' marks
@@ -698,7 +698,7 @@ def test_the_page_draws_a_frame_s_annotations_and_follows_them(host):
     frame stops showing the model's dimensions."""
     import ingetrazo_core as NATIVE
     from tests.sheet_frame_cases import annotated
-    from views import wgpu_sheet_frames
+    from ingetrazo_render import sheet_frames
     ws = _sheets(host)
     plan = ws.composer.comp.frames[0]
     annotated(ws.composer._scene(), plan, host.window)
@@ -706,7 +706,7 @@ def test_the_page_draws_a_frame_s_annotations_and_follows_them(host):
     provider = host.window._ext_sheet_annots[0]
     host.window._ext_sheet_annots[0] = lambda scene, sheet: told.append((sheet.scale_n, sheet.text_mm)) or provider(
         scene, sheet)
-    got = wgpu_sheet_frames.annotations(host.view.source_viewport, plan, host.window._ext_sheet_annots)
+    got = sheet_frames.annotations(host.view.source_viewport, plan, host.window._ext_sheet_annots)
     assert told[-1] == (plan.scale_n, 3.0)
     kinds = [a[0] for a in got]
     assert {"poly", "line", "text", "secmark", "xpoly", "xtext"} <= set(kinds), kinds
@@ -728,11 +728,11 @@ def test_the_page_draws_a_frame_s_annotations_and_follows_them(host):
 
 def test_a_layered_dxf_has_each_layer_and_its_hatch(host, tmp_path):
     from tests.sheet_frame_cases import dxf_layers
-    from views import wgpu_sheet_frames
+    from ingetrazo_render import sheet_frames
     ws = _sheets(host)
     plan = ws.composer.comp.frames[0]
     dxf_layers(ws.composer._scene())
-    assert wgpu_sheet_frames.export_dxf(host.view.source_viewport, plan, tmp_path / "v.dxf") > 10
+    assert sheet_frames.export_dxf(host.view.source_viewport, plan, tmp_path / "v.dxf") > 10
     assert "MUROS-TRAMA" in (tmp_path / "v.dxf").read_text()
 
 
@@ -789,12 +789,12 @@ def test_every_tool_of_the_rail_runs_on_the_page(host, monkeypatch):
 def test_labels_levels_polygons_and_images_from_the_page(host, monkeypatch, tmp_path):
     import numpy as np
     from tests.plugin_images import write_png
-    from views import wgpu_sheet_frames
+    from ingetrazo_render import sheet_frames
     from ingetrazo_render import shell_files
     ws = _sheets(host)
     comp = ws.composer
     plan = comp.comp.frames[0]
-    pts, wpts, _e, _w, _c = wgpu_sheet_frames.snaps(host.view.source_viewport, plan)
+    pts, wpts, _e, _w, _c = sheet_frames.snaps(host.view.source_viewport, plan)
     hit = {"p": pts[0].tolist(), "world": wpts[0].tolist(), "frame": plan._doc_key, "segment": None}
     # A label: the spot (bound to the model), then where its text goes.
     _run_actions(host, "sheets:tool\x1fetiqueta")

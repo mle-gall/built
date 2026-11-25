@@ -160,7 +160,7 @@ def test_the_frame_draws_what_the_view_shows_without_touching_the_scene(name):
                                            ("scene:Iso no walls", "Iso no walls")])
 @pytest.mark.parametrize("hidden", [False, True])
 def test_a_vector_frame_draws_what_the_composer_drew(view_key, name, hidden):
-    """``wgpu_sheet_frames.drawing`` against the composer's way: the view
+    """``sheet_frames.drawing`` against the composer's way: the view
     applied to the scene, the camera pointed by ``apply_frame_camera``,
     ``collect_geometry``'s walk, the same hidden-line pass."""
     from types import SimpleNamespace
@@ -169,7 +169,7 @@ def test_a_vector_frame_draws_what_the_composer_drew(view_key, name, hidden):
     from core.hlr import hlr_drawing
     import ingetrazo_core
     from core.saved_views import SavedView
-    from views import wgpu_sheet_frames
+    from ingetrazo_render import sheet_frames
 
     def scene_with_views():
         s = _scene()
@@ -183,7 +183,7 @@ def test_a_vector_frame_draws_what_the_composer_drew(view_key, name, hidden):
               style="vectorial", hidden_lines=hidden)
     scene = scene_with_views()
     source = SimpleNamespace(scene=scene, camera=OrbitCamera())
-    got = wgpu_sheet_frames.drawing(source, MarcoVista(**kw))
+    got = sheet_frames.drawing(source, MarcoVista(**kw))
     segs, kinds = got["segs"], got["kinds"]
 
     ref = scene_with_views()
@@ -208,3 +208,16 @@ def test_a_vector_frame_draws_what_the_composer_drew(view_key, name, hidden):
         return sorted(rows)
     assert len(segs) > 10
     assert canon(segs, kinds) == canon(want, d.kinds)
+
+
+def test_frame_scene_overrides_have_their_own_namespace():
+    from types import SimpleNamespace
+    from ingetrazo_render.sheet_frames import FrameScene
+
+    scene = SimpleNamespace(label="live", units="mm")
+    facade = FrameScene(scene, label="paper")
+    assert vars(facade) == {"_scene": scene, "label": "paper"}
+    assert (facade.label, facade.units) == ("paper", "mm")
+    with pytest.raises(AttributeError, match="does not change the scene"):
+        facade.units = "m"
+    assert (scene.label, scene.units) == ("live", "mm")

@@ -191,7 +191,7 @@ impl SheetHost {
         for comp in sheets.try_iter()? {
             comps.append(comp?)?;
         }
-        let frames = py.import("views.wgpu_sheet_frames")?;
+        let frames = py.import("ingetrazo_render.sheet_frames")?;
         let ground = frames.call_method1(
             "Ground",
             (wrap_pyfunction!(ignore_ground_update, py)?, &view),

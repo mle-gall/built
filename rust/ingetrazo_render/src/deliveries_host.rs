@@ -657,7 +657,7 @@ impl PdfWriter {
         let Some(view) = view.filter(|v| opt(v, "renderer").is_some()) else {
             return py.import("ingetrazo_render.sheet_workspace")?.call_method1("composer_for", (win,))?.call_method1("export_all_pdf", (path, sheets));
         };
-        let frames = py.import("views.wgpu_sheet_frames")?;
+        let frames = py.import("ingetrazo_render.sheet_frames")?;
         let scene = history_of(win)?.getattr("scene")?;
         let wanted: Option<Vec<Bound<'py, PyAny>>> = if sheets.is_none() { None } else { Some(sheets.try_iter()?.map(|s| s?.getattr("_doc_key")).collect::<PyResult<_>>()?) };
         let comps = PyList::empty(py);

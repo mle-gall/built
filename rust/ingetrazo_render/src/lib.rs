@@ -3255,6 +3255,7 @@ mod preferences;
 mod about;
 mod sheet_host;
 mod sheet_workspace;
+mod sheet_frames;
 mod start_view;
 mod library_view;
 mod resident_rows;
@@ -3437,6 +3438,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     library_view::register(m)?;
     m.add_class::<resident_rows::ResidentRows>()?;
     sheet_workspace::register(m)?;
+    sheet_frames::register(m)?;
     m.add_function(wrap_pyfunction!(sheet_host::show_delivery_form, m)?)?;
     m.add_function(wrap_pyfunction!(sheet_host::show_view_export, m)?)?;
     m.add_class::<units_start::UnitsDraft>()?;
