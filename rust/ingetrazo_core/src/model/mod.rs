@@ -13,6 +13,7 @@ pub mod dimension_frame;
 pub mod group_frame;
 pub mod hlr_view;
 pub mod linetypes;
+pub mod placement_walks;
 pub mod pyfloat;
 pub mod saved_view;
 pub mod saved_view_state;
@@ -58,5 +59,6 @@ pub fn register_model(m: &Bound<'_, PyModule>) -> PyResult<()> {
     anchor_broad::register(m)?;
     saved_view_state::register(m)?;
     scene_bounds::register(m)?;
+    placement_walks::register(m)?;
     Ok(())
 }

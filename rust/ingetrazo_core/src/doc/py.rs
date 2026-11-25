@@ -465,7 +465,7 @@ fn which_of(f: Field) -> u8 {
     if f == Field::Axes { 1 } else { 0 }
 }
 
-fn read_matrix<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key, f: Field) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn read_matrix<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key, f: Field) -> PyResult<Bound<'py, PyAny>> {
     let slot = view_slot(f);
     let (x, serial) = {
         let mut d = lock();
