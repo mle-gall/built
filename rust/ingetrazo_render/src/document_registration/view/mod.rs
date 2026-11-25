@@ -53,6 +53,7 @@ mod document_controller;
 mod document_interaction;
 mod document_tools;
 mod modules;
+mod interaction_host;
 mod ndof_input;
 mod texture_probe;
 mod view_commands;
@@ -121,7 +122,6 @@ pub(super) fn register(module: &Bound<PyModule>) -> PyResult<()> {
         texture_probe::measure_texture_position,
         module
     )?)?;
-    module.add_function(wrap_pyfunction!(register_view_class, module)?)?;
-    module.add_function(wrap_pyfunction!(register_view_functions, module)?)?;
+
     Ok(())
 }

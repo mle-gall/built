@@ -211,6 +211,7 @@ fn definition(name: &str) -> Option<&'static Module> {
 }
 
 const VIEW_MODULES: &[&str] = &[
+    "document_interaction",
     "documents",
     "document_tools",
     "view_navigation",
