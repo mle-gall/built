@@ -48,6 +48,12 @@ macro_rules! fields {
         let fields=PyDict::new($py); $(fields.set_item($key,$value)?;)* fields
     }};
 }
+mod chrome_actions;
+mod chrome_frame;
+mod chrome_input;
+mod chrome_inspector;
+mod chrome_tree;
+mod chrome_tree_action;
 mod device;
 mod document_controller;
 mod document_interaction;
