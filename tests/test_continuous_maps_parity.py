@@ -66,7 +66,7 @@ def _tex(rng):
 
 
 def answers():
-    from core.texture import continuous_maps
+    from ingetrazo_core import texture_continuous_maps as continuous_maps
     rng = random.Random(20261125)
     out = []
     for k in range(150):

@@ -7,6 +7,7 @@
 
 use pyo3::prelude::*;
 
+pub mod anchor_broad;
 pub mod camera_live;
 pub mod dimension_frame;
 pub mod group_frame;
@@ -14,6 +15,8 @@ pub mod hlr_view;
 pub mod linetypes;
 pub mod pyfloat;
 pub mod saved_view;
+pub mod saved_view_state;
+pub mod scene_bounds;
 pub mod section_cut;
 pub mod section_fill;
 pub mod selection;
@@ -39,5 +42,8 @@ pub fn register_model(m: &Bound<'_, PyModule>) -> PyResult<()> {
     texture_maths::register(m)?;
     tag_edits::register(m)?;
     tag_styles::register(m)?;
+    anchor_broad::register(m)?;
+    saved_view_state::register(m)?;
+    scene_bounds::register(m)?;
     Ok(())
 }

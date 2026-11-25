@@ -142,7 +142,7 @@ def answers(texture):
         g = [QV(rng.uniform(-3, 3), rng.uniform(-3, 3), rng.uniform(-3, 3)) for _ in range(2)]
         d = QV(rng.uniform(-1, 1), rng.uniform(-1, 1), rng.uniform(-1, 1)).normalized()
         t = rng.uniform(-3, 3)
-        rot.append(_r(texture._rotated_map(g[0], rng.uniform(-2, 2), g[1], rng.uniform(-2, 2),
+        rot.append(_r(__import__("ingetrazo_core").texture_rotated_map(g[0], rng.uniform(-2, 2), g[1], rng.uniform(-2, 2),
                                            QV(rng.uniform(-9, 9), rng.uniform(-9, 9), 1.0), d,
                                            math.cos(t), math.sin(t))))
     out["rotated"] = rot

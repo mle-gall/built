@@ -22,7 +22,7 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 import core._native as _native
 from core import mesh as M
-from core import scene as scene_mod
+from ingetrazo_core import scene_bounds_inside as _inside
 from core.group import Group, copy_group
 from core.scene import Scene
 from formats import igz
@@ -226,12 +226,21 @@ def test_a_copy_inside_the_box_is_not_read(binary, tmp_path):
     box = _walk(sc)
     assert len(sc._bounds_parts) < len(list(sc.placements()))
 
-    real = scene_mod._inside
-    scene_mod._inside = lambda *a: False
-    try:
-        assert _walk(sc) == box
-    finally:
-        scene_mod._inside = real
+    # Every copy read, none skipped: the same box.
+    from ingetrazo_core import group_placed_box
+    from core.group import _local_points
+    los, his = [], []
+    for placed, m in sc.placements(precise=True):
+        pts = _local_points(placed.mesh)
+        if pts is None or not len(pts):
+            continue
+        lo, hi = group_placed_box(np.ascontiguousarray(pts, dtype=np.float64),
+                                  None if m is None else [float(v) for v in m.ravel()])
+        los.append(lo)
+        his.append(hi)
+    lo, hi = sc.bounds()
+    assert (lo.x(), lo.y(), lo.z()) == tuple(np.min(los, axis=0))
+    assert (hi.x(), hi.y(), hi.z()) == tuple(np.max(his, axis=0))
 
 
 @pytest.mark.parametrize("seed", range(20))
@@ -250,13 +259,13 @@ def test_inside_never_cuts_what_the_points_reach(seed):
     world = pts @ rot.T + np.array([d[12], d[13], d[14]])
     lo, hi = world.min(axis=0), world.max(axis=0)
     # Exactly its box, or a hair smaller on any side: not inside.
-    assert not scene_mod._inside(local, d, tuple(lo), tuple(hi))
-    assert not scene_mod._inside(local, d, tuple(lo - 1e-3), tuple(hi))
+    assert not _inside(local, d, tuple(lo), tuple(hi))
+    assert not _inside(local, d, tuple(lo - 1e-3), tuple(hi))
     # Well around it, and the box of its corners with room: inside.
-    assert scene_mod._inside(local, d, tuple(lo - 100.0), tuple(hi + 100.0))
+    assert _inside(local, d, tuple(lo - 100.0), tuple(hi + 100.0))
 
 
 def test_inside_says_no_to_a_nan():
     nan = float("nan")
     d = tuple(QMatrix4x4().data())
-    assert not scene_mod._inside((nan, 0, 0, 1, 1, 1), d, (-9, -9, -9), (9, 9, 9))
+    assert not _inside((nan, 0, 0, 1, 1, 1), d, (-9, -9, -9), (9, 9, 9))

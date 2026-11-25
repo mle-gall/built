@@ -146,6 +146,7 @@ def answers():
 
 
 def _answers():
+    import ingetrazo_core as N
     from core import saved_views as S
     out = {"capture": [], "apply": [], "shown": [], "sig": [], "geo": [], "shadow": []}
     rng = random.Random(20261125)
@@ -166,9 +167,9 @@ def _answers():
         rec.append(_view_fields(v))
         out["capture"].append(rec)
         views.append(v)
-        out["shown"].append(_jsonable(S.shown_state(scene)))
-        out["sig"].append(_jsonable(S.visibility_sig(scene)))
-        out["geo"].append(_jsonable(S.georef_state(scene)))
+        out["shown"].append(_jsonable(N.saved_view_shown_state(scene)))
+        out["sig"].append(_jsonable(N.saved_view_visibility_sig(scene)))
+        out["geo"].append(_jsonable(N.saved_view_georef_state(scene)))
     for k in range(120):
         v = rng.choice(views)
         v = S.SavedView.from_dict(v.to_dict())
@@ -196,7 +197,7 @@ def _answers():
         raw = {"enabled": rng.random() < 0.5, "hour": rng.choice((3, 30, "x")),
                "darkness": rng.uniform(0, 1)}
         held = scene.shadows
-        S.apply_shadow_state(scene, raw)
+        N.saved_view_apply_shadows(scene, raw)
         out["shadow"].append([scene.shadows is held, _jsonable(scene.shadows.to_dict())])
     return out
 

@@ -109,6 +109,7 @@ def _uid_of(g):
 def answers():
     from ingetrazo_core import Vec3 as V
     import numpy as np
+    import ingetrazo_core as N
     from core import dimension as D
     out = {"may_hold": [], "scenes": []}
     rng = random.Random(20261125)
@@ -124,15 +125,15 @@ def answers():
                 p = p + rng.choice((0.0, 3.9 * tol, 4.0 * tol, 4.1 * tol, -4.0 * tol))
             else:
                 p = np.array([rng.uniform(-4, 4) + survey, rng.uniform(-4, 4), rng.uniform(-1, 4)])
-            row.append(bool(D._may_hold(mesh, V(*p), tol)))
+            row.append(bool(N.dimension_may_hold(mesh, V(*p), tol)))
         out["may_hold"].append(row)
     # Not deferred, or deferred without source points: True.
     from core.mesh import DeferredMesh, Mesh
     plain = Mesh()
     bare = Mesh()
     DeferredMesh.defer(bare, lambda _m: None, 0, None)
-    out["may_hold_plain"] = [bool(D._may_hold(plain, V(9, 9, 9), 1e-4)),
-                             bool(D._may_hold(bare, V(9, 9, 9), 1e-4))]
+    out["may_hold_plain"] = [bool(N.dimension_may_hold(plain, V(9, 9, 9), 1e-4)),
+                             bool(N.dimension_may_hold(bare, V(9, 9, 9), 1e-4))]
 
     for seed in range(24):
         _UIDS.clear()
@@ -149,7 +150,7 @@ def answers():
                     g = Group(mesh)
                     g.xform = _matrix(srng, M)
                     scene.groups.append(g)
-        ap = D._AnchorPlacements(scene.groups)
+        ap = N.AnchorPlacements(scene.groups)
         rec = {"entries": [_entry(scene, e) for e in ap.entries], "queries": []}
         pts = []
         for root in scene.groups:
