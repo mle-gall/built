@@ -77,6 +77,10 @@ pub(super) fn install_interaction_module(module: &Bound<PyModule>) -> PyResult<(
         "document_interaction" => super::interaction_host::install(module)?,
         "wgpu_view" => super::metal_view::install_module(module)?,
         "wgpu_ui" => super::chrome_input::install_module(module)?,
+        "wgpu_axes" => super::frame_scene::install_axes(module)?,
+        "wgpu_billboards" => super::frame_scene::install_billboards(module)?,
+        "wgpu_style" => super::frame_scene::install_style(module)?,
+        "wgpu_sections" => super::frame_scene::install_sections(module)?,
         "document_tools" => {
             import_names(module, "__future__", &[("annotations", "annotations")])?;
             import_names(module, "typing", &[("Optional", "Optional")])?;
