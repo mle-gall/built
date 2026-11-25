@@ -36,7 +36,7 @@ bash packaging/macos-icon.sh "$ROOT" "$WORK"
 export CARGO_TARGET_DIR="$WORK/cargo"
 BUILT_MACOS_BUNDLE=1 cargo build --locked --release --manifest-path rust/built_app/Cargo.toml
 PYTHONPATH="$ROOT" isolated "$PYTHON" -m PyInstaller --clean --noconfirm \
-    --workpath "$WORK/work" --distpath "$WORK/collect" packaging/native-macos.spec
+    --workpath "$WORK/work" --distpath "$WORK/collect" packaging/native.spec
 
 APP="$STAGE/Built.app"
 cp -R "$WORK/collect/Built.app" "$APP"

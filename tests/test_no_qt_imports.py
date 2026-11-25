@@ -40,7 +40,7 @@ def test_app_sources_have_no_qt_imports():
     remaining = []
     paths = [*ROOT.glob("*.py"), *ROOT.glob("*.spec")]
     for folder in APP:
-        for pattern in ("*.py", "*.sh"):
+        for pattern in ("*.py", "*.sh", "*.spec"):
             paths.extend((ROOT / folder).rglob(pattern))
     for path in sorted(paths):
         source = path.read_text(encoding="utf-8")

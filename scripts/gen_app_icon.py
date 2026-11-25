@@ -7,7 +7,7 @@
 Outputs, all committed because a clone must be installable without Inkscape:
 
     resources/icons/ingetrazo_<size>.png   16..512, for hicolor and the web
-    resources/icons/ingetrazo.ico          for ingetrazo.spec and the Inno setup
+    resources/icons/ingetrazo.ico          for packaging/native.spec and the Inno setup
 
 Run ``scripts/gen_doc_icons.py`` AFTER this one: the .igz document icons
 composite ``ingetrazo_256.png`` as their badge, so they must come second.
