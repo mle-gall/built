@@ -13,6 +13,7 @@ mod orbit_camera;
 pub mod dimension_frame;
 pub mod group_frame;
 pub mod hlr_view;
+pub(crate) mod hlr_api;
 pub(crate) mod vista;
 pub mod linetypes;
 pub mod links;

@@ -67,8 +67,7 @@ def test_every_stretch_of_the_work_is_heard(monkeypatch):
     real_tick = P.tick
 
     def where(done=None):
-        import sys
-        heard.append((sys._getframe(1).f_code.co_name, done))
+        heard.append(done)
         real_tick(done)
 
     monkeypatch.setattr(P, "tick", where)
@@ -78,7 +77,7 @@ def test_every_stretch_of_the_work_is_heard(monkeypatch):
     # Gathering, cutting down (the Rust engine's batches), the shadows.
     # Each group contributes six gathering ticks. The native visibility pass
     # reports fractions between gathering and the receiver/caster ticks.
-    fractions = [i for i, (_, done) in enumerate(heard) if done is not None]
+    fractions = [i for i, done in enumerate(heard) if done is not None]
     assert fractions[0] == 40 * 6
     assert len(fractions) > 1
     assert len(heard) - fractions[-1] - 1 >= 40 * 6
@@ -90,7 +89,7 @@ def test_every_stretch_of_the_work_is_heard(monkeypatch):
         hlr_drawing(scene, cam)
     # The walk is heard; the classification runs in Rust in one call
     # (ingetrazo_core sheets::drawing).
-    assert any(name == "eat_mesh" for name, _ in heard)
+    assert heard == [None] * (40 * 6)
 
 
 # ---- The bar ----------------------------------------------------------------
