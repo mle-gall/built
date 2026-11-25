@@ -56,7 +56,8 @@ def test_the_root_holds_the_definition_and_no_placement_owns_it(tmp_path):
 
 def test_a_copy_is_projected_without_reading_the_file(tmp_path, monkeypatch):
     host, link, src = _host(tmp_path)
-    monkeypatch.setattr(links, "load_source", lambda *a, **k: pytest.fail("read"))
+    from formats import igz as _igz
+    monkeypatch.setattr(_igz, "load_into", lambda *a, **k: pytest.fail("read"))
     copy = copy_group(link, V(9, 0, 0))
     host.groups.append(copy)
     for part in _parts(copy):

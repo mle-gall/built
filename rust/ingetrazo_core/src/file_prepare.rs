@@ -163,22 +163,14 @@ impl Prepare {
                     legacy_fields(g, row)?;
                 }
                 if self.compat {
-                    let links = py.import("core.links")?;
                     if crate::model::links::link_of(g)?.is_some() {
                         let link = row.get_item("ext")?.get_item(crate::model::links::LINK_KEY)?;
                         link.call_method1("pop", ("rel", py.None()))?;
                         link.call_method1(
                             "update",
-                            (links.call_method1(
-                                "_link_record",
-                                (
-                                    link.get_item("path")?,
-                                    self.stream
-                                        .as_ref()
-                                        .unwrap()
-                                        .bind(py)
-                                        .getattr("destination")?,
-                                ),
+                            (crate::model::link_io::link_record(
+                                &link.get_item("path")?,
+                                Some(&self.stream.as_ref().unwrap().bind(py).getattr("destination")?),
                             )?,),
                         )?;
                     }

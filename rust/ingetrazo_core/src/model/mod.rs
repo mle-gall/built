@@ -17,6 +17,7 @@ pub mod hlr_view;
 pub(crate) mod hlr_api;
 pub(crate) mod vista;
 pub mod linetypes;
+pub mod link_io;
 pub mod links;
 pub mod placement_walks;
 pub mod pyfloat;
@@ -73,6 +74,7 @@ pub fn register_model(m: &Bound<'_, PyModule>) -> PyResult<()> {
     solid_checks::register(m)?;
     placement_walks::register(m)?;
     links::register(m)?;
+    link_io::register(m)?;
     group_mesh::register(m)?;
     scene_revision::register(m)?;
     Ok(())

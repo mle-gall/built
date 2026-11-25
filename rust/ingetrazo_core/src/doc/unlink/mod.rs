@@ -22,10 +22,9 @@ pub(crate) fn fill<'py>(
     };
     let py = scene.py();
     let io = py.import("core.links")?;
-    let found = io.call_method1("locate", (&record, host_path))?;
-    if found.is_none() {
+    let Some(found) = crate::model::link_io::locate(&record, host_path)? else {
         return Ok(Some(format!("{} was not found", record.get_item("path")?)));
-    }
+    };
     let path = found.call_method0("resolve")?;
     let norm = links::norm(&path)?;
     if norm != links::norm(&record.get_item("path")?)? {
@@ -36,14 +35,13 @@ pub(crate) fn fill<'py>(
     let materials = py
         .get_type::<PyDict>()
         .call1((scene.getattr("materials")?,))?;
-    let source = match io.call_method1(
-        "_read_definition",
-        (
-            &materials,
-            &path,
-            record.call_method1("get", ("select",))?,
-            record.call_method1("get", ("include_nested", true))?,
-        ),
+    let source = match crate::model::link_io::read_definition(
+        materials.as_any(),
+        &path,
+        &record.call_method1("get", ("select",))?,
+        &record.call_method1("get", ("include_nested", true))?,
+        None,
+        None,
     ) {
         Ok(s) => s,
         Err(e) if e.value(py).is_instance(&io.getattr("LinkError")?)? => {
@@ -55,16 +53,13 @@ pub(crate) fn fill<'py>(
         .getattr("materials")?
         .call_method1("update", (materials,))?;
     links::populate(group, &source.get_item(0)?, false, None)?;
-    io.call_method1(
-        "_hold",
-        (
-            scene,
-            &path,
-            record.call_method1("get", ("select",))?,
-            record.call_method1("get", ("include_nested", true))?,
-            source.get_item(0)?,
-            source.get_item(1)?,
-        ),
+    crate::model::link_io::hold(
+        scene,
+        &path,
+        &record.call_method1("get", ("select",))?,
+        &record.call_method1("get", ("include_nested", true))?,
+        &source.get_item(0)?,
+        &source.get_item(1)?,
     )?;
     links::sync_tags(scene, &path, &source.get_item(1)?)?;
     let entry = links::entry(scene, &path)?;
