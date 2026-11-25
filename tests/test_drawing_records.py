@@ -610,12 +610,13 @@ def test_every_line_type_has_a_name_a_dxf_twin_and_a_pattern(tmp_path):
 
 def test_recount_after_host_drawing_preserves_other_mesh_counts(monkeypatch):
     import ingetrazo_core
+    from core.purge import layer_count_steps
     from core.history import AddEdgeCommand
     scene = Scene(groups=[Group(Mesh())])
     _square(scene.groups[0].mesh)
     history = History(scene)
     def counted():
-        return list(purge.layer_count_steps(scene, history=history))[-1]
+        return list(layer_count_steps(scene, history=history))[-1]
     before = counted()
     history.execute(AddEdgeCommand(V(0, 0), V(1, 0)))
     monkeypatch.setattr(ingetrazo_core, "purge_iter_groups", lambda *_: pytest.fail("placement walk"))
