@@ -9,7 +9,7 @@ use super::{
 };
 use crate::math::{xyz, Vec3};
 use glam::DVec3;
-use numpy::{IntoPyArray, PyReadonlyArray1, PyReadonlyArray2};
+use numpy::{IntoPyArray, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::{
     prelude::*,
     types::{PyDict, PyList, PySet, PyTuple},
@@ -479,11 +479,16 @@ fn resident_snap<'p>(
         .getattr("instances")?
         .get_item("info")?
         .extract::<PyReadonlyArray2<u32>>()?;
-    let info = info.as_array();
-    let picked = row
-        .extract::<i64>()
-        .ok()
-        .filter(|&r| r >= 0 && (r as usize) < info.nrows() && info[[r as usize, 2]] & 129 == 0);
+    // An empty scene's info table may come from an empty buffer whose data
+    // pointer is not aligned for u32; never view it as an array.
+    let picked = if info.len() == 0 {
+        None
+    } else {
+        let info = info.as_array();
+        row.extract::<i64>()
+            .ok()
+            .filter(|&r| r >= 0 && (r as usize) < info.nrows() && info[[r as usize, 2]] & 129 == 0)
+    };
     let ray = view.call_method1("_pixel_to_ray", (x, y))?;
     let (o, d) = (ray.get_item(0)?, ray.get_item(1)?);
     if o.is_none() || d.is_none() {
