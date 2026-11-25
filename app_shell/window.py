@@ -734,7 +734,7 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         project.refresh(self)
 
     def close_document(self, doc=None, ask: bool = True) -> bool:
-        from app_shell import files
+        from ingetrazo_render import shell_files as files
         return files.close_document(self, doc, ask)
 
     def close_documents(self, docs) -> bool:
@@ -784,33 +784,33 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         wgpu_start.hide(self)
 
     # Commands from the menu bar, the chrome and the start page land here
-    # (app_shell.files).
+    # (ingetrazo_render.shell_files).
     def run_command(self, name, *args):
-        from app_shell import files
+        from ingetrazo_render import shell_files as files
         return files.command(self, name, *args)
 
     def open_path(self, path):
-        from app_shell import files
+        from ingetrazo_render import shell_files as files
         return files.open_path(self, path)
 
     def _on_open(self):
-        from app_shell import files
+        from ingetrazo_render import shell_files as files
         return files.open_dialog(self)
 
     def _on_save(self):
-        from app_shell import files
+        from ingetrazo_render import shell_files as files
         files.save(self)
 
     def _on_save_as(self):
-        from app_shell import files
+        from ingetrazo_render import shell_files as files
         files.save_as(self)
 
     def _on_export_igz(self):
-        from app_shell import files
+        from ingetrazo_render import shell_files as files
         files.export_igz(self)
 
     def _on_new_window(self):
-        from app_shell import files
+        from ingetrazo_render import shell_files as files
         files.new_window(self)
 
     def _on_import_orthophoto(self):
@@ -822,7 +822,7 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         import_photomesh(self)
 
     def _load_photomesh_threaded(self, path, datum, cb):
-        from app_shell.files import parse_threaded
+        from ingetrazo_render.shell_files import parse_threaded
         from ingetrazo_render import read_survey_mesh
         result, error = parse_threaded(read_survey_mesh, path, cb, datum=datum,
                                        limit=self.viewport.max_texture_size())
@@ -911,7 +911,7 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         tick()
 
     def _import_progress(self, title, *, monotonic=False):
-        from app_shell import files
+        from ingetrazo_render import shell_files as files
         return files.import_progress(self, title, monotonic=monotonic)
 
     def _parse_stl_threaded(self, path, scale, simplify_mode, cb, report=None):
@@ -924,9 +924,9 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         return ModelClipboard.available()
 
     def _sync_foreign_clipboard(self):
-        from app_shell import files
+        from ingetrazo_render import shell_files as files
         files.sync_foreign_clipboard(self)
 
     def _open_recent(self, path):
-        from app_shell import files
+        from ingetrazo_render import shell_files as files
         return files.open_path(self, path)

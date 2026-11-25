@@ -22,7 +22,7 @@ def cold_start(host, tmp_path, monkeypatch, page=False, recover=False, untitled_
     from core.settings import settings
     from formats import igz
     from ingetrazo_render import wgpu_start
-    from app_shell import files
+    from ingetrazo_render import shell_files as files
 
     work = tmp_path
     slots = work / "autosave"

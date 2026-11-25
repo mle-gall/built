@@ -22,7 +22,7 @@ from pathlib import Path
 from core.settings import settings as QSettings
 from app_shell.native import _shell
 if _shell is not None:
-    from app_shell.files import ShellFileDialog as QFileDialog
+    from ingetrazo_render.shell_files import ShellFileDialog as QFileDialog
 else:
     from PySide6.QtCore import QStandardPaths
     from PySide6.QtWidgets import QFileDialog

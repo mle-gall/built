@@ -152,7 +152,7 @@ def test_persistence(tmp_path):
 
 
 def test_menu_dispatch_and_report(native_window, monkeypatch, tmp_path):
-    from app_shell.files import IMPORTS
+    from ingetrazo_render.shell_files import IMPORTS
     from views.filedialogs import file_dialogs
     from formats import rfa
 

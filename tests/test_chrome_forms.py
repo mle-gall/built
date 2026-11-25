@@ -290,7 +290,7 @@ def test_a_form_in_the_shell_with_no_chrome_cancels_instead_of_a_qt_dialog(monke
 # ---- File pickers ------------------------------------------------------------------
 def test_a_path_field_picks_through_file_dialogs(monkeypatch, tmp_path):
     """Qt's picker here; in the shell the same call is ShellFileDialog's
-    native panel (app_shell.files.install swaps filedialogs.QFileDialog)."""
+    native panel (ingetrazo_render.shell_files.install swaps filedialogs.QFileDialog)."""
     from views import filedialogs
     seen = []
 

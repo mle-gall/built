@@ -89,7 +89,7 @@ def test_active_file_tabs_and_reopen(win, tmp_path):
     source = win._doc
     source.viewport.history.execute(AddEdgeCommand(QVector3D(), QVector3D(1, 0, 0)))
     assert source.viewport.history.undo_stack
-    from app_shell import files
+    from ingetrazo_render import shell_files as files
     assert files.do_save(win, source.path)
     assert next(e for e in storage.load(path)['files'] if e['path'] == 'source.igz')['role'] == 'linked'
     win._documents.remove(source)
@@ -155,7 +155,7 @@ def test_new_document_can_be_saved_into_session(win, tmp_path):
     assert not win._doc.read_only
     assert all(d.read_only for d in win.documents() if d is not win._doc)
     new_path = tmp_path / 'new.igz'
-    from app_shell import files
+    from ingetrazo_render import shell_files as files
     assert files.do_save(win, new_path)
     assert win.query_worksession()["active_file"] == str(new_path)
     assert new_path.is_file()

@@ -140,7 +140,7 @@ fn copy_selection(v: &Obj, publish: bool) -> PyResult<bool> {
     v.setattr("clipboard", &data)?;
     if publish {
         if m.getattr("NATIVE")?.is_truthy()? {
-            py.import("app_shell.files")?
+            py.import("ingetrazo_render.shell_files")?
                 .call_method1("publish_clipboard", (v.call_method0("window")?, data))?;
         } else {
             py.import("formats.clip")?

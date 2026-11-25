@@ -1,5 +1,5 @@
 """Undo what app_shell installs process-wide (app_shell.modal.install,
-app_shell.files.install) so the shell's tests leave the Qt app's modules as
+ingetrazo_render.shell_files.install) so the shell's tests leave the Qt app's modules as
 they found them for the tests that run after them in the same process."""
 import importlib
 import os

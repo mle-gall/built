@@ -485,7 +485,7 @@ def saved_picture(path):
 
 
 def save_with(win, monkeypatch, path, image):
-    from app_shell import files
+    from ingetrazo_render import shell_files as files
 
     view = win._doc.stand_in
     asked = []
