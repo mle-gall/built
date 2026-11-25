@@ -18,6 +18,7 @@ fn path_obj<'p>(py: Python<'p>, p: &std::path::Path) -> PyResult<Obj<'p>> {
     py.import("pathlib")?.call_method1("Path", (p,))
 }
 mod datum;
+mod codec_modules;
 mod document_types;
 mod delivery;
 mod geotiff;
@@ -34,6 +35,7 @@ pub(super) fn register_formats(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(file_scene::igz_reset_scene, m)?)?;
     m.add_function(wrap_pyfunction!(file_scene::igz_restore_views, m)?)?;
     m.add_function(wrap_pyfunction!(file_scene::igz_finish_scene, m)?)?;
+    m.add_function(wrap_pyfunction!(codec_modules::install_codec_modules,m)?)?;
     file_mesh::register(m)?;
     file_precision::register(m)?;
     gltf_read::register(m)?;

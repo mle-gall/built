@@ -136,40 +136,12 @@ class Edge:
 #: out of another, an extrusion's walls — keys on these.
 PAINT_KEYS = ("color", "mat", "texture", "opacity", "pbr")
 
-#: Everything an edge carries besides its two ends, in the order
-#: :meth:`Mesh.add_edges_welded` reads them.
-#:
-#: Any code that rebuilds a mesh from bare coordinates has to carry these
-#: across, and forgetting one is invisible until a user hits it. Grouping a
-#: cylinder once showed every facet seam because ``soft`` was dropped; then
-#: Marco hid an edge, grouped the drawing, and the edge came back (2026-09-10)
-#: because ``hidden`` was added to ``Edge`` later and only some of the copies
-#: learned about it. Adding a flag here now teaches every one of them at once.
-EDGE_FLAG_NAMES = ("soft", "curve", "layer", "hidden", "flat")
-EDGE_FLAG_DEFAULTS = (False, None, None, False, False)
-
-
-def smooths(edge) -> bool:
-    """Whether the shading runs smooth across ``edge``: a soft edge not
-    marked ``flat`` (Soften Edges' «Smooth normals»)."""
-    return bool(getattr(edge, "soft", False)) and not getattr(edge, "flat", False)
-
-
-def edge_flags(edge) -> tuple:
-    """The edge's flags as a tuple, ready to travel with its coordinates."""
-    return tuple(getattr(edge, name, default)
-                 for name, default in zip(EDGE_FLAG_NAMES, EDGE_FLAG_DEFAULTS))
-
-
-def edge_is_plain(edge) -> bool:
-    """True when there is nothing to carry: a bare, visible, untagged edge."""
-    return edge_flags(edge) == EDGE_FLAG_DEFAULTS
-
-
-def stamp_edge_flags(edge, flags) -> None:
-    """Put back what :func:`edge_flags` took."""
-    for name, value in zip(EDGE_FLAG_NAMES, flags):
-        setattr(edge, name, value)
+EDGE_FLAG_NAMES = store_views.EDGE_FLAG_NAMES
+EDGE_FLAG_DEFAULTS = store_views.EDGE_FLAG_DEFAULTS
+smooths = store_views.smooths
+edge_flags = store_views.edge_flags
+edge_is_plain = store_views.edge_is_plain
+stamp_edge_flags = store_views.stamp_edge_flags
 
 
 class Face:
