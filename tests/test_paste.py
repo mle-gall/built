@@ -6,7 +6,7 @@ from __future__ import annotations
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from types import SimpleNamespace
 
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
@@ -80,7 +80,7 @@ def test_paste_keeps_face_attrs_and_reanchors_texture():
     f.attrs["texture"] = {"path": "/tmp/tex.png", "sw": 1.0, "sh": 1.0,
                           "uvw": [1, 0, 0, 0, 0, 1, 0, 0]}
     scene.selection.add(f)
-    assert Viewport.copy_selection(vp)
+    assert Viewport.copy_selection(vp, publish=False)
 
     f.attrs["color"] = (0.0, 1.0, 0.0, 1.0)   # re-paint AFTER copy: snapshot
     _paste_at(vp, 5, 0)
@@ -112,7 +112,7 @@ def _make_group(scene, x0=0.0):
 
 def _copy(vp):
     from tests.controller_surface import ControllerSurface as Viewport
-    return Viewport.copy_selection(vp)
+    return Viewport.copy_selection(vp, publish=False)
 
 
 def _paste_at(vp, x, y):
@@ -308,11 +308,11 @@ def test_cut_group_removes_it_and_paste_restores():
     from tests.controller_surface import ControllerSurface as Viewport
     scene = Scene()
     vp = _VP(scene, History(scene), None)
-    vp.copy_selection = lambda: Viewport.copy_selection(vp)
+    vp.copy_selection = lambda **kwargs: Viewport.copy_selection(vp, **kwargs)
     g = _make_group(scene)
     scene.selection.add(g)
 
-    assert Viewport.cut_selection(vp)
+    assert Viewport.cut_selection(vp, publish=False)
     assert scene.groups == []               # gone, and on the clipboard
     _paste_at(vp, 0, 0)
     assert len(scene.groups) == 1
