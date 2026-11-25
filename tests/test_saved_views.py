@@ -246,3 +246,7 @@ def test_scripted_view_coerces_camera_numbers_and_switches():
     assert (view.distance, view.fov_deg, view.perspective, view.two_point) == (7.5, 60., False, True)
     converted = from_lookat("Imported", (3, 4, 5), (0, 0, 0), (0, 0, 1), perspective=0)
     assert converted.perspective is False
+
+
+def test_default_pitch_keeps_the_serialized_camera_value():
+    assert SavedView("Default").to_dict()["pitch"] == 0.5235987755982988

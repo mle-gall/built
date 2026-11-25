@@ -8,6 +8,8 @@ use pyo3::{
 };
 type Obj<'p> = Bound<'p, PyAny>;
 const MODULE: &str = "ingetrazo_core.saved_views";
+// Persist the original binary64 camera default. FRAC_PI_6 rounds one ULP higher.
+const DEFAULT_PITCH: f64 = 0.5235987755982988;
 const FIELDS: &[&str] = &[
     "name",
     "navigator_view",
@@ -53,7 +55,7 @@ fn origin() -> Py<PyTuple> {
             .unbind()
     })
 }
-#[pyfunction(name="__init__",signature=(view,name,target=origin(),distance=20.0,yaw=-std::f64::consts::FRAC_PI_4,pitch=std::f64::consts::FRAC_PI_6,fov_deg=45.,perspective=true,two_point=false,hidden_layers=None,style=None,section=None,georef=None,shadows=None,hidden_objects=None,hidden_shown=None,navigator_view=None,folder=None,lens=None,hidden_folders=None))]
+#[pyfunction(name="__init__",signature=(view,name,target=origin(),distance=20.0,yaw=-std::f64::consts::FRAC_PI_4,pitch=DEFAULT_PITCH,fov_deg=45.,perspective=true,two_point=false,hidden_layers=None,style=None,section=None,georef=None,shadows=None,hidden_objects=None,hidden_shown=None,navigator_view=None,folder=None,lens=None,hidden_folders=None))]
 #[allow(clippy::too_many_arguments)]
 fn init(
     view: &Obj,
