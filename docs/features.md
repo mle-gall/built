@@ -1,6 +1,6 @@
 # What works today
 
-Built is pre-release. This is what the current build does on macOS.
+Built is pre-release. This is what the current build does.
 
 ## Modelling
 
@@ -10,7 +10,7 @@ Built is pre-release. This is what the current build does on macOS.
 
 ## Large models
 
-- The renderer (wgpu, Metal on macOS) culls on the GPU and draws the interface in the same frame.
+- Only what is in view is drawn, and the interface is drawn in the same frame as the model.
 - Models of several million faces at survey coordinates stay workable.
 
 ## Project tree
@@ -61,3 +61,7 @@ Built is pre-release. This is what the current build does on macOS.
 | `.igz` | Opens. These are the files of the modeller Built grew from. |
 | `.skp` | Imports `.skp` files, with their materials. |
 | IFC | Exports IFC4 (and IFC4X3) from the object records. IDS checks need `ifcopenshell`, which `requirements.txt` does not install. See [`ifc-export.md`](ifc-export.md). |
+
+## Architecture
+
+Native Rust, with a GPU renderer.

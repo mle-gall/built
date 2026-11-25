@@ -20,7 +20,7 @@ Groups and components keep a model organised, and a component edited once change
 
 ### Fast on very large models
 
-The renderer runs on the GPU (wgpu, Metal on macOS) and culls there, so a model of several million faces stays interactive while you orbit, zoom and draw.
+A model of several million faces stays interactive while you orbit, zoom and draw: only what is in view is drawn.
 Edits stay local: changing one part does not rebuild the rest of the model.
 The interface is drawn in the same frame as the model, and you navigate with trackpad gestures: slide and pinch to orbit, pan and zoom.
 
@@ -133,7 +133,6 @@ The bundled plugins are the AI assistant, the MCP bridge, the console, a model s
 **Platform**
 
 - Native, written in Rust
-- GPU renderer on wgpu
 - Trackpad and touch-screen navigation
 - 64-bit coordinates in `.built`
 - Interface in 19 languages
@@ -147,7 +146,7 @@ More detail in [`docs/features.md`](docs/features.md).
 
 ## Status
 
-Pre-release, with no public download yet. Built runs on macOS on Apple silicon; Linux and Windows builds are in progress.
+Pre-release, with no public download yet; build it from source.
 
 ## Formats
 
@@ -158,6 +157,8 @@ Saves `.built` ([format](docs/built-format.md)), opens `.igz`, imports `.skp` fi
 <details>
 <summary>Commands (Python 3.13 and a Rust toolchain)</summary>
 
+The build scripts below are for macOS today. Linux and Windows builds are being set up.
+
 ```bash
 python3.13 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
@@ -166,7 +167,7 @@ cargo build --release --manifest-path rust/built_app/Cargo.toml     # the applic
 rust/built_app/target/release/built --root . --venv .venv           # run it from the checkout
 ```
 
-For the macOS application bundle, with PyInstaller and ifcopenshell installed in the same environment:
+For the application bundle, with PyInstaller and ifcopenshell installed in the same environment:
 
 ```bash
 packaging/build-macos-native.sh dist    # writes dist/Built.app
