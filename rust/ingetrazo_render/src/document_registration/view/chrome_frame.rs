@@ -382,7 +382,7 @@ pub(super) fn chrome_form<'py>(a: &Args<'py>) -> Reply<'py> {
 
 /// Exclusive work holds the window (an open, an import): the model is half
 /// there, so a frame draws only the chrome over what is resident.
-fn chrome_only<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn chrome_only<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let view = a.get_item(0)?;
     if !truthy(&view, "_ui_attached")? {
@@ -917,7 +917,6 @@ pub(super) const FUNCTIONS: &[Method] = &[
     ("_project_action", Mode::Function, project_action, &["win", "arg"], "", ""),
     ("_tabs", Mode::Function, tabs, &["view", "win"], "", ""),
     ("_sheet_and_jobs", Mode::Function, sheet_and_jobs, &["view", "win"], "", ""),
-    ("chrome_only", Mode::Function, chrome_only, &["view"], "", ""),
     ("chrome_frame", Mode::Function, chrome_frame, &["view"], "", ""),
     ("_sync_units", Mode::Function, sync_units, &["view", "history"], "", ""),
     ("before_frame", Mode::Function, before_frame, &["view"], "", ""),

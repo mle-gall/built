@@ -131,13 +131,11 @@ pub(super) fn snapshot<'p>(h: &Bound<'p, Host>) -> PyResult<Bound<'p, PyDict>> {
     let names = PyList::empty(py);
     let links = PyList::empty(py);
     let read_only = PyList::empty(py);
-    let tabs = py.import("views.wgpu_tabs")?;
     for item in docs.try_iter()? {
         let item = item?;
         let name = item.call_method0("display_name")?;
         names.append(&name)?;
-        if !tabs
-            .call_method1("link_host", (&w, &item))?
+        if !crate::document_registration::view::calls::link_host(&w, &item)?
             .get_item(0)?
             .is_none()
         {

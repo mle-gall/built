@@ -27,7 +27,7 @@ fn prompt<'py>(view: &Obj<'py>, title: impl IntoPyObject<'py>, body: impl IntoPy
 
 /// Where the model is seen, in device coordinates (ui.rs `free_ndc`): the
 /// window minus the rail, dock and bars showing. None without the chrome.
-fn free_area<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn free_area<'py>(a: &Args<'py>) -> Reply<'py> {
     let view = stand_in(&a.get_item(0)?)?;
     if view.is_none() || !attr_flag(&view, "_ui_attached", false)? {
         return Ok(none(a.py()));
@@ -314,7 +314,7 @@ fn tab<'py>(win: &Obj<'py>, view: &Obj<'py>, arg: &str) -> PyResult<()> {
             };
             view.setattr("_ui_pending", ("visibility_set", (viewport.getattr("scene")?, operation, key)))?;
             prompt(view, title, body, operation.into_bound_py_any(py)?.call_method0("capitalize")?)?;
-        } else if module.getattr("_core")?.call((&viewport, "edit_visibility_set"), Some(&fields!(py; "verb" => operation, "key" => key)))?.get_item("ok")?.is_truthy()? {
+        } else if super::chrome_tree_action::core_command(&viewport, "edit_visibility_set".into_bound_py_any(py)?.as_any(), Some(&fields!(py; "verb" => operation, "key" => key)))?.get_item("ok")?.is_truthy()? {
             viewport.call_method0("notify_scene_changed")?;
             view.call_method0("update")?;
         }
@@ -534,7 +534,6 @@ pub(super) fn form_panel<'py>(a: &Args<'py>) -> Reply<'py> {
 pub(super) fn form_fields<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, win) = (a.get_item(0)?, a.get_item(1)?);
-    let module = ui(py)?;
     let Some(name) = own(&view, "_ui_form")?.filter(|name| name.is_truthy().unwrap_or(false)) else {
         return Ok(none(py));
     };
@@ -615,7 +614,7 @@ pub(super) fn form_fields<'py>(a: &Args<'py>) -> Reply<'py> {
                     None => Ok(none(py)),
                 };
                 let shown = match read {
-                    Ok(colour) if colour.is_truthy()? => module.call_method1("_hex", (colour,))?,
+                    Ok(colour) if colour.is_truthy()? => direct(py, super::chrome_tree::hex, (colour,))?,
                     Ok(_) => "".into_bound_py_any(py)?,
                     Err(error) if error.is_instance_of::<PyException>(py) => "".into_bound_py_any(py)?,
                     Err(error) => return Err(error),
@@ -789,7 +788,6 @@ pub(super) fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
 
 #[rustfmt::skip]
 pub(super) const FUNCTIONS: &[Method] = &[
-    ("free_area", Mode::Function, free_area, &["win"], "", ""),
     ("_run", Mode::Function, run, &["win", "actions", "source_view=None"], "", ""),
     ("_all_commands", Mode::Function, all_commands, &["win"], "", ""),
     ("command_action", Mode::Function, command_action, &["view", "win", "verb", "arg"], "", ""),

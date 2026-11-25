@@ -97,7 +97,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
             get(&state, "_ui_mode")?,
             get(&state, "_ui_lens")?,
             filename.as_str().into_bound_py_any(py)?,
-            module.call_method0("_current_material_name")?,
+            direct(py, super::chrome_tree::current_material_name, ())?,
             tool,
             brush,
             scene.getattr("show_section_planes")?,
@@ -638,7 +638,7 @@ pub(super) fn link_state<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 
 fn core<'py>(viewport: &Obj<'py>, command: &str, args: Bound<'py, PyDict>) -> Reply<'py> {
-    ui(viewport.py())?.getattr("_core")?.call((viewport, command), Some(&args))
+    super::chrome_tree_action::core_command(viewport, command.into_bound_py_any(viewport.py())?.as_any(), Some(&args))
 }
 fn flash(viewport: &Obj<'_>, message: &Obj<'_>) -> PyResult<()> {
     viewport.call_method1("flash_status", (message.str()?,)).map(drop)
@@ -870,7 +870,7 @@ pub(super) fn set_status<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 
 /// The tree takes the next pick (or typed name + Enter).
-fn file_to<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn file_to<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let view = attr(&attr(&a.get_item(0)?, "_doc")?, "stand_in")?;
     if !view.is_none() {
@@ -918,6 +918,5 @@ pub(super) const FUNCTIONS: &[Method] = &[
     ("_inspector", Mode::Function, inspector, &["view", "win"], "", ""),
     ("_linked_inspector", Mode::Function, linked_inspector, &["view", "win", "data", "key"], "", ""),
     ("_link_action", Mode::Function, link_action, &["win", "view", "g", "key"], "", ""),
-    ("_file_to", Mode::Function, file_to, &["win", "n"], "", ""),
     ("after_frame", Mode::Function, after_frame, &["view"], "", ""),
 ];

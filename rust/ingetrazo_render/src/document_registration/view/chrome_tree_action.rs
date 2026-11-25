@@ -32,7 +32,7 @@ fn changed(viewport: &Obj<'_>) -> PyResult<()> {
     viewport.call_method0("notify_scene_changed").map(drop)
 }
 fn core<'py>(viewport: &Obj<'py>, command: &str, args: Bound<'py, PyDict>) -> Reply<'py> {
-    ui(viewport.py())?.getattr("_core")?.call((viewport, command), Some(&args))
+    core_command(viewport, command.into_bound_py_any(viewport.py())?.as_any(), Some(&args))
 }
 /// The file a dialog gave, `None` when it was cancelled.
 fn chosen<'py>(py: Python<'py>, dialog: &str, args: impl pyo3::call::PyCallArgs<'py>) -> PyResult<Option<Obj<'py>>> {
@@ -116,7 +116,7 @@ fn chip<'py>(win: &Obj<'py>, view: &Obj<'py>, action: &str) -> PyResult<()> {
     } else if key.starts_with("status:") {
         direct(py, super::chrome_inspector::set_status, (win, &groups, tail))?;
     } else if key == "file" && !groups.is_empty() {
-        module.call_method1("_file_to", (win, groups.len()))?;
+        direct(py, super::chrome_inspector::file_to, (win, groups.len()))?;
     } else if key.starts_with("active:") || key.starts_with("isolate:") {
         let (what, node) = partition(key, ':');
         again(format!("{what}{SEP}n:{node}"))?;
@@ -1021,7 +1021,7 @@ impl<'a, 'py> Row<'a, 'py> {
             }
         } else if self.is(&["fileto"]) {
             self.select(self.members()?)?;
-            module.call_method1("_file_to", (win, self.members()?.len()))?;
+            direct(py, super::chrome_inspector::file_to, (win, self.members()?.len()))?;
         } else if self.is(&["parent"]) && named.is_some() {
             self.core("edit_structure_node", fields!(py; "node" => named.as_deref(), "field" => "parent", "value" => &extra))?;
             self.changed()?;
@@ -1267,8 +1267,7 @@ impl<'a, 'py> Row<'a, 'py> {
 /// Run a core protocol command (docs/core-protocol.md §1): the UI edits the
 /// model through these, by key. A key outside the open context is told, not
 /// raised.
-#[pyfunction(name = "_core", signature = (vp, command, /, **args))]
-fn core_command<'py>(vp: &Obj<'py>, command: &Obj<'py>, args: Option<&Bound<'py, PyDict>>) -> Reply<'py> {
+pub(super) fn core_command<'py>(vp: &Obj<'py>, command: &Obj<'py>, args: Option<&Bound<'py, PyDict>>) -> Reply<'py> {
     let py = vp.py();
     let commands = py.import("core.protocol.commands")?;
     match commands.getattr("run")?.call((vp.getattr("history")?, command), args) {
@@ -1325,6 +1324,5 @@ pub(super) const FUNCTIONS: &[Method] = &[
 ];
 
 pub(super) fn register(namespace: &Bound<PyDict>) -> PyResult<()> {
-    install(namespace.as_any(), namespace, FUNCTIONS)?;
-    namespace.set_item("_core", wrap_pyfunction!(core_command, namespace.py())?)
+    install(namespace.as_any(), namespace, FUNCTIONS)
 }

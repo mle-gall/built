@@ -146,7 +146,7 @@ impl DocumentViews {
             return primary.call_method0("draw_frame");
         }
         let ui = py.import("views.wgpu_ui")?;
-        if ui.call_method1("chrome_only", (&primary,))?.is_truthy()?
+        if crate::document_registration::view::calls::chrome_only(&primary)?
             || py
                 .import("ingetrazo_render.sheet_workspace")?
                 .call_method1("shown", (&primary,))?
@@ -317,8 +317,7 @@ impl DocumentViews {
         }
         let py = doc.py();
         let claimed = if method == "event" {
-            py.import("views.wgpu_ui")?
-                .call_method1("claims_key", (&primary, event))?
+            crate::document_registration::view::calls::claims_key(&primary, event)?
         } else {
             py.import("views.wgpu_view")?
                 .call_method1("_ui_claims", (&primary, method, event))?
@@ -345,9 +344,7 @@ impl DocumentViews {
             let kwargs = PyDict::new(win.py());
             kwargs.set_item(
                 "free",
-                win.py()
-                    .import("views.wgpu_ui")?
-                    .call_method1("free_area", (win,))?,
+                crate::document_registration::view::calls::free_area(win)?,
             )?;
             win.getattr("viewport")?.getattr("camera")?.call_method(
                 "fit_box",
