@@ -3,8 +3,6 @@ import ast
 from pathlib import Path
 import re
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[1]
 APP = ("app_shell", "core", "examples", "formats", "georef", "plugins", "scripts", "tools", "views")
 QT = {"PySide6", "shiboken6", "QtCore", "QtGui", "QtWidgets"}
@@ -31,7 +29,6 @@ def python_lines(source):
     return found
 
 
-@pytest.mark.xfail(strict=False, reason="Qt removal in progress across the owner lanes")
 def test_app_sources_have_no_qt_imports():
     remaining = []
     for folder in APP:
