@@ -260,6 +260,43 @@ impl Color {
     fn fromRgbF(r: f64, g: f64, b: f64, a: f64) -> Self {
         Self([r, g, b, a].map(|v| (v.clamp(0., 1.) * 255.).round() as u8))
     }
+    fn red(&self) -> u8 {
+        self.0[0]
+    }
+    fn green(&self) -> u8 {
+        self.0[1]
+    }
+    fn blue(&self) -> u8 {
+        self.0[2]
+    }
+    fn alpha(&self) -> u8 {
+        self.0[3]
+    }
+    fn redF(&self) -> f64 {
+        self.red() as f64 / 255.
+    }
+    fn greenF(&self) -> f64 {
+        self.green() as f64 / 255.
+    }
+    fn blueF(&self) -> f64 {
+        self.blue() as f64 / 255.
+    }
+    fn lightnessF(&self) -> f64 {
+        let c = &self.0[..3];
+        (f64::from(*c.iter().max().unwrap()) + f64::from(*c.iter().min().unwrap())) / 510.
+    }
+    fn name(&self) -> String {
+        format!("#{:02x}{:02x}{:02x}", self.red(), self.green(), self.blue())
+    }
+    fn alphaF(&self) -> f64 {
+        f64::from(self.alpha()) / 255.
+    }
+    fn lightness(&self) -> u8 {
+        (self.lightnessF() * 255.).round() as u8
+    }
+    fn rgb(&self) -> u32 {
+        u32::from_be_bytes([255, self.red(), self.green(), self.blue()])
+    }
     fn getRgb(&self) -> (u8, u8, u8, u8) {
         self.0.into()
     }
@@ -332,6 +369,9 @@ fn parse_color(s: &str) -> PyResult<Color> {
 }
 
 impl Color {
+    pub(crate) fn from_pixel(rgba: [u8; 4]) -> Self {
+        Self(rgba)
+    }
     fn read(obj: &Obj<'_>) -> PyResult<Self> {
         if let Ok(color) = obj.cast::<Self>() {
             return Ok(*color.borrow());

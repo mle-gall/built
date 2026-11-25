@@ -210,10 +210,9 @@ fn material<'p>(
     let mat = m.call_method("Material", (name, color), Some(&kw))?;
     registry.get_item(m.call_method1("register", (registry, mat))?)
 }
-fn clearance<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
-    let py = scene.py();
+fn clearance<'p>(layers: &Obj<'p>) -> PyResult<Obj<'p>> {
+    let py = layers.py();
     let key = "rfa-clearance-zones";
-    let layers = scene.getattr("layers")?;
     for l in layers.try_iter()? {
         let l = l?;
         if l.getattr("key")?.eq(key)? {
@@ -241,10 +240,8 @@ fn rfa_apply<'p>(py: Python<'p>, scene: &Obj<'p>, payload: &Obj<'p>) -> PyResult
     let layers = layers.unbind();
     let payload = payload.clone().unbind();
     let built = crate::file_open::DocumentOpen::stage(py, None, move |py, _| {
-        let scope = py.import("types")?.call_method0("SimpleNamespace")?;
-        scope.setattr("materials", registry.bind(py))?;
-        scope.setattr("layers", layers.bind(py))?;
-        let (warnings, definitions, placement) = build_family(py, &scope, payload.bind(py))?;
+        let (warnings, definitions, placement) =
+            build_family(py, registry.bind(py), layers.bind(py), payload.bind(py))?;
         Ok((warnings, definitions, placement, layers, registry)
             .into_pyobject(py)?
             .into_any()
@@ -287,7 +284,8 @@ fn rfa_apply<'p>(py: Python<'p>, scene: &Obj<'p>, payload: &Obj<'p>) -> PyResult
 }
 fn build_family<'p>(
     py: Python<'p>,
-    scene: &Obj<'p>,
+    registry: &Obj<'p>,
+    layers: &Obj<'p>,
     payload: &Obj<'p>,
 ) -> PyResult<(Bound<'p, PyList>, Bound<'p, PyList>, Obj<'p>)> {
     if !val(payload, "schema")?.eq("ingetrazo.rfa/1")? {
@@ -304,7 +302,6 @@ fn build_family<'p>(
     let family = dict(payload, "family")?;
     let source = dict(payload, "source")?;
     let styles = dict(payload, "styles")?;
-    let registry = scene.getattr("materials")?;
     let materials = PyDict::new(py);
     for (key, raw) in dict(payload, "materials")?.iter() {
         let rgb = val(&raw, "rgb")?;
@@ -327,9 +324,10 @@ fn build_family<'p>(
         };
         materials.set_item(
             key,
-            material(&registry, &raw.get_item("name")?, color.as_any(), opacity)?,
+            material(registry, &raw.get_item("name")?, color.as_any(), opacity)?,
         )?;
     }
+    let group_type = py.import("core.group")?.getattr("Group")?;
     let matrix = py.get_type::<crate::math::Matrix4>();
     let defs = PyList::empty(py);
     let copy = py.import("copy")?.getattr("deepcopy")?;
@@ -384,7 +382,7 @@ fn build_family<'p>(
                         )
                     };
                     mat = Some(material(
-                        &registry,
+                        registry,
                         &format!("{name} — Clearance").into_pyobject(py)?.into_any(),
                         &col,
                         Some(0.2),
@@ -394,7 +392,11 @@ fn build_family<'p>(
                     Some(m) => m.getattr("name")?,
                     None => geometry.call_method1("get", ("label", "Solid"))?,
                 };
-                let g = group(&name)?;
+                let mesh =
+                    rfa_triangle_mesh(py, &p.get_item("positions")?, &p.get_item("indices")?)?;
+                let kw = PyDict::new(py);
+                kw.set_item("name", name)?;
+                let g = group_type.call((mesh,), Some(&kw))?;
                 g.setattr("component", false)?;
                 g.setattr("hidden", val(&p, "hidden")?.is_truthy()?)?;
                 g.setattr(
@@ -403,7 +405,7 @@ fn build_family<'p>(
                 )?;
                 if zone {
                     if zone_layer.is_none() {
-                        zone_layer = Some(clearance(scene)?);
+                        zone_layer = Some(clearance(layers)?);
                     }
                     g.setattr("layer", zone_layer.as_ref())?;
                 }
@@ -414,10 +416,6 @@ fn build_family<'p>(
                 let ext = PyDict::new(py);
                 ext.set_item("rfa", detail)?;
                 g.setattr("ext", ext)?;
-                g.setattr(
-                    "mesh",
-                    rfa_triangle_mesh(py, &p.get_item("positions")?, &p.get_item("indices")?)?,
-                )?;
                 grouped
                     .call_method1("setdefault", (id, PyList::empty(py)))?
                     .call_method1("append", (g,))?;
@@ -455,7 +453,76 @@ fn build_family<'p>(
         .call_method1("place_copy", (defs.get_item(0)?,))?;
     Ok((warnings, defs, placement))
 }
+#[pyfunction]
+fn rfa_history_do<'p>(command: &Obj<'p>, scene: &Obj<'p>) -> PyResult<()> {
+    let py = scene.py();
+    let history = py.import("core.history")?;
+    let copy_materials = |source: &Obj<'p>| py.get_type::<PyDict>().call1((source,));
+    let first = command.getattr("after")?.is_none();
+    if first {
+        command.setattr(
+            "materials_before",
+            copy_materials(&scene.getattr("materials")?)?,
+        )?;
+    }
+    let run = (|| -> PyResult<()> {
+        history
+            .getattr("SnapshotImport")?
+            .call_method1("do", (command, scene))?;
+        if first {
+            command.setattr(
+                "materials_after",
+                copy_materials(&scene.getattr("materials")?)?,
+            )?;
+            let registry = py
+                .import("core.bim_registry")?
+                .call_method1("get", (scene,))?;
+            let defaults = PyDict::new(py);
+            defaults.set_item("name", "OmniClass")?;
+            registry
+                .call_method1("setdefault", ("classification_systems", PyDict::new(py)))?
+                .call_method1("setdefault", ("omniclass", defaults))?;
+            command.setattr(
+                "registry_command",
+                history.call_method1("SetRegistryCommand", (registry,))?,
+            )?;
+        }
+        scene.setattr(
+            "materials",
+            copy_materials(&command.getattr("materials_after")?)?,
+        )?;
+        command
+            .getattr("registry_command")?
+            .call_method1("do", (scene,))?;
+        Ok(())
+    })();
+    if run.is_err() {
+        scene.setattr(
+            "materials",
+            copy_materials(&command.getattr("materials_before")?)?,
+        )?;
+    }
+    run
+}
+#[pyfunction]
+fn rfa_history_undo(command: &Obj<'_>, scene: &Obj<'_>) -> PyResult<()> {
+    let py = scene.py();
+    py.import("core.history")?
+        .getattr("SnapshotImport")?
+        .call_method1("undo", (command, scene))?;
+    scene.setattr(
+        "materials",
+        py.get_type::<PyDict>()
+            .call1((command.getattr("materials_before")?,))?,
+    )?;
+    if let Some(reg) = command.getattr_opt("registry_command")? {
+        reg.call_method1("undo", (scene,))?;
+    }
+    Ok(())
+}
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(rfa_history_do, m)?)?;
+    m.add_function(wrap_pyfunction!(rfa_history_undo, m)?)?;
     m.add_function(wrap_pyfunction!(rfa_read, m)?)?;
     m.add_function(wrap_pyfunction!(rfa_triangle_mesh, m)?)?;
     m.add_function(wrap_pyfunction!(rfa_apply, m)?)

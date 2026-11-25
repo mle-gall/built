@@ -10,7 +10,7 @@ import struct
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from PySide6.QtGui import QImage
+from ingetrazo_render import SurveyRaster
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
@@ -35,9 +35,7 @@ def _cube(scene, hist, size=4.0, height=3.0):
 
 
 def _make_png(path: Path) -> Path:
-    img = QImage(4, 4, QImage.Format_RGBA8888)
-    img.fill(0xFF3366CC)
-    img.save(str(path), "PNG")
+    path.write_bytes(SurveyRaster(4, 4, bytes((51, 102, 204, 255)) * 16).png())
     return path
 
 

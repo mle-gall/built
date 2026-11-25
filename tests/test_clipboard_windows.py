@@ -99,7 +99,7 @@ def test_new_window_uses_the_running_application(native_host, tmp_path, monkeypa
 def test_quitting_leaves_the_copy_as_plain_data(app):
     clip.publish(_clip())
     clip.flush()
-    md = QApplication.clipboard().mimeData()
+    md = clip.current_offer()
     assert not isinstance(md, clip.ClipMime)
     assert clip.decode(md.data(clip.MIME).data()) is not None
 

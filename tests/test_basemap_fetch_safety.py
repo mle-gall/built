@@ -7,6 +7,7 @@ from concurrent.futures import Future
 from georef.datum import SceneDatum
 from georef.tile_fetcher import TileFetcher
 from georef.tiles import PRESETS, TileCache, TileLayer
+from ingetrazo_render import SurveyRaster
 from tests.controller_surface import ControllerSurface as Viewport
 
 
@@ -20,8 +21,16 @@ class _Fetcher:
 
 
 def test_missing_tiles_leave_paint_before_starting_network(monkeypatch):
-    """A tile lookup during painting schedules the request on the host queue."""
+    """Two paints coalesce their missing tiles on the window timer queue."""
     viewport = Viewport()
+    deliveries = []
+    dispatch = viewport._request_missing_tiles
+
+    def deliver():
+        deliveries.append(None)
+        dispatch()
+
+    monkeypatch.setattr(viewport, "_request_missing_tiles", deliver)
     layer = TileLayer(PRESETS["osm"], zoom=16)
     datum = SceneDatum(-12.0464, -77.0428)
     viewport.scene.tile_layer = layer
@@ -36,15 +45,17 @@ def test_missing_tiles_leave_paint_before_starting_network(monkeypatch):
                               _shared=SimpleNamespace())
     sync(display, {})
     assert fetcher.requests == []
+    sync(display, {})
     assert viewport._tile_requests_scheduled
-
+    assert deliveries == []
     viewport._host.timers.run_due()
+    assert len(deliveries) == 1
     assert fetcher.requests
     assert viewport._tile_requests_scheduled is False
     viewport.close()
 
 
-def test_tile_download_submits_the_tile_url_to_the_worker(native_host, tmp_path, monkeypatch):
+def test_tile_download_submits_the_tile_url_to_the_worker(tmp_path, monkeypatch):
     from georef import transport
 
     received = Future()
@@ -54,12 +65,14 @@ def test_tile_download_submits_the_tile_url_to_the_worker(native_host, tmp_path,
         return b""
 
     monkeypatch.setattr(transport, "_download", download)
-    fetcher = TileFetcher(TileCache(tmp_path), parent=native_host.viewport)
+    viewport = Viewport()
+    fetcher = TileFetcher(TileCache(tmp_path), parent=viewport)
     try:
         fetcher._start_download(PRESETS["osm"], 1, 2, 3)
         assert received.result(timeout=5) == "https://tile.openstreetmap.org/3/1/2.png"
     finally:
         fetcher.cancel_all()
+        viewport.close()
 
 
 def test_a_tile_on_disk_is_read_at_once_without_the_network(tmp_path):
@@ -67,11 +80,10 @@ def test_a_tile_on_disk_is_read_at_once_without_the_network(tmp_path):
     disk cache must come back in that same paint (deferring it left the
     base map blank in the composer), and reading it must not build the
     fetcher, whose network manager is what may not start inside paintGL."""
-    from ingetrazo_render import SurveyRaster
     viewport = Viewport()
     cache = TileCache(tmp_path)
-    image = SurveyRaster(4, 4, bytes((10, 120, 30, 255)) * 16)
-    cache.put("osm", 1, 2, 3, image.png())
+    data = SurveyRaster(4, 4, bytes((10, 120, 30, 255)) * 16).png()
+    cache.put("osm", 1, 2, 3, data)
     viewport._tile_disk_cache = cache
     got = viewport._disk_cached_tile(PRESETS["osm"], 1, 2, 3)
     assert got is not None and got.rgba()[:4] == bytes((10, 120, 30, 255))
