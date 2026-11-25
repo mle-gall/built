@@ -58,5 +58,6 @@ pub fn register_shell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Documents: ModelClipboard, cold_start_document, request_close.
     m.add_function(wrap_pyfunction!(crate::shell_host::start_profile, m)?)?;
     m.add_class::<crate::shell_host::Host>()?;
+    crate::shell_runtime::register(m)?;
     crate::shell_files::register(m)
 }

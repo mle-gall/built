@@ -170,7 +170,7 @@ fn confirm_window_close(win: &Bound<'_, PyAny>) -> PyResult<bool> {
     {
         return Ok(false);
     }
-    win.py().import("app_shell.project")?.call_method1("persist", (win,))?;
+    win.py().import("ingetrazo_render.shell_project")?.call_method1("persist", (win,))?;
     Ok(true)
 }
 
@@ -225,7 +225,7 @@ fn project_tab_menu(win: &Bound<'_, PyAny>, verb: &str, index: usize) -> PyResul
             };
             win.call_method1("close_documents", (targets,))?;
         }
-        "move" => { win.py().import("app_shell.windows")?.call_method1("move_to_new_window", (win, doc))?; }
+        "move" => { win.py().import("ingetrazo_render.shell_windows")?.call_method1("move_to_new_window", (win, doc))?; }
         "pictures" => {
             let key = "tabs/hover_picture";
             let previous = super::navigation::setting(win.py(), key, "1")?;

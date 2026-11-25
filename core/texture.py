@@ -62,9 +62,10 @@ def texture_cache_root() -> Path:
     override = os.environ.get("INGETRAZO_TEXTURE_CACHE")
     if override:
         return Path(override)
-    from app_shell.native import _shell
-    if _shell is not None:
-        return Path(_shell.local_data_directory(os.environ.get("BUILT_SETTINGS_DIR"))) / "IngeTrazo" / "textures"
+    from ingetrazo_render.shell_services import available
+    if available():
+        from ingetrazo_render import local_data_directory
+        return Path(local_data_directory(os.environ.get("BUILT_SETTINGS_DIR"))) / "IngeTrazo" / "textures"
     return _data_root() / "IngeTrazo" / "textures"
 
 

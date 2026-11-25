@@ -30,7 +30,7 @@ def _spy(grid, monkeypatch, name, result, display=False):
 def test_export_image_renders_the_active_view(grid, monkeypatch, tmp_path):
     from ingetrazo_render import chrome_forms
     from views.filedialogs import file_dialogs
-    from app_shell import native
+    from ingetrazo_render import shell_services as native
     monkeypatch.setattr(native, "available", lambda: True)
     win = grid.win
     top = grid.click("Top")

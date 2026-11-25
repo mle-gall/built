@@ -228,14 +228,16 @@ pub fn pick_lazy_native<'py>(view: &Obj<'py>) -> PyResult<Obj<'py>> {
     positions.sort_by_key(|r| r.0);
     let mut snap = Vec::new();
     let mut vis = Vec::new();
-    for (_, g) in positions {
+    let placed = PyList::new(py, positions.iter().map(|(_, g)| g.clone()))?;
+    let states = crate::model::scene_mesh_states::scene_group_states(py, &scene, placed.as_any())?;
+    for ((_, g), (visible, snappable, _)) in positions.into_iter().zip(states) {
         let row = *lookup
             .get(&(g.as_ptr() as usize))
             .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("missing lazy placement"))?;
-        if scene.call_method1("group_snappable", (&g,))?.is_truthy()? {
+        if snappable {
             snap.push(row)
         }
-        if scene.call_method1("entity_visible", (&g,))?.is_truthy()? {
+        if visible {
             vis.push(row)
         }
     }

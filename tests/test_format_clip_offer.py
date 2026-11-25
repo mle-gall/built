@@ -2,7 +2,7 @@
 Qt-era type still read, a copy of this process not read back."""
 from types import SimpleNamespace
 
-from app_shell import native
+from ingetrazo_render import shell_services as native
 from formats import clip_payload
 from ingetrazo_render import ModelClipboard
 

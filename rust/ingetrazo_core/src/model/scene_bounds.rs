@@ -186,17 +186,20 @@ fn scene_bounds<'py>(py: Python<'py>, scene: &Bound<'py, PyAny>) -> PyResult<Bou
         }
     };
     let loose = scene.getattr("loose_mesh")?;
-    for edge in loose.getattr("edges")?.try_iter()? {
-        let edge = edge?;
-        if scene.call_method1("entity_visible", (&edge,))?.is_truthy()? {
+    let edges = pyo3::types::PyList::new(py, loose.getattr("edges")?.try_iter()?.collect::<PyResult<Vec<_>>>()?)?;
+    let faces = pyo3::types::PyList::new(py, loose.getattr("faces")?.try_iter()?.collect::<PyResult<Vec<_>>>()?)?;
+    // What shows, for every loose element at once (`scene_mesh_states`).
+    let ((face_shown, _), (edge_shown, _, _)) =
+        super::scene_mesh_states::scene_mesh_states(py, scene, &loose, faces.as_any(), edges.as_any())?;
+    for (edge, shown) in edges.iter().zip(edge_shown) {
+        if shown {
             seen = true;
             absorb(edge.getattr("v0")?.call_method0("position_tuple")?.extract()?, &mut lo, &mut hi);
             absorb(edge.getattr("v1")?.call_method0("position_tuple")?.extract()?, &mut lo, &mut hi);
         }
     }
-    for face in loose.getattr("faces")?.try_iter()? {
-        let face = face?;
-        if scene.call_method1("entity_visible", (&face,))?.is_truthy()? {
+    for (face, shown) in faces.iter().zip(face_shown) {
+        if shown {
             for v in face.getattr("loop")?.try_iter()? {
                 seen = true;
                 absorb(v?.call_method0("position_tuple")?.extract()?, &mut lo, &mut hi);

@@ -508,7 +508,7 @@ fn parse_stl_threaded(
             last: None,
         },
     )?;
-    py.import("app_shell.modal")?
+    py.import("ingetrazo_render.shell_modal")?
         .call_method1("run_until", (&poll,))?;
     let result = poll.borrow(py).worker.wait(py);
     poll.borrow_mut(py).__call__(py)?;

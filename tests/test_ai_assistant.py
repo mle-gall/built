@@ -549,7 +549,7 @@ def test_send_becomes_stop_and_a_stopped_turn_is_discarded(panel, monkeypatch):
 
 def test_pasted_image_attaches_with_thumbnail(panel, monkeypatch):
     from ingetrazo_render import SurveyRaster
-    from app_shell import native
+    from ingetrazo_render import shell_services as native
     data = SurveyRaster(10, 10, bytes([255, 0, 0, 255]) * 100).png()
     monkeypatch.setattr(native, "pasteboard_read", lambda kind: data)
     panel.event("paste_photo", "invoke", None)

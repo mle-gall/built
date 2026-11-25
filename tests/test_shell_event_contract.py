@@ -10,7 +10,7 @@ def test_shell_event_methods():
     root = Path(__file__).resolve().parents[1]
     views = root / "views"
     files = [*views.glob("wgpu*.py"),
-             *root.joinpath("tools").glob("*.py"), *root.joinpath("app_shell").glob("*.py")]
+             *root.joinpath("tools").glob("*.py")]
     handlers = "\n".join(path.read_text() for path in files)
     shared = (views / "document_interaction.py").read_text()
     lines = shared.splitlines()

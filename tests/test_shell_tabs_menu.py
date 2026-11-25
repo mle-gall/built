@@ -255,7 +255,7 @@ def test_move_to_new_window_takes_the_project_and_its_history(host, second, tmp_
 
 
 def test_the_last_project_cannot_move_out(host, tmp_path):
-    from app_shell import windows
+    from ingetrazo_render import shell_windows as windows
     (a,) = _copies(tmp_path, 1)
     host.open_path(a)
     assert not windows.can_move(host.window)
@@ -384,7 +384,7 @@ def test_each_kind_gets_the_rows_docs_context_menu_lists(host, kinds, kind):
 
 def test_the_menus_carry_the_expected_verbs(host, kinds, monkeypatch):
     from ingetrazo_render import context_menu_build, context_menu_action, verbs_constants
-    from app_shell import native
+    from ingetrazo_render import shell_services as native
     scene = host.viewport.scene
     # A model copied by an earlier test would add "Paste here" to empty space.
     monkeypatch.setattr(native, "pasteboard_types", lambda: ([], 0))
@@ -528,7 +528,7 @@ def test_with_the_chrome_the_menu_goes_to_it(host, kinds, monkeypatch):
 
 
 def test_feed_changes_follow_the_document_across_windows(host, second):
-    from app_shell import windows
+    from ingetrazo_render import shell_windows as windows
     from core.history import SetPluginDataCommand
     from views.extension_api import ExtensionApp
 
@@ -586,7 +586,7 @@ def test_replacing_the_viewport_history_detaches_the_old_feed(host):
 
 
 def test_input_and_modal_buttons_stay_in_the_owning_window(host, second):
-    from app_shell import modal
+    from ingetrazo_render import shell_modal as modal
     from views import input_state
     from ingetrazo_core import Input as Qt, PixelPoint as QPoint
 
@@ -606,3 +606,17 @@ def test_input_and_modal_buttons_stay_in_the_owning_window(host, second):
     host.focus(False)
     assert input_state.mouse_buttons(host.window) == Qt.NoButton
     assert input_state.modifiers(host.viewport) == Qt.NoModifier
+
+
+def test_closing_the_move_origin_releases_its_request_and_restores_the_other_host(host, tmp_path):
+    from ingetrazo_render import Host, shell_modal, shell_windows
+
+    origin = Host(0, 640, 480, 1.0, settings=str(tmp_path / "origin"))
+    try:
+        assert shell_modal.host() is origin
+        token = shell_windows.request(origin, "move", (origin.window, origin.window._doc))
+    finally:
+        origin.close()
+    assert shell_windows.take(token) is None
+    assert origin not in shell_windows.hosts()
+    assert shell_modal.host() is host

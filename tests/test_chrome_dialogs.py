@@ -19,7 +19,7 @@ from core.input_codes import StandardButton
 
 @pytest.fixture
 def win(native_host, monkeypatch):
-    from app_shell import modal
+    from ingetrazo_render import shell_modal as modal
     w = native_host.window
     monkeypatch.setattr(cd, "live", lambda parent: w.view if parent is w else None)
 
@@ -54,7 +54,7 @@ def chrome(win, then):
 
 
 def press(key, mods=Qt.NoModifier, target=None):
-    from app_shell import modal
+    from ingetrazo_render import shell_modal as modal
     modal.dispatch(target._host, ("key", 0, 0, 0, mods.value, key.value, ""))
 
 

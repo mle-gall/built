@@ -31,9 +31,9 @@ def _app_data_base() -> Path:
     the platform's, built from the process's ``APPDATA`` on Windows
     whenever one is set (#1180: a run that points it at a sandbox must not
     write into the real profile)."""
-    from app_shell.native import _shell
+    from ingetrazo_render.shell_services import available
     from ingetrazo_render import recovery_directory
-    if _shell is not None:
+    if available():
         found = recovery_directory(os.environ.get("BUILT_SETTINGS_DIR") or None)
     elif sys.platform == "win32" and os.environ.get("APPDATA"):
         return Path(os.environ["APPDATA"]) / "IngeTrazo" / "IngeTrazo"

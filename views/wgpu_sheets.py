@@ -1162,7 +1162,7 @@ class Workspace:
             return
         title, ext, filters = self._EXPORTS[kind]
         from views.filedialogs import file_dialogs
-        # The native save panel in both apps (the shell's is app_shell.files').
+        # The native save panel in both apps (the shell uses ingetrazo_render.shell_files).
         parent = None                     # the shell's panels have no Qt parent
         path, _ = file_dialogs.getSaveFileName(parent, title, self._default_path(kind), filters)
         if path:

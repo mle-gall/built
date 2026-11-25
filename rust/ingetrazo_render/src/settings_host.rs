@@ -943,7 +943,7 @@ impl SettingsSheet {
                         sc.call_method1("set_action_keys", (&a, sc.call_method1("default_keys", (&a,))?))?;
                     }
                     let w = win(me)?;
-                    for host in py.import("app_shell.windows")?.call_method0("hosts")?.try_iter()? {
+                    for host in py.import("ingetrazo_render.shell_windows")?.call_method0("hosts")?.try_iter()? {
                         let host = host?;
                         if !host.getattr("window")?.is(&w) {
                             for scope in sc.call_method1("keyboard_scopes", (host.getattr("window")?,))?.try_iter()? {

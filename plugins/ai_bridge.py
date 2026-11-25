@@ -390,7 +390,7 @@ class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
         window = self._viewport.window()
         shown = getattr(window, "_shown_viewport", None)
         view = shown() if shown is not None else self._viewport
-        from app_shell import native
+        from ingetrazo_render import shell_services as native
         if native.available():
             from ingetrazo_render import SurveyRaster
             frame = window.view.render_pixels(width, height)

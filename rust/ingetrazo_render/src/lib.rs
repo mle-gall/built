@@ -88,6 +88,7 @@ mod shell_files;
 mod shell_host;
 mod shell_window;
 mod shell;
+mod shell_runtime;
 pub mod platform_paths;
 pub mod ui;
 mod host_context;

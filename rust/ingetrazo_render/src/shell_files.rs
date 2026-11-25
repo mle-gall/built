@@ -100,7 +100,7 @@ fn split_dir(py: Python<'_>, directory: &Any<'_>) -> PyResult<(String, String)> 
 }
 
 fn native_panels(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("app_shell.native")
+    py.import("ingetrazo_render.shell_services")
 }
 
 fn text_or<'py>(py: Python<'py>, v: &Any<'py>, fallback: &str) -> Any<'py> {
@@ -319,7 +319,7 @@ fn new_model<'py>(py: Python<'py>, win: &Any<'py>) -> PyResult<Any<'py>> {
 /// File ▸ New Window (⇧⌘N): a window on the start page, in this process.
 #[pyfunction]
 fn new_window(py: Python<'_>, win: &Any<'_>) -> PyResult<bool> {
-    py.import("app_shell.windows")?.call_method1("request", (win.getattr("_host")?, "new"))?;
+    py.import("ingetrazo_render.shell_windows")?.call_method1("request", (win.getattr("_host")?, "new"))?;
     Ok(true)
 }
 
@@ -331,7 +331,7 @@ fn move_to_new_window(py: Python<'_>, win: &Any<'_>, doc: Option<Any<'_>>) -> Py
         Some(d) => d,
         None => win.getattr("_doc")?,
     };
-    Ok(!py.import("app_shell.windows")?.call_method1("move_to_new_window", (win, doc))?.is_none())
+    Ok(!py.import("ingetrazo_render.shell_windows")?.call_method1("move_to_new_window", (win, doc))?.is_none())
 }
 
 #[pyfunction]
@@ -391,9 +391,9 @@ fn open_path<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>) -> PyResult<
         return Ok(b(py, false));
     }
     if suffix == ".builtproject" || suffix == ".igzproj" {
-        // Built projects open here (app_shell/project.py); an .igzproj is
+        // Built projects open here (shell_runtime/project.rs); an .igzproj is
         // converted in place first.
-        return py.import("app_shell.project")?.call_method1("open_project", (win, &path));
+        return py.import("ingetrazo_render.shell_project")?.call_method1("open_project", (win, &path));
     }
     for doc in win.getattr("_documents")?.try_iter()? {
         let doc = doc?;
@@ -405,7 +405,7 @@ fn open_path<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>) -> PyResult<
     }
     // A file opens only once: open in another window, that window and its
     // tab come to the front.
-    let found = py.import("app_shell.windows")?.getattr("find_document")?.call((&path,), Some(&kw(py, &[("exclude", win.clone())])?))?;
+    let found = py.import("ingetrazo_render.shell_windows")?.getattr("find_document")?.call((&path,), Some(&kw(py, &[("exclude", win.clone())])?))?;
     let (other, doc) = (found.get_item(0)?, found.get_item(1)?);
     if !other.is_none() {
         let window = other.getattr("window")?;
@@ -758,7 +758,7 @@ fn import_progress<'py>(py: Python<'py>, win: &Any<'py>, title: &Any<'py>, monot
         let bar = held.bind(py);
         bar.call_method1("setValue", (shown,))?;
         bar.call_method1("setLabelText", (tr(py, &a.get_item(1)?.str()?.to_string())?,))?;
-        py.import("app_shell.modal")?.call_method0("tick")?;
+        py.import("ingetrazo_render.shell_modal")?.call_method0("tick")?;
         Ok(none(py))
     })?;
     Ok((bar, cb))
@@ -809,7 +809,7 @@ fn parse_threaded<'py>(py: Python<'py>, parser: &Any<'py>, path: &Any<'py>, cb: 
         }
         obj(py, !wk.bind(py).call_method0("is_alive")?.is_truthy()?)
     })?;
-    if !py.import("app_shell.modal")?.call_method1("run_until", (done,))?.is_truthy()? {
+    if !py.import("ingetrazo_render.shell_modal")?.call_method1("run_until", (done,))?.is_truthy()? {
         worker.call_method0("join")?;
     }
     while latest.is_truthy()? {
@@ -963,7 +963,7 @@ fn save_progress<'py>(py: Python<'py>, job: &Any<'py>) -> PyResult<Any<'py>> {
     let j = job.clone().unbind();
     Ok(func(py, move |py, a| {
         j.bind(py).call_method1("update", (a.get_item(0)?, tr(py, &a.get_item(1)?.str()?.to_string())?))?;
-        py.import("app_shell.modal")?.call_method0("tick")?;
+        py.import("ingetrazo_render.shell_modal")?.call_method0("tick")?;
         Ok(none(py))
     })?
     .into_bound(py))
@@ -993,7 +993,7 @@ fn do_save<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>, copy: bool) ->
     let dialogs = cd(py)?;
     let autosave = py.import("core.autosave")?;
     let links = py.import("core.links")?;
-    let project = py.import("app_shell.project")?;
+    let project = py.import("ingetrazo_render.shell_project")?;
     if !win.getattr("_workspace")?.is_none() {
         return Ok(false);
     }

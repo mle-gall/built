@@ -61,7 +61,7 @@ pub(crate) fn start_profile<'p>(
     Ok(profile)
 }
 fn front(host: &Obj<'_>) -> PyResult<()> {
-    host.py().import("app_shell.modal")?.setattr("_HOST", host)
+    crate::shell_runtime::windows::activate(host.py(), Some(host))
 }
 fn modal(host: &Obj<'_>) -> PyResult<bool> {
     host.py()
@@ -131,7 +131,7 @@ pub(crate) fn document_views<'p>(h: &Obj<'p>) -> PyResult<(Obj<'p>, Obj<'p>)> {
         vp.getattr("history")?.setattr("max_steps", steps)?;
     }
     let view = py
-        .import("app_shell.view")?
+        .import("ingetrazo_render.shell_views")?
         .call_method1("ShellView", (h,))?;
     view.setattr("source_viewport", &vp)?;
     view.setattr("camera", vp.getattr("camera")?)?;
@@ -237,8 +237,7 @@ impl Host {
         let (vp, view) = document_views(h)?;
         w.call_method1("bind", (&vp, view))?;
         vp.call_method1("set_active_tool", (py.None(),))?;
-        py.import("app_shell.modal")?
-            .call_method1("install", (h,))?;
+        front(h)?;
         py.import(FILES)?.call_method1("install", (&w,))?;
         let ext = w
             .getattr("__dict__")?
@@ -246,7 +245,7 @@ impl Host {
         render.call_method1("setup_extension_menus", (&w, ext))?;
         w.getattr("_extension_menus")?
             .call_method1("refresh", (&w,))?;
-        py.import("app_shell.windows")?
+        py.import("ingetrazo_render.shell_windows")?
             .call_method1("register", (h,))?;
         let kw = PyDict::new(py);
         kw.set_item("repeat", true)?;
@@ -556,7 +555,7 @@ impl Host {
     fn adopt(slf: &Bound<'_, Self>, token: &Obj<'_>) -> PyResult<bool> {
         let h = slf.as_any();
         front(h)?;
-        let windows = h.py().import("app_shell.windows")?;
+        let windows = h.py().import("ingetrazo_render.shell_windows")?;
         let request = windows.call_method1("take", (token,))?;
         if request.is_none() {
             return Ok(false);
@@ -1179,7 +1178,7 @@ impl Host {
         py.import("ingetrazo_render.chrome_forms")?
             .call_method1("close_all", (&w,))?;
         w.setattr("_release_check", py.None())?;
-        py.import("app_shell.windows")?
+        py.import("ingetrazo_render.shell_windows")?
             .call_method1("unregister", (h,))?;
         w.getattr("scene_player")?.call_method0("cancel")?;
         w.getattr("_extension_menus")?.call_method0("clear")?;

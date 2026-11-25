@@ -329,7 +329,7 @@ def test_export_image_tall_frame(monkeypatch):
 
 def test_export_image_menu_crops_to_the_frame(monkeypatch, tmp_path, native_host):
     from unittest.mock import Mock
-    from app_shell import native
+    from ingetrazo_render import shell_services as native
     from ingetrazo_render import chrome_forms
     from tests.raster_samples import solid_raster
     from views.filedialogs import file_dialogs

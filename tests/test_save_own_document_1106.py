@@ -59,7 +59,7 @@ def _new_tab(win, n, path=None):
 
 def _pane(win, n=7):
     """What a split-view extension assigns: a view on another scene."""
-    from app_shell.view import ShellView
+    from ingetrazo_render.shell_views import ShellView
     from views.document_controller import DocumentController
     pane = DocumentController(win._host)
     display = ShellView(win._host)

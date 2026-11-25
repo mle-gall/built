@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 from core.settings import settings as preferences
-from app_shell import native
+from ingetrazo_render import shell_services as native
 from ingetrazo_render.shell_files import ShellFileDialog
 
 from views import filedialogs

@@ -424,7 +424,7 @@ impl DocumentViews {
             .as_ref()
             .map(|v| v.bind(py).clone());
         let display = py
-            .import("app_shell.model_views")?
+            .import("ingetrazo_render.shell_views")?
             .call_method1("make_pane", (doc, index == 1, initial, saved))?;
         self.displays.borrow_mut()[index] = Some(display.clone().unbind());
         Ok(display)

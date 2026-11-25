@@ -222,7 +222,7 @@ fn open_alignment(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyAny>> {
         Ok(features.unbind())
     })?;
     let worker = Py::new(py, worker)?;
-    py.import("app_shell.modal")?
+    py.import("ingetrazo_render.shell_modal")?
         .call_method1("run_until", (worker.bind(py).getattr("ready")?,))?;
     let worker = worker.borrow(py);
     worker.wait(py)
