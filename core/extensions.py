@@ -195,7 +195,7 @@ def discover_plugins(dirs=None, *, panels_only=False, native_panels=None):
     errors: list[PluginError] = []
     seen: set[str] = set()
 
-    from core.extension_manager import disabled_overrides, safe_mode
+    from ingetrazo_core.extension_manager import disabled_overrides, safe_mode
     if safe_mode():
         return plugins, errors
     if native_panels is not None:

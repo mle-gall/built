@@ -14,7 +14,7 @@ import json
 
 from tests.extensions_chrome import Browser
 
-from core import extension_manager as manager
+from ingetrazo_core import extension_manager as manager
 from core.extensions import discover_plugins
 from tests.test_extension_manager import TOOL_SOURCE, _extension
 from tests.test_extension_manager_hand_installed import _hand_package
@@ -35,7 +35,7 @@ def _loaded(root):
 
 def test_retired_extensions_are_the_managed_folders_the_catalog_dropped(
         tmp_path, monkeypatch):
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     _managed(tmp_path, "archxq_it")
     _managed(tmp_path, "kitchen")                     # still in the catalog
     _hand_package(tmp_path, "aberturas")              # not managed
@@ -47,10 +47,10 @@ def test_retired_extensions_are_the_managed_folders_the_catalog_dropped(
 
 def test_installing_the_replacement_sets_the_retired_copy_aside(
         tmp_path, monkeypatch):
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     old = _managed(tmp_path, "archxq_it")
     source = TOOL_SOURCE.encode()
-    monkeypatch.setattr(manager, "_get", lambda *_args: source)
+    monkeypatch.setattr(manager, "download", lambda *_args: source)
     new = _extension(source, "archxq_it_lite")
     asked = []
 
@@ -68,10 +68,10 @@ def test_installing_the_replacement_sets_the_retired_copy_aside(
 
 def test_a_sibling_the_catalog_still_lists_is_not_taken_for_a_copy(
         tmp_path, monkeypatch):
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     _managed(tmp_path, "archxq_it")
     source = TOOL_SOURCE.encode()
-    monkeypatch.setattr(manager, "_get", lambda *_args: source)
+    monkeypatch.setattr(manager, "download", lambda *_args: source)
     new = _extension(source, "archxq_it_lite")
     manager.install_extension(
         new, lambda paths: False, catalog_ids=["archxq_it", "archxq_it_lite"])

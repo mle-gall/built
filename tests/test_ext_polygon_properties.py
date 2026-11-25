@@ -127,7 +127,7 @@ def test_faces_in_different_planes_are_refused():
 
 
 def test_it_is_listed_among_the_example_extensions():
-    from core.extension_manager import example_extension_files
+    from ingetrazo_core.extension_manager import example_extension_files
     assert "Polygon properties" in {title for _, title, _ in example_extension_files()}
 
 

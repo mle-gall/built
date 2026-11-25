@@ -169,6 +169,7 @@ mod sweep_operation;
 mod make_faces;
 mod geometry_arrays;
 mod component_library;
+mod extension_manager;
 mod outliner;
 pub mod pyset;
 mod push_guard;
@@ -190,6 +191,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     screen::register(m)?;
     scene_animation::register(m)?;
     component_library::register(m)?;
+    extension_manager::register(m)?;
     m.add_class::<scene_video::MkvWriter>()?;
     m.add_class::<mp4::Mp4Writer>()?;
     m.add_function(wrap_pyfunction!(scene_video::video_writer, m)?)?;

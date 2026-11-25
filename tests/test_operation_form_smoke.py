@@ -233,8 +233,8 @@ def test_native_extensions_open_painted_and_apply(tmp_path):
     home.mkdir()
     plugins = tmp_path / "plugins"
     venv = fixture_venv(tmp_path,
-        "from pathlib import Path\nfrom core import extension_manager as em\n"
-        f"em.user_plugins_dir = lambda: Path({str(plugins)!r})\n"
+        "from pathlib import Path\nfrom ingetrazo_core import extension_manager as em\n"
+        f"from core import extensions\nextensions.user_plugins_dir = lambda: Path({str(plugins)!r})\n"
         "em.load_cached_catalog = lambda: None\n"
         "em.refresh_catalog = lambda: em.CatalogSnapshot([], {}, '', False)\n")
     steps = tmp_path / "commands"
