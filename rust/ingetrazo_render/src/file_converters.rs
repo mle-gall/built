@@ -87,7 +87,7 @@ fn import_dwg(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<bool>
 #[pyfunction]
 fn import_skp(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = win.py();
-    let ui = py.import("views.document_open")?;
+    let ui = py.import("ingetrazo_render.document_open")?;
     let host = win
         .getattr("__dict__")?
         .cast_into::<PyDict>()?

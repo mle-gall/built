@@ -3457,6 +3457,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(render_result::blender_availability, m)?)?;
     m.add_class::<render_result::RenderResult>()?;
     m.add_function(wrap_pyfunction!(font_lengths::font_length, m)?)?;
+    shell_window::open::register(m)?;
     view_export::register(m)?;
     m.add_class::<svg_options::SvgOptions>()?;
     m.add_class::<tag_counts::TagCounts>()?;

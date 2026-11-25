@@ -437,7 +437,7 @@ fn open_path<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>) -> PyResult<
     }
     let windowed = host.getattr("ns_view")?.is_truthy()?;
     let is_import = IMPORTS.contains(&suffix.as_str());
-    let open = py.import("views.document_open");
+    let open = py.import("ingetrazo_render.document_open");
     if suffix == ".skp" && windowed {
         let open = open?;
         return open.call_method1("start", (win, &path, open.getattr("install_skp")?));
