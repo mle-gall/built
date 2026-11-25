@@ -46,9 +46,15 @@ def test_a_store_refusal_leaves_the_model_and_writes_a_repro(monkeypatch, logs, 
 
     monkeypatch.setattr(MeshStore, "push_" + where, refused)
     flashes = []
-    from core.protocol import commands
-    monkeypatch.setattr(commands._Headless, "flash_status",
-                        lambda self, text, *a: flashes.append(text), raising=False)
+    from core.push_pull import PushPullOperation
+    commit = PushPullOperation._commit
+
+    def observe_commit(operation, viewport):
+        monkeypatch.setattr(type(viewport), "flash_status",
+                            lambda self, text, *args: flashes.append(text))
+        return commit(operation, viewport)
+
+    monkeypatch.setattr(PushPullOperation, "_commit", observe_commit)
     push_pull(hist, to_json_key(top.key), 0.5, keep_base=where != "translate")
     assert type(mesh) is S.StoreMesh            # never handed to Python objects
     assert _state(mesh) == before
