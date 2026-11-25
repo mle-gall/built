@@ -161,8 +161,8 @@ fn recover_discarded(win: &Bound<'_, PyAny>) -> PyResult<()> {
         return Ok(());
     }
     let chosen: String = py
-        .import("views.filedialogs")?
-        .getattr("file_dialogs")?
+        .import("ingetrazo_render.shell_files")?
+        .getattr("ShellFileDialog")?
         .call_method1(
             "getOpenFileName",
             (

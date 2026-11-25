@@ -275,9 +275,9 @@ def test_save_and_open_folder_live_in_the_image_utility(window, tmp_path, monkey
     write_png(panel.image, 32, 20)
     folder = Mock()
     from plugins import _blender_panel
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     saved = tmp_path / "saved.png"
-    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *_: (str(saved), ""))
+    monkeypatch.setattr(ShellFileDialog, "getSaveFileName", lambda *_: (str(saved), ""))
     monkeypatch.setattr(_blender_panel, "open_url", folder)
     panel._show_result()
     model = panel.viewer.model

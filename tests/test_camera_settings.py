@@ -332,12 +332,12 @@ def test_export_image_menu_crops_to_the_frame(monkeypatch, tmp_path, native_host
     from ingetrazo_render import shell_services as native
     from ingetrazo_render import chrome_forms
     from tests.raster_samples import solid_raster
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     win = native_host.window
     render = Mock(return_value=solid_raster(16, 9, (0, 0, 0)))
     monkeypatch.setattr(native, "available", lambda: True)
     monkeypatch.setattr(win._active_view(), "render_raster", render)
-    monkeypatch.setattr(file_dialogs, "getSaveFileName",
+    monkeypatch.setattr(ShellFileDialog, "getSaveFileName",
                         lambda *args: (str(tmp_path / "frame.png"), ""))
     win._on_export_image()
     chrome_forms.current(win).press("ok")
@@ -572,7 +572,7 @@ def test_typing_the_lens_with_zoom_on(native_host):
 
 
 def test_the_zoom_hint_says_what_to_type():
-    from views.status_hints import NAV_HINTS
+    from ingetrazo_render.status_hints import NAV_HINTS
     assert "35mm" in NAV_HINTS["zoom"] and "60deg" in NAV_HINTS["zoom"]
 
 

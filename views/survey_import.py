@@ -5,7 +5,7 @@ from pathlib import Path
 from ingetrazo_core import Vec3 as QVector3D
 from core.i18n import tr
 from ingetrazo_render import chrome_dialogs as _dialogs
-from views.filedialogs import file_dialogs
+from ingetrazo_render.shell_files import ShellFileDialog
 
 
 def import_orthophoto(window) -> None:
@@ -19,7 +19,7 @@ def import_orthophoto(window) -> None:
     from georef.geotiff import (GeoTiffError, describe, read_info,
                                 read_rgba, unsupported_reason)
 
-    path_str, _ = file_dialogs.getOpenFileName(
+    path_str, _ = ShellFileDialog.getOpenFileName(
         window, tr("Import orthomosaic"), "",
         tr("GeoTIFF (*.tif *.tiff);;All files (*)"))
     if not path_str:
@@ -127,7 +127,7 @@ def import_alignment(window):
     from ingetrazo_core import open_alignment
     from ingetrazo_render import place_alignment
 
-    name, _ = file_dialogs.getOpenFileName(window, tr("Import georef"), "",
+    name, _ = ShellFileDialog.getOpenFileName(window, tr("Import georef"), "",
         tr("Georef (*.kml *.kmz *.geojson *.json);;All files (*)"))
     if not name:
         return
@@ -147,7 +147,7 @@ def import_points(window):
     from ingetrazo_render import OperationForm, place_survey_points
     from ingetrazo_render import chrome_forms
 
-    path, _ = file_dialogs.getOpenFileName(window, tr("Import survey points CSV"), "",
+    path, _ = ShellFileDialog.getOpenFileName(window, tr("Import survey points CSV"), "",
                                             tr("CSV (*.csv *.txt);;All files (*)"))
     if not path:
         return
@@ -181,7 +181,7 @@ def import_points(window):
 def import_photomesh(window):
     from ingetrazo_render import place_survey_mesh, survey_mesh_datum
 
-    name, _ = file_dialogs.getOpenFileName(window, tr("Import photogrammetric mesh"), "",
+    name, _ = ShellFileDialog.getOpenFileName(window, tr("Import photogrammetric mesh"), "",
                                             tr("ODM textured model (*.obj);;All files (*)"))
     if not name:
         return

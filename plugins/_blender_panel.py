@@ -339,8 +339,8 @@ class BlenderPanel:
             self._show_result()
         elif control == "save" and self.image:
             import shutil
-            from views.filedialogs import file_dialogs
-            path, _ = file_dialogs.getSaveFileName(self.app.window, "Save image", "render.png", "PNG (*.png)")
+            from ingetrazo_render.shell_files import ShellFileDialog
+            path, _ = ShellFileDialog.getSaveFileName(self.app.window, "Save image", "render.png", "PNG (*.png)")
             if path:
                 shutil.copyfile(self.image, path)
 

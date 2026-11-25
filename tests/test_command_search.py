@@ -11,7 +11,8 @@ import pytest
 from ingetrazo_render import shell_action as ShellAction
 from core import string_search as ss
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from views import command_metadata as cs, wgpu_ui
+from ingetrazo_render import command_metadata as cs
+from views import wgpu_ui
 
 
 @pytest.fixture

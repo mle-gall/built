@@ -1254,7 +1254,7 @@ fn _pick_paint(py: Python<'_>, win: &Bound<'_, PyAny>, name: &str, recipe: Optio
 
 #[pyfunction]
 fn _pick_image<'py>(py: Python<'py>, win: &Bound<'py, PyAny>, title: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let dialogs = py.import("views.filedialogs")?.getattr("file_dialogs")?;
+    let dialogs = py.import("ingetrazo_render.shell_files")?.getattr("ShellFileDialog")?;
     let path = dialogs.call_method1("getOpenFileName", (win, title, "", "Images (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff)"))?.get_item(0)?;
     Ok(if path.is_truthy()? { Some(path) } else { None })
 }
@@ -1784,7 +1784,7 @@ impl LibrarySheet {
         if verb == "verb" && !registry.is_none() && st.get_item("type")?.eq("registry")? {
             let mut path = s(py, "");
             if arg == "registry_csv" {
-                path = py.import("views.filedialogs")?.getattr("file_dialogs")?.call_method1("getOpenFileName", (&win, "Codes CSV", "", "CSV (*.csv)"))?.get_item(0)?;
+                path = py.import("ingetrazo_render.shell_files")?.getattr("ShellFileDialog")?.call_method1("getOpenFileName", (&win, "Codes CSV", "", "CSV (*.csv)"))?.get_item(0)?;
             }
             if registry.call_method1("act", (&win, &arg, path))?.is_truthy()? && arg == "registry_apply" {
                 cs(py)?.call_method1("close", (&win,))?;

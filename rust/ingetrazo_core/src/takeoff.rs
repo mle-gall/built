@@ -161,7 +161,7 @@ impl InspectorTakeoff {
         path.call_method1("append", (&group,))?;
         if !vp
             .py()
-            .import("views.tree_navigation")?
+            .import("ingetrazo_render.tree_navigation")?
             .call_method1("open_to", (vp, path))?
             .is_truthy()?
         {

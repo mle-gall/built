@@ -407,3 +407,27 @@ mod tests {
         );
     }
 }
+
+/// Resolve a style for the current frame. An explicit environment switch
+/// overrides the model, which makes offscreen renders reproducible.
+#[pyfunction]
+#[pyo3(signature=(style=None))]
+pub(crate) fn ao_settings<'p>(py: Python<'p>, style: Option<&Bound<'p,PyAny>>) -> PyResult<Option<Bound<'p,PyDict>>> {
+    let env = |key:&str,default:f64| {
+        std::env::var(key).ok().and_then(|v|v.trim().parse::<f64>().ok()).unwrap_or(default)
+    };
+    let (radius,intensity)=match std::env::var("INGETRAZO_AO").ok().filter(|v|!v.is_empty()).as_deref(){
+        Some("0")=>return Ok(None),
+        Some(_)=>(env("INGETRAZO_AO_RADIUS",0.5),env("INGETRAZO_AO_INTENSITY",1.0)),
+        None=>{
+            let Some(s)=style else{return Ok(None)};
+            if !s.getattr_opt("ambient_occlusion")?.map(|v|v.is_truthy()).transpose()?.unwrap_or(false) {return Ok(None);}
+            (s.getattr("ao_distance")?.extract()?,s.getattr("ao_intensity")?.extract()?)
+        }
+    };
+    let settings=PyDict::new(py);
+    settings.set_item("radius",radius.max(1e-4))?;
+    settings.set_item("intensity",intensity)?;
+    settings.set_item("samples",env("INGETRAZO_AO_SAMPLES",16.).clamp(4.,64.) as u32)?;
+    Ok(Some(settings))
+}

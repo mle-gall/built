@@ -723,10 +723,9 @@ impl SettingsSheet {
         if slf.getattr("_paths")?.is_none() {
             let w = win(slf)?;
             let collect = || -> PyResult<Bound<'py, PyDict>> {
-                let menu_paths = py.import("views.command_metadata")?.getattr("menu_paths")?;
                 let out = PyDict::new(py);
                 for scope in shortcuts(py)?.call_method1("keyboard_scopes", (&w,))?.try_iter()? {
-                    for (k, v) in menu_paths.call1((scope?,))?.cast_into::<PyDict>()?.iter() {
+                    for (k, v) in crate::command_metadata::menu_paths(&scope?)?.iter() {
                         out.set_item(k, v)?;
                     }
                 }
@@ -971,7 +970,7 @@ impl SettingsSheet {
 
     fn _kb_export(slf: &Slf<'_>) -> PyResult<()> {
         let py = slf.py();
-        let dialogs = py.import("views.filedialogs")?.getattr("file_dialogs")?;
+        let dialogs = py.import("ingetrazo_render.shell_files")?.getattr("ShellFileDialog")?;
         let path = dialogs.call_method1("getSaveFileName", (Self::_parent(slf)?, tr(py, "Export shortcuts")?, "ingetrazo-shortcuts.json", tr(py, "Shortcuts (*.json)")?))?.get_item(0)?;
         if !path.is_truthy()? {
             return Ok(());
@@ -991,7 +990,7 @@ impl SettingsSheet {
     fn _kb_import(slf: &Slf<'_>) -> PyResult<()> {
         let py = slf.py();
         let sc = shortcuts(py)?;
-        let dialogs = py.import("views.filedialogs")?.getattr("file_dialogs")?;
+        let dialogs = py.import("ingetrazo_render.shell_files")?.getattr("ShellFileDialog")?;
         let path = dialogs.call_method1("getOpenFileName", (Self::_parent(slf)?, tr(py, "Import shortcuts")?, "", tr(py, "Shortcuts (*.json)")?))?.get_item(0)?;
         if !path.is_truthy()? {
             return Ok(());
@@ -1045,7 +1044,7 @@ impl SettingsSheet {
                 crate::settings_rows::device_edit(&envb, &edits, None)?;
             }
             "ndof_load" => {
-                let dialogs = py.import("views.filedialogs")?.getattr("file_dialogs")?;
+                let dialogs = py.import("ingetrazo_render.shell_files")?.getattr("ShellFileDialog")?;
                 let path = dialogs.call_method1("getOpenFileName", (Self::_parent(slf)?, tr(py, "Load SpaceMouse profile")?, "", "JSON (*.json)"))?.get_item(0)?;
                 if !path.is_truthy()? {
                     return Ok(());
@@ -1127,7 +1126,7 @@ impl SettingsSheet {
             }
         }
         let envb = env(w)?;
-        envb.getattr("st")?.call_method1("setValue", (crate::settings_rows::apply(py)?.getattr("_UNITS_FOR_NEW_KEY")?, "1"))?;
+        envb.getattr("st")?.call_method1("setValue", (crate::settings_rows::live::NEW_UNITS, "1"))?;
         py.import("core.units")?.call_method1("set_ask_at_start", (true,))?;
         chrome(py)?.call_method1("refresh", (w,))?;
         Ok(())

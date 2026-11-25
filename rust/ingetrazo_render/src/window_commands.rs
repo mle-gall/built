@@ -525,8 +525,8 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
         "_ask_keep_orphans" => call!("ask_keep_orphans", (win, a.req(0, "orphans")?)),
 
         // ---- export, import, links -----------------------------------------------------------
-        "export_video" => done!(py.import("views.video_export")?.call_method1("run_export", (win,))),
-        "ask_animation" => done!(py.import("views.scene_playback")?.call_method1("edit_animation", (win,))),
+        "export_video" => done!(crate::shell_window::video::run_export(win)),
+        "ask_animation" => done!(crate::shell_window::playback::edit_animation(win)),
         "_on_export_view_svg" => py.import("views.svg_export")?.call_method1("open_view_export", (win,)),
         "_view_line_groups" => py.import("views.svg_export")?.call_method1("view_line_groups", (win.call_method0("_active_view")?, a.or(0, "fast", true)?)),
         "view_svg_builder" => py.import("views.svg_export")?.call_method1("active_view_builder", (win,)),

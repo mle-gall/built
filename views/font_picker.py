@@ -61,7 +61,7 @@ def annotation(win):
 
     def apply(p):
         from core.protocol.commands import set_annotation_font
-        from views.settings_apply import document_history
+        from ingetrazo_render.settings_sheet import document_history
         if set_annotation_font(document_history(env.vp), p["font"], p["bold"], p["italic"],
                                round(p["height"]))["ok"]:
             _scene_changed(env)

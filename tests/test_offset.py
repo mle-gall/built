@@ -278,7 +278,7 @@ def test_offset_snaps_only_during_the_drag():
     import math
 
     from ingetrazo_core import ScreenPoint, Input
-    from views.status_hints import hint_for
+    from ingetrazo_render.status_hints import hint_for
     from tools.offset import OffsetTool
     from views.document_interaction import _HoverEvent
     from tests.controller_surface import ControllerSurface as Viewport

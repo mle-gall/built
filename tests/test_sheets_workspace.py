@@ -789,7 +789,8 @@ def test_every_tool_of_the_rail_runs_on_the_page(host, monkeypatch):
 def test_labels_levels_polygons_and_images_from_the_page(host, monkeypatch, tmp_path):
     import numpy as np
     from tests.plugin_images import write_png
-    from views import filedialogs, wgpu_sheet_frames
+    from views import wgpu_sheet_frames
+    from ingetrazo_render import shell_files
     ws = _sheets(host)
     comp = ws.composer
     plan = comp.comp.frames[0]
@@ -819,7 +820,7 @@ def test_labels_levels_polygons_and_images_from_the_page(host, monkeypatch, tmp_
     # An image: the file, then the item at the margins, in its proportions.
     pic = tmp_path / "logo.png"
     write_png(pic, 200, 100)
-    monkeypatch.setattr(filedialogs.file_dialogs, "getOpenFileName",
+    monkeypatch.setattr(shell_files.ShellFileDialog, "getOpenFileName",
                         staticmethod(lambda *a, **k: (str(pic), "")))
     _run_actions(host, "sheets:tool\x1fimagen")
     image = comp.comp.images[-1]
@@ -845,14 +846,14 @@ def test_pan_and_zoom(host):
 
 # ---- export ----------------------------------------------------------------------------
 def test_export_pdf_from_the_workspace(host, tmp_path, monkeypatch):
-    from views import filedialogs
+    from ingetrazo_render import shell_files
     out = tmp_path / "sheet.pdf"
     asked = []
 
     def save(parent, caption="", directory="", filters="", *a, **k):
         asked.append((caption, directory))
         return str(out), filters
-    monkeypatch.setattr(filedialogs.file_dialogs, "getSaveFileName", staticmethod(save))
+    monkeypatch.setattr(shell_files.ShellFileDialog, "getSaveFileName", staticmethod(save))
     ws = _sheets(host)
     _act(host, "export\x1fpdf")
     assert out.read_bytes()[:4] == b"%PDF"

@@ -7,7 +7,7 @@ fn types(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
     module(py, "shell_views")
 }
 #[pyfunction]
-fn view_init(view: &Obj<'_>, host: &Obj<'_>) -> PyResult<()> {
+pub(super) fn view_init(view: &Obj<'_>, host: &Obj<'_>) -> PyResult<()> {
     let py = view.py();
     let kw = PyDict::new(py);
     kw.set_item("timers", host.getattr("timers")?)?;
@@ -193,15 +193,17 @@ fn attach(view: &Obj<'_>) -> PyResult<bool> {
     if view.getattr("renderer")?.is_none() {
         let primary = view.getattr("primary")?;
         primary.call_method1("add_peer", (view,))?;
-        let peer = view.py().import("views.resident_peer")?;
-        let raw = peer.call_method1("raw_renderer", (primary.getattr("renderer")?,))?;
+        let raw = super::resident::raw_renderer(&primary.getattr("renderer")?)?;
         let physical = size(view)?.into_pyobject(view.py())?;
         view.setattr("_physical_size", &physical)?;
         let target = raw.call_method1("add_tile_target", physical)?;
         view.setattr("_target", &target)?;
         view.setattr(
             "renderer",
-            peer.call_method1("TargetRenderer", (&raw, target))?,
+            Bound::new(
+                view.py(),
+                super::resident::TargetRenderer::new(raw.unbind(), target.extract()?),
+            )?,
         )?;
     }
     Ok(true)
@@ -339,10 +341,8 @@ fn resolve<'p>(py: Python<'p>, name: &str) -> PyResult<Obj<'p>> {
                 "chrome_offset",
                 prop.call1((wrap_pyfunction!(offset, py)?,))?,
             )?;
-            vec![
-                py.import("views.resident_peer")?.getattr("ResidentPeer")?,
-                m.getattr("ShellView")?,
-            ]
+            super::resident::pane_methods(&members)?;
+            vec![m.getattr("ShellView")?]
         }
         "ShellDocument" => {
             methods!("__init__"=>document_init);
@@ -361,6 +361,8 @@ fn resolve<'p>(py: Python<'p>, name: &str) -> PyResult<Obj<'p>> {
 pub(super) fn register(parent: &Bound<'_, PyModule>) -> PyResult<()> {
     let m = &create(parent, "shell_views")?;
     m.add_class::<PaneHost>()?;
+    m.add_class::<super::resident::TargetRenderer>()?;
+    m.add_function(wrap_pyfunction!(super::resident::raw_renderer, m)?)?;
     for f in [
         wrap_pyfunction!(make_pane, m)?,
         wrap_pyfunction!(choose, m)?,

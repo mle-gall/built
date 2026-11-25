@@ -144,7 +144,7 @@ def test_the_status_bar_offers_alt_and_names_the_state(native_host):
     """The usual status bar puts the offer AND the current state on one line
     while drawing: «Alt = Activar/desactivar "Inferencias lineales"
     (Ninguno activo)»."""
-    from views.status_hints import alt_inference_hint, hint_for
+    from ingetrazo_render.status_hints import alt_inference_hint, hint_for
 
     # Shorter than the usual wording on purpose: it has the whole bar
     # for this line and we have half of it, so the full name «linear

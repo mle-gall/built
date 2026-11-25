@@ -587,25 +587,25 @@ def test_replacing_the_viewport_history_detaches_the_old_feed(host):
 
 def test_input_and_modal_buttons_stay_in_the_owning_window(host, second):
     from ingetrazo_render import shell_modal as modal
-    from views import input_state
+    from ingetrazo_core import window_input
     from ingetrazo_core import Input as Qt, PixelPoint as QPoint
 
     other = second()
     host.pointer("move", 17, 23, held=1, modifiers=Qt.ShiftModifier.value)
     other.pointer("move", 5, 3, modifiers=Qt.ControlModifier.value)
-    assert input_state.mouse_buttons(host.window) == Qt.LeftButton
-    assert input_state.cursor_position(host.view) == QPoint(17, 23)
-    assert input_state.modifiers(host.viewport) == Qt.ShiftModifier
-    assert input_state.mouse_buttons(other.viewport) == Qt.NoButton
-    assert input_state.modifiers(other.viewport) == Qt.ControlModifier
+    assert window_input.mouse_buttons(host.window) == Qt.LeftButton
+    assert window_input.cursor_position(host.view) == QPoint(17, 23)
+    assert window_input.modifiers(host.viewport) == Qt.ShiftModifier
+    assert window_input.mouse_buttons(other.viewport) == Qt.NoButton
+    assert window_input.modifiers(other.viewport) == Qt.ControlModifier
     other.view._ui_attached = True
     modal.dispatch(other, ("press", 1, 2, 2, 0, 0, ""))
-    assert input_state.mouse_buttons(other.window) == Qt.RightButton
+    assert window_input.mouse_buttons(other.window) == Qt.RightButton
     modal.dispatch(other, ("release", 1, 2, 2, 0, 0, ""))
-    assert input_state.mouse_buttons(other.window) == Qt.NoButton
+    assert window_input.mouse_buttons(other.window) == Qt.NoButton
     host.focus(False)
-    assert input_state.mouse_buttons(host.window) == Qt.NoButton
-    assert input_state.modifiers(host.viewport) == Qt.NoModifier
+    assert window_input.mouse_buttons(host.window) == Qt.NoButton
+    assert window_input.modifiers(host.viewport) == Qt.NoModifier
 
 
 def test_closing_the_move_origin_releases_its_request_and_restores_the_other_host(host, tmp_path):

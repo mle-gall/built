@@ -66,6 +66,9 @@ pub mod desktop_menu_model;
 pub mod desktop_menu;
 pub mod extension_menu;
 mod extension_setup;
+mod extension_api;
+mod status_hints;
+mod command_metadata;
 mod model_views;
 mod pane_dividers;
 /// The one verb source: kinds, menu rows, inspector verbs, dispatch.
@@ -3314,6 +3317,12 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     component_replacement::register(m)?;
     inspection_edits::register(m)?;
     context_edits::register(m)?;
+    m.add_function(wrap_pyfunction!(ao::ao_settings,m)?)?;
+    tree_grouping::navigation::register(m)?;
+    m.add("VideoError", m.py().get_type::<shell_window::video::VideoError>())?;
+    m.add_function(wrap_pyfunction!(shell_window::video::export_video,m)?)?;
+    status_hints::register(m)?;
+    command_metadata::register(m)?;
     native_view_actions::register(m)?;
     plugin_workspace::register(m)?;
     m.add_class::<link_watch::LinkWatch>()?;

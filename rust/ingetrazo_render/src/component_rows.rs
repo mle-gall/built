@@ -127,7 +127,7 @@ pub fn select_component_instances(
     let path = outliner.call_method1("path_to", (roots, &picks[0]))?;
     let tr = py.import("core.i18n")?.getattr("tr")?;
     if !py
-        .import("views.tree_navigation")?
+        .import("ingetrazo_render.tree_navigation")?
         .call_method1("open_to", (&vp, path))?
         .is_truthy()?
     {

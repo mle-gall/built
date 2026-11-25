@@ -1016,8 +1016,8 @@ def _qty_rows(per_unit) -> list:
 
 def _export_csv(win) -> None:
     from core.bim import quantities_csv
-    from views.filedialogs import file_dialogs
-    path, _ = file_dialogs.getSaveFileName(win, "Export quantities CSV", "metrado.csv", "CSV (*.csv);;All files (*)")
+    from ingetrazo_render.shell_files import ShellFileDialog
+    path, _ = ShellFileDialog.getSaveFileName(win, "Export quantities CSV", "metrado.csv", "CSV (*.csv);;All files (*)")
     if not path:
         return
     with _wait_cursor(win.viewport):
@@ -1074,7 +1074,7 @@ def _tree_action(win, view, action) -> None:
     from core import layers as L
     from core.group import Group
     from core.history import SetRegistryCommand
-    from views.tree_navigation import execute
+    from ingetrazo_render.tree_navigation import execute
     if SEP not in action:
         # The inspector's chips and the delivery counts: "verb:arg".
         verb, _, key = action.partition(":")
@@ -1325,7 +1325,7 @@ def _tree_action(win, view, action) -> None:
                 host.viewport.notify_scene_changed()
                 view.update()
         elif verb == "documentroot":
-            from views.tree_navigation import open_to
+            from ingetrazo_render.tree_navigation import open_to
             open_to(vp, [])
         elif verb in ("revealselection", "revealnode"):
             plan = _tree(view, win, discover=True) if scene.selection else None
@@ -1371,8 +1371,8 @@ def _tree_action(win, view, action) -> None:
                 vp.flash_status("Select groups in another saved, open document first")
         elif verb == "linkregistry":
             from core import project
-            from views.filedialogs import file_dialogs
-            path, _ = file_dialogs.getSaveFileName(win, "Move registry to project", "", "Built project (*.builtproject)")
+            from ingetrazo_render.shell_files import ShellFileDialog
+            path, _ = ShellFileDialog.getSaveFileName(win, "Move registry to project", "", "Built project (*.builtproject)")
             if path:
                 project.create(scene, path, win._current_path)
                 win._relink_done("Project registry updated")
@@ -1454,9 +1454,9 @@ def _tree_action(win, view, action) -> None:
             rebuild()
         elif verb in ("importtags", "exporttags"):
             from ingetrazo_core import tag_template_file
-            from views.filedialogs import file_dialogs
+            from ingetrazo_render.shell_files import ShellFileDialog
             save = verb == "exporttags"
-            chooser = file_dialogs.getSaveFileName if save else file_dialogs.getOpenFileName
+            chooser = ShellFileDialog.getSaveFileName if save else ShellFileDialog.getOpenFileName
             path, _ = chooser(win, "Export layer template" if save else "Import layer template",
                               "layers.json" if save else "", "Layer template (*.json)")
             if path and win.viewport.scene is scene:
@@ -1469,9 +1469,9 @@ def _tree_action(win, view, action) -> None:
                     vp.flash_status(str(exc))
         elif verb in ("exportpat", "exportlin"):
             from ingetrazo_core import export_style_file
-            from views.filedialogs import file_dialogs
+            from ingetrazo_render.shell_files import ShellFileDialog
             ext = verb[6:]
-            path, _ = file_dialogs.getSaveFileName(win, "Export drawing patterns", f"patterns.{ext}", f"Pattern files (*.{ext})")
+            path, _ = ShellFileDialog.getSaveFileName(win, "Export drawing patterns", f"patterns.{ext}", f"Pattern files (*.{ext})")
             if path and win.viewport.scene is scene:
                 try:
                     count = export_style_file(scene, path, ext)
@@ -1496,8 +1496,8 @@ def _tree_action(win, view, action) -> None:
             rebuild()
         elif verb == "importlin":
             from ingetrazo_core import import_line_file
-            from views.filedialogs import file_dialogs
-            path, _ = file_dialogs.getOpenFileName(win, "Import line types", "", "Line type files (*.lin)")
+            from ingetrazo_render.shell_files import ShellFileDialog
+            path, _ = ShellFileDialog.getOpenFileName(win, "Import line types", "", "Line type files (*.lin)")
             if path and win.viewport.scene is scene:
                 try:
                     count, skipped = import_line_file(vp.history, path)
@@ -1510,8 +1510,8 @@ def _tree_action(win, view, action) -> None:
         elif verb == "importpat":
             from core.i18n import tr
             from ingetrazo_core import import_hatch_file
-            from views.filedialogs import file_dialogs
-            path, _ = file_dialogs.getOpenFileName(win, "Import hatch patterns", "", "Pattern files (*.pat)")
+            from ingetrazo_render.shell_files import ShellFileDialog
+            path, _ = ShellFileDialog.getOpenFileName(win, "Import hatch patterns", "", "Pattern files (*.pat)")
             if path and win.viewport.scene is scene:
                 try:
                     count = import_hatch_file(vp.history, path)
@@ -1619,7 +1619,7 @@ def _tree_action(win, view, action) -> None:
             _isolate(win, [tree.row_id(g) if tree else g.uid for g in shown()])
         elif verb == "open":
             from core.outliner import path_to
-            from views.tree_navigation import open_to
+            from ingetrazo_render.tree_navigation import open_to
             g = item()
             if g is not None:
                 parents = path_to(scene.groups, g)
@@ -1844,7 +1844,7 @@ def _core(vp, command, /, **args):
 def _delete_node(vp, key) -> None:
     from core import bim_registry, structure
     from core.history import CompoundCommand, SetRegistryCommand
-    from views.tree_navigation import execute
+    from ingetrazo_render.tree_navigation import execute
     scene = vp.scene
     registry = bim_registry.get(scene)
     section = registry["structure"]
@@ -2232,10 +2232,10 @@ def _link_action(win, view, g, key) -> None:
         elif key == "linknested":
             win._set_link_nested(g, not rec.get("include_nested", True))
         elif key == "linkrelink":
-            from views.filedialogs import file_dialogs
+            from ingetrazo_render.shell_files import ShellFileDialog
             from formats import built
             source = Path(rec["path"])
-            path, _ = file_dialogs.getOpenFileName(win, f"Locate {source.name}", str(source.parent),
+            path, _ = ShellFileDialog.getOpenFileName(win, f"Locate {source.name}", str(source.parent),
                                                    built.DOCUMENT_FILTER)
             if not path:
                 return
@@ -2293,7 +2293,7 @@ def _set_status(win, groups, value) -> None:
     from copy import deepcopy
     from core.history import CompoundCommand, SetRecordCommand
     from core.ifc_tables import common_pset
-    from views.tree_navigation import execute
+    from ingetrazo_render.tree_navigation import execute
     commands = []
     for g in groups:
         rec = g.ifc or {}
@@ -2784,12 +2784,12 @@ def _opens_commands(view, event) -> bool:
 
 
 def _all_commands(win):
-    from views.command_metadata import commands
+    from ingetrazo_render.command_metadata import commands
     return [(cmd.name, cmd.path, cmd.keys, cmd.action) for cmd in commands(win)]
 
 
 def command_action(view, win, verb, arg):
-    from views import command_metadata
+    from ingetrazo_render import command_metadata
     if verb == "cmdscope":
         view._ui_command_scope = arg
         view._ui_command_owner = None
@@ -2802,21 +2802,22 @@ def command_action(view, win, verb, arg):
             action = hits[i]
             if verb == "cmdrun":
                 command_metadata.run(action)
-            elif command_metadata.visible(action):
+            elif action.isVisible():
                 owner = win if hasattr(win, "open_preferences") else win.parentWidget()
                 if owner is not None:
                     owner.open_preferences(shortcut_of=action)
 
 
 def _command_query(view, win, query) -> None:
-    from views import command_metadata, wgpu_sheets
+    from views import wgpu_sheets
+    from ingetrazo_render import command_metadata
     workspace = wgpu_sheets.workspace_of(view)
     from ingetrazo_render import sheet_command_scope
     owner = sheet_command_scope(win) if workspace is not None else win
     if not query or getattr(view, "_ui_command_owner", None) is not owner:
         view._ui_command_pool = command_metadata.commands(owner, getattr(view, "_ui_command_scope", ""))
         view._ui_command_owner = owner
-    live = [c for c in view._ui_command_pool if command_metadata.visible(c.action)]
+    live = [c for c in view._ui_command_pool if c.action.isVisible()]
     hits = command_metadata.search(owner, query, pool=live)
     view._ui_cmd_hits = [c.action for c in hits]
     view.renderer.ui_set_command_results([(c.name, c.path, c.keys, c.action.isEnabled()) for c in hits])

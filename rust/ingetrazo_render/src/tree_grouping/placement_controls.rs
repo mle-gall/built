@@ -88,7 +88,7 @@ pub(super) fn act(win: &Bound<'_, PyAny>, clicked: &Bound<'_, PyAny>, verb: &str
     };
     let selected = model_ids(&scene)?;
     let mut kept_rows = kept(&scene, &selected)?;
-    let nav = py.import("views.tree_navigation")?;
+    let nav = py.import("ingetrazo_render.tree_navigation")?;
     if matches!(verb, "pickrow" | "toggleitem") {
         let toggle = verb == "toggleitem";
         if !toggle {

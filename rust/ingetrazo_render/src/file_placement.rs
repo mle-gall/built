@@ -15,8 +15,8 @@ fn file_picker<'py>(
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
     let py = win.py();
     let filename: String = py
-        .import("views.filedialogs")?
-        .getattr("file_dialogs")?
+        .import("ingetrazo_render.shell_files")?
+        .getattr("ShellFileDialog")?
         .call_method1(
             method,
             (

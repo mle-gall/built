@@ -98,7 +98,7 @@ def test_cut_list_group_copy_export(tmp_path, monkeypatch, pasteboard):
     from core.scene import Scene
     from tests.test_parts import _box, _part
     from core.group import Group
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     assembly = Group(name="Assembly")
     assembly.adopt([_part(_box(.2, .8, .4, color=color), name)
                     for color, name in [((1, 0, 0), 'Red, "panel"'), ((0, 1, 0), "Green")]])
@@ -117,7 +117,7 @@ def test_cut_list_group_copy_export(tmp_path, monkeypatch, pasteboard):
     sheet.act(ctx, "verb", ["copy"])
     assert list(csv.reader(io.StringIO(pasteboard["public.utf8-plain-text"].decode(), newline=""), dialect="excel-tab")) == sheet.table
     path = tmp_path / "parts.csv"
-    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *args: (str(path), "CSV"))
+    monkeypatch.setattr(ShellFileDialog, "getSaveFileName", lambda *args: (str(path), "CSV"))
     sheet.act(ctx, "verb", ["csv"])
     with path.open(newline="") as f:
         assert list(csv.reader(f)) == sheet.table

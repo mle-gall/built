@@ -196,7 +196,7 @@ class MetalView(ViewNavigation):
         raise NotImplementedError("a MetalView host supplies its surface")
 
     def _wrap_renderer(self):
-        from views.resident_peer import TargetRenderer
+        from ingetrazo_render.shell_views import TargetRenderer
         if (self.peers() and self.renderer is not None
                 and hasattr(self.renderer, 'bind_target')
                 and not isinstance(self.renderer, TargetRenderer)):
@@ -1676,7 +1676,7 @@ class MetalView(ViewNavigation):
             scene = self.tools.scene
             busy = bool(getattr(self, "_look_drag", None)
                         or self.tools.start_point is not None or DocumentInteraction._tool_busy_for_delete(self.tools.tool))
-            from views.resident_peer import raw_renderer
+            from ingetrazo_render.shell_views import raw_renderer
             chrome = getattr(self, "_shared", self)
             renderer = raw_renderer(chrome.renderer) if getattr(chrome, "_ui_attached", False) else None
             owner = model_escape(busy, bool(scene is not None and scene.selection),
@@ -1736,8 +1736,8 @@ class MetalView(ViewNavigation):
         if pos is not None:
             # The lock shows at once, the hand still (GL's _refresh_snap).
             from ingetrazo_render import MouseEvent
-            from views import input_state
-            held = input_state.modifiers(self)
+            from ingetrazo_core import window_input
+            held = window_input.modifiers(self)
             self.hover(pos.x(), pos.y(), held)
             self.tools.hover(MouseEvent("move", pos.x(), pos.y(),
                                        modifiers=int(getattr(held, "value", held))))

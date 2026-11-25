@@ -27,7 +27,7 @@ def setup(app):
         def done(value):
             with Path(__file__).with_suffix(".jsonl").open("a") as out:
                 out.write(json.dumps(value) + "\\n")
-        ask_text(app._window, "Text", "Label text:", "Muro", done, multiline=True)
+        ask_text(app.window, "Text", "Label text:", "Muro", done, multiline=True)
     app.add_menu_action("Try multiline prompt", ask)
 ''')
     script = root / "keys.txt"
