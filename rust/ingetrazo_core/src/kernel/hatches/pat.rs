@@ -22,7 +22,10 @@ pub(super) fn parse_pat<'p>(py: Python<'p>, text: &str) -> PyResult<Bound<'p, Py
     let factor = if INCHES.is_match(text) { 25.4 } else { 1. };
     let out = PyDict::new(py);
     let mut current = None;
-    for raw in text.lines() {
+    // Match str.splitlines() on files from classic Mac and Unicode text sources.
+    for raw in text.split([
+        '\n', '\r', '\u{b}', '\u{c}', '\u{1c}', '\u{1d}', '\u{1e}', '\u{85}', '\u{2028}', '\u{2029}',
+    ]) {
         let line = raw.split(';').next().unwrap().trim();
         if line.is_empty() {
             continue;
@@ -175,10 +178,17 @@ pub(super) fn to_pat(patterns: &Obj<'_>) -> PyResult<String> {
     };
     for pattern in patterns.try_iter()? {
         let pattern = pattern?;
-        let (name, label, rows): (String, String, Obj) = pattern.extract()?;
+        let fields = pattern.try_iter()?.take(4).collect::<PyResult<Vec<_>>>()?;
+        let [name, label, rows] = fields.as_slice() else {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "expected three pattern fields (name, label, families)",
+            ));
+        };
         if !rows.is_truthy()? {
             continue;
         }
+        let name: String = name.extract()?;
+        let label: String = label.extract()?;
         let safe = UNSAFE_NAME.replace_all(&name, "-");
         let safe = safe.trim_matches('-');
         out.push_str(&format!(
