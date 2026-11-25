@@ -452,8 +452,7 @@ class MetalView(ViewNavigation):
             if old and packed is not None and packed is not self.packed and packed.vertices is old[0]:
                 # The index's open-time snapshot shares the old arrays;
                 # same contents, so let it read the new ones and free those.
-                from dataclasses import replace
-                index.packed = replace(packed, vertices=self.packed.vertices,
+                index.packed = packed.replace(vertices=self.packed.vertices,
                                        indices=self.packed.indices)
         later(self, 50, adopt)
 
@@ -536,8 +535,7 @@ class MetalView(ViewNavigation):
         self._inference_future = self._inference_worker.submit(build)
 
     def _inference_snapshot(self):
-        from dataclasses import replace
-        packed = replace(self.packed, instances=self.packed.instances.copy(),
+        packed = self.packed.replace(instances=self.packed.instances.copy(),
                          bounds=self.packed.bounds.copy(), commands=self.packed.commands.copy(),
                          edge_commands=self.packed.edge_commands.copy())
         if any(packed.origin) or any(any(o) for o in packed.prototype_origins):

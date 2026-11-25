@@ -13,7 +13,6 @@ Materials use 16-byte prototype headers followed by 32-byte corner records
 only for prototypes with textures or backs that differ from their fronts.
 """
 import ingetrazo_core
-from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import NamedTuple
 import numpy as np
@@ -25,111 +24,12 @@ from views.array_bake import _attrs_table
 
 VERTEX = np.dtype([('pos', '<f4', 3), ('normal', '<f4', 3), ('color', 'u1', 4)])
 INSTANCE = np.dtype([('world', '<f4', (4, 4)), ('info', '<u4', 4)])
-OBJECT_HIDDEN = 1 << 4
-VISIBILITY_FILTERED = 1 << 5
 
 COMMAND = np.dtype([('count', '<u4'), ('instances', '<u4'), ('first', '<u4'),
                     ('base', '<i4'), ('start', '<u4')])
 
 
-@dataclass
-class PackedScene:
-    vertices: np.ndarray
-    indices: np.ndarray
-    bounds: np.ndarray
-    commands: np.ndarray
-    edge_commands: np.ndarray
-    instances: np.ndarray
-    uids: list
-    world_bounds: np.ndarray
-    timings: dict | None = None
-    groups: list | None = None
-    materials: np.ndarray | None = None
-    textures: tuple | None = None
-    texture_paths: tuple = ()
-    hidden_commands: np.ndarray | None = None
-    hidden_edge_commands: np.ndarray | None = None
-
-    profile_exclusions: tuple = ()
-    reveal_hidden: tuple = (False, False)
-
-    prototype_lookup: dict | None = None
-    # Code -> the baked paint its vertices carry (None: plain). An edit
-    # rebakes each variant of a changed mesh with its own paint.
-    prototype_paints: dict | None = None
-
-    # Sparse replacements since the last whole-table handoff. Rebuilding
-    # this stream on each edit copies every unrelated material record.
-    material_updates: dict = field(default_factory=dict)
-
-    origin: tuple = (0., 0., 0.)
-    prototype_origins: tuple = ()
-    model_translations: np.ndarray | None = None
-    bake_focus: tuple | None = None
-
-    occurrence_keys: dict = field(default_factory=dict)
-    # id(mesh) -> (mesh, a prototype code it is drawn with, -1: nothing to
-    # draw): every mesh the pack met, the loose one and empty ones included.
-    mesh_codes: dict = field(default_factory=dict)
-
-    def row_key(self, group):
-        return self.occurrence_keys.get(group, getattr(group, 'uid', 'loose'))
-
-    def rebase(self, origin):
-        """Project the original placement translations into this view frame."""
-        if self.origin == origin:
-            return False
-        self.instances["world"][:, 3, :3] = self.model_translations - origin
-        self.world_bounds = self.world_bounds + np.subtract(self.origin, origin)
-        self.origin = origin
-        return True
-
-    def material_stream(self):
-        if not self.material_updates:
-            return self.materials
-        count = len(self.commands)
-        headers = np.zeros((count, 4), '<u4')
-        chunks = [headers.view(np.uint8).ravel()]
-        at = count
-        old = self.materials.view('<u4').reshape(-1, 4)
-        for code in range(count):
-            if code in self.material_updates:
-                flags, records = self.material_updates[code]
-            else:
-                _, first, length, flags = map(int, old[code])
-                records = self.materials[first*16:first*16 + length*32]
-            headers[code, 3] = flags
-            if len(records):
-                headers[code, :3] = self.commands['base'][code], at, len(records) // 32
-                chunks.append(records)
-                at += len(records) // 16
-        self.materials = np.concatenate(chunks)
-        self.material_updates = {}
-        return self.materials
-
-    def _upload_arrays(self):
-        prototypes = (self.vertices, self.indices, self.bounds, np.concatenate((self.commands, self.edge_commands)))
-        return tuple(a.view(np.uint8).reshape(-1) for a in prototypes), self.instances.view(np.uint8).reshape(-1)
-
-    def prepare_upload(self):
-        from ingetrazo_render import SceneUpload
-        if len(self.instances):
-            self._prepared_upload = SceneUpload(*self._upload_arrays())
-
-    def upload(self, renderer):
-        prepared = self.__dict__.pop("_prepared_upload", None)
-        if prepared is None:
-            renderer.set_scene(*self._upload_arrays())
-        else:
-            renderer.set_prepared_scene(prepared, self.instances.view(np.uint8).reshape(-1))
-        renderer.set_materials(self.material_stream())
-        renderer.set_textures(*self.textures)
-        if hasattr(renderer, "set_profile_exclusions"):
-            renderer.set_profile_exclusions(self.profile_exclusions)
-        from views.wgpu_parity import has_transparency, hidden_geometry
-        if hasattr(renderer, "set_material_transparency"):
-            renderer.set_material_transparency(has_transparency(self))
-        hidden_geometry(SimpleNamespace(renderer=renderer, packed=self))
+from ingetrazo_render import OBJECT_HIDDEN, VISIBILITY_FILTERED, PackedScene
 
 
 def bake_mesh(mesh):
