@@ -95,9 +95,3 @@ def test_pointer_names_follow_the_preference_and_the_guide_mode():
     # At twice the pixels, the hotspot scales with them.
     assert tool_cursor_raster("tool:line", 64)[2:4] == (8, 56)
 
-
-def test_icons_module_names_pointers_for_hosts_without_a_factory():
-    from views import icons
-    assert icons.tool_cursor("line") == "tool:line"
-    assert icons.tool_cursor("select") is None
-    assert icons.solid_cursor("1") == "tool:solid-1"

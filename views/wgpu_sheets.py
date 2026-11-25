@@ -84,7 +84,7 @@ def embeds(win) -> bool:
     return is_shell(win)
 
 
-#: The rail's tools: their icon (views/icons.py) and their name.
+#: The rail's tools: their icon (ingetrazo_render.icon_art) and their name.
 TOOL_ICONS = {"select": "select", "pan": "pan", "zoom": "zoom", "zoom_ventana": "zoom_window",
               "estilo": "eyedropper", "vista": "comp_vista", "texto": "text", "etiqueta": "comp_etiqueta",
               "nivel": "comp_nivel", "llamada": "comp_llamada", "imagen": "image", "cajetin": "comp_cajetin",

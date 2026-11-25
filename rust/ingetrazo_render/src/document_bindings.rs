@@ -106,12 +106,16 @@ fn document_status(v: &Obj, text: &str, msec: i64) -> PyResult<()> {
 #[pyfunction]
 fn document_tool_pointer<'py>(v: &Obj<'py>, key: &Obj<'py>, plus: bool) -> PyResult<Obj<'py>> {
     let factory = opt(&opt(v, "_host")?, "tool_cursor")?;
-    let factory = if factory.is_none() {
-        v.py().import("views.icons")?.getattr("tool_cursor")?
-    } else {
-        factory
-    };
-    factory.call1((key, plus))
+    if !factory.is_none() {
+        return factory.call1((key, plus));
+    }
+    // No factory of the host's own: the pointer by its name, in the
+    // preferred style.
+    let py = v.py();
+    let style = py.import("core.general_settings")?.call_method1("value", ("cursor_style", "tool"))?.str()?;
+    let key: Option<String> = key.extract()?;
+    let name = crate::tool_cursors::tool_cursor_name(key.as_deref(), plus, style.to_str()?);
+    Ok(pyo3::IntoPyObjectExt::into_bound_py_any(name, py)?)
 }
 pub(super) fn register(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(document_paint_extensions, m)?)?;
