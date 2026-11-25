@@ -51,22 +51,3 @@ def run(win, key):
         win._sync_section_menu()
         win._sync_style_menu()
     return ran
-
-
-def bind(win, action, key, *, toggle=False):
-    """Connect a classic host action before its shortcut customizations load."""
-    from PySide6.QtGui import QKeySequence
-    entry = next(row for row in entries() if row[1] == key)
-    action.setShortcuts([QKeySequence(shortcut) for shortcut in entry[3]])
-    signal = action.toggled if toggle else action.triggered
-    signal.connect(lambda on=False: run_view_command(win, key, on))
-    bindings = win.__dict__.setdefault("_view_bindings", {})
-
-    def reflect():
-        value = (action.shortcut().toString(QKeySequence.NativeText), action.isEnabled())
-        if bindings.get(key) != value:
-            bindings[key] = value
-            win._view_binding_version = vars(win).get("_view_binding_version", 0) + 1
-
-    action.changed.connect(reflect)
-    reflect()

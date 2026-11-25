@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from core.group import Group, copy_group
 from core.mesh import Mesh
@@ -12,9 +11,9 @@ from formats import clip
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def app():
-    return QApplication.instance() or QApplication([])
+    """The offers are native: no application object is needed."""
 
 
 def _box_group(x: float) -> Group:
