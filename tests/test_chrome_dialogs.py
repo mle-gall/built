@@ -7,7 +7,6 @@ Offscreen there is no Metal frame: ``live`` is replaced by a stand-in view
 and the test plays the chrome (marks the sheet drawn, clicks or types)."""
 from __future__ import annotations
 
-from tests.raster_samples import solid_raster
 from types import SimpleNamespace
 
 import pytest
@@ -36,6 +35,18 @@ def win(native_host, monkeypatch):
 
     monkeypatch.setattr(modal, "run_until", turn)
     return w
+
+
+def _png_rgb(w, h, pixel):
+    """An opaque RGB PNG of one colour (standard library only)."""
+    import struct
+    import zlib
+
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    rows = b"".join(b"\x00" + pixel * w for _ in range(h))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
 
 
 def chrome(win, then):
@@ -190,8 +201,7 @@ def test_information_call_sites_post_toasts(win, tmp_path, monkeypatch, method, 
         monkeypatch.setattr(autosave, "discarded_dir", lambda: tmp_path)
     elif method == "_on_insert_faceme_image":
         picture = tmp_path / "opaque.png"
-        image = solid_raster(2, 2, (255, 255, 255))
-        assert image.save(str(picture))
+        picture.write_bytes(_png_rgb(2, 2, b"\xff\xff\xff"))
         monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *a: (str(picture), ""))
 
     elif method == "_import_rfa_path":
