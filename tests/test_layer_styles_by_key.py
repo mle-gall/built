@@ -7,6 +7,7 @@ rename changes and two tags in different folders may share. Every map the
 sheets, the DXF and the 3D view read a tag's look from is keyed by the key
 the segments and rings carry — keyed by label, a renamed tag lost its look
 and two «Corte» tags got one look between them."""
+import ingetrazo_core
 from types import SimpleNamespace
 
 import numpy as np
@@ -56,9 +57,9 @@ def test_cut_hatches_and_their_looks_are_keyed_by_key(scene):
     assert set(forms) == set(KEYS)
     assert forms["corte-sur"]["angle"] == 45.0
     assert forms["corte-norte"]["angle"] == 0.0
-    assert set(L.cut_hatch_grounds(scene)) == {"corte-sur"}
-    assert L.cut_hatch_inks(scene)["corte-sur"] == (0.0, 0.0, 1.0)
-    fills = L.cut_fill_colours(scene)
+    assert set(ingetrazo_core.tag_styles.cut_hatch_grounds(scene)) == {"corte-sur"}
+    assert ingetrazo_core.tag_styles.cut_hatch_inks(scene)["corte-sur"] == (0.0, 0.0, 1.0)
+    fills = ingetrazo_core.tag_styles.cut_fill_colours(scene)
     assert {"Muros", "corte-norte", "corte-sur"} <= set(fills)
     assert fills["corte-norte"] != fills["corte-sur"]
     for name in ("Paredes", "Corte"):            # no label leaks in as a key
@@ -67,7 +68,7 @@ def test_cut_hatches_and_their_looks_are_keyed_by_key(scene):
 
 
 def test_line_styles_carry_each_tags_own_pen_and_line(scene):
-    styles = L.line_styles(scene, True)
+    styles = ingetrazo_core.tag_styles.line_styles(scene, True)
     assert styles["Muros"][1] == "dashed" and styles["Muros"][3] == 0.7
     assert styles["corte-norte"][1] == "dotted"
     assert styles["corte-norte"][3] == 0.35

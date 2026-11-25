@@ -16,6 +16,7 @@ Regenerate only on purpose, against the reference implementation:
 ``python tests/test_hlr_rest_parity.py --write``."""
 from __future__ import annotations
 
+import ingetrazo_core
 import gzip
 import json
 import math
@@ -114,43 +115,43 @@ def answers(hlr):
     out = {"basis": [], "depth": [], "cap": [], "ring": [], "clip_t": [], "clip_s": [],
            "persp": []}
     for tris, hard, soft, soft_n, plane, cam in scenes():
-        out["basis"].append(_r(list(hlr.camera_basis(cam))))
+        out["basis"].append(_r(list(ingetrazo_core.hlr_camera_basis(cam))))
         for persp in (False, True):
             cam.perspective = persp
-            out["basis"].append(_r(list(hlr.camera_basis(cam))))
+            out["basis"].append(_r(list(ingetrazo_core.hlr_camera_basis(cam))))
         cam.perspective = True
-        e, r, u, f = hlr.camera_basis(cam)
+        e, r, u, f = ingetrazo_core.hlr_camera_basis(cam)
         for _ in range(3):
             pl = _Plane((rng.uniform(-2, 2), rng.uniform(-2, 2), rng.uniform(0, 2)),
                         (rng.uniform(-1, 1), rng.uniform(-1, 1), rng.uniform(-1, 1)))
-            out["cap"].append(_r(hlr.cap_depth_affine(pl, e, r, u, f)))
-        out["cap"].append(_r(hlr.cap_depth_affine(_Plane((0, 0, 0), tuple(f)), e, r, u, f)))
+            out["cap"].append(_r(ingetrazo_core.hlr_cap_depth_affine(pl, e, r, u, f)))
+        out["cap"].append(_r(ingetrazo_core.hlr_cap_depth_affine(_Plane((0, 0, 0), tuple(f)), e, r, u, f)))
         rings = [np.array([(x, y, 0.5) for x, y in ((0, 0), (1, 0), (1, 1), (0, 1))], float)]
         b = tris[:12].reshape(-1, 3, 3)
         lo = b.reshape(-1, 3).min(axis=0)
         hi = b.reshape(-1, 3).max(axis=0)
         mid = (lo + hi) / 2
         ring = np.array([mid + (dx, dy, 0) for dx, dy in ((-.05, -.05), (.05, -.05), (.05, .05), (-.05, .05))])
-        out["depth"].append(_r(hlr.solid_depth(ring, b, (0.0, 0.0, 1.0))))
-        out["depth"].append(_r(hlr.solid_depth(ring, b, (0.3, -0.2, 1.0))))
-        out["depth"].append(_r(hlr.solid_depth(ring, tris, (1.0, 0.0, 0.0))))
-        out["depth"].append(_r(hlr.solid_depth(ring + (100, 0, 0), b, (0.0, 0.0, 1.0))))
-        out["depth"].append(_r(hlr.solid_depth(ring[:2], b, (0.0, 0.0, 1.0))))
+        out["depth"].append(_r(ingetrazo_core.hlr_solid_depth(ring, b, (0.0, 0.0, 1.0))))
+        out["depth"].append(_r(ingetrazo_core.hlr_solid_depth(ring, b, (0.3, -0.2, 1.0))))
+        out["depth"].append(_r(ingetrazo_core.hlr_solid_depth(ring, tris, (1.0, 0.0, 0.0))))
+        out["depth"].append(_r(ingetrazo_core.hlr_solid_depth(ring + (100, 0, 0), b, (0.0, 0.0, 1.0))))
+        out["depth"].append(_r(ingetrazo_core.hlr_solid_depth(ring[:2], b, (0.0, 0.0, 1.0))))
         rings.append(ring)
-        out["ring"].append(_r(list(hlr.cap_ring_edges(rings))))
+        out["ring"].append(_r(list(ingetrazo_core.hlr_cap_ring_edges(rings))))
         # Clips in clip space, straight from the view.
         m = cam.projection_matrix() * cam.view_matrix()
         M = np.array(m.data(), dtype=np.float64).reshape(4, 4, order="F")
         C = np.concatenate([tris.reshape(-1, 3), np.ones((len(tris) * 3, 1))], axis=1) @ M.T
-        out["clip_t"].append(_r(hlr._clip_triangles(C.reshape(-1, 3, 4))))
+        out["clip_t"].append(_r(ingetrazo_core.hlr_clip_triangles(C.reshape(-1, 3, 4))))
         E = np.concatenate([hard.reshape(-1, 3), np.ones((len(hard) * 2, 1))], axis=1) @ M.T
         E = E.reshape(-1, 2, 4)
-        out["clip_s"].append(_r(list(hlr._clip_segments(E[:, 0], E[:, 1]))))
+        out["clip_s"].append(_r(list(ingetrazo_core.hlr_clip_segments(E[:, 0], E[:, 1]))))
         out["persp"].append(_r(hlr.hlr_perspective(_Scene(plane), cam,
                                                    geometry=(tris, hard, soft, soft_n))))
-    out["ring"].append(_r(list(hlr.cap_ring_edges([]))))
-    out["clip_t"].append(_r(hlr._clip_triangles(np.zeros((0, 3, 4)))))
-    out["depth"].append(_r(hlr.solid_depth(np.zeros((4, 3)), np.zeros((0, 3, 3)), (0, 0, 1))))
+    out["ring"].append(_r(list(ingetrazo_core.hlr_cap_ring_edges([]))))
+    out["clip_t"].append(_r(ingetrazo_core.hlr_clip_triangles(np.zeros((0, 3, 4)))))
+    out["depth"].append(_r(ingetrazo_core.hlr_solid_depth(np.zeros((4, 3)), np.zeros((0, 3, 3)), (0, 0, 1))))
     return out
 
 

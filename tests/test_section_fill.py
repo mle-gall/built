@@ -9,11 +9,12 @@ chords the plane takes out of the triangles, chained into closed rings,
 holes left open. Every model here is generated."""
 from __future__ import annotations
 
+import ingetrazo_core
 import numpy as np
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
-from core.section import cut_chords, fill_triangles
+from core.section import fill_triangles
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 _QUADS = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6),
@@ -34,7 +35,7 @@ def _cut(meshes, z=1.0, normal=UP):
     a = np.array([[t[0].x(), t[0].y(), t[0].z()] for t in tris])
     b = np.array([[t[1].x(), t[1].y(), t[1].z()] for t in tris])
     c = np.array([[t[2].x(), t[2].y(), t[2].z()] for t in tris])
-    chords = cut_chords(a, b - a, c - a, normal, QVector3D(0, 0, z))
+    chords = ingetrazo_core.section_cut_chords(a, b - a, c - a, normal, QVector3D(0, 0, z))
     return chords, fill_triangles(chords, normal)
 
 
@@ -131,7 +132,7 @@ def test_a_box_cut_on_a_slant_fills_in_its_own_plane():
     a = np.array([[t[0].x(), t[0].y(), t[0].z()] for t in tris])
     b = np.array([[t[1].x(), t[1].y(), t[1].z()] for t in tris])
     c = np.array([[t[2].x(), t[2].y(), t[2].z()] for t in tris])
-    chords = cut_chords(a, b - a, c - a, n, QVector3D(1, 1, 0.9))
+    chords = ingetrazo_core.section_cut_chords(a, b - a, c - a, n, QVector3D(1, 1, 0.9))
     fill = fill_triangles(chords, n)
     d = fill.reshape(-1, 3).astype(np.float64) @ np.array(
         [n.x(), n.y(), n.z()]) - np.dot([n.x(), n.y(), n.z()], [1, 1, 0.9])

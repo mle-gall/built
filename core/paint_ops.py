@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Paint History commands shared by the bucket and protocol."""
+import ingetrazo_core
 from core.history import (
     CompoundCommand,
     SetFaceBackCommand,
@@ -40,8 +41,8 @@ def _surface_commands(mesh, faces, seed, tex, plane) -> list | None:
     from ingetrazo_core import texture_continuous_maps as continuous_maps
     look = tex
     if tex.get("uvw") and (plane is None or not _same_plane(seed, plane)):
-        from core.texture import flattened_texture
-        look = flattened_texture(tex, plane[0] if plane else None)
+        import ingetrazo_core
+        look = ingetrazo_core.texture_flattened(tex, plane[0] if plane else None)
     maps = continuous_maps(mesh, faces, seed, look)
     if len(maps) < 2:
         return None
@@ -70,8 +71,8 @@ def _texture_commands(faces, tex, plane) -> list:
     if same:
         cmds.append(SetFaceTextureCommand(same, tex))
     if other:
-        from core.texture import flattened_texture
-        cmds.append(SetFaceTextureCommand(other, flattened_texture(tex, plane[0])))
+        import ingetrazo_core
+        cmds.append(SetFaceTextureCommand(other, ingetrazo_core.texture_flattened(tex, plane[0])))
     return cmds
 
 
@@ -84,8 +85,8 @@ def paint_stamp(color, texture, opacity, material, plane=None, face=None):
         if face is None:
             tex.pop("uvw", None)
         elif tex.get("uvw") and (plane is None or not _same_plane(face, plane)):
-            from core.texture import flattened_texture
-            tex = flattened_texture(tex, plane[0] if plane else None)
+            import ingetrazo_core
+            tex = ingetrazo_core.texture_flattened(tex, plane[0] if plane else None)
         stamp = {"texture": tex}
     if opacity is not None:
         stamp["opacity"] = float(opacity)

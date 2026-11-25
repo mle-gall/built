@@ -2,6 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """The composer's sacred math: paper mm × scale → metres of model, and the
 camera settings that realise it (docs/composer-plan.md)."""
+import ingetrazo_core
 import math
 
 import pytest
@@ -481,13 +482,13 @@ class TestHLRScene:
         # return_world: every world endpoint must re-project EXACTLY onto
         # its 2D segment — the invariant dimension anchoring relies on.
         import numpy as np
-        from core.hlr import _to_cam, camera_basis
+        import ingetrazo_core
         segs2, world = hlr_view(scene, cam, return_world=True)
         assert segs2.shape[0] == world.shape[0]
-        eye, right, up, fwd = camera_basis(cam)
+        eye, right, up, fwd = ingetrazo_core.hlr_camera_basis(cam)
         for (x0, y0, x1, y1), (w0, w1) in zip(segs2, world):
-            c0 = _to_cam(np.asarray([w0]), eye, right, up, fwd)[0]
-            c1 = _to_cam(np.asarray([w1]), eye, right, up, fwd)[0]
+            c0 = ingetrazo_core.hlr_to_cam(np.asarray([w0]), eye, right, up, fwd)[0]
+            c1 = ingetrazo_core.hlr_to_cam(np.asarray([w1]), eye, right, up, fwd)[0]
             assert (c0[0], c0[1]) == pytest.approx((x0, y0), abs=1e-9)
             assert (c1[0], c1[1]) == pytest.approx((x1, y1), abs=1e-9)
         # and the roof's world Z is the roof's height (only real segments —

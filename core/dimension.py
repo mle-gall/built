@@ -40,7 +40,6 @@ import ingetrazo_core as _NATIVE
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 
-
 #: Holds an endpoint remembers (see Dimension._live).
 _MAX_HOLDS = 8
 
@@ -197,7 +196,6 @@ def _chain_to(root, target) -> tuple:
 #: frame, the value, the squared offset, the line's ends, what the cursor
 #: asks for) is ``rust/ingetrazo_core/src/model/dimension_frame.rs``.
 _AXES = ("x", "y", "z")
-_linear_frame = _NATIVE.dimension_linear_frame
 
 
 @record_fields('_a', '_b', 'offset', 'axis', 'layer', 'text', 'anchor_a', 'anchor_b', '_holds',

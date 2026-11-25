@@ -1,12 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Host bindings for the Rust .skp reader and classic model provider."""
+import ingetrazo_core
 from collections import OrderedDict
 
-from core.texture import (
-    colorize_image as _colorize_image, image_has_cutout as _image_has_cutout,
-    hls_to_rgb as _hls_to_rgb, rgb_to_hls as _rgb_to_hls,
-    projection_basis as _plane_basis,
-)
+from core.texture import (colorize_image as _colorize_image, image_has_cutout as _image_has_cutout, projection_basis as _plane_basis)
 from formats.skp_consumption import (
     SoftSegments, _GeometryCache, _geometry_cache, _remember_geometry,
 )

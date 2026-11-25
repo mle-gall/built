@@ -1,4 +1,5 @@
 """Synthetic regressions for independent folder visibility and stable tag rows."""
+import ingetrazo_core
 import json
 
 from tests.test_project_drawing_filters import Project
@@ -24,20 +25,20 @@ def test_independent_flags_and_every_undo_redo():
     states = []
     for names, folders, on in [([], ['parent'], False), (['A'], [], False),
                                 ([], ['parent'], True)]:
-        states.append(L.layer_state(scene))
+        states.append(ingetrazo_core.tag_edits.layer_state(scene))
         commands.set_tag_state(history, tags=[scene.layer(n).key for n in names],
                                folders=folders, visible=on)
         assert history.last_error is None
     assert not scene.layer('A').visible
     assert not L.effective_visible(scene, scene.layer('A'))
     assert L.effective_visible(scene, scene.layer('B'))
-    final = L.layer_state(scene)
+    final = ingetrazo_core.tag_edits.layer_state(scene)
     for state in reversed(states):
         assert history.undo()
-        assert L.layer_state(scene) == state
+        assert ingetrazo_core.tag_edits.layer_state(scene) == state
     for _ in states:
         assert history.redo()
-    assert L.layer_state(scene) == final
+    assert ingetrazo_core.tag_edits.layer_state(scene) == final
 
 
 def test_expand_collapse_reuses_the_document_projection():

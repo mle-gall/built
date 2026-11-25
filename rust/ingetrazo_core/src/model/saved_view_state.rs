@@ -153,7 +153,7 @@ fn saved_view_take_camera(view: &Bound<'_, PyAny>, camera: &Bound<'_, PyAny>) ->
 #[pyo3(signature = (view, scene, camera, style=None))]
 fn saved_view_recapture(py: Python<'_>, view: &Bound<'_, PyAny>, scene: &Bound<'_, PyAny>, camera: &Bound<'_, PyAny>,
                         style: Option<Bound<'_, PyAny>>) -> PyResult<()> {
-    let cls = py.import("core.saved_views")?.getattr("SavedView")?;
+    let cls = super::module(py, "core.saved_views")?.getattr("SavedView")?;
     let fresh = saved_view_capture(py, &cls, &view.getattr("name")?, scene, camera, style)?;
     fresh.setattr("folder", view.getattr("folder")?)?;
     for field in view.getattr("_record_fields")?.try_iter()? {
@@ -166,7 +166,7 @@ fn saved_view_recapture(py: Python<'_>, view: &Bound<'_, PyAny>, scene: &Bound<'
 /// `SavedView.apply_camera(camera)`: the camera, lens included.
 #[pyfunction]
 fn saved_view_apply_camera(py: Python<'_>, view: &Bound<'_, PyAny>, camera: &Bound<'_, PyAny>) -> PyResult<()> {
-    let point = py.import("core.camera_point")?.getattr("CameraPoint")?;
+    let point = super::module(py, "core.camera_point")?.getattr("CameraPoint")?;
     camera.setattr("target", point.call1((view.getattr("target")?,))?)?;
     for a in ["distance", "yaw", "pitch", "fov_deg", "perspective", "two_point"] {
         camera.setattr(a, view.getattr(a)?)?;
@@ -181,7 +181,7 @@ fn saved_view_apply_camera(py: Python<'_>, view: &Bound<'_, PyAny>, camera: &Bou
 /// `scene.shadows` in place (the panel, menu and viewport hold that one).
 #[pyfunction]
 fn saved_view_apply_shadows(py: Python<'_>, scene: &Bound<'_, PyAny>, raw: &Bound<'_, PyAny>) -> PyResult<()> {
-    let fresh = py.import("core.sun")?.getattr("ShadowSettings")?.call_method1("from_dict", (raw,))?;
+    let fresh = super::module(py, "core.sun")?.getattr("ShadowSettings")?.call_method1("from_dict", (raw,))?;
     scene.getattr("shadows")?.getattr("__dict__")?.call_method1("update", (fresh.getattr("__dict__")?,))?;
     Ok(())
 }
@@ -200,7 +200,7 @@ fn saved_view_apply_state(py: Python<'_>, view: &Bound<'_, PyAny>, scene: &Bound
     let folders = view.getattr("hidden_folders")?;
     if !folders.is_none() {
         let off = PySet::new(py, folders.try_iter()?.collect::<PyResult<Vec<_>>>()?)?;
-        let all = py.import("core.layers")?.getattr("folders_of")?.call1((scene,))?;
+        let all = super::module(py, "core.layers")?.getattr("folders_of")?.call1((scene,))?;
         let vis = PyDict::new(py);
         for f in all.try_iter()? {
             let f = f?;
@@ -211,7 +211,7 @@ fn saved_view_apply_state(py: Python<'_>, view: &Bound<'_, PyAny>, scene: &Bound
     }
     let style = view.getattr("style")?;
     if style.is_truthy()? {
-        let style = py.import("core.style")?.getattr("Style")?.call_method1("from_dict", (style,))?;
+        let style = super::module(py, "core.style")?.getattr("Style")?.call_method1("from_dict", (style,))?;
         match put_style.filter(|p| !p.is_none()) {
             Some(put) => {
                 put.call1((style,))?;
@@ -273,7 +273,7 @@ fn saved_view_apply(py: Python<'_>, view: &Bound<'_, PyAny>, scene: &Bound<'_, P
 }
 
 fn sorted_items<'py>(py: Python<'py>, d: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
-    let items = py.import("builtins")?.getattr("sorted")?.call1((d.call_method0("items")?,))?;
+    let items = super::module(py, "builtins")?.getattr("sorted")?.call1((d.call_method0("items")?,))?;
     PyTuple::new(py, items.try_iter()?.collect::<PyResult<Vec<_>>>()?)
 }
 
@@ -292,7 +292,7 @@ fn saved_view_shown_state<'py>(py: Python<'py>, scene: &Bound<'py, PyAny>) -> Py
         .map(|ly| { let ly = ly?; Ok(PyTuple::new(py, [ly.getattr("key")?, ly.getattr("visible")?])?) })
         .collect::<PyResult<Vec<_>>>()?;
     let mut hidden = hidden_uids(scene, true)?;
-    let sorted = py.import("builtins")?.getattr("sorted")?.call1((PyList::new(py, hidden.drain(..))?,))?;
+    let sorted = super::module(py, "builtins")?.getattr("sorted")?.call1((PyList::new(py, hidden.drain(..))?,))?;
     PyTuple::new(py, [
         PyTuple::new(py, layers)?.into_any(),
         sorted_items(py, &attr_or(scene, "folder_visibility", PyDict::new(py).into_any())?)?.into_any(),
@@ -312,7 +312,7 @@ fn saved_view_shown_state<'py>(py: Python<'py>, scene: &Bound<'py, PyAny>) -> Py
 /// recalls a scene for a moment.
 #[pyfunction]
 fn saved_view_visibility_sig<'py>(py: Python<'py>, scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
-    let effective = py.import("core.layers")?.getattr("effective_visible")?;
+    let effective = super::module(py, "core.layers")?.getattr("effective_visible")?;
     let allowed = attr_or(scene, "_navigator_allowed", none(py))?;
     let layers = scene.getattr("layers")?.try_iter()?
         .map(|ly| { let ly = ly?; Ok(PyTuple::new(py, [ly.getattr("key")?, effective.call1((scene, &ly))?])?) })

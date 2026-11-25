@@ -2,12 +2,13 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """The native colourize pass (``texture_colorize_pixels``, which replaced the
 tiled NumPy one) matches the original full-image encoded output."""
+import ingetrazo_core
 import numpy as np
 import pytest
 from ingetrazo_render import SurveyRaster
 
 from core import texture
-from core.texture import rgb_to_hls, hls_to_rgb, COLORIZE_SHIFT
+from core.texture import COLORIZE_SHIFT
 
 
 # Frozen full-image oracle: preserve the exact global reduction and pixel math.
@@ -31,10 +32,10 @@ def _whole_image_colorize(data, target_rgb, ctype=COLORIZE_SHIFT):
         alpha = px[..., 3]
         vis = alpha > 0
         avg = rgb[vis].mean(axis=0) if vis.any() else rgb.mean(axis=(0, 1))
-        h0, l0, s0 = rgb_to_hls(avg.reshape(1, 3))
-        ht, lt, st = rgb_to_hls(
+        h0, l0, s0 = ingetrazo_core.texture_rgb_to_hls(avg.reshape(1, 3))
+        ht, lt, st = ingetrazo_core.texture_rgb_to_hls(
             np.array([[c / 255.0 for c in target_rgb[:3]]]))
-        hue, lum, sat = rgb_to_hls(rgb)
+        hue, lum, sat = ingetrazo_core.texture_rgb_to_hls(rgb)
         if ctype == 1:
             hue = np.full_like(hue, float(ht[0]))
             sat = np.full_like(sat, float(st[0]))
@@ -42,7 +43,7 @@ def _whole_image_colorize(data, target_rgb, ctype=COLORIZE_SHIFT):
             hue = (hue + (float(ht[0]) - float(h0[0]))) % 1.0
             sat = np.clip(sat + (float(st[0]) - float(s0[0])), 0.0, 1.0)
         lum = np.clip(lum + (float(lt[0]) - float(l0[0])), 0.0, 1.0)
-        out = np.clip(hls_to_rgb(hue, lum, sat) * 255.0 + 0.5,
+        out = np.clip(ingetrazo_core.texture_hls_to_rgb(hue, lum, sat) * 255.0 + 0.5,
                       0, 255).astype(np.uint8)
         result = np.dstack([out, alpha])
         return SurveyRaster(w, h, result.tobytes()).material_png(data)

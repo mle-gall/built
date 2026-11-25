@@ -7,6 +7,7 @@ degenerate case; in the parallel camera that showed every vertical edge
 as a short line."""
 from __future__ import annotations
 
+import ingetrazo_core
 import math
 
 
@@ -53,10 +54,10 @@ def test_the_screen_keeps_its_orientation_from_the_89_degree_days():
 def test_the_camera_bases_do_not_degenerate():
     """camera_basis (hidden-line pass, sheets) and the view rotation read
     the same effective up: right and up stay unit vectors at the pole."""
-    from core.hlr import camera_basis
+    import ingetrazo_core
     for view in ("top", "bottom"):
         c = _camera(view)
-        _eye, right, up, fwd = camera_basis(c)
+        _eye, right, up, fwd = ingetrazo_core.hlr_camera_basis(c)
         assert abs(float((right ** 2).sum()) - 1.0) < 1e-9
         assert abs(float((up ** 2).sum()) - 1.0) < 1e-9
         assert abs(float((right * fwd).sum())) < 1e-9

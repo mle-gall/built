@@ -10,6 +10,7 @@ unknown key raises ``KeyError`` before anything runs. The answer is
 (a :class:`core.protocol.feed.Step`) or None when nothing happened."""
 from __future__ import annotations
 
+import ingetrazo_core
 from core.history import Command
 from core.protocol.records import patch_record_field, set_filing_rule
 from core.protocol.keys import elements, from_json_key, store_of
@@ -1316,25 +1317,25 @@ class SetTagStateCommand(Command):
     def do(self, scene):
         from copy import deepcopy
         from core import layers as L, links
-        self.before = L.layer_state(scene)
+        self.before = ingetrazo_core.tag_edits.layer_state(scene)
         self.links_before = deepcopy({k: e.get("overrides") for k, e in links.registry_view(scene).items()
                                       if isinstance(e, dict)})
         if self.visible is not None:
             for key in self.folders:
                 scene.folder_visibility[key] = bool(self.visible)
-            L.set_visible(scene, self.tags, self.visible)
+            ingetrazo_core.tag_edits.set_visible(scene, self.tags, self.visible)
             for key in self.tags:
                 links.note_visibility(scene, key, bool(self.visible))
             for entity in list(scene.selection):
                 if not scene.entity_visible(entity):
                     scene.selection.discard(entity)
         if self.locked is not None:
-            L.set_locked(scene, self.tags, self.locked)
+            ingetrazo_core.tag_edits.set_locked(scene, self.tags, self.locked)
         scene.version += 1
 
     def undo(self, scene):
         from core import layers as L, links
-        L.apply_layer_state(scene, self.before)
+        ingetrazo_core.tag_edits.apply_layer_state(scene, self.before)
         for key, entry in links.registry_view(scene).items():
             if isinstance(entry, dict) and key in self.links_before:
                 entry["overrides"] = dict(self.links_before[key] or {})

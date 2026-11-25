@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Clipboard History operations shared by both viewports and the agent protocol."""
+import ingetrazo_core
 from ingetrazo_core import Vec3 as QVector3D
 from core.mesh import element_identity
 from core.group import copy_group, translated_attrs
@@ -46,8 +47,8 @@ def stamp_clipboard(history, clip, off):
     scene = history.scene
     from core.ifc_identity import copied_face_attrs
     copy_attrs = copied_face_attrs(scene)
-    from core.layers import template_name_map
-    names = template_name_map(scene, clip.get("layers") or {})
+    import ingetrazo_core
+    names = ingetrazo_core.tag_edits.template_name_map(scene, clip.get("layers") or {})
 
     from core.links import _renamed_paint, restamp_materials
     from core.materials import register

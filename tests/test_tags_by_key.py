@@ -11,6 +11,7 @@ with, stable), and the name is only what the panels show: free to repeat
 from __future__ import annotations
 
 
+import ingetrazo_core
 from ingetrazo_core import Vec3 as QVector3D
 
 
@@ -56,7 +57,7 @@ def test_labels_repeat_and_entities_keep_their_key():
 
 def test_hiding_one_beams_tag_leaves_the_other_shown():
     scene, a, b, *_ = _two_parts()
-    L.set_visible(scene, [a.layer], False)
+    ingetrazo_core.tag_edits.set_visible(scene, [a.layer], False)
     assert not scene._layer_state(a)[0] and scene._layer_state(b)[0]
 
 

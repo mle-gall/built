@@ -234,7 +234,6 @@ VERTICAL_TOLERANCE = 1e-3
 # positions, sw, sh, rot=0.0)``: .skp-style planar ``(u, v)`` of world points,
 # scaled by the tile size (``sw``/``sh`` near 0 count as 1).
 projection_basis = _NATIVE.texture_projection_basis
-projection_axes = _NATIVE.texture_projection_axes
 planar_uv = _NATIVE.texture_planar_uv
 
 
@@ -256,20 +255,6 @@ planar_uv = _NATIVE.texture_planar_uv
 fit_uv_affine = _NATIVE.texture_fit_uv_affine
 affine_uv = _NATIVE.texture_affine_uv
 face_uv_axes = _NATIVE.texture_face_uv_axes
-placement_of = _NATIVE.texture_placement_of
-
-
-#: ``flattened_texture(tex, normal=None)``: ``tex`` without its per-face map,
-#: keeping the look it had on the plane of ``normal`` as a planar projection
-#: (``sw``/``sh``/``rot`` from :func:`placement_of`).
-flattened_texture = _NATIVE.texture_flattened
-
-
-#: ``uv_reference_points(points, normal=None)``: three points on the face's
-#: plane forming a right-angled triad sized to the face, for pinning an affine
-#: UV map (NOT face vertices: a long thin face's corners are nearly collinear,
-#: and a map fitted through that sliver came back rotated), or ``None``.
-uv_reference_points = _NATIVE.texture_uv_reference_points
 
 
 # ---- Colourize (tinted .skp materials) -----------------------------------
@@ -286,12 +271,6 @@ uv_reference_points = _NATIVE.texture_uv_reference_points
 
 COLORIZE_SHIFT = 0
 COLORIZE_TINT = 1
-
-
-#: Vectorized ``colorsys.rgb_to_hls`` over an (..., 3) array in 0..1, and
-#: ``hls_to_rgb(hue, lum, sat)`` back to (..., 3).
-rgb_to_hls = _NATIVE.texture_rgb_to_hls
-hls_to_rgb = _NATIVE.texture_hls_to_rgb
 
 
 def colorize_image(data, target_rgb, ctype=COLORIZE_SHIFT):

@@ -17,6 +17,8 @@ implementation: ``python tests/test_tag_edits_parity.py --write``."""
 from __future__ import annotations
 
 import gzip
+
+import ingetrazo_core
 import json
 import random
 import sys
@@ -133,21 +135,21 @@ def run(L, seed):
             elif op == 3 and len(folders) > 2:
                 step("remove", L.remove_folder(s, rng.choice(folders[:-2])))
             elif op == 4:
-                step("file", L.move_to_folder(s, [_pick(rng, s), _pick(rng, s)], rng.choice(folders)))
+                step("file", ingetrazo_core.tag_edits.move_to_folder(s, [_pick(rng, s), _pick(rng, s)], rng.choice(folders)))
             elif op == 5:
-                step("vis", L.set_visible(s, [_pick(rng, s)], rng.random() < 0.5))
+                step("vis", ingetrazo_core.tag_edits.set_visible(s, [_pick(rng, s)], rng.random() < 0.5))
             elif op == 6:
-                step("lock", L.set_locked(s, [_pick(rng, s)], rng.random() < 0.5))
+                step("lock", ingetrazo_core.tag_edits.set_locked(s, [_pick(rng, s)], rng.random() < 0.5))
             elif op == 7:
                 step("isolate", L.isolate(s, [_pick(rng, s)]))
             elif op == 8:
-                step("isolated", [L.is_isolated(s, ly.key) for ly in s.layers])
+                step("isolated", [ingetrazo_core.tag_edits.is_isolated(s, ly.key) for ly in s.layers])
             elif op == 9:
                 step("active", L.set_active(s, _pick(rng, s)))
             elif op == 10:
-                st = L.layer_state(s)
-                L.set_visible(s, [ly.key for ly in s.layers], False)
-                L.apply_layer_state(s, st)
+                st = ingetrazo_core.tag_edits.layer_state(s)
+                ingetrazo_core.tag_edits.set_visible(s, [ly.key for ly in s.layers], False)
+                ingetrazo_core.tag_edits.apply_layer_state(s, st)
                 step("state", st)
             elif op == 11:
                 step("scenes", L.hide_in_scenes(s, [_pick(rng, s)], rng.random() < 0.7))
@@ -157,22 +159,22 @@ def run(L, seed):
                 step("template_for", L.template_for(s, [_pick(rng, s), _pick(rng, s)]))
             elif op == 14:
                 t = L.template_of(other)
-                step("matched", L.matched_template(s, t))
-                step("name_map", L.template_name_map(s, t))
+                step("matched", ingetrazo_core.tag_edits.matched_template(s, t))
+                step("name_map", ingetrazo_core.tag_edits.template_name_map(s, t))
             elif op == 15:
                 step("apply", L.apply_template(s, L.template_of(other)))
             elif op == 16:
                 added = L.add_missing(s, L.template_for(other, [ly.key for ly in other.layers]))
                 step("add_missing", added)
                 if rng.random() < 0.6:
-                    step("remove_added", L.remove_added(s, *added))
+                    step("remove_added", ingetrazo_core.tag_edits.remove_added(s, *added))
             elif op == 17:
                 step("line_types", L.load_line_types(s, rng.choice((
                     None, {"a": {"pattern": [1, -1]}, "": {}, "b": {"label": 3, "pattern": "x"},
                            "c" * 70: {"label": "L" * 200, "pattern": [2, -1, 0, -1],
                                       "color": [1, 0, 0]}}))))
             elif op == 18:
-                step("labels", [L.path_label(s, _pick(rng, s)), L.layer_label(s, _pick(rng, s)),
+                step("labels", [L.path_label(s, _pick(rng, s)), ingetrazo_core.tag_edits.layer_label(s, _pick(rng, s)),
                                 L.export_labels(s), [L.folder_label(s, f) for f in folders],
                                 [L.folder_visible(s, f) for f in folders],
                                 [L.effective_visible(s, ly) for ly in s.layers],

@@ -8,6 +8,7 @@ the dialog's choices or the paper size redraws the preview at once, and
 the export that follows reuses what the preview already computed."""
 from __future__ import annotations
 
+import ingetrazo_core
 from contextlib import ExitStack, contextmanager
 
 from core.mesh import element_identity
@@ -164,13 +165,13 @@ def framed(camera, frame):
 
     from ingetrazo_core import Vec3 as QVector3D
 
-    from core.hlr import camera_basis
+    import ingetrazo_core
     from core.vista_caras import view_rect
     pan_x, pan_y, zoom = frame
     keep = (QVector3D(camera.target), camera.distance, camera.fov_deg)
     try:
         x0, y0, x1, y1 = view_rect(camera)
-        _eye, right, up, _fwd = camera_basis(camera)
+        _eye, right, up, _fwd = ingetrazo_core.hlr_camera_basis(camera)
         shift = right * (pan_x * (x1 - x0)) + up * (pan_y * (y1 - y0))
         camera.target = camera.target + QVector3D(*map(float, shift))
         zoom = max(float(zoom), 1e-3)
@@ -413,12 +414,12 @@ def view_line_groups(vp, fast: bool = True) -> list:
     if len(vp.scene.layers) > 1:
         # With layers, each one as a layer of its own, with its
         # colour and line type — as the composer's export.
-        from core.layers import line_styles
+        import ingetrazo_core
         from formats.dxf_views import dxf_groups_by_layer
         d = hlr_drawing(vp.scene, vp.camera, layers=True,
                         geometry=vp.hlr_geometry(tags=True) if fast
                         else None)
-        d.styles = line_styles(vp.scene, True)
+        d.styles = ingetrazo_core.tag_styles.line_styles(vp.scene, True)
         return dxf_groups_by_layer(d, "VISTA", hidden_lines=False)
     d = hlr_drawing(vp.scene, vp.camera, geometry=geometry)
     k = d.kinds

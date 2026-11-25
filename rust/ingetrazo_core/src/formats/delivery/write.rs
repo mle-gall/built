@@ -131,7 +131,7 @@ impl<'p> View<'p> {
             kw.set_item("layers", true)?;
             let draw = hlr.call_method("hlr_drawing", (model, cam), Some(&kw))?;
             let layers = py.import("core.layers")?;
-            draw.setattr("styles", layers.call_method1("line_styles", (model, true))?)?;
+            draw.setattr("styles", crate::model::tag_styles::line_styles(py, model, true)?)?;
             draw.setattr("labels", layers.call_method1("export_labels", (model,))?)?;
             let ls = model.getattr("layers")?;
             if !svg && ls.len()? == 1 {

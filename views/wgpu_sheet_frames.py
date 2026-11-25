@@ -14,6 +14,7 @@ the style payload gets the frame's values. The composer's
 """
 from __future__ import annotations
 
+import ingetrazo_core
 from copy import copy
 
 import numpy as np
@@ -284,9 +285,7 @@ def drawing(source, frame):
     has a hatch, each ring's look (colour, pattern, ground, ink, form) as
     the composer's ``compute_hlr`` gave them. None when its view is gone."""
     from core.composition import model_height_for_frame
-    from core.layers import (LINETYPES, cut_fill_colours, cut_hatch_forms, cut_hatch_grounds,
-                             cut_hatch_inks, cut_hatches, grain_layers, layer_lines_wanted,
-                             line_styles, section_cut_kind)
+    from core.layers import LINETYPES, cut_hatch_forms, cut_hatches, grain_layers, section_cut_kind
     scene = source.scene
     view = saved_view(scene, frame)
     if view is False:
@@ -296,7 +295,7 @@ def drawing(source, frame):
     filled = (getattr(frame, "cut_fill", "solid") or "solid") != "none"
     fill_by_layer = bool(getattr(frame, "cut_fill_by_layer", False)) and filled
     hatches = cut_hatches(facade) if filled else {}
-    by_layer = layer_lines_wanted(facade) or coloured or fill_by_layer or bool(hatches)
+    by_layer = ingetrazo_core.tag_styles.layer_lines_wanted(facade) or coloured or fill_by_layer or bool(hatches)
     extra = {"depth_layers": grain_layers(facade)} if by_layer else {}
     got = _hlr(source, frame, tags=by_layer, profiles=bool(getattr(frame, "profiles", True)), fills=filled,
                hidden=bool(getattr(frame, "hidden_lines", False)), **extra)
@@ -308,14 +307,14 @@ def drawing(source, frame):
            "fills": [to_mm(np.asarray(ring, float).reshape(-1, 2)) for ring in d.loops]}
     if d.layers is not None:
         style = getattr(facade, "display_style", None)
-        looks = line_styles(facade, coloured or bool(getattr(style, "color_by_layer", False)))
+        looks = ingetrazo_core.tag_styles.line_styles(facade, coloured or bool(getattr(style, "color_by_layer", False)))
         out["tags"] = [str(t) for t in d.layers]
         out["styles"] = {tag: (st[0], st[2], st[3], list(st[4] if st[4] is not None else LINETYPES.get(st[1], ())),
                                st[5] if len(st) > 5 else None)
                          for tag, st in looks.items()}
     if (fill_by_layer or hatches) and d.loop_layers is not None:
-        table = cut_fill_colours(facade) if fill_by_layer else {}
-        grounds, inks = cut_hatch_grounds(facade), cut_hatch_inks(facade)
+        table = ingetrazo_core.tag_styles.cut_fill_colours(facade) if fill_by_layer else {}
+        grounds, inks = ingetrazo_core.tag_styles.cut_hatch_grounds(facade), ingetrazo_core.tag_styles.cut_hatch_inks(facade)
         cut = section_cut_kind(facade)
         forms = {tag: dict(f, cut=cut) for tag, f in cut_hatch_forms(facade, float(frame.scale_n or 100.0)).items()}
         k = frame.h_mm / model_height_for_frame(frame.h_mm, frame.scale_n)
@@ -363,7 +362,7 @@ def circles(source, frame):
     ``(cx, cy, r)`` mm (the composer's ``frame_circles``): what the radius
     tool takes from one click on the arc. The model's circles are collected
     once per model version (core.hlr.collect_circles)."""
-    from core.hlr import _to_cam, camera_basis, collect_circles
+    from core.hlr import collect_circles
     if getattr(frame, "perspective", False):
         return np.empty((0, 3))
     scene = source.scene
@@ -374,14 +373,14 @@ def circles(source, frame):
     if view is False:
         return np.empty((0, 3))
     camera = frame_camera(source.camera, frame, view, scene)
-    eye, right, up, fwd = camera_basis(camera)
+    eye, right, up, fwd = ingetrazo_core.hlr_camera_basis(camera)
     got = _hlr_to_mm(frame)
     out = []
     for c, r, n in _CIRCLES["circles"]:
         if abs(n.x() * fwd[0] + n.y() * fwd[1] + n.z() * fwd[2]) < 0.9995:
             continue                                  # seen at a slant
         c3 = np.array([c.x(), c.y(), c.z()], float)
-        cam = _to_cam(np.stack([c3, c3 + right * r]), eye, right, up, fwd)[:, :2]
+        cam = ingetrazo_core.hlr_to_cam(np.stack([c3, c3 + right * r]), eye, right, up, fwd)[:, :2]
         (px, py), (qx, qy) = got(cam)
         out.append((frame.x_mm + px, frame.y_mm + py, float(np.hypot(qx - px, qy - py))))
     return np.array(out, float).reshape(-1, 3)
@@ -488,20 +487,20 @@ def _line_groups(source, frame):
     its view is gone."""
     from core.composition import frame_view_name
     from core.hlr import hlr_drawing
-    from core.layers import export_labels, layer_lines_wanted, line_styles
+    from core.layers import export_labels
     from formats.dxf_views import dxf_groups_by_class, dxf_groups_by_layer
     got = _frame_pass(source, frame, True)
     if got is None:
         return None
     facade, camera, geometry = got
     hidden = bool(getattr(frame, "hidden_lines", False))
-    by_layer = layer_lines_wanted(facade) or len(getattr(facade, "layers", ())) > 1
+    by_layer = ingetrazo_core.tag_styles.layer_lines_wanted(facade) or len(getattr(facade, "layers", ())) > 1
     d = hlr_drawing(facade, camera, geometry=geometry if by_layer else geometry[:4], layers=by_layer,
                     profiles=bool(getattr(frame, "profiles", True)), fills=False, hidden=hidden)
     layer = frame_view_name(frame).split(" — ")[0]
     texts = []
     if d.layers is not None:
-        d.styles, d.labels = line_styles(facade, True), export_labels(facade)
+        d.styles, d.labels = ingetrazo_core.tag_styles.line_styles(facade, True), export_labels(facade)
         groups = dxf_groups_by_layer(d, layer, hidden, texts)
     else:
         groups = dxf_groups_by_class(d, layer, hidden)
@@ -645,7 +644,7 @@ def level_at(source, frame, x, y):
     ``frame_level_at``): in an elevation or a horizontal section the page's
     vertical is the model's Z; a plan or an axonometric cannot tell (None)."""
     from core.composition import model_height_for_frame
-    from core.hlr import camera_basis
+    import ingetrazo_core
     if getattr(frame, "perspective", False) or frame.h_mm <= 0:
         return None
     scene = source.scene
@@ -653,7 +652,7 @@ def level_at(source, frame, x, y):
     if view is False:
         return None
     camera = frame_camera(source.camera, frame, view, scene)
-    eye, right, up, fwd = camera_basis(camera)
+    eye, right, up, fwd = ingetrazo_core.hlr_camera_basis(camera)
     if abs(float(fwd[2])) > 1e-3:              # not a horizontal view
         return None
     half_h = model_height_for_frame(frame.h_mm, frame.scale_n) / 2.0
