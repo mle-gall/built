@@ -130,6 +130,7 @@ mod selection_growth;
 mod paint_stroke;
 mod offset_face;
 mod text3d;
+mod blender;
 mod solid_analysis;
 mod soften;
 mod seed_orientation;

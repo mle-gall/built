@@ -149,7 +149,6 @@ hiddenimports += [
     'core.ai_recipes',
     'core.bim',
     # Render with Blender (#181): the plugin's logic and the GLB it sends.
-    'core.render_blender',
     'formats.gltf',
     'tools.place_group',
     'tools.paste',
