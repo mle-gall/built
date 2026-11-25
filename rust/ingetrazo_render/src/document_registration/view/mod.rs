@@ -86,7 +86,9 @@ fn register_view_class(cls: &Obj) -> PyResult<()> {
             document_controller::DOCUMENT_CONTROLLER
         }
         ("views.document_controller", "QtViewHost") => document_controller::QT_VIEW_HOST,
-        ("views.view_navigation", "ViewNavigation") => view_navigation::VIEW_NAVIGATION,
+        ("views.view_navigation", "ViewNavigation") => {
+            return view_navigation::register(cls, &cls.py().import(module)?)
+        }
         ("views.view_host", "WidgetShim") => view_host::WIDGET_SHIM,
         ("views.document_interaction", "DocumentInteraction") => {
             document_interaction::DOCUMENT_INTERACTION
