@@ -121,8 +121,8 @@ impl LinkWatch {
             for path in paths.iter().filter(|p| sources.contains(*p)) {
                 dirty = true;
                 if !path.is_file()
-                    || links
-                        .call_method1("is_packed", (&scene, path))?
+                    || crate::host_context::core_module(scene.py())?
+                        .call_method1("link_is_packed", (&scene, path))?
                         .is_truthy()?
                 {
                     continue;
@@ -190,8 +190,8 @@ impl LinkWatch {
             let scene = vp.getattr("scene")?;
             for path in links.call_method1("sources", (&scene,))?.try_iter()? {
                 let path = path?;
-                if !links
-                    .call_method1("is_packed", (&scene, &path))?
+                if !crate::host_context::core_module(scene.py())?
+                    .call_method1("link_is_packed", (&scene, &path))?
                     .is_truthy()?
                 {
                     paths.insert(path.extract::<PathBuf>()?);

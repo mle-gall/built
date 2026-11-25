@@ -98,7 +98,10 @@ def dump(scene):
                     "visibility": dict(scene.folder_visibility),
                     "uids": dict(scene.layer_folder_uids),
                     "names": dict(scene.layer_folder_names)},
-        "plugin_data": scene.plugin_data,
+        # The links registry is a root table of its own; the archived
+        # states recorded it where the file keeps it, in plugin_data.
+        "plugin_data": ({**scene.plugin_data, "links": scene.link_registry}
+                        if scene.__dict__.get("_parity_links") else scene.plugin_data),
         "kept": [group_dump(g) for g in scene.kept_components],
     }, default=lambda o: sorted(o) if isinstance(o, set) else repr(o)))
 
@@ -265,7 +268,8 @@ def structural_steps(steps):
     link = template()
     link.ext = {"link": {"path": "/synthetic/reference.igz"}}
     scene.groups.append(link)
-    scene.plugin_data["links"] = {"/synthetic/reference.igz": {}}
+    scene.link_registry = {"/synthetic/reference.igz": {}}
+    scene.__dict__["_parity_links"] = True
     box(scene.mesh)
     commands = [
         MakeGroupCommand(scene.mesh.faces, [], name="Faces"),

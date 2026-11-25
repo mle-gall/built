@@ -48,8 +48,7 @@ pub(crate) fn replace_definitions<'py>(
         if ext.is_truthy()? && ext.call_method1("get", ("link",))?.is_truthy()? {
             g.setattr(
                 "children",
-                py.import("core.links")?
-                    .call_method1("copy_parts", (source, &g))?,
+                crate::model::links::copy_parts(source, &g)?,
             )?;
         } else {
             let children = PyList::empty(py);
@@ -388,7 +387,6 @@ pub(crate) fn unlink_placements<'py>(
     pairs: &Obj<'py>,
 ) -> PyResult<UnlinkPlan<'py>> {
     let py = scene.py();
-    let links = py.import("core.links")?;
     let names = py.import("core.kept_components")?;
     let mut before = Vec::new();
     let mut after: Vec<Bound<'py, PyDict>> = Vec::new();
@@ -402,9 +400,9 @@ pub(crate) fn unlink_placements<'py>(
     }
     for g in &groups {
         let inner = PyList::empty(py);
-        let copied = links.call_method1("unlinked_copy", (g, pairs, &inner))?;
+        let copied = crate::model::links::unlinked_copy(g, Some(pairs), Some(inner.as_any()))?.into_any();
         nested.push((
-            links.call_method1("link_of", (g,))?.get_item("path")?,
+            crate::model::links::link_of(g)?.expect("a linked placement").get_item("path")?,
             inner,
         ));
         let mut name = g.getattr("name")?;

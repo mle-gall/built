@@ -96,10 +96,7 @@ impl Prepare {
                     attr(g, "xform")?
                 };
                 let placeholder = !xf.is_none()
-                    && py
-                        .import("core.links")?
-                        .call_method1("save_as_placeholder", (g, self.scene.bind(py)))?
-                        .is_truthy()?;
+                    && crate::model::links::save_as_placeholder(g, self.scene.bind(py))?;
                 let m = if placeholder {
                     api(py)?.call_method0("_empty_mesh")?
                 } else {
@@ -167,8 +164,8 @@ impl Prepare {
                 }
                 if self.compat {
                     let links = py.import("core.links")?;
-                    if links.call_method1("link_of", (g,))?.is_truthy()? {
-                        let link = row.get_item("ext")?.get_item(links.getattr("LINK_KEY")?)?;
+                    if crate::model::links::link_of(g)?.is_some() {
+                        let link = row.get_item("ext")?.get_item(crate::model::links::LINK_KEY)?;
                         link.call_method1("pop", ("rel", py.None()))?;
                         link.call_method1(
                             "update",

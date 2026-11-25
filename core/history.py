@@ -678,14 +678,13 @@ class _TagState:
 
     def __init__(self, scene) -> None:
         from copy import deepcopy
-        from core import links
         from core.layers import folders_of, layer_values
         self.layers = list(scene.layers)
         self.attrs = {id(ly): layer_values(ly) for ly in self.layers}
         self.folders = list(folders_of(scene))
         self.maps = {name: dict(getattr(scene, name, None) or {})
                      for name in self._MAPS}
-        self.registry = deepcopy(links.registry(scene))
+        self.registry = deepcopy(scene.link_registry)
         self.cache = dict(scene.__dict__.get("_link_tag_tables") or {})
         self.materials = dict(scene.materials)
         self.active = getattr(scene, "active_layer", None)
@@ -704,7 +703,6 @@ class _TagState:
     def go(self, scene, to: "_TagState") -> None:
         """Change ``scene`` from this state to ``to``."""
         from copy import deepcopy
-        from core import links
         old_ids = {id(ly) for ly in self.layers}
         new_ids = {id(ly) for ly in to.layers}
         scene.layers[:] = [ly for ly in scene.layers
@@ -731,7 +729,7 @@ class _TagState:
         for name, now in maps.items():
             setattr(scene, name, now)
         scene.layer_folders = folders
-        self._sync(links.registry(scene), self.registry, to.registry, deepcopy)
+        self._sync(scene.link_registry, self.registry, to.registry, deepcopy)
         self._sync(scene.__dict__.setdefault("_link_tag_tables", {}),
                    self.cache, to.cache)
         self._sync(scene.materials, self.materials, to.materials)
@@ -740,37 +738,6 @@ class _TagState:
 
 
 _MISSING = object()
-
-
-def _nested_pairs(old, new) -> list:
-    """``(old, new)`` for the parts and meshes of a file linked inside a
-    link just unlinked, now read again as the host's own link (``new``):
-    the part read again for each one ``old`` held. ``old``'s parts came
-    through the outer file, under the uids it gave them — its copy of
-    this file named by ``old.source_uid`` (``links.stable_uid``)."""
-    from core import links
-    from core.purge import iter_groups
-    origin = getattr(old, "source_uid", None)
-    out = []
-    if old.mesh is not None and new.mesh is not None:
-        out.append((old.mesh, new.mesh))
-    if not origin:
-        return out
-    fresh = {}
-    for part in iter_groups(new.children or ()):
-        src = getattr(part, "source_uid", None)
-        if src:
-            fresh[links.stable_uid(origin, src)] = part
-    meshes = {id(old.mesh)}
-    for part in iter_groups(old.children or ()):
-        twin = fresh.get(getattr(part, "source_uid", None))
-        if twin is None:
-            continue
-        out.append((part, twin))
-        if id(part.mesh) not in meshes:
-            meshes.add(id(part.mesh))
-            out.append((part.mesh, twin.mesh))
-    return out
 
 
 def _discard_removed_selection(scene):

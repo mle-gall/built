@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import math
 
+import ingetrazo_core
+
 from core.group import Group
 from core.history import MeshCommand
 from core.mesh import Edge, Face
@@ -25,9 +27,8 @@ from core.mesh import Edge, Face
 def _outside_the_host(group) -> bool:
     """A linked file's parts are edited in their own document, and a
     locked group is not edited at all."""
-    from core import links
     return (getattr(group, "locked", False)
-            or links.linked_ancestor(group) is not None)
+            or ingetrazo_core.link_linked_ancestor(group) is not None)
 
 
 def selected_edges(scene) -> dict:

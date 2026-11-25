@@ -86,7 +86,7 @@ def test_a_host_override_survives_the_source_and_can_be_cleared(tmp_path):
     src = _source(tmp_path / "Site.igz")
     host, _comp = _host_with_link(tmp_path, src)
     host.layer("Site / Wood").visible = False
-    assert links.note_visibility(host, "Site / Wood", False)
+    assert ingetrazo_core.link_note_visibility(host, "Site / Wood", False)
     _source(src, wood_visible=True)
     links.reload(host, src)
     assert host.layer("Site / Wood").visible is False      # host's choice
@@ -96,7 +96,7 @@ def test_a_host_override_survives_the_source_and_can_be_cleared(tmp_path):
     _source(src, wood_visible=False)
     links.reload(host, src)
     assert host.layer("Site / Wood").visible is False
-    assert not links.note_visibility(host, "Layer 0", False)   # host's own
+    assert not ingetrazo_core.link_note_visibility(host, "Layer 0", False)   # host's own
 
 
 def test_any_host_switch_counts_as_an_override(tmp_path):
@@ -112,7 +112,7 @@ def test_any_host_switch_counts_as_an_override(tmp_path):
 def test_packed_keeps_the_geometry_without_the_source(tmp_path):
     src = _source(tmp_path / "Site.igz", faces=2)
     host, _comp = _host_with_link(tmp_path, src)
-    links.set_packed(host, src, True)
+    ingetrazo_core.link_set_packed(host, src, True)
     path = tmp_path / "host.igz"
     igz.save_scene(host, path)
     src.unlink()
@@ -193,8 +193,11 @@ def test_a_deferred_mesh_is_relabelled_without_being_built():
            "edges": np.zeros((3, 2), dtype=np.int32),
            "layers": np.array([0, -1, -1], dtype=np.int32)}
     assert DeferredMesh.defer(mesh, build, 2, src)
-    assert links._relabel_deferred(mesh, lambda n: links.tag_name(
-        "/x/Site.igz", n))
+    from core.group import Group
+    comp = Group(name="Site")
+    part = Group(mesh, name="P")
+    comp.children = [part]
+    ingetrazo_core.link_install_definition(comp, "/x/Site.igz", set(), {})
     assert not built                                  # never built
     new = mesh.__dict__["_deferred_source"]
     table = new["meta"]["face_attrs"]
@@ -250,7 +253,7 @@ def test_reload_prunes_obsolete_mirror_folders(tmp_path, legacy):
     igz.save_scene(source, src)
     host, _ = _host_with_link(tmp_path, src)
     if legacy:
-        links.registry(host)[str(src)].pop("folder_uids")
+        host.link_registry[str(src)].pop("folder_uids")
     host.layer_folders += ["Host", "Host child", "Site / Personal"]
     host.folder_parents.update({"Host child": "Site / Still occupied",
                                 "Site / Personal": "Site"})

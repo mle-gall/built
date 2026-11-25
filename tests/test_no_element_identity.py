@@ -44,7 +44,6 @@ _ALLOWED = {
     ("core/history.py", "_sync"): "tag-state dict values against a sentinel, not elements",
     ("core/ai.py", "_tidy_groups"): "groups",
     ("core/intersect.py", "intersect"): "polygons of two meshes",
-    ("core/links.py", "restamp_materials"): "paint rows: was one copied",
     ("core/outliner.py", "reparent_problem"): "groups",
 }
 

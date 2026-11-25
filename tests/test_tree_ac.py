@@ -9,6 +9,8 @@ top node is merged into its row, nested files sit at the root once each
 and inspector for the current task."""
 from __future__ import annotations
 
+import ingetrazo_core
+
 import os
 import time
 from pathlib import Path
@@ -109,11 +111,11 @@ def test_file_state_reads_without_writing_the_link_registry(ui):
     from core import links
     from core.link_structure import file_state
     scene = ui[0]
-    before = {k: dict(v) for k, v in links.registry(scene).items()}
+    before = {k: dict(v) for k, v in scene.link_registry.items()}
     nested = next(n["path"] for n in ui[2]._ui_tree["nodes"].values() if n.get("via"))
     assert file_state(scene, nested, nested=True) == "resolved"
     assert file_state(scene, "/nowhere/Gone.igz") == "missing"
-    assert {k: dict(v) for k, v in links.registry(scene).items()} == before
+    assert {k: dict(v) for k, v in scene.link_registry.items()} == before
 
 
 def test_a_single_top_node_is_merged_into_its_file_row(ui):
@@ -135,7 +137,7 @@ def test_a_single_top_node_is_merged_into_its_file_row(ui):
 def test_a_file_without_structure_merges_its_single_top_tag_folder(ui):
     from core import bim_registry, link_structure, links
     scene, win, view, rows, act = ui
-    reg = links.registry(scene)
+    reg = scene.link_registry
     path = next(p for p in reg if p.endswith("Show building.igz"))
     saved = reg[path].pop("structure", None)
     try:
@@ -329,7 +331,7 @@ def test_inspector_verbs_follow_the_selection_kind(ui):
     assert selection_kind(scene, faces) == "faces"
     got = _verbs(win, faces)
     assert "Group" in got and "Component" not in got and "File to…" not in got
-    assert isinstance(own, Group) and links.linked_ancestor(own) is None
+    assert isinstance(own, Group) and ingetrazo_core.link_linked_ancestor(own) is None
 
 
 def test_read_only_inspector_has_no_editable_name_and_no_edits(ui):
@@ -766,15 +768,15 @@ def test_source_visibility_restored_from_the_file_inspector_undoes(ui):
     source = tree.nodes["link:Ride"]["path"]
     assert scene.layer(tag).visible
     act("eye", "n:" + key)
-    assert links.registry(scene)[source]["overrides"][tag] is False
+    assert scene.link_registry[source]["overrides"][tag] is False
     act("node", "n:link:Ride")
     wu._inspector(view, win)
     actions = dict(view.renderer.calls["ui_set_inspector"][1])["Actions"]
     assert ("lnk:linkresettags:link:Ride", "Show tags as the source has them") in actions
     wu._tree_action(win, view, "insp:lnk:linkresettags:link:Ride")
-    assert scene.layer(tag).visible and not links.registry(scene)[source]["overrides"]
+    assert scene.layer(tag).visible and not scene.link_registry[source]["overrides"]
     assert win.viewport.history.undo() and not scene.layer(tag).visible
-    assert links.registry(scene)[source]["overrides"][tag] is False
+    assert scene.link_registry[source]["overrides"][tag] is False
 
 
 def test_identity_separates_physical_parent_filing_and_surface_material(tmp_path):

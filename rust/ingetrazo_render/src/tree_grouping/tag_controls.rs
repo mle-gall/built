@@ -27,19 +27,19 @@ pub fn set_new_tags_hidden(py: Python<'_>, on: bool) -> PyResult<()> {
 pub(super) fn editable_tag_selection(scene: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = scene.py();
     let group = py.import("core.group")?.getattr("Group")?;
-    let links = py.import("core.links")?;
+    let links = crate::host_context::core_module(py)?;
     let filing = py.import("core.structure")?;
     for entity in scene.getattr("selection")?.try_iter()? {
         let entity = entity?;
         if entity.is_instance(&group)?
             && (filing.call_method1("node_of", (&entity,))?.is_truthy()?
-                || !links.call_method1("linked_ancestor", (&entity,))?.is_none())
+                || !links.call_method1("link_linked_ancestor", (&entity,))?.is_none())
         {
             return Ok(false);
         }
     }
     let edit = scene.getattr("edit_group")?;
-    Ok(edit.is_none() || links.call_method1("linked_ancestor", (edit,))?.is_none())
+    Ok(edit.is_none() || links.call_method1("link_linked_ancestor", (edit,))?.is_none())
 }
 
 /// A mixed selection starts at a placeholder. Folder paths distinguish duplicate labels.

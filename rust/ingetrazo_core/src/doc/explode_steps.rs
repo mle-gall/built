@@ -227,7 +227,6 @@ fn unlink_first(py: Python<'_>, me: &Obj<'_>, scene: &Obj<'_>, groups: &Obj<'_>)
     me.setattr("_after", result.get_item(1)?)?;
     let host_path = scene.getattr_opt("_project_host_path")?.unwrap_or_else(|| none(py));
     let fill = links(py, "fill_link")?;
-    let nested_pairs = host(py, "_nested_pairs")?;
     for row in result.get_item(2)?.try_iter()? {
         let row = row?;
         let outer = row.get_item(0)?;
@@ -240,7 +239,7 @@ fn unlink_first(py: Python<'_>, me: &Obj<'_>, scene: &Obj<'_>, groups: &Obj<'_>)
             if fill.call((scene, &new), Some(&kw))?.is_truthy()? {
                 pairs.call_method1("extend", (part_pairs,))?; // kept as it showed
             } else {
-                pairs.call_method1("extend", (nested_pairs.call1((old, new))?,))?;
+                pairs.call_method1("extend", (crate::model::links::nested_pairs(&old, &new)?,))?;
             }
         }
     }
@@ -250,7 +249,6 @@ fn unlink_first(py: Python<'_>, me: &Obj<'_>, scene: &Obj<'_>, groups: &Obj<'_>)
 /// The groups and meshes the copies hold, the files linked inside them
 /// aside (theirs are their links').
 fn copied<'py>(py: Python<'py>, after: &Obj<'py>) -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>)> {
-    let is_linked = links(py, "is_linked")?;
     let groups = PyList::empty(py);
     let meshes = PyList::empty(py);
     let mut stack = Vec::new();
@@ -263,7 +261,7 @@ fn copied<'py>(py: Python<'py>, after: &Obj<'py>) -> PyResult<(Bound<'py, PyList
         }
     }
     while let Some(g) = stack.pop() {
-        if is_linked.call1((&g,))?.is_truthy()? {
+        if crate::model::links::is_linked(&g)? {
             continue;
         }
         groups.append(&g)?;
@@ -303,19 +301,18 @@ fn release(py: Python<'_>, me: &Obj<'_>, scene: &Obj<'_>, gone: &Bound<'_, PySet
         outside.set_item(k, n.extract::<i64>()? - c)?;
     }
     let renames = PyDict::new(py);
-    let release_tags = links(py, "release_tags")?;
     for path in gone.iter() {
-        renames.call_method1("update", (release_tags.call1((scene, path, &used, &outside))?,))?;
+        renames.update(crate::model::links::release_tags(scene, &path, used.as_any(), outside.as_any())?.as_mapping())?;
     }
     if renames.len() > 0 {
         let (groups, meshes) = copied(py, &after)?;
-        links(py, "relabel")?.call1((groups, meshes, renames))?;
+        crate::model::links::relabel(groups.as_any(), meshes.as_any(), &renames)?;
     }
     Ok(())
 }
 
 fn sources<'py>(py: Python<'py>, scene: &Obj<'py>) -> PyResult<Bound<'py, PySet>> {
-    PySet::new(py, links(py, "sources")?.call1((scene,))?.try_iter()?.collect::<PyResult<Vec<_>>>()?)
+    PySet::new(py, crate::model::links::sources(scene)?)
 }
 
 fn run_unlink(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
@@ -358,7 +355,7 @@ fn run_unlink(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
         if gone.len() > 0 {
             release(py, &me, scene, &gone)?;
         }
-        let registry = links(py, "registry")?.call1((scene,))?;
+        let registry = crate::model::links::registry(scene)?;
         let cache = scene.getattr("__dict__")?.get_item("_link_tag_tables").ok().filter(|c| c.is_truthy().unwrap_or(false));
         for p in gone.iter() {
             registry.call_method1("pop", (&p, py.None()))?;
@@ -369,10 +366,9 @@ fn run_unlink(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
         me.setattr("_tags_after", tag_state.call1((scene,))?)?;
     }
     if let Some(errors) = scene.getattr_opt("link_errors")?.filter(|e| e.is_instance_of::<PyDict>()) {
-        let norm = links(py, "_norm")?;
         let kept = PyDict::new(py);
         for p in errors.call_method0("keys")?.try_iter()?.collect::<PyResult<Vec<_>>>()? {
-            if gone.contains(norm.call1((&p,))?)? {
+            if gone.contains(crate::model::links::norm(&p)?)? {
                 kept.set_item(&p, errors.call_method1("pop", (&p,))?)?;
             }
         }
@@ -446,20 +442,18 @@ impl Unlink {
     /// links back exactly, and redo the very same copies.
     #[new]
     fn new(py: Python<'_>, groups: Obj<'_>) -> PyResult<PyClassInitializer<Self>> {
-        let is_linked = links(py, "is_linked")?;
-        let ancestor = links(py, "linked_ancestor")?;
-        let link_of = links(py, "link_of")?;
+        use crate::model::links;
         let mut kept = Vec::new();
         for g in groups.try_iter()? {
             let g = g?;
             let owner = g.getattr_opt("owner")?.unwrap_or_else(|| none(py));
-            if is_linked.call1((&g,))?.is_truthy()? && ancestor.call1((owner,))?.is_none() {
+            if links::is_linked(&g)? && links::linked_ancestor(&owner)?.is_none() {
                 kept.push(g);
             }
         }
         let mut paths: Vec<Obj<'_>> = Vec::new();
         for g in &kept {
-            let path = link_of.call1((g,))?.get_item("path")?;
+            let path = links::link_of(g)?.expect("a linked placement").get_item("path")?;
             if !paths.iter().any(|p| p.eq(&path).unwrap_or(false)) {
                 paths.push(path);
             }
