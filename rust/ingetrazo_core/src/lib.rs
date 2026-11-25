@@ -228,7 +228,6 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(store::plane_repair::plane_cycle, m)?)?;
     m.add_function(wrap_pyfunction!(store::plane_repair::install_rebuilt_plane, m)?)?;
     m.add_function(wrap_pyfunction!(store::plane_repair::prune_object_plane, m)?)?;
-    m.add_function(wrap_pyfunction!(store::intersection_edit::partition_intersections, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::revert_recorded_union, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::merge_seeded_edges, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::revert_seeded_merges, m)?)?;

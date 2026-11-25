@@ -140,6 +140,7 @@ impl Polygon {
 #[pyo3::pyclass(module = "ingetrazo_core", name = "IntersectionPolygon", frozen)]
 pub(super) struct PyPolygon {
     poly: Polygon,
+    pub(super) boundary: WorldRings,
     pub(super) h: Hypot,
 }
 
@@ -151,18 +152,13 @@ impl PyPolygon {
 #[pyo3::pymethods]
 impl PyPolygon {
     #[staticmethod]
-    fn from_rings(rings: WorldRings, hypot: &str) -> pyo3::PyResult<Option<Self>> {
+    pub(super) fn from_rings(rings: WorldRings, hypot: &str) -> pyo3::PyResult<Option<Self>> {
         let h = crate::hypot_of(hypot)?;
-        Ok(Polygon::from_rings(&rings, |p| p, h).map(|poly| Self { poly, h }))
-    }
-
-    fn replace_regions(&self, mesh: &pyo3::Bound<'_,pyo3::PyAny>, face: &pyo3::Bound<'_,pyo3::PyAny>,
-                       regions: &pyo3::Bound<'_,pyo3::PyAny>, copy: &pyo3::Bound<'_,pyo3::PyAny>) -> pyo3::PyResult<()> {
-        super::intersection_edit::replace_regions(self,mesh,face,regions,copy)
+        Ok(Polygon::from_rings(&rings, |p| p, h).map(|poly| Self { poly, h, boundary: rings }))
     }
 
     #[getter]
-    fn bounds(&self) -> Box3 {
+    pub(super) fn bounds(&self) -> Box3 {
         self.poly.bounds
     }
 
@@ -171,7 +167,7 @@ impl PyPolygon {
         self.poly.normal.into()
     }
 
-    fn cross(&self, other: &Self) -> Vec<Segment> {
+    pub(super) fn cross(&self, other: &Self) -> Vec<Segment> {
         let mut out = Vec::new();
         self.poly.cross(&other.poly, self.h, &mut out);
         out

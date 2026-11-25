@@ -122,9 +122,23 @@ def test_nearly_parallel_faces_do_not_divide_by_zero():
     assert X.cross(a, b) == []                        # no crossing, no crash
 
 
-def test_the_numpy_box_test_finds_the_same_pairs():
-    """The box test runs in NumPy blocks now; it must pick exactly the
-    pairs the one-by-one ``_boxes_touch`` picked."""
+def test_indexed_face_bounds_agree_with_scalar_overlap():
+    import numpy as np
+    from ingetrazo_core import touching_boxes
+
+    def boxes(polygons):
+        low, high = zip(*(p.bounds for p in polygons))
+        return np.array(low), np.array(high)
+
+    def pairs(lo_a, hi_a, lo_b, hi_b, same):
+        i, j = touching_boxes(lo_a, hi_a, lo_b, hi_b, same, 1e-6)
+        return zip(i.tolist(), j.tolist())
+
+    def overlap(a, b):
+        (la, ha), (lb, hb) = a.bounds, b.bounds
+        return all(l <= h + 1e-6 and m <= n + 1e-6
+                   for l, h, m, n in zip(la, hb, lb, ha))
+
     import random
     rnd = random.Random(3)
     polys = []
@@ -133,17 +147,17 @@ def test_the_numpy_box_test_finds_the_same_pairs():
         polys += [p for p in (X.world_polys(f) for f in _box(
             x, y, z, x + rnd.uniform(0.2, 2), y + rnd.uniform(0.2, 2),
             z + rnd.uniform(0.2, 2), RED).mesh.faces) if p is not None]
-    lo, hi = X._boxes(polys)
+    lo, hi = boxes(polys)
     same = {(i, j) for i in range(len(polys)) for j in range(i + 1, len(polys))
-            if X._boxes_touch(polys[i], polys[j])}
-    assert set(X._touching(lo, hi, lo, hi, same=True)) == same
+            if overlap(polys[i], polys[j])}
+    assert set(pairs(lo, hi, lo, hi, same=True)) == same
     half = len(polys) // 2
     a, b = polys[:half], polys[half:]
-    la, ha = X._boxes(a)
-    lb, hb = X._boxes(b)
+    la, ha = boxes(a)
+    lb, hb = boxes(b)
     cross_pairs = {(i, j) for i in range(len(a)) for j in range(len(b))
-                   if X._boxes_touch(a[i], b[j])}
-    assert set(X._touching(la, ha, lb, hb, same=False)) == cross_pairs
+                   if overlap(a[i], b[j])}
+    assert set(pairs(la, ha, lb, hb, same=False)) == cross_pairs
 
 
 def test_with_model_and_everything_selected_still_cuts():
