@@ -99,8 +99,12 @@ fn files_under(dir: &std::path::Path, out: &mut Vec<u64>) {
     }
 }
 
+/// The cache root through the module, as the Python read its global:
+/// scripts and tests point it elsewhere by replacing
+/// `core.texture.texture_cache_root`.
 fn root_path(py: Python<'_>) -> PyResult<PathBuf> {
-    Ok(PathBuf::from(texture_cache_root(py)?.str()?.to_string()))
+    let root = module(py, "core.texture")?.call_method0("texture_cache_root")?;
+    Ok(PathBuf::from(root.str()?.to_string()))
 }
 
 /// `(file count, total bytes)` currently held in the texture cache.
@@ -346,12 +350,13 @@ pub fn tinted_texture<'py>(tex: &Obj<'py>, color: &Obj<'py>, ctype: i64) -> PyRe
     };
     let comps: Vec<f64> = PyTuple::new(py, color.try_iter()?.take(3).collect::<PyResult<Vec<_>>>()?)?.extract()?;
     let rgb255: Vec<i64> = comps.iter().map(|c| (c.clamp(0.0, 1.0) * 255.0).round_ties_even() as i64).collect();
-    let out = colorize_image(&data, &PyTuple::new(py, &rgb255)?.into_any(), Some(&ctype.into_pyobject(py)?.into_any()))?;
+    let me = module(py, "core.texture")?;
+    let out = me.call_method1("colorize_image", (&data, PyTuple::new(py, &rgb255)?, ctype))?;
     if out.is(&data) {
         return copy(tex); // colorize failed: leave it alone
     }
     let name: String = base_path.getattr("name")?.extract()?;
-    let cached = match cache_image(out.cast::<PyBytes>()?, &name, "tinted") {
+    let cached = match me.call_method1("cache_image", (&out, &name, "tinted")) {
         Ok(p) => p,
         Err(e) if e.is_instance_of::<PyOSError>(py) => return copy(tex),
         Err(e) => return Err(e),

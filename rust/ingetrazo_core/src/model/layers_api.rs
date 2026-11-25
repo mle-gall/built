@@ -546,7 +546,7 @@ fn tag_new_objects<'py>(scene: &Obj<'py>, before: &Obj<'py>, include_groups: boo
 #[pyfunction]
 fn grain_layers<'py>(scene: &Obj<'py>) -> PyResult<Bound<'py, PyList>> {
     let py = scene.py();
-    let wood = py.import("ingetrazo_core.hatches")?.getattr("WOOD")?;
+    let wood = native(py)?.getattr("hatches")?.getattr("WOOD")?;
     let out = PyList::empty(py);
     let layers = scene.attr_opt(intern!(py, "layers"))?.unwrap_or_else(|| PyTuple::empty(py).into_any());
     for ly in layers.try_iter()? {
