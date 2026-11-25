@@ -4,7 +4,9 @@ use pyo3::types::{PyDict, PyList, PySet, PyTuple};
 
 mod documents;
 mod scenes;
+pub(crate) mod playback;
 mod status;
+pub(crate) mod video;
 pub(crate) use documents::release_watch;
 use documents::*;
 pub use scenes::ShellScenes;
@@ -190,8 +192,7 @@ impl ShellWindow {
         w.setattr("tray", tray)?;
         w.setattr(
             "scene_player",
-            py.import("views.scene_playback")?
-                .call_method1("WindowPlayback", (w, &timers))?,
+            playback::WindowPlayback::create(w.as_any(), &timers)?,
         )?;
         w.setattr("file_openers", PyDict::new(py))?;
         w.setattr("tool_label", "")?;

@@ -195,14 +195,14 @@ def test_warning_before_the_first_frame_is_kept_in_the_chrome_history(native_hos
 def test_information_call_sites_post_toasts(win, tmp_path, monkeypatch, method, title):
     from core import autosave, texture
     from formats import rfa
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     args = ()
     if method == "_on_recover_discarded":
         monkeypatch.setattr(autosave, "discarded_dir", lambda: tmp_path)
     elif method == "_on_insert_faceme_image":
         picture = tmp_path / "opaque.png"
         picture.write_bytes(_png_rgb(2, 2, b"\xff\xff\xff"))
-        monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *a: (str(picture), ""))
+        monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *a: (str(picture), ""))
 
     elif method == "_import_rfa_path":
         monkeypatch.setattr(rfa, "read_rfa", lambda path: {})
@@ -376,7 +376,7 @@ def test_open_with_missing_sources_has_one_banner_and_problem_rows(win, tmp_path
     from formats import igz
     from tests.test_links import _source, _host_with_link
     from views import wgpu_ui
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
 
     a, b = (_source(tmp_path / name) for name in ("A.igz", "B.igz"))
     host, _ = _host_with_link(tmp_path, a)
@@ -394,7 +394,7 @@ def test_open_with_missing_sources_has_one_banner_and_problem_rows(win, tmp_path
     rules = wgpu_ui._problem_rules(scene, {}, {}, {}, [])
     affected = next(groups for _, key, _, groups in rules if key == "links")
     assert len(affected) == 3
-    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *args: (str(moved), ""))
+    monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *args: (str(moved), ""))
     wgpu_ui._run(win, ["linkbanner:locate"])
     assert win._doc._missing_link_banner == "1 linked file missing"
     assert len(links.linked_groups(scene, moved)) == 2

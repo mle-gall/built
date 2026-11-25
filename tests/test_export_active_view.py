@@ -29,14 +29,14 @@ def _spy(grid, monkeypatch, name, result, display=False):
 
 def test_export_image_renders_the_active_view(grid, monkeypatch, tmp_path):
     from ingetrazo_render import chrome_forms
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     from ingetrazo_render import shell_services as native
     monkeypatch.setattr(native, "available", lambda: True)
     win = grid.win
     top = grid.click("Top")
 
     out = tmp_path / "view.png"
-    monkeypatch.setattr(file_dialogs, "getSaveFileName",
+    monkeypatch.setattr(ShellFileDialog, "getSaveFileName",
                         lambda *a, **k: (str(out), ""))
 
     called = _spy(grid, monkeypatch, "render_raster", lambda: solid_raster(64, 40, (0, 0, 0)))

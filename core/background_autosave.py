@@ -10,7 +10,7 @@ import uuid
 from core.host_callbacks import HostService, Signal
 from core.timers import timer
 from ingetrazo_core import Input as Qt
-from views import input_state
+from ingetrazo_core import window_input
 
 from core import autosave
 from ingetrazo_core import snapshot_steps
@@ -124,7 +124,7 @@ class BackgroundAutosave(HostService):
             return
         if getattr(self.window, '_opening_document', False):
             return
-        if input_state.mouse_buttons(self.window) != Qt.NoButton:
+        if window_input.mouse_buttons(self.window) != Qt.NoButton:
             return
         if self.job is None:
             self._start_next()

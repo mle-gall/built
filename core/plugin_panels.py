@@ -195,8 +195,8 @@ def dispatch(win, raw):
             binding.invalidate()
             return
         if event["event"] == "browse":
-            from views.filedialogs import file_dialogs
-            path, _ = file_dialogs.getOpenFileName(win, "Choose file")
+            from ingetrazo_render.shell_files import ShellFileDialog
+            path, _ = ShellFileDialog.getOpenFileName(win, "Choose file")
             if (not path or binding.scene is not win.viewport.scene
                     or event["revision"] != binding.scene.version):
                 return

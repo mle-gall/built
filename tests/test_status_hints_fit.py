@@ -7,7 +7,7 @@ import pytest
 from ingetrazo_core import Vec3 as QVector3D
 from core.i18n import set_language, current_language
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
-from views.status_hints import HINTS, hint_for
+from ingetrazo_render.status_hints import HINTS, hint_for
 
 _MAX_CHARS = 112
 

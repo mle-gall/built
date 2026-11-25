@@ -717,18 +717,18 @@ def test_drawing_creates_a_valid_custom_line_and_rejects_a_pattern_without_gaps(
 
 def test_drawing_imports_and_exports_line_type_files(tmp_path, monkeypatch):
     from tests.test_project_drawing_filters import Project
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
     p = Project()
     lin = tmp_path / "mine.lin"
     lin.write_text(_LIN, encoding="utf-8")
-    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *_: (str(lin), ""))
+    monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *_: (str(lin), ""))
     p.action("importlin", "")
     assert "3" in p.win.viewport.status[-1] and "BOXES" in p.win.viewport.status[-1]
     lin.unlink()
     p.action("importlin", "")
     assert set(p.scene.line_types) == {"BORDE_2", "FENCE", "GAS"}
     out = tmp_path / "out.lin"
-    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *_: (str(out), ""))
+    monkeypatch.setattr(ShellFileDialog, "getSaveFileName", lambda *_: (str(out), ""))
     p.action("exportlin", "")
     found, _ = L.parse_lin(out.read_text(encoding="utf-8"))
     assert set(found) == {"BORDE_2", "FENCE", "GAS"} and found["GAS"]["text"] == "GAS"

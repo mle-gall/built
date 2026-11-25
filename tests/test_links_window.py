@@ -121,11 +121,11 @@ def test_project_link_subset_and_agent_surface(win, tmp_path):
 def test_link_document_action_shows_nested_choice(win, tmp_path, monkeypatch, choice):
     from core.i18n import tr
     from ingetrazo_render import chrome_forms
-    from views.filedialogs import file_dialogs
+    from ingetrazo_render.shell_files import ShellFileDialog
 
     path = _source(tmp_path / "building.igz")
     placements = []
-    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *args: (str(path), ""))
+    monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *args: (str(path), ""))
     monkeypatch.setattr(win, "link_igz_path", lambda path, **opts: placements.append((path, opts)))
     def choose(parent, title, label, items, done):
         assert items == [tr("Include nested linked files"), tr("Source geometry only")]
@@ -230,10 +230,11 @@ def test_link_selection_header_preserves_occurrence_and_nested_choice(win, tmp_p
 def test_project_header_moves_the_registry_next_to_the_host(win, tmp_path, monkeypatch):
     from core import bim_registry, project
     from tests.test_tree_links import _View
-    from views import filedialogs, wgpu_ui
+    from views import wgpu_ui
+    from ingetrazo_render import shell_files
 
     path = tmp_path / "Design.builtproject"
-    monkeypatch.setattr(filedialogs.file_dialogs, "getSaveFileName", lambda *args: (str(path), ""))
+    monkeypatch.setattr(shell_files.ShellFileDialog, "getSaveFileName", lambda *args: (str(path), ""))
     wgpu_ui._tree_action(win, _View(), "linkregistry" + wgpu_ui.SEP)
     assert path.is_file() and Path(project.path_for(win.viewport.scene)) == path
     assert project.storage.load(path)["bim_registry"] == bim_registry.get(win.viewport.scene)

@@ -25,8 +25,8 @@ def style_payload(scene, override=None, *, horizon=2.0, scale=1.0, edit_rest_fad
     result['fade'] = float(edit_rest_fade)
     result['fade_color'] = edit_fade_color(style.background)
     result['back_color'] = effective_back_color(style, scene)
-    from views.ambient_occlusion import settings_for
-    ao = settings_for(style)
+    from ingetrazo_render import ao_settings
+    ao = ao_settings(style)
     result['ambient_occlusion'] = ao is not None
     if ao is not None:
         result.update(ao_distance=ao['radius'], ao_intensity=ao['intensity'],

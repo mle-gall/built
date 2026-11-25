@@ -688,7 +688,7 @@ def test_drawing_catalog_and_scene_folders_in_native_window(tmp_path):
 import json
 from ingetrazo_render import Host
 from views import wgpu_ui
-from views.filedialogs import file_dialogs
+from ingetrazo_render.shell_files import ShellFileDialog
 menu, state = Host.menu, Host.state
 def dispatch(self, command):
     if not command.startswith("fixture-"):
@@ -716,7 +716,7 @@ def dispatch(self, command):
             saved=json.loads(settings().value("layers/own_pieces")))
         pref("piece",own)
         self.fixture_hatch_prefs["removed"]=json.loads(settings().value("layers/own_pieces"))
-        file_dialogs.getSaveFileName=lambda *args: ({str(output)!r},"")
+        ShellFileDialog.getSaveFileName=lambda *args: ({str(output)!r},"")
         wgpu_ui._tree_action(self.window,self.view,"exportpat"+wgpu_ui.SEP)
     elif command=="fixture-folder":
         act("tagfolder","new",dict(name="Survey",parent="Site"))
@@ -730,8 +730,8 @@ def dispatch(self, command):
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("tagcolours","1")))
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("modellines","0")))
         template={str(tmp_path / "drawing.json")!r}
-        file_dialogs.getSaveFileName=lambda *args: (template,"")
-        file_dialogs.getOpenFileName=lambda *args: (template,"")
+        ShellFileDialog.getSaveFileName=lambda *args: (template,"")
+        ShellFileDialog.getOpenFileName=lambda *args: (template,"")
         for verb in ("exporttags","importtags"):
             wgpu_ui._tree_action(self.window,self.view,verb+wgpu_ui.SEP)
         folder=add_folder(scene,"Temporary tags")
@@ -978,8 +978,8 @@ def test_native_animation_forms_and_video_file(tmp_path):
         scene.saved_views.append(SavedView.capture(name, scene, camera))
     scene.animation = SceneAnimation(transition=0, pause=0)
     save_scene(scene, path)
-    venv = fixture_venv(tmp_path, "from views.filedialogs import file_dialogs\n"
-                       f"file_dialogs.getSaveFileName = lambda *a, **k: ({str(movie)!r}, '')\n")
+    venv = fixture_venv(tmp_path, "from ingetrazo_render.shell_files import ShellFileDialog\n"
+                       f"ShellFileDialog.getSaveFileName = lambda *a, **k: ({str(movie)!r}, '')\n")
     script = tmp_path / "steps"
     script.write_text("wait 700\nmenu animation_settings\nwait 300\nstate\nkey enter\nwait 200\n"
                       "menu scene_play\nwait 300\nkey escape\nmenu export:video\nwait 300\nstate\n"
@@ -1011,10 +1011,10 @@ def test_native_orthomosaic_import_and_undo(tmp_path):
     save_scene(Scene(), model)
     write_geotiff(tile, np.full((8, 16, 4), 255, dtype=np.uint8))
     venv = fixture_venv(tmp_path,
-        "from views.filedialogs import file_dialogs\n"
+        "from ingetrazo_render.shell_files import ShellFileDialog\n"
         "from georef.tile_fetcher import TileFetcher\n"
         "TileFetcher.request = lambda *args: None\n"
-        f"file_dialogs.getOpenFileName = lambda *a, **k: ({str(tile)!r}, '')\n")
+        f"ShellFileDialog.getOpenFileName = lambda *a, **k: ({str(tile)!r}, '')\n")
     steps = tmp_path / "actions"
     steps.write_text("wait 700\nmenu import:orthomosaic\nwait 400\nstate\n"
                      "menu undo\nwait 400\nstate\nquit\n")
@@ -1042,11 +1042,11 @@ def test_native_survey_imports_share_datum_and_save(tmp_path):
     alignment.write_text(json.dumps(dict(type="LineString", coordinates=[[-73., -15.], [-73.001, -15.]])))
     obj = _write_odm_tree(tmp_path)
     venv = fixture_venv(tmp_path,
-        "from views.filedialogs import file_dialogs\n"
+        "from ingetrazo_render.shell_files import ShellFileDialog\n"
         "from georef.tile_fetcher import TileFetcher\n"
         "TileFetcher.request = lambda *a, **k: None\n"
         f"paths = {{'*.csv': {str(csv)!r}, '*.obj': {str(obj)!r}, '*.kml': {str(alignment)!r}}}\n"
-        "file_dialogs.getOpenFileName = lambda *a: (next(path for ext, path in paths.items() if ext in a[3]), '')\n")
+        "ShellFileDialog.getOpenFileName = lambda *a: (next(path for ext, path in paths.items() if ext in a[3]), '')\n")
     script = tmp_path / "survey-steps"
     script.write_text("wait 800\nmenu import:survey_points\nwait 300\nstate\nkey escape\nwait 300\nstate\n"
                       "menu import:survey_points\nwait 300\nkey enter\nwait 300\nstate\n"

@@ -41,8 +41,8 @@ def test_namespace_import_and_undo(library, tmp_path, monkeypatch):
     lib.act(ctx, "verb", ["registry_add"])
     assert "already exists" in form.error and json.loads(form.field("registry_json")[3]) == draft
     path = tmp_path / "codes.csv"
-    from views.filedialogs import file_dialogs
-    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *args: (str(path), "CSV"))
+    from ingetrazo_render.shell_files import ShellFileDialog
+    monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *args: (str(path), "CSV"))
     path.write_text("code,title\nA,First\nA,Duplicate")
     lib.act(ctx, "verb", ["registry_csv"])
     assert "duplicate" in form.error and json.loads(form.field("registry_json")[3]) == draft

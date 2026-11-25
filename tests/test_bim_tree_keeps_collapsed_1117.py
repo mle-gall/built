@@ -57,7 +57,7 @@ def toggle(view, win, key):
 
 
 def test_opening_a_group_leaves_the_folded_branches_folded(native_host):
-    from views.tree_navigation import open_to
+    from ingetrazo_render.tree_navigation import open_to
     win, vp, view = native_host.window, native_host.viewport, _View()
     first, second = _model(vp.scene)
     walls, = first.children

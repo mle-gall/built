@@ -272,7 +272,7 @@ pub(crate) fn context_lock(vp: &Bound<'_, PyAny>, groups: Vec<Bound<'_, PyAny>>,
     }
     if picks.is_empty() { return Ok(()); }
     if editing && lock { vp.call_method0("end_group_edit")?; }
-    py.import("views.tree_navigation")?.call_method1("execute", (
+    py.import("ingetrazo_render.tree_navigation")?.call_method1("execute", (
         vp, py.import("ingetrazo_core")?.getattr("NativeCommand")?.call_method1("lock", (picks, lock))?,
     ))?;
     Ok(())

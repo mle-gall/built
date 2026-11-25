@@ -1,5 +1,6 @@
 //! Document facts and commands for an occurrence's context menu.
 pub mod paint;
+pub(crate) mod navigation;
 pub mod placement_controls;
 pub mod row_actions;
 pub mod tag_controls;
@@ -198,7 +199,7 @@ impl<'py> Occurrences<'py> {
             .unwrap();
         let parent = self.rows[*best].parent;
         if !py
-            .import("views.tree_navigation")?
+            .import("ingetrazo_render.tree_navigation")?
             .call_method1("open_to", (vp, self.path(parent)))?
             .is_truthy()?
         {
@@ -344,7 +345,7 @@ pub fn tree_group_action(
     let parents = tree.path(tree.rows[indices[0]].parent);
     if !win
         .py()
-        .import("views.tree_navigation")?
+        .import("ingetrazo_render.tree_navigation")?
         .call_method1("open_to", (&vp, parents))?
         .is_truthy()?
     {
@@ -463,7 +464,7 @@ pub fn tree_move(
         .import("core.history")?
         .call_method1("ReparentGroupsCommand", (groups, destination))?;
     vp.py()
-        .import("views.tree_navigation")?
+        .import("ingetrazo_render.tree_navigation")?
         .call_method1("execute", (vp, command))?;
     Ok(true)
 }

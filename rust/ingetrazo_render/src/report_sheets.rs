@@ -396,7 +396,7 @@ impl CutListSheet {
                 copy_text(py, &csv(&self.table, '\t'))?;
             }
             "csv" => {
-                let dialogs = py.import("views.filedialogs")?.getattr("file_dialogs")?;
+                let dialogs = py.import("ingetrazo_render.shell_files")?.getattr("ShellFileDialog")?;
                 let answer = dialogs.call_method1("getSaveFileName", (ctx.getattr("win")?, "Export cut list", "Cut list.csv", "CSV (*.csv)"))?;
                 let path: String = answer.get_item(0)?.extract()?;
                 if !path.is_empty() {

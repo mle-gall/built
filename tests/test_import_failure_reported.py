@@ -18,7 +18,7 @@ from ingetrazo_core import Vec3 as V
 
 from core.history import AddEdgeCommand
 from formats import dae, glb, obj, skp, stl
-from views.filedialogs import file_dialogs
+from ingetrazo_render.shell_files import ShellFileDialog
 
 
 _CUBE_OBJ = ("v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nf 1 2 3 4\n").encode()
@@ -79,7 +79,7 @@ def _write(tmp_path, name, data):
 def _menu_import(win, path, monkeypatch):
     """The File ▸ Import entry for ``path``, with its file and unit dialogs
     answered."""
-    monkeypatch.setattr(file_dialogs, "getOpenFileName",
+    monkeypatch.setattr(ShellFileDialog, "getOpenFileName",
                         lambda *_a, **_k: (str(path), ""))
     monkeypatch.setattr("ingetrazo_render.chrome_forms.show", lambda _, form: form.press("ok"))
     kind = "glb" if path.suffix == ".gltf" else path.suffix[1:]

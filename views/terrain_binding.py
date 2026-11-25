@@ -78,14 +78,14 @@ def action(view, vp, verb):
         view._profile_binding = ProfileBinding(path)
         view._profile_binding.sync(view, vp)
     elif binding and binding.profile:
-        from views.filedialogs import file_dialogs
+        from ingetrazo_render.shell_files import ShellFileDialog
 
         ext = "csv" if verb == "csv" else "png"
         if ext == "png":
             data = bytes(view.renderer.ui_profile_png())
         else:
             data = profile_to_csv(binding.profile, binding.vertical, binding.alt).encode("utf-8")
-        path, _ = file_dialogs.getSaveFileName(
+        path, _ = ShellFileDialog.getSaveFileName(
             None, "Export terrain profile", "profile." + ext, "*." + ext
         )
         if path:

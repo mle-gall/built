@@ -36,7 +36,7 @@ def sync(view, style, *, scene=None):
     cached = getattr(shared, '_reference_cache', None)
     if not (terrain or tiles or survey or images or cached):
         return
-    from views.resident_peer import raw_renderer
+    from ingetrazo_render.shell_views import raw_renderer
     renderer = raw_renderer(view.renderer)
     origin = tuple(view.packed.origin)
     scope = (renderer, scene, origin)

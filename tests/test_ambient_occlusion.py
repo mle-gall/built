@@ -16,14 +16,14 @@ import pytest
 from ingetrazo_core import Vec3 as QVector3D
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 
-from views import ambient_occlusion as ao  # noqa: E402
+from ingetrazo_render import ao_settings  # noqa: E402
 
 
 def test_it_is_off_unless_asked(monkeypatch):
     monkeypatch.delenv("INGETRAZO_AO", raising=False)
-    assert ao.settings_from_env() is None
+    assert ao_settings() is None
     monkeypatch.setenv("INGETRAZO_AO", "0")
-    assert ao.settings_from_env() is None
+    assert ao_settings() is None
 
 
 def test_the_settings_are_kept_in_range(monkeypatch):
@@ -31,7 +31,7 @@ def test_the_settings_are_kept_in_range(monkeypatch):
     monkeypatch.setenv("INGETRAZO_AO_RADIUS", "-3")
     monkeypatch.setenv("INGETRAZO_AO_SAMPLES", "500")
     monkeypatch.setenv("INGETRAZO_AO_INTENSITY", "nada")
-    s = ao.settings_from_env()
+    s = ao_settings()
     assert s["radius"] > 0 and s["samples"] == 64 and s["intensity"] == 1.0
 
 
@@ -247,12 +247,12 @@ def test_the_frame_follows_the_style_unless_the_environment_forces_it(
         monkeypatch):
     from core.style import Style
     monkeypatch.delenv("INGETRAZO_AO", raising=False)
-    assert ao.settings_for(Style()) is None
-    got = ao.settings_for(Style(ambient_occlusion=True, ao_distance=2.0,
+    assert ao_settings(Style()) is None
+    got = ao_settings(Style(ambient_occlusion=True, ao_distance=2.0,
                                 ao_intensity=0.5))
     assert got["radius"] == 2.0 and got["intensity"] == 0.5
     monkeypatch.setenv("INGETRAZO_AO", "0")
-    assert ao.settings_for(Style(ambient_occlusion=True)) is None
+    assert ao_settings(Style(ambient_occlusion=True)) is None
 
 
 # ---- Stable (0.5.11): silhouettes, sky and flat faces ------------------------

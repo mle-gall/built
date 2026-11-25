@@ -276,7 +276,7 @@ impl TreePaint {
             )?;
         }
         let command = history.call_method1("CompoundCommand", (cmds,))?;
-        py.import("views.tree_navigation")?
+        py.import("ingetrazo_render.tree_navigation")?
             .call_method1("execute", (vp, command))?;
         Ok(())
     }
