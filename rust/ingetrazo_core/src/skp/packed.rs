@@ -312,7 +312,7 @@ fn skp_parse_raw<'p>(
     })
 }
 /// Rows share their read-only coordinates. A slice only replaces the index range.
-#[pyclass(module = "ingetrazo_core")]
+#[pyclass(sequence, module = "ingetrazo_core")]
 struct PointRows {
     #[pyo3(get)]
     _array: Py<PyAny>,
@@ -383,7 +383,7 @@ impl PointRows {
 }
 
 /// Soft edges remain in packed, read-only arrays until a consumer requests a pair.
-#[pyclass(module = "ingetrazo_core")]
+#[pyclass(sequence, module = "ingetrazo_core")]
 struct SoftSegments {
     #[pyo3(get)]
     chunks: Py<PyList>,
