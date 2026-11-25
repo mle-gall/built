@@ -65,8 +65,17 @@ def scene_of(seed):
     return s
 
 
-def answers(seed):
+def _walk():
+    import ingetrazo_core
+    native = getattr(ingetrazo_core, "group_visible_placements", None)
+    if native is not None:
+        return native
     from core.group import visible_placements
+    return visible_placements
+
+
+def answers(seed):
+    visible_placements = _walk()
     s = scene_of(seed)
     out = []
     for g in s.groups:
@@ -83,7 +92,7 @@ def test_visible_placements_answer_as_the_python_did(seed):
 
 
 def test_the_walk_is_lazy_and_hands_out_own_matrices():
-    from core.group import visible_placements
+    visible_placements = _walk()
     s = scene_of(3)
     g = s.groups[0]
     walk = visible_placements(s, g)

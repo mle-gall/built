@@ -49,7 +49,8 @@ def collect_geometry(scene, layers: bool = False):
     insides of an object follow the object) — and the same for every
     triangle, whose layer its section cut is inked and filled with:
     ``(tris, hard, soft, hard_layers, soft_layers, tri_layers)``."""
-    from core.group import visible_placements, world_mesh
+    from core.group import world_mesh
+    from ingetrazo_core import group_visible_placements as visible_placements
     from core.layers import DEFAULT_LAYER, layer_of
 
     tris: list = []
@@ -123,7 +124,7 @@ def collect_circles(scene) -> list:
     (Marco, 2026-09-20: «como que no reconoce el centro de un círculo»).
     The same curve on two faces (a hole and the pipe through it) is
     reported once."""
-    from core.group import visible_placements
+    from ingetrazo_core import group_visible_placements as visible_placements
     from core.snap import curve_centers_of_face
 
     out: list = []
