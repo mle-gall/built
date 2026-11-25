@@ -289,7 +289,7 @@ def test_paste_stamps_once_and_returns_to_select(native_host, monkeypatch):
     # nothing keeps following the cursor. The clipboard survives, so pasting
     # again stamps another copy.
     # A board of this test's own: no copy of an earlier test to adopt.
-    from app_shell import files
+    from ingetrazo_render import shell_files as files
     from ingetrazo_render import ModelClipboard
     monkeypatch.setattr(files, "_clipboard", ModelClipboard())
     win = native_host.window
@@ -423,7 +423,7 @@ def test_paste_in_place_lands_on_the_original_and_selects_it():
 
 def test_paste_in_place_menu_action_keeps_the_active_tool(native_host, monkeypatch):
     # A board of this test's own: no copy of an earlier test to adopt.
-    from app_shell import files
+    from ingetrazo_render import shell_files as files
     from ingetrazo_render import ModelClipboard
     monkeypatch.setattr(files, "_clipboard", ModelClipboard())
     win = native_host.window
