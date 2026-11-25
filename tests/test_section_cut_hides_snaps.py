@@ -18,7 +18,7 @@ from ingetrazo_core import Vec3 as V
 
 from ingetrazo_core.section import SectionPlane  # noqa: E402
 from core.snap import compute_snap  # noqa: E402
-from core.style import Style  # noqa: E402
+from ingetrazo_core.style import Style  # noqa: E402
 from tests.controller_surface import ControllerSurface as Viewport
 
 

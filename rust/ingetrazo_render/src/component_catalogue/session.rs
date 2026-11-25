@@ -8,7 +8,7 @@ use pyo3::{
     types::{IntoPyDict, PyBytes, PyList},
 };
 type Obj<'p> = Bound<'p, PyAny>;
-fn files(py: Python) -> PyResult<&Py<PyAny>> {
+fn files(py: Python<'_>) -> PyResult<&Py<PyAny>> {
     static FILES: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
     FILES.get_or_try_init(py, || {
         Ok(py

@@ -8,7 +8,7 @@
 //! material rules, once per distinct tag and paint.
 use super::assemble::assemble;
 use super::packed_scene::{PackedScene, OBJECT_HIDDEN, VISIBILITY_FILTERED};
-use numpy::{PyArray1, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2};
+use numpy::{PyArray1, PyArrayMethods, PyReadonlyArray1};
 use pyo3::{
     exceptions::PyValueError,
     prelude::*,

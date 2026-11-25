@@ -27,7 +27,7 @@ def fresh(monkeypatch):
 
 
 def _forget_choice():
-    from core.settings import settings as preferences
+    from ingetrazo_core.settings import settings as preferences
     st = preferences()
     for group in ("General/", "general/"):
         st.remove(group + "rust_engine")
@@ -159,20 +159,20 @@ def test_another_version_tries_the_engine_the_guard_turned_off(monkeypatch):
     """The guard turns the engine off for the version that failed, not for
     good: the next version starts with it on once more. What the user
     turned off in Preferences stays off."""
-    import core.version
+    import ingetrazo_core.version
     monkeypatch.delenv("INGETRAZO_RUST", raising=False)
     try:
         general_settings.set_value("rust_engine", "1")
         general_settings.set_value(_native.STARTING, "0")
         general_settings.set_value(_native.OFF_BY_GUARD, "")
-        monkeypatch.setattr(core.version, "__version__", "9.9.1")
+        monkeypatch.setattr(ingetrazo_core.version, "__version__", "9.9.1")
         assert _native.start_guard([]) is False
         assert _native.start_guard([]) is False
         assert _native.start_guard([]) is True     # off, by 9.9.1's guard
         assert general_settings.value(_native.OFF_BY_GUARD) == "9.9.1"
         assert _native.start_guard([]) is False    # same version: stays off
         assert not _native.wanted()
-        monkeypatch.setattr(core.version, "__version__", "9.9.2")
+        monkeypatch.setattr(ingetrazo_core.version, "__version__", "9.9.2")
         assert _native.start_guard([]) is False    # the update tries again
         assert _native.wanted()
         assert general_settings.value(_native.STARTING) == "1"

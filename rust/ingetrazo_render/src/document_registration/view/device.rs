@@ -238,7 +238,6 @@ fn raw_message<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 pub(super) fn install_devices(module: &Bound<PyModule>) -> PyResult<()> {
     let py = module.py();
-    let builtins = py.import("builtins")?;
     module.add("SPNAV_SOCKETS", ("/var/run/spnav.sock", "/run/spnav.sock"))?;
     module.add(
         "_SPNAV_PACKET",

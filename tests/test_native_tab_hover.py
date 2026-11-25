@@ -22,7 +22,7 @@ from pathlib import Path
 
 def setup(app):
     from core import units
-    from core.settings import settings
+    from ingetrazo_core.settings import settings
     win = app.window
     def hover(index):
         view = win.view

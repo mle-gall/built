@@ -19,7 +19,7 @@ from ingetrazo_core import Vec3 as V
 
 import core._native as _native
 from core.mesh import Mesh
-from core.triangulate import plane_axes, triangulate
+from ingetrazo_core.triangulate import plane_axes, triangulate
 
 nat = _native.available()
 HYPOT = _native.qt_hypot() if nat is not None else None

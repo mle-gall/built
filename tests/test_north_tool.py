@@ -12,7 +12,7 @@ import pytest
 from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
 
-from core import sun
+from ingetrazo_core import sun
 from core.history import History, SetNorthCommand
 from core.render_blender import sun_toward
 from core.scene import Scene

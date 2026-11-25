@@ -50,7 +50,7 @@ pub fn normalized(v: V3, _h: Hypot) -> V3 {
     V3::from_vector(v.vector().normalize_or_zero())
 }
 
-/// `core.triangulate.plane_axes`.
+/// `ingetrazo_core.triangulate.plane_axes`.
 pub fn plane_axes(normal: V3, h: Hypot) -> (V3, V3) {
     let n = normalized(normal, h);
     let mut r = V3(1.0, 0.0, 0.0);

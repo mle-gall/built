@@ -1288,14 +1288,14 @@ impl Page {
                     a = self.to_screen(v[0], v[1]);
                     b = self.to_screen(w[0], w[1]);
                     for line in [[self.to_screen(p[0], p[1]), a], [a, b], [b, self.to_screen(q[0], q[1])]] {
-                        painter.line_segment(line, Stroke::new(1.5, ACCENT));
+                        painter.line_segment(line, Stroke::new(1.5_f32, ACCENT));
                     }
                     if let Some(d) = dot { painter.circle_filled(self.to_screen(d[0], d[1]), 3.5, ACCENT); }
                 }
             }
             let mid = a + (b - a) * 0.5;
             painter.circle_filled(mid, HANDLE, Color32::WHITE);
-            painter.circle_stroke(mid, HANDLE, Stroke::new(1.5, ACCENT));
+            painter.circle_stroke(mid, HANDLE, Stroke::new(1.5_f32, ACCENT));
         }
         if let Some(Drag::Place { from, to, .. }) = &self.drag {
             let r = Rect::from_two_pos(self.to_screen(from[0], from[1]), self.to_screen(to[0], to[1]));

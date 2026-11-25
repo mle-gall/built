@@ -7,7 +7,9 @@ from ingetrazo_core import Vec3
 
 
 def bulk_results():
-    from core import autosave, axes, geometry, guide, materials, structure, style, sun, triangulate
+    from core import axes, geometry, guide, materials, structure
+    from ingetrazo_core import sun
+    from ingetrazo_core import autosave, style, triangulate
     from core.textlabel import TextLabel
 
     ring = [Vec3(x, y, 0) for x, y in [(0, 0), (4, 0), (4, 3), (2, 1), (0, 3)]]
@@ -43,7 +45,8 @@ def bulk_results():
 def service_results(monkeypatch, tmp_path):
     import sys
     from types import SimpleNamespace
-    from core import paths, settings, timers, version
+    from ingetrazo_core import settings
+    from ingetrazo_core import paths, timers, version
 
     calls = []
 

@@ -189,7 +189,7 @@ def test_scene_remembers_its_shadow_settings(tmp_path):
     2026-09-14). Applied IN PLACE: the panel, the menu and the viewport
     hold the one ``scene.shadows`` object."""
     from formats import igz
-    from core.sun import ShadowSettings
+    from ingetrazo_core.sun import ShadowSettings
 
     scene = Scene()
     sh = scene.shadows

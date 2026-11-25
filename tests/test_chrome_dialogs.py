@@ -203,7 +203,8 @@ def test_warning_before_the_first_frame_is_kept_in_the_chrome_history(native_hos
     ("_on_clear_texture_cache", "Texture cache"),
 ])
 def test_information_call_sites_post_toasts(win, tmp_path, monkeypatch, method, title):
-    from core import autosave, texture
+    from core import texture
+    from ingetrazo_core import autosave
     from formats import rfa
     from ingetrazo_render.shell_files import ShellFileDialog
     args = ()
@@ -418,7 +419,7 @@ def test_open_with_missing_sources_has_one_banner_and_problem_rows(win, tmp_path
 
 
 def test_open_preserves_recovery_as_a_separate_copy(win, tmp_path, monkeypatch):
-    from core import autosave
+    from ingetrazo_core import autosave
     from core.scene import Scene
     from formats import igz
     from views import wgpu_ui

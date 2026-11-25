@@ -242,10 +242,8 @@ fn post_key(view: usize, key_code: u16, chars: &str, command: bool) -> bool {
         let flags = if command { NSEventModifierFlags::Command } else { NSEventModifierFlags::empty() };
         let text = NSString::from_str(chars);
         for kind in [NSEventType::KeyUp, NSEventType::KeyDown] {
-            let ev = unsafe {
-                NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
-                    kind, NSPoint::new(0.0, 0.0), flags, 0.0, window.windowNumber(), None, &text, &text, false, key_code)
-            };
+            let ev = NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
+                    kind, NSPoint::new(0.0, 0.0), flags, 0.0, window.windowNumber(), None, &text, &text, false, key_code);
             let Some(ev) = ev else { return false };
             // At the start, in reverse: the press comes out first.
             app.postEvent_atStart(&ev, true);

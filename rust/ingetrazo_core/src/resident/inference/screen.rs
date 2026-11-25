@@ -2,7 +2,6 @@
 //! Camera-independent world bounds and a camera-keyed grid for placement picking.
 use numpy::{
     IntoPyArray, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3,
-    PyUntypedArrayMethods,
 };
 use pyo3::{
     exceptions::{PyIndexError, PyValueError},

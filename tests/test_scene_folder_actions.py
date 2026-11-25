@@ -127,7 +127,7 @@ def test_the_mark_follows_recall_and_clears_on_deletion(win):
 
 
 def test_scene_picture_mode_is_saved_by_the_chooser(win):
-    from core.settings import settings
+    from ingetrazo_core.settings import settings
     for action, stored in [("0", False), ("1", True)]:
         _run(win, ["scenephotomode:" + action])
         assert settings().value("scenes/thumbnails", type=bool) is stored

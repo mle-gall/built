@@ -9,7 +9,6 @@ use std::time::Instant;
 use egui::{pos2, vec2, Color32, CornerRadius, Margin, Pos2, Rect, Sense, Stroke, Vec2};
 
 /// Small widgets shared by the dock and the forms (segmented, tabs).
-mod widgets;
 /// The chrome's modal forms (rust/ingetrazo_render/src/forms_host.rs).
 pub mod dialog;
 pub mod operation_form;
@@ -1005,7 +1004,7 @@ impl Ui {
             let pointer = self.ctx.input(|i| i.pointer.hover_pos()).unwrap_or(self.screen.center());
             self.cursor.retype_anchor(revision).unwrap_or(pointer - egui::vec2(0., 22.))
         });
-        self.cursor.set(caption, value, typing, at, start.map(|(x, y)| at), revision);
+        self.cursor.set(caption, value, typing, at, start.map(|_| at), revision);
     }
     pub fn set_selection(&mut self, summary: String, actions: Vec<(String, String, String, bool, bool)>) {
         self.selection = (!summary.is_empty()).then_some((summary, actions));
@@ -1760,7 +1759,7 @@ impl Ui {
                         ui.set_min_height(28.0);
                         let labels = [if col.proposal_available { "Tags" } else { "Filing" }, "Drawing", "Export"];
                         let width = (ui.available_width()-84.).clamp(144.,220.);
-                        if let Some(i) = widgets::segmented(ui,&labels,col.lens as usize,width) {
+                        if let Some(i) = kit::segmented(ui,&labels,col.lens as usize,width) {
                             self.plugins.showing = false;
                             col.lens = Lens::from_index(i as u8);
                             actions.push(format!("lens\u{1f}{i}"));
@@ -2752,11 +2751,11 @@ impl Ui {
                     let clipped = painter.with_clip_rect(rect);
                     clipped.rect_filled(tag, R_INSET, SHEET);
                     clipped.galley(at + vec2(5., 2.), label, INK);
-                    painter.rect_stroke(rect, 0., Stroke::new(1., if active { ACCENT } else { EDGE }),
+                    painter.rect_stroke(rect, 0., Stroke::new(1_f32, if active { ACCENT } else { EDGE }),
                                         egui::StrokeKind::Inside);
                 }
                 for &[x0,y0,x1,y1] in &self.model_guides {
-                    painter.line_segment([pos2(x0,y0),pos2(x1,y1)], Stroke::new(2., ACCENT));
+                    painter.line_segment([pos2(x0,y0),pos2(x1,y1)], Stroke::new(2_f32, ACCENT));
                 }
             }
             self.top_bar(ctx, screen);
@@ -2931,35 +2930,6 @@ fn item_response(ui: &mut egui::Ui, item: &Item, icon: Option<&egui::TextureHand
     resp.on_hover_text(tip)
 }
 
-/// A project tab: capsule, name (and • while unsaved), × on the right when
-/// current or hovered. Some(true): close clicked; Some(false): tab clicked.
-fn doc_tab(ui: &mut egui::Ui, name: &str, active: bool, dirty: bool) -> Option<bool> {
-    let label = if dirty { format!("{name} •") } else { name.to_owned() };
-    let g = ui.painter().layout_no_wrap(label, body(), INK);
-    let (rect, resp) = ui.allocate_exact_size(vec2(g.size().x + 12.0 + 26.0, 28.0), Sense::click());
-    let st = state_of(&resp, active, true);
-    paint_state(ui, rect, st, R_CONTROL);
-    let ink = if active { BRIGHT } else if resp.hovered() { INK } else { INK_2 };
-    ui.painter().galley(pos2(rect.min.x + 12.0, rect.center().y - g.size().y / 2.0), g, ink);
-    let x = Rect::from_center_size(pos2(rect.max.x - 14.0, rect.center().y), vec2(18.0, 18.0));
-    let over_x = resp.hover_pos().is_some_and(|p| x.contains(p));
-    if active || resp.hovered() {
-        if over_x {
-            ui.painter().circle_filled(x.center(), 9.0, PRESS);
-        }
-        let c = x.center();
-        let k = 3.5;
-        let pen = Stroke::new(1.3_f32, if over_x { INK } else { DIM });
-        ui.painter().line_segment([c + vec2(-k, -k), c + vec2(k, k)], pen);
-        ui.painter().line_segment([c + vec2(-k, k), c + vec2(k, -k)], pen);
-    }
-    if resp.clicked() {
-        let on_x = resp.interact_pointer_pos().is_some_and(|p| x.contains(p));
-        return Some(on_x && (active || resp.hovered()));
-    }
-    None
-}
-
 /// Inspector rows: label left, value right; a value written
 /// "\u{1d}edit\u{1d}<id>\u{1d}<text>" is an editable field (Enter applies).
 fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::collections::HashMap<String, String>,
@@ -3022,7 +2992,7 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
                 let (lr, _) = ui.allocate_exact_size(vec2(88.0, CONTROL_H), Sense::hover());
                 ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, meta(), DIM);
                 let w = (ui.available_width() - 8.0).max(60.0);
-                if let Some(i) = widgets::segmented(ui, &labels, at, w) {
+                if let Some(i) = kit::segmented(ui, &labels, at, w) {
                     if i != at { actions.push(format!("edit\u{1f}{id}\u{1f}{}", labels[i])); }
                 }
             });

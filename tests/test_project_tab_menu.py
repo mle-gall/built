@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from ingetrazo_core import Vec3 as V
 
-from core.settings import settings
+from ingetrazo_core.settings import settings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from views import wgpu_tabs
 

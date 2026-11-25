@@ -135,7 +135,7 @@ pub fn normalized(v: V3, h: Hypot) -> V3 {
     }
 }
 
-/// `core.triangulate.plane_axes`.
+/// `ingetrazo_core.triangulate.plane_axes`.
 pub fn plane_axes(normal: V3, h: Hypot) -> (V3, V3) {
     let n = normalized(normal, h);
     let mut r = V3(1.0, 0.0, 0.0);
@@ -149,7 +149,7 @@ pub fn plane_axes(normal: V3, h: Hypot) -> (V3, V3) {
     (u, v)
 }
 
-// ---- earcut: core.triangulate's Mapbox port, node for node ---------------
+// ---- earcut: ingetrazo_core.triangulate's Mapbox port, node for node ---------------
 
 struct Node {
     i: usize,
@@ -604,7 +604,7 @@ fn point_in_triangle(ax: f64, ay: f64, bx: f64, by: f64, cx: f64, cy: f64, px: f
         && (bx - px) * (cy - py) - (cx - px) * (by - py) >= 0.0
 }
 
-/// `core.triangulate.earcut`.
+/// `ingetrazo_core.triangulate.earcut`.
 pub fn earcut(pts: &[(f64, f64)], holes: &[usize]) -> Vec<[usize; 3]> {
     earcut_impl(pts, holes, false)
 }
@@ -649,7 +649,7 @@ fn earcut_impl(pts: &[(f64, f64)], holes: &[usize], spatial: bool) -> Vec<[usize
     tris
 }
 
-/// `core.triangulate.is_convex`.
+/// `ingetrazo_core.triangulate.is_convex`.
 pub(crate) fn is_convex(poly: &[(f64, f64)]) -> bool {
     let n = poly.len();
     if n < 4 {
@@ -756,7 +756,7 @@ pub fn face_geometry(pos: &[V3], rings: &[&[u32]], h: Hypot, compensated: bool) 
     let cy = py_sum(outer.iter().map(|&i| pos[i as usize].1 as f64), compensated);
     let cz = py_sum(outer.iter().map(|&i| pos[i as usize].2 as f64), compensated);
     let centroid = V3((cx / cnt) as f32, (cy / cnt) as f32, (cz / cnt) as f32);
-    // core.triangulate.triangulate(loop, holes, normal), and again with
+    // ingetrazo_core.triangulate.triangulate(loop, holes, normal), and again with
     // the unit normal when that is another vector.
     let tris = triangles(pos, rings, normal, h);
     let same = unit.0.to_bits() == normal.0.to_bits() && unit.1.to_bits() == normal.1.to_bits()

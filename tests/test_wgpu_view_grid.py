@@ -19,7 +19,7 @@ def test_visible_tiles_share_one_resident_scene_and_gpu(grid):
 
 
 def test_each_tile_draws_its_own_camera_and_style(grid):
-    from core.style import style_by_name
+    from ingetrazo_core.style import style_by_name
     vp = grid.click("Top")
     vp.view_style = style_by_name("X-ray").copy()
     grid.renderer.calls.clear()

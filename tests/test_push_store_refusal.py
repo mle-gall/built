@@ -23,9 +23,9 @@ def _state(mesh):
 
 @pytest.fixture
 def logs(monkeypatch, tmp_path):
-    import core.paths
+    import ingetrazo_core.paths
     import core.push_pull as P
-    monkeypatch.setattr(core.paths, "user_log_dir", lambda: tmp_path)
+    monkeypatch.setattr(ingetrazo_core.paths, "user_log_dir", lambda: tmp_path)
     monkeypatch.setattr(P, "_REPROS", set())
     return tmp_path
 

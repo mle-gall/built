@@ -55,7 +55,7 @@ def run(kind, steps):
     call_dialog = lambda *args, **kwargs: kwargs["done"]("Label")
     schedule = lambda owner, delay, callback: callback()
     with patch("ingetrazo_render.chrome_forms.ask_text", side_effect=call_dialog), \
-         patch("core.timers.later", side_effect=schedule), \
+         patch("ingetrazo_core.timers.later", side_effect=schedule), \
          patch.object(ScaleManagerTool, "_run", staticmethod(lambda vp, g: dialogs.append(g.name))):
         if kind != "scale_manager":
             tool.on_activate(vp)

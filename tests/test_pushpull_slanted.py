@@ -20,7 +20,7 @@ from core.edits import build_add_edge
 from core.history import History, MoveVerticesCommand
 from ingetrazo_core.orient import is_closed, orient_outward, signed_volume
 from core.scene import Scene
-from core.triangulate import plane_axes
+from ingetrazo_core.triangulate import plane_axes
 from tests.test_fuzz_engine import V, _draw_rect, _push, _up
 
 
