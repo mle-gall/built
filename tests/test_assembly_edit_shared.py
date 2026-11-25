@@ -528,7 +528,7 @@ def test_metal_follows_a_part_deleted_in_an_assembly_without_a_repack(
 def test_a_linked_assembly_stays_read_only(native_host, tmp_path, monkeypatch):
     """Parts of a linked file are edited in their own document: going into
     a copy of a link, or a part of it, offers the file and enters nothing."""
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     from core import links
     from formats import igz
     src = Scene()

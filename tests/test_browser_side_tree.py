@@ -106,7 +106,7 @@ def test_read_only_and_stale_rows_cannot_delete_the_selection(model):
 
 def test_deleting_a_tag_rechecks_the_document_after_confirmation(native_question_host):
     from core.layers import Layer
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     from core.group import Group
     win = native_question_host.window
     scene = win.viewport.scene

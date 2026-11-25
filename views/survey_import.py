@@ -4,7 +4,7 @@ from pathlib import Path
 
 from ingetrazo_core import Vec3 as QVector3D
 from core.i18n import tr
-from views import chrome_dialogs as _dialogs
+from ingetrazo_render import chrome_dialogs as _dialogs
 from views.filedialogs import file_dialogs
 
 
@@ -145,7 +145,7 @@ def import_alignment(window):
 def import_points(window):
     from georef.points import parse_points_csv
     from ingetrazo_render import OperationForm, place_survey_points
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
 
     path, _ = file_dialogs.getOpenFileName(window, tr("Import survey points CSV"), "",
                                             tr("CSV (*.csv *.txt);;All files (*)"))

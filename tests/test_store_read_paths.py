@@ -13,17 +13,12 @@ and must answer the same; on the store it must also stay store-backed (a
 read that materialised would hide the very bug it checks)."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import random                                                     # noqa: E402
 from types import SimpleNamespace                                 # noqa: E402
 
 import pytest                                                     # noqa: E402
-from PySide6.QtCore import QPointF, Qt                            # noqa: E402
-from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication                        # noqa: E402
+from core.input_codes import Input
+from ingetrazo_core import ScreenPoint, Vec3 as QVector3D
 
 import core._native as _native                                    # noqa: E402
 from core import store_mesh as S                                  # noqa: E402
@@ -34,7 +29,6 @@ from formats import igz                                           # noqa: E402
 from tests.test_fuzz_engine import V, _draw_rect, _push           # noqa: E402
 from tools.base import ToolContext                                # noqa: E402
 
-app = QApplication.instance() or QApplication([])
 
 pytestmark = pytest.mark.skipif(
     _native.available() is None
@@ -138,8 +132,8 @@ class _Viewport:
         pass
 
 
-def _ctx(vp, modifiers=Qt.NoModifier):
-    return ToolContext(viewport=vp, world=QVector3D(), screen=QPointF(0, 0),
+def _ctx(vp, modifiers=Input.NoModifier):
+    return ToolContext(viewport=vp, world=QVector3D(), screen=ScreenPoint(0, 0),
                        modifiers=modifiers, snap=None)
 
 
@@ -193,9 +187,9 @@ def test_paint_hover_marks_the_face_under_the_cursor(doc):
 
 
 @pytest.mark.parametrize("modifiers,stays", [
-    (Qt.ShiftModifier, False),                          # toggle: out
-    (Qt.ControlModifier, True),                         # add: still in
-    (Qt.ShiftModifier | Qt.ControlModifier, False),     # remove: out
+    (Input.ShiftModifier, False),                          # toggle: out
+    (Input.ControlModifier, True),                         # add: still in
+    (Input.ShiftModifier | Input.ControlModifier, False),     # remove: out
 ])
 def test_select_click_on_a_face_already_selected(doc, modifiers, stays):
     from tools.rust_tools import SelectTool

@@ -8,7 +8,7 @@ from __future__ import annotations
 from core.settings import settings
 from tests.preferences_chrome import Controls
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from views import chrome_forms
+from ingetrazo_render import chrome_forms
 
 
 def _customised():

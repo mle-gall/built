@@ -174,12 +174,10 @@ system prompt + `ai.chat` + `ai.run_transactional`. See
 `plugins/ai_assistant.py` for the full worked example (agent loop with
 screenshot feedback) and `docs/ai-bridge.md` for the MCP route.
 
-Threading rule for any plugin doing network or background work: never
-touch the document off the main thread. Relay results with a
-`Signal(object)` on a queued connection to a bound method —
-`Signal(dict)` would hand the slot a COPY of the payload, and a lambda
-receiver runs on the WRONG thread (both bugs were hunted in these very
-plugins; the details are in the AI plugins' comments).
+Run network requests on a worker and apply their results on the application
+thread. The native AI Assistant uses a queue and a timer to deliver responses,
+checks the originating document and discards cancelled requests. See
+[`plugins/_assistant_panel.py`](../plugins/_assistant_panel.py).
 
 ## Beyond tools: `setup(app)`
 
@@ -201,31 +199,18 @@ def setup(app):
     app.on_document_changed(refresh)      # edits, undo, New, Open, tab switch
     app.on_document_closed(forget)        # forget(scene): a project tab closed
 
-    # A tab in the side tray, beside Properties / BIM / Terrain. It goes
-    # back where the user left it and is listed in Window ▸ Panels (the
-    # user may hide it there); `name` tells apart several panels of one
-    # extension, `panel=` puts several extensions in ONE tab. The tabs show
-    # only an icon (the name is their tooltip and heads the panel): `icon=`
-    # takes a QIcon or one of IngeTrazo's drawn icons by key, which follows
-    # the theme; without it, the tab shows the name's initial.
-    dock = app.add_panel("Levels", my_widget, icon="panel_levels")
-    # A panel few users need open all the time: closed the first time,
-    # opened from Window ▸ Panels (and remembered from then on).
-    app.add_panel("Levels — help", help_widget, name="help",
-                  start_hidden=True)
-    app.add_panel("AI", chat, panel="ai", stretch=1)
-    app.show_panel(dock)                  # to the front, shown again if hidden
+    # Open the native panel registered by this module's create_panel.
+    from core.plugin_panels import open_panel
 
     # Several commands? A submenu of your own: Extensions ▸ Windowizer ▸ …
     sub = app.add_menu("Windowizer")
     sub.addAction("Edit window…", edit)
 
-    # Entries in the viewport's right-click menu, after the selection's own
-    # (open dialogs from them with QTimer.singleShot(0, …)):
+    # Add a command to the viewport's right-click menu.
     app.add_context_menu(lambda menu, selection: ...)
 
     # What YOUR container groups are, in the Browser: the type in
-    # the Type column (the filter finds it), the properties in its tooltip.
+    # the Type column, the properties in its tooltip.
     # Asked for every row: keep it cheap; None for groups that are not yours.
     app.add_outliner_kind(lambda group: {
         "type": "Window", "props": [("Panes", "3 × 2"), ("Width", "1.20 m")]}
@@ -238,7 +223,7 @@ def setup(app):
 
     # An entry in the Extensions menu (a shortcut already taken is left off;
     # `tip` says what it does, in the status bar and in F3).
-    app.add_menu_action("Levels…", lambda: app.show_panel(dock), "Ctrl+Shift+L",
+    app.add_menu_action("Levels…", lambda: open_panel(app.window, app.key), "Ctrl+Shift+L",
                         tip="Show the levels of the building.")
 
     # Another .igz as ONE component, with no file dialog: it follows the
@@ -246,11 +231,6 @@ def setup(app):
     # (one undo step). Returns the component; None = no geometry.
     app.import_igz("/path/to/bench.igz")
     comp = app.import_igz("/path/to/bench.igz", at=(4.0, 2.0, 0.0))
-
-    # Drawn with a QPainter over every frame, whatever the active tool;
-    # world points (metres) to pixels, thousands at a time:
-    app.add_overlay(lambda viewport, painter: ...)
-    px, py, in_front = app.world_to_pixels(points_n_by_3)
 
     # The same marks on the SHEETS (0.6.2): lines and texts in world
     # points; each model-view frame projects and prints them as vectors,
@@ -361,25 +341,16 @@ IngeTrazo's log folder for the full traceback.
 
 ### Where your interface goes
 
-The side tray is one place, not the only one. Pick by how the user works
-with it:
+Export `create_panel(app, invalidate)` from the plugin module for a
+document-bound panel. Use the `dock` slot for controls such as light placement
+that stay visible while modelling. Use `utility` for wide output such as the
+Console or Blender render preview. Both slots use the same descriptor and
+event API. See [Plugin panels](plugin-panels.md) for a working example,
+supported controls, viewport overlays and document lifetime.
 
-- **A tray tab** (`add_panel`) — for what stays open *while modelling* and
-  works on the viewport: placing things with a click, settings you tweak
-  and look at the model again. Render with Blender and Levels live here.
-  Keep it narrow-friendly: controls that shrink, sections that fold
-  (`views/fold_section.py`), no fixed widths.
-- **A native utility** — for wide output such as the Python Console and the Blender image preview. Both are bound to the open document. See [Plugin panels](plugin-panels.md).
-- **A classic dialog or a window of your own** (a `QDialog`, any Qt window, from a
-  tool or a menu entry) — for what is opened, used and closed, or needs
-  room, as in the classic Model Info report. Parent it to `app.window`, make it
-  non-modal unless it must block, and reuse one instance.
-- **Only a menu entry or a tool** — for one-shot commands.
-- **A workspace** (below) — when the extension has a document of its own
-  that replaces the model for a while.
-
-Nothing forces the tray: an extension may mix these (Render has its tab
-and opens the image in a window).
+For a short interaction, open a native form from a menu or tool and apply the
+result in its completion callback. Windowizer uses this pattern for its edit
+command. A one-shot command can also run directly from the Extensions menu.
 
 ### A document type of its own, and workspaces (API 2)
 
@@ -438,27 +409,12 @@ Wilson's Windowizer 3 by Bane Andreev, an architect, written with AI help.
 
 ## Bundled reference plugins
 
-- `plugins/model_info.py` — Model Info dialog (geometry / materials /
-  layers / BIM statistics). A read-only, dialog-based plugin.
-- `plugins/python_console.py` — the Python Console. A stateful,
-  command-layer-integrated plugin.
-- `plugins/solid_inspector.py` — Solid Inspector: per-edge watertightness
-  diagnosis with viewport highlighting, step-by-step navigation and a
-  one-undo-step repair (`RepairSolidsCommand`, snapshot undo over several
-  meshes). A side-tray tab (`setup(app)` + `add_panel`) with a viewport
-  overlay that paints each problem in its colour.
-- `plugins/ai_assistant.py` — the in-app AI assistant (Ctrl+Shift+A): a
-  multi-provider chat agent that models through `core.ai`, in the «AI»
-  tray tab. The reference for worker threads, per-provider settings and a
-  menu entry that brings a tab forward.
-- `plugins/ai_bridge.py` — the MCP bridge: a localhost TCP server that
-  lets an external agent (Claude Code/Desktop) drive the document; a
-  section of the same «AI» tab (`panel="ai"`). The reference for socket
-  servers and main-thread relays.
-- `plugins/render_blender.py` — Render with Blender: a tray tab with
-  folding sections, lights placed with a click and drawn over the
-  viewport, document data, a child process, and the image in a window of
-  its own. The reference for a full panel extension.
+- Model Info presents geometry, materials, layers and BIM statistics in a read-only utility panel.
+- Python Console executes commands with document history and undo.
+- Solid Inspector shows watertightness problems, highlights their edges in the viewport and repairs selected meshes in one undo step.
+- AI Assistant uses a native dock panel for chat, provider settings and background requests.
+- Render with Blender uses a dock for lights and camera controls and a utility panel for its image preview.
+- AI Bridge runs document commands on the native host thread. On macOS and Linux, its Start bridge button opens a private Unix socket for the current profile. The listener stops when the window closes.
 
 ## Roadmap
 
@@ -547,8 +503,7 @@ def setup(app):
     # Retain unsubscribe and invoke it in your extension's teardown.
 ```
 
-The bridge calls `fn(**args)` on the Qt main thread with the dialog guard
-active. Return plain JSON values (string-keyed dicts, lists, finite numbers,
+The bridge calls `fn(**args)` on the native document thread. Forms and sheets opened by a call are cancelled before its reply. Return plain JSON values (string-keyed dicts, lists, finite numbers,
 strings, booleans or null); invalid output raises a clear error. Schemas are
 advertised to clients, not a runtime JSON Schema validator: validate domain
 arguments in the callable. Read `app.scene` inside the callable so it follows

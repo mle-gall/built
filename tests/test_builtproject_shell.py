@@ -50,7 +50,7 @@ def names(win):
 
 
 def test_open_with_a_missing_member_never_asks(host, tmp_path, monkeypatch):
-    from views import chrome_dialogs as cd
+    from ingetrazo_render import chrome_dialogs as cd
     asked = []
     monkeypatch.setattr(cd, "question", lambda *a, **k: asked.append(a) or 0)
     monkeypatch.setattr(cd, "warning", lambda *a, **k: asked.append(a))

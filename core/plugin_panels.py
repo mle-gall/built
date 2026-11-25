@@ -38,7 +38,7 @@ def on_document_close(app, close):
 
 
 def open_panel(win, key):
-    from views.chrome_dialogs import view_of
+    from ingetrazo_render.chrome_dialogs import view_of
     view = view_of(win)
     if not getattr(view, "_ui_attached", False) or not hasattr(view.renderer, "ui_plugin_open"):
         return False
@@ -58,7 +58,7 @@ def open_panel(win, key):
 
 def show_utility(win, key, model):
     """Publish or replace one utility for this document, keeping its zoom and position."""
-    from views.chrome_dialogs import view_of
+    from ingetrazo_render.chrome_dialogs import view_of
     view = view_of(win)
     if not getattr(view, "_ui_attached", False):
         return None
@@ -144,15 +144,19 @@ def sync(view, win):
         view._plugin_scene = win.viewport.scene
         view._plugin_document = uuid.uuid4().hex
         view._plugin_bindings = {}
-        for key, factory in win._panel_factories.items():
-            try:
-                binding = Binding(win, key, factory, view)
-            except (Exception, SystemExit):
-                import logging
-                logging.getLogger(__name__).exception("Plugin panel %s failed to load", key)
-                continue
-            view._plugin_bindings[binding.instance] = binding
+        view._plugin_factories_seen = set()
         view._ui_plugins_sent = False
+    for key, factory in win._panel_factories.items():
+        if key in view._plugin_factories_seen:
+            continue
+        view._plugin_factories_seen.add(key)
+        try:
+            binding = Binding(win, key, factory, view)
+        except (Exception, SystemExit):
+            import logging
+            logging.getLogger(__name__).exception("Plugin panel %s failed to load", key)
+            continue
+        view._plugin_bindings[binding.instance] = binding
     if not getattr(view, "_ui_plugins_sent", False):
         live = [scope for doc in win._documents
                 if (scope := getattr(getattr(doc, "stand_in", None), "_plugin_document", None))]
@@ -166,7 +170,7 @@ def sync(view, win):
 
 
 def dispatch(win, raw):
-    from views.chrome_dialogs import view_of
+    from ingetrazo_render.chrome_dialogs import view_of
     view = view_of(win)
     event = json.loads(raw)
     binding = getattr(view, "_plugin_bindings", {}).get(event.get("instance"))

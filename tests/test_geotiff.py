@@ -196,7 +196,7 @@ def test_failed_survey_cache_write_preserves_the_document(tmp_path, monkeypatch)
             raise OSError("cache full")
         monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *args: (str(tile), ""))
         monkeypatch.setattr("core.texture.cache_image", fail)
-        monkeypatch.setattr("views.chrome_dialogs.critical", lambda *args: messages.append(args[-1]))
+        monkeypatch.setattr("ingetrazo_render.chrome_dialogs.critical", lambda *args: messages.append(args[-1]))
         host.menu("import:orthomosaic")
         assert messages == ["cache full"] and not host.errors
         assert scene.georef is None and scene.tile_layer is None and not scene.image_planes

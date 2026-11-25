@@ -8,17 +8,11 @@ with the layers as they are switched at the time of asking."""
 from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from core.layers import Layer  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
 
 
 def _box(scene, layer, x0):

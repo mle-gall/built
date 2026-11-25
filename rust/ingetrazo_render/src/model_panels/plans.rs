@@ -232,7 +232,7 @@ pub(super) fn plan_options(win: &Obj<'_>, target: &Obj<'_>, group: bool) -> PyRe
         return Ok(());
     }
     let py = win.py();
-    let forms = py.import("views.chrome_forms")?;
+    let forms = py.import("ingetrazo_render.chrome_forms")?;
     let fields = PyList::empty(py);
     let field = forms.getattr("Field")?;
     if group {

@@ -10,7 +10,7 @@ use egui::{pos2, vec2, Color32, CornerRadius, Margin, Pos2, Rect, Sense, Stroke,
 
 /// Small widgets shared by the dock and the forms (segmented, tabs).
 mod widgets;
-/// The chrome's modal forms (views/chrome_forms.py).
+/// The chrome's modal forms (rust/ingetrazo_render/src/forms_host.rs).
 pub mod dialog;
 pub mod operation_form;
 /// Sheets, a workspace of the window (views/wgpu_sheets.py).

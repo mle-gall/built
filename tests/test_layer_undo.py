@@ -252,7 +252,7 @@ def test_drawing_add_and_rename_stay_off_the_modelling_history(native_host):
 
 def test_panel_delete_asks_when_the_layer_has_content(native_question_host):
     from tests.native_tree import action
-    from views import chrome_dialogs as dialogs
+    from ingetrazo_render import chrome_dialogs as dialogs
     win = native_question_host.window
     scene = win.viewport.scene
     face = _square(scene.mesh)

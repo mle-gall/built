@@ -4,20 +4,15 @@
 and placement into the scene's local frame. Headless, synthetic ODM output."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import numpy as np
 import pytest
-from PySide6.QtGui import QGuiApplication
+from ingetrazo_render import SurveyRaster
 
 from georef.datum import SceneDatum, utm_forward, utm_inverse
 from georef.photomesh import (DEFAULT_TEXTURE_BUDGET, ODMAnchor, atlas_bytes,
                               find_anchor, load_atlas, load_odm_obj, parse_anchor,
                               parse_mtl, plan_texture_sizes)
 
-_app = QGuiApplication.instance() or QGuiApplication([])
 
 # Chanchallay: UTM 18S, the real anchor from the user's own survey.
 ANCHOR_TEXT = "WGS84 UTM 18S\n717623 8278698\n"
@@ -265,10 +260,9 @@ def test_atlas_within_limits_is_left_alone():
 
 
 def test_load_atlas_downscales_and_caches(tmp_path, monkeypatch):
-    from PySide6.QtGui import QImage
     monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "cache"))
     src = tmp_path / "atlas.png"
-    QImage(1024, 1024, QImage.Format.Format_RGB32).save(str(src), "PNG")
+    assert SurveyRaster(1024, 1024, bytes((0, 0, 0, 255)) * (1024**2)).save(src)
 
     img = load_atlas(src, (256, 256))
     assert (img.width, img.height) == (256, 256)
@@ -527,12 +521,10 @@ def test_anchor_and_material_runs_survive(tmp_path):
 def test_atlases_are_embedded_not_referenced(tmp_path):
     """The whole point: the document must open on a machine that never had the
     455 MB ODM export."""
-    from PySide6.QtGui import QImage
 
     obj = _write_odm_tree(tmp_path)
     mesh = load_odm_obj(obj, _datum_at_anchor())
-    image = QImage(64, 64, QImage.Format.Format_RGB32)
-    image.fill(0xFF3366AA)
+    image = SurveyRaster(64, 64, bytes((51, 102, 170, 255)) * (64**2))
     mesh.images = {0: image}
 
     restored, out = _round_trip(tmp_path, mesh)
@@ -624,14 +616,10 @@ def test_empty_mesh_has_empty_bounds(tmp_path):
 
 
 def test_atlas_reduction_keeps_orientation_and_straight_alpha(tmp_path):
-    from PySide6.QtGui import QColor, QImage
-    from ingetrazo_render import SurveyRaster
-    image = QImage(4, 4, QImage.Format.Format_RGBA8888)
-    image.fill(QColor(255, 0, 0, 0))
-    for y in range(4):
-        for x in (0, 2):
-            image.setPixelColor(x, y, QColor(0, 255 if y < 2 else 0, 255 if y >= 2 else 0))
+    transparent = (255, 0, 0, 0)
+    top = bytes((0, 255, 0, 255) + transparent) * 2
+    bottom = bytes((0, 0, 255, 255) + transparent) * 2
     path = tmp_path / "bands.png"
-    assert image.save(str(path))
+    assert SurveyRaster(4, 4, top * 2 + bottom * 2).save(path)
     reduced = SurveyRaster.atlas(path, (2, 2))
     assert reduced.rgba() == bytes((0, 255, 0, 128)) * 2 + bytes((0, 0, 255, 128)) * 2

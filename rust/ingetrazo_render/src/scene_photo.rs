@@ -29,7 +29,7 @@ pub fn render_scene_photo(window: &Obj<'_>, request: &str) -> PyResult<Option<Pi
         return Ok(None);
     }
     let display = py
-        .import("views.chrome_dialogs")?
+        .import("ingetrazo_render.chrome_dialogs")?
         .call_method1("view_of", (window,))?;
     if display.is_none() {
         return Ok(None);

@@ -9,14 +9,9 @@ view on showed nothing of a cylinder's seams, yet a click could land on one.
 """
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtGui import QGuiApplication
 from ingetrazo_core import Vec3 as QVector3D
 
-_app = QGuiApplication.instance() or QGuiApplication([])
 
 from core.layers import Layer
 from core.scene import Scene

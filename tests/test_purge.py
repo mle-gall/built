@@ -184,7 +184,7 @@ def test_flags_scope_the_sweep():
 def test_deleting_a_layer_reassigns_faces_INSIDE_groups(native_question_host):
     from core.layers import layer_of
     from tests.native_tree import action
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     scene = native_question_host.viewport.scene
     inner = Mesh()
     f = _quad(inner)
@@ -206,7 +206,7 @@ def test_deleting_a_layer_reassigns_faces_INSIDE_groups(native_question_host):
 
 def test_the_drawing_purge_removes_only_unused_tags_and_undo_restores_order(native_question_host):
     from tests.native_tree import action
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     host = native_question_host
     scene = host.viewport.scene
     names = [DEFAULT_LAYER, "CVL_PUNTO", "BUZON", "Trees"]

@@ -14,13 +14,11 @@ geometry, with an edge's own layer inside an object kept."""
 from __future__ import annotations
 
 from tests.shell_isolation import one_off_export, restore_shell_patches  # noqa: F401
-import os
 
 import numpy as np
 import pytest
 from ingetrazo_core import Vec3 as V
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from core import _native                                 # noqa: E402
 from core import mesh as M                               # noqa: E402
@@ -29,11 +27,6 @@ from core.hlr import hlr_drawing                         # noqa: E402
 from core.layers import Layer                            # noqa: E402
 from core.scene import Scene                             # noqa: E402
 from formats import igz                                  # noqa: E402
-
-
-def _app():
-    from PySide6.QtWidgets import QApplication
-    return QApplication.instance() or QApplication([])
 
 
 def _box(mesh, x0, y0, z0, s=1.0, layer=None):
@@ -139,7 +132,6 @@ def lazy(request, monkeypatch):
 
 def test_the_arrays_draw_the_lines_the_walk_draws_with_their_layers(
         tmp_path, lazy):
-    _app()
     scene = _scene(tmp_path, lazy)
     vp = _viewport(scene)
     geometry = vp.hlr_geometry(tags=True)
@@ -167,7 +159,6 @@ def test_the_arrays_draw_the_lines_the_walk_draws_with_their_layers(
 def test_with_a_section_cut_too(tmp_path, lazy):
     from core.history import History, PlaceSectionPlaneCommand
     from core.section import SectionPlane
-    _app()
     scene = _scene(tmp_path, lazy)
     vp = _viewport(scene)
     hist = History(scene)
@@ -186,7 +177,6 @@ def test_with_a_section_cut_too(tmp_path, lazy):
 def test_the_exports_hand_the_arrays_over(native_host, tmp_path, monkeypatch):
     """The SVG and DXF exports of a view with layers no longer walk."""
     from core import hlr as H
-    _app()
     win = native_host.window
     scene = _scene(tmp_path, False)
     win.viewport.scene.layers[:] = scene.layers
@@ -214,7 +204,6 @@ def test_a_hidden_face_inside_an_object_hides_nothing():
     its edges), so a sheet by layer showed less than the screen under a
     hidden roof. From the arrays, as on the screen: the box under the
     hidden top keeps its edges."""
-    _app()
     scene = Scene()
     m = M.Mesh()
     roof = m.add_face([V(0, 0, 2), V(2, 0, 2), V(2, 2, 2), V(0, 2, 2)])
