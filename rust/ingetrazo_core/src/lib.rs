@@ -129,6 +129,7 @@ mod vertex_bevel;
 mod selection_growth;
 mod paint_stroke;
 mod offset_face;
+mod text3d;
 mod solid_analysis;
 mod soften;
 mod seed_orientation;

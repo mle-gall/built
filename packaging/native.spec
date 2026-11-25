@@ -107,7 +107,6 @@ for _plat, _names in _DWG_FILES.items():
 # ── Hidden imports ───────────────────────────────────────────────────────────
 hiddenimports = [
     # Lazily imported project modules (inside functions) — listed for safety.
-    'core.text3d',
     'core.textlabel',
 ]
 
