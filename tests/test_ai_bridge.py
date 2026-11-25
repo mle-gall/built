@@ -259,7 +259,7 @@ def test_the_flatpak_ships_the_mcp_script():
     # manifest must copy scripts/ with the rest of the tree.
     from core.paths import app_root
     manifest = (app_root() / "packaging" / "flatpak" / "com.ingetrazo.IngeTrazo.yml").read_text(encoding="utf-8")
-    line = next(l for l in manifest.splitlines() if "cp -a app_shell" in l)
+    line = next(l for l in manifest.splitlines() if "cp -a core" in l)
     assert " scripts " in line + " "
 
 

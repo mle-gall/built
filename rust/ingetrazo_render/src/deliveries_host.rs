@@ -83,7 +83,7 @@ fn monotonic(py: Python<'_>) -> PyResult<f64> {
 fn report_job(win: &Bound<'_, PyAny>, history: &Bound<'_, PyAny>, job: &Bound<'_, PyAny>, fraction: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
     job.call_method1("update", (fraction,))?;
-    py.import("app_shell.modal")?.call_method0("tick")?; // a turn of the shell's loop; none headless
+    py.import("ingetrazo_render.shell_modal")?.call_method0("tick")?; // a turn of the shell's loop; none headless
     if job.getattr("cancelled")?.is_truthy()? || !history_of(win)?.is(history) {
         return Err(PyInterruptedError::new_err("Delivery cancelled"));
     }

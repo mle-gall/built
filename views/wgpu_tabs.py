@@ -104,7 +104,7 @@ def tabs(win, docs=None) -> list:
 def _elsewhere(win) -> list:
     """The projects in the app's other windows (the native app): (id, name, window)."""
     try:
-        from app_shell import windows
+        from ingetrazo_render import shell_windows as windows
     except Exception:  # noqa: BLE001
         return []
     return windows.elsewhere(win)
@@ -112,7 +112,7 @@ def _elsewhere(win) -> list:
 
 def _can_move(win) -> bool:
     try:
-        from app_shell import windows
+        from ingetrazo_render import shell_windows as windows
     except Exception:  # noqa: BLE001
         return False
     return windows.can_move(win)
@@ -170,7 +170,7 @@ def action(win, view, arg) -> None:
         win._on_new_tab()
     elif verb == "goto":
         try:
-            from app_shell import windows
+            from ingetrazo_render import shell_windows as windows
         except Exception:  # noqa: BLE001
             return
         windows.goto(win, rest)

@@ -1,6 +1,6 @@
 """Sheets as a workspace of the Built window (views/wgpu_sheets.py), headless.
 
-The native shell's host (app_shell/) runs the same view, chrome and input
+The native shell's host (ingetrazo_render.Host) runs the same view, chrome and input
 code as the Qt app's Metal view; here it has no surface, so a recording
 renderer stands in for the Metal one. The page itself is native: its
 snapshot comes from the document (ingetrazo_core sheet_page_json), and

@@ -19,7 +19,7 @@ pub(super) fn invalidate_tabs(w: &Obj<'_>) -> PyResult<()> {
 pub(super) fn make_document<'p>(w: &Obj<'p>, vp: &Obj<'p>, view: &Obj<'p>) -> PyResult<Obj<'p>> {
     let py = w.py();
     let doc = py
-        .import("app_shell.model_views")?
+        .import("ingetrazo_render.shell_views")?
         .call_method0("ShellDocument")?;
     doc.setattr("viewport", vp)?;
     doc.setattr("stand_in", view)?;
@@ -120,7 +120,7 @@ pub(super) fn activate_document(w: &Obj<'_>, doc: &Obj<'_>) -> PyResult<()> {
     kw.set_item("force", true)?;
     vp.getattr("_document_watch")?
         .call_method("observe", (), Some(&kw))?;
-    py.import("app_shell.project")?
+    py.import("ingetrazo_render.shell_project")?
         .call_method1("persist", (w,))?;
     host.call_method0("request_frame")?;
     Ok(())
@@ -163,7 +163,7 @@ pub(super) fn retire_document(w: &Obj<'_>, doc: &Obj<'_>) -> PyResult<()> {
         .call_method1("suspend", (doc,))?;
     release_watch(doc)?;
     docs.call_method1("remove", (doc,))?;
-    let project = py.import("app_shell.project")?;
+    let project = py.import("ingetrazo_render.shell_project")?;
     project.call_method1("closed", (w, doc))?;
     project.call_method1("persist", (w,))?;
     let vp = doc.getattr("viewport")?;

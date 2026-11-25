@@ -82,7 +82,7 @@ def test_save_as_built_clears_dirty_and_names_the_window(host, tmp_path):
 
 
 def test_save_of_an_igz_asks_where_through_the_native_panel(host, tmp_path, monkeypatch):
-    from app_shell import native
+    from ingetrazo_render import shell_services as native
     src = _copy(tmp_path)
     host.open_path(src)
     _draw(host)
@@ -235,7 +235,7 @@ def test_composite_with_nested_links_opens_and_reloads(host, tmp_path):
 
 
 def test_open_dialog_goes_through_the_native_panel(host, tmp_path, monkeypatch):
-    from app_shell import native
+    from ingetrazo_render import shell_services as native
     src = _copy(tmp_path)
     monkeypatch.setattr(native, "open_files", lambda title, filters=None, directory=None, multiple=False: [str(src)])
     assert host.menu("open")

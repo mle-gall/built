@@ -68,7 +68,7 @@ def test_open_with_a_missing_member_never_asks(host, tmp_path, monkeypatch):
     a, b = win._documents
     assert not a.read_only and b.read_only and b.viewport.scene.worksession_read_only
     # Problems and the Project tree carry it.
-    from app_shell import project
+    from ingetrazo_render import shell_project as project
     assert [r[1] for r in project.problems(win)] == ["project:" + str((tmp_path / "job" / "gone.igz").resolve())]
     rows = project.tree_rows(win, "", set())
     assert {r[0][1]: r[0][4] for r in rows[1:]}["gone.igz"] == "file:missing"
@@ -144,7 +144,7 @@ def test_opening_an_igzproj_converts_it_in_place(host, tmp_path):
 
 
 def test_open_path_uses_the_native_project_session(host, tmp_path):
-    from app_shell import project
+    from ingetrazo_render import shell_project as project
     from ingetrazo_render import shell_files as files
     path = three_member_project(tmp_path / "job")
     assert files.open_path(host.window, path)
@@ -152,7 +152,7 @@ def test_open_path_uses_the_native_project_session(host, tmp_path):
 
 
 def test_locate_a_missing_member_relocates_it_in_the_manifest(host, tmp_path):
-    from app_shell import project
+    from ingetrazo_render import shell_project as project
     path = three_member_project(tmp_path / "job")
     found = tmp_path / "job" / "moved" / "gone.igz"
     found.parent.mkdir()

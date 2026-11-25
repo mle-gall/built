@@ -180,7 +180,7 @@ def export(view, native_question_host, monkeypatch):
     dialog as the user found it."""
     from ingetrazo_render import chrome_forms
     from views.filedialogs import file_dialogs
-    from app_shell import native
+    from ingetrazo_render import shell_services as native
     monkeypatch.setattr(native, "available", lambda: True)
     win, vp, folder = view
     seen = {}

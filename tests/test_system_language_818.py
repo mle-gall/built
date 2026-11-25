@@ -8,7 +8,7 @@ in Preferences (and Window ▸ Language) and is what an unset choice means.
 from __future__ import annotations
 
 import pytest
-from app_shell import native
+from ingetrazo_render import shell_services as native
 from core import i18n, settings
 
 from tests.preferences_chrome import Controls, settings_file
@@ -42,8 +42,8 @@ def test_system_locales_pick_the_closest_catalog(locales, expected):
 
 @pytest.fixture
 def system_is_french(monkeypatch):
-    from types import SimpleNamespace
-    monkeypatch.setattr(native, "_shell", SimpleNamespace(preferred_languages=lambda: ["fr-FR", "en-US"]))
+    monkeypatch.setattr(native, "available", lambda: True)
+    monkeypatch.setattr("ingetrazo_render.preferred_languages", lambda: ["fr-FR", "en-US"])
 
 
 def test_unset_or_system_follows_the_os_and_a_pinned_one_stays(system_is_french):

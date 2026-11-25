@@ -3,7 +3,7 @@ from ingetrazo_core import project_sidebar as native_project_sidebar
 
 
 def project_sidebar(scene, tree, rows, *options):
-    from app_shell.windows import hosts
+    from ingetrazo_render.shell_windows import hosts
     from core import outliner
 
     rows, path = native_project_sidebar(scene, tree, rows, *options)

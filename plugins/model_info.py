@@ -283,7 +283,7 @@ class ModelInfoPanel:
 
     def event(self, control, event, value):
         if (control, event) == ("copy", "invoke"):
-            from app_shell.native import pasteboard_write
+            from ingetrazo_render.shell_services import pasteboard_write
             text = _stats_to_text(self._stats)
             if not pasteboard_write([("public.utf8-plain-text", text.encode())]):
                 raise RuntimeError(tr("Could not copy to clipboard"))

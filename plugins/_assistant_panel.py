@@ -88,7 +88,7 @@ class AssistantPanel:
         elif control == "photo":
             self.attach_photo(value)
         elif control == "paste_photo":
-            from app_shell.native import pasteboard_read
+            from ingetrazo_render.shell_services import pasteboard_read
             data = pasteboard_read("public.png") or pasteboard_read("public.tiff")
             if data:
                 self.attach_photo(data)

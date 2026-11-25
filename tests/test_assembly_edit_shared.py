@@ -431,7 +431,7 @@ class _Metal:
     every placement."""
 
     def __init__(self, vp, monkeypatch):
-        from app_shell.view import ShellView
+        from ingetrazo_render.shell_views import ShellView
         self.view = view = ShellView(vp._host)
         view.source_viewport = vp
         view.camera = vp.camera

@@ -395,7 +395,7 @@ fn save_export_image(
     kw.set_item("sharp_shadows", true)?;
     kw.set_item("transparent", transparent)?;
     kw.set_item("crop_to_frame", true)?;
-    let native = py.import("app_shell.native")?.call_method0("available")?.is_truthy()?;
+    let native = py.import("ingetrazo_render.shell_services")?.call_method0("available")?.is_truthy()?;
     let method = if native { "render_raster" } else { "render_image" };
     let image = view.call_method(method, (width,), Some(&kw))?;
     let ready = !image.is_none() && (native || !image.call_method0("isNull")?.is_truthy()?);

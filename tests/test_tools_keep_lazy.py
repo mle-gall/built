@@ -243,7 +243,7 @@ def test_a_view_moving_into_the_grid_keeps_its_bakes(floor):
     win, vp, _mesh, _x, _y = floor
     primary = vp.keys_stand_in
     packed = primary.packed
-    from app_shell.model_views import make_pane
+    from ingetrazo_render.shell_views import make_pane
     from ingetrazo_render import ModelViews
 
     win.set_view_layout("four")

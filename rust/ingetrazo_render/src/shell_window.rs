@@ -632,32 +632,32 @@ impl ShellWindow {
     }
     fn _pick_view_layout<'p>(slf: &Bound<'p, Self>) -> PyResult<Obj<'p>> {
         slf.py()
-            .import("app_shell.model_views")?
+            .import("ingetrazo_render.shell_views")?
             .call_method1("choose", (slf,))
     }
     fn open_project<'p>(slf: &Bound<'p, Self>, path: &Obj<'p>) -> PyResult<Obj<'p>> {
         slf.py()
-            .import("app_shell.project")?
+            .import("ingetrazo_render.shell_project")?
             .call_method1("open_project", (slf, path))
     }
     fn set_active_file<'p>(slf: &Bound<'p, Self>, path: &Obj<'p>) -> PyResult<Obj<'p>> {
         slf.py()
-            .import("app_shell.project")?
+            .import("ingetrazo_render.shell_project")?
             .call_method1("set_active_file", (slf, path))
     }
     fn query_worksession<'p>(slf: &Bound<'p, Self>) -> PyResult<Obj<'p>> {
         slf.py()
-            .import("app_shell.project")?
+            .import("ingetrazo_render.shell_project")?
             .call_method1("query", (slf,))
     }
     fn persist_worksession<'p>(slf: &Bound<'p, Self>) -> PyResult<Obj<'p>> {
         slf.py()
-            .import("app_shell.project")?
+            .import("ingetrazo_render.shell_project")?
             .call_method1("persist", (slf,))
     }
     fn _refresh_worksession<'p>(slf: &Bound<'p, Self>) -> PyResult<Obj<'p>> {
         slf.py()
-            .import("app_shell.project")?
+            .import("ingetrazo_render.shell_project")?
             .call_method1("refresh", (slf,))
     }
     fn _show_empty_area<'p>(slf: &Bound<'p, Self>) -> PyResult<Obj<'p>> {
@@ -815,7 +815,7 @@ impl ShellWindow {
     }
     #[staticmethod]
     fn _pump_file_command(py: Python<'_>) -> PyResult<()> {
-        py.import("app_shell.modal")?.call_method0("tick")?;
+        py.import("ingetrazo_render.shell_modal")?.call_method0("tick")?;
         Ok(())
     }
     #[staticmethod]

@@ -73,7 +73,7 @@ fn item(id: &str, text: &str, accel: Option<&str>) -> MenuItem {
 }
 
 /// The File menu's imports: (command, label). The command is
-/// `import:<suffix>` (app_shell.imports).
+/// `import:<suffix>`.
 pub use ingetrazo_render::desktop_menu_model::IMPORTS;
 
 pub fn build() -> muda::Result<Menus> {

@@ -298,7 +298,7 @@ impl DocumentOpen {
         }
         let ready = Py::new(py, Self::parse(job)?)?;
         let run = || -> PyResult<_> {
-            let modal = py.import("app_shell.modal")?;
+            let modal = py.import("ingetrazo_render.shell_modal")?;
             let wait = ready.bind(py).getattr("ready")?;
             let mut last = None;
             while !ready.borrow(py).ready() {

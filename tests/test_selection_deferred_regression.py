@@ -138,7 +138,7 @@ def test_model_info_only_loads_deferred_meshes_when_visible(native_gpu_host, mon
         scene.version += 1
         plugin_panels.sync(view, win)
         assert census.call_count == 2
-        monkeypatch.setattr("app_shell.native.pasteboard_write", lambda offers: True)
+        monkeypatch.setattr("ingetrazo_render.shell_services.pasteboard_write", lambda offers: True)
         binding.model.event("copy", "invoke", None)
         assert census.call_count == 2
 

@@ -5,7 +5,7 @@
 Animation layer (``ingetrazo_render.headless_layer``, ``platform="layer"``),
 as it draws into the shell's window. ``HeadlessView`` is the shell's
 resident view (``MetalView`` over ``WidgetShim``, as
-``app_shell.view.ShellView``) with such a layer for its surface and timers
+``ingetrazo_render.shell_views.ShellView``) with such a layer for its surface and timers
 of its own; it replaces the hidden Qt ``WgpuView``. Drive its timers with
 ``view.run_timers()``; send it input with ``mouse``, ``key`` and ``wheel``."""
 from __future__ import annotations

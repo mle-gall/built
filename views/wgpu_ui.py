@@ -731,7 +731,7 @@ def _tree(view, win, *, discover=False):
     rows, path_bar = project_sidebar(scene, tree, rows, flt, exp, str(getattr(win, "_current_path", "") or ""), lens == 1, sel_ids)
     rows.extend(catalog.rows(flt, exp))
     if "_project" in getattr(win, "__dict__", {}):
-        from app_shell import project as built_project
+        from ingetrazo_render import shell_project as built_project
         rows.extend(built_project.tree_rows(win, flt, exp))
     if discover:
         from ingetrazo_core import reveal_selection
@@ -747,7 +747,7 @@ def _tree(view, win, *, discover=False):
         if not cache or cache[0] != cache_key:
             cache = cache_key, _problem_rules(scene, registry, structure._nodes(registry), recipes, unfiled, profile)
             if "_project" in win.__dict__:
-                from app_shell import project as built_project
+                from ingetrazo_render import shell_project as built_project
                 cache[1].extend(built_project.problems(win))
             view._ui_rules_cache = cache
         rows, readiness = export_readiness(scene, tree, records, getattr(view, "_delivery_key", "") or "",
@@ -1346,7 +1346,7 @@ def _tree_action(win, view, action) -> None:
         elif kind == "project-file" and verb in ("item", "open", "edit", "linkrelink"):
             # A project file row: one click shows its tab (opening it);
             # Locate… on a missing one finds where it went.
-            from app_shell import project as built_project
+            from ingetrazo_render import shell_project as built_project
             built_project.tree_action(win, {"edit": "edit", "linkrelink": "locate"}.get(verb, "open"), ident)
         elif kind == "project-files" and verb in ("item", "open"):
             pass

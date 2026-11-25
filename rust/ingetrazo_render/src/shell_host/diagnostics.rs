@@ -150,7 +150,7 @@ pub(super) fn snapshot<'p>(h: &Bound<'p, Host>) -> PyResult<Bound<'p, PyDict>> {
     d.set_item("read_only", read_only)?;
     d.set_item(
         "windows",
-        py.import("app_shell.windows")?
+        py.import("ingetrazo_render.shell_windows")?
             .call_method0("hosts")?
             .len()?,
     )?;
@@ -215,7 +215,7 @@ pub(super) fn snapshot<'p>(h: &Bound<'p, Host>) -> PyResult<Bound<'p, PyDict>> {
     d.set_item("ime_area", h.getattr("_ime_area")?)?;
     d.set_item("clipboard", optional(&vp, "clipboard")?.is_truthy()?)?;
     let types: Vec<String> = py
-        .import("app_shell.native")?
+        .import("ingetrazo_render.shell_services")?
         .call_method0("pasteboard_types")?
         .get_item(0)?
         .extract()?;

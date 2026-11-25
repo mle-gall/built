@@ -10,9 +10,7 @@ _ENV = ("XDG_DATA_HOME", "BUILT_ANSWERS", "BUILT_SETTINGS_DIR")
 
 _PATCHED = {
     "core.settings": ("_store",),
-    "ingetrazo_render.chrome_dialogs": ("live", "QEventLoop", "_shell_installed"),
     "core.renderer_settings": ("capability", "status_text", "_shell_installed"),
-    "app_shell.modal": ("_HOST",),
 }
 _MISSING = object()
 
@@ -20,6 +18,8 @@ _MISSING = object()
 @contextmanager
 def _shell_state():
     """Restore process-wide shell services even when a host fails to open."""
+    from ingetrazo_render import shell_modal
+    previous_host = shell_modal.host()
     env = {k: os.environ.get(k) for k in _ENV}
     saved = []
     for name, attrs in _PATCHED.items():
@@ -30,6 +30,7 @@ def _shell_state():
     try:
         yield
     finally:
+        shell_modal.set_host(previous_host)
         for k, v in env.items():
             if v is None:
                 os.environ.pop(k, None)
