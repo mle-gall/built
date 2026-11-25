@@ -34,6 +34,25 @@ Built is pre-release. This is what the current build does on macOS.
 
 - Python plugins and an agent bridge (MCP) work on the same documents. See [`plugins.md`](plugins.md) and [`ai-bridge.md`](ai-bridge.md).
 
+## AI
+
+- The AI Assistant panel talks to the provider you configure with your own key: Anthropic, OpenAI, Google Gemini, Groq, OpenRouter, DeepSeek, OpenCode Go, or a local OpenAI-compatible server such as Ollama or LM Studio.
+- The MCP bridge lets your own agent work on the open document. It listens on your machine only. See [`ai-bridge.md`](ai-bridge.md).
+- An agent can query the model, groups, tags, records, registry and project tree, set the camera and take viewport screenshots, run Python on the live document, file elements, edit records and classification, and export IFC.
+- Every action is one undo step. Code that fails is rolled back whole.
+
+## Drawings and sheets
+
+- The Sheets workspace places views of the model on paper at a scale and exports PDF, DXF, SVG or an image.
+
+![The Sheets workspace with one A4 landscape sheet](images/built/sheets.png)
+
+## Import and export
+
+- Imports: `.skp`, COLLADA, DXF, glTF/GLB, OBJ, STL. `.dwg` needs an external converter; `.rfa` needs its reader built.
+- Exports: IFC, glTF/GLB, COLLADA, OBJ, STL, and the current view as DXF, SVG or an image.
+- Rendering through Blender, when Blender is installed.
+
 ## Formats
 
 | Format | Support |
