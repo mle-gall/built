@@ -229,10 +229,6 @@ impl Lines {
         self.slots.iter().map(|(k, s)| (k.clone(), s.count)).collect()
     }
 
-    pub fn active(&self) -> bool {
-        self.enabled && self.slots.values().any(|s| s.count > 0)
-    }
-
     /// Whether anything draws in one layer: the MSAA colour must outlive
     /// the edge pass only for the slots drawn after it.
     pub fn active_layer(&self, above_edges: bool) -> bool {
@@ -319,12 +315,11 @@ mod tests {
         let (d, q) = pollster::block_on(adapter.request_device(&Default::default(), None)).unwrap();
         let camera = crate::buffer(&d, &[0; 112], wgpu::BufferUsages::UNIFORM);
         let mut lines = super::Lines::new(crate::antialias::SampleModes::test(), &d, wgpu::TextureFormat::Bgra8UnormSrgb, &camera);
-        assert!(!lines.active());
+        assert!(!lines.active_layer(false) && !lines.active_layer(true));
         let one = segment([0.; 3], [1., 0., 0.], [1., 4., 4.]);
         let three = [one.clone(), one.clone(), one.clone()].concat();
         lines.upload(&d, &q, "box", &three, false).unwrap();
         lines.upload(&d, &q, "guides", &one, false).unwrap();
-        assert!(lines.active());
         assert!(lines.active_layer(false) && !lines.active_layer(true));
         let size = lines.slots["box"].buffer.size();
         lines.upload(&d, &q, "box", &one, false).unwrap();
@@ -336,12 +331,12 @@ mod tests {
         assert!(lines.active_layer(true));
         lines.upload(&d, &q, "box", &[], false).unwrap();
         lines.upload(&d, &q, "guides", &[], false).unwrap();
-        assert!(lines.active() && !lines.active_layer(false), "only the layer above the edges is left");
+        assert!(lines.active_layer(true) && !lines.active_layer(false), "only the layer above the edges is left");
         lines.upload(&d, &q, "hidden", &[], true).unwrap();
-        assert!(!lines.active());
+        assert!(!lines.active_layer(true) && !lines.active_layer(false));
         lines.upload(&d, &q, "box", &one, false).unwrap();
         lines.enabled = false;
-        assert!(!lines.active() && !lines.active_layer(false));
+        assert!(!lines.active_layer(true) && !lines.active_layer(false));
         // Both pipelines record against matching targets without validation errors.
         lines.enabled = true;
         let target = |samples, format| d.create_texture(&wgpu::TextureDescriptor {
