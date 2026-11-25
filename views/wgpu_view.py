@@ -6,7 +6,7 @@ import numpy as np
 from core.input_codes import Input as Qt, Type as QEvent
 from core.host_callbacks import Signal
 from core.timers import later
-from views.paint_types import QColor
+from ingetrazo_render import PaintColor as QColor
 from ingetrazo_core import Vec3 as QVector3D
 from core.camera import OrbitCamera
 from views.wgpu_scene import pack_scene
@@ -1356,7 +1356,7 @@ class MetalView(ViewNavigation):
             return
         from core.mesh import Edge
         from ingetrazo_core import ScreenPoint as QPointF
-        from views.paint_types import QPen
+        from ingetrazo_render import PaintPen as QPen
         entities = [(e, False) for e in self.scene.selection if isinstance(e, Edge)]
         hovered = getattr(self.tools, '_mesh_hover', getattr(self.source_viewport, '_hover_entity', None))
         if isinstance(hovered, Edge) and hovered not in self.scene.selection:

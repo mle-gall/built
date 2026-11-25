@@ -42,7 +42,7 @@ from core.input_types import NATIVE
 from ingetrazo_core import Type as QEvent, Input as Qt, ScreenPoint as QPointF, ScreenRect as QRectF
 from core.host_callbacks import Signal
 from core.timers import later, timer as window_timer
-from views.paint_types import QColor, QFont, QPen, QPolygonF
+from ingetrazo_render import AnnotationFont as QFont, PaintColor as QColor, PaintPen as QPen
 import numpy as np
 import ingetrazo_core
 import ingetrazo_render

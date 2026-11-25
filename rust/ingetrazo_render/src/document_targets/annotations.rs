@@ -145,7 +145,7 @@ fn pick_text_label<'py>(v: &Obj<'py>, x: f64, y: f64, rect_only: bool) -> PyResu
     ] {
         font.call_method1(method, (style.call_method1("get", (key, default))?,))?;
     }
-    // views.paint_types' fonts are the Rust AnnotationFont, which answers
+    // AnnotationFont supplies
     // its own metrics.
     let fm = font;
     for lab in labels.try_iter()? {

@@ -36,7 +36,7 @@ from copy import copy
 import numpy as np
 from core.input_codes import Input as Qt
 from ingetrazo_core import ScreenPoint as QPointF
-from views.paint_types import QColor, QPen
+from ingetrazo_render import PaintColor as QColor, PaintPen as QPen
 from ingetrazo_core import Vec3 as QVector3D
 
 from views.document_interaction import DocumentInteraction, _guide_vertices, shown_guides
