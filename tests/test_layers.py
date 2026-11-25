@@ -164,17 +164,12 @@ def test_annotations_take_layers_like_any_entity(tmp_path):
 def test_hidden_layer_hides_annotations_from_picks():
     """The pick paths honour the layer: a leader text or a cota on a hidden
     (or locked) layer is not under the cursor, exactly like a face."""
-    import os
-    from PySide6.QtGui import QFont, QFontMetrics
+    from ingetrazo_render import AnnotationFont
     from ingetrazo_core import Vec3 as QVector3D
-    from PySide6.QtWidgets import QApplication
     from core.dimension import Dimension
     from core.textlabel import TextLabel
     from tests.controller_surface import ControllerSurface as Viewport
 
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    if QApplication.instance() is None:        # QFontMetrics needs an app
-        QApplication([])
     scene = Scene()
     lab = TextLabel(QVector3D(3, 0, 0), QVector3D(-2, 0, 0), "Pileta")
     dim = Dimension(QVector3D(0, 0, 0), QVector3D(2, 0, 0), QVector3D(0, 0, 1))
@@ -183,10 +178,10 @@ def test_hidden_layer_hides_annotations_from_picks():
     scene.layers.append(Layer("Anotaciones"))
     assign_layer(lab, "Anotaciones")
     assign_layer(dim, "Anotaciones")
-    font = QFont()
+    font = AnnotationFont()
     font.setPointSize(9)
     font.setBold(True)
-    w = QFontMetrics(font).horizontalAdvance("Pileta")
+    w = font.horizontalAdvance(lab.text)
     px = {3.0: (300.0, 100.0), 1.0: (100.0, 100.0),
           0.0: (0.0, 200.0), 2.0: (200.0, 200.0)}
 

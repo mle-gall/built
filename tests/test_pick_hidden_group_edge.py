@@ -8,15 +8,9 @@ behind the box, selected the slab instead of the box.
 """
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-if QApplication.instance() is None:
-    QApplication([])
 
 from core.group import Group  # noqa: E402
 from core.mesh import Face, Mesh  # noqa: E402

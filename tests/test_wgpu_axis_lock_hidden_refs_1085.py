@@ -10,10 +10,8 @@ candidates and the occlusion test are the Metal view's own."""
 import math
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
+from tests.headless_gpu import mouse
 
 from tests.test_.skp_inference_gaps import click, refresh, view  # noqa: F401
 
@@ -32,8 +30,12 @@ def _iso(view):
     800x600 the far top corner sits 120 px above the near one, a visible
     reference that rightly gives its own height)."""
     _box(view.scene.mesh, 0, 0, 0, 2, 2, 2)
-    view.resize(1000, 700)
-    view.source_viewport.resize(1000, 700)
+    host = getattr(view, "_host", None)
+    if callable(getattr(host, "resize", None)):          # the shell's host
+        host.resize(1000, 700, 1.)
+    else:                                                 # a headless view
+        view.resize(1000, 700)
+        view.source_viewport.resize(1000, 700)
     cam = view.camera
     cam.aspect = 1000 / 700
     cam.target = V(1, 1, 1)
@@ -44,9 +46,7 @@ def _iso(view):
 
 
 def _move_px(view, x, y):
-    q = QPointF(x, y)
-    QApplication.sendEvent(view, QMouseEvent(
-        QMouseEvent.MouseMove, q, q, Qt.NoButton, Qt.NoButton, Qt.NoModifier))
+    mouse(view, "move", x, y)
     return view.last_snap
 
 

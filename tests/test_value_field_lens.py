@@ -3,7 +3,7 @@ tools (ui/value_field.rs): what is typed shows by the cursor, and the lens
 is part of the revision, so Enter reads the applied lens back."""
 from types import SimpleNamespace
 
-from PySide6.QtCore import QPoint
+from ingetrazo_core import PixelPoint as QPoint
 
 from core.camera import OrbitCamera
 

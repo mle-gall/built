@@ -8,15 +8,10 @@ click meant for the picture lying inside, and it could not be selected at
 all. A face on the image's plane (traced on it) still wins."""
 from __future__ import annotations
 
-import os
+from tests.raster_samples import solid_raster
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtGui import QImage
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
 
 
 def _setup(tmp_path, image_z):
@@ -32,8 +27,7 @@ def _setup(tmp_path, image_z):
         scene.mesh.add_face([p[i] for i in q])
     top = next(f for f in scene.mesh.faces if f.normal().z() > 0.9)
     top.attrs["hidden"] = True
-    pic = QImage(8, 8, QImage.Format_RGBA8888)
-    pic.fill(0xFF30C040)
+    pic = solid_raster(8, 8, (48, 192, 64))
     path = tmp_path / "photo.png"
     pic.save(str(path))
     image = ImagePlane(str(path), V(1, 1, image_z), V(2, 0, 0), V(0, 2, 0))

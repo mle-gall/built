@@ -441,21 +441,12 @@ def active_view_builder(win):
         shown = getattr(vp.scene, "show_axes", True)
         vp.scene.show_axes = shown and axes
         try:
-            from core.input_types import NATIVE
-            if NATIVE:
-                from ingetrazo_render import SurveyRaster
-                height = max(64, round(width_px / aspect)) if aspect else None
-                frame = vp.keys_stand_in.render_pixels(width_px, height, overlays=False, sharp_shadows=True)
-                picture = SurveyRaster(*frame) if frame else None
-            elif aspect is None:
-                picture = vp.render_image(width_px, overlays=False,
-                                          sharp_shadows=True)
-            else:
-                # A window of the sheet's shape (the camera is already
-                # widened to it): the picture has that shape too.
-                picture = vp.render_image(
-                    width_px, max(64, round(width_px / aspect)),
-                    overlays=False, sharp_shadows=True)
+            from ingetrazo_render import SurveyRaster
+            # A window of the sheet's shape (the camera is already widened
+            # to it): the picture has that shape too.
+            height = max(64, round(width_px / aspect)) if aspect else None
+            frame = vp.keys_stand_in.render_pixels(width_px, height, overlays=False, sharp_shadows=True)
+            picture = SurveyRaster(*frame) if frame else None
         finally:
             vp.scene.show_axes = shown
         return picture, view_rect(vp.camera)
@@ -489,7 +480,7 @@ def open_view_export(win, frame_builder=None):
     """Open the one-off Export sheet. Sheets can supply a frame's SvgBuilder."""
     import json
     from pathlib import Path
-    from core.settings import settings as QSettings
+    from core.settings import settings as native_settings
     from ingetrazo_core import AtomicDocument
     from core.i18n import tr
     from core.saved_views import SavedView
@@ -516,7 +507,7 @@ def open_view_export(win, frame_builder=None):
         if win.viewport.history is history:
             builder = win.view_svg_builder()
 
-    settings = QSettings()
+    settings = native_settings()
     settings.beginGroup("export_svg/v5")
     prefs = {key: settings.value(key) for key in settings.childKeys()}
     svg = SvgOptions.current_view(

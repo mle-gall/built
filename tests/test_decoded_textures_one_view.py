@@ -8,21 +8,15 @@ uploaded once, and keeping the images only held their memory — ~65 MB on
 the plaza, for as long as it stayed open (release check, 14-11)."""
 from __future__ import annotations
 
-import sys
+from tests.raster_samples import solid_raster
 
-from PySide6.QtGui import QColor, QImage
-from PySide6.QtWidgets import QApplication
-
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
 
 from views import document_interaction as VPM                        # noqa: E402
 
 
 def _png(tmp_path, name):
     path = tmp_path / name
-    img = QImage(8, 8, QImage.Format_RGBA8888)
-    img.fill(QColor(200, 30, 30))
+    img = solid_raster(8, 8, (200, 30, 30))
     img.save(str(path))
     return str(path)
 
@@ -32,7 +26,7 @@ def test_one_view_keeps_no_decoded_image(tmp_path, monkeypatch):
     monkeypatch.setattr(VPM, "_several_views_shown", lambda: False)
     a = _png(tmp_path, "a.png")
     img, cutout = VPM._decoded_texture(a)
-    assert not img.isNull()
+    assert img is not None and cutout is False
     assert VPM._DECODED_TEXTURES == {}
 
 

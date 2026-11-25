@@ -49,8 +49,8 @@ def open_panel(win, key):
             if opened is not None:
                 opened()
                 binding.invalidate()
-                binding.push()
             view.renderer.ui_plugin_open(binding.instance)
+            binding.push()
             view.update()
             return True
     return False
@@ -107,15 +107,20 @@ class Binding:
 
     def push(self):
         revision = self.scene.version
+        visible = (not getattr(self.model, "sections_on_show", False)
+                   or self.view.renderer.ui_plugin_visible(self.instance))
+        if not visible and self.sent_revision is not None:
+            return
         if not self.dirty and self.sent_revision == revision:
             return
-        self.dirty = False
+        # Register a closed panel's identity so the native menu can open it.
+        self.dirty = not visible
         self.sent_revision = revision
         model = self.model
         envelope = dict(api=getattr(model, "api", 1), plugin=self.key, panel=self.id,
                         title=self.title, slot=self.slot, instance=self.instance, document=self.document, revision=revision)
         try:
-            sections = model.sections()
+            sections = model.sections() if visible else []
             clean_sections = json.dumps(sections, allow_nan=False)
             if self.error:
                 sections = [*sections, section("_error", "Plugin error",
@@ -163,6 +168,7 @@ def sync(view, win):
         view.renderer.ui_plugin_document(view._plugin_document, live)
         for binding in view._plugin_bindings.values():
             binding.dirty = True
+            binding.sent_revision = None
             binding.last_event = 0
         view._ui_plugins_sent = True
     for binding in view._plugin_bindings.values():

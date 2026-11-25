@@ -9,7 +9,7 @@ it. Rotate already worked this way; Move did not (reported by @pacaeiro).
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, Qt
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.group import Group
@@ -47,8 +47,8 @@ class _Vp:
 
 
 def _ctx(vp, x, y, z=0.0):
-    return ToolContext(viewport=vp, world=V(x, y, z), screen=QPointF(0, 0),
-                       modifiers=Qt.NoModifier, snap=None)
+    return ToolContext(viewport=vp, world=V(x, y, z), screen=ScreenPoint(0, 0),
+                       modifiers=Input.NoModifier, snap=None)
 
 
 def _square(scene, x0=0.0):
@@ -68,7 +68,7 @@ def test_ctrl_leaves_the_original_and_stamps_a_copy():
     tool.on_click(_ctx(vp, 0, 0))                     # grab the corner
     tool.on_hover(_ctx(vp, 1, 0))                     # dragging: original follows…
     assert _xs(scene) == [1.0]
-    assert tool.on_key(vp, Qt.Key_Control, Qt.NoModifier)
+    assert tool.on_key(vp, Input.Key_Control, Input.NoModifier)
     assert tool._copy and _xs(scene) == [0.0]         # …until Ctrl: it goes back
     tool.on_hover(_ctx(vp, 3, 0))
     assert _xs(scene) == [0.0]                        # the original stays put
@@ -88,10 +88,10 @@ def test_ctrl_again_turns_copy_off_and_the_original_follows():
     vp = _Vp(scene)
     tool = MoveTool()
     tool.on_click(_ctx(vp, 0, 0))
-    tool.on_key(vp, Qt.Key_Control, Qt.NoModifier)
+    tool.on_key(vp, Input.Key_Control, Input.NoModifier)
     tool.on_hover(_ctx(vp, 2, 0))
     assert _xs(scene) == [0.0]
-    tool.on_key(vp, Qt.Key_Control, Qt.NoModifier)   # copy off: the preview resumes
+    tool.on_key(vp, Input.Key_Control, Input.NoModifier)   # copy off: the preview resumes
     assert _xs(scene) == [2.0]
     tool.on_click(_ctx(vp, 2, 0))
     assert _xs(scene) == [2.0]                        # a plain move after all
@@ -103,7 +103,7 @@ def test_external_array_after_a_copy():
     vp = _Vp(scene)
     tool = MoveTool()
     tool.on_click(_ctx(vp, 0, 0))
-    tool.on_key(vp, Qt.Key_Control, Qt.NoModifier)
+    tool.on_key(vp, Input.Key_Control, Input.NoModifier)
     tool.on_click(_ctx(vp, 2, 0))                     # one copy at +2
     assert _xs(scene) == [0.0, 2.0]
     assert tool.on_array_value(vp, 3, "x")            # "3x": three copies at 2, 4, 6
@@ -120,7 +120,7 @@ def test_internal_array_divides_the_distance():
     vp = _Vp(scene)
     tool = MoveTool()
     tool.on_click(_ctx(vp, 0, 0))
-    tool.on_key(vp, Qt.Key_Control, Qt.NoModifier)
+    tool.on_key(vp, Input.Key_Control, Input.NoModifier)
     tool.on_click(_ctx(vp, 6, 0))
     assert tool.on_array_value(vp, 3, "/")            # "/3": copies at 2, 4, 6
     assert _xs(scene) == [0.0, 2.0, 4.0, 6.0]
@@ -132,7 +132,7 @@ def test_the_array_window_closes_at_the_next_click():
     vp = _Vp(scene)
     tool = MoveTool()
     tool.on_click(_ctx(vp, 0, 0))
-    tool.on_key(vp, Qt.Key_Control, Qt.NoModifier)
+    tool.on_key(vp, Input.Key_Control, Input.NoModifier)
     tool.on_click(_ctx(vp, 2, 0))
     scene.selection = []
     tool.on_click(_ctx(vp, 5, 5))                     # nothing there: no move starts…
@@ -167,7 +167,7 @@ def test_a_group_copies_as_a_sibling_and_arrays():
     vp = _Vp(scene)
     tool = MoveTool()
     tool.on_click(_ctx(vp, 0, 0))
-    tool.on_key(vp, Qt.Key_Control, Qt.NoModifier)
+    tool.on_key(vp, Input.Key_Control, Input.NoModifier)
     tool.on_click(_ctx(vp, 0, 3))
     assert len(scene.groups) == 2
     copy = [x for x in scene.groups if x is not g][0]
@@ -200,7 +200,7 @@ def test_count_and_spacing_in_one_entry_after_a_copy():
     vp = _Vp(scene)
     tool = MoveTool()
     tool.on_click(_ctx(vp, 0, 0))
-    tool.on_key(vp, Qt.Key_Control, Qt.NoModifier)
+    tool.on_key(vp, Input.Key_Control, Input.NoModifier)
     tool.on_click(_ctx(vp, 2, 0))                     # one copy at +2 (direction)
     assert tool.on_array_value(vp, 3, "x", step=10.0)
     assert _xs(scene) == [0.0, 10.0, 20.0, 30.0]
@@ -215,7 +215,7 @@ def test_count_and_spacing_typed_during_the_ctrl_drag():
     vp = _Vp(scene)
     tool = MoveTool()
     tool.on_click(_ctx(vp, 0, 0))
-    tool.on_key(vp, Qt.Key_Control, Qt.NoModifier)
+    tool.on_key(vp, Input.Key_Control, Input.NoModifier)
     tool.on_hover(_ctx(vp, 0.7, 0))                   # pointing along +X
     assert tool.on_array_value(vp, 4, "x", step=2.5)
     assert _xs(scene) == [0.0, 2.5, 5.0, 7.5, 10.0]

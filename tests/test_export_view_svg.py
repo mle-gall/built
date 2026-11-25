@@ -4,6 +4,8 @@ per model layer (and per line class), each in its colour, line type and
 pen, at paper size, its touching segments chained into one path."""
 from __future__ import annotations
 
+from tests.raster_samples import pixels, solid_raster
+from ingetrazo_render import SurveyRaster
 import xml.etree.ElementTree as ET
 
 import numpy as np
@@ -306,22 +308,17 @@ def test_glass_hides_nothing_and_a_face_seen_from_behind_is_back_colour():
 
 
 def _png(path, w=8, h=4):
-    from PySide6.QtGui import QColor, QImage
-    img = QImage(w, h, QImage.Format_RGB32)
-    img.fill(QColor(200, 40, 40))
+    img = solid_raster(w, h, (200, 40, 40))
     assert img.save(str(path))
     return str(path)
 
 
 def _quadrants(path):
     """An 8 x 8 texture of four plain quadrants, to read orientation."""
-    from PySide6.QtGui import QColor, QImage
-    img = QImage(8, 8, QImage.Format_RGB32)
     cols = {(0, 0): (220, 30, 30), (1, 0): (30, 200, 30),
             (0, 1): (30, 30, 220), (1, 1): (230, 220, 30)}
-    for x in range(8):
-        for y in range(8):
-            img.setPixelColor(x, y, QColor(*cols[(x // 4, y // 4)]))
+    rgba = b"".join(bytes((*cols[x // 4, y // 4], 255)) for y in range(8) for x in range(8))
+    img = SurveyRaster(8, 8, rgba)
     assert img.save(str(path))
     return str(path), img
 
@@ -332,7 +329,6 @@ def test_a_textured_face_is_one_shape_filled_as_the_view_lays_it(tmp_path):
     laid onto the face here, as the viewport does (its world → UV map and
     its image turned bottom-up), so any program shows it the same."""
     import base64
-    from PySide6.QtGui import QImage
     from core.scene import Scene
     from core.texture import face_uv_axes
     from core.vista_caras import view_faces
@@ -367,7 +363,7 @@ def test_a_textured_face_is_one_shape_filled_as_the_view_lays_it(tmp_path):
     assert float(pic.get("height")) == pytest.approx(10.0, abs=0.01)
     assert float(pic.get("x")) == pytest.approx(10.0, abs=0.01)  # margin
     uri = pic.get(XL)
-    baked = QImage.fromData(base64.b64decode(uri.split(",", 1)[1]))
+    baked = SurveyRaster.decode(base64.b64decode(uri.split(",", 1)[1]))
     gu, cu, gv, cv = face_uv_axes(tex, wall.normal())
     for wx, wz in ((0.1, 0.1), (0.4, 0.9), (0.6, 0.3), (1.3, 0.6),
                    (1.85, 0.15)):
@@ -377,13 +373,12 @@ def test_a_textured_face_is_one_shape_filled_as_the_view_lays_it(tmp_path):
         # The viewport uploads the image bottom-up: v = 0 is its last row.
         tx = int((u % 1.0) * 8)
         ty = int((1.0 - v % 1.0) * 8) % 8
-        want = src.pixelColor(tx, ty)
+        want = pixels(src)[ty, tx].astype(int)
         # Front view: page x follows world x, page y runs down world z.
-        got = baked.pixelColor(int(wx / 2 * baked.width()),
-                               int((1 - wz) * baked.height()))
-        assert abs(got.red() - want.red()) < 40, (wx, wz)
-        assert abs(got.green() - want.green()) < 40, (wx, wz)
-        assert abs(got.blue() - want.blue()) < 40, (wx, wz)
+        got = pixels(baked)[int((1 - wz) * baked.height), int(wx / 2 * baked.width)].astype(int)
+        assert abs(got[0] - want[0]) < 40, (wx, wz)
+        assert abs(got[1] - want[1]) < 40, (wx, wz)
+        assert abs(got[2] - want[2]) < 40, (wx, wz)
     # Without textures: its mean colour, no pattern.
     wall.attrs["texture"] = {"path": _png(tmp_path / "rojo.png"),
                              "sw": 1.0, "sh": 1.0}
@@ -394,13 +389,12 @@ def test_a_textured_face_is_one_shape_filled_as_the_view_lays_it(tmp_path):
 
 def test_a_shaded_texture_is_darkened_in_the_file(tmp_path):
     import base64
-    from PySide6.QtGui import QImage
     from formats.svg_out import _image_uri
     png = _png(tmp_path / "t.png")
-    imgs = [QImage.fromData(base64.b64decode(u.split(",", 1)[1]))
+    imgs = [SurveyRaster.decode(base64.b64decode(u.split(",", 1)[1]))
             for u in (_image_uri(png, 1.0), _image_uri(png, 0.5))]
-    r_full = imgs[0].pixelColor(1, 1).red()
-    r_dark = imgs[1].pixelColor(1, 1).red()
+    r_full = int(pixels(imgs[0])[1, 1, 0])
+    r_dark = int(pixels(imgs[1])[1, 1, 0])
     assert r_dark == pytest.approx(r_full * 0.5, abs=4)
 
 
@@ -592,7 +586,7 @@ def test_in_perspective_the_texture_lands_where_the_camera_puts_it():
     projective: any point of the wall, taken through its texture
     coordinates, must land where the camera projects it — an affine guess
     from three points broke the brick courses at every piece of wall."""
-    from PySide6.QtCore import QPointF
+    from ingetrazo_core import ScreenPoint as QPointF
     from core.scene import Scene
     from core.texture import face_uv_axes
     from core.vista_caras import _Perspective, view_faces
@@ -750,11 +744,9 @@ def test_a_sheet_of_paper_takes_the_drawing_fitted_and_centred():
 
 
 def test_the_picture_of_the_view_lies_under_the_lines_on_its_window():
-    from PySide6.QtGui import QColor, QImage
     from formats.svg_out import svg_text
     import xml.etree.ElementTree as ET2
-    img = QImage(40, 20, QImage.Format_RGB32)
-    img.fill(QColor(10, 120, 200))
+    img = solid_raster(40, 20, (10, 120, 200))
     groups = [("VISTA", np.array([(1, 1, 3, 1)], float))]
     text, _n = svg_text(groups, scale_n=100.0,
                         image=(img, (0.0, 0.0, 4.0, 2.0)))
@@ -861,7 +853,6 @@ def test_the_view_picture_without_axes_leaves_the_view_as_it_was(
     win = native_host.window
     vp = win.viewport
     seen = []
-    monkeypatch.setattr("core.input_types.NATIVE", True)
     monkeypatch.setattr(vp.keys_stand_in, "render_pixels", lambda *a, **k: seen.append(
         vp.scene.show_axes))
     vp.scene.show_axes = True
@@ -1343,7 +1334,6 @@ def test_the_picture_of_the_selection_shows_the_selection_alone(native_host, mon
         seen.append((a.hidden, b.hidden))
         return 40, 30, bytes([120, 100, 80, 255]) * 1200
 
-    monkeypatch.setattr("core.input_types.NATIVE", True)
     monkeypatch.setattr(vp.keys_stand_in, "render_pixels", render)
     text, _n = win.view_svg_builder().build(
         {"image": True}, {"area": "selection", "size": None})

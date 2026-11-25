@@ -12,7 +12,7 @@ from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
-from core.input_types import QPointF
+from ingetrazo_core import ScreenPoint as QPointF
 
 
 def _cube():

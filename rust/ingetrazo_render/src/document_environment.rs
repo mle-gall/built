@@ -90,12 +90,7 @@ fn schedule_tile_requests(v: &Obj) -> PyResult<()> {
     v.setattr("_tile_requests_scheduled", true)?;
     let h = host(v.py())?;
     let callback = v.getattr("_request_missing_tiles")?;
-    if h.getattr("NATIVE")?.is_truthy()? {
-        h.call_method1("later", (v, 0, callback))?;
-    } else {
-        h.getattr("QTimer")?
-            .call_method1("singleShot", (0, callback))?;
-    }
+    h.call_method1("later", (v, 0, callback))?;
     Ok(())
 }
 fn request(

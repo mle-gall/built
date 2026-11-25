@@ -28,8 +28,8 @@ from types import SimpleNamespace
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMouseEvent
+from ingetrazo_core import ScreenPoint, Input
+from ingetrazo_render import MouseEvent
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.snap import compute_snap
@@ -72,8 +72,8 @@ def _camera(vp, name, yaw, pitch):
 
 def _hover(vp, world):
     px = vp._world_to_pixel(world)
-    vp._last_mouse_pos = QPointF(*px)
-    vp._process_hover(QPointF(*px), Qt.NoModifier)
+    vp._last_mouse_pos = ScreenPoint(*px)
+    vp._process_hover(ScreenPoint(*px), Input.NoModifier)
     return px
 
 
@@ -123,9 +123,8 @@ def test_clicking_the_level_foot_at_the_start_draws_nothing_and_breaks_nothing(n
     assert vp.last_snap.kind == "from_point"
     assert (vp.last_snap.point - INICIO).length() < 1e-6
     edges = len(vp.scene.mesh.edges)
-    vp._dispatch_tool_click(QMouseEvent(
-        QMouseEvent.MouseButtonPress, QPointF(*px),
-        Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    vp._dispatch_tool_click(MouseEvent(
+        "press", *px, Input.LeftButton, Input.LeftButton, Input.NoModifier))
     assert len(vp.scene.mesh.edges) == edges          # no zero-length edge
     assert (vp.active_tool.start_point - INICIO).length() < 1e-6  # still drawing
 

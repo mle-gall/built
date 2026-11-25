@@ -4,7 +4,8 @@ Live placement moves alter resident matrices only; the document is touched
 once, by the same commands used by MoveTool, after the user commits.
 """
 import numpy as np
-from core.input_types import Qt
+
+from core.input_codes import Input as Qt
 from core.history import MoveGroupCommand, CompoundCommand
 from tools.base import ToolContext
 from tools.tape import TapeMeasureTool

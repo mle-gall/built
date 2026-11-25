@@ -9,7 +9,7 @@ import uuid
 
 from core.host_callbacks import HostService, Signal
 from core.timers import timer
-from core.input_types import Qt
+from ingetrazo_core import Input as Qt
 from views import input_state
 
 from core import autosave

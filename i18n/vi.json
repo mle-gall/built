@@ -1,4 +1,13 @@
 {
+ "Discard": "Bỏ thay đổi",
+ "Abort": "Hủy bỏ",
+ "Ignore": "Bỏ qua",
+ "Retry": "Thử lại",
+ "Restore Defaults": "Khôi phục mặc định",
+ "Open": "Mở",
+ "OK": "Đồng ý",
+ "Yes": "Có",
+ "No": "Không",
  "Map": "Bản đồ",
  "Model origin (0,0)": "Gốc tọa độ mô hình (0,0)",
  "Place or address": "Địa điểm hoặc địa chỉ",

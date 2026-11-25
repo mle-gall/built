@@ -8,12 +8,12 @@ read-only pass, a pick still gets the mesh's own face. Skipped without the
 engine."""
 from __future__ import annotations
 
+from ingetrazo_render import MouseEvent
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import random
 
 import pytest  # noqa: E402
-from PySide6.QtCore import QEvent, QPointF, Qt  # noqa: E402
-from PySide6.QtGui import QMouseEvent
+from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
 from ingetrazo_core import Vec3 as V
 
 import core._native as _native  # noqa: E402
@@ -215,9 +215,7 @@ def test_a_centre_found_on_a_light_face_survives_an_edit(native_window, big_enou
 
 
 def _click(vp, x, y):
-    press = QMouseEvent(QEvent.Type.MouseButtonPress, QPointF(x, y),
-                        vp.mapToGlobal(QPointF(x, y)), Qt.LeftButton,
-                        Qt.LeftButton, Qt.NoModifier)
+    press = MouseEvent('press', x, y, Qt.LeftButton, Qt.LeftButton, Qt.NoModifier, vp.mapToGlobal(QPointF(x, y)).x(), vp.mapToGlobal(QPointF(x, y)).y())
     vp._dispatch_tool_click(press)
 
 

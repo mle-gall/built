@@ -128,6 +128,12 @@ impl ModelClipboard {
     fn publish(&self, win: &Bound<'_, PyAny>, clip: &Bound<'_, PyAny>) -> PyResult<()> {
         let py = win.py();
         let native = py.import("app_shell.native")?;
+        if !native.call_method0("available")?.is_truthy()? {
+            // No shell (a headless host): the copy is offered in this
+            // process, where `adopt` reads it for the other documents.
+            py.import("formats.clip")?.call_method1("publish", (clip,))?;
+            return Ok(());
+        }
         let encode = py.import("formats.clip_payload")?.getattr("encode")?;
         let data = win
             .getattr("_host")?

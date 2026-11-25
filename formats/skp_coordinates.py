@@ -3,6 +3,7 @@
 """Read-only packed coordinate protocol for the internal SKP payload."""
 
 from functools import partialmethod
+from operator import attrgetter
 from ingetrazo_core import (
     skp_rows_init, skp_rows_get, skp_rows_iter, skp_packed_eq, skp_packed_repr,
     skp_flatten_rings as flatten_rings,
@@ -21,9 +22,7 @@ class PointRows:
 
     __init__ = partialmethod(skp_rows_init)
 
-    def _coordinate_span(self):
-        """Borrow read-only rows in this exact order; no Python float expansion."""
-        return self._array, self._indices
+    _coordinate_span = partialmethod(attrgetter("_array", "_indices"))
 
     def __len__(self):
         return len(self._indices)

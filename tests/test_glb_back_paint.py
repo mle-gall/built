@@ -7,10 +7,10 @@ its own paint or a container's, keeps the front. Every assertion reads a real
 GLB back: the triangles under each material, by colour and by picture."""
 from __future__ import annotations
 
+from tests.raster_samples import solid_raster
 import json
 import struct
 
-from PySide6.QtGui import QColor, QImage
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group
@@ -81,8 +81,7 @@ def _at(x):
 
 
 def _png(path):
-    img = QImage(4, 4, QImage.Format_RGB32)
-    img.fill(QColor(10, 200, 30))
+    img = solid_raster(4, 4, (10, 200, 30))
     img.save(str(path))
     return path
 

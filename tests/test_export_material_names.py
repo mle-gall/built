@@ -15,14 +15,6 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
 
 from core.scene import Scene                                      # noqa: E402
 from formats import dae as dae_format                             # noqa: E402

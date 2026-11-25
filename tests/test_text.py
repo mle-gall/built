@@ -3,14 +3,9 @@
 """Text annotations (leader labels) and 3D Text geometry."""
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtGui import QGuiApplication
 from ingetrazo_core import Vec3 as QVector3D
 
-_app = QGuiApplication.instance() or QGuiApplication([])
 
 from core.history import (AddTextLabelCommand, DeleteTextLabelsCommand,
                           History)
@@ -236,7 +231,7 @@ def test_select_delete_key_removes_label():
     DeleteTextLabelsCommand was missing and only NameError'd at press
     time — regression guard)."""
     from types import SimpleNamespace
-    from PySide6.QtCore import Qt
+    from ingetrazo_core import Input as Qt
     from tools.rust_tools import SelectTool
 
     scene = Scene()
@@ -285,16 +280,16 @@ def test_pick_text_label_hits_the_drawn_block():
     """The hit box follows the drawn block: with the anchor to the right the
     words are LEFT of the leader end, and a click there (not to the right,
     where the block used to be) picks the label."""
-    from PySide6.QtGui import QFont, QFontMetrics
+    from ingetrazo_render import AnnotationFont
     from tests.controller_surface import ControllerSurface as Viewport
 
     scene = Scene()
     lab = TextLabel(QVector3D(3, 0, 0), QVector3D(-2, 0, 0), "Pileta")
     scene.text_labels.append(lab)
-    font = QFont()
+    font = AnnotationFont()
     font.setPointSize(9)
     font.setBold(True)
-    w = QFontMetrics(font).horizontalAdvance("Pileta")
+    w = font.horizontalAdvance("Pileta")
 
     class _VP:
         pick_threshold_px = 8.0

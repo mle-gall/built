@@ -7,7 +7,7 @@ now plain copied edges go through the Line tool's planner, so a copy laid
 across a face splits it — and a face copied with its edges is not doubled."""
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, Qt
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
@@ -43,14 +43,14 @@ class _Vp:
 
 
 def _ctx(vp, x, y):
-    return ToolContext(viewport=vp, world=V(x, y), screen=QPointF(0, 0),
-                       modifiers=Qt.NoModifier, snap=None)
+    return ToolContext(viewport=vp, world=V(x, y), screen=ScreenPoint(0, 0),
+                       modifiers=Input.NoModifier, snap=None)
 
 
 def _copy(vp, grab, drop):
     tool = MoveTool()
     tool.on_click(_ctx(vp, *grab))
-    tool.on_key(vp, Qt.Key_Control, Qt.NoModifier)
+    tool.on_key(vp, Input.Key_Control, Input.NoModifier)
     tool.on_hover(_ctx(vp, *drop))
     tool.on_click(_ctx(vp, *drop))
 

@@ -124,11 +124,7 @@ def test_the_move_tool_on_screen_lowers_the_arc():
     """The reporter's gesture through the real tool: the top arc selected,
     picked at its end and dropped on the bottom arc's end."""
     import os
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QPointF, Qt
-    from PySide6.QtWidgets import QApplication
-    if QApplication.instance() is None:
-        QApplication([])
+    from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
     from tools.move import MoveTool
     from views.document_interaction import _HoverEvent
     from tests.controller_surface import ControllerSurface as Viewport

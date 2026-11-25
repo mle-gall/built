@@ -15,7 +15,7 @@ fn owns_shift_lock<'py>(a: &Args<'py>) -> Reply<'py> {
 fn shift_held<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
-    let qt = imported(py, "core.input_types")?.getattr("Qt")?;
+    let qt = imported(py, "ingetrazo_core")?.getattr("Input")?;
     let input_state = imported(py, "views.input_state")?.into_any();
     (input_state
         .call_method1("modifiers", (tool.getattr("_vp")?,))?
@@ -183,8 +183,8 @@ fn pointer<'py>(a: &Args<'py>) -> Reply<'py> {
         event.set_item("world", world.call_method0("toTuple")?)?;
     }
     if tool.call_method0("_shift_held")?.is_truthy()? {
-        let shift = imported(py, "core.input_types")?
-            .getattr("Qt")?
+        let shift = imported(py, "ingetrazo_core")?
+            .getattr("Input")?
             .getattr("ShiftModifier")?
             .getattr("value")?;
         event.set_item("mods", event.get_item("mods")?.bitor(shift)?)?;

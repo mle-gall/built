@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import zipfile
 
-from PySide6.QtGui import QImage
+from ingetrazo_render import SurveyRaster
 
 from formats import igz
 
@@ -14,8 +14,8 @@ from formats import igz
 def _payload(tmp_path):
     entries = []
     for i in range(7):
-        image = QImage(2, 2, QImage.Format_RGB32)
-        image.fill(0x112233 + i)
+        r, g, b = (0x112233 + i).to_bytes(3, "big")
+        image = SurveyRaster(2, 2, bytes((r, g, b, 255)) * 4)
         path = tmp_path / f"image-{i}.png"
         assert image.save(str(path))
         entries.append({"path": str(path), "sw": 1.0, "sh": 2.0})

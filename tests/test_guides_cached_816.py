@@ -10,17 +10,14 @@ guides or their selection change."""
 from __future__ import annotations
 
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from tests.raster_samples import pixels
 from tests.controller_surface import live_image
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
 
 import views.document_interaction as vpmod  # noqa: E402
 from core.guide import Guide  # noqa: E402
@@ -44,20 +41,12 @@ def test_dashes_match_a_point_by_point_construction():
     assert spans == [(0, 2 * len(a), False)]
 
 
-def _pixels(img):
-    a = img.convertToFormat(img.Format.Format_RGB32)
-    buf = np.frombuffer(a.constBits(), np.uint8).reshape(
-        a.height(), a.bytesPerLine())[:, :a.width() * 4]
-    return buf.copy()
-
-
 def test_the_edit_box_sharing_the_buffer_does_not_eat_the_guides(native_gpu_host):
     """The dashed box of the group being edited reuses the guides' buffer;
     a cached frame must not draw the box where the guides were."""
     from core.group import Group
     from core.mesh import Mesh
     win = native_gpu_host.window
-    _app.processEvents()
     vp = win.viewport
     m = Mesh()
     m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
@@ -68,10 +57,10 @@ def test_the_edit_box_sharing_the_buffer_does_not_eat_the_guides(native_gpu_host
     vp.camera.set_view("top")
     vp.scene.begin_group_edit(g)
     vp.scene.version += 1
-    first = _pixels(live_image(vp))
-    second = _pixels(live_image(vp))
+    first = pixels(live_image(vp))
+    second = pixels(live_image(vp))
     assert (first == second).all()
     # And the guide is really there: a row of guide-blue pixels.
     vp.scene.guides[:] = []
-    bare = _pixels(live_image(vp))
+    bare = pixels(live_image(vp))
     assert (first != bare).any()

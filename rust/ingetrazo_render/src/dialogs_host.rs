@@ -46,17 +46,8 @@ fn cd(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     py.import("ingetrazo_render")?.getattr("chrome_dialogs")
 }
 
-fn native(py: Python<'_>) -> PyResult<bool> {
-    py.import("core.input_types")?.getattr("NATIVE")?.is_truthy()
-}
-
 fn dict_get<'py>(o: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
     o.getattr("__dict__")?.call_method1("get", (key,))
-}
-
-fn platform_offscreen(py: Python<'_>) -> PyResult<bool> {
-    let name: String = py.import("PySide6.QtGui")?.getattr("QGuiApplication")?.call_method0("platformName")?.extract()?;
-    Ok(name == "offscreen" || name == "minimal")
 }
 
 fn attr_or<'py>(o: &Bound<'py, PyAny>, name: &str, fallback: Bound<'py, PyAny>) -> Bound<'py, PyAny> {
@@ -114,69 +105,23 @@ fn view_of<'py>(py: Python<'py>, win: &Bound<'py, PyAny>) -> Bound<'py, PyAny> {
 }
 
 /// The Metal view whose chrome can show a sheet for `parent` now, or `None`
-/// if a blocking question cannot be drawn.
+/// if a blocking question cannot be drawn. Nothing draws one until the
+/// shell's modal host (`app_shell.modal.install`) puts its own `live` here.
 #[pyfunction]
-fn live<'py>(py: Python<'py>, parent: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let nothing = py.None().into_bound(py);
-    if native(py)? || platform_offscreen(py)? {
-        return Ok(nothing);
-    }
-    let m = cd(py)?;
-    let win = m.call_method1("window_of", (parent,))?;
-    if win.is_none() || flag(&win, "_closed") {
-        return Ok(nothing);
-    }
-    if !parent.is(&win) && !parent.is_none() && !inside_view_area(parent, &win)? {
-        return Ok(nothing);
-    }
-    let shown = win.call_method0("isVisible").and_then(|v| v.is_truthy()).and_then(|v| Ok(v && !win.call_method0("isMinimized")?.is_truthy()?));
-    match shown {
-        Ok(true) => {}
-        Ok(false) => return Ok(nothing),
-        Err(e) if e.is_instance_of::<pyo3::exceptions::PyRuntimeError>(py) => return Ok(nothing),
-        Err(e) => return Err(e),
-    }
-    if !py.import("PySide6.QtWidgets")?.getattr("QApplication")?.call_method0("activeModalWidget")?.is_none() {
-        return Ok(nothing); // a Qt dialog is up: the chrome is behind it
-    }
-    let view = m.call_method1("view_of", (&win,))?;
-    if view.is_none() || !flag(&view, "_ui_attached") || opt(&view, "renderer").is_none() || !view.call_method0("isVisible")?.is_truthy()? {
-        return Ok(nothing);
-    }
-    if flag(&view, "_drawing_frame") {
-        return Ok(nothing); // asked from inside a frame: none could draw the sheet
-    }
-    Ok(view)
+fn live<'py>(py: Python<'py>, _parent: &Bound<'py, PyAny>) -> Bound<'py, PyAny> {
+    py.None().into_bound(py)
 }
 
-/// The window to post an unanswered model on, including an offscreen Qt
-/// window.
+/// The window to post an unanswered model on: in the shell, one whose
+/// chrome can draw now; headless (plain CPython, tests), the parent's window.
 #[pyfunction]
 fn async_host<'py>(py: Python<'py>, parent: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let m = cd(py)?;
     let win = m.call_method1("window_of", (parent,))?;
-    if !m.call_method1("live", (parent,))?.is_none() || (!m.call_method0("in_shell")?.is_truthy()? && platform_offscreen(py)?) {
+    if !m.call_method0("in_shell")?.is_truthy()? || !m.call_method1("live", (parent,))?.is_none() {
         return Ok(win);
     }
     Ok(py.None().into_bound(py))
-}
-
-/// A panel of the window (docked, even hidden), not a dialog of its own.
-fn inside_view_area(widget: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let mut w = widget.clone();
-    while !w.is_none() && !w.is(win) {
-        if w.call_method0("isWindow")?.is_truthy()? {
-            return Ok(false);
-        }
-        w = w.call_method0("parentWidget")?;
-    }
-    Ok(w.is(win))
-}
-
-#[pyfunction]
-#[pyo3(name = "_inside_view_area")]
-fn inside_view_area_py(widget: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<bool> {
-    inside_view_area(widget, win)
 }
 
 // ---- The sheet ------------------------------------------------------------------------
@@ -622,7 +567,7 @@ fn sheet_key(py: Python<'_>, win: &Bound<'_, PyAny>, event: &Bound<'_, PyAny>) -
     if sheet.is_none() {
         return Ok(false);
     }
-    let qt = py.import("core.input_types")?.getattr("Qt")?;
+    let qt = py.import("ingetrazo_core")?.getattr("Input")?;
     let (key, mods) = (event.call_method0("key")?, event.call_method0("modifiers")?);
     let (default, cancel, discard) = (sheet.getattr("default")?, sheet.getattr("cancel")?, sheet.getattr("discard")?);
     if (key.eq(qt.getattr("Key_Return")?)? || key.eq(qt.getattr("Key_Enter")?)?) && default.is_truthy()? {
@@ -670,13 +615,10 @@ const STANDARD: [(&str, &str, bool); 17] = [
     ("Ok", "OK", true),
 ];
 
-/// `QMessageBox`'s buttons: Qt's in the Qt app, `core.input_codes`' in the shell.
+/// The standard buttons `critical`/`warning`/`information`/`question`
+/// answer with (`QMessageBox`'s values).
 fn message_box(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    if native(py)? {
-        py.import("core.input_codes")?.getattr("StandardButton")
-    } else {
-        py.import("PySide6.QtWidgets")?.getattr("QMessageBox")
-    }
+    py.import("core.input_codes")?.getattr("StandardButton")
 }
 
 fn button_key(py: Python<'_>, b: &Bound<'_, PyAny>) -> PyResult<String> {
@@ -792,16 +734,14 @@ fn question<'py>(py: Python<'py>, parent: &Bound<'py, PyAny>, title: &Bound<'py,
 // ---- Modality while a sheet is up ---------------------------------------------------
 
 /// What a modal QMessageBox does for its window, for the chrome's sheet and
-/// exclusive jobs: no shortcut, key or click reaches anything else. In the
-/// Qt app an event filter on the application does it; the shell's host
-/// asks `modal(win)` instead.
+/// exclusive jobs: the shell's host asks `modal(win)` and keeps keys,
+/// clicks and gestures from the rest of the window; a menu bar the window
+/// has greys out.
 #[pyclass(name = "_Guard", module = "ingetrazo_render.chrome_dialogs", get_all)]
 pub struct Guard {
     win: Py<PyAny>,
     menus: Py<PyAny>,
     count: i64,
-    /// The application's event filter (Qt app only).
-    filter: Py<PyAny>,
 }
 
 #[pymethods]
@@ -821,18 +761,13 @@ fn guard_engage(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
     let mut guard = dict_get(win, "_chrome_guard")?;
     if guard.is_none() {
-        let filter = if native(py)? { py.None() } else { qt_filter(win)?.unbind() };
-        guard = Bound::new(py, Guard { win: win.clone().unbind(), menus: PyList::empty(py).into_any().unbind(), count: 0, filter })?.into_any();
+        guard = Bound::new(py, Guard { win: win.clone().unbind(), menus: PyList::empty(py).into_any().unbind(), count: 0 })?.into_any();
         win.setattr("_chrome_guard", &guard)?;
     }
     let g = guard.cast::<Guard>()?;
     g.borrow_mut().count += 1;
     if g.borrow().count != 1 {
         return Ok(());
-    }
-    let filter = g.borrow().filter.clone_ref(py);
-    if !filter.is_none(py) {
-        py.import("PySide6.QtWidgets")?.getattr("QApplication")?.call_method0("instance")?.call_method1("installEventFilter", (filter,))?;
     }
     let menus = PyList::empty(py);
     if win.hasattr("menuBar")? {
@@ -865,10 +800,6 @@ fn guard_release(win: &Bound<'_, PyAny>) -> PyResult<()> {
     if g.borrow().count != 0 {
         return Ok(());
     }
-    let filter = g.borrow().filter.clone_ref(py);
-    if !filter.is_none(py) {
-        py.import("PySide6.QtWidgets")?.getattr("QApplication")?.call_method0("instance")?.call_method1("removeEventFilter", (filter,))?;
-    }
     let menus = g.borrow().menus.clone_ref(py);
     for action in menus.bind(py).try_iter()? {
         match action?.call_method1("setEnabled", (true,)) {
@@ -879,53 +810,6 @@ fn guard_release(win: &Bound<'_, PyAny>) -> PyResult<()> {
     }
     g.borrow_mut().menus = PyList::empty(py).into_any().unbind();
     Ok(())
-}
-
-/// A QObject (child of the window) whose `eventFilter` is `guard_filter`.
-fn qt_filter<'py>(win: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let py = win.py();
-    let qobject = py.import("PySide6.QtCore")?.getattr("QObject")?;
-    let class = py.import("builtins")?.getattr("type")?.call1(("_GuardFilter", (qobject,), PyDict::new(py)))?;
-    let filter = class.call1((win,))?;
-    let w = win.clone().unbind();
-    let method = func(py, move |py, a| Ok(obj(py, guard_filter(w.bind(py), &a.get_item(1)?, &a.get_item(2)?)?)?))?;
-    filter.setattr("eventFilter", py.import("types")?.getattr("MethodType")?.call1((method, &filter))?)?;
-    Ok(filter)
-}
-
-fn guard_filter(win: &Bound<'_, PyAny>, target: &Bound<'_, PyAny>, event: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let py = win.py();
-    let m = cd(py)?;
-    let qevent = py.import("core.input_types")?.getattr("QEvent")?;
-    let kind = event.call_method0("type")?;
-    let is = |name: &str| -> PyResult<bool> { kind.eq(qevent.getattr(name)?) };
-    if is("KeyPress")? || is("KeyRelease")? || is("ShortcutOverride")? || is("Shortcut")? {
-        let no_sheet = m.call_method1("current_sheet", (win,))?.is_none();
-        if is("ShortcutOverride")? {
-            event.call_method0("accept")?; // the key is "taken": no shortcut fires
-        } else if no_sheet && form_up(win)? && (is("KeyPress")? || is("KeyRelease")?) {
-            // A form on the chrome: its fields take the keys.
-            let view = m.call_method1("view_of", (win,))?;
-            if !view.is_none() {
-                py.import("views.wgpu_ui")?.call_method1("key", (view, event, is("KeyPress")?))?;
-            }
-        } else if is("KeyPress")? && !event.call_method0("isAutoRepeat")?.is_truthy()? {
-            if no_sheet {
-                m.call_method1("job_key", (win, event))?;
-            } else {
-                m.call_method1("sheet_key", (win, event))?;
-            }
-        }
-        return Ok(true);
-    }
-    if is("NativeGesture")? {
-        return Ok(true);
-    }
-    let click = is("MouseButtonPress")? || is("MouseButtonRelease")? || is("MouseButtonDblClick")? || is("Wheel")? || is("ContextMenu")?;
-    if click && target.is_instance(&py.import("PySide6.QtWidgets")?.getattr("QWidget")?)? {
-        return Ok(!target.is(m.call_method1("view_of", (win,))?));
-    }
-    Ok(false)
 }
 
 fn form_up(win: &Bound<'_, PyAny>) -> PyResult<bool> {
@@ -1154,7 +1038,7 @@ fn find_job<'py>(py: Python<'py>, win: &Bound<'py, PyAny>, jid: &Bound<'py, PyAn
 /// Esc cancels the exclusive job, when it can stop.
 #[pyfunction]
 fn job_key(py: Python<'_>, win: &Bound<'_, PyAny>, event: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let escape = py.import("core.input_types")?.getattr("Qt")?.getattr("Key_Escape")?;
+    let escape = py.import("ingetrazo_core")?.getattr("Input")?.getattr("Key_Escape")?;
     if event.call_method0("key")?.eq(escape)? {
         for j in running_jobs(win)?.into_iter().rev() {
             if j.getattr("exclusive")?.is_truthy()? && j.getattr("cancellable")?.is_truthy()? {
@@ -1363,14 +1247,14 @@ impl ChromeBar {
 
 // ---- The module -------------------------------------------------------------------------
 
-/// Read when first asked for (PEP 562): `QEventLoop` (Qt's, until
-/// `app_shell.modal` installs the shell's) and `QMessageBox` (the buttons
-/// `critical`/`warning`/`information`/`question` answer with).
+/// Read when first asked for (PEP 562): `QEventLoop`, the loop `ask` turns
+/// (the shell's modal pump, `app_shell.modal.ShellLoop`), and `QMessageBox`,
+/// the buttons `critical`/`warning`/`information`/`question` answer with.
 #[pyfunction]
 #[pyo3(name = "__getattr__")]
 fn module_getattr<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
     if name == "QEventLoop" {
-        return py.import("PySide6.QtCore")?.getattr("QEventLoop");
+        return py.import("app_shell.modal")?.getattr("ShellLoop");
     }
     if name == "QMessageBox" {
         return message_box(py);
@@ -1398,7 +1282,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         wrap_pyfunction!(view_of, &sub)?,
         wrap_pyfunction!(live, &sub)?,
         wrap_pyfunction!(async_host, &sub)?,
-        wrap_pyfunction!(inside_view_area_py, &sub)?,
         wrap_pyfunction!(sheets_py, &sub)?,
         wrap_pyfunction!(current_sheet, &sub)?,
         wrap_pyfunction!(roles, &sub)?,

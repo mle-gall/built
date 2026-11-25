@@ -95,20 +95,12 @@ def win(native_gpu_host):
     return window
 
 
-def _size(img):
-    """A capture's size: a SurveyRaster's properties, or a QImage's calls."""
-    return (img.width, img.height) if isinstance(img.width, int) else (img.width(), img.height())
-
-
 def _pixel(vp):
     """The colour a little off the view's centre (the capture is a
     SurveyRaster: RGBA bytes)."""
     import numpy as np
     img = live_image(vp)
-    w, h = _size(img)
-    if not hasattr(img, "rgba"):                 # a QImage, before the native capture
-        c = img.pixelColor(w // 2 + 15, h // 2 + 15)
-        return (c.red(), c.green(), c.blue())
+    w, h = img.width, img.height
     px = np.frombuffer(img.rgba(), np.uint8).reshape(h, w, 4)
     return tuple(int(v) for v in px[h // 2 + 15, w // 2 + 15, :3])
 
@@ -190,7 +182,8 @@ def test_a_paint_stays_on_screen_after_leaving_the_groups(win, layout):
     old material (the letters of the plaza, 04-11)."""
     vp = win.viewport
     _open(vp, layout)
-    w, h = _size(live_image(vp))
+    image = live_image(vp)
+    w, h = image.width, image.height
     x = (w // 2 + 15) * vp.width() // w
     y = (h // 2 + 15) * vp.height() // h
     face = vp.pick_face_any(x, y)[0]

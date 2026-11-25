@@ -4,18 +4,16 @@ from types import SimpleNamespace
 import numpy as np
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from PySide6.QtCore import Qt, QPointF
+from core.input_codes import Input as Qt
+from ingetrazo_core import ScreenPoint as QPointF
 from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
-from PySide6.QtWidgets import QApplication
 from core.scene import Scene
 from core.mesh import Mesh
 from core.group import Group
 from core.snap import compute_snap
 from views.wgpu_scene import pack_scene
 from views.wgpu_inference import prepare, snap
-from views.wgpu_view import WgpuView
-
-app = QApplication.instance() or QApplication([])
+from tests.headless_gpu import HeadlessView
 
 
 @pytest.fixture
@@ -28,7 +26,7 @@ def view():
     group.xform = QMatrix4x4()
     group.xform.translate(4, 3, 0)
     scene.groups.append(group)
-    v = WgpuView()
+    v = HeadlessView()
     v.resize(800, 600)
     v.scene = scene
     v.packed = pack_scene(scene)
@@ -118,7 +116,7 @@ def test_edit_context_does_not_duplicate_group_geometry(view):
 def test_snap_matches_gl_viewport(view, point):
     from tests.controller_surface import ControllerSurface as Viewport
     gl = Viewport()
-    gl.resize(view.size())
+    gl.resize(view.width(), view.height())
     gl.scene = view.scene
     gl.camera = view.camera
     gl.active_tool = None
@@ -132,11 +130,10 @@ def test_snap_matches_gl_viewport(view, point):
 
 def test_wheel_and_window_match_gl(view):
     import copy
-    from PySide6.QtCore import QPoint
-    from PySide6.QtGui import QWheelEvent
+    from ingetrazo_render import WheelEvent
     from tests.controller_surface import ControllerSurface as Viewport
     gl = Viewport()
-    gl.resize(view.size())
+    gl.resize(view.width(), view.height())
     gl.scene = view.scene
     gl.camera = copy.deepcopy(view.camera)
     view.source_viewport = gl
@@ -144,9 +141,7 @@ def test_wheel_and_window_match_gl(view):
     view._depth_world_at = gl._depth_world_at = lambda *args: ('hit', focus)
     gl._model_diag = view._model_diag
     gl._invert_wheel = False
-    event = QWheelEvent(QPointF(420, 315), QPointF(420, 315), QPoint(),
-                        QPoint(0, 120), Qt.NoButton, Qt.NoModifier,
-                        Qt.NoScrollPhase, False)
+    event = WheelEvent(420., 315., 0., 0., 0., 120., "none", 0)   # one notch, as the shell sends it
     view.wheelEvent(event)
     gl.wheelEvent(event)
     assert view.camera.view_matrix().data() == gl.camera.view_matrix().data()
@@ -268,7 +263,7 @@ def test_native_curve_order_and_invalid_indices():
 
 
 def test_full_pack_starts_inference_without_after_open(monkeypatch):
-    view = WgpuView()
+    view = HeadlessView()
     monkeypatch.setattr(view, '_upload', lambda: None)
     view.set_scene(Scene(), opening=True)
     assert view._inference_future is not None

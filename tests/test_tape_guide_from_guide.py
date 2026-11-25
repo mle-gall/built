@@ -9,7 +9,7 @@ the tool picked with the mesh edge picker, which never sees guides.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, Qt
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.guide import Guide
@@ -48,8 +48,8 @@ class _Vp:
 
 def _ctx(vp, x, y, kind="on_edge"):
     snap = SnapResult(V(x, y), kind, (0, 0, 0)) if kind else None
-    return ToolContext(viewport=vp, world=V(x, y), screen=QPointF(x * 100, y * 100),
-                       modifiers=Qt.NoModifier, snap=snap)
+    return ToolContext(viewport=vp, world=V(x, y), screen=ScreenPoint(x * 100, y * 100),
+                       modifiers=Input.NoModifier, snap=snap)
 
 
 def test_a_guide_pulled_from_a_guide_is_parallel_at_the_offset():

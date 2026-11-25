@@ -62,16 +62,7 @@ def test_the_corner_itself_is_still_an_endpoint():
 
 
 def test_the_viewport_keeps_the_hovered_corner_before_the_first_click():
-    import os
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    import pytest
-    from PySide6.QtCore import QPointF, Qt
-    from PySide6.QtWidgets import QApplication
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    elif not isinstance(app, QApplication):
-        pytest.skip("another Qt application flavour is already running")
+    from ingetrazo_core import ScreenPoint, Input
     from tests.controller_surface import ControllerSurface as Viewport
     from tools.rust_tools import RectangleTool
     vp = Viewport(None)
@@ -85,13 +76,13 @@ def test_the_viewport_keeps_the_hovered_corner_before_the_first_click():
     vp.camera.distance = 12
     vp.set_active_tool(RectangleTool())
     corner_px = vp._world_to_pixel(V(4, 0, 3))
-    vp._process_hover(QPointF(*corner_px), Qt.NoModifier)
+    vp._process_hover(ScreenPoint(*corner_px), Input.NoModifier)
     assert vp._acquired_point is None                  # crossing it is not enough
     assert vp._dwell_timer.isActive()
     vp._encourage_dwelt()                              # …pausing on it is (the timer)
     assert vp._acquired_point is not None and (vp._acquired_point - V(4, 0, 3)).length() < 1e-6
     away_px = vp._world_to_pixel(V(2, 0, 1))
-    vp._process_hover(QPointF(*away_px), Qt.NoModifier)
+    vp._process_hover(ScreenPoint(*away_px), Input.NoModifier)
     assert (vp._acquired_point - V(4, 0, 3)).length() < 1e-6      # still encouraged
 
 
@@ -99,16 +90,7 @@ def test_a_tool_with_inferences_off_snaps_but_never_encourages():
     """``allow_inferences = False`` (the Offset): the hard point snap still
     lands on the corner, but the dwell never starts — no encouraged point,
     no «from point» / «level with» lines."""
-    import os
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    import pytest
-    from PySide6.QtCore import QPointF, Qt
-    from PySide6.QtWidgets import QApplication
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    elif not isinstance(app, QApplication):
-        pytest.skip("another Qt application flavour is already running")
+    from ingetrazo_core import ScreenPoint, Input
     from tests.controller_surface import ControllerSurface as Viewport
     from tools.base import Tool
 
@@ -134,7 +116,7 @@ def test_a_tool_with_inferences_off_snaps_but_never_encourages():
     vp.camera.distance = 12
     vp.set_active_tool(_SnapsOnly())
     corner_px = vp._world_to_pixel(V(4, 0, 3))
-    vp._process_hover(QPointF(*corner_px), Qt.NoModifier)
+    vp._process_hover(ScreenPoint(*corner_px), Input.NoModifier)
     assert vp.last_snap.kind == "endpoint"     # the snap still works…
     assert not vp._dwell_timer.isActive()      # …but no dwell → no inference
     assert vp._encouraged == []
@@ -144,16 +126,7 @@ def test_hovering_a_circles_rim_encourages_its_centre(monkeypatch):
     """Marco's reference capture (2026-09-14): with the Circle tool on
     another circle's rim, the dotted line runs from THAT circle's centre —
     the centre is an encouraged point like a corner."""
-    import os
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    import pytest
-    from PySide6.QtCore import QPointF, Qt
-    from PySide6.QtWidgets import QApplication
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    elif not isinstance(app, QApplication):
-        pytest.skip("another Qt application flavour is already running")
+    from ingetrazo_core import ScreenPoint, Input
     from tests.controller_surface import ControllerSurface as Viewport
     from tools.circle import CircleTool
     from tools.base import ToolContext
@@ -168,8 +141,8 @@ def test_hovering_a_circles_rim_encourages_its_centre(monkeypatch):
     vp.set_active_tool(tool)
 
     def ctx(world):
-        return ToolContext(viewport=vp, world=world, screen=QPointF(0, 0),
-                           modifiers=Qt.NoModifier, snap=None)
+        return ToolContext(viewport=vp, world=world, screen=ScreenPoint(0, 0),
+                           modifiers=Input.NoModifier, snap=None)
     tool.on_click(ctx(V(2, 2, 0)))
     tool.on_click(ctx(V(3, 2, 0)))                  # a circle, centre (2,2), r = 1
     assert len(vp.scene.mesh.edges) >= 12
@@ -180,12 +153,12 @@ def test_hovering_a_circles_rim_encourages_its_centre(monkeypatch):
     a0, a1 = 0.0, 2 * math.pi / tool.sides
     mid = V(2 + (math.cos(a0) + math.cos(a1)) / 2, 2 + (math.sin(a0) + math.sin(a1)) / 2, 0)
     rim_px = vp._world_to_pixel(mid)
-    vp._process_hover(QPointF(*rim_px), Qt.NoModifier)   # hover the rim…
+    vp._process_hover(ScreenPoint(*rim_px), Input.NoModifier)   # hover the rim…
     vp._encourage_dwelt()                                # …and pause on it
     assert vp._acquired_point is not None
     assert (vp._acquired_point - V(2, 2, 0)).length() < 1e-3
     far_px = vp._world_to_pixel(V(5, 2.02, 0))          # level with the centre, along red
-    vp._process_hover(QPointF(*far_px), Qt.NoModifier)
+    vp._process_hover(ScreenPoint(*far_px), Input.NoModifier)
     snap = vp.last_snap
     assert snap.kind == "from_point", snap.kind
     assert abs(snap.point.y() - 2.0) < 1e-6 and abs(snap.point.x() - 5.0) < 0.05
@@ -214,10 +187,6 @@ def test_two_encouraged_points_pin_the_cursor_where_their_axis_lines_cross():
 
 
 def test_the_viewport_keeps_the_last_two_encouraged_points():
-    import os
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtWidgets import QApplication
-    QApplication.instance() or QApplication([])
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     for pt in (V(1, 0, 0), V(2, 0, 0), V(3, 0, 0), V(3, 0, 0)):
@@ -257,12 +226,8 @@ def test_component_origin_and_arc_midpoint_pseudo_edges_snap_by_name():
 
 
 def test_the_viewport_offers_an_arcs_sweep_midpoint_and_a_groups_origin():
-    import os
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from ingetrazo_core import Matrix4 as QMatrix4x4
-    from PySide6.QtWidgets import QApplication
-    QApplication.instance() or QApplication([])
     from tests.controller_surface import ControllerSurface as Viewport
     from tools.arc import ArcTool
     from tools.rust_tools import LineTool
@@ -280,8 +245,8 @@ def test_the_viewport_offers_an_arcs_sweep_midpoint_and_a_groups_origin():
     vp.set_active_tool(arc)
 
     def ctx(world):
-        return ToolContext(viewport=vp, world=world, screen=QPointF(0, 0),
-                           modifiers=Qt.NoModifier, snap=None)
+        return ToolContext(viewport=vp, world=world, screen=ScreenPoint(0, 0),
+                           modifiers=Input.NoModifier, snap=None)
     arc.on_click(ctx(V(0, 0, 0)))
     arc.on_click(ctx(V(2, 0, 0)))
     arc.on_click(ctx(V(1, 1, 0)))                      # a half circle, r = 1
@@ -295,11 +260,11 @@ def test_the_viewport_offers_an_arcs_sweep_midpoint_and_a_groups_origin():
     vp.scene.version += 1
     vp.set_active_tool(LineTool())
     px = vp._world_to_pixel(V(1, 1.02, 0))               # the arc's apex
-    vp._process_hover(QPointF(*px), Qt.NoModifier)
+    vp._process_hover(ScreenPoint(*px), Input.NoModifier)
     assert vp.last_snap.kind == "arc_midpoint", vp.last_snap.kind
     assert (vp.last_snap.point - V(1, 1, 0)).length() < 0.02
     px = vp._world_to_pixel(V(5.02, 4.0, 0))             # the group's origin
-    vp._process_hover(QPointF(*px), Qt.NoModifier)
+    vp._process_hover(ScreenPoint(*px), Input.NoModifier)
     assert vp.last_snap.kind == "component_origin", vp.last_snap.kind
 
 
@@ -307,11 +272,7 @@ def test_an_arc_started_at_another_arcs_end_snaps_tangent_to_it():
     """The classic "Tangent at Vertex" (cyan): an arc that starts at the end
     of another arc snaps its bulge so the two run tangent — an S-curve here:
     the half circle over (0..2) continues below (2..4) with the same radius."""
-    import os
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QPointF, Qt
-    from PySide6.QtWidgets import QApplication
-    QApplication.instance() or QApplication([])
+    from ingetrazo_core import ScreenPoint, Input
     from tests.controller_surface import ControllerSurface as Viewport
     from tools.arc import ArcTool
     from tools.base import ToolContext
@@ -325,8 +286,8 @@ def test_an_arc_started_at_another_arcs_end_snaps_tangent_to_it():
     vp.camera.distance = 12
 
     def ctx(world):
-        return ToolContext(viewport=vp, world=world, screen=QPointF(0, 0),
-                           modifiers=Qt.NoModifier, snap=None)
+        return ToolContext(viewport=vp, world=world, screen=ScreenPoint(0, 0),
+                           modifiers=Input.NoModifier, snap=None)
     first = ArcTool()
     vp.set_active_tool(first)
     first.on_click(ctx(V(0, 0, 0)))
@@ -353,10 +314,6 @@ def test_an_arc_started_at_another_arcs_end_snaps_tangent_to_it():
 # from outside, without opening them — magenta, and the tip says "in group"/"in component".
 
 def _offscreen_vp():
-    import os
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtWidgets import QApplication
-    QApplication.instance() or QApplication([])
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1000, 600)
@@ -369,7 +326,7 @@ def _offscreen_vp():
 def _arc_mesh():
     """A mesh holding one half-circle arc (0,0)→(2,0) over (1,1), drawn with
     the real tool into a scratch scene."""
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from core.scene import Scene
     from core.history import History
     from tools.arc import ArcTool
@@ -388,8 +345,8 @@ def _arc_mesh():
     st = _Stub()
     arc = ArcTool()
     for w in (V(0, 0, 0), V(2, 0, 0), V(1, 1, 0)):
-        arc.on_click(ToolContext(viewport=st, world=w, screen=QPointF(0, 0),
-                                 modifiers=Qt.NoModifier, snap=None))
+        arc.on_click(ToolContext(viewport=st, world=w, screen=ScreenPoint(0, 0),
+                                 modifiers=Input.NoModifier, snap=None))
     assert any(getattr(e, "curve", None) is not None for e in st.scene.mesh.edges)
     return st.scene.mesh
 
@@ -407,7 +364,7 @@ def _placed(vp, mesh, dx, dy):
 
 
 def test_the_hovered_edge_can_be_a_components_and_the_tip_says_so():
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from core.mesh import Mesh
     from tools.rust_tools import LineTool
     vp = _offscreen_vp()
@@ -418,7 +375,7 @@ def test_the_hovered_edge_can_be_a_components_and_the_tip_says_so():
     _placed(vp, mesh, 5, 4)                                  # square at (5..7, 4..6)
     vp.set_active_tool(LineTool())
     px = vp._world_to_pixel(V(6, 4.02, 0))                   # its bottom edge, mid
-    vp._process_hover(QPointF(*px), Qt.NoModifier)
+    vp._process_hover(ScreenPoint(*px), Input.NoModifier)
     edge = vp._hover_edge
     assert edge is not None and getattr(edge, "in_group", False)
     assert edge.context == "component"
@@ -428,7 +385,7 @@ def test_the_hovered_edge_can_be_a_components_and_the_tip_says_so():
 
 
 def test_arc_midpoint_and_tangent_reach_arcs_inside_a_component():
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from tools.rust_tools import LineTool
     from tools.arc import ArcTool
     from tools.base import ToolContext
@@ -438,15 +395,15 @@ def test_arc_midpoint_and_tangent_reach_arcs_inside_a_component():
     _placed(vp, _arc_mesh(), 5, 4)                           # arc (5,4)→(7,4) over (6,5)
     vp.set_active_tool(LineTool())
     px = vp._world_to_pixel(V(6, 5.02, 0))                   # the placed arc's apex
-    vp._process_hover(QPointF(*px), Qt.NoModifier)
+    vp._process_hover(ScreenPoint(*px), Input.NoModifier)
     assert vp.last_snap.kind == "arc_midpoint", vp.last_snap.kind
     assert (vp.last_snap.point - V(6, 5, 0)).length() < 0.02
     arc = ArcTool()
     vp.set_active_tool(arc)
 
     def ctx(world):
-        return ToolContext(viewport=vp, world=world, screen=QPointF(0, 0),
-                           modifiers=Qt.NoModifier, snap=None)
+        return ToolContext(viewport=vp, world=world, screen=ScreenPoint(0, 0),
+                           modifiers=Input.NoModifier, snap=None)
     arc.on_click(ctx(V(7, 4, 0)))                            # the placed arc's end
     arc.on_click(ctx(V(9, 4, 0)))
     assert arc._tangent_dir is not None
@@ -454,7 +411,7 @@ def test_arc_midpoint_and_tangent_reach_arcs_inside_a_component():
 
 
 def test_the_centre_of_a_components_circle_comes_from_its_rim():
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from tools.circle import CircleTool
     from tools.base import ToolContext
     from core.scene import Scene
@@ -476,13 +433,13 @@ def test_the_centre_of_a_components_circle_comes_from_its_rim():
     st = _Stub()
     circ = CircleTool()
     for w in (V(2, 2, 0), V(3, 2, 0)):
-        circ.on_click(ToolContext(viewport=st, world=w, screen=QPointF(0, 0),
-                                  modifiers=Qt.NoModifier, snap=None))
+        circ.on_click(ToolContext(viewport=st, world=w, screen=ScreenPoint(0, 0),
+                                  modifiers=Input.NoModifier, snap=None))
     _placed(vp, st.scene.mesh, 5, 4)                         # circle centre (7,6), r = 1
     vp.set_active_tool(CircleTool())
     a0, a1 = 0.0, 2 * math.pi / circ.sides
     rim = V(7 + (math.cos(a0) + math.cos(a1)) / 2, 6 + (math.sin(a0) + math.sin(a1)) / 2, 0)
-    vp._process_hover(QPointF(*vp._world_to_pixel(rim)), Qt.NoModifier)
+    vp._process_hover(ScreenPoint(*vp._world_to_pixel(rim)), Input.NoModifier)
     ref = vp._valid_center_ref()
     assert ref is not None and (ref[0] - V(7, 6, 0)).length() < 1e-3
 
@@ -492,7 +449,7 @@ def test_a_loose_edge_and_a_components_edge_under_the_cursor_together():
     edges) and the pergola (a component) under the cursor, every mouse move
     raised NameError inside pick_edge_any — the hover died and clicks «no
     hacían nada». The nearer of the two must simply win."""
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from core.mesh import Mesh
     from tools.rust_tools import LineTool
     vp = _offscreen_vp()
@@ -505,9 +462,9 @@ def test_a_loose_edge_and_a_components_edge_under_the_cursor_together():
     vp.scene.version += 1
     vp.set_active_tool(LineTool())
     px = vp._world_to_pixel(V(6, 4.09, 0))                   # nearer the loose edge
-    vp._process_hover(QPointF(*px), Qt.NoModifier)           # must not raise
+    vp._process_hover(ScreenPoint(*px), Input.NoModifier)           # must not raise
     e = vp._hover_edge
     assert e is not None and not getattr(e, "in_group", False)
     px = vp._world_to_pixel(V(6, 4.0, 0))                    # on the component's edge
-    vp._process_hover(QPointF(*px), Qt.NoModifier)
+    vp._process_hover(ScreenPoint(*px), Input.NoModifier)
     assert getattr(vp._hover_edge, "in_group", False)

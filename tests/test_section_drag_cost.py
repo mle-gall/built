@@ -129,10 +129,6 @@ def test_the_heights_are_kept_only_for_the_same_arrays_and_normal():
 
 def _viewport_with_a_cut():
     import os
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtWidgets import QApplication
-    if QApplication.instance() is None:
-        QApplication([])
     from core.history import History, PlaceSectionPlaneCommand
     from core.section import SectionPlane
     from tests.test_pushpull_ux import _cube

@@ -34,17 +34,16 @@ jobs:
       - name: System packages
         run: |
           sudo apt-get update -qq
-          # libegl/libgl for Qt, fuse for appimagetool, xvfb for the smoke test
+          # Winit uses the system display libraries. Mesa supplies the offscreen Vulkan device.
           sudo apt-get install -y --no-install-recommends \
-            curl file libgtk-3-dev libegl1 libgl1 libxkbcommon-x11-0 \
-            libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 \
-            libfuse2 xvfb mesa-vulkan-drivers
+            curl file libgtk-3-dev libwayland-dev libxkbcommon-x11-0 \
+            libfuse2 xvfb libvulkan1 mesa-vulkan-drivers
 
       - name: Python dependencies
         run: |
           python -m venv venv
           ./venv/bin/python -m pip install --quiet --upgrade pip
-          ./venv/bin/python -m pip install --quiet PySide6==6.11.2 numpy pytest pyinstaller 'ezdxf>=1.4.4' 'manifold3d>=3.5.3'
+          ./venv/bin/python -m pip install --quiet numpy pytest pyinstaller 'ezdxf>=1.4.4' 'manifold3d>=3.5.3'
           # openskp: UPSTREAM main — every IngeTrazo patch is merged there
           # (legacy corpus 186/186 PRs #194/#199, annotations write+read
           # PR #203). Pinned by SHA like build-windows.yml so both
@@ -63,6 +62,8 @@ jobs:
           ./venv/bin/python -m pip install --quiet maturin
           ./venv/bin/maturin build --release -m rust/ingetrazo_core/Cargo.toml -o "$RUNNER_TEMP/wheels"
           ./venv/bin/python -m pip install "$RUNNER_TEMP"/wheels/ingetrazo_core-*.whl
+          CARGO_PROFILE_RELEASE_STRIP=none ./venv/bin/maturin build --release --features extension-module -m rust/ingetrazo_render/Cargo.toml -o "$RUNNER_TEMP/wheels"
+          ./venv/bin/python -m pip install "$RUNNER_TEMP"/wheels/ingetrazo_render-*.whl
           INGETRAZO_RUST=1 ./venv/bin/python -c "import core._native as n; assert n.native is not None; print('engine:', n.engine())"
 
       - name: Tests
@@ -136,22 +137,17 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Same GL/xcb set the AppImage job installs: PyInstaller only bundles
-      # the Qt xcb chain it can RESOLVE at build time, and --check needs
-      # libEGL on the runner (first snap flight failed on exactly this).
       - name: System packages
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            file libgtk-3-dev libegl1 libgl1 libxkbcommon-x11-0 \
-            libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 \
-            libxcb-render-util0
+            file libgtk-3-dev libwayland-dev libxkbcommon-x11-0 libvulkan1
 
       - name: Python dependencies
         run: |
           python -m venv venv
           ./venv/bin/python -m pip install --quiet --upgrade pip
-          ./venv/bin/python -m pip install --quiet PySide6==6.11.2 numpy pyinstaller 'manifold3d>=3.5.3'
+          ./venv/bin/python -m pip install --quiet numpy pyinstaller 'manifold3d>=3.5.3'
           ./venv/bin/python -m pip install --quiet "openskp @ git+https://github.com/iamahsanmehmood/openskp@291700bc213655a00461838de71e5f206311e619#subdirectory=packages/python"
 
       # The Rust engine (rust/ingetrazo_core, Preferences ▸
@@ -164,6 +160,8 @@ jobs:
           ./venv/bin/python -m pip install --quiet maturin
           ./venv/bin/maturin build --release -m rust/ingetrazo_core/Cargo.toml -o "$RUNNER_TEMP/wheels"
           ./venv/bin/python -m pip install "$RUNNER_TEMP"/wheels/ingetrazo_core-*.whl
+          CARGO_PROFILE_RELEASE_STRIP=none ./venv/bin/maturin build --release --features extension-module -m rust/ingetrazo_render/Cargo.toml -o "$RUNNER_TEMP/wheels"
+          ./venv/bin/python -m pip install "$RUNNER_TEMP"/wheels/ingetrazo_render-*.whl
           INGETRAZO_RUST=1 ./venv/bin/python -c "import core._native as n; assert n.native is not None; print('engine:', n.engine())"
 
       - name: Build the PyInstaller bundle

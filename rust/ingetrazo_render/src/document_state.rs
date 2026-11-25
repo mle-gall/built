@@ -218,11 +218,6 @@ fn apply_tool_cursor(v: &Obj) -> PyResult<()> {
             return Ok(());
         }
         cur = opt(&t, "qt_cursor")?;
-        if !cur.is_none() && !host(py)?.getattr("NATIVE")?.is_truthy()? {
-            cur = py
-                .import("PySide6.QtGui")?
-                .call_method1("QCursor", (cur,))?;
-        }
     }
     if cur.is_none() {
         v.call_method0("unsetCursor")?;

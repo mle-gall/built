@@ -19,12 +19,10 @@ the number floating beside it, which rule 6 calls «prohibido».
 from __future__ import annotations
 
 import math
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QPointF
+from ingetrazo_core import ScreenPoint as QPointF
 
 from core.composition import CotaItem
 

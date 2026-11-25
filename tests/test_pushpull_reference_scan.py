@@ -4,18 +4,13 @@ the radius, and every move read them all. The nearest one that counts is the
 same answer without reading the rest."""
 from __future__ import annotations
 
-import os
 import random
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
-from PySide6.QtCore import QPointF  # noqa: E402
+from ingetrazo_core import ScreenPoint  # noqa: E402
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-if QApplication.instance() is None:
-    QApplication([])
 
 from core.topology import _key  # noqa: E402
 from tools.pushpull import PushPullTool  # noqa: E402
@@ -91,7 +86,7 @@ def _tool(cache, cap=()):
 
 
 def _ctx(vp, x, y):
-    return SimpleNamespace(viewport=vp, screen=QPointF(x, y), hit=None,
+    return SimpleNamespace(viewport=vp, screen=ScreenPoint(x, y), hit=None,
                            ctrl=False)
 
 

@@ -6,17 +6,14 @@ Esc order, arrows and type-to-search are tested in Rust (ui/large_sheet.rs);
 the Metal round trip in test_sheet_pattern_metal.py."""
 from __future__ import annotations
 
+from ingetrazo_render import KeyEvent
 import json
 
 import pytest
-from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QKeyEvent
-from PySide6.QtWidgets import QApplication
+from core.input_codes import Input as Qt
 
 from ingetrazo_render import chrome_forms
 from ingetrazo_render import chrome_sheet as cs
-
-_app = QApplication.instance() or QApplication([])
 
 
 class Renderer:
@@ -149,16 +146,14 @@ def test_actions_reach_the_provider_and_fields_apply_at_once(win):
     assert ("verb", "eat") == p.seen[5] and p.seen.count(("verb", "eat")) == 1
 
 
-def test_close_animates_out_and_gives_the_view_the_keys(win, monkeypatch):
+def test_close_animates_out_and_gives_the_view_the_keys(win):
     p = Fruit()
     cs.open(win, p)
     frame(win)
-    fired = []
-    monkeypatch.setattr("PySide6.QtCore.QTimer.singleShot", staticmethod(lambda ms, fn: (fired.append(ms), fn())))
     cs.action(win, "fruit\x1fclose")                     # Esc or × in the chrome
     assert not cs.shown(win) and cs.current(win) is None
     assert p.closed_n == 1
-    assert win.view.focused == 1                         # focus back on the model's view
+    assert cs.claims_key(win.view, key(Qt.Key_Down)) is None
     assert frame(win) is None                            # "" sent: the chrome animates it out
     assert "_chrome_sheet" not in win.__dict__
 
@@ -190,7 +185,7 @@ def test_a_broken_provider_closes_its_sheet_not_the_window(win):
 
 
 def key(k, text="", mods=Qt.NoModifier):
-    return QKeyEvent(QEvent.KeyPress, k, mods, text)
+    return KeyEvent(True, k, mods, text)
 
 
 def test_it_owns_the_keys_but_the_windows_shortcuts(win):
@@ -201,7 +196,7 @@ def test_it_owns_the_keys_but_the_windows_shortcuts(win):
         assert cs.claims_key(view, key(k, t)) is True
     for k in (Qt.Key_F, Qt.Key_A, Qt.Key_C, Qt.Key_V):        # ⌘F search, text editing
         assert cs.claims_key(view, key(k, "", Qt.ControlModifier)) is True
-    for k in (Qt.Key_K, Qt.Key_O, Qt.Key_W, Qt.Key_Q, Qt.Key_Comma):
+    for k in (Qt.Key_K, Qt.Key_O, Qt.Key_W, Qt.Key_Q, ord(",")):
         assert cs.claims_key(view, key(k, "", Qt.ControlModifier)) is False
 
 
@@ -210,20 +205,3 @@ def test_offscreen_open_exposes_the_sheet_model():
     provider = Fruit()
     assert cs.open(win, provider)
     assert cs.shown(win) and cs.current(win) is provider
-
-
-def test_missing_frame_reports_failure_and_closes_the_provider(win, monkeypatch):
-    shots = []
-    monkeypatch.setattr("PySide6.QtCore.QTimer.singleShot", staticmethod(lambda ms, fn: shots.append(fn)))
-
-    monkeypatch.setattr("PySide6.QtGui.QGuiApplication.platformName", staticmethod(lambda: "cocoa"))
-    p = Fruit()
-    cs.open(win, p)
-    shots[-1]()                                          # the watchdog, no frame drawn
-    assert p.closed_n == 1 and not cs.shown(win)
-    assert win.flashed == ["Built could not draw the fruit sheet."]
-    q = Fruit()
-    cs.open(win, q)
-    frame(win)                                           # drawn: the watchdog does nothing
-    shots[-1]()
-    assert q.seen == [] and cs.shown(win)

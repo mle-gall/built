@@ -25,15 +25,11 @@ def main():
     parser.add_argument("--worker", action="store_true", help="open through DocumentOpen")
     args = parser.parse_args()
     path = args.fixture
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
-    from PySide6.QtWidgets import QApplication
-    app = QApplication.instance() or QApplication([])
     with tempfile.TemporaryDirectory() as cache:
         os.environ["INGETRAZO_TEXTURE_CACHE"] = cache
-        QSettings.setDefaultFormat(QSettings.IniFormat)
-        for scope in (QSettings.UserScope, QSettings.SystemScope):
-            QSettings.setPath(QSettings.IniFormat, scope, cache)
+        os.environ["BUILT_SETTINGS_DIR"] = cache
+        from core.settings import use_native
+        use_native(cache)
         from core import group, layers
         from core.scene import Scene
         from formats import igz, skp

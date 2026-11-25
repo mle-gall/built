@@ -20,17 +20,12 @@ from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
-import os
 import random
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
 
 
 def _box(mesh, x0, y0, z0, x1, y1, z1):
@@ -60,8 +55,6 @@ def viewport(native_host, request):
     from core.group import Group
     from core.mesh import Mesh
     win = native_host.window
-    for _ in range(10):
-        _app.processEvents()
     vp = win.viewport          # rays ask the pick index: no GL needed
     sc = vp.scene
     _box(sc.mesh, -4, -0.1, 0, 4, 0.1, 3)                 # a loose wall
@@ -90,7 +83,6 @@ def test_the_batch_hides_exactly_what_the_rays_hide(viewport, view):
     vp = viewport
     vp.camera.set_view(view)
     vp.camera.fit_to(V(-5, -3, 0), V(5, 3, 4))
-    _app.processEvents()
     pts = _scene_points(vp.scene, random.Random(view), 400)
     one = [vp._is_occluded(p) for p in pts]
     assert any(one) and not all(one)          # the views do hide something
@@ -228,7 +220,7 @@ def test_the_kill_switch_keeps_the_rays_one_by_one(native_window, monkeypatch):
     vp.scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
     vp.scene.version += 1
     win._activate_tool("line")
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
     vp._process_hover(QPointF(vp.width() / 2, vp.height() / 2), Qt.NoModifier)
     assert "are_occluded" in seen and seen["are_occluded"] is None
 
@@ -242,7 +234,6 @@ def test_pick_vertex_batches_like_one_ray_at_a_time(viewport, view,
     vp = viewport
     vp.camera.set_view(view)
     vp.camera.fit_to(V(-5, -3, 0), V(5, 3, 4))
-    _app.processEvents()
     rng = random.Random(view)
     pixels = []
     pts = _scene_points(vp.scene, rng, 400)
@@ -274,8 +265,6 @@ def test_pick_vertex_dense_hidden_corners(native_host, monkeypatch):
     behind the wall and a visible one lies a few pixels away — the batches
     must answer the one-at-a-time loop's corner every time."""
     win = native_host.window
-    for _ in range(10):
-        _app.processEvents()
     vp = win.viewport
     sc = vp.scene
     _box(sc.mesh, -3, -0.1, -1, 3, 0.1, 1)            # the wall, y≈0
@@ -291,7 +280,6 @@ def test_pick_vertex_dense_hidden_corners(native_host, monkeypatch):
     sc.version += 1
     vp.camera.set_view("front")
     vp.camera.fit_to(V(-0.7, -1, -0.5), V(0.7, 1, 0.5))
-    _app.processEvents()
     rng = random.Random(1)
     pixels = []
     for k in range(12):                 # around each front corner
@@ -355,7 +343,6 @@ def test_the_native_rays_hide_exactly_what_numpy_hides(viewport, view,
     vp = viewport
     vp.camera.set_view(view)
     vp.camera.fit_to(V(-5, -3, 0), V(5, 3, 4))
-    _app.processEvents()
     pts = _scene_points(vp.scene, random.Random("native" + view), 600)
     calls = []
     real = vv._occlusion_native()
@@ -385,7 +372,6 @@ def test_a_narrow_cone_of_rays_hides_what_the_rays_hide(viewport, view,
     vp = viewport
     vp.camera.set_view(view)
     vp.camera.fit_to(V(-60, -40, -20), V(60, 40, 40))
-    _app.processEvents()
     rng = random.Random(view)
     sc = vp.scene
     near = [g for g in sc.groups if g.name in ("block 0", "block 4",
@@ -419,13 +405,11 @@ def test_a_narrow_cone_of_rays_hides_what_the_rays_hide(viewport, view,
     assert 0 < sum(tested) < len(pts) * spans
 
 
-
 def test_pick_vertex_asks_a_shared_corner_once(viewport, monkeypatch):
     """A corner shared by several edges is one point: asked once."""
     vp = viewport
     vp.camera.set_view("iso")
     vp.camera.fit_to(V(-60, -40, -20), V(60, 40, 40))
-    _app.processEvents()
     asked = []
     real_many, real_one = vp._occluded_many, vp._is_occluded
     monkeypatch.setattr(vp, "_is_occluded",

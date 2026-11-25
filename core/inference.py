@@ -31,7 +31,7 @@ import os
 from typing import Optional
 
 from core import _native
-from core.input_types import Qt
+from ingetrazo_core import Input as Qt
 from core.timers import timer
 from ingetrazo_core import Vec3 as QVector3D
 

@@ -13,7 +13,6 @@ them against whatever implementation ``tools`` exports now.
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -109,7 +108,7 @@ LINE_SCENARIOS = {
 
 def run_line(steps, far=False):
     from ingetrazo_core import Vec3
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
     from tools.rust_tools import LineTool
     view = LineView(far=far)
@@ -128,7 +127,7 @@ def run_line(steps, far=False):
             view.scene.mesh.add_face([tuple(float(v) + o for v, o in zip(p, off)) for p in step[1]])
         elif kind in ("click", "hover"):
             snap = _Snap(step[2] if len(step) > 2 else "on_face")
-            ctx = ToolContext(view, at(step[1]), QPointF(0, 0), Qt.NoModifier, snap)
+            ctx = ToolContext(view, at(step[1]), ScreenPoint(0, 0), Input.NoModifier, snap)
             (tool.on_click if kind == "click" else tool.on_hover)(ctx)
         elif kind == "value":
             v = step[1]
@@ -270,7 +269,7 @@ _MODS = {"none": 0, "shift": 0x02000000, "ctrl": 0x04000000, "shift+ctrl": 0x060
 
 def run_select(steps):
     from ingetrazo_core import Vec3
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
     from tools.rust_tools import SelectTool
     view = SelectView()
@@ -290,8 +289,8 @@ def run_select(steps):
             view.edit_box = step[1]
             continue
         view.calls.clear()
-        mods = Qt.KeyboardModifier(_MODS[step[3]]) if len(step) > 3 else Qt.NoModifier
-        ctx = ToolContext(view, Vec3(), QPointF(step[1], step[2]), mods, None)
+        mods = Input.KeyboardModifier(_MODS[step[3]]) if len(step) > 3 else Input.NoModifier
+        ctx = ToolContext(view, Vec3(), ScreenPoint(step[1], step[2]), mods, None)
         {"click": tool.on_click, "double": tool.on_double_click,
          "triple": tool.on_triple_click, "hover": tool.on_hover}[kind](ctx)
         out.append({"selection": view.names(view.scene.selection), "calls": list(view.calls)})
@@ -370,7 +369,7 @@ _KEYS = {"down": "Key_Down", "right": "Key_Right", "ctrl": "Key_Control"}
 
 def run_rect(steps, far=False):
     from ingetrazo_core import Vec3
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
     from tools.rust_tools import RectangleTool
     view = RectView(far=far)
@@ -386,18 +385,18 @@ def run_rect(steps, far=False):
         kind = step[0]
         result = None
         if kind in ("click", "hover"):
-            mods = Qt.ShiftModifier if len(step) > 2 and step[2] == "shift" else Qt.NoModifier
-            ctx = ToolContext(view, at(step[1]), QPointF(0, 0), mods, _Snap("on_face"))
+            mods = Input.ShiftModifier if len(step) > 2 and step[2] == "shift" else Input.NoModifier
+            ctx = ToolContext(view, at(step[1]), ScreenPoint(0, 0), mods, _Snap("on_face"))
             (tool.on_click if kind == "click" else tool.on_hover)(ctx)
         elif kind == "value":
             v = step[1]
             result = bool(tool.on_value(view, tuple(map(float, v)) if isinstance(v, (list, tuple)) else float(v)))
         elif kind == "key":
-            result = bool(tool.on_key(view, getattr(Qt, _KEYS[step[1]]), Qt.NoModifier))
+            result = bool(tool.on_key(view, getattr(Input, _KEYS[step[1]]), Input.NoModifier))
         elif kind == "key_release":
             tapped = step[2]
             view.ctrl_tapped = lambda: tapped
-            result = bool(tool.on_key_release(view, getattr(Qt, _KEYS[step[1]])))
+            result = bool(tool.on_key_release(view, getattr(Input, _KEYS[step[1]])))
         elif kind == "cancel":
             tool.on_cancel(view)
         snap = _rect_snapshot(view, tool)
@@ -469,7 +468,7 @@ CIRCLE_SCENARIOS = {
 
 def run_circle(steps, polygon=False, far=False):
     from ingetrazo_core import Vec3
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
     from tools.circle import CircleTool, PolygonTool
     view = RectView(far=far)
@@ -485,7 +484,7 @@ def run_circle(steps, polygon=False, far=False):
         kind = step[0]
         result = None
         if kind in ("click", "hover"):
-            ctx = ToolContext(view, at(step[1]), QPointF(0, 0), Qt.NoModifier, _Snap("on_face"))
+            ctx = ToolContext(view, at(step[1]), ScreenPoint(0, 0), Input.NoModifier, _Snap("on_face"))
             (tool.on_click if kind == "click" else tool.on_hover)(ctx)
         elif kind == "value":
             v = step[1]
@@ -493,11 +492,11 @@ def run_circle(steps, polygon=False, far=False):
         elif kind == "segments":
             result = bool(tool.on_segments_value(view, step[1]))
         elif kind == "key":
-            result = bool(tool.on_key(view, getattr(Qt, _KEYS[step[1]]), Qt.NoModifier))
+            result = bool(tool.on_key(view, getattr(Input, _KEYS[step[1]]), Input.NoModifier))
         elif kind == "key_release":
             tapped = step[2]
             view.ctrl_tapped = lambda: tapped
-            result = bool(tool.on_key_release(view, getattr(Qt, _KEYS[step[1]])))
+            result = bool(tool.on_key_release(view, getattr(Input, _KEYS[step[1]])))
         elif kind == "cancel":
             tool.on_cancel(view)
         elif kind == "undo":
@@ -609,7 +608,7 @@ ROT_SCENARIOS = {
 
 def run_rot(steps):
     from ingetrazo_core import Vec3
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
     from tools.rotated_rectangle import RotatedRectangleTool
     view = RotView()
@@ -622,16 +621,16 @@ def run_rot(steps):
         if kind in ("click", "hover"):
             w = Vec3(*map(float, step[1]))
             opt = step[2] if len(step) > 2 else None
-            mods = Qt.ShiftModifier if opt == "shift" else Qt.NoModifier
+            mods = Input.ShiftModifier if opt == "shift" else Input.NoModifier
             snap = _Snap("endpoint" if opt == "endpoint" else "on_face")
             x, y = view._world_to_pixel(w)
-            ctx = ToolContext(view, w, QPointF(x, y), mods, snap)
+            ctx = ToolContext(view, w, ScreenPoint(x, y), mods, snap)
             (tool.on_click if kind == "click" else tool.on_hover)(ctx)
         elif kind == "value":
             v = step[1]
             result = bool(tool.on_value(view, tuple(map(float, v)) if isinstance(v, (list, tuple)) else float(v)))
         elif kind == "key":
-            result = bool(tool.on_key(view, getattr(Qt, _KEYS[step[1]]), Qt.NoModifier))
+            result = bool(tool.on_key(view, getattr(Input, _KEYS[step[1]]), Input.NoModifier))
         elif kind == "axis":
             view.axis_lock = step[1]
         elif kind == "wall":
@@ -742,7 +741,7 @@ ARC_SCENARIOS = {
 
 def run_arc(name, steps):
     from ingetrazo_core import Vec3
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
     from tools.arc import ArcTool, CenterArcTool, PieTool, ThreePointArcTool
     kind = name.split(":")[0]
@@ -758,9 +757,9 @@ def run_arc(name, steps):
         if what in ("click", "hover", "double"):
             w = Vec3(*map(float, step[1]))
             opt = step[2] if len(step) > 2 else None
-            mods = Qt.AltModifier if opt == "alt" else Qt.NoModifier
+            mods = Input.AltModifier if opt == "alt" else Input.NoModifier
             x, y = view._world_to_pixel(w)
-            ctx = ToolContext(view, w, QPointF(x, y), mods, _Snap("on_face"))
+            ctx = ToolContext(view, w, ScreenPoint(x, y), mods, _Snap("on_face"))
             {"click": tool.on_click, "hover": tool.on_hover,
              "double": getattr(tool, "on_double_click", tool.on_click)}[what](ctx)
         elif what == "value":
@@ -771,7 +770,7 @@ def run_arc(name, steps):
         elif what == "radius":
             result = bool(tool.on_radius_value(view, step[1]))
         elif what == "key":
-            result = bool(tool.on_key(view, getattr(Qt, _KEYS[step[1]]), Qt.NoModifier))
+            result = bool(tool.on_key(view, getattr(Input, _KEYS[step[1]]), Input.NoModifier))
         elif what == "cancel":
             tool.on_cancel(view)
         snap = _arc_snapshot(view, tool)
@@ -858,7 +857,7 @@ MOVE_SCENARIOS = {
 
 def run_move(steps):
     from ingetrazo_core import Vec3
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
     from tools.move import MoveTool
     view = MoveView()
@@ -872,7 +871,7 @@ def run_move(steps):
             view.under = step[1]
             continue
         if kind in ("click", "hover"):
-            ctx = ToolContext(view, Vec3(*map(float, step[1])), QPointF(0, 0), Qt.NoModifier, _Snap("on_face"))
+            ctx = ToolContext(view, Vec3(*map(float, step[1])), ScreenPoint(0, 0), Input.NoModifier, _Snap("on_face"))
             (tool.on_click if kind == "click" else tool.on_hover)(ctx)
         elif kind == "value":
             v = step[1]
@@ -880,11 +879,11 @@ def run_move(steps):
         elif kind == "array":
             result = bool(tool.on_array_value(view, step[1], step[2], step[3]))
         elif kind == "key":
-            result = bool(tool.on_key(view, getattr(Qt, _KEYS[step[1]]), Qt.NoModifier))
+            result = bool(tool.on_key(view, getattr(Input, _KEYS[step[1]]), Input.NoModifier))
         elif kind == "key_release":
             tapped = step[2]
             view.ctrl_tapped = lambda: tapped
-            result = bool(tool.on_key_release(view, getattr(Qt, _KEYS[step[1]])))
+            result = bool(tool.on_key_release(view, getattr(Input, _KEYS[step[1]])))
         elif kind == "cancel":
             tool.on_cancel(view)
         elif kind == "undo_history":
@@ -913,7 +912,7 @@ SCALE_SCENARIOS = {
 
 def run_scale(steps):
     from ingetrazo_core import Vec3
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
     from tools.scale import ScaleTool
 
@@ -932,10 +931,10 @@ def run_scale(steps):
             point = Vec3(x / 100, y / 100, 0)
             snap = _Snap("endpoint")
             snap.point = point
-            ctx = ToolContext(view, point, QPointF(x, y), Qt.NoModifier, snap)
+            ctx = ToolContext(view, point, ScreenPoint(x, y), Input.NoModifier, snap)
             (tool.on_click if kind == "click" else tool.on_hover)(ctx)
         elif kind == "key":
-            result = tool.on_key(view, getattr(Qt, "Key_" + args[0]), Qt.NoModifier)
+            result = tool.on_key(view, getattr(Input, "Key_" + args[0]), Input.NoModifier)
         elif kind == "release":
             tool.on_release(view)
         elif kind == "value":
@@ -966,7 +965,7 @@ ROTATE_SCENARIOS = {
 
 
 def run_rotate(steps):
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from ingetrazo_core import Vec3
     from tools.base import ToolContext
     from tools.rotate import RotateTool
@@ -979,10 +978,10 @@ def run_rotate(steps):
     for kind, *args in steps:
         result = None
         if kind in ("click", "hover"):
-            ctx = ToolContext(view, Vec3(*args, 0.), QPointF(), Qt.NoModifier, None)
+            ctx = ToolContext(view, Vec3(*args, 0.), ScreenPoint(), Input.NoModifier, None)
             (tool.on_click if kind == "click" else tool.on_hover)(ctx)
         elif kind == "copy":
-            result = tool.on_key(view, Qt.Key_Control, Qt.NoModifier)
+            result = tool.on_key(view, Input.Key_Control, Input.NoModifier)
         elif kind == "group":
             view.scene.select([view.group])
         elif kind == "value":
@@ -1048,7 +1047,7 @@ FOLLOWME_SCENARIOS = {
 
 
 def run_followme(steps):
-    from PySide6.QtCore import Qt
+    from ingetrazo_core import Input
     from core.scene import Scene
     from tests.test_followme import _Vp2, _ctx, V
     from tools.followme import FollowMeTool
@@ -1064,7 +1063,7 @@ def run_followme(steps):
             vp.scene.selection.update(edges)
         elif step in ("profile", "alt"):
             vp._pick = profile if step == "profile" else perimeter
-            tool.on_hover(_ctx(vp, 20, 10, mods=Qt.NoModifier if step == "profile" else Qt.AltModifier))
+            tool.on_hover(_ctx(vp, 20, 10, mods=Input.NoModifier if step == "profile" else Input.AltModifier))
         elif step.startswith("edge"):
             vp._edge = edges[int(step[-1])]
             tool.on_hover(_ctx(vp, 80, 10))
@@ -1125,7 +1124,7 @@ FLIP_SCENARIOS = {
 
 def run_flip(steps):
     from types import SimpleNamespace
-    from PySide6.QtCore import Qt
+    from ingetrazo_core import Input
     from core.scene import Scene
     from core.group import placement_points
     from tests.test_flip_nested_groups import _vp, _cabinet, V
@@ -1139,11 +1138,11 @@ def run_flip(steps):
     for kind in steps:
         result = None
         if kind in ("x", "y", "control"):
-            key = {"x": Qt.Key_Right, "y": Qt.Key_Left, "control": Qt.Key_Control}[kind]
-            result = tool.on_key(vp, key, Qt.NoModifier)
+            key = {"x": Input.Key_Right, "y": Input.Key_Left, "control": Input.Key_Control}[kind]
+            result = tool.on_key(vp, key, Input.NoModifier)
         elif kind == "chord":
             vp.ctrl_tapped = lambda: False
-            result = tool.on_key_release(vp, Qt.Key_Control)
+            result = tool.on_key_release(vp, Input.Key_Control)
         elif kind == "click":
             tool.on_click(SimpleNamespace(viewport=vp))
         elif kind == "cancel":
@@ -1172,7 +1171,7 @@ PASTE_SCENARIOS = {
 
 
 def run_paste(steps):
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from core.history import History
     from core.scene import Scene
     from tests.test_paste import _PreviewVP, _make_group, V
@@ -1187,7 +1186,7 @@ def run_paste(steps):
     for kind, *args in steps:
         result = None
         if kind in ("hover", "click"):
-            getattr(tool, "on_" + kind)(ToolContext(vp, V(*args), QPointF(), Qt.NoModifier, None))
+            getattr(tool, "on_" + kind)(ToolContext(vp, V(*args), ScreenPoint(), Input.NoModifier, None))
         elif kind == "group":
             clip["groups"] = [_make_group(scene)]
             tool.on_activate(vp)
@@ -1221,7 +1220,7 @@ TAPE_SCENARIOS = {
 
 
 def run_tape(steps):
-    from PySide6.QtCore import Qt
+    from ingetrazo_core import Input
     from core.guide import Guide
     from core.scene import Scene
     from tests.test_tape_axis_source_and_guide_segment import _Vp, _ctx, V
@@ -1241,7 +1240,7 @@ def run_tape(steps):
             ctx = _ctx(view, *args[:2], kind=args[2])
             getattr(tool, "on_" + kind)(ctx)
         elif kind == "control":
-            result = tool.on_key_release(view, Qt.Key_Control)
+            result = tool.on_key_release(view, Input.Key_Control)
         elif kind == "value":
             result = tool.on_value(view, args[0])
         elif kind == "cancel":
@@ -1323,7 +1322,7 @@ PROTRACTOR_SCENARIOS = {
 
 
 def run_protractor(steps):
-    from PySide6.QtCore import Qt
+    from ingetrazo_core import Input
     from core.scene import Scene
     from tests.test_protractor import _VpScreen, _ctx
     from tools.protractor import ProtractorTool
@@ -1335,7 +1334,7 @@ def run_protractor(steps):
         if kind in ("hover", "click"):
             (tool.on_hover if kind == "hover" else tool.on_click)(_ctx(view, *args))
         elif kind == "control":
-            result = tool.on_key(view, Qt.Key_Control, Qt.NoModifier)
+            result = tool.on_key(view, Input.Key_Control, Input.NoModifier)
         elif kind == "release":
             tool.on_release(view)
         elif kind == "value":
@@ -1365,7 +1364,7 @@ PAINT_SCENARIOS = {
 def run_paint(steps):
     from contextlib import ExitStack
     from unittest.mock import patch
-    from PySide6.QtCore import Qt, QPointF
+    from ingetrazo_core import Input, ScreenPoint
     from ingetrazo_core import Vec3
     from core.group import Group
     from core.mesh import Mesh
@@ -1407,7 +1406,7 @@ def run_paint(steps):
                 side = 1. if step in ("back", "sample_back") else -1.
                 hit = ((None, None) if step == "miss" else (painted, group) if container
                        else (b if step in ("other", "sample_empty") else a, None))
-                ctx = ToolContext(view, Vec3(), QPointF(), Qt.NoModifier, None)
+                ctx = ToolContext(view, Vec3(), ScreenPoint(), Input.NoModifier, None)
                 tool.on_hover(ctx)
                 tool.on_click(ctx)
             rows.append(json.loads(json.dumps({
@@ -1483,7 +1482,7 @@ WALKTHROUGH_SCENARIOS = {
 
 def run_walkthrough(tool_name, steps):
     from unittest.mock import patch
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from ingetrazo_core import Vec3
     from core.camera import OrbitCamera
     from tools.base import ToolContext
@@ -1503,7 +1502,7 @@ def run_walkthrough(tool_name, steps):
         for kind, *args in steps:
             result = None
             if kind in ("click", "hover"):
-                ctx = ToolContext(view, Vec3(*args[0]), QPointF(*args[1]), Qt.NoModifier, None)
+                ctx = ToolContext(view, Vec3(*args[0]), ScreenPoint(*args[1]), Input.NoModifier, None)
                 (tool.on_click if kind == "click" else tool.on_hover)(ctx)
             elif kind == "value":
                 result = tool.on_value(view, args[0])
@@ -1514,13 +1513,13 @@ def run_walkthrough(tool_name, steps):
             elif kind == "look":
                 tool.on_look(view, *args)
             elif kind in ("walk", "keys"):
-                mods = {"none": Qt.NoModifier, "through": Qt.AltModifier,
-                        "vertical": Qt.ShiftModifier, "run": Qt.ControlModifier
-                        if kind == "walk" else Qt.ShiftModifier}[args[-1]]
+                mods = {"none": Input.NoModifier, "through": Input.AltModifier,
+                        "vertical": Input.ShiftModifier, "run": Input.ControlModifier
+                        if kind == "walk" else Input.ShiftModifier}[args[-1]]
                 if kind == "walk":
                     tool.step(view, args[0], args[1], 0.1, mods)
                 else:
-                    tool.step(view, {getattr(Qt, "Key_" + k) for k in args[0]}, 0.1, mods)
+                    tool.step(view, {getattr(Input, "Key_" + k) for k in args[0]}, 0.1, mods)
             out.append({"eye": _pt(view.camera.eye()), "direction": _pt(view.camera.forward()),
                         "lines": [[_pt(a), _pt(b)] for a, b in tool.rubber_band_lines()],
                         "undo": len(view.history.undo_stack), "result": result})
@@ -1614,6 +1613,5 @@ def load(tool):
 
 if __name__ == "__main__":
     if sys.argv[1:2] == ["record"]:
-        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
         sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
         record(tuple(sys.argv[2:]) or ("line", "select", "rectangle", "move"))
