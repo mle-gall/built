@@ -7,7 +7,7 @@ pub(crate) mod push_queries;
 mod push_scans;
 mod snap_host;
 pub(crate) use snap_host::SnapFrame;
-mod store_views;
+pub(crate) mod store_views;
 mod hatches;
 mod edits;
 mod snap_surfaces;

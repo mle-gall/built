@@ -368,61 +368,18 @@ def face_attrs(mesh):
         for k in fa[np.sort(first)].tolist():
             yield (_face_attrs_from_json(table[k]) or {}) if k >= 0 else {}
         return
-    from core import store_mesh
-    if type(mesh) is store_mesh.StoreMesh:
-        yield from store_mesh.face_attrs(mesh)
+    from core.store_mesh import StoreMesh
+    if isinstance(mesh, StoreMesh):
+        yield from store_views.attribute_rows(mesh)
         return
     for f in mesh.faces:
         yield f.attrs
 
 
-def turn_face_over(face) -> None:
-    """Reverse ``face``'s winding for the automatic orientation passes —
-    which must not move paint from one side of a wall to the other.
+from ingetrazo_core import store_views
 
-    Paint lives by side: the front's in ``attrs`` (``PAINT_KEYS``), the
-    back's own in ``attrs["back"]`` (a dict), or ``True`` when the back
-    mirrors the front. Reversing the loop alone moves "front" to the other
-    geometric side and takes its paint along. When the BACK has paint of
-    its own, the sides were painted deliberately — a house wall, brick
-    outside and plaster inside, wound the wrong way — and the two paints
-    trade places as the winding turns, so the street keeps its brick and
-    only the face now points the right way (Marco's question, 2026-09-18).
-
-    A face painted on ONE side keeps the old rule: the paint follows the
-    front. That is what a painted rectangle pulled into a box relies on —
-    the base, turned over to face down, must come out painted OUTSIDE, «a
-    painted box, not a box with one painted face» (Marco, 2026-08-27). The
-    two rules meet where they should: paint on both sides pins the sides;
-    paint on one side goes with the correction.
-
-    The explicit Reverse Faces command (``FlipFacesCommand``) swaps nothing,
-    by design: there the material follows the front, the classic behaviour."""
-    swap_orientation_paint(face)
-    face.reverse_rings()
-
-
-def swap_orientation_paint(face) -> None:
-    """Keep explicit front and back paint on their geometric sides at a flip."""
-    attrs = face.attrs if face.attrs is not None else {}
-    if isinstance(attrs.get("back"), dict):
-        _exchange_paint(attrs)
-        face.attrs = attrs
-
-
-def _exchange_paint(attrs):
-    """Exchange two explicit sides in a face attribute dictionary."""
-    back = attrs.pop("back")
-    front = {k: attrs.pop(k) for k in PAINT_KEYS if k in attrs}
-    attrs.update(back)
-    if front:
-        attrs["back"] = front
-
-
-def _dominant_attrs(faces) -> dict:
-    """The attrs of the largest-area face that carries any — the dominant
-    contributor when a merge collapses several faces into one survivor."""
-    return object_replay.dominant_attrs(faces)
+turn_face_over = store_views.turn_face_over
+swap_orientation_paint = store_views.swap_orientation_paint
 
 
 def _trace_loops(outline: list[tuple[Vertex, Vertex]]) -> Optional[list[list[Vertex]]]:
@@ -436,23 +393,6 @@ def _trace_loops(outline: list[tuple[Vertex, Vertex]]) -> Optional[list[list[Ver
     key, so the store's views trace the same loops."""
     from ingetrazo_core import trace_object_loops
     return trace_object_loops(outline)
-
-
-def _orient_union_loops(
-    outer: list[Vertex], holes: list[list[Vertex]], normal: QVector3D
-) -> None:
-    """Restore face winding after tracing an undirected union boundary.
-
-    The tracer may choose either direction independently for each loop.
-    Keep the source face's front side and wind holes opposite to the outer
-    boundary, without swapping front/back paint.
-    """
-    object_replay.orient_union(outer, holes, normal, Face)
-
-
-def _loop_area(loop: list[Vertex]) -> float:
-    """Newell-magnitude area of a vertex loop (orientation-independent)."""
-    return object_replay.loop_area(loop)
 
 
 def element_identity(item):

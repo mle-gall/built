@@ -14,6 +14,13 @@ import ingetrazo_core
 from ingetrazo_core import command_protocol
 from ingetrazo_core.command_protocol import (hide, lock, make_unique, move_vertices, redo,
     rename_placement, rename_placements, set_tag, undo, unhide)
+from ingetrazo_core.command_protocol import (
+    add_edge, add_edges, add_face, add_arc,
+    add_geo_path, move_geo_path_node, add_text_label, add_dimension, place_section_plane, set_north, add_image_plane,
+    set_material_pbr, set_material_base, rename_material, edit_material, duplicate_material, delete_material, create_material, name_unnamed_colours,
+    edit_loose_geometry, promote_tag, file_placements, edit_structure_node,
+    reset_link_tags, delete_placements, unlink_placements, edit_tag,
+)
 from core.history import Command
 from core.protocol.records import patch_record_field, set_filing_rule
 from core.protocol.keys import elements, from_json_key, store_of
@@ -233,7 +240,7 @@ def paint_material(history, *, placement=None, mesh=None, faces=(), seed=None, m
         clicked = command_protocol.need(target_mesh, "face", [seed])[0] if seed is not None else targets[0]
     mat = None
     if isinstance(material, str):
-        mat = _material(history, material)
+        mat = command_protocol.material(history, material)
         if color is None and texture is None:
             color, texture = mat.color, mat.texture
         if opacity is None:
@@ -389,128 +396,6 @@ def solid_operation(history, operation, placements):
     history.execute(command)
     return command_protocol.answer(history, before)
 
-
-def add_edge(history, a, b=None, soft=None, tag=None, eye=None, offset=None):
-    """One drawn segment, ``a`` to ``b``. ``offset`` instead of (or with) ``b``:
-    the end is the stored position at ``a`` plus ``offset`` exactly (a typed
-    length). ``eye`` (the camera position, as the Line tool passes it)
-    decides which way a new vertical face looks."""
-    if tag is not None and history.scene.layer_by_key(tag) is None:
-        raise KeyError(f"no tag with key {tag!r}")
-    if b is None:
-        if offset is None:
-            raise ValueError("add_edge needs b or offset")
-        b = [float(x) + float(d) for x, d in zip(a, offset)]
-    return _draw_segments(history, [(a, b)], single=True, soft=soft, tag=tag, eye=eye,
-                          offset=offset)
-
-
-def add_edges(history, segments):
-    return _draw_segments(history, list(segments))
-
-
-def _draw_segments(history, segments, single=False, **options):
-    from core.coordinate_frame import ZERO, choose_origin, mesh_frame, point_in_frame
-    from core.edits import build_add_edge, build_add_edges
-    from core.coordinate_frame import drawing_point, planned_points
-    offset = options.pop("offset", None)
-    mesh = history.scene.mesh
-    st = store_of(mesh)
-    origin = choose_origin(segments[0][0]) if st is not None and segments else ZERO
-    local = [(point_in_frame(a, origin), point_in_frame(b, origin)) for a, b in segments]
-    if options.get("eye") is not None:
-        options["eye"] = point_in_frame(options["eye"], origin)
-    before = history.revision
-    with mesh_frame(mesh, origin):
-        cmd = (build_add_edge(history.scene, *local[0], **options) if single else
-               build_add_edges(history.scene, local))
-        exact = {p.toTuple(): tuple(v-o for v, o in zip(raw, origin))
-                 for pair, args in zip(local, segments) for p, raw in zip(pair, args)
-                 } if st is not None else {}
-        if offset is not None and st is not None:
-            start = drawing_point(mesh, local[0][0])
-            exact = {local[0][0].toTuple(): tuple(start),
-                     local[0][1].toTuple(): tuple(start + [float(d) for d in offset])}
-        with planned_points(mesh, exact):
-            history.execute(cmd)
-    return command_protocol.answer(history, before)
-
-
-def add_face(history, outer=None, holes=(), anchor=None, offsets=None, curve=False):
-    """A face over a ring of points, with its edges: the Rectangle's commit.
-    ``outer`` the ring (open mesh coordinates), or ``anchor`` plus
-    ``offsets``: the ring is the stored position at ``anchor`` plus each
-    offset exactly (typed sizes). ``holes`` are inner rings. The plane it
-    lands on is rebuilt, so a ring drawn over a face fills its hole (#538).
-    ``curve``: the ring is one closed curve (the Circle's and the Polygon's
-    commit), tagged so, its plane's faces rebuilt as
-    ``core.arrangement.curve_extras`` says. One step."""
-    from core.coordinate_frame import (ZERO, choose_origin, drawing_point, mesh_frame,
-                                       planned_points, point_in_frame)
-    from core.edits import build_add_edges
-    from core.history import AddFaceCommand
-    if outer is None:
-        if anchor is None or offsets is None:
-            raise ValueError("add_face needs outer, or anchor and offsets")
-        outer = [[float(a) + float(d) for a, d in zip(anchor, off)] for off in offsets]
-    outer = [list(map(float, p)) for p in outer]
-    if len(outer) < 3:
-        raise ValueError("a face needs three points")
-    holes = [[list(map(float, p)) for p in ring] for ring in (holes or ())]
-    mesh = history.scene.mesh
-    st = store_of(mesh)
-    origin = choose_origin(outer[0]) if st is not None else ZERO
-    ring = [point_in_frame(p, origin) for p in outer]
-    inner = [[point_in_frame(p, origin) for p in h] for h in holes]
-    segments = [(r[i], r[(i + 1) % len(r)]) for r in [ring, *inner] for i in range(len(r))]
-    before = history.revision
-    with mesh_frame(mesh, origin):
-        exact = {}
-        if st is not None:
-            if offsets is not None:
-                start = drawing_point(mesh, point_in_frame(anchor, origin))
-                exact = {p.toTuple(): tuple(start + [float(d) for d in off])
-                         for p, off in zip(ring, offsets)}
-            else:
-                exact = {p.toTuple(): tuple(v - o for v, o in zip(raw, origin))
-                         for p, raw in zip(ring, outer)}
-        if curve:
-            from core.arrangement import curve_extras
-            cmd = build_add_edges(history.scene, segments, detect_faces=False,
-                                  extra=curve_extras(history.scene, ring))
-        else:
-            cmd = build_add_edges(history.scene, segments, detect_faces=False,
-                                  extra=[AddFaceCommand(list(ring), holes=inner or None)],
-                                  plane_rebuild=True)
-        with planned_points(mesh, exact):
-            history.execute(cmd)
-    return command_protocol.answer(history, before)
-
-
-def add_arc(history, points, center=None, trim=None):
-    """An arc polyline (open mesh coordinates): the Arc tools' and
-    Freehand's commit (``core.arrangement.arc_command``). ``center`` closes
-    the wedge (the Pie); ``trim`` is ``[[a, b], ...]``, edges to erase once
-    the arc is in (a fillet's corner stubs). One step."""
-    from core.arrangement import arc_command
-    from core.coordinate_frame import ZERO, choose_origin, mesh_frame, planned_points, point_in_frame
-    pts = [list(map(float, p)) for p in points]
-    if len(pts) < 2:
-        raise ValueError("an arc needs two points")
-    mesh = history.scene.mesh
-    st = store_of(mesh)
-    origin = choose_origin(pts[0]) if st is not None else ZERO
-    local = [point_in_frame(p, origin) for p in pts]
-    close = point_in_frame(center, origin) if center is not None else None
-    cuts = [(point_in_frame(a, origin), point_in_frame(b, origin)) for a, b in (trim or ())]
-    before = history.revision
-    with mesh_frame(mesh, origin):
-        cmd = arc_command(history.scene, local, close, cuts or None)
-        exact = ({p.toTuple(): tuple(v - o for v, o in zip(raw, origin)) for p, raw in zip(local, pts)}
-                 if st is not None else {})
-        with planned_points(mesh, exact):
-            history.execute(cmd)
-    return command_protocol.answer(history, before)
 
 def add_guide(history, point, direction=None, origin=None):
     """Construction line or point, in open mesh coordinates."""
@@ -700,80 +585,6 @@ def erase_stroke(history, hide=False, edges=(), placements=(), guides=(), dimens
     before = history.revision
     if commands:
         history.execute(commands[0] if len(commands) == 1 else CompoundCommand(commands))
-    return command_protocol.answer(history, before)
-
-
-def add_geo_path(history, points, closed=False):
-    from ingetrazo_core import Vec3
-    from georef.geopath import GeoPath
-    from core.history import AddGeoPathCommand
-    if len(points) < 2:
-        raise ValueError("expected at least two path nodes")
-    return command_protocol.execute(history, AddGeoPathCommand(GeoPath([Vec3(*p) for p in points], closed=closed)))
-
-
-def move_geo_path_node(history, path, node, point):
-    from ingetrazo_core import Vec3
-    from core.history import MoveGeoPathNodeCommand
-    paths = history.scene.geo_paths
-    if not 0 <= path < len(paths) or not 0 <= node < len(paths[path].points):
-        raise KeyError("unknown path node")
-    return command_protocol.execute(history, MoveGeoPathNodeCommand(paths[path], node, Vec3(*point)))
-
-
-def add_text_label(history, anchor, offset, text, attachment=None):
-    from ingetrazo_core import Vec3
-    from core.annotation_anchor import Attachment
-    from core.history import AddTextLabelCommand
-    from core.textlabel import TextLabel
-    point = Vec3(*anchor)
-    label = TextLabel(point, Vec3(*offset), text, attachment=Attachment.restore(history.scene, attachment, point))
-    return command_protocol.execute(history, AddTextLabelCommand(label))
-
-
-def add_dimension(history, a, b, offset, axis=None, attachments=(None, None)):
-    from ingetrazo_core import Vec3
-    from core.annotation_anchor import Attachment
-    from core.dimension import Dimension
-    from core.history import AddDimensionCommand
-    dim = Dimension(Vec3(*a), Vec3(*b), Vec3(*offset), axis=axis)
-    dim.attachment_a, dim.attachment_b = (Attachment.restore(history.scene, raw, pos)
-                                          for raw, pos in zip(attachments, (dim.a, dim.b), strict=True))
-    return command_protocol.execute(history, AddDimensionCommand(dim))
-
-
-def place_section_plane(history, point, normal, name=None, symbol=None):
-    from ingetrazo_core import Vec3
-    from core.i18n import tr
-    from core.history import PlaceSectionPlaneCommand
-    from core.section import SectionPlane
-    planes = history.scene.section_planes
-    plane = SectionPlane(Vec3(*point), Vec3(*normal),
-                         name=tr("Section {n}", n=len(planes) + 1) if name is None else name,
-                         symbol=ingetrazo_core.section_next_symbol(planes) if symbol is None else symbol)
-    return command_protocol.execute(history, PlaceSectionPlaneCommand(plane))
-
-
-def set_north(history, degrees):
-    import math
-    from core.history import SetNorthCommand
-    from core.sun import wrap_north_deg, scene_north_deg
-    if not math.isfinite(degrees):
-        raise ValueError("expected a finite north angle")
-    deg = wrap_north_deg(degrees)
-    before = history.revision
-    if abs(deg - scene_north_deg(history.scene)) > 1e-9:
-        history.execute(SetNorthCommand(deg))
-    return command_protocol.answer(history, before)
-
-
-def add_image_plane(history, path, origin, u, v, aspect=1.0, name=""):
-    from ingetrazo_core import Vec3
-    from core.history import AddImagePlaneCommand
-    from core.image_plane import ImagePlane
-    before = history.revision
-    plane = ImagePlane(path, Vec3(*origin), Vec3(*u), Vec3(*v), aspect=aspect, name=name)
-    history.execute(AddImagePlaneCommand(plane))
     return command_protocol.answer(history, before)
 
 
@@ -1007,40 +818,10 @@ def edit_link_subset(history, placement, text):
     return command_protocol.answer(history, before)
 
 
-def reset_link_tags(history, path):
-    from ingetrazo_core import reset_source_tags
-    command = reset_source_tags(history.scene, path)
-    return command_protocol.execute(history, command)
-
-
-def unlink_placements(history, placements):
-    from core.history import UnlinkCommand
-    command = UnlinkCommand(command_protocol.resolve_placements(history, placements))
-    before = history.revision
-    if command.groups:
-        history.execute(command)
-    return command_protocol.answer(history, before)
-
-
 def edit_section_plane(history, uid, field, value=""):
     from ingetrazo_core import section_edit
     command = section_edit(history.scene, uid, field, value)
     return command_protocol.execute(history, command)
-
-
-def edit_loose_geometry(history, field):
-    from ingetrazo_core import loose_edit
-    return command_protocol.execute(history, loose_edit(history.scene, field))
-
-
-def promote_tag(history, tag, ifc_class):
-    from ingetrazo_core import promote_tag as plan
-    return command_protocol.execute(history, plan(history.scene, tag, ifc_class))
-
-
-def file_placements(history, placements, node):
-    from core import structure
-    return command_protocol.execute(history, structure.file(history.scene, placements, node))
 
 
 def edit_assembly_part(history, placement, child=None, visible=None, name=None):
@@ -1073,19 +854,6 @@ def edit_saved_scene(history, verb, **args):
     if result["ok"] and verb in ("add", "duplicate"):
         result["index"] = history.scene.saved_views.index(command.view)
     return result
-
-
-def edit_structure_node(history, node, field, value):
-    from ingetrazo_core import plan_node_edit
-    return command_protocol.execute(history, plan_node_edit(history.scene, node, field, value))
-
-
-def edit_tag(history, tags, field, value):
-    edit = history.scene._root._tag_edit(tags, field, value)
-    before = history.revision
-    if edit is not None:
-        history.execute(EditTagCommand(edit))
-    return command_protocol.answer(history, before)
 
 
 class SetTagStateCommand(Command):
@@ -1246,212 +1014,6 @@ def purge_debris(history):
     (``Mesh.purge_debris``, one snapshot step)."""
     from core.history import SnapshotMutation
     return command_protocol.execute(history, SnapshotMutation(lambda scene: scene.mesh.purge_debris()))
-
-
-def _material(history, name):
-    mat = (getattr(history.scene, "materials", None) or {}).get(name)
-    if mat is None:
-        raise KeyError(f"no material called {name!r}")
-    return mat
-
-
-def rename_material(history, name, new_name):
-    """Rename a registry material (its name is its key, §2) on every face
-    and container that wears it: ``RestampMaterialCommand``. A name another
-    material has is refused (that would merge two materials)."""
-    from dataclasses import replace
-    from core.history import RestampMaterialCommand
-    mat = _material(history, name)
-    new_name = str(new_name).strip()
-    if not new_name:
-        raise ValueError("a material needs a name")
-    before = history.revision
-    if new_name == name:
-        return command_protocol.answer(history, before, ok=False)
-    if new_name in history.scene.materials:
-        raise ValueError(f"there is already a material called {new_name!r}")
-    history.execute(RestampMaterialCommand(name, replace(mat, name=new_name)))
-    return command_protocol.answer(history, before)
-
-
-def edit_material(history, name, color=None, opacity=None, tile=None):
-    """Change a registry material everywhere it is worn. ``color`` is
-    ``[r, g, b]`` 0–1 (a textured material takes it as its tint),
-    ``opacity`` 0–1 (1 = opaque), ``tile`` ``[width, height]`` in metres
-    (textured only). Plain: ``RestampMaterialCommand``; textured:
-    ``EditTexturedMaterialCommand`` (each face keeps its own placement)."""
-    from dataclasses import replace
-    from core.history import EditTexturedMaterialCommand, RestampMaterialCommand
-    mat = _material(history, name)
-    before = history.revision
-    if mat.texture and (color is not None or tile is not None) and opacity is None:
-        tex = mat.texture
-        size = None
-        if tile is not None:
-            size = (float(tile[0]), float(tile[1]), float(tex.get("rot", 0.0)))
-        tint = tuple(color) if color is not None else tex.get("tint")
-        history.execute(EditTexturedMaterialCommand(name, tint, size=size))
-        return command_protocol.answer(history, before)
-    if tile is not None and not mat.texture:
-        raise ValueError("only a textured material has a tile size")
-    changes = {}
-    if color is not None:
-        changes["color"] = tuple(float(c) for c in color[:3])
-    if opacity is not None:
-        o = float(opacity)
-        changes["opacity"] = None if o >= 0.999 else max(0.0, o)
-    if not changes:
-        return command_protocol.answer(history, before, ok=False)
-    history.execute(RestampMaterialCommand(name, replace(mat, **changes)))
-    return command_protocol.answer(history, before)
-
-
-def duplicate_material(history, name, new_name=None):
-    """A copy of a registry material under a new name (``"<name> copy"``,
-    numbered when taken), worn by nothing yet: ``AddMaterialCommand``. The
-    answer adds ``name``."""
-    from copy import deepcopy
-    from dataclasses import replace
-    from core.material_commands import AddMaterialCommand
-    mat = _material(history, name)
-    taken = history.scene.materials
-    if new_name is None:
-        new_name, n = f"{name} copy", 2
-        while new_name in taken:
-            new_name, n = f"{name} copy {n}", n + 1
-    elif new_name in taken:
-        raise ValueError(f"there is already a material called {new_name!r}")
-    before = history.revision
-    history.execute(AddMaterialCommand(replace(deepcopy(mat), name=new_name)))
-    out = command_protocol.answer(history, before)
-    out["name"] = new_name
-    return out
-
-
-def delete_material(history, name):
-    """Remove a registry material; what wore it shows the default
-    material: ``DeleteMaterialCommand``."""
-    from core.material_commands import DeleteMaterialCommand
-    _material(history, name)
-    return command_protocol.execute(history, DeleteMaterialCommand(name))
-
-
-def delete_placements(history, placements):
-    """Delete placements (uids, nested included) with their geometry: one
-    ``DeleteGroupCommand`` each, as one step."""
-    from core.history import CompoundCommand, DeleteGroupCommand
-    groups = command_protocol.resolve_placements(history, placements)
-    before = history.revision
-    if groups:
-        history.execute(CompoundCommand([DeleteGroupCommand(g) for g in groups]))
-    return command_protocol.answer(history, before)
-
-
-def create_material(history, name=None, color=None, texture=None, opacity=None, pbr=None, finish=None,
-                    reuse=True):
-    """Add a material: a colour base (``color`` ``[r,g,b]`` 0–1) or an image
-    base (``texture`` ``{"path", "sw", "sh"}``), with optional ``opacity``,
-    ``pbr`` and ``finish``. With ``reuse`` and no ``pbr``, a material with
-    the same plain recipe is answered instead (``reused`` true, no step).
-    Unnamed, it is named after its colour (``Colour #A0703C``) or image.
-    The answer adds ``name``."""
-    from core.material_commands import AddMaterialCommand, find_material, fresh_name, material_for_paint
-    from core.materials import Material
-    if (color is None) == (texture is None):
-        raise ValueError("a material has one base: a colour or an image")
-    materials = history.scene.materials
-    rgb = tuple(float(c) for c in color[:3]) if color is not None else None
-    before = history.revision
-    if reuse and pbr is None:
-        found = find_material(materials, color=rgb, texture=texture, opacity=opacity)
-        if found is not None and (name is None or name == found):
-            return {"ok": True, "step": None, "error": None, "rejected": None, "name": found, "reused": True}
-    if name is None:
-        name = material_for_paint(history.scene, color=rgb, texture=texture, opacity=opacity).name
-        name = fresh_name(materials, name)
-    elif name in materials:
-        raise ValueError(f"there is already a material called {name!r}")
-    mat = Material(name, color=rgb, texture=dict(texture) if texture else None,
-                   opacity=None if opacity is None or float(opacity) >= 0.999 else float(opacity),
-                   pbr=dict(pbr) if pbr else None, finish=finish)
-    history.execute(AddMaterialCommand(mat))
-    out = command_protocol.answer(history, before)
-    out.update(name=name, reused=False)
-    return out
-
-
-def set_material_base(history, name, base, color=None, texture=None):
-    """Switch a material's base between a colour (``base="color"``,
-    ``color`` or its current colour) and an image (``base="image"``,
-    ``texture`` ``{"path", "sw", "sh"}``, or the image it had). Its PBR
-    values, opacity and finish are kept; what wears it follows
-    (``RestampMaterialCommand``)."""
-    from dataclasses import replace
-    from core.history import RestampMaterialCommand
-    mat = _material(history, name)
-    before = history.revision
-    if base == "color":
-        rgb = tuple(float(c) for c in (color if color is not None else (mat.color or (0.8, 0.8, 0.8)))[:3])
-        new = replace(mat, color=rgb, texture=None)
-    elif base == "image":
-        tex = dict(texture) if texture else (dict(mat.texture) if mat.texture else None)
-        if not tex or not tex.get("path"):
-            raise ValueError("an image base needs an image")
-        tex.setdefault("sw", 1.0)
-        tex.setdefault("sh", tex["sw"])
-        new = replace(mat, texture=tex, color=mat.color if mat.pbr is not None else None)
-    else:
-        raise ValueError("base is 'color' or 'image'")
-    if new == mat:
-        return command_protocol.answer(history, before, ok=False)
-    history.execute(RestampMaterialCommand(name, new))
-    return command_protocol.answer(history, before)
-
-
-def set_material_pbr(history, name, **channels):
-    """Set PBR channels of a material, whatever its base: ``metallic``,
-    ``roughness``, ``ao_strength`` (0–1), ``normal_scale`` (≥ 0), and maps
-    ``metallic_map``, ``roughness_map``, ``normal_map``, ``ao_map`` (a
-    path or ``{"path", "flip_y"?}``). ``None`` removes a channel; with none
-    left the material has no PBR. ``RestampMaterialCommand``."""
-    from dataclasses import replace
-    from core.history import RestampMaterialCommand
-    from core.material_commands import PBR_KEYS, PBR_MAPS
-    mat = _material(history, name)
-    unknown = sorted(set(channels) - set(PBR_KEYS))
-    if unknown:
-        raise ValueError(f"unknown PBR channel {unknown[0]!r}; one of {list(PBR_KEYS)}")
-    pbr = dict(mat.pbr or {})
-    for key, value in channels.items():
-        if value is None:
-            pbr.pop(key, None)
-        elif key in PBR_MAPS:
-            pbr[key] = {"path": value} if isinstance(value, str) else dict(value)
-        else:
-            v = float(value)
-            pbr[key] = max(v, 0.0) if key == "normal_scale" else min(max(v, 0.0), 1.0)
-    before = history.revision
-    new = replace(mat, pbr=pbr or None)
-    if new == mat:
-        return command_protocol.answer(history, before, ok=False)
-    history.execute(RestampMaterialCommand(name, new))
-    return command_protocol.answer(history, before)
-
-
-def name_unnamed_colours(history):
-    """"Name these": each distinct colour painted without a material
-    (older files) becomes a material, reusing one with the same recipe;
-    the faces and containers take its name (``NameColoursCommand``). The
-    answer adds ``named``, the number of colours."""
-    from core.material_commands import NameColoursCommand
-    cmd = NameColoursCommand()
-    before = history.revision
-    n = cmd.count(history.scene)
-    if n:
-        history.execute(cmd)
-    out = command_protocol.answer(history, before, ok=bool(n))
-    out["named"] = n
-    return out
 
 
 def rename_component(history, placement, name):

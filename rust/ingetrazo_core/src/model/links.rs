@@ -1986,13 +1986,8 @@ pub fn own_mesh<'py>(mesh: &Obj<'py>) -> PyResult<Obj<'py>> {
             .is_truthy()?
         {
             let od = out.getattr(pyo3::intern!(py, "__dict__"))?;
-            if d.contains("_deferred_hooks")? {
-                od.set_item("_deferred_hooks", PyList::new(py, d.get_item("_deferred_hooks")?.try_iter()?.collect::<PyResult<Vec<_>>>()?)?)?;
-            }
-            for key in ["_deferred_hook_source", "_deferred_geom"] {
-                if d.contains(key)? {
-                    od.set_item(key, d.get_item(key)?)?;
-                }
+            if d.contains("_deferred_geom")? {
+                od.set_item("_deferred_geom", d.get_item("_deferred_geom")?)?;
             }
             return Ok(out);
         }

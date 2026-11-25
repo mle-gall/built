@@ -147,8 +147,7 @@ impl PyMeshStore {
                         PyDict::new(py).into_any()
                     } else {
                         let entry = owner.as_any().get_item("_attr_table")?.get_item(row)?;
-                        py.import("core.store_mesh")?
-                            .call_method1("_copy_attrs", (entry,))?
+                        crate::kernel::store_views::properties::copy_attrs(&entry)?.into_any()
                     };
                     updates.set_item(key, &value)?;
                     value

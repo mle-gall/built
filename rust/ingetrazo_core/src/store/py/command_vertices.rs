@@ -33,8 +33,7 @@ impl<'py> AttrChanges<'py> {
         let py = self.own.py();
         let (index, _) = store.face_info(key)?;
         let value = if index >= 0 {
-            py.import("core.store_mesh")?
-                .call_method1("_copy_attrs", (self.table.get_item(index)?,))?
+            crate::kernel::store_views::properties::copy_attrs(&self.table.get_item(index)?)?.into_any()
         } else {
             PyDict::new(py).into_any()
         };

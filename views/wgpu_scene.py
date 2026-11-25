@@ -42,8 +42,8 @@ def bake_mesh(mesh):
         arrays = arrays_of(mesh)
         pos = arrays.pos
         if type(mesh).__name__ == 'StoreMesh':
-            from core.store_mesh import attr_columns
-            table, attr = attr_columns(mesh)
+            from ingetrazo_core import store_views
+            table, attr = store_views.attr_columns(mesh)
             attr = np.asarray(attr, np.int64)
         else:
             table = [f.attrs for f in mesh.faces]
@@ -94,13 +94,13 @@ def _source_arrays(mesh, paint=None, texture_ids=None, face_overrides=None, bill
     if src is None and type(mesh).__name__ == 'StoreMesh':
         # A store-backed mesh (core/store_mesh.py): its welded arrays,
         # vertex indices already shared by corners and edges.
-        from core.store_mesh import attr_columns
+        from ingetrazo_core import store_views
         a = mesh.__dict__['_store'].arrays()
         pos, corners = a['pos'], a['corners']
         sizes, counts = a['ring_sizes'], a['ring_counts']
         edges = a['edges']
         flags = a['flags'] & 7
-        table, attr = attr_columns(mesh, face_overrides)
+        table, attr = store_views.attr_columns(mesh, face_overrides)
         attr = np.asarray(attr, np.int64)
     elif src is not None:
         pos, corners, sizes, counts = (src[k] for k in ('pos', 'rings', 'sizes', 'counts'))
