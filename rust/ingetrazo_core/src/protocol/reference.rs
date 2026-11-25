@@ -56,8 +56,7 @@ fn bake_container_xform(group: &Obj<'_>) -> PyResult<()> {
             matrix.mul(if m.is_none() { &identity } else { &m })?,
         )?;
     }
-    py.import("core.explode")?
-        .call_method1("rotate_offsets", (group, &matrix))?;
+    crate::placement_transform::rotate_offsets(group, &matrix)?;
     let mesh = group.getattr("mesh")?;
     if mesh.getattr("vertices")?.is_truthy()? {
         group.setattr(

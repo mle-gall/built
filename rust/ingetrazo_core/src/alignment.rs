@@ -101,9 +101,7 @@ fn parse_kmz(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, PyList>> {
         }) else {
             return Ok(None);
         };
-        let data = py
-            .import("core.zip_limits")?
-            .call_method1("read", (&archive, name))?;
+        let data = crate::archive_limits::read_member(&archive, name)?;
         Ok(Some(data.cast::<PyBytes>()?.as_bytes().to_vec()))
     })();
     archive.call_method0("close")?;

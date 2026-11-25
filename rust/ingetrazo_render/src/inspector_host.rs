@@ -175,7 +175,7 @@ fn bevel_state<'py>(py: Python<'py>, tool: &Bound<'py, PyAny>) -> PyResult<Bound
     if type_name(tool) != "FilletTool" {
         return Ok(py.None().into_bound(py));
     }
-    let profiles = py.import("core.bevel_profiles")?;
+    let profiles = py.import("ingetrazo_core.bevel_profiles")?;
     let shape = tool.getattr("shape")?;
     let segments = tool.getattr("segments")?;
     let b = PyDict::new(py);
@@ -352,7 +352,7 @@ fn camera_edit(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, key: &str, v: &B
             if let Some(i) = last_digit() {
                 pts[usize::from(key.starts_with("target"))].set_item(i, v)?;
             }
-            let point = py.import("core.camera_point")?.getattr("CameraPoint")?;
+            let point = py.import("ingetrazo_core")?.getattr("Vec3")?;
             let a = point.call1(pts[0].to_tuple())?;
             let b = point.call1(pts[1].to_tuple())?;
             cam.call_method1("place", (a, b))?;
@@ -404,7 +404,7 @@ fn bevel_edit(host: &Bound<'_, PyAny>, tool: &Bound<'_, PyAny>, key: &str, value
             tool.call_method1("set_shape", (host, py.None()))?;
         }
         ("shape", Some("drawn" | "custom")) => {
-            let controls = py.import("core.bevel_profiles")?.call_method1("controls", (tool.getattr("shape")?, tool.getattr("segments")?))?;
+            let controls = py.import("ingetrazo_core.bevel_profiles")?.call_method1("controls", (tool.getattr("shape")?, tool.getattr("segments")?))?;
             tool.call_method1("set_shape", (host, controls))?;
         }
         ("shape" | "curve", _) => {

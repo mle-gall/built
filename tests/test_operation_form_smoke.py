@@ -967,7 +967,7 @@ def test_native_animation_forms_and_video_file(tmp_path):
     from core.camera import OrbitCamera
     from core.saved_views import SavedView
     from core.scene import Scene
-    from core.scene_animation import SceneAnimation
+    from ingetrazo_core import SceneAnimation
     from formats.igz import save_scene
 
     from ingetrazo_core import video_format

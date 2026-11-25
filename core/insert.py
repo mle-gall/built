@@ -38,7 +38,7 @@ def is_scale_figure(group) -> bool:
     (any person, or the user's own picture); a file from before the mark
     is recognised by the picture the app used then (Sumari, then the
     Engineer from 26-09), since an older file carries no group names."""
-    from core.scale_figure import LEGACY_IMAGES, is_marked
+    from ingetrazo_core.scale_figure import LEGACY_IMAGES, is_marked
     if is_marked(group):
         return True
     if getattr(group, "billboard", False) is not True:

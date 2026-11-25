@@ -26,6 +26,7 @@ mod context_menu;
 mod lens;
 use lens::Lens;
 mod tree_order;
+pub(crate) use tree_order::natural as natural_name_order;
 mod tree_filter;
 mod tree_keys;
 mod tree_rows;

@@ -24,7 +24,7 @@ def setup(app):
         import numpy as np
         from core.protocol.commands import add_image_plane
         from ingetrazo_render import background_autosave
-        from core.scale_figure import store_picture
+        from ingetrazo_core.scale_figure import store_picture
         from core.text3d import build_text_letters
         from core.paths import cache_directory
         from core.texture import texture_cache_root

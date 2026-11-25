@@ -271,8 +271,7 @@ fn igz_read_document<'p>(
     };
     let entry = m.getattr("_DOC_ENTRY")?;
     let tree = (|| {
-        py.import("core.zip_limits")?
-            .call_method1("check", (&archive, path.getattr("name")?))?;
+        crate::archive_limits::check_archive(&archive, &path.getattr("name")?.extract::<String>()?)?;
         let info = archive.call_method1("getinfo", (&entry,))?;
         let size = info.getattr("file_size")?.extract::<u64>()?;
         if reader.is_some()

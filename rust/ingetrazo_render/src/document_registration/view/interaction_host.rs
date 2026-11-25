@@ -293,25 +293,11 @@ pub(super) fn install(m: &Bound<PyModule>) -> PyResult<()> {
     m.add("_plog", wrap_pyfunction!(plog, m)?)?;
     lazy_chunk(m)?;
     let attrs = PyDict::new(py);
-    let signal = m.getattr("Signal")?;
+    let slot = m.getattr("CallbackSlot")?;
     let builtins = py.import("builtins")?;
-    for (name, kind) in [
-        ("valueBufferChanged", "str"),
-        ("sceneVersionChanged", "int"),
-        ("measurementChanged", "str"),
-        ("tilesChanged", ""),
-        ("coordinateChanged", "str"),
-        ("projectionChanged", "str"),
-        ("smartZoomRequested", ""),
-    ] {
-        attrs.set_item(
-            name,
-            if kind.is_empty() {
-                signal.call0()?
-            } else {
-                signal.call1((builtins.getattr(kind)?,))?
-            },
-        )?;
+    for name in ["valueBufferChanged", "sceneVersionChanged", "measurementChanged",
+                 "tilesChanged", "coordinateChanged", "projectionChanged", "smartZoomRequested"] {
+        attrs.set_item(name, slot.call0()?)?;
     }
     attrs.set_item("DEFAULT_FACE_COLOR", m.getattr("DEFAULT_FACE_COLOR")?)?;
     attrs.set_item(
@@ -403,7 +389,7 @@ fn dependencies(m: &Bound<PyModule>) -> PyResult<()> {
                 ("MIN_CIRCLE_DASHES", "_MIN_CIRCLE_DASHES"),
             ],
         ),
-        ("core.host_callbacks", &[("Signal", "Signal")]),
+        ("ingetrazo_render", &[("CallbackSlot", "CallbackSlot")]),
         (
             "core.timers",
             &[("later", "later"), ("timer", "window_timer")],

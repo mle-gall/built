@@ -549,7 +549,7 @@ fn general<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
 }
 
 fn figure_key(py: Python<'_>, name: &str) -> PyResult<String> {
-    py.import("core.scale_figure")?.getattr(name)?.extract()
+    py.import("ingetrazo_core.scale_figure")?.getattr(name)?.extract()
 }
 
 fn put_image(env: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -557,7 +557,7 @@ fn put_image(env: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<()> {
     if !path.is_truthy()? {
         return Ok(());
     }
-    let sf = py.import("core.scale_figure")?;
+    let sf = py.import("ingetrazo_core.scale_figure")?;
     let readable = py.import("ingetrazo_render")?.call_method1("raster_dimensions", (path,))?;
     if !readable.is_truthy()? {
         return Err(pyo3::exceptions::PyValueError::new_err(tr(py, "That file is not a picture Built can read.")?));
@@ -596,7 +596,7 @@ fn put_image(env: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<()> {
 fn figure_rows(py: Python<'_>) -> PyResult<Vec<Binding>> {
     let put_pick = func(py, |py, a| {
         let (env, v) = (a.get_item(0)?, a.get_item(1)?);
-        let sf = py.import("core.scale_figure")?;
+        let sf = py.import("ingetrazo_core.scale_figure")?;
         let st = env.getattr("st")?;
         if v.eq(sf.getattr("CUSTOM")?)? {
             let saved = st.call_method1("value", (figure_key(py, "KEY_IMAGE")?, ""))?;
@@ -616,7 +616,7 @@ fn figure_rows(py: Python<'_>) -> PyResult<Vec<Binding>> {
         Ok(none(py))
     })?;
     let options = func(py, |py, _a| {
-        let sf = py.import("core.scale_figure")?;
+        let sf = py.import("ingetrazo_core.scale_figure")?;
         let out = PyList::empty(py);
         for p in sf.call_method0("people")?.try_iter()? {
             let p = p?;
@@ -641,7 +641,7 @@ fn figure_rows(py: Python<'_>) -> PyResult<Vec<Binding>> {
     Ok(vec![
         Binding::new("scale_figure", key_get(py, "new_document/scale_figure", obj(py, "1")?, Kind::Bool)?, key_set(py, "new_document/scale_figure", Kind::Bool)?),
         Binding::new("figure", func(py, |py, a| {
-            let sf = py.import("core.scale_figure")?;
+            let sf = py.import("ingetrazo_core.scale_figure")?;
             let default = sf.getattr("DEFAULT_PICK")?;
             let v = a.get_item(0)?.getattr("st")?.call_method1("value", (figure_key(py, "KEY_PICK")?, &default))?;
             Ok((if v.is_truthy()? { v.str()? } else { default.str()? }).into_any().unbind())

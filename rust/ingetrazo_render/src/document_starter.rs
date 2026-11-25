@@ -69,7 +69,7 @@ fn billboard_person(
 #[pyfunction]
 fn insert_scale_figure(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
-    let figures = py.import("core.scale_figure")?;
+    let figures = py.import("ingetrazo_core.scale_figure")?;
     let figure = figures.call_method0("chosen")?;
     let scene = win.getattr("viewport")?.getattr("scene")?;
     if !figure.is_none() {

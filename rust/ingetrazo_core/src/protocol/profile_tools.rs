@@ -248,7 +248,7 @@ fn bevel_selection<'py>(
             Some(shape.clone())
         } else {
             if !py
-                .import("core.bevel_profiles")?
+                .import("ingetrazo_core.bevel_profiles")?
                 .call_method1("valid", (shape,))?
                 .is_truthy()?
             {

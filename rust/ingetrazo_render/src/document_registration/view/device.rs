@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Host attachment, daemon reads and device-event dispatch for 3D mice.
-use super::modules::{class, method, py_super};
+use super::modules::{class, method};
 use super::*;
 use pyo3::exceptions::{PyBlockingIOError, PyOSError};
 use pyo3::types::PyBytes;
@@ -9,8 +9,7 @@ use pyo3::types::PyBytes;
 fn init_input<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let hub = a.get_item(0)?;
-    py_super(&py.import("views.ndof_input")?, "NdofInput", &hub)?
-        .call_method1("__init__", (a.get_item(1)?,))?;
+    hub.setattr("_host", a.get_item(1)?.getattr_opt("_host")?)?;
     for key in ["_backend", "_last_t", "_moved_t"] {
         hub.setattr(key, py.None())?;
     }
@@ -277,15 +276,14 @@ pub(super) fn install_devices(module: &Bound<PyModule>) -> PyResult<()> {
     module.add("_KEYS", py.get_type::<PyTuple>().call1((keys,))?)?;
     module.add("_settings_cache", py.None())?;
     module.add("_shared", py.None())?;
-    let signal = module.getattr("Signal")?;
-    let object = builtins.getattr("object")?;
+    let slot = module.getattr("CallbackSlot")?;
     let hub = class(
         module,
         "NdofInput",
-        &[module.getattr("HostService")?],
+        &[],
         &fields!(py;
-        "motion"=>signal.call1((&object,builtins.getattr("float")?))?,"button"=>signal.call1((builtins.getattr("int")?,builtins.getattr("bool")?))?,
-        "raw"=>signal.call1((object,))?,"WHEEL_QUIET_S"=>0.4),
+        "motion"=>slot.call0()?,"button"=>slot.call0()?,
+        "raw"=>slot.call0()?,"WHEEL_QUIET_S"=>0.4),
     )?;
     register_view_class(&hub)?;
     install(
