@@ -14,8 +14,8 @@ ENV/
 build/
 dist/
 *.egg-info/
-# PyInstaller (ingetrazo.spec is versioned deliberately)
-!ingetrazo.spec
+# PyInstaller (packaging/native.spec is versioned deliberately)
+!packaging/native.spec
 
 # IDE / editor
 .vscode/

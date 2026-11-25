@@ -266,7 +266,7 @@ def test_the_flatpak_ships_the_mcp_script():
 def test_the_mcp_script_ships_with_the_app_and_the_flag_finds_it():
     from core.paths import app_root
     assert (app_root() / "scripts" / "ingetrazo_mcp.py").is_file()
-    spec = (app_root() / "ingetrazo.spec").read_text(encoding="utf-8")
+    spec = (app_root() / "packaging/native.spec").read_text(encoding="utf-8")
     assert "('scripts/ingetrazo_mcp.py',   'scripts')" in spec
     assert "name='ingetrazo-mcp'" in spec and "console=True" in spec
 

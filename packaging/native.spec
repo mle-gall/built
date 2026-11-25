@@ -1,25 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for IngeTrazo.
+"""Collect Built's embedded Python runtime, data files and MCP console helper.
 
-Produces (one-dir mode):
-- Windows: dist\\ingetrazo\\  (ingetrazo.exe + DLLs + _internal resources)
-- Linux:   dist/ingetrazo/   (binary + libs)
-
-Build:
-    pyinstaller ingetrazo.spec --noconfirm
-
-The same spec works on every platform (mirrors ingepresupuestos.spec in the
-sibling repo). Runtime resource lookups are repo-root-relative
-(``Path(__file__).parents[1] / "resources"``), which in the frozen one-dir
-layout resolves inside ``_internal/`` — so every data destination below
-mirrors the repo layout exactly.
-
+Windows, Linux and macOS install the Rust launcher into the collected bundle.
+Resource paths under _internal mirror the source tree.
 """
+import os
 import site
 import sys
 from pathlib import Path
 
-ROOT = Path(SPECPATH).resolve()
+ROOT = Path(SPECPATH).resolve().parent
 from runpy import run_path
 built_extension = run_path(str(ROOT / "formats" / "built.py"))["BUILT_SUFFIX"][1:]
 
@@ -140,7 +130,8 @@ hiddenimports += ['core._native', 'ingetrazo_core']
 # Revit family import (File > Import > Revit family): formats.rfa loads the
 # native reader through importlib, which static analysis cannot follow.
 hiddenimports += ['formats.rfa']
-if _ilu.find_spec('ingetrazo_rfa') is not None:
+omit_rfa = sys.platform == 'darwin' and os.environ.get('BUILT_PACKAGE_RFA') == '0'
+if not omit_rfa and _ilu.find_spec('ingetrazo_rfa') is not None:
     hiddenimports += collect_submodules('ingetrazo_rfa')
 hiddenimports += ['core.renderer_settings']
 if _ilu.find_spec('ingetrazo_render') is None:
@@ -208,16 +199,16 @@ def _app_imports(paths):
                 continue
             for name in names:
                 parts = name.split('.')
-                if (Path(*parts).with_suffix('.py').is_file()
-                        or (Path(*parts) / '__init__.py').is_file()):
+                if (ROOT.joinpath(*parts).with_suffix('.py').is_file()
+                        or (ROOT.joinpath(*parts) / '__init__.py').is_file()):
                     found.add(name)
     return sorted(found)
 
 
 hiddenimports += _app_imports(
-    [*Path('plugins').glob('*.py'),
-     *Path('examples/extensions').rglob('*.py'),
-     Path('scripts/ingetrazo_mcp.py')])
+    [*(ROOT / 'plugins').glob('*.py'),
+     *(ROOT / 'examples/extensions').rglob('*.py'),
+     ROOT / 'scripts/ingetrazo_mcp.py'])
 # The rest of openskp (export/*, _face_groups, instanced_scene, codegen…)
 # plus its PACKAGE DATA: create.py loads ``_scaffold/blank_v17.skp`` via
 # importlib.resources and PyInstaller never bundles non-Python files on its
@@ -256,17 +247,15 @@ hiddenimports += collect_submodules('mapbox_earcut')
 # cannot help here because it resolves a path relative to a __file__ that
 # does not exist in a frozen app.
 from PyInstaller.utils.hooks import collect_dynamic_libs
-_earcut_libs = collect_dynamic_libs('mapbox_earcut')
+binaries = collect_dynamic_libs('mapbox_earcut')
 for _sp in site.getsitepackages() + [site.getusersitepackages()]:
     _sib = Path(_sp) / 'mapbox_earcut.libs'
     if _sib.is_dir():
-        _earcut_libs += [(str(f), '.') for f in _sib.iterdir() if f.is_file()]
+        binaries += [(str(f), '.') for f in _sib.iterdir() if f.is_file()]
         break
-print('spec: mapbox_earcut native files: %d' % len(_earcut_libs))
+print('spec: mapbox_earcut native files: %d' % len(binaries))
 
 excludes = [
-    'PySide6',
-    'shiboken6',
     'tkinter',
     'matplotlib',
     'pandas',
@@ -281,16 +270,28 @@ excludes = [
 for package in ('app_shell', 'core', 'formats', 'views', 'tools'):
     hiddenimports += collect_submodules(package)
 
+if omit_rfa:
+    excludes.append('ingetrazo_rfa')
+
+app_excludes = excludes.copy()
+if sys.platform == 'darwin':
+    app_excludes.remove('ifcopenshell')
+    hiddenimports += collect_submodules('ifcopenshell')
+    datas += collect_data_files('ifcopenshell')
+    binaries += collect_dynamic_libs('ifcopenshell')
+    datas += [('tests/fixtures/shell/slab-and-cube.igz', 'examples'),
+              ('packaging/native_check.py', '.')]
+
 a = Analysis(
-    ['packaging/native_check.py'],
+    [str(ROOT / 'packaging/native_check.py')],
     pathex=[str(ROOT)],
-    binaries=_earcut_libs,
-    datas=datas,
+    binaries=[(str(ROOT / src), dest) for src, dest in binaries],
+    datas=[(str(ROOT / src), dest) for src, dest in datas],
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=excludes,
+    excludes=app_excludes,
     noarchive=True,
 )
 # Keep the host GPU driver's X11, C++ runtime and GLib together (#6).
@@ -345,7 +346,7 @@ exe = EXE(
 # to give them, so Windows gets a console build of the stdlib-only server
 # sharing this bundle's _internal/. Spawned with pipes it opens no window.
 mcp_a = Analysis(
-    ['scripts/ingetrazo_mcp.py'],
+    [str(ROOT / 'scripts/ingetrazo_mcp.py')],
     pathex=[str(ROOT)],
     binaries=[],
     datas=[],

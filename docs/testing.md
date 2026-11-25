@@ -1,5 +1,10 @@
 # Running the tests
 
+A fresh virtual environment created with `python -m venv .venv` and
+`.venv/bin/python -m pip install -r requirements.txt` installs neither
+PySide6 nor shiboken6. Build the Rust extensions with
+`VENV=.venv scripts/build_native.sh` before running the suite.
+
 The suite runs in parallel with [pytest-xdist](https://pypi.org/project/pytest-xdist/)
 (in `requirements.txt`). Give it the number of workers; everything else is set
 by `tests/conftest.py`: file-level scheduling (`--dist loadfile`, so a file's

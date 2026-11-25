@@ -114,7 +114,7 @@ jobs:
       - name: Compilar con PyInstaller
         shell: bash
         run: |
-          pyinstaller ingetrazo.spec --noconfirm
+          pyinstaller packaging/native.spec --noconfirm
           PYO3_PYTHON="$(python -c 'import sys; print(sys.executable)')" packaging/install-native-launcher.sh dist/ingetrazo
           ls -la dist/
           du -sh dist/ingetrazo/
@@ -128,7 +128,7 @@ jobs:
           test -f dist/ingetrazo/_internal/i18n/es.json
           test -f dist/ingetrazo/_internal/resources/components/components.json
           # La plantilla .skp en blanco de openskp la generó una herramienta
-          # propietaria: desde el 2026-09-28 NO se distribuye (ingetrazo.spec
+          # propietaria: desde el 2026-09-28 NO se distribuye (packaging/native.spec
           # la excluye y no hay exportación a .skp). Si
           # un paquete la trae otra vez, falla aquí — y también --check.
           test ! -e dist/ingetrazo/_internal/openskp/_scaffold

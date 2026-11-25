@@ -76,7 +76,7 @@ parts:
     override-build: |
       mkdir -p "$CRAFT_PART_INSTALL/opt/ingetrazo"
       cp -a "$CRAFT_PART_SRC/." "$CRAFT_PART_INSTALL/opt/ingetrazo/"
-      # never ship openskp's SDK-written blank template (see ingetrazo.spec)
+      # never ship openskp's SDK-written blank template (see packaging/native.spec)
       find "$CRAFT_PART_INSTALL" -type d -name _scaffold -path '*openskp*' -prune -exec rm -rf {} +
     stage-packages:
       - libgtk-3-0
