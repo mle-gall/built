@@ -9,7 +9,7 @@
 //! per attribute row, not per face.
 use super::assemble::{choose_origin, REBASE_DISTANCE};
 use numpy::{
-    ndarray::{Array1, Array2},
+    ndarray::{Array, Array1, Array2, ArrayView, Dimension},
     IntoPyArray, PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2,
 };
 use pyo3::{
@@ -49,6 +49,16 @@ fn value<'py>(attrs: &Obj<'py>, key: &str) -> PyResult<Option<Obj<'py>>> {
     Ok(Some(attrs.call_method1("get", (key,))?).filter(|v| !v.is_none()))
 }
 
+/// A copy of `view`. Nothing is read off an empty one: the strides NumPy
+/// gives an array without elements are not ones ndarray's debug checks
+/// accept (a panic in debug builds only).
+fn owned<A: Clone, D: Dimension>(view: ArrayView<'_, A, D>) -> Array<A, D> {
+    if view.is_empty() {
+        return Array::from_shape_vec(view.raw_dim(), Vec::new()).expect("an empty shape holds no elements");
+    }
+    view.to_owned()
+}
+
 /// The positions the normals are taken from, in the precision the document
 /// keeps them (f32 for a file's own arrays, f64 for an edited mesh or one
 /// moved to another frame): the face mapping is resolved per distinct
@@ -61,11 +71,11 @@ enum Points {
 impl Points {
     fn read(pos: &Obj<'_>) -> PyResult<Self> {
         if let Ok(single) = pos.extract::<PyReadonlyArray2<'_, f32>>() {
-            return Ok(Self::Single(single.as_array().to_owned()));
+            return Ok(Self::Single(owned(single.as_array())));
         }
         let np = pos.py().import("numpy")?;
         let double: PyReadonlyArray2<'_, f64> = np.call_method1("asarray", (pos, np.getattr("float64")?))?.extract()?;
-        Ok(Self::Double(double.as_array().to_owned()))
+        Ok(Self::Double(owned(double.as_array())))
     }
     fn rows(&self) -> usize {
         match self {
@@ -372,9 +382,9 @@ fn source_arrays<'py>(
     let sizes = integers(&sizes)?;
     let counts = integers(&counts)?;
     let edges: PyReadonlyArray2<'_, i64> = np.call_method1("asarray", (edges, np.getattr("int64")?))?.call_method1("reshape", (-1, 2))?.extract()?;
-    let mut edges = edges.as_array().to_owned();
+    let mut edges = owned(edges.as_array());
     let flags: PyReadonlyArray1<'_, u8> = np.call_method1("asarray", (flags, np.getattr("uint8")?))?.extract()?;
-    let flags = flags.as_array().to_owned();
+    let flags = owned(flags.as_array());
     let attr = integers(&attr)?;
 
     let mut origin = [0.; 3];
