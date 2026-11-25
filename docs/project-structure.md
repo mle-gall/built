@@ -156,19 +156,11 @@ Templates (ride; building by storey and trade; infrastructure) seed a tree
 with recipes. An IDS attached to an export profile drives `completeness` and
 can propose recipe fields (required psets) per node.
 
-## Migration of the ride files
-
-`bootstrap` on `asbuilt_ride.igz` (tags organised 2026-11-09, records
-from 2026-11-08) should yield Ride › {Track, Supports, Access, Fasteners,
-Reference, Context} with recipes inferred from the records; facilities and
-stairs mount under their links. Conflicts to expect: the `_To review` layers
-(no class), fasteners (tagged, no records, `class: null`), Groupe#536.
-
 ## Phases and acceptance
 
 1. **Engine + tools** (this note's data model, `core/structure.py`,
    `agent_structure`, registry validation, `bootstrap`): tests on a synthetic
-   scene and on a headless load of the ride; a `bootstrap` report for the ride.
+   scene and on a headless load of a large real model, with a `bootstrap` report.
 2. **Panel** shipped in the Structure dock. The facet index serves queries and saved displays.
 3. **Modeling integration**: active node on creation.
 4. **Templates and IDS.**
