@@ -25,7 +25,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from core.input_types import NATIVE, QEvent, Qt
+from core.input_types import QEvent, Qt
 from ingetrazo_render import shortcut_text
 
 SEP = "\x1f"

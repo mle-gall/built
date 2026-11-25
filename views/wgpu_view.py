@@ -3,7 +3,7 @@ from contextlib import ExitStack, contextmanager
 import math
 import time
 import numpy as np
-from core.input_types import NATIVE, QEvent, Qt
+from core.input_types import QEvent, Qt
 from core.host_callbacks import Signal
 from core.timers import later
 from views.paint_types import QColor
