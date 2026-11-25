@@ -221,6 +221,7 @@ const VIEW_MODULES: &[&str] = &[
     "document_controller",
     "ndof_input",
     "wgpu_view",
+    "wgpu_ui",
 ];
 
 #[pyclass(module = "ingetrazo_core", frozen)]
