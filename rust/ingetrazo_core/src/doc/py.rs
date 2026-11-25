@@ -3054,6 +3054,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     super::metadata_steps::register(m)?;
     super::history_support::register(m)?;
     m.add_class::<super::history::DocumentHistory>()?;
+    m.add_class::<super::feed::records::FeedMeshRecord>()?;
+    m.add_class::<super::feed::records::FeedStepRecord>()?;
     m.add_class::<super::feed::FeedReaders>()?;
     m.add_class::<DocRecord>()?;
     m.add_class::<DocAttr>()?;

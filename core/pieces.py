@@ -33,8 +33,8 @@ def connected_parts(mesh: Mesh) -> list:
     Two faces are one piece when they share a vertex; a loose edge joins
     whatever its ends touch, so a wire hanging off a solid stays with it.
     A store-backed mesh is read by the store (``core.store_parts``)."""
-    from core import store_parts
-    found = store_parts.parts(mesh, solid=False)
+    from ingetrazo_core import store_views
+    found = store_views.mesh_parts(mesh, solid=False)
     if found is not None:
         return found
     parent: dict = {}
@@ -209,8 +209,8 @@ def solid_parts(mesh: Mesh) -> list:
     the piece its ends touch; one touching nothing is a wire of its own.
     A store-backed mesh is read by the store (``core.store_parts``), with
     the same pieces in the same order."""
-    from core import store_parts
-    found = store_parts.parts(mesh, solid=True)
+    from ingetrazo_core import store_views
+    found = store_views.mesh_parts(mesh, solid=True)
     if found is not None:
         return found
     parent: dict = {}
@@ -332,8 +332,8 @@ def copy_part(faces, edges) -> Mesh:
     thousands of faces, and a per-face walk froze the UI at that scale).
     Faces and edges of one store-backed mesh are copied by the store
     (``core.store_parts.copy_part``)."""
-    from core import store_parts
-    made = store_parts.copy_part(faces, edges)
+    from ingetrazo_core import store_views
+    made = store_views.copy_mesh_part(faces, edges)
     if made is not None:
         return made
     import numpy as np

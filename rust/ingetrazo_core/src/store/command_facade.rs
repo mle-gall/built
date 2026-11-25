@@ -3,6 +3,7 @@
 //! transaction. Going through its store also publishes edits to an open definition.
 mod erase;
 mod explode;
+mod transfer;
 pub(crate) use explode::{command_explode_geometry, Exploded};
 mod vertices;
 mod plane;

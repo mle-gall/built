@@ -1,20 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""A deferred mesh's shape as arrays: what building it WOULD make, without
-making a single Python object (the experimental engine's lazy meshes).
-
-:func:`plan` replays :meth:`Mesh.bulk_weld`, :meth:`Mesh.add_edges_welded`
-and :meth:`Mesh.add_faces_welded` on an empty mesh in NumPy: the vertex
-positions in ``mesh.vertices`` order, the edges in ``mesh.edges`` order
-with their flags, the faces' corners as vertex indices and each edge's
-incident faces in ``edge.faces`` order. tests/test_lazy_mesh_plan.py holds
-it to the built mesh, index for index."""
+"""A deferred mesh in native weld, edge and face order, before first access."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
 import numpy as np
 
+from ingetrazo_core import deferred_weld as weld
 from core import mesh as _mesh
 
 
@@ -44,39 +37,6 @@ class Plan:
     @property
     def nfaces(self) -> int:
         return len(self.ring_counts)
-
-
-def weld(pos: np.ndarray, sequential: bool = False, *, precise=None):
-    """``(vpos, point_ids)``: what :meth:`Mesh.bulk_weld` returns on an EMPTY
-    mesh, as positions instead of vertices (same order: the vertex list).
-    ``sequential``: in the order :meth:`Mesh.vertex` called point by point
-    makes them instead — the same vertices, each where its point comes.
-    The source array determines the default precision for both mesh backings.
-    A format with its own precision may select it explicitly."""
-    if precise is None:
-        precise = np.asarray(pos).dtype != np.float32
-    vpos, ids, origin = _weld(pos, precise=precise)
-    if sequential and len(vpos):
-        order = np.argsort(origin, kind="stable")
-        rank = np.empty_like(order)
-        rank[order] = np.arange(len(order))
-        vpos, ids = vpos[order], rank[ids]
-    return vpos, ids
-
-
-def _weld(pos: np.ndarray, *, precise=False):
-    """``(vpos, point_ids, origin)`` — the weld, and the input point each
-    vertex was made at."""
-    from ingetrazo_core import store_weld_indices, weld_points
-    pos = np.ascontiguousarray(pos, dtype=np.float64 if precise else np.float32)
-    if not len(pos):
-        return np.zeros((0, 3)), np.empty(0, np.int64), np.empty(0, np.int64)
-    tol2 = (10.0 ** -_mesh._KEY_DECIMALS) ** 2
-    if precise:
-        ids, origin = store_weld_indices(pos, _mesh._KEY_SCALE, tol2)
-        return pos[origin], ids, origin
-    vpos, ids, origin = weld_points(pos, _mesh._KEY_SCALE, tol2)
-    return vpos.astype(np.float64), ids, origin
 
 
 def plan(pos, edges, flags, curves, layers, layer_names, rings, sizes,

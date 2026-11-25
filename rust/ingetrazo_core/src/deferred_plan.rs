@@ -222,3 +222,78 @@ pub(crate) fn planned_face_areas<'py>(
     }
     Ok(areas.into_pyarray(py))
 }
+
+/// Both reader orders use the same weld. The per-entity reader assigns
+/// vertex indices in the order their representative input points arrive.
+#[pyfunction]
+#[pyo3(signature=(pos,sequential=false,*,precise=None))]
+pub(crate) fn deferred_weld<'py>(
+    pos: &Obj<'py>,
+    sequential: bool,
+    precise: Option<bool>,
+) -> PyResult<(
+    Bound<'py, numpy::PyArray2<f64>>,
+    Bound<'py, numpy::PyArray1<i64>>,
+)> {
+    let py = pos.py();
+    let np = crate::model::module(py, "numpy")?;
+    let f32_type = np.getattr("float32")?;
+    let precise = match precise {
+        Some(p) => p,
+        None => !np
+            .call_method1("asarray", (pos,))?
+            .getattr("dtype")?
+            .eq(&f32_type)?,
+    };
+    let array = np.call_method1(
+        "ascontiguousarray",
+        (
+            pos,
+            if precise {
+                np.getattr("float64")?
+            } else {
+                f32_type
+            },
+        ),
+    )?;
+    if array.len()? == 0 {
+        return Ok((crate::flat3(py, vec![])?, Vec::new().into_pyarray(py)));
+    }
+    let (points, mut ids, origin) = if precise {
+        let a = array.extract::<PyReadonlyArray2<f64>>()?;
+        if a.as_array().ncols() != 3 {
+            return Err(PyValueError::new_err("expected (P, 3) positions"));
+        }
+        let p = a.as_slice()?.as_chunks::<3>().0;
+        py.detach(|| crate::weld::weld(p, 1e4, 1e-8))
+    } else {
+        let a = array.extract::<PyReadonlyArray2<f32>>()?;
+        if a.as_array().ncols() != 3 {
+            return Err(PyValueError::new_err("expected (P, 3) positions"));
+        }
+        let p = a.as_slice()?.as_chunks::<3>().0;
+        py.detach(|| {
+            let (v, ids, origin) = crate::weld::weld(p, 1e4, 1e-8);
+            (
+                v.into_iter().map(|p| p.map(f64::from)).collect(),
+                ids,
+                origin,
+            )
+        })
+    };
+    let flat = if sequential {
+        let mut order = (0..points.len()).collect::<Vec<_>>();
+        order.sort_unstable_by_key(|&i| origin[i]);
+        let mut rank = vec![0; order.len()];
+        for (n, &i) in order.iter().enumerate() {
+            rank[i] = n as i64
+        }
+        for key in &mut ids {
+            *key = rank[*key as usize];
+        }
+        order.into_iter().flat_map(|i| points[i]).collect()
+    } else {
+        points.into_iter().flatten().collect()
+    };
+    Ok((crate::flat3(py, flat)?, ids.into_pyarray(py)))
+}

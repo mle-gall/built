@@ -197,9 +197,155 @@ fn strips<'py>(
     Ok(out)
 }
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(bridge_pairs, m)?)?;
+    m.add_function(wrap_pyfunction!(bridge_plan, m)?)?;
     m.add_function(wrap_pyfunction!(bridge_centre, m)?)?;
     m.add_function(wrap_pyfunction!(align_loop, m)?)?;
     m.add_function(wrap_pyfunction!(align_chain, m)?)?;
     m.add_function(wrap_pyfunction!(strips, m)?)?;
     Ok(())
+}
+
+fn bridge_error(py: Python<'_>, message: &str) -> PyResult<PyErr> {
+    Ok(PyErr::from_value(
+        crate::model::module(py, "core.bridge")?
+            .getattr("BridgeError")?
+            .call1((message,))?,
+    ))
+}
+type PointList<'py> = Bound<'py, PyAny>;
+fn aligned<'py>(
+    a: &PointList<'py>,
+    b: &PointList<'py>,
+) -> PyResult<(PointList<'py>, PointList<'py>, bool)> {
+    Ok(if b.len()? >= a.len()? {
+        (a.clone(), align_loop(a, b)?.into_any(), true)
+    } else {
+        (align_loop(b, a)?.into_any(), b.clone(), true)
+    })
+}
+#[pyfunction]
+fn bridge_pairs<'py>(
+    p: &PointList<'py>,
+    q: &PointList<'py>,
+) -> PyResult<Vec<(PointList<'py>, PointList<'py>, bool)>> {
+    let py = p.py();
+    let pc = p.getattr("closed")?.is_truthy()?;
+    let qc = q.getattr("closed")?.is_truthy()?;
+    let pl = p.getattr("loops")?;
+    let ql = q.getattr("loops")?;
+    let a = pl.get_item(0)?;
+    let b = ql.get_item(0)?;
+    if !pc && !qc {
+        return Ok(vec![(a.clone(), align_chain(&a, &b)?.into_any(), false)]);
+    }
+    let mismatch = "A face with holes can only be bridged to another face with as many holes";
+    if pc != qc {
+        let (loops, closed, line) = if pc { (&pl, a, b) } else { (&ql, b, a) };
+        if loops.len()? > 1 {
+            return Err(bridge_error(py, mismatch)?);
+        }
+        let mut pts = line.try_iter()?.collect::<PyResult<Vec<_>>>()?;
+        if pts.len() > 2 {
+            let back = pts[1..pts.len() - 1]
+                .iter()
+                .rev()
+                .cloned()
+                .collect::<Vec<_>>();
+            pts.extend(back);
+        }
+        return Ok(vec![aligned(&closed, PyList::new(py, pts)?.as_any())?]);
+    }
+    if pl.len()? != ql.len()? {
+        return Err(bridge_error(py, mismatch)?);
+    }
+    let mut out = vec![aligned(&a, &b)?];
+    let centre = |pts: &PointList<'py>| -> PyResult<DVec3> {
+        let p = Profile::read(pts)?;
+        p.require_point()?;
+        Ok(midpoint(&p.points))
+    };
+    let ca = centre(&a)?;
+    let cb = centre(&b)?;
+    let mut left = ql
+        .try_iter()?
+        .skip(1)
+        .map(|h| {
+            let h = h?;
+            Ok((centre(&h)? - cb, h))
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    for hole in pl.try_iter()?.skip(1) {
+        let hole = hole?;
+        let rel = centre(&hole)? - ca;
+        let mut best = 0;
+        for i in 1..left.len() {
+            if left[i].0.distance_squared(rel) < left[best].0.distance_squared(rel) {
+                best = i
+            }
+        }
+        out.push(aligned(&hole, &left.remove(best).1)?);
+    }
+    Ok(out)
+}
+fn all_flat(pts: &[DVec3]) -> bool {
+    if pts.len() < 4 {
+        return true;
+    }
+    let a = pts[0];
+    let mut n = DVec3::ZERO;
+    for p in &pts[1..] {
+        for q in &pts[1..] {
+            let c = (*p - a).cross(*q - a);
+            if c.length() > n.length() {
+                n = c
+            }
+        }
+    }
+    if n.length() < EPS {
+        return true;
+    }
+    let n = n.normalize();
+    let size = pts.iter().map(|p| p.distance(a)).fold(0., f64::max);
+    pts.iter().all(|p| (*p - a).dot(n).abs() <= 1e-5 * size)
+}
+#[pyfunction]
+fn bridge_plan<'py>(profiles: &PointList<'py>) -> PyResult<Bound<'py, PyList>> {
+    let py = profiles.py();
+    let (p, q): (PointList, PointList) = {
+        let pts = profiles.try_iter()?.collect::<PyResult<Vec<_>>>()?;
+        if pts.len() != 2 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "expected two profiles",
+            ));
+        }
+        (pts[0].clone(), pts[1].clone())
+    };
+    let a = Profile::read(&p.getattr("points")?)?;
+    let b = Profile::read(&q.getattr("points")?)?;
+    if (!p.getattr("face")?.is_none() || !q.getattr("face")?.is_none())
+        && all_flat(&[a.points, b.points].concat())
+    {
+        return Err(bridge_error(
+            py,
+            "Both lie on one plane: nothing to bridge",
+        )?);
+    }
+    if p.getattr("closed")?.is_truthy()? || q.getattr("closed")?.is_truthy()? {
+        let key = crate::model::module(py, "core.topology")?.getattr("_key")?;
+        let keys = pyo3::types::PySet::empty(py)?;
+        for pt in a.objects {
+            keys.add(key.call1((pt,))?)?;
+        }
+        for pt in b.objects {
+            if keys.contains(key.call1((pt,))?)? {
+                return Err(bridge_error(py, "The two to bridge must not touch")?);
+            }
+        }
+    }
+    let out = PyList::empty(py);
+    for (a, b, closed) in bridge_pairs(&p, &q)? {
+        out.call_method1("extend", (strips(&a, &b, closed)?,))?;
+    }
+    Ok(out)
 }

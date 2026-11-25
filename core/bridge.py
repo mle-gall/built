@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from ingetrazo_core import Vec3 as QVector3D
 
-from ingetrazo_core import align_chain, align_loop, bridge_centre as _centre, run_stitch, strips
+from ingetrazo_core import align_chain, align_loop, bridge_centre as _centre, bridge_pairs as _pairs, bridge_plan as plan, run_stitch, strips
 from core.mesh import Edge, Face, turn_face_over
 from core.orient import orient_outward
 from core.sweep import _CURVE_FACET_COS, _wall, order_path_edges
@@ -132,53 +132,6 @@ def _connected(edges, most: int | None = None) -> list[list] | None:
 
 # ---------------------------------------------------------------- pairing
 
-def _align_loops(a, b) -> tuple[list, list]:
-    """``a`` and ``b`` with the one of MORE points turned to match the
-    other. Turned the other way round, a square against a circle could only
-    start at one of its four corners, a step of a quarter turn: the circle
-    came out a corner's worth (45°) twisted whenever it was the first one
-    selected."""
-    if len(b) >= len(a):
-        return a, align_loop(a, b)
-    return align_loop(b, a), b
-
-
-def _there_and_back(chain) -> list:
-    """An open chain as a flat closed loop: out along it and back."""
-    return list(chain) + list(reversed(chain[1:-1]))
-
-
-def _pairs(p: Profile, q: Profile) -> list[tuple]:
-    """The loops of ``p`` and ``q`` to bridge, as (a, b, closed)."""
-    if not p.closed and not q.closed:
-        a, b = p.loops[0], q.loops[0]
-        return [(a, align_chain(a, b), False)]
-    if p.closed != q.closed:
-        loop, line = (p, q) if p.closed else (q, p)
-        if len(loop.loops) > 1:
-            raise BridgeError("A face with holes can only be bridged to "
-                              "another face with as many holes")
-        return [(*_align_loops(loop.loops[0],
-                               _there_and_back(line.loops[0])), True)]
-    if len(p.loops) != len(q.loops):
-        raise BridgeError("A face with holes can only be bridged to "
-                          "another face with as many holes")
-    a, b = p.loops[0], q.loops[0]
-    out = [(*_align_loops(a, b), True)]
-    # Each hole goes to the other's hole that sits in the same place
-    # relative to its face, so two rings make a pipe.
-    ca, cb = _centre(a), _centre(b)
-    left = list(q.loops[1:])
-    for h in p.loops[1:]:
-        rel = _centre(h) - ca
-        k = min(range(len(left)),
-                key=lambda i: ((_centre(left[i]) - cb) - rel).lengthSquared())
-        out.append((*_align_loops(h, left.pop(k)), True))
-    return out
-
-
-# ---------------------------------------------------------------- building
-
 def _flat(quad) -> bool:
     a, b, c, d = quad
     n = QVector3D.crossProduct(b - a, c - a)
@@ -202,40 +155,6 @@ def _polygons(poly) -> tuple[list, tuple | None]:
     if (c - a).length() <= (d - b).length():
         return [[a, b, c], [a, c, d]], (a, c)
     return [[a, b, d], [b, c, d]], (b, d)
-
-
-def _all_flat(points) -> bool:
-    if len(points) < 4:
-        return True
-    a = points[0]
-    n = QVector3D()
-    for p in points[1:]:
-        for q in points[1:]:
-            c = QVector3D.crossProduct(p - a, q - a)
-            if c.length() > n.length():
-                n = c
-    if n.length() < _EPS:
-        return True
-    n = n.normalized()
-    size = max((p - a).length() for p in points)
-    return all(abs(QVector3D.dotProduct(p - a, n)) <= _FLAT * size
-               for p in points)
-
-
-def plan(profiles) -> list[list]:
-    """The side polygons that bridge two profiles, without touching any
-    mesh (also what a preview would draw)."""
-    p, q = profiles
-    if (p.face is not None or q.face is not None) and \
-            _all_flat(p.points + q.points):
-        raise BridgeError("Both lie on one plane: nothing to bridge")
-    if set(map(_key, p.points)) & set(map(_key, q.points)) and \
-            (p.closed or q.closed):
-        raise BridgeError("The two to bridge must not touch")
-    polys = []
-    for a, b, closed in _pairs(p, q):
-        polys.extend(strips(a, b, closed))
-    return polys
 
 
 def bridge(mesh, profiles) -> list[Face]:

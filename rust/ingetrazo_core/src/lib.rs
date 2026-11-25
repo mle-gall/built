@@ -287,6 +287,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(qt_dot_pairs, m)?)?;
     m.add_function(wrap_pyfunction!(smooth_corner_normals, m)?)?;
     link_tree::register(m)?;
+    m.add_function(wrap_pyfunction!(deferred_plan::deferred_weld, m)?)?;
     m.add_function(wrap_pyfunction!(deferred_plan::planned_face_areas, m)?)?;
     bridge_profiles::register(m)?;
     m.add_function(wrap_pyfunction!(deferred_plan::deferred_incidence, m)?)?;

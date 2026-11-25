@@ -588,13 +588,13 @@ class Scene:
         share = entry_transaction = None
         if active_mesh is None and (group.children or group.xform is not None):
             attachments = self._attachment_swap()
-            from core.reference_edit import enter
+            from ingetrazo_core.command_protocol import enter_reference
             from core.store_mesh import StoreMesh
             # A singular placement needs the compatibility world copy. Keep
             # the placement swaps on entry so its History step can replay them.
             depth = _dm.begin() if type(entry_mesh) is StoreMesh else 0
             try:
-                share, parts = enter(self, group, frame)
+                share, parts = enter_reference(self, group, frame)
                 if depth:
                     entry_transaction = _dm.commit()
             except Exception:
@@ -674,8 +674,8 @@ class Scene:
         unchanged = True
         share = nivel.pop("share", None)
         if share is not None:
-            from core.reference_edit import finish
-            unchanged = finish(share, nivel.get("parts"))
+            from ingetrazo_core.command_protocol import finish_reference
+            unchanged = finish_reference(share, nivel.get("parts"))
         if unchanged:
             self._placement_context_bumps += 1
         self.mesh = nivel["mesh"]

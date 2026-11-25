@@ -1,48 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Pieces, Explode and Purge on store-backed meshes (docs/meshstore-design.md,
-"Pieces, Explode and Purge"): the parts of ``core.pieces``,
-``ExplodeGroupCommand`` and ``core.purge`` that walked every face and edge
-in Python, done by the store (``rust/ingetrazo_core/src/store/pieces.rs``,
-``explode.rs``) or over its arrays, without building Python objects for the
-mesh's elements and without materialising it.
-
-Every function answers ``None`` when it cannot serve the mesh (a Python
-mesh, a native module without the op, no QVector3D formula for the
-geometric tests); the caller then runs the Python kernel, whose result is
-the same."""
+"""Lazy element sequences and copy provenance for native store operations."""
 from __future__ import annotations
 
 import weakref
 from collections.abc import Mapping, Sequence
-
-import numpy as np
-
-
-def _store_mesh(mesh):
-    """``mesh`` when it is a live store-backed mesh, else None."""
-    from core.store_mesh import StoreMesh
-    return mesh if type(mesh) is StoreMesh else None
-
-
-# ---------------------------------------------------------------- pieces
-
-def parts(mesh, solid: bool):
-    """``core.pieces.solid_parts`` (``solid``) or ``connected_parts`` of a
-    store-backed mesh: ``[(faces, edges)]`` as views, in Python's order."""
-    m = _store_mesh(mesh)
-    if m is None:
-        return None
-    snap = m._store.snapshot()
-    if solid:
-        from core._native import qt_hypot
-        found = snap.solid_parts(qt_hypot())
-    else:
-        found = snap.connected_parts()
-    from core.store_mesh import EdgeView, FaceView
-    return [(Views(m, fs, FaceView), Views(m, es, EdgeView))
-            for fs, es in found]
-
 
 class Views(Sequence):
     """Elements of a store-backed mesh by key, a view made per read: a
@@ -70,74 +32,7 @@ class Views(Sequence):
         return f"Views({len(self._keys)} {self._cls.__name__})"
 
 
-def _keys_of(elements, cls):
-    """``(mesh, keys)`` when every element is a view of one store mesh."""
-    if isinstance(elements, Views) and elements._cls is cls:
-        return elements._m, list(elements._keys)
-    m = _owner(elements, cls)
-    return m, ([x.key for x in elements] if m is not None else None)
-
-
-def _owner(elements, cls):
-    """The store mesh every element of ``elements`` is a view of, if one."""
-    m = None
-    for x in elements:
-        if type(x) is not cls:
-            return None
-        if m is None:
-            m = x._m
-        elif x._m is not m:
-            return None
-    return m
-
-
-def copy_part(faces, edges):
-    """``core.pieces.copy_part`` when every face and edge is a view of one
-    store-backed mesh: the new mesh is built by the store from the keys
-    (``StoreSnapshot.extract``), the attrs rows mapped once per row."""
-    from core.store_mesh import (EdgeView, FaceView, _hole_filter,
-                                 _table_index, _weld_args, become_store)
-    if not len(faces) and not len(edges):
-        return None
-    m, fkeys = _keys_of(faces, FaceView) if len(faces) else (None, [])
-    me, ekeys = _keys_of(edges, EdgeView) if len(edges) else (None, [])
-    if fkeys is None or ekeys is None:
-        return None
-    m = m or me
-    if m is None or (len(faces) and len(edges) and me is not m) \
-            or _store_mesh(m) is None:
-        return None
-    snap = m._store.snapshot()
-    from core import mesh as _mesh
-    d = m.__dict__
-    table_src, own = d["_attr_table"], d["_attr_own"]
-    # Rows once per row used; a face's own dict, row of its own.
-    rows = snap.face_rows(fkeys) if fkeys else np.zeros(0, dtype=np.int64)
-    table: list = []
-    index: dict = {}
-    uniq, inverse = np.unique(rows, return_inverse=True)
-    face_attr = np.array([_table_index(table, index, table_src[r])
-                          if r >= 0 else -1 for r in uniq.tolist()],
-                         dtype=np.int64)[inverse.reshape(-1)] \
-        if len(rows) else np.zeros(0, dtype=np.int64)
-    if own:
-        at = {k: i for i, k in enumerate(fkeys)}
-        for k in sorted(own.keys() & at.keys(), key=at.get):
-            face_attr[at[k]] = _table_index(table, index, own[k])
-    face_attr = face_attr.tolist()
-    store = snap.extract(next(_mesh._KEY_NAMESPACES), fkeys, ekeys,
-                         face_attr, _hole_filter, **_weld_args())
-    new = _mesh.Mesh()
-    become_store(new, store, table)
-    new.resplit_curves()
-    _ORIGINS[new] = (weakref.ref(m),
-                     CopiedKeys({"face": (fkeys, store.keys("face"))}))
-    return new
-
-
-#: Piece mesh -> (weak source mesh, its faces' source keys): what
-#: :func:`copy_part` cut it from, for the change feed.
-_ORIGINS: "weakref.WeakKeyDictionary" = None
+_ORIGINS = weakref.WeakKeyDictionary()
 
 
 def origin_of(mesh):
@@ -148,108 +43,6 @@ def origin_of(mesh):
         return None, None
     src = got[0]()
     return (src, got[1]) if src is not None else (None, None)
-
-
-# ---------------------------------------------------------------- explode
-
-def _needs_face(side) -> bool:
-    """Whether ``placed_face_paint`` needs the face itself for this side:
-    a texture without its ``uvw`` map, or PBR maps without a texture, are
-    placed from the face's normal."""
-    if not isinstance(side, dict):
-        return False
-    tex = side.get("texture")
-    if tex:
-        return not tex.get("uvw")
-    return any(key.endswith("_map") for key in (side.get("pbr") or {}))
-
-
-def explode_geometry(m, src, xform, inverse, invertible, paint):
-    """``ExplodeGroupCommand``'s geometry loop as one store op
-    (``MeshStore.paste_from``): ``src``'s faces and edges into ``m``
-    through ``xform`` (None: as they are), each new face wearing what it
-    showed inside the group. Returns ``(added faces, change, keys)``,
-    ``keys[kind]`` the ``(source key, key in m)`` pairs (vertices and
-    edges: the one now at the source element's mapped place); None when
-    the store cannot do it (the Python loop runs)."""
-    from core.group import np_affine, placed_face_paint
-    from core.materials import effective_attrs
-    from core.store_mesh import FaceView, _hole_filter
-    st = m._store
-    sst = src._store
-    snap = sst.snapshot()
-    pos = sst.positions()
-    if xform is None:
-        mapped = np.ascontiguousarray(pos, dtype=np.float64).reshape(-1, 3)
-    else:
-        rot, trans = np_affine(xform)
-        mapped = pos @ rot.T + trans
-    sd = src.__dict__
-    src_table, src_own = sd["_attr_table"], sd["_attr_own"]
-    fkeys = sst.keys("face")
-    rows = sst.arrays()["face_attr"] if fkeys else []
-    d = m.__dict__
-    # Copy on write: snapshots and deep copies share the table list.
-    table = list(d["_attr_table"])
-    index = {repr(a): i for i, a in enumerate(table)}
-
-    def value_of(drawn):
-        if not drawn:
-            return 0
-        drawn = {key: (dict(val) if isinstance(val, dict) else val)
-                 for key, val in drawn.items()}
-        key = repr(drawn)
-        i = index.get(key)
-        if i is None:
-            i = index[key] = len(table)
-            table.append(drawn)
-        return i + 1
-
-    # What a face showed inside is what it keeps outside: its own paint,
-    # or the group's on both sides, pinned to the prototype. Once per
-    # attribute row, except where the placing needs the face's normal
-    # and for faces with a dict of their own.
-    rows = np.asarray(rows, dtype=np.int64)
-    face_attr = np.zeros(len(fkeys), dtype=np.uint32)
-    single = []                      # (index, attrs) placed face by face
-    if src_own:
-        own_at = [i for i, k in enumerate(fkeys) if k in src_own]
-        single = [(i, src_own[fkeys[i]]) for i in own_at]
-        shared = np.ones(len(fkeys), dtype=bool)
-        shared[own_at] = False
-    else:
-        shared = None
-    pick = np.arange(len(rows)) if shared is None else np.flatnonzero(shared)
-    order = pick[np.argsort(rows[pick], kind="stable")]
-    uniq, starts = np.unique(rows[order], return_index=True)
-    bounds = list(starts.tolist()) + [len(order)]
-    for n, r in enumerate(uniq.tolist()):
-        at = order[bounds[n]:bounds[n + 1]]
-        base = src_table[r] if r >= 0 else None
-        drawn = effective_attrs(dict(base or {}), paint)
-        if invertible and (_needs_face(drawn) or _needs_face(drawn.get("back"))):
-            single.extend((i, base) for i in at.tolist())
-            continue
-        if invertible:
-            drawn = placed_face_paint(drawn, FaceView(src, fkeys[int(at[0])]),
-                                      inverse)
-        face_attr[at] = value_of(drawn)
-    for i, base in sorted(single, key=lambda x: x[0]):
-        drawn = effective_attrs(dict(base or {}), paint)
-        if invertible:
-            drawn = placed_face_paint(drawn, FaceView(src, fkeys[i]), inverse)
-        face_attr[i] = value_of(drawn)
-    face_attr = face_attr.tolist()
-    (made, vmap, emap), change = st.paste_from(snap, mapped, face_attr,
-                                               _hole_filter)
-    d["_attr_table"] = table
-    m._dirty(1)
-    from core.store_mesh import _Indexed
-    added = _Indexed(m, made, FaceView)
-    keys = CopiedKeys({"vertex": (sst.keys("vertex"), vmap),
-                       "edge": (sst.keys("edge"), emap),
-                       "face": (fkeys, made)})
-    return added, change, keys
 
 
 class CopiedKeys(Mapping):
@@ -280,6 +73,3 @@ class CopiedKeys(Mapping):
 
     def __len__(self):
         return len(self._columns)
-
-
-_ORIGINS = weakref.WeakKeyDictionary()

@@ -3,6 +3,8 @@
 //! facades still supply attribute dictionaries and compatibility command hints.
 pub(super) mod capture;
 mod hints;
+mod placements;
+pub(super) mod records;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use std::collections::{BTreeSet, HashSet};
@@ -94,12 +96,10 @@ pub(super) fn build<'py>(
             changes.get_item("scene")?.get_item("modified")?,
         )?;
     }
-    let known =
-        api.getattr("_known_placements")?
-            .call1((cmd, phase, &step, &scene, !record.is_none()))?;
+    let known = placements::known(cmd, phase, &step, &scene, !record.is_none())?;
     step.setattr(
         "complete",
-        known.is_truthy()? && step.getattr("complete")?.is_truthy()?,
+        known && step.getattr("complete")?.is_truthy()?,
     )?;
     placements
         .get_item("modified")?
