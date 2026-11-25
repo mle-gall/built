@@ -651,6 +651,128 @@ pub fn hide_unprinted(scene: &Obj<'_>) -> PyResult<()> {
     Ok(())
 }
 
+// ---- The constructor -----------------------------------------------------------
+
+/// Python's `max(a, b)` and `min(a, b)`: the first unless the second is
+/// strictly beyond it (a NaN never is).
+fn py_max(a: f64, b: f64) -> f64 { if b > a { b } else { a } }
+fn py_min(a: f64, b: f64) -> f64 { if b < a { b } else { a } }
+
+/// `_finite(raw, default)`: `float(raw)` when it reads and is finite.
+fn finite(py: Python<'_>, raw: &Obj<'_>, default: f64) -> f64 {
+    match py.get_type::<pyo3::types::PyFloat>().call1((raw,)).and_then(|v| v.extract::<f64>()) {
+        Ok(v) if v.is_finite() => v,
+        _ => default,
+    }
+}
+
+/// `_ground(raw)`: `None`, `"layer"`, or an RGB tuple kept to 0–1.
+fn ground<'py>(py: Python<'py>, raw: &Obj<'py>) -> PyResult<Obj<'py>> {
+    if raw.eq(GROUND_LAYER)? {
+        return Ok(PyString::new(py, GROUND_LAYER).into_any());
+    }
+    if (raw.is_instance_of::<PyList>() || raw.is_instance_of::<PyTuple>()) && raw.len()? >= 3 {
+        let float = py.get_type::<pyo3::types::PyFloat>();
+        let mut rgb = Vec::with_capacity(3);
+        for i in 0..3 {
+            match float.call1((raw.get_item(i)?,)).and_then(|v| v.extract::<f64>()) {
+                Ok(v) => rgb.push(py_min(1.0, py_max(0.0, v))),
+                Err(_) => return Ok(none(py)),
+            }
+        }
+        return Ok(PyTuple::new(py, rgb)?.into_any());
+    }
+    Ok(none(py))
+}
+
+/// The constructor's parameters after `name`, in order.
+const TAG_PARAMS: [&str; 22] = ["visible", "locked", "color", "folder", "linetype", "lineweight", "opacity",
+    "printable", "uid", "key", "cut_weight", "hatch", "hatch_ground", "hatch_color", "hatch_angle",
+    "hatch_scale", "hatch_on_paper", "brick", "hatch_cross", "joints", "mortar", "hatch_offset"];
+
+/// `Layer.__init__(name, *args, **kwargs)`: every field cleaned and set, in
+/// the Python's order. A parameter given as `None` is `None`, not left out.
+#[pyfunction]
+#[pyo3(signature = (tag, name, *args, **kwargs))]
+fn tag_init<'py>(py: Python<'py>, tag: &Obj<'py>, name: &Obj<'py>, args: &Bound<'py, PyTuple>,
+                 kwargs: Option<&Bound<'py, PyDict>>) -> PyResult<()> {
+    if args.len() > TAG_PARAMS.len() {
+        return Err(pyo3::exceptions::PyTypeError::new_err("Layer() takes at most 23 positional arguments"));
+    }
+    let mut given: Vec<Option<Obj<'py>>> = vec![None; TAG_PARAMS.len()];
+    for (i, a) in args.iter().enumerate() {
+        given[i] = Some(a);
+    }
+    if let Some(kw) = kwargs {
+        for (k, v) in kw.iter() {
+            let k: String = k.extract()?;
+            let Some(i) = TAG_PARAMS.iter().position(|p| *p == k) else {
+                return Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                    "Layer() got an unexpected keyword argument '{k}'")));
+            };
+            if given[i].is_some() {
+                return Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                    "Layer() got multiple values for argument '{k}'")));
+            }
+            given[i] = Some(v);
+        }
+    }
+    let mut it = given.into_iter();
+    let mut next = || it.next().unwrap();
+    let (visible, locked, color, folder, linetype, lineweight, opacity, printable, uid, key, cut_weight) =
+        (next(), next(), next(), next(), next(), next(), next(), next(), next(), next(), next());
+    let (hatch, hatch_ground, hatch_color, hatch_angle, hatch_scale, hatch_on_paper, brick, hatch_cross,
+         joints, mortar, hatch_offset) =
+        (next(), next(), next(), next(), next(), next(), next(), next(), next(), next(), next());
+    let or = |v: Option<Obj<'py>>, d: Obj<'py>| v.unwrap_or(d);
+    let none_ = || none(py);
+    let t = |b: bool| -> Obj<'py> { pyo3::types::PyBool::new(py, b).to_owned().into_any() };
+    let layers = layers_module(py)?;
+    let h = hatches(py)?;
+    let uid = or(uid, none_());
+    tag.setattr("uid", if uid.is_truthy()? { uid } else { layers.call_method0("new_uid")? })?;
+    tag.setattr("name", name)?;
+    let key = or(key, none_());
+    tag.setattr("key", if key.is_truthy()? { key } else { name.clone() })?;
+    tag.setattr("visible", or(visible, t(true)))?;
+    tag.setattr("locked", or(locked, t(false)))?;
+    let color = or(color, none_());
+    tag.setattr("color", if color.is_none() { color } else { tuple_of(&color)? })?;
+    let folder = or(folder, none_());
+    tag.setattr("folder", if folder.is_truthy()? { folder } else { none_() })?;
+    let lt = or(linetype, PyString::new(py, "continuous").into_any());
+    let known = layers.call_method1("known_linetype", (&lt,))?.is_truthy()?;
+    tag.setattr("linetype", if known { lt } else { PyString::new(py, "continuous").into_any() })?;
+    tag.setattr("lineweight", or(lineweight, none_()))?;
+    tag.setattr("cut_weight", or(cut_weight, none_()))?;
+    let hatch = or(hatch, none_());
+    let ok = !hatch.is_none() && h.call_method1("known", (&hatch,))?.is_truthy()?;
+    tag.setattr("hatch", if ok { hatch } else { none_() })?;
+    tag.setattr("hatch_ground", ground(py, &or(hatch_ground, none_()))?)?;
+    tag.setattr("hatch_color", ground(py, &or(hatch_color, none_()))?)?;
+    let angle = hatch_angle.map_or(0.0, |a| finite(py, &a, 0.0));
+    tag.setattr("hatch_angle", super::pyfloat::modulo(angle, 360.0))?;
+    let scale = hatch_scale.map_or(1.0, |a| finite(py, &a, 1.0));
+    tag.setattr("hatch_scale", py_min(20.0, py_max(0.05, scale)))?;
+    tag.setattr("hatch_offset", clean_offset(py, &or(hatch_offset, none_()))?)?;
+    let paper = or(hatch_on_paper, none_());
+    tag.setattr("hatch_on_paper", if paper.is_none() { paper } else { t(paper.is_truthy()?) })?;
+    let brick = or(brick, none_());
+    tag.setattr("brick", if brick.is_none() { brick } else { h.call_method1("clean_brick", (brick,))? })?;
+    tag.setattr("hatch_cross", hatch_cross.map_or(Ok(false), |v| v.is_truthy())?)?;
+    let joints = or(joints, none_());
+    let known = h.getattr("JOINTS")?.contains(&joints)?;
+    tag.setattr("joints", if known { joints } else { none_() })?;
+    tag.setattr("mortar", mortar.map_or(Ok(false), |v| v.is_truthy())?)?;
+    let opacity: f64 = match opacity {
+        Some(o) => py.get_type::<pyo3::types::PyFloat>().call1((o,))?.extract()?,
+        None => 1.0,
+    };
+    tag.setattr("opacity", py_min(1.0, py_max(0.1, opacity)))?;
+    tag.setattr("printable", printable.map_or(Ok(true), |v| v.is_truthy())?)?;
+    Ok(())
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "tag_styles")?;
     for f in [
@@ -687,6 +809,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         wrap_pyfunction!(legend_rows, &sub)?,
         wrap_pyfunction!(unprinted, &sub)?,
         wrap_pyfunction!(hide_unprinted, &sub)?,
+        wrap_pyfunction!(tag_init, &sub)?,
     ] {
         sub.add_function(f)?;
     }
