@@ -14,12 +14,8 @@ import math
 import struct
 
 from core.input_types import Qt
-from PySide6.QtGui import QColor, QImage
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
-if QApplication.instance() is None:
-    QApplication([])
+from ingetrazo_render import SurveyRaster
 
 from core.group import Group, make_billboard_group  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
@@ -31,12 +27,10 @@ V = QVector3D
 
 
 def _png(path, see_through: bool):
-    img = QImage(8, 8, QImage.Format_ARGB32)
-    img.fill(QColor(200, 150, 100, 255))
+    rows = [bytes((200, 150, 100, 255)) * 8] * 8
     if see_through:
-        for x in range(8):
-            img.setPixelColor(x, 0, QColor(0, 0, 0, 0))
-    img.save(str(path))
+        rows[0] = bytes(4 * 8)                   # the top row: clear
+    SurveyRaster(8, 8, b"".join(rows)).save(str(path))
     return path
 
 
