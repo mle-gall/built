@@ -5,7 +5,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyTuple;
 
-#[pyclass(frozen, subclass)]
+#[pyclass(frozen)]
 pub struct SearchItem {
     words: Vec<Vec<char>>,
     main: usize,
@@ -18,25 +18,48 @@ fn words(text: &str) -> impl Iterator<Item = &str> {
         .filter(|s| !s.is_empty())
 }
 
+// unicodedata and str.casefold share Python's Unicode tables with translated
+// plugin labels. Keep a bounded cache on the module's callable.
+#[pyfunction]
+pub fn command_fold(py: Python<'_>, text: &str) -> PyResult<String> {
+    let unicode = py.import("unicodedata")?;
+    let normalized: String = unicode
+        .call_method1("normalize", ("NFKD", text))?
+        .extract()?;
+    let combining = unicode.getattr("combining")?;
+    let mut bare = String::with_capacity(normalized.len());
+    for c in normalized.chars() {
+        if c.is_ascii() || !combining.call1((c,))?.is_truthy()? {
+            bare.push(c);
+        }
+    }
+    pyo3::types::PyString::new(py, &bare)
+        .call_method0("casefold")?
+        .extract()
+}
+
 #[pymethods]
 impl SearchItem {
     #[new]
-    fn new(groups: Vec<(String, usize)>) -> Self {
+    fn new(py: Python<'_>, groups: Vec<String>) -> PyResult<Self> {
+        let fold = py.import("ingetrazo_core")?.getattr("command_fold")?;
         let mut terms = Vec::new();
         let mut main = 0;
         let mut total_len = 0;
-        for (folded, size) in groups {
+        for group in groups.into_iter().filter(|s| !s.trim().is_empty()) {
+            let folded: String = fold.call1((&group,))?.extract()?;
+            let size = group.chars().count();
             main = terms.len();
             terms.extend(words(&folded).map(|w| w.chars().collect::<Vec<_>>()));
             total_len += size;
         }
         let name_len = terms[main..].iter().map(Vec::len).sum();
-        Self {
+        Ok(Self {
             words: terms,
             main,
             name_len,
             total_len,
-        }
+        })
     }
 
     #[getter]

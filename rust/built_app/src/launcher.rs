@@ -304,7 +304,7 @@ pub fn register_launcher() {
 
 pub fn initialize(py: Python<'_>) -> PyResult<()> {
     py.import("core.tls")?.call_method0("ensure_once")?;
-    py.import("core.worker_gc")?.call_method0("install")?;
+    py.import("ingetrazo_core")?.call_method0("install_main_thread_collector")?;
     let log = py.import("core.paths")?.call_method0("open_crash_log")?;
     if !log.is_none() {
         let faults = py.import("faulthandler")?;
@@ -317,7 +317,7 @@ pub fn initialize(py: Python<'_>) -> PyResult<()> {
     }
     #[cfg(windows)]
     if std::env::var_os("BUILT_SETTINGS_DIR").is_none() {
-        py.import("core.gpu_prefs")?
+        py.import("ingetrazo_core")?
             .call_method0("ensure_high_performance_gpu")?;
     }
     Ok(())

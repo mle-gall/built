@@ -5,7 +5,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from core.gpu_prefs import GPU_PREFS_KEY, HIGH_PERFORMANCE, ensure_high_performance_gpu
+from ingetrazo_core import ensure_high_performance_gpu
+
+GPU_PREFS_KEY = r"Software\Microsoft\DirectX\UserGpuPreferences"
+HIGH_PERFORMANCE = "GpuPreference=2;"
 
 
 class _FakeWinreg:

@@ -57,7 +57,7 @@ fn description(py: Python, action: &Obj, name: &str) -> PyResult<String> {
             tip = bare.to_owned();
         }
     }
-    let fold = py.import("core.string_search")?.getattr("fold")?;
+    let fold = py.import("ingetrazo_core")?.getattr("command_fold")?;
     let bare = plain(name);
     let folded: String = fold.call1((&bare,))?.extract()?;
     if fold
@@ -151,7 +151,7 @@ impl Command {
             }
         }
         let trail: Vec<_> = path.split(SEP).filter(|s| !s.is_empty()).collect();
-        let item = py.import("core.string_search")?.getattr("Item")?;
+        let item = py.import("ingetrazo_core")?.getattr("SearchItem")?;
         let mut translated = trail.clone();
         translated.push(&name);
         let mut originals = trail
@@ -304,8 +304,8 @@ fn search<'p>(window: &Obj<'p>, query: &str, pool: Option<Vec<Obj<'p>>>) -> PyRe
         entries.append((row.getattr("items")?, rank))?;
     }
     let folded = py
-        .import("core.string_search")?
-        .call_method1("fold", (query,))?;
+        .import("ingetrazo_core")?
+        .call_method1("command_fold", (query,))?;
     let ranked: Vec<usize> = py
         .import("ingetrazo_core")?
         .call_method1("rank_commands", (folded, short, entries))?
