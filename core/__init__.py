@@ -7,7 +7,7 @@
 import sys as _sys
 
 try:
-    from ingetrazo_core import arrangement, push_scans, snap_frame, snap_query, topology
+    from ingetrazo_core import arrangement, edits, hatches, push_scans, snap, snap_frame, snap_query, topology
 except ModuleNotFoundError as _error:
     if _error.name != "ingetrazo_core":
         raise
@@ -17,3 +17,6 @@ else:
     _sys.modules[__name__ + ".push_scans"] = push_scans
     _sys.modules[__name__ + ".snap_frame"] = snap_frame
     _sys.modules[__name__ + ".topology"] = topology
+    _sys.modules[__name__ + ".hatches"] = hatches
+    _sys.modules[__name__ + ".edits"] = edits
+    _sys.modules[__name__ + ".snap"] = snap

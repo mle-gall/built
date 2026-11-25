@@ -189,3 +189,17 @@ def test_two_argument_snap_resolver():
     query = sq.make_query(scene.edges, project, cursor)
     hit = resolve_snap(query, SnapFrame(dict(options.arguments), query))
     assert (hit.kind, hit.point.toTuple()) == ("endpoint", (2., 0., 0.))
+
+
+def test_native_drawing_module_imports_and_pickle():
+    import importlib
+    import pickle
+    from core.snap import SnapResult
+
+    for module, symbol in (("edits", "build_add_edges"), ("snap", "compute_snap"),
+                           ("hatches", "hatch_lines")):
+        api = importlib.import_module("core." + module)
+        assert api.__name__ == "core." + module
+        function = getattr(api, symbol)
+        assert pickle.loads(pickle.dumps(function)) is function
+    assert pickle.loads(pickle.dumps(SnapResult(None, "none"))) == SnapResult(None, "none")

@@ -71,7 +71,7 @@ impl PyMeshStore {
         Ok(Some((dirty, paint_source, remainder, swapped)))
     }
 
-    pub(super) fn add_face_in_frame(
+    pub(in crate::store) fn add_face_in_frame(
         &mut self,
         py: Python<'_>,
         rings: Vec<Vec<[f64; 3]>>,
@@ -83,6 +83,24 @@ impl PyMeshStore {
         owner: &Bound<'_, PyDict>,
     ) -> PyResult<Option<FaceResult>> {
         let mut dirty = 1 + rings.iter().map(Vec::len).sum::<usize>();
+        // A plain insertion can publish directly once every possible allocation
+        // and quantised corner has been checked. Near the slot limit use the
+        // staged path, which also handles generation retirement after undo.
+        if !divide && attrs.is_none_or(|a| a.is_empty()) {
+            let corners = dirty - 1;
+            let fits = [corners, corners, 1].iter().enumerate().all(|(k, n)| {
+                self.inner.hwm[k].len.max(self.inner.state.slots[k].len())
+                    .saturating_add(*n) <= super::super::keys::MAX_SLOTS as usize
+            });
+            if fits && rings.iter().flatten().all(|&p| self.inner.quantize(p).into_iter().all(f64::is_finite)) {
+                let dirty = u32::try_from(dirty).map_err(|_| {
+                    pyo3::exceptions::PyOverflowError::new_err("face edit exceeds dirty count")
+                })?;
+                let (slot, _) = self.op(|s, ch| s.add_face(&rings, ch))?;
+                self.inner.set_face_flags(slot, u8::from(interior));
+                return Ok(Some((self.inner.key(Kind::Face, slot), dirty, None, Vec::new(), false)));
+            }
+        }
         let mut work = Self::wrap(self.inner.clone());
         let (slot, _) = work.op(|s, ch| s.add_face(&rings, ch))?;
         let face = work.inner.key(Kind::Face, slot);

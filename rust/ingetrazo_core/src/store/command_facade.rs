@@ -131,13 +131,16 @@ pub(crate) fn command_add_face(
             .import("core.scan_index")?
             .call_method0("enabled")?
             .is_truthy()?;
-    let result: Option<FaceResult> = mesh
-        .getattr("_store")?
-        .call_method1(
-            "_add_command_face",
-            (rings, attrs, interior, divide, scan, hypot, owner),
+    let store = mesh.getattr("_store")?;
+    let result = if let Ok(root) = store.cast_exact::<super::py::PyMeshStore>() {
+        root.try_borrow_mut()?.add_face_in_frame(
+            py, rings, attrs, interior, divide, scan, &hypot, owner.cast::<PyDict>()?,
         )?
-        .extract()?;
+    } else {
+        // An occurrence refreshes from and publishes to its definition on dispatch.
+        store.call_method1("_add_command_face",
+            (rings, attrs, interior, divide, scan, hypot, owner))?.extract()?
+    };
     let Some((face, dirty, mother, remainder, hole_swaps)) = result else {
         return Ok(None);
     };
