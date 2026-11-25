@@ -173,8 +173,8 @@ def test_metal_rebakes_the_smoothed_definition_without_a_repack(monkeypatch):
     definition; undo brings the facets back. No full pack, no rescan of
     the placements."""
     from tests.test_wgpu_updates import Renderer, assert_matches_fresh_pack
-    from views.wgpu_scene import pack_scene
-    from views.wgpu_updates import InstanceUpdates
+    from ingetrazo_core import pack_scene
+    from ingetrazo_core import InstanceUpdates
     mesh = _cylinder(Mesh(), soft=False)
     a, b = Group(mesh, name="a"), Group(mesh, name="b")
     a.xform, b.xform = QMatrix4x4(), QMatrix4x4()
@@ -187,7 +187,7 @@ def test_metal_rebakes_the_smoothed_definition_without_a_repack(monkeypatch):
     flat = updates.packed.vertices.copy()
     bakes = []
     monkeypatch.setattr(
-        "views.wgpu_updates.pack_scene",
+        "ingetrazo_core.pack_scene",
         lambda s, **kw: (bakes.append(len(s.groups)), pack_scene(s, **kw))[1])
 
     def settle():
@@ -333,7 +333,7 @@ def test_hardening_clears_the_soft_only_mark():
 
 
 def test_metal_shades_a_soft_only_edge_flat_without_its_line():
-    from views.wgpu_scene import pack_scene
+    from ingetrazo_core import pack_scene
 
     def pack(smooth=None):
         group = Group(_cylinder(Mesh(), soft=False))

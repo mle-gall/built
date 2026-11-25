@@ -17,7 +17,8 @@ from core.scene import Scene
 from formats import igz
 from formats.glb import load_glb, parse_container
 from formats.gltf import save_glb
-from views.wgpu_scene import _source_arrays, _texture_array
+from ingetrazo_core import source_arrays
+from ingetrazo_render import material_texture_array
 
 
 def triangle(mesh):
@@ -115,8 +116,8 @@ def test_restamp_keeps_uv_and_legacy_corner_bytes(tmp_path):
     face.attrs["texture"] = {**tex, "uvw": [2, 0, 0, .25, 0, 3, 0, .75]}
     def pack():
         ids = {}
-        *_, maps, paints = _source_arrays(scene.loose_mesh, texture_ids=ids)
-        return maps.tobytes(), paints.tobytes(), _texture_array(ids)
+        *_, maps, paints = source_arrays(scene.loose_mesh, texture_ids=ids)
+        return maps.tobytes(), paints.tobytes(), material_texture_array(ids)
     before = pack()
     assert before[0] == np.array([*face.attrs["texture"]["uvw"], *([0]*8)], '<f4').tobytes()
     assert before[1] == np.array([0, 1, 0], '<u4').tobytes()

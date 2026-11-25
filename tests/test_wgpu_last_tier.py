@@ -93,7 +93,7 @@ def test_solid_click_results_and_undo(tool_type, monkeypatch):
         return scene, history, vp, updates, a, b, untouched
     scene, history, native, updates, a, b, untouched = setup()
     reference, _, direct, _, ra, rb, _ = setup()
-    import views.wgpu_updates as update_module
+    import ingetrazo_core as update_module
     original_pack = update_module.pack_scene
     baked_meshes = []
     def record_pack(scene, **kw):

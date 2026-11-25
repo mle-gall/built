@@ -80,7 +80,7 @@ def native():
 
 
 def synthetic_pack(alpha=64):
-    from views.wgpu_scene import VERTEX, INSTANCE, COMMAND
+    from ingetrazo_core import VERTEX, INSTANCE, COMMAND
     vertices=np.zeros(12,dtype=VERTEX)
     quad=np.array([[-.8,-.8,0],[.8,-.8,0],[.8,.8,0],[-.8,-.8,0],[.8,.8,0],[-.8,.8,0]],dtype=np.float32)
     vertices['pos'][:6]=quad; quad[:,2]=-.4; vertices['pos'][6:]=quad
@@ -198,7 +198,7 @@ def test_texture_tool_updates_only_one_faces_uv_rows(native, tmp_path):
     from ingetrazo_core import Vec3
     from tools.texture_position import TexturePositionTool
     from tools.texture_position_metal import TexturePreview
-    from views.wgpu_scene import pack_scene
+    from ingetrazo_core import pack_scene
 
     path = tmp_path / "tile.png"
     tile = np.zeros((16, 16, 3), np.uint8)
@@ -400,7 +400,7 @@ def audit_handoff():
     import runpy
     import sys
     import views.wgpu_view as module
-    from views.wgpu_scene import PackedScene
+    from ingetrazo_core import PackedScene
     original_pack = module.pack_scene
     original_upload = PackedScene.upload
     import views.wgpu_style as style_module
@@ -452,7 +452,7 @@ if __name__ == '__main__':
 
 def test_pbr_shading_changes_pixels_and_keeps_picks(native, tmp_path):
     from ingetrazo_core import Vec3 as QVector3D
-    from views.wgpu_scene import pack_scene
+    from ingetrazo_core import pack_scene
     scene = Scene()
     face = scene.loose_mesh.add_face([QVector3D(x, y, 0) for x, y in
                                      ((-.8, -.8), (.8, -.8), (.8, .8), (-.8, .8))])
@@ -513,7 +513,7 @@ def test_intersected_wall_occludes_loose_slab_edges(native, monkeypatch):
     from core.protocol.commands import run
     from core.store_mesh import StoreMesh
     from tests.test_intersect_faces import _box, RED, BLUE
-    from views.wgpu_scene import pack_scene
+    from ingetrazo_core import pack_scene
 
     scene = Scene()
     mesh = scene.mesh

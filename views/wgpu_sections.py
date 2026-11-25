@@ -8,11 +8,11 @@ import ingetrazo_core
 def capture_rows(packed, scene, tint):
     """Resolve saved-frame visibility without baking or changing resident rows."""
     from types import SimpleNamespace
-    from views.wgpu_scene import _placement_records, _placement_state
-    state = _placement_state(scene)
+    from ingetrazo_core import placement_records, PlacementState
+    state = PlacementState(scene)
     vp = SimpleNamespace(scene=scene)
     visible = {id(group): not (flags & 1) for group, _, _, flags, _c in
-               _placement_records(scene, scene.groups, vp, state)}
+               placement_records(scene, scene.groups, vp, state)}
     rows = packed.instances.copy()
     for i, (uid, group) in enumerate(zip(packed.uids, packed.groups)):
         rows['info'][i, 2] = int(not visible.get(id(group), group is None)) | (8 if getattr(group, 'billboard', False) else 0)

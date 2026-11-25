@@ -57,7 +57,7 @@ def test_selected_faces_are_split_into_runs_per_dot_colour():
     vp.scene.selection.update({plain, orange})
     vp.scene.version += 1
     from types import SimpleNamespace
-    from views.wgpu_scene import pack_scene, VERTEX
+    from ingetrazo_core import pack_scene, VERTEX
     from views.wgpu_parity import face_marks
     view = SimpleNamespace(scene=vp.scene, source_viewport=vp, camera=vp.camera,
                            packed=pack_scene(vp.scene))

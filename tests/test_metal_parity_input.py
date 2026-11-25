@@ -219,7 +219,7 @@ def test_selection_marks_and_preview_bridge(view):
 @pytest.mark.parametrize('fail', [False, True])
 def test_billboard_export_restores_world_and_schedules_overlays(view, fail, monkeypatch):
     from core.group import make_billboard_group
-    from views.wgpu_scene import INSTANCE
+    from ingetrazo_core import INSTANCE
     from ingetrazo_render import SurveyRaster
     from pathlib import Path
     texture = Path('resources/components/person_billboard.png').resolve()

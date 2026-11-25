@@ -175,8 +175,8 @@ def test_bridge_source_save_updates_one_binary_mesh_in_resident_scene(tmp_path, 
     from core.history import History
     from plugins.ai_bridge import _Bridge
     from tests.test_wgpu_updates import assert_matches_fresh_pack
-    from views.wgpu_scene import pack_scene
-    from views.wgpu_updates import InstanceUpdates
+    from ingetrazo_core import pack_scene
+    from ingetrazo_core import InstanceUpdates
 
     monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)
     src = Scene()

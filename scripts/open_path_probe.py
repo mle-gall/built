@@ -212,7 +212,7 @@ class Probe:
         import views.wgpu_inference as wi
         from ingetrazo_render import Host
         from ingetrazo_render.shell_views import ShellView
-        from views import wgpu_scene
+        import ingetrazo_core
         probe = self
 
         load_into = igz.load_into
@@ -229,7 +229,7 @@ class Probe:
                     probe.result["rss_after_load_mb"] = rss_now_mb()
         igz.load_into = timed_load
 
-        pack_scene = wgpu_scene.pack_scene
+        pack_scene = ingetrazo_core.pack_scene
 
         def timed_pack(scene, *a, **k):
             start = time.perf_counter()
@@ -242,7 +242,7 @@ class Probe:
                 probe.result["packed_instances"] = int(len(packed.instances))
                 probe.event("pack_done")
             return packed
-        wv.pack_scene = wgpu_scene.pack_scene = timed_pack
+        wv.pack_scene = ingetrazo_core.pack_scene = timed_pack
 
         upload = ShellView._upload
 
