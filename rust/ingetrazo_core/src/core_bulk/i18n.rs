@@ -4,9 +4,9 @@ use super::{paths, Module, Obj};
 use pyo3::{
     exceptions::{PyIndexError, PyKeyError, PyValueError},
     prelude::*,
-    types::{PyDict, PyFrozenSet, PyString},
+    types::{PyDict, PyFrozenSet},
 };
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{fs, path::PathBuf};
 
 const LANGUAGE_NAMES: &[(&str, &str)] = &[
     ("en", "English"),
@@ -35,21 +35,21 @@ const SYSTEM: &str = "system";
 #[pyclass(frozen)]
 struct Catalogue {
     language: String,
-    translations: HashMap<String, String>,
-    sources: HashMap<String, String>,
+    translations: Py<PyDict>,
+    sources: Py<PyDict>,
 }
 
 impl Catalogue {
-    fn empty(language: &str) -> Self {
+    fn empty(py: Python<'_>, language: &str) -> Self {
         Self {
             language: language.to_owned(),
-            translations: HashMap::new(),
-            sources: HashMap::new(),
+            translations: PyDict::new(py).unbind(),
+            sources: PyDict::new(py).unbind(),
         }
     }
 
     fn load(py: Python<'_>, language: &str) -> PyResult<Self> {
-        let mut catalogue = Self::empty(language);
+        let catalogue = Self::empty(py, language);
         if language == "en" {
             return Ok(catalogue);
         }
@@ -64,10 +64,9 @@ impl Catalogue {
             result => result?,
         };
         for (source, value) in data.cast::<PyDict>()?.iter() {
-            let source = source.extract::<String>()?;
-            let value = value.str()?.extract::<String>()?;
-            catalogue.sources.insert(value.clone(), source.clone());
-            catalogue.translations.insert(source, value);
+            let value = value.str()?;
+            catalogue.sources.bind(py).set_item(&value, &source)?;
+            catalogue.translations.bind(py).set_item(source, value)?;
         }
         Ok(catalogue)
     }
@@ -190,30 +189,34 @@ fn current_language(m: &Module<'_>) -> PyResult<String> {
 
 /// Return the English source for a translated label, for example a shortcut key.
 #[pyfunction(pass_module)]
-fn source_of(m: &Module<'_>, text: &str) -> PyResult<String> {
+fn source_of<'py>(m: &Module<'py>, text: &Obj<'py>) -> PyResult<Obj<'py>> {
     Ok(active(m)?
         .get()
         .sources
-        .get(text)
-        .map_or(text, String::as_str)
-        .to_owned())
+        .bind(m.py())
+        .get_item(text)?
+        .unwrap_or_else(|| text.clone()))
 }
 
 /// Translate a source string, then apply Python string formatting if keywords are supplied.
 #[pyfunction(pass_module, signature=(text, /, **kwargs))]
 fn tr<'py>(
     m: &Module<'py>,
-    text: &Bound<'py, PyString>,
+    text: &Obj<'py>,
     kwargs: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Obj<'py>> {
     let py = m.py();
     let catalogue = active(m)?;
-    let out = match catalogue.get().translations.get(text.to_cow()?.as_ref()) {
-        Some(translated) => PyString::new(py, translated),
-        None => text.clone(),
-    };
+    // Plugins pass optional labels as None; preserve ordinary Python key
+    // equality and return the original object when there is no translation.
+    let out = catalogue
+        .get()
+        .translations
+        .bind(py)
+        .get_item(text)?
+        .unwrap_or_else(|| text.clone());
     let Some(kwargs) = kwargs.filter(|d| !d.is_empty()) else {
-        return Ok(out.into_any());
+        return Ok(out);
     };
     match out.call_method("format", (), Some(kwargs)) {
         Err(err)
@@ -237,7 +240,7 @@ pub(super) fn install(m: &Module<'_>) -> PyResult<()> {
     m.add("RTL_LANGUAGES", PyFrozenSet::new(py, RTL)?)?;
     m.add("HIDDEN_LANGUAGES", PyFrozenSet::empty(py)?)?;
     m.add("SYSTEM", SYSTEM)?;
-    m.add("_active", Py::new(py, Catalogue::empty("en"))?)?;
+    m.add("_active", Py::new(py, Catalogue::empty(py, "en"))?)?;
     for f in [
         wrap_pyfunction!(available_languages, m)?,
         wrap_pyfunction!(current_language, m)?,

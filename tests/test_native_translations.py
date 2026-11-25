@@ -75,3 +75,8 @@ def test_catalogue_switch_keeps_shortcut_sources_and_format_fallback(tmp_path, m
                 assert i18n.current_language() == code
     finally:
         i18n.set_language(before)
+
+
+def test_missing_plugin_tooltip_survives_translation():
+    assert i18n.tr(None) is None
+    assert i18n.source_of(None) is None
