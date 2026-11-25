@@ -3,7 +3,7 @@
 //! The Sheets page's drawing tools that catch the model (docs/rust-sheets.md
 //! step 6): what each frame offers to snap to (its drawn edges' ends and
 //! middles with their model points, and the edges themselves, sent by
-//! views/wgpu_sheet_frames.py `snaps`), the snap search (the composer's
+//! ingetrazo_render.sheet_frames `snaps`), the snap search (the composer's
 //! `nearest_snap_point`: a corner or a middle first, else a point along an
 //! edge), and the clicks a tool gathers before it makes its item.
 

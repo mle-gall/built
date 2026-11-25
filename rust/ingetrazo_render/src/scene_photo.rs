@@ -44,7 +44,7 @@ pub fn render_scene_photo(window: &Obj<'_>, request: &str) -> PyResult<Option<Pi
         .import("core.composition")?
         .getattr("MarcoVista")?
         .call((), Some(&opts))?;
-    let frames = py.import("views.wgpu_sheet_frames")?;
+    let frames = py.import("ingetrazo_render.sheet_frames")?;
     let saved = frames.call_method1("saved_view", (&scene, &frame))?;
     if !saved.is_truthy()? {
         return Ok(None);
