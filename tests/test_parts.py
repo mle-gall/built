@@ -9,8 +9,7 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group
 from core.mesh import Mesh
-from core.parts import (cut_list, cut_list_text, part_material,
-                        part_points, part_rows, part_size)
+from ingetrazo_core.parts import part_material, part_points, part_rows, part_size
 
 
 _QUADS = ((0, 2, 3, 1), (4, 5, 7, 6), (0, 1, 5, 4),
@@ -108,14 +107,22 @@ def test_a_part_inherits_its_containers_paint_on_default_faces():
     assert part_material(part) == "#00ff00"
 
 
+def _cut_table(holder, by_material=True):
+    import json
+    from ingetrazo_render import surface_spec
+    parts = [{"uid": row["part"].uid, "name": row["name"], "material": row["material"],
+              "size": row["size"], "dimensions": [f"{m * 1000:.0f}" for m in row["size"]]}
+             for row in part_rows(holder)]
+    result = json.loads(surface_spec("cutlist", json.dumps(
+        {"parts": parts, "match_material": by_material})))
+    return result["content"]["blocks"][0]["cells"]
+
+
 def test_identical_parts_are_one_cut_list_line():
-    rows = part_rows(_stool())
-    lines = cut_list(rows)
-    assert [(ln["qty"], ln["names"]) for ln in lines] == [
-        (2, ["leg A", "leg B"]), (1, ["seat"])]
-    text = cut_list_text(lines, lambda m: f"{m * 1000:.0f}",
-                         ["Qty", "Parts", "Material", "L", "W", "T"])
-    assert text.splitlines()[1] == "2\tleg A, leg B\t#996633\t580\t40\t40"
+    from ingetrazo_render import cut_list_csv
+    lines = _cut_table(_stool())
+    assert [row[:2] for row in lines[1:]] == [["2", "leg A, leg B"], ["1", "seat"]]
+    assert cut_list_csv(lines, True).splitlines()[1] == "2\tleg A, leg B\t#996633\t580\t40\t40"
 
 
 def test_the_material_can_be_left_out_of_the_match():
@@ -124,18 +131,17 @@ def test_the_material_can_be_left_out_of_the_match():
     stool = _stool()
     for f in stool.children[2].mesh.faces:
         f.attrs["color"] = [0.1, 0.1, 0.1]
-    assert [ln["qty"] for ln in cut_list(part_rows(stool))] == [1, 1, 1]
-    merged = cut_list(part_rows(stool), by_material=False)
-    assert [ln["qty"] for ln in merged] == [2, 1]
-    assert merged[0]["material"] == "#996633, #1a1a1a"
+    assert [row[0] for row in _cut_table(stool)[1:]] == ["1", "1", "1"]
+    merged = _cut_table(stool, by_material=False)[1:]
+    assert [row[0] for row in merged] == ["2", "1"]
+    assert merged[0][2] == "#996633, #1a1a1a"
 
 
 def test_names_sort_naturally():
     kids = [_part(_box(0.1, 0.1, 0.1), f"Piece {n}") for n in (10, 2, 1)]
     holder = Group()
     holder.adopt(kids)
-    assert cut_list(part_rows(holder))[0]["names"] == [
-        "Piece 1", "Piece 2", "Piece 10"]
+    assert _cut_table(holder)[1][1] == "Piece 1, Piece 2, Piece 10"
 
 
 def _window_with(native_host, group):
@@ -199,17 +205,15 @@ def _sheet(sx: float, sy: float) -> Mesh:
 def test_a_part_with_no_thickness_is_a_surface_not_a_zero_board():
     """A skin or a pane drawn as one plane is kept — it is what the model
     shows — but the cut list must not list it as a 0-thick board."""
-    from core.parts import is_surface
+    from ingetrazo_core.parts import is_surface
     holder = Group()
     holder.adopt([_part(_sheet(0.6, 0.135), "baseboard skin"),
                   _part(_box(0.6, 0.4, 0.018), "shelf")])
     rows = part_rows(holder)
     assert [is_surface(r["size"]) for r in rows] == [True, False]
-    text = cut_list_text(cut_list(rows), lambda m: f"{m * 1000:.0f}",
-                         ["Qty", "Parts", "Material", "L", "W", "T"])
-    lines = text.splitlines()
-    assert lines[1].split("\t")[-1] == "18"            # the shelf
-    assert lines[2].split("\t")[-1] == "surface"       # the skin
+    lines = _cut_table(holder)
+    assert lines[1][-1] == "18"            # the shelf
+    assert lines[2][-1] == "surface"       # the skin
 
 
 def _copies(n=40):
@@ -237,7 +241,7 @@ def test_copies_of_one_definition_are_read_once(monkeypatch):
     """A container of copies used to read the shared mesh once per copy,
     for the material and again for the points: 300 copies of a
     3 000-face tree froze the window ~14 s each time it was selected."""
-    from core import parts
+    from ingetrazo_core import parts
     holder = _copies(40)
     calls = {"net": 0}
     real = type(next(iter(holder.children[0].mesh.faces))).net_area
@@ -254,7 +258,7 @@ def test_copies_of_one_definition_are_read_once(monkeypatch):
 
 
 def test_shared_reading_gives_the_rows_reading_one_by_one_gave():
-    from core import parts
+    from ingetrazo_core import parts
     holder = _copies(12)
     together = parts.part_rows(holder)
     alone = [parts.part_row(k) for k in holder.children]
@@ -273,7 +277,7 @@ def test_shared_reading_gives_the_rows_reading_one_by_one_gave():
 
 def test_parts_read_lazy_shared_prototypes_without_building(monkeypatch, tmp_path):
     import numpy as np
-    from core import parts
+    from ingetrazo_core import parts
     from core.group import iter_placements
     from core.mesh import DeferredMesh
     from core.scene import Scene

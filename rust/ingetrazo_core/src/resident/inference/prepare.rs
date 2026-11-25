@@ -290,25 +290,27 @@ impl<'p> Placements<'p> {
     }
     fn index(
         &self,
-        class: &Obj<'p>,
         base: &Obj<'p>,
         protos: &Obj<'p>,
         packed: &Obj<'p>,
         scene: &Obj<'p>,
     ) -> PyResult<Obj<'p>> {
-        let result = class.call1((
-            base,
-            protos,
-            class.py().get_type::<PyList>().call1((protos,))?,
-            packed,
-            scene,
-        ))?;
+        let result = packed
+            .py()
+            .get_type::<super::index::ResidentInference>()
+            .call1((
+                base,
+                protos,
+                packed.py().get_type::<PyList>().call1((protos,))?,
+                packed,
+                scene,
+            ))?;
         result.setattr("world_box_cache", (&self.center, &self.extent))?;
         Ok(result)
     }
 }
 #[pyfunction]
-fn resident_rebase<'p>(class: &Obj<'p>, index: &Obj<'p>, packed: &Obj<'p>) -> PyResult<Obj<'p>> {
+fn resident_rebase<'p>(index: &Obj<'p>, packed: &Obj<'p>) -> PyResult<Obj<'p>> {
     let py = packed.py();
     let p = Placements::read(packed)?;
     let protos = index.getattr("protos")?;
@@ -317,10 +319,10 @@ fn resident_rebase<'p>(class: &Obj<'p>, index: &Obj<'p>, packed: &Obj<'p>) -> Py
         "InstanceSet",
         &protos,
     )?;
-    p.index(class, &base, &protos, packed, &index.getattr("scene")?)
+    p.index(&base, &protos, packed, &index.getattr("scene")?)
 }
 #[pyfunction]
-fn resident_prototype<'p>(
+pub(super) fn resident_prototype<'p>(
     packed: &Obj<'p>,
     code: usize,
     scene: &Obj<'p>,
@@ -349,8 +351,8 @@ fn resident_prototype<'p>(
     let proto = built.get_item(0)?.get_item(0)?;
     Ok((&proto, &proto).into_pyobject(py)?.into_any())
 }
-#[pyfunction]
-fn resident_prepare<'p>(class: &Obj<'p>, packed: &Obj<'p>, scene: &Obj<'p>) -> PyResult<Obj<'p>> {
+#[pyfunction(signature=(packed,scene=None))]
+fn resident_prepare<'p>(packed: &Obj<'p>, scene: Option<&Obj<'p>>) -> PyResult<Obj<'p>> {
     let py = packed.py();
     let np = py.import("numpy")?;
     let p = Placements::read(packed)?;
@@ -364,6 +366,8 @@ fn resident_prepare<'p>(class: &Obj<'p>, packed: &Obj<'p>, scene: &Obj<'p>) -> P
                 .get_or_insert(row);
         }
     }
+    let none = py.None().into_bound(py);
+    let scene = scene.unwrap_or(&none);
     let lease = scene.is_instance_of::<SceneLease>();
     let lock = if lease {
         Some(scene.getattr("_reading")?)
@@ -420,16 +424,10 @@ fn resident_prepare<'p>(class: &Obj<'p>, packed: &Obj<'p>, scene: &Obj<'p>) -> P
         "build_snap_index",
         &arrays,
     )?;
-    p.index(
-        class,
-        &built.get_item(1)?,
-        &built.get_item(0)?,
-        packed,
-        &weak,
-    )
+    p.index(&built.get_item(1)?, &built.get_item(0)?, packed, &weak)
 }
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(resident_prepare, m)?)?;
     m.add_function(wrap_pyfunction!(resident_rebase, m)?)?;
-    m.add_function(wrap_pyfunction!(resident_prototype, m)?)
+    Ok(())
 }

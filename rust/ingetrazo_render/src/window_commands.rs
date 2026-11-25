@@ -250,7 +250,7 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
             }
             let vp = viewport(win)?;
             let settings = py.import("views.ndof_input")?.call_method0("current_settings")?;
-            let moved = py.import("core.ndof")?.call_method1("apply_ndof", (vp.getattr("camera")?, a.req(0, "sample")?, a.req(1, "dt")?, vp.call_method0("height")?, settings))?;
+            let moved = py.import("ingetrazo_render.ndof")?.call_method1("apply_ndof", (vp.getattr("camera")?, a.req(0, "sample")?, a.req(1, "dt")?, vp.call_method0("height")?, settings))?;
             if moved.is_truthy()? {
                 vp.call_method0("update")?;
             }

@@ -43,17 +43,19 @@ fn cutlist(d: &Value) -> PyResult<Value> {
     let mut members = Vec::new();
     for (_, mut group) in groups.into_iter().rev() {
         let first = group[0];
-        group.sort_by(|a, b| a.name.cmp(&b.name));
+        let mut materials = Vec::new();
+        for part in &group {
+            let label = part.material.as_str();
+            if !label.is_empty() && !materials.contains(&label) {
+                materials.push(label);
+            }
+        }
+        group.sort_by(|a, b| crate::ui::natural_name_order(&a.name.to_lowercase(), &b.name.to_lowercase()));
         let names = group.iter().map(|p| p.name.as_str()).collect::<Vec<_>>();
-        let materials: std::collections::BTreeSet<_> = group
-            .iter()
-            .map(|p| p.material.as_str())
-            .filter(|m| !m.is_empty())
-            .collect();
         let mut row = vec![
             group.len().to_string(),
             names.join(", "),
-            materials.into_iter().collect::<Vec<_>>().join(", "),
+            materials.join(", "),
         ];
         row.extend(first.dimensions.clone());
         if first.size[2] < 0.0005 {

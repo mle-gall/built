@@ -229,7 +229,7 @@ fn inherited(children: &[Obj], parts: &[(Obj, Obj)]) -> PyResult<Vec<Option<Stri
     }
     let points = children[0]
         .py()
-        .import("core.parts")?
+        .import("ingetrazo_core.parts")?
         .getattr("part_points")?;
     let mut owners = HashMap::<_, HashSet<usize>>::new();
     for (i, g) in children.iter().enumerate() {

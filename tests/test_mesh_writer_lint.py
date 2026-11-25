@@ -9,7 +9,6 @@ MUTATORS = {"append", "extend", "insert", "remove", "pop", "clear", "reverse",
             "sort", "__setitem__", "__delitem__", "__iadd__", "__imul__"}
 # Non-mesh values with the same spelling, identified by the exact statement.
 EXCEPTIONS = {
-    ("core/scene_animation.py", "self.loop = bool(loop)"),
     ("formats/dxf_in.py", "per_layer.setdefault(layer, _Bucket()).faces.append(loop)"),
 }
 

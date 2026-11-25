@@ -384,7 +384,7 @@ impl Bounds {
 pub fn figure_bounds(scene: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     let py = scene.py();
     let placement = py.import("core.group")?.getattr("placement_points")?;
-    let marked = py.import("core.scale_figure")?.getattr("is_marked")?;
+    let marked = py.import("ingetrazo_core.scale_figure")?.getattr("is_marked")?;
     let limit: f64 = py
         .import("core.coordinate_frame")?
         .getattr("REBASE_DISTANCE")?

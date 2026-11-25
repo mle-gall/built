@@ -613,7 +613,6 @@ fn upload<'py>(a: &Args<'py>) -> Reply<'py> {
     let render = py.import("ingetrazo_render")?;
     let start = perf_counter(py)?;
     if view.getattr("renderer")?.is_none() {
-        py.import("core.black_box")?.call_method1("install_panic_log", (&render,))?;
         let handles = view.call_method0("_window_handles")?;
         let renderer = render.getattr("Renderer")?.call(
             (handles.get_item(0)?, view.call_method0("width")?, view.call_method0("height")?, view.call_method0("devicePixelRatioF")?),
@@ -753,7 +752,7 @@ fn sync_scene_camera<'py>(a: &Args<'py>) -> Reply<'py> {
     let copy = py.import("copy")?.getattr("copy")?;
     let frame = py.import("core.coordinate_frame")?;
     let choose_origin = frame.getattr("choose_origin")?;
-    let camera_point = py.import("core.camera_point")?.getattr("CameraPoint")?;
+    let camera_point = py.import("ingetrazo_core")?.getattr("Vec3")?;
     let vec3 = py.import("ingetrazo_core")?.getattr("Vec3")?;
     let signature = |value: &Obj<'py>| -> Reply<'py> {
         if value.is_instance(&vec3)? { value.call_method0("toTuple") } else { Ok(value.clone()) }

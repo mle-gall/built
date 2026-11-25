@@ -366,7 +366,7 @@ def test_scene_menu_acts_on_marked_scene_and_export_uses_chosen_format(host, mon
 
 
 def test_native_scene_playback_stops_on_input_and_switches_documents_safely(host):
-    from core.scene_animation import SceneAnimation
+    from ingetrazo_core import SceneAnimation
 
     assert host.open(FIXTURE)
     win, viewport = host.window, host.viewport

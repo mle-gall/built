@@ -481,9 +481,7 @@ pub(super) fn install_module(module: &Bound<PyModule>) -> PyResult<()> {
     modules::import_names(module, "ingetrazo_core", &[("pack_scene", "pack_scene")])?;
     module.add("__doc__", "Native Metal input and presentation sharing the document camera and selection.")?;
     let navigation = py.import("views.view_navigation")?.getattr("ViewNavigation")?;
-    let builtins = py.import("builtins")?;
-    let (float, object) = (builtins.getattr("float")?, builtins.getattr("object")?);
-    let ready = py.import("core.host_callbacks")?.getattr("Signal")?.call1((&float, object, &float))?;
+    let ready = py.import("ingetrazo_render")?.call_method0("CallbackSlot")?;
     let cls = modules::class(module, "MetalView", &[navigation], &fields!(py; "frameReady" => ready, "_ZOOM_OUT_STEP" => 0.05))?;
     install(module.dict().as_any(), &module.dict(), FUNCTIONS)?;
     register(&cls, module)

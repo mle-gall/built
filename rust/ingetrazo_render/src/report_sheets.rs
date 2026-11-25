@@ -5,7 +5,7 @@
 //!
 //! What stays Python is what each one reports on or acts through: the
 //! extension installer and discovery (`ingetrazo_core.extension_manager`,
-//! `core.extensions`), the parts of an assembly (`core.parts`) and the
+//! `core.extensions`), the parts of an assembly (`ingetrazo_core.parts`) and the
 //! document's units, history and selection.
 use pyo3::{
     exceptions::PyValueError,
@@ -302,7 +302,7 @@ impl CutListSheet {
         self.built_for = Some(sig);
         let fine = py.import("core.units")?.getattr("fmt_len_fine")?;
         let parts = PyList::empty(py);
-        let rows = py.import("core.parts")?.call_method1("part_rows", (assembly.as_ref().map_or_else(|| py.None().into_bound(py), |a| a.clone()),))?;
+        let rows = py.import("ingetrazo_core.parts")?.call_method1("part_rows", (assembly.as_ref().map_or_else(|| py.None().into_bound(py), |a| a.clone()),))?;
         for r in rows.try_iter()? {
             let r = r?;
             let part = PyDict::new(py);

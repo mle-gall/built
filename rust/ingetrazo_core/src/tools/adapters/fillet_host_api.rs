@@ -634,7 +634,7 @@ fn set_shape<'py>(a: &Args<'py>) -> Reply<'py> {
     let viewport = a.get_item(1)?;
     let mut x: Obj<'py>;
     let mut y: Obj<'py>;
-    let bevel_profiles = imported(py, "core.bevel_profiles")?.into_any();
+    let bevel_profiles = imported(py, "ingetrazo_core.bevel_profiles")?.into_any();
     if imported(py, "builtins")?
         .getattr("isinstance")?
         .call1((

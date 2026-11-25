@@ -790,7 +790,7 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
     }
     scene.setattr(
         "animation",
-        py.import("core.scene_animation")?
+        py.import("ingetrazo_core")?
             .getattr("SceneAnimation")?
             .call_method1("from_dict", (data(payload, "scene_animation")?,))?,
     )?;

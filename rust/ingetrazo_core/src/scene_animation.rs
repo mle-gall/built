@@ -60,8 +60,8 @@ impl Pose {
     fn put_on(&self, camera: &Bound<'_, PyAny>) -> PyResult<()> {
         let point = camera
             .py()
-            .import("core.camera_point")?
-            .call_method1("CameraPoint", (self.target,))?;
+            .import("ingetrazo_core")?
+            .call_method1("Vec3", (self.target,))?;
         camera.setattr("target", point)?;
         camera.setattr("distance", self.distance)?;
         camera.setattr("yaw", self.yaw)?;
@@ -382,7 +382,103 @@ impl ScenePlayback {
     }
 }
 
+/// Playback settings stored on each drawing. Default records serialize to an empty object.
+#[pyclass(get_all, set_all, eq, module = "ingetrazo_core", from_py_object)]
+#[derive(Clone, PartialEq)]
+pub struct SceneAnimation {
+    enabled: bool,
+    transition: f64,
+    pause: f64,
+}
+
+fn seconds(v: &Bound<'_, PyAny>, default: f64) -> PyResult<f64> {
+    let py = v.py();
+    match py
+        .import("builtins")?
+        .call_method1("float", (v,))
+        .and_then(|s| s.extract::<f64>())
+    {
+        Ok(s) if s.is_finite() => Ok(s.clamp(0., 60.)),
+        Ok(_) => Ok(default),
+        Err(e)
+            if e.is_instance_of::<PyValueError>(py)
+                || e.is_instance_of::<pyo3::exceptions::PyTypeError>(py) =>
+        {
+            Ok(default)
+        }
+        Err(e) => Err(e),
+    }
+}
+fn transition_time(v: &Bound<'_, PyAny>) -> PyResult<f64> {
+    seconds(v, 2.)
+}
+fn pause_time(v: &Bound<'_, PyAny>) -> PyResult<f64> {
+    seconds(v, 1.)
+}
+fn enabled_flag(v: &Bound<'_, PyAny>) -> PyResult<bool> {
+    v.is_truthy()
+}
+
+#[pymethods]
+impl SceneAnimation {
+    #[new]
+    #[pyo3(signature=(enabled=true,transition=2.0,pause=1.0))]
+    fn new(
+        #[pyo3(from_py_with=enabled_flag)] enabled: bool,
+        #[pyo3(from_py_with=transition_time)] transition: f64,
+        #[pyo3(from_py_with=pause_time)] pause: f64,
+    ) -> Self {
+        Self {
+            enabled,
+            transition,
+            pause,
+        }
+    }
+    fn glide_seconds(&self) -> f64 {
+        if self.enabled {
+            self.transition
+        } else {
+            0.
+        }
+    }
+    fn to_dict<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, pyo3::types::PyDict>> {
+        let out = pyo3::types::PyDict::new(py);
+        if !self.enabled {
+            out.set_item("enabled", false)?;
+        }
+        if self.transition != 2. {
+            out.set_item("transition", self.transition)?;
+        }
+        if self.pause != 1. {
+            out.set_item("pause", self.pause)?;
+        }
+        Ok(out)
+    }
+    #[staticmethod]
+    fn from_dict(raw: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let Ok(d) = raw.cast::<pyo3::types::PyDict>() else {
+            return Ok(Self::new(true, 2., 1.));
+        };
+        Ok(Self::new(
+            d.get_item("enabled")?
+                .as_ref()
+                .map_or(Ok(true), enabled_flag)?,
+            d.get_item("transition")?
+                .as_ref()
+                .map_or(Ok(2.), transition_time)?,
+            d.get_item("pause")?.as_ref().map_or(Ok(1.), pause_time)?,
+        ))
+    }
+    fn __reduce__<'p>(&self, py: Python<'p>) -> (Bound<'p, pyo3::types::PyType>, (bool, f64, f64)) {
+        (
+            py.get_type::<Self>(),
+            (self.enabled, self.transition, self.pause),
+        )
+    }
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<SceneAnimation>()?;
     m.add_class::<Pose>()?;
     m.add_class::<Run>()?;
     m.add_class::<ScenePlayback>()?;

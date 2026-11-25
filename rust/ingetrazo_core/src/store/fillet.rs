@@ -296,7 +296,7 @@ pub(super) fn grid_cap(
 }
 
 // The editor's control points (core/bevel_profiles.py); sampled in the kernel.
-const CORNICE: &[(f64, f64, bool)] = &[
+pub(crate) const CORNICE: &[(f64, f64, bool)] = &[
     (1.0, 0.0, false),
     (1.0, 0.125, false),
     (0.92, 0.16, true),
@@ -311,7 +311,7 @@ const CORNICE: &[(f64, f64, bool)] = &[
     (0.175, 1.0, false),
     (0.0, 1.0, false),
 ];
-const CROWN: &[(f64, f64, bool)] = &[
+pub(crate) const CROWN: &[(f64, f64, bool)] = &[
     (1.0, 0.0, false),
     (1.0, 0.25, false),
     (0.75, 0.25, false),
@@ -325,7 +325,19 @@ const CROWN: &[(f64, f64, bool)] = &[
     (0.0, 1.0, false),
 ];
 
-pub(super) fn sample_profile(
+pub(crate) fn valid_controls(controls: &[(f64,f64,bool)]) -> bool {
+    !(controls.len() < 2
+        || controls.iter().any(|&(x, y, _)| {
+            !(-1e-9..=1. + 1e-9).contains(&x) || !(-1e-9..=1. + 1e-9).contains(&y)
+        })
+        || (controls[0].0 - 1.).abs() > 1e-9
+        || controls[0].1.abs() > 1e-9
+        || controls.last().unwrap().0.abs() > 1e-9
+        || (controls.last().unwrap().1 - 1.).abs() > 1e-9
+)
+}
+
+pub(crate) fn sample_profile(
     shape: &str,
     drawn: &[(f64, f64, bool)],
     n: usize,
@@ -356,14 +368,7 @@ pub(super) fn sample_profile(
         "custom" => drawn,
         _ => return Ok(vec![]),
     };
-    if controls.len() < 2
-        || controls.iter().any(|&(x, y, _)| {
-            !(-1e-9..=1. + 1e-9).contains(&x) || !(-1e-9..=1. + 1e-9).contains(&y)
-        })
-        || (controls[0].0 - 1.).abs() > 1e-9
-        || controls[0].1.abs() > 1e-9
-        || controls.last().unwrap().0.abs() > 1e-9
-        || (controls.last().unwrap().1 - 1.).abs() > 1e-9
+    if !valid_controls(controls)
     {
         return Err((
             "The drawn profile must run from one face to the other.",
