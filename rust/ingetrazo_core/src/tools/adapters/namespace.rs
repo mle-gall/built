@@ -222,6 +222,17 @@ const VIEW_MODULES: &[&str] = &[
     "ndof_input",
     "wgpu_view",
     "wgpu_ui",
+    "wgpu_axes",
+    "wgpu_billboards",
+    "wgpu_style",
+    "wgpu_sections",
+    "wgpu_lines",
+    "wgpu_overlay",
+    "wgpu_edit_context",
+    "wgpu_parity",
+    "wgpu_references",
+    "wgpu_tabs",
+    "wgpu_annotations",
 ];
 
 #[pyclass(module = "ingetrazo_core", frozen)]

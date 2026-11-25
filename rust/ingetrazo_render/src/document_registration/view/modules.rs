@@ -77,6 +77,17 @@ pub(super) fn install_interaction_module(module: &Bound<PyModule>) -> PyResult<(
         "document_interaction" => super::interaction_host::install(module)?,
         "wgpu_view" => super::metal_view::install_module(module)?,
         "wgpu_ui" => super::chrome_input::install_module(module)?,
+        "wgpu_axes" => super::frame_scene::install_axes(module)?,
+        "wgpu_billboards" => super::frame_scene::install_billboards(module)?,
+        "wgpu_style" => super::frame_scene::install_style(module)?,
+        "wgpu_sections" => super::frame_scene::install_sections(module)?,
+        "wgpu_lines" => super::frame_lines::install_lines(module)?,
+        "wgpu_overlay" => super::frame_lines::install_overlay(module)?,
+        "wgpu_edit_context" => super::frame_lines::install_edit_context(module)?,
+        "wgpu_parity" => super::frame_marks::install_parity(module)?,
+        "wgpu_references" => super::frame_marks::install_references(module)?,
+        "wgpu_tabs" => super::frame_tabs::install_tabs(module)?,
+        "wgpu_annotations" => super::frame_annotations::install_annotations(module)?,
         "document_tools" => {
             import_names(module, "__future__", &[("annotations", "annotations")])?;
             import_names(module, "typing", &[("Optional", "Optional")])?;
