@@ -29,7 +29,7 @@ def cancels(monkeypatch):
     """Answer any question the chrome asks with Cancel, and report whether
     one was actually asked — a silent refusal would pass these asserts too,
     and silence is the bug they exist to prevent."""
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     shown = {"count": 0, "titles": []}
 
     def ask(parent, title, text, buttons, *args, cancel=None, **kw):
