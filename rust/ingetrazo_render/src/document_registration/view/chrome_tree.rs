@@ -671,7 +671,7 @@ pub(super) fn component_verb<'py>(a: &Args<'py>) -> Reply<'py> {
     let verb: String = verb.extract()?;
     match verb.as_str() {
         "cplace" => {
-            let components = py.import("core.kept_components")?;
+            let components = py.import("ingetrazo_core.kept_components")?;
             let template = if kept.is_none() { components.call_method1("make_template", (&definition,))? } else { kept };
             win.call_method1("_start_place", (components.call_method1("place_copy", (template,))?,))?;
         }

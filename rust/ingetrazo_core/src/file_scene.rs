@@ -253,7 +253,7 @@ fn archive_settings(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_>) -> PyResu
                 .and_then(|v| v.cast_into::<PyDict>().ok())
             {
                 let path = py
-                    .import("core.project")?
+                    .import("ingetrazo_core.project")?
                     .call_method1("path_for", (scene,))?;
                 if path.is_truthy()? {
                     p.call_method1("pop", ("rel", py.None()))?;
@@ -850,7 +850,7 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
     anchors.call_method0("clear")?;
     if let Some(seq) = payload.get_item("text_placement_anchors")? {
         let class = py
-            .import("core.annotation_anchor")?
+            .import("ingetrazo_core.annotation_anchor")?
             .getattr("TextPlacementAnchor")?;
         for item in seq.try_iter()? {
             let v = class.call_method1("restore", (scene, item?))?;
@@ -910,7 +910,7 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
         scene,
         payload,
         "image_planes",
-        "core.image_plane",
+        "ingetrazo_core.image_plane",
         "ImagePlane",
     )?;
     Ok(repairs)

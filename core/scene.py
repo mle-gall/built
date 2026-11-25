@@ -89,7 +89,7 @@ class Scene:
     # Construction guides (Tape Measure): infinite dashed lines / points used to
     # align real drawing. Scaffolding, never part of the mesh.
     guides: list = field(default_factory=list)
-    # Imported reference images (core.image_plane.ImagePlane) — a scanned plan
+    # Imported reference images (ingetrazo_core.image_plane.ImagePlane) — a scanned plan
     # or photo you trace over. Display-only like the terrain and for the same
     # reason (invariant #4): reference to draw on top of, never topology.
     image_planes: list = field(default_factory=list)
@@ -151,7 +151,7 @@ class Scene:
     #: ``xform``) that shares its prototype with any copies still in the
     #: model. They never draw, pick or export; they wait in the «In model»
     #: list to be placed again or to replace other copies. See
-    #: :mod:`core.kept_components`.
+    #: :mod:`ingetrazo_core.kept_components`.
     kept_components: list = field(default_factory=list)
     # Display style for dimension annotations (edited from the Tray).
     #: ``norma`` is the drafting standard the dimensions obey — ISO (and so

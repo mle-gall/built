@@ -149,7 +149,7 @@ fn import_picture(win: &Bound<'_, PyAny>) -> PyResult<()> {
         return Ok(());
     };
     let (aspect, w, h): (f64, i64, i64) = py
-        .import("core.image_plane")?
+        .import("ingetrazo_core.image_plane")?
         .call_method1("image_aspect", (&path,))?
         .extract()?;
     let dialogs = py.import("ingetrazo_render.chrome_dialogs")?;

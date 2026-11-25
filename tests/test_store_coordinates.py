@@ -204,7 +204,7 @@ def test_scene_frame_stays_put_and_composes_child_offsets_in_double():
 
 
 def test_frame_preserves_numeric_input_and_feed_coordinates(view):
-    from core.coordinate_frame import mesh_frame
+    from ingetrazo_core.coordinate_frame import mesh_frame
     from ingetrazo_core import Vec3 as V
     from tests.test_.skp_inference_gaps import click, move, refresh, use
     from tools.rust_tools import LineTool
@@ -333,7 +333,7 @@ def test_format_three_reopens_edge_with_original_float32_weld_decision(
 
 
 def test_camera_relative_edit_through_a_far_mirrored_occurrence(monkeypatch):
-    from core.coordinate_frame import mesh_frame
+    from ingetrazo_core.coordinate_frame import mesh_frame
     from core.group import Group
     from core.history import SnapshotMutation
     from ingetrazo_core import Matrix4, Vec3

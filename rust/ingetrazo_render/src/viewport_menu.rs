@@ -241,7 +241,7 @@ pub fn read_facts(
     }
     if f.components > 0 && groups.len() == sel.len() && !f.linked_part && !f.all_links {
         f.replaceable = win.call_method1("_replacement_choices", (&selection,))?.is_truthy()?;
-        let kept = py.import("core.kept_components")?;
+        let kept = py.import("ingetrazo_core.kept_components")?;
         f.kept = true;
         for group in groups.iter().filter(|g| is_component(g)) {
             if kept.call_method1("kept_template", (scene, group.getattr("mesh")?))?.is_none() {

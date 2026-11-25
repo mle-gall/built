@@ -23,7 +23,7 @@ def seed_defaults(registry=None):
 
 def get(scene):
     """Return a detached view, seeded only if the document has no registry."""
-    from core.project import read
+    from ingetrazo_core.project import read
     project = read(scene)
     stored = project['bim_registry'] if project else scene.plugin_data.get('bim_registry')
     return seed_defaults() if stored is None else deepcopy(stored)

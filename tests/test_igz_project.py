@@ -1,7 +1,8 @@
 """Projects share registry and IFC identity across independently loaded hosts."""
 import pytest
 from copy import deepcopy
-from core import project, bim_registry
+from core import bim_registry
+from ingetrazo_core import project
 from core.scene import Scene
 from core.history import SetRegistryCommand
 from formats import project as storage, igz

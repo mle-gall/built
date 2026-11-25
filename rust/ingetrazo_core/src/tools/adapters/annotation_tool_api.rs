@@ -8,7 +8,7 @@ fn host_annotation_pick<'py>(a: &Args<'py>) -> Reply<'py> {
     let binding: Obj<'py>;
     let point = a.get_item(2)?;
     let tool = a.get_item(0)?;
-    let picked_attachment = imported(py, "core.annotation_anchor")?.getattr("picked_attachment")?;
+    let picked_attachment = imported(py, "ingetrazo_core.annotation_anchor")?.getattr("picked_attachment")?;
     if tool
         .getattr("_ctx")?
         .getattr("world")?

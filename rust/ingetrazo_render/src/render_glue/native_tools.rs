@@ -2012,7 +2012,7 @@ impl NativeTools {
             };
             if !revision.eq(&notified)? {
                 if let Some(notify) = some(&view.getattr("source_viewport")?, "notify_scene_changed")? {
-                    let frame = py.import("core.coordinate_frame")?.call_method0("model_frame")?;
+                    let frame = py.import("ingetrazo_core.coordinate_frame")?.call_method0("model_frame")?;
                     within(&frame, || notify.call0())?;
                 }
             }

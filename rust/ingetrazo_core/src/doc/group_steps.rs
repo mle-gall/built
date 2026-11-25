@@ -141,7 +141,7 @@ fn run_insert(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     crate::structure::file_created_placement(scene, &group)?;
     if !attachment.is_none() {
         let anchor = py
-            .import("core.annotation_anchor")?
+            .import("ingetrazo_core.annotation_anchor")?
             .getattr("TextPlacementAnchor")?
             .call_method1("create", (scene, scene.call_method1("occurrence_path", (&group,))?, &attachment))?;
         if !anchor.is_none() {

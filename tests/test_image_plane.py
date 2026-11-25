@@ -17,7 +17,7 @@ from core.history import (
     History,
     TransformImagePlaneCommand,
 )
-from core.image_plane import IMAGE_LAYER, ImagePlane, image_aspect
+from ingetrazo_core.image_plane import IMAGE_LAYER, ImagePlane, image_aspect
 from core.scene import Scene
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 
@@ -469,3 +469,15 @@ def test_a_locked_image_draws_its_border_only_while_selected():
     lines.clear()
     Viewport._draw_image_outlines(vp, painter)
     assert len(lines) == 8
+
+
+def test_archive_accepts_numeric_text_and_an_unnamed_reference():
+    from ingetrazo_core.image_plane import ImagePlane
+
+    image = ImagePlane.from_dict({
+        "path": "survey.png", "origin": [0, 0, 0], "u": [2, 0, 0], "v": [0, 1, 0],
+        "aspect": "0.5", "opacity": "0.75", "locked": 1, "name": None,
+    })
+    assert (image.path, image.name, image.aspect, image.opacity, image.locked) == (
+        "survey.png", "", 0.5, 0.75, True,
+    )

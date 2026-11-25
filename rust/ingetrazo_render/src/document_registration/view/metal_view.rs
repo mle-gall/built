@@ -192,7 +192,7 @@ struct GeometryFrame {
 impl GeometryFrame {
     fn __enter__(&mut self, py: Python<'_>) -> PyResult<()> {
         let view = self.view.bind(py);
-        let mesh_frame = py.import("core.coordinate_frame")?.getattr("mesh_frame")?;
+        let mesh_frame = py.import("ingetrazo_core.coordinate_frame")?.getattr("mesh_frame")?;
         let frames = py.import("contextlib")?.getattr("ExitStack")?.call0()?;
         frames.call_method0("__enter__")?;
         let entered = (|| -> PyResult<()> {

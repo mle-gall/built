@@ -121,7 +121,7 @@ fn igz_load_links<'p>(
     let path = py.import("pathlib")?.call_method1("Path", (path,))?;
     scene.setattr("_project_host_path", path.call_method0("resolve")?.str()?)?;
     let read = (|| -> PyResult<()> {
-        let shared = py.import("core.project")?.call_method1("read", (scene,))?;
+        let shared = py.import("ingetrazo_core.project")?.call_method1("read", (scene,))?;
         if shared.is_truthy()? {
             scene
                 .getattr("plugin_data")?

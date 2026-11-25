@@ -15,7 +15,7 @@ from ingetrazo_core import Vec3 as V
 
 
 def _setup(tmp_path, image_z):
-    from core.image_plane import ImagePlane
+    from ingetrazo_core.image_plane import ImagePlane
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(400, 300)

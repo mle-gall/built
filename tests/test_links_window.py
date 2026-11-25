@@ -230,7 +230,8 @@ def test_link_selection_header_preserves_occurrence_and_nested_choice(win, tmp_p
 
 
 def test_project_header_moves_the_registry_next_to_the_host(win, tmp_path, monkeypatch):
-    from core import bim_registry, project
+    from core import bim_registry
+    from ingetrazo_core import project
     from tests.test_tree_links import _View
     from views import wgpu_ui
     from ingetrazo_render import shell_files

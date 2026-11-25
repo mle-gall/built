@@ -62,7 +62,7 @@ fn igz_save_scene_inner<'p>(
 ) -> PyResult<Obj<'p>> {
     let api = api(py)?;
     if scene.hasattr("plugin_data")? && !compatibility {
-        let project = py.import("core.project")?;
+        let project = py.import("ingetrazo_core.project")?;
         project.call_method1("refresh_reference", (scene, path))?;
         project.call_method1("sync_files", (scene, path))?;
         py.import("core.links")?

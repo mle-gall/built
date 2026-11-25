@@ -640,7 +640,7 @@ impl<'a, 'py> Row<'a, 'py> {
             }
         } else if self.is(&["linkregistry"]) {
             if let Some(path) = chosen(py, "getSaveFileName", (win, "Move registry to project", "", "Built project (*.builtproject)"))? {
-                py.import("core.project")?.call_method1("create", (&scene, path, win.getattr("_current_path")?))?;
+                py.import("ingetrazo_core.project")?.call_method1("create", (&scene, path, win.getattr("_current_path")?))?;
                 win.call_method1("_relink_done", ("Project registry updated",))?;
             }
         } else if self.is(&["eye", "lock"]) && rk == "geometry:loose" {

@@ -8,7 +8,8 @@ looks like a passing check.
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from core import project, record
+from core import record
+from ingetrazo_core import project
 
 
 def _simple(facet, field):

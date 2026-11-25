@@ -88,7 +88,7 @@ fn name_definition(
         return Ok(());
     }
     let py = win.py();
-    let kept = py.import("core.kept_components")?;
+    let kept = py.import("ingetrazo_core.kept_components")?;
     let mesh = definition.getattr("mesh")?;
     let targets = kept
         .call_method1("copies_of", (scene, &mesh))?

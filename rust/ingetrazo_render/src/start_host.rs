@@ -998,7 +998,7 @@ fn new_project(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let path = py.import("pathlib")?.getattr("Path")?.call1((name,))?.call_method1("with_suffix", (".builtproject",))?;
     let made = (|| -> PyResult<()> {
         let scene = py.import("core.scene")?.getattr("Scene")?.call0()?;
-        py.import("core.project")?.call_method1("create", (scene, &path))?;
+        py.import("ingetrazo_core.project")?.call_method1("create", (scene, &path))?;
         win.call_method1("open_project", (&path,))?;
         Ok(())
     })();

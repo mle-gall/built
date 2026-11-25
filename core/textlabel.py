@@ -52,7 +52,7 @@ class TextLabel(Record):
 
     @classmethod
     def from_dict(cls, data: dict, scene=None) -> "TextLabel":
-        from core.annotation_anchor import Attachment
+        from ingetrazo_core.annotation_anchor import Attachment
         point = QVector3D(*data.get("anchor", [0, 0, 0]))
         binding = Attachment.restore(scene, data.get("attachment"), point) if scene is not None else None
         return cls(point,
