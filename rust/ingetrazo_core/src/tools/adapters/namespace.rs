@@ -210,7 +210,7 @@ fn definition(name: &str) -> Option<&'static Module> {
     MODULES.iter().find(|m| m.name == leaf)
 }
 
-const CORE_MODULES: &[&str] = &["protocol", "protocol.commands", "protocol.feed", "protocol.keys", "protocol.records", "protocol.queries", "purge", "bridge", "lazy_mesh", "reference_edit", "material_commands", "link_structure", "hlr", "vista_caras", "units", "texture", "doc_model", "dimension", "layers", "composition", "push_pull", "solids", "sweep", "make_faces", "intersect", "pieces", "inference", "geometry_arrays", "outliner", "solid_analysis", "offset", "text3d", "render_blender", "extensions"];
+const CORE_MODULES: &[&str] = &["protocol", "protocol.commands", "protocol.feed", "protocol.keys", "protocol.records", "protocol.queries", "purge", "bridge", "lazy_mesh", "reference_edit", "material_commands", "link_structure", "hlr", "vista_caras", "units", "texture", "doc_model", "dimension", "layers", "links", "group", "scene", "composition", "push_pull", "solids", "sweep", "make_faces", "intersect", "pieces", "inference", "geometry_arrays", "outliner", "solid_analysis", "offset", "text3d", "render_blender", "extensions"];
 const VIEW_MODULES: &[&str] = &[
     "document_interaction",
     "documents",
@@ -297,6 +297,9 @@ impl ToolModules {
                 "core.doc_model" => crate::model::doc_model_api::install(module),
                 "core.dimension" => crate::model::dimension_api::install(module),
                 "core.layers" => crate::model::layers_api::install(module),
+                "core.links" => crate::model::links_api::install(module),
+                "core.group" => crate::model::group_api::install(module),
+                "core.scene" => crate::model::scene_api::install(module),
                 "core.composition" => crate::sheets::composition::install(module),
                 "core.push_pull" => crate::push_operation::install(module),
                 "core.solids" => crate::solids::install(module),

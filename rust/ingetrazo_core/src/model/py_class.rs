@@ -110,6 +110,132 @@ impl<'py, T> FastAttr<'py> for Bound<'py, T> {
     }
 }
 
+/// A native method the way CPython's own are: a method descriptor (a
+/// `PyMethodDef` with `METH_FASTCALL`, bound to `object`), so `obj.name(…)`
+/// calls straight into Rust as a Python function is called, with no bound
+/// method made per access. [`NativeMethod`] costs a `MethodType` and a
+/// trampoline per call, which a one-line rule (`Group.is_component`,
+/// `Scene.__setattr__`) notices. The body gets the instance and the
+/// positional arguments; a `_kw` one also gets the keyword names (CPython's
+/// vectorcall convention: their values follow the positional ones).
+pub type FastBody = for<'py> fn(&Bound<'py, PyAny>, &[Bound<'py, PyAny>]) -> PyResult<Bound<'py, PyAny>>;
+pub type FastKwBody = for<'py> fn(&Bound<'py, PyAny>, &[Bound<'py, PyAny>], Option<&Bound<'py, PyTuple>>) -> PyResult<Bound<'py, PyAny>>;
+
+/// Run a fast method's body: the GIL is held (CPython is calling), errors
+/// and panics become the Python exception.
+///
+/// # Safety
+/// `slf` and the `n` pointers at `args` are live objects CPython lends for
+/// the call; `kwnames` is null or a tuple.
+pub unsafe fn run_fast(
+    slf: *mut pyo3::ffi::PyObject,
+    args: *const *mut pyo3::ffi::PyObject,
+    n: usize,
+    kwnames: *mut pyo3::ffi::PyObject,
+    body: Result<FastBody, FastKwBody>,
+) -> *mut pyo3::ffi::PyObject {
+    let py = unsafe { Python::assume_attached() };
+    let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> PyResult<Bound<'_, PyAny>> {
+        let me = unsafe { Bound::from_borrowed_ptr(py, slf) };
+        let nkw = if kwnames.is_null() { 0 } else { unsafe { pyo3::ffi::PyTuple_Size(kwnames) as usize } };
+        let all: Vec<Bound<'_, PyAny>> = (0..n + nkw).map(|i| unsafe { Bound::from_borrowed_ptr(py, *args.add(i)) }).collect();
+        match body {
+            Ok(f) => {
+                if nkw != 0 {
+                    return Err(pyo3::exceptions::PyTypeError::new_err("this method takes no keyword arguments"));
+                }
+                f(&me, &all)
+            }
+            Err(f) => {
+                let names = if kwnames.is_null() { None } else { Some(unsafe { Bound::from_borrowed_ptr(py, kwnames) }.cast_into::<PyTuple>()?) };
+                f(&me, &all, names.as_ref())
+            }
+        }
+    }));
+    match out {
+        Ok(Ok(v)) => v.into_ptr(),
+        Ok(Err(e)) => {
+            e.restore(py);
+            std::ptr::null_mut()
+        }
+        Err(_) => {
+            pyo3::exceptions::PyRuntimeError::new_err("a native method panicked").restore(py);
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// `extern "C"` entry points for a fast method body: `fast!(entry, body)`
+/// for positional arguments, `fast!(kw entry, body)` with keywords.
+#[macro_export]
+macro_rules! fast {
+    ($entry:ident, $body:path) => {
+        unsafe extern "C" fn $entry(
+            slf: *mut pyo3::ffi::PyObject,
+            args: *mut *mut pyo3::ffi::PyObject,
+            n: pyo3::ffi::Py_ssize_t,
+        ) -> *mut pyo3::ffi::PyObject {
+            unsafe { $crate::model::py_class::run_fast(slf, args as *const _, n as usize, std::ptr::null_mut(), Ok($body)) }
+        }
+    };
+    (kw $entry:ident, $body:path) => {
+        unsafe extern "C" fn $entry(
+            slf: *mut pyo3::ffi::PyObject,
+            args: *const *mut pyo3::ffi::PyObject,
+            n: pyo3::ffi::Py_ssize_t,
+            kwnames: *mut pyo3::ffi::PyObject,
+        ) -> *mut pyo3::ffi::PyObject {
+            // The method descriptor passes a plain count (no offset flag).
+            unsafe { $crate::model::py_class::run_fast(slf, args, n as usize, kwnames, Err($body)) }
+        }
+    };
+}
+
+fn descriptor<'py>(py: Python<'py>, name: &'static std::ffi::CStr, meth: pyo3::ffi::PyMethodDefPointer, flags: std::ffi::c_int) -> PyResult<Obj<'py>> {
+    let def = Box::leak(Box::new(pyo3::ffi::PyMethodDef { ml_name: name.as_ptr(), ml_meth: meth, ml_flags: flags, ml_doc: std::ptr::null() }));
+    // SAFETY: `def` lives for ever; `object` is the type every instance is.
+    unsafe {
+        let d = pyo3::ffi::PyDescr_NewMethod(std::ptr::addr_of_mut!(pyo3::ffi::PyBaseObject_Type), def);
+        Bound::from_owned_ptr_or_err(py, d)
+    }
+}
+
+/// `ns[name]` = a fast method taking positional arguments (`fast!`).
+pub fn fast_method(ns: &Bound<'_, PyDict>, name: &'static std::ffi::CStr, entry: pyo3::ffi::PyCFunctionFast) -> PyResult<()> {
+    let d = descriptor(ns.py(), name, pyo3::ffi::PyMethodDefPointer { PyCFunctionFast: entry }, pyo3::ffi::METH_FASTCALL)?;
+    ns.set_item(name.to_string_lossy(), d)
+}
+
+/// `ns[name]` = a fast method taking keywords too (`fast!(kw …)`).
+pub fn fast_kw_method(ns: &Bound<'_, PyDict>, name: &'static std::ffi::CStr, entry: pyo3::ffi::PyCFunctionFastWithKeywords) -> PyResult<()> {
+    let d = descriptor(ns.py(), name, pyo3::ffi::PyMethodDefPointer { PyCFunctionFastWithKeywords: entry }, pyo3::ffi::METH_FASTCALL | pyo3::ffi::METH_KEYWORDS)?;
+    ns.set_item(name.to_string_lossy(), d)
+}
+
+/// The arguments of a fast keyword call matched to `names` (positional
+/// first, then by keyword); `None` for one not given.
+pub fn bind_args<'a, 'py>(args: &'a [Bound<'py, PyAny>], kwnames: Option<&Bound<'py, PyTuple>>, names: &[&str]) -> PyResult<Vec<Option<&'a Bound<'py, PyAny>>>> {
+    let nkw = kwnames.map_or(0, |k| k.len());
+    let npos = args.len() - nkw;
+    if npos > names.len() {
+        return Err(pyo3::exceptions::PyTypeError::new_err(format!("takes at most {} arguments ({npos} given)", names.len())));
+    }
+    let mut out: Vec<Option<&Bound<'py, PyAny>>> = (0..names.len()).map(|i| args[..npos].get(i)).collect();
+    if let Some(k) = kwnames {
+        for (j, key) in k.iter().enumerate() {
+            let key: String = key.extract()?;
+            let Some(i) = names.iter().position(|n| *n == key) else {
+                return Err(pyo3::exceptions::PyTypeError::new_err(format!("unexpected keyword argument '{key}'")));
+            };
+            if out[i].is_some() {
+                return Err(pyo3::exceptions::PyTypeError::new_err(format!("got multiple values for argument '{key}'")));
+            }
+            out[i] = Some(&args[npos + j]);
+        }
+    }
+    Ok(out)
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<NativeMethod>()
 }

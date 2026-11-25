@@ -42,6 +42,9 @@ pub(crate) mod texture_api;
 pub(crate) mod doc_model_api;
 pub(crate) mod dimension_api;
 pub(crate) mod layers_api;
+pub(crate) mod links_api;
+pub(crate) mod group_api;
+pub(crate) mod scene_api;
 pub mod py_class;
 
 /// A module already imported, from `sys.modules`: `py.import` runs the
