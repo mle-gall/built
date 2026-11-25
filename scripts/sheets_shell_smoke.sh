@@ -62,7 +62,7 @@ STEPS
 BUILT_PASTEBOARD=built-sheets-smoke BUILT_ANSWERS=escape BUILT_SHOTS=$SHOTS \
     "${PYTHON:-$ROOT/.venv/bin/python}" "$ROOT/scripts/isolated_launch.py" "$BIN" --settings "$RUN/settings" --shots "$SHOTS" --size 1280x800 --new-instance \
     --script "$RUN/script.txt" "$RUN/arco-yanque.igz" > "$RUN/log.txt" 2>&1
-grep '^\[built\] \(state\|capture\|error\|opened\)' "$RUN/log.txt" | sed -E 's/"widget_gaps": \{[^}]*\}, //' || true
+grep '^\[built\] \(state\|capture\|error\|opened\)' "$RUN/log.txt" || true
 echo "log: $RUN/log.txt"
 test -s "$RUN/sheet.pdf" && echo "pdf: $(wc -c < "$RUN/sheet.pdf") bytes" || echo "pdf: MISSING"
 AFTER=$(stat -f '%m' "$PLIST" 2>/dev/null || echo none)

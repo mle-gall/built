@@ -712,7 +712,6 @@ class Host:
             "form_open": self.renderer.ui_dialog_open() if self.renderer is not None else False,
             "start_page": bool(getattr(win.__dict__.get("_start_page"), "wanted", False)),
             "errors": len(self.errors),
-            "widget_gaps": self.missing(),
             "classic_window_loaded": "views.main_window" in sys.modules,
             "blocked_widgets": [],
             "not_here": list(self.not_here_log),
@@ -743,20 +742,6 @@ class Host:
     def _pasteboard_types():
         from app_shell import native
         return [t for t in native.pasteboard_types()[0] if "ingetrazo" in t]
-
-    def missing(self):
-        """Widget/window API the document or extension asked for and the shell
-        lacks (probes of the code's own lazily set attributes left out)."""
-        widgets = sys.modules.get("PySide6.QtWidgets")
-        if widgets is None:
-            return {}
-        from views.view_host import MISSING
-        out = {}
-        for name, n in MISSING.most_common():
-            bare = name.split(".", 1)[-1]
-            if hasattr(widgets.QWidget, bare) or hasattr(widgets.QMainWindow, bare):
-                out[name] = n
-        return out
 
 
 def bootstrap(root: str, venv: str | None):

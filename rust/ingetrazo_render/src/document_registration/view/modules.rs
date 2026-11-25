@@ -127,7 +127,6 @@ pub(super) fn install_interaction_module(module: &Bound<PyModule>) -> PyResult<(
         }
         "view_host" => {
             import_names(module, "__future__", &[("annotations", "annotations")])?;
-            import_names(module, "collections", &[("Counter", "Counter")])?;
             import_names(
                 module,
                 "core.input_types",
@@ -264,16 +263,6 @@ fn shim_init<'py>(a: &Args<'py>) -> Reply<'py> {
     view.setattr("_enabled", true)?;
     Ok(none(py))
 }
-fn shim_missing<'py>(a: &Args<'py>) -> Reply<'py> {
-    let py = a.py();
-    let name = a.get_item(1)?.extract::<String>()?;
-    if !name.starts_with("__") {
-        let missing = py.import("views.view_host")?.getattr("MISSING")?;
-        let n = missing.get_item(&name)?.extract::<usize>()?;
-        missing.set_item(&name, n + 1)?;
-    }
-    Err(pyo3::exceptions::PyAttributeError::new_err(name))
-}
 fn shim_event<'py>(a: &Args<'py>) -> Reply<'py> {
     false.into_bound_py_any(a.py())
 }
@@ -298,8 +287,6 @@ fn noop(this: &Obj, args: &Bound<PyTuple>, kwargs: Option<&Bound<PyDict>>) {
 fn view_host(module: &Bound<PyModule>) -> PyResult<()> {
     let py = module.py();
     let base = py.import("builtins")?.getattr("object")?;
-    module.add("MISSING", module.getattr("Counter")?.call0()?)?;
-    module.add("__annotations__", fields!(py; "MISSING"=>"Counter"))?;
     let cls = class(
         module,
         "WidgetShim",
@@ -316,14 +303,6 @@ fn view_host(module: &Bound<PyModule>) -> PyResult<()> {
                 Mode::Method,
                 shim_init,
                 &["self", "parent=None", "host=None"],
-                "",
-                "",
-            ),
-            (
-                "__getattr__",
-                Mode::Method,
-                shim_missing,
-                &["self", "name"],
                 "",
                 "",
             ),

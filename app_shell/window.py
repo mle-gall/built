@@ -11,7 +11,6 @@ import ingetrazo_render as native
 from core.input_types import QEvent, Qt
 
 from ingetrazo_render import shell_action as ShellAction
-from views.view_host import MISSING
 from ingetrazo_render.document_commands import WindowDocumentCommands
 
 
@@ -400,7 +399,6 @@ class ShellWindow(WindowDocumentCommands):
             raise AttributeError(name)
         if name in _QUIET:
             return lambda *a, **k: None
-        MISSING["window." + name] += 1
         raise AttributeError(name)
 
     # ---- the documents' state, as MainWindow keeps it --------------------
