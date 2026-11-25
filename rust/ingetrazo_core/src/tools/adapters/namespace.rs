@@ -231,6 +231,8 @@ const VIEW_MODULES: &[&str] = &[
     "wgpu_edit_context",
     "wgpu_parity",
     "wgpu_references",
+    "wgpu_tabs",
+    "wgpu_annotations",
 ];
 
 #[pyclass(module = "ingetrazo_core", frozen)]

@@ -263,7 +263,7 @@ fn hover_face_marks<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     let rows = empty(py);
     for point in points {
-        rows.append((point.call_method0("toTuple")?, (0, 0, 1), rgba))?;
+        rows.append((point.call_method0("toTuple")?, (0, 0, 1), (rgba[0], rgba[1], rgba[2], rgba[3])))?;
     }
     bytes_of(numpy.call_method1("array", (rows, vertex))?, py)
 }

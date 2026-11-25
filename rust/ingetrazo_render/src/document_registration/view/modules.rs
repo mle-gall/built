@@ -86,6 +86,8 @@ pub(super) fn install_interaction_module(module: &Bound<PyModule>) -> PyResult<(
         "wgpu_edit_context" => super::frame_lines::install_edit_context(module)?,
         "wgpu_parity" => super::frame_marks::install_parity(module)?,
         "wgpu_references" => super::frame_marks::install_references(module)?,
+        "wgpu_tabs" => super::frame_tabs::install_tabs(module)?,
+        "wgpu_annotations" => super::frame_annotations::install_annotations(module)?,
         "document_tools" => {
             import_names(module, "__future__", &[("annotations", "annotations")])?;
             import_names(module, "typing", &[("Optional", "Optional")])?;
