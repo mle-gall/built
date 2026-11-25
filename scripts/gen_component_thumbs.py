@@ -28,11 +28,7 @@ def generate(components: Path, output: Path):
 
 
 if __name__ == "__main__":
-    import os
     from scripts.isolated_launch import isolate_script
     isolate_script()
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtGui import QGuiApplication
-    app = QGuiApplication([])
     components = ROOT / "resources" / "components"
     generate(components, components / "thumbs")

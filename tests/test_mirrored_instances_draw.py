@@ -16,16 +16,12 @@ from __future__ import annotations
 
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication
 
-_app = QApplication.instance() or QApplication([])
 
 AMARILLO = (1.0, 0.85, 0.0)
 
@@ -59,11 +55,12 @@ def test_a_mirrored_placement_draws_instanced_with_its_front_colour(native_gpu_h
     placements = [i for i, group in enumerate(packed.groups) if group is not None and group.mesh is proto]
     assert len(placements) == 2
     assert len(set(packed.instances['info'][placements, 0])) == 1
-    dpr = img.width() / max(vp.width(), 1)
+    from tests.raster_samples import pixels
+    frame = pixels(img)
+    dpr = img.width / max(vp.width(), 1)
     for x in (-2.0, 2.0):
         px = vp._world_to_pixel(V(x, 0.5, 0))     # off the red axis
-        c = img.pixelColor(int(px[0] * dpr), int(px[1] * dpr))
-        r, g, b = c.redF(), c.greenF(), c.blueF()
+        r, g, b = frame[int(px[1] * dpr), int(px[0] * dpr), :3] / 255.
         assert r > 0.6 and g > 0.5 and b < 0.35, (x, (r, g, b))
 
 

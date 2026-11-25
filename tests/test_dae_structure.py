@@ -2,9 +2,9 @@
 IngeTrazo reads its own .dae back as it was."""
 from __future__ import annotations
 
+from tests.raster_samples import solid_raster
 import xml.etree.ElementTree as ET
 
-from PySide6.QtGui import QImage
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group
@@ -151,8 +151,7 @@ def test_structure_comes_back_as_it_was(tmp_path):
 
 
 def test_textured_face_exports_image_and_reimports_texture(tmp_path):
-    img = QImage(8, 8, QImage.Format_RGB888)
-    img.fill(0x884422)
+    img = solid_raster(8, 8, (136, 68, 34))
     png = tmp_path / "madera.png"
     img.save(str(png))
     scene = Scene()

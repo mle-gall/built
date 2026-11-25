@@ -22,10 +22,10 @@ x = 2, y = 0 and z = 2, and each is asked in turn.
 from __future__ import annotations
 
 
+from ingetrazo_render import KeyEvent, MouseEvent
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from PySide6.QtCore import QEvent, QPointF, Qt
-from PySide6.QtGui import QKeyEvent, QMouseEvent
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.snap import AXIS_COLORS, face_plane_world
@@ -83,9 +83,7 @@ def _pixel(vp, world):
 
 
 def _press(vp, px, py):
-    vp._dispatch_tool_click(QMouseEvent(
-        QMouseEvent.MouseButtonPress, QPointF(px, py),
-        Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    vp._dispatch_tool_click(MouseEvent('press', px, py, Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
 
 
 def _picked_plane(vp, px, py):
@@ -396,8 +394,7 @@ def test_shift_marks_the_plane_the_shape_is_on_and_gives_it_back(native_host):
         QVector3D(face[1]).normalized(), V(1.0, 0.0, 0.0))) > 0.999, (
             "the wall under the cursor is not the plane (#545)")
 
-    vp.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Shift,
-                               Qt.ShiftModifier))
+    vp.keyPressEvent(KeyEvent(True, Qt.Key_Shift, Qt.ShiftModifier))
     assert tool.plane_ref is not None and tool.plane_ref[1] == "plane"
     assert abs(QVector3D.dotProduct(
         QVector3D(tool.plane_ref[0]).normalized(), V(1.0, 0.0, 0.0))) > 0.999
@@ -409,8 +406,7 @@ def test_shift_marks_the_plane_the_shape_is_on_and_gives_it_back(native_host):
             "the marked plane let the cursor take it away")
     assert (QVector3D(held[0]) - QVector3D(face[0])).length() < 1e-9
 
-    vp.keyReleaseEvent(QKeyEvent(QEvent.KeyRelease, Qt.Key_Shift,
-                                 Qt.NoModifier))
+    vp.keyReleaseEvent(KeyEvent(False, Qt.Key_Shift, Qt.NoModifier))
     assert tool.plane_ref is None
     freed = tool.drawing_plane()                    # the face answers again
     assert abs(QVector3D.dotProduct(

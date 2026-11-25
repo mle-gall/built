@@ -14,14 +14,10 @@ checks the vertex by identity, and a hold that dies in a join takes the
 vertex at the spot where it died."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core.dimension import Dimension
 from core.history import (AddDimensionCommand, History,
@@ -32,8 +28,6 @@ from core.snap import SnapResult
 from formats import igz
 from tools.base import ToolContext
 from tools.move import MoveTool
-
-_app = QApplication.instance() or QApplication([])
 
 
 def V(x, y, z=0.0):

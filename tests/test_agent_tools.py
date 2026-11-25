@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+from tests.raster_samples import solid_raster
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import threading
 from types import SimpleNamespace
 
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication
 from core.group import Group
 from core.mesh import Mesh
 from core.layers import Layer
@@ -152,8 +152,8 @@ def test_camera_zoom_and_screenshot(model, monkeypatch):
     assert camera["target"] == pytest.approx([10, 0, 0])
     call(bridge, "zoom_to", uids=[child.uid])
     assert 10 <= call(bridge, "query_camera")["target"][0] <= 12
-    from PySide6.QtGui import QImage
-    monkeypatch.setattr(win.viewport, "render_image", lambda w, h: QImage(w, h, QImage.Format_RGB32))
+    from ingetrazo_render import SurveyRaster
+    monkeypatch.setattr(win.viewport, "render_image", lambda w, h: solid_raster(w, h, (0, 0, 0)))
     shot = call(bridge, "screenshot", uids=[child.uid], width=64, height=64)
     assert shot["camera"] == call(bridge, "query_camera")
     assert len(win.viewport.history.undo_stack) == before
@@ -174,22 +174,21 @@ def test_walkthrough_camera_verbs_keep_orbit_distance_and_document_history(model
 
 
 def test_screenshot_frames_shared_camera_and_captures_metal(model, monkeypatch, tmp_path):
-    from PySide6.QtGui import QImage
+    from ingetrazo_render import SurveyRaster
     win, bridge, _, child, _ = model
     targets = []
 
     def capture(w, h, **options):
         targets.append(win.viewport.camera.target.x())
-        image = QImage(w, h, QImage.Format_RGB32)
-        image.fill(0xff123456)
+        image = solid_raster(w, h, (18, 52, 86))
         return image
 
     monkeypatch.setattr(win.view, "render_image", capture)
     monkeypatch.setattr("plugins.ai_bridge.tempfile.gettempdir", lambda: str(tmp_path))
     for args in ({"uids": [child.uid]}, {}):
         shot = call(bridge, "screenshot", width=90, height=65, **args)
-        image = QImage(shot["path"])
-        assert (image.width(), image.height(), image.pixel(0, 0)) == (90, 65, 0xff123456)
+        image = SurveyRaster.open(shot["path"])
+        assert (image.width, image.height, image.rgba()[:4]) == (90, 65, bytes((18, 52, 86, 255)))
     assert 10 <= targets[0] <= 12
     assert targets[0] == targets[1]
 

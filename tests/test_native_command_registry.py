@@ -1,7 +1,6 @@
 """The native Keyboard table edits the same bindings the window dispatches."""
-from PySide6.QtCore import Qt
+from core.input_types import Qt
 from core.settings import settings
-from PySide6.QtGui import QKeySequence
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
@@ -31,13 +30,13 @@ def test_tools_views_and_menus_reassign_and_reset_across_windows(tmp_path, monke
         form.press("ok")
         assert tool.portable_keys() == ["F9"]
         for action, previous in [(view, tool), (menu, view)]:
-            sheet._assign(action, [QKeySequence("F9")])
+            sheet._assign(action, ["F9"])
             forms.pop().press("cancel")
-            assert previous.shortcut() == QKeySequence("F9")
-            sheet._assign(action, [QKeySequence("F9")])
+            assert previous.portable_keys() == ["F9"]
+            sheet._assign(action, ["F9"])
             forms.pop().press("ok")
-            assert not previous.shortcuts()
-            assert hosts[1].window._registry_actions[action_key(action)].shortcut() == QKeySequence("F9")
+            assert not previous.portable_keys()
+            assert hosts[1].window._registry_actions[action_key(action)].portable_keys() == ["F9"]
         # A new host reads the saved override before receiving the first key.
         hosts.append(Host(0, 900, 700, 1.0, settings=profile))
         fresh = hosts[-1]
@@ -52,10 +51,10 @@ def test_tools_views_and_menus_reassign_and_reset_across_windows(tmp_path, monke
         sheet.state.kb_focus = "sc:view:orbit"
         sheet._kb_verb("kb_default")
         assert fresh.window._registry_actions["view:orbit"].portable_keys() == ["O"]
-        sheet._assign(tool, [QKeySequence("F9")])
+        sheet._assign(tool, ["F9"])
         sheet._kb_verb("kb_reset_all")
         forms.pop().press("ok")
-        assert all(h.window._registry_actions["tool:line"].shortcut() == QKeySequence("L") for h in hosts)
+        assert all(h.window._registry_actions["tool:line"].portable_keys() == ["L"] for h in hosts)
         assert not fresh._shortcut(Qt.Key_F9, 0)
     finally:
         for h in reversed(hosts):

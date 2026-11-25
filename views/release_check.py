@@ -59,9 +59,6 @@ def start_check(window, quiet=False, fetch=None, current=__version__):
         if window._release_check is not result:
             return
         busy = chrome_dialogs.modal(window) or chrome_dialogs.async_host(window) is None
-        if not busy and not chrome_sheet.in_shell():
-            from PySide6.QtWidgets import QApplication
-            busy = QApplication.activeModalWidget() is not None
         mode = model.presentation(busy)
         if mode == "wait":
             later(window, _RETRY_MS, lambda: present(model))

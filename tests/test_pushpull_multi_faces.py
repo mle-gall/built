@@ -9,7 +9,7 @@ Headless: stub viewport + direct tool calls, as test_pushpull_ux.py.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QPointF
+from core.input_types import Input, ScreenPoint
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
@@ -53,8 +53,8 @@ class _StubViewport:
         return self._pick, None
 
 
-def _ctx(vp, modifiers=Qt.NoModifier):
-    return ToolContext(viewport=vp, world=QVector3D(), screen=QPointF(0, 0),
+def _ctx(vp, modifiers=Input.NoModifier):
+    return ToolContext(viewport=vp, world=QVector3D(), screen=ScreenPoint(0, 0),
                        modifiers=modifiers, snap=None)
 
 
@@ -92,7 +92,7 @@ def _two_boxes(height=3.0):
     return scene
 
 
-def _drag(scene, lead, dist, modifiers=Qt.NoModifier):
+def _drag(scene, lead, dist, modifiers=Input.NoModifier):
     """Activate with the scene's current selection, start on ``lead`` and
     commit ``dist`` — the click-click gesture."""
     vp = _StubViewport(scene, pick=lead)
@@ -322,7 +322,7 @@ def test_ctrl_copy_stacks_on_every_face():
     a, b = _faces_at_z(scene, 3.0)
     scene.select([a, b])
 
-    _drag(scene, a, 2.0, modifiers=Qt.ControlModifier)
+    _drag(scene, a, 2.0, modifiers=Input.ControlModifier)
 
     assert len(_faces_at_z(scene, 3.0)) == 2   # the bases stay as slabs
     assert len(_faces_at_z(scene, 5.0)) == 2

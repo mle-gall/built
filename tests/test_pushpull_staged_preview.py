@@ -22,7 +22,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
@@ -345,8 +345,8 @@ def test_staged_drag_through_on_hover_matches_the_commit():
     scene, vp, tool = _start(_split_top, _TopView)
     for z in [3.6, 4.5, 2.2]:
         tool.on_hover(ToolContext(viewport=vp, world=QVector3D(),
-                                  screen=QPointF(10.0, -z * 10.0),
-                                  modifiers=Qt.NoModifier, snap=None))
+                                  screen=ScreenPoint(10.0, -z * 10.0),
+                                  modifiers=Input.NoModifier, snap=None))
         assert tool._stage_d is not None
         assert abs(tool.extrusion - (z - 3.0)) < 1e-5
         assert _canon(scene) == _canon(_direct(_split_top, tool.extrusion))

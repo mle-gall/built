@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, world_mesh
@@ -45,8 +45,8 @@ def _box(mesh, s=1.0):
     return faces[1]                                   # the top face
 
 
-def _ctx(vp, mods=Qt.NoModifier):
-    return ToolContext(viewport=vp, world=V(0, 0), screen=QPointF(0, 0),
+def _ctx(vp, mods=Input.NoModifier):
+    return ToolContext(viewport=vp, world=V(0, 0), screen=ScreenPoint(0, 0),
                        modifiers=mods, snap=None)
 
 

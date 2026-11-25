@@ -8,9 +8,8 @@ undo step, and the count stays for the next ones."""
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from tools.base import ToolContext
 from tools.circle import CircleTool, PolygonTool
@@ -18,7 +17,6 @@ from tools.circle import CircleTool, PolygonTool
 
 @pytest.fixture(scope="module")
 def viewport():
-    QApplication.instance() or QApplication([])
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1000, 700)
@@ -28,8 +26,8 @@ def viewport():
 
 
 def _ctx(world):
-    return ToolContext(viewport=None, world=world, screen=QPointF(0, 0),
-                       modifiers=Qt.NoModifier, snap=None)
+    return ToolContext(viewport=None, world=world, screen=ScreenPoint(0, 0),
+                       modifiers=Input.NoModifier, snap=None)
 
 
 def _draw(vp, tool, center, rim):

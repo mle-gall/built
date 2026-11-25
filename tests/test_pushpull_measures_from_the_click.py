@@ -11,8 +11,8 @@ from __future__ import annotations
 import math
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMouseEvent
+from core.input_types import ScreenPoint, Input
+from ingetrazo_render import MouseEvent
 from ingetrazo_core import Vec3 as V
 
 
@@ -29,9 +29,8 @@ def _window(native_host, target, distance):
 
 
 def _event(vp, px, py):
-    vp._last_mouse_pos = QPointF(px, py)
-    return QMouseEvent(QMouseEvent.MouseButtonPress, QPointF(px, py),
-                       Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+    vp._last_mouse_pos = ScreenPoint(px, py)
+    return MouseEvent("press", px, py, Input.LeftButton, Input.LeftButton, Input.NoModifier)
 
 
 def _pull(win, vp, at, rise):
@@ -41,11 +40,11 @@ def _pull(win, vp, at, rise):
     win._activate_tool("pushpull")
     tool = vp.active_tool
     px, py = vp._world_to_pixel(at)
-    vp._process_hover(QPointF(px, py), Qt.NoModifier)
+    vp._process_hover(ScreenPoint(px, py), Input.NoModifier)
     vp._dispatch_tool_click(_event(vp, px, py))
     assert tool.dragging
     qx, qy = vp._world_to_pixel(at + V(0, 0, rise))
-    vp._process_hover(QPointF(qx, qy), Qt.NoModifier)
+    vp._process_hover(ScreenPoint(qx, qy), Input.NoModifier)
     return tool.extrusion
 
 

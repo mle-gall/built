@@ -9,18 +9,12 @@ placed dimension's line is a snap target like any other edge — also in a
 scene that holds nothing else."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from types import SimpleNamespace  # noqa: E402
 
-from PySide6.QtCore import QPointF, Qt  # noqa: E402
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-if QApplication.instance() is None:
-    QApplication([])
 
 from core.dimension import Dimension  # noqa: E402
 from core.history import History  # noqa: E402

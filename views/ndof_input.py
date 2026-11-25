@@ -8,8 +8,8 @@ the device.
 * **Linux — spacenavd.** The free driver every distribution packages
   (``spacenavd``). It serves the device on a Unix socket in a fixed binary
   protocol: 32-byte packets of eight native ints, ``type`` first — 0 motion
-  (x y z rx ry rz period), 1 button press, 2 release. Read with a
-  ``QSocketNotifier``, so it never blocks the UI.
+  (x y z rx ry rz period), 1 button press, 2 release. The native window timer polls its
+  nonblocking socket.
 * **Windows — Raw Input.** A 3D mouse is a USB HID «multi-axis controller»
   (usage page 1, usage 8); registering for it makes Windows send
   ``WM_INPUT`` with the device's own reports, next to (not instead of) the
@@ -30,7 +30,6 @@ import sys
 import time
 
 from core.host_callbacks import HostService, Signal
-from core.input_types import NATIVE
 
 from core.ndof import NdofSample, from_hid, from_spacenavd
 
@@ -150,23 +149,14 @@ class SpnavBackend:
             return False
         sock.setblocking(False)
         self.sock = sock
-        if NATIVE:
-            from core.timers import timer
-            self.notifier = timer(self.owner, self._read, 12, repeat=True)
-            self.notifier.start()
-        else:
-            from PySide6.QtCore import QSocketNotifier
-            self.notifier = QSocketNotifier(sock.fileno(), QSocketNotifier.Read, self.owner)
-            self.notifier.activated.connect(self._read)
+        from core.timers import timer
+        self.notifier = timer(self.owner, self._read, 12, repeat=True)
+        self.notifier.start()
         return True
 
     def close(self) -> None:
         if self.notifier is not None:
-            if NATIVE:
-                self.notifier.stop()
-            else:
-                self.notifier.setEnabled(False)
-                self.notifier.deleteLater()
+            self.notifier.stop()
             self.notifier = None
         if self.sock is not None:
             self.sock.close()
@@ -273,38 +263,16 @@ class RawInputBackend:
         if not user32.RegisterRawInputDevices(
                 ctypes.byref(dev), 1, ctypes.sizeof(dev)):
             return False
-        if NATIVE:
-            from app_shell.native import _shell
-            _shell.set_raw_input_handler(self._on_msg)
-            return True
-        from PySide6.QtCore import QAbstractNativeEventFilter, QCoreApplication
-        backend = self
-
-        class _Filter(QAbstractNativeEventFilter):
-            def nativeEventFilter(self, event_type, message):
-                try:
-                    if bytes(event_type) == b"windows_generic_MSG":
-                        backend._on_msg(int(message))
-                except Exception:  # noqa: BLE001 — never break the event loop
-                    pass
-                return False, 0
-
-        self.filter = _Filter()
-        QCoreApplication.instance().installNativeEventFilter(self.filter)
+        from app_shell.native import _shell
+        if _shell is None:
+            return False
+        _shell.set_raw_input_handler(self._on_msg)
         return True
-
     def close(self) -> None:
-        if NATIVE:
-            from app_shell.native import _shell
+        from app_shell.native import _shell
+        if _shell is not None:
             _shell.set_raw_input_handler(None)
-            return
-        if self.filter is not None:
-            from PySide6.QtCore import QCoreApplication
-            app = QCoreApplication.instance()
-            if app is not None:
-                app.removeNativeEventFilter(self.filter)
-            self.filter = None
-
+        return
     def _on_msg(self, msg_ptr: int) -> None:
         import ctypes
         from ctypes import wintypes
@@ -365,9 +333,9 @@ _KEYS = (("enabled", True), ("sensitivity", 1.0), ("invert_pan", False),
 
 def load_settings():
     """The user's 3D mouse settings (Preferences ▸ Navigation)."""
-    from core.settings import settings as QSettings
+    from core.settings import settings as profile_settings
     from core.ndof import NdofSettings
-    st = QSettings()
+    st = profile_settings()
     out = NdofSettings()
     for key, default in _KEYS:
         raw = st.value(f"ndof/{key}", None)
@@ -412,8 +380,8 @@ def current_settings():
 def save_settings(settings) -> None:
     global _settings_cache
     _settings_cache = settings
-    from core.settings import settings as QSettings
-    st = QSettings()
+    from core.settings import settings as profile_settings
+    st = profile_settings()
     for key, default in _KEYS:
         val = getattr(settings, key)
         st.setValue(f"ndof/{key}",
@@ -446,16 +414,13 @@ def shared_input(window=None) -> NdofInput:
     share it and the active one moves (a device has one driver socket)."""
     global _shared
     if _shared is None:
-        if not NATIVE:
-            from PySide6.QtCore import QCoreApplication
-            window = QCoreApplication.instance()
         _shared = NdofInput(window)
-    if NATIVE and window is not None:
+    if window is not None:
         host = window._host
         if _shared._host is not None and _shared._host is not host:
             host.timers.transfer_context(_shared._host.timers, _shared)
         _shared._host = host
-    if not _shared._driver_checked and (not NATIVE or _shared._host is not None):
+    if not _shared._driver_checked and _shared._host is not None:
         _shared._driver_checked = True
         _shared.start()
     return _shared

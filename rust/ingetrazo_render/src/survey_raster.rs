@@ -195,6 +195,13 @@ impl SurveyRaster {
     fn height(&self) -> u32 {
         self.pixels.height()
     }
+    #[pyo3(name = "pixelColor")]
+    fn pixel_color(&self, x: i64, y: i64) -> PyResult<crate::annotation_canvas::Color> {
+        let pixel = u32::try_from(x).ok().zip(u32::try_from(y).ok())
+            .and_then(|(x, y)| self.pixels.get_pixel_checked(x, y))
+            .ok_or_else(|| PyValueError::new_err("pixel outside raster"))?;
+        Ok(crate::annotation_canvas::Color::from_pixel(pixel.0))
+    }
     fn rgba<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
         PyBytes::new(py, self.pixels.as_raw())
     }

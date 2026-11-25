@@ -14,7 +14,7 @@ from tests.shell_isolation import native_window, restore_shell_patches  # noqa: 
 
 
 import pytest  # noqa: E402
-from PySide6.QtCore import QPointF, Qt  # noqa: E402
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as V
 
 

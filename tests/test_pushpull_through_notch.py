@@ -14,23 +14,12 @@ import math
 
 import pytest
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from core.orient import is_closed
 from tools.arc import commit_arc
 
 
-@pytest.fixture(scope="module")
-def app():
-    a = QApplication.instance()
-    if a is None:
-        a = QApplication([])
-    elif not isinstance(a, QApplication):
-        pytest.skip("another Qt application flavour is already running")
-    return a
-
-
-def _rounded_box(app):
+def _rounded_box():
     """A 2 m cube whose front face (y = 0) has its top-right corner rounded
     by an arc of radius 0.5; returns the viewport and the corner sliver."""
     from tests import test_pushpull_ux as T
@@ -53,9 +42,9 @@ def _back(mesh):
     return [f for f in mesh.faces if all(abs(v.y() - 2.0) < 1e-6 for v in f.vertices)]
 
 
-def test_pushing_the_corner_piece_through_trims_the_far_face(app):
+def test_pushing_the_corner_piece_through_trims_the_far_face():
     from tests import test_pushpull_ux as T
-    vp, sliver = _rounded_box(app)
+    vp, sliver = _rounded_box()
     m = vp.scene.mesh
     T._push(vp.scene, sliver, -2.0)
     assert is_closed(m)
@@ -79,10 +68,10 @@ def test_pushing_the_corner_piece_through_trims_the_far_face(app):
     assert len(_back(m)[0].vertices) == 4
 
 
-def test_pushing_past_the_far_face_stops_flush_and_trims_too(app):
+def test_pushing_past_the_far_face_stops_flush_and_trims_too():
     from tests import test_pushpull_ux as T
     from tools.pushpull import PushPullTool
-    vp, sliver = _rounded_box(app)
+    vp, sliver = _rounded_box()
     tool = PushPullTool()
     tool.base_face = sliver
     tool.dragging = True
@@ -101,9 +90,9 @@ def test_pushing_past_the_far_face_stops_flush_and_trims_too(app):
     assert len(_back(m)[0].vertices) == 12
 
 
-def test_short_of_the_far_face_is_still_a_recess(app):
+def test_short_of_the_far_face_is_still_a_recess():
     from tests import test_pushpull_ux as T
-    vp, sliver = _rounded_box(app)
+    vp, sliver = _rounded_box()
     m = vp.scene.mesh
     T._push(vp.scene, sliver, -1.94)
     assert is_closed(m)

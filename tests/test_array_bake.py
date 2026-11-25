@@ -8,13 +8,13 @@ box, samples and fingerprint — inside painted containers too. And it
 builds nothing: the mesh stays deferred until a face is asked for."""
 from __future__ import annotations
 
+from tests.raster_samples import solid_raster
 import random
 from types import SimpleNamespace
 
 import numpy as np
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import pytest
-from PySide6.QtGui import QImage
 from ingetrazo_core import Vec3 as V
 
 import core._native as _native
@@ -133,8 +133,7 @@ def _check(vp, tmp_path, seed, alpha=False):
     returns the buckets that were not empty."""
     rng = random.Random(seed)
     png = tmp_path / "t.png"
-    img = QImage(4, 4, QImage.Format_RGB32)
-    img.fill(0x8B5A2B)
+    img = solid_raster(4, 4, (139, 90, 43))
     img.save(str(png))
     scene = _random_scene(rng)
     _paint_up(scene, rng, png)

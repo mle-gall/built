@@ -9,8 +9,7 @@ from __future__ import annotations
 
 import math
 
-import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from tools.base import ToolContext
@@ -41,9 +40,9 @@ class _VP:
         pass
 
 
-def _ctx(vp, world, mods=Qt.NoModifier):
+def _ctx(vp, world, mods=Input.NoModifier):
     px = vp._world_to_pixel(world)
-    return ToolContext(viewport=vp, world=world, screen=QPointF(*px),
+    return ToolContext(viewport=vp, world=world, screen=ScreenPoint(*px),
                        modifiers=mods, snap=None)
 
 
@@ -117,8 +116,8 @@ def test_shift_holds_the_width_angle():
     tool.on_click(_ctx(vp, V(2, 0)))
     tool.on_hover(_ctx(vp, V(1, 3)))
     assert tool.angle == 0.0                  # flat on the ground
-    tool.on_hover(_ctx(vp, V(1, 3), Qt.ShiftModifier))
-    tool.on_hover(_ctx(vp, V(1, 1, 5), Qt.ShiftModifier))   # would stand up
+    tool.on_hover(_ctx(vp, V(1, 3), Input.ShiftModifier))
+    tool.on_hover(_ctx(vp, V(1, 1, 5), Input.ShiftModifier))   # would stand up
     w, angle = tool._width_and_angle(tool.hover_point, tool._locked)
     assert angle == 0.0 and math.isclose(w, 1.0, abs_tol=1e-6)
 
@@ -149,8 +148,8 @@ class _EyeVP(_VP):
 
 def _ctx_snap(vp, world, kind):
     from core.snap import SnapResult
-    return ToolContext(viewport=vp, world=world, screen=QPointF(0, 0),
-                       modifiers=Qt.NoModifier, snap=SnapResult(world, kind))
+    return ToolContext(viewport=vp, world=world, screen=ScreenPoint(0, 0),
+                       modifiers=Input.NoModifier, snap=SnapResult(world, kind))
 
 
 def test_the_width_is_read_on_the_second_protractors_plane():
@@ -189,8 +188,8 @@ def test_shift_holds_the_base_edge_direction():
     vp = _VP()
     tool = _started(vp)
     tool.on_hover(_ctx(vp, V(3, 3)))                       # 45°
-    tool.on_hover(_ctx(vp, V(3, 3), Qt.ShiftModifier))     # held
-    tool.on_hover(_ctx(vp, V(5, 1), Qt.ShiftModifier))     # cursor wanders
+    tool.on_hover(_ctx(vp, V(3, 3), Input.ShiftModifier))     # held
+    tool.on_hover(_ctx(vp, V(5, 1), Input.ShiftModifier))     # cursor wanders
     h = tool.hover_point
     assert abs(h.x() - h.y()) < 1e-6 and h.x() > 0         # still at 45°
     assert tool.on_value(vp, 2.0)                           # 2 m along it
@@ -201,12 +200,12 @@ def test_shift_holds_the_base_edge_direction():
 def test_the_click_lands_on_the_held_line_and_releasing_frees_it():
     vp = _VP()
     tool = _started(vp)
-    tool.on_hover(_ctx(vp, V(4, 0), Qt.ShiftModifier))     # held along X
-    tool.on_hover(_ctx(vp, V(3, 2), Qt.ShiftModifier))
+    tool.on_hover(_ctx(vp, V(4, 0), Input.ShiftModifier))     # held along X
+    tool.on_hover(_ctx(vp, V(3, 2), Input.ShiftModifier))
     assert _close(tool.hover_point, V(3, 0))
     tool.on_hover(_ctx(vp, V(3, 2)))                        # Shift up: free
     assert _close(tool.hover_point, V(3, 2))
-    tool.on_hover(_ctx(vp, V(4, 0), Qt.ShiftModifier))
-    tool.on_hover(_ctx(vp, V(3, 2), Qt.ShiftModifier))
-    tool.on_click(_ctx(vp, V(3, 2), Qt.ShiftModifier))
+    tool.on_hover(_ctx(vp, V(4, 0), Input.ShiftModifier))
+    tool.on_hover(_ctx(vp, V(3, 2), Input.ShiftModifier))
+    tool.on_click(_ctx(vp, V(3, 2), Input.ShiftModifier))
     assert _close(tool.base_point, V(3, 0))

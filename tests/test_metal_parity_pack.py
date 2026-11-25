@@ -1,10 +1,10 @@
 """P3 pack ABI: GL resolution, hidden streams and bounded texture mips."""
+from tests.raster_samples import solid_raster
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QImage
 from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 from core import _native
 from core.group import Group
@@ -101,7 +101,7 @@ def test_no_hidden_visible_stream_is_byte_identical_to_legacy_kernel():
 
 def test_texture_resolution_budget_mips_and_ids(tmp_path):
     path = str(tmp_path/'large.png')
-    image = QImage(2048, 32, QImage.Format_RGBA8888); image.fill(0xff123456); image.save(path)
+    image = solid_raster(2048, 32, (18, 52, 86)); image.save(path)
     w, h, layers, mips = _texture_array([path])
     assert (w, h, layers) == (2048, 32, 2)
     assert len(mips[-1]) == 8
@@ -220,11 +220,9 @@ def test_native_material_palette_matches_fallback(monkeypatch):
 
 
 def test_mixed_material_pack_matches_python_palette(monkeypatch, tmp_path):
-    from PySide6.QtGui import QColor
     from views import wgpu_scene
     path = str(tmp_path / 'swatch.png')
-    image = QImage(2, 2, QImage.Format_RGB32)
-    image.fill(QColor('red'))
+    image = solid_raster(2, 2, (255, 0, 0))
     assert image.save(path)
     mesh = Mesh()
     for x, paint in enumerate([

@@ -38,7 +38,6 @@ import math
 import numpy as np
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 from core.scene import Scene
 from core.mesh import Mesh
 from core.group import Group
@@ -46,8 +45,6 @@ from core.guide import Guide
 from views.wgpu_scene import pack_scene
 from views.wgpu_inference import (prepare, snap, nearby_edges, reference_edge,
                                   tangent_direction, eligible_rows, surface)
-
-app = QApplication.instance() or QApplication([])
 
 
 def harness(scene):

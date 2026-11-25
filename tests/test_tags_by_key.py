@@ -10,14 +10,9 @@ with, stable), and the name is only what the panels show: free to repeat
 («Beams» in every folder) and to change without relabelling anything."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
 
 from core import layers as L  # noqa: E402
 from core.group import Group  # noqa: E402

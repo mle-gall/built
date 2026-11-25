@@ -46,7 +46,5 @@ if __name__ == "__main__":
     sys.path.insert(0, str(HERE.parents[2]))
     import os
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtGui import QGuiApplication
-    app = QGuiApplication.instance() or QGuiApplication([])
     paths = make(Path(sys.argv[1]))
     print({k: str(v) for k, v in paths.items()})

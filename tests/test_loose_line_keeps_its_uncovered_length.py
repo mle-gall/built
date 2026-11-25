@@ -14,7 +14,7 @@ Headless: ``QVector3D`` value types only.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.edits import build_add_edge

@@ -6,25 +6,16 @@ one the active paint again, exactly as it was painted; the list survives
 a restart, minus images that are gone from disk."""
 from __future__ import annotations
 
-import os
 import random
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from core.input_types import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from core.settings import settings as QSettings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from PySide6.QtGui import QColor, QImage
+from ingetrazo_render import SurveyRaster
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
 
 from core.history import History                                  # noqa: E402
 from core.materials import Material                               # noqa: E402
@@ -58,8 +49,8 @@ class _FakeViewport:
 def _click(vp, face):
     vp._pick = face
     PaintTool().on_click(ToolContext(viewport=vp, world=QVector3D(),
-                                     screen=QPointF(0, 0),
-                                     modifiers=Qt.NoModifier, snap=None))
+                                     screen=ScreenPoint(0, 0),
+                                     modifiers=Input.NoModifier, snap=None))
 
 
 def _use(color=None, texture=None, name=None, opacity=None):
@@ -74,9 +65,8 @@ def _use(color=None, texture=None, name=None, opacity=None):
 
 
 def _png(path, rgb):
-    img = QImage(8, 8, QImage.Format_RGB32)
-    img.fill(QColor.fromRgbF(*rgb))
-    assert img.save(str(path))
+    pixel = bytes(round(channel * 255) for channel in rgb) + bytes([255])
+    assert SurveyRaster(8, 8, pixel * 64).save(str(path))
     return str(path)
 
 

@@ -194,7 +194,7 @@ def test_square_drawn_after_circle_splits_three_areas():
 
 
 def _click(vp, tool, x, y):
-    from PySide6.QtCore import QPointF, Qt
+    from core.input_types import QPointF, Qt
     from tools.base import ToolContext
     tool.on_click(ToolContext(viewport=vp, world=QVector3D(x, y, 0),
                               screen=QPointF(0, 0), modifiers=Qt.NoModifier,

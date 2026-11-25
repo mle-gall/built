@@ -4,8 +4,7 @@
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QBuffer
-from PySide6.QtGui import QImage, qRgba
+from ingetrazo_render import SurveyRaster
 
 from formats import skp_reader as skp
 
@@ -18,14 +17,8 @@ def _empty_cache():
 
 
 def _image(red=150):
-    image = QImage(3, 2, QImage.Format_RGBA8888)
-    image.fill(qRgba(red, 80, 40, 255))
-    image.setPixel(0, 0, qRgba(10, 20, 30, 0))
-    image.setPixel(1, 0, qRgba(30, 100, 200, 128))
-    buffer = QBuffer()
-    buffer.open(QBuffer.WriteOnly)
-    image.save(buffer, "PNG")
-    return bytes(buffer.data())
+    pixels = bytes((10, 20, 30, 0, 30, 100, 200, 128)) + bytes((red, 80, 40, 255)) * 4
+    return SurveyRaster(3, 2, pixels).png()
 
 
 def test_key_includes_image_color_and_mode(monkeypatch):

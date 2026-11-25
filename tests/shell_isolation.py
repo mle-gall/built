@@ -1,12 +1,12 @@
-"""Undo what app_shell installs process-wide (app_shell.modal.install,
-app_shell.files.install) so the shell's tests leave the Qt app's modules as
-they found them for the tests that run after them in the same process."""
+"""Isolated native document and window fixtures."""
+from contextlib import contextmanager
 import importlib
+from pathlib import Path
 import os
 
 import pytest
 
-_ENV = ("QT_QPA_PLATFORM", "XDG_DATA_HOME", "BUILT_ANSWERS", "BUILT_SETTINGS_DIR")
+_ENV = ("XDG_DATA_HOME", "BUILT_ANSWERS", "BUILT_SETTINGS_DIR")
 
 _PATCHED = {
     "core.settings": ("_store",),
@@ -18,77 +18,55 @@ _PATCHED = {
 _MISSING = object()
 
 
-@pytest.fixture(autouse=True, scope="module")
-def restore_shell_patches(tmp_path_factory):
+@contextmanager
+def _shell_state():
+    """Restore process-wide shell services even when a host fails to open."""
     env = {k: os.environ.get(k) for k in _ENV}
-    os.environ["BUILT_SETTINGS_DIR"] = str(tmp_path_factory.mktemp("shell-settings"))
-    from PySide6.QtCore import QCoreApplication, QSettings, QStandardPaths, QTimer
-    qt = [(QTimer, a, QTimer.__dict__.get(a, _MISSING))
-          for a in ("start", "singleShot", "_shell_tracked")]
-    names = (QCoreApplication.organizationName(), QCoreApplication.applicationName())
-    test_mode = QStandardPaths.isTestModeEnabled()
-    fmt = QSettings.defaultFormat()
-    saved = {}
+    saved = []
     for name, attrs in _PATCHED.items():
-        try:
-            mod = importlib.import_module(name)
-        except Exception:  # noqa: BLE001
-            continue
-        saved[name] = (mod, {a: getattr(mod, a, _MISSING) for a in attrs})
-    yield
-    for cls, attr, value in qt:
-        if value is _MISSING:
-            if attr in cls.__dict__:
-                try:
-                    delattr(cls, attr)
-                except (AttributeError, TypeError):
-                    pass
-        else:
-            setattr(cls, attr, value)
+        mod = importlib.import_module(name)
+        # Capture only overrides installed in the module. Looking up an
+        # absent attribute can invoke a backend's lazy __getattr__.
+        saved.extend((mod, attr, vars(mod).get(attr, _MISSING)) for attr in attrs)
     try:
-        from app_shell import qt_host
-        guard = getattr(qt_host, "_GUARD", None)
-        app = getattr(qt_host, "_APP", None)
-        if guard is not None and app is not None:
-            app.removeEventFilter(guard.filter)
-        qt_host._GUARD = None
-        qt_host._APP = None
-        qt_host._SETTINGS_DIR = None
-    except Exception:  # noqa: BLE001
-        pass
-    QCoreApplication.setOrganizationName(names[0])
-    QCoreApplication.setApplicationName(names[1])
-    QStandardPaths.setTestModeEnabled(test_mode)
-    QSettings.setDefaultFormat(fmt)
-    for k, v in env.items():
-        if v is None:
-            os.environ.pop(k, None)
-        else:
-            os.environ[k] = v
-    for mod, values in saved.values():
-        for attr, value in values.items():
+        yield
+    finally:
+        for k, v in env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        for mod, attr, value in reversed(saved):
             if value is _MISSING:
-                if hasattr(mod, attr):
-                    delattr(mod, attr)
+                vars(mod).pop(attr, None)
             else:
                 setattr(mod, attr, value)
 
 
-@pytest.fixture
-def native_host(tmp_path, restore_shell_patches, monkeypatch):
-    """One native host, including its initial document and private profile."""
+@pytest.fixture(autouse=True, scope="module")
+def restore_shell_patches(tmp_path_factory):
+    with _shell_state():
+        os.environ["BUILT_SETTINGS_DIR"] = str(tmp_path_factory.mktemp("shell-settings"))
+        yield
+
+
+@contextmanager
+def open_test_host(profile, *, width=900, height=600, scale=1.):
+    """Open a private document without creating an OS window."""
     from app_shell.host import Host
-    from core import settings
-    profile = str(tmp_path / "profile")
-    # The offscreen QApplication lives for the module. Choose this document's
-    # test store even when Qt has already been initialized by an earlier test.
-    from ingetrazo_core import NativeSettings
-    monkeypatch.setattr(settings, "_store", NativeSettings(profile))
-    host = Host(0, 900, 600, 1., settings=profile)
-    try:
+    with _shell_state():
+        os.environ["BUILT_SETTINGS_DIR"] = str(Path(profile).resolve())
+        host = Host(0, width, height, scale, settings=os.environ["BUILT_SETTINGS_DIR"])
+        try:
+            yield host
+        finally:
+            host.close()
+
+
+@pytest.fixture
+def native_host(tmp_path):
+    with open_test_host(tmp_path / "profile") as host:
         yield host
-    finally:
-        host.close()
 
 
 @pytest.fixture
@@ -126,24 +104,20 @@ def one_off_export(win, fmt, destination):
     return form
 
 
+def attach_test_renderer(host):
+    """Create a real offscreen GPU target for an isolated Host."""
+    from ingetrazo_render import Renderer
+    renderer = Renderer(0, host.width, host.height, host.scale, platform="offscreen")
+    # The offscreen target can present a frame although there is no native window.
+    host.view._presentable = lambda: host.view.renderer is not None
+    host.hand_renderer(host.view, renderer)
+    host.window._activate_tool("select")
+    return renderer
+
+
 @pytest.fixture
 def native_gpu_host(native_host, monkeypatch):
-    """Attach the native renderer to a hidden platform window for pixel readbacks."""
-    from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QApplication, QWidget
-    from views.wgpu_surface import window_handles
-    if QApplication.platformName() in {"offscreen", "minimal"}:
-        pytest.skip("pixel readback requires a native window system")
-    surface = QWidget()
-    surface.setAttribute(Qt.WA_DontShowOnScreen)
-    surface.resize(native_host.width, native_host.height)
-    handle, platform = window_handles(surface)
-    # The window handle must outlive the renderer in native_host's teardown.
-    native_host._test_surface = surface
-    native_host.ns_view = handle
-    native_host.surface_handles = platform
-    # Pixel assertions sample model coordinates. Keep egui out of that buffer.
     from views import wgpu_ui
     monkeypatch.setattr(wgpu_ui, "attach", lambda view: None)
-    assert native_host.attach_surface() is not None
+    attach_test_renderer(native_host)
     return native_host

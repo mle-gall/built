@@ -9,21 +9,17 @@ from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.controller_surface import ControllerSurface
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
 import core._native as _native  # noqa: E402
 from tests.test_lazy_native_snap import (  # noqa: E402
     VIEWS, _face_key, _set_view, _window)
 from views import document_interaction as vpmod  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
 mod = _native.native
 pytestmark = pytest.mark.skipif(
     mod is None or not hasattr(mod, "InstanceSet"),

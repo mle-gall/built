@@ -8,18 +8,12 @@ cursor was set. After every operation the viewport now unsets and sets the
 tool's cursor again, and does the same when the pointer comes back in."""
 from __future__ import annotations
 
+from ingetrazo_render import MouseEvent
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from PySide6.QtCore import QPointF, Qt  # noqa: E402
-from PySide6.QtGui import QMouseEvent  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-if QApplication.instance() is None:
-    QApplication([])
+from core.input_types import Qt
 
 
 def _spy(vp, monkeypatch):
@@ -31,9 +25,7 @@ def _spy(vp, monkeypatch):
 
 
 def _click(vp):
-    return QMouseEvent(QMouseEvent.Type.MouseButtonPress, QPointF(50, 50),
-                       QPointF(50, 50), Qt.LeftButton, Qt.LeftButton,
-                       Qt.NoModifier)
+    return MouseEvent('press', 50, 50, Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
 
 
 def test_an_operation_puts_the_tool_cursor_back(native_window, monkeypatch):

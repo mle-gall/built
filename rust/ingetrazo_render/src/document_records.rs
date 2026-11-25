@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Transient tool records and callbacks of the document host.
 use crate::document_host::*;
-use pyo3::exceptions::{PyKeyError, PyRuntimeError};
-use pyo3::{
-    prelude::*,
-    types::{PyDict, PyList},
-};
+use pyo3::exceptions::PyKeyError;
+use pyo3::{prelude::*, types::PyDict};
 
 #[pyclass(get_all, set_all)]
 struct SnapEdge {
@@ -146,58 +143,31 @@ fn occlusion_native(py: Python) -> PyResult<Obj> {
     }
     Ok(none(py))
 }
+/// Observe Alt before chrome or tools consume the key. Each document owns its tap.
 #[pyfunction]
-fn alt_filter(w: &Obj, event: &Obj) -> PyResult<bool> {
-    let py = w.py();
-    let h = host(py)?;
-    let cls = h.getattr("QEvent")?;
-    let t = event.call_method0("type")?;
-    let down = t.eq(cls.getattr("KeyPress")?)?;
-    if t.eq(cls.getattr("MouseButtonPress")?)? {
-        w.setattr("_clean", false)?;
-        return Ok(false);
+fn observe_alt_key(view: &Obj, pressed: bool, key: i64, repeat: bool) -> PyResult<()> {
+    const ALT: i64 = 0x01000023;
+    if repeat {
+        return Ok(());
     }
-    if (!down && !t.eq(cls.getattr("KeyRelease")?)?)
-        || event.call_method0("isAutoRepeat")?.is_truthy()?
-    {
-        return Ok(false);
-    }
-    if !event
-        .call_method0("key")?
-        .eq(h.getattr("Qt")?.getattr("Key_Alt")?)?
-    {
-        if down {
-            w.setattr("_clean", false)?;
+    if key != ALT {
+        if pressed && opt(view, "_clean_alt_press")?.is_truthy()? {
+            view.setattr("_clean_alt_press", false)?;
         }
-        return Ok(false);
+        return Ok(());
     }
-    let mut tap = !down && w.getattr("_clean")?.is_truthy()?;
-    w.setattr("_clean", down)?;
-    let views = PyList::new(
-        py,
-        w.getattr("_viewports")?
-            .try_iter()?
-            .collect::<PyResult<Vec<_>>>()?,
-    )?;
-    for v in views.iter() {
-        let apply = || -> PyResult<bool> {
-            if v.getattr("_alt_down")?.is_truthy()? != down {
-                v.call_method1("_apply_alt_cursor", (down,))?;
-            }
-            Ok(tap && v.call_method0("_alt_tapped")?.is_truthy()?)
-        };
-        match apply() {
-            Ok(true) => tap = false,
-            Err(e) if !e.is_instance_of::<PyRuntimeError>(py) => return Err(e),
-            _ => {}
-        }
+    let tap = !pressed && opt(view, "_clean_alt_press")?.is_truthy()?;
+    view.setattr("_clean_alt_press", pressed)?;
+    view.call_method1("_apply_alt_cursor", (pressed,))?;
+    if tap {
+        view.call_method0("_alt_tapped")?;
     }
-    Ok(false)
+    Ok(())
 }
 
 pub(super) fn register(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<SnapEdge>()?;
-    m.add_function(wrap_pyfunction!(alt_filter, m)?)?;
+    m.add_function(wrap_pyfunction!(observe_alt_key, m)?)?;
     m.add_function(wrap_pyfunction!(lazy_chunk_fill, m)?)?;
     m.add_function(wrap_pyfunction!(lazy_chunk_value, m)?)?;
 

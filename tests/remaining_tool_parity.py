@@ -22,7 +22,7 @@ CASES = {
 
 
 def run(kind, steps):
-    from PySide6.QtCore import Qt
+    from core.input_types import Qt
     from tools.dimension import DimensionTool
     from tools.eraser import EraserTool
     from tools.geopath import GeoPathTool

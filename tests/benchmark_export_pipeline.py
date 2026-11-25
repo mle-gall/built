@@ -13,7 +13,6 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from PySide6.QtWidgets import QApplication
 from core.scene import Scene
 from core.bim import collect_objects
 from formats import igz
@@ -27,7 +26,6 @@ def main():
     parser.add_argument('--geometry', choices=('brep', 'polygonal'), default='brep')
     parser.add_argument('--instancing', action='store_true')
     args = parser.parse_args()
-    app = QApplication([])
     scene = Scene()
 
     def measure(stage, operation):

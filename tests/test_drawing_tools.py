@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
@@ -478,7 +478,7 @@ def test_a_rectangle_drawn_on_a_box_keeps_the_box_closed():
     open shell: orient_outward has no volume to judge windings against, the
     push reads the wrong sign, the coplanar merge dissolves the door.
     """
-    from PySide6.QtCore import QPointF, Qt
+    from core.input_types import QPointF, Qt
     from core.orient import is_closed
     from tools.base import ToolContext
     from tools.rust_tools import RectangleTool

@@ -8,10 +8,8 @@ own (moving) corners — "self inference", as @pacaeiro named it.
 """
 from __future__ import annotations
 
-import os
 
-import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
@@ -47,8 +45,8 @@ class _Vp:
 
 
 def _ctx(vp, x, y, z=0.0):
-    return ToolContext(viewport=vp, world=V(x, y, z), screen=QPointF(0, 0),
-                       modifiers=Qt.NoModifier, snap=None)
+    return ToolContext(viewport=vp, world=V(x, y, z), screen=ScreenPoint(0, 0),
+                       modifiers=Input.NoModifier, snap=None)
 
 
 def test_move_names_the_edges_it_drags():
@@ -75,7 +73,7 @@ def test_a_copy_in_progress_excludes_nothing():
     vp = _Vp(scene)
     tool = MoveTool()
     tool.on_click(_ctx(vp, 0, 0))
-    tool.on_key(vp, Qt.Key_Control, Qt.NoModifier)
+    tool.on_key(vp, Input.Key_Control, Input.NoModifier)
     assert tool.snap_excluded() is None                 # the original stays put
 
 
@@ -92,13 +90,6 @@ def test_rotate_names_the_geometry_swinging():
 
 
 def test_the_viewport_drops_the_moving_edges_from_the_snap_scene():
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtWidgets import QApplication
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    elif not isinstance(app, QApplication):
-        pytest.skip("another Qt application flavour is already running")
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1000, 600)
@@ -117,8 +108,8 @@ def test_the_viewport_drops_the_moving_edges_from_the_snap_scene():
     px = vp._world_to_pixel(V(3, 0, 0))
     before = vp._snap_scene(*px).edges
     assert len(before) == 8                             # both squares, untouched
-    tool.on_click(ToolContext(viewport=vp, world=V(0, 0, 0), screen=QPointF(0, 0),
-                              modifiers=Qt.NoModifier, snap=None))
+    tool.on_click(ToolContext(viewport=vp, world=V(0, 0, 0), screen=ScreenPoint(0, 0),
+                              modifiers=Input.NoModifier, snap=None))
     during = vp._snap_scene(*px).edges
     assert len(during) == 4
     assert all(e.a in still.vertices and e.b in still.vertices for e in during)

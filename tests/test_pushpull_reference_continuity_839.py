@@ -10,7 +10,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as V
 
 from core.orient import is_closed
@@ -42,16 +42,16 @@ def box_drag():
     tool.hovered_face = faces[1]
     at = faces[1].centroid()
     pixel = vp._world_to_pixel(at)
-    tool.on_click(ToolContext(vp, at, QPointF(*pixel), Qt.NoModifier, None))
+    tool.on_click(ToolContext(vp, at, ScreenPoint(*pixel), Input.NoModifier, None))
     assert tool._prism_cap
     yield vp, tool, pixel
     tool.on_cancel(vp)
-    vp.deleteLater()
+    vp.close()
 
 
 def _context(vp, point):
     point = V(*point)
-    return ToolContext(vp, point, QPointF(*vp._world_to_pixel(point)), Qt.NoModifier, None)
+    return ToolContext(vp, point, ScreenPoint(*vp._world_to_pixel(point)), Input.NoModifier, None)
 
 
 def _shape(vp):
@@ -64,7 +64,7 @@ def test_a_steady_inward_push_never_jumps_back_to_its_side_faces(box_drag):
     vp, tool, pixel = box_drag
     distances = []
     for offset in range(1, 221):
-        vp._process_hover(QPointF(pixel[0], pixel[1] + offset), Qt.NoModifier)
+        vp._process_hover(ScreenPoint(pixel[0], pixel[1] + offset), Input.NoModifier)
         distances.append(tool.extrusion)
     # Before the fix, offsets 87 -> 88 changed -0.769 to -0.007 as the
     # reference switched to the original side face. Leaving the origin's
@@ -106,7 +106,7 @@ def test_cancel_restores_the_original_closed_box(box_drag):
     vp, tool, pixel = box_drag
     before = _shape(vp)
     for offset in (30, 88, 180, 201, 219):
-        vp._process_hover(QPointF(pixel[0], pixel[1] + offset), Qt.NoModifier)
+        vp._process_hover(ScreenPoint(pixel[0], pixel[1] + offset), Input.NoModifier)
     tool.on_cancel(vp)
     assert _shape(vp) == before
     assert is_closed(vp.scene.mesh)
@@ -115,7 +115,7 @@ def test_cancel_restores_the_original_closed_box(box_drag):
 def test_commit_undo_and_redo_keep_the_closed_box(box_drag):
     vp, tool, pixel = box_drag
     before = _shape(vp)
-    vp._process_hover(QPointF(pixel[0], pixel[1] - 80), Qt.NoModifier)
+    vp._process_hover(ScreenPoint(pixel[0], pixel[1] - 80), Input.NoModifier)
     distance = tool.extrusion
     tool.on_click(_context(vp, (0, 0, 2 + distance)))
     assert not tool.dragging
@@ -130,7 +130,7 @@ def test_commit_undo_and_redo_keep_the_closed_box(box_drag):
 
 def test_typed_distance_keeps_its_exact_value(box_drag):
     vp, tool, pixel = box_drag
-    vp._process_hover(QPointF(pixel[0], pixel[1] - 60), Qt.NoModifier)
+    vp._process_hover(ScreenPoint(pixel[0], pixel[1] - 60), Input.NoModifier)
     assert tool.on_value(vp, 1.25)
     assert not tool.dragging
     assert len(vp.history.undo_stack) == 1
@@ -143,7 +143,7 @@ def test_a_second_drag_after_cancel_follows_the_cursor(box_drag):
     tool.on_cancel(vp)
     tool.hovered_face = next(f for f in vp.scene.mesh.faces if f.centroid().z() > 1.99)
     tool.on_click(_context(vp, (0, 0, 2)))
-    vp._process_hover(QPointF(pixel[0], pixel[1] + 88), Qt.NoModifier)
+    vp._process_hover(ScreenPoint(pixel[0], pixel[1] + 88), Input.NoModifier)
     assert tool.extrusion == pytest.approx(-0.7782507, abs=1e-5)
 
 

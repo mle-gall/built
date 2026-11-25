@@ -6,11 +6,10 @@ and one segment is a flat chamfer — one undo step, as before. It bevels
 corners (vertices) too. The tool strip and inspector follow edits made with the keyboard."""
 from __future__ import annotations
 
+from ingetrazo_render import KeyEvent
 import pytest
-from PySide6.QtCore import QEvent, QPointF, Qt
-from PySide6.QtGui import QKeyEvent
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core.orient import is_closed, signed_volume
 from tools.base import ToolContext
@@ -20,11 +19,6 @@ from tests.test_fillet import box, edge_at
 
 @pytest.fixture(scope="module")
 def viewport():
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    elif not isinstance(app, QApplication):
-        pytest.skip("another Qt application flavour is already running")
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1000, 700)
@@ -73,9 +67,9 @@ def _tap_ctrl(vp, tool, alone=True):
 
 def _type(vp, text):
     for ch in text:
-        ev = QKeyEvent(QEvent.KeyPress, 0, Qt.NoModifier, ch)
+        ev = KeyEvent(True, 0, 0, ch)
         assert vp._handle_value_key(ev), ch
-    ev = QKeyEvent(QEvent.KeyPress, Qt.Key_Return, Qt.NoModifier)
+    ev = KeyEvent(True, Qt.Key_Return)
     return vp._handle_value_key(ev)
 
 
@@ -177,8 +171,8 @@ def test_p_stays_push_pull_for_other_tools(viewport):
     from tools.rust_tools import LineTool
     viewport.set_active_tool(LineTool())
     viewport._set_value_buffer("")
-    assert viewport._handle_value_key(QKeyEvent(QEvent.KeyPress, 0, Qt.NoModifier, "2"))
-    assert not viewport._handle_value_key(QKeyEvent(QEvent.KeyPress, 0, Qt.NoModifier, "p"))
+    assert viewport._handle_value_key(KeyEvent(True, 0, 0, '2'))
+    assert not viewport._handle_value_key(KeyEvent(True, 0, 0, 'p'))
     viewport._set_value_buffer("")
 
 

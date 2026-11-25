@@ -8,13 +8,13 @@ inferences do not pull the grip; what is being scaled is left out of the
 snap, so it never lands on itself."""
 from __future__ import annotations
 
+from ingetrazo_render import MouseEvent
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from types import SimpleNamespace
 
 
 import pytest
-from PySide6.QtCore import QEvent, QPointF, Qt
-from PySide6.QtGui import QMouseEvent
+from core.input_types import Qt
 from ingetrazo_core import Vec3 as QVector3D
 
 from tests.test_scale_grips import V, _tool_with_box
@@ -103,8 +103,7 @@ def test_in_the_viewport_the_grip_lands_on_another_boxs_corner(native_window):
 
     def hover(p):
         px = vp._world_to_pixel(p)
-        ev = QMouseEvent(QEvent.MouseMove, QPointF(*px), QPointF(*px),
-                         Qt.NoButton, Qt.NoButton, Qt.NoModifier)
+        ev = MouseEvent('move', *px, Qt.NoButton, Qt.NoButton, Qt.NoModifier)
         ctx = vp._build_ctx(ev)
         tool.on_hover(ctx)
         return ctx.snap

@@ -1,8 +1,8 @@
 """Empty-space zoom stays at view depth; high-resolution ticks stay fractional."""
 from types import SimpleNamespace
 import pytest
-from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import QWheelEvent
+from core.input_types import QPoint, QPointF, Qt
+from ingetrazo_render import WheelEvent
 from ingetrazo_core import Vec3 as V
 from core.camera import OrbitCamera
 from tests.controller_surface import ControllerSurface as Viewport
@@ -29,9 +29,7 @@ def test_real_surface_hit_keeps_its_actual_depth():
 
 
 def wheel(delta):
-    return QWheelEvent(QPointF(100, 100), QPointF(100, 100), QPoint(),
-                       QPoint(0, delta), Qt.NoButton, Qt.NoModifier,
-                       Qt.ScrollUpdate, False)
+    return WheelEvent(100, 100, 0, 0, 0, delta, "move")
 
 
 def viewport():
@@ -79,9 +77,7 @@ def test_a_slide_gesture_picks_the_point_under_the_cursor_once():
     vp._world_under_cursor = lambda x, y: picks.append((x, y)) or V(1, 2, 0)
     for i in range(200):
         x = 100 + i % 7
-        event = QWheelEvent(QPointF(x, 100), QPointF(x, 100), QPoint(0, 1),
-                            QPoint(0, -2 if i < 100 else 2), Qt.NoButton,
-                            Qt.NoModifier, Qt.ScrollUpdate, False)
+        event = WheelEvent(x, 100, 0, 1, 0, -2 if i < 100 else 2, "move")
         Viewport.wheelEvent(vp, event)
     assert len(picks) == 1
     assert vp.camera.distance != 50.0

@@ -292,16 +292,12 @@ def _vff_skp(tmp_path, thumb_pixels) -> Path:
     ``meta/model_thumbnail.png``."""
     import io
     import zipfile
-    from PySide6.QtCore import QBuffer, QByteArray, QIODevice
-    from PySide6.QtGui import QColor, QImage
-    img = QImage(8, 8, QImage.Format_RGBA8888)
-    img.fill(QColor(255, 255, 255))
+    from ingetrazo_render import SurveyRaster
+    pixels = bytearray([255] * (8 * 8 * 4))
     for x, y in thumb_pixels:
-        img.setPixelColor(x, y, QColor(0, 0, 0))
-    raw = QByteArray()
-    buf = QBuffer(raw)
-    buf.open(QIODevice.WriteOnly)
-    img.save(buf, "PNG")
+        offset = 4 * (y * 8 + x)
+        pixels[offset:offset + 4] = bytes((0, 0, 0, 255))
+    raw = SurveyRaster(8, 8, bytes(pixels)).png()
     zbuf = io.BytesIO()
     with zipfile.ZipFile(zbuf, "w") as zf:
         zf.writestr("meta/model_thumbnail.png", bytes(raw))
@@ -574,16 +570,12 @@ def test_openskp_adapter_image_entities_become_billboards(tmp_path):
     # A def with is_image=True (upstream PR openskp#8) placed by an instance
     # becomes its OWN group; a cutout texture (real alpha) marks it as a
     # face-me billboard, an opaque photo stays a static panel.
-    from PySide6.QtGui import QImage
+    from ingetrazo_render import SurveyRaster
 
     cutout = tmp_path / "toro.png"
-    img = QImage(4, 4, QImage.Format_RGBA8888)
-    img.fill(0x00000000)          # fully transparent pixels -> cutout
-    img.save(str(cutout), "PNG")
+    cutout.write_bytes(SurveyRaster(4, 4, bytes((0, 0, 0, 0)) * 16).png())
     opaque = tmp_path / "mural.png"
-    img2 = QImage(4, 4, QImage.Format_RGB888)
-    img2.fill(0xFF8080FF)
-    img2.save(str(opaque), "PNG")
+    opaque.write_bytes(SurveyRaster(4, 4, bytes((128, 128, 255, 255)) * 16).png())
 
     def image_def(id, name, mid):
         d = _tri_def(id, name)
@@ -628,12 +620,10 @@ def test_a_cutout_image_stuck_on_a_face_stays_put(tmp_path):
     # the cutout guess did it. Lying on a face (here a face of ANOTHER
     # component, as in that file, 0.5 mm off it) keeps one static; a cutout
     # standing free — the plaza's bull — still turns.
-    from PySide6.QtGui import QImage
+    from ingetrazo_render import SurveyRaster
 
     cutout = tmp_path / "logo.png"
-    img = QImage(4, 4, QImage.Format_RGBA8888)
-    img.fill(0x00000000)
-    img.save(str(cutout), "PNG")
+    cutout.write_bytes(SurveyRaster(4, 4, bytes((0, 0, 0, 0)) * 16).png())
 
     def image_def(id, name):
         d = _tri_def(id, name)
@@ -676,12 +666,10 @@ def test_openskp_adapter_default_mapping_is_local(tmp_path, monkeypatch):
     # two copies of the same textured component must sample the same patch of
     # the tile (identical UVs), regardless of where each copy sits in world.
     from core.texture import affine_uv
-    from PySide6.QtGui import QImage
+    from ingetrazo_render import SurveyRaster
 
     png = tmp_path / "wood.png"
-    img = QImage(4, 4, QImage.Format_RGB888)
-    img.fill(0xFF884422)
-    img.save(str(png), "PNG")
+    png.write_bytes(SurveyRaster(4, 4, bytes((136, 68, 34, 255)) * 16).png())
 
     child = _tri_def(5, "Banca")
     child.faces[20].material_id = 9
@@ -815,11 +803,9 @@ def test_openskp_adapter_splits_prototypes_by_inherited_material(monkeypatch):
 def test_openskp_adapter_translucent_material_carries_opacity(tmp_path):
     # Material.transparency < 1 (useTrans, upstream PR openskp#12) becomes
     # attrs["opacity"] — and survives the default-mapping uvw baking.
-    from PySide6.QtGui import QImage
+    from ingetrazo_render import SurveyRaster
     png = tmp_path / "glass.png"
-    img = QImage(4, 4, QImage.Format_RGB888)
-    img.fill(0xFF6495ED)
-    img.save(str(png), "PNG")
+    png.write_bytes(SurveyRaster(4, 4, bytes((100, 149, 237, 255)) * 16).png())
 
     root = _tri_def(0, "ROOT_MODEL")
     root.faces[20].material_id = 9
@@ -843,12 +829,10 @@ def test_openskp_adapter_colorized_material_tints_shared_texture(tmp_path):
     # shares the source material's image bytes; the adapter must write a
     # RE-TINTED copy under its own name (the base texture stays pristine)
     # with the cutout alpha preserved.
-    from PySide6.QtGui import QImage, qRgba
+    from ingetrazo_render import SurveyRaster
     png = tmp_path / "fence.png"
-    img = QImage(4, 4, QImage.Format_RGBA8888)
-    img.fill(qRgba(200, 200, 200, 255))          # grey weave...
-    img.setPixel(0, 0, qRgba(0, 0, 0, 0))        # ...with a cutout hole
-    img.save(str(png), "PNG")
+    rgba = bytes((0, 0, 0, 0)) + bytes((200, 200, 200, 255)) * 15
+    png.write_bytes(SurveyRaster(4, 4, rgba).png())
     base_bytes = png.read_bytes()
 
     root = _tri_def(0, "ROOT_MODEL")
@@ -865,10 +849,10 @@ def test_openskp_adapter_colorized_material_tints_shared_texture(tmp_path):
     attrs = payload["groups"][0]["faces"][0][2]
     path = attrs["texture"]["path"]
     assert path.endswith("7_fence.png")          # own name, base untouched
-    out = QImage(path).convertToFormat(QImage.Format_RGBA8888)
-    assert out.pixelColor(0, 0).alpha() == 0     # cutout survived the tint
-    c = out.pixelColor(2, 2)
-    assert c.green() > c.red() and c.green() > c.blue()   # shifted to green
+    pixels = SurveyRaster.open(path).rgba()
+    assert pixels[3] == 0
+    r, g, b = pixels[40:43]
+    assert g > r and g > b
 
 
 # ---- Layers (.skp tags) -------------------------------------------------------

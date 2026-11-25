@@ -9,19 +9,15 @@ wider than that."""
 from __future__ import annotations
 
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QImage
+from tests.raster_samples import pixels
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core.camera import OrbitCamera
 
-_app = QApplication.instance() or QApplication([])
 
 V = QVector3D
 
@@ -48,11 +44,8 @@ def test_the_reach_covers_what_the_view_holds_and_never_widens():
     assert cam.parallel_depth() == cam.far_plane()
 
 
-def _rgb(img: QImage) -> np.ndarray:
-    img = img.convertToFormat(QImage.Format_RGBA8888)
-    buf = np.frombuffer(img.constBits(), np.uint8)
-    px = buf.reshape(img.height(), img.bytesPerLine())[:, :img.width() * 4]
-    return px.reshape(img.height(), img.width(), 4)[..., :3].astype(np.int32)
+def _rgb(img) -> np.ndarray:
+    return pixels(img)[..., :3].astype(np.int32)
 
 
 @pytest.fixture
@@ -80,7 +73,7 @@ def test_faces_close_together_do_not_fight_in_parallel(win):
         vp.camera.set_view("iso")
         vp.camera.set_projection(proj)
         vp.camera.fit_to(V(0, 0, 0), V(1, 1, 0.01))
-        px = _rgb(vp.render_image(400, 300, overlays=False))
+        px = _rgb(vp.render_raster(400, 300, overlays=False))
         red = (px[..., 0] > 150) & (px[..., 2] < 100)
         blue = (px[..., 2] > 150) & (px[..., 0] < 100)
         counts[proj] = (int(red.sum()), int(blue.sum()))

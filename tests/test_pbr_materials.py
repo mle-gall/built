@@ -1,4 +1,5 @@
 """PBR recipes at document, glTF and renderer boundaries."""
+from tests.raster_samples import solid_raster
 from dataclasses import replace
 from pathlib import Path
 import zipfile
@@ -6,7 +7,7 @@ import zipfile
 import numpy as np
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from PySide6.QtGui import QColor, QImage
+from ingetrazo_render import SurveyRaster
 from ingetrazo_core import Vec3 as V
 
 from core.group import Group
@@ -24,8 +25,7 @@ def triangle(mesh):
 
 
 def image(path, rgb):
-    tile = QImage(2, 3, QImage.Format_RGB32)
-    tile.fill(QColor(*rgb))
+    tile = solid_raster(2, 3, rgb)
     assert tile.save(str(path))
     return str(path)
 
@@ -82,7 +82,7 @@ def test_glb_round_trip_channels_uv_and_factors(tmp_path, packed):
     restored = Scene()
     load_glb(restored, source)
     actual = restored.materials["Alloy"].pbr
-    assert QImage(actual["normal_map"]["path"]).pixelColor(0, 0).green() == 218
+    assert SurveyRaster.open(actual["normal_map"]["path"]).rgba()[1] == 218
     assert actual["normal_scale"] == .52
     assert restored.groups[0].mesh.faces[0].attrs["pbr"] == actual
     out = tmp_path / "again.glb"
@@ -99,10 +99,10 @@ def test_glb_round_trip_channels_uv_and_factors(tmp_path, packed):
         idx = js["textures"][texture["index"]]["source"]
         view = js["bufferViews"][js["images"][idx]["bufferView"]]
         start = view["byteOffset"]
-        return QImage.fromData(buffers[0][start:start+view["byteLength"]]).pixelColor(0, 0)
+        return SurveyRaster.decode(buffers[0][start:start+view["byteLength"]]).rgba()[:4]
     orm = pixel(mr["metallicRoughnessTexture"])
-    assert (orm.green(), orm.blue()) == (50, 202)
-    assert pixel(mat["occlusionTexture"]).red() == 78
+    assert (orm[1], orm[2]) == (50, 202)
+    assert pixel(mat["occlusionTexture"])[0] == 78
 
 
 def test_restamp_keeps_uv_and_legacy_corner_bytes(tmp_path):

@@ -116,8 +116,6 @@ for _plat, _names in _DWG_FILES.items():
 
 # ── Hidden imports ───────────────────────────────────────────────────────────
 hiddenimports = [
-    # Qt submodules sometimes missed by static analysis.
-    'PySide6.QtNetwork',        # tile/DEM fetch (georef)
     # Lazily imported project modules (inside functions) — listed for safety.
     'core.text3d',
     'core.textlabel',
@@ -267,6 +265,8 @@ for _sp in site.getsitepackages() + [site.getusersitepackages()]:
 print('spec: mapbox_earcut native files: %d' % len(_earcut_libs))
 
 excludes = [
+    'PySide6',
+    'shiboken6',
     'tkinter',
     'matplotlib',
     'pandas',
@@ -293,37 +293,8 @@ a = Analysis(
     excludes=excludes,
     noarchive=True,
 )
-# ── The X client libraries come from the HOST, never from here ───────────────
-# Bundling libX11 puts a SECOND copy of it in the process: Qt loads ours
-# through $ORIGIN while the host's GL driver loads the system one, and the
-# Display of one is not the Display of the other. Mesa tolerates it; NVIDIA
-# does not, and the packaged builds die at start-up with
-#   qt.glx: qglx_findConfig: Failed to finding matching FBConfig
-#   Could not initialize GLX
-# (issue #6 — the tarball and the AppImage fail on an NVIDIA + X11 machine
-# where the same tag from source works). Note that `libxcb.so.1` was never
-# bundled, which is what makes the split possible in the first place.
-#
-# Only these three go: they are on every system that can draw a window at
-# all, and every one of them is also loaded by the host's GL driver. The
-# other libxcb-* helpers stay — Qt's xcb plugin needs them and a minimal
-# host may not have them.
-#
-# 2026-09-15, issue #6 again (v0.3.19, NVIDIA + Ubuntu 24.04): with the X
-# libraries gone the bundle still aborts inside Qt's GLX integration while
-# the same tag from pip PySide6 runs — so the culprit is something else the
-# bundle carries and pip does not. The C++ runtime: PyInstaller ships the
-# build runner's ``libstdc++.so.6`` / ``libgcc_s.so.1`` (Ubuntu 22.04,
-# GLIBCXX ≤ 3.4.30) and they are loaded FIRST, so a driver library that
-# was built against a newer runtime fails to load and GLX has no vendor
-# to talk to. The AppImage exclude list has carried both for years for
-# exactly that reason («Workaround for: libstdc++.so.6: version
-# GLIBCXX_3.4.21 not found»); every desktop has a runtime at least as
-# new as the runner's, which is all the bundled Qt needs — the pip wheels
-# never bring their own either. ``libglib-2.0.so.0`` goes for the same
-# reason: the host's GIO modules (gvfs, loaded through the platform theme)
-# expect the host's GLib, and the bundled older one produced the
-# ``g_task_set_static_name`` noise in every report.
+# Keep the host GPU driver's X11, C++ runtime and GLib together (#6).
+# Bundling the build runner's copies can break NVIDIA on newer systems.
 _HOST_ONLY = {'libX11.so.6', 'libX11-xcb.so.1', 'libxcb-glx.so.0',
               'libstdc++.so.6', 'libgcc_s.so.1', 'libglib-2.0.so.0'}
 if sys.platform.startswith('linux'):
@@ -343,24 +314,6 @@ if sys.platform == 'win32':
                   if not (Path(b[0]).name.lower() in _DWG_DLLS
                           and Path(b[0]).parent == Path('.'))]
 
-# Qt's HTTPS on Windows goes through Windows' own TLS (schannel), never
-# OpenSSL. Qt looks for libssl-3-x64.dll beside the .exe, then in System32,
-# and reaches the copy in _internal only through PATH — so a machine where
-# another program left OpenSSL 3.6 in System32 got that libssl, linked
-# against OUR libcrypto 3.5, and the extension manager died on «CRYPTO_calloc
-# not found» (#564). Choosing schannel in code is too late: asking Qt which
-# backends exist already loads OpenSSL. Without the plugin Qt picks
-# schannel. Python's own ssl uses libssl-3.dll / libcrypto-3.dll (no -x64)
-# and stays.
-if sys.platform == 'win32':
-    _QT_OPENSSL = {'qopensslbackend.dll', 'libssl-3-x64.dll',
-                   'libcrypto-3-x64.dll'}
-    _before = len(a.binaries)
-    a.binaries = [b for b in a.binaries
-                  if Path(b[0]).name.lower() not in _QT_OPENSSL]
-    print('spec: dropped %d OpenSSL files of Qt (#564)'
-          % (_before - len(a.binaries)))
-
 pyz =PYZ(a.pure, a.zipped_data)
 
 icon = None
@@ -378,7 +331,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,                  # UPX sometimes breaks PySide6 — never enable
+    upx=False,
     console=False,              # GUI app, no terminal window
     disable_windowed_traceback=False,
     target_arch=None,

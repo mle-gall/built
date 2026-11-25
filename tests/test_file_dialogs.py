@@ -5,20 +5,19 @@ the program is installed in (Marco, 2026-09-07)."""
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QApplication, QFileDialog
+from core.settings import settings as preferences
+from app_shell import native
+from app_shell.files import ShellFileDialog
 
 from views import filedialogs
 from views.filedialogs import file_dialogs, last_dir, remember, start_in
 
-_app = QApplication.instance() or QApplication([])
-
 
 def _fresh():
-    QSettings().remove("files/last_dir")
+    preferences().remove("files/last_dir")
 
 
 def test_nothing_remembered_means_documents_or_a_fallback(tmp_path):
@@ -42,7 +41,7 @@ def test_the_chosen_folder_is_remembered_and_reused(tmp_path):
     assert start_in(str(other)) == str(other)
     assert start_in(str(other / "x.igz")) == str(other / "x.igz")
     # a remembered folder that vanished is not used
-    QSettings().setValue("files/last_dir", str(tmp_path / "borrada"))
+    preferences().setValue("files/last_dir", str(tmp_path / "borrada"))
     assert last_dir(tmp_path) == str(tmp_path)
 
 
@@ -50,20 +49,21 @@ def test_the_shim_feeds_the_dialog_and_learns_from_it(tmp_path, monkeypatch):
     _fresh()
     seen = {}
 
-    def fake_save(parent, caption="", dir="", filter="", *a, **k):
-        seen["dir"] = dir
-        return (str(tmp_path / "salida" / "lamina.pdf"), filter)
+    def fake_save(title, name, filters, directory):
+        seen["dir"] = str(Path(directory) / name)
+        return str(tmp_path / "salida" / "lamina.pdf")
     (tmp_path / "salida").mkdir()
-    monkeypatch.setattr(QFileDialog, "getSaveFileName", staticmethod(fake_save))
+    monkeypatch.setattr(filedialogs, "QFileDialog", ShellFileDialog)
+    monkeypatch.setattr(native, "save_file", fake_save)
     remember(tmp_path)
     path, _ = file_dialogs.getSaveFileName(None, "Export PDF…", "lamina.pdf", "PDF (*.pdf)")
     assert seen["dir"] == str(tmp_path / "lamina.pdf")   # started where the user was
     assert last_dir() == str(tmp_path / "salida")         # …and learnt the new folder
 
-    def fake_open(parent, caption="", dir="", filter="", *a, **k):
-        seen["open"] = dir
-        return ("", "")                                    # cancelled
-    monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(fake_open))
+    def fake_open(title, filters, directory, multiple=False):
+        seen["open"] = str(directory)
+        return []
+    monkeypatch.setattr(native, "open_files", fake_open)
     file_dialogs.getOpenFileName(None, "Open", "", "IGZ (*.igz)")
     assert seen["open"] == str(tmp_path / "salida")
     assert last_dir() == str(tmp_path / "salida")         # a cancel changes nothing
@@ -80,10 +80,11 @@ def test_with_nothing_remembered_a_dialog_starts_beside_the_open_document(tmp_pa
         _window = _Win()
     seen = {}
 
-    def fake_save(parent, caption="", dir="", filter="", *a, **k):
-        seen["dir"] = dir
-        return ("", "")
-    monkeypatch.setattr(QFileDialog, "getSaveFileName", staticmethod(fake_save))
+    def fake_save(title, name, filters, directory):
+        seen["dir"] = str(Path(directory) / name)
+        return None
+    monkeypatch.setattr(filedialogs, "QFileDialog", ShellFileDialog)
+    monkeypatch.setattr(native, "save_file", fake_save)
     file_dialogs.getSaveFileName(_Composer(), "Export PDF…", "lamina.pdf", "PDF (*.pdf)")
     assert seen["dir"] == str(tmp_path / "proyecto" / "lamina.pdf")
 
@@ -101,10 +102,10 @@ def test_a_share_that_refuses_the_login_falls_back_instead_of_raising(tmp_path, 
             raise OSError(1326, "The user name or password is incorrect")
         return real_is_dir(self)
     monkeypatch.setattr(filedialogs.Path, "is_dir", is_dir)
-    QSettings().setValue("files/last_dir", share)
+    preferences().setValue("files/last_dir", share)
     assert last_dir(tmp_path) == str(tmp_path)
     assert start_in("lamina.pdf", tmp_path) == os.path.join(str(tmp_path), "lamina.pdf")
     assert start_in(share + "/plano.igz", tmp_path).endswith("plano.igz")
     remember(share + "/plano.igz")                      # nothing raised, nothing learnt
-    assert QSettings().value("files/last_dir") == share
+    assert preferences().value("files/last_dir") == share
     _fresh()

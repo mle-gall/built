@@ -1,4 +1,13 @@
 {
+ "No": "いいえ",
+ "Discard": "変更を破棄",
+ "Abort": "中止",
+ "Ignore": "無視",
+ "Retry": "再試行",
+ "Restore Defaults": "デフォルトに戻す",
+ "Open": "開く",
+ "Yes": "はい",
+ "OK": "OK",
  "Map": "地図",
  "Model origin (0,0)": "モデルの原点 (0,0)",
  "Place or address": "場所または住所",

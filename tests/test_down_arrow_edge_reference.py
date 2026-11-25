@@ -10,23 +10,20 @@ The GL viewport had the cycle, but read an edge that only its own hover
 picks set: on the Metal view nothing fed it, so Down did nothing there.
 Both views are driven here with real key events.
 """
+from ingetrazo_render import KeyEvent
 import math
 
 import pytest
-from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QKeyEvent
+from core.input_codes import Input as Qt
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from tests.test_.skp_inference_gaps import (  # noqa: F401 (fixture)
     click, move, refresh, same, turned, view)
 
-app = QApplication.instance() or QApplication([])
-
 
 def key(widget, k, modifiers=Qt.NoModifier):
-    QApplication.sendEvent(widget, QKeyEvent(QEvent.KeyPress, k, modifiers))
-    QApplication.sendEvent(widget, QKeyEvent(QEvent.KeyRelease, k, modifiers))
+    widget.keyPressEvent(KeyEvent(True, k, modifiers))
+    widget.keyReleaseEvent(KeyEvent(False, k, modifiers))
 
 
 @pytest.fixture

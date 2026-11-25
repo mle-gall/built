@@ -10,15 +10,9 @@ block without the object, and switching the view on reused it. The order
 matters — a pick between the two steps is what left the stale block."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-if QApplication.instance() is None:
-    QApplication([])
 
 from core.group import Group  # noqa: E402
 from core.mesh import Mesh  # noqa: E402

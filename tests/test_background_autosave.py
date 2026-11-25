@@ -1,3 +1,4 @@
+from tests.raster_samples import solid_raster
 import threading
 import time
 import pytest
@@ -177,16 +178,15 @@ def test_snapshot_while_editing_preserves_root_and_group(tmp_path):
 def test_survey_arrays_and_images_are_detached(tmp_path):
     from tests.test_photomesh import _write_odm_tree, _datum_at_anchor
     from georef.photomesh import load_odm_obj
-    from PySide6.QtGui import QImage
     import numpy as np
     scene=Scene()
     scene.photo_mesh=load_odm_obj(_write_odm_tree(tmp_path),_datum_at_anchor())
-    image=QImage(8,8,QImage.Format_RGB32);image.fill(0xff3366aa)
+    image = solid_raster(8, 8, (51, 102, 170))
     scene.photo_mesh.images={0:image}
     expected=scene.photo_mesh.vertices.copy()
     snap=drain(snapshot_steps(scene))
     scene.photo_mesh.vertices[:]=999
-    scene.photo_mesh.images[0].fill(0xffff0000)
+    scene.photo_mesh.images[0] = solid_raster(8, 8, (255, 0, 0))
     path=tmp_path/'survey-snapshot.igz'
     igz.write_prepared(snap,path,background=True)
     recovered=Scene();igz.load_into(recovered,path)

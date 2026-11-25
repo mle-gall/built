@@ -6,15 +6,10 @@ _world_to_pixel, point for point, on every camera."""
 from __future__ import annotations
 
 import math
-import os
 import random
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
 
 
 def test_the_projector_gives_the_pixels_of_world_to_pixel():
