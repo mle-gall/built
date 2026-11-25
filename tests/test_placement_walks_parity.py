@@ -3,8 +3,8 @@
 """The placement walks of ``core/group.py`` must walk as the Python
 generators did at ``61fe6326``. ``iter_placements`` and
 ``iter_painted_placements`` and (round 11) ``visible_placements`` are
-native iterators over the Rust document (``model/placement_walks.rs``);
-``model_placements`` is still Python, pinned for its move: ``iter_placements``, ``iter_painted_placements``,
+native iterators over the Rust document (``model/placement_walks.rs``),
+and (round 12) ``model_placements``: ``iter_placements``, ``iter_painted_placements``,
 ``visible_placements`` and ``model_placements`` over seeded trees (classic
 groups and instances, three levels, hidden and locked tags, tags in a
 folder switched off, Hide, paints at any depth, a base matrix, a filter),
@@ -28,7 +28,7 @@ def _walks():
     import ingetrazo_core as N
     from core import group as G
     return (N.group_iter_placements, N.group_iter_painted_placements,
-            N.group_visible_placements, G.model_placements)
+            N.group_visible_placements, N.group_model_placements)
 
 
 def _scene(rng):

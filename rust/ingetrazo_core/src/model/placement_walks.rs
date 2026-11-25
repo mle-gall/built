@@ -357,10 +357,202 @@ fn group_iter_painted_placements(py: Python<'_>, group: &Bound<'_, PyAny>, base:
     walk(py, true, group, base, paint)
 }
 
+// ---- model_placements: f64 matrices as NumPy composes them ------------------
+
+/// A 4 x 4 product `a @ b` (row-major) as NumPy's on this Mac (Accelerate):
+/// each element `fma(a2, b2, a0 b0) + fma(a3, b3, a1 b1)`, measured equal on
+/// 48,000 elements (`tests/test_model_placements_golden.py`).
+fn numpy_matmul4(a: &[f64; 16], b: &[f64; 16]) -> [f64; 16] {
+    std::array::from_fn(|i| {
+        let (r, c) = (i / 4, i % 4);
+        let t = |k: usize| (a[r * 4 + k], b[k * 4 + c]);
+        let ((a0, b0), (a1, b1), (a2, b2), (a3, b3)) = (t(0), t(1), t(2), t(3));
+        a2.mul_add(b2, a0 * b0) + a3.mul_add(b3, a1 * b1)
+    })
+}
+
+/// A placement's matrix as `formats.built.placement_values` reads it (16
+/// values, Qt's column-major storage), or None without one.
+fn model_values(py: Python<'_>, node: &Node, obj: &Bound<'_, PyAny>) -> PyResult<Option<[f64; 16]>> {
+    if let Node::Doc(k) = node {
+        let d = doc::lock();
+        if let Some(Data::Placement(p)) = d.node(*k).map(|n| &n.data) {
+            return Ok(p.xform.as_ref().map(|x| x.doubles()));
+        }
+    }
+    match obj.getattr_opt("xform")? {
+        Some(x) if !x.is_none() => {
+            let v: Vec<f64> = super::module(py, "ingetrazo_core")?.call_method1("built_placement_values", (x,))?.extract()?;
+            Ok(Some(v.try_into().map_err(|_| PyRuntimeError::new_err("a matrix of 16 values"))?))
+        }
+        _ => Ok(None),
+    }
+}
+
+fn array4<'py>(py: Python<'py>, v: &[f64; 16]) -> PyResult<Py<PyAny>> {
+    let a = numpy::ndarray::Array2::from_shape_vec((4, 4), v.to_vec()).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+    Ok(numpy::PyArray2::from_owned_array(py, a).into_any().unbind())
+}
+
+struct ModelFrame {
+    children: Vec<(Node, Option<Py<PyAny>>)>,
+    next: usize,
+    matrix: Option<(Py<PyAny>, [f64; 16])>,
+}
+
+#[pyclass(module = "ingetrazo_core", name = "ModelPlacementWalk")]
+pub struct ModelWalk {
+    start: Option<(Py<PyAny>, Option<(Py<PyAny>, [f64; 16])>)>,
+    pending: Option<(Node, Py<PyAny>, Option<(Py<PyAny>, [f64; 16])>)>,
+    stack: Vec<ModelFrame>,
+    visible: Option<Py<PyAny>>,
+}
+
+impl ModelWalk {
+    /// `matrix = base; if xform: matrix = values (@ base)`.
+    fn compose(py: Python<'_>, node: &Node, obj: &Bound<'_, PyAny>, base: &Option<(Py<PyAny>, [f64; 16])>)
+               -> PyResult<Option<(Py<PyAny>, [f64; 16])>> {
+        Ok(match (model_values(py, node, obj)?, base) {
+            (None, b) => b.as_ref().map(|(o, v)| (o.clone_ref(py), *v)),
+            (Some(own), None) => Some((array4(py, &own)?, own)),
+            (Some(own), Some((_, b))) => {
+                let m = numpy_matmul4(&own, b);
+                Some((array4(py, &m)?, m))
+            }
+        })
+    }
+
+    fn emit(py: Python<'_>, group: &Bound<'_, PyAny>, m: &Option<(Py<PyAny>, [f64; 16])>) -> PyResult<Py<PyAny>> {
+        let m = match m {
+            Some((o, _)) => o.clone_ref(py).into_bound(py),
+            None => py.None().into_bound(py),
+        };
+        Ok(PyTuple::new(py, [group.clone(), m])?.into_any().unbind())
+    }
+}
+
+#[pymethods]
+impl ModelWalk {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        if let Some((group, base)) = self.start.take() {
+            let group = group.into_bound(py);
+            let node = node_of(&group);
+            let m = Self::compose(py, &node, &group, &base)?;
+            let out = Self::emit(py, &group, &m)?;
+            self.pending = Some((node, group.unbind(), m));
+            return Ok(out);
+        }
+        loop {
+            if let Some((node, obj, m)) = self.pending.take() {
+                let children = children_of(py, &node, obj.bind(py))?;
+                if !children.is_empty() {
+                    self.stack.push(ModelFrame { children, next: 0, matrix: m });
+                }
+            }
+            let Some(top) = self.stack.last_mut() else {
+                return Err(PyStopIteration::new_err(()));
+            };
+            if top.next == top.children.len() {
+                self.stack.pop();
+                continue;
+            }
+            let i = top.next;
+            top.next += 1;
+            let (node, handle) = {
+                let (node, handle) = &mut top.children[i];
+                let node = match node { Node::Doc(k) => Node::Doc(*k), Node::Obj => Node::Obj };
+                (node, handle.take())
+            };
+            let handle = match (handle, &node) {
+                (Some(h), _) => h,
+                (None, Node::Doc(k)) => doc::lock().handle_ref(py, *k)
+                    .ok_or_else(|| PyRuntimeError::new_err("a child placement without its handle"))?,
+                (None, Node::Obj) => unreachable!(),
+            };
+            let child = handle.into_bound(py);
+            let base = top.matrix.as_ref().map(|(o, v)| (o.clone_ref(py), *v));
+            if let Some(f) = &self.visible {
+                if !f.call1(py, (&child,))?.is_truthy(py)? {
+                    continue;
+                }
+            }
+            let m = Self::compose(py, &node, &child, &base)?;
+            let out = Self::emit(py, &child, &m)?;
+            self.pending = Some((node, child.unbind(), m));
+            return Ok(out);
+        }
+    }
+
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        if let Some((g, b)) = &self.start {
+            visit.call(g)?;
+            if let Some((o, _)) = b {
+                visit.call(o)?;
+            }
+        }
+        if let Some((_, o, m)) = &self.pending {
+            visit.call(o)?;
+            if let Some((a, _)) = m {
+                visit.call(a)?;
+            }
+        }
+        for f in &self.stack {
+            if let Some((a, _)) = &f.matrix {
+                visit.call(a)?;
+            }
+            for (_, h) in &f.children {
+                if let Some(h) = h {
+                    visit.call(h)?;
+                }
+            }
+        }
+        if let Some(v) = &self.visible {
+            visit.call(v)?;
+        }
+        Ok(())
+    }
+
+    fn __clear__(&mut self) {
+        self.start = None;
+        self.pending = None;
+        self.stack.clear();
+        self.visible = None;
+    }
+}
+
+/// `model_placements(group, base=None, visible=None)`: `(group, matrix)`
+/// for `group` and every nested placement below it (a child left out with
+/// its subtree when `visible(child)` is false), each matrix a 4 x 4 f64
+/// array in Qt's column-major storage composed `own @ above` as NumPy
+/// does, the one above handed on unchanged where a placement has none
+/// (None while the chain has no matrix). Lazy, as the generator.
+#[pyfunction]
+#[pyo3(signature = (group, base=None, visible=None))]
+fn group_model_placements(py: Python<'_>, group: &Bound<'_, PyAny>, base: Option<Bound<'_, PyAny>>,
+                          visible: Option<Bound<'_, PyAny>>) -> PyResult<ModelWalk> {
+    let base = match base.filter(|b| !b.is_none()) {
+        Some(b) => {
+            let flat = super::module(py, "numpy")?.call_method1("asarray", (&b, "float64"))?.call_method0("ravel")?;
+            let v: Vec<f64> = flat.extract()?;
+            let v: [f64; 16] = v.try_into().map_err(|_| PyRuntimeError::new_err("a 4 x 4 base matrix"))?;
+            Some((b.unbind(), v))
+        }
+        None => None,
+    };
+    Ok(ModelWalk { start: Some((group.clone().unbind(), base)), pending: None, stack: Vec::new(),
+                   visible: visible.filter(|v| !v.is_none()).map(Bound::unbind) })
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PlacementWalk>()?;
     m.add_function(wrap_pyfunction!(group_iter_placements, m)?)?;
     m.add_function(wrap_pyfunction!(group_iter_painted_placements, m)?)?;
     m.add_function(wrap_pyfunction!(group_visible_placements, m)?)?;
+    m.add_class::<ModelWalk>()?;
+    m.add_function(wrap_pyfunction!(group_model_placements, m)?)?;
     Ok(())
 }

@@ -920,22 +920,6 @@ def _local_points(mesh):
     return np.array([v.position_tuple() for v in verts], dtype=np.float64)
 
 
-def model_placements(group, base=None, visible=None):
-    """Placements composed in f64, in Qt's column-major storage order."""
-    import numpy as np
-    from formats.built import placement_values
-    matrix = base
-    transform = getattr(group, "xform", None)
-    if transform is not None:
-        matrix = np.asarray(placement_values(transform), dtype=float).reshape(4, 4)
-        if base is not None:
-            matrix = matrix @ base
-    yield group, matrix
-    for child in getattr(group, "children", ()):
-        if visible is None or visible(child):
-            yield from model_placements(child, matrix, visible)
-
-
 def placement_points(group, cache=None):
     """Every vertex position of ``group`` and its nested placements, in WORLD
     space, as an ``(N, 3)`` float64 array. ``cache`` (``{id(mesh): array}``)
@@ -953,7 +937,7 @@ def placement_points(group, cache=None):
     out: list = []
     if cache is None:
         cache = {}
-    for g, m in model_placements(group):
+    for g, m in _NATIVE.group_model_placements(group):
         arr = cache.get(id(g.mesh))
         if arr is None:
             arr = _local_points(g.mesh)

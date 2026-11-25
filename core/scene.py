@@ -732,8 +732,7 @@ class Scene:
             if not self.entity_visible(g) or getattr(g, "billboard", False):
                 continue
             if precise:
-                from core.group import model_placements
-                yield from model_placements(g, visible=lambda child:
+                yield from ingetrazo_core.group_model_placements(g, visible=lambda child:
                                             not child.billboard and self.entity_visible(child))
             else:
                 yield from walk(g, None)
