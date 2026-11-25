@@ -749,7 +749,7 @@ fn sync_scene_camera<'py>(a: &Args<'py>) -> Reply<'py> {
     let (view, install) = (a.get_item(0)?, a.get_item(1)?.is_truthy()?);
     let np = py.import("numpy")?;
     let copy = py.import("copy")?.getattr("copy")?;
-    let frame = py.import("core.coordinate_frame")?;
+    let frame = py.import("ingetrazo_core.coordinate_frame")?;
     let choose_origin = frame.getattr("choose_origin")?;
     let camera_point = py.import("ingetrazo_core")?.getattr("Vec3")?;
     let vec3 = py.import("ingetrazo_core")?.getattr("Vec3")?;

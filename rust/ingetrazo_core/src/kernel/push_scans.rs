@@ -24,7 +24,7 @@ impl<'py> Scan<'py> {
         if mesh.is_none() && !required {
             return Ok(None);
         }
-        let api = py.import("core.scan_index")?;
+        let api = py.import("ingetrazo_core.scan_index")?;
         let stored = api.call_method1("store_backed", (mesh,))?.is_truthy()?;
         let mut view = api.call_method1("scan", (mesh, !stored))?;
         if view.is_none() {
@@ -64,7 +64,7 @@ fn p(v: &Obj<'_>) -> PyResult<P> {
 }
 fn store_backed(mesh: &Obj<'_>) -> PyResult<bool> {
     mesh.py()
-        .import("core.scan_index")?
+        .import("ingetrazo_core.scan_index")?
         .call_method1("store_backed", (mesh,))?
         .is_truthy()
 }
@@ -72,7 +72,7 @@ fn store_enabled(mesh: &Obj<'_>) -> PyResult<bool> {
     Ok(store_backed(mesh)?
         && mesh
             .py()
-            .import("core.scan_index")?
+            .import("ingetrazo_core.scan_index")?
             .call_method0("enabled")?
             .is_truthy()?)
 }

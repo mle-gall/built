@@ -231,7 +231,7 @@ fn igz_write_container<'p>(
 fn igz_backup_previous(py: Python<'_>, path: PathBuf) -> PyResult<bool> {
     if !path.is_file()
         || py
-            .import("core.general_settings")?
+            .import("ingetrazo_core.general_settings")?
             .call_method1("value", ("backup", "1"))?
             .str()?
             .to_str()?

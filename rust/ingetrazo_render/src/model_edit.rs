@@ -137,7 +137,7 @@ fn delete_entities(vp: &Bound<'_, PyAny>) -> PyResult<()> {
         commands.append(history.call_method1("DeleteGuidesCommand", (guides,))?)?;
     }
     for (module, class, command) in [
-        ("core.image_plane", "ImagePlane", "DeleteImagePlanesCommand"),
+        ("ingetrazo_core.image_plane", "ImagePlane", "DeleteImagePlanesCommand"),
         ("core.section", "SectionPlane", "DeleteSectionPlanesCommand"),
         ("core.dimension", "Dimension", "DeleteDimensionsCommand"),
         ("ingetrazo_core.textlabel", "TextLabel", "DeleteTextLabelsCommand"),

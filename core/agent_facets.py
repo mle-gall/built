@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Shared viewport display for structure filing, saved scenes and facet tools."""
 from copy import deepcopy
-from core import facets, bim_registry
+from core import bim_registry
+from ingetrazo_core import facets
 from ingetrazo_core.history import SetRegistryCommand
 
 

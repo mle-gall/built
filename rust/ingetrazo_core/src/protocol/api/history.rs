@@ -360,7 +360,7 @@ fn registry_undo(this: &Obj<'_>, scene: &Obj<'_>) -> PyResult<()> {
 fn registry_doc(_this: &Obj<'_>, scene: &Obj<'_>) -> PyResult<bool> {
     Ok(scene
         .py()
-        .import("core.project")?
+        .import("ingetrazo_core.project")?
         .call_method1("path_for", (scene,))?
         .is_none())
 }

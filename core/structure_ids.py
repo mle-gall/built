@@ -8,7 +8,8 @@ looks like a passing check.
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from core import project, record
+from core import record
+from ingetrazo_core import project
 
 
 def _simple(facet, field):
@@ -24,7 +25,7 @@ def load_requirements(scene, registry):
             continue
         eligible = None
         if config.get('filter') is not None:
-            from core import facets
+            from ingetrazo_core import facets
             index = facets.build(scene)
             eligible = {index.groups[key] for key in facets.evaluate(index, config['filter'])}
         for filename in config['ids_files']:

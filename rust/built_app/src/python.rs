@@ -266,6 +266,23 @@ impl Host {
         })
     }
 
+    /// `BUILT_PERF`: the GPU time of each pass of the last timed frame, in
+    /// milliseconds (the renderer's timestamp queries; a few frames late).
+    pub fn gpu_passes(&self) -> Vec<(String, f64)> {
+        Python::attach(|py| {
+            let read = || -> PyResult<Vec<(String, f64)>> {
+                let renderer = self.obj.bind(py).getattr("window")?.getattr("view")?.getattr("renderer")?;
+                if renderer.is_none() {
+                    return Ok(Vec::new());
+                }
+                let passes: std::collections::BTreeMap<String, Option<f64>> =
+                    renderer.call_method0("last_timings")?.get_item(3)?.extract()?;
+                Ok(passes.into_iter().filter_map(|(name, ms)| Some((name, ms?))).collect())
+            };
+            read().unwrap_or_default()
+        })
+    }
+
     /// Exercise the same store and live renderer binding as the Display row.
     pub fn apply_msaa(&self, count: u32) {
         Python::attach(|py| {

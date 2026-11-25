@@ -48,7 +48,7 @@ impl ReleaseSheet {
                         .call_method1("skip_version", (settings(py)?, &value))?;
                 }
                 "open" => {
-                    py.import("core.desktop_open")?
+                    py.import("ingetrazo_core.desktop_open")?
                         .call_method1("open_url", (value,))?;
                 }
                 _ => {}

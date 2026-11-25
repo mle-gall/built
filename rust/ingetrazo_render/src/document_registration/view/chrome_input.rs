@@ -5,7 +5,7 @@ use super::chrome_frame::{own, render, truthy, ui};
 use super::*;
 
 fn input<'py>(py: Python<'py>, name: &str) -> Reply<'py> {
-    py.import("core.input_codes")?.getattr("Input")?.getattr(name)
+    py.import("ingetrazo_core")?.getattr("Input")?.getattr(name)
 }
 fn is_input(value: &Obj<'_>, name: &str) -> PyResult<bool> {
     value.eq(input(value.py(), name)?)
@@ -330,7 +330,7 @@ pub(super) fn install_module(module: &Bound<PyModule>) -> PyResult<()> {
     module.add("ingetrazo_core", py.import("ingetrazo_core")?)?;
     module.add("os", py.import("os")?)?;
     modules::import_names(module, "pathlib", &[("Path", "Path")])?;
-    modules::import_names(module, "core.input_codes", &[("Input", "Qt")])?;
+    modules::import_names(module, "ingetrazo_core", &[("Input", "Qt")])?;
     modules::import_names(module, "ingetrazo_core.timers", &[("later", "later")])?;
     modules::import_names(module, "ingetrazo_render", &[("shortcut_text", "shortcut_text"), ("rail_icon", "_icon_rgba")])?;
     modules::import_names(module, "ingetrazo_render.keyboard_bindings", &[("action_keys", "action_keys")])?;

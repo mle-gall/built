@@ -15,7 +15,7 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, iter_placements, placement_points
 from core.history import History
-from core.insert import (component_from_scene, ensure_layers,
+from ingetrazo_core.document_insert import (component_from_scene, ensure_layers,
                          import_document_as_component, merge_materials)
 from core.layers import Layer, assign_layer
 from core.materials import Material
@@ -63,7 +63,7 @@ def test_un_face_me_del_archivo_entra_y_solo_se_queda_fuera_el_muneco():
     cornisa es un face-me con su foto. Solo el muñeco de escala de la app
     se queda fuera — por nombre, o por su imagen cuando el archivo es viejo
     y no trae nombres."""
-    from core.insert import is_scale_figure
+    from ingetrazo_core.document_insert import is_scale_figure
     src = Scene()
     arco = Group(_cuadrado(Mesh()), name="Arco")
     toro = Group(Mesh(), name="Group 24")

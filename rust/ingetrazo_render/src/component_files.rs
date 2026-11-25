@@ -309,7 +309,7 @@ fn import_kept_components(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> Py
     let src = py.import("core.scene")?.call_method0("Scene")?;
     let file = py.import("pathlib")?.call_method1("Path", (path,))?;
     py.import("formats.igz")?.call_method1("load_into", (&src, file))?;
-    let templates = py.import("core.kept_components")?.call_method1("definitions_of", (&src,))?;
+    let templates = py.import("ingetrazo_core.kept_components")?.call_method1("definitions_of", (&src,))?;
     let count = templates.len()?;
     if count == 0 { return Ok(0); }
 
@@ -324,7 +324,7 @@ fn import_kept_components(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> Py
     root.setattr("xform", py.None())?;
     root.setattr("material", py.None())?;
     root.setattr("children", &templates)?;
-    let insert = py.import("core.insert")?;
+    let insert = py.import("ingetrazo_core.document_insert")?;
     insert.call_method1("merge_materials", (src.getattr("materials")?, &recipes, root))?;
     let additions = PyDict::new(py);
     for (name, recipe) in recipes.cast::<PyDict>()?.iter() {

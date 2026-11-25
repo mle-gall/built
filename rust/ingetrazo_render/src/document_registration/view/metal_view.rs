@@ -84,6 +84,20 @@ fn ui_claims<'py>(a: &Args<'py>) -> Reply<'py> {
 /// closed view, after the chrome has had the event, with the remote
 /// camera in step and the geometry in the view frame.
 pub(super) fn tool_frame<'py>(view: &Obj<'py>, name: &str, event: Option<&Obj<'py>>, body: impl FnOnce() -> Reply<'py>) -> Reply<'py> {
+    event_frame(view, name, event, true, body)
+}
+
+/// An event that only moves the camera (a wheel zoom, a slide): the chrome's
+/// claim and the camera mirrored to and from the document, without the
+/// meshes' geometry frame. Nothing on that path reads a mesh's coordinates:
+/// the point under the cursor comes from the pick and the resident arrays.
+/// Entering a frame per mesh was nearly all of a wheel event's time on a
+/// large model.
+pub(super) fn camera_frame<'py>(view: &Obj<'py>, name: &str, event: Option<&Obj<'py>>, body: impl FnOnce() -> Reply<'py>) -> Reply<'py> {
+    event_frame(view, name, event, false, body)
+}
+
+fn event_frame<'py>(view: &Obj<'py>, name: &str, event: Option<&Obj<'py>>, geometry: bool, body: impl FnOnce() -> Reply<'py>) -> Reply<'py> {
     let py = view.py();
     if truthy(view, "_closed")? {
         return Ok(none(py));
@@ -99,11 +113,11 @@ pub(super) fn tool_frame<'py>(view: &Obj<'py>, name: &str, event: Option<&Obj<'p
     if remote {
         view.call_method0("_sync_scene_camera")?;
     }
-    let shifted = match packed.getattr_opt("origin")? {
+    let shifted = geometry && match packed.getattr_opt("origin")? {
         Some(origin) => any(py, &origin)?,
         None => false,
     };
-    let result = if shifted || truthy(view, "_remote_meshes")? {
+    let result = if geometry && (shifted || truthy(view, "_remote_meshes")?) {
         let frame = view.call_method0("_geometry_frame")?;
         frame.call_method0("__enter__")?;
         match body() {
@@ -135,7 +149,7 @@ pub(super) fn ctrl_tap(view: &Obj<'_>, event: &Obj<'_>) -> PyResult<()> {
     if source.is_none() || (repeat.is_callable() && repeat.call0()?.is_truthy()?) {
         return Ok(());
     }
-    let codes = py.import("core.input_codes")?;
+    let codes = py.import("ingetrazo_core")?;
     let key = event.call_method0("key")?;
     if key.eq(codes.getattr("Input")?.getattr("Key_Control")?)? {
         let kind = attr(event, "type")?;
@@ -192,7 +206,7 @@ struct GeometryFrame {
 impl GeometryFrame {
     fn __enter__(&mut self, py: Python<'_>) -> PyResult<()> {
         let view = self.view.bind(py);
-        let mesh_frame = py.import("core.coordinate_frame")?.getattr("mesh_frame")?;
+        let mesh_frame = py.import("ingetrazo_core.coordinate_frame")?.getattr("mesh_frame")?;
         let frames = py.import("contextlib")?.getattr("ExitStack")?.call0()?;
         frames.call_method0("__enter__")?;
         let entered = (|| -> PyResult<()> {
@@ -276,7 +290,7 @@ fn init<'py>(a: &Args<'py>) -> Reply<'py> {
     view.call_method0("_prepare_surface")?;
     view.setattr("camera", py.import("core.camera")?.getattr("OrbitCamera")?.call0()?)?;
     view.setattr("source_viewport", py.None())?;
-    view.call_method1("setFocusPolicy", (py.import("core.input_codes")?.getattr("Input")?.getattr("StrongFocus")?,))?;
+    view.call_method1("setFocusPolicy", (py.import("ingetrazo_core")?.getattr("Input")?.getattr("StrongFocus")?,))?;
     view.call_method1("setMouseTracking", (true,))?;
     view.setattr("hovered_row", py.None())?;
     view.setattr("inference_index", py.None())?;

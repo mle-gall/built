@@ -238,7 +238,7 @@ def test_registered_shortcuts_use_rust_and_plugin_actions_still_trigger(host):
 
 
 def test_winit_tool_cursors_use_the_same_art_for_tools_and_navigation(host):
-    from core import general_settings
+    from ingetrazo_core import general_settings
     from ingetrazo_render import tool_cursor_art
 
     host.window._activate_tool("line")

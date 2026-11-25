@@ -87,14 +87,14 @@ def _save_ifc(scene, path, project_name, profile, stream):
                 kept.append(obj)
         objects = kept
     if config.get('filter') is not None:
-        from core.facets import build, evaluate
+        from ingetrazo_core.facets import build, evaluate
         index = build(scene)
         allowed = {index.groups[key] for key in evaluate(index, config['filter'])}
         objects = [obj for obj in objects
                    if (obj.get('group') or obj.get('owner')) in allowed]
     if not objects:
         raise ValueError('No tagged BIM objects to export')
-    from core.project import read as read_project
+    from ingetrazo_core.project import read as read_project
     project = read_project(scene)
     if project:
         scene.plugin_data['ifc_identity'] = project['ifc_identity']

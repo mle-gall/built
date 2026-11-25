@@ -17,7 +17,7 @@ from core.mesh import Mesh
 from core.scene import Scene
 from ingetrazo_core import resident_prepare as prepare
 from ingetrazo_core import pack_scene
-from core.input_codes import MouseButton
+from ingetrazo_core import MouseButton
 from tests.headless_gpu import HeadlessView, mouse
 
 WHEEL = MouseButton.MiddleButton

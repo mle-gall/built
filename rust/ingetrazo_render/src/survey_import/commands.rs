@@ -350,7 +350,7 @@ pub(crate) fn orthophoto(win: &Obj) -> PyResult<()> {
     kw.set_item("name", path.getattr("stem")?)?;
     kw.set_item("locked", true)?;
     let plane = py
-        .import("core.image_plane")?
+        .import("ingetrazo_core.image_plane")?
         .getattr("ImagePlane")?
         .call((cached.str()?, bl, u, v), Some(&kw))?;
     let cmd = py

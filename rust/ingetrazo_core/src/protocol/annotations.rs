@@ -92,7 +92,7 @@ fn add_text_label<'py>(
     let point = vec3(anchor)?;
     let kw = PyDict::new(py);
     let attach = py
-        .import("core.annotation_anchor")?
+        .import("ingetrazo_core.annotation_anchor")?
         .getattr("Attachment")?
         .call_method1("restore", (history.getattr("scene")?, attachment, &point))?;
     kw.set_item("attachment", attach)?;
@@ -125,7 +125,7 @@ fn add_dimension<'py>(
         (vec3(a)?, vec3(b)?, vec3(offset)?),
         Some(&kw),
     )?;
-    let factory = py.import("core.annotation_anchor")?.getattr("Attachment")?;
+    let factory = py.import("ingetrazo_core.annotation_anchor")?.getattr("Attachment")?;
     for (key, raw, point) in [
         ("attachment_a", attachments.0, "a"),
         ("attachment_b", attachments.1, "b"),
@@ -214,7 +214,7 @@ fn add_image_plane<'py>(
     let kw = PyDict::new(py);
     kw.set_item("aspect", aspect)?;
     kw.set_item("name", name)?;
-    let plane = py.import("core.image_plane")?.call_method(
+    let plane = py.import("ingetrazo_core.image_plane")?.call_method(
         "ImagePlane",
         (path, vec3(origin)?, vec3(u)?, vec3(v)?),
         Some(&kw),

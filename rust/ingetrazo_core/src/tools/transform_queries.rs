@@ -524,7 +524,7 @@ pub fn transform_grab(
     let dims = if mode == "move" {
         let dims = transform_records(ctx, "dimension")?;
         let dims = py
-            .import("core.move_ops")?
+            .import("ingetrazo_core.move_ops")?
             .call_method1("dimension_modes", (dims, &groups, &verts))?;
         if direct && dims.is_truthy()? {
             groups.clear();

@@ -244,7 +244,7 @@ def test_its_own_row_does_not_offer_to_replace_the_selection(native_components):
 
 def test_keep_in_file_survives_deleting_every_copy_and_undoes():
     from core.history import KeepComponentCommand
-    from core.kept_components import kept_template
+    from ingetrazo_core.kept_components import kept_template
     scene, hist, sillas, _m, _c, _h = _model()
     proto = sillas[0].mesh
     sillas[0].layer = "Mobiliario"
@@ -315,7 +315,7 @@ def test_kept_definitions_survive_the_igz_and_share_with_copies(tmp_path):
 
 def test_a_kept_definition_with_no_copy_can_replace_and_be_placed():
     from core.history import KeepComponentCommand
-    from core.kept_components import place_copy
+    from ingetrazo_core.kept_components import place_copy
     scene, hist, sillas, mesas, _c, _h = _model()
     hist.execute(KeepComponentCommand(mesas[0]))
     for g in mesas:
@@ -456,7 +456,7 @@ def native_components(native_question_host):
 
 def test_orphaned_by_names_only_definitions_left_with_no_copy():
     from core.history import KeepComponentCommand
-    from core.kept_components import orphaned_by
+    from ingetrazo_core.kept_components import orphaned_by
     scene, hist, sillas, mesas, _c, _h = _model()
     assert orphaned_by(scene, sillas[:2]) == []          # one chair stays
     assert [g.name for g in orphaned_by(scene, sillas + mesas[:1])] == [
@@ -466,7 +466,7 @@ def test_orphaned_by_names_only_definitions_left_with_no_copy():
 
 
 def test_a_copy_nested_elsewhere_still_counts_as_a_copy():
-    from core.kept_components import orphaned_by
+    from ingetrazo_core.kept_components import orphaned_by
     scene, _h, sillas, _m, _c, _holder = _model()
     box = Group(Mesh(), name="Comedor")
     box.adopt([copy_group(sillas[0], V(0, 5, 0))])

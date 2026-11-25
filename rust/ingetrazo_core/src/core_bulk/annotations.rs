@@ -285,7 +285,7 @@ fn label_from<'p>(cls: &Obj<'p>, data: &Obj<'p>, scene: Option<&Obj<'p>>) -> PyR
     let bind = if let Some(s) = scene {
         Some(
             cls.py()
-                .import("core.annotation_anchor")?
+                .import("ingetrazo_core.annotation_anchor")?
                 .getattr("Attachment")?
                 .call_method1("restore", (s, get(data, "attachment")?, &point))?,
         )

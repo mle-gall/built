@@ -60,7 +60,7 @@ impl PluginDataStep {
 #[pyfunction]
 pub(crate) fn registry_apply(step: &Obj<'_>, scene: &Obj<'_>, undo: bool) -> PyResult<()> {
     let py = scene.py();
-    let project = py.import("core.project")?;
+    let project = py.import("ingetrazo_core.project")?;
     let value = step.getattr("value")?;
     let shared = if undo {
         let kw = PyDict::new(py);

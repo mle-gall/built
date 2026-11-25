@@ -17,7 +17,7 @@ from pathlib import Path
 
 from ingetrazo_core import NativeSettings
 
-from core import general_settings
+from ingetrazo_core import general_settings
 
 APP = Path(__file__).resolve().parents[1]
 
@@ -25,7 +25,7 @@ APP = Path(__file__).resolve().parents[1]
 def _read_in_new_process(ini: Path, name: str) -> str:
     code = (
         "from ingetrazo_core import NativeSettings\n"
-        "from core import general_settings\n"
+        "from ingetrazo_core import general_settings\n"
         f"st = NativeSettings({str(ini.parent.parent)!r})\n"
         f"print(general_settings.value({name!r}, 'MISSING', st))\n")
     out = subprocess.run([sys.executable, "-c", code], cwd=APP,

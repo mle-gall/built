@@ -1094,7 +1094,7 @@ impl ComponentsProvider {
         let scene = ctx.getattr("scene")?;
         match verb {
             "apply" => {
-                let kc = py.import("core.kept_components")?;
+                let kc = py.import("ingetrazo_core.kept_components")?;
                 let template = if !kept.is_none() { kept.clone() } else { kc.call_method1("make_template", (&definition,))? };
                 win.call_method1("_start_place", (kc.call_method1("place_copy", (template,))?,))?;
             }

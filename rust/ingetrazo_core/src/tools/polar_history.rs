@@ -144,7 +144,7 @@ pub fn rotation_command<'py>(
         let new_attrs = py
             .import("core.ifc_identity")?
             .getattr("copied_face_attrs")?;
-        let copy_guide = py.import("core.move_ops")?.getattr("copied_guide")?;
+        let copy_guide = py.import("ingetrazo_core.move_ops")?.getattr("copied_guide")?;
         let next_curve = py
             .import("core.mesh")?
             .getattr("Mesh")?

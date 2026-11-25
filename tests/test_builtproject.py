@@ -11,7 +11,8 @@ from pathlib import Path
 import pytest
 
 import ingetrazo_core as native
-from core import bim_registry, project
+from core import bim_registry
+from ingetrazo_core import project
 from core.scene import Scene
 from formats import igz
 from formats import project as storage

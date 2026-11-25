@@ -19,7 +19,7 @@ fn notify_if_present(owner: &Obj, method: &str) -> PyResult<()> {
     Ok(())
 }
 fn general<'p>(py: Python<'p>) -> PyResult<Bound<'p, PyModule>> {
-    py.import("core.general_settings")
+    py.import("ingetrazo_core.general_settings")
 }
 fn bit(on: bool) -> &'static str {
     if on {

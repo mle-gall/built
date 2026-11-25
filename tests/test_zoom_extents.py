@@ -119,7 +119,7 @@ def test_zoom_extents_frames_the_scale_figure_in_a_new_document(native_window):
 
 
 def _image_window(native_host):
-    from core.image_plane import ImagePlane
+    from ingetrazo_core.image_plane import ImagePlane
     from core.layers import Layer
 
     win = native_host.window

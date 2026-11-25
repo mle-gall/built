@@ -210,7 +210,7 @@ fn definition(name: &str) -> Option<&'static Module> {
     MODULES.iter().find(|m| m.name == leaf)
 }
 
-const CORE_MODULES: &[&str] = &["protocol", "protocol.commands", "protocol.feed", "protocol.keys", "protocol.records", "protocol.queries", "purge", "bridge", "lazy_mesh", "reference_edit", "material_commands", "link_structure", "hlr", "vista_caras", "units", "composition", "push_pull", "solids", "sweep", "make_faces", "intersect", "pieces", "inference", "geometry_arrays", "outliner", "solid_analysis", "offset", "text3d", "render_blender", "extensions"];
+const CORE_MODULES: &[&str] = &["protocol", "protocol.commands", "protocol.feed", "protocol.keys", "protocol.records", "protocol.queries", "purge", "bridge", "lazy_mesh", "reference_edit", "material_commands", "link_structure", "hlr", "vista_caras", "units", "composition", "push_pull", "solids", "sweep", "make_faces", "intersect", "pieces", "inference", "geometry_arrays", "outliner", "solid_analysis", "offset", "text3d", "render_blender", "extensions", "input_codes"];
 const VIEW_MODULES: &[&str] = &[
     "document_interaction",
     "documents",
@@ -301,6 +301,13 @@ impl ToolModules {
                 "core.intersect" => crate::store::face_intersections::install(module),
                 "core.pieces" => crate::store::piece_command::install(module),
                 "core.inference" => crate::inference::install(module),
+                "core.input_codes" => {
+                    let core = py.import("ingetrazo_core")?;
+                    for name in ["Type", "DeviceType", "StandardButton", "AlignmentFlag", "ApplicationAttribute", "AspectRatioMode", "BrushStyle", "CursorShape", "DockWidgetArea", "FocusPolicy", "FocusReason", "GlobalColor", "Key", "KeyboardModifier", "MouseButton", "MouseEventSource", "NativeGestureType", "PenCapStyle", "PenJoinStyle", "PenStyle", "ScrollPhase", "TransformationMode", "WidgetAttribute", "WindowState", "Input"] {
+                        module.add(name, core.getattr(name)?)?;
+                    }
+                    Ok(())
+                }
                 "core.extensions" => crate::extension_manager::discovery::install(module),
                 "core.render_blender" => crate::blender::install(module),
                 "core.text3d" => crate::text3d::install(module),

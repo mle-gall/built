@@ -10,7 +10,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 def test_help_documentation_opens_the_manual(native_host, monkeypatch):
     opened = []
-    monkeypatch.setattr("core.desktop_open.open_url", opened.append)
+    monkeypatch.setattr("ingetrazo_core.desktop_open.open_url", opened.append)
     action = native_host.window._registry_actions["menu:documentation"]
     action.trigger()
     assert opened == ["https://ingetrazo-docs.pages.dev/"]

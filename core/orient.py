@@ -70,7 +70,8 @@ def orient_outward(mesh, seed: int = 12345, only=None) -> list:
     still scanned for this pass alone."""
     if not mesh.faces:
         return []
-    from core import _native, scan_index
+    from core import _native
+    from ingetrazo_core import scan_index
     mod, hypot = _native.native, _native.qt_hypot()
     if mod is None or hypot is None or not hasattr(mod, "orient_decision"):
         raise RuntimeError("orient_outward needs the native engine (ingetrazo_core.orient_decision)")

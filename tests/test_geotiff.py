@@ -141,7 +141,7 @@ def test_import_places_the_orthomosaic_on_the_datum(monkeypatch, tmp_path):
     its true size and place, locked, on the Images layer; a scene without
     a datum gets one at the picture's centre and the base map follows."""
     from ingetrazo_render import Host
-    from core.image_plane import IMAGE_LAYER
+    from ingetrazo_core.image_plane import IMAGE_LAYER
     from ingetrazo_render.shell_files import ShellFileDialog
 
     src = DATA / "orto_jpeg_tile.tif"

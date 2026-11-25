@@ -94,7 +94,7 @@ pub(crate) fn export_readiness(
     };
     let predicate = config.call_method1("get", ("filter",))?;
     let allowed = if !predicate.is_none() {
-        let facets = scene.py().import("core.facets")?;
+        let facets = scene.py().import("ingetrazo_core.facets")?;
         let index = facets.call_method1("build", (scene,))?;
         let groups = index.getattr("groups")?;
         let mut ids = HashSet::new();

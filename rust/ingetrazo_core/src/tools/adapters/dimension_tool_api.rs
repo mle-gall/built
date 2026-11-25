@@ -31,8 +31,8 @@ fn host_dimension_edge<'py>(a: &Args<'py>) -> Reply<'py> {
     let owner: Obj<'py>;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
-    let picked_edge = imported(py, "core.annotation_anchor")?.getattr("picked_edge")?;
-    let attachment = imported(py, "core.annotation_anchor")?.getattr("Attachment")?;
+    let picked_edge = imported(py, "ingetrazo_core.annotation_anchor")?.getattr("picked_edge")?;
+    let attachment = imported(py, "ingetrazo_core.annotation_anchor")?.getattr("Attachment")?;
     let snap = optional(&tool.getattr("_ctx")?, "snap")?;
     let edge = optional(&snap, "edge")?;
     if optional(&snap, "kind")?.eq("on_edge")?

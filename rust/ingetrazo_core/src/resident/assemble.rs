@@ -15,10 +15,10 @@ use pyo3::{
 type Obj<'py> = Bound<'py, PyAny>;
 
 /// Beyond this distance from the frame origin f32 coordinates lose the
-/// precision the model needs (`core.coordinate_frame.REBASE_DISTANCE`).
-pub(super) const REBASE_DISTANCE: f64 = 512.;
+/// precision the model needs (`ingetrazo_core.coordinate_frame.REBASE_DISTANCE`).
+pub(crate) const REBASE_DISTANCE: f64 = 512.;
 
-/// `core.coordinate_frame.choose_origin`: keep the frame while the centre
+/// `ingetrazo_core.coordinate_frame.choose_origin`: keep the frame while the centre
 /// stays within reach of it, else move it to the centre's whole metres.
 pub(crate) fn choose_origin(center: [f64; 3], previous: [f64; 3]) -> [f64; 3] {
     let reach = (0..3).map(|k| (center[k] - previous[k]).abs()).fold(0., f64::max);

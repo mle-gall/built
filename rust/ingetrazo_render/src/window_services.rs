@@ -9,7 +9,7 @@ fn attrs<'py>(win: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
 #[pyfunction]
 fn configure_recovery(win: &Bound<'_, PyAny>, timer: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
-    let read = py.import("core.general_settings")?.getattr("value")?;
+    let read = py.import("ingetrazo_core.general_settings")?.getattr("value")?;
     let store = py.import("ingetrazo_core.settings")?.call_method0("settings")?;
     let enabled = read.call1(("autosave", "1", &store))?.str()?.to_str()? != "0";
     let minutes = read.call1(("autosave_min", 5, store))?;

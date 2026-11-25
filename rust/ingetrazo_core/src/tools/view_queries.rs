@@ -31,7 +31,7 @@ pub(super) fn classify(entity: &Bound<'_, PyAny>) -> PyResult<&'static str> {
             ("core.section", "SectionPlane", "section_plane"),
             ("ingetrazo_core.textlabel", "TextLabel", "text_label"),
             ("core.dimension", "Dimension", "dimension"),
-            ("core.image_plane", "ImagePlane", "image_plane"),
+            ("ingetrazo_core.image_plane", "ImagePlane", "image_plane"),
             ("ingetrazo_core.guide", "Guide", "guide"),
             ("ingetrazo_core.guide", "GuideCircle", "guide"),
             ("georef.geopath", "GeoPath", "geopath"),

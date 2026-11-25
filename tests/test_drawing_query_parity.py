@@ -44,7 +44,7 @@ def test_outside_contacts_and_duplicate_order():
 
 
 def overlay_results(monkeypatch):
-    from core import scan_index
+    from ingetrazo_core import scan_index
     from core.edits import _ScanFaces
     from core.mesh import Mesh
     outputs = []

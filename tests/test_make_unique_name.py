@@ -11,7 +11,7 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group, copy_group
 from core.history import History, MakeUniqueCommand
-from core.kept_components import (make_template, names_in_use,
+from ingetrazo_core.kept_components import (make_template, names_in_use,
                                   numbered_name)
 from core.mesh import Mesh
 from core.scene import Scene

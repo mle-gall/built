@@ -612,7 +612,7 @@ const STANDARD: [(&str, &str, bool); 17] = [
 /// The standard buttons `critical`/`warning`/`information`/`question`
 /// answer with (`QMessageBox`'s values).
 fn message_box(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    py.import("core.input_codes")?.getattr("StandardButton")
+    py.import("ingetrazo_core")?.getattr("StandardButton")
 }
 
 fn button_key(py: Python<'_>, b: &Bound<'_, PyAny>) -> PyResult<String> {
@@ -1128,7 +1128,7 @@ impl Busy {
         if path.is_truthy()? && !failed {
             let folder = py.import("pathlib")?.getattr("Path")?.call1((path,))?.call_method0("resolve")?.getattr("parent")?.unbind();
             let action = func(py, move |py, _a| {
-                py.import("core.desktop_open")?.call_method1("open_url", (folder.bind(py),))?;
+                py.import("ingetrazo_core.desktop_open")?.call_method1("open_url", (folder.bind(py),))?;
                 Ok(none(py))
             })?;
             kw.set_item("action_label", "Open folder")?;

@@ -329,7 +329,7 @@ pub(crate) fn make_placement_unique<'py>(
     if rename {
         let name = group.getattr("name")?;
         if name.is_truthy()? {
-            let api = group.py().import("core.kept_components")?;
+            let api = group.py().import("ingetrazo_core.kept_components")?;
             let kwargs = PyDict::new(group.py());
             kwargs.set_item("skip", group)?;
             let taken = api.getattr("names_in_use")?.call((scene,), Some(&kwargs))?;

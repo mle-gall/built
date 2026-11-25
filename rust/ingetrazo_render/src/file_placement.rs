@@ -93,7 +93,7 @@ fn insert_document<'py>(
         .call_method1("load_into", (&temp, &p))?;
     let vp = win.getattr("viewport")?;
     vp.call_method0("end_group_edit")?;
-    let group = py.import("core.insert")?.call_method1(
+    let group = py.import("ingetrazo_core.document_insert")?.call_method1(
         "import_document_as_component",
         (vp.getattr("scene")?, temp, p.getattr("stem")?),
     )?;
@@ -149,7 +149,7 @@ fn import_picture(win: &Bound<'_, PyAny>) -> PyResult<()> {
         return Ok(());
     };
     let (aspect, w, h): (f64, i64, i64) = py
-        .import("core.image_plane")?
+        .import("ingetrazo_core.image_plane")?
         .call_method1("image_aspect", (&path,))?
         .extract()?;
     let dialogs = py.import("ingetrazo_render.chrome_dialogs")?;

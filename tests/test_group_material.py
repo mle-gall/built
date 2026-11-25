@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 
-from core.input_codes import Input as Qt
+from ingetrazo_core import Input as Qt
 from ingetrazo_core import ScreenPoint as QPointF
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 

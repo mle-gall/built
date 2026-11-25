@@ -449,7 +449,7 @@ fn build_family<'p>(
         defs.append(def)?;
     }
     let placement = py
-        .import("core.kept_components")?
+        .import("ingetrazo_core.kept_components")?
         .call_method1("place_copy", (defs.get_item(0)?,))?;
     Ok((warnings, defs, placement))
 }

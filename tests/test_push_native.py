@@ -41,7 +41,8 @@ from ingetrazo_core import Vec3 as QVector3D
 import core._native as _native
 from core import mesh as M
 from core import orient as O
-from core import push_scans, scan_index
+from core import push_scans
+from ingetrazo_core import scan_index
 from ingetrazo_core import store_mesh as S
 
 mod = _native.native

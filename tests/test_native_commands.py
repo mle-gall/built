@@ -149,7 +149,7 @@ def test_paint_placements_registers_a_new_material_in_the_same_step():
 
 
 def test_rename_component_is_one_native_step():
-    from core.kept_components import copies_of
+    from ingetrazo_core.kept_components import copies_of
     scene = Scene()
     h = History(scene)
     mesh = Mesh()

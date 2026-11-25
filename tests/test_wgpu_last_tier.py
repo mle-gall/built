@@ -1,6 +1,6 @@
 """Shared commands must give identical geometry through native dispatch."""
 import pytest
-from core.input_codes import Input as Qt
+from ingetrazo_core import Input as Qt
 from ingetrazo_core import ScreenPoint as QPointF
 from ingetrazo_core import Vec3 as QVector3D
 from tools.base import ToolContext

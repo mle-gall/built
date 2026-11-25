@@ -115,7 +115,7 @@ fn copy_selection(v: &Obj, publish: bool) -> PyResult<bool> {
         }
     }
     let names = py
-        .import("core.insert")?
+        .import("ingetrazo_core.document_insert")?
         .call_method1("used_layers", (attrs, &edge_layers, &groups))?;
     let registry = PyDict::new(py);
     let materials = opt(&scene, "materials")?;

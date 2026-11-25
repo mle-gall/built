@@ -627,7 +627,7 @@ fn state(sheet: &Bound<'_, StartSheet>, back: bool) -> PyResult<String> {
 
 /// Show the file in the Finder (both apps).
 fn reveal(py: Python<'_>, path: &str) -> PyResult<()> {
-    py.import("core.desktop_open")?.call_method1("reveal", (path,))?;
+    py.import("ingetrazo_core.desktop_open")?.call_method1("reveal", (path,))?;
     Ok(())
 }
 
@@ -998,7 +998,7 @@ fn new_project(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let path = py.import("pathlib")?.getattr("Path")?.call1((name,))?.call_method1("with_suffix", (".builtproject",))?;
     let made = (|| -> PyResult<()> {
         let scene = py.import("core.scene")?.getattr("Scene")?.call0()?;
-        py.import("core.project")?.call_method1("create", (scene, &path))?;
+        py.import("ingetrazo_core.project")?.call_method1("create", (scene, &path))?;
         win.call_method1("open_project", (&path,))?;
         Ok(())
     })();

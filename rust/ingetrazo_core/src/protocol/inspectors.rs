@@ -182,7 +182,7 @@ fn rename_component<'py>(history: &Obj<'py>, placement: &Obj<'py>, name: &Obj<'p
         None => one(history, placement)?,
     };
     let mesh = group.getattr("mesh")?;
-    let module = py.import("core.kept_components")?;
+    let module = py.import("ingetrazo_core.kept_components")?;
     let targets = module.call_method1("copies_of", (&scene, &mesh))?;
     let template = module.call_method1("kept_template", (&scene, &mesh))?;
     let changed = PyDict::new(py);

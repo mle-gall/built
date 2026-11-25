@@ -333,7 +333,7 @@ impl MoveCopies {
             .map(|&d| self.member(py, d))
             .collect::<PyResult<Vec<_>>>()?;
         let history = py.import("ingetrazo_core.history")?;
-        let ops = py.import("core.move_ops")?;
+        let ops = py.import("ingetrazo_core.move_ops")?;
         let group = py.import("core.group")?;
         let new_attrs = py
             .import("core.ifc_identity")?
@@ -415,16 +415,13 @@ impl MoveCopies {
                 commands.push(history.getattr("AddEdgeCommand")?.call((a, b), Some(&kw))?);
             }
             if !keys.is_empty() {
-                commands.push(ops.call_method1("_PlannedWhenRun", (planned,))?);
+                commands.push(crate::move_ops::make(py,false,&(planned,).into_pyobject(py)?)?);
             }
         }
         if commands.is_empty() {
             return Ok(None);
         }
-        Ok(Some(ops.call_method1(
-            "_MoveCopiesCommand",
-            (commands, groups, guides, faces, segments),
-        )?))
+        Ok(Some(crate::move_ops::make(py,true,&(commands,groups,guides,faces,segments).into_pyobject(py)?)?))
     }
 }
 

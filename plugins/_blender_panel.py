@@ -10,7 +10,7 @@ from ingetrazo_core import Vec3
 from ingetrazo_render import blender_availability
 
 from core import render_blender as rb
-from core.desktop_open import open_url
+from ingetrazo_core.desktop_open import open_url
 from ingetrazo_core.settings import settings as native_settings
 
 _SETTINGS = "render/"

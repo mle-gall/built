@@ -363,7 +363,7 @@ fn dependencies(m: &Bound<PyModule>) -> PyResult<()> {
                 ("smooths", "smooths"),
             ],
         ),
-        ("core.element_set", &[("ElementSet", "ElementSet")]),
+        ("ingetrazo_core", &[("ElementSet", "ElementSet")]),
         ("array", &[("array", "array")]),
         ("pathlib", &[("Path", "Path")]),
         ("typing", &[("Optional", "Optional")]),
