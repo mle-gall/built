@@ -580,7 +580,7 @@ fn move_among_siblings(history: &Obj<'_>, view: &Obj<'_>, earlier: bool) -> PyRe
     );
     let py = scene.py();
     let command = py
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .call_method1("SceneTreeCommand", (Py::new(py, change)?,))?;
     history.call_method1("execute", (command,))?;
     Ok(true)
@@ -689,7 +689,7 @@ fn edit_menu_folder(
     let py = scene.py();
     let edit = Py::new(py, op)?;
     let cmd = py
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .call_method1("SceneTreeCommand", (&edit,))?;
     let before: u64 = history.getattr("revision")?.extract()?;
     history.call_method1("execute", (cmd,))?;

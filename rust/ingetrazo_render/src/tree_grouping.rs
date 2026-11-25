@@ -360,7 +360,7 @@ pub fn tree_group_action(
             win.call_method0("_on_make_component")?;
         }
         "explode" => {
-            let history = win.py().import("core.history")?;
+            let history = win.py().import("ingetrazo_core.history")?;
             let steps = PyList::empty(win.py());
             for group in groups.iter() {
                 steps.append(history.call_method1("ExplodeGroupCommand", (group,))?)?;
@@ -461,7 +461,7 @@ pub fn tree_move(
     vp.call_method0("end_group_edit")?;
     let command = vp
         .py()
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .call_method1("ReparentGroupsCommand", (groups, destination))?;
     vp.py()
         .import("ingetrazo_render.tree_navigation")?

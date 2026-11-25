@@ -19,7 +19,7 @@ from ingetrazo_core import presentation as _presentation  # noqa: F401
 
 from core.doc_model import Record, record_fields
 
-from core.history import CommandRejected
+from ingetrazo_core.history import CommandRejected
 # Native steps (docs/commands-port.md), kept under these names.
 from ingetrazo_core import MoveSceneCommand, RenameSceneCommand  # noqa: F401
 

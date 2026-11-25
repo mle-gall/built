@@ -3,7 +3,7 @@
 from copy import deepcopy
 
 from core import bim_registry, links
-from core.history import (AssignLayerCommand, Command, CompoundCommand, EnsureLayersCommand,
+from ingetrazo_core.history import (AssignLayerCommand, Command, CompoundCommand, EnsureLayersCommand,
                           SetRecordCommand, SetRegistryCommand, SetStructureNodeCommand)
 from core.layers import DEFAULT_LAYER, layer_of
 from core.group import new_uid

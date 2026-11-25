@@ -191,7 +191,7 @@ pub(crate) fn section_edit<'py>(
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
     let p = plane(scene, uid)?;
     let py = p.py();
-    let history = py.import("core.history")?;
+    let history = py.import("ingetrazo_core.history")?;
     let active = p.getattr("active")?.is_truthy()?;
     let hidden = p.getattr("hidden")?.is_truthy()?;
     match field_name {

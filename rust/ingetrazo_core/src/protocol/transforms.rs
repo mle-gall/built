@@ -321,7 +321,7 @@ fn move_selection<'py>(
 ) -> Reply<'py> {
     let py = history.py();
     if let Some(plan) = _plan {
-        if !plan.is_instance(&py.import("core.history")?.getattr("Command")?)? {
+        if !plan.is_instance(&py.import("ingetrazo_core.history")?.getattr("Command")?)? {
             return Err(pyo3::exceptions::PyTypeError::new_err(
                 "a prepared move must be a history command",
             ));
@@ -503,7 +503,7 @@ fn flip_selection<'py>(
                     group.call_method1("transformed_attrs", (face.getattr("attrs")?, &m))?,
                 ))?,
             )?;
-            cmds.append(py.import("core.history")?.call_method(
+            cmds.append(py.import("ingetrazo_core.history")?.call_method(
                 "AddFaceCommand",
                 (outer,),
                 Some(&kw),
@@ -520,7 +520,7 @@ fn flip_selection<'py>(
             kw.set_item("curve", curves.get_item(curve)?)?;
             let soft = e.getattr("soft")?;
             kw.set_item("soft", if soft.is_truthy()? { Some(soft) } else { None })?;
-            cmds.append(py.import("core.history")?.call_method(
+            cmds.append(py.import("ingetrazo_core.history")?.call_method(
                 "AddEdgeCommand",
                 (
                     m.call_method1("map", (e.getattr("a")?,))?,
@@ -547,7 +547,7 @@ fn flip_selection<'py>(
         if !positions.is_empty() {
             let kw = PyDict::new(py);
             kw.set_item("faces", faces)?;
-            cmds.append(py.import("core.history")?.call_method(
+            cmds.append(py.import("ingetrazo_core.history")?.call_method(
                 "FlipVerticesCommand",
                 (positions.values(), c, n),
                 Some(&kw),

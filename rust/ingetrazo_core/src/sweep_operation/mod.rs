@@ -139,7 +139,7 @@ impl SweepFace {
             self.closed,
         )? {
             return Err(PyErr::from_value(
-                py.import("core.history")?
+                py.import("ingetrazo_core.history")?
                     .call_method1("CommandRejected", (&self.refusal,))?,
             ));
         }
@@ -163,7 +163,7 @@ fn build_sweep_face<'p>(
         py.import("ingetrazo_core")?
             .getattr("resident_face_mutation")?
     } else {
-        py.import("core.history")?.getattr("SnapshotMutation")?
+        py.import("ingetrazo_core.history")?.getattr("SnapshotMutation")?
     };
     cmd.call1((SweepFace {
         profile: profile.unbind(),

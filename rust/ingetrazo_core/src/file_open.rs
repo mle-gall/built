@@ -103,7 +103,7 @@ fn read_skp<'py>(
     let payload = reader.getattr("parse_skp")?.call((path,), Some(args))?;
     let empty = payload.call_method1("get", ("empty", false))?.is_truthy()?;
     let history = py
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .getattr("History")?
         .call1((scene,))?;
     // A private document has no listeners to notify. Reserving the editor's

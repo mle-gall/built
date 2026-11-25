@@ -172,7 +172,7 @@ pub(crate) fn loose_edit<'py>(
     field: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = scene.py();
-    let history = py.import("core.history")?;
+    let history = py.import("ingetrazo_core.history")?;
     if field == "eye" {
         let mesh = scene.getattr("mesh")?;
         let entities = py
@@ -400,7 +400,7 @@ pub(crate) fn reset_source_tags<'py>(
             commands.append(flags.call1((keys, PyList::empty(py), index == 1, py.None()))?)?;
         }
     }
-    let history = py.import("core.history")?;
+    let history = py.import("ingetrazo_core.history")?;
     commands.append(py.import("core.links")?.call_method1("set_registry_command", (saved,))?)?;
     Ok(Some(history.call_method1("CompoundCommand", (commands,))?))
 }

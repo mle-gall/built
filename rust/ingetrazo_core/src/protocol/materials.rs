@@ -115,7 +115,7 @@ fn edit_material<'py>(
         } else {
             tex.call_method1("get", ("tint",))?
         };
-        let step = py.import("core.history")?.call_method(
+        let step = py.import("ingetrazo_core.history")?.call_method(
             "EditTexturedMaterialCommand",
             (name, tint),
             Some(&kw),

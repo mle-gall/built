@@ -44,7 +44,7 @@ fn texture_commands<'p>(
 ) -> PyResult<Vec<Obj<'p>>> {
     let py = faces.py();
     let set = py
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .getattr("SetFaceTextureCommand")?;
     let Some(plane) = plane.filter(|p| !p.is_none()) else {
         return Ok(vec![set.call1((faces, tex))?]);
@@ -102,7 +102,7 @@ fn surface_commands<'p>(
     let mut cmds = Vec::new();
     let rest = PyList::empty(py);
     let set = py
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .getattr("SetFaceTextureCommand")?;
     for face in faces.try_iter()? {
         let f = face?;
@@ -189,7 +189,7 @@ fn build_paint<'p>(
     plane: Option<&Obj<'p>>,
 ) -> PyResult<Obj<'p>> {
     let py = mesh.py();
-    let history = py.import("core.history")?;
+    let history = py.import("ingetrazo_core.history")?;
     let none = py.None().into_bound(py);
     let name = if material.is_none() {
         none.clone()

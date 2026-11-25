@@ -36,7 +36,7 @@ fn execute_make(vp: &Bound<'_, PyAny>, cmd: &Bound<'_, PyAny>) -> PyResult<()> {
         cmd.clone()
     } else {
         vp.py()
-            .import("core.history")?
+            .import("ingetrazo_core.history")?
             .call_method1("GroupInContextCommand", (cmd, group))?
     };
     vp.getattr("history")?.call_method1("execute", (cmd,))?;
@@ -55,7 +55,7 @@ fn make_group(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let edges = matching(&sel, "core.mesh", "Edge")?;
     let groups = matching(&sel, "core.group", "Group")?;
     let loose = !edges.is_empty() || !faces.is_empty();
-    let hist = py.import("core.history")?;
+    let hist = py.import("ingetrazo_core.history")?;
     let fail = if loose {
         None
     } else {
@@ -121,7 +121,7 @@ fn explode_group(win: &Bound<'_, PyAny>) -> PyResult<()> {
     } else {
         let cmd = win
             .py()
-            .import("core.history")?
+            .import("ingetrazo_core.history")?
             .getattr("ExplodeGroupCommand")?;
         for g in groups.iter() {
             win.call_method1("_execute_make", (cmd.call1((g,))?,))?;
@@ -147,7 +147,7 @@ fn explode_images(vp: &Bound<'_, PyAny>) -> PyResult<()> {
     if groups.is_empty() {
         return Ok(());
     }
-    let history = py.import("core.history")?;
+    let history = py.import("ingetrazo_core.history")?;
     let commands = PyList::empty(py);
     commands.append(history.call_method1("DeleteImagePlanesCommand", (images,))?)?;
     for g in groups.iter() {
@@ -201,7 +201,7 @@ impl ComponentName {
             return Ok(());
         }
         let name = name.trim();
-        let history = py.import("core.history")?;
+        let history = py.import("ingetrazo_core.history")?;
         let kw = PyDict::new(py);
         let cmd = match self.mode {
             Component::Group => history.call_method1(

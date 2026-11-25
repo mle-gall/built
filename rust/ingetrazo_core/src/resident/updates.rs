@@ -95,7 +95,7 @@ struct Commands<'py> {
 }
 impl<'py> Commands<'py> {
     fn new(py: Python<'py>) -> PyResult<Self> {
-        Ok(Self { history: py.import("core.history")? })
+        Ok(Self { history: py.import("ingetrazo_core.history")? })
     }
     fn any(&self, command: &Obj<'py>, names: &[&str]) -> PyResult<bool> {
         for name in names {

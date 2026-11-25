@@ -4,7 +4,7 @@ from copy import deepcopy
 
 from core import doc_model as _dm
 from core.group import iter_placements
-from core.history import SnapshotImport
+from ingetrazo_core.history import SnapshotImport
 
 
 class AgentSnapshot(SnapshotImport):

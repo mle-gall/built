@@ -66,7 +66,7 @@ pub(crate) fn group_scale_command<'p>(
         py,
         [axes.get_item(1)?, axes.get_item(2)?, axes.get_item(3)?],
     )?;
-    Ok(Some(py.import("core.history")?.call_method1(
+    Ok(Some(py.import("ingetrazo_core.history")?.call_method1(
         "ScaleGroupCommand",
         (group, center, PyTuple::new(py, ratios)?, basis),
     )?))

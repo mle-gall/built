@@ -160,7 +160,7 @@ def edit_face(mesh):
 
 def edit_command(face, distance: float = 0.01):
     """The Move tool's command for ``face`` moved ``distance`` along its normal."""
-    from core.history import MoveVerticesCommand
+    from ingetrazo_core.history import MoveVerticesCommand
     return MoveVerticesCommand(list(face.vertices), face.normal() * distance,
                                carry_textures=True)
 
@@ -448,7 +448,7 @@ class Probe:
             self.later(500, edit)
 
         def edit():
-            from core.history import CommandRejected
+            from ingetrazo_core.history import CommandRejected
             # The open group's mesh (a component instance edits a world copy).
             face = edit_face(scene.mesh)
             if face is None:

@@ -61,7 +61,7 @@ pub fn tree_delete_rows(vp: &Bound<'_, PyAny>, clicked: &Bound<'_, PyAny>) -> Py
             locked[parent] |= locked[i];
         }
     }
-    let history = py.import("core.history")?;
+    let history = py.import("ingetrazo_core.history")?;
     let steps = PyList::empty(py);
     let picked: HashSet<_> = tree.targets.iter().copied().collect();
     let mut reason = "";
@@ -198,7 +198,7 @@ fn delete_tag_answer(
     {
         let cmd = win
             .py()
-            .import("core.history")?
+            .import("ingetrazo_core.history")?
             .call_method1("DeleteLayerCommand", (key,))?;
         win.py()
             .import("ingetrazo_render.tree_navigation")?
@@ -257,7 +257,7 @@ pub fn tree_header_state(vp: &Bound<'_, PyAny>, scope: &str, lock: bool) -> PyRe
                 .getattr("NativeCommand")?
                 .call_method1("lock", (rows, !any))?
         } else {
-            py.import("core.history")?
+            py.import("ingetrazo_core.history")?
                 .call_method1("HideCommand", (rows, !any))?
         };
         py.import("ingetrazo_render.tree_navigation")?
@@ -328,7 +328,7 @@ fn purge_tags_answer(
     {
         let cmd = win
             .py()
-            .import("core.history")?
+            .import("ingetrazo_core.history")?
             .call_method1("PurgeUnusedCommand", (true, false))?;
         win.py()
             .import("ingetrazo_render.tree_navigation")?

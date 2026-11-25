@@ -659,7 +659,7 @@ impl Writer {
                 return Ok(Self);
             }
         }
-        let reason = py.import("core.history")?.getattr("CommandRejected")?
+        let reason = py.import("ingetrazo_core.history")?.getattr("CommandRejected")?
             .call1(("Another document transaction is active.",))?;
         Err(PyErr::from_value(reason))
     }

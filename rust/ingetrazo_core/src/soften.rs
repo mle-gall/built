@@ -295,7 +295,7 @@ fn __getattr__<'p>(m: &Bound<'p, PyModule>, name: &str) -> PyResult<Obj<'p>> {
         "type",
         (
             name,
-            (py.import("core.history")?.getattr("MeshCommand")?,),
+            (py.import("ingetrazo_core.history")?.getattr("MeshCommand")?,),
             ns,
         ),
     )?;

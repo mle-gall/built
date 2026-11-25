@@ -359,7 +359,7 @@ pub(super) fn install(m: &Module<'_>, name: &str, core: &Module<'_>) -> PyResult
         }
         "core.reference_edit" => {
             let p = core.getattr("command_protocol")?;
-            let h = py.import("core.history")?;
+            let h = py.import("ingetrazo_core.history")?;
             for (n, b, c, flag, init) in [
                 (
                     "ReshareInstanceCommand",

@@ -116,7 +116,7 @@ fn delete_entities(vp: &Bound<'_, PyAny>) -> PyResult<()> {
         return Ok(());
     }
     let commands = PyList::empty(py);
-    let history = py.import("core.history")?;
+    let history = py.import("ingetrazo_core.history")?;
     let edges = matching(&sel, "core.mesh", "Edge")?;
     let faces = matching(&sel, "core.mesh", "Face")?;
     if !edges.is_empty() || !faces.is_empty() {

@@ -171,7 +171,7 @@ impl MeshEdit {
                     .call_method("rebuild_cap_plane", args, None)?
                     .is_truthy()?
                 {
-                    return Err(PyErr::from_value(py.import("core.history")?.call_method1(
+                    return Err(PyErr::from_value(py.import("ingetrazo_core.history")?.call_method1(
                         "CommandRejected",
                         ("Cap already matches its plane",),
                     )?));

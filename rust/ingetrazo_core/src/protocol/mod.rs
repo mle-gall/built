@@ -57,7 +57,7 @@ fn history_command<'py>(
     name: &str,
     args: impl pyo3::call::PyCallArgs<'py>,
 ) -> PyResult<Obj<'py>> {
-    py.import("core.history")?.call_method1(name, args)
+    py.import("ingetrazo_core.history")?.call_method1(name, args)
 }
 
 #[pyfunction]

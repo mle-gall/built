@@ -20,7 +20,7 @@ pub(in crate::doc) fn tokens<'py>(
     attrs_copy_max: isize,
 ) -> PyResult<Bound<'py, PyList>> {
     let py = cmd.py();
-    let history = py.import("core.history")?;
+    let history = py.import("ingetrazo_core.history")?;
     let compound = history.getattr("CompoundCommand")?;
     let mesh_cmd = history.getattr("MeshCommand")?;
     let active = scene.getattr("mesh")?;

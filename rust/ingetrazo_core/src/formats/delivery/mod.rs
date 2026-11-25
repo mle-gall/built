@@ -33,7 +33,7 @@ fn store<'p>(history: &Obj<'p>, key: &Obj<'p>, values: &Obj<'p>) -> PyResult<Obj
     let py = history.py();
     let before = history.getattr("revision")?;
     let cmd = py
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .call_method1("SetPluginDataCommand", ("deliveries", values))?;
     history.call_method1("execute", (cmd,))?;
     let out = py.get_type::<PyDict>().call1((py

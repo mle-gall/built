@@ -1106,7 +1106,7 @@ impl<'a, 'py> Row<'a, 'py> {
             if parent.is_truthy()? {
                 self.expand(format!("n:{}", parent.str()?))?;
             }
-            execute()?.call1((viewport, py.import("core.history")?.getattr("SetRegistryCommand")?.call1((registry,))?))?;
+            execute()?.call1((viewport, py.import("ingetrazo_core.history")?.getattr("SetRegistryCommand")?.call1((registry,))?))?;
         } else if self.is(&["delete"]) && named.is_some() {
             let node = named.as_deref().unwrap_or("");
             let count = structure.call_method1("members", (&scene, node))?.len()?;
@@ -1285,7 +1285,7 @@ pub(super) fn delete_node<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (viewport, key) = (a.get_item(0)?, a.get_item(1)?);
     let structure = py.import("core.structure")?;
-    let history = py.import("core.history")?;
+    let history = py.import("ingetrazo_core.history")?;
     let scene = viewport.getattr("scene")?;
     let registry = py.import("core.bim_registry")?.call_method1("get", (&scene,))?;
     let section = registry.get_item("structure")?;

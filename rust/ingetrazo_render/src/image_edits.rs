@@ -52,7 +52,7 @@ fn image_unlock(win: &Bound<'_, PyAny>, image: &Bound<'_, PyAny>) -> PyResult<()
 fn image_delete(vp: &Bound<'_, PyAny>, image: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = vp.py();
     let cmd = py
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .call_method1("DeleteImagePlanesCommand", (PyList::new(py, [image])?,))?;
     vp.getattr("history")?.call_method1("execute", (cmd,))?;
     vp.getattr("scene")?
@@ -149,7 +149,7 @@ fn image_answer(
         return Ok(());
     }
     let py = win.py();
-    let history = py.import("core.history")?;
+    let history = py.import("ingetrazo_core.history")?;
     if width {
         if value <= 0. {
             return Ok(());

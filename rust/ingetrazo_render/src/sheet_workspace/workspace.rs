@@ -295,7 +295,7 @@ impl Workspace {
         s.call_method1(
             "_execute",
             (s.py()
-                .import("core.history")?
+                .import("ingetrazo_core.history")?
                 .call_method1("SheetCommand", (inner,))?,),
         )?;
         Ok(())
@@ -1852,7 +1852,7 @@ impl Workspace {
                 let valid = 0..sheets.len()? as isize;
                 if valid.contains(&i) && valid.contains(&j) {
                     let step = py
-                        .import("core.history")?
+                        .import("ingetrazo_core.history")?
                         .call_method1("MoveSheetCommand", (sheets.get_item(i)?, j))?;
                     Self::_execute(s, &step)?;
                     comp.call_method0("_reload_comp_combo")?;
@@ -1920,7 +1920,7 @@ impl Workspace {
         )?;
         Self::_execute(
             s,
-            &py.import("core.history")?
+            &py.import("ingetrazo_core.history")?
                 .call_method1("InsertSheetCommand", (sheet,))?,
         )?;
         Self::_show(s, sheets.len()? as isize - 1)
@@ -1948,7 +1948,7 @@ impl Workspace {
         )?;
         Self::_execute(
             s,
-            &py.import("core.history")?
+            &py.import("ingetrazo_core.history")?
                 .call_method1("InsertSheetCommand", (dup, index + 1))?,
         )?;
         Self::_show(s, index + 1)
@@ -1965,7 +1965,7 @@ impl Workspace {
         let current = comp.getattr("comp")?.is(&sheet);
         Self::_execute(
             s,
-            &py.import("core.history")?
+            &py.import("ingetrazo_core.history")?
                 .call_method1("RemoveSheetCommand", (sheet,))?,
         )?;
         if current {

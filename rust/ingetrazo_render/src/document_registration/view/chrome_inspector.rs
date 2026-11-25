@@ -834,7 +834,7 @@ pub(super) fn status_text<'py>(a: &Args<'py>) -> Reply<'py> {
 pub(super) fn set_status<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (win, groups, value) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?);
-    let history = py.import("core.history")?;
+    let history = py.import("ingetrazo_core.history")?;
     let commands = empty(py);
     for group in groups.try_iter()? {
         let group = group?;

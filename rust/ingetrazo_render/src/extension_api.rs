@@ -199,7 +199,7 @@ impl ExtensionApp {
     fn set_document_data(&self, py: Python, value: &Obj) -> PyResult<()> {
         let vp = self.viewport(py)?;
         let cmd = py
-            .import("core.history")?
+            .import("ingetrazo_core.history")?
             .getattr("SetPluginDataCommand")?
             .call1((&self.key, value))?;
         vp.getattr("history")?.call_method1("execute", (cmd,))?;

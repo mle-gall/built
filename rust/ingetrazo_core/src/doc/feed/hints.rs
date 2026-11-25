@@ -6,7 +6,7 @@ type Obj<'py> = Bound<'py, PyAny>;
 fn visit<'py>(cmd: &Obj<'py>, mut leaf: impl FnMut(&Obj<'py>) -> PyResult<()>) -> PyResult<()> {
     let compound = cmd
         .py()
-        .import("core.history")?
+        .import("ingetrazo_core.history")?
         .getattr("CompoundCommand")?;
     let mut stack = vec![cmd.clone()];
     while let Some(c) = stack.pop() {

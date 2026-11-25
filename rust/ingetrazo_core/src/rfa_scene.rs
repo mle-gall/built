@@ -456,7 +456,7 @@ fn build_family<'p>(
 #[pyfunction]
 fn rfa_history_do<'p>(command: &Obj<'p>, scene: &Obj<'p>) -> PyResult<()> {
     let py = scene.py();
-    let history = py.import("core.history")?;
+    let history = py.import("ingetrazo_core.history")?;
     let copy_materials = |source: &Obj<'p>| py.get_type::<PyDict>().call1((source,));
     let first = command.getattr("after")?.is_none();
     if first {
@@ -507,7 +507,7 @@ fn rfa_history_do<'p>(command: &Obj<'p>, scene: &Obj<'p>) -> PyResult<()> {
 #[pyfunction]
 fn rfa_history_undo(command: &Obj<'_>, scene: &Obj<'_>) -> PyResult<()> {
     let py = scene.py();
-    py.import("core.history")?
+    py.import("ingetrazo_core.history")?
         .getattr("SnapshotImport")?
         .call_method1("undo", (command, scene))?;
     scene.setattr(

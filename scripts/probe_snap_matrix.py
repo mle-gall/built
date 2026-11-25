@@ -193,7 +193,7 @@ def _build_turned_edit(vp, kind: str) -> None:
     # twice about the origin — so it remembers its axes the way the program
     # keeps them (a mesh built already turned would be a group that was
     # never rotated, whose axes are the world's).
-    from core.history import RotateGroupCommand
+    from ingetrazo_core.history import RotateGroupCommand
     g = Group(local, name="turned group")
     vp.scene.groups.append(g)
     vp.history.execute(RotateGroupCommand(g, P(0, 0, 0), P(1, 0, 0), 20.0))
