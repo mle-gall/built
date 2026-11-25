@@ -362,7 +362,7 @@ fn group_iter_painted_placements(py: Python<'_>, group: &Bound<'_, PyAny>, base:
 /// A 4 x 4 product `a @ b` (row-major) as NumPy's on this Mac (Accelerate):
 /// each element `fma(a2, b2, a0 b0) + fma(a3, b3, a1 b1)`, measured equal on
 /// 48,000 elements (`tests/test_model_placements_golden.py`).
-fn numpy_matmul4(a: &[f64; 16], b: &[f64; 16]) -> [f64; 16] {
+pub(crate) fn numpy_matmul4(a: &[f64; 16], b: &[f64; 16]) -> [f64; 16] {
     std::array::from_fn(|i| {
         let (r, c) = (i / 4, i % 4);
         let t = |k: usize| (a[r * 4 + k], b[k * 4 + c]);
