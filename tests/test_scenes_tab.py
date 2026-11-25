@@ -11,7 +11,7 @@ def test_one_command_of_each_kind_for_scenes():
     are the native steps: no Python class of the same name beside them."""
     import ingetrazo_core
     import core.history as H
-    import core.saved_views as S
+    import ingetrazo_core.saved_views as S
     from ingetrazo_core import history as commands
     assert H is commands
     assert H.AddSceneCommand is commands.AddSceneCommand is ingetrazo_core.AddSceneCommand
@@ -66,7 +66,7 @@ def test_a_scene_shown_from_the_menu_is_marked_in_the_chooser(native_host):
 
 def test_insert_scene_clamps_large_integer_positions():
     from core.history import AddSceneCommand
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     from core.scene import Scene
 
     scene = Scene()

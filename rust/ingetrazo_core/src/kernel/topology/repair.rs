@@ -218,7 +218,7 @@ fn heal_overlapping_faces<'py>(
         &h,
     )?;
     if !flat {
-        py.import("core.orient")?
+        py.import("ingetrazo_core.orient")?
             .call_method1("orient_outward", (mesh,))?;
     }
     Ok(removed)

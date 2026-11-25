@@ -11,7 +11,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History, SetFaceColorCommand
 from core.group import Group
-from core.orient import is_closed, orient_outward, signed_volume
+from ingetrazo_core.orient import is_closed, orient_outward, signed_volume
 from core.scene import Scene
 from formats import obj as obj_format
 from formats import stl as stl_format

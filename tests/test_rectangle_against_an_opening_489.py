@@ -13,7 +13,7 @@ from ingetrazo_core import Vec3 as V
 
 from core.edits import build_add_edges
 from core.history import History
-from core.orient import is_closed
+from ingetrazo_core.orient import is_closed
 from core.scene import Scene
 from tests import test_pushpull_ux as T
 

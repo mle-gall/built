@@ -22,7 +22,7 @@ def _scene():
     from core.group import Group
     from core.layers import Layer
     from core.mesh import Mesh
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     from core.scene import Scene
     s = Scene()
     for name, folder in (("Muros", "Arq"), ("Losa", "Arq"), ("Mobiliario", "Int"), ("Ejes", None),

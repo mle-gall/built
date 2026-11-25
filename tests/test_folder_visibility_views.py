@@ -6,7 +6,7 @@ from ingetrazo_core import Vec3 as QVector3D
 from core import layers as L
 from core.layers import Layer
 from core.scene import Scene
-from core.saved_views import SavedView
+from ingetrazo_core.saved_views import SavedView
 from core.camera import OrbitCamera
 
 

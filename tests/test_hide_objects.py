@@ -22,7 +22,7 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from core.group import Group, copy_group
 from core.history import HideCommand, HideEdgesCommand, History
 from core.mesh import Mesh
-from core.saved_views import SavedView
+from ingetrazo_core.saved_views import SavedView
 from core.scene import Scene
 from formats import igz
 

@@ -15,7 +15,7 @@ def _activate(win, name):
 
 def _window_with_two_scenes(native_host):
     from core.layers import Layer
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
 
     win = native_host.window
     scene = win.viewport.scene
@@ -41,7 +41,7 @@ def test_camera_only_recall_keeps_version_and_clean_document(native_host):
 
 
 def test_recall_that_changes_layers_still_bumps_version(native_host):
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     win, scene, cam = _window_with_two_scenes(native_host)
     furniture = next(ly for ly in scene.layers if ly.name == "Furniture")
     furniture.visible = False

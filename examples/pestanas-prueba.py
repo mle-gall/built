@@ -27,7 +27,7 @@ from ingetrazo_core import Vec3 as V
 
 
 from core.camera import OrbitCamera  # noqa: E402
-from core.saved_views import SavedView  # noqa: E402
+from ingetrazo_core.saved_views import SavedView  # noqa: E402
 from core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402
 

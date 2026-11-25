@@ -26,7 +26,7 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, world_mesh
 from core.mesh import Mesh
-from core.orient import is_closed, signed_volume
+from ingetrazo_core.orient import is_closed, signed_volume
 from ingetrazo_core.store_mesh import StoreMesh
 from tools.base import ToolContext
 from tools.pushpull import PushPullTool

@@ -8,7 +8,7 @@ import pytest
 
 from core.camera import OrbitCamera
 from core.layers import Layer
-from core.saved_views import SavedView, from_lookat
+from ingetrazo_core.saved_views import SavedView, from_lookat
 from core.scene import Scene
 
 
@@ -217,3 +217,36 @@ def test_scene_remembers_its_shadow_settings(tmp_path):
     igz.load_into(out, p)
     assert [v.shadows["enabled"] for v in out.saved_views] == [True, False]
     assert ShadowSettings.from_dict(out.saved_views[0].shadows).hour == 15
+
+
+def test_documented_plugin_imports_resolve_in_a_fresh_interpreter():
+    import subprocess
+    import sys
+
+    subprocess.run([sys.executable, "-c", """
+from core.saved_views import *
+from core.section import *
+from core.orient import *
+assert callable(from_lookat) and callable(RenameSceneCommand) and callable(MoveSceneCommand)
+from ingetrazo_core import saved_views, section, orient
+assert SavedView is saved_views.SavedView
+assert SectionPlane is section.SectionPlane
+assert orient_outward is orient.orient_outward
+assert turn_face_over is orient.turn_face_over
+"""], check=True, timeout=15)
+
+
+def test_scripted_view_coerces_camera_numbers_and_switches():
+    from ingetrazo_core.saved_views import SavedView
+
+    view = SavedView("Scripted", (n for n in (2, 3, 4)), distance="7.5",
+                     fov_deg="60", perspective=0, two_point=1, hidden_layers=False)
+    assert view.hidden_layers == []
+    assert view.target == (2, 3, 4)
+    assert (view.distance, view.fov_deg, view.perspective, view.two_point) == (7.5, 60., False, True)
+    converted = from_lookat("Imported", (3, 4, 5), (0, 0, 0), (0, 0, 1), perspective=0)
+    assert converted.perspective is False
+
+
+def test_default_pitch_keeps_the_serialized_camera_value():
+    assert SavedView("Default").to_dict()["pitch"] == 0.5235987755982988

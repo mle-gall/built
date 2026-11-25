@@ -86,7 +86,7 @@ def answers(sv):
 
 
 def test_the_saved_view_archive_answers_as_the_python_one_did():
-    from core import saved_views
+    from ingetrazo_core import saved_views
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     got = json.loads(json.dumps(answers(saved_views)))
     for key in want:
@@ -96,7 +96,7 @@ def test_the_saved_view_archive_answers_as_the_python_one_did():
 
 if __name__ == "__main__" and "--write" in sys.argv:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from core import saved_views
+    from ingetrazo_core import saved_views
     data = answers(saved_views)
     GOLDEN.parent.mkdir(exist_ok=True)
     GOLDEN.write_bytes(gzip.compress(json.dumps(data).encode(), mtime=0))

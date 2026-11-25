@@ -10,7 +10,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
 from core.mesh import Mesh
-from core.orient import is_closed, signed_volume
+from ingetrazo_core.orient import is_closed, signed_volume
 from core.scene import Scene
 from core.sweep import order_path_edges, sweep_profile
 from tools.base import ToolContext

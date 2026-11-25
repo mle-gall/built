@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
 from core.scene import Scene
-from core.section import SectionPlane
+from ingetrazo_core.section import SectionPlane
 from core.camera import OrbitCamera
 from ingetrazo_core import pack_scene
 from views.wgpu_sections import geometry, capture_rows

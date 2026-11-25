@@ -143,7 +143,7 @@ def test_a_box_cut_on_a_slant_fills_in_its_own_plane():
 
 def test_the_viewport_fills_the_cut_and_keeps_it_across_a_selection(native_host):
     from core.group import Group
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     vp = native_host.viewport
     scene = vp.scene
     m = Mesh()
@@ -207,7 +207,7 @@ def test_cross_hatching_draws_both_ways_and_spacing_counts():
 
 
 def test_the_plane_fill_over_the_style():
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     from core.style import Style
     style = Style(name="test")
     style.section_fill = True
@@ -230,7 +230,7 @@ def test_the_plane_fill_over_the_style():
 
 def test_the_viewport_hatches_the_cut_it_fills(native_host):
     from core.group import Group
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     vp = native_host.viewport
     scene = vp.scene
     m = Mesh()

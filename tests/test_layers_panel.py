@@ -10,7 +10,7 @@ from core import layers as L
 from core.group import Group
 from core.layers import DEFAULT_LAYER, Layer, assign_layer
 from core.mesh import Mesh
-from core.saved_views import SavedView
+from ingetrazo_core.saved_views import SavedView
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from tests.test_drawing_records import _square
 

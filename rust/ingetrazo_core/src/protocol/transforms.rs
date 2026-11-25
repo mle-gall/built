@@ -357,7 +357,7 @@ fn move_selection<'py>(
             ("ingetrazo_core.mesh", "Edge", &es),
             ("ingetrazo_core.mesh", "Face", &fs),
             ("core.dimension", "Dimension", &dims),
-            ("core.section", "SectionPlane", &planes),
+            ("ingetrazo_core.section", "SectionPlane", &planes),
             ("ingetrazo_core.textlabel", "TextLabel", &labels),
         ];
         let classes = classes

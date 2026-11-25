@@ -59,7 +59,7 @@ def _every_kind(comp) -> None:
 
 def build(path: Path) -> None:
     from core.composition import Composicion, MarcoVista, TextoItem
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     from core.scene import Scene
     from ingetrazo_core.formats.igz import save_scene
     scene = Scene()

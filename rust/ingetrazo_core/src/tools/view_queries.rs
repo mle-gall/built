@@ -28,7 +28,7 @@ pub(super) fn classify(entity: &Bound<'_, PyAny>) -> PyResult<&'static str> {
             ("core.mesh", "Face", "face"),
             ("core.mesh", "Edge", "edge"),
             ("core.group", "Group", "group"),
-            ("core.section", "SectionPlane", "section_plane"),
+            ("ingetrazo_core.section", "SectionPlane", "section_plane"),
             ("ingetrazo_core.textlabel", "TextLabel", "text_label"),
             ("core.dimension", "Dimension", "dimension"),
             ("ingetrazo_core.image_plane", "ImagePlane", "image_plane"),

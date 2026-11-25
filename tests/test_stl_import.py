@@ -10,7 +10,7 @@ import pytest
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History, SnapshotImport
-from core.orient import is_closed, signed_volume
+from ingetrazo_core.orient import is_closed, signed_volume
 from core.scene import Scene
 from formats import stl as stl_format
 import tests.test_fuzz_engine as F

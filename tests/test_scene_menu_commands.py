@@ -11,7 +11,7 @@ from core.camera import OrbitCamera
 from core.composition import Composicion
 from core.history import History
 from core.protocol.commands import edit_saved_scene
-from core.saved_views import SavedView
+from ingetrazo_core.saved_views import SavedView
 from core.scene import Scene
 
 

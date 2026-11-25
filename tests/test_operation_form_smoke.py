@@ -965,7 +965,7 @@ def test_native_mesh_units_and_model_menu(tmp_path, suffix):
                     reason="requires the native window")
 def test_native_animation_forms_and_video_file(tmp_path):
     from core.camera import OrbitCamera
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     from core.scene import Scene
     from ingetrazo_core import SceneAnimation
     from formats.igz import save_scene

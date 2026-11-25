@@ -63,7 +63,7 @@ def test_hlr_geometry_matches_the_python_walk(native_host):
     assert sym([(s[:2], s[2:]) for s in slow]) == sym(
         [(s[:2], s[2:]) for s in fast])
     # Section cut: the array path falls back to the list clipper.
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     sp = SectionPlane(QVector3D(0, 0, 0.5), QVector3D(0, 0, 1),
                       name="Planta", symbol="1")
     scene.section_planes.append(sp)

@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Push/pull's native passes must leave every decision where Python puts it.
 
-The orientation pass (``core.orient.orient_outward``, now
+The orientation pass (``ingetrazo_core.orient.orient_outward``, now
 ``ingetrazo_core.orient_decision``) and the push tool's searches over the
 whole mesh (``core.push_scans``) run natively whenever the scans do; with
 ``scan_index._forced_off`` (``INGETRAZO_SCANS=0``) the original Python runs:
@@ -40,7 +40,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 import core._native as _native
 from core import mesh as M
-from core import orient as O
+from ingetrazo_core import orient as O
 from core import push_scans
 from ingetrazo_core import scan_index
 from ingetrazo_core import store_mesh as S

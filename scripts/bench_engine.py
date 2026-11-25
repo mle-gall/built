@@ -125,7 +125,7 @@ def op_intersect_apply(ctx):
 def op_orient(ctx):
     """Orient Faces over the biggest group's meshes."""
     from core.group import iter_placements
-    from core.orient import orient_outward
+    from ingetrazo_core.orient import orient_outward
     for m, _ in iter_placements(_biggest_group(ctx["scene"])):
         orient_outward(m.mesh)
 

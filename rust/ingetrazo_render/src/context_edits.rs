@@ -206,7 +206,7 @@ fn align_face(vp: &Bound<'_, PyAny>, face: &Bound<'_, PyAny>) -> PyResult<()> {
 fn section_action(win: &Bound<'_, PyAny>, verb: &str) -> PyResult<()> {
     let py = win.py();
     let vp = win.getattr("viewport")?;
-    let planes = selected(win, "core.section", "SectionPlane")?;
+    let planes = selected(win, "ingetrazo_core.section", "SectionPlane")?;
     let hist = py.import("ingetrazo_core.history")?;
     match verb {
         "align" => {

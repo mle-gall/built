@@ -34,7 +34,7 @@ def test_streamed_save_matches_retained_document_and_round_trips(tmp_path, monke
     from core import layers, links
     from core.composition import Composicion
     from core.materials import Material
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     from tests.test_igz_format3 import _canonical
 
     scene = _scene(tmp_path)

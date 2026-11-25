@@ -40,3 +40,16 @@ pub fn build<'p>(
     module.add(name, &cls)?;
     Ok(cls)
 }
+
+/// Use an existing native entry point as a method of a journalled handle.
+pub fn bind_methods(cls: &Bound<PyAny>, methods: &[(&str, &str, bool)]) -> PyResult<()> {
+    let py = cls.py();
+    let core = py.import("ingetrazo_core")?;
+    let classmethod = py.import("builtins")?.getattr("classmethod")?;
+    let partial = py.import("functools")?.getattr("partialmethod")?;
+    for &(name, function, is_class) in methods {
+        let descriptor = if is_class { &classmethod } else { &partial };
+        cls.setattr(name, descriptor.call1((core.getattr(function)?,))?)?;
+    }
+    Ok(())
+}

@@ -70,7 +70,7 @@ def test_the_title_block_field_says_it_too():
 def test_a_new_section_takes_a_LETTER_not_a_number():
     """«Las secciones se nombran así: no suele ser un 1, sino A-A, B-B»
     (50:45). The mark draws the letter at both ends, so «A … A»."""
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     V = QVector3D
     planes = []
     for _ in range(4):
@@ -98,7 +98,7 @@ def test_the_section_tool_letters_the_plane_it_places():
 
 def test_the_plane_can_be_renamed_after_it_is_placed(native_host):
     from core.history import PlaceSectionPlaneCommand
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     from ingetrazo_render import context_menu_build, context_menu_run
     from ingetrazo_render import chrome_forms
 

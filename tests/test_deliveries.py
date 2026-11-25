@@ -136,7 +136,7 @@ def test_selected_and_visible_preserve_source(tmp_path):
 
 
 def test_scenes_cancel_keeps_previous_files(tmp_path):
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     s = _tagged_wall_scene()
     cam = OrbitCamera()
     cam.perspective = False

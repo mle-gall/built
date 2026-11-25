@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""``core.orient.orient_outward`` (the native pass, ``orient.rs``) must
+"""``ingetrazo_core.orient.orient_outward`` (the native pass, ``orient.rs``) must
 decide as the Python oracle of ``core/orient.py`` did at ``0fd95100``, so
 the oracle can go: seeded assemblies of boxes (alone, side by side, sharing
 a wall that becomes an interior partition, stacked, one inside another),
@@ -81,7 +81,7 @@ def cases():
 
 
 def answers():
-    from core.orient import is_closed, orient_outward, signed_volume
+    from ingetrazo_core.orient import is_closed, orient_outward, signed_volume
     out = []
     for m, only, seed in cases():
         faces = list(m.faces)

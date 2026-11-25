@@ -395,7 +395,7 @@ fn editable(mesh: &Obj<'_>, rows: &Bound<'_, PyList>, error: Option<&str>) -> Py
     kw.set_item("coplanar_merge", true)?;
     py.import("ingetrazo_core")?
         .call_method("run_stitch", (mesh, seed, added), Some(&kw))?;
-    py.import("core.orient")?
+    py.import("ingetrazo_core.orient")?
         .call_method1("orient_outward", (mesh,))?;
     let fuse = py.import("ingetrazo_core.formats.fuse")?;
     fuse.call_method1("soften_by_smoothing_group", (mesh,))?;

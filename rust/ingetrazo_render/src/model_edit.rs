@@ -138,7 +138,7 @@ fn delete_entities(vp: &Bound<'_, PyAny>) -> PyResult<()> {
     }
     for (module, class, command) in [
         ("ingetrazo_core.image_plane", "ImagePlane", "DeleteImagePlanesCommand"),
-        ("core.section", "SectionPlane", "DeleteSectionPlanesCommand"),
+        ("ingetrazo_core.section", "SectionPlane", "DeleteSectionPlanesCommand"),
         ("core.dimension", "Dimension", "DeleteDimensionsCommand"),
         ("ingetrazo_core.textlabel", "TextLabel", "DeleteTextLabelsCommand"),
         ("ingetrazo_core.georef.geopath", "GeoPath", "DeleteGeoPathsCommand"),

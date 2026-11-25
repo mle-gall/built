@@ -343,7 +343,7 @@ pub fn igz_archive_scene_fields(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_
     archive_styles(scene, out)?;
     let views = attr(scene, "saved_views")?;
     if views.is_truthy()? {
-        let class = py.import("core.saved_views")?.getattr("SavedView")?;
+        let class = py.import("ingetrazo_core.saved_views")?.getattr("SavedView")?;
         out.set_item(
             "saved_views",
             rows(&views, |v| {
@@ -647,7 +647,7 @@ pub fn igz_reset_scene(scene: &Obj<'_>, payload: &Dict<'_>, survey: &Obj<'_>) ->
 #[pyfunction]
 pub fn igz_restore_views(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<()> {
     let py = scene.py();
-    let class = py.import("core.saved_views")?.getattr("SavedView")?;
+    let class = py.import("ingetrazo_core.saved_views")?.getattr("SavedView")?;
     let dest = PyList::empty(py);
     if let Some(seq) = payload.get_item("saved_views")? {
         for v in seq.try_iter()? {
@@ -792,7 +792,7 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
             .call_method1("from_dict", (data(payload, "scene_animation")?,))?,
     )?;
     if let Ok(seq) = data(payload, "section_planes")?.cast::<PyList>() {
-        let class = py.import("core.section")?.getattr("SectionPlane")?;
+        let class = py.import("ingetrazo_core.section")?.getattr("SectionPlane")?;
         let mut active = false;
         let planes = rows(seq, |v| {
             let plane = class.call_method1("from_dict", (v,))?;

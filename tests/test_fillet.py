@@ -17,7 +17,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from ingetrazo_core import apply_fillet, plan_fillet
 from core.mesh import Mesh
-from core.orient import is_closed, signed_volume
+from ingetrazo_core.orient import is_closed, signed_volume
 
 
 def box(L=2.0, W=1.0, H=1.0) -> Mesh:

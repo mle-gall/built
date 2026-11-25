@@ -432,7 +432,11 @@ fn cap_passes_wall(
     )
 }
 
+#[path = "orientation_api.rs"]
+mod orientation_api;
+
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    orientation_api::register(m)?;
     let sub = PyModule::new(m.py(), "core.push_scans")?;
     sub.add_function(wrap_pyfunction!(is_closed, &sub)?)?;
     sub.add_function(wrap_pyfunction!(mesh_is_flat, &sub)?)?;

@@ -94,7 +94,7 @@ pub(super) fn mutate_many(op: &Obj, scene: &Obj) -> PyResult<()> {
         let kw = PyDict::new(op.py());
         kw.set_item("only", (&face,))?;
         op.py()
-            .import("core.orient")?
+            .import("ingetrazo_core.orient")?
             .call_method("orient_outward", (&mesh,), Some(&kw))?;
         op.setattr("base_face", &face)?;
         op.setattr("_drag_pre_oriented", true)?;
@@ -218,7 +218,7 @@ pub(super) fn mutate_guarded(op: &Obj, scene: &Obj, preview: bool) -> PyResult<(
                 .map(|_| ())
         },
         number(op, "extrusion")?.abs() >= MIN_EXTRUDE,
-        &py.import("core.orient")?.getattr("is_closed")?,
+        &py.import("ingetrazo_core.orient")?.getattr("is_closed")?,
         &py.import("core.topology")?.getattr("_mesh_is_flat")?,
         &py.import("ingetrazo_core.store_mesh")?.getattr("_store_of")?,
     )?;
