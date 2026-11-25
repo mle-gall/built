@@ -28,11 +28,6 @@ def test_overlay_buffers_do_not_expand_lazy_mesh_or_follow_unrelated_edits(viewp
     assert type(mesh) is DeferredMesh
     group = loaded.groups.pop()
     vp = viewport
-    # This test is about the renderer's buffers. The bundled Model Info panel
-    # walks every face on each scene revision whether or not it is open, and
-    # that builds the mesh too: a separate defect, reported to the plugins lane.
-    from core import plugin_panels
-    monkeypatch.setattr(plugin_panels, "sync", lambda view, win: None)
     vp.scene.groups.append(group)
     vp.scene.show_hidden_geometry = True
     vp.scene.select([group])
@@ -96,3 +91,65 @@ def test_context_reuses_assemblies_sharing_an_empty_container_mesh(viewport):
     changed = vp._placements_epoch()
     assert id(other) not in vp._epoch_kept_tops(after, changed, ctx=True)
     vp.scene.edit_group = None
+
+
+def test_model_info_only_loads_deferred_meshes_when_visible(native_gpu_host, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from ingetrazo_core import Vec3
+    from core import plugin_panels
+    from core.mesh import on_mesh_materialized
+    from plugins import model_info
+
+    win, view = native_gpu_host.window, native_gpu_host.view
+    scene = win.viewport.scene
+    view.renderer.ui_enable(None)
+    view._ui_attached = True
+    win._panel_factories = {"model_info": model_info.ModelInfoPanel}
+
+    def add_deferred(name):
+        mesh = Mesh()
+        scene.groups.append(Group(mesh, name))
+        def build(target):
+            target.add_face([Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 1, 0)])
+        assert DeferredMesh.defer(mesh, build, 1)
+        return mesh
+
+    meshes = [add_deferred("first"), add_deferred("second")]
+
+    census = Mock(wraps=model_info._collect_stats)
+    monkeypatch.setattr(model_info, "_collect_stats", census)
+    materialized = []
+    token = on_mesh_materialized.set(materialized.append)
+    try:
+        plugin_panels.sync(view, win)
+        scene.version += 1
+        plugin_panels.sync(view, win)
+        assert not materialized
+        census.assert_not_called()
+
+        assert plugin_panels.open_panel(win, "model_info")
+        assert {id(m) for m in materialized} == {id(m) for m in meshes}
+        binding = next(b for b in view._plugin_bindings.values() if b.key == "model_info")
+        binding.invalidate()
+        plugin_panels.sync(view, win)
+        census.assert_called_once_with(scene)
+
+        scene.version += 1
+        plugin_panels.sync(view, win)
+        assert census.call_count == 2
+        monkeypatch.setattr("app_shell.native.pasteboard_write", lambda offers: True)
+        binding.model.event("copy", "invoke", None)
+        assert census.call_count == 2
+
+        other = SimpleNamespace(id="other", title="Other", slot="utility", sections=lambda: [])
+        plugin_panels.show_utility(win, "other", other)
+        third = add_deferred("third")
+        scene.version += 1
+        plugin_panels.sync(view, win)
+        assert type(third) is DeferredMesh and len(materialized) == 2
+        assert census.call_count == 2
+        assert plugin_panels.open_panel(win, "model_info")
+        assert census.call_count == 3 and materialized[-1] is third
+    finally:
+        on_mesh_materialized.reset(token)

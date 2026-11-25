@@ -2770,6 +2770,9 @@ impl Renderer {
     fn ui_plugin_open(&mut self, instance: &str) {
         if let Some(ui) = self.ui.as_mut() { ui.plugin_open(instance); }
     }
+    fn ui_plugin_visible(&self, instance: &str) -> bool {
+        self.ui.as_ref().is_some_and(|ui| ui.plugin_visible(instance))
+    }
     fn ui_plugin_document(&mut self, document: String, live: Vec<String>) {
         if let Some(ui) = self.ui.as_mut() { ui.plugin_document(document, &live); }
     }
