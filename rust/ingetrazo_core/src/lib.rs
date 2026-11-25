@@ -123,6 +123,7 @@ mod material_library;
 mod material_survey;
 mod swatch;
 mod assembly_inspector;
+mod solid_analysis;
 mod solid_inspector;
 mod scene_tree;
 mod structure_bootstrap;
