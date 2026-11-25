@@ -7,6 +7,7 @@ use pyo3::{
 };
 mod placements;
 mod document;
+mod drawing;
 mod materials;
 mod annotations;
 
@@ -131,6 +132,7 @@ pub(crate) fn register(root: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(move_vertices, &m)?)?;
     m.add_function(wrap_pyfunction!(undo, &m)?)?;
     m.add_function(wrap_pyfunction!(redo, &m)?)?;
+    drawing::register(&m)?;
     annotations::register(&m)?;
     materials::register(&m)?;
     document::register(&m)?;

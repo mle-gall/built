@@ -15,6 +15,7 @@ from ingetrazo_core import command_protocol
 from ingetrazo_core.command_protocol import (hide, lock, make_unique, move_vertices, redo,
     rename_placement, rename_placements, set_tag, undo, unhide)
 from ingetrazo_core.command_protocol import (
+    add_edge, add_edges, add_face, add_arc,
     add_geo_path, move_geo_path_node, add_text_label, add_dimension, place_section_plane, set_north, add_image_plane,
     set_material_pbr, set_material_base, rename_material, edit_material, duplicate_material, delete_material, create_material, name_unnamed_colours,
     edit_loose_geometry, promote_tag, file_placements, edit_structure_node,
@@ -395,128 +396,6 @@ def solid_operation(history, operation, placements):
     history.execute(command)
     return command_protocol.answer(history, before)
 
-
-def add_edge(history, a, b=None, soft=None, tag=None, eye=None, offset=None):
-    """One drawn segment, ``a`` to ``b``. ``offset`` instead of (or with) ``b``:
-    the end is the stored position at ``a`` plus ``offset`` exactly (a typed
-    length). ``eye`` (the camera position, as the Line tool passes it)
-    decides which way a new vertical face looks."""
-    if tag is not None and history.scene.layer_by_key(tag) is None:
-        raise KeyError(f"no tag with key {tag!r}")
-    if b is None:
-        if offset is None:
-            raise ValueError("add_edge needs b or offset")
-        b = [float(x) + float(d) for x, d in zip(a, offset)]
-    return _draw_segments(history, [(a, b)], single=True, soft=soft, tag=tag, eye=eye,
-                          offset=offset)
-
-
-def add_edges(history, segments):
-    return _draw_segments(history, list(segments))
-
-
-def _draw_segments(history, segments, single=False, **options):
-    from core.coordinate_frame import ZERO, choose_origin, mesh_frame, point_in_frame
-    from core.edits import build_add_edge, build_add_edges
-    from core.coordinate_frame import drawing_point, planned_points
-    offset = options.pop("offset", None)
-    mesh = history.scene.mesh
-    st = store_of(mesh)
-    origin = choose_origin(segments[0][0]) if st is not None and segments else ZERO
-    local = [(point_in_frame(a, origin), point_in_frame(b, origin)) for a, b in segments]
-    if options.get("eye") is not None:
-        options["eye"] = point_in_frame(options["eye"], origin)
-    before = history.revision
-    with mesh_frame(mesh, origin):
-        cmd = (build_add_edge(history.scene, *local[0], **options) if single else
-               build_add_edges(history.scene, local))
-        exact = {p.toTuple(): tuple(v-o for v, o in zip(raw, origin))
-                 for pair, args in zip(local, segments) for p, raw in zip(pair, args)
-                 } if st is not None else {}
-        if offset is not None and st is not None:
-            start = drawing_point(mesh, local[0][0])
-            exact = {local[0][0].toTuple(): tuple(start),
-                     local[0][1].toTuple(): tuple(start + [float(d) for d in offset])}
-        with planned_points(mesh, exact):
-            history.execute(cmd)
-    return command_protocol.answer(history, before)
-
-
-def add_face(history, outer=None, holes=(), anchor=None, offsets=None, curve=False):
-    """A face over a ring of points, with its edges: the Rectangle's commit.
-    ``outer`` the ring (open mesh coordinates), or ``anchor`` plus
-    ``offsets``: the ring is the stored position at ``anchor`` plus each
-    offset exactly (typed sizes). ``holes`` are inner rings. The plane it
-    lands on is rebuilt, so a ring drawn over a face fills its hole (#538).
-    ``curve``: the ring is one closed curve (the Circle's and the Polygon's
-    commit), tagged so, its plane's faces rebuilt as
-    ``core.arrangement.curve_extras`` says. One step."""
-    from core.coordinate_frame import (ZERO, choose_origin, drawing_point, mesh_frame,
-                                       planned_points, point_in_frame)
-    from core.edits import build_add_edges
-    from core.history import AddFaceCommand
-    if outer is None:
-        if anchor is None or offsets is None:
-            raise ValueError("add_face needs outer, or anchor and offsets")
-        outer = [[float(a) + float(d) for a, d in zip(anchor, off)] for off in offsets]
-    outer = [list(map(float, p)) for p in outer]
-    if len(outer) < 3:
-        raise ValueError("a face needs three points")
-    holes = [[list(map(float, p)) for p in ring] for ring in (holes or ())]
-    mesh = history.scene.mesh
-    st = store_of(mesh)
-    origin = choose_origin(outer[0]) if st is not None else ZERO
-    ring = [point_in_frame(p, origin) for p in outer]
-    inner = [[point_in_frame(p, origin) for p in h] for h in holes]
-    segments = [(r[i], r[(i + 1) % len(r)]) for r in [ring, *inner] for i in range(len(r))]
-    before = history.revision
-    with mesh_frame(mesh, origin):
-        exact = {}
-        if st is not None:
-            if offsets is not None:
-                start = drawing_point(mesh, point_in_frame(anchor, origin))
-                exact = {p.toTuple(): tuple(start + [float(d) for d in off])
-                         for p, off in zip(ring, offsets)}
-            else:
-                exact = {p.toTuple(): tuple(v - o for v, o in zip(raw, origin))
-                         for p, raw in zip(ring, outer)}
-        if curve:
-            from core.arrangement import curve_extras
-            cmd = build_add_edges(history.scene, segments, detect_faces=False,
-                                  extra=curve_extras(history.scene, ring))
-        else:
-            cmd = build_add_edges(history.scene, segments, detect_faces=False,
-                                  extra=[AddFaceCommand(list(ring), holes=inner or None)],
-                                  plane_rebuild=True)
-        with planned_points(mesh, exact):
-            history.execute(cmd)
-    return command_protocol.answer(history, before)
-
-
-def add_arc(history, points, center=None, trim=None):
-    """An arc polyline (open mesh coordinates): the Arc tools' and
-    Freehand's commit (``core.arrangement.arc_command``). ``center`` closes
-    the wedge (the Pie); ``trim`` is ``[[a, b], ...]``, edges to erase once
-    the arc is in (a fillet's corner stubs). One step."""
-    from core.arrangement import arc_command
-    from core.coordinate_frame import ZERO, choose_origin, mesh_frame, planned_points, point_in_frame
-    pts = [list(map(float, p)) for p in points]
-    if len(pts) < 2:
-        raise ValueError("an arc needs two points")
-    mesh = history.scene.mesh
-    st = store_of(mesh)
-    origin = choose_origin(pts[0]) if st is not None else ZERO
-    local = [point_in_frame(p, origin) for p in pts]
-    close = point_in_frame(center, origin) if center is not None else None
-    cuts = [(point_in_frame(a, origin), point_in_frame(b, origin)) for a, b in (trim or ())]
-    before = history.revision
-    with mesh_frame(mesh, origin):
-        cmd = arc_command(history.scene, local, close, cuts or None)
-        exact = ({p.toTuple(): tuple(v - o for v, o in zip(raw, origin)) for p, raw in zip(local, pts)}
-                 if st is not None else {})
-        with planned_points(mesh, exact):
-            history.execute(cmd)
-    return command_protocol.answer(history, before)
 
 def add_guide(history, point, direction=None, origin=None):
     """Construction line or point, in open mesh coordinates."""

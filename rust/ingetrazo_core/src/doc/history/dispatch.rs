@@ -6,7 +6,7 @@ use pyo3::{
 };
 type Obj<'py> = Bound<'py, PyAny>;
 
-pub(super) fn in_frame<T>(frame: &Obj<'_>, f: impl FnOnce() -> PyResult<T>) -> PyResult<T> {
+pub(crate) fn in_frame<T>(frame: &Obj<'_>, f: impl FnOnce() -> PyResult<T>) -> PyResult<T> {
     let py = frame.py();
     frame.call_method0("__enter__")?;
     let result = f();

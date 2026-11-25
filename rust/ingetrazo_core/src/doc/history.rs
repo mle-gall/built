@@ -3,6 +3,7 @@
 //! still implement Python inverses. Existing scripting clients edit these
 //! lists directly when folding a group-edit session or cancelling a preview.
 mod dispatch;
+pub(crate) use dispatch::in_frame;
 pub(crate) mod lifecycle;
 use super::py::PyTransaction;
 use std::collections::VecDeque;
