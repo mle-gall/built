@@ -160,7 +160,7 @@ fn run_one<'py>(win: &Obj<'py>, action: &Obj<'py>, source_view: &Obj<'py>) -> Py
         }
         "lsheet" => return glue.getattr("chrome_sheet")?.call_method1("action", (win, arg)).map(drop),
         "start" => return glue.getattr("wgpu_start")?.call_method1("action", (win, arg)).map(drop),
-        "sheets" => return py.import("views.wgpu_sheets")?.call_method1("action", (win, arg)).map(drop),
+        "sheets" => return py.import("ingetrazo_render.sheet_workspace")?.call_method1("action", (win, arg)).map(drop),
         "tab" if arg == "scene:editcamera" => {
             return win.call_method1("edit_scene_camera", (glue.call_method1("marked_view", (win,))?,)).map(drop);
         }
@@ -252,7 +252,7 @@ fn run_one<'py>(win: &Obj<'py>, action: &Obj<'py>, source_view: &Obj<'py>) -> Py
         "act" if arg.into_bound_py_any(py)?.call_method0("isdecimal")?.is_truthy()? => {
             // The Sheets workspace retains its composer actions.
             let shown = if source_view.is_truthy()? { source_view.clone() } else { attr(&win.getattr("_doc")?, "stand_in")? };
-            let workspace = py.import("views.wgpu_sheets")?.call_method1("workspace_of", (shown,))?;
+            let workspace = py.import("ingetrazo_render.sheet_workspace")?.call_method1("workspace_of", (shown,))?;
             if !workspace.is_none() {
                 let index = py.get_type::<pyo3::types::PyInt>().call1((arg,))?;
                 let actions = workspace.getattr("_actions")?;
@@ -748,7 +748,7 @@ fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, win, query) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?);
     let metadata = render(py)?.getattr("command_metadata")?;
-    let workspace = py.import("views.wgpu_sheets")?.call_method1("workspace_of", (&view,))?;
+    let workspace = py.import("ingetrazo_render.sheet_workspace")?.call_method1("workspace_of", (&view,))?;
     let owner = if workspace.is_none() { win } else { render(py)?.call_method1("sheet_command_scope", (&win,))? };
     if !query.is_truthy()? || !attr(&view, "_ui_command_owner")?.is(&owner) {
         let scope = view.getattr_opt("_ui_command_scope")?.unwrap_or("".into_bound_py_any(py)?);

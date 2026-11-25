@@ -733,7 +733,7 @@ fn draw_frame<'py>(a: &Args<'py>) -> Reply<'py> {
         if ui.call_method1("chrome_only", (&view,))?.is_truthy()? {
             return ui.call_method1("chrome_frame", (&view,)); // a document is coming in
         }
-        let sheets = py.import("views.wgpu_sheets")?;
+        let sheets = py.import("ingetrazo_render.sheet_workspace")?;
         if sheets.call_method1("shown", (&view,))?.is_truthy()? {
             return sheets.call_method1("frame", (&view,)); // the Sheets workspace: the page, not the model
         }

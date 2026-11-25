@@ -624,12 +624,12 @@ impl ShellWindow {
     }
     fn _show_model<'p>(slf: &Bound<'p, Self>) -> PyResult<Obj<'p>> {
         slf.py()
-            .import("views.wgpu_sheets")?
+            .import("ingetrazo_render.sheet_workspace")?
             .call_method1("to_model", (slf,))
     }
     fn _to_sheets<'p>(slf: &Bound<'p, Self>) -> PyResult<Obj<'p>> {
         slf.py()
-            .import("views.wgpu_sheets")?
+            .import("ingetrazo_render.sheet_workspace")?
             .call_method1("to_sheets", (slf,))
     }
     fn _pick_view_layout<'p>(slf: &Bound<'p, Self>) -> PyResult<Obj<'p>> {

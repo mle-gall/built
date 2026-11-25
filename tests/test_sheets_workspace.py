@@ -1,4 +1,4 @@
-"""Sheets as a workspace of the Built window (views/wgpu_sheets.py), headless.
+"""Sheets as a workspace of the Built window (sheet_workspace), headless.
 
 The native shell's host (ingetrazo_render.Host) runs the same view, chrome and input
 code as the Qt app's Metal view; here it has no surface, so a recording
@@ -128,8 +128,8 @@ class Recorder:
 @pytest.fixture
 def host(tmp_path, monkeypatch):
     from ingetrazo_render import Host
-    from views import wgpu_sheets
-    monkeypatch.setattr(wgpu_sheets, "FORCE", True)
+    from ingetrazo_render import sheet_workspace
+    monkeypatch.setattr(sheet_workspace, "FORCE", True)
     monkeypatch.syspath_prepend(str(ROOT / "scripts"))
     import sheets_fixture
     doc = tmp_path / "sheet.igz"
@@ -150,8 +150,8 @@ def host(tmp_path, monkeypatch):
 
 
 def _ws(host):
-    from views import wgpu_sheets
-    return wgpu_sheets.workspace_of(host.view)
+    from ingetrazo_render import sheet_workspace
+    return sheet_workspace.workspace_of(host.view)
 
 
 def _sheets(host):
@@ -163,8 +163,8 @@ def _sheets(host):
 
 
 def _act(host, arg):
-    from views import wgpu_sheets
-    wgpu_sheets.action(host.window, arg)
+    from ingetrazo_render import sheet_workspace
+    sheet_workspace.action(host.window, arg)
     host.view.draw_frame()
 
 
@@ -391,7 +391,7 @@ def test_the_next_dimension_level_and_ground_line_take_the_last_look(host):
     into the next session, the others not."""
     import ingetrazo_core as NATIVE
     from core.composition import AddItemCommand
-    from views import wgpu_sheets
+    from ingetrazo_render import sheet_workspace
     ws = _sheets(host)
     comp = ws.composer.comp
     scene = ws.composer._scene()
@@ -418,7 +418,7 @@ def test_the_next_dimension_level_and_ground_line_take_the_last_look(host):
     _set(host, ground, ground="band", band_mm=4.0)
     ground2 = NATIVE.sheet_new_item(comp, "terreno", 10.0, 100.0, 80.0, 100.0, scene)
     assert (ground2.ground, ground2.band_mm, ground2.stroke_mm) == ("band", 4.0, 0.5)
-    wgpu_sheets.Workspace(ws.composer)                # a new session
+    sheet_workspace.Workspace(ws.composer)                # a new session
     again = NATIVE.sheet_new_cota(comp, (20.0, 60.0), (60.0, 60.0), 5.0, "", scene)
     assert (again.ends, again.color) == ("tick", "#c03020")
     assert NATIVE.sheet_new_item(comp, "nivel", 50.0, 50.0, 50.0, 50.0, scene).size_mm != 4.0
@@ -489,9 +489,9 @@ def test_keys_go_to_the_page_and_window_keys_stay_the_window_s(host):
     tool = type(host.viewport.active_tool).__name__
     host.key(True, Input.Key_L, 0, "l")
     assert type(host.viewport.active_tool).__name__ == tool
-    from views import wgpu_sheets
+    from ingetrazo_render import sheet_workspace
     from ingetrazo_render import ShortcutOverride
-    assert not wgpu_sheets.claims_key(host.view, ShortcutOverride(Input.Key_S, Input.ControlModifier, "s"))
+    assert not sheet_workspace.claims_key(host.view, ShortcutOverride(Input.Key_S, Input.ControlModifier, "s"))
     # ⌃Tab: back to the model.
     host.key(True, Input.Key_Tab, Input.MetaModifier)
     assert _ws(host) is None
@@ -773,10 +773,10 @@ def test_radius_and_angle_dimensions_from_the_page(host):
 
 
 def test_every_tool_of_the_rail_runs_on_the_page(host, monkeypatch):
-    from views import wgpu_sheets
+    from ingetrazo_render import sheet_workspace
     ws = _sheets(host)
-    rail = {t for group in wgpu_sheets.RAIL for t in group}
-    assert rail <= wgpu_sheets.NATIVE_TOOLS
+    rail = {t for group in sheet_workspace.RAIL for t in group}
+    assert rail <= sheet_workspace.NATIVE_TOOLS
     for tool in sorted(rail - {"imagen"}):
         _run_actions(host, f"sheets:tool\x1f{tool}")
         assert ws.composer.tool_mode == tool

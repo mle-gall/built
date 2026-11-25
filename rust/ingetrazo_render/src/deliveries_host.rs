@@ -655,7 +655,7 @@ impl PdfWriter {
         let win = self.win.bind(py);
         let view = opt(win, "_doc").and_then(|d| opt(&d, "stand_in"));
         let Some(view) = view.filter(|v| opt(v, "renderer").is_some()) else {
-            return py.import("views.wgpu_sheets")?.call_method1("composer_for", (win,))?.call_method1("export_all_pdf", (path, sheets));
+            return py.import("ingetrazo_render.sheet_workspace")?.call_method1("composer_for", (win,))?.call_method1("export_all_pdf", (path, sheets));
         };
         let frames = py.import("views.wgpu_sheet_frames")?;
         let scene = history_of(win)?.getattr("scene")?;

@@ -201,9 +201,9 @@ def test_shortcut_editor_opens_on_the_searched_command(win):
 
 
 def test_sheet_search_lists_and_runs_only_the_current_workspaces_commands(win, monkeypatch):
-    from views import wgpu_sheets
+    from ingetrazo_render import sheet_workspace
     from tests.scene_controls import chrome
-    host = wgpu_sheets.composer_for(win)
+    host = sheet_workspace.composer_for(win)
     ws = host._ws
     ws.shown, ws.view = True, win.view
     monkeypatch.setattr(win.view, "_sheets_ws", ws, raising=False)
@@ -265,14 +265,14 @@ def test_f3_runs_a_sheet_tool_and_returns_to_modelling_in_a_release_window(tmp_p
 from pathlib import Path
 
 def setup(app):
-    from views import wgpu_sheets
+    from ingetrazo_render import sheet_workspace
     def record():
         win = app.window
-        ws = wgpu_sheets.workspace_of(win.view)
+        ws = sheet_workspace.workspace_of(win.view)
         with Path(__file__).with_suffix(".jsonl").open("a") as out:
             print(json.dumps([ws.composer.tool_mode if ws else "model",
                               win.view.renderer.ui_claims_key("F5", 0)]), file=out)
-    app.add_menu_action("Open Sheets", lambda: wgpu_sheets.to_sheets(app.window))
+    app.add_menu_action("Open Sheets", lambda: sheet_workspace.to_sheets(app.window))
     app.add_menu_action("Read current workspace", record)
 """)
     actions = ["menu extension:sheet_search_probe:0", "key f3", "type chain dimension",
@@ -296,7 +296,7 @@ def test_sheet_binding_shares_the_keyboard_table_and_follows_the_active_document
     from ingetrazo_render.keyboard_bindings import export_shortcuts, import_shortcuts
     from ingetrazo_render import KeyEvent, shortcut_text
     from tests.scene_controls import chrome
-    from views import wgpu_sheets
+    from ingetrazo_render import sheet_workspace
     from ingetrazo_render.settings_sheet import SettingsSheet
 
     sheet = SettingsSheet("keyboard")
@@ -313,7 +313,7 @@ def test_sheet_binding_shares_the_keyboard_table_and_follows_the_active_document
         "sheet:cota_cadena": "F8", "tool:line": "L"}})[:2] == (2, 0)
     _, _, f8, _ = shortcut_text("F8")
     for _ in range(2):
-        ws = wgpu_sheets.composer_for(win)._ws
+        ws = sheet_workspace.composer_for(win)._ws
         ws.shown, ws.view = True, win.view
         monkeypatch.setattr(win.view, "_sheets_ws", ws, raising=False)
         with chrome(win):

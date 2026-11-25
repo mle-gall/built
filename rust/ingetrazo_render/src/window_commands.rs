@@ -272,7 +272,7 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
         }
         // Back to Select once a picture is placed, so the next click doesn't stamp a copy.
         "activate_select_tool" => done!(win.call_method1("_activate_tool", ("select",))),
-        "_ensure_composer" => py.import("views.wgpu_sheets")?.call_method1("composer_for", (win,)),
+        "_ensure_composer" => py.import("ingetrazo_render.sheet_workspace")?.call_method1("composer_for", (win,)),
         "_on_open_composer" => done!(win.call_method0("_ensure_composer")?.call_method0("show")),
         "_show_sheet" => {
             let index = a.req(0, "index")?;

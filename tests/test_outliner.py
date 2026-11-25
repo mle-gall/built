@@ -255,7 +255,7 @@ def test_a_horizontal_cut_gives_a_plan(native_question_host):
 
 
 def test_export_all_pdf_can_take_only_some_sheets(tmp_path, native_host):
-    from views.wgpu_sheets import composer_for
+    from ingetrazo_render.sheet_workspace import composer_for
 
     win = native_host.window
     first, second = _sheets_model(win)
