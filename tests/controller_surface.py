@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from weakref import proxy
 
 from core.input_codes import Type
+from core.input_types import NATIVE
 from ingetrazo_core import WindowInput, capture_document_frame
 from ingetrazo_render import WindowTimers
 from views.document_interaction import DocumentInteraction
@@ -31,10 +32,12 @@ class _InputSurface(WidgetShim):
 
 class ControllerSurface(DocumentInteraction, _InputSurface):
     def __init__(self, parent=None):
-        from app_shell.host import Host
         host = SimpleNamespace(width=640, height=480, scale=1., ns_view=0,
                                timers=WindowTimers(), input_state=WindowInput(), window=proxy(self),
-                               tool_cursor=Host.tool_cursor, request_frame=lambda: None, cursor_changed=lambda cursor: None)
+                               request_frame=lambda: None, cursor_changed=lambda cursor: None)
+        if NATIVE:
+            from app_shell.host import Host
+            host.tool_cursor = Host.tool_cursor
         super().__init__(parent, host=host)
 
     def resize(self, width, height=None):
