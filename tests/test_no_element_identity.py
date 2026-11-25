@@ -41,7 +41,7 @@ _ELEMENT = re.compile(
 # (path, enclosing function) -> why identity is meant there.
 _ALLOWED = {
     # Not elements: names that look like them.
-    ("core/history_commands.py", "_sync"): "tag-state dict values against a sentinel, not elements",
+    ("core/history.py", "_sync"): "tag-state dict values against a sentinel, not elements",
     ("core/ai.py", "_tidy_groups"): "groups",
     ("core/intersect.py", "intersect"): "polygons of two meshes",
     ("core/links.py", "restamp_materials"): "paint rows: was one copied",

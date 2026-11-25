@@ -68,15 +68,19 @@ impl ShellAction {
         false
     }
 
-    /// The first key, as portable text (`"Ctrl+Shift+S"`; empty for none).
-    fn shortcut(&self, py: Python<'_>) -> PyResult<String> {
+    fn shortcut<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let seq = py.import("PySide6.QtGui")?.getattr("QKeySequence")?;
         let keys: Vec<String> = self.state.bind(py).call_method0("portable_keys")?.extract()?;
-        Ok(keys.into_iter().next().unwrap_or_default())
+        match keys.first() {
+            Some(k) => seq.call1((k,)),
+            None => seq.call0(),
+        }
     }
 
-    /// Every key, as portable text.
-    fn shortcuts(&self, py: Python<'_>) -> PyResult<Vec<String>> {
-        self.state.bind(py).call_method0("portable_keys")?.extract()
+    fn shortcuts<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+        let seq = py.import("PySide6.QtGui")?.getattr("QKeySequence")?;
+        let keys: Vec<String> = self.state.bind(py).call_method0("portable_keys")?.extract()?;
+        keys.iter().map(|k| seq.call1((k,))).collect()
     }
 
     #[allow(non_snake_case)]

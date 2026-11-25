@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Model clipboard serialization and its system-clipboard offer: the platform
-//! pasteboard of the native shell, or this process alone without one.
+//! Model clipboard serialization. The native and Qt hosts transport identical archives.
 use crate::math::{xyz, Vec3};
 use pyo3::{
     exceptions::{PyKeyError, PyValueError},
     prelude::*,
-    types::{PyBytes, PyDict, PyList, PyTuple},
+    types::{PyBytes, PyDict, PyList},
 };
 use std::collections::HashSet;
 type Obj<'p> = Bound<'p, PyAny>;
@@ -251,193 +250,102 @@ fn clip_decode<'p>(py: Python<'p>, data: &Obj<'p>) -> PyResult<Option<Obj<'p>>> 
     Ok(Some(out.into_any()))
 }
 const MIME: &str = "application/x-ingetrazo-clipboard";
-
-/// This process's last Copy: the clipboard dict, its encoded payload and
-/// the pasteboard change count it was written at (None without a shell:
-/// the offer then lives in this process only).
-struct Published {
-    clip: Py<PyAny>,
-    data: Py<PyBytes>,
-    count: Option<i64>,
+fn qt(py: Python<'_>) -> PyResult<Obj<'_>> {
+    py.import("PySide6.QtWidgets")?.getattr("QApplication")
 }
-
-static PUBLISHED: std::sync::Mutex<Option<Published>> = std::sync::Mutex::new(None);
-
-fn native(py: Python<'_>) -> PyResult<Option<Obj<'_>>> {
-    let Ok(module) = py.import("app_shell.native") else {
-        return Ok(None);
-    };
-    let module = module.into_any();
-    Ok(module.call_method0("available")?.is_truthy()?.then_some(module))
+fn adapter(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
+    py.import("formats.clip")
 }
-
-fn payload(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("formats.clip_payload")
-}
-
-/// What the clipboard holds of ours, as a Copy offers it: `clip` is the
-/// dict when this process published it (None for another process's), and
-/// `data(MIME).data()` gives the payload bytes, read on demand.
-#[pyclass(module = "ingetrazo_core", name = "ClipOffer", frozen)]
-pub struct ClipOffer {
-    #[pyo3(get)]
-    clip: Option<Py<PyAny>>,
-    bytes: std::sync::Mutex<Option<Py<PyBytes>>>,
-}
-
-/// The payload of an offer (`.data()` as a byte array answered).
-#[pyclass(module = "ingetrazo_core", name = "ClipData", frozen)]
-pub struct ClipData {
-    bytes: Py<PyBytes>,
-}
-
-#[pymethods]
-impl ClipData {
-    fn data(&self, py: Python<'_>) -> Py<PyBytes> {
-        self.bytes.clone_ref(py)
-    }
-    fn __len__(&self, py: Python<'_>) -> usize {
-        self.bytes.bind(py).as_bytes().len()
-    }
-}
-
-impl ClipOffer {
-    fn bytes<'p>(&self, py: Python<'p>) -> PyResult<Option<Bound<'p, PyBytes>>> {
-        if let Some(b) = self.bytes.lock().unwrap().as_ref() {
-            return Ok(Some(b.bind(py).clone()));
-        }
-        let read = match native(py)? {
-            Some(shell) => shell.call_method1("pasteboard_read", (MIME,))?,
-            None => return Ok(None),
-        };
-        if read.is_none() {
-            return Ok(None);
-        }
-        let b = read.cast_into::<PyBytes>()?;
-        *self.bytes.lock().unwrap() = Some(b.clone().unbind());
-        Ok(Some(b))
-    }
-}
-
-#[pymethods]
-impl ClipOffer {
-    /// An offer of `clip` (encoded when first read).
-    #[new]
-    #[pyo3(signature = (clip = None))]
-    fn new(clip: Option<Py<PyAny>>) -> Self {
-        Self { clip, bytes: std::sync::Mutex::new(None) }
-    }
-    fn formats(&self) -> Vec<&'static str> {
-        vec![MIME]
-    }
-    #[pyo3(name = "hasFormat")]
-    fn has_format(&self, mime: &str) -> bool {
-        mime == MIME
-    }
-    /// The payload for `mime` (None for any other type).
-    fn data(&self, py: Python<'_>, mime: &str) -> PyResult<Option<ClipData>> {
-        if mime != MIME {
-            return Ok(None);
-        }
-        if self.bytes.lock().unwrap().is_none() {
-            if let Some(clip) = &self.clip {
-                let encoded = payload(py)?.call_method1("encode", (clip.bind(py),))?.cast_into::<PyBytes>()?;
-                *self.bytes.lock().unwrap() = Some(encoded.unbind());
-            }
-        }
-        Ok(self.bytes(py)?.map(|b| ClipData { bytes: b.unbind() }))
-    }
-    #[pyo3(name = "retrieveData")]
-    fn retrieve_data<'p>(&self, py: Python<'p>, mime: &str, _kind: Option<Obj<'p>>) -> PyResult<Option<ClipData>> {
-        self.data(py, mime)
-    }
-}
-
-/// What the clipboard offers now in our format, or None.
 #[pyfunction]
-fn clip_current_offer(py: Python<'_>) -> PyResult<Option<ClipOffer>> {
-    // Copied out first: the lock is never held across a call into Python.
-    let published = PUBLISHED
-        .lock()
-        .unwrap()
-        .as_ref()
-        .map(|p| (p.clip.clone_ref(py), p.data.clone_ref(py), p.count));
-    let ours = |clip: Py<PyAny>, data: Py<PyBytes>| ClipOffer { clip: Some(clip), bytes: std::sync::Mutex::new(Some(data)) };
-    match native(py)? {
-        Some(shell) => {
-            let (types, count): (Vec<String>, i64) = shell.call_method0("pasteboard_types")?.extract()?;
-            if !types.iter().any(|t| t == MIME) {
-                return Ok(None);
-            }
-            // Ours while nobody wrote the pasteboard since.
-            Ok(Some(match published.filter(|p| p.2 == Some(count)) {
-                Some((clip, data, _)) => ours(clip, data),
-                None => ClipOffer { clip: None, bytes: std::sync::Mutex::new(None) },
-            }))
-        }
-        None => Ok(published.map(|(clip, data, _)| ours(clip, data))),
+fn clip_current_offer(py: Python<'_>) -> PyResult<Obj<'_>> {
+    let app = qt(py)?;
+    if app.call_method0("instance")?.is_none() {
+        return Ok(py.None().into_bound(py));
     }
+    app.call_method0("clipboard")?.call_method0("mimeData")
 }
-
 #[pyfunction]
 fn clip_available(py: Python<'_>) -> PyResult<bool> {
-    Ok(clip_current_offer(py)?.is_some())
+    let md = adapter(py)?.call_method0("current_offer")?;
+    Ok(!md.is_none() && md.call_method1("hasFormat", (MIME,))?.is_truthy()?)
 }
-
-/// Put `clip` on the clipboard: on the platform pasteboard when a shell
-/// runs (other windows and processes paste it), else in this process.
 #[pyfunction]
 fn clip_publish<'p>(py: Python<'p>, clip: &Obj<'p>) -> PyResult<()> {
-    let encoded = payload(py)?.call_method1("encode", (clip,))?;
-    let data = encoded.cast_into::<PyBytes>()?;
-    let mut count = None;
-    if let Some(shell) = native(py)? {
-        let items = PyList::new(py, [PyTuple::new(py, [pyo3::types::PyString::new(py, MIME).into_any(), data.clone().into_any()])?])?;
-        if shell.call_method1("pasteboard_write", (items,))?.is_truthy()? {
-            let (_, n): (Vec<String>, i64) = shell.call_method0("pasteboard_types")?.extract()?;
-            count = Some(n);
-        }
+    let class = qt(py)?;
+    let app = class.call_method0("instance")?;
+    if app.is_none() {
+        return Ok(());
     }
-    let previous = PUBLISHED.lock().unwrap().replace(Published { clip: clip.clone().unbind(), data: data.unbind(), count });
-    drop(previous); // released outside the lock
+    let api = adapter(py)?;
+    if !app
+        .getattr_opt("_clip_flush_hooked")?
+        .map(|v| v.is_truthy())
+        .transpose()?
+        .unwrap_or(false)
+    {
+        app.setattr("_clip_flush_hooked", true)?;
+        app.getattr("aboutToQuit")?
+            .call_method1("connect", (api.getattr("flush")?,))?;
+    }
+    class
+        .call_method0("clipboard")?
+        .call_method1("setMimeData", (api.call_method1("ClipMime", (clip,))?,))?;
     Ok(())
 }
-
-/// Nothing left to render at quit: the payload is written when copied.
 #[pyfunction]
-fn clip_flush() {}
-
-/// Another process's Copy, decoded (None when the offer is ours or absent).
+fn clip_flush(py: Python<'_>) -> PyResult<()> {
+    let md = clip_current_offer(py)?;
+    if !md.is_instance(&adapter(py)?.getattr("ClipMime")?)? {
+        return Ok(());
+    }
+    let plain = py.import("PySide6.QtCore")?.call_method0("QMimeData")?;
+    if let Ok(data) = md.call_method1("retrieveData", (MIME, py.None())) {
+        if !data.is_none() && data.len()? > 0 {
+            plain.call_method1("setData", (MIME, data))?;
+        }
+    }
+    qt(py)?
+        .call_method0("clipboard")?
+        .call_method1("setMimeData", (plain,))?;
+    Ok(())
+}
 #[pyfunction]
 fn clip_foreign(py: Python<'_>) -> PyResult<Obj<'_>> {
-    let none = py.None().into_bound(py);
-    let Some(offer) = clip_current_offer(py)? else { return Ok(none) };
-    if offer.clip.is_some() {
-        return Ok(none);
+    let md = clip_current_offer(py)?;
+    let api = adapter(py)?;
+    if md.is_none()
+        || md.is_instance(&api.getattr("ClipMime")?)?
+        || !md.call_method1("hasFormat", (MIME,))?.is_truthy()?
+    {
+        return Ok(py.None().into_bound(py));
     }
-    match offer.bytes(py)? {
-        Some(b) if !b.as_bytes().is_empty() => payload(py)?.call_method1("decode", (b,)),
-        _ => Ok(none),
-    }
+    api.call_method1(
+        "decode",
+        (md.call_method1("data", (MIME,))?.call_method0("data")?,),
+    )
 }
-
-/// Our own offer decoded afresh, for another window of this process
-/// (None when it is `current`, was adopted from, or is not ours).
 #[pyfunction(signature=(current,adopted_from=None))]
-fn clip_own<'p>(py: Python<'p>, current: &Obj<'p>, adopted_from: Option<&Obj<'p>>) -> PyResult<Obj<'p>> {
-    let none = py.None().into_bound(py);
-    let Some(offer) = clip_current_offer(py)? else { return Ok(none) };
-    let Some(clip) = offer.clip.as_ref().map(|c| c.bind(py).clone()) else { return Ok(none) };
-    if clip.is(current) || adopted_from.is_some_and(|v| v.is(&clip)) {
-        return Ok(none);
+fn clip_own<'p>(
+    py: Python<'p>,
+    current: &Obj<'p>,
+    adopted_from: Option<&Obj<'p>>,
+) -> PyResult<Obj<'p>> {
+    let md = clip_current_offer(py)?;
+    let api = adapter(py)?;
+    let none = || py.None().into_bound(py);
+    if !md.is_instance(&api.getattr("ClipMime")?)? {
+        return Ok(none());
     }
-    match offer.bytes(py)? {
-        Some(b) if !b.as_bytes().is_empty() => payload(py)?.call_method1("decode", (b,)),
-        _ => Ok(none),
+    let clip = md.getattr("clip")?;
+    if clip.is_none() || clip.is(current) || adopted_from.is_some_and(|v| v.is(&clip)) {
+        return Ok(none());
     }
+    let data = md.call_method1("retrieveData", (MIME, py.None()))?;
+    if data.is_none() || data.len()? == 0 {
+        return Ok(none());
+    }
+    api.call_method1("decode", (data.call_method0("data")?,))
 }
-
-/// The payload of an older offer object (`clip`, cached in `_bytes`).
 #[pyfunction]
 fn clip_retrieve<'p>(py: Python<'p>, offer: &Obj<'p>, mime: &str) -> PyResult<Obj<'p>> {
     if mime != MIME {
@@ -447,8 +355,13 @@ fn clip_retrieve<'p>(py: Python<'p>, offer: &Obj<'p>, mime: &str) -> PyResult<Ob
     if !cached.is_none() {
         return Ok(cached);
     }
-    let data = match payload(py)?.call_method1("encode", (offer.getattr("clip")?,)) {
-        Err(e) if e.is_instance_of::<pyo3::exceptions::PyException>(py) => PyBytes::new(py, b"").into_any(),
+    let api = adapter(py)?;
+    let array = api.getattr("QByteArray")?;
+    let result = api
+        .call_method1("encode", (offer.getattr("clip")?,))
+        .and_then(|bytes| array.call1((bytes,)));
+    let data = match result {
+        Err(e) if e.is_instance_of::<pyo3::exceptions::PyException>(py) => array.call0()?,
         r => r?,
     };
     offer.setattr("_bytes", &data)?;
@@ -467,7 +380,5 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         clip_foreign,
         clip_own
     );
-    m.add_class::<ClipOffer>()?;
-    m.add_class::<ClipData>()?;
     Ok(())
 }
