@@ -10,14 +10,12 @@ Built is pre-release. There is no public download yet; you build it from source.
 
 | | |
 |---|---|
-| ![The Line tool drawing along the red axis, with the length shown beside the cursor](docs/images/built/line-tool.png) | ![An element selected in the model, with the project tree and its record in the dock](docs/images/built/tree-and-record.png) |
-| **Drawing with inference.** The Line tool locks to an axis and shows the length as you move. | **Project tree and record.** A selected element shows where it is filed, its tag, material and file. |
+| ![The Line tool snapping to an endpoint, with the length shown beside the cursor](docs/images/built/line-tool.png) | ![An element selected in the model, with the project tree and its record in the dock](docs/images/built/tree-and-record.png) |
+| **Drawing with inference.** The Line tool snaps to an endpoint and shows the length as you move. | **Project tree and record.** A selected element shows where it is filed, its tag, material and file. |
 | ![The Drawing columns of the project tree: line weight, hatch, line and colour per node](docs/images/built/drawing-columns.png) | ![The Export columns of the project tree with a readiness count per node and a fix checklist](docs/images/built/export-checks.png) |
 | **Drawing columns.** The same tree sets line weight, hatch and colour per node. | **Export checks.** Each node shows how many of its items are ready for IFC, with a checklist of what to fix. |
 
 ![The model from the front](docs/images/built/front-view.png)
-
-*The screenshots use a copy of a real as-built model in which every name, tag and material was replaced by a generated label.*
 
 ## What works today
 
@@ -36,7 +34,7 @@ Built is pre-release. There is no public download yet; you build it from source.
 | `.built` | Built's own format: a ZIP with JSON and binary geometry, 64-bit coordinates. See [`docs/built-format.md`](docs/built-format.md). |
 | `.igz` | Opens. These are the files of the modeller Built grew from. |
 | `.skp` | Imports `.skp` files, with their materials. |
-| IFC | Exports IFC4 (and IFC4X3) from the object records, with IDS checks. See [`docs/ifc-export.md`](docs/ifc-export.md). |
+| IFC | Exports IFC4 (and IFC4X3) from the object records. IDS checks need `ifcopenshell`, which `requirements.txt` does not install. See [`docs/ifc-export.md`](docs/ifc-export.md). |
 
 ## Building from source
 
