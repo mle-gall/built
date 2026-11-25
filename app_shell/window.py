@@ -189,7 +189,7 @@ class ShellScenes:
         if view is None:
             return
         from ingetrazo_core import presentation
-        from core.saved_views import shown_state
+        from ingetrazo_core import saved_view_shown_state as shown_state
         vp = self._vp()
         scene = vp.scene
         before = shown_state(scene)

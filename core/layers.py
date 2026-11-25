@@ -189,84 +189,24 @@ class _LayerMethods:
 
     __slots__ = ()
 
-    def __init__(self, name: str, visible: bool = True,
-                 locked: bool = False, color=None,
-                 folder: str | None = None, linetype: str = "continuous",
-                 lineweight: float | None = None,
-                 opacity: float = 1.0, printable: bool = True, uid: str | None = None,
-                 key: str | None = None,
-                 cut_weight: float | None = None,
-                 hatch: str | None = None, hatch_ground=None,
-                 hatch_color=None, hatch_angle: float = 0.0,
-                 hatch_scale: float = 1.0,
-                 hatch_on_paper: bool | None = None,
-                 brick=None, hatch_cross: bool = False, joints=None,
-                 mortar: bool = False, hatch_offset=None) -> None:
-        self.uid = uid or new_uid()
-        self.name = name
-        #: What entities carry; stable across renames.
-        self.key = key or name
-        self.visible = visible
-        self.locked = locked
-        self.color = tuple(color) if color is not None else None
-        self.folder = folder or None
-        #: How the layer's edges are inked on a sheet and in a DXF:
-        #: one of :data:`LINETYPES`.
-        self.linetype = (linetype if known_linetype(linetype)
-                         else "continuous")
-        #: Pen width on a sheet, in millimetres (``None``: the sheet's own
-        #: pen for the line's class).
-        self.lineweight = lineweight
-        #: Pen width of the layer's section cut on a sheet, in millimetres
-        #: (``None``: the sheet's cut pen) — a wall cut heavier than the
-        #: door and the window cut beside it, whatever its other lines.
-        self.cut_weight = cut_weight
-        #: What its section cut is filled with on a sheet: one of
-        #: ``core.hatches.HATCH_LABELS`` (brick, concrete, insulation…), or
-        #: ``None`` for the frame's own fill.
-        from core.hatches import known
-        self.hatch = hatch if hatch is not None and known(hatch) else None
-        #: A solid colour under the hatch: ``None`` (the paper), ``"layer"``
-        #: (the layer's own colour, light) or an RGB tuple (0–1) — white
-        #: or grey under brick, say.
-        self.hatch_ground = _ground(hatch_ground)
-        #: The ink of the hatch's lines: ``None`` (as the frame says — its
-        #: fill colour, or the layer's when it fills by layer), ``"layer"``
-        #: (by layer: always the layer's colour) or an RGB tuple (a fixed
-        #: colour, black say, whatever the frame).
-        self.hatch_color = _ground(hatch_color)
-        #: The hatch turned this many degrees, and this many times its size.
-        self.hatch_angle = _finite(hatch_angle, 0.0) % 360.0
-        self.hatch_scale = min(20.0, max(0.05, _finite(hatch_scale, 1.0)))
-        #: Where a pattern of pieces (core.hatches.PLACED) starts: ``(x,
-        #: y)`` real mm it is moved by — the first joint along a wall, the
-        #: first course up it, tiles off an axis — ``None`` for none.
-        self.hatch_offset = clean_offset(hatch_offset)
-        #: ``True``: the hatch measures the same on paper at any scale
-        #: (a drawing's convention); ``False``: it grows and shrinks with the
-        #: frame's scale, like the real bricks or tiles it stands for (its
-        #: own size is the one at 1:100).
-        self.hatch_on_paper = (None if hatch_on_paper is None
-                               else bool(hatch_on_paper))
-        #: The brick its brickwork hatch is drawn with: ``(length, width,
-        #: height, joint)`` in mm, ``None`` for the usual metric one.
-        from core.hatches import clean_brick
-        self.brick = clean_brick(brick) if brick is not None else None
-        #: A wood hatch drawn with a cross from corner to corner where a
-        #: piece is cut across its grain (core.hatches.cut_across): studs,
-        #: joists and beams in section; the rest in the hatch.
-        self.hatch_cross = bool(hatch_cross)
-        #: How its masonry joints are drawn: one of core.hatches.JOINTS, or
-        #: ``None`` — by the sheet's scale. ``mortar``: the double joints
-        #: filled in light grey.
-        from core.hatches import JOINTS
-        self.joints = joints if joints in JOINTS else None
-        self.mortar = bool(mortar)
-        #: Face opacity, 0.1–1: a reference layer seen through.
-        self.opacity = min(1.0, max(0.1, float(opacity)))
-        #: ``False``: seen in the model, left out of the sheets — their
-        #: views, PDF and DXF (references, construction lines, notes).
-        self.printable = bool(printable)
+    def __init__(self, name: str, *args, **kwargs) -> None:
+        """``Layer(name, visible=True, locked=False, color=None, folder=None,
+        linetype="continuous", lineweight=None, opacity=1.0, printable=True,
+        uid=None, key=None, cut_weight=None, hatch=None, hatch_ground=None,
+        hatch_color=None, hatch_angle=0.0, hatch_scale=1.0,
+        hatch_on_paper=None, brick=None, hatch_cross=False, joints=None,
+        mortar=False, hatch_offset=None)``: every value cleaned
+        (``model/tag_styles.rs: tag_init``). ``key`` is what entities carry,
+        stable across renames (the name by default); ``color`` ``None`` is
+        the automatic one; ``linetype`` one of :data:`LINETYPES` or the
+        document's ``lin:…``; ``lineweight`` / ``cut_weight`` pen mm (``None``:
+        the sheet's); ``hatch`` one of ``core.hatches.HATCH_LABELS``;
+        ``hatch_ground`` / ``hatch_color`` ``None``, ``"layer"`` or an RGB;
+        ``hatch_on_paper`` ``True`` keeps the paper size at any scale;
+        ``brick`` ``(length, width, height, joint)`` mm; ``joints`` one of
+        ``core.hatches.JOINTS``; ``opacity`` 0.1–1; ``printable`` ``False``
+        leaves the tag out of the sheets."""
+        _rs.tag_styles.tag_init(self, name, *args, **kwargs)
 
     def to_dict(self) -> dict:
         """The tag as a file stores it: defaults left out (the document's
@@ -338,31 +278,9 @@ _INIT_ORDER = ("uid", "name", "key", "visible", "locked", "color", "folder",
                "joints", "mortar", "opacity", "printable")
 
 
-def _finite(raw, default: float) -> float:
-    try:
-        value = float(raw)
-    except (TypeError, ValueError):
-        return default
-    import math
-    return value if math.isfinite(value) else default
-
-
 #: ``Layer.hatch_ground`` / ``hatch_color`` for «the layer's own colour»
 #: (light, for a ground; as it is, for the ink) — by layer.
 GROUND_LAYER = "layer"
-
-
-def _ground(raw):
-    """A hatch ground or ink as stored: ``None``, :data:`GROUND_LAYER` or
-    an RGB tuple kept to 0–1; anything else is ``None``."""
-    if raw == GROUND_LAYER:
-        return GROUND_LAYER
-    if isinstance(raw, (list, tuple)) and len(raw) >= 3:
-        try:
-            return tuple(min(1.0, max(0.0, float(c))) for c in raw[:3])
-        except (TypeError, ValueError):
-            return None
-    return None
 
 
 #: The tag a linked file's untagged content wears in the host

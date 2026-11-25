@@ -12,13 +12,13 @@ position-matching to rediscover topology.
 to rebuild its dynamic VBOs.
 """
 from __future__ import annotations
-from core.camera_point import CameraPoint
 from core.mesh import element_identity
 from core.element_set import ElementSet
 
 from dataclasses import InitVar, dataclass, field
 from typing import Iterable
 
+import ingetrazo_core as _NATIVE
 from ingetrazo_core import Vec3 as QVector3D
 
 from core import layers as _layers
@@ -39,23 +39,6 @@ def _make_shadows():
 def _make_animation():
     from core.scene_animation import SceneAnimation
     return SceneAnimation()
-
-
-def _inside(local, d, lo, hi) -> bool:
-    """Whether a placement with matrix ``d`` (column-major) of a mesh whose
-    box is ``local`` (centre, half size) stays inside ``lo``–``hi`` whatever
-    its points: most of a big model's copies do, and reading a copy's points
-    is the cost of walking it (~1 s over 21 406 placements, #158). Strictly
-    inside, by more than the rounding of that reading: it cannot change a
-    minimum or a maximum. A NaN anywhere says no."""
-    cx, cy, cz, hx, hy, hz = local
-    for k in range(3):
-        c = d[k] * cx + d[k + 4] * cy + d[k + 8] * cz + d[k + 12]
-        r = abs(d[k]) * hx + abs(d[k + 4]) * hy + abs(d[k + 8]) * hz
-        slack = 1e-9 * (abs(c) + r)
-        if not (c - r - slack > lo[k] and c + r + slack < hi[k]):
-            return False
-    return True
 
 
 @dataclass
@@ -879,17 +862,6 @@ class Scene:
         self.bump_view()             # the GL colour caches are keyed on it
         return len(new)
 
-    def delete_selection(self) -> None:
-        if not self.selection:
-            return
-        for ent in list(self.selection):
-            if isinstance(ent, Edge):
-                self.mesh.remove_edge(ent)
-            elif isinstance(ent, Face):
-                self.mesh.remove_face(ent)
-        self.selection.clear()
-        self.version += 1
-
     def clear(self) -> None:
         self.end_group_edit()
         if (self.mesh.edges or self.mesh.faces or self.selection
@@ -962,66 +934,19 @@ class Scene:
         self.plugin_data = {}
 
     # ---- Queries ------------------------------------------------------------
-    def iter_world_faces(self):
-        """Every visible face with the matrix that maps it to WORLD space:
-        ``(face, matrix_or_None)``. Instance groups share a prototype mesh in
-        local coordinates — exporters and geometry consumers must apply the
-        matrix; classic faces come with ``None``."""
-        for f in self.loose_mesh.faces:
-            if self.entity_visible(f):
-                yield f, None
-        for g, m in self.placements():
-            for f in g.mesh.faces:
-                yield f, m
 
     def selection_bounds(self) -> tuple[QVector3D, QVector3D] | tuple[None, None]:
         """Axis-aligned bounding box of the SELECTION — what Zoom Selection
         frames, as ``bounds()`` is what Zoom Extents frames. ``(None, None)``
         when nothing selected has a place in space.
 
-        Loose edges and faces, whole groups (nested placements included,
-        vectorized per mesh like ``bounds()``), dimensions, reference
-        images and construction guides — by their point only: a guide line
-        is infinite, and its ±10 km segment made Ctrl+A then Zoom Selection
-        frame a dot (#627). Not cached: it runs once per command, over the
-        selection only."""
-        import numpy as np
-        from core.group import placement_points
-        from core.guide import is_guide
-        pts: list = []
-
-        def add(p: QVector3D) -> None:
-            pts.append((p.x(), p.y(), p.z()))
-
-        for ent in self.selection:
-            if is_guide(ent):                # before Edge: it has .a / .b
-                if getattr(ent, "is_circle", False):
-                    for p in ent.sample_points(32):
-                        add(p)
-                else:
-                    add(ent.point)
-            elif hasattr(ent, "mesh"):        # Group / component instance
-                arr = placement_points(ent)
-                if len(arr):
-                    pts.extend((arr.min(axis=0), arr.max(axis=0)))
-            elif isinstance(ent, Face):
-                pts.extend(v.position_tuple() for v in ent.loop)
-            elif isinstance(ent, Edge):
-                pts.extend((ent.v0.position_tuple(), ent.v1.position_tuple()))
-            elif hasattr(ent, "vertices"):    # Face
-                for v in ent.vertices:
-                    add(v)
-            elif hasattr(ent, "corners"):     # ImagePlane
-                for c in ent.corners():
-                    add(c)
-            elif hasattr(ent, "a") and hasattr(ent, "b"):    # Edge, Dimension
-                add(ent.a)
-                add(ent.b)
-        if not pts:
-            return None, None
-        arr = np.array(pts, dtype=float)
-        lo, hi = arr.min(axis=0), arr.max(axis=0)
-        return CameraPoint(lo), CameraPoint(hi)
+        Loose edges and faces, whole groups (nested placements included),
+        dimensions, reference images and construction guides — by their
+        point only: a guide line is infinite, and its ±10 km segment made
+        Ctrl+A then Zoom Selection frame a dot (#627). Not cached: it runs
+        once per command, over the selection only. In Rust
+        (``rust/ingetrazo_core/src/model/scene_bounds.rs``)."""
+        return _NATIVE.scene_selection_bounds(self)
 
     def _bounds_key(self):
         """What :meth:`bounds` depends on besides the content: the edit
@@ -1039,128 +964,21 @@ class Scene:
 
         CACHED per ``version`` — hovering over empty space derives the work
         plane (and the status-bar coordinate) from the model centre, so this
-        runs on EVERY mouse move across sky or base map. The old per-corner
-        Python walk cost ~1.7 s per call against piscina's 230k-face merged
-        group, twice per hover: the event loop starved and GNOME declared
-        the app dead (the paste "no responde" hang). Every mutation —
+        runs on EVERY mouse move across sky or base map. Every mutation —
         commands, layer toggles — bumps ``version``, the same invariant the
-        viewport's chunk caches key on.
+        viewport's chunk caches key on. A view-only bump (a click that
+        selects, ``bump_view``) changes ``version`` but not the box: the
+        content key (:meth:`_bounds_key`) keeps the cached box across it.
 
-        Group bounds are vectorized over each mesh's welded vertex list
-        (as the instance branch always was), so an orphaned vertex left by
-        a deletion may pad them slightly until the weld reuses it; loose
-        entities keep the exact per-entity visibility walk.
-
-        A view-only bump (a click that selects, ``bump_view``) changes
-        ``version`` but not the box: the content key below keeps the
-        cached box across it. On the plant of #158 the walk costs ~1 s, and
-        the first click or hover over empty space after every selection
-        paid it again."""
-        cached = getattr(self, "_bounds_cache", None)
-        content = self._bounds_key()
-        if cached is not None and (cached[0] == self.version
-                                   or cached[2] == content):
-            if cached[0] != self.version:
-                self._bounds_cache = (self.version, cached[1], content)
-            lo, hi = cached[1]
-            if lo is None:
-                return None, None
-            return CameraPoint(lo), CameraPoint(hi)
-        import numpy as np
-        inf = float("inf")
-        minx = miny = minz = inf
-        maxx = maxy = maxz = -inf
-        seen = False
-
-        def absorb(x, y, z) -> None:
-            nonlocal minx, miny, minz, maxx, maxy, maxz, seen
-            seen = True
-            if x < minx: minx = x
-            if y < miny: miny = y
-            if z < minz: minz = z
-            if x > maxx: maxx = x
-            if y > maxy: maxy = y
-            if z > maxz: maxz = z
-
-        for edge in self.loose_mesh.edges:
-            if self.entity_visible(edge):
-                absorb(*edge.v0.position_tuple())
-                absorb(*edge.v1.position_tuple())
-        for face in self.loose_mesh.faces:
-            if self.entity_visible(face):
-                for v in face.loop:
-                    absorb(*v.position_tuple())
-        # One vertex array per MESH, not per placement: a model of 21 406
-        # placements over 2 722 meshes read 14 million vertices one by one
-        # to learn its box, ~7 s (issue #158).
-        per_mesh: dict = {}
-        # A lazy mesh's positions cannot change while it stays lazy, so the
-        # box of one of its placements is kept from the last walk, by array
-        # and matrix: after an edit only what changed is read again (a
-        # whole walk of the plant of #158 is ~1 s, on the first hover over
-        # empty space after every edit). The entry holds the array, so its
-        # id is not reused while the box is kept.
-        parts = getattr(self, "_bounds_parts", None) or {}
-        kept: dict = {}
-        from core.lazy_mesh import plan_of
-        from core.group import _local_points
-        from ingetrazo_core import group_placed_box
-        for g, m in self.placements(precise=True):
-            key = id(g.mesh)
-            arr = per_mesh.get(key)
-            if arr is None:
-                plan = plan_of(g.mesh)      # a lazy mesh: no build
-                if plan is not None:
-                    arr = plan.pos
-                    lazy = True
-                else:
-                    arr = _local_points(g.mesh)
-                    if arr is None:
-                        continue
-                    lazy = False
-                # Its own box, centre and half size, for _inside below.
-                local = None
-                if len(arr):
-                    a, b = arr.min(axis=0), arr.max(axis=0)
-                    local = (*((a + b) / 2.0).tolist(),
-                             *((b - a) / 2.0).tolist())
-                per_mesh[key] = (arr, lazy, local)
-            else:
-                arr, lazy, local = arr
-            if not len(arr):
-                continue
-            d = tuple(m.ravel()) if m is not None else None  # column-major
-            part = None
-            if lazy:
-                pkey = (id(arr), d)
-                part = kept.get(pkey) or parts.get(pkey)
-            if part is not None:
-                glo, ghi = part[1], part[2]
-            elif seen and d is not None and _inside(
-                    local, d, (minx, miny, minz), (maxx, maxy, maxz)):
-                continue                    # it cannot widen the box
-            else:
-                # The prototype's points through the placement, and their
-                # box (``rust/ingetrazo_core/src/group_frame.rs``).
-                glo, ghi = group_placed_box(
-                    np.ascontiguousarray(arr, dtype=np.float64),
-                    None if d is None else [float(v) for v in d])
-                if lazy:
-                    part = (per_mesh[key][0], glo, ghi)
-            if part is not None:
-                kept[pkey] = part
-            seen = True
-            minx = min(minx, glo[0]); miny = min(miny, glo[1])
-            minz = min(minz, glo[2])
-            maxx = max(maxx, ghi[0]); maxy = max(maxy, ghi[1])
-            maxz = max(maxz, ghi[2])
-        self._bounds_parts = kept
-        if not seen:
-            self._bounds_cache = (self.version, (None, None), content)
-            return None, None
-        self._bounds_cache = (self.version, ((minx, miny, minz),
-                                             (maxx, maxy, maxz)), content)
-        return CameraPoint(minx, miny, minz), CameraPoint(maxx, maxy, maxz)
+        Group bounds are read from one vertex array per MESH (a model of
+        21 406 placements over 2 722 meshes read 14 million vertices one by
+        one, ~7 s, #158), so an orphaned vertex left by a deletion may pad
+        them slightly until the weld reuses it; a placement that cannot
+        widen the box is not read at all, and a lazy mesh's placed box is
+        kept from the last walk (``_bounds_parts``). Loose entities keep
+        the exact per-entity visibility walk. In Rust
+        (``rust/ingetrazo_core/src/model/scene_bounds.rs``)."""
+        return _NATIVE.scene_bounds(self)
 
 
 # ``_groups_owner``: a placement whose children stand in for the top

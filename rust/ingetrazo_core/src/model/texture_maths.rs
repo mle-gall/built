@@ -12,7 +12,7 @@
 
 use glam::DVec3;
 use pyo3::prelude::*;
-use pyo3::types::PyTuple;
+use pyo3::types::{PyDict, PyList, PySet, PyTuple};
 
 use super::pyfloat;
 use super::section_fill::{arr, flat_f64};
@@ -265,12 +265,100 @@ fn texture_placement_of(tex: &Bound<'_, PyAny>, normal: &Bound<'_, PyAny>) -> Py
 fn texture_rotated_map(py: Python<'_>, gu: &Bound<'_, PyAny>, cu: f64, gv: &Bound<'_, PyAny>, cv: f64,
                        axis_point: &Bound<'_, PyAny>, axis_dir: &Bound<'_, PyAny>, cos_t: f64, sin_t: f64)
     -> PyResult<(Py<Vec3>, f64, Py<Vec3>, f64)> {
-    let (gu, gv, a, d) = (xyz(gu)?, xyz(gv)?, xyz(axis_point)?, xyz(axis_dir)?);
+    let (gu2, cu2, gv2, cv2) = rotated((xyz(gu)?, cu, xyz(gv)?, cv), xyz(axis_point)?, xyz(axis_dir)?, cos_t, sin_t);
+    Ok((vec(py, gu2)?, cu2, vec(py, gv2)?, cv2))
+}
+
+type Map = (DVec3, f64, DVec3, f64);
+
+fn rotated((gu, cu, gv, cv): Map, a: DVec3, d: DVec3, cos_t: f64, sin_t: f64) -> Map {
     let rot = |v: DVec3| v * cos_t + d.cross(v) * sin_t + d * (d.dot(v) * (1.0 - cos_t));
     let (gu2, gv2) = (rot(gu), rot(gv));
-    let cu2 = cu + gu.dot(a) - gu2.dot(a);
-    let cv2 = cv + gv.dot(a) - gv2.dot(a);
-    Ok((vec(py, gu2)?, cu2, vec(py, gv2)?, cv2))
+    (gu2, cu + gu.dot(a) - gu2.dot(a), gv2, cv + gv.dot(a) - gv2.dot(a))
+}
+
+/// `continuous_maps(mesh, faces, seed, tex)`: `{face.key: tex dict with
+/// uvw}` for the faces of `faces` reached from `seed` across soft edges,
+/// the map turned about each hinge into the next facet's plane (the
+/// classic way to paint a cylinder). The mesh answers through its own
+/// methods (`find_edge`, the faces' loops and normals); the maths is
+/// glam's, as `Vec3`'s is.
+#[pyfunction]
+fn texture_continuous_maps<'py>(py: Python<'py>, mesh: &Bound<'py, PyAny>, faces: &Bound<'py, PyAny>,
+                                seed: &Bound<'py, PyAny>, tex: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+    let faces: Vec<Bound<'py, PyAny>> = faces.try_iter()?.collect::<PyResult<_>>()?;
+    let result = PyDict::new(py);
+    if seed.is_none() || faces.is_empty() {
+        return Ok(result);
+    }
+    let ids = PySet::empty(py)?;
+    for f in &faces {
+        ids.add(f.getattr("key")?)?;
+    }
+    let (gu, cu, gv, cv) = texture_face_uv_axes(py, tex, &seed.call_method0("normal")?)?;
+    let mut maps: Vec<Map> = vec![(xyz(gu.bind(py))?, cu, xyz(gv.bind(py))?, cv)];
+    // face key → its row in `maps`.
+    let out = PyDict::new(py);
+    out.set_item(seed.getattr("key")?, 0usize)?;
+    let mut stack = vec![seed.clone()];
+    while let Some(f) = stack.pop() {
+        let here = maps[out.get_item(f.getattr("key")?)?.unwrap().extract::<usize>()?];
+        let n1 = xyz(&f.call_method0("normal")?)?;
+        if n1.length_squared() < 1e-18 {
+            continue;
+        }
+        let n1 = n1.normalize_or_zero();
+        let mut loops = vec![f.getattr("loop")?];
+        for lp in f.getattr("hole_loops")?.try_iter()? {
+            loops.push(lp?);
+        }
+        for lp in loops {
+            let n = lp.len()?;
+            for i in 0..n {
+                let e = mesh.call_method1("find_edge", (lp.get_item(i)?, lp.get_item((i + 1) % n)?))?;
+                if e.is_none() || !e.getattr("soft")?.is_truthy()? {
+                    continue;
+                }
+                for g in e.getattr("faces")?.try_iter()? {
+                    let g = g?;
+                    let key = g.getattr("key")?;
+                    if g.eq(&f)? || !ids.contains(&key)? || out.contains(&key)? {
+                        continue;
+                    }
+                    let n2 = xyz(&g.call_method0("normal")?)?;
+                    let a = xyz(&e.getattr("a")?)?;
+                    let d = xyz(&e.getattr("b")?)? - a;
+                    if n2.length_squared() < 1e-18 || d.length_squared() < 1e-18 {
+                        continue;
+                    }
+                    let (n2, d) = (n2.normalize_or_zero(), d.normalize_or_zero());
+                    let cos_t = n1.dot(n2);
+                    let sin_t = d.dot(n1.cross(n2));
+                    if cos_t < -0.999 {
+                        continue; // folded back: no hinge
+                    }
+                    out.set_item(&key, maps.len())?;
+                    maps.push(rotated(here, a, d, cos_t, sin_t));
+                    stack.push(g);
+                }
+            }
+        }
+    }
+    let base = PyDict::new(py);
+    for (k, v) in tex.call_method0("items")?.try_iter()?.map(|kv| kv.and_then(|kv| kv.extract::<(Bound<'py, PyAny>, Bound<'py, PyAny>)>())) .collect::<PyResult<Vec<_>>>()? {
+        if !(k.eq("uvw")? || k.eq("rot")?) {
+            base.set_item(k, v)?;
+        }
+    }
+    for f in &faces {
+        let key = f.getattr("key")?;
+        let Some(row) = out.get_item(&key)? else { continue };
+        let (gu, cu, gv, cv) = maps[row.extract::<usize>()?];
+        let t = base.copy()?;
+        t.set_item("uvw", PyList::new(py, [gu.x, gu.y, gu.z, cu, gv.x, gv.y, gv.z, cv])?)?;
+        result.set_item(key, t)?;
+    }
+    Ok(result)
 }
 
 /// `uv_reference_points(points, normal=None)`: a right-angled triad on the
@@ -487,6 +575,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(texture_face_uv_axes, m)?)?;
     m.add_function(wrap_pyfunction!(texture_placement_of, m)?)?;
     m.add_function(wrap_pyfunction!(texture_rotated_map, m)?)?;
+    m.add_function(wrap_pyfunction!(texture_continuous_maps, m)?)?;
     m.add_function(wrap_pyfunction!(texture_uv_reference_points, m)?)?;
     m.add_function(wrap_pyfunction!(texture_rgb_to_hls, m)?)?;
     m.add_function(wrap_pyfunction!(texture_hls_to_rgb, m)?)?;

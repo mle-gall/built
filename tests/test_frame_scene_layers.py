@@ -25,7 +25,8 @@ from core.group import Group
 from core.layers import Layer
 from core.mesh import Mesh
 from core.scene import Scene
-from core.saved_views import SavedView, visibility_sig
+from core.saved_views import SavedView
+from ingetrazo_core import saved_view_visibility_sig as visibility_sig
 from tests.controller_surface import ControllerSurface as Viewport
 
 

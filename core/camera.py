@@ -291,10 +291,6 @@ class OrbitCamera:
         camera's sensor and picture."""
         return fov_from_focal(focal_mm, self.picture_height_mm())
 
-    def focal_for_fov(self, fov_deg: float) -> float:
-        """The focal length that gives ``fov_deg`` on this camera."""
-        return focal_from_fov(fov_deg, self.picture_height_mm())
-
     def place(self, eye: QVector3D, target: QVector3D) -> bool:
         """Put the eye exactly at ``eye`` looking at ``target`` — the
         coordinates typed in the camera settings. The target becomes the

@@ -30,7 +30,6 @@ import ingetrazo_core as _NATIVE
 from ingetrazo_core import Vec3 as QVector3D
 
 
-
 def _data_root() -> Path:
     """The platform's per-user data folder, as the native shell names it
     (``platform_paths.rs: local_data_directory``) when it is not loaded
@@ -239,13 +238,6 @@ projection_axes = _NATIVE.texture_projection_axes
 planar_uv = _NATIVE.texture_planar_uv
 
 
-def face_uvs(face, tex: dict):
-    """Planar UVs for ``face``'s outer-loop vertices from a texture attrs dict."""
-    return planar_uv(face.normal(), list(face.vertices),
-                     float(tex.get("sw", 1.0)), float(tex.get("sh", 1.0)),
-                     float(tex.get("rot", 0.0)))
-
-
 # ``fit_uv_affine(points, uvs)``: the world→UV affine map ``[gu.xyz, u0,
 # gv.xyz, v0]`` fitted from a polygon's vertices and their explicit UVs (a
 # COLLADA/OBJ import), from the edge pair with the largest cross product;
@@ -271,72 +263,6 @@ placement_of = _NATIVE.texture_placement_of
 #: keeping the look it had on the plane of ``normal`` as a planar projection
 #: (``sw``/``sh``/``rot`` from :func:`placement_of`).
 flattened_texture = _NATIVE.texture_flattened
-
-
-#: The map ``uv(p) = g·p + c`` carried across a hinge: ``uv(R⁻¹ p)`` for the
-#: rotation about the shared edge that lays the previous face onto the new
-#: one, so the image continues across the edge without a cut.
-_rotated_map = _NATIVE.texture_rotated_map
-
-
-def continuous_maps(mesh, faces, seed, tex: dict) -> dict:
-    """Per-face texture dicts that make ``tex`` run CONTINUOUSLY over a
-    curved surface — ``faces`` joined by soft edges — the classic way to
-    paint a cylinder or a rounded corner: the image is laid on ``seed``
-    (its planar projection, or the map it already carries) and walked to
-    each neighbour across their shared soft edge, turned about that edge
-    into the neighbour's plane, so bricks wrap around the bend instead of
-    restarting on every facet (Marco's rounded corner, 2026-09-15).
-
-    Returns ``{face.key: tex dict with uvw}`` for the faces reached from
-    ``seed``; faces of the set not connected to it are left out (the
-    caller paints them the ordinary way)."""
-    faces = list(faces)
-    if seed is None or not faces:
-        return {}
-    ids = {f.key for f in faces}
-    gu, cu, gv, cv = face_uv_axes(tex, seed.normal())
-    out = {seed.key: (gu, cu, gv, cv)}
-    stack = [seed]
-    while stack:
-        f = stack.pop()
-        g_u, c_u, g_v, c_v = out[f.key]
-        n1 = f.normal()
-        if n1.lengthSquared() < 1e-18:
-            continue
-        n1 = n1.normalized()
-        for lp in (f.loop, *f.hole_loops):
-            n = len(lp)
-            for i in range(n):
-                e = mesh.find_edge(lp[i], lp[(i + 1) % n])
-                if e is None or not e.soft:
-                    continue
-                for g in e.faces:
-                    if g == f or g.key not in ids or g.key in out:
-                        continue
-                    n2 = g.normal()
-                    d = e.b - e.a
-                    if n2.lengthSquared() < 1e-18 or d.lengthSquared() < 1e-18:
-                        continue
-                    n2 = n2.normalized()
-                    d = d.normalized()
-                    cos_t = QVector3D.dotProduct(n1, n2)
-                    sin_t = QVector3D.dotProduct(d, QVector3D.crossProduct(n1, n2))
-                    if cos_t < -0.999:
-                        continue                # folded back: no hinge
-                    out[g.key] = _rotated_map(g_u, c_u, g_v, c_v, e.a, d,
-                                              cos_t, sin_t)
-                    stack.append(g)
-    result = {}
-    base = {k: v for k, v in tex.items() if k not in ("uvw", "rot")}
-    for f in faces:
-        m = out.get(f.key)
-        if m is None:
-            continue
-        gu, cu, gv, cv = m
-        result[f.key] = {**base, "uvw": [gu.x(), gu.y(), gu.z(), float(cu),
-                                         gv.x(), gv.y(), gv.z(), float(cv)]}
-    return result
 
 
 #: ``uv_reference_points(points, normal=None)``: three points on the face's

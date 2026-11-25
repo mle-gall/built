@@ -60,7 +60,7 @@ def saved_view(scene, frame):
 def frame_scene(scene, frame, view) -> FrameScene:
     """What ``SavedView.apply_state`` and ``apply_frame_shadows`` changed on
     the live scene, as overrides of a facade."""
-    from core.saved_views import georef_objects
+    from ingetrazo_core import saved_view_georef_objects as georef_objects
     over = {"edit_group": None, "_bounds_cache": None}
     if getattr(scene, "image_planes", ()) or getattr(scene, "photo_mesh", None):
         over["hidden_reference_tags"] = NATIVE.sheet_frame_hidden_tags(scene._root, view)
