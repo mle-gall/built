@@ -7,7 +7,7 @@ use pyo3::{exceptions::PyIndexError, prelude::*};
 type Obj<'p> = Bound<'p, PyAny>;
 type TriangleHit = (usize, f64, Option<[f64; 3]>);
 
-fn hit_rows<'p>(
+pub(super) fn hit_rows<'p>(
     index: &Obj<'p>,
     rows: &Obj<'p>,
     o: [f64; 3],
@@ -72,7 +72,7 @@ fn surface_hit<'p>(
     .transpose()
 }
 #[pyfunction(signature=(index,row,origin,direction,limit=f64::INFINITY))]
-fn surface<'p>(
+pub(super) fn surface<'p>(
     index: &Obj<'p>,
     row: &Obj<'p>,
     origin: &Obj<'p>,

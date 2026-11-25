@@ -236,7 +236,7 @@ pub(super) fn screen_boxes<'p>(
 }
 
 #[pyfunction(signature=(index,packed=None))]
-fn eligible_rows<'p>(index: &Obj<'p>, packed: Option<&Obj<'p>>) -> PyResult<Obj<'p>> {
+pub(super) fn eligible_rows<'p>(index: &Obj<'p>, packed: Option<&Obj<'p>>) -> PyResult<Obj<'p>> {
     let packed = match packed {
         Some(p) => p.clone(),
         None => index.getattr("packed")?,
