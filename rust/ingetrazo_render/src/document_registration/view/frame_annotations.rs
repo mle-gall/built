@@ -299,7 +299,7 @@ fn draw_tool_feedback<'py>(a: &Args<'py>) -> Reply<'py> {
         }
         let draw = attr(&interaction(py)?, "_draw_extension_overlays")?;
         if !draw.is_none() && attr(&tools, "_ext_overlays")?.is_truthy()? {
-            module.call_method1("plugin_paint", (&painter, py.import("functools")?.call_method1("partial", (draw, &tools))?))?;
+            direct(py, plugin_paint, (&painter, py.import("functools")?.call_method1("partial", (draw, &tools))?))?;
         }
         if attr(&tool, "value_label")?.is_callable() || bands {
             layout.call_method1("_draw_length_label", (&painter,))?;
@@ -371,7 +371,7 @@ fn draw_tool_overlays<'py>(a: &Args<'py>) -> Reply<'py> {
             if own {
                 hook.call1((&tools, &painter))?;
             } else {
-                module.call_method1("plugin_paint", (&painter, py.import("functools")?.call_method1("partial", (hook, &tools))?))?;
+                direct(py, plugin_paint, (&painter, py.import("functools")?.call_method1("partial", (hook, &tools))?))?;
             }
         }
         if !labels {
@@ -400,7 +400,7 @@ fn draw_tool_overlays<'py>(a: &Args<'py>) -> Reply<'py> {
 /// An extension's overlay hook paints on the annotation canvas itself,
 /// which answers the painter calls it makes (pens, brushes, lines,
 /// polygons, rectangles, ellipses, text). There is no Qt painter.
-fn plugin_paint<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn plugin_paint<'py>(a: &Args<'py>) -> Reply<'py> {
     a.get_item(1)?.call1((a.get_item(0)?,))
 }
 
@@ -457,7 +457,6 @@ pub(super) fn install_annotations(module: &Bound<PyModule>) -> PyResult<()> {
                 "",
             ),
             ("draw_tool_overlays", Mode::Function, draw_tool_overlays, &["painter", "tools", "*", "labels=True"], "", ""),
-            ("plugin_paint", Mode::Function, plugin_paint, &["target", "draw"], "", ""),
         ],
     )
 }

@@ -26,7 +26,7 @@ fn point(event: &Obj<'_>) -> PyResult<(f64, f64)> {
     Ok((float(position.call_method0("x")?)?, float(position.call_method0("y")?)?))
 }
 
-fn opens_commands<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn opens_commands<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, event) = (a.get_item(0)?, a.get_item(1)?);
     let module = ui(py)?;
@@ -46,7 +46,7 @@ fn opens_commands<'py>(a: &Args<'py>) -> Reply<'py> {
     false.into_bound_py_any(py)
 }
 
-fn problem_key<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn problem_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, event) = (a.get_item(0)?, a.get_item(1)?);
     let export = own(&view, "_ui_lens")?.is_some_and(|lens| lens.eq(2).unwrap_or(false));
@@ -64,7 +64,7 @@ fn problem_key<'py>(a: &Args<'py>) -> Reply<'py> {
     step.into_bound_py_any(py)
 }
 
-fn reveal_shortcut<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn reveal_shortcut<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let event = a.get_item(0)?;
     (is_input(&event.call_method0("key")?, "Key_J")? && mods_of(py, &event)?.eq(12)?).into_bound_py_any(py)
@@ -78,8 +78,7 @@ fn claims_key<'py>(a: &Args<'py>) -> Reply<'py> {
     if !truthy(&view, "_ui_attached")? {
         return false.into_bound_py_any(py);
     }
-    let module = ui(py)?;
-    let opens = || module.call_method1("_opens_commands", (&view, &event));
+    let opens = || direct(py, opens_commands, (&view, &event));
     let large = render(py)?.getattr("chrome_sheet")?.call_method1("claims_key", (&view, &event))?;
     if !large.is_none() {
         // The large sheet owns every key but the window's ⌘ shortcuts.
@@ -88,8 +87,8 @@ fn claims_key<'py>(a: &Args<'py>) -> Reply<'py> {
     if is_input(&event.call_method0("key")?, "Key_Escape")? {
         return true.into_bound_py_any(py); // Reserve it for the chrome and viewport Escape router.
     }
-    if module.call_method1("_reveal_shortcut", (&event,))?.is_truthy()?
-        || module.call_method1("_problem_key", (&view, &event))?.is_truthy()?
+    if direct(py, reveal_shortcut, (&event,))?.is_truthy()?
+        || direct(py, problem_key, (&view, &event))?.is_truthy()?
         || opens()?.is_truthy()?
         || view.getattr("renderer")?.call_method1("ui_claims_key", (key_name(py, &event)?, mods_of(py, &event)?))?.is_truthy()?
     {
@@ -109,7 +108,7 @@ fn key<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     let module = ui(py)?;
     let renderer = view.getattr("renderer")?;
-    if module.call_method1("_opens_commands", (&view, &event))?.is_truthy()? {
+    if direct(py, opens_commands, (&view, &event))?.is_truthy()? {
         if pressed {
             renderer.call_method0("ui_open_commands")?;
             view.call_method0("update")?;
@@ -120,14 +119,14 @@ fn key<'py>(a: &Args<'py>) -> Reply<'py> {
         return Ok(no);
     }
     let on_sheets = sheets(py)?.call_method1("shown", (&view,))?.is_truthy()?;
-    if !on_sheets && module.call_method1("_reveal_shortcut", (&event,))?.is_truthy()? {
+    if !on_sheets && direct(py, reveal_shortcut, (&event,))?.is_truthy()? {
         if pressed {
             let separator: String = module.getattr("SEP")?.extract()?;
             module.call_method1("_tree_action", (view.call_method0("window")?, &view, format!("revealselection{separator}")))?;
         }
         return Ok(yes);
     }
-    let step = if on_sheets { 0.into_bound_py_any(py)? } else { module.call_method1("_problem_key", (&view, &event))? };
+    let step = if on_sheets { 0.into_bound_py_any(py)? } else { direct(py, problem_key, (&view, &event))? };
     if step.is_truthy()? {
         if pressed {
             renderer.call_method1("ui_step_issue", (step,))?;
@@ -190,7 +189,7 @@ fn wheel<'py>(a: &Args<'py>) -> Reply<'py> {
 /// Exclusive work holds the window: only its chip (Cancel) and the window's
 /// own drag take the pointer; the model and the rest of the chrome see
 /// nothing until it ends.
-fn held<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn held<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, kind, event) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?);
     let dialogs = render(py)?.getattr("chrome_dialogs")?;
@@ -228,7 +227,7 @@ fn pointer<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     let module = ui(py)?;
     let pages = sheets(py)?;
-    if module.call_method1("_held", (&view, &kind, &event))?.is_truthy()? {
+    if direct(py, held, (&view, &kind, &event))?.is_truthy()? {
         return true.into_bound_py_any(py);
     }
     let renderer = view.getattr("renderer")?;
@@ -275,14 +274,10 @@ fn pointer<'py>(a: &Args<'py>) -> Reply<'py> {
 
 #[rustfmt::skip]
 const FUNCTIONS: &[Method] = &[
-    ("_opens_commands", Mode::Function, opens_commands, &["view", "event"], "", ""),
-    ("_problem_key", Mode::Function, problem_key, &["view", "event"], "", ""),
-    ("_reveal_shortcut", Mode::Function, reveal_shortcut, &["event"], "", ""),
     ("claims_key", Mode::Function, claims_key, &["view", "event"], "", ""),
     ("key", Mode::Function, key, &["view", "event", "pressed"], "", ""),
     ("_mods", Mode::Function, mods, &["event"], "", ""),
     ("wheel", Mode::Function, wheel, &["view", "event"], "", ""),
-    ("_held", Mode::Function, held, &["view", "kind", "event"], "", ""),
     ("pointer", Mode::Function, pointer, &["view", "kind", "event=None"], "", ""),
 ];
 

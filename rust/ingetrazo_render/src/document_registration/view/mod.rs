@@ -77,6 +77,16 @@ mod texture_probe;
 mod view_commands;
 mod view_host;
 mod view_navigation;
+/// Call one of this lane's bindings from Rust: `args` is every parameter,
+/// defaults included (nothing fills them in on this path). For the
+/// functions no one outside their own module calls, which are therefore
+/// not names on the Python module.
+fn direct<'py, A>(py: Python<'py>, binding: fn(&Args<'py>) -> Reply<'py>, args: A) -> Reply<'py>
+where
+    A: IntoPyObject<'py, Target = PyTuple>,
+{
+    binding(&pyo3::BoundObject::into_bound(args.into_pyobject(py).map_err(Into::into)?))
+}
 fn install(owner: &Obj, namespace: &Bound<PyDict>, entries: &[Method]) -> PyResult<()> {
     let py = owner.py();
     let registrar = Bindings::new(py)?

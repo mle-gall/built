@@ -114,7 +114,7 @@ fn chip<'py>(win: &Obj<'py>, view: &Obj<'py>, action: &str) -> PyResult<()> {
         }
         again(format!("edit{SEP}section:{}:{}{SEP}{}", fields[1], fields[2], fields.get(3).copied().unwrap_or("")))?;
     } else if key.starts_with("status:") {
-        module.call_method1("_set_status", (win, &groups, tail))?;
+        direct(py, super::chrome_inspector::set_status, (win, &groups, tail))?;
     } else if key == "file" && !groups.is_empty() {
         module.call_method1("_file_to", (win, groups.len()))?;
     } else if key.starts_with("active:") || key.starts_with("isolate:") {
@@ -125,16 +125,16 @@ fn chip<'py>(win: &Obj<'py>, view: &Obj<'py>, action: &str) -> PyResult<()> {
         if fields.len() != 3 {
             return Err(PyValueError::new_err(format!("not enough values to unpack (expected 3, got {})", fields.len())));
         }
-        module.call_method1("_set_status", (win, module.call_method1("_tree_groups", (view, fields[1]))?, fields[2]))?;
+        direct(py, super::chrome_inspector::set_status, (win, direct(py, super::chrome_tree::tree_groups, (view, fields[1]))?, fields[2]))?;
     } else if key.starts_with("cutlist") {
         if !tail.is_empty() {
-            module.call_method1("_select", (win, module.call_method1("_tree_groups", (view, tail))?))?;
+            module.call_method1("_select", (win, direct(py, super::chrome_tree::tree_groups, (view, tail))?))?;
         }
         render(py)?.call_method1("show_report_sheet", (win, "cutlist"))?;
     } else if let Some(verb) = key.strip_prefix("lib:") {
         render(py)?.getattr("wgpu_library")?.call_method1("action", (win, view, verb))?;
     } else if let Some(form) = key.strip_prefix("form:") {
-        module.call_method1("_open_form", (view, form))?;
+        direct(py, super::chrome_actions::open_form, (view, form))?;
     } else if key.starts_with("takeoff_faces:") {
         py.import("ingetrazo_core")?.getattr("InspectorTakeoff")?.call_method1("select_faces", (&viewport, tail))?;
     } else if key == "measure" {
@@ -303,7 +303,7 @@ impl<'a, 'py> Row<'a, 'py> {
     }
     /// The inspector shows this row until the selection moves.
     fn inspect(&self, key: &str) -> PyResult<()> {
-        let stamp = self.module.call_method1("_sel_key", (self.scene.getattr("selection")?,))?;
+        let stamp = direct(self.py, super::chrome_frame::sel_key, (self.scene.getattr("selection")?,))?;
         self.view.setattr("_ui_insp_node", (key, stamp))
     }
     fn expand(&self, key: impl AsRef<str>) -> PyResult<()> {
@@ -325,7 +325,7 @@ impl<'a, 'py> Row<'a, 'py> {
             return if path.is_truthy()? { self.scene.call_method1("resolve_occurrence", (path,)) } else { Ok(none(self.py)) };
         }
         if self.kind_is(&["i", "c", "g"]) {
-            self.module.call_method1("_group_by_uid", (self.win, &self.ident))
+            direct(self.py, super::chrome_tree::group_by_uid, (self.win, &self.ident))
         } else {
             Ok(none(self.py))
         }
@@ -362,7 +362,7 @@ impl<'a, 'py> Row<'a, 'py> {
     fn members(&self) -> PyResult<Bound<'py, PyList>> {
         match self.node.as_deref() {
             Some("") => list(&self.unfiled()?),
-            Some(node) => Ok(self.module.call_method1("_tree_groups", (self.view, node))?.cast_into()?),
+            Some(node) => Ok(direct(self.py, super::chrome_tree::tree_groups, (self.view, node))?.cast_into()?),
             None => {
                 let copies = self.copies()?;
                 if !copies.is_empty() {
@@ -420,7 +420,7 @@ impl<'a, 'py> Row<'a, 'py> {
             let field = |name: &str| node.call_method1("get", (name,));
             if field("kind")?.eq("host")? {
                 let tag = node.call_method1("get", ("recipe", PyDict::new(py)))?.call_method1("get", ("tag",))?;
-                let layer = self.module.call_method1("_layer", (&self.scene, tag))?;
+                let layer = direct(py, super::chrome_tree::layer, (&self.scene, tag))?;
                 if !layer.is_none() {
                     seen.set_item(layer.getattr("key")?, py.None())?;
                 }
@@ -501,7 +501,7 @@ impl<'a, 'py> Row<'a, 'py> {
             let target = glue.getattr("TreePaint")?.call1((&scene, self.target()?))?;
             glue.getattr("wgpu_library")?.call_method("open_library", (win, "materials"), Some(&fields!(py; "scope" => "s:model", "paint_target" => target)))?;
         } else if self.is(&["into", "beside", "root", "outdent"]) {
-            let target = if extra.is_empty() { none(py) } else { module.call_method1("_group_by_uid", (win, partition(&extra, ':').1))? };
+            let target = if extra.is_empty() { none(py) } else { direct(py, super::chrome_tree::group_by_uid, (win, partition(&extra, ':').1))? };
             if glue.call_method1("tree_move", (viewport, self.item()?, target, &self.verb))?.is_truthy()? {
                 if self.verb == "into" {
                     self.expand(&extra)?;
@@ -712,7 +712,7 @@ impl<'a, 'py> Row<'a, 'py> {
             }
             self.rebuild()?;
         } else if self.is(&["cplace", "cselect", "creplace", "ckeep", "crename"]) {
-            module.call_method1("_component_verb", (win, view, &self.verb, &rk))?;
+            direct(py, super::chrome_tree::component_verb, (win, view, &self.verb, &rk))?;
             self.rebuild()?;
         } else if self.is(&["issues"]) {
             view.setattr("_ui_issues", !own(view, "_ui_issues")?.is_some_and(|issues| issues.is_truthy().unwrap_or(false)))?;
@@ -844,7 +844,7 @@ impl<'a, 'py> Row<'a, 'py> {
             self.rebuild()?;
         } else if self.is(&["print", "color", "linetype", "weight", "hatch"]) && named.is_some() && !self.linked {
             let tag = self.data.get_item("recipes")?.get_item(named.as_deref())?.call_method1("get", ("tag",))?;
-            let layer = module.call_method1("_layer", (&scene, tag))?;
+            let layer = direct(py, super::chrome_tree::layer, (&scene, tag))?;
             if !layer.is_none() {
                 self.core("edit_tag", fields!(py; "tags" => PyList::new(py, [layer.getattr("key")?])?, "field" => &self.verb, "value" => &extra))?;
                 self.rebuild()?;
@@ -854,7 +854,7 @@ impl<'a, 'py> Row<'a, 'py> {
             module.call_method1("_measure", (view, win))?;
             self.rebuild()?;
         } else if self.is(&["exportcsv"]) {
-            module.call_method1("_export_csv", (win,))?;
+            direct(py, super::chrome_tree::export_csv, (win,))?;
         } else if self.is(&["expandall"]) {
             self.exp.call_method1("update", (core_module.call_method1("expand_project_folders", (&scene, self.data.call_method1("get", ("nodes", PyDict::new(py)))?))?,))?;
             self.rebuild()?;
@@ -1161,7 +1161,7 @@ impl<'a, 'py> Row<'a, 'py> {
                         execute()?.call1((viewport, structure.call_method1("apply_bootstrap", (&scene, arg))?))?;
                     }
                     "delete" => {
-                        module.call_method1("_delete_node", (viewport, arg))?;
+                        direct(py, delete_node, (viewport, arg))?;
                     }
                     "lib" => {
                         glue.getattr("wgpu_library")?.call_method1("confirmed", (win, view, arg, &extra))?;
@@ -1216,7 +1216,7 @@ impl<'a, 'py> Row<'a, 'py> {
                 "segments" => {
                     let most = core_module.getattr("curve_segments")?.getattr("MAX_SEGMENTS")?;
                     let selection = list(&scene.getattr("selection")?)?;
-                    let shape = module.call_method1("_curve_of", (&scene, &selection))?;
+                    let shape = direct(py, super::chrome_inspector::curve_of, (&scene, &selection))?;
                     let count = py.get_type::<pyo3::types::PyInt>().call1((&stripped,))?;
                     let cannot = || PyValueError::new_err("This curve cannot be rebuilt");
                     if shape.is_none() || !shape.getattr("flat")?.is_truthy()? {
@@ -1281,7 +1281,7 @@ fn core_command<'py>(vp: &Obj<'py>, command: &Obj<'py>, args: Option<&Bound<'py,
     }
 }
 
-fn delete_node<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn delete_node<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (viewport, key) = (a.get_item(0)?, a.get_item(1)?);
     let structure = py.import("core.structure")?;
@@ -1321,7 +1321,6 @@ fn edit<'py>(a: &Args<'py>) -> Reply<'py> {
 #[rustfmt::skip]
 pub(super) const FUNCTIONS: &[Method] = &[
     ("_tree_action", Mode::Function, tree_action, &["win", "view", "action"], "", ""),
-    ("_delete_node", Mode::Function, delete_node, &["vp", "key"], "", ""),
     ("_edit", Mode::Function, edit, &["id_", "text"], "", ""),
 ];
 

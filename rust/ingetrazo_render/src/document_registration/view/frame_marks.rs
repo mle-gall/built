@@ -298,7 +298,7 @@ fn visible_flag(o: &Obj<'_>) -> PyResult<bool> {
     Ok(!o.is_none() && o.getattr("visible")?.is_truthy()?)
 }
 
-fn vertices<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn vertices<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let numpy = np(py)?;
     let (mut positions, mut uvs) = (numpy.call_method1("asarray", (a.get_item(0)?,))?, numpy.call_method1("asarray", (a.get_item(1)?,))?);
@@ -310,7 +310,7 @@ fn vertices<'py>(a: &Args<'py>) -> Reply<'py> {
     numpy.call_method1("column_stack", ((positions.sub(a.get_item(2)?)?, uvs),))?.call_method1("astype", (numpy.getattr("float32")?,))?.call_method0("ravel")
 }
 
-fn texture<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn texture<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let numpy = np(py)?;
     let (fallback, limit) = (a.get_item(1)?, a.get_item(2)?);
@@ -354,11 +354,11 @@ impl<'py> Layers<'py> {
         self.renderer.call_method0("max_texture_size")
     }
     fn upload(&self, key: &str, geometry: Obj<'py>, image: &Obj<'py>, fallback: (u8, u8, u8), opacity: Obj<'py>, depth: bool) -> PyResult<()> {
-        let [width, height, pixels] = unpack::<3>(&self.module.call_method1("_texture", (image, fallback, self.limit()?))?)?;
+        let [width, height, pixels] = unpack::<3>(&direct(self.py, texture, (image, fallback, self.limit()?))?)?;
         self.updates.append((key, geometry, width, height, pixels, opacity, (0., 0., 0., 0.), depth))
     }
     fn geometry(&self, positions: impl IntoPyObject<'py>, uvs: impl IntoPyObject<'py>, origin: &Obj<'py>, triangles: Option<Obj<'py>>) -> Reply<'py> {
-        self.module.call_method1("_vertices", (positions, uvs, origin, triangles))
+        direct(self.py, vertices, (positions, uvs, origin, triangles))
     }
 }
 
@@ -511,8 +511,6 @@ pub(super) fn install_references(module: &Bound<PyModule>) -> PyResult<()> {
         module.dict().as_any(),
         &module.dict(),
         &[
-            ("_vertices", Mode::Function, vertices, &["positions", "uvs", "origin", "triangles=None"], "", ""),
-            ("_texture", Mode::Function, texture, &["image", "fallback", "limit"], "", ""),
             ("sync", Mode::Function, references_sync, &["view", "style", "*", "scene=None"], "", ""),
         ],
     )

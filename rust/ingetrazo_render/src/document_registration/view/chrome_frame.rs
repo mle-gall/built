@@ -101,7 +101,7 @@ fn wide<'py>(py: Python<'py>, lens: &Obj<'py>) -> PyResult<bool> {
 /// The dock width for lens `lens`: the user's width for Filing; for the
 /// wide sets the width last dragged there, at least `WIDE_DOCK` and never
 /// narrower than the user's own.
-fn dock_width<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn dock_width<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let store = settings(a.get_item(1)?)?;
     let own = number(&store.call_method1("value", ("ui/dock_width", 300.0))?, true)?.unwrap_or(300.0);
@@ -123,7 +123,7 @@ fn apply_dock_width<'py>(a: &Args<'py>) -> Reply<'py> {
     if renderer.is_none() || !renderer.hasattr("ui_set_dock_width")? {
         return Ok(none(py));
     }
-    renderer.call_method1("ui_set_dock_width", (ui(py)?.call_method1("dock_width", (lens_of(&view)?, a.get_item(1)?))?,))?;
+    renderer.call_method1("ui_set_dock_width", (direct(py, dock_width, (lens_of(&view)?, a.get_item(1)?))?,))?;
     Ok(none(py))
 }
 
@@ -371,7 +371,7 @@ fn sheet_and_jobs<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 
 /// The form on top, if any (rust/ingetrazo_render/src/forms_host.rs).
-fn chrome_form<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn chrome_form<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let view = a.get_item(0)?;
     if view.getattr("renderer")?.hasattr("ui_set_dialog")? {
@@ -401,7 +401,7 @@ fn modal_layers<'py>(view: &Obj<'py>, win: &Obj<'py>) -> PyResult<()> {
     let py = view.py();
     let module = ui(py)?;
     module.call_method1("_sheet_and_jobs", (view, win))?;
-    module.call_method1("_chrome_form", (view, win))?;
+    direct(py, chrome_form, (view, win))?;
     render(py)?.getattr("wgpu_start")?.call_method1("before_frame", (view, win))?;
     render(py)?.getattr("chrome_sheet")?.call_method1("before_frame", (view, win))?;
     Ok(())
@@ -506,8 +506,8 @@ fn before_frame<'py>(a: &Args<'py>) -> Reply<'py> {
     module.call_method1("_sync_units", (&view, win.getattr("viewport")?.getattr("history")?))?;
     module.call_method1("_cursor_value", (&view, &win))?;
     module.call_method1("_selection", (&view, &win, &active))?;
-    module.call_method1("_cluster", (&view, &win))?;
-    module.call_method1("_form", (&view, &win))?;
+    direct(py, cluster, (&view, &win))?;
+    direct(py, super::chrome_actions::form_fields, (&view, &win))?;
     render(py)?.call_method1("bind_deliveries", (&win,))?;
     render(py)?.getattr("wgpu_library")?.call_method1("before_frame", (&view, &win))?;
     module.call_method1("_sync_project_rows", (&view, &win))?;
@@ -527,7 +527,7 @@ fn before_frame<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 
 /// The native name of the key the tools call Ctrl (⌘ on the Mac).
-fn ctrl<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn ctrl<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let module = ui(py)?;
     let known = module.getattr("_CTRL")?;
@@ -555,7 +555,7 @@ fn options<'py>(a: &Args<'py>) -> Reply<'py> {
     let host = view.getattr("tools")?; // what the tools are handed as their viewport here
     let name: String = if tool.is_none() { String::new() } else { tool.get_type().name()?.extract()? };
     let out = PyList::empty(py);
-    let ctrl = || module.call_method0("_ctrl");
+    let ctrl = || direct(py, ctrl, ());
     let flag = |name: &str| -> PyResult<i32> { Ok(tool.getattr(name)?.is_truthy()? as i32) };
     let (held_tool, held_host, held_view) = (tool.clone().unbind(), host.clone().unbind(), view.clone().unbind());
     match name.as_str() {
@@ -619,7 +619,7 @@ fn options<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     if name == "DimensionTool" {
         let held_view = view.clone().unbind();
-        let run = action(py, move |py| ui(py)?.call_method1("_open_form", (held_view.bind(py), "dimstyle")).map(drop))?;
+        let run = action(py, move |py| direct(py, super::chrome_actions::open_form, (held_view.bind(py), "dimstyle")).map(drop))?;
         out.append(("dimstyle", "Dimension style…", "", 0, run))?;
     }
     let lock = attr(&source, "axis_lock")?;
@@ -642,7 +642,7 @@ fn options<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(out.into_any())
 }
 
-fn cluster<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn cluster<'py>(a: &Args<'py>) -> Reply<'py> {
     a.py().import("views.view_commands")?.call_method1("sync", (a.get_item(0)?, a.get_item(1)?))
 }
 
@@ -683,7 +683,7 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
     };
     let renderer = view.getattr("renderer")?;
     if tool.is_none() && attr(&display.getattr("source_viewport")?, "nav_mode")?.eq("zoom")? {
-        ui(py)?.call_method1("_lens_value", (&view, &tools, &revision))?;
+        direct(py, lens_value, (&view, &tools, &revision))?;
         return Ok(none(py));
     }
     if at.is_none() {
@@ -720,7 +720,7 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
 /// `_handle_zoom_value_key`): the same field, by the cursor, reading the
 /// focal length the view has now. The lens is what the value acts on, so it
 /// is part of the revision Rust reads a commit from.
-fn lens_value<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn lens_value<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, tools, revision) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?);
     let display = tools.getattr_opt("view")?.unwrap_or_else(|| view.clone());
@@ -757,7 +757,7 @@ fn lens_value<'py>(a: &Args<'py>) -> Reply<'py> {
 /// The selection as the providers' signatures see it: its native revision
 /// (core/element_set.py), taken on every change of content and for every
 /// new set. Every empty selection is one and the same.
-fn sel_key<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn sel_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let selection = a.get_item(0)?;
     if selection.len()? != 0 { selection.getattr("revision") } else { 0.into_bound_py_any(a.py()) }
 }
@@ -795,13 +795,13 @@ fn selection<'py>(a: &Args<'py>) -> Reply<'py> {
         }
         return Ok(none(py));
     }
-    let sig = (id(&scene), module.call_method1("_sel_key", (&selected,))?).into_bound_py_any(py)?;
+    let sig = (id(&scene), direct(py, sel_key, (&selected,))?).into_bound_py_any(py)?;
     if sig.eq(attr(&view, "_ui_sel_sig")?)? {
         return Ok(none(py));
     }
     view.setattr("_ui_sel_sig", sig)?;
     let verbs = PyList::empty(py);
-    for verb in module.call_method1("_commands", (&win, &selected))?.try_iter()? {
+    for verb in direct(py, commands, (&win, &selected))?.try_iter()? {
         let [key, label, shortcut, _run, enabled, more] = unpack::<6>(&verb?)?;
         verbs.append((key, label, shortcut, enabled, more))?;
     }
@@ -812,7 +812,7 @@ fn selection<'py>(a: &Args<'py>) -> Reply<'py> {
 /// (id, label, shortcut, run, enabled, in More) for the inspector's verbs:
 /// the verb source's (verbs.rs), the very entries the right-click menu
 /// offers this selection, run the same way (viewport_menu.rs).
-fn commands<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn commands<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     render(py)?.call_method1("inspector_verbs", (a.get_item(0)?, py.get_type::<PyList>().call1((a.get_item(1)?,))?))
 }
@@ -910,27 +910,20 @@ fn isolate<'py>(a: &Args<'py>) -> Reply<'py> {
 pub(super) const FUNCTIONS: &[Method] = &[
     ("_window", Mode::Function, window, &["view"], "", ""),
     ("attach", Mode::Function, attach, &["view"], "", ""),
-    ("dock_width", Mode::Function, dock_width, &["lens", "settings=None"], "", ""),
     ("apply_dock_width", Mode::Function, apply_dock_width, &["view", "settings=None"], "", ""),
     ("keep_dock_width", Mode::Function, keep_dock_width, &["view", "arg", "settings=None"], "", ""),
     ("_send_tools", Mode::Function, send_tools, &["view", "win"], "", ""),
     ("_project_action", Mode::Function, project_action, &["win", "arg"], "", ""),
     ("_tabs", Mode::Function, tabs, &["view", "win"], "", ""),
     ("_sheet_and_jobs", Mode::Function, sheet_and_jobs, &["view", "win"], "", ""),
-    ("_chrome_form", Mode::Function, chrome_form, &["view", "win"], "", ""),
     ("chrome_only", Mode::Function, chrome_only, &["view"], "", ""),
     ("chrome_frame", Mode::Function, chrome_frame, &["view"], "", ""),
     ("_sync_units", Mode::Function, sync_units, &["view", "history"], "", ""),
     ("before_frame", Mode::Function, before_frame, &["view"], "", ""),
-    ("_ctrl", Mode::Function, ctrl, &[], "", ""),
     ("_options", Mode::Function, options, &["view"], "", ""),
-    ("_cluster", Mode::Function, cluster, &["view", "win"], "", ""),
     ("_cursor_value", Mode::Function, cursor_value, &["view", "win"], "", ""),
-    ("_lens_value", Mode::Function, lens_value, &["view", "tools", "revision"], "", ""),
-    ("_sel_key", Mode::Function, sel_key, &["sel"], "", ""),
     ("_summary", Mode::Function, summary, &["snapshot"], "", ""),
     ("_selection", Mode::Function, selection, &["view", "win", "active"], "", ""),
-    ("_commands", Mode::Function, commands, &["win", "sel"], "", ""),
     ("_show_all", Mode::Function, show_all, &["vp"], "", ""),
     ("_isolate", Mode::Function, isolate, &["win", "uids"], "", ""),
 ];

@@ -37,13 +37,13 @@ fn among(docs: &Obj<'_>, doc: &Obj<'_>) -> PyResult<bool> {
     docs.contains(doc)
 }
 
-fn docs<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn docs<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let documents = attr(&a.get_item(0)?, "documents")?;
     if documents.is_none() { Ok(PyList::empty(py).into_any()) } else { documents.call0() }
 }
 
-fn dirty<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn dirty<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let check = attr(&a.get_item(0)?, "_doc_is_dirty")?;
     if check.is_none() {
@@ -65,7 +65,7 @@ fn link_host<'py>(a: &Args<'py>) -> Reply<'py> {
         return nothing();
     }
     let links = py.import("core.links")?;
-    let docs = if given.is_none() { tabs_module(py)?.call_method1("_docs", (&win,))? } else { given };
+    let docs = if given.is_none() { direct(py, docs, (&win,))? } else { given };
     let preferred = attr(&doc, "link_host")?;
     let mut order = Vec::new();
     if among(&docs, &preferred)? {
@@ -95,7 +95,7 @@ fn link_host<'py>(a: &Args<'py>) -> Reply<'py> {
     nothing()
 }
 
-fn saved_text<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn saved_text<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let time = py.import("time")?;
     let modified = match path_of(py, a.get_item(0)?)?.call_method0("stat") {
@@ -108,10 +108,9 @@ fn saved_text<'py>(a: &Args<'py>) -> Reply<'py> {
     time.call_method1("strftime", (format, time.call_method1("localtime", (modified,))?))
 }
 
-fn tip<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn tip<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (win, doc, host, count) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?, a.get_item(3)?);
-    let module = tabs_module(py)?;
     let mut lines = Vec::new();
     let path = doc.getattr("path")?;
     if path.is_none() {
@@ -123,13 +122,13 @@ fn tip<'py>(a: &Args<'py>) -> Reply<'py> {
             Some(rest) => format!("~{rest}"),
             None => place,
         };
-        let saved: String = module.call_method1("_saved_text", (&path,))?.extract()?;
+        let saved: String = direct(py, saved_text, (&path,))?.extract()?;
         lines.push(if saved.is_empty() { place } else { format!("{place} · {saved}") });
     }
     if !host.is_none() {
         lines.push(format!("linked in {} · {} placement{}", host.call_method0("display_name")?.str()?, count.str()?, if count.eq(1)? { "" } else { "s" }));
     }
-    if module.call_method1("_dirty", (&win, &doc))?.is_truthy()? {
+    if direct(py, dirty, (&win, &doc))?.is_truthy()? {
         lines.push("Unsaved changes".to_owned());
     }
     lines.join("\n").into_bound_py_any(py)
@@ -148,7 +147,7 @@ fn tabs<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (win, given) = (a.get_item(0)?, a.get_item(1)?);
     let module = tabs_module(py)?;
-    let docs = if given.is_none() { module.call_method1("_docs", (&win,))? } else { py.get_type::<PyList>().call1((given,))? };
+    let docs = if given.is_none() { direct(py, docs, (&win,))? } else { py.get_type::<PyList>().call1((given,))? };
     let front = attr(&win, "_doc")?;
     let out = PyList::empty(py);
     for doc in docs.try_iter()? {
@@ -158,9 +157,9 @@ fn tabs<'py>(a: &Args<'py>) -> Reply<'py> {
             doc.getattr("tab_id")?,
             doc.call_method0("display_name")?,
             doc.is(&front),
-            module.call_method1("_dirty", (&win, &doc))?,
+            direct(py, dirty, (&win, &doc))?,
             !host.is_none(),
-            module.call_method1("_tip", (&win, &doc, &host, count))?,
+            direct(py, tip, (&win, &doc, &host, count))?,
             "",
         ))?;
     }
@@ -207,7 +206,7 @@ fn document_tabs<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(state)
 }
 
-fn close<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn close<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (win, doc) = (a.get_item(0)?, a.get_item(1)?);
     let own = attr(&win, "close_document")?;
@@ -215,7 +214,7 @@ fn close<'py>(a: &Args<'py>) -> Reply<'py> {
     closed.is_truthy()?.into_bound_py_any(py)
 }
 
-fn activate<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn activate<'py>(a: &Args<'py>) -> Reply<'py> {
     let (win, doc) = (a.get_item(0)?, a.get_item(1)?);
     if !doc.is(&attr(&win, "_doc")?) {
         win.call_method1("activate_document", (doc,))?;
@@ -229,7 +228,7 @@ fn action<'py>(a: &Args<'py>) -> Reply<'py> {
     let (win, view) = (a.get_item(0)?, a.get_item(1)?);
     let arg: String = a.get_item(2)?.extract()?;
     let module = tabs_module(py)?;
-    let docs = module.call_method1("_docs", (&win,))?;
+    let docs = direct(py, docs, (&win,))?;
     let (verb, rest) = arg.split_once(':').unwrap_or((&arg, ""));
     let int = py.get_type::<pyo3::types::PyInt>();
     let doc_at = |text: &str| -> PyResult<Option<Obj<'py>>> {
@@ -243,12 +242,12 @@ fn action<'py>(a: &Args<'py>) -> Reply<'py> {
     match verb {
         "activate" => {
             if let Some(doc) = doc_at(rest)? {
-                module.call_method1("_activate", (&win, doc))?;
+                direct(py, activate, (&win, doc))?;
             }
         }
         "close" => {
             if let Some(doc) = doc_at(rest)? {
-                module.call_method1("_close", (&win, doc))?;
+                direct(py, close, (&win, doc))?;
             }
         }
         "new" => {
@@ -281,7 +280,7 @@ fn source_context<'py>(a: &Args<'py>) -> Reply<'py> {
     let nothing = || (py.None(), py.None()).into_bound_py_any(py);
     let doc = attr(&win, "_doc")?;
     let host = attr(&doc, "link_host")?;
-    if host.is_none() || !among(&tabs_module(py)?.call_method1("_docs", (&win,))?, &host)? {
+    if host.is_none() || !among(&direct(py, docs, (&win,))?, &host)? {
         return nothing();
     }
     let scene = host.getattr("viewport")?.getattr("scene")?;
@@ -304,7 +303,7 @@ fn sync_host_context<'py>(a: &Args<'py>) -> Reply<'py> {
     let module = tabs_module(py)?;
     let doc = attr(&win, "_doc")?;
     let host = attr(&doc, "link_host")?;
-    let scene = if !host.is_none() && among(&module.call_method1("_docs", (&win,))?, &host)? { host.getattr("viewport")?.getattr("scene")? } else { none(py) };
+    let scene = if !host.is_none() && among(&direct(py, docs, (&win,))?, &host)? { host.getattr("viewport")?.getattr("scene")? } else { none(py) };
     let origin = match attr(&view, "packed")?.getattr_opt("origin")? {
         Some(origin) => py.get_type::<PyTuple>().call1((origin,))?,
         None => (0., 0., 0.).into_bound_py_any(py)?,
@@ -348,7 +347,7 @@ fn open_link_source<'py>(a: &Args<'py>) -> Reply<'py> {
                 Some(host) => host.bind(py).call0()?,
                 None => py.None().into_bound(py),
             };
-            if win.is_none() || host.is_none() || doc.is(&host) || !among(&tabs_module(py)?.call_method1("_docs", (&win,))?, &host)? {
+            if win.is_none() || host.is_none() || doc.is(&host) || !among(&direct(py, docs, (&win,))?, &host)? {
                 return Ok(());
             }
             let scene = host.getattr("viewport")?.getattr("scene")?;
@@ -372,22 +371,6 @@ fn open_link_source<'py>(a: &Args<'py>) -> Reply<'py> {
     opened.into_bound_py_any(py)
 }
 
-/// ⌃Tab / ⌃⇧Tab: the next or previous tab in strip order, wrapping.
-fn step<'py>(a: &Args<'py>) -> Reply<'py> {
-    let py = a.py();
-    let (win, delta) = (a.get_item(0)?, a.get_item(1)?);
-    let module = tabs_module(py)?;
-    let docs = module.call_method1("_docs", (&win,))?;
-    let front = attr(&win, "_doc")?;
-    let count = docs.len()?;
-    if count < 2 || !among(&docs, &front)? {
-        return Ok(none(py));
-    }
-    let next = docs.call_method1("index", (&front,))?.add(delta)?.rem(count)?;
-    module.call_method1("_activate", (&win, docs.get_item(next)?))?;
-    Ok(none(py))
-}
-
 pub(super) fn install_tabs(module: &Bound<PyModule>) -> PyResult<()> {
     let py = module.py();
     module.add(
@@ -400,23 +383,16 @@ pub(super) fn install_tabs(module: &Bound<PyModule>) -> PyResult<()> {
         module.dict().as_any(),
         &module.dict(),
         &[
-            ("_docs", Mode::Function, docs, &["win"], "", ""),
-            ("_dirty", Mode::Function, dirty, &["win", "doc"], "", ""),
             ("link_host", Mode::Function, link_host, &["win", "doc", "docs=None"], "", ""),
-            ("_saved_text", Mode::Function, saved_text, &["path"], "", ""),
-            ("_tip", Mode::Function, tip, &["win", "doc", "host", "n"], "", ""),
             ("pictures_on", Mode::Function, pictures_on, &[], "", ""),
             ("tabs", Mode::Function, tabs, &["win", "docs=None"], "", ""),
             ("_elsewhere", Mode::Function, elsewhere, &["win"], "", ""),
             ("_can_move", Mode::Function, can_move, &["win"], "", ""),
             ("document_tabs", Mode::Function, document_tabs, &["view"], "", ""),
-            ("_close", Mode::Function, close, &["win", "doc"], "", ""),
-            ("_activate", Mode::Function, activate, &["win", "doc"], "", ""),
             ("action", Mode::Function, action, &["win", "view", "arg"], "", ""),
             ("source_context", Mode::Function, source_context, &["win"], "", ""),
             ("sync_host_context", Mode::Function, sync_host_context, &["view", "win"], "", ""),
             ("open_link_source", Mode::Function, open_link_source, &["win", "path", "mount=None"], "", ""),
-            ("step", Mode::Function, step, &["win", "delta"], "", ""),
         ],
     )
 }
