@@ -434,6 +434,7 @@ class Host:
         from ingetrazo_render import ContextMenuEvent, MouseEvent
         self.input_state.pointer(x, y, held, modifiers)
         if kind in ("press", "double"):
+            self.window.viewport._clean_alt_press = False
             self.window.scene_player.stop()
             self._front()
         view = self.view
@@ -483,7 +484,7 @@ class Host:
         (the tools' letters), else the view's key handler. While a sheet
         or an exclusive job holds the window, only they hear keys."""
         from core.input_types import Qt
-        from ingetrazo_render import KeyEvent, ShortcutOverride
+        from ingetrazo_render import KeyEvent, ShortcutOverride, observe_alt_key
         from ingetrazo_render import chrome_dialogs as cd
         self.input_state.modifiers = modifiers
         view = self.view
@@ -510,6 +511,7 @@ class Host:
                     self._guard("job key", cd.job_key, self.window, ev)
             self.request_frame()
             return True
+        observe_alt_key(self.window.viewport, pressed, key, repeat)
         doc = self.window._doc
         if pressed and key == Qt.Key_Escape and doc.model_views.cancel_divider():
             self.request_frame()
@@ -609,6 +611,8 @@ class Host:
         self.request_frame()
 
     def focus(self, on):
+        if not on:
+            self.window.viewport._clean_alt_press = False
         if on:
             self._front()
             from views.ndof_input import shared_input

@@ -1,38 +1,29 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Input events as the Qt-era handlers read them, built from winit's
-//! (`rust/built_app/src/keys.rs` already sends Qt's codes).
-//!
-//! The handlers in `views/` and `tools/` call `event.position()`,
-//! `button()`, `buttons()`, `modifiers()`, `key()`, `text()`,
-//! `angleDelta()`, `pixelDelta()`, `phase()`… These value objects answer
-//! those calls with the types of `core.input_types` (Qt's own under PySide,
-//! the native point classes and input codes in the `built` binary). No
-//! QEvent is constructed: a QMouseEvent needs a QPointingDevice, which needs
-//! a real platform.
+//! Window events and positions shared by the native host and scripting callers.
 use pyo3::{exceptions::PyKeyError, prelude::*};
 
 fn types(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("core.input_types")
+    py.import("ingetrazo_core")
 }
 
-fn qt<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    types(py)?.getattr("Qt")?.getattr(name)
+fn input_code<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
+    types(py)?.getattr("Input")?.getattr(name)
 }
 
 fn point_f(py: Python<'_>, (x, y): (f64, f64)) -> PyResult<Bound<'_, PyAny>> {
-    types(py)?.getattr("QPointF")?.call1((x, y))
+    types(py)?.getattr("ScreenPoint")?.call1((x, y))
 }
 
 fn point(py: Python<'_>, (x, y): (i64, i64)) -> PyResult<Bound<'_, PyAny>> {
-    types(py)?.getattr("QPoint")?.call1((x, y))
+    types(py)?.getattr("PixelPoint")?.call1((x, y))
 }
 
 fn modifiers(py: Python<'_>, mask: u32) -> PyResult<Bound<'_, PyAny>> {
-    qt(py, "KeyboardModifier")?.call1((mask,))
+    input_code(py, "KeyboardModifier")?.call1((mask,))
 }
 
 fn mouse_buttons(py: Python<'_>, mask: u32) -> PyResult<Bound<'_, PyAny>> {
-    qt(py, "MouseButton")?.call1((mask,))
+    input_code(py, "MouseButton")?.call1((mask,))
 }
 
 /// What every event answers: its type, accepted or not, where it is.
@@ -60,7 +51,7 @@ impl ShellEvent {
 #[pymethods]
 impl ShellEvent {
     fn r#type<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        types(py)?.getattr("QEvent")?.getattr(self.kind)
+        types(py)?.getattr("Type")?.getattr(self.kind)
     }
 
     fn accept(&mut self) {
@@ -152,6 +143,14 @@ impl MouseEvent {
         Ok(mouse_init(mouse_kind(kind)?, x, y, button, held, modifiers, gx, gy, timestamp))
     }
 
+    #[staticmethod]
+    fn hover<'py>(position: &Bound<'py, PyAny>, flags: &Bound<'py, PyAny>) -> PyResult<Bound<'py, Self>> {
+        let modifiers = flags.extract().or_else(|_| flags.getattr("value")?.extract::<u32>())?;
+        let x = position.call_method0("x")?.extract()?;
+        let y = position.call_method0("y")?.extract()?;
+        Bound::new(position.py(), mouse_init("MouseMove", x, y, 0, 0, modifiers, None, None, 0))
+    }
+
     fn timestamp(&self) -> i64 {
         self.timestamp
     }
@@ -200,7 +199,7 @@ impl MouseEvent {
     }
 
     fn source<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        qt(py, "MouseEventNotSynthesized")
+        input_code(py, "MouseEventNotSynthesized")
     }
 
     fn device(&self) -> Option<Py<PyAny>> {
@@ -284,7 +283,7 @@ impl KeyEvent {
     fn keyCombination<'py>(slf: PyRef<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         let py = slf.py();
         let mods = modifiers(py, slf.as_super().mods)?;
-        let keys = qt(py, "Key")?;
+        let keys = input_code(py, "Key")?;
         if keys.getattr("_value2member_map_")?.contains(slf.key)? {
             mods.bitor(keys.call1((slf.key,))?)
         } else {
@@ -365,7 +364,7 @@ impl WheelEvent {
     }
 
     fn phase<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        qt(py, self.phase)
+        input_code(py, self.phase)
     }
 
     fn modifiers<'py>(slf: PyRef<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -381,7 +380,7 @@ impl WheelEvent {
     }
 
     fn source<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        qt(py, "MouseEventNotSynthesized")
+        input_code(py, "MouseEventNotSynthesized")
     }
 
     fn device(&self, py: Python<'_>) -> Py<PointerDevice> {
@@ -426,7 +425,7 @@ impl NativeGestureEvent {
 
     #[allow(non_snake_case)]
     fn gestureType<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        qt(py, self.kind)
+        input_code(py, self.kind)
     }
 
     fn value(&self) -> f64 {

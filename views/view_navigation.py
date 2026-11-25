@@ -5,7 +5,7 @@ from __future__ import annotations
 import ingetrazo_render
 from typing import Optional
 
-from core.input_types import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 
@@ -18,7 +18,7 @@ class ViewNavigation:
     def _world_to_pixel(self, world, mvp=None):
         return ingetrazo_render.view_pixel(self, world, mvp)
 
-    def _zoom_to_box(self, start: QPointF, end: QPointF) -> None:
+    def _zoom_to_box(self, start: ScreenPoint, end: ScreenPoint) -> None:
         return ingetrazo_render.zoom_box(self, start, end)
 
     def _project_to_lock_line(
@@ -41,19 +41,12 @@ class ViewNavigation:
 
     @staticmethod
     def _can_warp_pointer() -> bool:
-        """Whether the pointer can be put back after each look move. Wayland
-        does not let a client move it; there the look is a plain drag."""
-        from core.input_types import NATIVE
-        if NATIVE:
-            return False  # winit delivers relative look drags in window coordinates
-        from PySide6.QtGui import QGuiApplication
-        name = QGuiApplication.platformName().lower()
-        return not (name.startswith("wayland") or name in ("offscreen",
-                                                            "minimal"))
+        """The native window reports relative motion without warping the pointer."""
+        return False
 
     def _begin_look(self, ev) -> None:
         self._look_drag = (ev.button(), ev.position().toPoint())
-        self.setCursor(Qt.BlankCursor)
+        self.setCursor(Input.BlankCursor)
 
     def _look_move(self, ev) -> None:
         return ingetrazo_render.look_move(self, ev)

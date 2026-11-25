@@ -1,13 +1,12 @@
-"""Bind a host's pointer coordinates and input codes at the extension boundary."""
-import sys
+"""Window input values shared by the native event loop, scripts and plugins."""
+from ingetrazo_core import DeviceType, Input, PixelPoint, ScreenPoint, ScreenRect, ScreenSize, Type
 
-NATIVE = "built_shell" in sys.builtin_module_names
+NATIVE = True
 
-if NATIVE:
-    from core.input_codes import Input as Qt, Type as QEvent, DeviceType
-    from ingetrazo_core import (PixelPoint as QPoint, ScreenPoint as QPointF, ScreenRect as QRectF,
-                                ScreenRect as QRect, ScreenSize as QSize)
-else:
-    from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, QSize, Qt
-    from PySide6.QtGui import QInputDevice
-    DeviceType = QInputDevice.DeviceType
+# Retain the original extension imports over the native value types.
+QEvent = Type
+Qt = Input
+QPoint = PixelPoint
+QPointF = ScreenPoint
+QRect = QRectF = ScreenRect
+QSize = ScreenSize

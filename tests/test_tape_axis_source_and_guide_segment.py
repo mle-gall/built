@@ -10,11 +10,8 @@
 """
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtCore import QPointF, Qt  # noqa: E402
+from core.input_types import ScreenPoint, Input  # noqa: E402
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.guide import Guide  # noqa: E402
@@ -57,8 +54,8 @@ class _Vp:
 def _ctx(vp, x, y, z=0.0, kind=None):
     snap = SnapResult(V(x, y, z), kind, (0, 0, 0)) if kind else None
     return ToolContext(viewport=vp, world=V(x, y, z),
-                       screen=QPointF(x * 100, y * 100),
-                       modifiers=Qt.NoModifier, snap=snap)
+                       screen=ScreenPoint(x * 100, y * 100),
+                       modifiers=Input.NoModifier, snap=snap)
 
 
 # ---- 1. an axis is a guide source -----------------------------------------
@@ -88,8 +85,6 @@ def test_the_second_click_places_the_axis_guide_too():
 
 
 def test_the_real_viewport_finds_the_axis_under_the_cursor():
-    from PySide6.QtWidgets import QApplication
-    QApplication.instance() or QApplication([])
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1000, 600)
@@ -109,8 +104,6 @@ def test_the_axis_cue_rule_lives_in_the_engine():
     """Step 4 of the split: the cue that paints the axis square is the
     engine's rule, and the viewport's name for it is a delegate. The pick
     (``pick_axis``) stays a viewport service the engine calls."""
-    from PySide6.QtWidgets import QApplication
-    QApplication.instance() or QApplication([])
     from tests.controller_surface import ControllerSurface as Viewport
 
     class _AxisSourceTool:
@@ -148,8 +141,6 @@ def test_supported_drawing_tools_expose_an_axis_source_before_click():
 
 
 def test_supported_drawing_tools_snap_to_a_visible_axis_at_first_point():
-    from PySide6.QtWidgets import QApplication
-    QApplication.instance() or QApplication([])
     from tools.arc import ArcTool, CenterArcTool, ThreePointArcTool
     from tools.circle import CircleTool
     from tools.rust_tools import LineTool

@@ -11,7 +11,7 @@ wipe the selection you are building.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.geometry import Edge, Face
@@ -63,18 +63,18 @@ def _scene():
     return s
 
 
-def _click(vp, entity, modifiers=Qt.NoModifier):
+def _click(vp, entity, modifiers=Input.NoModifier):
     vp.pick = entity
     SelectTool().on_click(ToolContext(
-        viewport=vp, world=V(0, 0), screen=QPointF(0.0, 0.0),
+        viewport=vp, world=V(0, 0), screen=ScreenPoint(0.0, 0.0),
         modifiers=modifiers, snap=None))
 
 
 def test_the_modifiers_map_to_the_four_modes():
-    assert _select_mode(int(Qt.NoModifier.value)) == "replace"
-    assert _select_mode(int(Qt.ShiftModifier.value)) == "toggle"
-    assert _select_mode(int(Qt.ControlModifier.value)) == "add"
-    assert _select_mode(int((Qt.ShiftModifier | Qt.ControlModifier).value)) == "remove"
+    assert _select_mode(int(Input.NoModifier.value)) == "replace"
+    assert _select_mode(int(Input.ShiftModifier.value)) == "toggle"
+    assert _select_mode(int(Input.ControlModifier.value)) == "add"
+    assert _select_mode(int((Input.ShiftModifier | Input.ControlModifier).value)) == "remove"
 
 
 def test_shift_click_takes_a_selected_edge_out_and_puts_an_unselected_one_in():
@@ -83,9 +83,9 @@ def test_shift_click_takes_a_selected_edge_out_and_puts_an_unselected_one_in():
     a, b = scene.edges[0], scene.edges[1]
     _click(vp, a)                                   # plain click: just a
     assert scene.selection == {a}
-    _click(vp, b, Qt.ShiftModifier)                 # shift: b joins
+    _click(vp, b, Input.ShiftModifier)                 # shift: b joins
     assert scene.selection == {a, b}
-    _click(vp, a, Qt.ShiftModifier)                 # shift again: a leaves
+    _click(vp, a, Input.ShiftModifier)                 # shift again: a leaves
     assert scene.selection == {b}
 
 
@@ -94,13 +94,13 @@ def test_ctrl_adds_and_shift_ctrl_removes():
     vp = _StubViewport(scene)
     a, b = scene.edges[0], scene.edges[1]
     _click(vp, a)
-    _click(vp, b, Qt.ControlModifier)
+    _click(vp, b, Input.ControlModifier)
     assert scene.selection == {a, b}
-    _click(vp, b, Qt.ControlModifier)               # Ctrl never takes away
+    _click(vp, b, Input.ControlModifier)               # Ctrl never takes away
     assert scene.selection == {a, b}
-    _click(vp, b, Qt.ShiftModifier | Qt.ControlModifier)
+    _click(vp, b, Input.ShiftModifier | Input.ControlModifier)
     assert scene.selection == {a}
-    _click(vp, b, Qt.ShiftModifier | Qt.ControlModifier)   # already out: no-op
+    _click(vp, b, Input.ShiftModifier | Input.ControlModifier)   # already out: no-op
     assert scene.selection == {a}
 
 
@@ -118,9 +118,9 @@ def test_a_modified_click_on_empty_space_keeps_the_selection():
     vp = _StubViewport(scene)
     a = scene.edges[0]
     scene.select([a])
-    _click(vp, None, Qt.ShiftModifier)              # missed while carving
+    _click(vp, None, Input.ShiftModifier)              # missed while carving
     assert scene.selection == {a}
-    _click(vp, None, Qt.ControlModifier)
+    _click(vp, None, Input.ControlModifier)
     assert scene.selection == {a}
     _click(vp, None)                                # a bare click does clear
     assert not scene.selection
@@ -132,7 +132,7 @@ def test_a_face_pick_takes_its_whole_surface_out():
     face = scene.faces[0]
     _click(vp, face)
     assert face in scene.selection
-    _click(vp, face, Qt.ShiftModifier)
+    _click(vp, face, Input.ShiftModifier)
     assert face not in scene.selection
 
 

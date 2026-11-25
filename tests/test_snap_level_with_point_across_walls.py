@@ -21,8 +21,8 @@ from __future__ import annotations
 import math
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMouseEvent
+from core.input_types import ScreenPoint, Input
+from ingetrazo_render import MouseEvent
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.scene import Scene
@@ -174,16 +174,15 @@ def _room(native_host, win_on_front=True):
 def _hover(vp, world):
     px = vp._world_to_pixel(world)
     assert px is not None
-    vp._last_mouse_pos = QPointF(*px)
-    vp._process_hover(QPointF(*px), Qt.NoModifier)
+    vp._last_mouse_pos = ScreenPoint(*px)
+    vp._process_hover(ScreenPoint(*px), Input.NoModifier)
     return px
 
 
 def _click(vp, px):
-    vp._last_mouse_pos = QPointF(*px)
-    vp._dispatch_tool_click(QMouseEvent(
-        QMouseEvent.MouseButtonPress, QPointF(*px),
-        Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    vp._last_mouse_pos = ScreenPoint(*px)
+    vp._dispatch_tool_click(MouseEvent(
+        "press", *px, Input.LeftButton, Input.LeftButton, Input.NoModifier))
 
 
 def test_the_window_on_the_next_wall_starts_level_with_the_first_one(native_host):

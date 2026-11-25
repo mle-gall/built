@@ -9,7 +9,7 @@ selected never erases a face the user could not see. The other tools
 that act on faces (Paint, Push/Pull, Offset...) keep their marking."""
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
@@ -43,8 +43,8 @@ def _hover_over(entity, monkeypatch):
     method = "pick_face" if isinstance(target, Face) else "pick_visible_edge"
     monkeypatch.setattr(vp, method, lambda _x, _y: target, raising=False)
     tool.on_hover(ToolContext(viewport=vp, world=QVector3D(),
-                              screen=QPointF(10, 10),
-                              modifiers=Qt.NoModifier, snap=None))
+                              screen=ScreenPoint(10, 10),
+                              modifiers=Input.NoModifier, snap=None))
     return scene, vp, target
 
 

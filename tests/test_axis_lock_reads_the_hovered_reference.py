@@ -10,9 +10,8 @@ from __future__ import annotations
 import math
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core.edits import build_add_edges
 from tools.tape import TapeMeasureTool
@@ -20,11 +19,6 @@ from tools.tape import TapeMeasureTool
 
 @pytest.fixture(scope="module")
 def viewport():
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    elif not isinstance(app, QApplication):
-        pytest.skip("another Qt application flavour is already running")
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1000, 700)
@@ -58,7 +52,7 @@ def _tape_from_bottom_edge(vp, sc, x=1.0):
 def _hover(vp, world):
     px = vp._world_to_pixel(world)
     assert px is not None
-    vp._process_hover(QPointF(*px), Qt.NoModifier)
+    vp._process_hover(ScreenPoint(*px), Input.NoModifier)
     return vp.last_snap
 
 
@@ -114,7 +108,7 @@ def test_the_tape_guide_lands_at_the_referenced_height(viewport):
     from tools.base import ToolContext
     snap = viewport.last_snap
     tool.on_click(ToolContext(viewport=viewport, world=snap.point,
-                              screen=QPointF(0, 0), modifiers=Qt.NoModifier, snap=snap))
+                              screen=ScreenPoint(0, 0), modifiers=Input.NoModifier, snap=snap))
     guides = viewport.scene.guides
     assert len(guides) == 1
     assert abs(guides[0].point.z() - 2.2) < 1e-6

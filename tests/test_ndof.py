@@ -19,6 +19,7 @@ from ingetrazo_core import Vec3 as QVector3D
 from core.camera import OrbitCamera
 from core.ndof import (NdofSample, NdofSettings, apply_ndof, from_hid,
                        from_spacenavd, mapped_movements, shape)
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from views.ndof_input import parse_hid_report, parse_spnav_packets
 
 
@@ -198,23 +199,22 @@ def test_hid_reports_old_split_and_new_combined():
     assert parse_hid_report(buttons, st) is None and st["buttons"] == 2
 
 
-def test_the_linux_driver_reads_a_spacenavd_socket(tmp_path, monkeypatch):
+def test_the_linux_driver_reads_a_spacenavd_socket(tmp_path, monkeypatch, native_host):
     """A fake spacenavd: the real protocol over a real Unix socket, read by
-    the real QSocketNotifier path."""
+    the native window timer."""
     import socket
     import sys
     if not sys.platform.startswith("linux"):
         pytest.skip("spacenavd is the Linux driver")
-    from PySide6.QtCore import QCoreApplication, QEventLoop
+    import time
     from views import ndof_input
-    app = QCoreApplication.instance() or QCoreApplication([])
     path = str(tmp_path / "spnav.sock")
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(path)
     server.listen(1)
     monkeypatch.setattr(ndof_input, "SPNAV_SOCKETS", (path,))
     monkeypatch.setattr(ndof_input.sys, "platform", "linux")
-    dev = ndof_input.NdofInput()
+    dev = ndof_input.NdofInput(native_host.window)
     got, buttons = [], []
     dev.motion.connect(lambda s, dt: got.append((s, dt)))
     dev.button.connect(lambda n, down: buttons.append((n, down)))
@@ -225,8 +225,10 @@ def test_the_linux_driver_reads_a_spacenavd_socket(tmp_path, monkeypatch):
         conn, _ = server.accept()
         conn.sendall(struct.pack("=8i", 0, 350, 0, 0, 0, 0, 0, 16)
                      + struct.pack("=8i", 1, 1, 0, 0, 0, 0, 0, 0))
-        for _ in range(30):
-            app.processEvents(QEventLoop.AllEvents, 10)
+        deadline = time.monotonic() + 1
+        while time.monotonic() < deadline:
+            native_host.idle()
+            time.sleep(.002)
             if got and buttons:
                 break
         assert got and got[0][0].right == pytest.approx(1.0)
@@ -269,18 +271,14 @@ def test_wheel_notches_do_not_zoom_while_the_cap_moves_the_view(monkeypatch):
     """3Dconnexion's driver turns a push of the cap into wheel notches for
     programs it does not know; with ours reading the device too, the view
     took a zoom step about eight times a second (12-10 video)."""
-    from PySide6.QtCore import QPoint, QPointF, Qt
-    from PySide6.QtGui import QWheelEvent
-    from PySide6.QtWidgets import QApplication
+    from ingetrazo_render import WheelEvent
     from views import ndof_input
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(400, 300)
 
     def notch():
-        QApplication.sendEvent(vp, QWheelEvent(
-            QPointF(200, 150), QPointF(200, 150), QPoint(), QPoint(0, 120),
-            Qt.NoButton, Qt.NoModifier, Qt.NoScrollPhase, False))
+        vp.wheelEvent(WheelEvent(200, 150, 0, 0, 0, 120))
 
     class Busy:
         def in_use(self):
@@ -452,24 +450,14 @@ def test_the_default_profile_changes_nothing(flags):
                                                     tilt, spin)
 
 
-def test_preferences_ok_untouched_keeps_the_motion(tmp_path, monkeypatch):
+def test_preferences_ok_untouched_keeps_the_motion(native_window):
     """Opening Preferences and pressing OK without touching the 3D mouse
     page must not change how the cap moves the view, whatever the old
     inversion boxes said."""
-    import os
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
-    from PySide6.QtWidgets import QApplication, QWidget
-    QApplication.instance() or QApplication([])
-    from ingetrazo_render import chrome_sheet
-    from ingetrazo_render import settings_sheet
+    from core.settings import settings
+    from ingetrazo_render import chrome_sheet, settings_sheet
     from views import ndof_input
-    path = tmp_path / "p.ini"
-    mk = lambda: QSettings(str(path), QSettings.IniFormat)   # noqa: E731
-    monkeypatch.setattr(ndof_input, "QSettings", mk, raising=False)
-    import PySide6.QtCore as QtCore
-    monkeypatch.setattr(QtCore, "QSettings", mk)
-    st = mk()
+    st = settings()
     for key in ("invert_pan_x", "invert_tilt", "invert_zoom"):
         st.setValue(f"ndof/{key}", "1")
     st.setValue("ndof/sensitivity", 1.5)
@@ -477,19 +465,7 @@ def test_preferences_ok_untouched_keeps_the_motion(tmp_path, monkeypatch):
     before = ndof_input.load_settings()
     assert before.mapping_preset == "original"
 
-    class _Win(QWidget):
-        def __init__(self):
-            super().__init__()
-
-            class _VP:
-                edit_rest_mode = "fade"
-
-                def set_edit_rest_mode(self, mode):
-                    self.edit_rest_mode = mode
-            self.viewport = _VP()
-            self._rest_actions = {}
-
-    win = _Win()
+    win = native_window
     settings_sheet.show(win, page="ndof")
     chrome_sheet.current(win).build(chrome_sheet.Ctx(win, None))
     chrome_sheet.close(win)
