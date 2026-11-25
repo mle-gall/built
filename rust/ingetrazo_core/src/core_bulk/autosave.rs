@@ -6,7 +6,7 @@ fn pathlib(py: Python<'_>, p: PathBuf) -> PyResult<Obj<'_>> {
     py.import("pathlib")?.call_method1("Path", (p,))
 }
 fn formats(py: Python<'_>) -> PyResult<Module<'_>> {
-    py.import("formats.built")
+    py.import("ingetrazo_core.formats.built")
 }
 #[pyfunction]
 fn _app_data_base(py: Python<'_>) -> PyResult<Obj<'_>> {
@@ -90,7 +90,7 @@ fn write<'p>(
     let kw = PyDict::new(m.py());
     kw.set_item("backup", false)?;
     m.py()
-        .import("formats.igz")?
+        .import("ingetrazo_core.formats.igz")?
         .call_method("save_scene", (scene, &slot), Some(&kw))?;
     Ok(slot)
 }

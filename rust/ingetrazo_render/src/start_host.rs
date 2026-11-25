@@ -1014,7 +1014,7 @@ fn new_project(win: &Bound<'_, PyAny>) -> PyResult<()> {
 
 fn open_dialog(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
-    let suffix: String = py.import("formats.built")?.getattr("BUILT_SUFFIX")?.extract()?;
+    let suffix: String = py.import("ingetrazo_core.formats.built")?.getattr("BUILT_SUFFIX")?.extract()?;
     let dialogs = py.import("ingetrazo_render.shell_files")?.getattr("ShellFileDialog")?;
     let name = dialogs.call_method1("getOpenFileName", (win, "Open", "", format!("Documents (*{suffix} *.igz *.builtproject *.igzproj)")))?.get_item(0)?;
     if name.is_truthy()? {
@@ -1042,7 +1042,7 @@ fn open_recent(py: Python<'_>, win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) 
         let sfx = suffix(&path)?;
         let kind = if sfx == ".builtproject" || sfx == ".igzproj" {
             "Project"
-        } else if py.import("formats.built")?.call_method1("is_built", (&path,))?.is_truthy()? {
+        } else if py.import("ingetrazo_core.formats.built")?.call_method1("is_built", (&path,))?.is_truthy()? {
             "Built"
         } else {
             "IngeTrazo"
@@ -1058,7 +1058,7 @@ fn open_recent(py: Python<'_>, win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) 
         return Ok(false);
     }
     let rec = recent(py)?;
-    if py.import("formats.project")?.call_method1("is_project", (&path,))?.is_truthy()? {
+    if py.import("ingetrazo_core.formats.project")?.call_method1("is_project", (&path,))?.is_truthy()? {
         // open_project remembered it (under its new name if converted).
         if original != path.str()?.to_string() {
             rec.call_method1("forget", (&original,))?;

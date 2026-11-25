@@ -97,7 +97,7 @@ pub(crate) fn points(win: &Obj) -> PyResult<()> {
     };
     let read = || -> PyResult<Obj> {
         let data = std::fs::read(path.extract::<std::path::PathBuf>()?)?;
-        py.import("georef.points")?
+        py.import("ingetrazo_core.georef.points")?
             .call_method1("parse_points_csv", (String::from_utf8_lossy(&data),))
     };
     let rows = match read() {
@@ -233,7 +233,7 @@ pub(crate) fn orthophoto(win: &Obj) -> PyResult<()> {
     let Some(path) = choose(win, title, "GeoTIFF (*.tif *.tiff);;All files (*)")? else {
         return Ok(());
     };
-    let tiff = py.import("georef.geotiff")?;
+    let tiff = py.import("ingetrazo_core.georef.geotiff")?;
     let info = match tiff.call_method1("read_info", (&path,)) {
         Ok(v) => v,
         Err(e) => return report(win, "critical", title, e.value(py).str()?.to_string()),
@@ -263,7 +263,7 @@ pub(crate) fn orthophoto(win: &Obj) -> PyResult<()> {
         let (lat, lon) = corners
             .iter()
             .fold((0., 0.), |(lat, lon), (y, x)| (lat + y / 4., lon + x / 4.));
-        py.import("georef.datum")?
+        py.import("ingetrazo_core.georef.datum")?
             .call_method1("SceneDatum", (lat, lon))?
     } else {
         scene.getattr("georef")?

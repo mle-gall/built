@@ -78,7 +78,7 @@ class LinkMeshes:
         """Read compressed bytes once. Only changed members need inflation,
         validation and native mesh construction. zipfile checks the local
         header before exposing the member's data offset."""
-        from formats.igz import _mesh_blocks
+        from ingetrazo_core.formats.igz import _mesh_blocks
         protos = {id(raw): i for i, raw in enumerate(payload.get("protos") or [])}
         unchanged, needed = set(), set()
         for block in _mesh_blocks(payload):
@@ -114,7 +114,7 @@ class LinkMeshes:
         return unchanged - needed
 
     def read(self, mesh, block, geom, identity):
-        from formats.igz import _load_mesh
+        from ingetrazo_core.formats.igz import _load_mesh
         key = self.key(block, geom, identity)
         old = self.previous.get(key)
         if old is not None and not self.filtered:

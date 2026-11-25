@@ -34,7 +34,7 @@ def fingerprint(scene) -> dict:
     """A structural summary of a loaded ``Scene`` — the comparable signature of
     a parse: geometry counts, bounding box, distinct materials/textures, and the
     group breakdown. Deliberately parser-agnostic (no identity, no ordering)."""
-    from formats.meshexport import world_faces
+    from ingetrazo_core.formats.meshexport import world_faces
 
     from ingetrazo_core import Vec3 as QVector3D
 
@@ -126,7 +126,7 @@ def compare(ground: dict, candidate: dict, tol: float = 1e-3) -> list[str]:
 def load_ground_truth(dae: Path):
     """Load the reference COLLADA export of the model into a fresh Scene."""
     from core.scene import Scene
-    from formats import dae as dae_format
+    from ingetrazo_core.formats import dae as dae_format
 
     if not dae.exists():
         raise RuntimeError(
@@ -141,7 +141,7 @@ def load_candidate(skp: Path):
     """Load ``skp`` through the pure-backend seam, or ``None`` when no backend
     can read it yet (``NeedsConverter``)."""
     from core.scene import Scene
-    from formats import skp as skp_format
+    from ingetrazo_core.formats import skp as skp_format
 
     scene = Scene()
     try:
@@ -169,7 +169,7 @@ def main(argv=None) -> int:
         return 2
 
     ground = fingerprint(load_ground_truth(args.dae or args.skp.with_suffix(".dae")))
-    from formats import skp as skp_format
+    from ingetrazo_core.formats import skp as skp_format
     fmt = skp_format.detect_format(args.skp)
     cand_scene = load_candidate(args.skp)
     candidate = fingerprint(cand_scene) if cand_scene is not None else None

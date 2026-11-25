@@ -210,7 +210,7 @@ pub fn skp_cached_colorize<'p>(
     ctype: &Obj<'p>,
 ) -> PyResult<Obj<'p>> {
     let py = data.py();
-    let glue = py.import("formats.skp_reader")?;
+    let glue = py.import("ingetrazo_core.formats.skp_reader")?;
     let transform = || glue.call_method1("_colorize_image", (data, color, ctype));
     let Some(rgb) = color.extract::<Vec<i64>>().ok().filter(|v| v.len() >= 3) else {
         return transform();

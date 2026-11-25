@@ -883,7 +883,7 @@ fn fused<'p>(py: Python<'p>, faces: &[Face]) -> PyResult<Obj<'p>> {
         let attrs = attr(py, f, &p)?;
         raw.append((p, (!attrs.is_empty()).then_some(attrs)))?
     }
-    let api = py.import("formats.fuse")?;
+    let api = py.import("ingetrazo_core.formats.fuse")?;
     dae_add_fused(&mesh, &api.call_method1("fuse_coplanar_loops", (raw,))?)?;
     api.call_method1("soften_smooth_edges", (&mesh,))?;
     Ok(mesh)
@@ -943,7 +943,7 @@ struct Limits {
 }
 impl Limits {
     fn get(py: Python<'_>) -> PyResult<Self> {
-        let m = py.import("formats.dae")?;
+        let m = py.import("ingetrazo_core.formats.dae")?;
         let k = |s| m.getattr(s)?.extract::<usize>();
         Ok(Self {
             fuse: k("_MAX_FUSE_LOOPS")?,
@@ -1443,7 +1443,7 @@ impl<'p> Structured<'p> {
         }
         if !tris.is_empty() {
             let fused = py
-                .import("formats.fuse")?
+                .import("ingetrazo_core.formats.fuse")?
                 .call_method1("fuse_coplanar_loops", (tris,))?;
             dae_add_fused(&mesh, &fused)?
         }
@@ -1777,7 +1777,7 @@ fn dae_load<'p>(
         if scene.getattr("georef")?.is_none() {
             scene.setattr(
                 "georef",
-                py.import("georef.datum")?
+                py.import("ingetrazo_core.georef.datum")?
                     .call_method1("SceneDatum", (lat, lon, alt))?,
             )?
         }

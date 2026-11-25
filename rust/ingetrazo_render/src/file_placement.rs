@@ -89,7 +89,7 @@ fn insert_document<'py>(
     let py = win.py();
     let p = py.import("pathlib")?.call_method1("Path", (path,))?;
     let temp = py.import("core.scene")?.call_method0("Scene")?;
-    py.import("formats.igz")?
+    py.import("ingetrazo_core.formats.igz")?
         .call_method1("load_into", (&temp, &p))?;
     let vp = win.getattr("viewport")?;
     vp.call_method0("end_group_edit")?;
@@ -245,7 +245,7 @@ fn ask_mesh_units(
     } else {
         model.call_method1(
             "mesh_import",
-            (py.import("formats.obj")?
+            (py.import("ingetrazo_core.formats.obj")?
                 .call_method1("suggest_unit", (path,))?,),
         )?
     };
@@ -294,7 +294,7 @@ fn mesh_units_answer(
         partial.call1((
             win.getattr("_apply_stl_import")?,
             path,
-            py.import("formats.stl")?
+            py.import("ingetrazo_core.formats.stl")?
                 .getattr("STL_UNITS")?
                 .get_item(unit)?,
             mode,
@@ -303,7 +303,7 @@ fn mesh_units_answer(
         partial.call1((
             win.getattr("_apply_obj_import")?,
             path,
-            py.import("formats.obj")?
+            py.import("ingetrazo_core.formats.obj")?
                 .getattr("OBJ_UNITS")?
                 .get_item(unit)?,
         ))?

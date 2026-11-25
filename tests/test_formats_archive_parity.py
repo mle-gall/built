@@ -55,3 +55,22 @@ def archive_results(source, folder, monkeypatch):
 def test_old_archive_round_trip(name, tmp_path, monkeypatch):
     expected = json.loads((ROOT / "tests/fixtures/formats_archive_python.json").read_text())
     assert archive_results(ROOT / name, tmp_path, monkeypatch) == expected[name]
+
+
+@pytest.mark.parametrize("first", [
+    "formats.igz", "ingetrazo_core.formats.igz", "formats.ifc",
+    "georef.points", "ingetrazo_core.georef.points",
+])
+def test_plugin_can_import_each_namespace_first(first):
+    import subprocess
+    import sys
+
+    probe = """
+from importlib import import_module
+import sys
+import_module(sys.argv[1])
+for name in ('formats.igz', 'georef.points'):
+    assert import_module(name) is import_module('ingetrazo_core.' + name)
+assert import_module('formats.ifc').__file__.endswith('__init__.py')
+"""
+    subprocess.run([sys.executable, "-c", probe, first], cwd=ROOT, check=True)

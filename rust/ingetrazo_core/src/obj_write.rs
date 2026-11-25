@@ -91,7 +91,7 @@ fn copy_texture(src: &Path, path: &Path, texture: &Bound<'_, PyModule>) {
 }
 #[pyfunction]
 fn obj_save(py: Python<'_>, scene: &Obj<'_>, path: PathBuf) -> PyResult<()> {
-    let helpers = py.import("formats.meshexport")?;
+    let helpers = py.import("ingetrazo_core.formats.meshexport")?;
     let texture = py.import("core.texture")?;
     let smooth = helpers.call_method0("SmoothNormals")?;
     let ids = PyDict::new(py);

@@ -708,7 +708,7 @@ pub fn skp_adapt_inner<'p>(
     consume: bool,
 ) -> PyResult<Obj<'p>> {
     let py = model.py();
-    let glue = py.import("formats.skp_reader")?.into_any();
+    let glue = py.import("ingetrazo_core.formats.skp_reader")?.into_any();
     let compat = py.import("ingetrazo_core.reader_compat")?;
     let version = attr(model, "version")?.str()?.to_string();
     let major = version
@@ -743,7 +743,7 @@ pub fn skp_adapt_inner<'p>(
         }
     }
     let groups = compat.call_method0("group_definitions")?;
-    let dae = py.import("formats.dae")?;
+    let dae = py.import("ingetrazo_core.formats.dae")?;
     plan.choose(
         glue.getattr("EXACT_TREE")?.is_truthy()?,
         compat.call_method1("kinds_known", (legacy,))?.is_truthy()?,
@@ -898,7 +898,7 @@ pub fn skp_adapt_inner<'p>(
 #[pyfunction(signature = (path, progress=None))]
 pub fn skp_parse<'p>(path: &Obj<'p>, progress: Option<&Obj<'p>>) -> PyResult<Obj<'p>> {
     let py = path.py();
-    let glue = py.import("formats.skp_reader")?;
+    let glue = py.import("ingetrazo_core.formats.skp_reader")?;
     let compat = py.import("ingetrazo_core.reader_compat")?;
     compat.call_method0("reset_group_definitions")?;
     if let Some(callback) = progress {

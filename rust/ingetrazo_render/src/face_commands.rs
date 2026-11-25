@@ -147,7 +147,7 @@ fn convert_geopath(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
     let vp = win.getattr("viewport")?;
     let scene = vp.getattr("scene")?;
-    let paths = matching(&scene.getattr("selection")?, "georef.geopath", "GeoPath")?;
+    let paths = matching(&scene.getattr("selection")?, "ingetrazo_core.georef.geopath", "GeoPath")?;
     if paths.is_empty() {
         return status(win, "Select a path to convert to geometry.", None);
     }

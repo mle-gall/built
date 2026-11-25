@@ -71,7 +71,7 @@ pub(crate) fn next(it: &Py<PyIterator>) -> PyResult<Option<Owned>> {
     })
 }
 fn api(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("formats.igz")
+    py.import("ingetrazo_core.formats.igz")
 }
 #[pyclass(get_all, set_all, module = "ingetrazo_core")]
 struct Geometry {

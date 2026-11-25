@@ -338,7 +338,7 @@ pub(crate) fn next_tag(scene: &Bound<'_, PyAny>) -> PyResult<String> {
 
 #[pyfunction]
 fn toggle_paths(win: &Bound<'_, PyAny>) -> PyResult<()> {
-    let paths = selected(win, "georef.geopath", "GeoPath")?;
+    let paths = selected(win, "ingetrazo_core.georef.geopath", "GeoPath")?;
     if !paths.is_empty() {
         let vp = win.getattr("viewport")?;
         execute(
@@ -356,7 +356,7 @@ fn toggle_paths(win: &Bound<'_, PyAny>) -> PyResult<()> {
 fn set_path_surface(win: &Bound<'_, PyAny>, mode: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
     let paths = PyList::empty(py);
-    for path in selected(win, "georef.geopath", "GeoPath")?.iter() {
+    for path in selected(win, "ingetrazo_core.georef.geopath", "GeoPath")?.iter() {
         if path.getattr("points")?.len()? >= 3 {
             paths.append(path)?;
         }
@@ -398,7 +398,7 @@ pub(super) fn surface_sampler<'py>(
         s
     } else {
         let s = py
-            .import("georef.dem")?
+            .import("ingetrazo_core.georef.dem")?
             .call_method1("DEMSampler", (datum,))?;
         if s.hasattr("_host")? {
             s.setattr("_host", vp.getattr("_host")?)?;

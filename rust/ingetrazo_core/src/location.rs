@@ -390,7 +390,7 @@ impl LocationEdit {
             }
         };
         let new = py
-            .import("georef.datum")?
+            .import("ingetrazo_core.georef.datum")?
             .getattr("SceneDatum")?
             .call1((lat, lon, alt, north))?;
         Ok(Self {

@@ -642,6 +642,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     move_ops::register(m)?;
     desktop_open::register(m)?;
     facets::register(m)?;
+    m.py().import("_built_file_packages")?;
     Ok(())
 }
 

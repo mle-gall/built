@@ -54,7 +54,7 @@ fn dem_init(
         "source",
         match source {
             Some(s) => s,
-            None => py.import("georef.dem")?.getattr("AWS_TERRAIN")?,
+            None => py.import("ingetrazo_core.georef.dem")?.getattr("AWS_TERRAIN")?,
         },
     )?;
     o.setattr("zoom", zoom)?;
@@ -69,7 +69,7 @@ fn dem_fetcher<'p>(o: &Obj<'p>) -> PyResult<Obj<'p>> {
         return Ok(f);
     }
     let py = o.py();
-    let m = py.import("georef.tile_fetcher")?;
+    let m = py.import("ingetrazo_core.georef.tile_fetcher")?;
     let mut cache = o.getattr("_cache")?;
     if !cache.is_truthy()? {
         let dir = m

@@ -102,7 +102,7 @@ fn remember_document(
         .getattr("suffix")?
         .call_method0("lower")?;
     if py
-        .import("formats.built")?
+        .import("ingetrazo_core.formats.built")?
         .getattr("DOCUMENT_SUFFIXES")?
         .contains(suffix)?
     {

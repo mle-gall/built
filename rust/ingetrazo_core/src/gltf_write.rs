@@ -503,7 +503,7 @@ impl<'py> Hierarchy<'py> {
         only: Option<&Obj<'py>>,
     ) -> PyResult<(Obj<'py>, Obj<'py>, List<'py>)> {
         let py = scene.py();
-        let helper = py.import("formats.meshexport")?;
+        let helper = py.import("ingetrazo_core.formats.meshexport")?;
         let h = Self {
             smoother: helper.call_method0("SmoothNormals")?,
             helper,
@@ -590,7 +590,7 @@ fn gltf_save<'py>(
     only: Option<&Obj<'py>>,
     embed_textures: bool,
 ) -> PyResult<()> {
-    let helper = py.import("formats.meshexport")?;
+    let helper = py.import("ingetrazo_core.formats.meshexport")?;
     let (mat, sources, parts) = if let Some(camera) = face_me {
         helper
             .call_method1("collect_geometry_split", (scene, camera))?

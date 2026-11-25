@@ -88,7 +88,7 @@ fn recover_untitled(win: &Bound<'_, PyAny>, n: usize, slot: &Bound<'_, PyAny>) -
     }
     let staged = py.import("core.scene")?.call_method0("Scene")?;
     if let Err(err) = py
-        .import("formats.igz")?
+        .import("ingetrazo_core.formats.igz")?
         .call_method1("load_into", (&staged, slot))
     {
         dialog.call_method1(
@@ -128,7 +128,7 @@ fn recover_untitled(win: &Bound<'_, PyAny>, n: usize, slot: &Bound<'_, PyAny>) -
 #[pyfunction]
 fn recover_discarded(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
-    let archive = py.import("formats.built")?;
+    let archive = py.import("ingetrazo_core.formats.built")?;
     let folder: PathBuf = py
         .import("ingetrazo_core.autosave")?
         .call_method0("discarded_dir")?

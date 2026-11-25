@@ -76,7 +76,7 @@ fn kml(text: &str) -> Vec<Feature> {
 }
 
 fn objects(py: Python<'_>, features: Vec<Feature>) -> PyResult<Bound<'_, PyList>> {
-    let class = py.import("georef.geoimport")?.getattr("GeoFeature")?;
+    let class = py.import("ingetrazo_core.georef.geoimport")?.getattr("GeoFeature")?;
     let result = PyList::empty(py);
     for f in features {
         result.append(class.call1((f.points, f.closed, f.name))?)?;

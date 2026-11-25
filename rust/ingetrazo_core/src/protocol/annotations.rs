@@ -51,7 +51,7 @@ fn add_geo_path<'py>(
     annotation(
         history,
         "AddGeoPathCommand",
-        py.import("georef.geopath")?
+        py.import("ingetrazo_core.georef.geopath")?
             .call_method("GeoPath", (nodes,), Some(&kw))?,
     )
 }
