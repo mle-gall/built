@@ -15,7 +15,7 @@ import pytest
 from ingetrazo_core import Vec3 as QVector3D
 
 from ingetrazo_core import bevel_profiles as bp
-from core.fillet import apply_fillet, plan_fillet
+from ingetrazo_core import apply_fillet, plan_fillet
 from core.orient import is_closed, signed_volume
 from tests.test_fillet import box, edge_at
 

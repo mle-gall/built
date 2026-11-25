@@ -131,7 +131,7 @@ mod export_progress;
 mod archive_limits;
 mod scale_figure;
 mod bevel_editor;
-mod vertex_bevel;
+
 mod selection_growth;
 mod paint_stroke;
 mod offset_face;
@@ -222,7 +222,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     bevel_editor::register(m)?;
     selection_growth::register(m)?;
     paint_stroke::register(m)?;
-    m.add_function(wrap_pyfunction!(vertex_bevel::plan_vertex_bevel,m)?)?;
+    store::py::fillet_preview::register(m)?;
+    m.add_function(wrap_pyfunction!(store::bevel::bevel_exponent, m)?)?;
     m.add_class::<takeoff::InspectorTakeoff>()?;
     m.add("TAG_PALETTE", pyo3::types::PyTuple::new(m.py(), doc::drawing::PALETTE)?)?;
     m.add_function(wrap_pyfunction!(doc::drawing::automatic_tag_color, m)?)?;

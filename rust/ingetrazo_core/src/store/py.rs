@@ -2748,23 +2748,6 @@ impl PyMeshStore {
         )
     }
 
-    #[staticmethod]
-    fn plan_object_fillet(
-        py: Python<'_>, vertices: Vec<super::fillet_incidence::Vertex>, edges: Vec<super::fillet_incidence::Edge>,
-        faces: Vec<super::fillet_incidence::Face>, count: usize, size: f64, segments: usize,
-        profile: f64, measure: &str, cut: bool, outline: Vec<(f64, f64)>, mirror: bool, steps: bool,
-    ) -> PyResult<PyRoundPlan> {
-        let incidence = super::fillet_incidence::Incidence::new(vertices, edges, faces, py.version_info().minor >= 12)?;
-        let inner = incidence.plan(count, size, segments, profile, measure, cut, &outline, mirror, steps)?;
-        Ok(PyRoundPlan {
-            faces: inner.rebuilt.iter().map(|(f, _)| u128::from(*f)).collect(),
-            materials: inner.materials.iter().copied().map(u128::from).collect(),
-            edges: inner.edges.iter().copied().map(u128::from).collect(),
-            flags: vec![], lineage: None, revision: 0,
-            hypot: crate::store::geometry::Hypot::LibCxxFma, inner,
-        })
-    }
-
     fn plan_fillet(
         &self,
         keys: Vec<u128>,
@@ -3875,3 +3858,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("StoreFallback", m.py().get_type::<StoreFallback>())?;
     Ok(())
 }
+
+#[path = "fillet_preview.rs"]
+pub(crate) mod fillet_preview;

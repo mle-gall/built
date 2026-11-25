@@ -585,7 +585,6 @@ fn shape_label<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn is_plain_fillet<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = imported(py, "tools.fillet_host")?;
     let tool = a.get_item(0)?;
     Ok({
         let value = (tool.getattr("measure")?.eq("radius")?).into_bound_py_any(py)?;
@@ -599,7 +598,7 @@ fn is_plain_fillet<'py>(a: &Args<'py>) -> Reply<'py> {
                 } else {
                     (tool
                         .getattr("profile")?
-                        .sub(module.getattr("CIRCULAR")?)?
+                        .sub(0.5)?
                         .abs()?
                         .lt(1e-09)?)
                     .into_bound_py_any(py)?
@@ -882,7 +881,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     } else {
         if tool
             .getattr("profile")?
-            .sub(module.getattr("CIRCULAR")?)?
+            .sub(0.5)?
             .abs()?
             .gt(1e-09)?
         {

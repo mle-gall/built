@@ -19,7 +19,7 @@ import math
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.fillet import _exponent, apply_fillet, plan_fillet
+from ingetrazo_core import bevel_exponent as _exponent, apply_fillet, plan_fillet
 from core.mesh import Mesh
 from core.orient import is_closed, signed_volume
 from tests.test_fillet import box, edge_at
@@ -331,7 +331,8 @@ def test_a_turned_squashed_box_takes_the_flat_cut():
 def test_caps_that_do_not_meet_get_a_centre_face():
     """A sheared box has three distinct bottoms. Every new side of its
     centre face must meet a cap, and the caps must meet the three strips."""
-    from core.fillet import _key
+    def _key(point):
+        return tuple(round(x * 1e5) for x in point.toTuple())
     mesh = box()
     tip = mesh.vertices[0]
     for vertex in mesh.vertices:

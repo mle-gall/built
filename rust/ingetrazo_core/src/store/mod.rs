@@ -21,7 +21,6 @@
 pub mod access;
 pub mod bevel;
 pub mod fillet;
-mod fillet_incidence;
 pub(crate) mod intersection_edit;
 pub(crate) mod plane_repair;
 pub(crate) mod plane_regions;

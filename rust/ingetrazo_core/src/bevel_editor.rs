@@ -8,7 +8,7 @@ use pyo3::{
 };
 type Control = (f64, f64, bool);
 type Obj<'p> = Bound<'p, PyAny>;
-fn read(points: &Obj) -> PyResult<Vec<Control>> {
+pub(crate) fn read(points: &Obj) -> PyResult<Vec<Control>> {
     let float = points.py().import("builtins")?.getattr("float")?;
     points
         .try_iter()?

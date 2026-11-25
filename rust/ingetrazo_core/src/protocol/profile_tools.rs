@@ -191,7 +191,7 @@ impl ApplyFillet {
 
     fn __call__(&self, scene: &Obj<'_>) -> PyResult<()> {
         let py = scene.py();
-        py.import("core.fillet")?
+        py.import("ingetrazo_core")?
             .call_method1("apply_fillet", (scene.getattr("mesh")?, self.plan.bind(py)))?;
         Ok(())
     }
@@ -283,7 +283,7 @@ fn bevel_selection<'py>(
                 profile,
             ),
         )?,
-        None => py.import("core.fillet")?.call_method1(
+        None => py.import("ingetrazo_core")?.call_method1(
             "plan_fillet",
             (
                 &mesh,
@@ -300,12 +300,7 @@ fn bevel_selection<'py>(
     if let Ok(msg) = plan.extract::<String>() {
         return failed(history, &before, &msg);
     }
-    let class = if plan.getattr("_store_plan")?.is_none() {
-        py.import("core.history")?.getattr("SnapshotMutation")?
-    } else {
-        py.import("ingetrazo_core")?
-            .getattr("resident_face_mutation")?
-    };
+    let class = py.import("ingetrazo_core")?.getattr("resident_face_mutation")?;
     let callback = Bound::new(
         py,
         ApplyFillet {
