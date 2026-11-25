@@ -8,7 +8,11 @@ APP = ("app_shell", "core", "examples", "formats", "georef", "plugins", "scripts
 QT = {"PySide6", "shiboken6", "QtCore", "QtGui", "QtWidgets"}
 DYNAMIC = {"import_module", "__import__", "importorskip"}
 SCRIPT_IMPORT = re.compile(r'^\s*(?:from|import)\s+(PySide6|shiboken6|QtCore|QtGui|QtWidgets)\b')
-RUST_IMPORT = re.compile(r'\.\s*import(?:_bound)?\s*\(\s*"(PySide6|shiboken6|QtCore|QtGui|QtWidgets)\b')
+RUST_IMPORT = re.compile(
+    r'(?:\.\s*import(?:_bound)?\s*\(\s*'
+    r'|\b(?:PyModule::import(?:_bound)?|imported|import_names)\s*\(\s*[^,;]+,\s*)'
+    r'"(?:PySide6|shiboken6|QtCore|QtGui|QtWidgets)\b'
+)
 
 
 def python_lines(source):
