@@ -143,7 +143,8 @@ impl ToolBounds {
     }
     fn add_group(&mut self, group: &Bound<'_, PyAny>) -> PyResult<()> {
         let api = group.py().import("core.group")?;
-        for placement in api.call_method1("model_placements", (group,))?.try_iter()? {
+        let walk = crate::model::module(group.py(), "ingetrazo_core")?.getattr("group_model_placements")?;
+        for placement in walk.call1((group,))?.try_iter()? {
             let pair = placement?;
             let mesh = pair.get_item(0)?.getattr("mesh")?;
             let matrix = pair.get_item(1)?;

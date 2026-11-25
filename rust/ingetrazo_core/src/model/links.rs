@@ -1894,6 +1894,11 @@ fn all_parts<'py>(py: Python<'py>, placement: &Obj<'py>) -> PyResult<Vec<Obj<'py
 #[pyo3(name = "link_copy_parts")]
 pub fn copy_parts<'py>(source: &Obj<'py>, copy: &Obj<'py>) -> PyResult<Bound<'py, PyList>> {
     let py = source.py();
+    // One more occurrence of the definition the document holds for this
+    // file: projected from it, as a fresh link of it is.
+    if let Some(def) = definition_of(source)? {
+        return project_parts(copy, &def.get_item(0)?);
+    }
     let (cls, fields) = group_fields(py)?;
     let new_uid = module(py, "core.group")?;
     let copy_uid: String = copy.getattr(pyo3::intern!(py, "uid"))?.extract()?;
@@ -1971,6 +1976,85 @@ pub fn copy_parts<'py>(source: &Obj<'py>, copy: &Obj<'py>) -> PyResult<Bound<'py
         }
     }
     Ok(parts)
+}
+
+/// The configuration a linked file's definition is held under: its
+/// normalised path, its subset and its nested-link policy.
+#[pyfunction]
+#[pyo3(name = "link_definition_key")]
+pub fn definition_key(path: &Obj<'_>, select: &Obj<'_>, nested: &Obj<'_>) -> PyResult<String> {
+    Ok(format!("{}\0{}\0{}", norm(path)?, select.repr()?, if nested.is_truthy()? { "True" } else { "False" }))
+}
+
+/// The scene root `group` sits under (through each node's first owner).
+fn root_of<'py>(py: Python<'py>, group: &Obj<'py>) -> Option<Bound<'py, PyAny>> {
+    let mut k = handle_key(group).ok()?;
+    let d = doc::lock();
+    for _ in 0..1_000_000 {
+        let n = d.node(k)?;
+        if n.kind == doc::Kind::Root {
+            return d.handle_ref(py, k).map(|h| h.into_bound(py));
+        }
+        k = *n.owners.first()?;
+    }
+    None
+}
+
+/// `(definition, tags)`: what the document holds for the file `group`
+/// links (with its subset and nested-link policy), or None (a packed link
+/// read back, a placement out of any scene, a file not read this session).
+#[pyfunction]
+#[pyo3(name = "link_definition")]
+pub fn definition_of<'py>(group: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
+    let py = group.py();
+    let Some(rec) = link_of(group)? else { return Ok(None) };
+    let Some(root) = root_of(py, group) else { return Ok(None) };
+    let key = definition_key(&rec.get_item("path")?, &get(&rec, "select")?, &get_or(&rec, "include_nested", true)?)?;
+    let def = root.call_method1(pyo3::intern!(py, "_link_definition"), (key,))?;
+    Ok((!def.is_none()).then_some(def))
+}
+
+/// Release what the root holds for the files `paths` (normalised): no
+/// placement links them any more.
+pub fn release_definitions(scene: &Obj<'_>, paths: &[String]) -> PyResult<()> {
+    let py = scene.py();
+    let root = scene.getattr(pyo3::intern!(py, "_root"))?;
+    let configs: Vec<String> = root.call_method0(pyo3::intern!(py, "_link_configs"))?.extract()?;
+    for c in configs {
+        if paths.iter().any(|p| c.split('\0').next() == Some(p.as_str())) {
+            root.call_method1(pyo3::intern!(py, "_set_link_definition"), (c,))?;
+        }
+    }
+    Ok(())
+}
+
+/// The parts of a new occurrence `copy` of definition `comp`: each part
+/// as a fresh link of the file gives it, under the uid
+/// `stable_uid(copy uid, source uid)`, sharing the definition's geometry.
+fn project_parts<'py>(copy: &Obj<'py>, comp: &Obj<'py>) -> PyResult<Bound<'py, PyList>> {
+    let py = copy.py();
+    let (cls, fields) = group_fields(py)?;
+    let mut p = Populate {
+        placement_uid: copy.getattr(pyo3::intern!(py, "uid"))?.extract()?,
+        reconcile: false,
+        previous: PyDict::new(py),
+        ambiguous: HashSet::new(),
+        installed: HashMap::new(),
+        claimed: HashSet::new(),
+        swaps: Vec::new(),
+        changed: false,
+        cls,
+        fields,
+        placement: placement_fields(py),
+    };
+    let mut parts = Vec::new();
+    let kids = comp.getattr(pyo3::intern!(py, "children"))?;
+    if kids.is_truthy()? {
+        for c in kids.try_iter()? {
+            parts.push(p.clone(&c?, copy)?);
+        }
+    }
+    PyList::new(py, parts)
 }
 
 /// A copy of `mesh` that shares nothing with it, for content the host now
@@ -2207,6 +2291,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(copy_parts, m)?)?;
     m.add_function(wrap_pyfunction!(own_mesh, m)?)?;
     m.add_function(wrap_pyfunction!(unlinked_copy, m)?)?;
+    m.add_function(wrap_pyfunction!(definition_key, m)?)?;
+    m.add_function(wrap_pyfunction!(definition_of, m)?)?;
     m.add_class::<RetaggedBuild>()?;
     Ok(())
 }

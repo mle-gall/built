@@ -869,9 +869,12 @@ fn traverse_node(k: Key, visit: &PyVisit<'_>) -> Result<(), PyTraverseError> {
             }
         }
     }
-    if let super::Data::Root { edit_path } = &n.data {
+    if let super::Data::Root { edit_path, link_defs } = &n.data {
         for (_, level) in edit_path {
             visit.call(level)?;
+        }
+        for (_, def) in link_defs {
+            visit.call(def)?;
         }
     }
     for v in n.views.iter() {
@@ -1490,7 +1493,7 @@ impl PyPlacement {
 
     fn _edit_matrix(&self, child: &PyPlacement) -> PyResult<[f64; 16]> {
         let doc = lock();
-        let super::Data::Root { edit_path } = &doc.need(self.key).map_err(err)?.data else {
+        let super::Data::Root { edit_path, .. } = &doc.need(self.key).map_err(err)?.data else {
             return Err(PyTypeError::new_err("a scene root owns an edit path"));
         };
         let mut world = glam::DMat4::IDENTITY;
@@ -1514,7 +1517,7 @@ impl PyPlacement {
         if d.need(k).map_err(err)?.children.len() > 0 {
             super::assembly::bind(&mut d, self.key, k);
         }
-        let Some(super::Data::Root { edit_path }) = d.node_mut(self.key).map(|n| &mut n.data)
+        let Some(super::Data::Root { edit_path, .. }) = d.node_mut(self.key).map(|n| &mut n.data)
         else {
             return Err(PyTypeError::new_err("a scene root owns an edit path"));
         };
@@ -1526,8 +1529,40 @@ impl PyPlacement {
         super::assembly::index(&mut lock(), self.key);
     }
 
+    /// A linked file's definition by its configuration, or None.
+    fn _link_definition(&self, py: Python<'_>, config: &str) -> Option<Py<PyAny>> {
+        let d = lock();
+        let Some(super::Data::Root { link_defs, .. }) = d.node(self.key).map(|n| &n.data) else { return None };
+        link_defs.iter().find(|(c, _)| c == config).map(|(_, v)| v.clone_ref(py))
+    }
+
+    /// Hold `definition` for `config` (None: release it); the one held
+    /// before is released.
+    #[pyo3(signature = (config, definition=None))]
+    fn _set_link_definition(&self, config: &str, definition: Option<Py<PyAny>>) {
+        let old = {
+            let mut d = lock();
+            let Some(super::Data::Root { link_defs, .. }) = d.node_mut(self.key).map(|n| &mut n.data) else { return };
+            let old = link_defs.iter().position(|(c, _)| c == config).map(|i| link_defs.remove(i).1);
+            if let Some(def) = definition {
+                link_defs.push((config.to_string(), def));
+            }
+            old
+        };
+        drop(old);
+    }
+
+    /// The configurations whose definitions the root holds.
+    fn _link_configs(&self) -> Vec<String> {
+        let d = lock();
+        match d.node(self.key).map(|n| &n.data) {
+            Some(super::Data::Root { link_defs, .. }) => link_defs.iter().map(|(c, _)| c.clone()).collect(),
+            _ => Vec::new(),
+        }
+    }
+
     fn _leave_edit(&self) -> Option<Py<PyAny>> {
-        if let Some(super::Data::Root { edit_path }) =
+        if let Some(super::Data::Root { edit_path, .. }) =
             lock().node_mut(self.key).map(|n| &mut n.data)
         {
             return edit_path.pop().map(|(_, level)| level);
@@ -1538,7 +1573,7 @@ impl PyPlacement {
     #[getter]
     fn _edit_path(&self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
         let d = lock();
-        let super::Data::Root { edit_path } = &d.need(self.key).map_err(err)?.data else {
+        let super::Data::Root { edit_path, .. } = &d.need(self.key).map_err(err)?.data else {
             return Err(PyTypeError::new_err("a scene root owns an edit path"));
         };
         edit_path
@@ -1553,7 +1588,7 @@ impl PyPlacement {
     #[getter]
     fn _edit_levels(&self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
         let d = lock();
-        let super::Data::Root { edit_path } = &d.need(self.key).map_err(err)?.data else {
+        let super::Data::Root { edit_path, .. } = &d.need(self.key).map_err(err)?.data else {
             return Err(PyTypeError::new_err("a scene root owns an edit path"));
         };
         Ok(edit_path
@@ -1574,7 +1609,7 @@ impl PyPlacement {
         }) else {
             return Ok(false);
         };
-        let super::Data::Root { edit_path } = &root.data else {
+        let super::Data::Root { edit_path, .. } = &root.data else {
             return Ok(false);
         };
         Ok(scopes.iter().any(|scope| match scope {
