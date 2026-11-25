@@ -28,10 +28,9 @@ fn placements<'py>(scene: &Obj<'py>) -> PyResult<Vec<(Vec<String>, Obj<'py>)>> {
     for g in scene.getattr("groups")?.try_iter()? {
         stack.push((Vec::new(), g?));
     }
-    let links = scene.py().import("core.links")?;
     while let Some((mut path, g)) = stack.pop() {
         path.push(g.getattr("uid")?.extract()?);
-        if !links.call_method1("is_linked", (&g,))?.is_truthy()? {
+        if !crate::model::links::is_linked(&g)? {
             for c in g.getattr("children")?.try_iter()? {
                 stack.push((path.clone(), c?));
             }

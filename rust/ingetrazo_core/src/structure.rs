@@ -133,11 +133,7 @@ impl StructurePlacements {
                 .collect(),
             pending: None,
             seen: HashSet::new(),
-            link: scene
-                .py()
-                .import("core.links")?
-                .getattr("link_of")?
-                .unbind(),
+            link: crate::model::module(scene.py(), "ingetrazo_core")?.getattr("link_of")?.unbind(),
         })
     }
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {

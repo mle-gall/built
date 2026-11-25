@@ -12,6 +12,8 @@ A copy used to keep the link record on its root only: its parts were not
 owned by it, so the read-only check missed them, and an edit inside one
 reached the other copies in memory while the source never saw it."""
 from __future__ import annotations
+
+import ingetrazo_core
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
@@ -90,10 +92,10 @@ def assert_live_link(copy, original):
     assert parts and len(parts) == len(theirs)
     for p, q in zip(parts, theirs):
         assert p is not q
-        assert links.linked_ancestor(p) is copy, p.name
+        assert ingetrazo_core.link_linked_ancestor(p) is copy, p.name
         assert p.mesh is q.mesh, p.name
         assert p.name == q.name
-        assert p.uid == links.stable_uid(copy.uid, q.source_uid)
+        assert p.uid == ingetrazo_core.link_stable_uid(copy.uid, q.source_uid)
     assert _state(copy) == _state(original)
 
 
@@ -117,7 +119,7 @@ def assert_reloads_with_the_source(scene, src, *copies):
         assert _faces(c) == 5
         kept = {p.uid: p for p in _parts(c)}
         assert kept == before[c]           # the same objects, by uid
-        assert all(links.linked_ancestor(p) is c for p in _parts(c))
+        assert all(ingetrazo_core.link_linked_ancestor(p) is c for p in _parts(c))
 
 
 # ---- copy_group: what every copy is made with -----------------------------
@@ -305,7 +307,7 @@ def test_make_unique_of_what_holds_a_link_and_of_the_link(win, tmp_path):
     assert len(vp.history.undo_stack) == steps + 1
     assert not links.is_linked(inner)
     assert not {id(p.mesh) for p in _parts(inner)} & {id(m) for m in meshes}
-    assert all(links.linked_ancestor(p) is None for p in _parts(inner))
+    assert all(ingetrazo_core.link_linked_ancestor(p) is None for p in _parts(inner))
     assert links.is_linked(link)
     assert_read_only(win, link)
 
@@ -337,7 +339,7 @@ def test_save_and_reopen(tmp_path, packed):
     copy = copy_group(link, V(5, 0, 0))
     host.groups.append(copy)
     if packed:
-        links.set_packed(host, src, True)
+        ingetrazo_core.link_set_packed(host, src, True)
     path = tmp_path / "host.igz"
     igz.save_scene(host, path)
     back = Scene()
@@ -349,7 +351,7 @@ def test_save_and_reopen(tmp_path, packed):
                    (b, link if b.uid == link.uid else copy)):
         assert _state(g) == _state(was)
         assert [p.uid for p in _parts(g)] == [p.uid for p in _parts(was)]
-        assert all(links.linked_ancestor(p) is g for p in _parts(g))
+        assert all(ingetrazo_core.link_linked_ancestor(p) is g for p in _parts(g))
     if not packed:
         again = copy_group(a)
         back.groups.append(again)

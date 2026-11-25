@@ -130,7 +130,7 @@ fn document_tools_begin_group_edit<'py>(a: &Args<'py>) -> Reply<'py> {
         }
     }
     let links = py.import("core.links")?;
-    let mut linked = links.call_method1("linked_ancestor", (&group,))?;
+    let mut linked = crate::host_context::core_module(py)?.call_method1("link_linked_ancestor", (&group,))?;
     if !linked.is_truthy()? {
         for ancestor in path.iter().rev() {
             if links.call_method1("is_linked", (ancestor,))?.is_truthy()? {

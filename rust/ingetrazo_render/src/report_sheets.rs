@@ -350,7 +350,7 @@ impl CutListSheet {
             return Ok(());
         }
         let Some(assembly) = self.assembly.as_ref().map(|a| a.bind(py)) else { return Ok(()) };
-        if !py.import("core.links")?.call_method1("linked_ancestor", (assembly,))?.is_none() {
+        if !crate::host_context::core_module(py)?.call_method1("link_linked_ancestor", (assembly,))?.is_none() {
             return Ok(());
         }
         let Some(uids) = self.selected.parse::<usize>().ok().and_then(|i| self.members.get(i.wrapping_sub(1))) else { return Ok(()) };

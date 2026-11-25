@@ -47,19 +47,14 @@ impl LinkSubset {
         text: &str,
     ) -> PyResult<Option<Self>> {
         let py = group.py();
-        let links = py.import("core.links")?;
-        let record = links.call_method1("link_of", (group,))?;
-        if record.is_none()
-            || !links
-                .call_method1("linked_ancestor", (group.getattr("owner")?,))?
-                .is_none()
-        {
+        let record = crate::model::links::link_of(group)?.unwrap_or_else(|| py.None().into_bound(py));
+        if record.is_none() || crate::model::links::linked_ancestor(&group.getattr("owner")?)?.is_some() {
             return Err(PyValueError::new_err(
                 "Choose a linked placement in this document",
             ));
         }
         let subset = py.import("json")?.call_method1("loads", (text,))?;
-        links.call_method1("validate_select", (&subset,))?;
+        crate::model::links::validate_select(&subset)?;
         let previous = record.call_method1("get", ("select",))?;
         if previous.eq(&subset)? {
             return Ok(None);
@@ -69,12 +64,12 @@ impl LinkSubset {
         let materials = py
             .get_type::<PyDict>()
             .call1((scene.getattr("materials")?,))?;
-        let source = links.call_method1(
+        let source = py.import("core.links")?.call_method1(
             "_read_definition",
             (&materials, &path, &subset, nested, group),
         )?;
-        let temporary = links.call_method1("_clone_shell", (group,))?;
-        links.call_method1("_populate", (&temporary, source.get_item(0)?))?;
+        let temporary = crate::model::links::clone_shell_of(group)?;
+        crate::model::links::populate(&temporary, &source.get_item(0)?, false, None)?;
         let after = Definition::read(&temporary, subset)?;
         // Native placement lists have a single owner.
         temporary.setattr("children", PyList::empty(py))?;
@@ -91,9 +86,8 @@ impl LinkSubset {
 
     fn apply(&mut self, scene: &Bound<'_, PyAny>, forward: bool) -> PyResult<()> {
         let py = scene.py();
-        let links = py.import("core.links")?;
         let group = self.placement.bind(py);
-        let record = links.call_method1("link_of", (group,))?;
+        let record = crate::model::links::link_of(group)?.unwrap_or_else(|| py.None().into_bound(py));
         let new = if forward { &self.after } else { &self.before };
         if let Some((before, after)) = &self.tag_states {
             let (from, to) = if forward {
@@ -108,7 +102,7 @@ impl LinkSubset {
             scene
                 .getattr("materials")?
                 .call_method1("update", (&self.materials,))?;
-            links.call_method1("_sync_tags", (scene, &self.path, &self.tags))?;
+            crate::model::links::sync_tags(scene, &pyo3::types::PyString::new(py, &self.path), self.tags.bind(py))?;
             self.tag_states = Some((before.unbind(), state.call1((scene,))?.unbind()));
         }
         let selection = scene.getattr("selection")?;
@@ -172,7 +166,7 @@ pub(crate) fn link_selection_sources(
 #[pyfunction]
 pub(crate) fn link_subset_rows(group: &Bound<'_, PyAny>) -> PyResult<Vec<(String, String)>> {
     let py = group.py();
-    let record = py.import("core.links")?.call_method1("link_of", (group,))?;
+    let record = crate::model::links::link_of(group)?.unwrap_or_else(|| py.None().into_bound(py));
     let subset = record.call_method1("get", ("select",))?;
     let summary = if subset.is_none() {
         "Full document".to_owned()

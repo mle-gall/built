@@ -98,7 +98,7 @@ def test_linked_tag_uses_a_host_override_and_leaves_the_source_alone(tmp_path):
     tag.visible = True
     assert command(history, "apply", key=set_id(scene))
     assert not tag.visible
-    assert links.registry(scene)[links.link_of(root)["path"]]["overrides"]
+    assert scene.link_registry[links.link_of(root)["path"]]["overrides"]
     history.undo()
     assert tag.visible and path.read_bytes() == original
 
