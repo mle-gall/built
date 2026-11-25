@@ -1,74 +1,60 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Screen-space bounds of resident instances for cursor queries.
 mod edges;
-mod lease;
 mod index;
+mod lease;
+mod picking;
 mod prepare;
-use numpy::{ndarray::Array2, IntoPyArray, PyArray2, PyReadonlyArray2};
+mod screen;
+use numpy::{IntoPyArray, PyReadonlyArray2};
 use pyo3::{exceptions::PyValueError, prelude::*};
-#[pyfunction]
-fn project_boxes<'py>(
-    py: Python<'py>,
-    wc: PyReadonlyArray2<'py, f64>,
-    we: PyReadonlyArray2<'py, f64>,
-    mvp: &Bound<'py, PyAny>,
+fn project_box(
+    c: [f64; 3],
+    e: [f64; 3],
+    m: &[f64; 16],
     width: f64,
     height: f64,
-) -> PyResult<(Bound<'py, PyArray2<f64>>, Bound<'py, PyArray2<f64>>)> {
-    let m: [f64; 16] = mvp.call_method0("data")?.extract()?;
-    let c = wc.as_array();
-    let e = we.as_array();
-    if c.dim() != e.dim() || c.ncols() != 3 {
-        return Err(PyValueError::new_err(
-            "expected matching (n, 3) box centres and extents",
-        ));
-    }
-    let mut lo = Array2::from_elem((c.nrows(), 2), f64::INFINITY);
-    let mut hi = Array2::from_elem((c.nrows(), 2), f64::NEG_INFINITY);
-    for i in 0..c.nrows() {
-        let clip_center =
-            |j: usize| c[[i, 0]] * m[j] + c[[i, 1]] * m[4 + j] + c[[i, 2]] * m[8 + j] + m[12 + j];
-        let center = [clip_center(0), clip_center(1), clip_center(3)];
-        let mut front = 0;
-        for sx in [-1., 1.] {
-            for sy in [-1., 1.] {
-                for sz in [-1., 1.] {
-                    let clip = |j: usize, k: usize| {
-                        center[k]
-                            + sx * e[[i, 0]] * m[j]
-                            + sy * e[[i, 1]] * m[4 + j]
-                            + sz * e[[i, 2]] * m[8 + j]
-                    };
-                    let w = clip(3, 2);
-                    if w <= 1e-3 || w.is_nan() {
-                        continue;
-                    }
-                    front += 1;
-                    for (j, v) in [
-                        (0, (1. + clip(0, 0) / w) * (width / 2.)),
-                        (1, (1. - clip(1, 1) / w) * (height / 2.)),
-                    ] {
-                        if v.is_nan() {
-                            lo[[i, j]] = v;
-                            hi[[i, j]] = v;
-                        } else if !lo[[i, j]].is_nan() {
-                            lo[[i, j]] = lo[[i, j]].min(v);
-                            hi[[i, j]] = hi[[i, j]].max(v);
-                        }
+) -> ([f64; 2], [f64; 2]) {
+    let mut lo = [f64::INFINITY; 2];
+    let mut hi = [f64::NEG_INFINITY; 2];
+    let clip_center = |j: usize| c[0] * m[j] + c[1] * m[4 + j] + c[2] * m[8 + j] + m[12 + j];
+    let center = [clip_center(0), clip_center(1), clip_center(3)];
+    let mut front = 0;
+    for sx in [-1., 1.] {
+        for sy in [-1., 1.] {
+            for sz in [-1., 1.] {
+                let clip = |j: usize, k: usize| {
+                    center[k] + sx * e[0] * m[j] + sy * e[1] * m[4 + j] + sz * e[2] * m[8 + j]
+                };
+                let w = clip(3, 2);
+                if w <= 1e-3 || w.is_nan() {
+                    continue;
+                }
+                front += 1;
+                for (j, v) in [
+                    (0, (1. + clip(0, 0) / w) * (width / 2.)),
+                    (1, (1. - clip(1, 1) / w) * (height / 2.)),
+                ] {
+                    if v.is_nan() {
+                        lo[j] = v;
+                        hi[j] = v;
+                    } else if !lo[j].is_nan() {
+                        lo[j] = lo[j].min(v);
+                        hi[j] = hi[j].max(v);
                     }
                 }
             }
         }
-        if front < 8 {
-            lo.row_mut(i).fill(if front == 0 {
-                f64::INFINITY
-            } else {
-                f64::NEG_INFINITY
-            });
-            hi.row_mut(i).fill(f64::INFINITY);
-        }
     }
-    Ok((lo.into_pyarray(py), hi.into_pyarray(py)))
+    if front < 8 {
+        lo.fill(if front == 0 {
+            f64::INFINITY
+        } else {
+            f64::NEG_INFINITY
+        });
+        hi.fill(f64::INFINITY);
+    }
+    (lo, hi)
 }
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     prepare::register(m)?;
@@ -77,7 +63,8 @@ pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<lease::SceneLease>()?;
     m.add_function(wrap_pyfunction!(nearest_inference_triangle, m)?)?;
     m.add_function(wrap_pyfunction!(resident_curve_features, m)?)?;
-    m.add_function(wrap_pyfunction!(project_boxes, m)?)
+    screen::register(m)?;
+    picking::register(m)
 }
 
 /// The front triangle and its normal, using the same barycentric slack as picking.
