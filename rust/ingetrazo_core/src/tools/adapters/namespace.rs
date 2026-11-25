@@ -210,7 +210,7 @@ fn definition(name: &str) -> Option<&'static Module> {
     MODULES.iter().find(|m| m.name == leaf)
 }
 
-const CORE_MODULES: &[&str] = &["plugin_panels", "protocol", "protocol.commands", "protocol.feed", "protocol.keys", "protocol.records", "protocol.queries", "purge", "bridge", "lazy_mesh", "reference_edit", "material_commands", "link_structure", "hlr", "vista_caras", "units", "composition", "push_pull", "solids", "sweep", "make_faces", "intersect", "pieces", "inference", "geometry_arrays", "outliner", "solid_analysis", "offset", "text3d", "render_blender", "extensions", "input_codes"];
+const CORE_MODULES: &[&str] = &["plugin_panels", "protocol", "protocol.commands", "protocol.feed", "protocol.keys", "protocol.records", "protocol.queries", "purge", "bridge", "lazy_mesh", "reference_edit", "material_commands", "link_structure", "hlr", "vista_caras", "units", "composition", "push_pull", "solids", "sweep", "make_faces", "intersect", "pieces", "inference", "geometry_arrays", "outliner", "solid_analysis", "offset", "text3d", "render_blender", "extensions", "input_codes", "texture", "doc_model", "dimension", "layers", "links", "group", "scene"];
 const VIEW_MODULES: &[&str] = &[
     "viewport", "chrome_forms", "chrome_dialogs",
     "document_interaction",
@@ -294,6 +294,13 @@ impl ToolModules {
                 "core.vista_caras" => crate::model::vista::install(module),
                 "core.hlr" => crate::model::hlr_api::install(module),
                 "core.units" => crate::model::units_api::install(module),
+                "core.texture" => crate::model::texture_api::install(module),
+                "core.doc_model" => crate::model::doc_model_api::install(module),
+                "core.dimension" => crate::model::dimension_api::install(module),
+                "core.layers" => crate::model::layers_api::install(module),
+                "core.links" => crate::model::links_api::install(module),
+                "core.group" => crate::model::group_api::install(module),
+                "core.scene" => crate::model::scene_api::install(module),
                 "core.composition" => crate::sheets::composition::install(module),
                 "core.push_pull" => crate::push_operation::install(module),
                 "core.solids" => crate::solids::install(module),

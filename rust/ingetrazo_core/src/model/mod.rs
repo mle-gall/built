@@ -40,6 +40,14 @@ pub mod tag_styles;
 pub mod texture_maths;
 pub mod units_format;
 pub(crate) mod units_api;
+pub(crate) mod texture_api;
+pub(crate) mod doc_model_api;
+pub(crate) mod dimension_api;
+pub(crate) mod layers_api;
+pub(crate) mod links_api;
+pub(crate) mod group_api;
+pub(crate) mod scene_api;
+pub mod py_class;
 
 /// A module already imported, from `sys.modules`: `py.import` runs the
 /// import hooks every time (over a microsecond under PySide's), and these
@@ -57,6 +65,7 @@ pub(crate) fn module<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, Py
 /// Every Python function and class of the model lane.
 pub fn register_model(m: &Bound<'_, PyModule>) -> PyResult<()> {
     units_format::register(m)?;
+    py_class::register(m)?;
     linetypes::register(m)?;
     selection::register(m)?;
     camera_live::register(m)?;
