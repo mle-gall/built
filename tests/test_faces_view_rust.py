@@ -110,7 +110,7 @@ def _compare(name):
     from tests import vista_caras_reference as R
     items, cam, proj, sp = R.geometry_cases()[name]
     py = _python(name)
-    rust = VC._face_geometry_native(items, cam, proj, sp, native)
+    rust = VC._face_geometry(items, proj, sp)
     assert len(py) == len(rust) == len(items)
     kept = 0
     for gp, gr in zip(py, rust):
@@ -162,30 +162,17 @@ def test_a_face_the_camera_cannot_draw_still_casts():
     from tests import vista_caras_reference as R
     items, cam, proj, _sp = R.geometry_cases()["behind_eye"]
     py = _python("behind_eye")
-    rust = VC._face_geometry_native(items, cam, proj, None, native)
+    rust = VC._face_geometry(items, proj, None)
     assert py[0] is not None and py[0][5] is None
     assert rust[0] is not None and rust[0][5] is None
     _same_rings(py[0][0], rust[0][0], 1e-9)
 
 
-def test_view_faces_goes_through_the_engine(monkeypatch):
+def test_view_faces_matches_the_recorded_walk():
     from tests import vista_caras_reference as R
     scene = _scene()
     cam = _camera(scene, False)
-    called = []
-    real = VC._face_geometry_native
-
-    def spy(items, *a):
-        called.append(len(items))
-        return real(items, *a)
-
-    monkeypatch.setattr(VC, "_face_geometry_native", spy)
     on = VC.view_faces(scene, cam)
-    assert called and called[0] == 20
-    # The engine is the only walk, whatever the kernel switch says.
-    monkeypatch.setattr(_native, "native", None)
-    VC.view_faces(scene, cam)
-    assert len(called) == 2
     # The retired walk and pass, both Python: the placement's map was Qt's,
     # in single precision, and between two faces of a turned box that share
     # an edge it left hairline slivers the engine's double precision closes

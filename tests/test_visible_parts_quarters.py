@@ -74,7 +74,7 @@ def test_a_face_under_hundreds_of_covers_comes_out_whole_as_python_has_it():
     """What the retired Python pass left of the same scene
     (``tests/vista_caras_reference.py``, scene ``quarters``)."""
     py = R.python_visible("quarters")
-    rust = VC._visible_parts_native(_scene(), native)
+    rust = VC._visible_parts(_scene())
     assert len(rust) == len(py)
     ground_py = [f for f in py if f["depth"] == 0.0]
     ground_rust = [f for f in rust if f.depth == 0.0]
