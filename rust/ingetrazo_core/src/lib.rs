@@ -168,6 +168,7 @@ mod pushscan;
 mod push_command;
 mod push_operation;
 mod solids;
+mod sweep_operation;
 pub mod pyset;
 mod push_guard;
 mod object_weld;

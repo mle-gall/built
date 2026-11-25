@@ -113,7 +113,7 @@ impl Store {
     }
 }
 
-pub(super) fn emit_sweep_faces(
+pub(crate) fn emit_sweep_faces(
     stations: &[Station],
     closed: bool,
     h: Hypot,
