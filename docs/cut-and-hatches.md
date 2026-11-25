@@ -21,7 +21,7 @@ line, cut by a plan section plane.
 | Bricks drawn as they are laid, at their real size | Hatch picker ▸ a masonry pattern ▸ **Piece** |
 | The same on screen, in the 3D view | Browser ▸ right-click the section plane ▸ **Fill of this cut ▸ Layers' hatches** |
 | A gas line dashed, yellow, with «GAS» along it | Layers panel ▸ **Line** column ▸ the line type panel |
-| All of it in a CAD program | Composer ▸ **Export view as DXF…**, or **File ▸ Export ▸ Current view as DXF** |
+| All of it in a CAD program | Composer ▸ **DXF…**, or **File ▸ Export ▸ Current view as DXF** |
 
 ---
 
@@ -216,8 +216,12 @@ and they change nothing in the model.
 
 ## 9. In the DXF
 
-**Export view as DXF…** (composer) and **File ▸ Export ▸ Current view as
-DXF** (a parallel view, drawn at 1:50) write, for each model layer:
+The composer's **DXF…** action writes the complete sheet in paper millimetres,
+including its views, hatches, dimensions and notes. Shaded views and placed
+images use PNG files saved beside the drawing.
+
+**File ▸ Export ▸ Current view as DXF** writes a parallel view at 1:50 with
+these layers for each model layer:
 
 | DXF layer | What |
 |---|---|

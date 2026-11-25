@@ -132,6 +132,16 @@ fn export_image(
     )?;
     Ok(troubled)
 }
+#[pyfunction]
+#[pyo3(signature=(kind,view_widget,comp,path,ground=None,doc_path=None,providers=None))]
+fn export_sheet_vector(kind: &str, view_widget: &Obj<'_>, comp: &Obj<'_>, path: &Obj<'_>,
+                       ground: Option<&Obj<'_>>, doc_path: Option<&Obj<'_>>, providers: Option<&Obj<'_>>) -> PyResult<Vec<String>> {
+    let comps = PyList::new(path.py(), [comp])?;
+    let (c, pictures, profiles, troubled) = frame_contents(view_widget, comps.as_any(), ground, providers)?;
+    core(path.py())?.call_method1("sheet_vector", (kind, path.str()?, comps, c, pictures, profiles,
+        view_widget.getattr("source_viewport")?.getattr("scene")?, doc_path.map(|p| p.str()).transpose()?))?;
+    Ok(troubled)
+}
 struct LineGroups<'py> {
     groups: Obj<'py>,
     texts: Bound<'py, PyList>,
@@ -285,6 +295,7 @@ pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         wrap_pyfunction!(frame_contents, m)?,
         wrap_pyfunction!(export_pdf, m)?,
         wrap_pyfunction!(export_image, m)?,
+        wrap_pyfunction!(export_sheet_vector, m)?,
         wrap_pyfunction!(export_dxf, m)?,
         wrap_pyfunction!(export_svg, m)?,
     ] {

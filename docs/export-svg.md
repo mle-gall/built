@@ -4,8 +4,8 @@
 vector drawing, ready to finish in an illustration program: one layer per
 model layer, every visible face a filled shape of its own under the lines,
 with its colour or its texture as the view lays it. In the sheet composer,
-**Export view as SVG…** does the same for the frame in front, at the frame's
-scale and with its pens.
+**SVG…** exports the whole sheet at paper size, including every frame, title,
+dimension and note. Each frame uses its own scale and pens.
 
 Everything here can be tried with any model that has materials, a texture and
 the sun's shadows switched on.

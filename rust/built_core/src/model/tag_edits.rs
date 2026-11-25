@@ -98,6 +98,18 @@ fn get_or_empty<'py>(d: &Obj<'py>, key: &str) -> PyResult<Obj<'py>> {
 #[pyfunction]
 pub fn folders_of(scene: &Obj<'_>) -> PyResult<Vec<String>> {
     let py = scene.py();
+    let out = folder_keys(scene)?;
+    let uids = scene.getattr_opt("layer_folder_uids")?.unwrap_or_else(|| PyDict::new(py).into_any());
+    let fresh = PyDict::new(py);
+    for f in &out {
+        let u = uids.call_method1("get", (f,))?;
+        fresh.set_item(f, if u.is_truthy()? { u } else { new_uid(py)? })?;
+    }
+    scene.setattr("layer_folder_uids", fresh)?;
+    Ok(out)
+}
+
+fn folder_keys(scene: &Obj<'_>) -> PyResult<Vec<String>> {
     let mut out: Vec<String> = Vec::new();
     if let Some(list) = attr(scene, "layer_folders")? {
         for f in list.try_iter()? {
@@ -114,13 +126,6 @@ pub fn folders_of(scene: &Obj<'_>) -> PyResult<Vec<String>> {
             }
         }
     }
-    let uids = scene.getattr_opt("layer_folder_uids")?.unwrap_or_else(|| PyDict::new(py).into_any());
-    let fresh = PyDict::new(py);
-    for f in &out {
-        let u = uids.call_method1("get", (f,))?;
-        fresh.set_item(f, if u.is_truthy()? { u } else { new_uid(py)? })?;
-    }
-    scene.setattr("layer_folder_uids", fresh)?;
     Ok(out)
 }
 
@@ -134,7 +139,7 @@ fn parents_table<'py>(scene: &Obj<'py>) -> PyResult<Obj<'py>> {
 pub fn folder_parent(scene: &Obj<'_>, name: &str, known: Option<&Obj<'_>>) -> PyResult<Option<String>> {
     let known = match known.filter(|k| !k.is_none()) {
         Some(k) => k.try_iter()?.filter_map(|f| f.ok().and_then(|f| s(&f))).collect(),
-        None => folders_of(scene)?,
+        None => folder_keys(scene)?,
     };
     tag_folder_parent(&parents_table(scene)?, known, name)
 }
