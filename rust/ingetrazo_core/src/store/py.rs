@@ -525,14 +525,6 @@ fn rows3<'py, T: numpy::Element + Copy>(py: Python<'py>, rows: &[[T; 3]]) -> Bou
 
 #[pymethods]
 impl PyMeshStore {
-    #[staticmethod]
-    #[pyo3(signature = (mesh, namespace, scale=10_000.0, tol2=1e-8, fused=false))]
-    fn _from_objects<'py>(mesh: &Bound<'py, PyAny>, namespace: u64, scale: f64, tol2: f64, fused: bool)
-        -> PyResult<(Self, Bound<'py, PyDict>, Bound<'py, PyDict>)> {
-        let (store, own, views) = super::from_objects::read(mesh, namespace, Weld { scale, tol2, fused })?;
-        Ok((Self::wrap(store), own, views))
-    }
-
     /// An empty store in key namespace `namespace` (`next(_KEY_NAMESPACES)`).
     #[new]
     #[pyo3(signature = (namespace, scale = 10_000.0, tol2 = 1e-8, fused = false))]
@@ -737,11 +729,6 @@ impl PyMeshStore {
         dense_dict(py, d)
     }
 
-    /// Rehydrate keyed scripting handles in place, including undo tombstones.
-    fn materialise(&self, mesh: &Bound<'_, PyAny>) -> PyResult<()> {
-        super::materialise::materialise(&self.inner, mesh)
-    }
-
     fn tool_face_picker(&self, py: Python<'_>, hypot: &str) -> PyResult<crate::pick::FacePicker> {
         let hypot = crate::hypot_of(hypot)?;
         Ok(py.detach(|| crate::pick::FacePicker::from_store(&self.inner, hypot)))
@@ -815,22 +802,188 @@ impl PyMeshStore {
         Ok(live.iter().map(|&s| self.inner.key(k, s)).collect())
     }
 
-    /// Replace only the iteration order, preserving the slots and all incidence.
-    fn reorder(&mut self, kind: &str, keys: Vec<u128>) -> PyResult<()> {
-        let kind = kind_of(kind)?;
-        let current = self.inner.live_slots(kind);
-        let next: Vec<_> = keys.into_iter().map(|key| live_of(&self.inner, kind, key))
-            .collect::<PyResult<_>>()?;
-        if next == current {
+    fn set_endpoint(&mut self, edge: u128, side: usize, vertex: u128) -> PyResult<()> {
+        let store = &mut self.inner;
+        let e = live_of(store, Kind::Edge, edge)?;
+        let v = live_of(store, Kind::Vertex, vertex)?;
+        let mut ends = *store.state.ends.get(e as usize);
+        if side > 1 {
+            return Err(PyValueError::new_err("endpoint index must be zero or one"));
+        }
+        if ends[side] == v {
             return Ok(());
         }
-        let unique: std::collections::HashSet<_> = next.iter().copied().collect();
-        if unique.len() != current.len() || next.len() != current.len() {
-            return Err(PyValueError::new_err("expected each live element exactly once"));
+        if !store.edge_faces(e).is_empty() {
+            return Err(PyValueError::new_err(
+                "edit the face ring to change a boundary edge",
+            ));
         }
-        let state = &mut self.inner.state;
-        state.order[kind as usize].set_order(next, &state.slots[kind as usize]);
-        self.inner.finish(Change::default());
+        if ends[1 - side] == v || store.find_edge(v, ends[1 - side]).is_some() {
+            return Err(PyValueError::new_err(
+                "endpoint would create a degenerate or duplicate edge",
+            ));
+        }
+        store.disk_unlink(e);
+        ends[side] = v;
+        store.state.ends.set(e as usize, ends);
+        store.disk_link(e);
+        store.finish(Change::default());
+        Ok(())
+    }
+
+    fn order_edge_faces(&mut self, edge: u128, faces: Vec<u128>) -> PyResult<()> {
+        let store = &mut self.inner;
+        let e = live_of(store, Kind::Edge, edge)?;
+        let next: Vec<_> = faces
+            .into_iter()
+            .map(|k| live_of(store, Kind::Face, k))
+            .collect::<PyResult<_>>()?;
+        let old = store.edge_faces(e);
+        if old == next {
+            return Ok(());
+        }
+        let mut sorted = next.clone();
+        let mut prior = old.to_vec();
+        prior.sort_unstable();
+        sorted.sort_unstable();
+        if sorted != prior {
+            return Err(PyValueError::new_err(
+                "edge.faces membership is determined by face rings",
+            ));
+        }
+        store.ef_write(e, next);
+        store.finish(Change::default());
+        Ok(())
+    }
+
+    fn replace_rings(&mut self, key: u128, rings: Vec<Vec<u128>>) -> PyResult<()> {
+        let f = live_of(&self.inner, Kind::Face, key)?;
+        if rings.is_empty() || rings.iter().any(Vec::is_empty) {
+            return Err(PyValueError::new_err(
+                "each face ring must contain vertices",
+            ));
+        }
+        let rings: Vec<Vec<u32>> = rings
+            .into_iter()
+            .map(|r| {
+                r.into_iter()
+                    .map(|k| live_of(&self.inner, Kind::Vertex, k))
+                    .collect()
+            })
+            .collect::<PyResult<_>>()?;
+        let old = self.inner.face_rings(f);
+        if old == rings {
+            return Ok(());
+        }
+        // Preserve the edge order and existing incidence entries for retained segments.
+        let mut work = self.inner.clone();
+        let mut delta = std::collections::HashMap::<(u32, u32), i64>::new();
+        for (loops, sign) in [(&old, -1), (&rings, 1)] {
+            for r in loops {
+                for (&a, &b) in r.iter().zip(r.iter().cycle().skip(1)) {
+                    *delta.entry((a.min(b), a.max(b))).or_default() += sign;
+                }
+            }
+        }
+        let mut change = Change::default();
+        for (loops, sign) in [(&old, -1), (&rings, 1)] {
+            for r in loops {
+                for (&a, &b) in r.iter().zip(r.iter().cycle().skip(1)) {
+                    let count = delta.get_mut(&(a.min(b), a.max(b))).unwrap();
+                    if count.signum() != sign {
+                        continue;
+                    }
+                    if sign < 0 {
+                        if let Some(e) = work.find_edge(a, b) {
+                            work.ef_remove(e, f);
+                        }
+                    } else {
+                        let e = work.link_edge(a, b, &mut change).map_err(op_err)?;
+                        work.ef_push(e, f);
+                    }
+                    *count -= sign;
+                }
+            }
+        }
+        work.set_rings(f, &rings, true);
+        work.finish(change);
+        self.inner = work;
+        Ok(())
+    }
+
+    /// Apply an ordered membership edit atomically, preserving held element keys.
+    fn set_members(&mut self, kind: &str, keys: Vec<u128>) -> PyResult<()> {
+        use std::collections::HashSet;
+        let kind = kind_of(kind)?;
+        let current = self.inner.live_slots(kind);
+        let next = keys
+            .into_iter()
+            .map(|key| any_of(&self.inner, kind, key))
+            .collect::<PyResult<Vec<_>>>()?;
+        if current == next {
+            return Ok(());
+        }
+        let wanted: HashSet<_> = next.iter().copied().collect();
+        if wanted.len() != next.len() {
+            return Err(PyValueError::new_err("mesh lists require unique elements"));
+        }
+        if current.len() == next.len() && current.iter().all(|slot| wanted.contains(slot)) {
+            let state = &mut self.inner.state;
+            state.order[kind as usize].set_order(next, &state.slots[kind as usize]);
+            self.inner.finish(Change::default());
+            return Ok(());
+        }
+        let mut work = self.inner.clone();
+        let mut change = Change::default();
+        let dropped: Vec<_> = current
+            .into_iter()
+            .filter(|s| !wanted.contains(s))
+            .collect();
+        match kind {
+            Kind::Vertex => {
+                if work
+                    .drop_orphan_vertices(&dropped, &mut change)
+                    .map_err(op_err)?
+                    != dropped.len()
+                {
+                    return Err(PyValueError::new_err(
+                        "cannot remove a vertex used by an edge",
+                    ));
+                }
+                work.relink_vertices(&next, &mut change);
+            }
+            Kind::Edge => {
+                for e in dropped {
+                    work.remove_edge(e, &mut change);
+                }
+                for &e in &next {
+                    if !work.alive(kind, e) {
+                        if let Some(reason) = work.relink_edge_blocked(e) {
+                            return Err(PyValueError::new_err(reason));
+                        }
+                        work.relink_edge(e, &mut change).map_err(op_err)?;
+                    }
+                }
+            }
+            Kind::Face => {
+                for f in dropped {
+                    if work.remove_face_blocked(f) {
+                        return Err(PyValueError::new_err(
+                            "face has inconsistent boundary incidence",
+                        ));
+                    }
+                    work.remove_face(f, &mut change);
+                }
+                for &f in &next {
+                    if !work.alive(kind, f) {
+                        work.relink_face(f, &mut change).map_err(op_err)?;
+                    }
+                }
+            }
+        }
+        work.state.order[kind as usize].set_order(next, &work.state.slots[kind as usize]);
+        work.finish(change);
+        self.inner = work;
         Ok(())
     }
 
@@ -2723,10 +2876,15 @@ impl PyMeshStore {
 
     /// `run_stitch`'s phase 2: `((collapses, bumps, refused vertex or
     /// None), change)`. Collapses before a refused vertex stay done.
-    fn collapse_collinear(&mut self, hypot: &str) -> PyResult<((usize, usize, Option<u128>), PyChange)> {
+    fn collapse_collinear(&mut self, hypot: &str) -> PyResult<((usize, usize), PyChange)> {
         let h = crate::hypot_of(hypot)?;
-        let ((n, b, r), ch) = self.op(|s, ch| Ok(s.collapse_collinear(h, ch)))?;
-        Ok(((n, b, r.map(|v| self.inner.key(Kind::Vertex, v))), ch))
+        self.op_all(|store, change| {
+            let (count, bumps, blocked) = store.collapse_collinear(h, change);
+            if blocked.is_some() {
+                return Err(OpError::Fallback("a collinear collapse would break incidence"));
+            }
+            Ok((count, bumps))
+        })
     }
 
     /// `Mesh._weld_into(keep, dup)`: `(bumps, change)`.
@@ -3188,10 +3346,6 @@ impl PyMeshStore {
             *value -= origin;
         }
         Some(crate::math::Matrix4::from(glam::DMat4::from_cols_array(&matrix)))
-    }
-
-    fn _convert_point(&self, target: &PyMeshStore, point: [f64; 3]) -> [f64; 3] {
-        self.inner.state.frame.convert(point, &target.inner.state.frame)
     }
 
     fn _in_model_frame(&self, origin: [f64; 3]) -> Self {

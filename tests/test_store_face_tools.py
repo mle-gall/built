@@ -22,7 +22,6 @@ from tools.followme import FollowMeTool
 
 def scenes(monkeypatch):
     native = pytest.importorskip("ingetrazo_core")
-    monkeypatch.setattr(S.StoreMesh, "_materialise", lambda *_: pytest.fail("materialised"))
     for backed in (False, True):
         scene = Scene()
         if backed:

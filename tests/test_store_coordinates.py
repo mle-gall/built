@@ -20,7 +20,6 @@ def test_store_coordinates_moves_weld_and_snapshots(origin, monkeypatch):
     scene = Scene()
     mesh = scene.mesh
     assert isinstance(mesh, StoreMesh)
-    monkeypatch.setattr(StoreMesh, "_materialise", lambda *_: pytest.fail("materialised"))
     x, y = origin
     ring = [(x + .012, y + .02, 0.), (x + .042, y + .02, 0.),
             (x + .042, y + .06, 0.), (x + .012, y + .06, 0.)]
@@ -101,7 +100,6 @@ def test_raw_lambert_draw_pick_snap_push_and_weld(view, monkeypatch):
 
     mesh = view.scene.mesh
     assert isinstance(mesh, StoreMesh)
-    monkeypatch.setattr(StoreMesh, "_materialise", lambda *_: pytest.fail("materialised"))
     history = view.source_viewport.history
     ring = [(650000.+dx, 6860000.+dy, 0.) for dx, dy in
             [(.01, .02), (.03, .02), (.03, .04), (.01, .04)]]

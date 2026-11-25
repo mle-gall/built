@@ -131,9 +131,8 @@ def test_heal_skips_import_scale_meshes():
     from ingetrazo_core import Vec3 as V
     m = Mesh()
     m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
-    real_faces = list(m.faces)
-    m.faces.extend(real_faces * topology._HEAL_FACE_CAP)  # fake the count
+    for i in range(1, topology._HEAL_FACE_CAP + 1):
+        m.add_face([V(i, 0, 0), V(i + 1, 0, 0), V(i, 1, 0)])
     t0 = time.time()
     assert topology.heal_overlapping_faces(m) == []
     assert time.time() - t0 < 0.05
-    m.faces[:] = real_faces

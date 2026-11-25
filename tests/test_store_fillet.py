@@ -153,7 +153,6 @@ def test_command_parity_and_snapshot_history(case, monkeypatch):
     pm.edges[0].flat = True
     pm.edges[0].curve = 9801
     sm = store_copy(pm)
-    monkeypatch.setattr(S.StoreMesh, "_materialise", lambda *a: pytest.fail("materialised"))
     reference = preview(pm, case)
     plan = preview(sm, case)
     assert not isinstance(reference, str), reference
@@ -204,7 +203,6 @@ def test_refusals(case, monkeypatch):
             pm.add_face([V(0, 0, 0), V(2, 0, 0), V(0, 1, 0)])
         pm.add_face([V(0, 0, 0), V(2, 0, 0), V(0, -2, 0)])
     sm = store_copy(pm)
-    monkeypatch.setattr(S.StoreMesh, "_materialise", lambda *a: pytest.fail("materialised"))
     def refused(m):
         edge = edge_at(m, (0, 0, 0), (-1, 0, 0) if case == "loose" else (2, 0, 0))
         if case in ("round apex", "long vertex", "wire vertex"):
@@ -242,7 +240,6 @@ def test_tool_uses_native_preview_and_one_snapshot_command(vertices, monkeypatch
     vp = SimpleNamespace(scene=scene, history=History(scene),
                          flash_status=lambda *args: None, update=lambda: None)
     vp.history.error_log = str(tmp_path / "history.log")
-    monkeypatch.setattr(S.StoreMesh, "_materialise", lambda *args: pytest.fail("materialised"))
     for key, value in dict(radius=.15, segments=3, profile=.5, measure="radius",
                            shape=None, corners="round", affect="vertices" if vertices else "edges").items():
         monkeypatch.setattr(FilletTool, key, value)

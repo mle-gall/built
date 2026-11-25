@@ -89,9 +89,6 @@ def push_pull(history, face, distance, keep_base=False):
     (f,) = _need(history.scene.mesh, "face", [face])
     op = PushPullOperation()
     op.base_face = f
-    if not op._ensure_store(history.scene):         # a Python mesh: a store first
-        return _answer(history, history.revision, ok=False)
-    f = op.base_face
     from core.coordinate_frame import ZERO, choose_origin, mesh_frame
     st = store_of(history.scene.mesh)
     origin = choose_origin(st.face_positions(f.key)[0][0]) if st is not None else ZERO
@@ -101,9 +98,6 @@ def push_pull(history, face, distance, keep_base=False):
 
 def _push_face(history, f, distance, keep_base, tool):
     tool.base_face = f
-    if not tool._ensure_store(history.scene):
-        return _answer(history, history.revision, ok=False)
-    f = tool.base_face
     tool.dragging = True
     tool._group = None
     target = tool._target_scene(history.scene)

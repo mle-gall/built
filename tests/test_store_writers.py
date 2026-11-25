@@ -23,11 +23,6 @@ def square(x, y, size):
     return [V(x, y), V(x + size, y), V(x + size, y + size), V(x, y + size)]
 
 
-@pytest.fixture(autouse=True)
-def forbid_materialisation(monkeypatch):
-    def fail(mesh):
-        pytest.fail("command materialised its mesh")
-    monkeypatch.setattr(StoreMesh, "_materialise", fail)
 
 
 def exercise(kind):
