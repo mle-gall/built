@@ -153,6 +153,36 @@ def test_wheel_and_window_match_gl(view):
     gl.close()
 
 
+def test_a_wheel_zoom_does_not_enter_the_geometry_frame(view):
+    """A wheel event only moves the camera. Entering the meshes' frame around
+    it (one Python context manager per mesh) was 3 ms of every event of a
+    zoom on a 5.2M-face model; the tools' events still enter it."""
+    from ingetrazo_render import MouseEvent, WheelEvent
+    entered = []
+    frame = view._geometry_frame
+
+    def counted():
+        entered.append(1)
+        return frame()
+
+    kept = dict(vars(view))
+    view._geometry_frame = counted
+    view._remote_meshes = [(view.scene.mesh, view.packed.origin)]    # as beside a linked model
+    try:
+        before = view.camera.view_matrix().data()
+        view.wheelEvent(WheelEvent(420., 315., 0., 0., 0., 120., "none", 0))
+        assert view.camera.view_matrix().data() != before
+        assert entered == []
+        view.mouseMoveEvent(MouseEvent("move", 420., 315., 0, 0, 0))
+        assert entered
+    finally:
+        for name in ("_geometry_frame", "_remote_meshes"):
+            if name in kept:
+                setattr(view, name, kept[name])
+            else:
+                delattr(view, name)
+
+
 def test_native_face_pick_resolves_prototype_and_edit_context(view):
     from types import SimpleNamespace
     view.source_viewport = SimpleNamespace(scene=view.scene)

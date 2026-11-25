@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! `MetalView`: the pointer, the keys and the wheel as the tools hear them,
 //! the picks a rectangle or a ray asks, and the close.
-use super::metal_view::{attr, base, ctrl_tap, tool_frame, truthy};
+use super::metal_view::{attr, base, camera_frame, ctrl_tap, tool_frame, truthy};
 use super::*;
 
 fn input<'py>(py: Python<'py>, name: &str) -> Reply<'py> {
@@ -519,7 +519,9 @@ fn orbit_pivot_at<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 
 fn wheel<'py>(a: &Args<'py>) -> Reply<'py> {
-    framed(a, "wheelEvent", |view, event| {
+    let (view, event) = (a.get_item(0)?, a.get_item(1)?);
+    camera_frame(&view, "wheelEvent", Some(&event), || {
+        let (view, event) = (&view, &event);
         let py = view.py();
         view.setattr("_invert_wheel", truthy(&view.getattr("source_viewport")?, "_invert_wheel")?)?;
         py.import("views.document_interaction")?.getattr("DocumentInteraction")?.call_method1("wheelEvent", (view, event))?;
