@@ -14,6 +14,17 @@ struct Module {
 
 #[rustfmt::skip]
 const MODULES: &[Module] = &[
+    Module {name:"metal_coverage",imports:&[("pathlib", &["Path"])],doc:"Generate the Metal audit from the built-in window registry and transient tools."},
+    Module {name:"texture_position",imports:&[("__future__", &["annotations"]), ("ingetrazo_core", &["register_tool_adapter"]), ("tools.overlay_painter", &["draw_overlay"]), ("core.input_types", &["Qt"]), ("ingetrazo_core", &["TextureMap", "TexturePlacement", "Vec3 as QVector3D"]), ("core.i18n", &["tr"]), ("tools.base", &["Tool", "ToolContext"])],doc:"Position Texture: the classic fixed pins on one face (Rafael's review of\n2026-09-10, C1: «no encontré manera de cambiar la escala a la textura»).\n\nRight-click a textured face ▸ Texture ▸ Position. The image shows with a\ndotted tile grid and four pins on the corners of the tile under the cursor:\n\n* **red** — drag to MOVE the texture (dragging the texture itself does the\n  same);\n* **green** — drag to SCALE and ROTATE about the red pin. A small\n  protractor appears on the red pin while you drag (Rafael, 2026-09-16:\n  «te bloquea a los 0, a los 45 y a los 90… si no es como un poco a ojo»;\n  Marco brought captures and a recording): a small disc of\n  fixed screen size with the start arm across it, the wedge swept, a\n  square on each arm, the current arm dashed through the green pin, and\n  the angle in the Measurements box. The rotation snaps to 15° steps\n  from where the drag began (0, 15, 30, 45… 90 — Rafael's 0/45/90 are\n  among them); Ctrl while dragging turns the snap off («Ctrl\n  = Sin ajuste»);\n* **blue** — drag to SCALE vertically and SHEAR (red and green stay);\n* a pin dragged or set down near a corner of the face or the middle of\n  one of its edges holds there — with a mark on the\n  point, as the drawing tools show it (a YouTube review of 0.6.1, #1308:\n  «the texture map placement anchors don't snap to vertices or\n  corners»). Ctrl lets go, as it frees the rotation;\n* **yellow** — perspective distort. The engine maps textures\n  with an affine map per face (what every exporter writes), so this pin is\n  shown but not draggable yet.\n\nA single click on a pin LIFTS it: it floats with the cursor, without\nchanging the texture, and the next click sets it down — the way to put the\nred pin on a corner of the face before scaling from there. Right-click\ninside the tool: Done, Reset, Flip, Rotate, Undo. Enter or a click outside\nthe face finishes; Esc first restores the position (and stays), a second\nEsc leaves without changes.\n\nThe result is the face's world→UV affine map (``attrs[\"texture\"][\"uvw\"]``,\nsee :func:`core.texture.face_uv_axes`): the viewport, the .skp/.dae/.obj\nwriters and the paint sampler all read that one map, so what is placed\nhere is what any .skp reader shows for the same file."},
+    Module {name:"overlay_painter",imports:&[],doc:"Present the Rust tool layer on a host's Qt paint device."},
+    Module {name:"select_host",imports:&[("__future__", &["annotations"]), ("ingetrazo_core", &["box_records", "box_placements", "box_chunk_group", "chunk_bounds as _local_bounds", "box_from_pack as _box_groups_packed", "segment_overlaps_box as _seg_rect_overlap"]), ("core.dimension", &["Dimension"]), ("core.textlabel", &["TextLabel"]), ("core.group", &["Group"]), ("core.mesh", &["Edge", "Face"]), ("core.guide", &["is_guide"]), ("core.section", &["SectionPlane"]), ("core.history", &["CompoundCommand", "DeleteDimensionsCommand", "DeleteGeoPathsCommand", "DeleteGroupCommand", "DeleteGuidesCommand", "DeleteSectionPlanesCommand", "DeleteTextLabelsCommand", "SetActiveSectionCommand", "EditTextLabelCommand", "EraseSelectionCommand"]), ("georef.geopath", &["GeoPath"]), ("ingetrazo_core", &["register_tool_functions"])],doc:"Select's viewport actions and compatibility paths for materialised meshes.\nStore-backed meshes grow picks through native incidence. The native viewport\nbox-selects placements from the renderer's packed prototype arrays."},
+    Module {name:"scale_manager_host",imports:&[("ingetrazo_core", &["register_tool_adapter"]), ("tools.rust_tool_base", &["RustTool"])],doc:"Both hosts' bindings for the scale manager tool gestures."},
+    Module {name:"annotation_host",imports:&[("ingetrazo_core", &["register_tool_adapter"]), ("tools.rust_tool_base", &["RustTool"]), ("ingetrazo_core", &["Vec3"]), ("tools.rust_tool_base", &["_point_property", "_tuple"]), ("tools.base", &["AxisMagnet"])],doc:"Both hosts' bindings for the annotation tool gestures."},
+    Module {name:"walkthrough_host",imports:&[("ingetrazo_core", &["register_tool_adapter", "register_tool_functions"]), ("tools.overlay_painter", &["draw_overlay"]), ("core.input_types", &["QPointF", "Qt"]), ("ingetrazo_core", &["Vec3", "ToolMachine"]), ("core.i18n", &["tr"]), ("core.units", &["fmt_len"]), ("tools.rust_tool_base", &["_Host", "_mods", "_tuple"])],doc:"Walkthrough bindings for the viewport camera, preferences, timers and painter."},
+    Module {name:"protractor_host",imports:&[("__future__", &["annotations"]), ("ingetrazo_core", &["register_tool_adapter"]), ("core.input_types", &["Qt"]), ("ingetrazo_core", &["Vec3 as QVector3D"]), ("core.guide", &["Guide"]), ("ingetrazo_core", &["ToolDisc"]), ("core.snap", &["COLOR_AXIS_X", "COLOR_AXIS_Y", "COLOR_AXIS_Z"]), ("core.axes", &["plane_axes"]), ("tools.base", &["Tool", "ToolContext"]), ("core.axes", &["AXES as _AXES"])],doc:"Viewport and extension bindings for the shared Rust protractor cursor."},
+    Module {name:"offset_host",imports:&[("ingetrazo_core", &["register_tool_adapter", "register_tool_functions"]), ("tools.overlay_painter", &["draw_overlay"]), ("ingetrazo_core", &["Vec3 as QVector3D", "ordered_edge_path as _run_from_edges", "outline_normal as _newell"]), ("core.i18n", &["tr"]), ("core.mesh", &["Edge"]), ("core.units", &["fmt_len"]), ("tools.rust_tool_base", &["_point_property"])],doc:"Offset viewport bindings. The machine owns the source geometry and gesture."},
+    Module {name:"rust_tool_base",imports:&[("__future__", &["annotations"]), ("ingetrazo_core", &["register_tool_adapter", "register_tool_functions"]), ("ingetrazo_core", &["ToolBounds", "ToolMachine", "ToolHandles", "Vec3", "ViewportToolHost"]), ("tools.base", &["Tool"])],doc:"ToolMachine event conversion, viewport queries and protocol dispatch."},
+    Module {name:"base",imports:&[("__future__", &["annotations"]), ("ingetrazo_core", &["register_tool_adapter", "register_tool_functions"]), ("abc", &["ABC", "abstractmethod"]), ("dataclasses", &["dataclass"]), ("core.input_types", &["QPointF", "Qt"]), ("ingetrazo_core", &["Vec3 as QVector3D", "cursor_pixel_scale", "cursor_plane_reference", "cursor_plane_color", "plane_input"]), ("core.snap", &["POINT_SNAP_KINDS", "SnapResult"]), ("core.axes", &["AXES as PLANE_LOCK_AXES"])],doc:"Base class for IngeTrazo tools and the per-event ``ToolContext`` they receive.\n\nA tool is anything the user activates from the toolbar to interact with the\nviewport: draw, modify, select. Both built-in tools and third-party plugins\ninherit from :class:`Tool` so they can be registered uniformly.\n\nSpatial tools (line, rectangle, push/pull, select, ...) override\n:meth:`on_click`, :meth:`on_hover` and :meth:`on_cancel`. The viewport\nraycasts the mouse pixel against the working plane and produces a\n:class:`ToolContext` that combines the snapped world point, the raw screen\nposition, keyboard modifiers and the snap metadata."},
     Module {name:"pushpull", imports:&[("__future__", &["annotations"]), ("ingetrazo_core", &["register_tool_adapter"]), ("core.input_types", &["Qt"]), ("ingetrazo_core", &["Vec3 as QVector3D", "push_reference_target"]), ("views", &["input_state"]), ("core.i18n", &["tr"]), ("core.mesh", &["_STITCH_TOL"]), ("core.mesh", &["Face as MeshFace"]), ("core.orient", &["orient_outward"]), ("core.topology", &["_key"]), ("tools.base", &["ToolContext", "ctrl_clause"]), ("tools.rust_tools", &["RustTool", "_mods"]), ("core.units", &["fmt_len"]), ("core", &["push_scans"]), ("core.push_pull", &["PushPullOperation", "_GroupScene", "_MIN_EXTRUDE", "_face_shape", "_loops_overlap_2d", "_made_since", "_paint_of", "_project_loop_2d"])], doc:"Push/Pull tool: extrude a face along its normal.\n\nUX (the usual push/pull convention):\n- Hover a face; the cursor picks the front-most face under it.\n- First click: lock onto that face and start a drag along its normal.\n- Subsequent mouse motion slides the extrusion preview (wireframe of\n  the future box) along the normal axis. Length is shown near the\n  midpoint, same overlay as the line tool.\n- Second click commits at the current distance.\n- Typing a number + Enter (VCB) commits at exactly that distance,\n  preserving the current direction's sign; a negative value (\"-2\")\n  reverses it, and unit suffixes (\"30cm\", \"1500mm\") are understood.\n- **Ctrl** = push/pull a copy: the start face stays in place (a slab\n  division) and the extrusion stacks as a new segment — how floors are\n  stacked.\n- **Double-click** repeats the last committed distance on the face under\n  the cursor (with Ctrl, as a copy).\n- **Several faces selected**: pushing or pulling any one of them moves them\n  all the same distance, each along its own normal, as one undo step.\n- Esc cancels without committing.\n\nCommit pipeline (the deterministic root-fix, no case tree):\n1. Orient the mesh outward (entry invariant; no-op on open sheets).\n2. Build the *naive* extrusion: consumed/kept base, moved cap (with holes),\n   one wall quad per boundary/hole edge — even where a quad lands on an\n   existing face's plane.\n3. Stitch connectivity (T-junctions, collinear vertices).\n4. On a solid: deterministically rebuild every touched plane (seams, overlaps,\n   cracks) from its edges via ``Store::rebuild_push_planes``; on a flat sheet, fall back\n   to the seeded coplanar merge (no outward side exists there).\n5. Orient outward again — every committed solid upholds the invariant.\n\nA bordered (embedded) base face is consumed either direction — pushing in\ncarves a recess / step / through-hole (the far face is punched when the push\nreaches it); pushing out grows the solid. A free-standing face keeps its base\nas the cap of the new box."},
     Module {name:"scale_host", imports:&[("__future__", &["annotations"]), ("ingetrazo_core", &["register_tool_adapter"]), ("core.input_types", &["Qt"]), ("ingetrazo_core", &["MatrixGesture", "ScaleGripSpec", "scale_grab", "Vec3 as QVector3D"]), ("core.i18n", &["tr"])], doc:"Scale grip picking and resident-row previews for the Rust machine."},
     Module {name:"fillet_host", imports:&[("__future__", &["annotations"]), ("ingetrazo_core", &["register_tool_adapter"]), ("core.input_types", &["Qt"]), ("ingetrazo_core", &["Vec3 as QVector3D", "bevel_nearest_end", "bevel_selection", "bevel_targets"]), ("core.fillet", &["CIRCULAR", "plan_fillet"]), ("core.units", &["fmt_len_fine"]), ("core.i18n", &["tr"]), ("core.mesh", &["Edge"]), ("core.vertex_bevel", &["plan_vertex_bevel"]), ("tools.base", &["Tool"])], doc:"Resident bevel targets, preview mesh and panel bindings for the Fillet machine."},
@@ -76,6 +87,35 @@ const HOST_CLASSES: &[(&str, &str, &str)] = &[
 pub(super) fn tool_module_classes() -> Vec<(&'static str, &'static str, &'static str)> {
     let mut classes = HOST_CLASSES.to_vec();
     classes.extend_from_slice(&[
+
+    ("tools.texture_position","TexturePositionTool","Tool"),
+
+
+
+    ("tools.scale_manager_host","ScaleManagerTool","RustTool"),
+
+    ("tools.annotation_host","_AnnotationTool","AxisMagnet,RustTool"),
+    ("tools.annotation_host","TextTool","_AnnotationTool"),
+    ("tools.annotation_host","DimensionTool","_AnnotationTool"),
+
+    ("tools.walkthrough_host","EyeHost","object"),
+    ("tools.walkthrough_host","PositionCameraHost","EyeHost"),
+    ("tools.walkthrough_host","WalkHost","EyeHost"),
+    ("tools.walkthrough_host","FirstPersonHost","EyeHost"),
+
+    ("tools.protractor_host","ProtractorBase","ToolDisc,Tool"),
+    ("tools.protractor_host","ProtractorHost","ProtractorBase"),
+
+    ("tools.offset_host","OffsetHost","object"),
+
+    ("tools.rust_tool_base","_Host","ViewportToolHost"),
+    ("tools.rust_tool_base","RustTool","Tool"),
+
+    ("tools.base","AxisMagnet","object"),
+    ("tools.base","PlaneLock","object"),
+    ("tools.base","ToolContext","object"),
+    ("tools.base","Tool","ABC"),
+
     ("tools.pushpull","PushPullTool","PushPullOperation,RustTool"),
     ("tools.scale_host","_Grip","object"),
     ("tools.scale_host","ScaleHost","object"),
@@ -170,9 +210,19 @@ fn definition(name: &str) -> Option<&'static Module> {
     MODULES.iter().find(|m| m.name == leaf)
 }
 
+const VIEW_MODULES: &[&str] = &[
+    "document_tools",
+    "view_navigation",
+    "view_commands",
+    "view_host",
+    "document_controller",
+    "ndof_input",
+];
+
 #[pyclass(module = "ingetrazo_core", frozen)]
 struct ToolModules {
     path: String,
+    views: bool,
 }
 
 #[pymethods]
@@ -194,7 +244,14 @@ impl ToolModules {
     ) -> Reply<'py> {
         let _ = target;
         let py = slf.py();
-        if definition(fullname).is_none() {
+        let found = if slf.get().views {
+            fullname
+                .strip_prefix("views.")
+                .is_some_and(|name| VIEW_MODULES.contains(&name))
+        } else {
+            definition(fullname).is_some()
+        };
+        if !found {
             return Ok(none(py));
         }
         py.import("importlib.machinery")?.call_method(
@@ -208,6 +265,11 @@ impl ToolModules {
     fn exec_module(&self, module: &Bound<'_, PyModule>) -> PyResult<()> {
         let py = module.py();
         let full: String = module.name()?.extract()?;
+        if self.views {
+            py.import("ingetrazo_render")?
+                .call_method1("install_interaction_module", (module,))?;
+            return Ok(());
+        }
         let spec = definition(&full).ok_or_else(|| PyImportError::new_err(full.clone()))?;
         if matches!(spec.name, "flip_host" | "paste_host") {
             module.add(
@@ -224,7 +286,9 @@ impl ToolModules {
                 let (name, alias) = field.split_once(" as ").unwrap_or((field, field));
                 let value = match source.getattr(name) {
                     Ok(value) => value,
-                    Err(error) if error.is_instance_of::<pyo3::exceptions::PyAttributeError>(py) => {
+                    Err(error)
+                        if error.is_instance_of::<pyo3::exceptions::PyAttributeError>(py) =>
+                    {
                         py.import(format!("{from}.{name}"))?.into_any()
                     }
                     Err(error) => return Err(error),
@@ -240,6 +304,12 @@ impl ToolModules {
     }
     #[pyo3(signature=(prefix=""))]
     fn iter_modules(&self, prefix: &str) -> Vec<(String, bool)> {
+        if self.views {
+            return VIEW_MODULES
+                .iter()
+                .map(|name| (format!("{prefix}{name}"), false))
+                .collect();
+        }
         MODULES
             .iter()
             .map(|m| (format!("{prefix}{}", m.name), false))
@@ -251,11 +321,22 @@ impl ToolModules {
 /// path entry only recognizes this package's former adapter modules.
 #[pyfunction]
 pub(super) fn install_tool_modules(paths: &Bound<'_, PyList>) -> PyResult<()> {
+    install_modules(paths, false)
+}
+#[pyfunction]
+pub(super) fn install_view_modules(paths: &Bound<PyList>) -> PyResult<()> {
+    install_modules(paths, true)
+}
+fn install_modules(paths: &Bound<PyList>, views: bool) -> PyResult<()> {
     let py = paths.py();
     let sys = py.import("sys")?;
     let first = paths.get_item(0)?.extract::<String>()?;
     let key = std::path::Path::new(&first)
-        .join("__built_native_tools__")
+        .join(if views {
+            "__built_native_views__"
+        } else {
+            "__built_native_tools__"
+        })
         .to_string_lossy()
         .into_owned();
     let cache = sys.getattr("path_importer_cache")?;
@@ -268,7 +349,13 @@ pub(super) fn install_tool_modules(paths: &Bound<'_, PyList>) -> PyResult<()> {
         let finder = match finder {
             Some(f) => f,
             None => {
-                let f = Bound::new(py, ToolModules { path: key.clone() })?;
+                let f = Bound::new(
+                    py,
+                    ToolModules {
+                        path: key.clone(),
+                        views,
+                    },
+                )?;
                 hooks.call_method1("append", (&f,))?;
                 f
             }

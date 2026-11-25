@@ -1,22 +1,33 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Built-in tool types retain Python subclassing and module identity.
 use super::*;
+mod annotation_host;
+mod base;
 mod eraser_host;
 mod fillet_host;
 mod followme_host;
 mod geopath_host;
 mod image_host;
+mod metal_coverage;
 mod move_host;
 mod north_host;
+mod offset_host;
+mod overlay_painter;
 mod paint_host;
 mod place_group_host;
+mod protractor_host;
 mod pushpull;
 mod rotate_host;
+mod rust_tool_base;
 mod rust_tools;
 mod scale_host;
+mod scale_manager_host;
 mod section_host;
+mod select_host;
 mod solid_host;
 mod tape_host;
+mod texture_position;
+mod walkthrough_host;
 fn define<'py>(
     module: &Bound<'py, PyModule>,
     name: &str,
@@ -46,12 +57,25 @@ fn install_methods(module: &Bound<PyModule>, cls: &Obj, methods: &[Method]) -> P
             doc,
         )?;
     }
-    py.import("abc")?
-        .call_method1("update_abstractmethods", (cls,))?;
+    if cls.is_instance_of::<pyo3::types::PyType>() {
+        py.import("abc")?
+            .call_method1("update_abstractmethods", (cls,))?;
+    }
     Ok(())
 }
 pub(super) fn install(name: &str, module: &Bound<PyModule>) -> PyResult<()> {
     match name {
+        "base" => base::install(module)?,
+        "rust_tool_base" => rust_tool_base::install(module)?,
+        "offset_host" => offset_host::install(module)?,
+        "protractor_host" => protractor_host::install(module)?,
+        "walkthrough_host" => walkthrough_host::install(module)?,
+        "annotation_host" => annotation_host::install(module)?,
+        "scale_manager_host" => scale_manager_host::install(module)?,
+        "select_host" => select_host::install(module)?,
+        "overlay_painter" => overlay_painter::install(module)?,
+        "texture_position" => texture_position::install(module)?,
+        "metal_coverage" => metal_coverage::install(module)?,
         "pushpull" => pushpull::install(module)?,
         "scale_host" => scale_host::install(module)?,
         "fillet_host" => fillet_host::install(module)?,
