@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import math
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
 from core.history import History

@@ -17,7 +17,7 @@
 | Tile upload hitch during zoom | ~100 ms | none ≥ 33 ms |
 | Idle CPU | 0 % ✓ | 0 % (keep watching the 149 % ghost) |
 
-`INGETRAZO_PERF=1` is the measuring stick; every phase lands with its
+`BUILT_PERF=1` is the measuring stick; every phase lands with its
 numbers in the commit message, like the marathon did.
 
 ## Why the native modeller feels 2× (honest diagnosis)
@@ -44,9 +44,9 @@ numbers in the commit message, like the marathon did.
   library swap.
 - **The engine moves to Rust, piece by piece** (decided 2026-11-11, after
   the SVG export of a villa took 13 minutes in Python + NumPy). Each piece
-  is a kernel in `rust/ingetrazo_core` behind the same Python interface,
+  is a kernel in `rust/built_core` behind the same Python interface,
   held to the Python pass by a parity test, with both engines runnable
-  (`INGETRAZO_RUST=1|0`) until the Python one is retired. By 0.6.5 no code
+  (`BUILT_RUST=1|0`) until the Python one is retired. By 0.6.5 no code
   of our own depends on NumPy; ezdxf and openskp keep it for now.
 - **The Python app stays Python.** Windows, dialogs, tools and the
   document model are where the velocity (solo dev + AI pair) comes from;
@@ -338,7 +338,7 @@ hover latency. The repeated context cost still needs a cursor-specific profile;
 assuming every camera change rebuilds the whole scene index would be incorrect.
 
 ```sh
-INGETRAZO_RUST=1 QT_QPA_PLATFORM=offscreen .venv-work/bin/python -m pytest -q \
+BUILT_RUST=1 QT_QPA_PLATFORM=offscreen .venv-work/bin/python -m pytest -q \
   tests/test_lazy_native_snap.py::test_camera_changes_reuse_pick_geometry_until_a_placement_moves
 ```
 
@@ -401,11 +401,11 @@ locally under the worktree. Nothing was pushed, and no PR or issue was created.
 
 ## P7 — wgpu renderer spike (2026-11-08)
 
-A separate pyo3 `ingetrazo_render.Renderer` now uploads a resident scene,
+A separate pyo3 `built_render.Renderer` now uploads a resident scene,
 computes per-placement frustum/one-physical-pixel culling on the GPU, compacts
 survivors into bounded per-prototype ranges, and renders indexed indirect
-commands. The production GL viewport is unchanged when `INGETRAZO_WGPU` is
-unset. Build/run/API details: [renderer README](../rust/ingetrazo_render/README.md).
+commands. The production GL viewport is unchanged when `BUILT_WGPU` is
+unset. Build/run/API details: [renderer README](../rust/built_render/README.md).
 
 ### Method and coverage
 
@@ -484,7 +484,7 @@ Neither path has Python per-prototype work during a frame.
 
 ### Embedding findings
 
-`INGETRAZO_WGPU=1` installs a per-document native QWidget stand-in in the
+`BUILT_WGPU=1` installs a per-document native QWidget stand-in in the
 real MainWindow stack. The hidden GL viewport retains document state; tools
 are disabled. Scene-version signals coalesce resident rebuilds. A bounded
 synthetic real-window run verified direct CAMetalLayer presentation, positive
@@ -530,11 +530,11 @@ expression set is MIT; Apache-2.0; MIT OR Apache-2.0 (also reverse-order and
 slash spellings); (MIT OR Apache-2.0) AND Unicode-3.0; Apache-2.0 WITH
 LLVM-exception; MIT OR Apache-2.0 OR Zlib; Zlib OR Apache-2.0 OR MIT;
 Unlicense OR MIT; ISC; Zlib; CC0-1.0. No proprietary or incompatible copyleft
-dependency was found in the locked graph. IngeTrazo and this crate remain GPL-3.
+dependency was found in the locked graph. Built and this crate remain GPL-3.
 
 ### Validation and hand-over
 
-- Rust: **4 passed** (`PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/ingetrazo_render/Cargo.toml`). Covers six frustum planes, subpixel rejection, mirrored/sheared bounds, survivor compaction/reset and 20-byte indirect layout.
+- Rust: **4 passed** (`PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/built_render/Cargo.toml`). Covers six frustum planes, subpixel rejection, mirrored/sheared bounds, survivor compaction/reset and 20-byte indirect layout.
 - Focused Python: **7 passed** (`QT_QPA_PLATFORM=offscreen .venv-work/bin/python -m pytest -q tests/test_wgpu_scene.py`). Covers ABI sizes, shared prototypes, local/world AABBs, matrix column order, palette colours, offsets, deferred meshes staying deferred, edge-only and hidden placements.
 - Required bounded suite, one invocation: `QT_QPA_PLATFORM=offscreen .venv-work/bin/python scripts/pytest_batches.py -m 'not slow'` — **7,093 passed, 19 failed, 138 skipped, 2 xfailed, 805 deselected, 56 warnings**, six batches. Elapsed 1,643 seconds includes pauses during renderer measurements.
 - The 19 failures match the supplied baseline: 14 translation completeness failures (including Arabic), cached cursor pick, extension-preview wrapping, hidden panels, swatch tooltip, and late-toolbar bold tooltip. No additional failures or crashes. [Exact failed test IDs](benchmarks/wgpu-2026-11-08/tests.json).
@@ -554,7 +554,7 @@ five display modes and asynchronous timestamp collection. The default GL
 path remains unchanged. Profiles/silhouettes, textures and section planes are
 out of scope. Tools remain disabled on the native stand-in.
 
-The native bake lives in ingetrazo_core to reuse facegeom.rs directly and
+The native bake lives in built_core to reuse facegeom.rs directly and
 avoid copying the triangulator. Rayon parallelizes faces within each mesh.
 Python still constructs Plans, iterates prototypes, allocates indices and
 concatenates buffers. Native edge packing returns bounds, but the scene
@@ -647,10 +647,10 @@ Builds used the worktree's Python 3.13 venv and CARGO_HOME=.cargo-work:
 ```sh
 python3.13 -m venv .venv-work
 .venv-work/bin/pip install -r requirements.txt maturin
-VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work .venv-work/bin/maturin develop --release --manifest-path rust/ingetrazo_core/Cargo.toml
-VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/ingetrazo_render/Cargo.toml
-PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/ingetrazo_core/Cargo.toml
-PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/ingetrazo_render/Cargo.toml
+VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work .venv-work/bin/maturin develop --release --manifest-path rust/built_core/Cargo.toml
+VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/built_render/Cargo.toml
+PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/built_core/Cargo.toml
+PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/built_render/Cargo.toml
 QT_QPA_PLATFORM=offscreen .venv-work/bin/python -m pytest -q tests/test_wgpu_scene.py
 QT_QPA_PLATFORM=offscreen .venv-work/bin/python scripts/pytest_batches.py -m 'not slow'
 ```
@@ -759,10 +759,10 @@ Build and focused validation (worktree-local Python 3.13 environment):
 ```sh
 python3.13 -m venv .venv-work
 .venv-work/bin/pip install -r requirements.txt maturin
-VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work .venv-work/bin/maturin develop --release --manifest-path rust/ingetrazo_core/Cargo.toml
-VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/ingetrazo_render/Cargo.toml
-PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/ingetrazo_core/Cargo.toml
-PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/ingetrazo_render/Cargo.toml
+VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work .venv-work/bin/maturin develop --release --manifest-path rust/built_core/Cargo.toml
+VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/built_render/Cargo.toml
+PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/built_core/Cargo.toml
+PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/built_render/Cargo.toml
 QT_QPA_PLATFORM=offscreen .venv-work/bin/python -m pytest -q tests/test_wgpu_scene.py tests/test_face_geometry_native.py
 QT_QPA_PLATFORM=offscreen .venv-work/bin/python scripts/pytest_batches.py -m 'not slow'
 ```
@@ -825,14 +825,14 @@ or performance gates.
 
 Both release builds succeeded using the private Python 3.13 venv and
 `CARGO_HOME=$PWD/.cargo-work`. The commands are the same as R1b above,
-including `--features extension-module` for ingetrazo_render.
+including `--features extension-module` for built_render.
 Use `TMPDIR=$PWD/.r2-tmp` for subsequent builds and tests (short enough
 for macOS Unix sockets).
 
 ```sh
 QT_QPA_PLATFORM=offscreen .venv-work/bin/python -m pytest -q tests/test_wgpu_overlay.py tests/test_wgpu_scene.py
-PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/ingetrazo_core/Cargo.toml
-PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/ingetrazo_render/Cargo.toml
+PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/built_core/Cargo.toml
+PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/built_render/Cargo.toml
 QT_QPA_PLATFORM=offscreen TMPDIR=$PWD/.r2-tmp .venv-work/bin/python scripts/pytest_batches.py -m 'not slow'
 ```
 
@@ -870,7 +870,7 @@ lazy-native memo is built by mouse hover. The index survives camera changes.
 Queries pass only the picked placement to the native candidate search, then
 reuse the GL Möller–Trumbore test and `compute_snap`. Local occlusion rejects
 back-side points within the picked prototype. Glyphs and inference guides use
-the R2 overlay. `INGETRAZO_PERF` hover logging includes the native total.
+the R2 overlay. `BUILT_PERF` hover logging includes the native total.
 
 Selection writes `scene.selection`, with Shift add and Ctrl/Cmd toggle as
 requested for this path. Highlight rows are cached by uid; panel changes are
@@ -925,11 +925,11 @@ Private Python 3.13 venv and private Cargo cache; no new dependencies:
 ```sh
 python3.13 -m venv .venv-work
 .venv-work/bin/pip install -r requirements.txt maturin
-VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work .venv-work/bin/maturin develop --release --manifest-path rust/ingetrazo_core/Cargo.toml
-VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/ingetrazo_render/Cargo.toml
+VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work .venv-work/bin/maturin develop --release --manifest-path rust/built_core/Cargo.toml
+VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/built_render/Cargo.toml
 QT_QPA_PLATFORM=offscreen TMPDIR=$PWD/.r2a-tmp .venv-work/bin/python -m pytest -q tests/test_wgpu_interaction.py tests/test_wgpu_scene.py tests/test_wgpu_overlay.py
-PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/ingetrazo_core/Cargo.toml
-PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/ingetrazo_render/Cargo.toml
+PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/built_core/Cargo.toml
+PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/built_render/Cargo.toml
 QT_QPA_PLATFORM=offscreen TMPDIR=$PWD/.r2a-tmp .venv-work/bin/python scripts/pytest_batches.py -m 'not slow'
 .venv-work/bin/python scripts/wgpu_r2a_measure.py ~/Desktop/models/asbuilt_ride.igz
 .venv-work/bin/python scripts/wgpu_r2a_measure.py ~/Desktop/models/asbuilt_ride.igz --msaa
@@ -1045,7 +1045,7 @@ worktree-local copy setting the profile's `instancing` key produced the on run.
 For independent future profile measurements, use:
 
 ```sh
-QT_QPA_PLATFORM=offscreen INGETRAZO_RUST=1 .venv-work/bin/python \
+QT_QPA_PLATFORM=offscreen BUILT_RUST=1 .venv-work/bin/python \
   tests/benchmark_export_pipeline.py \
   ~/Desktop/models/asbuilt_ride.igz \
   --output .venv-work/isolated-brep.ifc --geometry brep --instancing
@@ -1136,7 +1136,7 @@ a full collection. No renderer/crate files were changed.
 
 General now offers OpenGL (default) / Metal via wgpu (experimental), persisted
 as `General/viewport_renderer`. Changes apply to subsequently opened documents;
-an existing document retains its renderer. `INGETRAZO_WGPU=0/1` wins without
+an existing document retains its renderer. `BUILT_WGPU=0/1` wins without
 writing guard state. The status bar identifies the active document's renderer.
 A persisted `viewport_renderer_starting` flag is armed immediately before
 resident packing/device creation, after document loading, and cleared once on
@@ -1147,7 +1147,7 @@ failure threshold. Empty scenes clear the flag after successful device setup.
 ### Real-window measurements
 
 Python 3.13.12, PySide6 6.11.3, both local release crates; read-only ride input.
-Each GUI child was externally bounded to 240 s. `INGETRAZO_PERF=1`, ten-second
+Each GUI child was externally bounded to 240 s. `BUILT_PERF=1`, ten-second
 `faulthandler.dump_traceback_later` samples, explicit `PYTHONPATH`; QSettings,
 Qt writable paths, texture/drawing caches and logs redirected into this worktree.
 The initial module snapshot is from `b24de023`. No full suite from this worktree ran concurrently with these measurements.
@@ -1334,7 +1334,7 @@ not demonstrated safe for automatic live measurement by these changes.
 Reproduction (run twice in separate processes, model read only):
 
 ```sh
-QT_QPA_PLATFORM=offscreen INGETRAZO_RUST=1 .venv-work/bin/python \
+QT_QPA_PLATFORM=offscreen BUILT_RUST=1 .venv-work/bin/python \
   tests/benchmark_takeoff_arrays.py \
   ~/Desktop/models/asbuilt_ride.igz \
   --output .venv-work/takeoff-run1
@@ -1353,7 +1353,7 @@ Validation uses a worktree-owned Python 3.13 environment installed from
 `requirements.txt`; the optional Rust and IFC wheels are absent. Focused tests:
 
 ```sh
-QT_QPA_PLATFORM=offscreen INGETRAZO_RUST=1 .venv-work/bin/python -m pytest \
+QT_QPA_PLATFORM=offscreen BUILT_RUST=1 .venv-work/bin/python -m pytest \
   tests/test_geometry_arrays.py tests/test_bim.py \
   tests/test_bim_grouped_tags.py tests/test_bim_reinforcing_bar.py -q
 ```
@@ -1369,7 +1369,7 @@ wheel; existing non-IFC quantity fixtures pass.
 Bounded suite command:
 
 ```sh
-QT_QPA_PLATFORM=offscreen INGETRAZO_RUST=1 .venv-work/bin/python \
+QT_QPA_PLATFORM=offscreen BUILT_RUST=1 .venv-work/bin/python \
   scripts/pytest_batches.py -m 'not slow' --batches 60
 ```
 
@@ -1409,7 +1409,7 @@ native test code was changed to suppress these results.
 Isolated recheck command (same offscreen/Rust-requested environment):
 
 ```sh
-TMPDIR="$PWD/.venv-work/tmp" QT_QPA_PLATFORM=offscreen INGETRAZO_RUST=1 \
+TMPDIR="$PWD/.venv-work/tmp" QT_QPA_PLATFORM=offscreen BUILT_RUST=1 \
 .venv-work/bin/python -m pytest -q \
   tests/test_project_tabs.py::test_each_untitled_project_autosaves_to_its_own_slot \
   tests/test_extension_manager.py::test_extension_sort_modes_and_recent_date_availability \
@@ -1524,10 +1524,10 @@ Validation commands (all paths relative to this worktree):
 ```sh
 python3.13 -m venv .venv-work
 .venv-work/bin/pip install -r requirements.txt maturin
-CARGO_HOME=$PWD/.cargo-work VIRTUAL_ENV=$PWD/.venv-work .venv-work/bin/maturin develop --release --manifest-path rust/ingetrazo_core/Cargo.toml
-CARGO_HOME=$PWD/.cargo-work VIRTUAL_ENV=$PWD/.venv-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/ingetrazo_render/Cargo.toml
-CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/ingetrazo_core/Cargo.toml --lib
-CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/ingetrazo_render/Cargo.toml --lib
+CARGO_HOME=$PWD/.cargo-work VIRTUAL_ENV=$PWD/.venv-work .venv-work/bin/maturin develop --release --manifest-path rust/built_core/Cargo.toml
+CARGO_HOME=$PWD/.cargo-work VIRTUAL_ENV=$PWD/.venv-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/built_render/Cargo.toml
+CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/built_core/Cargo.toml --lib
+CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/built_render/Cargo.toml --lib
 QT_QPA_PLATFORM=offscreen .venv-work/bin/python -m pytest tests/test_wgpu_scene.py tests/test_wgpu_materials.py -q
 QT_QPA_PLATFORM=offscreen .venv-work/bin/python scripts/pytest_batches.py -m 'not slow'
 ```
@@ -1689,10 +1689,10 @@ cutout alpha rather than general material opacity, and foliage filtering.
 ```sh
 python3.13 -m venv .venv-work
 .venv-work/bin/pip install -r requirements.txt maturin
-CARGO_HOME=$PWD/.cargo-work VIRTUAL_ENV=$PWD/.venv-work .venv-work/bin/maturin develop --release --manifest-path rust/ingetrazo_core/Cargo.toml
-CARGO_HOME=$PWD/.cargo-work VIRTUAL_ENV=$PWD/.venv-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/ingetrazo_render/Cargo.toml
-CARGO_HOME=$PWD/.cargo-work cargo test --release --manifest-path rust/ingetrazo_core/Cargo.toml --lib
-CARGO_HOME=$PWD/.cargo-work cargo test --release --manifest-path rust/ingetrazo_render/Cargo.toml --lib
+CARGO_HOME=$PWD/.cargo-work VIRTUAL_ENV=$PWD/.venv-work .venv-work/bin/maturin develop --release --manifest-path rust/built_core/Cargo.toml
+CARGO_HOME=$PWD/.cargo-work VIRTUAL_ENV=$PWD/.venv-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/built_render/Cargo.toml
+CARGO_HOME=$PWD/.cargo-work cargo test --release --manifest-path rust/built_core/Cargo.toml --lib
+CARGO_HOME=$PWD/.cargo-work cargo test --release --manifest-path rust/built_render/Cargo.toml --lib
 QT_QPA_PLATFORM=offscreen .venv-work/bin/python -m pytest -q tests/test_wgpu_scene.py tests/test_wgpu_materials.py tests/test_wgpu_style.py tests/test_wgpu_interaction.py
 QT_QPA_PLATFORM=offscreen .venv-work/bin/python scripts/pytest_batches.py -m 'not slow'
 ```
@@ -1750,7 +1750,7 @@ Degenerate candidates with no adjacent normal cannot be silhouettes and are
 omitted. Coincident source edges retain their independent dash directions.
 The complete stable contract, including byte offsets, survivor addressing,
 material rebasing and replacement requirements, is in
-[`rust/ingetrazo_render/README.md`](../rust/ingetrazo_render/README.md#compact-resident-layout-2026-11-09).
+[`rust/built_render/README.md`](../rust/built_render/README.md#compact-resident-layout-2026-11-09).
 
 The shader generates six screen-space corners per edge; a non-indexed indirect
 draw per prototype instances its contiguous quad range across visible
@@ -1790,7 +1790,7 @@ above 33 ms, despite earlier sampled runs passing. This is not full R2b
 acceptance.
 
 **R2c integration checkpoint:** this worktree's `MainWindow._activate_tool`
-still disables tool activation when `INGETRAZO_WGPU=1`. R2c owns that file;
+still disables tool activation when `BUILT_WGPU=1`. R2c owns that file;
 it was not edited here. Its integration must remove that legacy guard and
 avoid the GL-only Tape `start_from_hover` pickup on the native path. Native
 activation observes the source viewport's existing measurement signal and
@@ -1857,9 +1857,9 @@ Private Python 3.13 environment and Cargo cache:
 ```sh
 python3.13 -m venv .venv-work
 .venv-work/bin/pip install -r requirements.txt maturin
-VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work .venv-work/bin/maturin develop --release --manifest-path rust/ingetrazo_core/Cargo.toml
-VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/ingetrazo_render/Cargo.toml
-VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work PYO3_PYTHON=$PWD/.venv-work/bin/python cargo test --release --manifest-path rust/ingetrazo_render/Cargo.toml
+VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work .venv-work/bin/maturin develop --release --manifest-path rust/built_core/Cargo.toml
+VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/built_render/Cargo.toml
+VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work PYO3_PYTHON=$PWD/.venv-work/bin/python cargo test --release --manifest-path rust/built_render/Cargo.toml
 QT_QPA_PLATFORM=offscreen .venv-work/bin/python -m pytest -q tests/test_wgpu_scene.py tests/test_wgpu_interaction.py tests/test_wgpu_materials.py
 QT_QPA_PLATFORM=offscreen .venv-work/bin/python scripts/pytest_batches.py -m 'not slow' --batches 24
 .venv-work/bin/python scripts/wgpu_idle_smoke.py
@@ -2021,10 +2021,10 @@ is reported separately in the handover):
 - `e034bc91` Benchmark faces-only configurations retain their requested edge state
 - `ede478e5` Profile classification reuses one local camera vector per visible placement
 - `d3705514` Renderer comparisons restore and record the same fitted camera
-VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/ingetrazo_render/Cargo.toml
+VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/built_render/Cargo.toml
 QT_QPA_PLATFORM=offscreen TMPDIR=$PWD/.r2b-tmp .venv-work/bin/python -m pytest -q tests/test_wgpu_updates.py tests/test_wgpu_interaction.py tests/test_wgpu_scene.py tests/test_wgpu_overlay.py
-PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/ingetrazo_core/Cargo.toml
-PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/ingetrazo_render/Cargo.toml
+PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/built_core/Cargo.toml
+PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --manifest-path rust/built_render/Cargo.toml
 QT_QPA_PLATFORM=offscreen TMPDIR=$PWD/.r2b-tmp .venv-work/bin/python scripts/pytest_batches.py -m 'not slow' --batches 60
 .venv-work/bin/python scripts/wgpu_r2b_smoke.py
 .venv-work/bin/python scripts/wgpu_r2b_measure.py ~/Desktop/models/asbuilt_ride.igz
@@ -2297,11 +2297,11 @@ Isolated environment and builds:
 ```sh
 python3.13 -m venv .venv-work
 .venv-work/bin/pip install -r requirements.txt maturin
-VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work .venv-work/bin/maturin develop --release --manifest-path rust/ingetrazo_core/Cargo.toml
-VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/ingetrazo_render/Cargo.toml
+VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work .venv-work/bin/maturin develop --release --manifest-path rust/built_core/Cargo.toml
+VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/built_render/Cargo.toml
 QT_QPA_PLATFORM=offscreen .venv-work/bin/python -m pytest -q tests/test_wgpu_*.py
-PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --release --manifest-path rust/ingetrazo_render/Cargo.toml
-PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --release --manifest-path rust/ingetrazo_core/Cargo.toml
+PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --release --manifest-path rust/built_render/Cargo.toml
+PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --release --manifest-path rust/built_core/Cargo.toml
 ```
 
 Python: **74 passed**. Renderer: **22 passed**, zero doc tests. Core: **6 passed**.
@@ -2476,8 +2476,8 @@ faces-only validation with the final ID-free pipeline. Commands:
 ```sh
 python3.13 -m venv .venv-work
 .venv-work/bin/pip install -r requirements.txt maturin
-CARGO_HOME=$PWD/.cargo-work VIRTUAL_ENV=$PWD/.venv-work .venv-work/bin/maturin develop --release --manifest-path rust/ingetrazo_core/Cargo.toml
-CARGO_HOME=$PWD/.cargo-work VIRTUAL_ENV=$PWD/.venv-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --manifest-path rust/ingetrazo_render/Cargo.toml --features extension-module
+CARGO_HOME=$PWD/.cargo-work VIRTUAL_ENV=$PWD/.venv-work .venv-work/bin/maturin develop --release --manifest-path rust/built_core/Cargo.toml
+CARGO_HOME=$PWD/.cargo-work VIRTUAL_ENV=$PWD/.venv-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --manifest-path rust/built_render/Cargo.toml --features extension-module
 QT_QPA_PLATFORM=offscreen .venv-work/bin/pytest -q tests/test_wgpu_*.py tests/test_pushpull*.py tests/test_line*.py tests/test_eras*.py tests/test_move*.py tests/test_rectangle*.py
 ```
 
@@ -2507,11 +2507,11 @@ builds were created. No full-suite batch runner was used.
   intentionally supplies no annotation picks for those features.
 - R3c: default renderer switch and GL fallback, plus full UI acceptance.
 CARGO_HOME=$PWD/.cargo-work VIRTUAL_ENV=$PWD/.venv-work \
-  .venv-work/bin/maturin develop --release --manifest-path rust/ingetrazo_core/Cargo.toml
+  .venv-work/bin/maturin develop --release --manifest-path rust/built_core/Cargo.toml
 CARGO_HOME=$PWD/.cargo-work VIRTUAL_ENV=$PWD/.venv-work CARGO_PROFILE_RELEASE_STRIP=none \
-  .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/ingetrazo_render/Cargo.toml
+  .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/built_render/Cargo.toml
 CARGO_HOME=$PWD/.cargo-work PYO3_PYTHON=$PWD/.venv-work/bin/python \
-  cargo test --release --manifest-path rust/ingetrazo_render/Cargo.toml
+  cargo test --release --manifest-path rust/built_render/Cargo.toml
 QT_QPA_PLATFORM=offscreen .venv-work/bin/python -m pytest -q tests/test_wgpu_*.py
 ```
 
@@ -2719,8 +2719,8 @@ and release builds only. Commands (from this worktree):
 ```sh
 python3.13 -m venv .venv-work
 .venv-work/bin/pip install -r requirements.txt maturin
-VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work .venv-work/bin/maturin develop --release --manifest-path rust/ingetrazo_core/Cargo.toml
-VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/ingetrazo_render/Cargo.toml
+VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work .venv-work/bin/maturin develop --release --manifest-path rust/built_core/Cargo.toml
+VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/built_render/Cargo.toml
 QT_QPA_PLATFORM=offscreen .venv-work/bin/python -m pytest -q tests/test_wgpu_*.py tests/test_scene_recall_version.py tests/test_composer_perspective.py tests/test_composer_frame_paper_bg.py tests/test_composer_raster_pens.py
 ```
 
@@ -2746,9 +2746,9 @@ A separate Metal-only run completed in 31.2192 s. Both children exited within
 240 seconds. Runs overlapped briefly and are single samples, not a performance
 acceptance gate. GL initialization is excluded; fresh Metal setup/upload is
 included. PNGs and raw JSON measurements are in the linked artifact directory.
-CARGO_HOME=$PWD/.cargo-work VIRTUAL_ENV=$PWD/.venv-work .venv-work/bin/maturin develop --release --manifest-path rust/ingetrazo_core/Cargo.toml
-CARGO_HOME=$PWD/.cargo-work VIRTUAL_ENV=$PWD/.venv-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --manifest-path rust/ingetrazo_render/Cargo.toml --features extension-module
-CARGO_HOME=$PWD/.cargo-work CARGO_PROFILE_RELEASE_STRIP=none cargo test --release --manifest-path rust/ingetrazo_render/Cargo.toml
+CARGO_HOME=$PWD/.cargo-work VIRTUAL_ENV=$PWD/.venv-work .venv-work/bin/maturin develop --release --manifest-path rust/built_core/Cargo.toml
+CARGO_HOME=$PWD/.cargo-work VIRTUAL_ENV=$PWD/.venv-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --manifest-path rust/built_render/Cargo.toml --features extension-module
+CARGO_HOME=$PWD/.cargo-work CARGO_PROFILE_RELEASE_STRIP=none cargo test --release --manifest-path rust/built_render/Cargo.toml
 QT_QPA_PLATFORM=offscreen .venv-work/bin/python -m pytest -q tests/test_wgpu_*.py
 ```
 
@@ -3056,10 +3056,10 @@ Commands (all in the isolated worktree):
 ```sh
 python3.13 -m venv .venv-work
 .venv-work/bin/pip install -r requirements.txt maturin
-VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --manifest-path rust/ingetrazo_core/Cargo.toml
-VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/ingetrazo_render/Cargo.toml
+VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --manifest-path rust/built_core/Cargo.toml
+VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/built_render/Cargo.toml
 QT_QPA_PLATFORM=offscreen .venv-work/bin/python -m pytest -q tests/test_wgpu_*.py
-PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --release --manifest-path rust/ingetrazo_render/Cargo.toml
+PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --release --manifest-path rust/built_render/Cargo.toml
 ```
 
 Python: **98 passed**, four existing deprecation warnings. Render crate:
@@ -3121,7 +3121,7 @@ Validation (Python 3.13.12, PySide6 6.11.3):
   No debug target directories were produced.
 - `QT_QPA_PLATFORM=offscreen .venv-work/bin/python -m pytest -q tests/test_wgpu_*.py`:
   **146 passed**, four pre-existing QImage deprecation warnings.
-- `QT_QPA_PLATFORM=cocoa INGETRAZO_R3_GUI=1 INGETRAZO_WGPU=1 .venv-work/bin/python -m pytest -q tests/test_wgpu_last_tier_menus.py`:
+- `QT_QPA_PLATFORM=cocoa BUILT_R3_GUI=1 BUILT_WGPU=1 .venv-work/bin/python -m pytest -q tests/test_wgpu_last_tier_menus.py`:
   **1 passed**, two Qt deprecation warnings. Run in a bounded subprocess
   (120-second limit) with isolated INI settings. Actual Metal window and
   final draw exercised. The initial attempt inherited the suite's offscreen
@@ -3154,7 +3154,7 @@ Remaining acceptance gaps:
 ## R3c-2b — 2026-11-09: default-renderer machinery
 
 The default remains OpenGL. Renderer selection now combines the saved
-`General/viewport_renderer`, `INGETRAZO_WGPU=0/1`, a session-cached capability
+`General/viewport_renderer`, `BUILT_WGPU=0/1`, a session-cached capability
 probe, and the existing persistent presentation guard. Existing `wgpu` choices
 survive; absent settings read `DEFAULT_RENDERER` without writing a migration.
 Guard recovery explicitly saves `opengl`, independently of that constant.
@@ -3190,7 +3190,7 @@ Validation in the worktree's Python 3.13.12 / Qt 6.11.3 environment:
 - Real probe: `.venv-work/bin/python -m core.renderer_settings` returned
   available=true.
 - Bounded Cocoa window smoke (120-second subprocess timeout):
-  `QT_QPA_PLATFORM=cocoa INGETRAZO_R3_GUI=1 .venv-work/bin/python -m pytest -q tests/test_wgpu_last_tier_menus.py`:
+  `QT_QPA_PLATFORM=cocoa BUILT_R3_GUI=1 .venv-work/bin/python -m pytest -q tests/test_wgpu_last_tier_menus.py`:
   1 passed, including actual native frame drawing.
 - Shell syntax and git diff whitespace checks passed.
 
@@ -3230,7 +3230,7 @@ journal their target prototype independently of geometry mutation serials, so
 commit, undo and redo replace only that prototype.
 
 Read-only pusher car measurement (`python -m tools.texture_position_measure
-~/code/ingetrazo-bench/pusher_car_rust.igz`, local texture cache, AO disabled):
+~/code/built-bench/pusher_car_rust.igz`, local texture cache, AO disabled):
 1,253 placements, first textured prototype `Groupe#167`, 50 faces, ten updates.
 Bake plus material upload **3.12–4.98 ms**; live texture preview stays enabled.
 Including render and synchronous pick completion: **8.69–21.44 ms** after the
@@ -3290,10 +3290,10 @@ Validation commands (worktree-local environment; no batch suite):
 ```sh
 python3.13 -m venv .venv-work
 .venv-work/bin/pip install -r requirements.txt maturin
-VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --manifest-path rust/ingetrazo_core/Cargo.toml
-VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/ingetrazo_render/Cargo.toml
+VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --manifest-path rust/built_core/Cargo.toml
+VIRTUAL_ENV=$PWD/.venv-work CARGO_HOME=$PWD/.cargo-work CARGO_PROFILE_RELEASE_STRIP=none .venv-work/bin/maturin develop --release --features extension-module --manifest-path rust/built_render/Cargo.toml
 QT_QPA_PLATFORM=offscreen .venv-work/bin/python -m pytest -q tests/test_wgpu_*.py tests/test_section_fill.py tests/test_sections.py
-PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --release --manifest-path rust/ingetrazo_render/Cargo.toml
+PYO3_PYTHON=$PWD/.venv-work/bin/python CARGO_HOME=$PWD/.cargo-work cargo test --release --manifest-path rust/built_render/Cargo.toml
 ```
 Python: **139 passed**, four existing deprecation warnings. Rust: **33 passed**,
 zero doc tests. Tests cover polygon depth/no-stencil configuration, native
@@ -3431,9 +3431,9 @@ to AO. See `baseline` and `final` PNGs alongside the timing JSON.
 ### Validation and remaining gates
 
 - Isolated Python 3.13 venv installed from requirements plus maturin.
-- `CARGO_HOME=$PWD/.cargo-work VIRTUAL_ENV=$PWD/.venv-work .venv-work/bin/maturin develop --release --manifest-path rust/ingetrazo_core/Cargo.toml`: passed.
-- Same command for `rust/ingetrazo_render/Cargo.toml`, with `--features extension-module` and `CARGO_PROFILE_RELEASE_STRIP=none`: passed.
-- `CARGO_HOME=$PWD/.cargo-work PYO3_PYTHON=$PWD/.venv-work/bin/python cargo test --release --manifest-path rust/ingetrazo_render/Cargo.toml`: 34 passed (including existing profile classification, cap depth/stencil and Metal validation; new conservative-scissor test).
+- `CARGO_HOME=$PWD/.cargo-work VIRTUAL_ENV=$PWD/.venv-work .venv-work/bin/maturin develop --release --manifest-path rust/built_core/Cargo.toml`: passed.
+- Same command for `rust/built_render/Cargo.toml`, with `--features extension-module` and `CARGO_PROFILE_RELEASE_STRIP=none`: passed.
+- `CARGO_HOME=$PWD/.cargo-work PYO3_PYTHON=$PWD/.venv-work/bin/python cargo test --release --manifest-path rust/built_render/Cargo.toml`: 34 passed (including existing profile classification, cap depth/stencil and Metal validation; new conservative-scissor test).
 - `.venv-work/bin/python -m pytest tests/test_wgpu_*.py -q -p no:cacheprovider`: 160 passed, 34 warnings. No batch/full suite.
 - Each GUI subprocess had a 240-second timeout; no unrelated processes stopped.
 

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The Library on the large sheet (ingetrazo_render.wgpu_library, option B with C's
+"""The Library on the large sheet (built_render.wgpu_library, option B with C's
 palette): types as tabs, scopes and categories on the side with the linked
 files' materials read-only, 96-pt tiles, the details pane and its editor;
 the Paint strip's fast path and Browse all…; the dock's inspector editing
@@ -12,11 +12,11 @@ import json
 
 import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.materials import Material
-from ingetrazo_render import chrome_sheet as cs
-from ingetrazo_render import wgpu_library as L
+from built_render import chrome_sheet as cs
+from built_render import wgpu_library as L
 
 
 class Renderer:
@@ -168,7 +168,7 @@ def test_paint_with_it_closes_the_sheet_and_remembers_it(win, monkeypatch):
 
 def test_delete_asks_first_over_the_sheet(win, monkeypatch):
     asked = []
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask_later",
+    monkeypatch.setattr("built_render.chrome_dialogs.ask_later",
                         lambda parent, title, body, buttons, done, **kw: (asked.append(title), done("yes")))
     L.open_library(win)
     frame(win)
@@ -278,7 +278,7 @@ def test_the_inspector_edits_the_material_paint_holds(win, monkeypatch):
 
 
 def test_online_catalogue_search_preview_download_and_document_credit(win, tmp_path, monkeypatch):
-    from ingetrazo_core import component_library as library
+    from built_core import component_library as library
     from formats import igz
     from core.scene import Scene
     import zipfile
@@ -296,8 +296,8 @@ def test_online_catalogue_search_preview_download_and_document_credit(win, tmp_p
         z.writestr("LICENSE.txt", "CC BY · Ana")
     image = solid_raster(32, 32, (69, 50, 171))
     image.save(str(src / "miniaturas/stool.png"))
-    monkeypatch.setenv("INGETRAZO_LIBRARY", str(src))
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "cache/tex"))
+    monkeypatch.setenv("BUILT_LIBRARY", str(src))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "cache/tex"))
 
     assert L.open_library(win, "components", scope="s:online")
     assert frame(win)["content"]["title"] == "Component library"
@@ -351,7 +351,7 @@ def test_online_catalogue_search_preview_download_and_document_credit(win, tmp_p
 
 
 def test_failed_or_abandoned_catalogue_download_never_places(win, monkeypatch):
-    from ingetrazo_core import component_library as library
+    from built_core import component_library as library
     from threading import Event
 
     entries = [{"id":"chair", "nombre":"Silla", "nombre_en":"Chair"}]

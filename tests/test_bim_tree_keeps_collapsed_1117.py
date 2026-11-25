@@ -6,7 +6,7 @@ Any change of content rebuilds the table, and opening a group is one: every
 folded branch of the tree came open again on picking a row."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_tree_links import _View
 from views import wgpu_ui
@@ -57,7 +57,7 @@ def toggle(view, win, key):
 
 
 def test_opening_a_group_leaves_the_folded_branches_folded(native_host):
-    from ingetrazo_render.tree_navigation import open_to
+    from built_render.tree_navigation import open_to
     win, vp, view = native_host.window, native_host.viewport, _View()
     first, second = _model(vp.scene)
     walls, = first.children

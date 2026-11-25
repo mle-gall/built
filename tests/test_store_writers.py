@@ -12,7 +12,7 @@ from core.group import Group
 from core.history import (AddFaceCommand, FlipFacesCommand, FlipGroupsCommand,
                           FlipVerticesCommand, History, StitchSolidCommand)
 from core.scene import Scene
-from ingetrazo_core.store_mesh import StoreMesh
+from built_core.store_mesh import StoreMesh
 from plugins.solid_inspector import RepairSolidsCommand, repair_item
 from tests.test_push_native import V, _mesh
 from tests.test_store_mesh import fingerprint, pytestmark

@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 
 def _box_seen_from_the_front(native_host):

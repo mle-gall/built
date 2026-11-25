@@ -15,7 +15,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 import views.document_interaction as viewport_mod  # noqa: E402
 from tests.test_lazy_native_snap import (  # noqa: E402
@@ -114,7 +114,7 @@ def _changes(vp):
         _set_view(vp, (75.0, 25.0, True))
 
     def xray():
-        from ingetrazo_core.style import Style
+        from built_core.style import Style
         vp.style_override = Style(name="x", face_mode="xray")
 
     def solid():

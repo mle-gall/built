@@ -14,10 +14,10 @@ from __future__ import annotations
 import struct
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.camera import OrbitCamera
-from ingetrazo_render.ndof import (NdofSample, NdofSettings, apply_ndof, from_hid,
+from built_render.ndof import (NdofSample, NdofSettings, apply_ndof, from_hid,
                        from_spacenavd, mapped_movements, shape)
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from views.ndof_input import parse_hid_report, parse_spnav_packets
@@ -271,7 +271,7 @@ def test_wheel_notches_do_not_zoom_while_the_cap_moves_the_view(monkeypatch):
     """3Dconnexion's driver turns a push of the cap into wheel notches for
     programs it does not know; with ours reading the device too, the view
     took a zoom step about eight times a second (12-10 video)."""
-    from ingetrazo_render import WheelEvent
+    from built_render import WheelEvent
     from views import ndof_input
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
@@ -296,13 +296,13 @@ def test_wheel_notches_do_not_zoom_while_the_cap_moves_the_view(monkeypatch):
 # ---- configurable physical-axis mapping -------------------------------------
 
 def test_original_preset_preserves_legacy_inversion():
-    from ingetrazo_render.ndof import mapped_movements
+    from built_render.ndof import mapped_movements
     st = NdofSettings(invert_pan_x=True)
     assert mapped_movements(NdofSample(right=1), st)["pan_x"] == -1
 
 
 def test_custom_axis_can_drive_different_action():
-    from ingetrazo_render.ndof import mapped_movements
+    from built_render.ndof import mapped_movements
     st = NdofSettings(mapping_preset="custom")
     st.axis_mapping["right"] = "zoom"
     st.axis_mapping["forward"] = "pan_x"
@@ -312,7 +312,7 @@ def test_custom_axis_can_drive_different_action():
 
 
 def test_custom_inversion_and_per_axis_speed():
-    from ingetrazo_render.ndof import mapped_movements
+    from built_render.ndof import mapped_movements
     st = NdofSettings(mapping_preset="custom")
     st.axis_inversion["right"] = True
     st.axis_sensitivity["right"] = 0.5
@@ -320,7 +320,7 @@ def test_custom_inversion_and_per_axis_speed():
 
 
 def test_duplicate_actions_sum_and_clamp():
-    from ingetrazo_render.ndof import mapped_movements
+    from built_render.ndof import mapped_movements
     st = NdofSettings(mapping_preset="custom")
     st.axis_mapping["up"] = "pan_x"
     result = mapped_movements(NdofSample(right=0.5, up=0.5), st)
@@ -348,7 +348,7 @@ def test_disabled_axis_does_nothing():
 
 
 def test_freecad_style_preset_matches_hardware_test():
-    from ingetrazo_render.ndof import FREECAD_MAPPING, FREECAD_INVERSION, mapped_movements
+    from built_render.ndof import FREECAD_MAPPING, FREECAD_INVERSION, mapped_movements
     st = NdofSettings(mapping_preset="freecad")
     assert FREECAD_MAPPING == {
         "right": "pan_x", "up": "zoom", "forward": "pan_y",
@@ -359,7 +359,7 @@ def test_freecad_style_preset_matches_hardware_test():
 
 
 def test_profile_json_round_trip(tmp_path):
-    from ingetrazo_render import save_profile, load_profile
+    from built_render import save_profile, load_profile
     st = NdofSettings(mapping_preset="custom", sensitivity=1.75)
     st.axis_mapping["roll"] = "pan_y"
     st.axis_inversion["roll"] = True
@@ -382,7 +382,7 @@ def test_profile_json_round_trip(tmp_path):
     {"global_speed": 100},
 ])
 def test_profile_rejects_invalid_data(change):
-    from ingetrazo_render import profile_to_dict, profile_from_dict
+    from built_render import profile_to_dict, profile_from_dict
     from copy import deepcopy
     data = profile_to_dict(NdofSettings())
     for key, value in change.items():
@@ -454,8 +454,8 @@ def test_preferences_ok_untouched_keeps_the_motion(native_window):
     """Opening Preferences and pressing OK without touching the 3D mouse
     page must not change how the cap moves the view, whatever the old
     inversion boxes said."""
-    from ingetrazo_core.settings import settings
-    from ingetrazo_render import chrome_sheet, settings_sheet
+    from built_core.settings import settings
+    from built_render import chrome_sheet, settings_sheet
     from views import ndof_input
     st = settings()
     for key in ("invert_pan_x", "invert_tilt", "invert_zoom"):

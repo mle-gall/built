@@ -10,8 +10,8 @@ from __future__ import annotations
 
 
 import pytest
-from ingetrazo_core import NativeSettings
-from ingetrazo_core import Vec3 as V
+from built_core import NativeSettings
+from built_core import Vec3 as V
 
 
 from tests.preferences_chrome import Controls, settings_file
@@ -104,7 +104,7 @@ def test_restore_defaults_turns_them_off(settings_file):
     (None, 0), ("0", 0), ("2", 2), ("3", 3), ("7", 0), ("lots", 0)])
 def test_the_viewport_reads_the_level_and_ignores_nonsense(
         tmp_path, monkeypatch, stored, level):
-    from ingetrazo_core import settings
+    from built_core import settings
     st = NativeSettings(tmp_path)
     monkeypatch.setattr(settings, "_store", st)
     if stored is not None:

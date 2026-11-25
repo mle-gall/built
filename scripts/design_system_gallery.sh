@@ -4,7 +4,7 @@ set -eu
 cd "$(dirname "$0")/.."
 root=$PWD
 run=$(mktemp -d)
-plist="$HOME/Library/Preferences/com.ingetrazo.IngeTrazo.plist"
+plist="$HOME/Library/Preferences/com.built.Built.plist"
 stamp() { stat -f %m "$plist" 2>/dev/null || echo absent; }
 before=$(stamp)
 cleanup() {

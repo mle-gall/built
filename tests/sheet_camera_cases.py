@@ -11,8 +11,8 @@ import math
 
 
 def scene():
-    from ingetrazo_core import Vec3 as V
-    from ingetrazo_core.saved_views import SavedView
+    from built_core import Vec3 as V
+    from built_core.saved_views import SavedView
     from core.scene import Scene
     s = Scene()
     for (x0, y0, z0, x1, y1, z1) in ((0, 0, 0, 12, 8, 0.3), (1, 1, 0.3, 5, 4, 3.2), (6, 1.5, 0.3, 11, 6, 2.6)):

@@ -11,7 +11,7 @@ from core.bim import (collect_objects, class_quantities, class_quantities_arrays
                       _placed_groups, _compose)
 from core.ifc_identity import object_guid, stable_guid
 from core.ifc_tables import TABLES, predefined_types
-from ingetrazo_core.version import __version__
+from built_core.version import __version__
 from .entities import Builder
 from core.ifc_tables_data import SCHEMA_DATA
 from .relationships import Appearance
@@ -43,7 +43,7 @@ def refs(values):
     return '(' + ','.join(map(ref, values)) + ')'
 
 
-def save_ifc(scene, path, project_name='IngeTrazo project', profile=None, *, project_directory=None):
+def save_ifc(scene, path, project_name='Built project', profile=None, *, project_directory=None):
     with open(path, 'w', encoding='ascii', buffering=1024 * 1024) as stream:
         report = _save_ifc(scene, path, project_name, profile, stream)
     registry = bim_registry.get(scene)
@@ -87,14 +87,14 @@ def _save_ifc(scene, path, project_name, profile, stream):
                 kept.append(obj)
         objects = kept
     if config.get('filter') is not None:
-        from ingetrazo_core.facets import build, evaluate
+        from built_core.facets import build, evaluate
         index = build(scene)
         allowed = {index.groups[key] for key in evaluate(index, config['filter'])}
         objects = [obj for obj in objects
                    if (obj.get('group') or obj.get('owner')) in allowed]
     if not objects:
         raise ValueError('No tagged BIM objects to export')
-    from ingetrazo_core.project import read as read_project
+    from built_core.project import read as read_project
     project = read_project(scene)
     if project:
         scene.plugin_data['ifc_identity'] = project['ifc_identity']
@@ -123,7 +123,7 @@ def _save_ifc(scene, path, project_name, profile, stream):
     header = ("ISO-10303-21;\nHEADER;\n"
               f"FILE_DESCRIPTION(({_s('ViewDefinition [' + view + ']')}),'2;1');\n"
               f"FILE_NAME({_s(Path(path).name)},{_s(stamp)},({_s(author)}),({_s(organization)}),"
-              f"{_s('IngeTrazo ' + __version__)},'IngeTrazo','');\n"
+              f"{_s('Built ' + __version__)},'Built','');\n"
               f"FILE_SCHEMA(('{schema}'));\nENDSEC;\nDATA;\n")
     stream.write(header)
     w = Builder(schema, stream)
@@ -132,7 +132,7 @@ def _save_ifc(scene, path, project_name, profile, stream):
         org = w.entity('IfcOrganization', Name=_s(organization or author))
         user = w.entity('IfcPersonAndOrganization', ThePerson=ref(person), TheOrganization=ref(org))
         app = w.entity('IfcApplication', ApplicationDeveloper=ref(org), Version=_s(__version__),
-                       ApplicationFullName=_s('IngeTrazo'), ApplicationIdentifier=_s('IngeTrazo'))
+                       ApplicationFullName=_s('Built'), ApplicationIdentifier=_s('Built'))
         owner = ref(w.entity('IfcOwnerHistory', OwningUser=ref(user), OwningApplication=ref(app),
                              ChangeAction='.NOCHANGE.', CreationDate=str(int(datetime.datetime.now().timestamp()))))
 
@@ -278,7 +278,7 @@ def _save_ifc(scene, path, project_name, profile, stream):
         if cls == 'IfcFacilityPartCommon':
             attrs['UsageType'] = '.NOTDEFINED.'
         if cls == 'IfcBuildingStorey':
-            from ingetrazo_core import Vec3 as QVector3D
+            from built_core import Vec3 as QVector3D
             matrix = _compose(bases[id(group)], group.xform) if group is not None else None
             attrs['Elevation'] = _f(matrix.map(QVector3D()).z() if matrix is not None else 0)
         qname, qentries, _ = class_quantities_arrays(original, arrays) if "arrays" in obj else class_quantities(original, faces)

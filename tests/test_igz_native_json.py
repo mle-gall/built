@@ -112,7 +112,7 @@ def assert_same_arrays(a, b):
 @pytest.fixture
 def any_size(monkeypatch):
     monkeypatch.setattr(igz, "_NATIVE_JSON_MIN", 0)
-    monkeypatch.setenv("INGETRAZO_RUST", "1")
+    monkeypatch.setenv("BUILT_RUST", "1")
     monkeypatch.setattr(_native, "native", mod, raising=False)
 
 
@@ -208,7 +208,7 @@ def test_a_nan_outside_the_meshes_leaves_it_to_the_plain_parser(any_size):
 
 
 def test_a_small_document_keeps_the_plain_parser(monkeypatch):
-    monkeypatch.setenv("INGETRAZO_RUST", "1")
+    monkeypatch.setenv("BUILT_RUST", "1")
     monkeypatch.setattr(_native, "native", mod, raising=False)
     assert len(json.dumps(document())) < igz._NATIVE_JSON_MIN
     assert igz._parse_native(json.dumps(document()).encode()) is None
@@ -327,7 +327,7 @@ def test_a_plain_file_too(any_size, tmp_path):
 def test_a_block_that_is_not_empty_when_read_builds_at_once(any_size):
     """defer() refuses a mesh that already holds something: the arrays still
     make the mesh the plain reader would."""
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
 
     tree = igz._parse_native(json.dumps(document()).encode())
     block = tree["scene"]["protos"][1]

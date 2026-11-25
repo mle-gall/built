@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Drawing on an exploded DWG plan froze IngeTrazo and then lost the line
+"""Drawing on an exploded DWG plan froze Built and then lost the line
 (#491).
 
 A flat drawing with curves rebuilds its faces on every stroke. On a plan of
@@ -16,12 +16,12 @@ import random
 
 
 import numpy as np  # noqa: E402
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 
 import core.arrangement as ar  # noqa: E402
 from core.arrangement import planar_rebuild  # noqa: E402
-from ingetrazo_core import planar_edits
+from built_core import planar_edits
 from core.history import RebuildPlanarFacesCommand  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
 from core.scene import Scene  # noqa: E402
@@ -164,7 +164,7 @@ def test_the_box_grid_meets_exactly_the_boxes_the_full_scan_meets():
         hi = lo + size * rng.uniform(0, 1, (n, 3))
         if trial % 2:
             hi[rng.random(n) < 0.05] *= 3.0          # a few long walls
-        from ingetrazo_core import touching_boxes
+        from built_core import touching_boxes
         rows, cols = touching_boxes(lo, hi, lo, hi, False, 0.)
         meeting = [[] for _ in lo]
         for row, col in zip(rows, cols):

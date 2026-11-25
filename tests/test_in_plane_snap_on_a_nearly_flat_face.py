@@ -8,7 +8,7 @@ zero, with the cursor over the face and a point encouraged.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.snap import _in_plane_with_point_snap
 

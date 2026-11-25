@@ -2,8 +2,8 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Old preference values cannot override the native design-system accent."""
 import pytest
-from ingetrazo_core import general_settings
-from ingetrazo_render import chrome_token
+from built_core import general_settings
+from built_render import chrome_token
 
 
 @pytest.mark.parametrize("legacy", ["orange", "system", "light_grey"])

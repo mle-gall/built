@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.scene import Scene
 from core.snap import AXIS_COLORS, compute_snap
@@ -62,7 +62,7 @@ def test_the_corner_itself_is_still_an_endpoint():
 
 
 def test_the_viewport_keeps_the_hovered_corner_before_the_first_click():
-    from ingetrazo_core import ScreenPoint, Input
+    from built_core import ScreenPoint, Input
     from tests.controller_surface import ControllerSurface as Viewport
     from tools.rust_tools import RectangleTool
     vp = Viewport(None)
@@ -90,7 +90,7 @@ def test_a_tool_with_inferences_off_snaps_but_never_encourages():
     """``allow_inferences = False`` (the Offset): the hard point snap still
     lands on the corner, but the dwell never starts — no encouraged point,
     no «from point» / «level with» lines."""
-    from ingetrazo_core import ScreenPoint, Input
+    from built_core import ScreenPoint, Input
     from tests.controller_surface import ControllerSurface as Viewport
     from tools.base import Tool
 
@@ -126,7 +126,7 @@ def test_hovering_a_circles_rim_encourages_its_centre(monkeypatch):
     """Marco's reference capture (2026-09-14): with the Circle tool on
     another circle's rim, the dotted line runs from THAT circle's centre —
     the centre is an encouraged point like a corner."""
-    from ingetrazo_core import ScreenPoint, Input
+    from built_core import ScreenPoint, Input
     from tests.controller_surface import ControllerSurface as Viewport
     from tools.circle import CircleTool
     from tools.base import ToolContext
@@ -226,8 +226,8 @@ def test_component_origin_and_arc_midpoint_pseudo_edges_snap_by_name():
 
 
 def test_the_viewport_offers_an_arcs_sweep_midpoint_and_a_groups_origin():
-    from ingetrazo_core import ScreenPoint, Input
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import ScreenPoint, Input
+    from built_core import Matrix4 as QMatrix4x4
     from tests.controller_surface import ControllerSurface as Viewport
     from tools.arc import ArcTool
     from tools.rust_tools import LineTool
@@ -272,7 +272,7 @@ def test_an_arc_started_at_another_arcs_end_snaps_tangent_to_it():
     """The classic "Tangent at Vertex" (cyan): an arc that starts at the end
     of another arc snaps its bulge so the two run tangent — an S-curve here:
     the half circle over (0..2) continues below (2..4) with the same radius."""
-    from ingetrazo_core import ScreenPoint, Input
+    from built_core import ScreenPoint, Input
     from tests.controller_surface import ControllerSurface as Viewport
     from tools.arc import ArcTool
     from tools.base import ToolContext
@@ -326,7 +326,7 @@ def _offscreen_vp():
 def _arc_mesh():
     """A mesh holding one half-circle arc (0,0)→(2,0) over (1,1), drawn with
     the real tool into a scratch scene."""
-    from ingetrazo_core import ScreenPoint, Input
+    from built_core import ScreenPoint, Input
     from core.scene import Scene
     from core.history import History
     from tools.arc import ArcTool
@@ -352,7 +352,7 @@ def _arc_mesh():
 
 
 def _placed(vp, mesh, dx, dy):
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     from core.group import Group
     g = Group(mesh, "pieza")
     xf = QMatrix4x4()
@@ -364,7 +364,7 @@ def _placed(vp, mesh, dx, dy):
 
 
 def test_the_hovered_edge_can_be_a_components_and_the_tip_says_so():
-    from ingetrazo_core import ScreenPoint, Input
+    from built_core import ScreenPoint, Input
     from core.mesh import Mesh
     from tools.rust_tools import LineTool
     vp = _offscreen_vp()
@@ -385,7 +385,7 @@ def test_the_hovered_edge_can_be_a_components_and_the_tip_says_so():
 
 
 def test_arc_midpoint_and_tangent_reach_arcs_inside_a_component():
-    from ingetrazo_core import ScreenPoint, Input
+    from built_core import ScreenPoint, Input
     from tools.rust_tools import LineTool
     from tools.arc import ArcTool
     from tools.base import ToolContext
@@ -411,7 +411,7 @@ def test_arc_midpoint_and_tangent_reach_arcs_inside_a_component():
 
 
 def test_the_centre_of_a_components_circle_comes_from_its_rim():
-    from ingetrazo_core import ScreenPoint, Input
+    from built_core import ScreenPoint, Input
     from tools.circle import CircleTool
     from tools.base import ToolContext
     from core.scene import Scene
@@ -449,7 +449,7 @@ def test_a_loose_edge_and_a_components_edge_under_the_cursor_together():
     edges) and the pergola (a component) under the cursor, every mouse move
     raised NameError inside pick_edge_any — the hover died and clicks «no
     hacían nada». The nearer of the two must simply win."""
-    from ingetrazo_core import ScreenPoint, Input
+    from built_core import ScreenPoint, Input
     from core.mesh import Mesh
     from tools.rust_tools import LineTool
     vp = _offscreen_vp()

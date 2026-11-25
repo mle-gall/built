@@ -12,7 +12,7 @@ returns before drawing anything when the camera is below it.
 import math
 from types import SimpleNamespace
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.camera import OrbitCamera
 

@@ -15,7 +15,7 @@ BIN = ROOT / "rust/built_app/target/release/built"
 def english(profile):
     """The scripted runs below type and click on English text and layout;
     a profile without a language follows the system's."""
-    from ingetrazo_core import NativeSettings
+    from built_core import NativeSettings
     profile.mkdir(parents=True, exist_ok=True)
     st = NativeSettings(str(profile)).fresh()
     st.setValue("language", "en")
@@ -26,7 +26,7 @@ def english(profile):
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_soften_and_export(tmp_path):
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     from core.group import Group
     from core.mesh import Mesh
     from core.scene import Scene
@@ -93,8 +93,8 @@ def test_native_release_review(tmp_path):
     opened = tmp_path / "download-url"
     release_url = "https://example.invalid/releases/test"
     venv = fixture_venv(tmp_path,
-        "from ingetrazo_core import desktop_open\n"
-        "from ingetrazo_render import release_check\n"
+        "from built_core import desktop_open\n"
+        "from built_render import release_check\n"
         "from pathlib import Path\n"
         f"release_check.fetch_latest = lambda: release_check.Release('999', '2026-01-01', '## Fixed', {release_url!r})\n"
         f"desktop_open.open_url = lambda url: Path({str(opened)!r}).write_text(url)\n")
@@ -121,10 +121,10 @@ def test_native_release_review(tmp_path):
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_first_run_custom_units(tmp_path):
-    from ingetrazo_core import NativeSettings
+    from built_core import NativeSettings
 
     profile = tmp_path / "profile"
-    folder = profile / "IngeTrazo"
+    folder = profile / "Built"
     folder.mkdir(parents=True)
     settings = NativeSettings(profile)
     custom = {"length": "cm", "precision": 3}
@@ -157,7 +157,7 @@ def test_native_first_run_custom_units(tmp_path):
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_settings_device_preferences(tmp_path):
-    from ingetrazo_core import NativeSettings
+    from built_core import NativeSettings
 
     profile = tmp_path / "profile"
     home = tmp_path / "home"
@@ -234,7 +234,7 @@ def test_native_extensions_open_painted_and_apply(tmp_path):
     home.mkdir()
     plugins = tmp_path / "plugins"
     venv = fixture_venv(tmp_path,
-        "from pathlib import Path\nfrom ingetrazo_core import extension_manager as em\n"
+        "from pathlib import Path\nfrom built_core import extension_manager as em\n"
         f"from core import extensions\nextensions.user_plugins_dir = lambda: Path({str(plugins)!r})\n"
         "em.load_cached_catalog = lambda: None\n"
         "em.refresh_catalog = lambda: em.CatalogSnapshot([], {}, '', False)\n")
@@ -319,7 +319,7 @@ def test_native_online_catalogue_places_the_credited_component(tmp_path):
     home.mkdir()
     result = run([str(BIN), "--root", str(ROOT), "--venv", str(ROOT / ".venv"), "--new-instance",
                   "--size", "1000x920", "--script", str(steps), str(initial)],
-                 env=dict(os.environ, INGETRAZO_LIBRARY=str(src), INGETRAZO_TEXTURE_CACHE=str(tmp_path / "cache/tex"),
+                 env=dict(os.environ, BUILT_LIBRARY=str(src), BUILT_TEXTURE_CACHE=str(tmp_path / "cache/tex"),
                           BUILT_ANSWERS="escape,cmd-d"), home=home, settings=tmp_path / "profile",
                  capture_output=True, text=True, timeout=60)
     log = result.stdout + result.stderr
@@ -358,14 +358,14 @@ def test_native_f3_finds_and_runs_a_misspelled_command(tmp_path):
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists()
                     or __import__("sys").platform != "darwin", reason="requires the native macOS menu")
 def test_native_menu_search_and_persisted_keyboard_binding(tmp_path):
-    from ingetrazo_core import NativeSettings
+    from built_core import NativeSettings
     from core.scene import Scene
     from formats.igz import save_scene
-    from ingetrazo_render.keyboard_bindings import settings_key
+    from built_render.keyboard_bindings import settings_key
     model = tmp_path / "empty.built"
     save_scene(Scene(), model)
     profile, home = tmp_path / "profile", tmp_path / "home"
-    config = profile / "IngeTrazo"
+    config = profile / "Built"
     config.mkdir(parents=True)
     home.mkdir()
     settings = NativeSettings(profile)
@@ -386,7 +386,7 @@ def test_native_menu_search_and_persisted_keyboard_binding(tmp_path):
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_ai_connection_edits_plugin_model(tmp_path):
-    from ingetrazo_core import NativeSettings
+    from built_core import NativeSettings
 
     home, profile = tmp_path / "home", tmp_path / "settings"
     home.mkdir()
@@ -408,8 +408,8 @@ def test_native_ai_connection_edits_plugin_model(tmp_path):
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_svg_preview_and_delivery_edit(tmp_path):
-    from ingetrazo_render import SurveyRaster
-    from ingetrazo_core import deliveries
+    from built_render import SurveyRaster
+    from built_core import deliveries
     from core.history import History
     from core.scene import Scene
     from formats.igz import load_into, save_scene
@@ -422,7 +422,7 @@ def test_native_svg_preview_and_delivery_edit(tmp_path):
         scope="visible", destination=str(tmp_path / "named.svg"), options={"paper": [297, 210]}))["key"]
     save_scene(scene, initial)
     venv = fixture_venv(tmp_path,
-        f"from ingetrazo_render import shell_services as native\nnative.save_file = lambda *args: {str(drawing)!r}\n")
+        f"from built_render import shell_services as native\nnative.save_file = lambda *args: {str(drawing)!r}\n")
     steps = tmp_path / "steps"
     steps.write_text("wait 700\nkey escape\nmenu delivery_export\nwait 650\nclick 630 208\n"
                      "wait 450\nclick 470 377\nwait 450\nclick 843 269\nwait 250\n"
@@ -466,8 +466,8 @@ def test_current_view_svg_modes_stay_centred_and_export(tmp_path):
     save_scene(_tagged_wall_scene(), initial)
     venv = fixture_venv(
         tmp_path,
-        f"""from ingetrazo_render import shell_services as native
-from ingetrazo_render import Host
+        f"""from built_render import shell_services as native
+from built_render import Host
 native.save_file = lambda *args: {str(drawing)!r}
 original_state = Host.state
 def state(self):
@@ -525,7 +525,7 @@ def test_bevel_inspector_edit_apply_and_leave(tmp_path):
     initial = tmp_path / "wall.built"
     save_scene(_tagged_wall_scene(), initial)
     venv = fixture_venv(tmp_path, """from tools.fillet import FilletTool
-from ingetrazo_render import Host
+from built_render import Host
 FilletTool.shape = "steps"
 FilletTool.radius = 0.01
 state = Host.state
@@ -564,7 +564,7 @@ Host.state = bevel_state
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_camera_registry_text_and_plugin_utilities(tmp_path):
     """Use renderer verbs for controls without a native menu-script spelling."""
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     from core.scene import Scene
     from formats.igz import save_scene
 
@@ -574,11 +574,11 @@ def test_camera_registry_text_and_plugin_utilities(tmp_path):
     thumb = solid_raster(90, 40, (85, 119, 136))
     assert thumb.save(str(image))
     marker = tmp_path / "preview-closed"
-    venv = fixture_venv(tmp_path, f"""from ingetrazo_render import Host
+    venv = fixture_venv(tmp_path, f"""from built_render import Host
 from core import bim_registry
-from ingetrazo_render import RenderResult
+from built_render import RenderResult
 from core.plugin_panels import show_utility
-from ingetrazo_render import chrome_sheet
+from built_render import chrome_sheet
 from views import wgpu_ui
 from pathlib import Path
 menu, state = Host.menu, Host.state
@@ -687,9 +687,9 @@ def test_drawing_catalog_and_scene_folders_in_native_window(tmp_path):
     output = tmp_path / "drawing.pat"
     venv = fixture_venv(tmp_path, f"""
 import json
-from ingetrazo_render import Host
+from built_render import Host
 from views import wgpu_ui
-from ingetrazo_render.shell_files import ShellFileDialog
+from built_render.shell_files import ShellFileDialog
 menu, state = Host.menu, Host.state
 def dispatch(self, command):
     if not command.startswith("fixture-"):
@@ -704,7 +704,7 @@ def dispatch(self, command):
     elif command=="fixture-hatch":
         wgpu_ui._tree_action(self.window,self.view,"drawingpatch"+wgpu_ui.SEP+json.dumps([["Paths"],dict(hatch="brick",mortar="1",hatch_ground="layer")]))
         act("documentpiece","brick",[250,115,60,8])
-        from ingetrazo_core.settings import settings
+        from built_core.settings import settings
         pref=self.view.renderer.ui_hatch_preference
         for key in ("glass","brick","glass","glass"):
             pref("pin",key)
@@ -727,7 +727,7 @@ def dispatch(self, command):
         act("tagfolder","batch",dict(owner=id(scene),parent=folder,folders=[detail],tags=["Paths"]))
         self.fixture_mixed_folder=scene.folder_parents.get(detail)==folder
     elif command=="fixture-tag-controls":
-        from ingetrazo_core import tag_edits
+        from built_core import tag_edits
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("tagcolours","1")))
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("modellines","0")))
         template={str(tmp_path / "drawing.json")!r}
@@ -743,7 +743,7 @@ def dispatch(self, command):
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("rename","preview-tag:"+tag.key,"Unused survey tag")))
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("purgetags","")))
     elif command=="fixture-selection-tag":
-        from ingetrazo_render import context_menu_build, context_menu_run
+        from built_render import context_menu_build, context_menu_run
         from core.group import Group
         group=Group(name="Loose tag target")
         scene.groups.append(group)
@@ -766,7 +766,7 @@ def dispatch(self, command):
             scene.version+=1
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("mergetag","preview-tag:Merge me")))
     elif command=="fixture-finish-merge":
-        from ingetrazo_render import chrome_forms
+        from built_render import chrome_forms
         form=chrome_forms.current(self.window)
         options=form.field("item").keys()
         form.receive("item",str(next(i for i, label in enumerate(options) if label.endswith("Paths"))))
@@ -785,7 +785,7 @@ def dispatch(self, command):
         saved=self.window._scene_tabs.marked_view()
         wgpu_ui._run(self.window,["tab:scenefolders:"+json.dumps(["file",str(id(scene)),"","Field views",saved.name])])
     elif command=="fixture-preview":
-        from ingetrazo_render import render_scene_photo
+        from built_render import render_scene_photo
         cam=self.viewport.camera
         cam.shift_y=0.18
         row=self.window._scene_tabs.marked_view()
@@ -793,16 +793,16 @@ def dispatch(self, command):
         self.fixture_photo=bool(pic and len(pic[2])==pic[0]*pic[1]*4 and max(pic[2])>min(pic[2]))
         self.fixture_restored=(cam.shift_y==0.18)
         wgpu_ui._paint_with(self.window,"ral:RAL 1000")
-        from ingetrazo_render import wgpu_library
+        from built_render import wgpu_library
         from tools.paint import PaintTool
         wgpu_library.edit_field(self.window,self.view,"brush_name:"+PaintTool.current_material.name,"Site paint")
         self.fixture_swatch=(PaintTool.current_material.name=="Site paint" and "Site paint" not in scene.materials)
     elif command=="fixture-paint-rows":
-        from ingetrazo_render import chrome_sheet
+        from built_render import chrome_sheet
         group=scene.groups[0]
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("paintrows","i:"+group.uid)))
     elif command=="fixture-apply-paint":
-        from ingetrazo_render import chrome_sheet
+        from built_render import chrome_sheet
         st=self.window._chrome_sheet
         self.fixture_paint_sheet=st.built.id
         chrome_sheet.action(self.window,chrome_sheet.SEP.join(("tree-material","open","ral:RAL 1000")))
@@ -810,8 +810,8 @@ def dispatch(self, command):
     self.request_frame()
 def facts(self):
     scene=self.viewport.scene
-    from ingetrazo_render.chrome_dialogs import current_sheet
-    from ingetrazo_render import chrome_forms
+    from built_render.chrome_dialogs import current_sheet
+    from built_render import chrome_forms
     choice=chrome_forms.current(self.window)
     question=current_sheet(self.window)
     paths=scene.layer("Paths")
@@ -965,12 +965,12 @@ def test_native_mesh_units_and_model_menu(tmp_path, suffix):
                     reason="requires the native window")
 def test_native_animation_forms_and_video_file(tmp_path):
     from core.camera import OrbitCamera
-    from ingetrazo_core.saved_views import SavedView
+    from built_core.saved_views import SavedView
     from core.scene import Scene
-    from ingetrazo_core import SceneAnimation
+    from built_core import SceneAnimation
     from formats.igz import save_scene
 
-    from ingetrazo_core import video_format
+    from built_core import video_format
     suffix, _ = video_format()
     path, movie = tmp_path / "tour.built", tmp_path / ("tour" + suffix)
     scene, camera = Scene(), OrbitCamera()
@@ -979,7 +979,7 @@ def test_native_animation_forms_and_video_file(tmp_path):
         scene.saved_views.append(SavedView.capture(name, scene, camera))
     scene.animation = SceneAnimation(transition=0, pause=0)
     save_scene(scene, path)
-    venv = fixture_venv(tmp_path, "from ingetrazo_render.shell_files import ShellFileDialog\n"
+    venv = fixture_venv(tmp_path, "from built_render.shell_files import ShellFileDialog\n"
                        f"ShellFileDialog.getSaveFileName = lambda *a, **k: ({str(movie)!r}, '')\n")
     script = tmp_path / "steps"
     script.write_text("wait 700\nmenu animation_settings\nwait 300\nstate\nkey enter\nwait 200\n"
@@ -1012,7 +1012,7 @@ def test_native_orthomosaic_import_and_undo(tmp_path):
     save_scene(Scene(), model)
     write_geotiff(tile, np.full((8, 16, 4), 255, dtype=np.uint8))
     venv = fixture_venv(tmp_path,
-        "from ingetrazo_render.shell_files import ShellFileDialog\n"
+        "from built_render.shell_files import ShellFileDialog\n"
         "from georef.tile_fetcher import TileFetcher\n"
         "TileFetcher.request = lambda *args: None\n"
         f"ShellFileDialog.getOpenFileName = lambda *a, **k: ({str(tile)!r}, '')\n")
@@ -1043,7 +1043,7 @@ def test_native_survey_imports_share_datum_and_save(tmp_path):
     alignment.write_text(json.dumps(dict(type="LineString", coordinates=[[-73., -15.], [-73.001, -15.]])))
     obj = _write_odm_tree(tmp_path)
     venv = fixture_venv(tmp_path,
-        "from ingetrazo_render.shell_files import ShellFileDialog\n"
+        "from built_render.shell_files import ShellFileDialog\n"
         "from georef.tile_fetcher import TileFetcher\n"
         "TileFetcher.request = lambda *a, **k: None\n"
         f"paths = {{'*.csv': {str(csv)!r}, '*.obj': {str(obj)!r}, '*.kml': {str(alignment)!r}}}\n"
@@ -1082,7 +1082,7 @@ def test_native_takeoff_picks_tagged_faces_in_their_edit_context(tmp_path):
     _group(scene, History(scene), faces).name = "Wall assembly"
     model = tmp_path / "wall.built"
     save_scene(scene, model)
-    venv = fixture_venv(tmp_path, """from ingetrazo_render import Host
+    venv = fixture_venv(tmp_path, """from built_render import Host
 from views import wgpu_ui
 menu, state = Host.menu, Host.state
 def drive(self, command):

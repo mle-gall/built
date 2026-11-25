@@ -1,20 +1,20 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Regenerate the *document* icons for IngeTrazo's file types (.igz/.dae/.skp).
+"""Regenerate the *document* icons for Built's file types (.igz/.dae/.skp).
 
 These are the icons the file manager shows on saved/opened files — a white
 document sheet with a dog-eared corner, a coloured title bar naming the format,
-faint table rows, and the IngeTrazo cube badge in the lower-right corner (the
+faint table rows, and the Built cube badge in the lower-right corner (the
 same visual family as IngePresupuestos' branded ``.db`` icon). One design,
 three accents so the formats read apart at a glance while staying clearly part
 of the same product.
 
 Outputs (committed to the repo):
   * resources/icons/hicolor/<size>/mimetypes/<mime>.png   ← Linux icon theme
-  * resources/icons/mimetypes/ingetrazo-<fmt>.ico         ← Windows DefaultIcon
+  * resources/icons/mimetypes/built-<fmt>.ico         ← Windows DefaultIcon
 
 Freedesktop MIME icon names (``/`` → ``-``) each format resolves to:
-  * .igz → application/x-ingetrazo         → application-x-ingetrazo
+  * .igz → application/x-built         → application-x-built
   * .dae → model/vnd.collada+xml           → model-vnd.collada+xml
   * .skp → application/vnd.sketchup.skp     → application-vnd.sketchup.skp
 
@@ -32,7 +32,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ICONS = ROOT / "resources" / "icons"
-BADGE = ICONS / "ingetrazo_256.png"           # the cube mark, composited as badge
+BADGE = ICONS / "built_256.png"           # the cube mark, composited as badge
 HICOLOR = ICONS / "hicolor"
 MIME_DIR = ICONS / "mimetypes"
 
@@ -41,7 +41,7 @@ ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]     # what we pack into the .ico
 
 # fmt key → (freedesktop mime icon name, label on the sheet, accent colour)
 FORMATS = {
-    "igz": ("application-x-ingetrazo",         "IGZ", "#2f7fe6"),
+    "igz": ("application-x-built",         "IGZ", "#2f7fe6"),
     "dae": ("model-vnd.collada+xml",           "DAE", "#1f9e6e"),
     "skp": ("application-vnd.sketchup.skp",     "SKP", "#e0872a"),
 }
@@ -139,7 +139,7 @@ def build() -> None:
             MIME_DIR.mkdir(parents=True, exist_ok=True)
             srcs = [str(HICOLOR / f"{s}x{s}" / "mimetypes" / f"{mime}.png")
                     for s in ICO_SIZES]
-            _run([*mag, *srcs, str(MIME_DIR / f"ingetrazo-{fmt}.ico")])
+            _run([*mag, *srcs, str(MIME_DIR / f"built-{fmt}.ico")])
 
             print(f"  {fmt}: {mime}  ✓  ({len(SIZES)} PNG sizes + .ico)")
 

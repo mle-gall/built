@@ -4,7 +4,7 @@ import json
 import random
 
 import pytest
-from ingetrazo_core import MeshStore
+from built_core import MeshStore
 from core.scene import Scene
 from tests.test_store_mesh import fingerprint
 from tests.test_store_pieces_explode import _explode_scene, _translate

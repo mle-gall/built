@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import ScreenPoint, Input
+from built_core import ScreenPoint, Input
 import numpy as np
-from ingetrazo_render import AnnotationCanvas
-from ingetrazo_core import Vec3 as V
+from built_render import AnnotationCanvas
+from built_core import Vec3 as V
 
 from core.history import History
 from core.scene import Scene

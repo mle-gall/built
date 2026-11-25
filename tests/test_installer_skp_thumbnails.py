@@ -3,9 +3,9 @@
 """The Windows installer keeps the previews of .skp files (issue #804).
 
 Explorer shows a thumbnail through the handler of the file's ProgID. The
-installer makes IngeTrazo.skp the default for .skp, and that ProgID has no
+installer makes Built.skp the default for .skp, and that ProgID has no
 handler, so the previews of the program that owned the extension before
-disappeared. The [Code] section copies that handler to IngeTrazo.skp. Inno
+disappeared. The [Code] section copies that handler to Built.skp. Inno
 Setup does not run on every machine, so this reads the script as text.
 """
 from __future__ import annotations
@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-ISS = Path(__file__).resolve().parent.parent / "installer" / "ingetrazo.iss"
+ISS = Path(__file__).resolve().parent.parent / "installer" / "built.iss"
 THUMBNAIL_PROVIDER = "{E357FCCD-A995-4576-B01F-234630154E96}"
 
 
@@ -35,7 +35,7 @@ def test_app_id_is_unchanged():
 def test_skp_progid_key_is_still_deleted_on_uninstall():
     entries = _section("Registry").replace("\\\n", " ").splitlines()
     entry = next(line for line in entries
-                 if r'Subkey: "Software\Classes\IngeTrazo.skp";' in line)
+                 if r'Subkey: "Software\Classes\Built.skp";' in line)
     assert "uninsdeletekey" in entry
 
 
@@ -52,7 +52,7 @@ def test_thumbnail_handler_is_copied_to_the_skp_progid():
     assert THUMBNAIL_PROVIDER in code
     write = next(line for line in code.splitlines() if "RegWriteStringValue" in line)
     assert "HKA" in write and "SkpProgId" in write
-    assert "SkpProgId = 'IngeTrazo.skp'" in code
+    assert "SkpProgId = 'Built.skp'" in code
 
 
 def test_handler_is_searched_in_progid_extension_and_system_associations():
@@ -104,7 +104,7 @@ def test_a_choice_made_since_is_left_alone():
 
 def test_last_the_programs_offered_for_skp_lend_their_handler():
     """A copy for one user over the one for the whole machine finds
-    IngeTrazo.skp as the previous ProgID; the other program's ProgID was
+    Built.skp as the previous ProgID; the other program's ProgID was
     only a key under .skp and in Explorer's list of what opened .skp, and
     the previews went (minipc, 11-11)."""
     code = _section("Code")

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Line types moved to Rust (``rust/ingetrazo_core/src/linetypes.rs``) and
+"""Line types moved to Rust (``rust/built_core/src/linetypes.rs``) and
 must answer exactly as the Python ones did.
 
 ``tests/fixtures/linetype_golden.json.gz`` holds what the retired Python

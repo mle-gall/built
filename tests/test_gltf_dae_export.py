@@ -10,8 +10,8 @@ import struct
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from ingetrazo_render import SurveyRaster
-from ingetrazo_core import Vec3 as QVector3D
+from built_render import SurveyRaster
+from built_core import Vec3 as QVector3D
 
 from core.history import History
 from core.scene import Scene
@@ -84,7 +84,7 @@ def test_glb_is_valid_and_has_geometry(tmp_path):
 
 
 def test_glb_is_y_up(tmp_path):
-    # A box from z=0..3 in IngeTrazo (Z-up) must land y=0..3 in glTF (Y-up).
+    # A box from z=0..3 in Built (Z-up) must land y=0..3 in glTF (Y-up).
     scene = Scene()
     hist = History(scene)
     _cube(scene, hist, height=3.0)

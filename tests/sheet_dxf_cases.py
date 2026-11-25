@@ -3,7 +3,7 @@
 """DXF writer cases (tests/test_sheet_dxf_parity.py): line groups per class
 and per layer with their line types, colours and own patterns, solids,
 texts, odd layer names. The goldens are the Python writer's bytes
-(formats/dxf_out.py before it moved to ingetrazo_core sheets::dxf)."""
+(formats/dxf_out.py before it moved to built_core sheets::dxf)."""
 from __future__ import annotations
 
 import numpy as np

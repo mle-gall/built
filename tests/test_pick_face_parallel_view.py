@@ -9,7 +9,7 @@ import math
 
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 
 def V(x, y, z=0.0):

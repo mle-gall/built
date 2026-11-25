@@ -15,11 +15,11 @@ Headless: the same direct tool calls as ``test_pushpull_ux``.
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.edits import build_add_edges
 from core.history import AddFaceCommand, History
-from ingetrazo_core.orient import is_closed, orient_outward, signed_volume
+from built_core.orient import is_closed, orient_outward, signed_volume
 from core.scene import Scene
 from formats.igz import load_into, save_scene
 from tests import test_pushpull_ux as T

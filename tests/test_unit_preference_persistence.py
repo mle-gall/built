@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 IngeTrazo contributors.
+# Copyright (C) 2026 Built contributors.
 """Unit choices and the new-document opt-in survive Preferences and reopening."""
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pytest
 from core import units
 from core.scene import Scene
 from formats import igz
-from ingetrazo_render.settings_sheet import Env, SettingsSheet
+from built_render.settings_sheet import Env, SettingsSheet
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from tests.units_chrome import edit_unit, units_row
 
@@ -78,7 +78,7 @@ def test_changed_units_remain_the_default_when_the_open_model_differs(chosen):
     # new-document choice; it cannot be inferred from the old units matching.
     assert window.viewport.scene.units == chosen
     assert units.new_document_units() == chosen
-    from ingetrazo_render import ShellWindow
+    from built_render import ShellWindow
     fresh_scene = Scene()
     fresh_window = SimpleNamespace(viewport=SimpleNamespace(scene=fresh_scene))
     ShellWindow._apply_new_document_units(fresh_window)
@@ -138,7 +138,7 @@ def test_cancel_does_not_change_units_or_the_document_only_choice(native_questio
     window = _window(CM)
     edit_unit(window, "for_new", 0)
 
-    from ingetrazo_render import chrome_forms, units_question
+    from built_render import chrome_forms, units_question
     other_window = native_question_host.window
     units.apply_units(other_window.viewport.scene, CM)
     units_question.offer_at_start(other_window)

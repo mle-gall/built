@@ -11,7 +11,7 @@ layer answered to «Layer 0»: hiding it emptied the open group. Decision of
 Marco (21-10): the untagged contents follow the group, as in .skp."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.history import MakeGroupCommand, History
 from core.layers import Layer

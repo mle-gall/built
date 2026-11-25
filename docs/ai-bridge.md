@@ -1,6 +1,6 @@
 # AI Bridge — modelar con Claude (MCP)
 
-IngeTrazo puede ser dirigido por un agente de IA (Claude Code, Claude
+Built puede ser dirigido por un agente de IA (Claude Code, Claude
 Desktop) mediante el [Model Context Protocol](https://modelcontextprotocol.io):
 el agente dibuja, consulta y **ve** el modelo en vivo — y cada acción suya
 es un paso de undo transaccional (si su código falla, el documento se
@@ -20,10 +20,10 @@ herramientas, incluida la consola Python.
 
 ## Uso en la interfaz clásica
 
-1. En IngeTrazo: pestaña **IA** de la barra lateral ▸ sección **Puente IA
+1. En Built: pestaña **IA** de la barra lateral ▸ sección **Puente IA
    (MCP)** ▸ **Encender puente** (o **Extensiones ▸ Puente IA (MCP)**, que
    abre esa sección y lo enciende) — arranca un servidor local (solo
-   127.0.0.1, puerto 4763; `INGETRAZO_AI_PORT` lo cambia). **Detener
+   127.0.0.1, puerto 4763; `BUILT_AI_PORT` lo cambia). **Detener
    puente** lo apaga.
 2. Al encenderlo, la sección muestra, con un botón Copiar, las líneas exactas para
    tu sistema (botón **Copiar**). No hace falta tener Python instalado: el
@@ -31,13 +31,13 @@ herramientas, incluida la consola Python.
 
    | Instalación | Comando del servidor MCP |
    |---|---|
-   | Windows (instalador o zip) | `C:\Program Files\IngeTrazo\ingetrazo-mcp.exe` |
-   | Linux AppImage / tarball / Flatpak / snap | `<ejecutable de IngeTrazo> --mcp` |
-   | Desde el repositorio | `python3 /ruta/a/app/scripts/ingetrazo_mcp.py` |
+   | Windows (instalador o zip) | `C:\Program Files\Built\built-mcp.exe` |
+   | Linux AppImage / tarball / Flatpak / snap | `<ejecutable de Built> --mcp` |
+   | Desde el repositorio | `python3 /ruta/a/app/scripts/built_mcp.py` |
 
    **Claude Code** (en una terminal):
 
-       claude mcp add ingetrazo -- "C:\Program Files\IngeTrazo\ingetrazo-mcp.exe"
+       claude mcp add built -- "C:\Program Files\Built\built-mcp.exe"
 
    **Claude Desktop**: pega esto en su archivo de configuración
    (`%APPDATA%\Claude\claude_desktop_config.json` en Windows,
@@ -46,14 +46,14 @@ herramientas, incluida la consola Python.
 
        {
          "mcpServers": {
-           "ingetrazo": {
-             "command": "C:\\Program Files\\IngeTrazo\\ingetrazo-mcp.exe",
+           "built": {
+             "command": "C:\\Program Files\\Built\\built-mcp.exe",
              "args": []
            }
          }
        }
 
-   Si Claude no responde: comprueba que IngeTrazo sigue abierto con el
+   Si Claude no responde: comprueba que Built sigue abierto con el
    puente encendido (la sección Puente IA (MCP) dice «Escuchando en…»),
    que la ruta del comando existe, y en Claude Desktop que el servidor
    aparece en Configuración ▸ Desarrollador ▸ MCP sin error.
@@ -63,7 +63,7 @@ herramientas, incluida la consola Python.
 ### El agente dentro de un contenedor (Docker, WSL2)
 
 El puente escucha **solo en `127.0.0.1`** de la máquina donde corre
-IngeTrazo, y así se queda: no tiene contraseña y `run_python` ejecuta
+Built, y así se queda: no tiene contraseña y `run_python` ejecuta
 código dentro de la aplicación, de modo que abrirlo a la red dejaría el
 modelo (y el equipo) a merced de cualquiera en ella.
 
@@ -74,17 +74,17 @@ puente corta la conexión en la primera línea que no es una petición JSON —
 la primera línea de cualquier petición HTTP es `POST / HTTP/1.1` — y el
 cuerpo nunca llega a leerse. Aun así, **detén el puente cuando no lo uses**.
 
-- **IngeTrazo dentro de WSL2** (AppImage o `.tar.gz` con WSLg) y el
+- **Built dentro de WSL2** (AppImage o `.tar.gz` con WSLg) y el
   contenedor con `--network host`: funciona tal cual, porque comparten
   `127.0.0.1`.
 - **En cualquier otro caso**, lleva el puerto hasta el agente con un túnel
   que tú controlas (`ssh -L 4763:127.0.0.1:4763 usuario@equipo`, `socat`…)
   y dile al cliente MCP dónde está el otro extremo:
 
-      INGETRAZO_AI_HOST=host.docker.internal INGETRAZO_AI_PORT=4763 \
-          python3 /ruta/a/app/scripts/ingetrazo_mcp.py
+      BUILT_AI_HOST=host.docker.internal BUILT_AI_PORT=4763 \
+          python3 /ruta/a/app/scripts/built_mcp.py
 
-  `INGETRAZO_AI_HOST` (por defecto `127.0.0.1`) solo cambia a dónde se
+  `BUILT_AI_HOST` (por defecto `127.0.0.1`) solo cambia a dónde se
   conecta el cliente; el puente no deja de escuchar únicamente en local.
 
 ## Herramientas expuestas
@@ -166,7 +166,7 @@ reset with `refresh_after_edit()`; this does not rewrite them automatically.
 
 Para el usuario que no usa Claude Code: la pestaña **IA** de la barra
 lateral (Ctrl+Shift+A la trae al frente, aunque esté oculta) es un chat
-DENTRO de IngeTrazo. Pega tu clave API — el
+DENTRO de Built. Pega tu clave API — el
 proveedor se detecta solo por el prefijo, la convención de IngePresupuestos:
 
 | Prefijo | Proveedor | Modelo por defecto |

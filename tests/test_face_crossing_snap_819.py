@@ -4,14 +4,14 @@
 the crossing (#819, @xcd-droid).
 
 A box sunk into the floor, a beam through a wall: .skp offers
-«Intersection» along the line where the two faces meet; IngeTrazo only
+«Intersection» along the line where the two faces meet; Built only
 said «On face», so a line could not start exactly on it."""
 from __future__ import annotations
 
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import Vec3 as V
+from built_core import Input as Qt
+from built_core import Vec3 as V
 
 
 from core.snap import compute_snap  # noqa: E402
@@ -104,7 +104,7 @@ def _sunk_copies_window(native_host):
     """The sunk box as component copies along the floor, in the pick
     index's lazy mode (the plant of #158)."""
     from core.group import Group
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     win, vp = _sunk_box_window(native_host)
     box = vp.scene.groups.pop()
     for k in range(6):

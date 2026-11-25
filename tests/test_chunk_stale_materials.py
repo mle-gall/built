@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 from tests.raster_samples import solid_raster
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.group import Group
 from core.history import History, MoveGroupCommand, SetFaceTextureCommand
@@ -115,8 +115,8 @@ def test_repaint_alone_is_picked_up_too(images):
 def test_the_flag_reaches_nested_placements(images):
     """A nested placement's mesh renders as part of its parent, so it needs
     the same signal — scene.groups as a flat list never reached it."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4
-    from ingetrazo_core import dirty_group_chunks
+    from built_core import Matrix4 as QMatrix4x4
+    from built_core import dirty_group_chunks
     scene = Scene()
     deep = Mesh()
     deep.add_face([V(0, 0), V(2, 0), V(2, 2), V(0, 2)])

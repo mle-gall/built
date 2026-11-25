@@ -17,7 +17,7 @@ import math
 import random
 
 import numpy as np
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core import topology
 from core.edits import build_add_edges
@@ -40,7 +40,7 @@ def test_a_stroke_lays_the_edge_graph_out_once(monkeypatch):
     # The Python planner's edge list is the one laid out once; with the
     # scans on, the fork plans over the mesh scan (core.edits._ScanEdges),
     # whose adjacency is built node by node and never as a CycleGraph.
-    monkeypatch.setenv("INGETRAZO_SCANS", "0")
+    monkeypatch.setenv("BUILT_SCANS", "0")
     scene, _hist = _slab_with_cylinders(3)
     built = []
     def make_graph(edges, key=topology._key):
@@ -162,7 +162,7 @@ def test_outlines_cross_as_they_did_edge_by_edge():
 def test_a_circle_drawn_on_the_solid_lands_as_before():
     """The circle is one new face in a new opening of the cap, the model
     still one closed solid with nothing turned or marked."""
-    from ingetrazo_core.orient import is_closed, signed_volume
+    from built_core.orient import is_closed, signed_volume
 
     scene, hist = _slab_with_cylinders(3)
     faces_before = len(scene.faces)

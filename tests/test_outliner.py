@@ -11,7 +11,7 @@ import time
 
 import pytest
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core import outliner
 from core.group import Group
@@ -86,7 +86,7 @@ def test_ten_thousand_nodes_build_once_and_refresh_quickly():
 
 def _sheets_model(win):
     from core.composition import Composicion, MarcoVista
-    from ingetrazo_core.saved_views import SavedView
+    from built_core.saved_views import SavedView
     scene = win.viewport.scene
     cam = win.viewport.camera
     scene.saved_views[:] = [SavedView.capture("Plan L1", scene, cam),
@@ -158,7 +158,7 @@ def test_a_failing_kind_provider_is_skipped():
 
 def _plan(win, target, *, height=None, sheet=True, scale=100):
     from views import wgpu_ui
-    from ingetrazo_render import chrome_forms
+    from built_render import chrome_forms
     verb, prefix = ("groupplan", "i:") if height is not None else ("cutview", "section:")
     wgpu_ui._tree_action(win, win.view, wgpu_ui.SEP.join((verb, prefix + str(target.uid))))
     form = chrome_forms.current(win)
@@ -218,7 +218,7 @@ def test_a_view_of_a_vertical_cut_looks_at_it_square_on(native_question_host):
     scene = win.viewport.scene
     scene.groups[:] = [building, tree]
     scene.version += 1
-    from ingetrazo_core.section import SectionPlane
+    from built_core.section import SectionPlane
     cut = SectionPlane(QVector3D(4, 3, 0), QVector3D(1, 0, 0),
                        name="Cross section", symbol="C")
     scene.section_planes[:] = [cut]
@@ -245,7 +245,7 @@ def test_a_horizontal_cut_gives_a_plan(native_question_host):
     scene = win.viewport.scene
     scene.groups[:] = [building, tree]
     scene.version += 1
-    from ingetrazo_core.section import SectionPlane
+    from built_core.section import SectionPlane
     cut = SectionPlane(QVector3D(0, 0, 1.4), QVector3D(0, 0, 1),
                        symbol="A")
     scene.section_planes[:] = [cut]
@@ -255,7 +255,7 @@ def test_a_horizontal_cut_gives_a_plan(native_question_host):
 
 
 def test_export_all_pdf_can_take_only_some_sheets(tmp_path, native_host):
-    from ingetrazo_render.sheet_workspace import composer_for
+    from built_render.sheet_workspace import composer_for
 
     win = native_host.window
     first, second = _sheets_model(win)
@@ -267,7 +267,7 @@ def test_export_all_pdf_can_take_only_some_sheets(tmp_path, native_host):
 
 
 def test_the_scale_fits_the_model_in_the_frame():
-    from ingetrazo_core.saved_views import SavedView
+    from built_core.saved_views import SavedView
     from core.camera import OrbitCamera
     building, tree = _building()                     # 5.1 m wide, 6 m tall
     from core.scene import Scene

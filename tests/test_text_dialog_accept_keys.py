@@ -16,11 +16,11 @@ ROOT = Path(__file__).resolve().parents[1]
 def answers(tmp_path_factory):
     root = tmp_path_factory.mktemp("multiline")
     profile = root / "profile"
-    folder = profile / "data/ingetrazo/plugins"
+    folder = profile / "data/built/plugins"
     folder.mkdir(parents=True)
     (folder / "prompt_probe.py").write_text('''import json
 from pathlib import Path
-from ingetrazo_render.chrome_forms import ask_text
+from built_render.chrome_forms import ask_text
 
 def setup(app):
     def ask():
@@ -56,7 +56,7 @@ def test_enter_alone_adds_a_line_and_does_not_accept(answers):
 
 
 def test_the_dialog_says_how_to_accept(native_question_host):
-    from ingetrazo_render import chrome_forms
+    from built_render import chrome_forms
     win = native_question_host.window
     chrome_forms.ask_text(win, "Text", "Label text:", multiline=True)
     form = chrome_forms.current(win)

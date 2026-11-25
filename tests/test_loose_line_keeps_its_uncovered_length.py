@@ -14,8 +14,8 @@ Headless: ``QVector3D`` value types only.
 """
 from __future__ import annotations
 
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Vec3 as QVector3D
 
 from core.edits import build_add_edge
 from core.history import EraseSelectionCommand, History

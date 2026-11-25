@@ -16,4 +16,3 @@ case "$(uname -s)" in
 esac
 cargo build --locked --release --target-dir "$target" --manifest-path rust/built_app/Cargo.toml
 install -m 755 "$target/release/built$suffix" "$dest/built$suffix"
-rm "$dest/ingetrazo$suffix"

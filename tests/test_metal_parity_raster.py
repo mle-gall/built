@@ -7,12 +7,12 @@ import pytest
 from core.scene import Scene
 from views.wgpu_style import style_payload, sun_payload
 
-HAS_RENDERER = importlib.util.find_spec("ingetrazo_render") is not None
+HAS_RENDERER = importlib.util.find_spec("built_render") is not None
 
 
 def raster(rgb):
     """A ``SurveyRaster`` of an H×W×3 (opaque) or H×W×4 array."""
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     rgb = np.asarray(rgb, np.uint8)
     if rgb.shape[2] == 3:
         rgb = np.concatenate([rgb, np.full(rgb.shape[:2] + (1,), 255, np.uint8)], axis=2)
@@ -37,7 +37,7 @@ def test_payload_defaults_and_hidden_controls():
 
 
 def test_sun_matches_gl_and_can_be_disabled(monkeypatch):
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     from tests.controller_surface import ControllerSurface as Viewport
     scene = Scene()
     scene.loose_mesh.add_face([QVector3D(0,0,0), QVector3D(1,0,0), QVector3D(0,1,1)])
@@ -49,16 +49,16 @@ def test_sun_matches_gl_and_can_be_disabled(monkeypatch):
     np.testing.assert_allclose(p['sun_direction'], view._sun_dir_now())
     assert len(p['shadow_matrix']) == 16
     assert sun_payload(scene, override=scene.display_style)['shadows']
-    from ingetrazo_core.style import Style
+    from built_core.style import Style
     assert not sun_payload(scene, override=Style(name='tecnico'))['shadows']
-    monkeypatch.setenv('INGETRAZO_NO_SHADOWS','1')
+    monkeypatch.setenv('BUILT_NO_SHADOWS','1')
     assert not sun_payload(scene)['shadows']
     view.close()
 
 
-@pytest.mark.skipif(not HAS_RENDERER, reason='release ingetrazo_render required')
+@pytest.mark.skipif(not HAS_RENDERER, reason='release built_render required')
 def test_native_api_available():
-    from ingetrazo_render import Renderer
+    from built_render import Renderer
     for name in ('set_preview_mesh','set_face_marks','set_suppressed_faces',
                  'set_profile_exclusions','set_hidden_geometry','set_lines'):
         assert hasattr(Renderer, name)
@@ -68,7 +68,7 @@ def test_native_api_available():
 def native():
     if not HAS_RENDERER:
         pytest.skip('requires the render crate')
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     from tests.headless_gpu import renderer as headless
     renderer = headless(64, 64, 1.)
     view=QMatrix4x4(); view.translate(0,0,-3)
@@ -80,7 +80,7 @@ def native():
 
 
 def synthetic_pack(alpha=64):
-    from ingetrazo_core import VERTEX, INSTANCE, COMMAND
+    from built_core import VERTEX, INSTANCE, COMMAND
     vertices=np.zeros(12,dtype=VERTEX)
     quad=np.array([[-.8,-.8,0],[.8,-.8,0],[.8,.8,0],[-.8,-.8,0],[.8,.8,0],[-.8,.8,0]],dtype=np.float32)
     vertices['pos'][:6]=quad; quad[:,2]=-.4; vertices['pos'][6:]=quad
@@ -195,10 +195,10 @@ def test_loose_transform_preview_restores_resident_faces(native):
 
 def test_texture_tool_updates_only_one_faces_uv_rows(native, tmp_path):
     from types import SimpleNamespace
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     from tools.texture_position import TexturePositionTool
     from tools.texture_position_metal import TexturePreview
-    from ingetrazo_core import pack_scene
+    from built_core import pack_scene
 
     path = tmp_path / "tile.png"
     tile = np.zeros((16, 16, 3), np.uint8)
@@ -264,7 +264,7 @@ def test_scaffold_lines_are_depth_tested_and_dashed(native,aa):
     assert 8<len(runs), 'on/off runs along the line'
     assert np.all(np.diff(runs)>=2) and np.all(np.diff(runs)<=6)
     # Sheet captures never carry scaffolding.
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     view=QMatrix4x4(); view.translate(0,0,-3)
     proj=QMatrix4x4(); proj.ortho(-1,1,-1,1,.1,10)
     style=dict(sky=False,edges=False)
@@ -311,7 +311,7 @@ def test_shadow_toggle_and_invalid_payload(native):
     with pytest.raises(ValueError): native.set_style(dict(shadows=True,sun_direction=(0,0,0)))
     native.set_style(dict(shadows=False))
     np.testing.assert_array_equal(original,capture(native))
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     matrix=QMatrix4x4(); matrix.ortho(-2,2,-2,2,-2,2)
     native.set_style(dict(shadows=True,sun_direction=(1,0,0.1),shadow_matrix=list(matrix.data())))
     shaded=capture(native)
@@ -322,8 +322,8 @@ def test_shadow_toggle_and_invalid_payload(native):
 
 @pytest.mark.parametrize("aa", [False, True])
 def test_paste_preview_repeats_the_image_and_clears(native, aa, tmp_path):
-    from ingetrazo_core import Vec3
-    from ingetrazo_render import preview_materials
+    from built_core import Vec3
+    from built_render import preview_materials
     from tools.paste import PasteTool
     from tests.controller_surface import ControllerSurface
 
@@ -400,7 +400,7 @@ def audit_handoff():
     import runpy
     import sys
     import views.wgpu_view as module
-    from ingetrazo_core import PackedScene
+    from built_core import PackedScene
     original_pack = module.pack_scene
     original_upload = PackedScene.upload
     import views.wgpu_style as style_module
@@ -451,8 +451,8 @@ if __name__ == '__main__':
 
 
 def test_pbr_shading_changes_pixels_and_keeps_picks(native, tmp_path):
-    from ingetrazo_core import Vec3 as QVector3D
-    from ingetrazo_core import pack_scene
+    from built_core import Vec3 as QVector3D
+    from built_core import pack_scene
     scene = Scene()
     face = scene.loose_mesh.add_face([QVector3D(x, y, 0) for x, y in
                                      ((-.8, -.8), (.8, -.8), (.8, .8), (-.8, .8))])
@@ -506,14 +506,14 @@ def test_hidden_object_readback_survives_gpu_growth(native):
 
 def test_intersected_wall_occludes_loose_slab_edges(native, monkeypatch):
     import math
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     from core.camera import OrbitCamera
     from core.history import History
     from core.intersect import WITH_CONTEXT
     from core.protocol.commands import run
-    from ingetrazo_core.store_mesh import StoreMesh
+    from built_core.store_mesh import StoreMesh
     from tests.test_intersect_faces import _box, RED, BLUE
-    from ingetrazo_core import pack_scene
+    from built_core import pack_scene
 
     scene = Scene()
     mesh = scene.mesh
@@ -571,7 +571,7 @@ def test_intersected_wall_occludes_loose_slab_edges(native, monkeypatch):
 
 @pytest.mark.parametrize("antialias", [False, True])
 def test_transparent_export_preserves_the_interactive_background(native, antialias):
-    from ingetrazo_core import Matrix4
+    from built_core import Matrix4
 
     upload(native, alpha=255)
     native.set_antialias(antialias)
@@ -591,7 +591,7 @@ def test_transparent_export_preserves_the_interactive_background(native, antiali
 
 
 def test_export_shadow_map_resolves_the_ground_shadow_edge(native):
-    from ingetrazo_core import Matrix4
+    from built_core import Matrix4
 
     vertices, indices, bounds, commands, rows = synthetic_pack(alpha=255)
     vertices["pos"][:, :2] *= .45
@@ -644,8 +644,8 @@ def test_export_shadow_map_resolves_the_ground_shadow_edge(native):
 @pytest.mark.parametrize('aa', [False, True])
 def test_reference_imagery_in_live_and_export_frames(native, layer, aa, tmp_path):
     from types import SimpleNamespace
-    from ingetrazo_core import Vec3, Matrix4
-    from ingetrazo_core.image_plane import ImagePlane
+    from built_core import Vec3, Matrix4
+    from built_core.image_plane import ImagePlane
     from georef.datum import SceneDatum
     from georef.tiles import TileLayer, PRESETS
     from georef.terrain import TerrainObject
@@ -748,7 +748,7 @@ def test_model_behind_reference_only_hidden_by_opaque_imagery(native, antialias)
 
 
 def test_selection_marks_follow_the_grab_and_leave_hover_marks_in_place(native):
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     vertices, *_ = upload(native, 255)
     native.set_style(dict(sky=False, edges=False))
     marks = np.tile(vertices[:6], 2)
@@ -779,11 +779,11 @@ def test_selection_marks_follow_the_grab_and_leave_hover_marks_in_place(native):
 @pytest.mark.parametrize('aa', [False, True])
 def test_clipboard_group_preview_moves_nested_texture_and_preserves_scene(native, tmp_path, aa):
     from types import SimpleNamespace
-    from ingetrazo_core import Vec3, Matrix4
+    from built_core import Vec3, Matrix4
     from core.scene import Scene
     from core.group import Group
     from core.mesh import Mesh
-    from ingetrazo_render import MeshToolAccess
+    from built_render import MeshToolAccess
 
     upload(native, 255)
     native.set_antialias(aa)

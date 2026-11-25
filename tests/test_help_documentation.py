@@ -10,7 +10,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 def test_help_documentation_opens_the_manual(native_host, monkeypatch):
     opened = []
-    monkeypatch.setattr("ingetrazo_core.desktop_open.open_url", opened.append)
+    monkeypatch.setattr("built_core.desktop_open.open_url", opened.append)
     action = native_host.window._registry_actions["menu:documentation"]
     action.trigger()
     assert opened == ["https://ingetrazo-docs.pages.dev/"]
@@ -18,7 +18,7 @@ def test_help_documentation_opens_the_manual(native_host, monkeypatch):
 
 def test_documentation_texts_translated_everywhere():
     keys = ("Documentation",
-            "Open the IngeTrazo documentation in the web browser.")
+            "Open the Built documentation in the web browser.")
     root = Path(__file__).resolve().parent.parent / "i18n"
     for f in sorted(root.glob("*.json")):
         if f.stem == "en":

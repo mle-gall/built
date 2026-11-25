@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import gc
 
-import ingetrazo_core
+import built_core
 import pytest
 
 import core.doc_model as dm
@@ -18,7 +18,7 @@ from core.scene import Scene
 
 
 def doc(handle, name):
-    return ingetrazo_core.doc_attr_value(handle, name)
+    return built_core.doc_attr_value(handle, name)
 
 
 def suspect(value) -> bool:
@@ -103,13 +103,13 @@ def test_rust_reads_a_link_path_edited_in_place():
     g = Group(name="Site")
     g.ext = {"link": {"path": "/a/Site.igz"}}
     s.groups.append(g)
-    assert ingetrazo_core.link_sources(s) == ["/a/Site.igz"]
+    assert built_core.link_sources(s) == ["/a/Site.igz"]
     g.ext["link"]["path"] = "/b/Site.igz"
-    assert ingetrazo_core.link_sources(s) == ["/b/Site.igz"]
+    assert built_core.link_sources(s) == ["/b/Site.igz"]
     rec = {"path": "/c/Site.igz"}
     g.ext["link"] = rec                  # a plain record stored, still held
     rec["path"] = "/d/Site.igz"
-    assert ingetrazo_core.link_sources(s) == ["/d/Site.igz"]
+    assert built_core.link_sources(s) == ["/d/Site.igz"]
 
 
 def test_undo_puts_back_an_edit_made_in_a_step():

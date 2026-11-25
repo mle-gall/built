@@ -17,7 +17,7 @@ from __future__ import annotations
 
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 import pytest  # noqa: E402
 
@@ -29,7 +29,7 @@ def cancels(monkeypatch):
     """Answer any question the chrome asks with Cancel, and report whether
     one was actually asked — a silent refusal would pass these asserts too,
     and silence is the bug they exist to prevent."""
-    from ingetrazo_render import chrome_dialogs
+    from built_render import chrome_dialogs
     shown = {"count": 0, "titles": []}
 
     def ask(parent, title, text, buttons, *args, cancel=None, **kw):
@@ -94,7 +94,7 @@ def test_grouping_only_loose_geometry_still_works(native_host):
 def test_component_from_loose_geometry_plus_a_group_holds_both(native_host, monkeypatch):
     """It used to refuse; since issue #90 it makes ONE component holding the
     loose geometry and the group, still a group inside."""
-    from ingetrazo_render import chrome_forms
+    from built_render import chrome_forms
     win, scene = _win_with_a_group_and_loose_geometry(native_host)
     # the scale figure (a face-me billboard) never goes inside
     inner = [g for g in scene.groups

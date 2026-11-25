@@ -10,7 +10,7 @@ view on showed nothing of a cylinder's seams, yet a click could land on one.
 from __future__ import annotations
 
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 
 from core.layers import Layer

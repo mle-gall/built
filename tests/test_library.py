@@ -9,7 +9,7 @@ import zipfile
 
 import pytest
 
-from ingetrazo_core import component_library as library
+from built_core import component_library as library
 
 
 @pytest.fixture
@@ -29,8 +29,8 @@ def served(tmp_path, monkeypatch):
         z.writestr("chair.obj", "mtllib chair.mtl\nv 0 0 0\n")
         z.writestr("chair.mtl", "newmtl m\nKd 1 0 0\n")
         z.writestr("wood.jpg", b"x")
-    monkeypatch.setenv("INGETRAZO_LIBRARY", str(src))
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "cache" / "tex"))
+    monkeypatch.setenv("BUILT_LIBRARY", str(src))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "cache" / "tex"))
     return src
 
 
@@ -56,7 +56,7 @@ def test_what_was_downloaded_once_survives_the_server_going_away(served,
     assert library.model_file(entry) is not None
     assert library.thumbnail("silla") is not None
 
-    monkeypatch.setenv("INGETRAZO_LIBRARY", str(served) + "-no-existe")
+    monkeypatch.setenv("BUILT_LIBRARY", str(served) + "-no-existe")
     assert library.index(), "the cached index was thrown away"
     assert library.model_file(entry) is not None
     assert library.thumbnail("silla") is not None
@@ -66,8 +66,8 @@ def test_an_unreachable_library_answers_empty_instead_of_raising(tmp_path,
                                                                  monkeypatch):
     # Working offline is one of this program's promises: a server that is not
     # there costs the catalogue, never the app.
-    monkeypatch.setenv("INGETRAZO_LIBRARY", str(tmp_path / "offline"))
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "tex"))
+    monkeypatch.setenv("BUILT_LIBRARY", str(tmp_path / "offline"))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "tex"))
     assert library.index() == []
     assert library.thumbnail("silla") is None
     assert library.model_file({"id": "silla", "obj": "chair.obj"}) is None
@@ -183,15 +183,15 @@ def test_a_download_says_who_it_is(monkeypatch, tmp_path):
         seen["ua"] = req.get_header("User-agent")
         return _Resp()
 
-    monkeypatch.setenv("INGETRAZO_LIBRARY", "https://ingetrazo.com/biblioteca")
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "tex"))
+    monkeypatch.setenv("BUILT_LIBRARY", "https://ingetrazo.com/biblioteca")
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "tex"))
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     library.index(refresh=True)
 
     ua = seen.get("ua")
     assert ua, "the request carried no User-Agent"
     assert "urllib" not in ua.lower()
-    assert "IngeTrazo" in ua
+    assert "Built" in ua
 
 
 def test_previews_are_fetched_in_the_background_and_then_come_from_disk(served):
@@ -229,8 +229,8 @@ def test_asking_for_the_same_preview_again_costs_nothing(served):
 def test_a_preview_that_cannot_be_had_never_raises(tmp_path, monkeypatch):
     # A blank square is the right answer to an unreachable server; an
     # exception on a worker thread is not.
-    monkeypatch.setenv("INGETRAZO_LIBRARY", str(tmp_path / "offline"))
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "tex"))
+    monkeypatch.setenv("BUILT_LIBRARY", str(tmp_path / "offline"))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "tex"))
     library.prefetch_thumbnails(["no-existe"])
     import time
     time.sleep(0.3)
@@ -238,8 +238,8 @@ def test_a_preview_that_cannot_be_had_never_raises(tmp_path, monkeypatch):
 
 
 def _catalogue_sheet(entries, language):
-    from ingetrazo_render import ComponentCatalogue
-    from ingetrazo_core.i18n import current_language, set_language, tr
+    from built_render import ComponentCatalogue
+    from built_core.i18n import current_language, set_language, tr
     catalogue = ComponentCatalogue()
     catalogue.load(json.dumps(entries))
     was = current_language()

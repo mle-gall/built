@@ -53,7 +53,7 @@ def test_into_and_beside_drops_restore_parents_in_one_undo_each(model):
 
 
 def test_row_menu_and_delete_key_remove_picked_rows_together(model):
-    from ingetrazo_core.i18n import tr
+    from built_core.i18n import tr
     host, vp, house, level, tree = model
     vp.scene.select([tree, level])
     assert tr("Delete") in group_rows(host, tree)
@@ -106,7 +106,7 @@ def test_read_only_and_stale_rows_cannot_delete_the_selection(model):
 
 def test_deleting_a_tag_rechecks_the_document_after_confirmation(native_question_host):
     from core.layers import Layer
-    from ingetrazo_render import chrome_dialogs
+    from built_render import chrome_dialogs
     from core.group import Group
     win = native_question_host.window
     scene = win.viewport.scene

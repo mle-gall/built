@@ -35,7 +35,7 @@ expose the model:
 - **"Sticky geometry"** (auto-merge) + **Groups/Components** to isolate from it.
 
 So they use a **shared-vertex, non-manifold B-rep** — *not* a textbook
-(manifold) half-edge. IngeTrazo arrived at the same conceptual model by
+(manifold) half-edge. Built arrived at the same conceptual model by
 dogfooding; the difference is purely implementation (rediscovered vs persistent
 connectivity). The migration target below is essentially that model.
 

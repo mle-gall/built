@@ -2,9 +2,9 @@
 from types import SimpleNamespace
 from weakref import proxy
 
-from ingetrazo_core import Type
-from ingetrazo_core import WindowInput
-from ingetrazo_render import SurveyRaster, WindowTimers
+from built_core import Type
+from built_core import WindowInput
+from built_render import SurveyRaster, WindowTimers
 from views.document_interaction import DocumentInteraction
 from views.view_host import WidgetShim
 
@@ -34,7 +34,7 @@ class ControllerSurface(DocumentInteraction, _InputSurface):
         host = SimpleNamespace(width=640, height=480, scale=1., ns_view=0,
                                timers=WindowTimers(), input_state=WindowInput(), window=proxy(self),
                                request_frame=lambda: None, cursor_changed=lambda cursor: None)
-        from ingetrazo_render import Host
+        from built_render import Host
         host.tool_cursor = Host.tool_cursor
         super().__init__(parent, host=host)
 

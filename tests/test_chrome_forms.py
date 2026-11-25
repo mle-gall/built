@@ -1,22 +1,22 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Forms on the Built chrome (rust/ingetrazo_render/src/forms_host.rs): prompts as fields on
+"""Forms on the Built chrome (rust/built_render/src/forms_host.rs): prompts as fields on
 the egui sheet, answered by continuation, never by a nested loop, so the
 same calls work in the ``built`` shell, which has no Qt event loop.
 
 Offscreen there is no Metal frame: ``live`` is replaced by a stand-in
 view and the test plays the chrome, sending the ``dlg:`` actions the
-renderer would (rust/ingetrazo_render/src/ui/dialog.rs)."""
+renderer would (rust/built_render/src/ui/dialog.rs)."""
 from __future__ import annotations
 
 import sys
 import types
 
 import pytest
-from ingetrazo_core import Input as Qt
+from built_core import Input as Qt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
-from ingetrazo_render import chrome_dialogs as cd
-from ingetrazo_render import chrome_forms as cf
+from built_render import chrome_dialogs as cd
+from built_render import chrome_forms as cf
 
 class FakeRenderer:
     def __init__(self):
@@ -188,7 +188,7 @@ def test_keys_reach_only_the_open_form_in_the_native_window(win, monkeypatch):
 def test_make_component_names_through_the_chrome(win):
     from core.group import Group
     scene = win.viewport.scene
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     face = scene.mesh.add_face([QVector3D(*p) for p in ((0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0))])
     scene.select([face])
     win._on_make_component()
@@ -201,9 +201,9 @@ def test_make_component_names_through_the_chrome(win):
 
 
 def test_divide_goes_through_the_protocol_once_answered(win, monkeypatch):
-    from ingetrazo_core import command_protocol as protocol
+    from built_core import command_protocol as protocol
     scene = win.viewport.scene
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     edge = scene.mesh.add_edge(QVector3D(0, 0, 0), QVector3D(4, 0, 0))
     scene.select([edge])
     calls = []
@@ -291,7 +291,7 @@ def test_a_form_in_the_shell_with_no_chrome_cancels_instead_of_a_qt_dialog(monke
 def test_a_path_field_picks_through_file_dialogs(monkeypatch, tmp_path):
     """Qt's picker here; in the shell the same call is ShellFileDialog's
     native file panel."""
-    from ingetrazo_render import shell_files
+    from built_render import shell_files
     seen = []
 
     class Picker:
@@ -309,8 +309,8 @@ def test_a_path_field_picks_through_file_dialogs(monkeypatch, tmp_path):
 
 
 def test_the_library_image_picker_follows_the_host(monkeypatch, tmp_path):
-    from ingetrazo_render import wgpu_library
-    from ingetrazo_render import shell_files
+    from built_render import wgpu_library
+    from built_render import shell_files
 
     class Picker:
         @staticmethod

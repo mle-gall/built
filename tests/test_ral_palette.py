@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Named, localized RAL paint from the native Library."""
 import json
-from ingetrazo_core.i18n import current_language, set_language
-from ingetrazo_core.paths import app_root
-from ingetrazo_core import bundled_materials
+from built_core.i18n import current_language, set_language
+from built_core.paths import app_root
+from built_core import bundled_materials
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tools.paint import PaintTool
-from ingetrazo_render import wgpu_library as library
+from built_render import wgpu_library as library
 
 
 def test_picking_a_ral_colour_paints_a_material_with_its_name(native_host):

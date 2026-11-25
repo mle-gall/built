@@ -2,14 +2,14 @@
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 from core.scene import Scene
 from core.group import Group
 from core.mesh import Mesh
 from views.document_interaction import edit_fade_color
 from tests.controller_surface import ControllerSurface as Viewport
 from tests.headless_gpu import HeadlessView
-from ingetrazo_core import pack_scene
+from built_core import pack_scene
 from views.wgpu_edit_context import rest_rows
 from views.wgpu_style import style_payload
 
@@ -103,14 +103,14 @@ def test_box_matches_gl_corners_and_hit_helper(context):
 
 def test_shader_rest_bits_are_preserved_and_shared():
     from pathlib import Path
-    root = Path(__file__).resolve().parents[1] / 'rust/ingetrazo_render/src'
+    root = Path(__file__).resolve().parents[1] / 'rust/built_render/src'
     assert '(i.info.z & 129u)' in (root / 'shader.wgsl').read_text()
     assert 'face_pixel(i, front)' in (root / 'xray.wgsl').read_text()
     assert 'style.fade.rgb, style.fade.a' in (root / 'shading.wgsl').read_text()
 
 
 def test_hidden_row_never_reaches_inference(context):
-    from ingetrazo_core import resident_snap as snap
+    from built_core import resident_snap as snap
     view, source, a, b, _, _, calls = context
     view.scene.begin_group_edit(a)
     view.scene.begin_group_edit(b)
@@ -125,7 +125,7 @@ def test_hidden_row_never_reaches_inference(context):
 
 
 def test_empty_click_uses_box_to_leave_one_level(context):
-    from ingetrazo_core import Input as Qt
+    from built_core import Input as Qt
     view, source, a, b, _, _, _ = context
     view.scene.begin_group_edit(a)
     view.scene.begin_group_edit(b)

@@ -16,7 +16,7 @@ import pytest
 ezdxf = pytest.importorskip("ezdxf")
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.history import AddEdgeCommand
 from formats import dwg_bridge, dxf_in
@@ -61,7 +61,7 @@ def win(native_host):
 @pytest.fixture
 def errors(win, monkeypatch):
     shown = []
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.critical",
+    monkeypatch.setattr("built_render.chrome_dialogs.critical",
                         lambda _parent, title, text: shown.append((title, text)))
     # The unit dialog answered: metres, no faces from the outlines.
     monkeypatch.setattr(win, "_dxf_options",
@@ -162,7 +162,7 @@ def test_a_dwg_with_nothing_to_import_goes_the_same_way(win, errors, tmp_path,
     _edit(win)
     mine = win.active_document()
     dxf = _dxf(tmp_path, name="converted.dxf")
-    temp = tmp_path / "ingetrazo-dwg-x" / "intermediate.dxf"
+    temp = tmp_path / "built-dwg-x" / "intermediate.dxf"
     temp.parent.mkdir()
 
     def convert(self, _dwg):

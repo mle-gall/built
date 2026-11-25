@@ -21,7 +21,7 @@ def available():
     global _module
     if _module is _UNSET:
         try:
-            import ingetrazo_core as mod
+            import built_core as mod
         except Exception as exc:  # noqa: BLE001 — a missing module is the norm
             mod = None
             if not isinstance(exc, ImportError):
@@ -33,7 +33,7 @@ def available():
 
 def wanted() -> bool:
     """Whether the engine is asked for: the environment overrides the classic launch guard."""
-    env = os.environ.get("INGETRAZO_RUST")
+    env = os.environ.get("BUILT_RUST", os.getenv("INGETRAZO_RUST"))
     if env is not None:
         return env != "0"
     return not _guard_disabled
@@ -97,14 +97,14 @@ def start_guard(argv) -> bool:
     global _guard_disabled
     _guard_disabled = False
     if FLAG in argv:
-        os.environ["INGETRAZO_RUST"] = "0"
+        os.environ["BUILT_RUST"] = "0"
         return False
-    if os.environ.get("INGETRAZO_RUST") is not None:
+    if os.environ.get("BUILT_RUST", os.getenv("INGETRAZO_RUST")) is not None:
         return False                    # tests and benches choose for us
     try:
-        from ingetrazo_core.settings import settings as native_settings
-        from ingetrazo_core import general_settings
-        from ingetrazo_core.version import __version__
+        from built_core.settings import settings as native_settings
+        from built_core import general_settings
+        from built_core.version import __version__
         st = native_settings()
         off_by = str(general_settings.value(OFF_BY_GUARD, "", st))
         if off_by and off_by != __version__:
@@ -137,8 +137,8 @@ def start_guard(argv) -> bool:
 def start_ok() -> None:
     """The window is up and has drawn: this start with the engine worked."""
     try:
-        from ingetrazo_core.settings import settings as native_settings
-        from ingetrazo_core import general_settings
+        from built_core.settings import settings as native_settings
+        from built_core import general_settings
         st = native_settings()
         if _count(general_settings.value(STARTING, "0", st)):
             general_settings.set_value(STARTING, "0", st)

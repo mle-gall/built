@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import math
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 #: Curated civil/architecture classes (IFC4 names).
 from core.ifc_tables import IFC_CLASSES
@@ -93,7 +93,7 @@ def _holds_face_tags(mesh) -> bool:
 def next_object_id(scene) -> int:
     """A fresh BIM object id (max existing + 1) — over the faces inside
     groups too, so ungrouping them never merges two objects."""
-    from ingetrazo_core.mesh import face_attrs
+    from built_core.mesh import face_attrs
     top = 0
     for mesh in (scene.loose_mesh, *_group_meshes(scene)):
         for attrs in face_attrs(mesh):
@@ -178,7 +178,7 @@ def face_set_volume(faces):
     if not faces:
         return None
     from core._native import qt_hypot
-    from ingetrazo_core.store_mesh import FaceView, StoreMesh
+    from built_core.store_mesh import FaceView, StoreMesh
     first = faces[0]
     if isinstance(first, FaceView) and isinstance(first._m, StoreMesh) and qt_hypot():
         if all(isinstance(f, FaceView) and f._m is first._m for f in faces):
@@ -249,7 +249,7 @@ def _tagged_group_faces(g, base, excluded=()) -> list:
     from types import SimpleNamespace
 
     from core.group import world_mesh
-    from ingetrazo_core.mesh import Mesh
+    from built_core.mesh import Mesh
     part = _untagged_part(g, excluded)
     if base is not None:
         part = SimpleNamespace(mesh=Mesh(), xform=base, children=[part])
@@ -259,7 +259,7 @@ def _tagged_group_faces(g, base, excluded=()) -> list:
 def _moved_faces(faces, m) -> list:
     """``faces`` mapped through ``m`` into a mesh of their own, welded so a
     closed set stays closed for :func:`face_set_volume`."""
-    from ingetrazo_core.mesh import Mesh
+    from built_core.mesh import Mesh
     out = Mesh()
     moved = []
     for f in faces:

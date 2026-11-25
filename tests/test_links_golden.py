@@ -40,19 +40,19 @@ MATS = ["Oak", "Brick", "Glass", "Concrete"]
 def _fn(name):
     """A links operation by its Python name: the native ``link_*`` function
     when there is one (after the move), else ``core.links``'s."""
-    import ingetrazo_core
+    import built_core
     from core import links
     for cand in ("link_" + name, name):
-        f = getattr(ingetrazo_core, cand, None)
+        f = getattr(built_core, cand, None)
         if f is not None and cand.startswith("link"):
             return f
     return getattr(links, name)
 
 
 def _registry(scene):
-    import ingetrazo_core
+    import built_core
     from core import links
-    read = getattr(ingetrazo_core, "link_registry_view", None)
+    read = getattr(built_core, "link_registry_view", None)
     return read(scene) if read is not None else _fn("registry_view")(scene)
 
 
@@ -206,7 +206,7 @@ def fingerprint(scene, tmp, *, build=False):
 # ---- the corpus -----------------------------------------------------------------
 
 def _V(x, y, z=0.0):
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     return Vec3(float(x), float(y), float(z))
 
 
@@ -233,7 +233,7 @@ def _write_source(path, rng, *, nested=None, generation=0):
     from core.materials import Material
     from core.scene import Scene
     from formats import igz
-    from ingetrazo_core import Matrix4
+    from built_core import Matrix4
     s = Scene()
     folders = rng.sample(FOLDERS, rng.randint(0, 3))
     s.layer_folders = list(folders)
@@ -356,7 +356,7 @@ def run_case(seed, tmp):
     from core.history import History, UnlinkCommand
     from core.scene import Scene
     from formats import igz
-    import ingetrazo_core
+    import built_core
     run = _Run(seed, tmp)
     rng = run.rng
     tmp = run.tmp
@@ -406,7 +406,7 @@ def run_case(seed, tmp):
                 _fn("reload")(host, src, host_path)
             elif op == "switch" and host.layers:
                 ly = rng.choice(list(host.layers))
-                ingetrazo_core.tag_edits.set_visible(host, [ly.key], not ly.visible)
+                built_core.tag_edits.set_visible(host, [ly.key], not ly.visible)
             elif op == "note" and host.layers:
                 ly = rng.choice(list(host.layers))
                 run.steps.append(["note-answer", _fn("note_visibility")(host, ly.key, False)])

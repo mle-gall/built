@@ -8,7 +8,7 @@ Make Group copied the geometry, welded it, and refused «degenerate edge:
 endpoints weld to one vertex»."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.history import History, MakeGroupCommand, MoveVerticesCommand
 from core.scene import Scene

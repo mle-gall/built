@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.bim import face_set_volume
 from core.solids import solid_report
 from core.protocol import queries
-from ingetrazo_core.store_mesh import StoreMesh
+from built_core.store_mesh import StoreMesh
 from core import _native
 from tests.test_core_protocol import _scene
 
@@ -100,7 +100,7 @@ def test_orient_feed():
 
 @pytest.mark.parametrize("hole", [False, True])
 def test_split_pushed_cap(hole):
-    from ingetrazo_core import plane_fingerprint as _canon_faces
+    from built_core import plane_fingerprint as _canon_faces
     from tests.test_core_protocol import _expected, _got, _read
     from core.history import History
     from core.protocol.commands import run
@@ -201,7 +201,7 @@ def test_partition_between_boxes():
 
 
 def test_transformed_solid_operands():
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     from core.group import Group, world_mesh
     from core.solids import solid_volume
 
@@ -218,7 +218,7 @@ def test_transformed_solid_operands():
 
 def test_seam_and_crack_discovery():
     import sys
-    from ingetrazo_core.store_mesh import _hypot
+    from built_core.store_mesh import _hypot
 
     mesh = empty(True).mesh
     f = mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
@@ -237,7 +237,7 @@ def test_seam_and_crack_discovery():
 
 
 def test_repeated_prism_pushes():
-    from ingetrazo_core import plane_fingerprint as _canon_faces
+    from built_core import plane_fingerprint as _canon_faces
     from core.history import History
     from tests.test_cap_rebuild import _push, _walls
 

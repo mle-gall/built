@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The DXF writer (ingetrazo_core sheets::dxf) writes byte for byte what
+"""The DXF writer (built_core sheets::dxf) writes byte for byte what
 formats/dxf_out.py wrote (goldens recorded from it before it moved)."""
 from __future__ import annotations
 

@@ -13,15 +13,15 @@ import io
 import contextlib
 import random
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core import solids
 from core.arrangement import _interior_point, _point_in_polygon
-from ingetrazo_core import plane_region_point as _region_test_point
+from built_core import plane_region_point as _region_test_point
 from core.edits import build_add_edges
 from core.history import History
 from core.mesh import Mesh
-from ingetrazo_core.orient import is_closed
+from built_core.orient import is_closed
 from core.scene import Scene
 from tests.test_pushpull_ux import _StubViewport
 from tests.test_solid_tools import BLUE, RED, _box

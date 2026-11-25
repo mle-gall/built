@@ -32,12 +32,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D  # noqa: E402
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D  # noqa: E402
 
 from core.group import Group  # noqa: E402
-from ingetrazo_core.mesh import Mesh  # noqa: E402
+from built_core.mesh import Mesh  # noqa: E402
 from core.scene import Scene  # noqa: E402
-from ingetrazo_core.formats.igz import save_scene  # noqa: E402
+from built_core.formats.igz import save_scene  # noqa: E402
 
 SIZES = {"S": (3, 30), "M": (8, 250), "L": (16, 1200), "XL": (28, 4000)}
 OUT_DIR = Path(__file__).resolve().parents[1] / "benchmarks" / "models"

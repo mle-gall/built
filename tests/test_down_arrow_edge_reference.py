@@ -10,12 +10,12 @@ The GL viewport had the cycle, but read an edge that only its own hover
 picks set: on the Metal view nothing fed it, so Down did nothing there.
 Both views are driven here with real key events.
 """
-from ingetrazo_render import KeyEvent
+from built_render import KeyEvent
 import math
 
 import pytest
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import Vec3 as V
+from built_core import Input as Qt
+from built_core import Vec3 as V
 
 from tests.test_.skp_inference_gaps import (  # noqa: F401 (fixture)
     click, move, refresh, same, turned, view)

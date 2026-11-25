@@ -12,12 +12,12 @@ lock stayed free. Now it goes through the cursor ray, as the on-edge snap.
 """
 from __future__ import annotations
 
-from ingetrazo_render import MouseEvent
+from built_render import MouseEvent
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 import pytest
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Input as Qt
+from built_core import Vec3 as QVector3D
 
 
 ALTURA = 0.825

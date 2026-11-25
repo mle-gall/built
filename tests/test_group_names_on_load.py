@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.group import Group
 from core.mesh import Mesh

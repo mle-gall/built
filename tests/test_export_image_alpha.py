@@ -16,8 +16,8 @@ import numpy as np
 from tests.controller_surface import live_image
 from tests.shell_isolation import native_gpu_host, native_question_host, restore_shell_patches  # noqa: F401
 import pytest
-from ingetrazo_render import SurveyRaster
-from ingetrazo_core import Vec3 as QVector3D
+from built_render import SurveyRaster
+from built_core import Vec3 as QVector3D
 
 V = QVector3D
 WIDTH = 900
@@ -67,7 +67,7 @@ def view(tmp_path, native_gpu_host):
 
 def _saved(vp, folder, style, **kw):
     """The picture as a viewer gets it: written to disk and read back."""
-    from ingetrazo_core.style import style_by_name
+    from built_core.style import style_by_name
     vp.style_override = style_by_name(style)
     path = folder / "out.png"
     assert vp.render_raster(WIDTH, sharp_shadows=True, **kw).save(str(path))
@@ -95,7 +95,7 @@ def test_the_occlusion_pass_leaves_the_same_blending(view, monkeypatch):
     """It multiplies with a blending of its own and puts the scene's back
     before the glass draws."""
     _win, vp, folder = view
-    monkeypatch.setenv("INGETRAZO_AO", "1")
+    monkeypatch.setenv("BUILT_AO", "1")
     img = _saved(vp, folder, "Default")
     for zone in ZONES:
         assert _at(vp, img, zone)[3] == 255, zone
@@ -178,9 +178,9 @@ def export(view, native_question_host, monkeypatch):
     """Export image as the menu runs it, its file dialog answered: ``run``
     ticks the box as told and returns the file read back. ``seen`` holds the
     dialog as the user found it."""
-    from ingetrazo_render import chrome_forms
-    from ingetrazo_render.shell_files import ShellFileDialog
-    from ingetrazo_render import shell_services as native
+    from built_render import chrome_forms
+    from built_render.shell_files import ShellFileDialog
+    from built_render import shell_services as native
     monkeypatch.setattr(native, "available", lambda: True)
     win, vp, folder = view
     seen = {}
@@ -238,7 +238,7 @@ def test_a_jpeg_does_not_offer_it(export, name):
 
 
 def test_a_disabled_box_never_counts():
-    from ingetrazo_render import OperationForm
+    from built_render import OperationForm
     form = OperationForm.image(".jpg")
     form.receive("transparent", "1")
     assert form.values()["transparent"] is False
@@ -247,7 +247,7 @@ def test_a_disabled_box_never_counts():
 def test_the_new_texts_are_translated():
     """test_translation_files asks that every language has the message;
     here, that the message is what the dialog asks for."""
-    from ingetrazo_core.paths import app_root
+    from built_core.paths import app_root
     data = json.loads((app_root() / "i18n/es.json").read_text(encoding="utf-8"))
     assert data["Transparent background"] == "Fondo transparente"
     assert "PNG" in data["Only PNG images keep transparency."]

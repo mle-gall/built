@@ -64,7 +64,7 @@ def test_the_kerb_under_the_fan_of_facets_finishes_as_python_does():
         done = subprocess.run(
             [sys.executable, "-c", CHILD, str(FIXTURE)], capture_output=True,
             text=True, timeout=60, cwd=str(FIXTURE.parent.parent.parent),
-            env={**__import__("os").environ, "INGETRAZO_RUST": "1"})
+            env={**__import__("os").environ, "BUILT_RUST": "1"})
     except subprocess.TimeoutExpired:
         pytest.fail("the engine's visible parts ran away on the kerb and "
                     "the fan of facets (60 s)")

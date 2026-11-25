@@ -12,7 +12,7 @@ from __future__ import annotations
 from tests.controller_surface import live_image
 from tests.raster_samples import pixels
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 
 from core.history import GroupToComponentCommand, MakeGroupCommand
@@ -96,7 +96,7 @@ def test_the_box_stays_on_screen(win, native_gpu_host):
 
     sc.selection.clear()
     sc.selection.add(g)
-    from ingetrazo_render import chrome_forms
+    from built_render import chrome_forms
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(chrome_forms, "ask_text", lambda *a, done, **kw: done("Caja"))
         win._on_make_component()

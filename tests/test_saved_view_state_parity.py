@@ -27,18 +27,18 @@ GOLDEN = Path(__file__).parent / "fixtures" / "saved_view_state_golden.json.gz"
 
 
 def _scene(rng):
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from core import layers as L
     from core.group import Group
     from core.mesh import Mesh
     from core.scene import Scene
-    from ingetrazo_core.section import SectionPlane
+    from built_core.section import SectionPlane
     scene = Scene()
     for i in range(rng.randint(0, 5)):
         scene.layers.append(L.Layer(f"T{i}", visible=rng.random() < 0.7))
     folders = []
     for i in range(rng.randint(0, 3)):
-        folders.append(__import__("ingetrazo_core").tag_edits.add_folder(scene, f"F{i}"))
+        folders.append(__import__("built_core").tag_edits.add_folder(scene, f"F{i}"))
     scene.folder_visibility = {f: rng.random() < 0.6 for f in L.folders_of(scene)}
     for i in range(rng.randint(0, 4)):
         g = Group(Mesh(), name=f"G{i}")
@@ -80,7 +80,7 @@ def _scene(rng):
 
 
 def _camera(rng):
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from core.camera import OrbitCamera
     cam = OrbitCamera()
     cam.target = V(rng.uniform(-9, 9), rng.uniform(-9, 9), rng.uniform(-2, 2))
@@ -146,8 +146,8 @@ def answers():
 
 
 def _answers():
-    import ingetrazo_core as N
-    from ingetrazo_core import saved_views as S
+    import built_core as N
+    from built_core import saved_views as S
     out = {"capture": [], "apply": [], "shown": [], "sig": [], "geo": [], "shadow": []}
     rng = random.Random(20261125)
     views = []
@@ -155,7 +155,7 @@ def _answers():
         scene, cam = _scene(rng), _camera(rng)
         style = None
         if rng.random() < 0.3:
-            from ingetrazo_core.style import Style
+            from built_core.style import Style
             style = Style(name="Own")
         v = S.SavedView.capture(f"V{k}", scene, cam, style)
         rec = [_view_fields(v), v.to_dict() and _jsonable(v.to_dict())]

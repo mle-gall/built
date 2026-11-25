@@ -1,4 +1,4 @@
-# IngeTrazo
+# Built
 
 Bahasa Indonesia · [English](README.md) · [Español](README.md#en-español)
 
@@ -13,7 +13,7 @@ Menggambar seperti membuat sketsa dengan tangan, dengan dukungan native untuk Li
 ![Platform: Linux · Windows · macOS](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-informational)
 ![Dibuat di Peru](https://img.shields.io/badge/made%20in-Peru%20%F0%9F%87%B5%F0%9F%87%AA-red)
 
-IngeTrazo menghadirkan pemodelan *dorong/tarik* di Linux, yang masih memiliki
+Built menghadirkan pemodelan *dorong/tarik* di Linux, yang masih memiliki
 sedikit pilihan CAD native untuk insinyur sipil, arsitek, dan siapa pun yang
 merancang furnitur, benda, scene, atau model 3D. Geometrinya bisa digambar
 bebas seperti sketsa tangan. Dukungan **tag BIM opsional** menghubungkan
@@ -21,9 +21,9 @@ geometri dengan kelas `IfcWall`, `IfcSlab`, atau `IfcColumn` untuk diekspor
 ke IFC. Bersama proyek saudaranya, [IngePresupuestos](https://ingepresupuestos.com),
 alur kerjanya menjadi **model → tag → perhitungan kuantitas → anggaran**.
 
-![Area model IngeTrazo](docs/images/viewport.png)
+![Area model Built](docs/images/viewport.png)
 
-> Nama IngeTrazo berangkat dari *trazar*: menggambar garis seperti dengan tangan.
+> Nama Built berangkat dari *trazar*: menggambar garis seperti dengan tangan.
 
 ## Status
 
@@ -32,7 +32,7 @@ mengedit, mengecat, memberi dimensi dan anotasi; membuka berkas `.skp` dari
 2013 sampai 2026; memberi kelas BIM dan mengekspor kuantitas IFC; serta
 menetapkan georeferensi dan mengimpor data survei.
 
-IngeTrazo dikembangkan sambil dipakai dalam proyek teknik nyata dan didukung
+Built dikembangkan sambil dipakai dalam proyek teknik nyata dan didukung
 ribuan pengujian otomatis. Mesin geometrinya menolak perubahan yang merusak
 solid tertutup, sehingga perhitungan kuantitas tetap dapat diandalkan.
 Versinya masih 0.x: format berkas dan API plugin bisa berubah antarversi minor,
@@ -44,26 +44,26 @@ dan beberapa bagian masih perlu diperbaiki. Jika menemukan masalah,
 Unduh paket dari [rilis terbaru](https://github.com/ingelibre/ingetrazo/releases/latest).
 
 - **Windows:** gunakan installer `-setup-` atau paket portabel `.zip`.
-- **Linux (x86_64):** gunakan **Flatpak dari repositori IngeTrazo** agar
+- **Linux (x86_64):** gunakan **Flatpak dari repositori Built** agar
   pembaruan tersedia melalui `flatpak update`. Aplikasi muncul di menu
   aplikasi, dan berkas `.igz` serta `.skp` dikaitkan dengannya.
 
 ```bash
-flatpak remote-add --user --if-not-exists ingetrazo https://ingetrazo.com/ingetrazo.flatpakrepo
-flatpak install --user ingetrazo com.ingetrazo.IngeTrazo
-flatpak run com.ingetrazo.IngeTrazo
+flatpak remote-add --user --if-not-exists built https://ingetrazo.com/ingetrazo.flatpakrepo
+flatpak install --user built com.built.Built
+flatpak run com.built.Built
 ```
 
-Rilis juga menyediakan berkas tunggal `IngeTrazo.flatpak` yang dapat dibuka
+Rilis juga menyediakan berkas tunggal `Built.flatpak` yang dapat dibuka
 dengan klik dua kali. Paket ini tidak memiliki saluran pembaruan, sehingga
 versinya tetap seperti saat dipasang. Pilihan lainnya adalah **AppImage**
 (beri izin eksekusi, lalu jalankan) atau **arsip tar** jika distro tidak
 menyediakan FUSE:
 
 ```bash
-chmod +x IngeTrazo-*-x86_64.AppImage && ./IngeTrazo-*-x86_64.AppImage
+chmod +x Built-*-x86_64.AppImage && ./Built-*-x86_64.AppImage
 # or
-tar -xzf IngeTrazo-*-linux-x86_64.tar.gz && IngeTrazo-*/ingetrazo
+tar -xzf Built-*-linux-x86_64.tar.gz && Built-*/built
 ```
 
 Python, Qt, dan pembaca `.skp` berbasis Python sudah disertakan dalam paket.
@@ -71,9 +71,9 @@ Opsi `--check` menampilkan hasil pemeriksaan pemasangan dan mengembalikan
 kode keluar selain nol jika ada komponen yang hilang.
 
 - **macOS** (Apple Silicon, M1 atau lebih baru): unduh
-  `IngeTrazo-<version>-macos-arm64.dmg` dari
+  `Built-<version>-macos-arm64.dmg` dari
   [rilis terbaru](https://github.com/ingelibre/ingetrazo/releases/latest),
-  buka, lalu seret IngeTrazo ke Applications. Aplikasi belum ditandatangani
+  buka, lalu seret Built ke Applications. Aplikasi belum ditandatangani
   secara digital. Saat pertama kali membukanya, klik kanan lalu pilih Open.
   Impor DWG belum tersedia di macOS karena `dwg2dxf` saat ini hanya untuk
   Linux. Pembaca `.skp` native berjalan di semua platform. Jika terjadi
@@ -84,12 +84,12 @@ Untuk mulai mencoba, buka salah satu dari empat dokumen proyek penataan
 alun-alun Yanque dalam folder [`examples/`](examples/README.id.md): air mancur,
 bangku dengan pergola, tiang lampu tenaga surya, atau gapura dengan seluruh
 tulangannya. Tiga dokumen pertama dilengkapi lembar A3 dan PDF. Berkas contoh
-juga disertakan pada setiap rilis sebagai `IngeTrazo-ejemplos.zip`.
+juga disertakan pada setiap rilis sebagai `Built-ejemplos.zip`.
 
 ## Memakai bahasa Indonesia
 
 Buka **Preferensi**, pilih **Bahasa Indonesia** pada pengaturan **Bahasa**,
-lalu mulai ulang IngeTrazo jika diminta. Terjemahan antarmuka tersimpan di
+lalu mulai ulang Built jika diminta. Terjemahan antarmuka tersimpan di
 [`i18n/id.json`](i18n/id.json).
 
 Dokumentasi ini memakai istilah CAD yang umum: **layer** untuk mengatur
@@ -193,7 +193,7 @@ Panduan penggunaan: [Layer](docs/layers.id.md) serta
   (Groq/Claude/GPT/Gemini/OpenRouter/DeepSeek/Ollama lokal), dan **Jembatan AI**
   untuk mengendalikan dokumen melalui MCP dari Claude Code/Desktop.
   Setiap tindakan AI menjadi satu langkah yang dapat diurungkan secara utuh.
-  Plugin yang gagal tidak menghalangi IngeTrazo untuk dijalankan.
+  Plugin yang gagal tidak menghalangi Built untuk dijalankan.
   Lihat [panduan plugin](docs/plugins.md) untuk mulai berkontribusi.
 - **Urungkan/Lakukan Ulang:** setiap pengeditan menjadi satu langkah utuh,
   termasuk skrip konsol.
@@ -210,11 +210,11 @@ tersebut, seperti pengelola ekstensi, sudah tersedia. Periksa
 [ROADMAP.md](ROADMAP.md) dan [CHANGELOG.md](CHANGELOG.md) untuk status
 pengembangan dan perubahan terbaru.
 
-## Mengapa IngeTrazo dibuat
+## Mengapa Built dibuat
 
 Insinyur sipil yang bekerja di Linux belum memiliki banyak pilihan aplikasi
 pemodelan 3D native: program yang umum dipakai sering tidak menyediakan versi
-Linux atau sulit dipelajari. IngeTrazo dibuat untuk kebutuhan tersebut,
+Linux atau sulit dipelajari. Built dibuat untuk kebutuhan tersebut,
 dengan Linux sebagai platform utama, antarmuka awal berbahasa Spanyol,
 lisensi perangkat lunak bebas, dan alur kerja yang berangkat dari lokasi
 proyek bergeoreferensi hingga pemberian tag untuk menghitung kuantitas.
@@ -239,7 +239,7 @@ Daftar dependensi lengkap ada di [`requirements.txt`](requirements.txt).
 
 ```bash
 git clone https://github.com/ingelibre/ingetrazo.git
-cd ingetrazo
+cd built
 python3 -m venv venv
 source venv/bin/activate          # Linux / macOS
 # .\venv\Scripts\activate         # Windows
@@ -264,39 +264,39 @@ folder `i18n/`.
 ## Ucapan terima kasih
 
 Semua kontributor dicantumkan dalam [AUTHORS](AUTHORS) dan menu
-**Bantuan ▸ Tentang IngeTrazo**. Kontributor dengan sumbangan terbesar
+**Bantuan ▸ Tentang Built**. Kontributor dengan sumbangan terbesar
 ditandai ★.
 
 - **★ [Pedro Caeiro](https://github.com/pacaeiro):** juru gambar arsitektur
   dan mekanik, dengan sekitar dua puluh pull request yang telah digabung
   dan lebih dari seratus laporan masalah dari pekerjaan nyata. Ia memakai
-  IngeTrazo setiap hari dan mencatat perilaku alat yang belum sesuai
+  Built setiap hari dan mencatat perilaku alat yang belum sesuai
   kebutuhan juru gambar. Laporan tersebut membantu memperbaiki banyak
   interaksi sehari-hari.
 - **★ [Gabriel Rodríguez Arregin](https://github.com/canalsecuario-blip):**
   arsitek dengan sekitar tiga puluh pull request yang telah digabung,
   termasuk sistem satuan, Penjelajah, Pemeriksa Solid, pemotongan miring
   pada Pembulatan 3D, Gabungkan segmen, dan banyak alat pengeditan.
-- **★ [Félix Riestra](https://github.com/felixriestra):** IngeTrazo untuk Mac,
+- **★ [Félix Riestra](https://github.com/felixriestra):** Built untuk Mac,
   komponen yang dapat dipisahkan menjadi bagian, dan Extension API 2.
 - **★ Rafael García Rodríguez**, melalui
   [Rafael 3D](https://www.youtube.com/@Rafa3D): juru gambar dan pengulas.
   Ulasan videonya menguji program dalam pekerjaan profesional dan mendorong
   pengembangan penyusun lembar. Tutorial standar gambar tekniknya, dengan
-  gambar acuan dari AutoCAD, menjadi dasar pengembangan dimensi IngeTrazo.
+  gambar acuan dari AutoCAD, menjadi dasar pengembangan dimensi Built.
 - **★ [OpenSKP](https://github.com/iamahsanmehmood/openskp)** oleh Ahsan
   Mehmood, berlisensi MIT: pembaca `.skp` berbasis Python yang dikembangkan
-  secara independen dan digunakan untuk impor native IngeTrazo. Proyek ini
+  secara independen dan digunakan untuk impor native Built. Proyek ini
   juga mengirim perbaikan ke OpenSKP untuk material, tekstur, pemetaan UV
   per bidang, entitas gambar, warna gaya, material sisi belakang, pengaturan
   tepi, serta pembaca format kontainer MFC sebelum 2021. Gunakan OpenSKP jika
   perlu membaca `.skp` dari Python, dan dukung proyeknya dengan bintang.
 - **[dafrobozao](https://github.com/dafrobozao):** terjemahan Portugis Brasil
-  (#54), bahasa ketiga IngeTrazo.
+  (#54), bahasa ketiga Built.
 - **[liuandy](https://github.com/liujvnes):** terjemahan Tionghoa Sederhana
-  (#123), bahasa keempat IngeTrazo.
+  (#123), bahasa keempat Built.
 - **[deedend](https://github.com/deedend):** terjemahan Italia (#182), bahasa
-  kelima IngeTrazo. Kemudian menyusul bahasa Indonesia oleh
+  kelima Built. Kemudian menyusul bahasa Indonesia oleh
   [Rainjalin](https://github.com/Rainjalin), Prancis oleh
   [Yann Steffan](https://github.com/YannFR81), Jerman oleh
   [PESI3D](https://github.com/PESI3D), Polandia oleh
@@ -312,7 +312,7 @@ ditandai ★.
 
 [GPL-3.0-or-later](LICENSE), keluarga lisensi copyleft yang juga dipakai
 Blender, FreeCAD, dan PrusaSlicer. Anda bebas menggunakan, mempelajari,
-mengubah, dan mendistribusikan ulang IngeTrazo, dengan syarat karya
+mengubah, dan mendistribusikan ulang Built, dengan syarat karya
 turunannya tetap memakai lisensi yang sama.
 
 ## Pembuat
@@ -322,7 +322,7 @@ Lihat [AUTHORS](AUTHORS).
 
 ---
 
-IngeTrazo adalah proyek independen yang ditulis dari awal dan tidak
+Built adalah proyek independen yang ditulis dari awal dan tidak
 berafiliasi dengan produsen perangkat lunak lain. Format berkas yang
 dibacanya tetap menjadi milik pemilik masing-masing.
 

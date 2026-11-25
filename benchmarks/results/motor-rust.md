@@ -1,7 +1,7 @@
 # Motor Rust experimental — mediciones (0.5.9, Bloque R)
 
 Máquina de Marco (Linux, 16 hilos). `scripts/bench_engine.py ~/Descargas/plaza.igz --no-profile`,
-una vez con `INGETRAZO_RUST=0` y otra con `=1`. Segundos.
+una vez con `BUILT_RUST=0` y otra con `=1`. Segundos.
 
 ## R1 — línea base (17-10, `c9f547f`)
 

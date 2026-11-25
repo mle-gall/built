@@ -6,9 +6,9 @@ sense ("2,5" is 2.5) and whenever ";" or a space already separates fields."""
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
-from ingetrazo_render import KeyEvent
+from built_core import Input as Qt
+from built_core import Vec3 as QVector3D
+from built_render import KeyEvent
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.controller_surface import ControllerSurface as Viewport
 

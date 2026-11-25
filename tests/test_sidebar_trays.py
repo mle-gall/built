@@ -1,7 +1,7 @@
 """The Project dock restores the widths of its Filing and wide lenses."""
 from types import SimpleNamespace
 
-from ingetrazo_core import NativeSettings
+from built_core import NativeSettings
 
 from views.wgpu_ui import WIDE_DOCK, apply_dock_width, keep_dock_width
 

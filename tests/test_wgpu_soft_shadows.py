@@ -11,13 +11,13 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from tests.preferences_chrome import Controls, settings_file
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.scene import Scene  # noqa: E402
 from views.document_interaction import SOFT_SHADOW_SPREAD
 from views.wgpu_style import style_payload, sun_payload  # noqa: E402
 
-HAS_RENDERER = importlib.util.find_spec("ingetrazo_render") is not None
+HAS_RENDERER = importlib.util.find_spec("built_render") is not None
 
 
 def _wall_scene():
@@ -145,8 +145,8 @@ def test_a_level_widens_the_penumbra_on_metal(native):
     """The wall's shadow on the floor: at the strongest level many more
     pixels sit between full shade and full sun than with the crisp map,
     and the core of the shadow stays as dark."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4
-    from ingetrazo_core import pack_scene
+    from built_core import Matrix4 as QMatrix4x4
+    from built_core import pack_scene
     scene = _wall_scene()
     pack_scene(scene).upload(native)
     view = QMatrix4x4()

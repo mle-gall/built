@@ -9,7 +9,7 @@ import math
 import random
 
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 
 def test_the_projector_gives_the_pixels_of_world_to_pixel():

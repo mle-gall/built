@@ -10,11 +10,11 @@ the box shows what was typed."""
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
-from ingetrazo_render import KeyEvent
+from built_render import KeyEvent
 from core import units
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
+from built_core import ScreenPoint as QPointF, Input as Qt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 

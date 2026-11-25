@@ -3,7 +3,7 @@
 """Zoom-to-cursor: keep the world point under the pointer fixed on screen."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.camera import OrbitCamera
 
@@ -50,7 +50,7 @@ def test_you_can_get_close_enough_to_look_at_a_component():
 def test_the_near_plane_gets_out_of_the_way_when_you_come_close():
     # Lifting the floor is no use if the near plane clips what you came to
     # see; it has to follow the camera in. Far away it must not move at all.
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     cam = OrbitCamera()
     cam.distance = 20.0
     unchanged = QMatrix4x4()
@@ -111,7 +111,7 @@ def test_a_broken_focus_leaves_the_camera_as_it_was():
 
 
 def _in_depth_range(cam, p):
-    from ingetrazo_core import Vec4 as QVector4D
+    from built_core import Vec4 as QVector4D
     c = (cam.projection_matrix() * cam.view_matrix()).map(
         QVector4D(p.x(), p.y(), p.z(), 1.0))
     return c.w() > 0 and -c.w() <= c.z() <= c.w()

@@ -5,7 +5,7 @@ import copy
 import weakref
 
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4
+from built_core import Matrix4 as QMatrix4x4
 
 from core.history import History, SnapshotImport
 from core.scene import Scene

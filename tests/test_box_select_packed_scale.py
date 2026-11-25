@@ -17,7 +17,7 @@ import time
 
 import numpy as np
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.camera import OrbitCamera
 from core.group import Group
@@ -25,9 +25,9 @@ from core.mesh import Edge, Face, Mesh, Vertex
 from core.scene import Scene
 import tools.select_host as select
 from tools.rust_tools import SelectTool
-from ingetrazo_render import MeshToolAccess
+from built_render import MeshToolAccess
 from views.document_interaction import DocumentInteraction
-from ingetrazo_core import pack_scene
+from built_core import pack_scene
 
 W, H = 800, 600
 
@@ -126,7 +126,7 @@ class _View:
 
 
 class _Facade(MeshToolAccess):
-    """The Metal view's tool facade (ingetrazo_render.NativeTools), minus
+    """The Metal view's tool facade (built_render.NativeTools), minus
     the window: no GL chunks, projection through the view's camera."""
 
     def __init__(self, scene, camera):
@@ -263,7 +263,7 @@ def _loose_scene():
 
 @pytest.mark.parametrize("crossing", [False, True])
 def test_loose_store_mesh_matches_the_walk(crossing):
-    from ingetrazo_core.store_mesh import StoreMesh
+    from built_core.store_mesh import StoreMesh
     scene = _loose_scene()
     if scene.mesh.__class__ is not StoreMesh:
         pytest.skip("mesh store off")

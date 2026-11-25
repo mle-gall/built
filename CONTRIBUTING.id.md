@@ -1,4 +1,4 @@
-# Berkontribusi pada IngeTrazo
+# Berkontribusi pada Built
 
 Bahasa Indonesia · [English](CONTRIBUTING.md)
 
@@ -10,8 +10,8 @@ laporan bug, atau masukan desain.
 Buat fork repositori, lalu jalankan:
 
 ```bash
-git clone https://github.com/<your-user>/ingetrazo.git
-cd ingetrazo
+git clone https://github.com/<your-user>/built.git
+cd built
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -132,7 +132,7 @@ sekarang mungkin perlu diperbarui saat versi minor berubah.
 
 Gunakan **issue** untuk bug dan usulan fitur. Gunakan **GitHub Discussions**
 untuk pertanyaan terbuka, pembahasan arsitektur, atau berbagi proyek yang
-dibuat dengan IngeTrazo.
+dibuat dengan Built.
 
 ## Lisensi kontribusi
 

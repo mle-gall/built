@@ -6,7 +6,7 @@ import tracemalloc
 
 import numpy as np
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4
+from built_core import Matrix4 as QMatrix4x4
 
 from formats import skp_reader as adapter
 

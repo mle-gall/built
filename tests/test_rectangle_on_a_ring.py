@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.history import History
 from core.scene import Scene

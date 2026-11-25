@@ -8,10 +8,10 @@ a deleted one's render because the caches are keyed on ``id(frame)``.
 """
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.composition import (Composicion, MarcoVista, format_scale,
                               parse_scale)
@@ -70,16 +70,16 @@ def test_the_title_block_field_says_it_too():
 def test_a_new_section_takes_a_LETTER_not_a_number():
     """«Las secciones se nombran así: no suele ser un 1, sino A-A, B-B»
     (50:45). The mark draws the letter at both ends, so «A … A»."""
-    from ingetrazo_core.section import SectionPlane
+    from built_core.section import SectionPlane
     V = QVector3D
     planes = []
     for _ in range(4):
         planes.append(SectionPlane(V(0, 0, 0), V(0, 0, 1),
-                                   symbol=ingetrazo_core.section_next_symbol(planes)))
+                                   symbol=built_core.section_next_symbol(planes)))
     assert [p.symbol for p in planes] == ["A", "B", "C", "D"]
     # a gap is filled, and past Z it carries
-    assert ingetrazo_core.section_next_symbol([planes[0], planes[2]]) == "B"
-    assert ingetrazo_core.section_next_symbol([SectionPlane(V(0, 0, 0), V(0, 0, 1), symbol=chr(65 + i))
+    assert built_core.section_next_symbol([planes[0], planes[2]]) == "B"
+    assert built_core.section_next_symbol([SectionPlane(V(0, 0, 0), V(0, 0, 1), symbol=chr(65 + i))
                         for i in range(26)]) == "AA"
 
 
@@ -98,9 +98,9 @@ def test_the_section_tool_letters_the_plane_it_places():
 
 def test_the_plane_can_be_renamed_after_it_is_placed(native_host):
     from core.history import PlaceSectionPlaneCommand
-    from ingetrazo_core.section import SectionPlane
-    from ingetrazo_render import context_menu_build, context_menu_run
-    from ingetrazo_render import chrome_forms
+    from built_core.section import SectionPlane
+    from built_render import context_menu_build, context_menu_run
+    from built_render import chrome_forms
 
     win = native_host.window
     vp = native_host.viewport

@@ -28,9 +28,9 @@ def _spy(grid, monkeypatch, name, result, display=False):
 
 
 def test_export_image_renders_the_active_view(grid, monkeypatch, tmp_path):
-    from ingetrazo_render import chrome_forms
-    from ingetrazo_render.shell_files import ShellFileDialog
-    from ingetrazo_render import shell_services as native
+    from built_render import chrome_forms
+    from built_render.shell_files import ShellFileDialog
+    from built_render import shell_services as native
     monkeypatch.setattr(native, "available", lambda: True)
     win = grid.win
     top = grid.click("Top")

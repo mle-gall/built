@@ -77,11 +77,11 @@ def test_review_exit_and_modelling_keys(tmp_path):
     if not binary.is_file():
         pytest.skip("build the native built_app binary for the windowed smoke test")
     profile = tmp_path / "settings"
-    plugin = profile / "data/ingetrazo/plugins/review_probe.py"
+    plugin = profile / "data/built/plugins/review_probe.py"
     plugin.parent.mkdir(parents=True)
     plugin.write_text("""def setup(app):
     def measure():
-        from ingetrazo_render.shell_modal import host
+        from built_render.shell_modal import host
         from pathlib import Path
         Path(__file__).with_suffix(".txt").write_text(host().view.tools.value_buffer)
     app.add_menu_action("Read measurements", measure)

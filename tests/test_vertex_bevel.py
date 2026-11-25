@@ -13,12 +13,12 @@ from __future__ import annotations
 import math
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
-from ingetrazo_core import bevel_exponent as _exponent, apply_fillet
+from built_core import bevel_exponent as _exponent, apply_fillet
 from core.mesh import Mesh
-from ingetrazo_core.orient import is_closed, signed_volume
-from ingetrazo_core import plan_vertex_bevel
+from built_core.orient import is_closed, signed_volume
+from built_core import plan_vertex_bevel
 from tests.test_fillet import box, edge_at
 
 ORIGIN = (0, 0, 0)

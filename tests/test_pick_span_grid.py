@@ -18,7 +18,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 import views.document_interaction as vv
 from views.document_interaction import _split_chunk_spans

@@ -11,7 +11,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 def test_file_new_clears_the_utm_readout(native_host):
     win = native_host.window
     from unittest.mock import Mock
-    from ingetrazo_render import sync_status_readout
+    from built_render import sync_status_readout
     win.viewport._last_coordinate_full = "E 211234.5  N 8212345.6  30N"
     win.viewport._last_coordinate = "E 211234.5  N 8212345.6"
     win._saved_version = win.viewport.scene.version   # nothing to discard

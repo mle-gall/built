@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 def _box(mesh, x0, y0, z0, x1, y1, z1):
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     p = [V(x, y, z) for z in (z0, z1) for y in (y0, y1) for x in (x0, x1)]
     for loop in ((0, 2, 3, 1), (4, 5, 7, 6), (0, 1, 5, 4), (1, 3, 7, 5), (3, 2, 6, 7), (2, 0, 4, 6)):
         mesh.add_face([p[i] for i in loop])
@@ -59,9 +59,9 @@ def _every_kind(comp) -> None:
 
 def build(path: Path) -> None:
     from core.composition import Composicion, MarcoVista, TextoItem
-    from ingetrazo_core.saved_views import SavedView
+    from built_core.saved_views import SavedView
     from core.scene import Scene
-    from ingetrazo_core.formats.igz import save_scene
+    from built_core.formats.igz import save_scene
     scene = Scene()
     _box(scene.mesh, 0, 0, 0, 12, 8, 0.3)
     _box(scene.mesh, 1, 1, 0.3, 5, 4, 3.2)

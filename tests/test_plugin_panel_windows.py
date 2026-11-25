@@ -16,7 +16,7 @@ pytestmark = pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1",
 def test_shell_console_history_and_render_dock(tmp_path):
     from tests.test_operation_form_smoke import fixture_venv
     venv = fixture_venv(tmp_path, """
-from ingetrazo_render import Host
+from built_render import Host
 state = Host.state
 def panel_state(self):
     return dict(state(self), utility=self.renderer.ui_area_rect("plugin_utility"))

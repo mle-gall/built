@@ -14,8 +14,8 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from ingetrazo_core import Vec3 as QVector3D
-from ingetrazo_render import chrome_forms
+from built_core import Vec3 as QVector3D
+from built_render import chrome_forms
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from core.edits import divide_edges, join_edges, join_preview
@@ -25,7 +25,7 @@ from core.scene import Scene
 
 @pytest.fixture
 def host(tmp_path):
-    from ingetrazo_render import Host
+    from built_render import Host
     host = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
     yield host
     host.close()
@@ -321,7 +321,7 @@ def test_the_preview_panel_paints_and_cancel_leaves_the_model_alone(host):
     host.menu("join_segments")
     form = chrome_forms.current(win)
     assert form.field("join_reason_join").label.startswith("2  ")
-    from ingetrazo_core import Matrix4
+    from built_core import Matrix4
     matrix = Matrix4()
     matrix.scale(0.5)
     assert sorted(form.join_marks.project(matrix.data(), 100, 80, (50, 20))) == [

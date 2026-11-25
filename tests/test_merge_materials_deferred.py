@@ -10,11 +10,11 @@ when one new name was another's old one)."""
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core import _native
 from core.group import Group, iter_placements
-from ingetrazo_core.document_insert import merge_materials
+from built_core.document_insert import merge_materials
 from core.materials import Material
 from core.mesh import DeferredMesh, Mesh, face_attrs
 from core.scene import Scene
@@ -56,7 +56,7 @@ def _host_materials():
 
 
 def _component(src):
-    """The definition a link makes of a loaded file (``ingetrazo_core.link_load_source``;
+    """The definition a link makes of a loaded file (``built_core.link_load_source``;
     component_from_scene would build the loose mesh to see if it is empty)."""
     comp = Group(src.mesh, name="file")
     comp.adopt(src.groups)

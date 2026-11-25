@@ -13,7 +13,7 @@ import math
 import random
 from types import SimpleNamespace
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core import snap
 from core.topology import segment_intersection

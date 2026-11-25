@@ -13,14 +13,14 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from ingetrazo_core import Input as Qt  # noqa: E402
-from ingetrazo_core import ScreenPoint as QPointF
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Input as Qt  # noqa: E402
+from built_core import ScreenPoint as QPointF
+from built_core import Vec3 as QVector3D
 
 
 from core import units  # noqa: E402
 from core.history import History  # noqa: E402
-from ingetrazo_core.i18n import tr  # noqa: E402
+from built_core.i18n import tr  # noqa: E402
 from core.scene import Scene  # noqa: E402
 from tools.base import ToolContext  # noqa: E402
 from tools.circle import CircleTool, PolygonTool  # noqa: E402

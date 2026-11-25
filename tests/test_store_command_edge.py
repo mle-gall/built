@@ -2,13 +2,13 @@
 from types import SimpleNamespace
 
 import pytest
-from ingetrazo_core import Matrix4, MeshStore, Vec3
+from built_core import Matrix4, MeshStore, Vec3
 
 from core.history import AddEdgeCommand, History, SnapshotMutation
 from core.layers import DEFAULT_LAYER
 from core.mesh import Mesh
 from core.scene import Scene
-from ingetrazo_core import store_mesh
+from built_core import store_mesh
 
 
 def test_draw_edge_matches_command_on_creation_and_restamps(monkeypatch):

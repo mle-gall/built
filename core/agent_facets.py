@@ -2,8 +2,8 @@
 """Shared viewport display for structure filing, saved scenes and facet tools."""
 from copy import deepcopy
 from core import bim_registry
-from ingetrazo_core import facets
-from ingetrazo_core.history import SetRegistryCommand
+from built_core import facets
+from built_core.history import SetRegistryCommand
 
 
 def _occurrences(filter):

@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-import ingetrazo_core.store_mesh as S
+import built_core.store_mesh as S
 from core.protocol.commands import push_pull
 from core.protocol.keys import to_json_key
 from tests.test_pushpull_cases import _boxed, _face
@@ -23,9 +23,9 @@ def _state(mesh):
 
 @pytest.fixture
 def logs(monkeypatch, tmp_path):
-    import ingetrazo_core.paths
+    import built_core.paths
     import core.push_pull as P
-    monkeypatch.setattr(ingetrazo_core.paths, "user_log_dir", lambda: tmp_path)
+    monkeypatch.setattr(built_core.paths, "user_log_dir", lambda: tmp_path)
     monkeypatch.setattr(P, "_REPROS", set())
     return tmp_path
 
@@ -38,7 +38,7 @@ def test_a_store_refusal_leaves_the_model_and_writes_a_repro(monkeypatch, logs, 
     top = _face(mesh, (1, 1, 2), (0, 0, 1))
     before = _state(mesh)
     calls = []
-    from ingetrazo_core import MeshStore
+    from built_core import MeshStore
 
     def refused(self, *args):
         calls.append(1)

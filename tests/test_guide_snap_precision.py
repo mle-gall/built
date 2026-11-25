@@ -12,7 +12,7 @@ from tests.shell_isolation import native_window, restore_shell_patches  # noqa: 
 import math
 import random
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 
 def _exact_crossing(g1, g2):

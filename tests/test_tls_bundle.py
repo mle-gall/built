@@ -2,14 +2,14 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Issue #198: the macOS package's Python looked for its CA bundle at the
 build machine's path, and the AI assistant failed with
-CERTIFICATE_VERIFY_FAILED. ingetrazo_core.python_tls points OpenSSL at a bundle that exists,
+CERTIFICATE_VERIFY_FAILED. built_core.python_tls points OpenSSL at a bundle that exists,
 and leaves a working setup — and verification — alone."""
 from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
 
-from ingetrazo_core import python_tls as tls
+from built_core import python_tls as tls
 import sys
 
 
@@ -172,7 +172,7 @@ def test_every_python_https_call_uses_the_context(monkeypatch, tmp_path):
     import io
     import re
     import urllib.request
-    from ingetrazo_core import component_library, extension_manager
+    from built_core import component_library, extension_manager
 
     # The AI client owns its own urllib calls. Both catalogues obtain the
     # same context at request time, including when the mirror is overridden.
@@ -193,8 +193,8 @@ def test_every_python_https_call_uses_the_context(monkeypatch, tmp_path):
 
     monkeypatch.setattr(tls, "https_context", lambda: context)
     monkeypatch.setattr(urllib.request, "urlopen", open_request)
-    monkeypatch.setenv("INGETRAZO_LIBRARY", "https://example.invalid")
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "textures"))
+    monkeypatch.setenv("BUILT_LIBRARY", "https://example.invalid")
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "textures"))
     assert component_library.index(refresh=True) == []
     assert extension_manager.download("https://example.invalid/extensions", 100)
     assert seen == [context, context]

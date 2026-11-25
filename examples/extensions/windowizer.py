@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Windowizer for IngeTrazo — a port of Rick Wilson's "Windowizer 3" (Ruby).
-# (c) 2004-2005 Rick Wilson; IngeTrazo port 2026 by Bane Andreev (Biro Andreev), an architect,
+# Windowizer for Built — a port of Rick Wilson's "Windowizer 3" (Ruby).
+# (c) 2004-2005 Rick Wilson; Built port 2026 by Bane Andreev (Biro Andreev), an architect,
 # not a programmer: written with the help of AI (Claude).
 # Adapted to the extension API (add_menu, add_context_menu, group.ext) by the
-# IngeTrazo maintainers.
+# Built maintainers.
 """Windowizer — parametric windows from selected faces.
 
 Select one or more faces (typically a rectangle drawn on a wall), then
 right-click ▸ Windowizer ▸ Windowize (or Extensions ▸ Windowizer ▸ Windowize selected faces).
 
-What it makes — the same pattern IngeTrazo uses for 3D text:
+What it makes — the same pattern Built uses for 3D text:
 
 * **the window is ONE container group** (tagged ``IfcWindow``) whose PARTS
   are the frame (``Frame``, one solid with a hole per pane) and the panes
@@ -40,11 +40,11 @@ import json
 import logging
 from pathlib import Path
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D, Vec4 as QVector4D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D, Vec4 as QVector4D
 
 from core.history import Command
 
-log = logging.getLogger("ingetrazo.plugins.windowizer")
+log = logging.getLogger("built.plugins.windowizer")
 
 KEY = Path(__file__).stem          # plugin_data key (= ExtensionApp.key)
 
@@ -82,7 +82,7 @@ _EPS = 1e-6
 
 
 #: Translations of the texts it shows (the example ships in every language
-#: IngeTrazo speaks; a text missing here stays in English).
+#: Built speaks; a text missing here stays in English).
 _TEXTS = {
     'es': {
         'Automatic (through the wall up to max. thickness, otherwise reveals)':
@@ -590,7 +590,7 @@ _TEXTS = {
 def _tr(text: str, **kw) -> str:
     """``text`` in the interface language, with ``{fields}`` filled."""
     try:
-        from ingetrazo_core.i18n import current_language
+        from built_core.i18n import current_language
         lang = current_language()
     except Exception:  # noqa: BLE001
         lang = "en"
@@ -1441,7 +1441,7 @@ class WindowizerDialog:
 
     @classmethod
     def ask(cls, viewport, params, materials, *, done, title="Windowizer", current=None):
-        from ingetrazo_render.chrome_forms import Field, Form, show
+        from built_render.chrome_forms import Field, Form, show
 
         fields = [Field(key, "edit", _tr(label), str(params[key]))
                   for key, label in (("rows", "Rows"), ("cols", "Columns"))]

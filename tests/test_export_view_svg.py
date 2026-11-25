@@ -5,12 +5,12 @@ pen, at paper size, its touching segments chained into one path."""
 from __future__ import annotations
 
 from tests.raster_samples import pixels, solid_raster
-from ingetrazo_render import SurveyRaster
+from built_render import SurveyRaster
 import xml.etree.ElementTree as ET
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 SVG = "{http://www.w3.org/2000/svg}"
@@ -227,9 +227,9 @@ def test_the_matte_light_is_the_viewport_s():
     assert np.allclose(MATTE_LIGHT, [light.x(), light.y(), light.z()])
 
 
-def test_an_unpainted_box_is_ingetrazo_white_lit_as_in_the_view():
+def test_an_unpainted_box_is_built_white_lit_as_in_the_view():
     from core.scene import Scene
-    from ingetrazo_core.style import DEFAULT_FACE_COLOR
+    from built_core.style import DEFAULT_FACE_COLOR
     from core.vista_caras import shade_factor, shaded, view_faces
     scene = Scene()
     _box(scene.loose_mesh)
@@ -285,7 +285,7 @@ def test_a_nearer_face_hides_what_is_behind_it():
 
 def test_glass_hides_nothing_and_a_face_seen_from_behind_is_back_colour():
     from core.scene import Scene
-    from ingetrazo_core.style import effective_back_color
+    from built_core.style import effective_back_color
     from core.vista_caras import view_faces
     V = QVector3D
     scene = Scene()
@@ -411,7 +411,7 @@ def _svg(
     switch=None,
 ):
     import json
-    from ingetrazo_render import SvgOptions
+    from built_render import SvgOptions
 
     return SvgOptions.current_view(
         json.dumps({"advanced": advanced} if prefs is None else prefs),
@@ -442,7 +442,7 @@ def _saved(model):
 
 
 def _export_sheet(win, path, fill="2", *, opener=None, scene=None):
-    from ingetrazo_render import chrome_sheet
+    from built_render import chrome_sheet
 
     (opener or win._on_export_view_svg)()
     provider = chrome_sheet.current(win)
@@ -485,12 +485,12 @@ def test_svg_restores_the_last_choice():
 
 def test_default_colour_only_drops_every_material_and_texture(tmp_path):
     """Painted, textured, see-through: with «Default colour only» every
-    face comes out in IngeTrazo's default colour, lit as the view or flat,
+    face comes out in Built's default colour, lit as the view or flat,
     opaque, with no image — a clean model to colour elsewhere."""
     from core.group import Group
     from core.mesh import Mesh
     from core.scene import Scene
-    from ingetrazo_core.style import DEFAULT_FACE_COLOR
+    from built_core.style import DEFAULT_FACE_COLOR
     from core.vista_caras import shade_factor, shaded, view_faces
     from formats.svg_out import save_svg_layers
     scene = Scene()
@@ -586,7 +586,7 @@ def test_in_perspective_the_texture_lands_where_the_camera_puts_it():
     projective: any point of the wall, taken through its texture
     coordinates, must land where the camera projects it — an affine guess
     from three points broke the brick courses at every piece of wall."""
-    from ingetrazo_core import ScreenPoint as QPointF
+    from built_core import ScreenPoint as QPointF
     from core.scene import Scene
     from core.texture import face_uv_axes
     from core.vista_caras import _Perspective, view_faces
@@ -650,7 +650,7 @@ def _sunny(scene):
     scene.shadows.enabled = True
     scene.shadows.month, scene.shadows.day = 6, 21
     scene.shadows.hour, scene.shadows.minute = 10, 0
-    from ingetrazo_core.sun import scene_sun_direction
+    from built_core.sun import scene_sun_direction
     return np.array(scene_sun_direction(scene))
 
 
@@ -778,7 +778,7 @@ def test_the_window_rect_holds_what_the_screen_shows(perspective):
 
 
 def test_the_builder_works_each_thing_out_once():
-    from ingetrazo_render.view_export import SvgBuilder
+    from built_render.view_export import SvgBuilder
     counts = {"lines": 0, "faces": 0}
 
     def lines():
@@ -804,7 +804,7 @@ def test_the_screen_size_sheet_is_the_window_edge_to_edge():
     """«Screen size»: the page is what the window shows, at its size, with
     no margin — and what lies past it is cut off at the page."""
     import xml.etree.ElementTree as ET2
-    from ingetrazo_render.view_export import SvgBuilder
+    from built_render.view_export import SvgBuilder
     lines = [("VISTA", np.array([(-5, 0, 5, 0), (0, -1, 0, 1)], float))]
     b = SvgBuilder(lambda: lines, lambda **o: [],
                    window=lambda: (-2.0, -1.0, 2.0, 1.0),
@@ -826,7 +826,7 @@ def test_the_screen_size_sheet_is_the_window_edge_to_edge():
 
 
 def test_the_picture_of_the_view_can_leave_the_axes_out(tmp_path):
-    from ingetrazo_render.view_export import SvgBuilder
+    from built_render.view_export import SvgBuilder
     m = _svg(axes=True)
     assert _opts(m)["faces"] == {"image": True, "axes": False}
     m.receive("axes", "1")
@@ -878,7 +878,7 @@ def test_the_sheet_takes_the_part_and_the_size_apart():
     its middle, edge to edge; the whole model on A3 fits with a margin;
     at the drawing's scale the sheet is as big as it needs."""
     import xml.etree.ElementTree as ET2
-    from ingetrazo_render.view_export import SvgBuilder
+    from built_render.view_export import SvgBuilder
     lines = [("VISTA", np.array([(-5, 0, 5, 0), (0, -1, 0, 1)], float))]
     b = SvgBuilder(lambda: lines, lambda **o: [],
                    window=lambda: (-2.0, -1.0, 2.0, 1.0),
@@ -915,7 +915,7 @@ def test_the_selection_part_exports_only_what_is_selected(tmp_path):
     from core.mesh import Mesh
     from core.scene import Scene
     from core.vista_caras import view_faces
-    from ingetrazo_render.view_export import SvgBuilder, selection_only
+    from built_render.view_export import SvgBuilder, selection_only
     scene = Scene()
     a, b = Group(Mesh(), name="a"), Group(Mesh(), name="b")
     _slab(a.mesh, 0, 0, 0, 1, 1, 1)
@@ -961,7 +961,7 @@ def test_a_sheet_of_another_shape_shows_what_lay_past_the_screen(
     camera is left as it was."""
     from core.scene import Scene
     from core.vista_caras import view_rect
-    from ingetrazo_render.view_export import widened
+    from built_render.view_export import widened
     scene = Scene()
     _slab(scene.loose_mesh, 0, 0, 0, 2, 2, 2)
     cam = _camera(scene)
@@ -981,7 +981,7 @@ def test_a_sheet_of_another_shape_shows_what_lay_past_the_screen(
 
 
 def test_the_builder_works_a_new_shape_out_in_the_widened_view():
-    from ingetrazo_render.view_export import SvgBuilder
+    from built_render.view_export import SvgBuilder
     inside = []
 
     class Widen:
@@ -1031,8 +1031,8 @@ def test_only_custom_paper_enables_its_dimensions():
 
 
 def test_preview_renders_the_requested_page_and_remembers_it():
-    from ingetrazo_render.view_export import SvgBuilder
-    from ingetrazo_render import svg_preview
+    from built_render.view_export import SvgBuilder
+    from built_render import svg_preview
 
     m = _svg(shadows=True, selection=True)
     for key, value in [
@@ -1060,7 +1060,7 @@ def test_the_framing_moves_and_zooms_the_view_and_leaves_it_as_it_was(
         perspective):
     from core.scene import Scene
     from core.vista_caras import _Parallel, _Perspective, view_rect
-    from ingetrazo_render.view_export import framed
+    from built_render.view_export import framed
     scene = Scene()
     _slab(scene.loose_mesh, 0, 0, 0, 2, 2, 2)
     cam = _camera(scene)
@@ -1088,7 +1088,7 @@ def test_the_framing_moves_and_zooms_the_view_and_leaves_it_as_it_was(
 
 
 def test_the_builder_frames_only_what_the_screen_shows():
-    from ingetrazo_render.view_export import NO_FRAME, SvgBuilder
+    from built_render.view_export import NO_FRAME, SvgBuilder
     asked = []
 
     class Frame:
@@ -1230,7 +1230,7 @@ def test_svg_scene_selection_is_shared_by_both_modes_and_resets_framing():
 
 
 def test_a_scene_is_exported_and_the_view_comes_back(native_host, tmp_path):
-    from ingetrazo_core.saved_views import SavedView
+    from built_core.saved_views import SavedView
     win = native_host.window
     vp = win.viewport
     native_host.resize(800, 600, 1.)
@@ -1256,8 +1256,8 @@ def test_a_scene_is_exported_and_the_view_comes_back(native_host, tmp_path):
         model.receive("svg_scene", "1")
         assert not mob.visible
 
-    from ingetrazo_render import chrome_sheet
-    from ingetrazo_core.settings import settings as current_settings
+    from built_render import chrome_sheet
+    from built_core.settings import settings as current_settings
 
     settings = current_settings()
     original_mode = settings.value("export_svg/v5/advanced")

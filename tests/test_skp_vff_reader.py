@@ -12,7 +12,7 @@ import zipfile
 
 import pytest
 
-from ingetrazo_core import skp_vff_model
+from built_core import skp_vff_model
 
 
 DATA = Path(__file__).parent / "data"
@@ -80,7 +80,7 @@ def test_damaged_member_fails_before_any_model_is_published(tmp_path):
 
 @pytest.mark.parametrize("relief", [False, True], ids=["flat", "faceted"])
 def test_drape_detection_requires_shared_uv_seams(relief):
-    from ingetrazo_core import skp_mark_drapes
+    from built_core import skp_mark_drapes
     import numpy as np
 
     # Eight triangles on a shared square grid. Raising the middle vertex

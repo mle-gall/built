@@ -9,8 +9,8 @@ Every file is synthetic or from tests/fixtures; settings go to tmp_path.
 from pathlib import Path
 
 import pytest
-from ingetrazo_core import StandardButton
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import StandardButton
+from built_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401  (autouse)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "shell"
@@ -20,7 +20,7 @@ DATA = Path(__file__).parent / "data"
 
 @pytest.fixture
 def host(tmp_path):
-    from ingetrazo_render import Host
+    from built_render import Host
     h = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
     yield h
     h.close()
@@ -29,7 +29,7 @@ def host(tmp_path):
 @pytest.fixture
 def answers(monkeypatch):
     """Answer the sheet: ``answers.append("discard")`` for the next ask."""
-    from ingetrazo_render import chrome_dialogs as cd
+    from built_render import chrome_dialogs as cd
 
     class Answers(list):
         asked: list
@@ -74,7 +74,7 @@ def test_save_as_built_clears_dirty_and_names_the_window(host, tmp_path):
     st = host.state()
     assert target.is_file() and st["path"] == str(target) and not st["dirty"]
     assert st["documents"] == ["saved.built"]
-    from ingetrazo_render import shell_files as files
+    from built_render import shell_files as files
     from formats import built
     assert built.is_built(target)
     assert str(target.resolve()) in [str(Path(p).resolve()) for p in host.window._recent_paths()]
@@ -82,7 +82,7 @@ def test_save_as_built_clears_dirty_and_names_the_window(host, tmp_path):
 
 
 def test_save_of_an_igz_asks_where_through_the_native_panel(host, tmp_path, monkeypatch):
-    from ingetrazo_render import shell_services as native
+    from built_render import shell_services as native
     src = _copy(tmp_path)
     host.open_path(src)
     _draw(host)
@@ -153,7 +153,7 @@ def test_quit_with_unsaved_work_asks_once_and_save_all_saves(host, tmp_path, ans
 
 
 def test_open_offers_the_auto_saved_copy(host, tmp_path, answers):
-    from ingetrazo_core import autosave
+    from built_core import autosave
     from core.scene import Scene
     from formats import igz
     src = _copy(tmp_path)
@@ -235,7 +235,7 @@ def test_composite_with_nested_links_opens_and_reloads(host, tmp_path):
 
 
 def test_open_dialog_goes_through_the_native_panel(host, tmp_path, monkeypatch):
-    from ingetrazo_render import shell_services as native
+    from built_render import shell_services as native
     src = _copy(tmp_path)
     monkeypatch.setattr(native, "open_files", lambda title, filters=None, directory=None, multiple=False: [str(src)])
     assert host.menu("open")
@@ -246,7 +246,7 @@ def test_right_click_builds_the_menu_for_what_was_hit(host, tmp_path, monkeypatc
     """The native app's right-click menu (docs/context-menu.md): what is
     under the pointer is selected first, and the menu is that kind's. The
     per-kind menus are tests/test_shell_tabs_menu.py's."""
-    from ingetrazo_render import selection_kind
+    from built_render import selection_kind
     host.open_path(_copy(tmp_path))
     from tests.test_shell_tabs_menu import StubRenderer
     monkeypatch.setattr(host.view, "renderer", StubRenderer())
@@ -280,7 +280,7 @@ def test_menu_edit_commands(host, tmp_path):
 
 
 def test_selection_commands_have_a_native_owner(host):
-    from ingetrazo_render import ShellWindow
+    from built_render import ShellWindow
     for verb in ("select_all", "invert_selection", "select_none"):
         host.menu(verb)
     assert host.window._on_select_all.__func__ is ShellWindow._on_select_all
@@ -291,8 +291,8 @@ def test_selection_commands_have_a_native_owner(host):
 def test_background_autosave_writes_a_recovery_slot(host, tmp_path):
     """The native clock schedules recovery. The retained writer slices finish on the UI thread."""
     import time
-    from ingetrazo_render import WindowTimer
-    from ingetrazo_core import autosave
+    from built_render import WindowTimer
+    from built_core import autosave
     src = _copy(tmp_path)
     host.open_path(src)
     _draw(host)
@@ -310,7 +310,7 @@ def test_background_autosave_writes_a_recovery_slot(host, tmp_path):
 
 
 def test_window_timers_follow_their_owner_and_nested_turns(host):
-    from ingetrazo_render import WindowTimers
+    from built_render import WindowTimers
 
     events = []
 
@@ -353,7 +353,7 @@ def test_window_timers_follow_their_owner_and_nested_turns(host):
 def test_native_view_timers_release_callbacks_on_close(host):
     import gc
     import weakref
-    from ingetrazo_render import WindowTimer
+    from built_render import WindowTimer
 
     view = host.view
     assert isinstance(view._settle_timer, WindowTimer)
@@ -380,7 +380,7 @@ def test_native_view_timers_release_callbacks_on_close(host):
 
 
 def test_cancelling_named_recovery_keeps_the_slot_and_active_tab(host, tmp_path, answers):
-    from ingetrazo_core import autosave
+    from built_core import autosave
     from formats import igz
     from core.scene import Scene
     source = _copy(tmp_path)
@@ -395,7 +395,7 @@ def test_cancelling_named_recovery_keeps_the_slot_and_active_tab(host, tmp_path,
 
 
 def test_a_bad_untitled_slot_preserves_the_open_drawing(host, tmp_path, answers, monkeypatch):
-    from ingetrazo_render import chrome_dialogs
+    from built_render import chrome_dialogs
     win = host.window
     _draw(host)
     original = win.active_document()
@@ -412,7 +412,7 @@ def test_a_bad_untitled_slot_preserves_the_open_drawing(host, tmp_path, answers,
 
 
 def test_a_read_only_project_rejects_an_import_before_reading_the_file(host, tmp_path, monkeypatch):
-    from ingetrazo_render import chrome_dialogs
+    from built_render import chrome_dialogs
     from formats import dae
     win = host.window
     vp = win.viewport

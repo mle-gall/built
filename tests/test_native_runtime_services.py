@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1", reason="requires a native window")
 def test_document_services_run_without_qt(tmp_path):
-    plugins = tmp_path / "profile/data/ingetrazo/plugins"
+    plugins = tmp_path / "profile/data/built/plugins"
     plugins.mkdir(parents=True)
     probe = plugins / "service_probe.py"
     probe.write_text('''from pathlib import Path
@@ -23,19 +23,19 @@ def setup(app):
         import threading
         import numpy as np
         from core.protocol.commands import add_image_plane
-        from ingetrazo_render import background_autosave
-        from ingetrazo_core.scale_figure import store_picture
+        from built_render import background_autosave
+        from built_core.scale_figure import store_picture
         from core.text3d import build_text_letters
-        from ingetrazo_core.paths import cache_directory
+        from built_core.paths import cache_directory
         from core.texture import texture_cache_root
         from georef import transport
         from georef.tiles import PRESETS, TileCache
         from georef.tile_fetcher import TileFetcher
-        from ingetrazo_render import SurveyRaster, notice_text
-        from ingetrazo_render import sheet_workspace
-        from ingetrazo_render import about_review
+        from built_render import SurveyRaster, notice_text
+        from built_render import sheet_workspace
+        from built_render import about_review
         from views.ndof_input import shared_input
-        from ingetrazo_render import ask_scale
+        from built_render import ask_scale
 
         folder = Path(__file__).parent
         assert cache_directory().is_relative_to(folder.parents[2])

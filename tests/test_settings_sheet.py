@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Settings as a large sheet (ingetrazo_render.settings_sheet): its sections and
+"""Settings as a large sheet (built_render.settings_sheet): its sections and
 their two groups, the search across every section, changes applied at
 once (native preferences for Built, the document for This model), the 3D mouse and
 keyboard sections, and offscreen command dispatch.
@@ -10,16 +10,16 @@ from __future__ import annotations
 import json
 
 import pytest
-from ingetrazo_render.shell_files import do_save
-from ingetrazo_core.settings import settings as preferences
+from built_render.shell_files import do_save
+from built_core.settings import settings as preferences
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from core import units
 from core.scene import Scene
 from formats import igz
-from ingetrazo_render import chrome_forms
-from ingetrazo_render import chrome_sheet as cs
-from ingetrazo_render import settings_sheet as ss
+from built_render import chrome_forms
+from built_render import chrome_sheet as cs
+from built_render import settings_sheet as ss
 
 SEP = cs.SEP
 
@@ -189,12 +189,12 @@ def test_a_built_setting_applies_at_once(win):
     act(win, "side", "general")
     act(win, "v", "undo_steps", "37")
     assert win.viewport.history.max_steps == 37
-    from ingetrazo_core import general_settings as gs
+    from built_core import general_settings as gs
     assert int(gs.value("undo_steps")) == 37
 
 
 def test_a_change_for_the_next_start_says_so(win):
-    from ingetrazo_core.i18n import available_languages, current_language, set_language
+    from built_core.i18n import available_languages, current_language, set_language
     running = current_language()
     others = [c for c in available_languages() if c != running]
     if not others:
@@ -202,7 +202,7 @@ def test_a_change_for_the_next_start_says_so(win):
     win.open_preferences()
     sheet = frame(win)
     row = fields(sheet)["language"]
-    from ingetrazo_core.i18n import LANGUAGE_NAMES
+    from built_core.i18n import LANGUAGE_NAMES
     sheet = act(win, "v", "language", row[7].index(LANGUAGE_NAMES.get(others[0], others[0])))
     assert preferences().value("language") == others[0]
     notes = [b["text"] for b in sheet["content"]["blocks"] if b["kind"] == "text" and b.get("tone") == "warn"]
@@ -253,7 +253,7 @@ def test_units_go_in_the_document_and_are_saved_with_it(win, tmp_path):
 
 
 def test_dimension_style_and_north_are_the_documents(win, tmp_path):
-    from ingetrazo_core.sun import scene_north_deg
+    from built_core.sun import scene_north_deg
     win.open_preferences(page="dimensions")
     frame(win)
     scene = win.viewport.scene
@@ -279,7 +279,7 @@ def test_dimension_style_and_north_are_the_documents(win, tmp_path):
 
 # ---- 3D mouse and keyboard --------------------------------------------------------
 def test_the_3d_mouse_section_holds_the_axis_table(win):
-    from ingetrazo_render.ndof import AXES
+    from built_render.ndof import AXES
     win.open_preferences(page="ndof")
     sheet = frame(win)
     got = fields(sheet)
@@ -297,7 +297,7 @@ def test_the_3d_mouse_section_holds_the_axis_table(win):
     assert preset[7][int(preset[4])] == "Custom"
     # A preset loads its values.
     sheet = act(win, "v", "ndof_preset", preset[7].index("FreeCAD-style"))
-    from ingetrazo_render.ndof import FREECAD_MAPPING
+    from built_render.ndof import FREECAD_MAPPING
     assert load_settings().axis_mapping == FREECAD_MAPPING
     act(win, "verb", "ndof_reset")
     assert load_settings().axis_inversion["up"] is False
@@ -306,8 +306,8 @@ def test_the_3d_mouse_section_holds_the_axis_table(win):
 def test_keyboard_lists_commands_and_changes_their_keys(win, monkeypatch):
     shown = []
     monkeypatch.setattr(ss.cf, "show", lambda parent, form: shown.append(form) or "chrome")
-    from ingetrazo_render.keyboard_bindings import action_key, collect_actions
-    from ingetrazo_render import sheet_command_scope
+    from built_render.keyboard_bindings import action_key, collect_actions
+    from built_render import sheet_command_scope
     acts = collect_actions(win)
     target = next(a for a in acts if a.text() and not a.shortcuts())
     win.open_preferences(shortcut_of=target)
@@ -365,13 +365,13 @@ def test_offscreen_units_command_opens_settings(win):
 
 
 def test_the_shell_prefs_command_opens_the_sheet(win):
-    from ingetrazo_render import shell_files as files
+    from built_render import shell_files as files
     assert files.open_settings(win)
     assert isinstance(cs.current(win), ss.SettingsSheet)
 
 
 def test_add_location_opens_coordinates_first_applies_to_the_document_and_undoes(win, tmp_path, monkeypatch):
-    from ingetrazo_core.sun import scene_north_deg
+    from built_core.sun import scene_north_deg
     from georef import tile_fetcher
     win.open_preferences(page="location")
     frame(win)
@@ -443,7 +443,7 @@ def test_place_search_approximate_location_and_capture_use_the_open_draft(win, m
 
 def test_move_origin_confirmation_and_undo_restore_survey_datum(win, monkeypatch):
     from georef.datum import SceneDatum
-    from ingetrazo_render import chrome_dialogs
+    from built_render import chrome_dialogs
     scene = win.viewport.scene
     old = SceneDatum(45, 7, alt=1250, north=30)
     scene.georef = old
@@ -494,7 +494,7 @@ def test_ambient_occlusion_edits_the_active_style(win):
 
 
 def test_occlusion_distance_slider_preserves_off_step_file_values(win):
-    from ingetrazo_core.style import AO_DISTANCE_RANGE
+    from built_core.style import AO_DISTANCE_RANGE
     win.active_style().ao_distance = 0.37
     win.open_preferences(page="appearance")
     frame(win)

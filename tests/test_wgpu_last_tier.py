@@ -1,8 +1,8 @@
 """Shared commands must give identical geometry through native dispatch."""
 import pytest
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import ScreenPoint as QPointF
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Input as Qt
+from built_core import ScreenPoint as QPointF
+from built_core import Vec3 as QVector3D
 from tools.base import ToolContext
 from tests.test_wgpu_mesh_tools import click, geometry
 from tests.test_wgpu_remaining_tools import prepare
@@ -93,7 +93,7 @@ def test_solid_click_results_and_undo(tool_type, monkeypatch):
         return scene, history, vp, updates, a, b, untouched
     scene, history, native, updates, a, b, untouched = setup()
     reference, _, direct, _, ra, rb, _ = setup()
-    import ingetrazo_core as update_module
+    import built_core as update_module
     original_pack = update_module.pack_scene
     baked_meshes = []
     def record_pack(scene, **kw):
@@ -220,7 +220,7 @@ def test_editing_commands_and_cancel(tool_type):
 def test_first_person_claims_shortcuts_and_timer_stops_on_focus_loss():
     from tests.controller_surface import ControllerSurface as Viewport
     from tests.headless_gpu import HeadlessView
-    from ingetrazo_render import KeyEvent, ShortcutOverride
+    from built_render import KeyEvent, ShortcutOverride
     from tests.headless_gpu import _code
     source = Viewport()
     view = HeadlessView()

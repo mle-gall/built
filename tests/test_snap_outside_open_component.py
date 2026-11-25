@@ -14,8 +14,8 @@ from __future__ import annotations
 import math
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Input
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Input
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group
 from core.mesh import Mesh
@@ -158,7 +158,7 @@ def test_the_box_does_not_take_the_rest_of_the_model(native_host):
 def test_the_tip_says_the_point_is_outside_the_open_component(native_host):
     """The ScreenTip's suffix: the rest of the model is not «in component»,
     it is outside the component being edited."""
-    from ingetrazo_core.i18n import tr
+    from built_core.i18n import tr
     win, vp, a, _b = _window(native_host)
     vp.begin_group_edit(a)
     assert _snap(vp, V(6.0, 0.0, 0.0)).context == "outside"
@@ -181,7 +181,7 @@ def test_the_tip_says_the_point_is_outside_the_open_component(native_host):
 
 
 def test_outside_a_plain_group_the_tip_names_the_group(native_host):
-    from ingetrazo_core.i18n import tr
+    from built_core.i18n import tr
     win, vp, _a, _b = _window(native_host)
     gm = Mesh()
     _box(gm)
@@ -195,7 +195,7 @@ def test_outside_a_plain_group_the_tip_names_the_group(native_host):
 
 
 def test_at_the_root_a_components_point_still_says_in_component(native_host):
-    from ingetrazo_core.i18n import tr
+    from built_core.i18n import tr
     win, vp, _a, _b = _window(native_host)
     assert vp.scene.edit_group is None
     assert _snap(vp, V(3.0, 0.0, 1.0)).context == "component"
@@ -212,7 +212,7 @@ def test_a_shape_started_on_the_rest_keeps_the_rests_plane(native_host):
                             V(6, 5, 2)])
     sc.version += 1
     vp.begin_group_edit(a)
-    from ingetrazo_core import ScreenPoint
+    from built_core import ScreenPoint
     from tools.rust_tools import RectangleTool
 
     tool = RectangleTool()

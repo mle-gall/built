@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import gc
 
-import ingetrazo_core
+import built_core
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core import links
 from core.group import copy_group, iter_placements
@@ -32,7 +32,7 @@ def _host(tmp_path):
 
 
 def _definition(group):
-    return ingetrazo_core.link_definition(group)
+    return built_core.link_definition(group)
 
 
 def _edit_tag_only(src):
@@ -51,7 +51,7 @@ def test_the_root_holds_the_definition_and_no_placement_owns_it(tmp_path):
     assert [c.uid for c in comp.children] == [p.source_uid for p in link.children]
     assert all(p.mesh is c.mesh for p, c in zip(link.children, comp.children))
     assert host._root._link_configs() == [
-        ingetrazo_core.link_definition_key(src.resolve(), None, True)]
+        built_core.link_definition_key(src.resolve(), None, True)]
 
 
 def test_a_copy_is_projected_without_reading_the_file(tmp_path, monkeypatch):
@@ -61,8 +61,8 @@ def test_a_copy_is_projected_without_reading_the_file(tmp_path, monkeypatch):
     copy = copy_group(link, V(9, 0, 0))
     host.groups.append(copy)
     for part in _parts(copy):
-        assert part.uid == ingetrazo_core.link_stable_uid(copy.uid, part.source_uid)
-        assert ingetrazo_core.link_linked_ancestor(part) is copy
+        assert part.uid == built_core.link_stable_uid(copy.uid, part.source_uid)
+        assert built_core.link_linked_ancestor(part) is copy
     # The same geometry as the link it copies, as every copy of a link.
     assert set(_meshes(copy)) == set(_meshes(link))
     assert [p.source_uid for p in _parts(copy)] == [p.source_uid for p in _parts(link)]

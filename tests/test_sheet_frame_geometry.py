@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""What a vector sheet frame draws (ingetrazo_core sheets::geometry, from
+"""What a vector sheet frame draws (built_core sheets::geometry, from
 the document and the mesh stores) is what the composer collected by
 applying the frame's saved view to the live scene and walking every face
 and edge in Python (``core.hlr.collect_geometry``): loose faces and edges
@@ -10,7 +10,7 @@ tags that do not print left out, each line inked with its own tag or its
 object's. The live scene is never touched."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 import math
 import os
 
@@ -19,11 +19,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 
-import ingetrazo_core as NATIVE  # noqa: E402
+import built_core as NATIVE  # noqa: E402
 
 
 def _box(x, y=0.0, z=0.0, *, layer=None, soft=False, hide_top=False):
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from core.mesh import Mesh
     m = Mesh()
     p = [V(x + a, y + b, z + c) for c in (0, 1) for b in (0, 1) for a in (0, 1)]
@@ -42,7 +42,7 @@ def _box(x, y=0.0, z=0.0, *, layer=None, soft=False, hide_top=False):
 
 
 def _xf(tx, ty, turn=0.0, mirror=False):
-    from ingetrazo_core import Matrix4
+    from built_core import Matrix4
     m = Matrix4()
     m.translate(tx, ty, 0.0)
     m.rotate(turn, 0.0, 0.0, 1.0)
@@ -52,10 +52,10 @@ def _xf(tx, ty, turn=0.0, mirror=False):
 
 
 def _scene():
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from core.group import Group
     from core.layers import Layer
-    from ingetrazo_core.saved_views import SavedView
+    from built_core.saved_views import SavedView
     from core.scene import Scene
     s = Scene()
     for name, folder in (("Muros", "Arq"), ("Losa", "Arq"), ("Mobiliario", "Int"), ("Ejes", None),
@@ -118,12 +118,12 @@ def _canon(tris, hard, soft, soft_n, tags=None):
 def _reference(name):
     """The composer's way, on a second identical scene."""
     from core.hlr import collect_geometry
-    import ingetrazo_core
+    import built_core
     scene = _scene()
     view = next((v for v in scene.saved_views if v.name == name), None)
     if view is not None:
         view.apply_state(scene)
-    ingetrazo_core.tag_styles.hide_unprinted(scene)
+    built_core.tag_styles.hide_unprinted(scene)
     tris, hard, soft, hard_l, soft_l, tri_l = collect_geometry(scene, layers=True)
     nan3 = (float("nan"),) * 3
     soft_p = [(p0, p1) for p0, p1, _a, _b in soft]
@@ -167,9 +167,9 @@ def test_a_vector_frame_draws_what_the_composer_drew(view_key, name, hidden):
     from core.camera import OrbitCamera
     from core.composition import MarcoVista, apply_frame_camera, model_height_for_frame
     from core.hlr import hlr_drawing
-    import ingetrazo_core
-    from ingetrazo_core.saved_views import SavedView
-    from ingetrazo_render import sheet_frames
+    import built_core
+    from built_core.saved_views import SavedView
+    from built_render import sheet_frames
 
     def scene_with_views():
         s = _scene()
@@ -191,7 +191,7 @@ def test_a_vector_frame_draws_what_the_composer_drew(view_key, name, hidden):
     view = next((v for v in ref.saved_views if v.name == name), None)
     cam = OrbitCamera()
     apply_frame_camera(cam, frame, view, ref)
-    ingetrazo_core.tag_styles.hide_unprinted(ref)
+    built_core.tag_styles.hide_unprinted(ref)
     d = hlr_drawing(ref, cam, profiles=True, fills=True, hidden=hidden)
     model_h = model_height_for_frame(frame.h_mm, frame.scale_n)
     k = frame.h_mm / model_h
@@ -212,7 +212,7 @@ def test_a_vector_frame_draws_what_the_composer_drew(view_key, name, hidden):
 
 def test_frame_scene_overrides_have_their_own_namespace():
     from types import SimpleNamespace
-    from ingetrazo_render.sheet_frames import FrameScene
+    from built_render.sheet_frames import FrameScene
 
     scene = SimpleNamespace(label="live", units="mm")
     facade = FrameScene(scene, label="paper")

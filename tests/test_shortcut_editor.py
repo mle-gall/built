@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from ingetrazo_core.i18n import current_language, set_language
-from ingetrazo_core.settings import settings
+from built_core.i18n import current_language, set_language
+from built_core.settings import settings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_render import settings_sheet
+from built_render import settings_sheet
 
 
 def keyboard(win):
@@ -26,9 +26,9 @@ def sheet(native_host):
 
 @pytest.fixture
 def reopen(tmp_path, monkeypatch, restore_shell_patches):
-    from ingetrazo_render import Host
-    from ingetrazo_core import settings as settings_module
-    from ingetrazo_core import NativeSettings
+    from built_render import Host
+    from built_core import settings as settings_module
+    from built_core import NativeSettings
     profile = str(tmp_path / "profile")
 
     @contextmanager
@@ -86,7 +86,7 @@ def test_a_clash_takes_the_keys_from_the_other_action(sheet, monkeypatch):
     forms.pop().press("ok")
     assert not group.portable_keys() and taken in explode.portable_keys()
     assert sheet._action("sc:sheet:group").portable_keys() == [taken]
-    from ingetrazo_render import shortcut_domains
+    from built_render import shortcut_domains
     for domain in (1, 2):
         keys = [key for action in sheet.actions() if shortcut_domains(action.objectName()) & domain
                 for key in action.portable_keys()]

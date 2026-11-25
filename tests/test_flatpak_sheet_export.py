@@ -7,7 +7,7 @@ FLATPAK = Path(__file__).resolve().parents[1] / "packaging" / "flatpak"
 
 
 def test_native_sheet_export_is_packaged():
-    manifest = (FLATPAK / "com.ingetrazo.IngeTrazo.yml").read_text()
+    manifest = (FLATPAK / "com.built.Built.yml").read_text()
     assert "rust/built_app/target/release/built ${FLATPAK_DEST}/bin/built" in manifest
     sources = next(line.split() for line in manifest.splitlines() if "- cp -a core " in line)
     assert {"formats", "views"} <= set(sources)

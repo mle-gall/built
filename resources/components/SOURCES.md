@@ -4,8 +4,8 @@
   `person_silhouette.png`/`.svg` — derived from "Silhouette of man standing and facing forward.svg"
   (Wikimedia Commons), dedicated to the public domain under **CC0 1.0**
   (no attribution required; noted here for provenance). Recoloured to the
-  IngeTrazo slate tone and tight-cropped for the face-me billboard.
-- `sumari.png` — the author himself (1.68 m): self-made cutout from his own photo, original artwork by Marco Sumari Tellez. The IngeTrazo scale figure, in the classic tradition of real people as scale figures.
+  Built slate tone and tight-cropped for the face-me billboard.
+- `sumari.png` — the author himself (1.68 m): self-made cutout from his own photo, original artwork by Marco Sumari Tellez. The Built scale figure, in the classic tradition of real people as scale figures.
 
 - The `*.igz` starter components are Sweet Home 3D furniture-library models,
   kept offline so the tray works with no network. Each file is one group with

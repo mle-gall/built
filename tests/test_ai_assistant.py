@@ -162,7 +162,7 @@ def test_recipe_helpers_build_correct_solids(native_host):
     assert all(f.attrs.get("color") == (1, 0, 0, 1)
                for f in cil.mesh.faces)
     # Every solid is watertight and the curved sides came out soft.
-    from ingetrazo_core.orient import is_closed
+    from built_core.orient import is_closed
     for g in (cil, aro, feston, caja):
         assert is_closed(g.mesh)
     assert any(e.soft for e in cil.mesh.edges)
@@ -338,7 +338,7 @@ def test_assistant_loop_executes_recipes_transactionally(native_host, monkeypatc
 def test_photo_attaches_to_next_message_only(panel, monkeypatch, tmp_path):
     # The attached photo rides the NEXT user message as scaled JPEG and is
     # cleared afterwards — execution feedback turns must not re-send it.
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     import base64
     photo = tmp_path / "fuente.jpg"
     photo.write_bytes(SurveyRaster(3000, 1500, bytes([128,128,128,255]) * (3000 * 1500)).jpeg())
@@ -489,7 +489,7 @@ def test_small_local_models_are_flagged():
 
 
 def test_box_helper_builds_a_closed_box(native_host):
-    from ingetrazo_core.orient import is_closed
+    from built_core.orient import is_closed
     win = native_host.window
     vp = win.viewport
     r = ai.run_transactional(
@@ -548,8 +548,8 @@ def test_send_becomes_stop_and_a_stopped_turn_is_discarded(panel, monkeypatch):
 
 
 def test_pasted_image_attaches_with_thumbnail(panel, monkeypatch):
-    from ingetrazo_render import SurveyRaster
-    from ingetrazo_render import shell_services as native
+    from built_render import SurveyRaster
+    from built_render import shell_services as native
     data = SurveyRaster(10, 10, bytes([255, 0, 0, 255]) * 100).png()
     monkeypatch.setattr(native, "pasteboard_read", lambda kind: data)
     panel.event("paste_photo", "invoke", None)
@@ -560,7 +560,7 @@ def test_pasted_image_attaches_with_thumbnail(panel, monkeypatch):
 
 def test_sent_photo_opens_its_preview(panel, tmp_path, monkeypatch):
     from tests.plugin_images import write_png
-    from ingetrazo_core import desktop_open
+    from built_core import desktop_open
     photo = tmp_path / "photo.png"
     write_png(photo, 64, 32)
     panel.event("photo", "commit", str(photo))
@@ -581,7 +581,7 @@ def test_user_agent_defeats_cloudflare_and_headers_carry_it():
     for provider in ("groq", "anthropic", "openai"):
         _u, headers, _p = ai.build_request(
             provider, "m", "k", "SYS", [{"role": "user", "text": "x"}])
-        assert headers["User-Agent"].startswith("IngeTrazo/")
+        assert headers["User-Agent"].startswith("Built/")
 
 
 def test_provider_selector_overrides_autodetect(panel, monkeypatch):
@@ -623,7 +623,7 @@ def test_list_models_filters_and_strips(monkeypatch):
     assert models == ["gemini-2.5-flash", "openai/gpt-oss-120b"]
     assert calls["url"] == "https://api.groq.com/openai/v1/models"
     assert calls["headers"]["Authorization"] == "Bearer gsk_k"
-    assert calls["headers"]["User-Agent"].startswith("IngeTrazo/")
+    assert calls["headers"]["User-Agent"].startswith("Built/")
 
     ai.list_models("anthropic", "sk-ant-k")
     assert "api.anthropic.com/v1/models" in calls["url"]
@@ -644,7 +644,7 @@ def test_chat_colours_are_owned_by_the_native_theme(panel):
 
 
 def test_each_provider_remembers_its_own_key_and_model(panel, monkeypatch):
-    from ingetrazo_render import chrome_forms
+    from built_render import chrome_forms
     forms = []
     monkeypatch.setattr(chrome_forms, "show", lambda _, form: forms.append(form))
     for provider, key in [("groq", "gsk_AAA"), ("gemini", "AIzaBBB")]:
@@ -711,7 +711,7 @@ def test_house_wall_and_prism_helpers_build_closed_solids(native_host):
     """Marco (2026-09-15): «se puede optimizar para que me dibuje algo
     mejor?». One call builds a house with walls of real thickness, a door
     leaf, glass panes and a roof — every solid watertight."""
-    from ingetrazo_core.orient import is_closed
+    from built_core.orient import is_closed
     win = native_host.window
     vp = win.viewport
     scope: dict = {"__name__": "__ai__"}

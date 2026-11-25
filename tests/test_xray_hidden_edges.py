@@ -11,7 +11,7 @@ face shows where it is, without the faces losing their transparency.
 from __future__ import annotations
 
 import numpy as np
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 
 
@@ -27,7 +27,7 @@ def _contrast(before, after) -> int:
 
 
 def test_an_edge_under_a_face_is_fainter_than_one_in_the_open(native_gpu_host):
-    from ingetrazo_core.style import style_by_name
+    from built_core.style import style_by_name
     vp = native_gpu_host.viewport
     scene = vp.scene
     # A lid over the left half (x < 0), two metres up; nothing on the

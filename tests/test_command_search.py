@@ -8,10 +8,10 @@ from unittest.mock import Mock
 
 import pytest
 
-from ingetrazo_render import shell_action as ShellAction
-import ingetrazo_core as ss
+from built_render import shell_action as ShellAction
+import built_core as ss
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_render import command_metadata as cs
+from built_render import command_metadata as cs
 from views import wgpu_ui
 
 
@@ -143,9 +143,9 @@ def test_a_plugin_can_hide_its_action_after_the_native_search_opens(win):
 
 
 def test_search_finds_translated_names_and_paths_by_either_language(tmp_path):
-    from ingetrazo_render import Host
-    from ingetrazo_core import i18n
-    from ingetrazo_core import NativeSettings
+    from built_render import Host
+    from built_core import i18n
+    from built_core import NativeSettings
     profile = str(tmp_path / "profile")
     NativeSettings(profile).setValue("language", "es")
     original = i18n.current_language()
@@ -189,7 +189,7 @@ def test_unavailable_action_cannot_run_from_a_previous_search(win):
 
 def test_shortcut_editor_opens_on_the_searched_command(win):
     from tests.scene_controls import chrome
-    from ingetrazo_render import chrome_sheet
+    from built_render import chrome_sheet
     with chrome(win):
         rows, detail = query(win, "orient faces")
         assert rows[0][:2] == ("Orient Faces", "Edit") and detail[0][2]
@@ -201,7 +201,7 @@ def test_shortcut_editor_opens_on_the_searched_command(win):
 
 
 def test_sheet_search_lists_and_runs_only_the_current_workspaces_commands(win, monkeypatch):
-    from ingetrazo_render import sheet_workspace
+    from built_render import sheet_workspace
     from tests.scene_controls import chrome
     host = sheet_workspace.composer_for(win)
     ws = host._ws
@@ -214,7 +214,7 @@ def test_sheet_search_lists_and_runs_only_the_current_workspaces_commands(win, m
         wgpu_ui.command_action(win.view, win, "cmdrun", "0")
         assert host.tool_mode == "cota_cadena"
         rows, _ = query(win, "ungroup")
-        from ingetrazo_render import shortcut_text
+        from built_render import shortcut_text
         assert rows[0][:3] == ("Ungroup", "Sheet", shortcut_text("Ctrl+Shift+G")[1])
         wgpu_ui.command_action(win.view, win, "cmdrun", "0")
         renderer.page_command.assert_called_once_with("ungroup")
@@ -259,13 +259,13 @@ def test_f3_runs_a_sheet_tool_and_returns_to_modelling_in_a_release_window(tmp_p
     if not binary.is_file():
         pytest.skip("requires the release shell")
     profile = tmp_path / "profile"
-    probe = profile / "data/ingetrazo/plugins/sheet_search_probe.py"
+    probe = profile / "data/built/plugins/sheet_search_probe.py"
     probe.parent.mkdir(parents=True)
     probe.write_text("""import json
 from pathlib import Path
 
 def setup(app):
-    from ingetrazo_render import sheet_workspace
+    from built_render import sheet_workspace
     def record():
         win = app.window
         ws = sheet_workspace.workspace_of(win.view)
@@ -293,11 +293,11 @@ def setup(app):
 
 
 def test_sheet_binding_shares_the_keyboard_table_and_follows_the_active_document(win, monkeypatch):
-    from ingetrazo_render.keyboard_bindings import export_shortcuts, import_shortcuts
-    from ingetrazo_render import KeyEvent, shortcut_text
+    from built_render.keyboard_bindings import export_shortcuts, import_shortcuts
+    from built_render import KeyEvent, shortcut_text
     from tests.scene_controls import chrome
-    from ingetrazo_render import sheet_workspace
-    from ingetrazo_render.settings_sheet import SettingsSheet
+    from built_render import sheet_workspace
+    from built_render.settings_sheet import SettingsSheet
 
     sheet = SettingsSheet("keyboard")
     sheet._win = win
@@ -321,7 +321,7 @@ def test_sheet_binding_shares_the_keyboard_table_and_follows_the_active_document
             assert ws.composer.tool_mode == "cota_cadena"
             query(win, "chain dimension")
             wgpu_ui.command_action(win.view, win, "cmdshortcut", "0")
-            from ingetrazo_render import chrome_sheet
+            from built_render import chrome_sheet
             assert chrome_sheet.current(win).kb_focus == "sc:sheet:cota_cadena"
             chrome_sheet.close(win)
         ws.shown = False

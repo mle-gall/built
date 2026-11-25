@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""A terrain profile item's ground (ingetrazo_core sheets::profile) is
+"""A terrain profile item's ground (built_core sheets::profile) is
 what ``ComposerWindow.profile_for`` sampled with ``georef.profile
 .sample_profile``: the same stations, the same points, the same
 elevations bit for bit off the same DEM fields (bilinear in float32), the
@@ -13,7 +13,7 @@ from __future__ import annotations
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 
-import ingetrazo_core as NATIVE  # noqa: E402
+import built_core as NATIVE  # noqa: E402
 
 
 
@@ -51,7 +51,7 @@ class _Dem:
 
 
 def _scene(paths, datum=True):
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from core.scene import Scene
     from georef.datum import SceneDatum as Datum
     from georef.geopath import GeoPath

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """A section plane's archive, its next symbol and its effective fill moved
-to Rust (``rust/ingetrazo_core/src/model/section_fill.rs``) and must answer
+to Rust (``rust/built_core/src/model/section_fill.rs``) and must answer
 as ``core/section.py``'s Python did at ``9cf53080``: ``from_dict`` of seeded
 raw entries (odd fills, layers, flags), ``to_dict`` back, the letters the
 next plane takes, and the fill a plane's cut is drawn with under a style.
@@ -10,7 +10,7 @@ Regenerate only on purpose, against the reference implementation:
 ``python tests/test_section_plane_parity.py --write``."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 import gzip
 import json
 import random
@@ -75,16 +75,16 @@ def answers(section):
             d["given_uid"] = uid == raw["uid"]
         out["planes"].append([d, [sp.point.toTuple(), sp.normal.toTuple(), sp.name, sp.symbol,
                                   sp.active, sp.hidden, sp.layer, sp.fill]])
-        out["fills"].append([list(ingetrazo_core.section_effective_fill(sp, st)) for st in styles])
+        out["fills"].append([list(built_core.section_effective_fill(sp, st)) for st in styles])
     for taken in symbol_cases():
         planes = [SimpleNamespace(symbol=t) for t in taken] + [SimpleNamespace()]
-        out["symbols"].append(ingetrazo_core.section_next_symbol(planes))
-    out["symbols"].append(ingetrazo_core.section_next_symbol(None))
+        out["symbols"].append(built_core.section_next_symbol(planes))
+    out["symbols"].append(built_core.section_next_symbol(None))
     return out
 
 
 def test_the_section_plane_archive_answers_as_the_python_did():
-    from ingetrazo_core import section
+    from built_core import section
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     got = json.loads(json.dumps(answers(section)))
     for key in want:
@@ -94,7 +94,7 @@ def test_the_section_plane_archive_answers_as_the_python_did():
 
 if __name__ == "__main__" and "--write" in sys.argv:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from ingetrazo_core import section
+    from built_core import section
     data = answers(section)
     GOLDEN.parent.mkdir(exist_ok=True)
     GOLDEN.write_bytes(gzip.compress(json.dumps(data).encode(), mtime=0))

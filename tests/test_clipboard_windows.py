@@ -1,9 +1,9 @@
-"""Copy/Paste between IngeTrazo windows (issue #76): the model clipboard
+"""Copy/Paste between Built windows (issue #76): the model clipboard
 travels through the system clipboard as a small ``.igz``-based payload."""
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group, copy_group
 from core.mesh import Mesh
@@ -58,8 +58,8 @@ def test_garbage_is_not_a_clipboard():
 
 @pytest.mark.parametrize("package", ["APPIMAGE", "FLATPAK_ID", None])
 def test_new_window_uses_the_running_application(native_host, tmp_path, monkeypatch, package):
-    from ingetrazo_render import Host
-    from ingetrazo_render import wgpu_start
+    from built_render import Host
+    from built_render import wgpu_start
 
     if package:
         monkeypatch.setenv(package, str(tmp_path / "package"))
@@ -78,8 +78,8 @@ def test_new_window_uses_the_running_application(native_host, tmp_path, monkeypa
 
 def test_without_a_shell_a_copy_reaches_the_other_documents_once(monkeypatch):
     from types import SimpleNamespace
-    from ingetrazo_render import ModelClipboard
-    from ingetrazo_render import shell_services as native
+    from built_render import ModelClipboard
+    from built_render import shell_services as native
 
     monkeypatch.setattr(native, "available", lambda: False)
     board = ModelClipboard()

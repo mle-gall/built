@@ -9,8 +9,8 @@ it back and recorded nothing, so that undo took the user's own last step
 and the cleared redo stack lost it for good."""
 from __future__ import annotations
 
-from ingetrazo_core import ScreenPoint, Input
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint, Input
+from built_core import Vec3 as QVector3D
 
 from core.history import AddEdgeCommand, History
 from core.scene import Scene

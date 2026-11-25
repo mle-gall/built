@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.edits import build_add_edge
 from core.group import Group
@@ -431,7 +431,7 @@ class _Metal:
     every placement."""
 
     def __init__(self, vp, monkeypatch):
-        from ingetrazo_render.shell_views import ShellView
+        from built_render.shell_views import ShellView
         self.view = view = ShellView(vp._host)
         view.source_viewport = vp
         view.camera = vp.camera
@@ -528,7 +528,7 @@ def test_metal_follows_a_part_deleted_in_an_assembly_without_a_repack(
 def test_a_linked_assembly_stays_read_only(native_host, tmp_path, monkeypatch):
     """Parts of a linked file are edited in their own document: going into
     a copy of a link, or a part of it, offers the file and enters nothing."""
-    from ingetrazo_render import chrome_dialogs
+    from built_render import chrome_dialogs
     from core import links
     from formats import igz
     src = Scene()

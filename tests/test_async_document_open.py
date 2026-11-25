@@ -5,9 +5,9 @@ import numpy as np
 
 from core.scene import Scene
 from formats import igz
-from ingetrazo_core import DocumentOpen
+from built_core import DocumentOpen
 from tests.fixtures.shell.make_composite import make
-from ingetrazo_core import open_focus, pack_scene
+from built_core import open_focus, pack_scene
 
 
 def test_worker_matches_blocking_nested_open(tmp_path):

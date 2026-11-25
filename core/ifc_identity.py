@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 IngeTrazo contributors.
+# Copyright (C) 2026 Built contributors.
 """Persistent IFC identities for elements and document-owned relationships."""
 import json
 import uuid
@@ -35,7 +35,7 @@ def object_guid(scene, obj, occurrence=None):
     owner = obj.get("owner")
     # Shared definitions cannot store a placement's GUID on their faces.
     if owner is not None:
-        from ingetrazo_core.mesh import DeferredMesh
+        from built_core.mesh import DeferredMesh
         if type(owner.mesh) is DeferredMesh:
             # Persist into the deferred document metadata, so both building
             # and saving later see the identity without building faces now.

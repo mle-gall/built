@@ -5,9 +5,9 @@ Close the ones to the right / to the left, Close all. The project right-clicked 
 Save and Save As act on it; each one closed asks only about itself."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
-from ingetrazo_core.settings import settings
+from built_core.settings import settings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from views import wgpu_tabs
 
@@ -57,14 +57,14 @@ def test_a_cancel_stops_closing_the_rest(native_host, monkeypatch):
     win.activate_document(a)
     win.viewport.scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(0, 1, 0)])
     win.viewport.scene.version += 1
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", lambda *args, **kw: "cancel")
+    monkeypatch.setattr("built_render.chrome_dialogs.ask", lambda *args, **kw: "cancel")
     _menu(native_host, "close_all", 2)
     assert win.documents() == [a, b, c]
     assert win.active_document() is a
 
 
 def test_save_from_the_menu_saves_that_project(native_host, tmp_path, monkeypatch):
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render.shell_files import ShellFileDialog
     win = native_host.window
     a, b, c = _three(win)
     target = tmp_path / "from-the-menu.built"

@@ -9,7 +9,7 @@ let me paint components». The status bar now says why and what to do."""
 from __future__ import annotations
 
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 
 from core.group import Group  # noqa: E402
@@ -52,5 +52,5 @@ def test_the_click_says_why_nothing_changed():
     name = "panela_porta"
     msg = ("{name}: every face has its own material, so nothing changed "
            "— open it and paint the faces")
-    from ingetrazo_core.i18n import tr
+    from built_core.i18n import tr
     assert tr(msg, name=name).startswith(name)

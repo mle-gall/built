@@ -15,9 +15,9 @@ from __future__ import annotations
 import math
 
 import pytest
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import ScreenPoint as QPointF
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Input as Qt
+from built_core import ScreenPoint as QPointF
+from built_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
 from tools.base import ToolContext

@@ -1,8 +1,8 @@
 """Standard native button labels follow the selected JSON catalogue."""
 import pytest
-from ingetrazo_core import i18n
-from ingetrazo_core import StandardButton
-from ingetrazo_render import chrome_dialogs
+from built_core import i18n
+from built_core import StandardButton
+from built_render import chrome_dialogs
 
 
 @pytest.mark.parametrize("lang,yes,cancel", [
@@ -32,13 +32,13 @@ def test_translation_api_in_a_fresh_plugin_interpreter():
     import subprocess
     import sys
 
-    from ingetrazo_core.paths import app_root
+    from built_core.paths import app_root
 
     subprocess.run([sys.executable, "-c", """
 from core.i18n import (LANGUAGE_NAMES, RTL_LANGUAGES, HIDDEN_LANGUAGES, SYSTEM,
     available_languages, current_language, is_rtl, language_for_locales,
     resolve_language, set_language, source_of, tr)
-from ingetrazo_core import i18n
+from built_core import i18n
 assert set_language is i18n.set_language and tr is i18n.tr
 set_language("es")
 assert i18n.current_language() == "es" and tr("Yes") == "Sí"

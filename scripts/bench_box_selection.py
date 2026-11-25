@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 IngeTrazo contributors.
+# Copyright (C) 2026 Built contributors.
 """Measure box-selection scratch memory on a synthetic import-sized mesh.
 
     python scripts/bench_box_selection.py --triangles 1000000
@@ -21,7 +21,7 @@ import tracemalloc
 from types import SimpleNamespace
 
 import numpy as np
-from ingetrazo_core import Matrix4 as QMatrix4x4
+from built_core import Matrix4 as QMatrix4x4
 
 
 def main() -> None:

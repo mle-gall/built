@@ -21,7 +21,7 @@ HERE = Path(__file__).resolve().parent
 
 def _box(history, x, y, size=1.0, h=1.0):
     """Six faces of a box at (x, y); returns them."""
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from core.history import AddFaceCommand
     mesh = history.scene.mesh
     a, b = (x, y), (x + size, y + size)
@@ -58,7 +58,7 @@ def _group(history, faces, name, component=False):
 
 def make(out: Path) -> dict:
     """Write ``parts.built`` and ``kinds.built`` under ``out``; their paths."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+    from built_core import Matrix4 as QMatrix4x4, Vec3 as V
     from core import links
     from core.dimension import Dimension
     from core.guide import Guide

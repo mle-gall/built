@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """AI Assistant contributions to the native plugin host."""
-from ingetrazo_core.i18n import tr
+from built_core.i18n import tr
 from plugins._assistant_panel import AssistantPanel, create_panel
 from plugins._assistant_prompt import (
     MAX_ROUNDS, MAX_FAILED_ROUNDS, MAX_TOKENS, TOKENS_BY_PROVIDER,

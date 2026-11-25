@@ -15,7 +15,7 @@ import math
 
 import numpy as np
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group
 from core.mesh import Mesh

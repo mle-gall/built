@@ -2,9 +2,9 @@
 
 Bahasa Indonesia · [Español](README.md)
 
-Empat dokumen ini dibuat oleh Marco Sumari Tellez dengan IngeTrazo untuk
+Empat dokumen ini dibuat oleh Marco Sumari Tellez dengan Built untuk
 proyek penataan alun-alun Yanque di Distrik Chichas, Arequipa, pada 2026.
-Buka melalui **Berkas ▸ Buka** atau klik dua kali jika IngeTrazo sudah
+Buka melalui **Berkas ▸ Buka** atau klik dua kali jika Built sudah
 terpasang. Tiga dokumen dilengkapi lembar A3 yang siap dibuka melalui
 **Berkas ▸ Penyusun lembar**. PDF hasil ekspornya tersedia di folder yang
 sama untuk dibandingkan.
@@ -28,7 +28,7 @@ dibersihkan, scene, dan lembar dengan legenda. Dokumen ini dipakai dalam
 [panduan layer](../docs/layers.id.md) beserta tangkapan layarnya.
 
 Untuk membuat ulang dokumen setelah mencoba mengubahnya, jalankan dari
-folder utama IngeTrazo:
+folder utama Built:
 
 ```bash
 python examples/capas-prueba.py
@@ -42,7 +42,7 @@ samping). Scene muncul sebagai tab di bawah area model. Gunakan dokumen ini
 untuk mencoba susunan beberapa tampilan, seperti dijelaskan dalam
 [panduan tab proyek](../docs/project-tabs.id.md).
 
-Untuk membuat ulang dokumen, jalankan dari folder utama IngeTrazo:
+Untuk membuat ulang dokumen, jalankan dari folder utama Built:
 
 ```bash
 python examples/pestanas-prueba.py
@@ -56,9 +56,9 @@ garis bantu putus-putus pada tampak dan potongan dengan proyeksi paralel,
 serta menyediakan snap kursor pada elevasi tersebut. Gagasan dan versi
 pertamanya dibuat oleh José Castro Basso (FADU–UDELAR).
 
-Ekstensi disertakan dalam IngeTrazo tetapi belum diaktifkan. Pasang melalui
+Ekstensi disertakan dalam Built tetapi belum diaktifkan. Pasang melalui
 **Ekstensi ▸ Kelola ekstensi…** atau salin ke folder plugin, lalu mulai
-ulang IngeTrazo. Tab «Niveles» akan muncul pada panel samping.
+ulang Built. Tab «Niveles» akan muncul pada panel samping.
 
 ## Lisensi
 
@@ -66,4 +66,4 @@ Dokumen dalam folder ini, termasuk model, lembar, dan PDF, adalah karya
 Marco Sumari Tellez yang diterbitkan dengan lisensi
 [Creative Commons Atribusi 4.0](https://creativecommons.org/licenses/by/4.0/deed.id).
 Anda boleh menggunakan, mengubah, dan membagikannya dengan mencantumkan
-sumber. Kode IngeTrazo tetap memakai lisensi GPL-3.0-or-later repositori.
+sumber. Kode Built tetap memakai lisensi GPL-3.0-or-later repositori.

@@ -4,16 +4,16 @@ from copy import copy
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_render import AnnotationCanvas, PaintColor, PaintPen, SurveyRaster
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_render import AnnotationCanvas, PaintColor, PaintPen, SurveyRaster
 from tests.raster_samples import pixels
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 from core.camera import OrbitCamera as Camera
 from core.scene import Scene
 from core.dimension import Dimension
 from core.textlabel import TextLabel
 from core.guide import Guide
-from ingetrazo_core.section import SectionPlane
+from built_core.section import SectionPlane
 from core.snap import SnapResult
 from views.document_interaction import _guide_vertices, shown_guides
 from tests.controller_surface import ControllerSurface as Viewport
@@ -44,7 +44,7 @@ KINDS = ("endpoint origin component_origin on_edge on_axis intersection_edge "
 
 
 def canvas_rgba(draw, size=(360, 100), dpr=1):
-    from ingetrazo_render import AnnotationCanvas
+    from built_render import AnnotationCanvas
     w, h = int(size[0] * dpr), int(size[1] * dpr)
     canvas = AnnotationCanvas(w, h, float(size[0]))
     draw(canvas)
@@ -245,8 +245,8 @@ def test_clear_dimension_stroke_covers_arrows_and_label_for_this_frame():
 
 
 def test_capture_marks_composite_over_straight_alpha_and_escape_label_text():
-    from ingetrazo_render import AnnotationCanvas
-    from ingetrazo_core import ScreenPoint as QPointF
+    from built_render import AnnotationCanvas
+    from built_core import ScreenPoint as QPointF
     target = AnnotationCanvas(96, 36, 96)
     base = bytes([0, 0, 255, 128]) * (96 * 36)
     assert target.composite(base) is base
@@ -260,7 +260,7 @@ def test_capture_marks_composite_over_straight_alpha_and_escape_label_text():
 
 
 def test_capture_rejects_impossible_pixel_dimensions_without_allocating():
-    from ingetrazo_render import AnnotationCanvas
+    from built_render import AnnotationCanvas
 
     with pytest.raises(ValueError):
         AnnotationCanvas(1 << 31, 1 << 31, 800).composite(b"")

@@ -13,12 +13,12 @@ import math
 import random
 
 import numpy as np
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.camera import OrbitCamera
 from core.composition import MarcoVista, apply_frame_camera
 from core.scene import Scene
-from ingetrazo_core.section import SectionPlane
+from built_core.section import SectionPlane
 
 VIEWS = ("top", "front", "right", "iso")
 
@@ -117,7 +117,7 @@ def soft_geometry(seed: int, tags: bool):
 
 
 def soft_camera(view: str) -> OrbitCamera:
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     cam = OrbitCamera()
     cam.set_view(view)
     cam.fit_to(Vec3(-3, -3, 0), Vec3(4, 3, 3))

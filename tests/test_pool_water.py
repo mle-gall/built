@@ -5,15 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Vec3 as QVector3D
 
-from ingetrazo_core.i18n import tr
+from built_core.i18n import tr
 from core.scene import Scene
 from formats.igz import load_into, save_scene
 from tools.base import ToolContext
 from tools.paint import PaintTool
-from ingetrazo_render.wgpu_library import _catalogue
+from built_render.wgpu_library import _catalogue
 from views.wgpu_ui import _paint_with
 
 
@@ -26,7 +26,7 @@ def test_water_library_keeps_calm_water_and_adds_one_static_pool_material():
     assert pool["texture"]["sw"] == pool["texture"]["sh"] == 3.0
     assert pool["opacity"] == 0.62
     assert Path(pool["texture"]["path"]).is_file()
-    from ingetrazo_render import swatch_pixels
+    from built_render import swatch_pixels
     assert len(swatch_pixels(pool["texture"]["path"], 32, True)) == 32 * 32 * 4
 
 

@@ -20,7 +20,7 @@ import random
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 import core._native as _native
 from core import lazy_mesh
@@ -456,7 +456,7 @@ def test_foreign_snapshot_needs_a_fresh_namespace():
 
 
 def test_instance_frame_weld_snapshot_and_camera_origin():
-    from ingetrazo_core import MeshStore
+    from built_core import MeshStore
     origin = (1e12, -1e12, 6e11)
     matrix = (0, -2, 0, 0, -3, 0, 0, 0, 0, 0, 5, 0, *origin, 1)
     model = MeshStore(41)

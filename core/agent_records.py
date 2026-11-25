@@ -5,7 +5,7 @@ from copy import deepcopy
 
 from core import record, bim_registry
 from core.agent_tools import json_value
-from ingetrazo_core.history import SetRecordCommand, SetRegistryCommand, CompoundCommand
+from built_core.history import SetRecordCommand, SetRegistryCommand, CompoundCommand
 from core.ifc_tables import IFC_CLASSES, TABLES, SCHEMAS, STATUS, common_pset, predefined_types
 
 
@@ -144,7 +144,7 @@ class RecordTools(LinkTools):
             raise ValueError('uids must be a list')
         if not uids:
             return []
-        from ingetrazo_core.structure import _targets
+        from built_core.structure import _targets
         return _targets(self._viewport.scene, uids)
 
     def _edit_records(self, targets, patches, schema, force):

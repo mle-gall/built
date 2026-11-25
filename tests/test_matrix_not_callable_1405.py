@@ -10,13 +10,13 @@ copied (``transformed_attrs``) and when a part's points were measured
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group
-from ingetrazo_core import group_transformed_attrs as transformed_attrs
-from ingetrazo_core import group_transformed_mesh as transformed_mesh
+from built_core import group_transformed_attrs as transformed_attrs
+from built_core import group_transformed_mesh as transformed_mesh
 from core.mesh import Mesh
-from ingetrazo_core.parts import part_points
+from built_core.parts import part_points
 
 
 class _NoCall(QMatrix4x4):

@@ -127,14 +127,14 @@ def test_the_mark_follows_recall_and_clears_on_deletion(win):
 
 
 def test_scene_picture_mode_is_saved_by_the_chooser(win):
-    from ingetrazo_core.settings import settings
+    from built_core.settings import settings
     for action, stored in [("0", False), ("1", True)]:
         _run(win, ["scenephotomode:" + action])
         assert settings().value("scenes/thumbnails", type=bool) is stored
 
 
 def test_model_and_camera_changes_invalidate_only_their_own_pictures(win):
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
 
     a, b = [add(win, name) for name in ("A", "B")]
 

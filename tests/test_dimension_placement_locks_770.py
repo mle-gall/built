@@ -12,7 +12,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from tools.dimension import DimensionTool
 

@@ -3,7 +3,7 @@
 """Genera capas-prueba.igz: un documento de ejemplo con todas las funciones
 de capas, para seguir el manual (docs/layers.md).
 
-Desde la carpeta de IngeTrazo, con su entorno activado:
+Desde la carpeta de Built, con su entorno activado:
 
     python examples/capas-prueba.py
 
@@ -19,7 +19,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 
 from core import layers as L  # noqa: E402
@@ -29,9 +29,9 @@ from core.group import Group  # noqa: E402
 from core.guide import Guide  # noqa: E402
 from core.layers import DEFAULT_LAYER, Layer  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
-from ingetrazo_core.saved_views import SavedView  # noqa: E402
+from built_core.saved_views import SavedView  # noqa: E402
 from core.scene import Scene  # noqa: E402
-from ingetrazo_core.section import SectionPlane  # noqa: E402
+from built_core.section import SectionPlane  # noqa: E402
 from core.textlabel import TextLabel  # noqa: E402
 from formats import igz  # noqa: E402
 

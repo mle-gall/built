@@ -6,7 +6,7 @@ the hover grows like a click would (a whole drawn curve, a whole smooth
 surface), and it is one undoable step."""
 from __future__ import annotations
 
-from ingetrazo_core import Input as Qt
+from built_core import Input as Qt
 
 from core.history import History
 from core.scene import Scene

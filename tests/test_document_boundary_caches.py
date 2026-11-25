@@ -32,7 +32,7 @@ def test_open_forgets_every_id_keyed_cache(native_window, tmp_path):
 
 
 def _seed_inference_references(vp):
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
 
     inference = vp.inference
     inference._hover_edge = object()
@@ -69,7 +69,7 @@ def test_new_drawing_drops_acquired_inference_references(native_window):
 
 
 def test_undo_drops_acquired_inference_references(native_window):
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
 
     from core.history import AddEdgeCommand
 
@@ -89,9 +89,9 @@ def test_native_document_boundary_discards_each_placement_and_mesh_cache(native_
     """Exercise the reset for every dictionary allocated by native placement cache helpers."""
     crates = Path(__file__).resolve().parents[1] / "rust"
     cache_helpers = {
-        "ingetrazo_core/src/document_snap": "dict_slot",
-        "ingetrazo_render/src/document_chunks": "memo",
-        "ingetrazo_render/src/document_placements": "cache",
+        "built_core/src/document_snap": "dict_slot",
+        "built_render/src/document_chunks": "memo",
+        "built_render/src/document_placements": "cache",
     }
     caches = set()
     for directory, helper in cache_helpers.items():

@@ -6,10 +6,10 @@ use gtk::prelude::*;
 use pyo3::prelude::*;
 
 pub fn pump(py: Python<'_>, view: usize, timeout_ms: f64) -> PyResult<Vec<Input>> {
-    let modal = py.import("ingetrazo_render.shell_modal")?;
+    let modal = py.import("built_render.shell_modal")?;
     let host = modal.call_method0("host")?;
     let win = host.getattr("window")?;
-    let dialogs = py.import("ingetrazo_render.chrome_dialogs")?;
+    let dialogs = py.import("built_render.chrome_dialogs")?;
     let sheet = dialogs.call_method1("current_sheet", (&win,))?;
     if sheet.is_none()
         || !sheet.getattr("blocking")?.is_truthy()?
@@ -100,12 +100,12 @@ pub fn post_key(py: Python<'_>, view: usize, code: u16, command: bool) -> PyResu
         (2, true) => "discard",
         _ => return Ok(false),
     };
-    let host = py.import("ingetrazo_render.shell_modal")?.call_method0("host")?;
+    let host = py.import("built_render.shell_modal")?.call_method0("host")?;
     if host.getattr("ns_view")?.extract::<usize>()? != view {
         return Ok(false);
     }
     let win = host.getattr("window")?;
-    let dialogs = py.import("ingetrazo_render.chrome_dialogs")?;
+    let dialogs = py.import("built_render.chrome_dialogs")?;
     let sheet = dialogs.call_method1("current_sheet", (&win,))?;
     if sheet.is_none() {
         return Ok(false);

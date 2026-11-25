@@ -1,15 +1,15 @@
-# Writing an IngeTrazo plugin
+# Writing an Built plugin
 
 The plugin API is **not stable yet** — expect breaking changes during the
 0.x series.
 
 A plugin is a Python file (or a package directory) that defines one or more
-tools. Drop it in either of the two places IngeTrazo scans at startup:
+tools. Drop it in either of the two places Built scans at startup:
 
 - `<app>/plugins/` — plugins bundled with the application (read-only in an
   installed build);
-- your per-user directory — `~/.local/share/ingetrazo/plugins/` on Linux
-  (honouring `$XDG_DATA_HOME`), `%APPDATA%\ingetrazo\plugins\` on Windows.
+- your per-user directory — `~/.local/share/built/plugins/` on Linux
+  (honouring `$XDG_DATA_HOME`), `%APPDATA%\built\plugins\` on Windows.
   **Extensions ▸ Open plugins folder** creates and opens it for you.
 
 Every `Tool` subclass **defined in the file** gets an entry in the
@@ -19,7 +19,7 @@ importing `LineTool` to reuse it does not duplicate the built-in.)
 ## Minimal example
 
 ```python
-# ~/.local/share/ingetrazo/plugins/hello_tool.py
+# ~/.local/share/built/plugins/hello_tool.py
 from tools.base import Tool
 
 
@@ -38,10 +38,10 @@ class HelloTool(Tool):
 
 Rules of the road:
 
-- **A broken plugin cannot break IngeTrazo.** If your file raises on import
+- **A broken plugin cannot break Built.** If your file raises on import
   or your tool raises in its constructor, the app still starts; the menu
   shows a disabled `⚠ name (load error)` entry with the exception in its
-  tooltip, and the full traceback goes to the `ingetrazo.plugins` logger.
+  tooltip, and the full traceback goes to the `built.plugins` logger.
 - Menu plugin tools are **one-shot**: `on_activate` runs (typically opening
   a dialog) and the viewport's active drawing tool is left untouched.
 - Plugins are imported by file path under a private module name — never
@@ -100,8 +100,8 @@ whole), and publishes one change-feed record.
 | Need | Use |
 |---|---|
 | An edit the editor already has | `core.protocol.commands.run(history, name, **args)`, or the function of that name (`lock`, `rename_placement`, `paint_placements`, `move_placements`, `erase`, …). Arguments are keys, placement uids or, in process, the placement handles. The answer is `{"ok", "step", "error", "rejected"}`. These are the same verbs MCP uses. |
-| A typed native step to combine with others | `from ingetrazo_core import NativeCommand`: `NativeCommand.rename(group, name)`, `NativeCommand.rename_each(groups, names)`, `NativeCommand.lock(groups, locked)`, `NativeCommand.paint(groups, paint_or_None)`. |
-| An annotation, section, guide, image, scene, sheet, group or component edit | The editor's own step classes keep their names and constructors (`core.history.AddDimensionCommand(dim)`, `InsertGroupCommand(group)`, …). They are native `ingetrazo_core.RecordStep` subclasses: combine them freely, and `isinstance(step, core.history.Command)` stays true. |
+| A typed native step to combine with others | `from built_core import NativeCommand`: `NativeCommand.rename(group, name)`, `NativeCommand.rename_each(groups, names)`, `NativeCommand.lock(groups, locked)`, `NativeCommand.paint(groups, paint_or_None)`. |
+| An annotation, section, guide, image, scene, sheet, group or component edit | The editor's own step classes keep their names and constructors (`core.history.AddDimensionCommand(dim)`, `InsertGroupCommand(group)`, …). They are native `built_core.RecordStep` subclasses: combine them freely, and `isinstance(step, core.history.Command)` stays true. |
 | Several steps as one | `core.history.CompoundCommand([step, ...])`. |
 | Any mesh, group or tag change written in Python | `core.history.SnapshotImport(mutate)`, below. |
 | A step with your own inverse | Subclass `core.history.Command` and implement `do(scene)` and `undo(scene)`. Set `doc_undo = True` when everything it changes is document state: the Rust history then undoes and redoes it from its transaction and never calls your `undo`. |
@@ -305,7 +305,7 @@ do not create a new `ExtensionApp` and restore the layout on every command.
 ### Managing community extensions
 
 **Extensions ▸ Manage extensions…** reads the community catalog from
-[`ingetrazo-extensions`](https://github.com/ingelibre/ingetrazo-extensions),
+[`built-extensions`](https://github.com/ingelibre/ingetrazo-extensions),
 downloads individual Python files or ZIP packages, and installs them in the
 per-user plugins directory. The manager separates browsing from the list of
 installed catalog extensions; both views support text and tag filtering.
@@ -315,12 +315,12 @@ last valid cache remains usable and its refresh time is shown. Catalog sorting
 includes name, reviewed status, installed state, and available updates; sorting
 by update date is available only when the catalog supplies per-extension
 dates. The manager shows installed and available versions for updates, and
-warns when an extension's tested IngeTrazo version is substantially older.
+warns when an extension's tested Built version is substantially older.
 Each entry shows its license and links to the author's repository before
 installation. Entries not in the maintainer-reviewed hash list are labelled
 as Community; assume that exact catalog version has not been reviewed by an
-IngeTrazo maintainer.
-Extensions requiring a newer IngeTrazo version cannot be installed or enabled.
+Built maintainer.
+Extensions requiring a newer Built version cannot be installed or enabled.
 
 Each download is checked against the catalog's SHA-256 before it is installed.
 The manager marks an extension as reviewed only when its hash matches the
@@ -329,7 +329,7 @@ maintainer's entry in `reviewed.toml`.
 Installed catalog extensions can be updated, enabled, disabled, or uninstalled
 from the manager. Update availability is shown as soon as the catalog is
 loaded; extension package files are downloaded only after choosing Download or
-Update. These changes take effect after restarting IngeTrazo because
+Update. These changes take effect after restarting Built because
 extensions register tools and UI during startup. Extensions are Python code:
 install only extensions whose source and publisher you trust. The checksum
 detects content that differs from the catalog; it is not a sandbox or a
@@ -337,7 +337,7 @@ guarantee that code is safe.
 
 If an installed extension fails to load at startup, its manager entry shows
 the load error and offers actions to disable it, open its folder, and open
-IngeTrazo's log folder for the full traceback.
+Built's log folder for the full traceback.
 
 ### Where your interface goes
 
@@ -354,10 +354,10 @@ command. A one-shot command can also run directly from the Extensions menu.
 
 ### A document type of its own, and workspaces (API 2)
 
-**Provisional while IngeTrazo is 0.x:** this protocol (`add_file_opener`,
+**Provisional while Built is 0.x:** this protocol (`add_file_opener`,
 `enter_workspace`/`leave_workspace`, the `workspace` object's shape) may
 still change in a later 0.x release without a major-version bump. Pin to
-a specific IngeTrazo version if you rely on it.
+a specific Built version if you rely on it.
 
 A bigger extension may have documents of its own — a CAM job, say, with
 its drawing on the stock and its operations:
@@ -370,7 +370,7 @@ def setup(app):
 
     # Files ending in .xyz are this extension's: opened from Open Recent,
     # the command line or a double-click, they go to open_job(path) (True
-    # when it opened). The file dialog stays IngeTrazo's own; offer an
+    # when it opened). The file dialog stays Built's own; offer an
     # «Open…» in the extension's panel. A core suffix (.igz, .dae, .skp,
     # .dxf, .dwg, .obj, .stl, .glb), or one another extension already
     # claimed, is refused — logged, not raised.
@@ -409,9 +409,9 @@ Wilson's Windowizer 3 by Bane Andreev, an architect, written with AI help.
 
 ## Forms, questions and jobs
 
-An extension asks with the chrome's forms and sheets: `from ingetrazo_render
+An extension asks with the chrome's forms and sheets: `from built_render
 import chrome_forms` (`Field`, `Form`, `show`, `ask_text`, `ask_number`,
-`ask_choice`, `request`/`flow`) and `from ingetrazo_render import
+`ask_choice`, `request`/`flow`) and `from built_render import
 chrome_dialogs` (`ask_later`, `notify`, `Job` for long work in the top bar).
 `views.extension_api` re-exports `chrome_forms`, `chrome_dialogs` and `Job`.
 

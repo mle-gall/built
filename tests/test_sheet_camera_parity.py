@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The frame camera in Rust (ingetrazo_core sheets::camera) is the one
+"""The frame camera in Rust (built_core sheets::camera) is the one
 core.composition.apply_frame_camera pointed: the same view and projection
 matrices and camera fields for standard views, saved views (lens shift,
 roll, clips, two-point), the frame's own orbit, turn and scale, and
@@ -17,7 +17,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
 
-import ingetrazo_core as NATIVE  # noqa: E402
+import built_core as NATIVE  # noqa: E402
 from tests.sheet_camera_cases import frames, scene  # noqa: E402
 GOLDENS = json.loads(gzip.decompress(
     (Path(__file__).parent / "fixtures" / "sheet_camera" / "goldens.json.gz").read_bytes()))

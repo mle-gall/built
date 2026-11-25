@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """The tag-folder tree's queries moved to Rust
-(``rust/ingetrazo_core/src/tag_folders.rs``: a folder's parent, its
+(``rust/built_core/src/tag_folders.rs``: a folder's parent, its
 subfolders, the Layers tab's order) and must answer as ``core/layers.py``'s
 Python did at ``74b54c81``.
 

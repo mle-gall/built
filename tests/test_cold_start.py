@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """A cold start without a file opens nothing by itself.
 
-The start page (ingetrazo_render.wgpu_start) offers the last document in its
+The start page (built_render.wgpu_start) offers the last document in its
 Continue card; nothing reopens it, or any other recent file, behind the
 page. Crash recovery is the one thing a cold start brings back unasked,
 and only after asking: the untitled auto-save left by a session that died.
@@ -17,12 +17,12 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 def cold_start(host, tmp_path, monkeypatch, page=False, recover=False, untitled_slot=False):
-    from ingetrazo_core import autosave
+    from built_core import autosave
     from core.scene import Scene
-    from ingetrazo_core.settings import settings
+    from built_core.settings import settings
     from formats import igz
-    from ingetrazo_render import wgpu_start
-    from ingetrazo_render import shell_files as files
+    from built_render import wgpu_start
+    from built_render import shell_files as files
 
     work = tmp_path
     slots = work / "autosave"
@@ -41,7 +41,7 @@ def cold_start(host, tmp_path, monkeypatch, page=False, recover=False, untitled_
     if untitled_slot:
         from core.group import Group
         from core.mesh import Mesh
-        from ingetrazo_core import Vec3 as QVector3D
+        from built_core import Vec3 as QVector3D
         scene = Scene()
         mesh = Mesh()
         mesh.add_face([QVector3D(0, 0, 0), QVector3D(1, 0, 0), QVector3D(1, 1, 0)])
@@ -59,7 +59,7 @@ def cold_start(host, tmp_path, monkeypatch, page=False, recover=False, untitled_
         return "yes" if recover else "no"
 
     monkeypatch.setattr(files, "open_path", open_path)
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", question)
+    monkeypatch.setattr("built_render.chrome_dialogs.ask", question)
     host.cold_start()
     assert not host.errors
     docs = [dict(path=d.path, names=[g.name for g in d.viewport.scene.groups])

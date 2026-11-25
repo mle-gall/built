@@ -5,7 +5,7 @@ newest first, missing ones dropped, imports never listed."""
 from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core.settings import settings
+from built_core.settings import settings
 
 
 def _reset():
@@ -16,7 +16,7 @@ def _reset():
 def test_old_recents_are_read_once_and_clearing_stays_cleared(native_host, tmp_path):
     """The plain path list older builds kept is the list until the first
     write, which drops it; Clear list then cannot bring it back."""
-    from ingetrazo_core import recent
+    from built_core import recent
     _reset()
     old, pinned, new = (tmp_path / f"{n}.igz" for n in ("old", "pinned", "new"))
     for p in (old, pinned, new):
@@ -57,13 +57,13 @@ def test_recent_list_is_ordered_deduplicated_and_capped(native_host, tmp_path):
     docs[-1].unlink()
     recent = native_host.extras()["recent"]
     assert str(docs[-1]) not in recent and str(docs[-3]) in recent
-    from ingetrazo_core.recent import clear
+    from built_core.recent import clear
     clear()
     assert not win._recent_paths()
 
 
 def test_forget_resolves_each_path_from_a_one_shot_iterable(tmp_path, monkeypatch):
-    from ingetrazo_core import NativeSettings, recent
+    from built_core import NativeSettings, recent
 
     st = NativeSettings(str(tmp_path / "settings"))
     monkeypatch.chdir(tmp_path)

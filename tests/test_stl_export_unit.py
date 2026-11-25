@@ -16,7 +16,7 @@ import struct
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.scene import Scene  # noqa: E402
 from formats import stl as stl_format  # noqa: E402
@@ -72,7 +72,7 @@ def test_exported_in_mm_and_imported_as_mm_keeps_the_size(tmp_path):
     ("cm", "cm", (1.5, 2.5)),
 ])
 def test_stl_sheet_remembers_the_unit(native_host, tmp_path, last_unit, expected, size):
-    from ingetrazo_core.settings import settings
+    from built_core.settings import settings
 
     out = tmp_path / "part.stl"
     settings().remove("export/stl_unit")

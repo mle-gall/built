@@ -6,8 +6,8 @@ top of the front ones, in whatever order the box listed them."""
 from __future__ import annotations
 
 
-from ingetrazo_render import AnnotationCanvas
-from ingetrazo_core import Vec3 as V
+from built_render import AnnotationCanvas
+from built_core import Vec3 as V
 
 
 from tools.scale import ScaleTool  # noqa: E402

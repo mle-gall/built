@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Ahsan Mehmood (OpenSKP) — IngeTrazo plugin contribution.
+# Copyright (C) 2026 Ahsan Mehmood (OpenSKP) — Built plugin contribution.
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Model Info plugin — model statistics in a dialog (Extensions menu).
 
@@ -10,7 +10,7 @@ with the rest of the application because they come from the same sources:
 - geometry reads ``scene.loose_mesh`` (NOT ``scene.mesh``, which is swapped
   while a group is open for editing — reading it would double-count);
 - materials mirror the Paint tray's idiom: ``attrs["color"]`` (floats 0–1)
-  and ``attrs["texture"]`` on each face — IngeTrazo has no material
+  and ``attrs["texture"]`` on each face — Built has no material
   registry to query;
 - BIM objects come from :func:`core.bim.collect_objects`, the same call
   behind the BIM tray and the IFC export, so a six-face wall with one tag
@@ -24,7 +24,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from core import bim
-from ingetrazo_core.i18n import tr
+from built_core.i18n import tr
 from tools.base import Tool
 from core.units import fmt_area, fmt_volume
 
@@ -283,7 +283,7 @@ class ModelInfoPanel:
 
     def event(self, control, event, value):
         if (control, event) == ("copy", "invoke"):
-            from ingetrazo_render.shell_services import pasteboard_write
+            from built_render.shell_services import pasteboard_write
             text = _stats_to_text(self._stats)
             if not pasteboard_write([("public.utf8-plain-text", text.encode())]):
                 raise RuntimeError(tr("Could not copy to clipboard"))

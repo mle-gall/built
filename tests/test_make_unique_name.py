@@ -7,11 +7,11 @@ names, so it skipped numbers and could repeat one."""
 from __future__ import annotations
 
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group, copy_group
 from core.history import History, MakeUniqueCommand
-from ingetrazo_core.kept_components import (make_template, names_in_use,
+from built_core.kept_components import (make_template, names_in_use,
                                   numbered_name)
 from core.mesh import Mesh
 from core.scene import Scene
@@ -134,8 +134,8 @@ def test_the_menu_make_unique_renames(native_window, monkeypatch):
 
 
 def test_the_offered_component_name_is_the_first_free_number(native_window, monkeypatch):
-    from ingetrazo_core.i18n import tr
-    from ingetrazo_render import chrome_forms
+    from built_core.i18n import tr
+    from built_render import chrome_forms
     win = native_window
     scene = win.viewport.scene
     uno = _component(tr("Component #{n}", n=1))

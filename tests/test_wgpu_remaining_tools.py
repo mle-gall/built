@@ -1,9 +1,9 @@
 """Native tools retain the document command and cancellation contracts."""
 from types import SimpleNamespace
 import pytest
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import ScreenPoint as QPointF
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Input as Qt
+from built_core import ScreenPoint as QPointF
+from built_core import Vec3 as QVector3D
 from tools.base import ToolContext
 from tools.rotate import RotateTool
 from core.camera import OrbitCamera
@@ -168,7 +168,7 @@ from tools.text import TextTool
 ])
 def test_annotation_history_and_cancel(tool_type, points, collection, monkeypatch):
     forms = []
-    monkeypatch.setattr("ingetrazo_render.chrome_forms.show", lambda parent, form: forms.append(form))
+    monkeypatch.setattr("built_render.chrome_forms.show", lambda parent, form: forms.append(form))
     scene, history, native, _ = prepare(tool_type())
     native.window = lambda: None
     for point in points:
@@ -230,8 +230,8 @@ def test_followme_preselected_path_undo():
 def test_container_paint_updates_instance_without_bake():
     from core.group import Group
     from core.mesh import Mesh
-    from ingetrazo_core import pack_scene
-    from ingetrazo_core import InstanceUpdates
+    from built_core import pack_scene
+    from built_core import InstanceUpdates
     scene, history, native, _ = prepare(PaintTool())
     mesh = Mesh()
     face = mesh.add_face([QVector3D(), QVector3D(2, 0, 0), QVector3D(0, 2, 0)])
@@ -260,8 +260,8 @@ def test_container_paint_updates_instance_without_bake():
 def test_face_paint_inside_group_rebakes_mesh():
     from core.group import Group
     from core.mesh import Mesh
-    from ingetrazo_core import pack_scene
-    from ingetrazo_core import InstanceUpdates
+    from built_core import pack_scene
+    from built_core import InstanceUpdates
 
     scene, history, native, _ = prepare(PaintTool())
     group = Group(Mesh())
@@ -287,8 +287,8 @@ def test_rotate_placement_preview_cancels_without_document_mutation():
     import numpy as np
     from core.group import Group
     from core.mesh import Mesh
-    from ingetrazo_core import Matrix4 as QMatrix4x4
-    from ingetrazo_core import pack_scene
+    from built_core import Matrix4 as QMatrix4x4
+    from built_core import pack_scene
     scene, history, native, _ = prepare(RotateTool())
     mesh = Mesh()
     mesh.add_face([QVector3D(), QVector3D(2, 0, 0), QVector3D(0, 2, 0)])

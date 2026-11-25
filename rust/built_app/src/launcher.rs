@@ -108,7 +108,7 @@ impl winit::application::ApplicationHandler for BatchWindow<'_> {
             let surface = surface_handles(&window)?;
             if let Batch::Design(prefix, directory) = self.job {
                 return Python::attach(|py| -> PyResult<i32> {
-                    let renderer = py.import("ingetrazo_render")?.getattr("Renderer")?;
+                    let renderer = py.import("built_render")?.getattr("Renderer")?;
                     let kwargs = pyo3::types::PyDict::new(py);
                     kwargs.set_item("display", surface.1)?;
                     kwargs.set_item("platform", surface.2)?;
@@ -173,7 +173,7 @@ fn write_pdf(job: &PdfExport, host: &python::Host) -> PyResult<i32> {
         let scene = window.getattr("viewport")?.getattr("scene")?;
         // Batch export reads the supplied archive directly, without prompting
         // for recovery or deleting a newer autosave of the same document.
-        py.import("ingetrazo_core.formats.igz")?
+        py.import("built_core.formats.igz")?
             .call_method1("load_into", (&scene, &job.input))?;
         window.setattr("_current_path", &job.input)?;
         let sheets = scene.getattr("compositions")?;
@@ -190,7 +190,7 @@ fn write_pdf(job: &PdfExport, host: &python::Host) -> PyResult<i32> {
             return Ok(1);
         }
         let composer = py
-            .import("ingetrazo_render.sheet_workspace")?
+            .import("built_render.sheet_workspace")?
             .call_method1("composer_for", (window,))?;
         let troubled = composer.call_method1("export_all_pdf", (&job.output, sheets))?;
         if !job.output.is_file() {
@@ -257,7 +257,7 @@ pub fn register_launcher() {
                 options.set_item("run_name", "__main__")?;
                 py.import("runpy")?.call_method(
                     "run_path",
-                    (layout.root.join("scripts/ingetrazo_mcp.py"),),
+                    (layout.root.join("scripts/built_mcp.py"),),
                     Some(&options),
                 )?;
                 Ok(())
@@ -287,15 +287,17 @@ pub fn register_launcher() {
 }
 
 pub fn initialize(py: Python<'_>) -> PyResult<()> {
-    py.import("ingetrazo_core.python_tls")?.call_method0("ensure_once")?;
-    let core = py.import("ingetrazo_core")?;
+    #[cfg(target_os = "macos")]
+    py.import("built_core")?.call_method0("NativeSettings")?;
+    py.import("built_core.python_tls")?.call_method0("ensure_once")?;
+    let core = py.import("built_core")?;
     core.call_method0("install_main_thread_collector")?;
-    let log = py.import("ingetrazo_core.paths")?.call_method0("open_crash_log")?;
+    let log = py.import("built_core.paths")?.call_method0("open_crash_log")?;
     if !log.is_none() {
         let faults = py.import("faulthandler")?;
         faults.call_method1("enable", (&log,))?;
         let path = log.getattr("name")?;
-        for module in [core, py.import("ingetrazo_render")?] {
+        for module in [core, py.import("built_render")?] {
             module.call_method1("install_panic_log", (&path,))?;
         }
         // Keep the descriptor valid as long as faulthandler may write to it.
@@ -306,7 +308,7 @@ pub fn initialize(py: Python<'_>) -> PyResult<()> {
     }
     #[cfg(windows)]
     if std::env::var_os("BUILT_SETTINGS_DIR").is_none() {
-        py.import("ingetrazo_core")?
+        py.import("built_core")?
             .call_method0("ensure_high_performance_gpu")?;
     }
     Ok(())
@@ -318,8 +320,8 @@ pub fn self_check(layout: &python::Layout) -> i32 {
             "i18n/es.json",
             "resources/textures/library.json",
             "resources/components/components.json",
-            "resources/icons/ingetrazo_256.png",
-            "scripts/ingetrazo_mcp.py",
+            "resources/icons/built_256.png",
+            "scripts/built_mcp.py",
         ] {
             if !layout.root.join(rel).is_file() {
                 return Err(pyo3::exceptions::PyFileNotFoundError::new_err(rel));
@@ -335,25 +337,25 @@ pub fn self_check(layout: &python::Layout) -> i32 {
                 "incomplete AI recipe book",
             ));
         }
-        for module in ["ingetrazo_core", "mapbox_earcut", "manifold3d"] {
+        for module in ["built_core", "mapbox_earcut", "manifold3d"] {
             py.import(module)?;
         }
         let rfa = py
             .import("importlib.util")?
-            .call_method1("find_spec", ("ingetrazo_rfa",))?;
+            .call_method1("find_spec", ("built_rfa",))?;
         if rfa.is_none() {
             println!(".rfa import: unavailable (reader not installed)");
         } else {
-            py.import("ingetrazo_rfa")?;
+            py.import("built_rfa")?;
             println!(".rfa import: available");
         }
         let converter = py
-            .import("ingetrazo_core.formats.dwg_bridge")?
+            .import("built_core.formats.dwg_bridge")?
             .call_method0("find_dwg2dxf")?;
         if converter.is_none() {
             println!("DWG converter: MISSING");
             let frozen = py
-                .import("ingetrazo_core.paths")?
+                .import("built_core.paths")?
                 .call_method0("is_frozen")?
                 .is_truthy()?;
             if frozen && !cfg!(target_os = "macos") {
@@ -397,7 +399,7 @@ pub fn check_extensions(host: &python::Host) -> bool {
 pub fn exit_now(status: i32) -> ! {
     Python::attach(|py| {
         let flush = || -> PyResult<()> {
-            py.import("ingetrazo_core.settings")?
+            py.import("built_core.settings")?
                 .call_method0("settings")?
                 .call_method0("sync")?;
             py.import("logging")?.call_method0("shutdown")?;

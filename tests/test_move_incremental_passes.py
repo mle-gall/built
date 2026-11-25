@@ -13,7 +13,7 @@ import math
 
 import numpy as np  # noqa: E402
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 
 def _prisma(n=12, r=1.0, h=2.0):

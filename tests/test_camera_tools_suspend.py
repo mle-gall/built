@@ -10,10 +10,10 @@ the Metal view also handed the tool a left-button release, which commits a
 Push/Pull in progress. Picking any other tool still resets it, as before.
 """
 import pytest
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import ScreenPoint as QPointF
-from ingetrazo_render import MouseEvent
-from ingetrazo_core import Vec3 as V
+from built_core import Input as Qt
+from built_core import ScreenPoint as QPointF
+from built_render import MouseEvent
+from built_core import Vec3 as V
 
 from tools.arc import ArcTool
 from tools.base import ToolContext

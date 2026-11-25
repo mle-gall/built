@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """The first-point work-plane rule: dimensioning/drawing in a standard view
 stays in the plane you're looking at instead of falling to the ground."""
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.snap import first_point_work_plane
 

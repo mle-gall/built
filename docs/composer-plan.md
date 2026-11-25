@@ -17,9 +17,9 @@ items (texto, cajetín, imagen) son 2D puro. Todo se exporta a PDF con métricas
 físicas exactas (`QPdfWriter`) o a la impresora. Las composiciones viven
 DENTRO del `.igz`, como QGIS guarda sus layouts en el proyecto.
 
-## El mapeo QGIS → IngeTrazo
+## El mapeo QGIS → Built
 
-| QGIS | IngeTrazo | de dónde sale |
+| QGIS | Built | de dónde sale |
 |---|---|---|
 | Layout | `Composicion` (core/composition.py) | nuevo |
 | `QgsLayoutItemMap` | `MarcoVista` — escena + proyección + escala 1:N | nuevo |

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core import _native
 from core import vista_caras as VC

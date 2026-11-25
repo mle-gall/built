@@ -8,10 +8,10 @@ from __future__ import annotations
 import math
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.bridge import Profile, bridge, strips
-from ingetrazo_core import bridge_centre, bridge_pairs
+from built_core import bridge_centre, bridge_pairs
 from core.mesh import Mesh
 
 _GAP = 3.0

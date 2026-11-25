@@ -3,11 +3,11 @@ import threading
 import time
 import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Vec3 as V
-from ingetrazo_core import autosave
+from built_core import Vec3 as V
+from built_core import autosave
 from core.scene import Scene
 from formats import igz
-from ingetrazo_core import snapshot_steps
+from built_core import snapshot_steps
 from tests.test_project_tabs import win, _edit
 
 

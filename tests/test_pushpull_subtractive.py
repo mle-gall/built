@@ -16,7 +16,7 @@ Headless: ``QVector3D`` values + a stub viewport for the tool.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.history import AddFaceCommand, History
 from core.scene import Scene
@@ -529,7 +529,7 @@ def test_bump_pushed_flush_back_dissolves_to_clean_cube():
     the wall. The pane must merge into the host wall (no seam, no hole, no
     zero-area side walls, no stale vertices) — a pristine cube again."""
     from core.edits import build_add_edges
-    from ingetrazo_core.orient import signed_volume
+    from built_core.orient import signed_volume
 
     scene = Scene()
     hist = History(scene)

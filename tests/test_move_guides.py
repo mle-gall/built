@@ -19,8 +19,8 @@ import math
 from types import SimpleNamespace
 
 
-from ingetrazo_core import ScreenPoint, Input
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint, Input
+from built_core import Vec3 as QVector3D
 
 
 from core.group import Group

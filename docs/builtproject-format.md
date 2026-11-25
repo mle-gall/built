@@ -12,7 +12,7 @@ sees (open tabs, cameras, the editable file, window layout, last scene) is
 stored in a **session file** of that person's own, outside the shared folder.
 
 The reader, writer, migration, pointer resolution and session store are
-Rust (`rust/ingetrazo_core/src/builtproject/`). The records/IFC registry
+Rust (`rust/built_core/src/builtproject/`). The records/IFC registry
 stays Python by design: Rust stores and merges it as an opaque JSON object,
 and `core.bim_registry.validate` checks its contents.
 
@@ -107,7 +107,7 @@ Opening a model never rewrites it, and neither does a conversion: an old
 pointer to `X.igzproj` keeps resolving to `X.builtproject` for as long as
 the model is not saved. The model's next **normal** save writes the pointer
 to the resolved `.builtproject` (both `path` and `rel`), with its other
-changes. The compatibility export (`.igz` for IngeTrazo) keeps writing an
+changes. The compatibility export (`.igz` for Built) keeps writing an
 absolute pointer to the resolved project, as today.
 
 ## 3. The per-user session file
@@ -242,7 +242,7 @@ every model find the new file without the old one, the re-read guarantees the
 new file is complete before the old one goes, and the conversion is
 reversible by the round trip above. A person who still needs an `.igzproj`
 for an old build can export it from the manifest
-(`ingetrazo_core.project_legacy_json`).
+(`built_core.project_legacy_json`).
 
 ## 6. Native open, save and session
 
@@ -267,7 +267,7 @@ for an old build can export it from the manifest
   `Name.builtproject` with an empty file list and a fresh registry and IFC
   identity; Open accepts `.builtproject` and `.igzproj`.
 
-## 7. API (Rust, exported from `ingetrazo_core`)
+## 7. API (Rust, exported from `built_core`)
 
 | Function or class | Does |
 |---|---|

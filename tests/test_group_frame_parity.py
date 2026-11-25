@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """A group's derived frame and oriented box moved to Rust
-(``rust/ingetrazo_core/src/group_frame.rs``) and must answer as
+(``rust/built_core/src/group_frame.rs``) and must answer as
 ``core/group.py``'s Python did at ``74b54c81``.
 
 - ``frame_from_points`` (and its convex hull) bit for bit: it picks the

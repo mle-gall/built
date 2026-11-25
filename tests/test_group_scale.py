@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from ingetrazo_core import Matrix4 as QMatrix4x4
+from built_core import Matrix4 as QMatrix4x4
 
 from core.group import Group
-from ingetrazo_core import group_scale, group_scale_command
+from built_core import group_scale, group_scale_command
 from core.history import History
 from core.scene import Scene
 from tests.test_group_axes import _slab
@@ -48,7 +48,7 @@ def test_unusable_or_unchanged_values_make_no_command():
 
 
 def test_a_rotated_group_made_component_scales_along_its_turned_axes():
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     from core.history import GroupToComponentCommand, RotateGroupCommand
     g = _slab()
     scene = Scene()
@@ -75,7 +75,7 @@ def test_a_rotated_group_made_component_scales_along_its_turned_axes():
 
 def test_repeated_set_and_undo_does_not_drift():
     import math
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     from core.history import GroupToComponentCommand, RotateGroupCommand
     g = _slab()
     scene = Scene()

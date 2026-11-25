@@ -7,7 +7,7 @@ line, and round-tripped through the .igz with its own ``kind``.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.guide import Guide, GuideCircle, guide_from_dict
 
@@ -255,7 +255,7 @@ def test_a_line_started_at_one_crossing_detects_the_other():
 
 
 def test_circle_tool_ctrl_toggles_guide_mode_and_draws_a_guide():
-    from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
+    from built_core import ScreenPoint as QPointF, Input as Qt
     from tools.base import ToolContext
     from tools.circle import CircleTool
     from core.scene import Scene

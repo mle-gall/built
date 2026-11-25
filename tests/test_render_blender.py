@@ -12,7 +12,7 @@ import struct
 import subprocess
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from core import render_blender as rb  # noqa: E402
@@ -45,7 +45,7 @@ def test_the_blender_script_is_valid_python():
     py_compile.compile(str(rb.render_script()), doraise=True)
 
 
-def test_a_packaged_ingetrazo_does_not_hand_blender_its_libraries():
+def test_a_packaged_built_does_not_hand_blender_its_libraries():
     env = rb.clean_env({"LD_LIBRARY_PATH": "/tmp/_MEIxyz",
                         "LD_LIBRARY_PATH_ORIG": "/usr/local/lib",
                         "PYTHONHOME": "/tmp/_MEIxyz", "HOME": "/home/x",
@@ -91,8 +91,8 @@ def test_the_command_runs_our_script_on_the_job(tmp_path):
 
 def test_under_flatpak_the_script_travels_next_to_the_job(tmp_path,
                                                          monkeypatch):
-    # The sandbox's /app/ingetrazo/… path does not exist for Blender on the
-    # host: «Python file "/app/ingetrazo/resources/blender/render_scene.py"
+    # The sandbox's /app/built/… path does not exist for Blender on the
+    # host: «Python file "/app/built/resources/blender/render_scene.py"
     # could not be opened» (Marco, 0.5.6.1 Flatpak).
     monkeypatch.setattr(rb, "in_flatpak", lambda: True)
     found = rb.BlenderFound(["flatpak-spawn", "--host", "blender"], "x")
@@ -108,13 +108,13 @@ def test_under_flatpak_renders_go_where_the_host_sees_them(tmp_path,
                                                           monkeypatch):
     monkeypatch.setattr(rb, "in_flatpak", lambda: True)
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
-    assert rb.work_base() == tmp_path / ".cache" / "IngeTrazo" / "render"
+    assert rb.work_base() == tmp_path / ".cache" / "Built" / "render"
 
 
 @pytest.mark.parametrize("line, expected", [
-    ("INGETRAZO stats Remaining: 00:03.05 | Mem: 77M | Sample 16/64", 0.25),
-    ("INGETRAZO stats Rendering 32 / 64 samples", 0.5),
-    ("INGETRAZO stats Mem: 0M | Synchronizing object | IngeTrazo", None),
+    ("BUILT stats Remaining: 00:03.05 | Mem: 77M | Sample 16/64", 0.25),
+    ("BUILT stats Rendering 32 / 64 samples", 0.5),
+    ("BUILT stats Mem: 0M | Synchronizing object | Built", None),
 ])
 def test_progress_is_read_from_both_engines(line, expected):
     assert rb.progress_of(line) == expected
@@ -155,7 +155,7 @@ def test_a_real_render_through_the_users_blender(tmp_path):
     result = subprocess.run(rb.command(found, job), capture_output=True, text=True,
                             env=rb.clean_env(), timeout=600)
     assert result.returncode == 0, (result.stdout + result.stderr)[-4000:]
-    assert "INGETRAZO done" in result.stdout
+    assert "BUILT done" in result.stdout
     assert _png_size(tmp_path / "render.png") == (160, 90)
 
 

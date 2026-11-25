@@ -11,7 +11,7 @@ import random
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 import core._native as _native
 from core import lazy_mesh
@@ -158,9 +158,9 @@ def test_near_coincident_cloud_keeps_the_plan_vertex_order(seed):
 @pytest.mark.parametrize("dtype, vertex_count", [(np.float32, 1), (np.float64, 2)])
 def test_deferred_weld_at_the_radius(monkeypatch, dtype, vertex_count):
     from core.group import _local_points
-    from ingetrazo_core.store_mesh import StoreMesh
+    from built_core.store_mesh import StoreMesh
 
-    mod = pytest.importorskip("ingetrazo_core")
+    mod = pytest.importorskip("built_core")
     monkeypatch.setattr(_native, "native", mod)
     # The squared distance rounds below the threshold in f32 and above it in f64.
     points = np.array([[0, 0, 0], [3.0003e-8, 1e-4, 0]], dtype=np.float32)

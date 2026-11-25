@@ -22,7 +22,7 @@ GOLDEN = Path(__file__).parent / "fixtures" / "continuous_maps_golden.json.gz"
 
 
 def _prism(rng):
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from core.mesh import Mesh
     m = Mesh()
     n = rng.randint(3, 24)
@@ -66,7 +66,7 @@ def _tex(rng):
 
 
 def answers():
-    from ingetrazo_core import texture_continuous_maps as continuous_maps
+    from built_core import texture_continuous_maps as continuous_maps
     rng = random.Random(20261125)
     out = []
     for k in range(150):

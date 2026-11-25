@@ -39,7 +39,7 @@ See [../CONTRIBUTING.md](../CONTRIBUTING.md).
 Preferences → General → Viewport renderer applies to newly opened documents.
 Existing Metal choices are preserved; profiles without a choice use
 `DEFAULT_RENDERER = 'opengl'` in `core/renderer_settings.py`.
-`INGETRAZO_WGPU=0/1` overrides the choice for one process without changing
+`BUILT_WGPU=0/1` overrides the choice for one process without changing
 saved preferences, but cannot bypass capability checks. Before window creation,
 a bounded subprocess imports the render crate and creates a tiny hidden Qt
 native widget to request the actual Metal device and required features. Its

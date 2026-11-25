@@ -5,12 +5,12 @@ layer, folders, merge, section planes on layers, layer lines on sheets and
 in DXF, templates."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 from core import layers as L
 from core.group import Group
 from core.layers import DEFAULT_LAYER, Layer, assign_layer
 from core.mesh import Mesh
-from ingetrazo_core.saved_views import SavedView
+from built_core.saved_views import SavedView
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from tests.test_drawing_records import _square
 
@@ -18,7 +18,7 @@ from tests.test_drawing_records import _square
 # ---- The panel -------------------------------------------------------------
 
 def test_add_opens_the_selected_folder_and_preserves_its_parent(native_host):
-    from ingetrazo_core import edit_tag_folder
+    from built_core import edit_tag_folder
     from tests.native_tree import action
     import json
     scene = native_host.viewport.scene
@@ -33,7 +33,7 @@ def test_add_opens_the_selected_folder_and_preserves_its_parent(native_host):
 
 def test_purge_asks_for_the_count_and_accepts_only_a_current_confirmation(native_question_host):
     from tests.native_tree import action
-    from ingetrazo_render import chrome_dialogs
+    from built_render import chrome_dialogs
     host = native_question_host
     scene = host.viewport.scene
     scene.layers.extend([Layer("Vacia 1"), Layer("Vacia 2")])
@@ -82,8 +82,8 @@ def test_the_target_acts_on_every_selected_row_and_on_folders(native_host):
     import json
     from tests.native_tree import action
     scene = native_host.viewport.scene
-    folder = ingetrazo_core.tag_edits.add_folder(scene, "Arq")
-    inner = ingetrazo_core.tag_edits.add_folder(scene, "Inner", parent=folder)
+    folder = built_core.tag_edits.add_folder(scene, "Arq")
+    inner = built_core.tag_edits.add_folder(scene, "Inner", parent=folder)
     scene.layers.extend([Layer("A"), Layer("B"), Layer("C", folder=folder), Layer("D", folder=inner)])
     def isolate(*rows):
         action(native_host, "isolatetags", json.dumps(rows))
@@ -110,7 +110,7 @@ def test_the_target_header_ends_the_isolation(native_host):
 
 def test_merge_tag_moves_carriers_in_one_step_and_rejects_a_replaced_target(native_host, monkeypatch):
     from tests.native_tree import action
-    from ingetrazo_render import chrome_forms
+    from built_render import chrome_forms
     scene = native_host.viewport.scene
     scene.layers.extend([Layer("A"), Layer("B")])
     face = _square(scene.mesh)
@@ -132,8 +132,8 @@ def test_merge_tag_moves_carriers_in_one_step_and_rejects_a_replaced_target(nati
 def test_expand_and_collapse_all_reach_nested_tag_folders():
     from tests.test_project_drawing_filters import Project
     project = Project()
-    outer = ingetrazo_core.tag_edits.add_folder(project.scene, "A")
-    inner = ingetrazo_core.tag_edits.add_folder(project.scene, "B", parent=outer)
+    outer = built_core.tag_edits.add_folder(project.scene, "A")
+    inner = built_core.tag_edits.add_folder(project.scene, "B", parent=outer)
     project.scene.layers.append(Layer("Walls", folder=inner))
     project.action("lens", "1")
     expanded = project.action("expandall", "")
@@ -168,7 +168,7 @@ def test_drawing_quick_filters_and_inversion_follow_document_use_and_selection()
 
 def test_saved_scene_preference_and_make_active(native_host):
     from tests.native_tree import action
-    from ingetrazo_core.settings import settings
+    from built_core.settings import settings
     scene = native_host.viewport.scene
     scene.saved_views.append(SavedView("Planta"))
     action(native_host, "newtaghidden", "1")
@@ -185,7 +185,7 @@ def test_saved_scene_preference_and_make_active(native_host):
 
 
 def test_drawing_model_colours_belong_to_the_style(native_host):
-    from ingetrazo_core.style import Style
+    from built_core.style import Style
     from tests.native_tree import action
     scene = native_host.viewport.scene
     for on in (True, False):
@@ -212,9 +212,9 @@ def test_tag_menu_changes_saved_scene_visibility_and_restores_it(native_host):
 
 def test_template_export_and_import_in_drawing(native_host, tmp_path, monkeypatch):
     from tests.native_tree import action
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render.shell_files import ShellFileDialog
     scene = native_host.viewport.scene
-    folder = ingetrazo_core.tag_edits.add_folder(scene, "Oficina")
+    folder = built_core.tag_edits.add_folder(scene, "Oficina")
     tag = Layer("Ejes", folder=folder, linetype="dashdot")
     scene.layers.append(tag)
     path = tmp_path / "plantilla.json"
@@ -263,7 +263,7 @@ def test_the_default_tag_swatch_distinguishes_no_colour_from_a_picked_or_automat
         return {t[0]: t[25] for t, _ in project.view.renderer.calls["ui_set_tree"][0]
                 if t[0].startswith("preview-tag:")}
     assert displayed()["preview-tag:Layer 0"] == ""
-    colour = ingetrazo_core.tag_styles.layer_color(scene.layer("Muros"))
+    colour = built_core.tag_styles.layer_color(scene.layer("Muros"))
     assert displayed()["preview-tag:Muros"] == "#" + "".join(f"{int(v * 255 + 0.5):02x}" for v in colour)
     scene.layer(DEFAULT_LAYER).color = (0.2, 0.4, 0.6)
     scene.version += 1
@@ -304,7 +304,7 @@ def test_selected_tags_take_the_same_line_and_projection_weight():
 def test_new_tag_at_a_tag_uses_its_folder_and_rejects_a_stale_target(native_host):
     from tests.native_tree import action
     scene = native_host.viewport.scene
-    arq = ingetrazo_core.tag_edits.add_folder(scene, "Arq")
+    arq = built_core.tag_edits.add_folder(scene, "Arq")
     scene.layers.extend([Layer("Muros", folder=arq), Layer("Suelta")])
     action(native_host, "newtag", "preview-tag:Muros")
     assert scene.layers[-1].folder == arq
@@ -343,9 +343,9 @@ def test_folder_projection_is_deferred_until_a_frame_and_reused_across_unchanged
         return original(scene)
     monkeypatch.setattr(wgpu_ui, "prepare_tree_model", counted)
     project.view.renderer.ui_project_hidden = lambda: True
-    parent = ingetrazo_core.tag_edits.add_folder(project.scene, "Outer")
-    child = ingetrazo_core.tag_edits.add_folder(project.scene, "Inner", parent=parent)
-    orphan = ingetrazo_core.tag_edits.add_folder(project.scene, "Orphan")
+    parent = built_core.tag_edits.add_folder(project.scene, "Outer")
+    child = built_core.tag_edits.add_folder(project.scene, "Inner", parent=parent)
+    orphan = built_core.tag_edits.add_folder(project.scene, "Orphan")
     project.scene.folder_parents = {child: parent, orphan: "missing"}
     project.scene.version += 1
     wgpu_ui._sync_project_rows(project.view, project.win)

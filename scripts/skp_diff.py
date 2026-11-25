@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Differential validation harness for IngeTrazo's .skp reader.
+"""Differential validation harness for Built's .skp reader.
 
 Ground truth is a COLLADA file **exported from the original program** by
 whoever owns the model (File ▸ Export ▸ 3D Model ▸ .dae), placed next to
 the .skp or given with ``--dae``. The harness loads it into a headless
-``Scene``, loads the .skp through IngeTrazo's own reader
+``Scene``, loads the .skp through Built's own reader
 (``formats/skp.py``), and diffs structural fingerprints (counts, bbox,
 materials, groups).
 
@@ -34,9 +34,9 @@ def fingerprint(scene) -> dict:
     """A structural summary of a loaded ``Scene`` — the comparable signature of
     a parse: geometry counts, bounding box, distinct materials/textures, and the
     group breakdown. Deliberately parser-agnostic (no identity, no ordering)."""
-    from ingetrazo_core.formats.meshexport import world_faces
+    from built_core.formats.meshexport import world_faces
 
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
 
     faces = list(world_faces(scene))
     tris = 0
@@ -126,7 +126,7 @@ def compare(ground: dict, candidate: dict, tol: float = 1e-3) -> list[str]:
 def load_ground_truth(dae: Path):
     """Load the reference COLLADA export of the model into a fresh Scene."""
     from core.scene import Scene
-    from ingetrazo_core.formats import dae as dae_format
+    from built_core.formats import dae as dae_format
 
     if not dae.exists():
         raise RuntimeError(
@@ -141,7 +141,7 @@ def load_candidate(skp: Path):
     """Load ``skp`` through the pure-backend seam, or ``None`` when no backend
     can read it yet (``NeedsConverter``)."""
     from core.scene import Scene
-    from ingetrazo_core.formats import skp as skp_format
+    from built_core.formats import skp as skp_format
 
     scene = Scene()
     try:
@@ -155,7 +155,7 @@ def load_candidate(skp: Path):
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Diff a .skp: a reference "
-                                             "COLLADA export vs IngeTrazo's reader.")
+                                             "COLLADA export vs Built's reader.")
     ap.add_argument("skp", type=Path, help="path to the .skp file")
     ap.add_argument("--dae", type=Path, default=None,
                     help="a COLLADA export of it (default: next to the .skp)")
@@ -169,7 +169,7 @@ def main(argv=None) -> int:
         return 2
 
     ground = fingerprint(load_ground_truth(args.dae or args.skp.with_suffix(".dae")))
-    from ingetrazo_core.formats import skp as skp_format
+    from built_core.formats import skp as skp_format
     fmt = skp_format.detect_format(args.skp)
     cand_scene = load_candidate(args.skp)
     candidate = fingerprint(cand_scene) if cand_scene is not None else None

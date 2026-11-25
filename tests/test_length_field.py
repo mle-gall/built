@@ -146,7 +146,7 @@ class _Key:
         return 0
 
     def modifiers(self):
-        from ingetrazo_core import Input as Qt
+        from built_core import Input as Qt
         return Qt.NoModifier
 
 

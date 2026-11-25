@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from ingetrazo_core import i18n
+from built_core import i18n
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
@@ -30,9 +30,9 @@ def test_arabic_is_offered_and_complete():
 
 @pytest.mark.parametrize("lang, rtl", [("ar", True), ("es", False), ("en", False), ("de", False)])
 def test_startup_direction_follows_the_language(lang, rtl, tmp_path, monkeypatch):
-    from ingetrazo_render import Host
-    from ingetrazo_core import settings
-    from ingetrazo_core import NativeSettings
+    from built_render import Host
+    from built_core import settings
+    from built_core import NativeSettings
 
     monkeypatch.setattr(settings, "_store", None)
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))

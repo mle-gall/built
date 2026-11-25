@@ -8,8 +8,8 @@ texture, say the flagstone, I should be able to change the colour too".
 from __future__ import annotations
 
 import pytest
-from ingetrazo_render import SurveyRaster
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_render import SurveyRaster
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group
 from core.mesh import Mesh
@@ -24,7 +24,7 @@ def V(x, y, z=0.0):
 @pytest.fixture(autouse=True)
 def _texture_cache(tmp_path, monkeypatch):
     """Tinted textures go to this test's own texture cache."""
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "textures"))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "textures"))
 
 
 def _png(pixels) -> bytes:

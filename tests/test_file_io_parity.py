@@ -23,14 +23,14 @@ SCALED_THRESHOLD = 200
 def _composite(tmp_path_factory, name, **build_args):
     from tests.composite_fixture import build
     with pytest.MonkeyPatch.context() as env:
-        env.setenv("INGETRAZO_RUST_IO", "0")
+        env.setenv("BUILT_RUST_IO", "0")
         return build(tmp_path_factory.mktemp(name), **build_args)
 
 
 @pytest.fixture(scope="module")
 def composite(tmp_path_factory):
     with pytest.MonkeyPatch.context() as env:
-        env.setenv("INGETRAZO_RUST_IO", "0")
+        env.setenv("BUILT_RUST_IO", "0")
         return make(tmp_path_factory.mktemp("file-io-composite"))
 
 
@@ -52,7 +52,7 @@ SOURCES = (CORPUS + ["leaf", "mid", "host"] + ["scaled-" + k for k in _PARTS]
 @pytest.mark.parametrize("source", SOURCES, ids=lambda p: Path(p).stem)
 @pytest.mark.parametrize("suffix", [".igz", ".built"])
 def test_saved_bytes(source, suffix, tmp_path, request, monkeypatch):
-    monkeypatch.setenv("INGETRAZO_RUST_IO", "1")
+    monkeypatch.setenv("BUILT_RUST_IO", "1")
     if igz.native_io() is None:
         pytest.skip("native document I/O unavailable")
     if isinstance(source, Path):
@@ -77,7 +77,7 @@ def test_saved_bytes(source, suffix, tmp_path, request, monkeypatch):
         monkeypatch.setattr(group, "new_uid", uid)
         monkeypatch.setattr(layers, "new_uid", uid)
         monkeypatch.setattr(uuid, "uuid4", lambda: uuid.UUID(int=next(guids)))
-        monkeypatch.setenv("INGETRAZO_RUST_IO", mode)
+        monkeypatch.setenv("BUILT_RUST_IO", mode)
         scene = Scene()
         igz.load_into(scene, src)
         if isinstance(source, str):
@@ -93,7 +93,7 @@ def test_saved_bytes(source, suffix, tmp_path, request, monkeypatch):
     out = tmp_path / ("again" + suffix)
     result = []
     for mode in ("0", "1"):
-        monkeypatch.setenv("INGETRAZO_RUST_IO", mode)
+        monkeypatch.setenv("BUILT_RUST_IO", mode)
         reopened = Scene()
         igz.load_into(reopened, dest)
         igz.save_scene(reopened, out, backup=False)
@@ -179,14 +179,14 @@ def test_native_float_spelling():
 
 
 def test_sheet_view_annotation_and_style_records(tmp_path, monkeypatch):
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     import json
     import zipfile
     from core.composition import Composicion, TextoItem
     from core.dimension import Dimension
     from core.layers import Layer
     from core.materials import Material
-    from ingetrazo_core.saved_views import SavedView
+    from built_core.saved_views import SavedView
     from core.textlabel import TextLabel
 
     scene = Scene()
@@ -210,7 +210,7 @@ def test_sheet_view_annotation_and_style_records(tmp_path, monkeypatch):
     scene.text_labels = [TextLabel(origin, offset, "Note", layer="Draft")]
 
     source = tmp_path / "sheet.built"
-    monkeypatch.setenv("INGETRAZO_RUST_IO", "0")
+    monkeypatch.setenv("BUILT_RUST_IO", "0")
     igz.save_scene(scene, source, backup=False)
     with zipfile.ZipFile(source) as archive:
         raw = json.loads(archive.read("document.json"))["scene"]
@@ -221,7 +221,7 @@ def test_sheet_view_annotation_and_style_records(tmp_path, monkeypatch):
 
     expected = None
     for mode in ("0", "1"):
-        monkeypatch.setenv("INGETRAZO_RUST_IO", mode)
+        monkeypatch.setenv("BUILT_RUST_IO", mode)
         if mode == "1":
             if igz.native_io() is None:
                 pytest.skip("native document I/O unavailable")

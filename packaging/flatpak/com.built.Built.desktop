@@ -1,0 +1,20 @@
+[Desktop Entry]
+Type=Application
+Name=Built
+GenericName=3D Modeler
+GenericName[es]=Modelador 3D
+Comment=Free 3D modeler for civil engineering and architecture
+Comment[es]=Modelador 3D libre para ingeniería civil y arquitectura
+Exec=built %f
+Terminal=false
+Categories=Graphics;3DGraphics;Engineering;
+MimeType=application/x-built;model/vnd.collada+xml;application/vnd.sketchup.skp;
+Icon=com.built.Built
+StartupNotify=true
+StartupWMClass=built
+Actions=NewWindow;
+
+[Desktop Action NewWindow]
+Name=New Window
+Name[es]=Nueva ventana
+Exec=built --new-window

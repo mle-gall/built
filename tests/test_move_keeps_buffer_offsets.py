@@ -17,7 +17,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 
 AMARILLO = (1.0, 0.85, 0.0)

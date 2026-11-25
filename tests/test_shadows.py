@@ -10,12 +10,12 @@ writing ``scene.shadows``.
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 from tests.preferences_chrome import Controls
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from core.scene import Scene  # noqa: E402
-from ingetrazo_core.sun import ShadowSettings  # noqa: E402
+from built_core.sun import ShadowSettings  # noqa: E402
 
 
 def V(x: float, y: float, z: float = 0.0) -> QVector3D:

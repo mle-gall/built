@@ -5,9 +5,9 @@ tags brought in namespaced and filed, saved as a placeholder, filled again
 from the source, overrides that survive the source's changes, packing."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core import links
 from core.layers import Layer, folder_parent, layer_of
@@ -86,24 +86,24 @@ def test_a_host_override_survives_the_source_and_can_be_cleared(tmp_path):
     src = _source(tmp_path / "Site.igz")
     host, _comp = _host_with_link(tmp_path, src)
     host.layer("Site / Wood").visible = False
-    assert ingetrazo_core.link_note_visibility(host, "Site / Wood", False)
+    assert built_core.link_note_visibility(host, "Site / Wood", False)
     _source(src, wood_visible=True)
     links.reload(host, src)
     assert host.layer("Site / Wood").visible is False      # host's choice
     # Not overridden: the source's switch comes through.
-    ingetrazo_core.link_clear_overrides(host, src)
+    built_core.link_clear_overrides(host, src)
     assert host.layer("Site / Wood").visible is True
     _source(src, wood_visible=False)
     links.reload(host, src)
     assert host.layer("Site / Wood").visible is False
-    assert not ingetrazo_core.link_note_visibility(host, "Layer 0", False)   # host's own
+    assert not built_core.link_note_visibility(host, "Layer 0", False)   # host's own
 
 
 def test_any_host_switch_counts_as_an_override(tmp_path):
     """Isolate, a saved view, the panel: not through note_visibility."""
     src = _source(tmp_path / "Site.igz")
     host, _comp = _host_with_link(tmp_path, src)
-    ingetrazo_core.tag_edits.set_visible(host, ["Site / Wood"], False)
+    built_core.tag_edits.set_visible(host, ["Site / Wood"], False)
     _source(src, faces=2)                  # any change to the source
     links.reload(host, src)
     assert host.layer("Site / Wood").visible is False
@@ -112,7 +112,7 @@ def test_any_host_switch_counts_as_an_override(tmp_path):
 def test_packed_keeps_the_geometry_without_the_source(tmp_path):
     src = _source(tmp_path / "Site.igz", faces=2)
     host, _comp = _host_with_link(tmp_path, src)
-    ingetrazo_core.link_set_packed(host, src, True)
+    built_core.link_set_packed(host, src, True)
     path = tmp_path / "host.igz"
     igz.save_scene(host, path)
     src.unlink()
@@ -197,7 +197,7 @@ def test_a_deferred_mesh_is_relabelled_without_being_built():
     comp = Group(name="Site")
     part = Group(mesh, name="P")
     comp.children = [part]
-    ingetrazo_core.link_install_definition(comp, "/x/Site.igz", set(), {})
+    built_core.link_install_definition(comp, "/x/Site.igz", set(), {})
     assert not built                                  # never built
     new = mesh.__dict__["_deferred_source"]
     table = new["meta"]["face_attrs"]
@@ -226,14 +226,14 @@ def test_a_links_untagged_pieces_take_their_owners_tag_colour():
     piece = Group(Mesh(), name="Flange")
     piece.layer = "Site / Untagged"
     piece.owner = owner
-    assert ingetrazo_core.tag_styles.object_layer(piece) == "Site / Steel"
+    assert built_core.tag_styles.object_layer(piece) == "Site / Steel"
     top = Group(Mesh(), name="Loose")
     top.layer = "Site / Untagged"
-    assert ingetrazo_core.tag_styles.object_layer(top) == DEFAULT_LAYER
+    assert built_core.tag_styles.object_layer(top) == DEFAULT_LAYER
     tagged = Group(Mesh(), name="Rail")
     tagged.layer = "Site / Wood"
     tagged.owner = owner
-    assert ingetrazo_core.tag_styles.object_layer(tagged) == "Site / Wood"      # its own tag still wins
+    assert built_core.tag_styles.object_layer(tagged) == "Site / Wood"      # its own tag still wins
     paint = {"by_layer": {"Site / Steel": (1.0, 0.0, 0.0),
                           "Site / Untagged": (0.0, 1.0, 0.0)},
              "color": (1.0, 0.0, 0.0)}

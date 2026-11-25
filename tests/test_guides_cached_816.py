@@ -16,7 +16,7 @@ from tests.raster_samples import pixels
 from tests.controller_surface import live_image
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 
 import views.document_interaction as vpmod  # noqa: E402

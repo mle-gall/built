@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 IngeTrazo contributors.
+# Copyright (C) 2026 Built contributors.
 """Run with PYTHONPATH=$PWD python tests/benchmark_mutation_notifications.py.
 
 Compares the pre-hook parent with this checkout; no baseline checkout or

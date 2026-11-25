@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import math
 
-from ingetrazo_core import ScreenPoint, Input
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint, Input
+from built_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
 from core.history import AddFaceCommand, History, MakeGroupCommand
@@ -398,7 +398,7 @@ def test_ctrl_copy_rotates_a_group_copy():
 
 
 def test_ctrl_copy_of_instance_shares_prototype():
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     scene = Scene()
@@ -534,7 +534,7 @@ def test_rotate_mixed_selection_groups_and_loose():
 
 
 def test_move_mixed_selection_groups_and_loose():
-    from ingetrazo_core import ScreenPoint
+    from built_core import ScreenPoint
     from core.group import Group
     from core.mesh import Mesh
     from tools.move import MoveTool

@@ -14,7 +14,7 @@ HERE = Path(__file__).resolve().parent
 
 def make(out: Path) -> dict:
     """Write the three files under ``out``; their paths by name."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     from core import links
     from core.scene import Scene
     from formats import igz

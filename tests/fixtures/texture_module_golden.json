@@ -161,7 +161,7 @@
   0,
   0
  ],
- "profile_root": "<tmp>/profile/data/IngeTrazo/textures",
+ "profile_root": "<tmp>/profile/data/Built/textures",
  "record": [
   "Texture(path='a.png', sw=1.0, sh=1.0)",
   {

@@ -5,7 +5,7 @@
 did not move anything it was not meant to move.
 
 The safety net for issue #31's second part (see
-``~/Proyectos/ingetrazo/inferencia-pantalla/plan.md``). The inference runs
+``~/Proyectos/built/inferencia-pantalla/plan.md``). The inference runs
 on every mouse move and decides where every click lands; months of tuning
 sit in it — the sticky acquired edge, the origin beating the axis line, the
 arrow locks, the hover plane, excluding the geometry being dragged. A
@@ -40,8 +40,8 @@ from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from ingetrazo_core import ScreenPoint                         # noqa: E402
-from ingetrazo_core import Vec3 as QVector3D                        # noqa: E402
+from built_core import ScreenPoint                         # noqa: E402
+from built_core import Vec3 as QVector3D                        # noqa: E402
 
 #: Every standard view plus four obliques. The obliques matter: pacaeiro's
 #: report is about "certain viewport positions", and a bug that only shows
@@ -164,7 +164,7 @@ def _build_scene(vp, kind: str) -> None:
 
 
 def _turn() -> "QMatrix4x4":
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     m = QMatrix4x4()
     m.rotate(30.0, 0.0, 0.0, 1.0)
     m.rotate(20.0, 1.0, 0.0, 0.0)
@@ -176,7 +176,7 @@ def _build_turned_edit(vp, kind: str) -> None:
     edge 1.5 m out along its local +X, both built in local coordinates and
     placed by the turn — the geometry a local-axes change must answer to."""
     from core.group import Group
-    from ingetrazo_core.mesh import Mesh
+    from built_core.mesh import Mesh
     P = QVector3D
     local = Mesh()
     local.add_face([P(-1.0, -1.0, 0.0), P(1.0, -1.0, 0.0),
@@ -193,7 +193,7 @@ def _build_turned_edit(vp, kind: str) -> None:
     # twice about the origin — so it remembers its axes the way the program
     # keeps them (a mesh built already turned would be a group that was
     # never rotated, whose axes are the world's).
-    from ingetrazo_core.history import RotateGroupCommand
+    from built_core.history import RotateGroupCommand
     g = Group(local, name="turned group")
     vp.scene.groups.append(g)
     vp.history.execute(RotateGroupCommand(g, P(0, 0, 0), P(1, 0, 0), 20.0))
@@ -241,7 +241,7 @@ def run(out_path: str, radii=RADII_PX, directions: int = 16,
         cameras=CAMERAS, tools=TOOLS, scenes=SCENES,
         alt_modes=ALT_MODES, acquired=ACQUIRED, started=STARTED,
         locks=LOCKS) -> int:
-    from ingetrazo_render import Host
+    from built_render import Host
 
     with TemporaryDirectory() as profile, closing(Host(0, 1200, 800, 1.0, settings=profile)) as host:
         win = host.window

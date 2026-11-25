@@ -17,7 +17,7 @@ from formats import dwg_bridge  # noqa: E402
 
 @pytest.fixture
 def window(tmp_path):
-    from ingetrazo_render import Host
+    from built_render import Host
     host = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
     yield host.window
     host.close()
@@ -26,7 +26,7 @@ def window(tmp_path):
 @pytest.fixture
 def dialogs(monkeypatch):
     shown = []
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.critical",
+    monkeypatch.setattr("built_render.chrome_dialogs.critical",
                         lambda parent, title, text: shown.append((title, text)))
     monkeypatch.setattr(dwg_bridge, "have_dwg_support", lambda: True)
     return shown
@@ -66,13 +66,13 @@ def test_cancel_is_quiet_and_reported_in_the_status_bar(
 
 def test_the_import_job_offers_cancel_and_cancel_stops_the_converter(
         window, dialogs, monkeypatch):
-    from ingetrazo_render import chrome_dialogs
+    from built_render import chrome_dialogs
     monkeypatch.setattr(chrome_dialogs, "live", lambda _: window.view)
     seen = {}
 
     def convert(self, dwg_path):
         from views import wgpu_ui
-        from ingetrazo_render import chrome_dialogs
+        from built_render import chrome_dialogs
         job, = chrome_dialogs.jobs(window)
         seen["cancellable"] = job.cancellable
         wgpu_ui._run(window, [f"job:cancel:{job.id}"])

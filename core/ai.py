@@ -32,7 +32,7 @@ import urllib.error
 import time
 import urllib.request
 
-from ingetrazo_core.version import USER_AGENT as _UA, __version__
+from built_core.version import USER_AGENT as _UA, __version__
 
 #: Cloudflare fronts several providers (Groq above all) and rejects
 #: urllib's default "Python-urllib/3.x" agent with HTTP 403 error 1010 —
@@ -44,11 +44,11 @@ USER_AGENT = _UA
 
 def build_scope(viewport, scope: dict | None = None) -> dict:
     """(Re)bind the live objects an agent scripts against."""
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     from core import bim
     from core.group import Group
     from core.layers import Layer
-    from ingetrazo_core.mesh import Edge, Face, Mesh, Vertex
+    from built_core.mesh import Edge, Face, Mesh, Vertex
     scope = scope if scope is not None else {"__name__": "__ai__"}
     scope.update(
         viewport=viewport, scene=viewport.scene, model=viewport.scene,
@@ -87,10 +87,10 @@ def _recipe_helpers(scene) -> dict:
     every model hand-rolled its own ring-of-quads lathe per piece — 40
     error-prone lines and a token bill each time, with faceted results
     (no soft edges, wrong winding). These build correct solids instead."""
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     from core.group import Group
-    from ingetrazo_core.mesh import Mesh
-    from ingetrazo_core.orient import orient_outward
+    from built_core.mesh import Mesh
+    from built_core.orient import orient_outward
 
     def _soften(mesh, deg=42.0):
         cos_t = math.cos(math.radians(deg))
@@ -780,7 +780,7 @@ def _urlopen(url: str, headers: dict, payload: bytes | None = None,
     total, wait, reason)`` is told each time so a chat panel can say so.
     Marco asked for a house and Gemini's 503 «high demand» cut it short
     at the walls (2026-09-15): one spike must not end the recipe."""
-    from ingetrazo_core.python_tls import https_context
+    from built_core.python_tls import https_context
     context = https_context()            # a packaged Python's CA bundle (#198)
     attempt = 0
     while True:
@@ -833,7 +833,7 @@ _NON_CHAT = ("whisper", "tts", "embed", "guard", "moderation", "imagen",
              "veo", "aqa", "audio", "transcribe", "image", "dall-e",
              # Groq's agentic "compound" systems run their own tools and
              # answer with prose about what they "did" — no recipe ever
-             # reaches IngeTrazo (Marco, 2026-09-15).
+             # reaches Built (Marco, 2026-09-15).
              "compound")
 
 

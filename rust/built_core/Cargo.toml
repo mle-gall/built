@@ -1,0 +1,65 @@
+[package]
+name = "built_core"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "Native kernels for Built's heavy computations (optional: Python falls back)"
+publish = false
+
+[lib]
+name = "built_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+weezl = "0.1"
+built_python_bindings = { path = "../python_bindings" }
+encoding_rs = "0.8"
+glam = { version = "0.29.3", features = ["serde"] }
+bincode = "1.3"
+numpy = "0.29"
+# No `extension-module` here: maturin builds the wheel as an extension
+# (PYO3_BUILD_EXTENSION_MODULE) and `cargo test` links libpython. The
+# feature stays for builds that ask for it explicitly.
+pyo3 = { version = "0.29", features = ["abi3-py311"] }
+zune-jpeg = "0.5"
+zune-core = "0.5"
+rayon = "1.12.0"
+crc32fast = "1.4"
+zmij = "1.0.23"
+flate2 = "1.1"
+i_overlay = "9.1"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
+ab_glyph = "0.2"
+roxmltree = "0.20"
+regex = "1.12"
+
+[features]
+extension-module = ["pyo3/extension-module"]
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+
+[dependencies.serde_json]
+version = "1"
+features = ["arbitrary_precision", "raw_value"]
+
+[dependencies.serde]
+version = "1"
+features = ["derive", "rc"]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSProcessInfo", "NSURL", "NSError", "NSObject", "NSDictionary", "NSValue"] }
+core-foundation = "0.9"
+core-foundation-sys = "0.8"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = ["Win32_Media_MediaFoundation", "Win32_System_Com"] }
+libloading = "0.8"

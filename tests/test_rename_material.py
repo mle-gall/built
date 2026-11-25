@@ -12,7 +12,7 @@ from __future__ import annotations
 
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 
 from core.group import Group                                      # noqa: E402
@@ -113,7 +113,7 @@ from tests.test_library_paint_selection import _model_paint
 
 
 def test_naming_a_swatch_not_yet_in_the_model_names_the_next_paint(window):
-    from ingetrazo_render import wgpu_library as library
+    from built_render import wgpu_library as library
     from tests.test_tree_links import _View
     name = "RAL 6011 Reseda green"
     library._pick_paint(window, recipe={"name": name, "color": [0.3, 0.6, 0.3]})
@@ -127,10 +127,10 @@ def test_recolouring_a_library_colour_makes_a_new_material(window,
                                                           monkeypatch):
     """«RAL 7035» in another colour would be a lie: the faces take a new
     material «… (modified)», the library file stays byte for byte."""
-    from ingetrazo_core.paths import app_root
-    from ingetrazo_core import ral_rgb
+    from built_core.paths import app_root
+    from built_core import ral_rgb
     from tests.test_tree_links import _View
-    from ingetrazo_render import wgpu_library as library
+    from built_render import wgpu_library as library
     palette = app_root() / "resources" / "colors" / "ral.json"
     ral = palette.read_bytes()
     entry = next(c for fam in __import__("json").loads(ral)["families"]
@@ -152,7 +152,7 @@ def test_recolouring_a_library_colour_makes_a_new_material(window,
 
 
 def test_rename_from_the_in_model_menu(window):
-    from ingetrazo_render import wgpu_library as library
+    from built_render import wgpu_library as library
     face = _model_paint(window, "Azul", (.1, .4, .9))
     library.provider("materials").run(library.Ctx(window, window.view), "rename",
                                       {"key": "m:Azul", "name": "Azul"}, "Techo")

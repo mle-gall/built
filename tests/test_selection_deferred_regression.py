@@ -1,6 +1,6 @@
 """Selecting and revealing edges must preserve deferred imported meshes."""
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4
+from built_core import Matrix4 as QMatrix4x4
 from core import _native
 from core.mesh import Mesh, DeferredMesh
 from core.group import Group
@@ -85,7 +85,7 @@ def test_context_reuses_assemblies_sharing_an_empty_container_mesh(viewport):
     after = vp._placements_epoch()
     assert id(other) in vp._epoch_kept_tops(before, after, ctx=True)
     # Actual geometry changes must still invalidate the subtree.
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     empty.add_edge(QVector3D(1, 0, 0), QVector3D(2, 0, 0))
     vp.scene.version += 1
     changed = vp._placements_epoch()
@@ -96,7 +96,7 @@ def test_context_reuses_assemblies_sharing_an_empty_container_mesh(viewport):
 def test_model_info_only_loads_deferred_meshes_when_visible(native_gpu_host, monkeypatch):
     from types import SimpleNamespace
     from unittest.mock import Mock
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     from core import plugin_panels
     from core.mesh import on_mesh_materialized
     from plugins import model_info
@@ -138,7 +138,7 @@ def test_model_info_only_loads_deferred_meshes_when_visible(native_gpu_host, mon
         scene.version += 1
         plugin_panels.sync(view, win)
         assert census.call_count == 2
-        monkeypatch.setattr("ingetrazo_render.shell_services.pasteboard_write", lambda offers: True)
+        monkeypatch.setattr("built_render.shell_services.pasteboard_write", lambda offers: True)
         binding.model.event("copy", "invoke", None)
         assert census.call_count == 2
 

@@ -4,13 +4,13 @@ the soft flag an import sets (formats.fuse.soften_smooth_edges), shaded
 smooth in the GL viewport and in the Metal view."""
 import numpy as np
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group, copy_group
 from core.history import History
 from core.mesh import Mesh
 from core.scene import Scene
-from ingetrazo_core.soften import SoftenByAngleCommand, selected_edges
+from built_core.soften import SoftenByAngleCommand, selected_edges
 from tests.test_viewport_smooth_shading import _cylinder, _stub
 
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
@@ -173,8 +173,8 @@ def test_metal_rebakes_the_smoothed_definition_without_a_repack(monkeypatch):
     definition; undo brings the facets back. No full pack, no rescan of
     the placements."""
     from tests.test_wgpu_updates import Renderer, assert_matches_fresh_pack
-    from ingetrazo_core import pack_scene
-    from ingetrazo_core import InstanceUpdates
+    from built_core import pack_scene
+    from built_core import InstanceUpdates
     mesh = _cylinder(Mesh(), soft=False)
     a, b = Group(mesh, name="a"), Group(mesh, name="b")
     a.xform, b.xform = QMatrix4x4(), QMatrix4x4()
@@ -187,7 +187,7 @@ def test_metal_rebakes_the_smoothed_definition_without_a_repack(monkeypatch):
     flat = updates.packed.vertices.copy()
     bakes = []
     monkeypatch.setattr(
-        "ingetrazo_core.pack_scene",
+        "built_core.pack_scene",
         lambda s, **kw: (bakes.append(len(s.groups)), pack_scene(s, **kw))[1])
 
     def settle():
@@ -212,7 +212,7 @@ def test_metal_rebakes_the_smoothed_definition_without_a_repack(monkeypatch):
 
 
 def test_dialog_cancel_and_accept_use_one_undo_step(native_window, monkeypatch):
-    from ingetrazo_render import chrome_forms
+    from built_render import chrome_forms
     win = native_window
     forms = []
     monkeypatch.setattr(chrome_forms, "show", lambda _, form: forms.append(form))
@@ -238,7 +238,7 @@ def test_dialog_cancel_and_accept_use_one_undo_step(native_window, monkeypatch):
 def test_smoothing_inside_a_component_reaches_its_copies(native_window, monkeypatch):
     """Inside an open component the command runs on its world copy; the
     share-back carries the soft flags to every copy, one undo step."""
-    from ingetrazo_render import chrome_forms
+    from built_render import chrome_forms
     mesh = _cylinder(Mesh(), soft=False)
     a, b = Group(mesh, name="a"), Group(mesh, name="b")
     a.xform, b.xform = QMatrix4x4(), QMatrix4x4()
@@ -268,7 +268,7 @@ def test_smoothing_inside_a_component_reaches_its_copies(native_window, monkeypa
 def test_the_dialog_softens_across_materials_by_default_as_.skp():
     """the modeller's Soften Edges has no material rule: the dialog starts
     with «Soften between different materials» ticked."""
-    from ingetrazo_render import OperationForm
+    from built_render import OperationForm
     options = OperationForm.soften("30").values()
     assert options["materials"] and options["coplanar"]
 
@@ -333,7 +333,7 @@ def test_hardening_clears_the_soft_only_mark():
 
 
 def test_metal_shades_a_soft_only_edge_flat_without_its_line():
-    from ingetrazo_core import pack_scene
+    from built_core import pack_scene
 
     def pack(smooth=None):
         group = Group(_cylinder(Mesh(), soft=False))
@@ -357,7 +357,7 @@ def test_metal_shades_a_soft_only_edge_flat_without_its_line():
 
 
 def test_the_dialog_has_smooth_normals_ticked_as_.skp():
-    from ingetrazo_render import OperationForm
+    from built_render import OperationForm
     form = OperationForm.soften("30")
     assert form.values()["smooth"]
     form.receive("harden", "1")
@@ -367,8 +367,8 @@ def test_the_dialog_has_smooth_normals_ticked_as_.skp():
 
 
 def test_the_dialog_passes_smooth_normals_to_the_command(native_window, monkeypatch, tmp_path):
-    monkeypatch.setenv("INGETRAZO_AUTOSAVE_DIR", str(tmp_path / "autosave"))
-    from ingetrazo_render import chrome_forms
+    monkeypatch.setenv("BUILT_AUTOSAVE_DIR", str(tmp_path / "autosave"))
+    from built_render import chrome_forms
     win = native_window
     forms = []
     monkeypatch.setattr(chrome_forms, "show", lambda _, form: forms.append(form))

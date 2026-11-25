@@ -13,11 +13,11 @@ already there is ever turned to suit the new ones."""
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Vec3 as Q
+from built_core import Vec3 as Q
 
 from core.bridge import bridge, follow_neighbours, profiles_from_selection
 from core.mesh import Mesh
-from ingetrazo_core.orient import is_closed, signed_volume
+from built_core.orient import is_closed, signed_volume
 
 
 def _sq(z, x0=0.0, up=True):

@@ -9,14 +9,14 @@ at any depth — toward its camera, and the GLB marks cut-out images MASK
 and translucent paint BLEND."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 import json
 import math
 import struct
 
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from ingetrazo_render import SurveyRaster
+from built_core import Input as Qt
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_render import SurveyRaster
 
 from core.group import Group, make_billboard_group  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
@@ -114,7 +114,7 @@ def test_a_simple_figure_keeps_its_picture_corner_to_corner(tmp_path):
         position=V(137.3, -48.9, 2.0)))
     for eye in (V(137.3, -80, 3), V(170, -40, 3), V(120, -20, 3)):
         (f,) = _figure_faces(world_faces(scene, lambda a, e=eye: e - a))
-        uvs = ingetrazo_core.texture_affine_uv(f.attrs["texture"]["uvw"], f.vertices)
+        uvs = built_core.texture_affine_uv(f.attrs["texture"]["uvw"], f.vertices)
         us = sorted(round(u, 6) for u, _v in uvs)
         vs = sorted(round(v, 6) for _u, v in uvs)
         assert us == [0.0, 0.0, 1.0, 1.0] and vs == [0.0, 0.0, 1.0, 1.0]

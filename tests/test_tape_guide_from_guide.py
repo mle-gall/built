@@ -9,8 +9,8 @@ the tool picked with the mesh edge picker, which never sees guides.
 """
 from __future__ import annotations
 
-from ingetrazo_core import ScreenPoint, Input
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint, Input
+from built_core import Vec3 as QVector3D
 
 from core.guide import Guide
 from core.history import History

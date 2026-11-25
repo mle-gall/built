@@ -4,7 +4,7 @@ import hashlib
 import json
 import random
 
-from ingetrazo_core import Vec3
+from built_core import Vec3
 from core.edits import touching_segments
 from core.geometry import Edge, Face
 from core.topology import find_duplicate_edge
@@ -44,7 +44,7 @@ def test_outside_contacts_and_duplicate_order():
 
 
 def overlay_results(monkeypatch):
-    from ingetrazo_core import scan_index
+    from built_core import scan_index
     from core.edits import _ScanFaces
     from core.mesh import Mesh
     outputs = []

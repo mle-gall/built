@@ -10,7 +10,7 @@ that distance (0.4 mm: a depth step of ~0.4 m at 50 m). The distance grows
 now; the eye ends up exactly where it did."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.camera import OrbitCamera
 

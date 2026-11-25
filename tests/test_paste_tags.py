@@ -6,12 +6,12 @@ left alone when the document already has them — and undo takes the new
 tags away with the paste."""
 from __future__ import annotations
 
-import ingetrazo_core
-from ingetrazo_core import Vec3 as QVector3D
+import built_core
+from built_core import Vec3 as QVector3D
 
 from core.group import Group
 from core.history import History
-from ingetrazo_core.document_insert import used_layers
+from built_core.document_insert import used_layers
 from core.layers import Layer, folder_parent, folders_of, layer_of
 from core.mesh import Mesh
 from core.scene import Scene
@@ -54,7 +54,7 @@ def _clip(src):
     names = used_layers([face[2]], edge_layers, [g])
     return {"faces": [face], "edges": [(V(3, 0), V(4, 0), False, None)],
             "edge_layers": edge_layers,
-            "layers": ingetrazo_core.tag_edits.template_for(src, names),
+            "layers": built_core.tag_edits.template_for(src, names),
             "groups": [g], "ref": V(0, 0, 0)}
 
 
@@ -101,7 +101,7 @@ def test_a_tag_the_document_has_keeps_its_own_look():
 def test_add_missing_never_moves_an_existing_folder():
     dst = Scene()
     dst.layer_folders = ["Structure"]                  # a top-level one here
-    ingetrazo_core.tag_edits.add_missing(dst, ingetrazo_core.tag_edits.template_for(_source(), ["Wood"]))
+    built_core.tag_edits.add_missing(dst, built_core.tag_edits.template_for(_source(), ["Wood"]))
     assert folder_parent(dst, "Structure") is None
     assert "Building" in folders_of(dst)
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import numpy as np
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.group import Group, placement_points
 from core.history import History

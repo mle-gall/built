@@ -7,14 +7,14 @@ deferred meshes are never edited through one of them, and the collector
 stays off through link resolution without being left off."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 
 import gc
 import random
 import uuid
 
 import numpy as np
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core import links
 from core.layers import assign_layer, layer_of
@@ -39,12 +39,12 @@ def test_stable_uid_is_byte_identical_to_the_uuid5_definition():
         samples.append((uuid.UUID(int=rng.getrandbits(128)).hex[:16],
                         uuid.UUID(int=rng.getrandbits(128)).hex[:16]))
     for p, s in samples:
-        assert ingetrazo_core.link_stable_uid(p, s) == _uuid5_uid(p, s), (p, s)
+        assert built_core.link_stable_uid(p, s) == _uuid5_uid(p, s), (p, s)
 
 
 def test_stable_uid_known_value():
     # Pinned: a link copy's id is persisted and referenced by scenes.
-    assert ingetrazo_core.link_stable_uid("0123456789abcdef", "fedcba9876543210") == \
+    assert built_core.link_stable_uid("0123456789abcdef", "fedcba9876543210") == \
         "a3e4efbb4124549c"
 
 
@@ -114,7 +114,7 @@ def test_populate_clones_with_stable_ids_and_copied_records():
     src.children = [child]
     child.owner = src
     placement = Group(name="Copy")
-    ingetrazo_core.link_populate(placement, src)
+    built_core.link_populate(placement, src)
     (c,) = placement.children
     (l,) = c.children
     assert c.uid == _uuid5_uid(placement.uid, child.uid)
@@ -142,7 +142,7 @@ def test_populate_keeps_an_empty_record_a_copy_of_its_own():
     child.ext = {}
     src.children = [child]
     placement = Group(name="Copy")
-    ingetrazo_core.link_populate(placement, src)
+    built_core.link_populate(placement, src)
     (c,) = placement.children
     assert c.ext == {} and c.ext is not child.ext
 
@@ -178,7 +178,7 @@ def _install(*meshes):
     comp.children = parts
     for p in parts:
         p.owner = comp
-    ingetrazo_core.link_install_definition(comp, "/x/Site.igz", set(), {})
+    built_core.link_install_definition(comp, "/x/Site.igz", set(), {})
     return comp, parts
 
 
@@ -223,7 +223,7 @@ def test_editing_a_tag_in_one_mesh_never_changes_another():
     assign_layer(fa, "Other")
     assert table[0]["layer"] == "Site / Wood"
     # Repaint A's material while B is still deferred: B's table stays.
-    ingetrazo_core.link_restamp_materials(a, {"x": "y"})
+    built_core.link_restamp_materials(a, {"x": "y"})
     assert b.__dict__["_deferred_source"]["meta"]["face_attrs"] is table
     (fb,) = b.faces
     assert layer_of(fb) == "Site / Wood"
@@ -247,12 +247,12 @@ def test_links_resolve_with_the_collector_off_and_it_comes_back_on(tmp_path, mon
                                        host_path=tmp_path / "host.igz"))
     igz.save_scene(host, tmp_path / "host.igz")
     states = []
-    real = ingetrazo_core.link_resolve
+    real = built_core.link_resolve
 
     def spy(*a, **k):
         states.append(gc.isenabled())
         return real(*a, **k)
-    monkeypatch.setattr(ingetrazo_core, "link_resolve", spy)
+    monkeypatch.setattr(built_core, "link_resolve", spy)
     was = gc.isenabled()
     gc.enable()
     try:

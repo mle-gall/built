@@ -17,8 +17,8 @@ import os
 
 
 import pytest
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Vec3 as QVector3D
 
 
 from core.history import History, SetFaceBackCommand              # noqa: E402
@@ -88,7 +88,7 @@ def test_el_reves_es_el_por_defecto_salvo_que_tenga_algo_o_el_frente_sea_translu
     assert is_translucent({"color": [0, 0, 1], "opacity": 0.4})
     assert not back_is_default({"color": [0, 0, 1], "opacity": 0.4})
     # malla / hoja: textura con píxeles transparentes de verdad
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     calada = SurveyRaster(8, 8, bytes((255, 0, 0, 255)) + bytes(63 * 4))
     calada.save(str(tmp_path / "malla.png"))
     opaca = solid_raster(8, 8, (51, 102, 153))
@@ -136,7 +136,7 @@ def test_pintar_el_reves_con_textura_posicionada_respeta_el_plano():
     vp = _Visor(desde_abajo=True)
     f = _quad(vp.scene.mesh)
     otra = vp.scene.mesh.add_face([V(0, 0), V(4, 0), V(4, 0, 3), V(0, 0, 3)])
-    from ingetrazo_core import paint_face_plane
+    from built_core import paint_face_plane
     PaintTool.current_texture = {"path": "x.png", "sw": 1, "sh": 1,
                                  "uvw": [1, 0, 0, 0, 0, 1, 0, 0]}
     PaintTool.current_texture_plane = paint_face_plane(f)
@@ -269,7 +269,7 @@ def test_los_trozos_se_distinguen_por_numero_de_construccion_no_por_id():
     dirección de memoria que el viejo (mismo ``id``, misma ``rev`` 0), y la
     instancia y la entrada GL derivadas del viejo se daban por vigentes.
     Cada construcción lleva ahora su número."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     from tests.test_pick_index import _VP, _bind
@@ -306,7 +306,7 @@ def test_el_tinte_del_reves_viaja_con_la_instancia_al_moverla():
     el nuevo ``dback``, y el pase del tinte seguía dibujando los reversos
     donde el arco estaba."""
     import numpy as np
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     from tests.test_pick_index import _VP, _bind
@@ -345,7 +345,7 @@ def test_una_instancia_espejada_conserva_el_frente_de_sus_caras():
     modelo industrial eran 4,2 millones de caras horneadas una a una. El
     trozo horneado (selección, siluetas) sigue con el giro corregido."""
     import numpy as np
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     from tests.test_pick_index import _VP, _bind

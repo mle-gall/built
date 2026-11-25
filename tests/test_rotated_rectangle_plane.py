@@ -15,8 +15,8 @@ assigned — so `_perp` always fell back to world +Z:
 """
 from __future__ import annotations
 
-from ingetrazo_core import ScreenPoint, Input
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint, Input
+from built_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
 from tools.base import PLANE_LOCK_KEYS, PlaneLock, ToolContext

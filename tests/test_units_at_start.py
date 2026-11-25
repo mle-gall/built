@@ -10,7 +10,7 @@ import pytest
 
 from core import units
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_render import chrome_forms, units_question
+from built_render import chrome_forms, units_question
 
 
 @pytest.fixture
@@ -105,7 +105,7 @@ def test_dont_show_again(win):
 
 def test_preferences_turn_it_back_on(win):
     from tests.units_chrome import edit_unit, units_row
-    from ingetrazo_render.settings_sheet import Env
+    from built_render.settings_sheet import Env
     units.set_ask_at_start(False)
     assert not units_row(win, "ask_start").value(Env(win))
     edit_unit(win, "ask_start", 1)
@@ -116,11 +116,11 @@ def test_preferences_turn_it_back_on(win):
 
 
 def test_a_document_already_open_is_not_asked_about(win, tmp_path):
-    from ingetrazo_render import shell_files as files
+    from built_render import shell_files as files
     from core.scene import Scene
     from formats import igz
-    from ingetrazo_core import Vec3
-    from ingetrazo_render import wgpu_start
+    from built_core import Vec3
+    from built_render import wgpu_start
 
     path = tmp_path / "plano.igz"
     igz.save_scene(Scene(), path)
@@ -135,8 +135,8 @@ def test_a_document_already_open_is_not_asked_about(win, tmp_path):
 # ---- Ctrl+U -------------------------------------------------------------------------
 
 def test_ctrl_u_opens_the_units_page(win):
-    from ingetrazo_render import chrome_sheet
-    from ingetrazo_render.keyboard_bindings import collect_actions, action_keys
+    from built_render import chrome_sheet
+    from built_render.keyboard_bindings import collect_actions, action_keys
     act = win._registry_actions["menu:units"]
     assert [a for a in collect_actions(win) if "Ctrl+U" in action_keys(a)] == [act]
     act.trigger()

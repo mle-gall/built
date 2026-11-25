@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import ezdxf
 import pytest
-from ingetrazo_core.settings import settings
+from built_core.settings import settings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.make_faces import faces_from_linework
 from core.mesh import Mesh
@@ -182,7 +182,7 @@ def _answer(monkeypatch, tick=None, accept=True):
             checklist[0] = (label, tick)
         return default if accept else cancel
 
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", answer)
+    monkeypatch.setattr("built_render.chrome_dialogs.ask", answer)
     return seen
 
 

@@ -8,7 +8,7 @@ import pytest
 
 from core.camera import OrbitCamera
 from core.layers import Layer
-from ingetrazo_core.saved_views import SavedView, from_lookat
+from built_core.saved_views import SavedView, from_lookat
 from core.scene import Scene
 
 
@@ -189,7 +189,7 @@ def test_scene_remembers_its_shadow_settings(tmp_path):
     2026-09-14). Applied IN PLACE: the panel, the menu and the viewport
     hold the one ``scene.shadows`` object."""
     from formats import igz
-    from ingetrazo_core.sun import ShadowSettings
+    from built_core.sun import ShadowSettings
 
     scene = Scene()
     sh = scene.shadows
@@ -228,7 +228,7 @@ from core.saved_views import *
 from core.section import *
 from core.orient import *
 assert callable(from_lookat) and callable(RenameSceneCommand) and callable(MoveSceneCommand)
-from ingetrazo_core import saved_views, section, orient
+from built_core import saved_views, section, orient
 assert SavedView is saved_views.SavedView
 assert SectionPlane is section.SectionPlane
 assert orient_outward is orient.orient_outward
@@ -237,7 +237,7 @@ assert turn_face_over is orient.turn_face_over
 
 
 def test_scripted_view_coerces_camera_numbers_and_switches():
-    from ingetrazo_core.saved_views import SavedView
+    from built_core.saved_views import SavedView
 
     view = SavedView("Scripted", (n for n in (2, 3, 4)), distance="7.5",
                      fov_deg="60", perspective=0, two_point=1, hidden_layers=False)

@@ -8,16 +8,16 @@ from types import SimpleNamespace
 from tests.shell_isolation import native_host, restore_shell_patches  # noqa: F401
 import pytest
 import numpy as np
-from ingetrazo_core import Input as Qt
-from ingetrazo_render import KeyEvent, SurveyRaster, blank_picture
+from built_core import Input as Qt
+from built_render import KeyEvent, SurveyRaster, blank_picture
 from tests.raster_samples import pixels, solid_raster
 
-from ingetrazo_core.settings import settings
-from ingetrazo_core import recent
+from built_core.settings import settings
+from built_core import recent
 from core.scene import Scene
 from formats import igz
-from ingetrazo_render import chrome_sheet as cs
-from ingetrazo_render import wgpu_start as ws
+from built_render import chrome_sheet as cs
+from built_render import wgpu_start as ws
 
 
 class FakeRenderer:
@@ -175,7 +175,7 @@ def test_the_preview_shows_project_problems_unfiled_and_where_it_was_left(win, m
     slot.write_bytes(a.read_bytes())
     import os
     os.utime(slot, (a.stat().st_mtime + 60, a.stat().st_mtime + 60))
-    monkeypatch.setattr("ingetrazo_core.autosave.pending", lambda p, *k, **kw: slot)
+    monkeypatch.setattr("built_core.autosave.pending", lambda p, *k, **kw: slot)
     ws.show(win)
     wait_loader(win)
     sh = sheet(win)
@@ -304,7 +304,7 @@ def test_enter_on_a_row_opens_it_through_the_window(win, monkeypatch, tmp_path):
 
 
 def test_a_moved_file_is_located(win, monkeypatch, tmp_path):
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render.shell_files import ShellFileDialog
     moved = doc(tmp_path, "moved.built")
     old = tmp_path / "gone.built"
     recent.remember(old)
@@ -335,7 +335,7 @@ def test_pin_toggles_and_pinned_come_first(win, monkeypatch, tmp_path):
 
 
 def test_new_model_and_templates(win, monkeypatch):
-    monkeypatch.setattr("ingetrazo_render.units_question.offer_at_start", lambda w: None)
+    monkeypatch.setattr("built_render.units_question.offer_at_start", lambda w: None)
     ws.show(win)
     sheet(win)
     act(win, "verb", "new")
@@ -460,7 +460,7 @@ def saved_picture(path):
 
 
 def save_with(win, monkeypatch, path, image):
-    from ingetrazo_render import shell_files as files
+    from built_render import shell_files as files
 
     view = win._doc.stand_in
     asked = []
@@ -552,7 +552,7 @@ def test_a_moved_file_hides_its_dead_duplicate(win, monkeypatch, tmp_path):
 
 
 def test_a_missing_row_still_offers_to_locate(win, monkeypatch, tmp_path):
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render.shell_files import ShellFileDialog
     found = doc(tmp_path, "found.built")
     gone = tmp_path / "away" / "lost.built"
     recent.remember(gone)
@@ -571,7 +571,7 @@ def test_a_missing_row_still_offers_to_locate(win, monkeypatch, tmp_path):
 
 
 def test_native_save_picture_roundtrips_rgba_without_a_widget():
-    from ingetrazo_render import archive_picture_png, archive_thumbnail
+    from built_render import archive_picture_png, archive_thumbnail
     row = bytes([255, 0, 0, 128, 0, 0, 255, 255])
     assert archive_picture_png(2, 2, bytes([4, 8, 12, 255]) * 4) is None
     encoded = archive_picture_png(2, 2, row * 2)
@@ -583,7 +583,7 @@ def test_link_preview_follows_moved_sources_and_stops_at_a_cycle(tmp_path):
     import json
     import zipfile
 
-    from ingetrazo_core import scan_document_links
+    from built_core import scan_document_links
 
     root = tmp_path / "host.igz"
     child = tmp_path / "moved.igz"

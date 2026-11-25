@@ -7,11 +7,11 @@ import gc
 
 import numpy as np
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core import doc_model
 from core.group import Group, PlacementProxy
-from ingetrazo_core import group_model_placements as model_placements
+from built_core import group_model_placements as model_placements
 from core.history import (AssignLayerCommand, HideCommand, History,
                           NativeCommand, SetPluginDataCommand, SetRecordCommand,
                           SetStructureNodeCommand)
@@ -304,7 +304,7 @@ def _tree():
 
 
 def test_doc_tree_composes_as_model_placements():
-    from ingetrazo_core import doc_worlds
+    from built_core import doc_worlds
     roots = _tree()
     handles, parent, local, has, hidden = N.doc_tree(roots)
     world, defined = doc_worlds(local, has, parent)
@@ -322,7 +322,7 @@ def test_doc_tree_composes_turned_and_scaled_chains_as_model_placements():
     of the product: chains four deep, each placement turned about its own
     axis, scaled unevenly and moved (``resident/pack.rs`` ``compose``)."""
     import random
-    from ingetrazo_core import doc_worlds
+    from built_core import doc_worlds
     rng = random.Random(20261125)
 
     def placed(name):

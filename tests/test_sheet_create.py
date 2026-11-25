@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The items the Sheets page's tools make (ingetrazo_core sheets::create):
+"""The items the Sheets page's tools make (built_core sheets::create):
 the title block from a template, as the composer's load_cajetin_template
 read it, docked in the page's corner."""
 from __future__ import annotations
@@ -10,7 +10,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import ingetrazo_core as NATIVE  # noqa: E402
+import built_core as NATIVE  # noqa: E402
 
 
 def test_a_title_block_starts_from_its_template(tmp_path):

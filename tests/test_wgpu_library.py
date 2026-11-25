@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The Library dock place (ingetrazo_render.wgpu_library): providers by type, the
+"""The Library dock place (built_render.wgpu_library): providers by type, the
 rows the dock draws (sections, categories, sort, filter, folds), the dock
 places (Project | Library, and back to where Project was), and the core
 protocol commands the Library edits through."""
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core import mesh as M
 from core.group import Group
@@ -15,13 +15,13 @@ from core.history import History, InsertGroupCommand
 from core.materials import Material
 from core.protocol import commands as C
 from core.scene import Scene
-from ingetrazo_render import wgpu_library as L
+from built_render import wgpu_library as L
 
 
 @pytest.fixture(autouse=True)
 def _throwaway_settings(private_settings, monkeypatch):
-    from ingetrazo_core import NativeSettings
-    from ingetrazo_core import settings
+    from built_core import NativeSettings
+    from built_core import settings
     monkeypatch.setattr(settings, "_store", NativeSettings(private_settings))
 
 
@@ -232,7 +232,7 @@ def test_delete_placements_and_rename_component():
     proto = M.Mesh()
     proto.add_face([V(9, 0, 0), V(10, 0, 0), V(10, 1, 0)])
     a, b = Group(proto, name="Chair"), Group(proto, name="Chair")
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     for g in (a, b):
         g.xform, g.component = QMatrix4x4(), True
     h.execute(InsertGroupCommand(a))

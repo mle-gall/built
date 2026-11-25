@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 IngeTrazo contributors.
+# Copyright (C) 2026 Built contributors.
 """#551: Rotate+Ctrl must subdivide coplanar overlaps instead of stacking faces."""
 from collections import Counter
 from types import SimpleNamespace
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.group import Group
 from core.history import EraseSelectionCommand, History, rotation_matrix

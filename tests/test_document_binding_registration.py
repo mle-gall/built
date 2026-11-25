@@ -4,8 +4,8 @@ import weakref
 from types import MethodType, SimpleNamespace
 
 import pytest
-import ingetrazo_core
-import ingetrazo_render
+import built_core
+import built_render
 
 from views.document_interaction import DocumentInteraction as Controller
 
@@ -13,7 +13,7 @@ from views.document_interaction import DocumentInteraction as Controller
 def test_host_kernel_binding_accepts_another_surface_and_defaults(monkeypatch):
     owner = SimpleNamespace()
     calls = []
-    monkeypatch.setattr(ingetrazo_core, "document_pick_index",
+    monkeypatch.setattr(built_core, "document_pick_index",
                         lambda *args: calls.append(args) or "index")
     assert Controller._pick_index(self=owner) == "index"
     assert Controller._pick_index(owner, near=("px", 4, 5)) == "index"
@@ -30,7 +30,7 @@ def test_binding_descriptors_allow_subclasses_instances_and_weak_callbacks(monke
             return super()._pick_index(near)
 
     view = object.__new__(Surface)
-    monkeypatch.setattr(ingetrazo_core, "document_pick_index", lambda receiver, near: near)
+    monkeypatch.setattr(built_core, "document_pick_index", lambda receiver, near: near)
     assert view._pick_index(near="override") == "override"
     original = Controller._pick_index.__get__(view, Surface)
     callback = weakref.WeakMethod(original)
@@ -45,8 +45,8 @@ def test_class_and_static_helpers_keep_their_receiver(monkeypatch):
 
     view = object.__new__(Surface)
     marker = object()
-    monkeypatch.setattr(ingetrazo_render, "tool_busy_for_delete", lambda cls, tool: (cls, tool))
-    monkeypatch.setattr(ingetrazo_render, "tool_busy", lambda tool: tool)
+    monkeypatch.setattr(built_render, "tool_busy_for_delete", lambda cls, tool: (cls, tool))
+    monkeypatch.setattr(built_render, "tool_busy", lambda tool: tool)
     assert view._tool_busy(marker) is Surface._tool_busy(marker) is marker
     assert Surface._tool_busy_for_delete(marker) == (Surface, marker)
     assert view._tool_busy_for_delete(marker) == (Surface, marker)
@@ -62,14 +62,14 @@ def test_plugin_pick_uses_public_coordinates_and_bound_signature(monkeypatch):
     assert method.__name__ == "pick_text_label"
     assert method.__qualname__ == "DocumentInteraction.pick_text_label"
     assert str(inspect.signature(method)) == "(screen_x: 'float', screen_y: 'float', rect_only: 'bool' = False)"
-    monkeypatch.setattr(ingetrazo_render, "pick_text_label", lambda *a: a)
+    monkeypatch.setattr(built_render, "pick_text_label", lambda *a: a)
     assert method(screen_y=2, screen_x=1) == (view, 1, 2, False)
     assert Controller.pick_text_label(view, 1, 2, rect_only=True) == (view, 1, 2, True)
 
 
 def test_plugin_clipboard_option_stays_keyword_only(monkeypatch):
     view = SimpleNamespace()
-    monkeypatch.setattr(ingetrazo_render, "copy_selection", lambda *args: args)
+    monkeypatch.setattr(built_render, "copy_selection", lambda *args: args)
     assert Controller.copy_selection(view) == (view, True)
     assert Controller.copy_selection(view, publish=False) == (view, False)
     with pytest.raises(TypeError):
@@ -84,7 +84,7 @@ def test_host_registers_defaults_and_independent_inference_fields():
     assert Controller._SNAP_LABELS["intersection_edge"] == "Intersect with Edge"
     assert isinstance(Controller._ENCOURAGING_KINDS, frozenset)
     assert module._SHARED_BAKES[0] == "_group_chunks"
-    assert module._SnapEdge is ingetrazo_render.SnapEdge
+    assert module._SnapEdge is built_render.SnapEdge
     assert vars(Controller)["_bind_bake_store"] is module._bind_bake_store
     assert module._AXIS_DIRS["z"] == (0., 0., 1.)
     view = object.__new__(Controller)

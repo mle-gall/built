@@ -41,10 +41,10 @@ def soften(scene):
 def section_cases(geometry, scene, packed):
     """``{case: (bytes, digest)}`` of ``geometry`` over planes, fills, face
     modes, cameras and heights."""
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     from core.camera import OrbitCamera
-    from ingetrazo_core.section import SectionPlane
-    from ingetrazo_core.style import Style
+    from built_core.section import SectionPlane
+    from built_core.style import Style
     low, high = scene.bounds()
     low, high = low.toTuple(), high.toTuple()
     out = {}
@@ -74,11 +74,11 @@ def kernel_cases(scene, packed):
     """The chords of each plane, and what the fill kernels make of them:
     the rings (``section_loops``), the fill's triangles, the hatch's
     segments at two spacings, one way and both."""
-    import ingetrazo_core
-    from ingetrazo_core import Vec3
+    import built_core
+    from built_core import Vec3
     from core.camera import OrbitCamera
-    from ingetrazo_core.section import SectionPlane
-    from ingetrazo_core.style import Style
+    from built_core.section import SectionPlane
+    from built_core.style import Style
     from views.wgpu_sections import geometry
     low, high = scene.bounds()
     low, high = low.toTuple(), high.toTuple()
@@ -90,21 +90,21 @@ def kernel_cases(scene, packed):
         view = SimpleNamespace(packed=packed)
         geometry(view, scene, Style(), OrbitCamera(), 600)
         chords = view._section_geometry_cache[1]
-        rings = ingetrazo_core.section_loops(chords)
-        fill = ingetrazo_core.section_fill_triangles(chords, plane.normal)
+        rings = built_core.section_loops(chords)
+        fill = built_core.section_fill_triangles(chords, plane.normal)
         out[name] = {"chords": [len(chords), digest(chords)],
                      "rings": [len(rings), digest(np.concatenate(rings)) if rings else ""],
                      "fill": [len(fill), digest(fill)]}
         for spacing in (0.25, 1.5):
             for cross in (False, True):
-                hatch = ingetrazo_core.section_hatch_segments(chords, plane.normal, spacing, cross)
+                hatch = built_core.section_hatch_segments(chords, plane.normal, spacing, cross)
                 out[name][f"hatch/{spacing}/{cross}"] = [len(hatch), digest(hatch)]
     scene.section_planes = []
     return out
 
 
 def hidden_view(scene):
-    from ingetrazo_core import pack_scene
+    from built_core import pack_scene
     from tests.controller_surface import ControllerSurface
     from tests.headless_gpu import HeadlessView
     source = ControllerSurface()
@@ -147,7 +147,7 @@ def golden():
 
 
 def test_section_vertices_are_the_recorded_bytes(golden):
-    from ingetrazo_core import pack_scene
+    from built_core import pack_scene
     from views.wgpu_sections import geometry
     scene = city()
     got = section_cases(geometry, scene, pack_scene(scene))
@@ -167,7 +167,7 @@ def test_selected_hidden_edges_are_the_recorded_bytes(golden):
 
 
 def test_fill_kernels_are_the_recorded_bytes(golden):
-    from ingetrazo_core import pack_scene
+    from built_core import pack_scene
     scene = city()
     got = kernel_cases(scene, pack_scene(scene))
     assert got == golden["kernels"]

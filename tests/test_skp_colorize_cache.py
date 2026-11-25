@@ -4,7 +4,7 @@
 from types import SimpleNamespace
 
 import pytest
-from ingetrazo_render import SurveyRaster
+from built_render import SurveyRaster
 
 from formats import skp_reader as skp
 

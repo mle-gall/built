@@ -22,8 +22,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
-from ingetrazo_render import AnnotationCanvas
-from ingetrazo_core import Vec3 as V
+from built_render import AnnotationCanvas
+from built_core import Vec3 as V
 
 from core.history import History
 from core.scene import Scene
@@ -47,7 +47,7 @@ def test_extensions_can_import_the_complete_native_v2_api():
     import importlib
     import logging
 
-    import ingetrazo_render
+    import built_render
     from formats import built
 
     api = importlib.import_module("views.extension_api")
@@ -60,12 +60,12 @@ def test_extensions_can_import_the_complete_native_v2_api():
     } <= exports.keys()
     for name in ("chrome_forms", "chrome_dialogs"):
         assert exports[name] is importlib.import_module(f"views.{name}")
-        assert exports[name] is getattr(ingetrazo_render, name)
-    assert exports["Job"] is ingetrazo_render.chrome_dialogs.Job
+        assert exports[name] is getattr(built_render, name)
+    assert exports["Job"] is built_render.chrome_dialogs.Job
     assert exports["annotations"] is __future__.annotations
     assert exports["built"] is built
     assert exports["logging"] is logging
-    assert exports["log"] is logging.getLogger("ingetrazo.plugins")
+    assert exports["log"] is logging.getLogger("built.plugins")
     assert api.ExtensionApp.__module__ == "views.extension_api"
     app = api.ExtensionApp(object(), "example")
     assert app.key == "example"
@@ -89,11 +89,11 @@ def test_plugin_api_imports_in_a_fresh_interpreter(first):
     script = f"""import {first}
 from views import extension_api, chrome_forms, chrome_dialogs
 from views.extension_api import ExtensionApp, Job
-import ingetrazo_render
+import built_render
 
 assert ExtensionApp(object(), "example").api_version == 2
-assert extension_api.chrome_forms is chrome_forms is ingetrazo_render.chrome_forms
-assert extension_api.chrome_dialogs is chrome_dialogs is ingetrazo_render.chrome_dialogs
+assert extension_api.chrome_forms is chrome_forms is built_render.chrome_forms
+assert extension_api.chrome_dialogs is chrome_dialogs is built_render.chrome_dialogs
 assert Job is chrome_dialogs.Job
 """
     env = os.environ.copy()
@@ -235,7 +235,7 @@ def test_a_suffix_already_claimed_is_refused_not_overwritten(native_window, capl
 def test_the_launcher_hands_an_extension_file_to_the_window(native_host, tmp_path, monkeypatch):
     opened = []
     _app_for(native_host.window).add_file_opener(".xyz", lambda path: opened.append(path) or True)
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.warning", lambda *args, **kwargs: None)
+    monkeypatch.setattr("built_render.chrome_dialogs.warning", lambda *args, **kwargs: None)
     assert native_host.open_path(tmp_path / "a.xyz")
     assert not native_host.open_path(tmp_path / "b.unknown")
     assert opened == [tmp_path / "a.xyz"]
@@ -295,8 +295,8 @@ def test_the_model_is_parked_and_comes_back(native_window):
 
 
 def test_workspace_cannot_take_over_an_open_or_write_over_the_parked_model(native_window, tmp_path):
-    from ingetrazo_render import shell_windows as windows
-    from ingetrazo_render import shell_files as files
+    from built_render import shell_windows as windows
+    from built_render import shell_files as files
     win = native_window
     doc = win.active_document()
     ws = FakeWorkspace()
@@ -353,7 +353,7 @@ def test_a_workspace_that_will_not_go_stops_quitting(native_window):
     win = native_window
     ws = FakeWorkspace(leave=False)
     _app_for(win).enter_workspace(ws)
-    from ingetrazo_render.shell_files import request_close
+    from built_render.shell_files import request_close
     assert not request_close(win)
     assert win.workspace() is ws
     ws.leave_answer = True
@@ -373,7 +373,7 @@ def test_opening_an_igz_leaves_the_workspace_first(native_window, tmp_path):
 
 def test_autosave_pauses_while_the_model_is_parked(native_window, monkeypatch):
     win = native_window
-    from ingetrazo_core import autosave
+    from built_core import autosave
     written = []
     monkeypatch.setattr(autosave, "write", lambda *a, **k: written.append(a))
     ws = FakeWorkspace()

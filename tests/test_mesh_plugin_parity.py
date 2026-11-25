@@ -5,7 +5,7 @@ import pickle
 from pathlib import Path
 
 from core.mesh import Edge, Face, Mesh, Vertex
-from ingetrazo_core import Vec3
+from built_core import Vec3
 
 
 class PluginMesh(Mesh):

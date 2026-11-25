@@ -4,7 +4,7 @@ from core.group import copy_group
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_in_model_nested import _component, _quad
 from tests.test_library_sheet import act, frame, tiles, win  # noqa: F401
-from ingetrazo_render.wgpu_library import open_library
+from built_render.wgpu_library import open_library
 
 
 def test_the_clicked_row_is_still_lit_after_the_refresh(win):

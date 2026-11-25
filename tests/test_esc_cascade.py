@@ -5,7 +5,7 @@
 should stop constraining" report: the window must release the arrow-key lock before it cancels a tool."""
 from __future__ import annotations
 
-from ingetrazo_core import Input as Qt
+from built_core import Input as Qt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
@@ -16,7 +16,7 @@ def escape(host):
 
 def test_esc_releases_axis_lock_first(native_host):
     vp = native_host.viewport
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     native_host.window._activate_tool("line")
     native_host.view.tools.sync()
     tool = vp.active_tool
@@ -65,6 +65,6 @@ def test_viewport_release_constraints_reports_whether_it_did(native_host):
 
 
 def _square():
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     return [QVector3D(0, 0, 0), QVector3D(1, 0, 0),
             QVector3D(1, 1, 0), QVector3D(0, 1, 0)]

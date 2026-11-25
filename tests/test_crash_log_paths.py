@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from ingetrazo_core import paths
+from built_core import paths
 
 
 @pytest.fixture
@@ -28,7 +28,7 @@ def test_user_log_dir_is_writable_and_outside_the_app(state_home):
     assert d.is_absolute() and d.is_dir()
     assert not str(d).startswith(str(paths.app_root()))
     if not sys.platform.startswith("win") and sys.platform != "darwin":
-        assert d == state_home / "ingetrazo"
+        assert d == state_home / "built"
     (d / "probe").write_text("x", encoding="utf-8")
 
 
@@ -42,12 +42,12 @@ def test_crash_log_opens_with_a_read_only_cwd_and_no_stderr(tmp_path, state_home
         if os.access(ro, os.W_OK):
             pytest.skip("running as a user that writes anywhere")
         with pytest.raises(PermissionError):
-            open("ingetrazo-crash.log", "a")          # the old behaviour
+            open("built-crash.log", "a")          # the old behaviour
         fh = paths.open_crash_log()
         assert fh is not None
         fh.write("ok\n")
         fh.close()
-        assert (paths.user_log_dir() / "ingetrazo-crash.log").read_text().endswith("ok\n")
+        assert (paths.user_log_dir() / "built-crash.log").read_text().endswith("ok\n")
         # the startup rule: a handle → faulthandler on it; none → only if stderr
         import faulthandler
         fh = paths.open_crash_log()
@@ -81,5 +81,5 @@ def test_failed_commands_log_into_the_user_folder(state_home):
 def test_no_default_writes_land_in_the_working_directory(tmp_path, state_home, monkeypatch):
     monkeypatch.chdir(tmp_path)
     from core.history import History
-    assert not Path("ingetrazo-errors.log").exists()
+    assert not Path("built-errors.log").exists()
     assert Path(History.default_error_log()).is_absolute()

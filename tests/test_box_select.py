@@ -12,7 +12,7 @@ maths is exercised without a GL context.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.scene import Scene
 from tools.rust_tools import SelectTool
@@ -129,7 +129,7 @@ def test_crossing_box_catches_group_edge_straddling_it():
 def test_box_select_maps_instances_to_world():
     # The prototype lives at the origin; only the instance whose TRANSFORM
     # puts it inside the box may be selected.
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     scene = Scene()
@@ -174,7 +174,7 @@ def test_crossing_box_selects_guides_window_does_not():
 
 
 def test_delete_key_erases_selected_guides():
-    from ingetrazo_core import Input as Qt
+    from built_core import Input as Qt
     from core.guide import Guide
     from core.history import History
     scene = Scene()

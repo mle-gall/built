@@ -149,12 +149,12 @@ def test_paint_placements_registers_a_new_material_in_the_same_step():
 
 
 def test_rename_component_is_one_native_step():
-    from ingetrazo_core.kept_components import copies_of
+    from built_core.kept_components import copies_of
     scene = Scene()
     h = History(scene)
     mesh = Mesh()
     a, b = Group(mesh, name="Door", uid="a"), Group(mesh, name="Door", uid="b")
-    from ingetrazo_core import Matrix4
+    from built_core import Matrix4
     for g in (a, b):
         g.xform, g.component = Matrix4(), True
         scene.groups.append(g)
@@ -170,7 +170,7 @@ def test_rename_component_is_one_native_step():
 # ---- record steps (annotations, sections, guides, images, scenes, sheets)
 
 def _guide_scene():
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     from core.guide import Guide
     scene = Scene()
     guide = Guide(Vec3(0, 0, 0), Vec3(1, 0, 0))
@@ -178,13 +178,13 @@ def _guide_scene():
 
 
 def test_record_steps_are_native_history_commands():
-    import ingetrazo_core
+    import built_core
     from core import history as H
     for name in ("AddGuideCommand", "DeleteDimensionsCommand", "CreatePlanCommand",
                  "UpdateSceneCommand", "MoveGeoPathNodeCommand"):
         cls = getattr(H, name)
-        assert cls is getattr(ingetrazo_core, name)
-        assert issubclass(cls, ingetrazo_core.RecordStep) and issubclass(cls, Command)
+        assert cls is getattr(built_core, name)
+        assert issubclass(cls, built_core.RecordStep) and issubclass(cls, Command)
 
 
 def test_a_record_step_undoes_by_its_transaction_in_history():
@@ -251,12 +251,12 @@ def test_the_tool_preview_helpers_stay_on_the_classes():
 
 def test_insert_and_delete_publish_where_the_placement_went():
     from core.history import DeleteGroupCommand, InsertGroupCommand
-    import ingetrazo_core
+    import built_core
     scene = Scene()
     h = History(scene)
     g = Group(Mesh(), name="part", uid="p")
     step = InsertGroupCommand(g)
-    assert isinstance(step, ingetrazo_core.RecordStep) and step.keeps_groups
+    assert isinstance(step, built_core.RecordStep) and step.keeps_groups
     assert step._owner is None and step.group is g
     h.execute(step)
     assert step._owner is scene.groups and g in scene.selection
@@ -274,7 +274,7 @@ def test_insert_and_delete_publish_where_the_placement_went():
 
 def test_merge_puts_back_the_same_merged_group_on_redo():
     from core.history import MergeGroupsCommand
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     scene = Scene()
     h = History(scene)
     parts = []
@@ -295,7 +295,7 @@ def test_merge_puts_back_the_same_merged_group_on_redo():
 # ---- mesh steps
 
 def _square(mesh, x=0.0):
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     return mesh.add_face([Vec3(x, 0, 0), Vec3(x + 1, 0, 0), Vec3(x + 1, 1, 0), Vec3(x, 1, 0)])
 
 

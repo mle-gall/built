@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import math
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, copy_group, frame_axes, group_frame
 from core.history import (ExplodeGroupCommand, FlipGroupsCommand, History,
@@ -350,8 +350,8 @@ def test_change_axes_on_a_component_that_kept_its_group_axes_484():
 
 
 def test_the_tool_takes_origin_red_and_green():
-    from ingetrazo_core import Input as Qt
-    from ingetrazo_core import ScreenPoint as QPointF
+    from built_core import Input as Qt
+    from built_core import ScreenPoint as QPointF
     from tools.base import ToolContext
     from tools.change_axes import ChangeAxesTool
 
@@ -404,7 +404,7 @@ def test_a_pasted_rotated_group_keeps_its_axes():
     """Issue #78 (@pacaeiro): Copy turns a classic group into an instance
     snapshot and Paste copies that — the instance copy dropped the local
     axes, so a pasted rotated group came back with the world's axes."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+    from built_core import Matrix4 as QMatrix4x4, Vec3 as V
     from core.group import Group, copy_group, group_frame
     from core.history import RotateGroupCommand
     from core.mesh import Mesh

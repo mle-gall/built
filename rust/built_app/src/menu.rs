@@ -6,10 +6,10 @@
 //! the view, so a value typed into the measurements box never collides
 //! with them. The egui chrome stays the place for tools and panels; the
 //! tools' single-letter shortcuts are not menu accelerators (Qt's
-//! ShortcutOverride order, see ingetrazo_render.Host.key).
+//! ShortcutOverride order, see built_render.Host.key).
 //!
 //! Each item's id is the command string the host understands
-//! (`ingetrazo_render.Host.menu`), or one the shell handles itself (`close`,
+//! (`built_render.Host.menu`), or one the shell handles itself (`close`,
 //! `quit`: both ask about unsaved work first). Quit is our own item, not
 //! muda's predefined one: that one calls `[NSApp terminate:]`, which ends
 //! the process without asking.
@@ -74,10 +74,10 @@ fn item(id: &str, text: &str, accel: Option<&str>) -> MenuItem {
 
 /// The File menu's imports: (command, label). The command is
 /// `import:<suffix>`.
-pub use ingetrazo_render::desktop_menu_model::IMPORTS;
+pub use built_render::desktop_menu_model::IMPORTS;
 
 pub fn build() -> muda::Result<Menus> {
-    use ingetrazo_render::desktop_menu_model::{Row, GROUPS};
+    use built_render::desktop_menu_model::{Row, GROUPS};
     let bar = Menu::new();
     let recent = Submenu::with_items("Open Recent", true, &[&MenuItem::new(EMPTY_RECENT, false, None)])?;
     let import = Submenu::new("Import", true);
@@ -113,7 +113,7 @@ pub fn build() -> muda::Result<Menus> {
     let plugins = groups["Plugins"].clone();
     let window = groups["Window"].clone();
     let mut model_checks = Vec::new();
-    for entry in ingetrazo_render::model_menu::entries() {
+    for entry in built_render::model_menu::entries() {
         if let Some((parent, label)) = entry.path.split_once(" ▸ ") {
             if !groups.contains_key(entry.path) {
                 let sub = Submenu::new(label, true);
@@ -154,7 +154,7 @@ impl Menus {
     }
 
     /// Rebuild only the contributions below the two built-in utilities.
-    pub fn set_extensions(&self, rows: &[ingetrazo_render::extension_menu::Row]) -> muda::Result<()> {
+    pub fn set_extensions(&self, rows: &[built_render::extension_menu::Row]) -> muda::Result<()> {
         while self.plugins.items().len() > self.fixed_plugin_items {
             self.plugins.remove_at(self.fixed_plugin_items);
         }

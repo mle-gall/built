@@ -3,9 +3,9 @@
 that toggle on a Ctrl tap (Move's copy, Rectangle's centre) ask
 ``ctrl_tapped`` on the release. Only the controller's own key handler
 recorded it, so on this view every tap read as a chord and was taken back."""
-from ingetrazo_render import KeyEvent, ShortcutOverride
+from built_render import KeyEvent, ShortcutOverride
 
-from ingetrazo_core import Key, KeyboardModifier
+from built_core import Key, KeyboardModifier
 from tests.headless_gpu import _code
 from tests.test_.skp_inference_gaps import view  # noqa: F401  (fixture)
 

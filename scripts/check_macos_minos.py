@@ -3,7 +3,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Fail if a Mach-O file in a macOS bundle asks for a newer macOS than given.
 
-    scripts/check_macos_minos.py dist/IngeTrazo.app 12.0
+    scripts/check_macos_minos.py dist/Built.app 12.0
 
 The dynamic loader refuses such a file when it is loaded, which for a Qt plugin
 or a NumPy module is long after the app seemed to work (#1123). Needs ``otool``.

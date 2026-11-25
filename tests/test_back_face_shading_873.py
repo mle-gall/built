@@ -15,7 +15,7 @@ from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa
 import numpy as np
 import pytest
 from tests.raster_samples import pixels
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 
 V = QVector3D

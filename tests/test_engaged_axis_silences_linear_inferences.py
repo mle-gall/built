@@ -40,7 +40,7 @@ import math
 from types import SimpleNamespace
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.snap import _AXIS_VECTORS, compute_snap
 

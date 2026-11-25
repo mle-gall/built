@@ -14,8 +14,8 @@ Shift+R y clic derecho»).
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Vec3 as V
-from ingetrazo_render import context_menu_action, shortcut_text
+from built_core import Vec3 as V
+from built_render import context_menu_action, shortcut_text
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
@@ -124,7 +124,7 @@ def test_enter_on_select_is_not_a_repeat(win):
     win._on_reverse_faces()
     win._activate_tool("line")
     win._activate_tool("select")
-    from ingetrazo_core import Input as Qt
+    from built_core import Input as Qt
     win._host.key(True, Qt.Key_Return, text="\r")
     win._host.key(False, Qt.Key_Return)
     assert win.viewport.active_tool is win._tools["select"]
@@ -152,7 +152,7 @@ def test_right_click_disables_repeat_until_a_command_runs(win):
 
 
 def test_keyboard_settings_identify_repeat_independently_of_its_label(win):
-    from ingetrazo_render.keyboard_bindings import action_key
+    from built_render.keyboard_bindings import action_key
     action = win._registry_actions["menu:repeat_last_command"]
     before = action_key(action)
     win._activate_tool("line")

@@ -3,7 +3,7 @@
 copy_placements (docs/core-protocol.md §1)."""
 import numpy as np
 import pytest
-from ingetrazo_core import Matrix4, Vec3
+from built_core import Matrix4, Vec3
 
 from core.group import Group
 from core.history import History

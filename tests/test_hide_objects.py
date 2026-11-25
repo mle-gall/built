@@ -16,13 +16,13 @@ from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa
 import pytest
 
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 
 from core.group import Group, copy_group
 from core.history import HideCommand, HideEdgesCommand, History
 from core.mesh import Mesh
-from ingetrazo_core.saved_views import SavedView
+from built_core.saved_views import SavedView
 from core.scene import Scene
 from formats import igz
 
@@ -166,7 +166,7 @@ def test_ghost_pass_draws_and_unhide_selected_brings_them_back(native_gpu_host):
     if vp.keys_stand_in.renderer is None:
         pytest.skip("the Qt platform has no native GPU surface")
     from tests.controller_surface import live_image
-    from ingetrazo_core import OBJECT_HIDDEN
+    from built_core import OBJECT_HIDDEN
     live_image(vp)
     assert vp.keys_stand_in.packed.reveal_hidden == (False, False)
     win._set_hidden_view("show_hidden_objects", True)

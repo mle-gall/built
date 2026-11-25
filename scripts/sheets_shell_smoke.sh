@@ -13,7 +13,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 BIN=${BUILT_BIN:-$ROOT/rust/built_app/target/release/built}
 SHOTS=${SHOTS:-$ROOT/build/sheets-shots/shell}
 RUN=$(mktemp -d "${TMPDIR:-/tmp}/built-sheets.XXXXXX")
-PLIST="$HOME/Library/Preferences/com.ingetrazo.IngeTrazo.plist"
+PLIST="$HOME/Library/Preferences/com.built.Built.plist"
 BEFORE=$(stat -f '%m' "$PLIST" 2>/dev/null || echo none)
 mkdir -p "$RUN/home" "$RUN/settings" "$SHOTS"
 cp "$ROOT/examples/arco-yanque.igz" "$RUN/"

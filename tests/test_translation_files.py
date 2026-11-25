@@ -12,8 +12,8 @@ import string
 
 import pytest
 
-from ingetrazo_core.i18n import LANGUAGE_NAMES, available_languages
-from ingetrazo_core.paths import app_root
+from built_core.i18n import LANGUAGE_NAMES, available_languages
+from built_core.paths import app_root
 
 _I18N_DIR = app_root() / "i18n"
 _FILES = sorted(_I18N_DIR.glob("*.json"))
@@ -110,7 +110,7 @@ def test_contributor_lines_have_translations():
     source list itself: a new CONTRIBUTORS line without its es.json
     entry fails here, and the completeness test above then carries
     the entry to every other catalog."""
-    from ingetrazo_render import AboutReview
+    from built_render import AboutReview
     source = json.loads((_I18N_DIR / "es.json").read_text(encoding="utf-8"))
     missing = [role for _name, role, _link, _starred in AboutReview.contributors()
                if role not in source]

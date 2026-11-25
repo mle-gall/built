@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The texture maths moved to Rust (``rust/ingetrazo_core/src/model/texture_maths.rs``)
+"""The texture maths moved to Rust (``rust/built_core/src/model/texture_maths.rs``)
 and must answer as ``core/texture.py``'s Python did at ``9cf53080``: the
 .skp projection basis and axes, planar and fitted UVs, the map a face renders
 with, the placement a fitted map shows, the hinge walk's turned map, the
@@ -16,7 +16,7 @@ map, is held to 1e-9 relative. Regenerate only on purpose, against the
 reference implementation: ``python tests/test_texture_maths_parity.py --write``."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 import gzip
 import json
 import math
@@ -41,9 +41,9 @@ def _normals(rng):
 
 
 def _polygon(rng, n, regular=False):
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     nx, ny, nz = rng.uniform(-1, 1), rng.uniform(-1, 1), rng.uniform(-1, 1)
-    from ingetrazo_core.triangulate import plane_axes
+    from built_core.triangulate import plane_axes
     nn = V(nx, ny, nz).normalized()
     if nn.length() == 0:
         nn = V(0, 0, 1)
@@ -60,7 +60,7 @@ def _polygon(rng, n, regular=False):
     return [p.toTuple() for p in pts], (nn.x(), nn.y(), nn.z())
 
 
-from ingetrazo_core import Vec3 as QV  # noqa: E402
+from built_core import Vec3 as QV  # noqa: E402
 
 
 def cases():
@@ -104,20 +104,20 @@ def answers(texture):
     normals, polys, texes, colours = cases()
     out = {}
     out["basis"] = [_r(texture.projection_basis(n)) for n in normals]
-    out["axes"] = [_r(ingetrazo_core.texture_projection_axes(QV(*n), rot))
+    out["axes"] = [_r(built_core.texture_projection_axes(QV(*n), rot))
                    for n in normals for rot in (0.0, 30.0, -122.5)]
     pts0 = [QV(1.5, -2.25, 3.0), QV(0, 0, 0), QV(-10.1, 4.4, 0.7)]
-    out["planar"] = [_r(ingetrazo_core.texture_planar_uv(QV(*n), pts0, sw, sh, rot))
+    out["planar"] = [_r(built_core.texture_planar_uv(QV(*n), pts0, sw, sh, rot))
                      for n in normals[:40] for sw, sh, rot in ((1.0, 1.0, 0.0), (0.3, 2.0, 45.0),
                                                                (0.0, 1e-12, -10.0))]
     fits, fits_big = [], []
     for pts, uvs, _n in polys:
-        f = ingetrazo_core.texture_fit_uv_affine(pts, uvs)
+        f = built_core.texture_fit_uv_affine(pts, uvs)
         (fits_big if len(pts) > 13 else fits).append(_r(f))
-        fits.append(_r(ingetrazo_core.texture_fit_uv_affine([QV(*p) for p in pts[:5]], uvs[:5])))
+        fits.append(_r(built_core.texture_fit_uv_affine([QV(*p) for p in pts[:5]], uvs[:5])))
     out["fit"] = fits
     out["fit_big"] = fits_big
-    out["affine"] = [_r(ingetrazo_core.texture_affine_uv(ingetrazo_core.texture_fit_uv_affine(p, u) or [1, 2, 3, 4, 5, 6, 7, 8],
+    out["affine"] = [_r(built_core.texture_affine_uv(built_core.texture_fit_uv_affine(p, u) or [1, 2, 3, 4, 5, 6, 7, 8],
                                           p + [QV(*p[0])]))
                      for p, u, _n in polys]
     maps = []
@@ -126,16 +126,16 @@ def answers(texture):
         t = {k: v for k, v in tex.items() if v is not None}
         maps.append(_r(texture.face_uv_axes(t, QV(*n))))
         pts, uvs, nrm = polys[i]
-        uvw = ingetrazo_core.texture_fit_uv_affine(pts, uvs)
+        uvw = built_core.texture_fit_uv_affine(pts, uvs)
         if uvw:
             maps.append(_r(texture.face_uv_axes({"uvw": uvw}, QV(*nrm))))
-            maps.append(_r(ingetrazo_core.texture_placement_of({"uvw": uvw}, QV(*nrm))))
-            maps.append(_r(ingetrazo_core.texture_placement_of({"uvw": uvw}, QV(*n))))
-            maps.append(_r(ingetrazo_core.texture_flattened({"uvw": uvw, "path": "x.png", "rot": 3},
+            maps.append(_r(built_core.texture_placement_of({"uvw": uvw}, QV(*nrm))))
+            maps.append(_r(built_core.texture_placement_of({"uvw": uvw}, QV(*n))))
+            maps.append(_r(built_core.texture_flattened({"uvw": uvw, "path": "x.png", "rot": 3},
                                                      QV(*nrm))))
-    maps.append(_r(ingetrazo_core.texture_placement_of({"uvw": [0] * 8}, QV(0, 0, 1))))
-    maps.append(_r(ingetrazo_core.texture_placement_of({"uvw": [1, 2]}, QV(0, 0, 1))))
-    maps.append(_r(ingetrazo_core.texture_placement_of({"uvw": [1, 0, 0, 0, 0, 1, 0, 0]}, QV(0, 0, 0))))
+    maps.append(_r(built_core.texture_placement_of({"uvw": [0] * 8}, QV(0, 0, 1))))
+    maps.append(_r(built_core.texture_placement_of({"uvw": [1, 2]}, QV(0, 0, 1))))
+    maps.append(_r(built_core.texture_placement_of({"uvw": [1, 0, 0, 0, 0, 1, 0, 0]}, QV(0, 0, 0))))
     out["maps"] = maps
     rot = []
     rng = random.Random(7)
@@ -143,28 +143,28 @@ def answers(texture):
         g = [QV(rng.uniform(-3, 3), rng.uniform(-3, 3), rng.uniform(-3, 3)) for _ in range(2)]
         d = QV(rng.uniform(-1, 1), rng.uniform(-1, 1), rng.uniform(-1, 1)).normalized()
         t = rng.uniform(-3, 3)
-        rot.append(_r(__import__("ingetrazo_core").texture_rotated_map(g[0], rng.uniform(-2, 2), g[1], rng.uniform(-2, 2),
+        rot.append(_r(__import__("built_core").texture_rotated_map(g[0], rng.uniform(-2, 2), g[1], rng.uniform(-2, 2),
                                            QV(rng.uniform(-9, 9), rng.uniform(-9, 9), 1.0), d,
                                            math.cos(t), math.sin(t))))
     out["rotated"] = rot
     refs = []
     for pts, _uvs, nrm in polys:
-        refs.append(_r(ingetrazo_core.texture_uv_reference_points(pts, None)))
-        refs.append(_r(ingetrazo_core.texture_uv_reference_points([QV(*p) for p in pts], QV(*nrm))))
-    refs.append(_r(ingetrazo_core.texture_uv_reference_points([(0, 0, 0)] * 4)))
+        refs.append(_r(built_core.texture_uv_reference_points(pts, None)))
+        refs.append(_r(built_core.texture_uv_reference_points([QV(*p) for p in pts], QV(*nrm))))
+    refs.append(_r(built_core.texture_uv_reference_points([(0, 0, 0)] * 4)))
     out["refs"] = refs
     rgb = np.array(colours, dtype=np.float64)
-    h, l, s = ingetrazo_core.texture_rgb_to_hls(rgb)
+    h, l, s = built_core.texture_rgb_to_hls(rgb)
     out["hls"] = _r([h, l, s])
-    out["hls_img"] = _r(list(ingetrazo_core.texture_rgb_to_hls(rgb.reshape(-1, 11, 3))))
-    out["rgb"] = _r(ingetrazo_core.texture_hls_to_rgb(h, l, s))
-    out["rgb_wrap"] = _r(ingetrazo_core.texture_hls_to_rgb(h * 3 - 1.2, l, s))
+    out["hls_img"] = _r(list(built_core.texture_rgb_to_hls(rgb.reshape(-1, 11, 3))))
+    out["rgb"] = _r(built_core.texture_hls_to_rgb(h, l, s))
+    out["rgb_wrap"] = _r(built_core.texture_hls_to_rgb(h * 3 - 1.2, l, s))
     return out
 
 
 def colorize_cases():
     """PNG images to tint, seeded: opaque, with a cutout, a flat colour."""
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     rng = np.random.default_rng(20261124)
     imgs = []
     for w, h, cut in ((17, 9, False), (32, 32, True), (5, 3, False), (64, 40, True)):
@@ -180,7 +180,7 @@ def colorize_cases():
 
 
 def colorize_answers(texture):
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     out = []
     for data in colorize_cases():
         for target, mode in (((200, 30, 30), 0), ((10, 200, 90), 1), ((128, 128, 128), 0),

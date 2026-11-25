@@ -1,14 +1,14 @@
 # SKP import backend seam
 
-> **2026-09-28.** IngeTrazo no longer runs, downloads or links to any
+> **2026-09-28.** Built no longer runs, downloads or links to any
 > proprietary .skp tooling: the former external converter and its automatic
 > download are gone, the validation tests built on it are gone, and the `.skp`
 > export is off because OpenSKP's writer builds on a blank template document
-> that IngeTrazo no longer distributes. `.skp` files are read with OpenSKP
+> that Built no longer distributes. `.skp` files are read with OpenSKP
 > only. Where the sections below say "the oracle", they mean the reference
 > output the reader was validated against at the time.
 
-IngeTrazo aims to open **any** `.skp` (old → recent). This document describes
+Built aims to open **any** `.skp` (old → recent). This document describes
 the single seam that decouples the app from *how* a `.skp` is read.
 
 ## Backends
@@ -41,7 +41,7 @@ store map — no ZIP, no `model.dat`. Our fork adds
 `openskp/legacy.py`: a full walker (materials + textures, layers,
 half-edge kernel, definitions/instances/groups, face-camera flags, UV
 matrices, dims/texts/guides/section planes) that emits the same
-`full_parse()` dict, so `SkpFile.parse()` and the whole IngeTrazo seam
+`full_parse()` dict, so `SkpFile.parse()` and the whole Built seam
 work unchanged. Validated: exact face/edge/area/bbox parity on five
 user models against their VFF (2021+) re-saves; `skp_diff`
 fingerprints identical through `apply_payload` (incl. materials and
@@ -73,7 +73,7 @@ Backends implement `available()`, `supports(fmt)`, `parse(path, progress)`.
 
 ## Native reader
 
-Both hosts open a .skp drawing with `ingetrazo_core.DocumentOpen`. Rust reads the modern VFF container and builds definition-local mesh stores. Placements retain the file's group/component tree, local axes, names and tags. The classic MFC reader uses the OpenSKP class registry. Coordinates are Z-up and convert from inches to metres.
+Both hosts open a .skp drawing with `built_core.DocumentOpen`. Rust reads the modern VFF container and builds definition-local mesh stores. Placements retain the file's group/component tree, local axes, names and tags. The classic MFC reader uses the OpenSKP class registry. Coordinates are Z-up and convert from inches to metres.
 
 `formats/skp.py` provides the scripting entry points. The format, parity fixtures and host measurements are described in [.skp import in Rust](rust-skp-import.md).
 
@@ -92,20 +92,20 @@ of the 2022 version):
   inches), added by **our upstream PR**
   ([openskp#4](https://github.com/iamahsanmehmood/openskp/pull/4)). The adapter
   writes the images to the app's own cache —
-  `<user data>/IngeTrazo/textures/skp/<stem>-<hash of path+size+mtime>/`,
-  overridable with `$INGETRAZO_TEXTURE_CACHE`, emptied from
+  `<user data>/Built/textures/skp/<stem>-<hash of path+size+mtime>/`,
+  overridable with `$BUILT_TEXTURE_CACHE`, emptied from
   *File ▸ Import ▸ Clear imported texture cache…* — so importing never creates
   a folder next to the user's `.skp` (it used to write `<stem>/` there, the
   usual COLLADA-export convention). Saving the document copies those
   images **into** the `.igz` container (`formats/igz.py`), which is what makes
   it portable; the cache is disposable and re-fills on open. It maps them with
-  IngeTrazo's planar
+  Built's planar
   projection at the material's real tile size. Measured: **18/18 materials and
   2/2 textures — exact parity with the oracle**; those rows no longer appear
   in the diff.
   Until the PRs ship on PyPI, install from the integration branch:
   `pip install git+https://github.com/tuxiasumari/openskp@ingetrazo#subdirectory=packages/python`
-  (branch `ingetrazo` = upstream `main` + both PR branches merged). With PyPI
+  (branch `built` = upstream `main` + both PR branches merged). With PyPI
   0.2.0 (no joins) faces import uncoloured.
 - ✅ **"~5–9% skipped faces" — resolved: it was a measurement artefact, not
   lost geometry.** The raw DAE carries 4516 triangles = exactly what OpenSKP
@@ -180,7 +180,7 @@ to the surviving segments. Different flattened placements get different IDs;
 shared component meshes keep their shared curve topology. Existing soft,
 smooth and hidden display flags remain authoritative.
 
-No analytic parameters are stored in the IngeTrazo document. For a later
+No analytic parameters are stored in the Built document. For a later
 phase, `Definition.arcs[curve_id]` exposes:
 
 - `center`: three coordinates in inches, definition-local space.

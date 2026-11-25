@@ -9,8 +9,8 @@ selected never erases a face the user could not see. The other tools
 that act on faces (Paint, Push/Pull, Offset...) keep their marking."""
 from __future__ import annotations
 
-from ingetrazo_core import ScreenPoint, Input
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint, Input
+from built_core import Vec3 as QVector3D
 
 from core.history import History
 from core.scene import Scene

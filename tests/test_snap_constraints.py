@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 IngeTrazo contributors.
+# Copyright (C) 2026 Built contributors.
 """Lock targets, face constraints, near-ties and visible edge portions.
 
 These cases reproduce the snap review's incorrect coordinates or metadata;
@@ -19,7 +19,7 @@ import math
 from types import SimpleNamespace
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core import snap
 from core.topology import segment_intersection

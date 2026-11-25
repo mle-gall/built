@@ -11,7 +11,7 @@ matters — a pick between the two steps is what left the stale block."""
 from __future__ import annotations
 
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 
 from core.group import Group  # noqa: E402

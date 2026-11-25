@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
+from built_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 from core import _native
 from core.group import Group
 from core.layers import Layer
@@ -13,8 +13,8 @@ from core.materials import effective_attrs
 from core.mesh import Mesh
 from core.scene import Scene
 from views.document_interaction import _paint_of
-from ingetrazo_core import pack_scene, source_arrays, COMMAND, OBJECT_HIDDEN, VISIBILITY_FILTERED
-from ingetrazo_render import material_texture_array
+from built_core import pack_scene, source_arrays, COMMAND, OBJECT_HIDDEN, VISIBILITY_FILTERED
+from built_render import material_texture_array
 
 
 def triangle(attrs=None):
@@ -132,7 +132,7 @@ def test_audit_fixture_matches_gl_and_retains_hidden():
 
 
 def test_incremental_hidden_change_rebakes_hidden_ranges_without_repack():
-    from ingetrazo_core import InstanceUpdates
+    from built_core import InstanceUpdates
     from tests.test_wgpu_updates import assert_matches_fresh_pack
     g = Group(triangle()); scene = Scene(groups=[g]); updates = InstanceUpdates(scene, pack_scene(scene))
     g.mesh.faces[0].attrs['hidden'] = True
@@ -145,7 +145,7 @@ def test_incremental_hidden_change_rebakes_hidden_ranges_without_repack():
 
 
 def test_incremental_paint_alpha_and_hidden_transform():
-    from ingetrazo_core import InstanceUpdates
+    from built_core import InstanceUpdates
     g = Group(triangle({'color': (1, 0, 0)})); scene = Scene(groups=[g])
     updates = InstanceUpdates(scene, pack_scene(scene))
     g.mesh.faces[0].attrs['opacity'] = .3
@@ -216,7 +216,7 @@ def test_native_material_palette_matches_numpy():
 
 
 def test_mixed_material_pack_matches_python_palette(monkeypatch, tmp_path):
-    import ingetrazo_core
+    import built_core
     path = str(tmp_path / 'swatch.png')
     image = solid_raster(2, 2, (255, 0, 0))
     assert image.save(path)
@@ -234,7 +234,7 @@ def test_mixed_material_pack_matches_python_palette(monkeypatch, tmp_path):
     native = _native.available()
     assert hasattr(native, 'pack_materials')
     monkeypatch.setattr(_native, 'native', native)
-    actual = ingetrazo_core.pack_scene(scene, face_overrides=overrides)
+    actual = built_core.pack_scene(scene, face_overrides=overrides)
     # Disable only the new kernel so every other pack stage stays identical.
     class PreviousCore:
         def __getattr__(self, name):
@@ -242,7 +242,7 @@ def test_mixed_material_pack_matches_python_palette(monkeypatch, tmp_path):
                 raise AttributeError(name)
             return getattr(native, name)
     monkeypatch.setattr(_native, 'native', PreviousCore())
-    expected = ingetrazo_core.pack_scene(scene, face_overrides=overrides)
+    expected = built_core.pack_scene(scene, face_overrides=overrides)
     assert actual.materials.tobytes() == expected.materials.tobytes()
     assert actual.vertices.tobytes() == expected.vertices.tobytes()
     assert actual.texture_paths == expected.texture_paths

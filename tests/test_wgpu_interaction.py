@@ -4,15 +4,15 @@ from types import SimpleNamespace
 import numpy as np
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import ScreenPoint as QPointF
-from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
+from built_core import Input as Qt
+from built_core import ScreenPoint as QPointF
+from built_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 from core.scene import Scene
 from core.mesh import Mesh
 from core.group import Group
 from core.snap import compute_snap
-from ingetrazo_core import pack_scene
-from ingetrazo_core import resident_prepare as prepare, resident_snap as snap
+from built_core import pack_scene
+from built_core import resident_prepare as prepare, resident_snap as snap
 from tests.headless_gpu import HeadlessView
 
 
@@ -62,7 +62,7 @@ def test_snap_matches_exact_rules(view, point, kind):
     transform = view.scene.groups[0].xform
     edges = [SimpleNamespace(a=transform.map(e.a), b=transform.map(e.b),
                              in_group=True, context='group') for e in mesh.edges]
-    from ingetrazo_core import face_centers_near
+    from built_core import face_centers_near
     centers = face_centers_near(view, *px, True, view._world_to_pixel)
     expected = compute_snap(world, px, SimpleNamespace(edges=edges),
                             view._world_to_pixel, 12., face_under_cursor=True,
@@ -130,7 +130,7 @@ def test_snap_matches_gl_viewport(view, point):
 
 def test_wheel_and_window_match_gl(view):
     import copy
-    from ingetrazo_render import WheelEvent
+    from built_render import WheelEvent
     from tests.controller_surface import ControllerSurface as Viewport
     gl = Viewport()
     gl.resize(view.width(), view.height())
@@ -157,7 +157,7 @@ def test_a_wheel_zoom_does_not_enter_the_geometry_frame(view):
     """A wheel event only moves the camera. Entering the meshes' frame around
     it (one Python context manager per mesh) was 3 ms of every event of a
     zoom on a 5.2M-face model; the tools' events still enter it."""
-    from ingetrazo_render import MouseEvent, WheelEvent
+    from built_render import MouseEvent, WheelEvent
     entered = []
     frame = view._geometry_frame
 

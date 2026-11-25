@@ -22,7 +22,7 @@ CASES = 60
 
 
 def scene_of(seed):
-    from ingetrazo_core import Matrix4
+    from built_core import Matrix4
     from core.group import Group
     from core.layers import Layer
     from core.mesh import Mesh
@@ -66,8 +66,8 @@ def scene_of(seed):
 
 
 def _walk():
-    import ingetrazo_core
-    native = getattr(ingetrazo_core, "group_visible_placements", None)
+    import built_core
+    native = getattr(built_core, "group_visible_placements", None)
     if native is not None:
         return native
     from core.group import visible_placements

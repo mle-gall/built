@@ -13,8 +13,8 @@ from __future__ import annotations
 import math
 
 import pytest
-from ingetrazo_core import ScreenPoint, Input
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint, Input
+from built_core import Vec3 as QVector3D
 
 from core.group import Group, oriented_bounds
 from core.history import History
@@ -240,7 +240,7 @@ def test_a_plain_move_still_moves():
 
 def test_native_move_hover_uses_the_displayed_placements_box():
     from types import SimpleNamespace
-    from ingetrazo_render import MeshToolAccess
+    from built_render import MeshToolAccess
 
     scene, group, vp, tool = _setup()
     access = MeshToolAccess()

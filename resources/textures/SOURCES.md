@@ -12,7 +12,7 @@
   seamless PBR sets at up to 8K.
 - `library/water/water_calm.png` — procedural seamless water (sum of
   tileable sine waves + sparkle highlights), original work generated for
-  IngeTrazo, GPL-3.0-or-later like the rest of the project.
+  Built, GPL-3.0-or-later like the rest of the project.
 - `library/water/pool_water.png` — original procedural pool-water artwork
   contributed by Bogdan Demchenko, GPL-3.0-or-later. A static turquoise
   texture with caustic highlights; the library uses 62% opacity and a 3 m

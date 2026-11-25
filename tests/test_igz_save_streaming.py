@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Large saves retain the exact legacy JSON/ZIP bytes with bounded scratch reads."""
-import ingetrazo_core
+import built_core
 import io
 import json
 import tracemalloc
@@ -11,7 +11,7 @@ import pytest
 
 from core.scene import Scene
 from formats import igz
-from ingetrazo_core import SaveStream
+from built_core import SaveStream
 import tempfile
 from tests.test_igz_format3 import _scene
 
@@ -34,14 +34,14 @@ def test_streamed_save_matches_retained_document_and_round_trips(tmp_path, monke
     from core import layers, links
     from core.composition import Composicion
     from core.materials import Material
-    from ingetrazo_core.saved_views import SavedView
+    from built_core.saved_views import SavedView
     from tests.test_igz_format3 import _canonical
 
     scene = _scene(tmp_path)
     source = tmp_path / "source.igz"
     igz.save_scene(_scene(tmp_path), source)
     scene.groups.append(links.make_link(scene, source))
-    folder = ingetrazo_core.tag_edits.add_folder(scene, "Finishes")
+    folder = built_core.tag_edits.add_folder(scene, "Finishes")
     scene.layers.append(layers.Layer("Wood", key="wood-key", folder=folder))
     scene.saved_views.append(SavedView("Plan", hidden_layers=["wood-key"]))
     scene.compositions.append(Composicion(name="Sheet 1"))
@@ -104,7 +104,7 @@ def test_many_completed_meshes_do_not_accumulate_encoded_bytes():
 @pytest.mark.parametrize("error", [OSError, RuntimeError, KeyboardInterrupt])
 @pytest.mark.parametrize("native", [False, True])
 def test_write_failure_preserves_old_file_and_closes_scratch(native, tmp_path, monkeypatch, error):
-    monkeypatch.setenv("INGETRAZO_RUST_IO", "1" if native else "0")
+    monkeypatch.setenv("BUILT_RUST_IO", "1" if native else "0")
     monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)
     monkeypatch.setattr(igz, "_BULK_MIN", 1)
     path = tmp_path / "old.igz"

@@ -3,10 +3,10 @@
 """COLLADA (.dae) import — documents as .skp modellers export them."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 from pathlib import Path
 
-from ingetrazo_core.orient import is_closed, signed_volume
+from built_core.orient import is_closed, signed_volume
 from core.scene import Scene
 from formats.dae import load_dae
 
@@ -205,7 +205,7 @@ def _textured_quad_dae(tmp_path, image_name="brick.png"):
     explicit TEXCOORDs (offsets 0=vertex, 1=uv) — the shape of the reference .dae."""
     import shutil
     img = tmp_path / image_name
-    from ingetrazo_core.paths import app_root
+    from built_core.paths import app_root
     shutil.copy(app_root() / "resources" / "textures" / "brick.png", img)
     body = f"""<?xml version="1.0"?>
 <COLLADA {_NSDECL} version="1.4.1">
@@ -264,7 +264,7 @@ def test_textured_import_carries_real_uvs(tmp_path):
     file's own UVs are kept as a world→UV affine map, the two export
     triangles fuse back into one quad, and evaluating the map at the corners
     reproduces the original texture coordinates."""
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
 
     def V(x, y, z=0.0):
         return QVector3D(float(x), float(y), float(z))
@@ -276,7 +276,7 @@ def test_textured_import_carries_real_uvs(tmp_path):
     assert len(faces) == 1                          # triangles fused
     tex = faces[0].attrs.get("texture")
     assert tex is not None and tex["path"] == img
-    uvs = ingetrazo_core.texture_affine_uv(tex["uvw"], [V(0, 0), V(2, 0), V(2, 3), V(0, 3)])
+    uvs = built_core.texture_affine_uv(tex["uvw"], [V(0, 0), V(2, 0), V(2, 3), V(0, 3)])
     expect = [(0, 0), (1, 0), (1, 1), (0, 1)]
     for (u, v), (eu, ev) in zip(uvs, expect):
         assert abs(u - eu) < 1e-5 and abs(v - ev) < 1e-5
@@ -303,7 +303,7 @@ def test_faceme_sprite_imports_as_mesh_billboard(tmp_path):
     the 'always face camera' flag, so the shape+alpha heuristic recovers it."""
     p, img = _textured_quad_dae(tmp_path, image_name="sprite.png")
     import shutil
-    from ingetrazo_core.paths import app_root
+    from built_core.paths import app_root
     shutil.copy(app_root() / "resources" / "components" / "person_billboard.png",
                 img)                              # a real cutout PNG
     # make the quad VERTICAL (xz plane) so it reads as a sprite
@@ -379,7 +379,7 @@ def test_repeated_components_share_one_prototype(tmp_path, monkeypatch):
     assert len({id(g.mesh) for g in inst}) == 1        # ONE shared prototype
     assert len(inst[0].mesh.faces) == 1                # fused quad, local coords
     # world positions come from the transforms
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     origins = sorted(round(g.xform.map(QVector3D(0, 0, 0)).x(), 3)
                      for g in inst)
     assert origins == [0.0, 10.0, 20.0]
@@ -419,7 +419,7 @@ def test_repeated_components_share_one_prototype(tmp_path, monkeypatch):
 def test_instance_edit_flows_make_unique():
     """Editing uses world coordinates. Make Unique gives a placement an
     independent definition, and Explode lands geometry at its world position."""
-    from ingetrazo_core import Matrix4, Vec3
+    from built_core import Matrix4, Vec3
     from core.group import Group
     from core.mesh import Mesh
     from core.history import AddEdgeCommand, ExplodeGroupCommand, History, MakeUniqueCommand
@@ -543,7 +543,7 @@ def test_nested_groups_keep_their_structure(tmp_path):
     holding «closed» — a circle and a rectangle — and «lines») comes back
     as the same tree with the same names, each piece of geometry in its own
     group, instead of melting into the loose mesh."""
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     from core.group import group_frame, world_mesh
 
     scene = Scene()

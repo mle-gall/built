@@ -5,9 +5,9 @@ from __future__ import annotations
 
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
-import ingetrazo_core.store_mesh as S
+import built_core.store_mesh as S
 from core.history import AddFaceCommand, History
 from core.protocol.commands import push_pull
 from core.protocol.keys import to_json_key
@@ -51,7 +51,7 @@ def test_push_retains_selection_and_history():
 
 
 def test_annotations_survive_a_push():
-    from ingetrazo_core.annotation_anchor import Attachment
+    from built_core.annotation_anchor import Attachment
     from core.textlabel import TextLabel
     scene = Scene()
     hist = History(scene)

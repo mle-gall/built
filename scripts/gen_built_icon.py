@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Rasterize Built's application icon from ``resources/icons/ingetrazo.svg``
+"""Rasterize Built's application icon from ``resources/icons/built.svg``
 with the renderer's resvg (no Inkscape or ImageMagick needed).
 
     python scripts/gen_built_icon.py
 
-Writes ``ingetrazo_<size>.png`` (16..512), ``ingetrazo_master.png`` (1024) and
-``ingetrazo.ico`` (PNG-compressed entries). The macOS ``.icns`` is built from
+Writes ``built_<size>.png`` (16..512), ``built_master.png`` (1024) and
+``built.ico`` (PNG-compressed entries). The macOS ``.icns`` is built from
 the PNGs by ``packaging/build-macos-app.sh``. File names keep the old prefix so
 packaging and the window icon find them unchanged.
 """
@@ -15,14 +15,14 @@ import struct
 import sys
 from pathlib import Path
 
-from ingetrazo_render import SurveyRaster, svg_rgba
+from built_render import SurveyRaster, svg_rgba
 
 ICONS = Path(__file__).resolve().parent.parent / "resources" / "icons"
 SIZES = (16, 32, 48, 64, 128, 256, 512)
 
 
 def render(size: int) -> SurveyRaster:
-    return SurveyRaster(*svg_rgba(ICONS / "ingetrazo.svg", size))
+    return SurveyRaster(*svg_rgba(ICONS / "built.svg", size))
 
 
 def write_ico(path: Path, images: dict[int, bytes]) -> None:
@@ -44,9 +44,9 @@ def main() -> int:
         print(exc, file=sys.stderr)
         return 1
     for size in SIZES:
-        render(size).save(str(ICONS / f"ingetrazo_{size}.png"))
-    render(1024).save(str(ICONS / "ingetrazo_master.png"))
-    write_ico(ICONS / "ingetrazo.ico",
+        render(size).save(str(ICONS / f"built_{size}.png"))
+    render(1024).save(str(ICONS / "built_master.png"))
+    write_ico(ICONS / "built.ico",
               {s: bytes(render(s).png()) for s in (16, 32, 48, 64, 128, 256)})
     print("wrote", ", ".join(f"{s}px" for s in SIZES), "+ master + ico")
     return 0

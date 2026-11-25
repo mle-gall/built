@@ -6,7 +6,7 @@ from types import SimpleNamespace as NS
 import numpy as np
 import pytest
 
-from ingetrazo_core import GeometryCache, skp_remember
+from built_core import GeometryCache, skp_remember
 from formats import skp_reader as adapter
 
 

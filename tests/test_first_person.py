@@ -8,8 +8,8 @@ or left) turns the head.
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import PixelPoint as QPoint, Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import PixelPoint as QPoint, Input as Qt
+from built_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from tools import walkthrough as wt
@@ -240,7 +240,7 @@ def test_the_sensitivity_setting_scales_the_turn(win, monkeypatch,
 
 
 def test_a_stored_sensitivity_out_of_range_falls_back(monkeypatch):
-    from ingetrazo_core.settings import settings
+    from built_core.settings import settings
     settings().setValue("walk/look_sensitivity", "9999")
     assert wt.look_sensitivity() == wt.DEFAULT_LOOK_SENSITIVITY
 

@@ -3,11 +3,11 @@
 """Start, new, open, drop and edit after closing the last native document."""
 from __future__ import annotations
 
-from ingetrazo_render import KeyEvent
+from built_render import KeyEvent
 import pytest
 
 from tests.shell_isolation import native_host, restore_shell_patches  # noqa: F401
-from ingetrazo_render import wgpu_start
+from built_render import wgpu_start
 from views import wgpu_tabs
 
 
@@ -43,8 +43,8 @@ def test_plus_brings_a_project_and_its_scene_commands_back(win):
 
 
 def test_start_claims_modelling_shortcuts_until_a_document_opens(win):
-    from ingetrazo_core import Input as Qt
-    from ingetrazo_render import chrome_sheet
+    from built_core import Input as Qt
+    from built_render import chrome_sheet
 
     win.close_document()
     key = KeyEvent(True, Qt.Key_L, Qt.NoModifier, 'l')
@@ -108,7 +108,7 @@ def test_plus_from_start_inserts_the_scale_figure(win):
 
 
 def test_an_external_edit_reveals_the_drawing(win):
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     from core.history import AddEdgeCommand
     win.close_document()
     win.viewport.notify_scene_changed()

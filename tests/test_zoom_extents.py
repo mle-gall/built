@@ -12,7 +12,7 @@ from tests.shell_isolation import native_window, restore_shell_patches  # noqa: 
 import math
 
 import pytest
-from ingetrazo_core import Vec3 as V, Vec4 as QVector4D
+from built_core import Vec3 as V, Vec4 as QVector4D
 
 from core.camera import MAX_DISTANCE, OrbitCamera
 
@@ -119,7 +119,7 @@ def test_zoom_extents_frames_the_scale_figure_in_a_new_document(native_window):
 
 
 def _image_window(native_host):
-    from ingetrazo_core.image_plane import ImagePlane
+    from built_core.image_plane import ImagePlane
     from core.layers import Layer
 
     win = native_host.window

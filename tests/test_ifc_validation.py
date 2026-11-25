@@ -13,8 +13,8 @@ from __future__ import annotations
 import logging
 
 import pytest
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Vec3 as QVector3D
 
 ifcopenshell = pytest.importorskip("ifcopenshell")
 import ifcopenshell.geom  # noqa: E402

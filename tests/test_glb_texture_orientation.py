@@ -5,11 +5,11 @@
 glTF counts V from the top of the image; the viewport, like OBJ and COLLADA,
 from the bottom. The exporter turned V over and the importer did not turn it
 back, so every picture in a GLB came in upside down: the scale figure of a
-file IngeTrazo itself had written, and the textures of anybody else's.
+file Built itself had written, and the textures of anybody else's.
 """
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 import json
 import os
 import struct
@@ -18,11 +18,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
-from ingetrazo_core import Vec3 as V
-from ingetrazo_render import SurveyRaster  # noqa: E402
+from built_core import Vec3 as V
+from built_render import SurveyRaster  # noqa: E402
 
 from core.scene import Scene  # noqa: E402
-import ingetrazo_core  # noqa: E402
+import built_core  # noqa: E402
 from formats.glb import load_glb, read_triangles  # noqa: E402
 from formats.gltf import save_glb  # noqa: E402
 
@@ -30,7 +30,7 @@ from formats.gltf import save_glb  # noqa: E402
 @pytest.fixture(autouse=True)
 def _texture_cache(tmp_path, monkeypatch):
     """Imported pictures go to this test's own texture cache."""
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "textures"))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "textures"))
 
 
 def _png_bytes(tmp_path) -> bytes:
@@ -44,7 +44,7 @@ def _corners_uv(scene):
     out = {}
     for face in scene.groups[-1].mesh.faces:
         points = [v.position for v in face.loop]
-        uvs = ingetrazo_core.texture_affine_uv(face.attrs["texture"]["uvw"], points)
+        uvs = built_core.texture_affine_uv(face.attrs["texture"]["uvw"], points)
         for p, uv in zip(points, uvs):
             out[(round(p.x(), 4), round(p.z(), 4))] = uv
     return out
@@ -102,7 +102,7 @@ def test_a_picture_comes_back_from_our_own_glb_the_right_way_up(tmp_path):
     face = scene.loose_mesh.add_face(corners)
     face.attrs["texture"] = {
         "path": str(tmp_path / "picture.png"), "sw": 1.0, "sh": 2.0,
-        "uvw": ingetrazo_core.texture_fit_uv_affine(corners, [(0, 0), (1, 0), (1, 1), (0, 1)])}
+        "uvw": built_core.texture_fit_uv_affine(corners, [(0, 0), (1, 0), (1, 1), (0, 1)])}
     path = tmp_path / "ours.glb"
     save_glb(scene, path)
 

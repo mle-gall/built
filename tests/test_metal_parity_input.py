@@ -1,21 +1,21 @@
 """Native pointer and keyboard events, model interaction and capture state restoration."""
-from ingetrazo_render import ContextMenuEvent, MouseEvent
+from built_render import ContextMenuEvent, MouseEvent
 import math
 from tests.native_view_input import click, press, release, double_click, key, type_text
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from ingetrazo_core import PixelPoint as QPoint, ScreenPoint as QPointF
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
+from built_core import PixelPoint as QPoint, ScreenPoint as QPointF
+from built_core import Input as Qt
+from built_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 from core.scene import Scene
 from core.mesh import Mesh
 from core.group import Group
 from core.history import History
 from tools.rust_tools import SelectTool
 from tests.controller_surface import ControllerSurface as Viewport
-from ingetrazo_core import resident_prepare as prepare
+from built_core import resident_prepare as prepare
 
 
 @pytest.fixture
@@ -113,7 +113,7 @@ def fixed_world(view, point):
 
 
 def test_section_place_move_toggle_undo(view):
-    from ingetrazo_core.settings import settings
+    from built_core.settings import settings
     from tools.section import SectionPlaneTool
     from tools.move import MoveTool
     settings().setValue("section/ask_name", "0")
@@ -219,8 +219,8 @@ def test_selection_marks_and_preview_bridge(view):
 @pytest.mark.parametrize('fail', [False, True])
 def test_billboard_export_restores_world_and_schedules_overlays(view, fail, monkeypatch):
     from core.group import make_billboard_group
-    from ingetrazo_core import INSTANCE
-    from ingetrazo_render import SurveyRaster
+    from built_core import INSTANCE
+    from built_render import SurveyRaster
     from pathlib import Path
     texture = Path('resources/components/person_billboard.png').resolve()
     im = SurveyRaster.open(texture)
@@ -314,7 +314,7 @@ def test_guides_and_tool_overlay_without_labels(view):
 
 def test_move_facade_reads_document_from_native_view(view):
     from tools.move import MoveTool
-    from ingetrazo_render import NativeTools
+    from built_render import NativeTools
     mesh = Mesh()
     mesh.add_edge(QVector3D(), QVector3D(1, 0, 0))
     group = Group(mesh)

@@ -1,28 +1,28 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""What a sheet frame shows (ingetrazo_core sheets::visibility) is what the
+"""What a sheet frame shows (built_core sheets::visibility) is what the
 composer showed by applying the frame's saved view to the live scene and
 reading the rows (SavedView.apply_state + the pack's placement
 walk), without touching the scene: tags, tags that do not print, nested tag folders, Hide on
 groups and nested placements, the view's hidden objects and folders."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
 
-import ingetrazo_core as NATIVE  # noqa: E402
+import built_core as NATIVE  # noqa: E402
 
 
 def _scene():
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from core.group import Group
     from core.layers import Layer
     from core.mesh import Mesh
-    from ingetrazo_core.saved_views import SavedView
+    from built_core.saved_views import SavedView
     from core.scene import Scene
     s = Scene()
     for name, folder in (("Muros", "Arq"), ("Losa", "Arq"), ("Mobiliario", "Int"), ("Ejes", None),
@@ -67,11 +67,11 @@ def _reference(scene, view):
     """The composer's way: apply the view, leave out what does not print,
     walk the placements."""
     from types import SimpleNamespace
-    import ingetrazo_core
-    from ingetrazo_core import placement_records, PlacementState
+    import built_core
+    from built_core import placement_records, PlacementState
     if view is not None:
         view.apply_state(scene)
-    ingetrazo_core.tag_styles.hide_unprinted(scene)
+    built_core.tag_styles.hide_unprinted(scene)
     vp = SimpleNamespace(scene=scene)
     state = PlacementState(scene)
     return {id(g): bool(flags & 1) for g, _, _, flags, _c in placement_records(scene, scene.groups, vp, state)}

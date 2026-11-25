@@ -16,12 +16,12 @@ from __future__ import annotations
 
 import pytest
 from tests.test_extension_previews import png
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 from core.group import Group
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_paint_hover_container import _ctx
 from tools.paint import PaintTool
-from ingetrazo_render import wgpu_library as library
+from built_render import wgpu_library as library
 
 
 @pytest.fixture

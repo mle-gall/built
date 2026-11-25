@@ -7,9 +7,9 @@ the geometry's float32 coordinates to inf, and NaN followed."""
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Input as Qt
+from built_core import Input as Qt
 
-from ingetrazo_render import KeyEvent, ShortcutOverride
+from built_render import KeyEvent, ShortcutOverride
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 
 
@@ -67,7 +67,7 @@ def test_a_document_with_a_nan_corner_opens_without_it(tmp_path):
     from core.scene import Scene
     from formats import igz
     good = Scene()
-    from ingetrazo_core import Vec3 as V3
+    from built_core import Vec3 as V3
     good.mesh.add_face([V3(0, 0, 0), V3(1, 0, 0), V3(1, 1, 0), V3(0, 1, 0)])
     good.mesh.add_face([V3(3, 0, 0), V3(4, 0, 0), V3(4, 1, 0)])
     path = tmp_path / "reja.igz"

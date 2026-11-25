@@ -6,7 +6,7 @@ inside one, as Make Group does. The command itself, run inside an assembly
 (a component holding components), still has to undo in place: the assembly's
 matrix was down in its parts when it ran, and comes back up on leaving."""
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 import pytest
 
 from tests.native_tree import group_rows
@@ -98,5 +98,5 @@ def test_the_menu_explode_inside_a_component_asks_for_make_unique(native_host, c
     win._on_explode_group()
     assert parent.children == [target] and target.children == [child]
     assert len(vp.history.undo_stack) == steps
-    from ingetrazo_core.i18n import tr
+    from built_core.i18n import tr
     assert group_rows(native_host, target)[tr("Explode Group")]

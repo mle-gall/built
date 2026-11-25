@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The unit formatters moved to Rust (``rust/ingetrazo_core/src/units.rs``)
+"""The unit formatters moved to Rust (``rust/built_core/src/units.rs``)
 and must read exactly as the Python ones did.
 
 ``tests/fixtures/units_format_golden.json.gz`` holds what the retired Python

@@ -46,7 +46,7 @@ def look(mesh):
 
 
 def mesh_of(rng, n):
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from core.mesh import Mesh
     m = Mesh()
     for i in range(n):
@@ -75,7 +75,7 @@ def mesh_of(rng, n):
 
 
 def matrix(rng):
-    from ingetrazo_core import Matrix4
+    from built_core import Matrix4
     t = Matrix4()
     t.translate(rng.choice([0.0, 1.25, 1e5]), rng.uniform(-3, 3), rng.uniform(-1, 1))
     t.rotate(rng.uniform(0, 360), rng.random(), rng.random(), rng.random() + 0.2)
@@ -85,9 +85,9 @@ def matrix(rng):
 
 
 def answers(seed):
-    from ingetrazo_core import Matrix4
+    from built_core import Matrix4
     from core.group import Group, world_mesh
-    from ingetrazo_core import group_transformed_mesh as transformed_mesh
+    from built_core import group_transformed_mesh as transformed_mesh
     rng = random.Random(seed)
     n = rng.choice([4, 20, 300])
     src = mesh_of(rng, n)
@@ -123,8 +123,8 @@ def _golden():
 def test_a_copy_carries_soft_flat_and_curves_at_any_size(n):
     """One build at any size: the small-mesh walk copied the flat flag and
     the vectorized copy did not; both carry soft, flat and curves now."""
-    from ingetrazo_core import Matrix4, Vec3 as V
-    from ingetrazo_core import group_transformed_mesh as transformed_mesh
+    from built_core import Matrix4, Vec3 as V
+    from built_core import group_transformed_mesh as transformed_mesh
     from core.mesh import Mesh
     m = Mesh()
     for i in range(n):

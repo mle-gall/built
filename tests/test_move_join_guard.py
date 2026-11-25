@@ -5,7 +5,7 @@ nothing on the undo stack, nothing in the error log, and the reason kept in
 ``History.last_rejected`` for the Move tool to say."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.group import Group
 from core.history import (CompoundCommand, History, MoveGroupCommand,

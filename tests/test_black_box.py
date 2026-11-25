@@ -5,7 +5,7 @@ import importlib
 import pytest
 
 
-@pytest.mark.parametrize("name", ["ingetrazo_core", "ingetrazo_render"])
+@pytest.mark.parametrize("name", ["built_core", "built_render"])
 def test_a_rust_panic_lands_in_the_log(tmp_path, name):
     module = importlib.import_module(name)
     path = tmp_path / "crash.log"

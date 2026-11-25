@@ -8,7 +8,7 @@ import itertools
 import math
 
 import numpy as np
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.camera import OrbitCamera
 from core.hlr import hlr_perspective

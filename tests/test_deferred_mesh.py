@@ -10,7 +10,7 @@ import copy
 import random
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 import core._native as _native
 from core import mesh as M
@@ -86,7 +86,7 @@ def _random_scene(rng) -> Scene:
     fill(proto, 25)
     for k in range(3):
         g = Group(proto, name=f"P{k}")
-        from ingetrazo_core import Matrix4 as QMatrix4x4
+        from built_core import Matrix4 as QMatrix4x4
         x = QMatrix4x4()
         x.translate(k * 10, 0, 0)
         g.xform = x
@@ -155,7 +155,7 @@ def test_a_deep_copy_is_its_own_mesh(binary, monkeypatch, tmp_path):
 def test_off_by_default_nothing_deferred(binary, monkeypatch, tmp_path):
     path = tmp_path / "doc.igz"
     igz.save_scene(_random_scene(random.Random(2)), path)
-    monkeypatch.delenv("INGETRAZO_RUST", raising=False)
+    monkeypatch.delenv("BUILT_RUST", raising=False)
     monkeypatch.setattr(_native, "wanted", lambda: False)
     scene = Scene()
     igz.load_into(scene, path)
@@ -198,7 +198,7 @@ def _painted_scene(seed, tmp_path):
     """A random scene with every attribute the writer keeps: paint,
     textures, layers, IFC, two sides, hidden faces and edges, curves,
     edge layers, holes (some nested)."""
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     rng = random.Random(seed)
     scene = _random_scene(rng)
     png = tmp_path / "w.png"

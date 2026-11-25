@@ -7,7 +7,7 @@ from __future__ import annotations
 import gc
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.scene import Scene
 from formats import igz

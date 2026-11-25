@@ -4,7 +4,7 @@ from copy import deepcopy
 
 from core import doc_model as _dm
 from core.group import iter_placements
-from ingetrazo_core.history import SnapshotImport
+from built_core.history import SnapshotImport
 
 
 class AgentSnapshot(SnapshotImport):
@@ -26,7 +26,7 @@ class AgentSnapshot(SnapshotImport):
         objects = list(groups) + list(scene.layers)
         memo = {id(o): o for o in [*objects, *meshes]}
         attrs = [(o, deepcopy(_dm.object_state(o), memo)) for o in objects]
-        from ingetrazo_core.mesh import DeferredMesh
+        from built_core.mesh import DeferredMesh
         mesh_states = {m: None if type(m) is DeferredMesh else m.capture_state()
                        for m in meshes if m is not scene.mesh}
         fields = {k: deepcopy(getattr(scene, k), memo) for k in (
@@ -78,7 +78,7 @@ class AgentSnapshot(SnapshotImport):
             super().do(scene)
             self.restore(scene, self.extra_after, self.changed_meshes)
             return
-        from ingetrazo_core.mesh import on_mesh_materialized
+        from built_core.mesh import on_mesh_materialized
         self.extra_before = self.capture(scene)
         before = self.extra_before[1]
 
@@ -144,7 +144,7 @@ class TreeSnapshot(SnapshotImport):
 
     @staticmethod
     def capture(scene, serials=None):
-        from ingetrazo_core import Matrix4 as QMatrix4x4
+        from built_core import Matrix4 as QMatrix4x4
         tree = []
         stack = list(scene.groups) + list(getattr(scene, "kept_components", ()) or ())
         seen = set()
@@ -169,7 +169,7 @@ class TreeSnapshot(SnapshotImport):
 
     @staticmethod
     def restore(scene, state):
-        from ingetrazo_core import Matrix4 as QMatrix4x4
+        from built_core import Matrix4 as QMatrix4x4
         for g, (holder, children), values in state:
             # ``adopt`` swaps in a new list; extensions and the view may
             # hold the original one, so that object comes back, refilled.

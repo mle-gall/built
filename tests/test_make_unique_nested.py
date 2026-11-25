@@ -4,7 +4,7 @@ subgroups within it») — with a private copy of the whole tree, so editing
 the unique one never reaches its former siblings."""
 from __future__ import annotations
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group, copy_group, world_mesh
 from core.history import History, MakeUniqueCommand

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The Rust drawing pass (ingetrazo_core sheets::drawing) draws what the
+"""The Rust drawing pass (built_core sheets::drawing) draws what the
 Python pass drew: the same segments, world points, kinds and layers, for
 every synthetic case of tests/hlr_parity_cases.py. The goldens were written
 by core/hlr.py before its loop moved to Rust (docs/rust-sheets.md §6)."""

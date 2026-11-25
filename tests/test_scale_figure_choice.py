@@ -7,14 +7,14 @@ from __future__ import annotations
 
 
 import pytest  # noqa: E402
-from ingetrazo_core import NativeSettings
-from ingetrazo_core.settings import settings as preferences
+from built_core import NativeSettings
+from built_core.settings import settings as preferences
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import numpy as np
-from ingetrazo_render import SurveyRaster
-from ingetrazo_core import Vec3 as V
+from built_render import SurveyRaster
+from built_core import Vec3 as V
 
-from ingetrazo_core import scale_figure as sf  # noqa: E402
+from built_core import scale_figure as sf  # noqa: E402
 from core.group import Group, make_billboard_group  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
 
@@ -22,7 +22,7 @@ from core.mesh import Mesh  # noqa: E402
 @pytest.fixture
 def settings(tmp_path, monkeypatch):
     st = NativeSettings(str(tmp_path))
-    monkeypatch.setattr("ingetrazo_core.autosave._app_data_base", lambda: tmp_path)
+    monkeypatch.setattr("built_core.autosave._app_data_base", lambda: tmp_path)
     return st
 
 
@@ -117,7 +117,7 @@ def test_the_mark_travels_in_the_igz(tmp_path):
 
 
 def test_inserting_a_document_leaves_out_whatever_figure_the_app_placed(tmp_path):
-    from ingetrazo_core.document_insert import is_scale_figure
+    from built_core.document_insert import is_scale_figure
     mine = make_billboard_group(str(_png(tmp_path / "yo.png")), 1.6, "Marco", 0.33)
     sf.mark(mine)
     engineer_old = make_billboard_group("/x/c1-ingeniero.png", 1.7, "Ingeniero", 0.4)
@@ -137,9 +137,9 @@ def test_inserting_a_document_leaves_out_whatever_figure_the_app_placed(tmp_path
 def test_preferences_choose_my_picture_and_ok_stores_it(native_host, tmp_path, monkeypatch):
     """The whole gesture: «My own picture…» asks for the file at once, OK
     copies it into the data folder and the next new document stands it."""
-    from ingetrazo_render import shell_files
+    from built_render import shell_files
     from tests.preferences_chrome import Controls
-    monkeypatch.setattr("ingetrazo_core.autosave._app_data_base", lambda: tmp_path)
+    monkeypatch.setattr("built_core.autosave._app_data_base", lambda: tmp_path)
     src = _png(tmp_path / "Marco_Sumari.png")
     monkeypatch.setattr(shell_files.ShellFileDialog, "getOpenFileName",
                         staticmethod(lambda *a, **k: (str(src), "")))
@@ -160,7 +160,7 @@ def test_preferences_choose_my_picture_and_ok_stores_it(native_host, tmp_path, m
 
 
 def test_cancelling_the_file_dialog_goes_back_to_the_person_before(native_host, monkeypatch):
-    from ingetrazo_render import shell_files
+    from built_render import shell_files
     from tests.preferences_chrome import Controls
     monkeypatch.setattr(shell_files.ShellFileDialog, "getOpenFileName",
                         staticmethod(lambda *a, **k: ("", "")))

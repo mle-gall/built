@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
@@ -29,9 +29,9 @@ def _extent(meshes):
 def test_letters_lay_out_exactly_like_the_one_piece_text():
     """Splitting into letters changes the STRUCTURE, never the geometry:
     same faces, same block extent, same baseline."""
-    whole = build_text_mesh("IngeTrazo", "Sans", True, False, 0.25, 0.05)
-    letters = build_text_letters("IngeTrazo", "Sans", True, False, 0.25, 0.05)
-    assert [c for c, _m in letters] == list("IngeTrazo")
+    whole = build_text_mesh("Built", "Sans", True, False, 0.25, 0.05)
+    letters = build_text_letters("Built", "Sans", True, False, 0.25, 0.05)
+    assert [c for c, _m in letters] == list("Built")
     assert sum(len(m.faces) for _c, m in letters) == len(whole.faces)
     a = _extent([whole])
     b = _extent([m for _c, m in letters])
@@ -168,12 +168,12 @@ def test_select_double_click_on_a_text_enters_it_like_any_group():
 
 
 def test_edit_3d_text_reaches_the_container_from_a_letter_inside(native_host, monkeypatch):
-    from ingetrazo_render import context_menu_build, context_menu_run
+    from built_render import context_menu_build, context_menu_run
     scene = native_host.viewport.scene
     text = make_text_group(text_params("Ab", "Sans"))
     scene.groups.append(text)
     opened = []
-    monkeypatch.setattr("ingetrazo_render.font_picker.text3d", lambda win, params, done: opened.append(params))
+    monkeypatch.setattr("built_render.font_picker.text3d", lambda win, params, done: opened.append(params))
     for parent, picked in [(text, text.children[1]), (None, text)]:
         scene.edit_group = parent
         scene.select([picked])
@@ -360,7 +360,7 @@ def test_an_edit_command_leaves_the_new_letters_pristine():
 
 
 def test_edit_3d_text_refuses_a_text_edited_by_hand(native_host, monkeypatch):
-    from ingetrazo_render import context_menu_build, context_menu_run
+    from built_render import context_menu_build, context_menu_run
     scene = native_host.viewport.scene
     group = make_text_group(text_params("Ab", "Sans"))
     scene.groups.append(group)
@@ -368,7 +368,7 @@ def test_edit_3d_text_refuses_a_text_edited_by_hand(native_host, monkeypatch):
     scene.select([group])
     flashed, opened = [], []
     monkeypatch.setattr(native_host.viewport, "flash_status", lambda msg, ms: flashed.append(msg))
-    monkeypatch.setattr("ingetrazo_render.font_picker.text3d", lambda *args: opened.append(args))
+    monkeypatch.setattr("built_render.font_picker.text3d", lambda *args: opened.append(args))
     menu = context_menu_build(native_host.window, native_host.view)
     edit = menu.find("edittext3d")
     assert edit and not edit.enabled and "edited by hand" in edit.label

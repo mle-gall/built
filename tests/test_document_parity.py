@@ -138,9 +138,9 @@ def test_geometry_history_agrees(runs):
 
 
 def test_scene_folder_edits_match_archived_replay():
-    from ingetrazo_core import scene_tree
+    from built_core import scene_tree
     from core.history import History, SceneTreeCommand
-    from ingetrazo_core.saved_views import SavedView
+    from built_core.saved_views import SavedView
     from core.scene import Scene
 
     scene = Scene()

@@ -10,7 +10,7 @@ stayed behind at the local origin and read as lost.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group, copy_group
 from core.history import ExplodeGroupCommand, History

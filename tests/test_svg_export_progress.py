@@ -16,12 +16,12 @@ import pytest
 pytest.importorskip("manifold3d")
 
 
-from ingetrazo_core import progress as P                         # noqa: E402
+from built_core import progress as P                         # noqa: E402
 from core import vista_caras as VC                      # noqa: E402
 from core.vista_caras import FaceFill                   # noqa: E402
 from tests.vista_caras_reference import _scene        # noqa: E402
-import ingetrazo_render as wgpu_deliveries              # noqa: E402
-from ingetrazo_render import chrome_dialogs                        # noqa: E402
+import built_render as wgpu_deliveries              # noqa: E402
+from built_render import chrome_dialogs                        # noqa: E402
 from tests.test_export_view_svg import _export_sheet
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
@@ -88,7 +88,7 @@ def test_every_stretch_of_the_work_is_heard(monkeypatch):
     with P.reporting(lambda done: None):
         hlr_drawing(scene, cam)
     # The walk is heard; the classification runs in Rust in one call
-    # (ingetrazo_core sheets::drawing).
+    # (built_core sheets::drawing).
     assert heard == [None] * (40 * 6)
 
 
@@ -210,9 +210,9 @@ def test_the_bar_left_alone_writes_the_svg_as_before(native_host, tmp_path, monk
 
 def test_cancel_on_a_slow_preview_turns_the_preview_off(native_host, monkeypatch):
     import time
-    from ingetrazo_core import deliveries
-    from ingetrazo_render import chrome_sheet
-    from ingetrazo_render import shell_modal as modal
+    from built_core import deliveries
+    from built_render import chrome_sheet
+    from built_render import shell_modal as modal
 
     win = native_host.window
     monkeypatch.setattr(chrome_dialogs, "in_shell", lambda: True)

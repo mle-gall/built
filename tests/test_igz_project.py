@@ -2,7 +2,7 @@
 import pytest
 from copy import deepcopy
 from core import bim_registry
-from ingetrazo_core import project
+from built_core import project
 from core.scene import Scene
 from core.history import SetRegistryCommand
 from formats import project as storage, igz
@@ -75,7 +75,7 @@ def test_undo_reverts_only_its_own_entry(tmp_path):
 
 def test_export_project_guid(tmp_path):
     from core.group import Group
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     from formats.ifc import save_ifc
     a, b = Scene(), Scene()
     path = tmp_path / 'shared.builtproject'

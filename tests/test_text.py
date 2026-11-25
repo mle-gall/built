@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 
 from core.history import (AddTextLabelCommand, DeleteTextLabelsCommand,
@@ -32,7 +32,7 @@ def test_3d_text_builds_watertight_letters_with_holes():
     mesh = build_text_mesh("O", "Sans", height=0.5, thickness=0.1)
     assert mesh.faces
     assert _closed(mesh)                            # solid ring, hole intact
-    from ingetrazo_core.orient import signed_volume
+    from built_core.orient import signed_volume
     assert signed_volume(mesh) > 0
     # the front face carries the counter of the O as a hole
     assert any(f.hole_loops for f in mesh.faces)
@@ -75,7 +75,7 @@ def test_3d_text_curve_seams_are_soft():
 
 
 def test_place_face_frame_maps_walls_and_floors():
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     from tools.place_group import PlaceGroupTool
     # wall facing -Y: sign stands upright, reading along +X
     right, y_axis, up = PlaceGroupTool._face_frame(QVector3D(0, -1, 0))
@@ -148,7 +148,7 @@ def test_select_double_click_edits_label(monkeypatch):
     """Double-clicking a leader text with Select opens the edit dialog
     (the usual convention) and commits the new text as one undoable command."""
     from types import SimpleNamespace
-    from ingetrazo_render import chrome_forms
+    from built_render import chrome_forms
     from tools.rust_tools import SelectTool
 
     scene = Scene()
@@ -231,7 +231,7 @@ def test_select_delete_key_removes_label():
     DeleteTextLabelsCommand was missing and only NameError'd at press
     time — regression guard)."""
     from types import SimpleNamespace
-    from ingetrazo_core import Input as Qt
+    from built_core import Input as Qt
     from tools.rust_tools import SelectTool
 
     scene = Scene()
@@ -280,7 +280,7 @@ def test_pick_text_label_hits_the_drawn_block():
     """The hit box follows the drawn block: with the anchor to the right the
     words are LEFT of the leader end, and a click there (not to the right,
     where the block used to be) picks the label."""
-    from ingetrazo_render import AnnotationFont
+    from built_render import AnnotationFont
     from tests.controller_surface import ControllerSurface as Viewport
 
     scene = Scene()

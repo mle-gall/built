@@ -14,12 +14,12 @@ through the pass that asks every face, and gets the answer it always got.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
-from ingetrazo_core import orient
+from built_core import orient
 from core.history import History, MoveVerticesCommand
 from core.mesh import Mesh
-from ingetrazo_core.orient import orient_outward, signed_volume
+from built_core.orient import orient_outward, signed_volume
 from core.scene import Scene
 from core.topology import _key
 from tests.test_pushpull_large_solid_cost import (_circle,

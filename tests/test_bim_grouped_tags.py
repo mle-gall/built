@@ -9,8 +9,8 @@ vanished from them while the Browser still showed the class."""
 from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Matrix4 as QMatrix4x4
-from ingetrazo_core import Vec3 as V
+from built_core import Matrix4 as QMatrix4x4
+from built_core import Vec3 as V
 
 from core import bim
 from core.bim import collect_objects, next_object_id, tag_faces, tag_group

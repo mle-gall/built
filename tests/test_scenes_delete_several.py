@@ -6,7 +6,7 @@ undone. Ctrl/Shift+click now picks several, − (or Delete) removes them
 all, and Undo brings each back in its place."""
 from __future__ import annotations
 
-from ingetrazo_core.saved_views import SavedView
+from built_core.saved_views import SavedView
 
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401

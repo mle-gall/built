@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""``ingetrazo_core.scan_index``: the drawing commands' whole-mesh searches as native
+"""``built_core.scan_index``: the drawing commands' whole-mesh searches as native
 prefilters must leave every decision where the full Python loops put it.
 
 Two layers:
@@ -26,13 +26,13 @@ import random
 import numpy as np
 import pytest
 from tests import fuzz
-from ingetrazo_core import Vec3 as QVector3D
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as QVector3D
+from built_core import Vec3 as V
 
 import core._native as _native
 from core import mesh as M
-from ingetrazo_core import scan_index
-from ingetrazo_core import store_mesh as S
+from built_core import scan_index
+from built_core import store_mesh as S
 
 mod = _native.available()
 pytestmark = pytest.mark.skipif(
@@ -164,7 +164,7 @@ def _points_on(rng, m):
 
 
 def _rect_on(rng, m):
-    from ingetrazo_core.triangulate import plane_axes
+    from built_core.triangulate import plane_axes
     f = rng.choice(list(m.faces))
     n = f.normal()
     u, w = plane_axes(n)

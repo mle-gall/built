@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """The composer's sacred math: paper mm × scale → metres of model, and the
 camera settings that realise it (docs/composer-plan.md)."""
-import ingetrazo_core
+import built_core
 import math
 
 import pytest
@@ -279,7 +279,7 @@ class TestFieldNames:
 
     def test_tooltips_name_the_fields_in_the_language_running(self):
         from core.composition import local_field_names
-        from ingetrazo_core.i18n import current_language, set_language
+        from built_core.i18n import current_language, set_language
         text = "Fields like {escala}, {lamina} and {n} expand."
         before = current_language()
         try:
@@ -386,7 +386,7 @@ class TestHLR:
 
     def _spans(self, a2, b2, az, bz, tris2, trisz, eps=1e-6):
         import numpy as np
-        from ingetrazo_core import HlrOccluders
+        from built_core import HlrOccluders
         tris = np.concatenate([np.array(tris2, float),
                                np.array(trisz, float)[..., None]], axis=2)
         off, spans = HlrOccluders(tris).visible_spans(
@@ -447,7 +447,7 @@ class TestHLR:
 
 class TestHLRScene:
     def test_box_from_top_shows_four_edges(self):
-        from ingetrazo_core import Vec3 as QVector3D
+        from built_core import Vec3 as QVector3D
         from core.camera import OrbitCamera
         from core.hlr import hlr_view
         from core.scene import Scene
@@ -482,13 +482,13 @@ class TestHLRScene:
         # return_world: every world endpoint must re-project EXACTLY onto
         # its 2D segment — the invariant dimension anchoring relies on.
         import numpy as np
-        import ingetrazo_core
+        import built_core
         segs2, world = hlr_view(scene, cam, return_world=True)
         assert segs2.shape[0] == world.shape[0]
-        eye, right, up, fwd = ingetrazo_core.hlr_camera_basis(cam)
+        eye, right, up, fwd = built_core.hlr_camera_basis(cam)
         for (x0, y0, x1, y1), (w0, w1) in zip(segs2, world):
-            c0 = ingetrazo_core.hlr_to_cam(np.asarray([w0]), eye, right, up, fwd)[0]
-            c1 = ingetrazo_core.hlr_to_cam(np.asarray([w1]), eye, right, up, fwd)[0]
+            c0 = built_core.hlr_to_cam(np.asarray([w0]), eye, right, up, fwd)[0]
+            c1 = built_core.hlr_to_cam(np.asarray([w1]), eye, right, up, fwd)[0]
             assert (c0[0], c0[1]) == pytest.approx((x0, y0), abs=1e-9)
             assert (c1[0], c1[1]) == pytest.approx((x1, y1), abs=1e-9)
         # and the roof's world Z is the roof's height (only real segments —

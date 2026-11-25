@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.arrangement import _area_floor, planar_arrangement
 from core.edits import build_add_edges

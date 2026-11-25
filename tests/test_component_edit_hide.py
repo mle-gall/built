@@ -9,7 +9,7 @@ the component being edited out of the frame — and out of the pick.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from core.group import Group
@@ -91,7 +91,7 @@ def test_hide_rest_toggles_back_to_the_previous_mode(native_host):
 
 
 def test_fade_slider_applies_immediately_and_follows_the_viewport(native_host):
-    from ingetrazo_render.settings_sheet import Env, SettingsSheet
+    from built_render.settings_sheet import Env, SettingsSheet
     win = native_host.window
     env = Env(win)
     def slider():

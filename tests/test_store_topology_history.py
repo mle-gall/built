@@ -7,7 +7,7 @@ from pathlib import Path
 import random
 
 import pytest
-from ingetrazo_core import Vec3
+from built_core import Vec3
 from core.mesh import Mesh, turn_face_over
 from tests.test_store_mesh import fingerprint
 

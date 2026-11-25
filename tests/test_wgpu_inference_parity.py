@@ -27,8 +27,8 @@ import math
 
 import numpy as np
 import pytest
-from ingetrazo_core import Input
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Input
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group
 from core.mesh import Mesh
@@ -442,12 +442,12 @@ def test_face_rules_ask_only_the_placements_under_the_cursor(view, monkeypatch):
     assert view.last_snap is not None
     # The test's own ID-pass stand-in (_pick) asks one row at a time; the
     # occlusion rays ask all rows through the native BVH. Neither is new.
-    import ingetrazo_core
+    import built_core
     asked.clear()
     # Observe the rows that actually reach every BVH ray, including side probes.
-    ingetrazo_core.face_crossing(
+    built_core.face_crossing(
         index, view, x, y, view.hovered_row, view.last_snap.point, V(0, 0, 1),
-        ingetrazo_core.eligible_rows(index, view.packed),
+        built_core.eligible_rows(index, view.packed),
         view._world_to_pixel, view.scene.edit_group)
     assert asked and max(asked) <= 8, asked
 

@@ -3,8 +3,8 @@
 use std::sync::Mutex;
 /// The model type, by its name here and on the platform. Callers asking by
 /// the Qt-era name (what the Qt window wrote on macOS) get the same data.
-const MIME: &str = "application/x-ingetrazo-clipboard";
-const QT_ERA: &str = "com.trolltech.anymime.application--x-ingetrazo-clipboard";
+const MIME: &str = "application/x-built-clipboard";
+const QT_ERA: &str = "com.trolltech.anymime.application--x-built-clipboard";
 const TEXT: &str = "public.utf8-plain-text";
 type Items = Vec<(String, Vec<u8>)>;
 
@@ -61,7 +61,7 @@ mod platform {
         match kind {
             TEXT => Some(13), // CF_UNICODETEXT
             MIME | QT_ERA => {
-                Some(unsafe { RegisterClipboardFormatW(w!("application/x-ingetrazo-clipboard")) })
+                Some(unsafe { RegisterClipboardFormatW(w!("application/x-built-clipboard")) })
                     .filter(|f| *f != 0)
             }
             _ => None,

@@ -3,20 +3,20 @@
 """Drawing records, history, archive and sheet export on synthetic models."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 from tests.shell_isolation import one_off_export, restore_shell_patches  # noqa: F401
 import json
 import random
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core import layers as L
 from core.group import Group
 from core.history import DeleteLayerCommand, History, MakeGroupCommand
 from core.layers import DEFAULT_LAYER, Layer, assign_layer, layer_of
 from core.mesh import Mesh
-from ingetrazo_core.saved_views import SavedView
+from built_core.saved_views import SavedView
 from core.scene import Scene
 
 
@@ -56,10 +56,10 @@ def test_a_malformed_record_loads_with_defaults(raw):
 
 
 def test_automatic_colour_is_stable_and_the_default_is_white():
-    assert ingetrazo_core.tag_styles.layer_color(Layer(DEFAULT_LAYER)) == L.DEFAULT_LAYER_COLOR
-    a = ingetrazo_core.tag_styles.layer_color(Layer("Estructura"))
-    assert a == ingetrazo_core.tag_styles.layer_color(Layer("Estructura")) and a in L.PALETTE
-    assert ingetrazo_core.tag_styles.layer_color(Layer("E", color=(1, 0, 0))) == (1, 0, 0)
+    assert built_core.tag_styles.layer_color(Layer(DEFAULT_LAYER)) == L.DEFAULT_LAYER_COLOR
+    a = built_core.tag_styles.layer_color(Layer("Estructura"))
+    assert a == built_core.tag_styles.layer_color(Layer("Estructura")) and a in L.PALETTE
+    assert built_core.tag_styles.layer_color(Layer("E", color=(1, 0, 0))) == (1, 0, 0)
 
 
 def test_igz_keeps_active_layer_folders_and_looks(tmp_path):
@@ -90,7 +90,7 @@ def test_new_groups_go_to_the_active_layer_and_their_insides_do_not():
     scene = Scene()
     history = History(scene)
     scene.layers.append(Layer("Muebles"))
-    ingetrazo_core.tag_edits.set_active(scene, "Muebles")
+    built_core.tag_edits.set_active(scene, "Muebles")
     f = _square(scene.mesh)
     history.execute(MakeGroupCommand([f], list(scene.mesh.edges)))
     g = scene.groups[-1]
@@ -111,7 +111,7 @@ def test_loose_lines_and_faces_stay_on_layer_0_and_their_group_does_not():
     scene = Scene()
     history = History(scene)
     scene.layers.append(Layer("Muros"))
-    ingetrazo_core.tag_edits.set_active(scene, "Muros")
+    built_core.tag_edits.set_active(scene, "Muros")
     history.execute(AddEdgeCommand(V(0, 0), V(5, 0)))
     history.execute(AddFaceCommand([V(10, 0), V(12, 0), V(12, 2), V(10, 2)]))
     history.execute(build_add_edge(scene, V(11, 0), V(11, 2)))   # a split
@@ -140,7 +140,7 @@ def test_a_replacement_or_a_tagged_object_keeps_its_layer():
     scene.layers += [Layer("A"), Layer("B")]
     old = Group(Mesh(), name="viejo")
     scene.groups.append(old)
-    ingetrazo_core.tag_edits.set_active(scene, "A")
+    built_core.tag_edits.set_active(scene, "A")
     before = L.object_ids(scene)
     twin = Group(Mesh(), name="reemplazo")
     twin.uid = old.uid                     # Make Unique / Replace keep it
@@ -156,13 +156,13 @@ def test_a_replacement_or_a_tagged_object_keeps_its_layer():
 def test_hiding_or_locking_the_active_layer_hands_back_to_the_default():
     scene = Scene()
     scene.layers += [Layer("A"), Layer("B")]
-    ingetrazo_core.tag_edits.set_active(scene, "A")
-    assert ingetrazo_core.tag_edits.set_visible(scene, ["B"], False) is False
-    assert ingetrazo_core.tag_edits.set_visible(scene, ["A"], False) is True
+    built_core.tag_edits.set_active(scene, "A")
+    assert built_core.tag_edits.set_visible(scene, ["B"], False) is False
+    assert built_core.tag_edits.set_visible(scene, ["A"], False) is True
     assert scene.active_layer is None
-    ingetrazo_core.tag_edits.set_active(scene, "A")                         # shows it again
+    built_core.tag_edits.set_active(scene, "A")                         # shows it again
     assert scene.layer("A").visible and scene.active_layer == "A"
-    assert ingetrazo_core.tag_edits.set_locked(scene, ["A"], True) is True
+    assert built_core.tag_edits.set_locked(scene, ["A"], True) is True
     assert L.active_layer(scene) == DEFAULT_LAYER
 
 
@@ -170,7 +170,7 @@ def test_rename_and_delete_follow_the_active_layer():
     scene = Scene()
     history = History(scene)
     scene.layers.append(Layer("A"))
-    ingetrazo_core.tag_edits.set_active(scene, "A")
+    built_core.tag_edits.set_active(scene, "A")
     assert L.rename_layer(scene, "A", "Z")
     assert scene.active_layer == "A"                 # the key stays
     assert scene.layer(scene.active_layer).name == "Z"
@@ -183,7 +183,7 @@ def test_rename_and_delete_follow_the_active_layer():
 def test_isolate_keeps_the_default_layer_on():
     scene = Scene()
     scene.layers += [Layer("A"), Layer("B"), Layer("C")]
-    ingetrazo_core.tag_edits.isolate(scene, ["B"])
+    built_core.tag_edits.isolate(scene, ["B"])
     assert [ly.visible for ly in scene.layers] == [True, False, True, False]
 
 
@@ -198,7 +198,7 @@ def test_merge_moves_everything_and_undoes():
     for e in (f, g, inner):
         assign_layer(e, "A")
     scene.saved_views.append(SavedView("S", hidden_layers=["A"]))
-    ingetrazo_core.tag_edits.set_active(scene, "A")
+    built_core.tag_edits.set_active(scene, "A")
     history.execute(DeleteLayerCommand("A", into="B"))
     assert scene.layer("A") is None
     assert all(layer_of(e) == "B" for e in (f, g, inner))
@@ -221,16 +221,16 @@ def test_merge_into_itself_or_nowhere_is_refused():
 def test_folders_add_rename_move_and_remove():
     scene = Scene()
     scene.layers += [Layer("A"), Layer("B")]
-    name = ingetrazo_core.tag_edits.add_folder(scene, "Carpeta")
-    assert name == "Carpeta 1" and ingetrazo_core.tag_edits.add_folder(scene, "Carpeta") == "Carpeta 2"
-    ingetrazo_core.tag_edits.move_to_folder(scene, ["A", "B", DEFAULT_LAYER], name)
+    name = built_core.tag_edits.add_folder(scene, "Carpeta")
+    assert name == "Carpeta 1" and built_core.tag_edits.add_folder(scene, "Carpeta") == "Carpeta 2"
+    built_core.tag_edits.move_to_folder(scene, ["A", "B", DEFAULT_LAYER], name)
     assert scene.layer("A").folder == name and scene.layer(DEFAULT_LAYER).folder is None
-    assert ingetrazo_core.tag_edits.rename_folder(scene, name, "Arq")
+    assert built_core.tag_edits.rename_folder(scene, name, "Arq")
     assert scene.layer("B").folder == name           # layers name its key
-    assert ingetrazo_core.tag_edits.folder_label(scene, name) == "Arq"
-    assert ingetrazo_core.tag_edits.rename_folder(scene, "Carpeta 2", "Arq")  # labels may repeat
-    assert not ingetrazo_core.tag_edits.rename_folder(scene, name, "")
-    ingetrazo_core.tag_edits.remove_folder(scene, name)
+    assert built_core.tag_edits.folder_label(scene, name) == "Arq"
+    assert built_core.tag_edits.rename_folder(scene, "Carpeta 2", "Arq")  # labels may repeat
+    assert not built_core.tag_edits.rename_folder(scene, name, "")
+    built_core.tag_edits.remove_folder(scene, name)
     assert scene.layer("A").folder is None and name not in L.folders_of(scene)
     assert name not in scene.layer_folder_names
 
@@ -240,20 +240,20 @@ def test_hide_in_every_scene_and_back():
     scene.layers.append(Layer("Nueva"))
     scene.saved_views += [SavedView("Planta"), SavedView("Alzado",
                                                           hidden_layers=["X"])]
-    assert ingetrazo_core.tag_edits.hide_in_scenes(scene, ["Nueva"], True) == 2
+    assert built_core.tag_edits.hide_in_scenes(scene, ["Nueva"], True) == 2
     assert scene.saved_views[1].hidden_layers == ["X", "Nueva"]
-    assert ingetrazo_core.tag_edits.hide_in_scenes(scene, ["Nueva"], True) == 0
-    assert ingetrazo_core.tag_edits.hide_in_scenes(scene, ["Nueva"], False) == 2
+    assert built_core.tag_edits.hide_in_scenes(scene, ["Nueva"], True) == 0
+    assert built_core.tag_edits.hide_in_scenes(scene, ["Nueva"], False) == 2
 
 
 def test_template_round_trip_adds_and_updates_without_removing():
     src = Scene()
     src.layers += [Layer("Muros", color=(0.5, 0.1, 0.1), folder="Arq",
                          linetype="dashed"), Layer("Ejes", linetype="dashdot")]
-    data = json.loads(json.dumps(ingetrazo_core.tag_edits.template_of(src)))
+    data = json.loads(json.dumps(built_core.tag_edits.template_of(src)))
     dst = Scene()
     dst.layers += [Layer("Muros", visible=False), Layer("Propia")]
-    added, updated = ingetrazo_core.tag_edits.apply_template(dst, data)
+    added, updated = built_core.tag_edits.apply_template(dst, data)
     assert (added, updated) == (1, 2)               # Ejes; Layer 0 + Muros
     assert [ly.name for ly in dst.layers] == [DEFAULT_LAYER, "Muros",
                                                "Propia", "Ejes"]
@@ -261,11 +261,11 @@ def test_template_round_trip_adds_and_updates_without_removing():
     assert not muros.visible                        # keeps its visibility
     assert (muros.folder, muros.linetype) == ("Arq", "dashed")
     with pytest.raises(ValueError):
-        ingetrazo_core.tag_edits.apply_template(dst, {"layers": []})
+        built_core.tag_edits.apply_template(dst, {"layers": []})
 
 
 def test_a_section_plane_on_a_hidden_layer_cuts_nothing():
-    from ingetrazo_core.section import SectionPlane
+    from built_core.section import SectionPlane
     scene = Scene()
     scene.layers.append(Layer("Cortes"))
     sp = SectionPlane(V(0, 0, 1), V(0, 0, 1), active=True)
@@ -280,7 +280,7 @@ def test_a_section_plane_on_a_hidden_layer_cuts_nothing():
 
 
 def test_select_content_takes_the_context_and_skips_locked():
-    from ingetrazo_core import on_layers
+    from built_core import on_layers
     scene = Scene()
     scene.layers += [Layer("A"), Layer("B", locked=True)]
     f1 = _square(scene.mesh)
@@ -302,15 +302,15 @@ def test_effective_attrs_by_layer_and_layer_look():
                      Layer("C", locked=True)]
     g = Group(Mesh(), name="g")
     g.layer = "A"
-    paint = ingetrazo_core.tag_styles.layer_paint(scene, g)
+    paint = built_core.tag_styles.layer_paint(scene, g)
     textured = {"texture": {"path": "x.png"}, "color": (0, 1, 0)}
     got = effective_attrs(textured, paint)
     assert got["color"] == (1, 0, 0) and "texture" not in got
     assert effective_attrs({"layer": "B"}, paint)["color"] == (0, 0, 1)
-    look = ingetrazo_core.tag_styles.layer_look(scene, g, paint)
+    look = built_core.tag_styles.layer_look(scene, g, paint)
     assert effective_attrs({"layer": "B"}, look)["opacity"] == 0.5
     # Locked, over the face's own material (Colour by layer off).
-    plain_look = ingetrazo_core.tag_styles.layer_look(scene, g, None)
+    plain_look = built_core.tag_styles.layer_look(scene, g, None)
     faded = effective_attrs({"layer": "C", "color": (0.0, 0.0, 0.0)},
                             plain_look)
     assert faded["color"] == pytest.approx((L.LOCKED_FADE,) * 3)
@@ -323,13 +323,13 @@ def test_effective_attrs_by_layer_and_layer_look():
 def test_no_look_means_no_change():
     scene = Scene()
     scene.layers.append(Layer("A"))
-    assert ingetrazo_core.tag_styles.layer_fx(scene) == {}
-    assert ingetrazo_core.tag_styles.layer_look(scene, None, None) is None
+    assert built_core.tag_styles.layer_fx(scene) == {}
+    assert built_core.tag_styles.layer_look(scene, None, None) is None
 
 
 def test_viewport_paint_follows_the_style_and_the_layers():
     from types import SimpleNamespace
-    from ingetrazo_core.style import Style
+    from built_core.style import Style
     from views.document_interaction import _paint_of
     scene = Scene()
     scene.layers += [Layer("A", color=(1, 0, 0))]
@@ -356,7 +356,7 @@ def test_the_group_bake_takes_the_layer_colour_and_comes_back():
     — and go back to the material when it is switched off (the chunk cache
     keys on the paint)."""
     import numpy as np
-    from ingetrazo_core.style import Style
+    from built_core.style import Style
     from tests.test_group_material import _stub, _vcol_colours
     scene = Scene()
     scene.display_style = Style()
@@ -390,7 +390,7 @@ def test_the_group_bake_takes_the_layer_colour_and_comes_back():
 
 
 def test_style_remembers_colour_by_layer_only_when_on():
-    from ingetrazo_core.style import Style
+    from built_core.style import Style
     assert "color_by_layer" not in Style().to_dict()
     s = Style(color_by_layer=True)
     assert Style.from_dict(s.to_dict()).color_by_layer
@@ -435,7 +435,7 @@ def test_hlr_tags_every_line_with_its_layer():
 
 def test_hlr_tags_survive_a_section_cut():
     from core.hlr import KIND_CUT, hlr_drawing
-    from ingetrazo_core.section import SectionPlane
+    from built_core.section import SectionPlane
     scene = _two_boxes_scene()
     for g in scene.groups:
         _square(g.mesh, x0=g.mesh.faces[0].loop[0].position.x(), z=1.0)
@@ -449,14 +449,14 @@ def test_hlr_tags_survive_a_section_cut():
 
 def test_line_styles_and_wanted():
     scene = _two_boxes_scene()
-    assert ingetrazo_core.tag_styles.layer_lines_wanted(scene)
-    st = ingetrazo_core.tag_styles.line_styles(scene, colored=False)
+    assert built_core.tag_styles.layer_lines_wanted(scene)
+    st = built_core.tag_styles.line_styles(scene, colored=False)
     assert st["A"] == (None, "dashed", 0.5, None, (3.0, 1.5), None)
     assert st["B"][0] is None
-    assert ingetrazo_core.tag_styles.line_styles(scene, colored=True)[DEFAULT_LAYER][0] is None
+    assert built_core.tag_styles.line_styles(scene, colored=True)[DEFAULT_LAYER][0] is None
     plain = Scene()
     plain.layers.append(Layer("X"))
-    assert not ingetrazo_core.tag_styles.layer_lines_wanted(plain)
+    assert not built_core.tag_styles.layer_lines_wanted(plain)
 
 
 def test_legend_snapshots_colour_and_line():
@@ -469,27 +469,27 @@ def test_legend_snapshots_colour_and_line():
 
 def test_nested_folders_move_rename_remove():
     scene = Scene()
-    a = ingetrazo_core.tag_edits.add_folder(scene, "A")
-    b = ingetrazo_core.tag_edits.add_folder(scene, "B", parent=a)
-    c = ingetrazo_core.tag_edits.add_folder(scene, "C", parent=b)
+    a = built_core.tag_edits.add_folder(scene, "A")
+    b = built_core.tag_edits.add_folder(scene, "B", parent=a)
+    c = built_core.tag_edits.add_folder(scene, "C", parent=b)
     scene.layers.append(Layer("x", folder=b))
     assert L.subfolders(scene, a, deep=True) == [b, c]
-    assert not ingetrazo_core.tag_edits.move_folder(scene, a, c)             # no loops
-    assert not ingetrazo_core.tag_edits.move_folder(scene, a, a)
-    assert ingetrazo_core.tag_edits.rename_folder(scene, b, "Bee")
-    assert L.folder_parent(scene, c) == b and ingetrazo_core.tag_edits.folder_label(scene, b) == "Bee"
+    assert not built_core.tag_edits.move_folder(scene, a, c)             # no loops
+    assert not built_core.tag_edits.move_folder(scene, a, a)
+    assert built_core.tag_edits.rename_folder(scene, b, "Bee")
+    assert L.folder_parent(scene, c) == b and built_core.tag_edits.folder_label(scene, b) == "Bee"
     assert L.layers_in_folder(scene, a) == ["x"]
-    ingetrazo_core.tag_edits.remove_folder(scene, b)                         # contents move up
+    built_core.tag_edits.remove_folder(scene, b)                         # contents move up
     assert scene.layer("x").folder == a
     assert L.folder_parent(scene, c) == a
-    assert ingetrazo_core.tag_edits.move_folder(scene, c, None) and L.folder_parent(scene, c) is None
+    assert built_core.tag_edits.move_folder(scene, c, None) and L.folder_parent(scene, c) is None
 
 
 def test_nested_folders_travel_in_the_file_and_the_template(tmp_path):
     from formats import igz
     scene = Scene()
-    a = ingetrazo_core.tag_edits.add_folder(scene, "A")
-    b = ingetrazo_core.tag_edits.add_folder(scene, "B", parent=a)
+    a = built_core.tag_edits.add_folder(scene, "A")
+    b = built_core.tag_edits.add_folder(scene, "B", parent=a)
     _square(scene.mesh)
     path = tmp_path / "f.igz"
     igz.save_scene(scene, path)
@@ -497,7 +497,7 @@ def test_nested_folders_travel_in_the_file_and_the_template(tmp_path):
     igz.load_into(back, path)
     assert L.folder_parent(back, b) == a
     other = Scene()
-    ingetrazo_core.tag_edits.apply_template(other, json.loads(json.dumps(ingetrazo_core.tag_edits.template_of(scene))))
+    built_core.tag_edits.apply_template(other, json.loads(json.dumps(built_core.tag_edits.template_of(scene))))
     assert L.folder_parent(other, b) == a
 
 
@@ -544,7 +544,7 @@ def test_a_layer_not_printed_round_trips_and_leaves_the_legend():
     rows, _sw = L.legend_rows(scene)
     assert "Muros" in rows and "Ref" not in rows
     assert [ly.name for ly in L.unprinted(scene)] == ["Ref"]
-    ingetrazo_core.tag_styles.hide_unprinted(scene)
+    built_core.tag_styles.hide_unprinted(scene)
     assert not scene.layer("Ref").visible and scene.layer("Muros").visible
 
 
@@ -609,7 +609,7 @@ def test_every_line_type_has_a_name_a_dxf_twin_and_a_pattern(tmp_path):
 
 
 def test_recount_after_host_drawing_preserves_other_mesh_counts(monkeypatch):
-    import ingetrazo_core
+    import built_core
     from core.purge import layer_count_steps
     from core.history import AddEdgeCommand
     scene = Scene(groups=[Group(Mesh())])
@@ -619,7 +619,7 @@ def test_recount_after_host_drawing_preserves_other_mesh_counts(monkeypatch):
         return list(layer_count_steps(scene, history=history))[-1]
     before = counted()
     history.execute(AddEdgeCommand(V(0, 0), V(1, 0)))
-    monkeypatch.setattr(ingetrazo_core, "purge_iter_groups", lambda *_: pytest.fail("placement walk"))
+    monkeypatch.setattr(built_core, "purge_iter_groups", lambda *_: pytest.fail("placement walk"))
     assert counted()[DEFAULT_LAYER] == before[DEFAULT_LAYER] + 1
     history.undo()
     assert counted() == before

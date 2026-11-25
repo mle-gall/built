@@ -12,8 +12,8 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 def test_make_component_shows_once_with_loose_geometry_and_a_group(native_host):
     from core.group import Group
     from core.mesh import Mesh
-    from ingetrazo_core import Vec3
-    from ingetrazo_render import context_menu_build
+    from built_core import Vec3
+    from built_render import context_menu_build
 
     win = native_host.window
     scene = win.viewport.scene
@@ -44,7 +44,7 @@ def test_multiple_plugins_keep_their_declared_order_and_paths(native_host):
 
 
 def test_nested_actions_checked_state_and_ancestor_visibility():
-    from ingetrazo_render import ExtensionMenus
+    from built_render import ExtensionMenus
     menus = ExtensionMenus()
     menu = menus.root("wood").addMenu("Wood")
     sub = menu.addMenu("Edges")
@@ -69,7 +69,7 @@ def test_nested_actions_checked_state_and_ancestor_visibility():
 
 
 def test_raw_plugin_action_tracks_live_changes():
-    from ingetrazo_render import ExtensionMenus
+    from built_render import ExtensionMenus
     tree = ExtensionMenus()
     menu = tree.root("raw")
     raw = menu.addAction("Marks")
@@ -89,7 +89,7 @@ def test_raw_plugin_action_tracks_live_changes():
 
 
 def test_window_registry_isolation_and_setup_rollback(tmp_path, monkeypatch):
-    from ingetrazo_render import Host
+    from built_render import Host
     from core import extensions
     from core.extensions import LoadedPlugin
 
@@ -142,7 +142,7 @@ def test_installed_plugin_toggles_in_a_modelling_window(tmp_path):
     root = Path(__file__).resolve().parents[1]
     binary = root / "rust/built_app/target/release/built"
     settings = tmp_path / "settings"
-    plugins = settings / "data/ingetrazo/plugins"
+    plugins = settings / "data/built/plugins"
     plugins.mkdir(parents=True)
     plugin = plugins / "menu_fixture.py"
     plugin.write_text("""from pathlib import Path

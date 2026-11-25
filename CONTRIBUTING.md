@@ -1,14 +1,14 @@
-# Contributing to IngeTrazo
+# Contributing to Built
 
 [Bahasa Indonesia](CONTRIBUTING.id.md)
 
-Thank you for your interest in IngeTrazo! Contributions of any kind are welcome — code, documentation, translations, bug reports, design feedback.
+Thank you for your interest in Built! Contributions of any kind are welcome — code, documentation, translations, bug reports, design feedback.
 
 ## Development setup
 
 ```bash
-git clone https://github.com/<your-user>/ingetrazo.git
-cd ingetrazo
+git clone https://github.com/<your-user>/built.git
+cd built
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -59,7 +59,7 @@ See [docs/architecture.md](docs/architecture.md) for a tour. Briefly:
 
 ## Writing a plugin
 
-The lowest-friction way to extend IngeTrazo — no fork needed. Drop a Python
+The lowest-friction way to extend Built — no fork needed. Drop a Python
 file in your user plugins folder and its tools appear in the **Extensions**
 menu; prototype live with **Extensions → Python Console** (`Ctrl+Shift+P`),
 where every run is one undoable step. The contract (discovery rules, failure
@@ -86,7 +86,7 @@ isolation, and the `SnapshotImport` recipe for modifying the model) is in
 ## Communication
 
 - Open **issues** for bugs and proposals.
-- Use **GitHub Discussions** for open-ended questions, architecture debates, and showcasing your projects built with IngeTrazo.
+- Use **GitHub Discussions** for open-ended questions, architecture debates, and showcasing your projects built with Built.
 
 ## Licensing of contributions
 

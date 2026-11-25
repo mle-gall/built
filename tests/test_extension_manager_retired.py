@@ -14,7 +14,7 @@ import json
 
 from tests.extensions_chrome import Browser
 
-from ingetrazo_core import extension_manager as manager
+from built_core import extension_manager as manager
 from core.extensions import discover_plugins
 from tests.test_extension_manager import TOOL_SOURCE, _extension
 from tests.test_extension_manager_hand_installed import _hand_package

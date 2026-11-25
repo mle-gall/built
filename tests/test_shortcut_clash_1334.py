@@ -4,13 +4,13 @@ from unittest.mock import Mock
 
 import pytest
 
-from ingetrazo_core import Input as Qt
+from built_core import Input as Qt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 @pytest.mark.parametrize("visible", [True, False])
 def test_plugin_save_actions_leave_the_model_shortcuts_available(native_host, monkeypatch, visible):
-    from ingetrazo_render import shell_files as files
+    from built_render import shell_files as files
 
     win = native_host.window
     root = win._extension_menus.root("graph")

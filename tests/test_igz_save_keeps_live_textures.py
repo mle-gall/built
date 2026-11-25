@@ -11,7 +11,7 @@ from __future__ import annotations
 from tests.raster_samples import solid_raster
 import zipfile
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.group import Group
 from core.mesh import Mesh

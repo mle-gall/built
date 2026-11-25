@@ -1,15 +1,15 @@
 """The native Keyboard table edits the same bindings the window dispatches."""
-from ingetrazo_core import Input as Qt
-from ingetrazo_core.settings import settings
-from ingetrazo_render import shortcut_text
+from built_core import Input as Qt
+from built_core.settings import settings
+from built_render import shortcut_text
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 def test_tools_views_and_menus_reassign_and_reset_across_windows(tmp_path, monkeypatch):
-    from ingetrazo_render import Host
-    from ingetrazo_render import settings_sheet
-    from ingetrazo_render.keyboard_bindings import action_key
-    from ingetrazo_render import view_commands
+    from built_render import Host
+    from built_render import settings_sheet
+    from built_render.keyboard_bindings import action_key
+    from built_render import view_commands
 
     f9 = shortcut_text("F9")[2]
     profile = str(tmp_path / "profile")
@@ -64,8 +64,8 @@ def test_tools_views_and_menus_reassign_and_reset_across_windows(tmp_path, monke
 
 
 def test_keyboard_prompt_roundtrips_platform_text_and_reserved_keys():
-    from ingetrazo_render import shortcut_alternatives
-    from ingetrazo_render.settings_sheet import _keys_text, _parse_keys
+    from built_render import shortcut_alternatives
+    from built_render.settings_sheet import _keys_text, _parse_keys
 
     for source in ("⌥⇧⌘É", "Ctrl+Alt+Shift+É"):
         assert _parse_keys(source) == ["Ctrl+Alt+Shift+É"]

@@ -13,7 +13,7 @@ crossing holes triangulate over the opening, and the plane rebuild read the
 uncovered half of the opening as covered and filled it."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.edits import build_add_edges
 from core.history import (EraseSelectionCommand, ExplodeGroupCommand,

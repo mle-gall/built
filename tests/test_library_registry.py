@@ -8,8 +8,8 @@ import pytest
 from core import bim_registry
 from core.history import History
 from core.scene import Scene
-from ingetrazo_render import chrome_sheet
-from ingetrazo_render import wgpu_library
+from built_render import chrome_sheet
+from built_render import wgpu_library
 
 
 @pytest.fixture
@@ -41,7 +41,7 @@ def test_namespace_import_and_undo(library, tmp_path, monkeypatch):
     lib.act(ctx, "verb", ["registry_add"])
     assert "already exists" in form.error and json.loads(form.field("registry_json")[3]) == draft
     path = tmp_path / "codes.csv"
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render.shell_files import ShellFileDialog
     monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *args: (str(path), "CSV"))
     path.write_text("code,title\nA,First\nA,Duplicate")
     lib.act(ctx, "verb", ["registry_csv"])

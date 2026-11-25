@@ -18,7 +18,7 @@ A visible edge behaves exactly as before.
 from __future__ import annotations
 
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 
 from core.snap import compute_snap  # noqa: E402

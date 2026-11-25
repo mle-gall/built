@@ -18,7 +18,7 @@ import struct
 
 
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 
 from core.group import Group                                      # noqa: E402
@@ -194,7 +194,7 @@ def test_obj_carries_normals(tmp_path, soft):
 
 
 def test_obj_round_trips_through_the_importer(tmp_path):
-    """IngeTrazo still reads its own OBJ back with the normals in it."""
+    """Built still reads its own OBJ back with the normals in it."""
     path = tmp_path / "c.obj"
     obj_format.save_obj(_scene(), path)
     again = Scene()

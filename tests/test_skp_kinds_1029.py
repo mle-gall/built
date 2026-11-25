@@ -16,7 +16,7 @@ import pytest
 
 pytest.importorskip("openskp")
 
-from ingetrazo_core import reader_compat
+from built_core import reader_compat
 from formats import skp_reader  # noqa: E402
 
 

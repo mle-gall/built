@@ -8,7 +8,7 @@ from core.group import Group
 from core.mesh import Mesh
 from core.scene import Scene
 from core.protocol.commands import run
-from ingetrazo_core import Vec3, solid_inspector_sections, solid_problem_targets
+from built_core import Vec3, solid_inspector_sections, solid_problem_targets
 from tests.solid_fixture import _box, _top
 from tests.test_tree_links import _View, _Win
 from views import wgpu_ui
@@ -122,7 +122,7 @@ def test_locked_target_rejects_a_fault_from_before_the_lock(project):
 
 
 def test_scoped_status_fix_updates_readiness_and_undo(project, tmp_path):
-    from ingetrazo_core.deliveries import create_delivery
+    from built_core.deliveries import create_delivery
     scene, win, view = project
     scene.plugin_data["bim_registry"] = {"structure": {"nodes": {
         "walls": {"name": "Walls", "parent": None, "recipe": {"class": "IfcWall"}}

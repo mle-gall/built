@@ -11,7 +11,7 @@ import json
 import math
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 
 from core.scene import Scene  # noqa: E402

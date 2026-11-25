@@ -19,8 +19,8 @@ the sweep moves away from the eye, whichever way the face is wound.
 from __future__ import annotations
 
 
-from ingetrazo_core import ScreenPoint, Input
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint, Input
+from built_core import Vec3 as QVector3D
 
 
 from core.scene import Scene

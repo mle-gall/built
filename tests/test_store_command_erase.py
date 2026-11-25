@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 
 import pytest
-from ingetrazo_core import MeshStore
+from built_core import MeshStore
 from core.history import EraseSelectionCommand
 from core.mesh import Mesh
 from tests.test_store_mesh import fingerprint

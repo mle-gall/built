@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""``ingetrazo_core``'s emulation of CPython's set of ints (``pyset.rs``)
+"""``built_core``'s emulation of CPython's set of ints (``pyset.rs``)
 iterates as the interpreter's own sets do, after any mix of the operations
 the native plane rebuild replays: a set from a list, adds, ``set(s)``,
 ``s |= t``, ``s - t`` (both of CPython's paths) and discards."""
@@ -10,8 +10,8 @@ import random
 
 import pytest
 
-ingetrazo_core = pytest.importorskip("ingetrazo_core")
-replay = getattr(ingetrazo_core, "py_set_replay", None)
+built_core = pytest.importorskip("built_core")
+replay = getattr(built_core, "py_set_replay", None)
 pytestmark = pytest.mark.skipif(replay is None, reason="engine without py_set_replay")
 
 
@@ -84,7 +84,7 @@ def test_large_sets_and_both_difference_paths():
 def test_pair_sets_iterate_as_cpython(seed):
     """Sets of plane cells (int pairs, negative ones and big ones too), as
     the planar arrangement and the outline tracer build them."""
-    order = getattr(ingetrazo_core, "py_pair_set_order", None)
+    order = getattr(built_core, "py_pair_set_order", None)
     if order is None:
         pytest.skip("engine without py_pair_set_order")
     rng = random.Random(seed)

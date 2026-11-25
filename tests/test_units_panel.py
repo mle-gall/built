@@ -9,13 +9,13 @@ import math
 import random
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 
 from core import units  # noqa: E402
 from core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402
-from ingetrazo_render import units_question  # noqa: E402
+from built_render import units_question  # noqa: E402
 from types import SimpleNamespace
 import json
 

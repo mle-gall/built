@@ -57,7 +57,7 @@ def test_native_chrome_selects_the_available_lao_face(tmp_path):
 
 
 def test_startup_uses_the_selected_catalogue(native_host):
-    from ingetrazo_core import i18n
+    from built_core import i18n
     from plugins._widget_language import apply_widget_language
     previous = i18n.current_language()
     try:

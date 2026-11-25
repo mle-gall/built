@@ -19,7 +19,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np                                                # noqa: E402
 import pytest                                                     # noqa: E402
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.group import Group                                      # noqa: E402
 from core.mesh import Mesh                                        # noqa: E402
@@ -153,7 +153,7 @@ def test_coplanar_faces_joined_by_a_soft_edge_keep_the_flat_colour():
 
 
 def test_loose_geometry_shades_round_too():
-    from ingetrazo_core import pack_scene
+    from built_core import pack_scene
     scene = Scene()
     _cylinder(scene.mesh)
     packed = pack_scene(scene)

@@ -3,8 +3,8 @@
 """Generate the bundled texture library (procedural, tileable, ours).
 
 Commercial modellers ship material libraries whose images are copyrighted, so
-IngeTrazo's are generated here on the renderer's annotation canvas
-(``ingetrazo_render.AnnotationCanvas``; gradients with numpy) — deterministic (fixed seed),
+Built's are generated here on the renderer's annotation canvas
+(``built_render.AnnotationCanvas``; gradients with numpy) — deterministic (fixed seed),
 seamlessly tileable (every speckle/line is drawn with toroidal wrap), and
 licence-clean. Re-run to regenerate:
 
@@ -22,8 +22,8 @@ import random
 from pathlib import Path
 
 import numpy as np
-from ingetrazo_core import ScreenPoint as QPointF, ScreenRect as QRectF
-from ingetrazo_render import AnnotationCanvas, PaintColor, PaintPen, SurveyRaster
+from built_core import ScreenPoint as QPointF, ScreenRect as QRectF
+from built_render import AnnotationCanvas, PaintColor, PaintPen, SurveyRaster
 
 PX = 256
 ROOT = Path(__file__).resolve().parent.parent

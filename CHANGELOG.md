@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to IngeTrazo are documented here.
+All notable changes to Built are documented here.
 Format inspired by [Keep a Changelog](https://keepachangelog.com); versions
 follow [SemVer](https://semver.org).
 
@@ -159,7 +159,7 @@ el cierre en Mac al importar un .skp con escenas.**
   picar algo no vuelve a trazar las líneas del modelo (#1100).
 - **Instalador de Windows**: al desinstalar, los `.skp` vuelven al programa
   que los abría (#1268), y las miniaturas se toman del programa anterior
-  aunque ya haya otra instalación de IngeTrazo.
+  aunque ya haya otra instalación de Built.
 - **Pestañas de proyecto y escenas** tan altas como las de iconos; el
   compositor reclama Ctrl+C/X/V antes que los atajos de la ventana.
 - **Gestor de extensiones**: descarga las miniaturas del catálogo y las
@@ -172,7 +172,7 @@ el cierre en Mac al importar un .skp con escenas.**
   #1334): una extensión que usa la misma tecla para lo suyo (el Editor de
   nodos guarda su grafo con Ctrl+S y Ctrl+Mayús+S) dejaba la tecla sin
   dueño y no guardaba nadie. Ahora, dentro del panel de la extensión la
-  tecla es de la extensión; en el resto de la ventana, de IngeTrazo.
+  tecla es de la extensión; en el resto de la ventana, de Built.
 - **Un STL importado vuelve a guardarse** (ronda Windows 0.6.2; ya pasaba
   en la 0.6.1): con «unir triángulos coplanares» (la opción por defecto),
   algunos modelos daban «list index out of range» al guardar. La limpieza
@@ -298,7 +298,7 @@ fiables, y decenas de arreglos de importación, pintura y grupos.**
   Alt+E oculta la fila.
 - **Área vacía** (#1127): al cerrar la última pestaña queda un área vacía con
   un «+» que abre un documento nuevo.
-- **Aviso de versión nueva**: una vez al día, al abrir, IngeTrazo pregunta a
+- **Aviso de versión nueva**: una vez al día, al abrir, Built pregunta a
   GitHub cuál es la última versión y, si hay una más reciente, muestra sus
   novedades sin interrumpir. También en Ayuda ▸ Buscar actualizaciones…; se
   apaga en Preferencias. No aparece en Flatpak ni Snap, que se actualizan
@@ -342,7 +342,7 @@ fiables, y decenas de arreglos de importación, pintura y grupos.**
 
 - **El programa ya no se cierra de golpe en las láminas**: tras un clic derecho
   en una fila de la lista de elementos del compositor, ocultarla o cambiar la
-  lista podía tumbar IngeTrazo, y se perdía lo que no estuviera guardado.
+  lista podía tumbar Built, y se perdía lo que no estuviera guardado.
 - **Importar `.skp`**: un componente escalado de cierta forma entraba 10 000
   veces más grande (#1196, @DarkBiscuits).
 - **Una importación que falla o no trae nada lo dice y no deja una pestaña
@@ -405,7 +405,7 @@ fiables, y decenas de arreglos de importación, pintura y grupos.**
 
 ## [0.6.0] — 2026-11-01
 
-**Varios proyectos en pestañas en la misma ventana; IngeTrazo ya habla 17
+**Varios proyectos en pestañas en la misma ventana; Built ya habla 17
 idiomas, los últimos el árabe (con la interfaz de derecha a izquierda) y el
 ucraniano; Empujar/Tirar que abre puertas y ventanas en muros reales, los .skp con sus grupos y componentes como en el
 archivo, superficies curvas que se ven redondas, oclusión ambiental más
@@ -430,8 +430,8 @@ natural y más de cuarenta aportes de la comunidad.**
   menús, paneles, barras y diálogos se reflejan; la vista 3D, las láminas
   y los campos de números siguen de izquierda a derecha. Los demás idiomas
   no cambian. *Cómo probarlo:* Ventana ▸ Preferencias… ▸ Idioma ▸ العربية
-  y reinicia IngeTrazo.
-- **Ucraniano** (@bolotov, #1054). Con el árabe, el ucraniano y el lao, que vuelve a ofrecerse, IngeTrazo habla 17 idiomas. *Cómo probarlo:* Ventana ▸ Preferencias… ▸
+  y reinicia Built.
+- **Ucraniano** (@bolotov, #1054). Con el árabe, el ucraniano y el lao, que vuelve a ofrecerse, Built habla 17 idiomas. *Cómo probarlo:* Ventana ▸ Preferencias… ▸
   Idioma, y reinicia.
 - **«Idioma del sistema»** como opción propia en Preferencias ▸ Idioma
   (#818, @francisreboucas en #875): sigue al sistema también después de
@@ -570,12 +570,12 @@ natural y más de cuarenta aportes de la comunidad.**
 
 ### Gracias
 
-- A **Aashish** y su canal **IngeTrazo Tutorials** en YouTube
+- A **Aashish** y su canal **Built Tutorials** en YouTube
   (@aashishzharbade-arch), que enseña el programa, sus extensiones y sus
   flujos de trabajo, y que ha creado nueve extensiones del catálogo:
   MultiView, Phasing Animator, Kitchen Maker, Display Scale, Taper, Bevel,
   Curve Tools, Texture Library y Make Stair. Un ecosistema que le da vida
-  a IngeTrazo.
+  a Built.
 - A todos los que aportaron código, traducciones, reportes y archivos de
   prueba a esta versión, y en especial a Gabriel, Pedro, Rafael y Ahsan,
   los pilares que dieron estructura al proyecto.
@@ -637,7 +637,7 @@ sección 0.5.10.1, más abajo.
   al quedarse quieta hay un solo cuadro de unos 40 ms en el modelo SPR.
 - **Cuatro idiomas nuevos:** japonés (@nonasige-ui, #597), coreano
   (@ultracat, #785), vietnamita (@vandang890615, #936) y tailandés
-  (@PRIDA-TAKON, #824). IngeTrazo arranca en ese idioma la primera vez si
+  (@PRIDA-TAKON, #824). Built arranca en ese idioma la primera vez si
   el sistema lo usa; se cambia en Preferencias ▸ Idioma. La traducción al
   lao (@bounkirdni-2025, #850) ya viene en el programa, pero todavía no se
   ofrece: en Windows las vocales y los tonos salían separados de su
@@ -743,7 +743,7 @@ sección 0.5.10.1, más abajo.
 - **OpenGL anterior a 3.3: un aviso claro** en lugar de una vista en blanco
   (#751, @pkoska en #910).
 - **Windows: las miniaturas de los .skp se conservan** al hacer de
-  IngeTrazo el programa predeterminado (#804, @pkoska en #905).
+  Built el programa predeterminado (#804, @pkoska en #905).
 - **.skp que no abre: el registro dice por qué** (#497, @pkoska en #907).
 - **Agrupar o borrar un grupo ya no deja geometría fantasma** (#987,
   @canalsecuario-blip en #988): los vértices y aristas sin uso que quedaban
@@ -763,7 +763,7 @@ ambiental.**
 
 **Si viene de la 0.5.9, esta versión trae también todo lo de la 0.5.10:**
 - **Motor Rust encendido por defecto** (también en el Flatpak), con el de
-  Python de reserva en Preferencias: si el módulo no carga, IngeTrazo vuelve
+  Python de reserva en Preferencias: si el módulo no carga, Built vuelve
   solo a Python.
 - **Modelos enormes sin tirones** (planta de 14 M de caras): el cursor de
   Línea y Rectángulo pasa de segundos a ~40 ms por movimiento; un clic de
@@ -845,7 +845,7 @@ visión, y unos sesenta arreglos.
 ### Cambiado
 - **Motor Rust activado por defecto** con Python de reserva: quien no lo
   eligió nunca recibe Rust; quien lo apagó lo sigue teniendo apagado; si el
-  módulo no carga, o un arranque no llega a dibujar, IngeTrazo vuelve al
+  módulo no carga, o un arranque no llega a dibujar, Built vuelve al
   motor de Python. Los textos dejan de decir «experimental» en los diez
   idiomas.
 - **El Flatpak lleva el motor Rust** (#767).
@@ -972,13 +972,13 @@ visión, y unos sesenta arreglos.
   (@pacaeiro), Francis Rebouças, @pkoska, @tony1233200, @hamzah1985,
   Victor Crespo y Alexis. Reportes y modelos: @xcd-droid, @GitHuhl,
   @buildsmart888 y todos los que abrieron issues.
-- Difusión: gracias a los canales de YouTube que mostraron IngeTrazo —
-  Blender 3D Architect, IngeTrazo Tutorials, JRobredo3D, Rafael 3D, Allan
+- Difusión: gracias a los canales de YouTube que mostraron Built —
+  Blender 3D Architect, Built Tutorials, JRobredo3D, Rafael 3D, Allan
   Brito, Savoirpourtous, BuildSmart Learning y todos los que le dedicaron un
   vídeo.
 
 ### Para desarrolladores
-- **Una prueba falla si `INGETRAZO_RUST=1` corre sin el módulo o con uno
+- **Una prueba falla si `BUILT_RUST=1` corre sin el módulo o con uno
   desactualizado** (huella de las fuentes Rust).
 - `scripts/profile_window_open.py`: abrir un documento en la ventana fase
   por fase (segundos, memoria residente y pico), en Linux y Windows (#760).
@@ -998,21 +998,21 @@ elegir, el ruso, y unos cincuenta arreglos; en Windows, el gestor de
 extensiones ya no se cae con un OpenSSL ajeno (#564).
 
 ### Añadido
-- **IngeTrazo con tu color: acento de los iconos y las barras** (#393,
+- **Built con tu color: acento de los iconos y las barras** (#393,
   pedido de Peter Mican). El naranja no le queda a todos los escritorios,
   así que ahora eliges el color que acompaña a todo el programa: los
   puntos y tiradores de cada icono (los clics que definen una forma, el
   pivote de Rotar, el punto donde empieza un arrastre), el fondo de los
   botones bajo el ratón y las marcas que aparecen al acoplar barras y
   paneles. En Ventana ▸ Preferencias ▸ General ▸ «Color de acento»:
-  - **naranja IngeTrazo** (el de siempre, por defecto), **azul**,
+  - **naranja Built** (el de siempre, por defecto), **azul**,
     **verde**, **rojo**, **morado** o **amarillo**;
   - **«Igual que el sistema»**: toma el color de acento que elegiste en tu
     escritorio (si el sistema lo comparte con las aplicaciones), así
-    IngeTrazo se ve como una aplicación más de tu equipo.
+    Built se ve como una aplicación más de tu equipo.
 
   Funciona con el tema claro y el oscuro, se aplica al instante sin
-  reiniciar —todos los iconos de IngeTrazo se vuelven a pintar en ese
+  reiniciar —todos los iconos de Built se vuelven a pintar en ese
   momento— y se recuerda para la próxima vez. La
   selección en el visor 3D sigue en naranja, para que lo elegido se
   distinga siempre del modelo. En los nueve idiomas.
@@ -1102,7 +1102,7 @@ extensiones ya no se cae con un OpenSSL ajeno (#564).
   de 3000 px) y las tarjetas salían con «Vista previa no disponible» antes
   de su imagen. Ahora la miniatura ya reducida se guarda junto a las
   capturas (y se rehace si la captura cambia), se recuerda mientras
-  IngeTrazo está abierto y las demás se preparan en segundo plano; no se
+  Built está abierto y las demás se preparan en segundo plano; no se
   descarga nada que antes no se descargara.
 - **El plano de Rectángulo, Círculo y Arco en espacio vacío lo elige la
   cámara, por el origen de los ejes** (#719, @pacaeiro), como en .skp:
@@ -1119,7 +1119,7 @@ extensiones ya no se cae con un OpenSSL ajeno (#564).
   seleccionado de 266 s a 9 s, y Orientar caras de 34 s a 9 s; empujar y
   tirar sobre un terreno grande va unas cuatro veces más rápido. El
   resultado es el mismo que con el motor de siempre, comprobado cara por
-  cara. Si el módulo no carga, IngeTrazo sigue con el motor de siempre sin
+  cara. Si el módulo no carga, Built sigue con el motor de siempre sin
   avisar de error; Ayuda ▸ Acerca de dice qué motor está en uso. Viene en
   Windows, macOS, AppImage y Snap; el Flatpak sigue con el motor de siempre
   en esta versión. Es una prueba: guarda copia de tus archivos y reporta lo
@@ -1149,7 +1149,7 @@ extensiones ya no se cae con un OpenSSL ajeno (#564).
   la tarjeta decía «no revisada», pero un clic ejecutaba el código de su
   autor con tus permisos. Instalar, actualizar o reemplazarla pide ahora
   confirmación nombrando al autor, con «No» por defecto; las revisadas y
-  las que trae IngeTrazo se instalan como antes.
+  las que trae Built se instalan como antes.
 - **El gestor de extensiones vuelve a pedir una captura que no se pudo
   descargar**, hasta tres veces y alternando GitHub con la copia de
   ingetrazo.com, en vez de dejar «Vista previa no disponible».
@@ -1212,7 +1212,7 @@ extensiones ya no se cae con un OpenSSL ajeno (#564).
   del ratón va como siempre. Además el eje adelante/atrás se leía con el
   signo cambiado en Windows, así que el zoom iba al revés. Y en Preferencias
   ▸ Ratón 3D hay una lectura en vivo: los seis números que manda el aparato
-  y cómo los entiende IngeTrazo.
+  y cómo los entiende Built.
 - **Una guía con coordenadas inválidas ya no impide guardar** (#723,
   @kcgemail): el guardado se negaba entero con «un punto con coordenadas
   inválidas … scene › guides[0] › point[0]» y el trabajo no se podía
@@ -1230,7 +1230,7 @@ extensiones ya no se cae con un OpenSSL ajeno (#564).
 - **Ver todo encuadra también las imágenes de referencia visibles** (#702,
   @Aaron1992): un plano importado para calcar, lejos del origen, se quedaba
   fuera de la pantalla.
-- **El Asistente IA ya no cierra IngeTrazo al arrancar en algunos Flatpak**
+- **El Asistente IA ya no cierra Built al arrancar en algunos Flatpak**
   (#706, @mvanhorn): pedir la fuente monoespaciada del sistema podía
   romperse dentro del sandbox; el chat usa ahora la fuente de la
   aplicación.
@@ -1276,7 +1276,7 @@ extensiones ya no se cae con un OpenSSL ajeno (#564).
   OpenRouter, DeepSeek y Ollama siguen con el nombre de siempre.
 - **El STL exportado sale en milímetros** (#513, @toSvenson): un STL no
   guarda la unidad y los programas de impresión 3D lo leen en milímetros,
-  pero IngeTrazo escribía los metros del modelo, así que una pieza de
+  pero Built escribía los metros del modelo, así que una pieza de
   15 × 25 mm entraba al laminador 1000 veces más chica. Ahora Archivo ▸
   Exportar ▸ STL pregunta la unidad, con milímetros por defecto, y recuerda
   la elección, igual que la importación.
@@ -1386,7 +1386,7 @@ extensiones ya no se cae con un OpenSSL ajeno (#564).
 
 ### Para desarrolladores
 - **La suite pasa en Windows sin `PYTHONUTF8`** y ya no escribe en el
-  `ingetrazo-errors.log` real del usuario (ronda Windows 0.5.9).
+  `built-errors.log` real del usuario (ronda Windows 0.5.9).
 - `scripts/bench_engine.py`: dónde gasta el tiempo el motor del modelo,
   con perfiles.
 
@@ -1408,7 +1408,7 @@ completos.
   y filtro de revisadas; instala, actualiza, desactiva y desinstala con un
   clic. Cada descarga se comprueba con el SHA-256 del catálogo antes de
   instalar nada; se ven la licencia, el repositorio y si esa versión exacta
-  fue revisada por quien mantiene IngeTrazo («Comunidad» si no). Avisa
+  fue revisada por quien mantiene Built («Comunidad» si no). Avisa
   cuando hace falta reiniciar y, si una extensión falla al cargar, ofrece
   desactivarla o abrir su carpeta. Si la misma extensión ya estaba
   instalada a mano con otro nombre de carpeta, lo detecta y ofrece apartar
@@ -1421,7 +1421,7 @@ completos.
   Las **extensiones de ejemplo** (Niveles, Propiedades del polígono,
   Windowizer) se instalan ahora desde el gestor, no desde un submenú propio:
   las que están en el catálogo como cualquier otra, y Windowizer como
-  «Incluida con IngeTrazo», desde la copia que trae el programa. Así se
+  «Incluida con Built», desde la copia que trae el programa. Así se
   activan, desactivan y desinstalan igual que las demás, y el menú
   Extensiones queda más corto.
 - **Navegador (el Outliner)**: una pestaña nueva de la barra
@@ -1547,14 +1547,14 @@ completos.
   conservar un componente aunque no quede ninguna copia colocada; y
   «Componentes de archivo…» trae los de otro `.igz` como biblioteca. Un
   documento con componentes guardados así los pierde si se abre en una
-  versión anterior (@canalsecuario-blip, ingetrazo-dev#4).
+  versión anterior (@canalsecuario-blip, built-dev#4).
 - **Redondear 3D también bisela** (Mayús+F): chaflán, curva ajustable,
   perfiles de escalones, cornisa y moldura, o uno dibujado a mano; cuatro
   formas de medir (radio, distancia en cada cara, ancho o profundidad);
   esquinas rellenas o en muesca; y biselar solo los vértices. Un panel
   abajo a la izquierda reúne todos los ajustes con vista previa en vivo.
   Con los ajustes de siempre redondea exactamente como antes
-  (@canalsecuario-blip, ingetrazo-dev#5).
+  (@canalsecuario-blip, built-dev#5).
 - **Edición ▸ Seleccionar nada (Ctrl+T)**, la pareja de Seleccionar todo;
   no marca el documento como modificado (#367, @pacaeiro, #349).
 - **Mover, Rotar y Voltear muestran un + en el cursor** mientras Ctrl hace
@@ -1636,7 +1636,7 @@ completos.
   grande que forma una sola pieza (un terreno o un modelo importado),
   decidir qué lado de cada cara es «fuera» lanzaba cientos de miles de
   rayos contra todos los triángulos — un empuje cualquiera podía congelar
-  IngeTrazo 3–4 minutos. Ahora cada rayo solo prueba los triángulos cerca
+  Built 3–4 minutos. Ahora cada rayo solo prueba los triángulos cerca
   de su trayectoria (un índice por bloques, como el de Blender): 21–31 s en
   esos casos, y el resto del empuje (aristas sueltas, cosido, cara opuesta)
   ya no recorre todo el grupo — 1,5 s → 0,8 s en una cara normal. El
@@ -1717,7 +1717,7 @@ completos.
   cruce del eje con la arista bajo el cursor: el punto sigue sobre el eje y
   cae exacto en la arista, como en la 0.5.7.
 - **Activar MultiView (u otra extensión que mueva el visor) cerraba
-  IngeTrazo**: al pasar el visor a otra ventana, Qt recrea su contexto de
+  Built**: al pasar el visor a otra ventana, Qt recrea su contexto de
   OpenGL, y los objetos que el visor crea al primer uso (planos de imagen,
   vista previa, fantasma de los grupos, búferes de escena y de profundidad,
   componentes instanciados) seguían apuntando al contexto viejo. Ahora se
@@ -1729,13 +1729,13 @@ completos.
   @pacaeiro): una vista (o cualquier elemento) arrastrada o redimensionada
   vuelve a donde estaba al pulsar Esc, sin dejar paso de deshacer; antes
   se quedaba donde la pillaba la tecla.
-- **Importar un GLB hecho con IngeTrazo lo trae a su tamaño**: un modelo
+- **Importar un GLB hecho con Built lo trae a su tamaño**: un modelo
   de más de 40 m se tomaba por uno en pulgadas y llegaba encogido 39
   veces. Los GLB de otros programas siguen adivinando la unidad.
 - **El panel de la cota de radio del compositor vuelve a funcionar**:
   cambiar el radio, el tipo, el texto o el estilo de una cota de radio o
   diámetro ya colocada daba un error y no hacía nada.
-- **Las herramientas que vienen con IngeTrazo conservan sus atajos**: con
+- **Las herramientas que vienen con Built conservan sus atajos**: con
   la carga diferida de extensiones, una extensión instalada (Point Cloud
   Splat) le quitaba `Ctrl+Shift+P` a la consola de Python. Ahora los atajos
   de lo incluido se reservan antes de cargar ninguna extensión.
@@ -1917,7 +1917,7 @@ completos.
   sale como un objeto con su nombre y su posición, anidado como en el
   modelo, y las copias de un componente comparten una sola malla (en la
   plaza el archivo pasa de 24,4 a 19,5 MB). Antes todo salía fundido en
-  un único objeto «IngeTrazo» (#304, @arthurarquitetoamb). Las figuras
+  un único objeto «Built» (#304, @arthurarquitetoamb). Las figuras
   de escala ya no se pierden: salen de pie mirando a la vista Frontal y
   sin espejar, también dentro de un grupo, donde salían cortadas y
   espejadas. Con algo seleccionado, Exportar ▸ glTF/GLB pregunta si se
@@ -1975,8 +1975,8 @@ completos.
 - **`scripts/bench_interaction.py`**: un banco que mide lo que siente la
   mano en el ratón (cada evento hasta que su fotograma está en pantalla),
   con mediana y p95 por gesto (#308, @orianbsilva).
-- Interruptores para diagnosticar: `INGETRAZO_NO_SNAP_FAST=1`,
-  `INGETRAZO_SCENE_ALWAYS_BUMP=1` e `INGETRAZO_NO_WALK_REACH=1` devuelven
+- Interruptores para diagnosticar: `BUILT_NO_SNAP_FAST=1`,
+  `BUILT_SCENE_ALWAYS_BUMP=1` e `BUILT_NO_WALK_REACH=1` devuelven
   el comportamiento anterior de cada optimización (@orianbsilva).
 
 ## [0.5.7] — 2026-09-30
@@ -1990,7 +1990,7 @@ aristas traseras (K) se dibujan en discontinua sobre el modelo opaco, las
 pinzas de Escalar enganchan otros objetos, cada comando explica qué hace y
 F3 se abre al instante. Los modelos con miles de copias espejadas abren sin
 agotar la memoria y cerrar es instantáneo. Renderizar con Blender funciona
-en el Flatpak, IngeTrazo habla indonesio, y se resolvieron los pedidos
+en el Flatpak, Built habla indonesio, y se resolvieron los pedidos
 pequeños que llegaron por correo y por GitHub.
 
 ### Añadido
@@ -2051,7 +2051,7 @@ pequeños que llegaron por correo y por GitHub.
 - **Preferencias ▸ General ▸ «Poner la figura de escala en los documentos
   nuevos»**: sin ella, cada documento nuevo empieza vacío (#221).
 - **Traducción al indonesio** (Bahasa Indonesia), el sexto idioma de
-  IngeTrazo (#216, #217, @Rainjalin).
+  Built (#216, #217, @Rainjalin).
 - **Para extensiones:** `window.import_igz_path(ruta, at=None)` y
   `app.import_igz` insertan un `.igz` como componente sin el diálogo, al
   ratón o en un punto (#179, pedido de Georges Le Roux);
@@ -2060,7 +2060,7 @@ pequeños que llegaron por correo y por GitHub.
   `app.add_pickable(...)` deja seleccionar y borrar objetos propios, y
   `group.ext` guarda parámetros de la extensión en sus grupos (se copian y
   se guardan, aparte de la etiqueta BIM). Todo en `docs/plugins.md`.
-- **Puente MCP desde un contenedor:** el cliente lee `INGETRAZO_AI_HOST`
+- **Puente MCP desde un contenedor:** el cliente lee `BUILT_AI_HOST`
   para llegar al puente por un túnel; el puente sigue escuchando solo en
   local (#130).
 
@@ -2106,7 +2106,7 @@ pequeños que llegaron por correo y por GitHub.
   vertical no toca no daba nada; el punto de la guía bajo el cursor se
   calculaba sin perspectiva y caía metros fuera de la pantalla (#166,
   @pacaeiro).
-- **Cerrar IngeTrazo con un modelo grande es instantáneo**: el proceso
+- **Cerrar Built con un modelo grande es instantáneo**: el proceso
   seguía vivo, con sus gigabytes, mientras Python liberaba objeto por
   objeto — 27 s → 1,2 s con el modelo de la #158 (@pacaeiro).
 - **Modelos con muchas copias espejadas abren y se dibujan**: cada copia
@@ -2156,7 +2156,7 @@ Versión de corrección de la 0.5.6.
   estaban afectados.
 
 ### Cambiado
-- **IngeTrazo se describe por sí mismo** en la interfaz, las fichas de
+- **Built se describe por sí mismo** en la interfaz, las fichas de
   Flatpak y Snap, el instalador y la documentación. El formato se llama
   «SKP (.skp)» en Archivo ▸ Importar, y si un `.skp` no se puede leer, el
   aviso sugiere exportarlo como COLLADA u OBJ desde el programa de origen.
@@ -2164,7 +2164,7 @@ Versión de corrección de la 0.5.6.
 ## [0.5.6] — 2026-09-29
 
 **Render con Blender, una pestaña para la IA y los aportes de la comunidad.**
-IngeTrazo renderiza imágenes fotorrealistas con el Blender que ya tengas
+Built renderiza imágenes fotorrealistas con el Blender que ya tengas
 instalado, de día o de noche con luces propias, y puede renderizar sola la
 vista cada vez que te detienes al recorrer el modelo. El Asistente IA y el
 puente MCP viven ahora en una pestaña de la barra lateral, y Ventana ▸ Paneles
@@ -2276,7 +2276,7 @@ suite rápida 3444 y lenta 804 correctas.
 
 ## [0.5.5] — 2026-09-28
 
-**Íconos renovados y lo que los usuarios pidieron.** IngeTrazo se queda solo
+**Íconos renovados y lo que los usuarios pidieron.** Built se queda solo
 con piezas libres: el enlace a un conversor externo de `.skp` y la
 exportación a `.skp` se retiran, y los `.skp` se siguen abriendo con el
 lector libre integrado. Los íconos se actualizan para mantenerlos coherentes
@@ -2288,10 +2288,10 @@ las unidades del documento.
 
 ### Retirado
 - **El enlace a un conversor externo de `.skp`.** Nunca formó parte de
-  IngeTrazo: ningún paquete lo incluía; IngeTrazo solo ofrecía descargarlo
+  Built: ningún paquete lo incluía; Built solo ofrecía descargarlo
   aparte para ejecutarlo bajo Wine. Ese enlace y la descarga se retiran.
   Los `.skp` se abren con el lector libre integrado (OpenSKP);
-  si uno no se puede leer, IngeTrazo lo dice y sugiere exportarlo como
+  si uno no se puede leer, Built lo dice y sugiere exportarlo como
   COLLADA u OBJ desde el programa de origen.
 - **Exportar a `.skp`**: el molde en blanco que usaba el escritor ya no se
   distribuye en ningún paquete (PyInstaller, Flatpak, Snap), y `--check`
@@ -2313,7 +2313,7 @@ las unidades del documento.
   camarita** con el lente naranja y una marca debajo, y **el borrador una
   goma inclinada** con su punta naranja. Las **vistas estándar siguen siendo
   la casita** con la pared que se mira en naranja.
-- **IngeTrazo se presenta por sí mismo**: el README, la ficha del Flatpak y
+- **Built se presenta por sí mismo**: el README, la ficha del Flatpak y
   la del Snap lo describen con su lema, *traza como a mano*, y dicen cómo
   se pronuncia su nombre (in-je-TRA-so: *inge*niería + *trazo*; sugerencia
   de @pacaeiro).
@@ -2369,11 +2369,11 @@ componentes cuyas copias comparten lo de dentro, grupos que ya no saltan al
 explotarlos y líneas sueltas en el `.skp`. Las láminas ganan líneas ocultas
 a trazos, una lista de elementos como la de QGIS y los dos clics que se
 perdían. Atajos de teclado propios en Preferencias, el ratón 3D con cada
-eje invertible, IngeTrazo en chino y el instalador de Windows en tres
+eje invertible, Built en chino y el instalador de Windows en tres
 idiomas. El Ingeniero es la nueva figura de escala.
 
 ### Cambiado
-- **En KDE Plasma con Wayland, IngeTrazo arranca en X11 (XWayland)** (#136,
+- **En KDE Plasma con Wayland, Built arranca en X11 (XWayland)** (#136,
   @leo-smi): ahí los menús flotantes de Qt salen rotos. Preferencias ▸
   General ▸ Servidor gráfico sigue permitiendo elegir Wayland.
 - **El instalador de Windows habla inglés, español y portugués** (#135,
@@ -2407,7 +2407,7 @@ idiomas. El Ingeniero es la nueva figura de escala.
   (la base para que el CAM de @felixriestra venga incluido, PR #132).
 - **Espacio vuelve a Seleccionar en el compositor**, como en el modelo (#83,
   @pacaeiro).
-- **IngeTrazo en chino simplificado** (Idioma ▸ 简体中文), traducido por
+- **Built en chino simplificado** (Idioma ▸ 简体中文), traducido por
   @liujvnes (#123). Su archivo no cargaba por una coma y porque algunas
   variables venían traducidas (`{名称}` en vez de `{name}`); ahora una prueba
   revisa cada archivo de idioma para que eso no vuelva a pasar. De paso,
@@ -2480,7 +2480,7 @@ idiomas. El Ingeniero es la nueva figura de escala.
   se perdía casi todo lo que venía después en la raíz del modelo (una casa
   abría con 2 de sus 72 objetos: solo muros y césped). Ahora abren enteros
   (2384 colocaciones en vez de 12) y también se leen esas cotas. Arreglo
-  propuesto a OpenSKP (iamahsanmehmood/openskp#384) y aplicado en IngeTrazo
+  propuesto a OpenSKP (iamahsanmehmood/openskp#384) y aplicado en Built
   mientras tanto. Gracias a Juan José Noriega por los modelos.
 
 ## [0.5.3] — 2026-09-25
@@ -2553,7 +2553,7 @@ Basso, es la primera y viene como ejemplo.
 ### Cambiado
 - **La bandeja lateral recuerda qué secciones dejaste plegadas** (Info de
   entidad, Capas, Escenas, Materiales, Componentes…): al volver a abrir
-  IngeTrazo aparecen como las dejaste (pedido de un usuario de Brasil).
+  Built aparecen como las dejaste (pedido de un usuario de Brasil).
 - **Asistente IA: LM Studio además de Ollama.** El proveedor local ya hablaba
   la API compatible con OpenAI que usa LM Studio; ahora la interfaz lo dice:
   «Local: Ollama / LM Studio», con la URL de cada uno en la ayuda
@@ -2710,9 +2710,9 @@ sitio para leer la pista de cada herramienta.
 
 ### Añadido
 - **Copiar y pegar entre ventanas** (#76, @pacaeiro): lo copiado en un
-  IngeTrazo se pega en otro abierto al lado, con sus materiales, texturas,
+  Built se pega en otro abierto al lado, con sus materiales, texturas,
   grupos y componentes. **Archivo ▸ Nueva ventana** (Ctrl+Mayús+N) abre un
-  segundo IngeTrazo para tener dos diseños lado a lado.
+  segundo Built para tener dos diseños lado a lado.
 - **Deshacer y Rehacer en la barra Principal**, justo después del puntero,
   con iconos propios (flecha curva, contorno en tinta y relleno naranja
   suave).
@@ -2739,7 +2739,7 @@ sitio para leer la pista de cada herramienta.
   se vuelve a arrastrar.
 
 ### Cambiado
-- **Acerca de IngeTrazo reconoce a todos los que aportan**, en unos
+- **Acerca de Built reconoce a todos los que aportan**, en unos
   créditos que suben despacio y sin parar, como al final de una película:
   Pedro Caeiro, Rafael García, Ahsan Mehmood, dafrobozao (portugués),
   Félix Riestra (versión para Mac) y Sherod Taylor (Primera persona), y un
@@ -2831,7 +2831,7 @@ el tema claro o el del sistema; y la primera versión empaquetada para
 macOS, gracias a @felixriestra.
 
 ### Añadido
-- **Versión para macOS** (PR #64, @felixriestra): un `IngeTrazo.app`
+- **Versión para macOS** (PR #64, @felixriestra): un `Built.app`
   empaquetado en `.dmg` para Apple Silicon, que abre `.igz` y `.skp` con
   doble clic. Sin firma de Apple: la primera vez, clic derecho ▸ Abrir.
 - **Ejes locales en grupos y componentes** (#44, @pacaeiro):
@@ -2905,17 +2905,17 @@ macOS, gracias a @felixriestra.
   (#65, @pacaeiro): los nombres de las unidades se traducen.
 - **macOS: el visor fallaba en cada cuadro con la herramienta Paseo** (#67):
   la etiqueta de la altura de ojos no tiene punto 3D y el visor intentaba
-  proyectarla igual. Y el README decía `cd ingetrazo/app`, carpeta que no
+  proyectarla igual. Y el README decía `cd built/app`, carpeta que no
   existe en el repositorio.
 - **La ventana del puente MCP daba un comando que no sobrevivía a la
   sesión en los paquetes de Linux.** Con el AppImage enseñaba la ruta del
   montaje temporal (`/tmp/.mount_…`), que muere al cerrar la app; con el
   Flatpak, una ruta de dentro del sandbox que el anfitrión no puede
   ejecutar, y además el Flatpak no llevaba el servidor dentro. Ahora dice
-  `<ruta del .AppImage> --mcp`, `flatpak run com.ingetrazo.IngeTrazo
-  --mcp` o `/snap/bin/ingetrazo --mcp` según el paquete, el Flatpak
+  `<ruta del .AppImage> --mcp`, `flatpak run com.built.Built
+  --mcp` o `/snap/bin/built --mcp` según el paquete, el Flatpak
   incluye `scripts/`, y la ventana trae la línea de **Antigravity CLI**
-  (`agy mcp add ingetrazo -- …`) junto a la de Claude Code. Lo encontró
+  (`agy mcp add built -- …`) junto a la de Claude Code. Lo encontró
   Marco montando Antigravity para el tutorial.
 
 ### Cambiado
@@ -3651,7 +3651,7 @@ con ella un modelo que llevaba tiempo sin abrir —`edificio.skp`, de
 la versión 8— abre. Se midió archivo por archivo antes de dar el salto: 214
 del corpus de Marco, 212 idénticos, uno rescatado, ninguno perdido, y el
 `.skp` que exportamos sale igual, comprobado con archivos de referencia.
-Lo demás son las cuatro issues que @pacaeiro abrió probando IngeTrazo,
+Lo demás son las cuatro issues que @pacaeiro abrió probando Built,
 y la vista en perspectiva que Marco pidió para sus
 láminas.
 
@@ -3681,7 +3681,7 @@ láminas.
   «Alt = inferencias (…)» con su estado. Uno por fase
   — apilarlos no cabía en la barra.
 - **Las personas de fuera del proyecto cuyo trabajo está dentro, acreditadas**
-  en `AUTHORS`, en el README y en Ayuda ▸ Acerca de IngeTrazo: Pedro
+  en `AUTHORS`, en el README y en Ayuda ▸ Acerca de Built: Pedro
   Caeiro (@pacaeiro) por los reportes y el PR #21, Rafael García Rodríguez
   por la revisión y las sugerencias, y Ahsan Mehmood por openskp.
 
@@ -3731,7 +3731,7 @@ láminas.
 ## [0.4.2] — 2026-09-16
 
 **Lo que pidió Pedro Caeiro, y exportar a `.skp` otra vez.** @pacaeiro,
-delineante, prueba IngeTrazo y anota cada gesto que
+delineante, prueba Built y anota cada gesto que
 no responde como espera: aquí caen sus cuatro pendientes de inferencia y
 herramientas. Y el arreglo que no podía
 esperar: Exportar ▸ `.skp` moría en el .exe, el AppImage, el tar y el
@@ -4135,7 +4135,7 @@ o con el modelo vivo delante; el rendimiento se midió antes de publicar
   independientes y el instanciado. El modelo de datos ya sostenía el árbol
   desde agosto; lo que faltaba era la edición por niveles, y es esto.
 - **Importar otro documento .igz como componente.** Archivo ▸ Importar ▸
-  «Documento IngeTrazo como componente (.igz)…»: el archivo entero llega
+  «Documento Built como componente (.igz)…»: el archivo entero llega
   como UN componente que se coloca con un clic, como el Import de un .skp
   — la pérgola, el arco y la luminaria dibujados en sus propios
   archivos entran en la plaza con sus grupos (anidados, como estaban), sus
@@ -4174,7 +4174,7 @@ o con el modelo vivo delante; el rendimiento se midió antes de publicar
   propio; el import `.skp` respeta lo que cada lado tiene pintado y el
   export escribe lo mismo; los modelos OBJ/DAE/glTF, que no tienen lados,
   llegan como caras de dos lados. Documentos anteriores: las caras
-  pintadas desde IngeTrazo muestran ahora el reverso por defecto — para
+  pintadas desde Built muestran ahora el reverso por defecto — para
   pintarlo, se pinta desde atrás.
 
 ### Arreglado
@@ -4220,7 +4220,7 @@ o con el modelo vivo delante; el rendimiento se midió antes de publicar
 ## [0.3.17] — 2026-09-10
 
 **La sesión de la Plaza Yanque.** Un día entero modelando una obra de verdad
-en IngeTrazo y cazando lo que fuera saliendo. Casi todo lo de abajo lo
+en Built y cazando lo que fuera saliendo. Casi todo lo de abajo lo
 reportó Marco mientras dibujaba, con captura o con el modelo vivo delante.
 
 ### Añadido
@@ -4334,7 +4334,7 @@ ni una referencia ni se dejaba seleccionar.
 - **Al orbitar, el eje vertical estaba invertido.** Arrastrar hacia abajo
   bajaba la cámara en vez de asomarte por encima del modelo, al revés que
   Blender o FreeCAD — y al revés que el propio encuadre de
-  IngeTrazo, que sí agarra el modelo en los dos ejes. Lo reportaron dos
+  Built, que sí agarra el modelo en los dos ejes. Lo reportaron dos
   usuarios el mismo día (issue #7 y un correo), ninguno capaz de decir
   cuál de los dos ejes era el malo, que es exactamente lo que se siente
   cuando hay uno solo invertido. Quien prefiera el gesto de antes lo
@@ -4345,7 +4345,7 @@ ni una referencia ni se dejaba seleccionar.
   ese formato es el de por defecto se llevaba por delante hasta el
   dibujado de las ventanas de Qt: no era un visor roto, era una app que
   no arrancaba. El mismo driver lo sirve sin problema por X11, así que
-  ahora IngeTrazo lo comprueba al arrancar y, si hace falta, pide un
+  ahora Built lo comprueba al arrancar y, si hace falta, pide un
   formato más modesto o se reinicia sola bajo X11. El Flatpak pasa a
   pedir `--socket=x11` para que ese reinicio tenga a dónde ir.
 - **Avisos de librerías al arrancar el AppImage.** Los módulos GIO del
@@ -4548,7 +4548,7 @@ vez, ejemplos reales para abrir: cuatro documentos de la plaza de Yanque.
 
 - **Ejemplos.** Cuatro documentos reales de la plaza de Yanque en la
   carpeta `examples/` del repositorio y en cada release
-  (`IngeTrazo-ejemplos.zip`): la pileta, la banca con pérgola y la
+  (`Built-ejemplos.zip`): la pileta, la banca con pérgola y la
   luminaria solar con su lámina A3 y el PDF resultante, y el arco de
   bienvenida con todo su acero. Licencia CC BY 4.0.
 
@@ -4836,9 +4836,9 @@ revisa el PR #266 que lo lleva todo.
   arista como oculta, así que el programa de destino dibujaba un marco negro alrededor de
   cada figura recortada (y de las hojas importadas cuyo contorno es la
   máscara de su textura). Una cara con todas sus aristas ocultas en
-  IngeTrazo sale con ellas ocultas.
+  Built sale con ellas ocultas.
 - **La geometría repetida se escribe una sola vez.** Un modelo guardado por
-  una IngeTrazo anterior tenía los componentes explotados: la piscina llevaba
+  una Built anterior tenía los componentes explotados: la piscina llevaba
   24 setos de 9600 caras fusionados en un solo grupo y tres bancas idénticas
   como tres grupos, y el `.skp` pesaba 70 MB. Ahora el exportador reconoce las
   piezas que son copias de otra, trasladadas o giradas sobre el eje
@@ -4848,7 +4848,7 @@ revisa el PR #266 que lo lleva todo.
   27 MB con las mismas caras en los mismos sitios.
 - **Solo viajan las capas en uso.** Al guardar el archivo en el programa de destino, Purgar
   tiraba 8 de las 10 capas de la piscina, todas vacías, y la capa por
-  defecto de IngeTrazo ya es la «Layer0» del formato. El resto del ahorro
+  defecto de Built ya es la «Layer0» del formato. El resto del ahorro
   que se ve al volver a guardarlo es el formato comprimido: nuestros archivos
   llevan las mismas caras, definiciones y texturas.
 
@@ -4867,10 +4867,10 @@ revisa el PR #266 que lo lleva todo.
   y luego no podía serializar el modelo. Cazado con archivos de referencia a partir de un caso
   mínimo (una definición de 1 cara seguida de otra de 3). El escritor del fork
   numera en una sola secuencia (arreglo propuesto a upstream); mientras tanto
-  IngeTrazo corrige el contador del archivo al guardar y escribe las figuras
+  Built corrige el contador del archivo al guardar y escribe las figuras
   al final, con lo que la pileta y la piscina se guardan.
 ### Corregido
-- **Las texturas de un `.skp` exportado se ven donde IngeTrazo
+- **Las texturas de un `.skp` exportado se ven donde Built
   las dibujó.** Tres causas, cazadas comparando con archivos de
   referencia. Dos están en el escritor de openskp y se compensan hasta
   que upstream las arregle (una sonda lo comprueba en cada exportación): la
@@ -4880,12 +4880,12 @@ revisa el PR #266 que lo lleva todo.
   añicos); y los UV pineados no se multiplicaban por el tamaño aplicado del
   material, que el lector divide al leer, así que una textura de 2 m salía 78
   veces más grande (el agua de la pileta, un azul plano). La tercera era de
-  IngeTrazo: la proyección por defecto del visor usaba otra base que la del
+  Built: la proyección por defecto del visor usaba otra base que la del
   formato y en muros que miran a +Y o −X la textura se veía girada 180°
   respecto de lo que sale en el archivo. Ahora hay una sola receta
   (`core.texture.projection_basis`, la del formato) para el visor, los
   exportadores OBJ/glTF/DAE, la vista previa de pegar y el importador.
-- **Un `.skp` exportado ya no muestra caras lavanda.** IngeTrazo
+- **Un `.skp` exportado ya no muestra caras lavanda.** Built
   pinta las dos caras de una superficie y el formato solo la que nombra el
   archivo, así que toda cara vista desde atrás (las bancas, el bajo del
   techo, las hojas de la palmera) salía con el color de reverso por defecto.
@@ -4917,24 +4917,24 @@ la misma raíz: el nombre de la textura en caché crecía en cada guardado.
 ### Añadido
 - **Puente IA (MCP) utilizable desde Windows y desde los paquetes.** El
   paquete no llevaba el servidor MCP y la guía mandaba `python3`, que en
-  Windows no existe: Claude Desktop nunca llegaba a IngeTrazo. Ahora el
-  instalador incluye `ingetrazo-mcp.exe`, el ejecutable acepta `--mcp` en
+  Windows no existe: Claude Desktop nunca llegaba a Built. Ahora el
+  instalador incluye `built-mcp.exe`, el ejecutable acepta `--mcp` en
   Linux, y al encender el puente se abre una ventana con las líneas exactas
   para Claude Code y Claude Desktop en ese sistema, con botón Copiar.
-- **Laptops con dos gráficas (Intel + NVIDIA/AMD): IngeTrazo pide la GPU
+- **Laptops con dos gráficas (Intel + NVIDIA/AMD): Built pide la GPU
   dedicada.** Windows arranca los programas nuevos con la integrada y el visor
   se arrastra mientras la RTX no hace nada. El instalador y la propia app
   escriben la misma preferencia que Configuración ▸ Sistema ▸ Pantalla ▸
-  Gráficos («Alto rendimiento») para `ingetrazo.exe`, solo si el usuario no
+  Gráficos («Alto rendimiento») para `built.exe`, solo si el usuario no
   había elegido nada; se aplica desde el siguiente arranque y se puede
   cambiar ahí mismo.
 - **Quién dibuja el visor.** Al arrancar, la app anota la tarjeta gráfica y
-  el controlador que le dieron el contexto OpenGL en `ingetrazo-gl.txt`
+  el controlador que le dieron el contexto OpenGL en `built-gl.txt`
   (carpeta de registros) y lo muestra en Ayuda ▸ Acerca de. Si el visor está
   dibujándose por software (`opengl32sw.dll` de Qt en Windows, `llvmpipe` en
   Linux), la barra de estado lo avisa: es la causa habitual de un
   «rendimiento pésimo» y la solución está en el controlador de la GPU, no en
-  IngeTrazo.
+  Built.
 
 ### Corregido
 - **El `.skp` exportado por la 0.3.10 no abría cuando una
@@ -5026,11 +5026,11 @@ entonces sobre las láminas y el modelado de Marco.
   prefijo del identificador de la app, como exige Flatpak.
 - **Windows: el instalador de 0.3.8 y 0.3.9 no arrancaba** si se instalaba en
   Archivos de programa: al iniciar, la app intentaba crear su registro de
-  fallos (`ingetrazo-crash.log`) en la carpeta de instalación, de solo
+  fallos (`built-crash.log`) en la carpeta de instalación, de solo
   lectura, y el respaldo usaba la consola, que un .exe sin consola no tiene
   («sys.stderr is None»). Los registros de fallos viven ahora en la carpeta
-  de datos del usuario (`%LOCALAPPDATA%\IngeTrazo` en Windows,
-  `~/.local/state/ingetrazo` en Linux) y el arranque nunca depende de que
+  de datos del usuario (`%LOCALAPPDATA%\Built` en Windows,
+  `~/.local/state/built` en Linux) y el arranque nunca depende de que
   exista una consola.
 
 ## [0.3.9] — 2026-09-03
@@ -5237,7 +5237,7 @@ probó en vivo antes de darse por buena.
 
 ### Corregido
 - El caché de texturas GL ya no se fuga al abrir otro documento.
-- Un crash nativo ahora deja autopsia en `ingetrazo-crash.log`.
+- Un crash nativo ahora deja autopsia en `built-crash.log`.
 
 ## [0.3.7.1] — 2026-08-28
 
@@ -5479,7 +5479,7 @@ project) hunted down every freeze it hit.
   Measurements box. "Offset" is now **Equidistancia** (the usual
   Spanish name).
 - **AI Assistant** (Extensions menu): chat with an AI provider from
-  inside IngeTrazo — provider picker with per-provider API key and
+  inside Built — provider picker with per-provider API key and
   model memory; every AI edit lands as ONE undoable command with full
   rollback on failure. Plus the **AI Bridge (MCP)**: model with Claude
   from outside the app over the Model Context Protocol.
@@ -5573,16 +5573,16 @@ model and comparing, tool by tool, against the expected behaviour.
 
 ### Changed
 - openskp dependency back on upstream (`iamahsanmehmood/openskp`):
-  every IngeTrazo patch is merged there, including the annotations
+  every Built patch is merged there, including the annotations
   writer (PR #203). CI pins upstream by SHA.
 
 ## [0.3.3] — 2026-08-21
 
-**The complete `.skp` round trip.** IngeTrazo now writes native `.skp`
+**The complete `.skp` round trip.** Built now writes native `.skp`
 (File → Export → `.skp`) and opens Marco's entire 13-year real-project
 corpus — 186 of 186 files, 2013–2026 — natively. Annotations travel BOTH
-ways: dimensions and leader texts drawn in IngeTrazo appear in the `.skp`,
-and the ones in `.skp` files land in IngeTrazo as live, editable
+ways: dimensions and leader texts drawn in Built appear in the `.skp`,
+and the ones in `.skp` files land in Built as live, editable
 annotations. The underlying reader fixes are merged into upstream
 [OpenSKP](https://github.com/iamahsanmehmood/openskp) (PRs #194/#199);
 the annotation writer is proposed as PR #203.
@@ -5627,10 +5627,10 @@ the annotation writer is proposed as PR #203.
 
 ## [0.3.2] — 2026-08-18
 
-**IngeTrazo has extensions.** The plugin system `docs/plugins.md` had been
+**Built has extensions.** The plugin system `docs/plugins.md` had been
 promising is implemented: an **Extensions** menu discovers Python plugins at
 startup from `<app>/plugins/` and the per-user directory
-(`~/.local/share/ingetrazo/plugins/` on Linux, `%APPDATA%\ingetrazo\plugins\`
+(`~/.local/share/built/plugins/` on Linux, `%APPDATA%\built\plugins\`
 on Windows). Based on contributions by Ahsan Mehmood
 ([OpenSKP](https://github.com/iamahsanmehmood/openskp)) — thank you! —
 consolidated and reworked in #4.
@@ -5659,7 +5659,7 @@ consolidated and reworked in #4.
 
 Linux gets first-class installers: every release now ships an **AppImage**
 (make executable and run; needs FUSE) and a **plain tarball**
-(`IngeTrazo-<version>-linux-x86_64.tar.gz` — extract and run `./ingetrazo`,
+(`Built-<version>-linux-x86_64.tar.gz` — extract and run `./built`,
 no FUSE, unpacks anywhere), both built and smoke-tested by CI on
 ubuntu-22.04 so they start on 22.04 and later. The Windows installer is
 unchanged.
@@ -5678,14 +5678,14 @@ unchanged.
 
 ### Changed
 - Composer: big models no longer freeze the sheet tools.
-- Repository references updated from `tuxiasumari/ingetrazo` to
+- Repository references updated from `tuxiasumari/built` to
   `ingelibre/ingetrazo` (About dialog, tile-fetcher user agents, and the
   external converter's download URL, which only worked through GitHub's rename
   redirect).
 
 ## [0.3.0] — 2026-08-08
 
-The sheet-composer release: model to printed plan without leaving IngeTrazo.
+The sheet-composer release: model to printed plan without leaving Built.
 
 ### Added
 - **Sheet composer** (Archivo ▸ Compositor de láminas): QGIS-style page
@@ -5763,11 +5763,11 @@ branded file-type icons.
   menu). Zoom (`Z`) drags up/down to zoom in/out; Zoom Window drags a
   rectangle and frames that region. Icons: a magnifier, and a magnifier
   inside a rectangle.
-- **Branded document icons** for the file types IngeTrazo works with —
+- **Branded document icons** for the file types Built works with —
   `.igz` (native), `.dae` (COLLADA) and `.skp`. On Linux a
   freedesktop MIME package paints the icons in the file manager (installed
   by `scripts/install_desktop.sh`); on Windows the installer associates the
-  `.igz` icon and adds IngeTrazo to the "Open with" list for `.dae`/`.skp`.
+  `.igz` icon and adds Built to the "Open with" list for `.dae`/`.skp`.
   Double-clicking a `.dae`/`.skp` now imports it.
 - **3D Text** now has a button on the Annotate toolbar (it was menu-only).
 
@@ -5791,12 +5791,12 @@ Open `.skp` files directly: File ▸ Import ▸ `.skp`…
 
 ### Added
 - **Direct `.skp` import** through an optional external converter — run as
-  a separate process, never part of IngeTrazo. The `.dae` and its texture folder land next to the `.skp`, then the
+  a separate process, never part of Built. The `.dae` and its texture folder land next to the `.skp`, then the
   existing COLLADA importer takes over (groups, components, textures,
   face-me sprites). On Linux the converter runs via Wine.
 - **One-click converter install**: if the external converter is missing,
   the import dialog offers to download it separately. No terminal required.
-  It is not bundled with IngeTrazo.
+  It is not bundled with Built.
 
 ### Fixed
 - `.skp` files stored under accented paths (`Imágenes`, `ñ`…) failed with a
@@ -5904,7 +5904,7 @@ civil engineering and architecture — draw → model → tag → take off → e
 - Deterministic intersections: circle×line, circle×circle, rect×rect split
   into proper regions — on flat drawings, next to solids, and on solid faces.
 - Transactional command history: any internal failure rolls back to the
-  exact previous state, tells the user, and logs to `ingetrazo-errors.log`.
+  exact previous state, tells the user, and logs to `built-errors.log`.
 - Fuzz-tested: 1000 seeded operation sequences with structural invariants
   (watertightness, orientation, undo fidelity) — 996 clean, 4 known-hard
   frozen as expected failures.

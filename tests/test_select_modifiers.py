@@ -11,14 +11,14 @@ wipe the selection you are building.
 """
 from __future__ import annotations
 
-from ingetrazo_core import ScreenPoint, Input
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint, Input
+from built_core import Vec3 as QVector3D
 
 from core.mesh import Edge, Face
 from core.scene import Scene
 from tools.base import ToolContext
 from tools.rust_tools import SelectTool
-from ingetrazo_core import select_mode as _select_mode
+from built_core import select_mode as _select_mode
 
 
 def V(x: float, y: float, z: float = 0.0) -> QVector3D:

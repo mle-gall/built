@@ -16,13 +16,13 @@ import os
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 
 from core.camera import OrbitCamera  # noqa: E402
 from core.scene import Scene  # noqa: E402
 
-HAS_RENDERER = importlib.util.find_spec("ingetrazo_render") is not None
+HAS_RENDERER = importlib.util.find_spec("built_render") is not None
 SIZE = 256
 THICKNESS_MM = (1, 2, 5)
 DISTANCE_M = (10, 50, 200)
@@ -30,7 +30,7 @@ DISTANCE_M = (10, 50, 200)
 
 @pytest.fixture(scope="module")
 def native():
-    from ingetrazo_render import Renderer
+    from built_render import Renderer
     renderer = Renderer(0, SIZE, SIZE, 1., platform="offscreen")
     renderer.set_antialias(False)
     renderer.set_edges(False)
@@ -62,7 +62,7 @@ def camera_at(distance, yaw_deg=-37.0):
 
 
 def render(renderer, scene, camera, fit=False):
-    from ingetrazo_core import pack_scene
+    from built_core import pack_scene
     from views.wgpu_style import style_payload
     packed = pack_scene(scene)
     packed.upload(renderer)

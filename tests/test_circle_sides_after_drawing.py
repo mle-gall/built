@@ -8,8 +8,8 @@ undo step, and the count stays for the next ones."""
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import ScreenPoint, Input
-from ingetrazo_core import Vec3 as V
+from built_core import ScreenPoint, Input
+from built_core import Vec3 as V
 
 from tools.base import ToolContext
 from tools.circle import CircleTool, PolygonTool

@@ -14,10 +14,10 @@ from __future__ import annotations
 
 import math
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.geometry import Face
-from ingetrazo_core.triangulate import is_convex
+from built_core.triangulate import is_convex
 
 
 def V(x: float, y: float, z: float = 0.0) -> QVector3D:

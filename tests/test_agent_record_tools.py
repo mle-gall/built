@@ -4,7 +4,7 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4
+from built_core import Matrix4 as QMatrix4x4
 from core.agent_inspection import InspectionTools
 from core.agent_records import RecordTools
 from core.group import Group
@@ -145,7 +145,7 @@ def test_invalid_csv_and_paging_are_atomic(model):
 def test_bridge_record_round_trip(native_host, monkeypatch):
     from tests.test_ai_bridge import _ask
     from plugins.ai_bridge import _Bridge
-    monkeypatch.setenv('INGETRAZO_AI_PORT', '0')
+    monkeypatch.setenv('BUILT_AI_PORT', '0')
     win = native_host.window
     bridge = _Bridge(win.viewport)
     try:

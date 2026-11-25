@@ -7,13 +7,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from ingetrazo_render import chrome_sheet
-from ingetrazo_render import AboutSheet as About, ExtensionsSheet as Extensions, CutListSheet as CutList
+from built_render import chrome_sheet
+from built_render import AboutSheet as About, ExtensionsSheet as Extensions, CutListSheet as CutList
 
 
 @pytest.fixture
 def pasteboard(monkeypatch):
-    from ingetrazo_render import shell_services as native
+    from built_render import shell_services as native
 
     items = {}
     def write(entries):
@@ -27,7 +27,7 @@ def pasteboard(monkeypatch):
 
 
 def build(provider, ctx):
-    pytest.importorskip("ingetrazo_render")
+    pytest.importorskip("built_render")
     spec = provider.build(ctx).wire()
     chrome_sheet.check_wire(json.dumps(spec))
     return spec
@@ -52,7 +52,7 @@ def test_about_and_clipboard(monkeypatch, native_host, pasteboard):
 
 def test_extensions_install_update_toggle_safe_reset_remove(tmp_path, monkeypatch):
     from core import extensions
-    from ingetrazo_core import extension_manager as em
+    from built_core import extension_manager as em
     root = tmp_path / "plugins"
     root.mkdir()
     monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: root)
@@ -99,7 +99,7 @@ def test_cut_list_group_copy_export(tmp_path, monkeypatch, pasteboard):
     from core.scene import Scene
     from tests.test_parts import _box, _part
     from core.group import Group
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render.shell_files import ShellFileDialog
     assembly = Group(name="Assembly")
     assembly.adopt([_part(_box(.2, .8, .4, color=color), name)
                     for color, name in [((1, 0, 0), 'Red, "panel"'), ((0, 1, 0), "Green")]])

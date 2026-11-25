@@ -1,6 +1,6 @@
 # UI patterns
 
-Patterns the Built chrome (egui in the Metal frame, `rust/ingetrazo_render/src/ui*.rs`)
+Patterns the Built chrome (egui in the Metal frame, `rust/built_render/src/ui*.rs`)
 reuses from one surface to the next. A new surface picks one of these
 before it is designed; a surface that fits none is a design question for
 Maxence, not a new one-off.
@@ -24,8 +24,8 @@ Manager**, **About** and report sheets also use this component.
   time. (What does — painting, filing, editing a material while looking at
   it — stays in the dock, the strip or the inspector; the sheet links to it.)
 - It is **not a question**. A question that changes data is the small
-  sheet hung from the top bar (`set_sheet`, `ingetrazo_render.chrome_dialogs`, `dialogs_host.rs`); a
-  form with OK/Cancel is a chrome form (`ingetrazo_render.chrome_forms`, `forms_host.rs`). Passing
+  sheet hung from the top bar (`set_sheet`, `built_render.chrome_dialogs`, `dialogs_host.rs`); a
+  form with OK/Cancel is a chrome form (`built_render.chrome_forms`, `forms_host.rs`). Passing
   information is a toast or the activity capsule.
 
 ### Anatomy

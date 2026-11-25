@@ -5,7 +5,7 @@ required UTF-8 member `document.json` identifies it with the top-level
 integer `"built_format": 1`. The identifier is mutually exclusive with
 `igz_format`. Readers reject unknown Built versions.
 
-Version 1 inherits the IngeTrazo format 3 scene, prototypes, groups, sheets,
+Version 1 inherits the Built format 3 scene, prototypes, groups, sheets,
 embedded textures, survey blobs and thumbnail. Each geometry block describes
 a member under `geom/` and its arrays by name, little-endian dtype, shape
 and byte offset. Writers align arrays to eight bytes. Edge endpoints and
@@ -24,10 +24,10 @@ triples to binary32. Element keys
 are session-local. Later versions may introduce additional geometry arrays
 and metadata.
 
-The IngeTrazo compatibility export writes a format 3 ZIP using binary32
+The Built compatibility export writes a format 3 ZIP using binary32
 points. Its precision warning reports the largest Euclidean displacement
 of a placed mesh point in world coordinates, in millimetres when it exceeds 0.0254 mm. Opening existing
-IngeTrazo formats 1, 2 and 3 follows their existing rules.
+Built formats 1, 2 and 3 follows their existing rules.
 
 ## Storage measurement
 

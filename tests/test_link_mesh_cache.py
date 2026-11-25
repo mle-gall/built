@@ -8,10 +8,10 @@ import numpy as np
 import pytest
 
 from core.group import Group
-from ingetrazo_core.materials import Material
-from ingetrazo_core import Vec3
-from ingetrazo_core.link_meshes import LinkMeshes
-from ingetrazo_core.mesh import Mesh
+from built_core.materials import Material
+from built_core import Vec3
+from built_core.link_meshes import LinkMeshes
+from built_core.mesh import Mesh
 
 
 def test_keys_include_only_the_material_renames_used_by_the_geometry():

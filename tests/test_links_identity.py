@@ -1,11 +1,11 @@
-import ingetrazo_core
+import built_core
 """Link identities belong to source placements, independent of labels and reloads."""
 import pytest
 from core import links
 from core.group import Group, iter_placements
 from core.scene import Scene
 from formats import igz
-from ingetrazo_core import Matrix4 as QMatrix4x4
+from built_core import Matrix4 as QMatrix4x4
 
 
 def source(tmp_path):
@@ -23,7 +23,7 @@ def test_stable_hosts_subset_and_rename(tmp_path):
     group = links.make_link(host, path, select={'uids': selected})
     host.groups.append(group)
     expected = [c.uid for c in group.children]
-    assert expected == [ingetrazo_core.link_stable_uid(group.uid, uid) for uid in selected]
+    assert expected == [built_core.link_stable_uid(group.uid, uid) for uid in selected]
     for name in ('one', 'two'):
         file = tmp_path / (name + '.igz')
         igz.save_scene(host, file)
@@ -88,7 +88,7 @@ def test_ride_read_only():
     import os
     from pathlib import Path
     import pytest
-    if not os.environ.get('INGETRAZO_TEST_RIDE'):
+    if not os.environ.get('BUILT_TEST_RIDE'):
         pytest.skip('opt-in real read-only fixture')
     path = Path('~/Desktop/models/asbuilt_ride.igz')
     before = path.stat().st_mtime_ns
@@ -97,7 +97,7 @@ def test_ride_read_only():
         scene = Scene()
         igz.load_into(scene, path)
         assert not scene.link_errors
-        rows.append([row['uid'] for row in __import__('ingetrazo_core.facets', fromlist=['build']).build(scene).values() if row['linked']])
+        rows.append([row['uid'] for row in __import__('built_core.facets', fromlist=['build']).build(scene).values() if row['linked']])
     assert rows[0] and rows[0] == rows[1]
     assert path.stat().st_mtime_ns == before
 
@@ -120,7 +120,7 @@ def test_nested_link_policy_per_placement(tmp_path):
     parent = Group(name='local assembly')
     parent.adopt([Group(name='local part'), links.make_link(middle, leaf_path)])
     middle.groups = [parent]
-    ingetrazo_core.link_set_packed(middle, leaf_path, True)
+    built_core.link_set_packed(middle, leaf_path, True)
     middle_path = tmp_path / 'middle.igz'
     igz.save_scene(middle, middle_path)
 
@@ -136,9 +136,9 @@ def test_nested_link_policy_per_placement(tmp_path):
     nested = full.children[0].children[1]
     assert len(nested.children) == len(leaf.groups)
     assert links.link_of(local)['include_nested'] is False
-    ingetrazo_core.link_set_include_nested(host, full, False)
+    built_core.link_set_include_nested(host, full, False)
     assert [g.name for g in full.children[0].children] == ['local part']
-    ingetrazo_core.link_set_include_nested(host, local, True)
+    built_core.link_set_include_nested(host, local, True)
     igz.save_scene(host, file)
     igz.load_into(host, file)
     local, full = host.groups
@@ -171,12 +171,12 @@ def test_source_only_skips_nested_file_before_selecting(tmp_path, monkeypatch):
 
 def test_bridge_source_save_updates_one_binary_mesh_in_resident_scene(tmp_path, monkeypatch):
     from types import SimpleNamespace
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from core.history import History
     from plugins.ai_bridge import _Bridge
     from tests.test_wgpu_updates import assert_matches_fresh_pack
-    from ingetrazo_core import pack_scene
-    from ingetrazo_core import InstanceUpdates
+    from built_core import pack_scene
+    from built_core import InstanceUpdates
 
     monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)
     src = Scene()
@@ -211,12 +211,12 @@ def test_bridge_source_save_updates_one_binary_mesh_in_resident_scene(tmp_path, 
         return got
 
     monkeypatch.setattr(igz, "_read_geometry_members", track)
-    sync = ingetrazo_core.link_sync_tags
+    sync = built_core.link_sync_tags
 
     def unchanged(*a):
         assert not sync(*a), "unchanged tags"
         return False
-    monkeypatch.setattr(ingetrazo_core, "link_sync_tags", unchanged)
+    monkeypatch.setattr(built_core, "link_sync_tags", unchanged)
     links.reload(host, path)
     assert len(inflated) == 1
     assert placed.children == old_groups
@@ -231,7 +231,7 @@ def test_bridge_source_save_updates_one_binary_mesh_in_resident_scene(tmp_path, 
 
 
 def test_nested_source_notification_keeps_outer_ids_tags_and_pack_policy(tmp_path):
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     leaf, path = source(tmp_path)
     for part in leaf.groups:
         part.mesh.add_face([V(), V(1, 0, 0), V(0, 1, 0)])
@@ -252,7 +252,7 @@ def test_nested_source_notification_keeps_outer_ids_tags_and_pack_policy(tmp_pat
     assert outer.children[0].children == parts
     assert parts[1].layer == tag and len(parts[1].mesh.faces) == 2
     assert [i for i, part in enumerate(parts) if part.mesh is not original[i]] == [1]
-    ingetrazo_core.link_set_packed(host, middle_path, True)
+    built_core.link_set_packed(host, middle_path, True)
     leaf.groups[1].mesh.clear()
     igz.save_scene(leaf, path)
     links.reload(host, path)

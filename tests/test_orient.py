@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Consistent outward orientation of closed solids (ingetrazo_core.orient).
+"""Consistent outward orientation of closed solids (built_core.orient).
 
 Root-fix groundwork: every face of a closed solid wound so its normal points
 out of the enclosed volume, decided per face by parity ray casting (robust to
@@ -9,10 +9,10 @@ triangle-prism bench from the engine notes; no-op on open/flat meshes.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
-from ingetrazo_core.orient import is_closed, orient_outward, signed_volume
+from built_core.orient import is_closed, orient_outward, signed_volume
 
 
 def V(x: float, y: float, z: float = 0.0) -> QVector3D:

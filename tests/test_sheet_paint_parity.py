@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The Rust painters (ingetrazo_core sheets::items) draw each sheet item as
+"""The Rust painters (built_core sheets::items) draw each sheet item as
 the Python painters of views/composer.py drew it: the same primitives in
 the same order, with the same pens, brushes, texts and geometry. The
 goldens were recorded from the Python painters (tests/sheet_paint_recorder.py,
@@ -20,7 +20,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
 
-import ingetrazo_core as NATIVE  # noqa: E402
+import built_core as NATIVE  # noqa: E402
 from tests.sheet_paint_cases import cases, frame_content, profile_of  # noqa: E402
 FIXTURES = Path(__file__).parent / "fixtures" / "sheet_paint"
 GROUPS = {g: json.loads(gzip.decompress((FIXTURES / f"goldens_{g}.json.gz").read_bytes()))

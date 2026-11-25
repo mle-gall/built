@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""``ingetrazo_core.orient.orient_outward`` (the native pass, ``orient.rs``) must
+"""``built_core.orient.orient_outward`` (the native pass, ``orient.rs``) must
 decide as the Python oracle of ``core/orient.py`` did at ``0fd95100``, so
 the oracle can go: seeded assemblies of boxes (alone, side by side, sharing
 a wall that becomes an interior partition, stacked, one inside another),
 prisms, an open sheet and a flat drawing, with faces turned over at random
 and passes restricted to a component (``only``). Recorded with the scans
-off (``INGETRAZO_SCANS=0``: the Python pass); each case keeps the faces
+off (``BUILT_SCANS=0``: the Python pass); each case keeps the faces
 turned, every face's ``interior`` mark, ``is_closed`` and
 ``signed_volume`` (to 1e-9).
 
 Regenerate only on purpose, against the reference implementation:
-``INGETRAZO_SCANS=0 python tests/test_orient_golden.py --write``."""
+``BUILT_SCANS=0 python tests/test_orient_golden.py --write``."""
 from __future__ import annotations
 
 import gzip
@@ -42,7 +42,7 @@ def _prism(m, V, rng, x, y):
 
 
 def cases():
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from core.mesh import Mesh, turn_face_over
     rng = random.Random(20261125)
     for k in range(70):
@@ -81,7 +81,7 @@ def cases():
 
 
 def answers():
-    from ingetrazo_core.orient import is_closed, orient_outward, signed_volume
+    from built_core.orient import is_closed, orient_outward, signed_volume
     out = []
     for m, only, seed in cases():
         faces = list(m.faces)
@@ -107,7 +107,7 @@ def test_the_native_pass_decides_as_the_python_oracle_did():
 if __name__ == "__main__" and "--write" in sys.argv:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     import os
-    assert os.environ.get("INGETRAZO_SCANS") == "0", "record with the Python pass"
+    assert os.environ.get("BUILT_SCANS") == "0", "record with the Python pass"
     GOLDEN.parent.mkdir(exist_ok=True)
     data = json.dumps(answers(), separators=(",", ":")).encode()
     GOLDEN.write_bytes(gzip.compress(data, mtime=0))

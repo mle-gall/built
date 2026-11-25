@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.group import Group
 from core.mesh import Mesh

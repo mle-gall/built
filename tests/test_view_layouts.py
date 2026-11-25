@@ -2,8 +2,8 @@
 from types import SimpleNamespace
 
 import pytest
-from ingetrazo_core import Vec3
-from ingetrazo_render import ModelViews, view_layouts
+from built_core import Vec3
+from built_render import ModelViews, view_layouts
 
 from tests.model_panes import grid  # noqa: F401
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
@@ -17,7 +17,7 @@ def arrange(layout="four", **state):
 
 
 def test_picker_uses_the_document_layout_and_cancel_leaves_it_alone(native_host, monkeypatch):
-    from ingetrazo_render import chrome_forms
+    from built_render import chrome_forms
     win = native_host.window
     assert win._doc.view_layout == "single" and win.view.peers() == []
     choices = {}
@@ -179,7 +179,7 @@ def test_extension_workspace_and_edit_state_stay_with_the_document(grid):
 
 
 def test_a_drawing_tool_owns_a_crossing_while_a_divider_still_drags(grid):
-    from ingetrazo_render import MouseEvent
+    from built_render import MouseEvent
     host = grid.host
     doc = grid.win._doc
     grid.win._activate_tool("line")
@@ -194,8 +194,8 @@ def test_a_drawing_tool_owns_a_crossing_while_a_divider_still_drags(grid):
 
 @pytest.mark.parametrize(("tolerance", "snaps"), [(16, False), (45, True)])
 def test_native_divider_uses_the_saved_snap_distance(grid, tolerance, snaps):
-    from ingetrazo_render import MouseEvent
-    from ingetrazo_core.settings import settings
+    from built_render import MouseEvent
+    from built_core.settings import settings
 
     settings().setValue("views/divider_snap_px", tolerance)
     grid.choose("single")

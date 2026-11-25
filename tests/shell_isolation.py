@@ -9,7 +9,7 @@ import pytest
 _ENV = ("XDG_DATA_HOME", "BUILT_ANSWERS", "BUILT_SETTINGS_DIR")
 
 _PATCHED = {
-    "ingetrazo_core.settings": ("_store",),
+    "built_core.settings": ("_store",),
 }
 _MISSING = object()
 
@@ -17,7 +17,7 @@ _MISSING = object()
 @contextmanager
 def _shell_state():
     """Restore process-wide shell services even when a host fails to open."""
-    from ingetrazo_render import shell_modal
+    from built_render import shell_modal
     previous_host = shell_modal.host()
     env = {k: os.environ.get(k) for k in _ENV}
     saved = []
@@ -52,7 +52,7 @@ def restore_shell_patches(tmp_path_factory):
 @contextmanager
 def open_test_host(profile, *, width=900, height=600, scale=1.):
     """Open a private document without creating an OS window."""
-    from ingetrazo_render import Host
+    from built_render import Host
     with _shell_state():
         os.environ["BUILT_SETTINGS_DIR"] = str(Path(profile).resolve())
         host = Host(0, width, height, scale, settings=os.environ["BUILT_SETTINGS_DIR"])
@@ -71,7 +71,7 @@ def native_host(tmp_path):
 @pytest.fixture
 def native_question_host(native_host, monkeypatch):
     """Use the real sheet stack while driving a native document without a renderer."""
-    from ingetrazo_render import chrome_dialogs
+    from built_render import chrome_dialogs
     monkeypatch.setattr(chrome_dialogs, "async_host",
                         lambda parent: native_host.window if parent is native_host.window else None)
     return native_host
@@ -86,7 +86,7 @@ def native_window(native_host):
 
 def one_off_export(win, fmt, destination):
     """Drive the File menu, Export sheet and queued writer on the UI thread."""
-    from ingetrazo_render import chrome_sheet
+    from built_render import chrome_sheet
     win.run_command(f"export:{fmt}")
     ctx = chrome_sheet.Ctx(win, win.view)
     provider = chrome_sheet.current(win)
@@ -105,7 +105,7 @@ def one_off_export(win, fmt, destination):
 
 def attach_test_renderer(host):
     """Create a real offscreen GPU target for an isolated Host."""
-    from ingetrazo_render import Renderer
+    from built_render import Renderer
     renderer = Renderer(0, host.width, host.height, host.scale, platform="offscreen")
     # The offscreen target can present a frame although there is no native window.
     host.view._presentable = lambda: host.view.renderer is not None

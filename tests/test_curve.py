@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import math
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.history import History, TagCurveCommand
 from core.scene import Scene
@@ -194,7 +194,7 @@ def test_square_drawn_after_circle_splits_three_areas():
 
 
 def _click(vp, tool, x, y):
-    from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
+    from built_core import ScreenPoint as QPointF, Input as Qt
     from tools.base import ToolContext
     tool.on_click(ToolContext(viewport=vp, world=QVector3D(x, y, 0),
                               screen=QPointF(0, 0), modifiers=Qt.NoModifier,

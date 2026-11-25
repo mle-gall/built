@@ -8,13 +8,13 @@ read-only pass, a pick still gets the mesh's own face. Skipped without the
 engine."""
 from __future__ import annotations
 
-from ingetrazo_render import MouseEvent
+from built_render import MouseEvent
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import random
 
 import pytest  # noqa: E402
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Vec3 as V
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Vec3 as V
 
 import core._native as _native  # noqa: E402
 from core import mesh as M  # noqa: E402

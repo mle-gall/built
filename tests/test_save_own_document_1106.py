@@ -14,14 +14,14 @@ import time
 from pathlib import Path
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
-from ingetrazo_core import autosave
+from built_core import autosave
 from core.history import AddEdgeCommand
 from core.scene import Scene
 from formats import igz as igz_format
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_render.shell_files import ShellFileDialog
+from built_render.shell_files import ShellFileDialog
 
 
 def _autosave_now(win, timeout=10.0):
@@ -59,7 +59,7 @@ def _new_tab(win, n, path=None):
 
 def _pane(win, n=7):
     """What a split-view extension assigns: a view on another scene."""
-    from ingetrazo_render.shell_views import ShellView
+    from built_render.shell_views import ShellView
     from views.document_controller import DocumentController
     pane = DocumentController(win._host)
     display = ShellView(win._host)
@@ -146,7 +146,7 @@ def test_closing_its_tab_saves_the_project(win, tmp_path, monkeypatch):
     a = _new_tab(win, 3, path)
     win.viewport = _pane(win)
     _new_tab(win, 2, tmp_path / "b.built")
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", lambda *a, **kw: "save")
+    monkeypatch.setattr("built_render.chrome_dialogs.ask", lambda *a, **kw: "save")
     assert win.close_document(a)
     assert _edges_in_file(path) == 3
     assert a not in win.documents()
@@ -158,7 +158,7 @@ def test_quitting_saves_each_project_with_a_view_in_front_of_one(
     _new_tab(win, 3, a_path)
     win.viewport = _pane(win)
     _new_tab(win, 2, b_path)
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", lambda *a, **kw: "save")
+    monkeypatch.setattr("built_render.chrome_dialogs.ask", lambda *a, **kw: "save")
     assert win._confirm_quit()
     assert _edges_in_file(a_path) == 3
     assert _edges_in_file(b_path) == 2
@@ -264,7 +264,7 @@ def test_a_workspace_is_not_asked_about_another_tab(win, tmp_path,
             return True
 
     assert win.enter_workspace(Workspace())
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", lambda *a, **kw: "save")
+    monkeypatch.setattr("built_render.chrome_dialogs.ask", lambda *a, **kw: "save")
     assert not win.close_document(a)
     assert a in win.documents()
     assert win.leave_workspace()
@@ -336,7 +336,7 @@ def test_each_tab_saves_its_own_file(win, tmp_path):
 def test_closing_a_tab_behind_saves_that_tab(win, tmp_path, monkeypatch):
     a = _new_tab(win, 3, tmp_path / "a.built")
     b = _new_tab(win, 2, tmp_path / "b.built")
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", lambda *a, **kw: "save")
+    monkeypatch.setattr("built_render.chrome_dialogs.ask", lambda *a, **kw: "save")
     assert win.close_document(a)
     assert _edges_in_file(a.path) == 3
     assert not b.path.exists()
@@ -350,7 +350,7 @@ def test_quitting_with_one_changed_tab_behind_saves_that_tab(win, tmp_path,
     win._on_save()
     assert not win._doc_is_dirty(b)
     assert win._doc_is_dirty(a)
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", lambda *a, **kw: "save")
+    monkeypatch.setattr("built_render.chrome_dialogs.ask", lambda *a, **kw: "save")
     assert win._confirm_quit()
     assert _edges_in_file(a.path) == 3
     assert _edges_in_file(b.path) == 2
@@ -361,7 +361,7 @@ def test_quitting_saves_all_each_to_its_own_file(win, tmp_path, monkeypatch):
     b = _new_tab(win, 2, tmp_path / "b.built")
     c = _new_tab(win, 5, tmp_path / "c.built")
     win.activate_document(b)
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", lambda *a, **kw: "save")
+    monkeypatch.setattr("built_render.chrome_dialogs.ask", lambda *a, **kw: "save")
     assert win._confirm_quit()
     assert [_edges_in_file(d.path) for d in (a, b, c)] == [3, 2, 5]
 
@@ -370,7 +370,7 @@ def test_cancelling_a_save_as_on_quit_stays_and_writes_nothing_wrong(
         win, tmp_path, monkeypatch):
     a = _new_tab(win, 3, tmp_path / "a.built")
     _new_tab(win, 2)                                # untitled: Save As
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", lambda *a, **kw: "save")
+    monkeypatch.setattr("built_render.chrome_dialogs.ask", lambda *a, **kw: "save")
     monkeypatch.setattr(ShellFileDialog, "getSaveFileName",
                         lambda *a, **k: ("", ""))
     assert not win._confirm_quit()
@@ -385,8 +385,8 @@ def test_a_failed_save_on_quit_stays(win, tmp_path, monkeypatch):
     def fail(*_a, **_k):
         raise OSError("disk full")
     monkeypatch.setattr(igz_format, "save_scene", fail)
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.save_failed", lambda *a, **k: None)
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", lambda *a, **kw: "save")
+    monkeypatch.setattr("built_render.chrome_dialogs.save_failed", lambda *a, **k: None)
+    monkeypatch.setattr("built_render.chrome_dialogs.ask", lambda *a, **kw: "save")
     assert not win._confirm_quit()
     assert win._doc_is_dirty(a)
     assert not path.exists()
@@ -508,17 +508,17 @@ def test_quitting_asks_once_for_every_modified_project(win, monkeypatch):
     def answer(*args, checklist, **kw):
         boxes.append(checklist)
         return "cancel"
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", answer)
+    monkeypatch.setattr("built_render.chrome_dialogs.ask", answer)
     assert not win._confirm_quit()
     assert len(boxes) == 1
     assert len(boxes[0]) == 2 and all("Untitled" in label and checked for label, checked in boxes[0])
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", lambda *a, **kw: "discard")
+    monkeypatch.setattr("built_render.chrome_dialogs.ask", lambda *a, **kw: "discard")
     assert win._confirm_quit()
 
 
 def test_cancelling_quit_in_a_later_window_keeps_the_first_window_recoverable(
         native_host, win, tmp_path, monkeypatch):
-    from ingetrazo_render import Host
+    from built_render import Host
     first = _new_tab(win, 3, tmp_path / "first.built")
     _autosave_now(win)
     slot = autosave.pending(first.path)
@@ -527,12 +527,12 @@ def test_cancelling_quit_in_a_later_window_keeps_the_first_window_recoverable(
     try:
         _new_tab(other.window, 2, tmp_path / "second.built")
         answers = iter(["discard", "cancel"])
-        monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", lambda *a, **k: next(answers))
+        monkeypatch.setattr("built_render.chrome_dialogs.ask", lambda *a, **k: next(answers))
         assert native_host.confirm_window_close()
         assert not other.confirm_window_close()
         assert not win._closed and not other.window._closed
         assert slot == autosave.pending(first.path) and win._doc_is_dirty(first)
-        monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", lambda *a, **k: "discard")
+        monkeypatch.setattr("built_render.chrome_dialogs.ask", lambda *a, **k: "discard")
         assert native_host.request_close()
         assert autosave.pending(first.path) is None and win._closed
     finally:

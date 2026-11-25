@@ -12,7 +12,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.history import History, MoveVerticesCommand
 from core.scene import Scene
@@ -124,7 +124,7 @@ def test_the_move_tool_on_screen_lowers_the_arc():
     """The reporter's gesture through the real tool: the top arc selected,
     picked at its end and dropped on the bottom arc's end."""
     import os
-    from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
+    from built_core import ScreenPoint as QPointF, Input as Qt
     from tools.move import MoveTool
     from views.document_interaction import _HoverEvent
     from tests.controller_surface import ControllerSurface as Viewport

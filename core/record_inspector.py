@@ -2,8 +2,8 @@
 from copy import deepcopy
 
 from core import bim_registry, record
-from ingetrazo_core import structure
-from ingetrazo_core.history import CompoundCommand, SetRecordCommand
+from built_core import structure
+from built_core.history import CompoundCommand, SetRecordCommand
 from core.ifc_tables import TABLES
 from core.protocol.records import occurrence
 

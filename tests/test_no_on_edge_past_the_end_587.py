@@ -9,8 +9,8 @@ edge IS the endpoint, which its own snap had already turned down."""
 from __future__ import annotations
 
 
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import Vec3 as V
+from built_core import Input as Qt
+from built_core import Vec3 as V
 
 
 from core.edits import build_add_edges  # noqa: E402

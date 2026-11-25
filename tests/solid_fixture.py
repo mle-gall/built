@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Synthetic solid geometry for the plugin and the native Problems inspector."""
-from ingetrazo_core import Vec3
+from built_core import Vec3
 
 
 def _box(mesh, x0=0.0, y0=0.0, z0=0.0, dx=2.0, dy=2.0, dz=2.0,

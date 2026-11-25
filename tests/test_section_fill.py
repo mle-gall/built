@@ -9,12 +9,12 @@ chords the plane takes out of the triangles, chained into closed rings,
 holes left open. Every model here is generated."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 import numpy as np
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
-import ingetrazo_core
+import built_core
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 _QUADS = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6),
@@ -35,8 +35,8 @@ def _cut(meshes, z=1.0, normal=UP):
     a = np.array([[t[0].x(), t[0].y(), t[0].z()] for t in tris])
     b = np.array([[t[1].x(), t[1].y(), t[1].z()] for t in tris])
     c = np.array([[t[2].x(), t[2].y(), t[2].z()] for t in tris])
-    chords = ingetrazo_core.section_cut_chords(a, b - a, c - a, normal, QVector3D(0, 0, z))
-    return chords, ingetrazo_core.section_fill_triangles(chords, normal)
+    chords = built_core.section_cut_chords(a, b - a, c - a, normal, QVector3D(0, 0, z))
+    return chords, built_core.section_fill_triangles(chords, normal)
 
 
 def _area(tris) -> float:
@@ -132,8 +132,8 @@ def test_a_box_cut_on_a_slant_fills_in_its_own_plane():
     a = np.array([[t[0].x(), t[0].y(), t[0].z()] for t in tris])
     b = np.array([[t[1].x(), t[1].y(), t[1].z()] for t in tris])
     c = np.array([[t[2].x(), t[2].y(), t[2].z()] for t in tris])
-    chords = ingetrazo_core.section_cut_chords(a, b - a, c - a, n, QVector3D(1, 1, 0.9))
-    fill = ingetrazo_core.section_fill_triangles(chords, n)
+    chords = built_core.section_cut_chords(a, b - a, c - a, n, QVector3D(1, 1, 0.9))
+    fill = built_core.section_fill_triangles(chords, n)
     d = fill.reshape(-1, 3).astype(np.float64) @ np.array(
         [n.x(), n.y(), n.z()]) - np.dot([n.x(), n.y(), n.z()], [1, 1, 0.9])
     assert np.abs(d).max() < 1e-5
@@ -143,7 +143,7 @@ def test_a_box_cut_on_a_slant_fills_in_its_own_plane():
 
 def test_the_viewport_fills_the_cut_and_keeps_it_across_a_selection(native_host):
     from core.group import Group
-    from ingetrazo_core.section import SectionPlane
+    from built_core.section import SectionPlane
     vp = native_host.viewport
     scene = vp.scene
     m = Mesh()
@@ -181,7 +181,7 @@ def _tube_and_column():
 
 def test_hatching_stays_inside_the_cut_and_out_of_its_hollow():
     chords, _fill = _cut(_tube_and_column())
-    lines = ingetrazo_core.section_hatch_segments(chords, UP, 0.25)
+    lines = built_core.section_hatch_segments(chords, UP, 0.25)
     assert len(lines)
     assert np.allclose(lines[:, :, 2], 1.0)            # in the plane
     mids = lines.astype(np.float64).mean(axis=1)
@@ -199,26 +199,26 @@ def test_cross_hatching_draws_both_ways_and_spacing_counts():
     m = Mesh()
     _box(m, 0, 0, 0, 2, 2, 2)
     chords, _fill = _cut([m])
-    one = ingetrazo_core.section_hatch_segments(chords, UP, 0.2)
-    both = ingetrazo_core.section_hatch_segments(chords, UP, 0.2, cross=True)
-    finer = ingetrazo_core.section_hatch_segments(chords, UP, 0.1)
+    one = built_core.section_hatch_segments(chords, UP, 0.2)
+    both = built_core.section_hatch_segments(chords, UP, 0.2, cross=True)
+    finer = built_core.section_hatch_segments(chords, UP, 0.1)
     assert len(both) > 1.8 * len(one)
     assert len(finer) > 1.8 * len(one)
 
 
 def test_the_plane_fill_over_the_style():
-    from ingetrazo_core.section import SectionPlane
-    from ingetrazo_core.style import Style
+    from built_core.section import SectionPlane
+    from built_core.style import Style
     style = Style(name="test")
     style.section_fill = True
     style.section_fill_color = (0.2, 0.3, 0.4)
     sp = SectionPlane(QVector3D(), UP)
-    assert ingetrazo_core.section_effective_fill(sp, style)[:2] == ("solid", (0.2, 0.3, 0.4))
+    assert built_core.section_effective_fill(sp, style)[:2] == ("solid", (0.2, 0.3, 0.4))
     sp.fill = {"pattern": "hatch", "color": (1.0, 0.0, 0.0),
                "spacing": 0.1}
-    assert ingetrazo_core.section_effective_fill(sp, style) == ("hatch", (1.0, 0.0, 0.0), 0.1)
+    assert built_core.section_effective_fill(sp, style) == ("hatch", (1.0, 0.0, 0.0), 0.1)
     style.section_fill = False                         # the master switch
-    assert ingetrazo_core.section_effective_fill(sp, style)[0] == "none"
+    assert built_core.section_effective_fill(sp, style)[0] == "none"
     back = SectionPlane.from_dict(sp.to_dict())
     assert back.fill == {"pattern": "hatch", "color": (1.0, 0.0, 0.0),
                          "spacing": 0.1}
@@ -230,7 +230,7 @@ def test_the_plane_fill_over_the_style():
 
 def test_the_viewport_hatches_the_cut_it_fills(native_host):
     from core.group import Group
-    from ingetrazo_core.section import SectionPlane
+    from built_core.section import SectionPlane
     vp = native_host.viewport
     scene = vp.scene
     m = Mesh()
@@ -287,7 +287,7 @@ def test_the_model_draws_the_line_types_by_default(native_host):
     """«Line types in the model», on unless a style says otherwise: a
     layer's edges come out dashed and in their line type's colour."""
     from tests.test_layer_cut import _gas_scene
-    from ingetrazo_core.style import Style
+    from built_core.style import Style
     vp = native_host.viewport
     scene = _gas_scene(vp.scene)
     scene.version += 1
@@ -315,13 +315,13 @@ def test_the_model_writes_a_line_types_words(native_host):
     the gaps the pattern leaves for them, lying along the edge."""
     from core.layers import Layer
     from core.group import Group
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     import numpy as np
     from core.layers import with_text
     vp = native_host.viewport
     scene = vp.scene
     drawn, spec = with_text([10.0, -2.0], "GAS", 2.0)
-    ingetrazo_core.tag_edits.load_line_types(scene, {"Gas": dict({"pattern": drawn,
+    built_core.tag_edits.load_line_types(scene, {"Gas": dict({"pattern": drawn,
                                          "pieces": [10.0, -2.0],
                                          "color": [0.85, 0.65, 0.0]},
                                         **spec)})
@@ -364,7 +364,7 @@ def test_picking_does_not_dash_the_model_again(native_host, monkeypatch):
 def test_a_dragged_cut_defers_changed_fill_but_reuses_equal_segments(monkeypatch):
     from types import SimpleNamespace
     import time
-    from ingetrazo_core import timers
+    from built_core import timers
     import views.document_interaction as interaction
     old = np.zeros((2, 2, 3), dtype=np.float32)
     tris = object()

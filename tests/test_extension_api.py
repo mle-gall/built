@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.history import History, SetPluginDataCommand
 from core.scene import Scene
@@ -182,12 +182,12 @@ def test_levels_panel_has_a_one_click_way_to_where_the_guides_show(levels):
 
 def test_the_example_extensions_ship_but_install_only_on_request(tmp_path,
                                                                  monkeypatch):
-    """Marco: «sería bueno tener esa extensión como ejemplo en IngeTrazo para
+    """Marco: «sería bueno tener esa extensión como ejemplo en Built para
     que otros usuarios vean» — shipped with the app and loaded only once
     someone installs it. Since 0.5.8 they install from Manage extensions…
     (the Extensions menu no longer has a submenu of its own for them), as
     managed extensions: disable and uninstall work on them like on any."""
-    from ingetrazo_core import extension_manager as manager
+    from built_core import extension_manager as manager
     from core import extensions
     examples = manager.example_extension_files()
     assert any(p.name == "niveles.py" and title == "Niveles"
@@ -213,8 +213,8 @@ def test_an_example_extension_can_be_a_package(tmp_path, monkeypatch):
     """A bigger example extension (CAM, PR #132) is a folder with an
     ``__init__.py``: it is listed from its package docstring, installed as
     the whole folder (no ``__pycache__``) and removed as a whole."""
-    from ingetrazo_core import extension_manager as manager
-    from ingetrazo_core import paths
+    from built_core import extension_manager as manager
+    from built_core import paths
     root = tmp_path / "app"
     pkg = root / "examples" / "extensions" / "demo"
     (pkg / "engine").mkdir(parents=True)

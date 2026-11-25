@@ -7,7 +7,7 @@ mark a guide I can draw on" report)."""
 from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 
 def _window_with_guide(native_host):

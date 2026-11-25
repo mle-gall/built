@@ -5,7 +5,7 @@ import pytest
 
 @pytest.hookimpl(trylast=True)
 def pytest_runtest_teardown(item, nextitem):
-    from ingetrazo_core import doc_depth
+    from built_core import doc_depth
     depth = doc_depth()
     if depth:
         print(f"\nOPEN-TRANSACTION depth={depth} after {item.nodeid}")

@@ -1,18 +1,18 @@
 """A hidden tag folder hides its tags in sheets/exports, and scenes
 remember which folders were switched off."""
-import ingetrazo_core
-from ingetrazo_core import Vec3 as QVector3D
+import built_core
+from built_core import Vec3 as QVector3D
 
 from core import layers as L
 from core.layers import Layer
 from core.scene import Scene
-from ingetrazo_core.saved_views import SavedView
+from built_core.saved_views import SavedView
 from core.camera import OrbitCamera
 
 
 def _scene():
     scene = Scene()
-    f = ingetrazo_core.tag_edits.add_folder(scene, "Arq")
+    f = built_core.tag_edits.add_folder(scene, "Arq")
     scene.layers += [Layer("Muro", folder=f), Layer("Losa", folder=f,
                                                     visible=False)]
     return scene, f
@@ -20,7 +20,7 @@ def _scene():
 
 def test_visible_placements_follow_the_folder():
     from core.group import Group
-    from ingetrazo_core import group_visible_placements as visible_placements
+    from built_core import group_visible_placements as visible_placements
     from core.mesh import Mesh
     scene, f = _scene()
     child = Group(Mesh(), name="child")
@@ -47,7 +47,7 @@ def test_a_scene_remembers_and_restores_hidden_folders():
     assert scene.folder_visibility[f] is False
     assert scene.layer("Losa").visible is False       # its own switch
     assert scene.layer("Muro").visible is True        # kept, folder hides it
-    assert not ingetrazo_core.tag_edits.effective_visible(scene, scene.layer("Muro"))
+    assert not built_core.tag_edits.effective_visible(scene, scene.layer("Muro"))
 
 
 def test_an_old_scene_leaves_the_folders_alone():

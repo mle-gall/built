@@ -4,14 +4,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from ingetrazo_render import ShellScenes
-from ingetrazo_render import SceneMark
-from ingetrazo_core import scene_tree
+from built_render import ShellScenes
+from built_render import SceneMark
+from built_core import scene_tree
 from core.camera import OrbitCamera
 from core.composition import Composicion
 from core.history import History
 from core.protocol.commands import edit_saved_scene
-from ingetrazo_core.saved_views import SavedView
+from built_core.saved_views import SavedView
 from core.scene import Scene
 
 
@@ -155,7 +155,7 @@ def test_duplicate_from_the_menu_goes_right_after_and_undoes(menu):
 
 def test_scene_folder_menu_keeps_reference_order_history_and_document_identity(menu):
     import json
-    from ingetrazo_core import scene_tree
+    from built_core import scene_tree
 
     actions, win, _ = menu
     a, b, c = (actions.add_scene() for _ in range(3))

@@ -13,11 +13,11 @@ notch, and got marked interior — a closed solid 2.3 m³ short."""
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.edits import build_add_edges
 from core.history import History
-from ingetrazo_core.orient import is_closed, signed_volume
+from built_core.orient import is_closed, signed_volume
 from core.scene import Scene
 from tests import test_pushpull_ux as T
 

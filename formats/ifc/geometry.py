@@ -107,7 +107,7 @@ def mapped_body(w, group, base, excluded, context_id, geometry, cache, axis):
     """
     import numpy as np
     from core.bim import _compose
-    from ingetrazo_core import group_np_affine as np_affine
+    from built_core import group_np_affine as np_affine
     from core.geometry_arrays import arrays_of, placed_arrays
 
     items = []

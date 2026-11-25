@@ -1,7 +1,7 @@
 """Hidden Geometry reveals smooth seams without changing normals or solids."""
 import pytest
 import numpy as np
-from ingetrazo_core import Vec3 as V, Matrix4 as QMatrix4x4
+from built_core import Vec3 as V, Matrix4 as QMatrix4x4
 from core.mesh import Mesh
 from core.group import Group
 from tests.controller_surface import live_image

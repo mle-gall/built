@@ -5,20 +5,20 @@ typed in, the lens as a focal length, roll, frame shift, clipping and the
 picture's frame — kept by scenes and by the document."""
 from __future__ import annotations
 
-from ingetrazo_render import open_camera
+from built_render import open_camera
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest  # noqa: E402
-from ingetrazo_core import Input as Qt  # noqa: E402
-from ingetrazo_core import Vec3 as QVector3D, Vec4 as QVector4D
+from built_core import Input as Qt  # noqa: E402
+from built_core import Vec3 as QVector3D, Vec4 as QVector4D
 
 
 from core.camera import (OrbitCamera, focal_from_fov,  # noqa: E402
                          fov_from_focal, frame_rect)
-from ingetrazo_core.saved_views import SavedView  # noqa: E402
+from built_core.saved_views import SavedView  # noqa: E402
 
 
 def _ndc(cam, p: QVector3D):
@@ -53,7 +53,7 @@ def test_an_ordinary_lens_draws_as_it_always_did():
     """No setting touched: the very same matrix as before the lens."""
     cam = _level_camera()
     assert cam.lens_dict() == {}
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     m = QMatrix4x4()
     m.perspective(cam.fov_deg, cam.aspect, cam.near_plane(), cam.far_plane())
     assert cam.projection_matrix() == m
@@ -220,7 +220,7 @@ def test_the_document_keeps_the_lens(tmp_path, native_host):
 # ---- The window -------------------------------------------------------------------
 
 def _edit(win, key, value=None):
-    from ingetrazo_render import inspector_action as action
+    from built_render import inspector_action as action
     import json
 
     view = getattr(win._doc, "stand_in", None) or win.viewport
@@ -252,7 +252,7 @@ def test_the_inspector_shows_and_sets_the_camera(native_host):
 
 def test_every_language_names_the_window():
     import json
-    from ingetrazo_core.paths import app_root
+    from built_core.paths import app_root
     for p in (app_root() / "i18n").glob("*.json"):
         if p.stem == "en":
             continue
@@ -267,7 +267,7 @@ def _fake_view(monkeypatch, w=1000, h=500):
     red exactly where the camera frame lies, so a crop can be checked
     without a graphics card."""
     import numpy as np
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     from views.document_controller import DocumentController
     cls = DocumentController
     vp = cls.__new__(cls)
@@ -329,10 +329,10 @@ def test_export_image_tall_frame(monkeypatch):
 
 def test_export_image_menu_crops_to_the_frame(monkeypatch, tmp_path, native_host):
     from unittest.mock import Mock
-    from ingetrazo_render import shell_services as native
-    from ingetrazo_render import chrome_forms
+    from built_render import shell_services as native
+    from built_render import chrome_forms
     from tests.raster_samples import solid_raster
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render.shell_files import ShellFileDialog
     win = native_host.window
     render = Mock(return_value=solid_raster(16, 9, (0, 0, 0)))
     monkeypatch.setattr(native, "available", lambda: True)
@@ -349,7 +349,7 @@ def test_export_image_menu_crops_to_the_frame(monkeypatch, tmp_path, native_host
 # ---- Basic and advanced ----------------------------------------------------------
 
 def test_basic_settings_first_advanced_on_request(native_host):
-    from ingetrazo_core.settings import settings
+    from built_core.settings import settings
     win = native_host.window
     settings().remove("camera_settings/advanced")
     inspector = open_camera(win)
@@ -565,14 +565,14 @@ def test_typing_the_lens_with_zoom_on(native_host):
     cam.set_projection("perspective")
     vp.set_nav_mode(None)
 
-    from ingetrazo_render import KeyEvent
+    from built_render import KeyEvent
     five = KeyEvent(True, Qt.Key_5, 0, "5", False)
     assert not vp._handle_value_key(five)
     assert vp._value_buffer == ""
 
 
 def test_the_zoom_hint_says_what_to_type():
-    from ingetrazo_render.status_hints import NAV_HINTS
+    from built_render.status_hints import NAV_HINTS
     assert "35mm" in NAV_HINTS["zoom"] and "60deg" in NAV_HINTS["zoom"]
 
 

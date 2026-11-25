@@ -26,7 +26,7 @@ def test_scale_figure_left_of_origin_and_175(native_window):
 
 
 def test_billboard_group_position_offsets_anchor():
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     from core.group import make_billboard_group
     g = make_billboard_group("x.png", 2.0, "P", 0.5,
                              position=QVector3D(-3.0, 1.0, 0.0))
@@ -44,7 +44,7 @@ def test_faceme_follows_the_view_direction_in_parallel_projection(native_window)
     away when zoomed in (Marco's front elevation, 2026-09-02). Perspective
     keeps turning toward the eye, the classic way."""
     import math
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     win = native_window
     win._start_blank_document()
     vp = win.viewport

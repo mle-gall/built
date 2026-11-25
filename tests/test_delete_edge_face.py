@@ -11,7 +11,7 @@ Headless: ``QVector3D`` values + commands against a ``Scene``.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
 from core.history import AddFaceCommand, DeleteEdgesCommand, History

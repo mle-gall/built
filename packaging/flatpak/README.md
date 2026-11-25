@@ -1,6 +1,6 @@
-# IngeTrazo as a Flatpak
+# Built as a Flatpak
 
-For the engineer who never opens a terminal: download `IngeTrazo.flatpak`,
+For the engineer who never opens a terminal: download `Built.flatpak`,
 double-click it, and GNOME Software / KDE Discover installs it — the
 Freedesktop runtime comes from Flathub automatically (the bundle carries
 `--runtime-repo`). Deliberately NOT on Flathub for now; this is
@@ -8,13 +8,13 @@ self-distribution, the same road IngeCAD and IngePresupuestos walk. The
 bundle rides each GitHub release.
 
     packaging/flatpak/build-flatpak.sh            # build + install (user)
-    packaging/flatpak/build-flatpak.sh --bundle   # + .staging/IngeTrazo.flatpak
+    packaging/flatpak/build-flatpak.sh --bundle   # + .staging/Built.flatpak
 
 The app module lets pip reach the network for wheels (numpy, openskp), which is exactly what Flathub forbids: if this ever goes there,
 that module becomes generated offline sources (flatpak-pip-generator) and
 this file is the reminder.
 
 Sandbox: wayland + fallback-x11 + dri + `--filesystem=home`, **plus
-network** — unlike IngeCAD, IngeTrazo fetches base-map tiles, the terrain
+network** — unlike IngeCAD, Built fetches base-map tiles, the terrain
 DEM and geocoding results (Track G). The pure-Python openskp backend
 covers every .skp era natively.

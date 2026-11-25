@@ -1,7 +1,7 @@
 """Persisted draw chunks must open across processes and winding changes."""
 from types import SimpleNamespace as Record
 
-from ingetrazo_core import Vec3
+from built_core import Vec3
 from views.document_interaction import DocumentInteraction as Controller
 
 

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from ingetrazo_render import SurveyRaster
+from built_render import SurveyRaster
 
 from georef.tiles import PRESETS, TileCache
 from georef.tile_fetcher import TileFetcher, default_cache_dir
@@ -64,19 +64,19 @@ def test_duplicate_request_coalesces(tmp_path):
 def test_default_cache_dir_uses_the_native_profile_directory(tmp_path, monkeypatch):
     from pathlib import Path
     from unittest.mock import Mock
-    import ingetrazo_render
+    import built_render
 
     profile = tmp_path / "settings"
     base = tmp_path / "local"
     resolve = Mock(return_value=base)
     monkeypatch.setenv("BUILT_SETTINGS_DIR", str(profile))
-    monkeypatch.setattr(ingetrazo_render, "local_data_directory", resolve, raising=False)
-    assert default_cache_dir() == base / "IngeTrazo" / "IngeTrazo" / "tiles"
+    monkeypatch.setattr(built_render, "local_data_directory", resolve, raising=False)
+    assert default_cache_dir() == base / "Built" / "Built" / "tiles"
     resolve.assert_called_once()
     assert Path(resolve.call_args.args[0]) == profile
 
     monkeypatch.delenv("BUILT_SETTINGS_DIR")
-    assert default_cache_dir() == base / "IngeTrazo" / "IngeTrazo" / "tiles"
+    assert default_cache_dir() == base / "Built" / "Built" / "tiles"
     resolve.assert_called_with(None)
 
 

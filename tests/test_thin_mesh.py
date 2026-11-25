@@ -2,7 +2,7 @@
 from copy import deepcopy
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core import _native
 from core.group import Group
@@ -11,7 +11,7 @@ from core.intersect import WITH_CONTEXT, build_intersect_faces
 from core.mesh import Mesh
 from core.protocol.commands import run
 from core.scene import Scene
-from ingetrazo_core.store_mesh import StoreMesh
+from built_core.store_mesh import StoreMesh
 from tests.test_offset_regions import _VP, _offset
 from tests.test_store_mesh import fingerprint
 from tests.test_store_pieces_explode import _cube
@@ -20,7 +20,7 @@ from tools.followme import FollowMeTool
 
 @pytest.fixture
 def resident(monkeypatch):
-    module = pytest.importorskip("ingetrazo_core")
+    module = pytest.importorskip("built_core")
     monkeypatch.setattr(_native, "native", module)
 
 

@@ -6,7 +6,7 @@ import math
 import random
 
 import pytest
-from ingetrazo_core import Matrix4, Vec3
+from built_core import Matrix4, Vec3
 from core import mesh as mesh_api
 from core.mesh import Mesh
 from core.snap import curve_centers_of_face

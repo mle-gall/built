@@ -4,7 +4,7 @@
 from pathlib import Path
 import platform
 
-from ingetrazo_core import trim_heap
+from built_core import trim_heap
 
 
 def test_native_launcher_caps_glibc_arenas_before_dispatch():

@@ -12,8 +12,8 @@ points are no reference but whose middle is.
 from __future__ import annotations
 
 
-from ingetrazo_core import ScreenPoint  # noqa: E402
-from ingetrazo_core import Vec3 as V
+from built_core import ScreenPoint  # noqa: E402
+from built_core import Vec3 as V
 
 
 from tools.pushpull import PushPullTool  # noqa: E402

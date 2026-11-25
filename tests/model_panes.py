@@ -1,9 +1,9 @@
 """Recording GPU targets driven by the native document, input and frame paths."""
 import pytest
 
-from ingetrazo_render import MouseEvent
+from built_render import MouseEvent
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_render.shell_views import TargetRenderer
+from built_render.shell_views import TargetRenderer
 
 class FakeRenderer:
     """Records each call with the target live at the time."""

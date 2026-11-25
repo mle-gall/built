@@ -90,7 +90,7 @@ def test_one_box_and_empty():
 
 def _plates(rng, n):
     """Random tilted rectangles (some with a hole), as loose faces."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+    from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
     from core.scene import Scene
     scene = Scene()

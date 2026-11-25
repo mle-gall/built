@@ -14,11 +14,11 @@ import math
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 import core._native as _native  # noqa: E402
 
-mod = _native.native            # the engine on (INGETRAZO_RUST), not only built
+mod = _native.native            # the engine on (BUILT_RUST), not only built
 pytestmark = pytest.mark.skipif(
     mod is None or not hasattr(mod, "InstanceSet")
     or not hasattr(mod.InstanceSet, "corners_near"),

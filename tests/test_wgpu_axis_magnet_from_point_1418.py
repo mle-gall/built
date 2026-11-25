@@ -7,7 +7,7 @@ reference the magnet still slides.
 Drives an unshown ``WgpuView`` with the real Line tool (the fixture of
 ``test_.skp_inference_gaps``)."""
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from tests.headless_gpu import mouse
 from tests.test_.skp_inference_gaps import click, refresh, view  # noqa: F401

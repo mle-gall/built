@@ -7,7 +7,7 @@ edges apart, chains the cut chords into closed rings, and the composer
 inks each class with its own pen and fills the rings under the lines."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 import math
 import os
 
@@ -15,14 +15,14 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.camera import OrbitCamera
 from core.composition import Composicion, MarcoVista, apply_frame_camera
 from core.hlr import (KIND_CUT, KIND_EDGE, KIND_PROFILE, hlr_drawing,
                       hlr_view, section_loops)
 from core.scene import Scene
-from ingetrazo_core.section import SectionPlane
+from built_core.section import SectionPlane
 
 V = QVector3D
 
@@ -177,12 +177,12 @@ def test_chords_across_a_triangle_diagonal_merge_and_end_on_verticals_vanish():
     # the two short ends one each
     assert cut == [0.25, 0.25, 10.0, 10.0]
     # world endpoints still re-project onto the merged 2D segments
-    import ingetrazo_core
+    import built_core
     cam = _camera(scene, "std:top")
-    eye, right, up, fwd = ingetrazo_core.hlr_camera_basis(cam)
+    eye, right, up, fwd = built_core.hlr_camera_basis(cam)
     for (x0, y0, x1, y1), (w0, w1) in zip(d.segs, d.world):
-        c0 = ingetrazo_core.hlr_to_cam(np.asarray([w0]), eye, right, up, fwd)[0]
-        c1 = ingetrazo_core.hlr_to_cam(np.asarray([w1]), eye, right, up, fwd)[0]
+        c0 = built_core.hlr_to_cam(np.asarray([w0]), eye, right, up, fwd)[0]
+        c1 = built_core.hlr_to_cam(np.asarray([w1]), eye, right, up, fwd)[0]
         assert (c0[0], c0[1]) == pytest.approx((x0, y0), abs=1e-9)
         assert (c1[0], c1[1]) == pytest.approx((x1, y1), abs=1e-9)
 

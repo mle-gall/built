@@ -11,11 +11,11 @@ the multi-region union.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
-from ingetrazo_core.store_mesh import plan_cap_plane as rebuild_plane
+from built_core.store_mesh import plan_cap_plane as rebuild_plane
 from core.mesh import Mesh
-from ingetrazo_core.orient import orient_outward
+from built_core.orient import orient_outward
 from core.scene import Scene
 from core.history import History
 from tools.pushpull import PushPullTool
@@ -213,7 +213,7 @@ def test_pushed_prism_cap_rebuild_matches_committed_face(perm, normal):
     kinds = [classify_push_edge(face, base[i], base[(i + 1) % count], sc.faces)
              for i in range(count)]
     attached = all(k != "free" for k, _ in kinds)
-    from ingetrazo_core.store_mesh import _hypot
+    from built_core.store_mesh import _hypot
     dirty, *_ = m._store.push_shell(face.key, [[p.toTuple() for p in base]],
                                     [[p.toTuple() for p in top]], (fn * d).toTuple(),
                                     attached, None, _hypot())
@@ -244,7 +244,7 @@ def test_rebuild_order_independent_on_overhang():
     classification reads the mesh volume, not the half-cleaned plane edges, so
     no order leaves a seam or an internal partition."""
     import itertools
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     from core.scene import Scene
     from core.history import History
     from tools.pushpull import PushPullTool
@@ -306,7 +306,7 @@ def test_rebuild_order_independent_on_overhang():
 
 
 def test_plane_cycle_keeps_the_first_minimum_and_unbounded_grid_coordinates():
-    from ingetrazo_core import plane_cycle as _canon_loop
+    from built_core import plane_cycle as _canon_loop
 
     # The slit returns to the smallest point twice. Reversing its winding
     # changes the shape fingerprint and choosing the second visit changes its start.
@@ -318,7 +318,7 @@ def test_plane_cycle_keeps_the_first_minimum_and_unbounded_grid_coordinates():
 
 def test_cap_coverage_counts_a_fresh_face_outside_the_seeded_scope():
     from core.arrangement import plane_basis
-    from ingetrazo_core import object_cap_coverage
+    from built_core import object_cap_coverage
 
     mesh = Mesh()
     ring = [V(0, 0), V(4, 0), V(4, 4), V(0, 4)]
@@ -333,7 +333,7 @@ def test_cap_coverage_counts_a_fresh_face_outside_the_seeded_scope():
 
 
 def test_collinear_outline_turns_use_the_runtime_grid_key_order():
-    from ingetrazo_core import union_plane_regions as _union_outline
+    from built_core import union_plane_regions as _union_outline
 
     for x in (0.0, float(2**51)):
         a, b, c = (x, 0.), (x + 1, 0.), (x, 1.)

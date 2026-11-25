@@ -8,10 +8,10 @@ import random
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
-from ingetrazo_core.store_mesh import StoreMesh
+from built_core.store_mesh import StoreMesh
 
 
 def _gen_faces(n, seed):
@@ -113,7 +113,7 @@ def test_bulk_weld_reuses_preexisting_vertices():
 
 def _reference_bulk_weld(mesh, points):
     """Scalar oracle: isolated cells first, then candidate points in order."""
-    from ingetrazo_core import object_replay
+    from built_core import object_replay
 
     if isinstance(mesh, StoreMesh):
         from core.mesh import _KEY_SCALE
@@ -183,7 +183,7 @@ def test_bulk_weld_resave_matches_scalar_oracle(tmp_path, monkeypatch):
     from tests.test_deferred_mesh import _painted_scene
     from tests.test_igz_format3 import _canonical
 
-    monkeypatch.setenv("INGETRAZO_RUST", "0")
+    monkeypatch.setenv("BUILT_RUST", "0")
     monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)
     monkeypatch.setattr(igz, "_BULK_MIN", 1)
     source = tmp_path / "source.igz"
@@ -202,7 +202,7 @@ def test_bulk_weld_resave_matches_scalar_oracle(tmp_path, monkeypatch):
 
 def test_weld_candidate_padding_and_integer_overflow_fallback(monkeypatch):
     from types import SimpleNamespace
-    from ingetrazo_core import weld_candidates
+    from built_core import weld_candidates
 
     # Sparse gaps and axis boundaries must not turn a packed carry into a
     # neighbouring cell. Compare against literal 26-neighbour membership.

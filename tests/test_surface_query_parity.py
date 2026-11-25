@@ -4,7 +4,7 @@ import hashlib
 import json
 import random
 
-from ingetrazo_core import Vec3
+from built_core import Vec3
 from core.geometry import Face, Edge
 from core.topology import hole_merged_with_loop, find_containing_face, orphaned_edges_at, face_is_bordered
 

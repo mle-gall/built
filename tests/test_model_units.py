@@ -11,7 +11,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 
 from core import units  # noqa: E402
@@ -95,7 +95,7 @@ def test_the_viewport_binds_its_scene_and_the_dialog_reads_it():
 def test_unit_labels_speak_the_ui_language():
     """@pacaeiro, issue #65: with the UI in English the Length unit combo
     listed «Metros», «Pulgadas decimales»… — the labels were Spanish."""
-    from ingetrazo_core import i18n
+    from built_core import i18n
     from core import units
     before = i18n.current_language()
     try:

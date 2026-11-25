@@ -4,7 +4,7 @@
 document's units — a feet-and-inches model showed a metric area."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 from core import units
 from tests.native_tree import inspector
 from tests.shell_isolation import restore_shell_patches  # noqa: F401

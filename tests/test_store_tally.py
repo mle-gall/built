@@ -2,10 +2,10 @@
 with reading every face and edge one by one."""
 from collections import Counter
 
-from ingetrazo_core import Vec3
+from built_core import Vec3
 
 from core.mesh import Mesh
-from ingetrazo_core import store_layer_tally, store_material_names
+from built_core import store_layer_tally, store_material_names
 
 
 def _mesh():

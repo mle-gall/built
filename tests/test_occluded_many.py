@@ -24,8 +24,8 @@ import random
 
 
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4
-from ingetrazo_core import Vec3 as V
+from built_core import Matrix4 as QMatrix4x4
+from built_core import Vec3 as V
 
 
 def _box(mesh, x0, y0, z0, x1, y1, z1):
@@ -198,7 +198,7 @@ def test_compute_snap_picks_the_same_candidate_with_the_batch(hidden_below):
 
 
 def test_the_kill_switch_keeps_the_rays_one_by_one(native_window, monkeypatch):
-    # INGETRAZO_NO_SNAP_FAST=1: compute_snap gets no batch to ask.
+    # BUILT_NO_SNAP_FAST=1: compute_snap gets no batch to ask.
     import views.document_interaction as vv
     monkeypatch.setattr(vv, "_NO_SNAP_FAST", True)
     import core.snap as cs
@@ -220,7 +220,7 @@ def test_the_kill_switch_keeps_the_rays_one_by_one(native_window, monkeypatch):
     vp.scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
     vp.scene.version += 1
     win._activate_tool("line")
-    from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
+    from built_core import ScreenPoint as QPointF, Input as Qt
     vp._process_hover(QPointF(vp.width() / 2, vp.height() / 2), Qt.NoModifier)
     assert "are_occluded" in seen and seen["are_occluded"] is None
 

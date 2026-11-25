@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group
 from core.history import History
@@ -63,7 +63,7 @@ def test_result_has_every_field_and_writes_json(tmp_path):
     for name in probe.INFO_FIELDS:
         assert name in result
     assert result["load_average"]["start"] and len(result["load_average"]["start"]) == 3
-    assert set(result["modules"]) >= {"ingetrazo_core", "ingetrazo_render"}
+    assert set(result["modules"]) >= {"built_core", "built_render"}
     result["load"] = 1.23456789
     out = probe.write_result(result, tmp_path / "deep" / "probe.json")
     back = json.loads(out.read_text())
@@ -102,12 +102,12 @@ def test_cold_takeoff_reports_time_and_objects():
 def _can_open_a_window():
     if sys.platform != "darwin":
         return "the probe drives the Metal view (macOS only)"
-    if os.environ.get("INGETRAZO_PROBE_WINDOW") != "1":
-        return "opens a real window on screen: set INGETRAZO_PROBE_WINDOW=1"
+    if os.environ.get("BUILT_PROBE_WINDOW") != "1":
+        return "opens a real window on screen: set BUILT_PROBE_WINDOW=1"
     try:
-        import ingetrazo_render  # noqa: F401
+        import built_render  # noqa: F401
     except ImportError:
-        return "ingetrazo_render is not built"
+        return "built_render is not built"
     return None
 
 

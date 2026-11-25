@@ -5,15 +5,15 @@ from contextlib import contextmanager
 import pytest
 
 from core import extensions
-from ingetrazo_core import settings
-from ingetrazo_core import NativeSettings
+from built_core import settings
+from built_core import NativeSettings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_render import keyboard_bindings as shortcuts
+from built_render import keyboard_bindings as shortcuts
 
 
 @pytest.mark.parametrize("factory,rebound", [(None, "Ctrl+Alt+U"), ("Ctrl+Alt+J", "Ctrl+Alt+K")])
 def test_extension_keeps_its_user_and_factory_bindings_across_restart(tmp_path, monkeypatch, factory, rebound):
-    from ingetrazo_render import Host
+    from built_render import Host
     (tmp_path / "unfold.py").write_text(
         f"def setup(app):\n    app.add_menu_action('Unfold Faces', lambda: None, {factory!r})\n")
     monkeypatch.setattr(extensions, "plugin_dirs", lambda: [tmp_path])

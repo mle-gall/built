@@ -79,7 +79,7 @@ def test_missing_directory_is_fine(tmp_path):
 def test_default_dirs_shape():
     dirs = plugin_dirs()
     assert dirs[0].name == "plugins"
-    assert user_plugins_dir().parts[-2:] == ("ingetrazo", "plugins")
+    assert user_plugins_dir().parts[-2:] == ("built", "plugins")
 
 
 # ---- Failure isolation (the app must always start) ------------------------
@@ -195,7 +195,7 @@ def test_empty_plugins_leave_management_and_author_commands_available(
     opened = []
     folder = tmp_path / "profile" / "plugins"
     monkeypatch.setattr(extensions, "user_plugins_dir", lambda: folder)
-    monkeypatch.setattr("ingetrazo_core.desktop_open.open_url", opened.append)
+    monkeypatch.setattr("built_core.desktop_open.open_url", opened.append)
     win._registry_actions["menu:plugins_folder"].trigger()
     assert folder.is_dir() and opened == [folder]
 

@@ -9,10 +9,10 @@ import math
 from types import SimpleNamespace
 
 import pytest
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Vec3 as QVector3D
 
-from ingetrazo_core import sun
+from built_core import sun
 from core.history import History, SetNorthCommand
 from core.render_blender import sun_toward
 from core.scene import Scene
@@ -253,7 +253,7 @@ def test_compass_lies_flat_at_the_centre_height():
 def test_recalling_a_scene_keeps_the_north():
     """North belongs to the site: a scene restores the shadow settings
     whole, and must not take the north back with them (docs/north.md)."""
-    from ingetrazo_core import saved_view_apply_shadows as apply_shadow_state
+    from built_core import saved_view_apply_shadows as apply_shadow_state
     scene = Scene()
     snapshot = scene.shadows.to_dict()          # a scene saved before
     scene.north_deg = 30.0

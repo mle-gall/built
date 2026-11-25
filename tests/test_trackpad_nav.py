@@ -13,15 +13,15 @@ from __future__ import annotations
 
 import math
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import DeviceType
-from ingetrazo_render import WheelEvent, NativeGestureEvent
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import DeviceType
+from built_render import WheelEvent, NativeGestureEvent
 from types import SimpleNamespace
 
-from ingetrazo_render import trackpad_nav
+from built_render import trackpad_nav
 
 CENTRE = QPointF(200, 150)
 SCREEN = DeviceType.TouchScreen
@@ -232,7 +232,7 @@ def test_momentum_keeps_turning_with_inertia_on(vp):
 
 
 def test_inertia_off_drops_momentum(vp):
-    from ingetrazo_core.settings import settings as preferences
+    from built_core.settings import settings as preferences
     settings = preferences()
     settings.setValue("nav/trackpad_inertia", "0")
     try:
@@ -395,13 +395,13 @@ def test_after_moving_the_view_a_double_tap_frames_again(native_host):
 def test_the_metal_view_orbits_and_pinches_too(native_host, monkeypatch):
     from types import SimpleNamespace
 
-    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+    from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
     from core.group import Group
     from core.mesh import Mesh
     from core.scene import Scene
     from tests.controller_surface import ControllerSurface as Viewport
-    from ingetrazo_core import resident_prepare as prepare
-    from ingetrazo_core import pack_scene
+    from built_core import resident_prepare as prepare
+    from built_core import pack_scene
 
     scene = Scene()
     mesh = Mesh()

@@ -19,7 +19,7 @@ from types import SimpleNamespace as NS
 
 import pytest
 
-from ingetrazo_core import reader_compat
+from built_core import reader_compat
 from formats import skp_reader
 
 DATA = Path(__file__).parent / "data"
@@ -30,7 +30,7 @@ pytest.importorskip("openskp")
 
 
 def _pixels(path) -> str:
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     img = SurveyRaster.open(path)
     assert img is not None, path
     return hashlib.sha256(img.rgba()).hexdigest()
@@ -39,7 +39,7 @@ def _pixels(path) -> str:
 @pytest.fixture
 def cache(tmp_path, monkeypatch):
     root = tmp_path / "cache"
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(root))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(root))
     return root
 
 
@@ -180,7 +180,7 @@ _invert_roughness.extra = {
 
 def test_2026_glossiness_flag_writes_an_inverted_roughness_map(
         cache, tmp_path):
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     skp = _rewrite(FIXTURE, tmp_path / "pbr_2026_style.skp", _invert_roughness)
     _payload, mats = _materials(skp)
     pbr = mats["PBR All Maps"]["pbr"]
@@ -237,7 +237,7 @@ def test_classic_files_import_unchanged(cache, name):
 def test_an_upstream_material_pbr_is_used_as_is(tmp_path, monkeypatch):
     # Once OpenSKP's Material carries `pbr` itself, the importer reads that
     # (same field names as reader_compat.read_pbr).
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "c"))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "c"))
     rough = NS(filename="r.png", data=b"\x89PNGrough", width=1.0, height=1.0)
     pbr = NS(workflow=1, metalness_enabled=True, metallic_factor=1.5,
              metallic_texture=None, roughness_enabled=True,

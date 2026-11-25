@@ -10,7 +10,7 @@ mounted nodes and undo; Isolate works on host groups, link rows, mounted
 nodes and mixed selections, and Show all restores what was there."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 import time
 from pathlib import Path
 
@@ -219,10 +219,10 @@ def test_eye_and_lock_on_mounted_nodes_write_overrides_and_undo(ui):
     assert tag.locked is False
     # The link row hides the whole file through its folder, nested files included.
     act("eye", "n:link:A")
-    assert not ingetrazo_core.tag_edits.folder_visible(scene, "A") and not ingetrazo_core.tag_edits.effective_visible(scene, scene.layer("A / C / Flights"))
+    assert not built_core.tag_edits.folder_visible(scene, "A") and not built_core.tag_edits.effective_visible(scene, scene.layer("A / C / Flights"))
     assert next(r for r in rows() if r["key"] == "n:link:A")["eye"] == 0
     win.viewport.history.undo()
-    assert ingetrazo_core.tag_edits.folder_visible(scene, "A")
+    assert built_core.tag_edits.folder_visible(scene, "A")
     # A nested file's node too.
     flights = _key(view, "Flights")
     act("eye", "n:" + flights)
@@ -253,21 +253,21 @@ def _visible(scene, g):
     """Drawn by the Metal pack: not filtered, its holders included."""
     from types import SimpleNamespace
     from core.group import iter_placements
-    import ingetrazo_core
+    import built_core
     root = g
     while getattr(root, "owner", None) is not None:
         root = root.owner
     root = next((r for r in scene.groups if r is root or any(p is g for p, _m in iter_placements(r))), root)
-    for p, _m, _x, f, _c in ingetrazo_core.placement_records(scene, [root], SimpleNamespace(scene=scene),
-                                                      ingetrazo_core.PlacementState(scene)):
+    for p, _m, _x, f, _c in built_core.placement_records(scene, [root], SimpleNamespace(scene=scene),
+                                                      built_core.PlacementState(scene)):
         if p is g:
-            return not f & (ingetrazo_core.VISIBILITY_FILTERED | 1)
+            return not f & (built_core.VISIBILITY_FILTERED | 1)
     return False
 
 
 @at_scale
 def test_isolate_link_row_mounted_node_host_group_and_mixed_then_show_all(ui, monkeypatch):
-    from ingetrazo_core import facets
+    from built_core import facets
     from core.agent_facets import set_display
     import views.wgpu_ui as wu
     scene, win, view, rows, act = ui
@@ -318,7 +318,7 @@ def test_isolate_link_row_mounted_node_host_group_and_mixed_then_show_all(ui, mo
 def test_native_isolation_matches_the_facet_index(ui):
     """The native closure (doc/occurrences.rs) shows, and draws through,
     exactly what the Python facet index gives for the same keys."""
-    from ingetrazo_core import facets
+    from built_core import facets
     scene, win, view, rows, act = ui
     index = facets.build(scene)
     tree = view._ui_tree["tree"]
@@ -340,7 +340,7 @@ def test_native_isolation_matches_the_facet_index(ui):
 def test_packer_draws_isolated_parts_through_their_link(ui):
     """The Metal pack: an isolated part inside a link is drawn, the link's
     own geometry and the other parts are not."""
-    import ingetrazo_core
+    import built_core
     scene, win, view, rows, act = ui
     tree = view._ui_tree["tree"]
     a = tree.links["link:A"][0]
@@ -348,7 +348,7 @@ def test_packer_draws_isolated_parts_through_their_link(ui):
     tie = tree.direct[_key(view, "Ties")][0]
     act("isolate", "n:" + _key(view, "Rails"))
     from types import SimpleNamespace
-    flags = {id(g): f for g, _m, _p, f, _c in ingetrazo_core.placement_records(
-        scene, [a], SimpleNamespace(scene=scene), ingetrazo_core.PlacementState(scene))}
-    filt = ingetrazo_core.VISIBILITY_FILTERED
+    flags = {id(g): f for g, _m, _p, f, _c in built_core.placement_records(
+        scene, [a], SimpleNamespace(scene=scene), built_core.PlacementState(scene))}
+    filt = built_core.VISIBILITY_FILTERED
     assert flags[id(a)] & filt and not flags[id(rail)] & filt and flags[id(tie)] & filt

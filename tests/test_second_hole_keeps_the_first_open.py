@@ -12,7 +12,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.topology import _point_in_face_solid
 from tools.circle import CircleTool

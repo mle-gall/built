@@ -1,5 +1,5 @@
 """Synthetic regressions for independent folder visibility and stable tag rows."""
-import ingetrazo_core
+import built_core
 import json
 
 from tests.test_project_drawing_filters import Project
@@ -25,20 +25,20 @@ def test_independent_flags_and_every_undo_redo():
     states = []
     for names, folders, on in [([], ['parent'], False), (['A'], [], False),
                                 ([], ['parent'], True)]:
-        states.append(ingetrazo_core.tag_edits.layer_state(scene))
+        states.append(built_core.tag_edits.layer_state(scene))
         commands.set_tag_state(history, tags=[scene.layer(n).key for n in names],
                                folders=folders, visible=on)
         assert history.last_error is None
     assert not scene.layer('A').visible
-    assert not ingetrazo_core.tag_edits.effective_visible(scene, scene.layer('A'))
-    assert ingetrazo_core.tag_edits.effective_visible(scene, scene.layer('B'))
-    final = ingetrazo_core.tag_edits.layer_state(scene)
+    assert not built_core.tag_edits.effective_visible(scene, scene.layer('A'))
+    assert built_core.tag_edits.effective_visible(scene, scene.layer('B'))
+    final = built_core.tag_edits.layer_state(scene)
     for state in reversed(states):
         assert history.undo()
-        assert ingetrazo_core.tag_edits.layer_state(scene) == state
+        assert built_core.tag_edits.layer_state(scene) == state
     for _ in states:
         assert history.redo()
-    assert ingetrazo_core.tag_edits.layer_state(scene) == final
+    assert built_core.tag_edits.layer_state(scene) == final
 
 
 def test_expand_collapse_reuses_the_document_projection():
@@ -93,8 +93,8 @@ def test_igz_folder_and_child_flags_roundtrip_and_legacy(tmp_path):
     path.write_text(json.dumps(payload))
     load_into(loaded, path)
     assert loaded.folder_visibility == {}
-    assert ingetrazo_core.tag_edits.effective_visible(loaded, loaded.layer('B'))
-    assert not ingetrazo_core.tag_edits.effective_visible(loaded, loaded.layer('A'))
+    assert built_core.tag_edits.effective_visible(loaded, loaded.layer('B'))
+    assert not built_core.tag_edits.effective_visible(loaded, loaded.layer('A'))
 
 
 def test_import_preserves_own_flags():
@@ -104,10 +104,10 @@ def test_import_preserves_own_flags():
                           'layer_folders': [{'key': 'f', 'name': 'folder', 'hidden': True,
                                              'tags': ['A', 'B']}]})
     assert scene.layer('A').visible and not scene.layer('B').visible
-    assert not ingetrazo_core.tag_edits.effective_visible(scene, scene.layer('A'))
+    assert not built_core.tag_edits.effective_visible(scene, scene.layer('A'))
     scene.folder_visibility['folder'] = True
-    assert ingetrazo_core.tag_edits.effective_visible(scene, scene.layer('A'))
-    assert not ingetrazo_core.tag_edits.effective_visible(scene, scene.layer('B'))
+    assert built_core.tag_edits.effective_visible(scene, scene.layer('A'))
+    assert not built_core.tag_edits.effective_visible(scene, scene.layer('B'))
 
 
 def test_metal_visibility_uses_instance_updates_without_repack(monkeypatch):
@@ -119,7 +119,7 @@ def test_metal_visibility_uses_instance_updates_without_repack(monkeypatch):
     scene.groups[0].layer = 'A'
     updates.apply(*updates.diff(scene), Renderer())
     old_key, old_bounds = _paint_key(scene), scene._bounds_key()
-    monkeypatch.setattr('ingetrazo_core.pack_scene', lambda *a, **k: (_ for _ in ()).throw(AssertionError('repack')))
+    monkeypatch.setattr('built_core.pack_scene', lambda *a, **k: (_ for _ in ()).throw(AssertionError('repack')))
     history = History(scene)
     commands.set_tag_state(history, folders=['folder'], visible=False)
     assert scene._bounds_key() != old_bounds
@@ -149,18 +149,18 @@ def test_folder_eye_sequence_is_three_undoable_toggles():
     assert len(history.undo_stack) == 3
     for _ in range(3):
         assert history.undo()
-    assert scene.layer("A").visible and ingetrazo_core.tag_edits.folder_visible(scene, "parent")
+    assert scene.layer("A").visible and built_core.tag_edits.folder_visible(scene, "parent")
     for _ in range(3):
         assert history.redo()
-    assert not scene.layer("A").visible and ingetrazo_core.tag_edits.folder_visible(scene, "parent")
+    assert not scene.layer("A").visible and built_core.tag_edits.folder_visible(scene, "parent")
 
 
 def test_linked_tags_keep_folder_flags_separate(tmp_path):
     scene = Scene()
     tags = {'layers': [L.Layer('A', folder='f').to_dict()],
             'folders': ['f'], 'folder_visibility': {'f': False}}
-    ingetrazo_core.link_sync_tags(scene, str(tmp_path / 'synthetic.igz'), tags)
+    built_core.link_sync_tags(scene, str(tmp_path / 'synthetic.igz'), tags)
     tag = next(ly for ly in scene.layers if ly.folder)
-    assert tag.visible and not ingetrazo_core.tag_edits.effective_visible(scene, tag)
+    assert tag.visible and not built_core.tag_edits.effective_visible(scene, tag)
     scene.folder_visibility[tag.folder] = True
-    assert ingetrazo_core.tag_edits.effective_visible(scene, tag)
+    assert built_core.tag_edits.effective_visible(scene, tag)

@@ -8,12 +8,12 @@ cursor was set. After every operation the viewport now unsets and sets the
 tool's cursor again, and does the same when the pointer comes back in."""
 from __future__ import annotations
 
-from ingetrazo_render import MouseEvent
+from built_render import MouseEvent
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 
 
 import pytest  # noqa: E402
-from ingetrazo_core import Input as Qt
+from built_core import Input as Qt
 
 
 def _spy(vp, monkeypatch):
@@ -33,7 +33,7 @@ def test_an_operation_puts_the_tool_cursor_back(native_window, monkeypatch):
     native_window._activate_tool("pushpull")
     tool = vp.active_tool
     from core.history import AddEdgeCommand
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     monkeypatch.setattr(tool, "on_click", lambda ctx: vp.history.execute(
         AddEdgeCommand(V(0, 0, 0), V(1, 0, 0))))
     calls = _spy(vp, monkeypatch)

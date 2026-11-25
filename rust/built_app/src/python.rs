@@ -1,8 +1,8 @@
-//! The embedded interpreter and the per-window controller (`ingetrazo_render.Host`).
+//! The embedded interpreter and the per-window controller (`built_render.Host`).
 //!
-//! `ingetrazo_render` is linked into this binary and registered as a
+//! `built_render` is linked into this binary and registered as a
 //! built-in module before the interpreter starts, so Python's
-//! `import ingetrazo_render` gets this binary's renderer, not a wheel from
+//! `import built_render` gets this binary's renderer, not a wheel from
 //! the venv: one `Renderer` type that Rust and Python both hold.
 //!
 //! Every call takes the GIL for its duration only (`Python::attach`); in
@@ -56,9 +56,9 @@ fn portable_root() -> Option<PathBuf> {
 
 /// Register the renderer module and start the interpreter (once).
 pub fn start(layout: &Layout) -> PyResult<()> {
-    use ingetrazo_render::ingetrazo_render;
+    use built_render::built_render;
     use crate::native::built_shell;
-    pyo3::append_to_inittab!(ingetrazo_render);
+    pyo3::append_to_inittab!(built_render);
     pyo3::append_to_inittab!(built_shell);
     #[cfg(built_bundle)]
     {
@@ -124,13 +124,13 @@ pub struct Extras {
     pub exit: bool,
     pub ime_area: Option<(f64, f64, f64, f64)>,
     pub recent: Option<Vec<String>>,
-    /// A window Python asked for (ingetrazo_render.shell_windows): its token.
+    /// A window Python asked for (built_render.shell_windows): its token.
     pub new_window: Option<String>,
     /// This window should come to the front.
     pub focus: bool,
 }
 
-/// The `ingetrazo_render.Host` for one window.
+/// The `built_render.Host` for one window.
 pub struct Host {
     obj: Py<PyAny>,
     /// When the last wheel or gesture event was handled (see `navigating`).
@@ -150,7 +150,7 @@ pub fn report(py: Python<'_>, err: PyErr, what: &str) {
 impl Host {
     pub fn new(surface: (usize, usize, &str), width: f64, height: f64, scale: f64, settings: Option<&str>, temporary: bool) -> PyResult<Host> {
         Python::attach(|py| {
-            let cls = py.import("ingetrazo_render")?.getattr("Host")?;
+            let cls = py.import("built_render")?.getattr("Host")?;
             let (window, display, platform) = surface;
             let obj = cls.call1((window, width, height, scale, settings, temporary, display, platform))?;
             Ok(Host { obj: obj.unbind(), navigated: std::cell::Cell::new(None) })
@@ -293,8 +293,8 @@ impl Host {
         Python::attach(|py| {
             let result = (|| -> PyResult<()> {
                 let win = self.obj.bind(py).getattr("window")?;
-                let env = py.import("ingetrazo_render.settings_sheet")?.getattr("Env")?.call1((win,))?;
-                let render = py.import("ingetrazo_render")?;
+                let env = py.import("built_render.settings_sheet")?.getattr("Env")?.call1((win,))?;
+                let render = py.import("built_render")?;
                 let levels: Vec<u32> = render.call_method1("msaa_levels", (&env,))?.extract()?;
                 if levels.contains(&count) {
                     render.call_method1("apply_msaa", (env, count))?;
@@ -361,7 +361,7 @@ impl Host {
     }
 
     #[cfg(target_os = "macos")]
-    pub fn extension_updates(&self, previous: Option<(u64,u64)>) -> Option<((u64,u64), Vec<ingetrazo_render::extension_menu::Row>)> {
+    pub fn extension_updates(&self, previous: Option<(u64,u64)>) -> Option<((u64,u64), Vec<built_render::extension_menu::Row>)> {
         Python::attach(|py| -> PyResult<_> {
             let menus=self.obj.bind(py).getattr("window")?.getattr("_extension_menus")?;
             let stamp=menus.call_method0("stamp")?.extract()?;
@@ -415,9 +415,9 @@ mod tests {
         start(&layout).expect("python starts");
         let builtin = Python::attach(|py| -> PyResult<bool> {
             let names = py.import("sys")?.getattr("builtin_module_names")?;
-            names.contains("ingetrazo_render")
+            names.contains("built_render")
         });
-        assert!(builtin.unwrap(), "ingetrazo_render is registered as a built-in module");
+        assert!(builtin.unwrap(), "built_render is registered as a built-in module");
         let settings = std::env::temp_dir().join("built-shell-cargo-test");
         let host = Host::new((0, 0, ""), 1280.0, 800.0, 2.0, Some(&settings.to_string_lossy()), true).expect("host");
         let fixture = layout.root.join("tests/fixtures/shell/slab-and-cube.igz");
@@ -434,7 +434,7 @@ mod tests {
 
 pub fn touch_select() -> bool {
     Python::attach(|py| -> PyResult<bool> {
-        let store = py.import("ingetrazo_core.settings")?.getattr("settings")?.call0()?;
+        let store = py.import("built_core.settings")?.getattr("settings")?.call0()?;
         Ok(store
             .call_method1("value", ("nav/touch_slide", "orbit"))?
             .extract::<String>()?
@@ -447,7 +447,7 @@ pub fn touch_select() -> bool {
 pub fn shutdown_workers() {
     pyo3::Python::attach(|py| {
         let drain = || -> PyResult<()> {
-            py.import("ingetrazo_core")?.getattr("DocumentOpen")?.call_method0("shutdown")?;
+            py.import("built_core")?.getattr("DocumentOpen")?.call_method0("shutdown")?;
             py.import("threading")?.call_method0("_shutdown")?;
             Ok(())
         };

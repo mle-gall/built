@@ -8,7 +8,7 @@ from tests.shell_isolation import native_window, restore_shell_patches  # noqa: 
 from pathlib import Path
 
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group, copy_group
 from core.history import (GroupToComponentCommand, History,
@@ -70,7 +70,7 @@ def test_make_unique_keeps_a_component_with_subgroups_a_component():
 
 
 def test_the_panel_says_group_for_a_group_of_groups(native_host):
-    from ingetrazo_core import selection_identity
+    from built_core import selection_identity
     from views.wgpu_ui import KINDS
     scene = native_host.viewport.scene
     history = native_host.viewport.history

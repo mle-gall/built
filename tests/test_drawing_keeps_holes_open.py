@@ -14,10 +14,10 @@ from __future__ import annotations
 
 import math
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.history import History
-from ingetrazo_core import planar_edits
+from built_core import planar_edits
 from core.scene import Scene
 from core.topology import _point_in_face_solid
 from tools.circle import CircleTool

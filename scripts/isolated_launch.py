@@ -13,11 +13,14 @@ def preferences_mtime():
         return None
     import pwd
     real_home = Path(pwd.getpwuid(os.getuid()).pw_dir)
-    plist = real_home / "Library/Preferences/com.ingetrazo.IngeTrazo.plist"
-    try:
-        return plist.stat().st_mtime_ns
-    except FileNotFoundError:
-        return None
+    prefs = real_home / "Library/Preferences"
+    stamps = {}
+    for name in ("com.ingetrazo.IngeTrazo.plist", "com.built.Built.plist"):
+        try:
+            stamps[name] = (prefs / name).stat().st_mtime_ns
+        except FileNotFoundError:
+            stamps[name] = None
+    return stamps
 
 
 def run(args, *, env=None, settings=None, home=None, **options):
@@ -33,7 +36,7 @@ def run(args, *, env=None, settings=None, home=None, **options):
             return subprocess.run(args, env=child, **options)
         finally:
             if preferences_mtime() != before:
-                raise RuntimeError("The macOS IngeTrazo preferences plist changed during the launch")
+                raise RuntimeError("The macOS Built preferences plist changed during the launch")
 
 
 def isolate_script():

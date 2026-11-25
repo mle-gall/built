@@ -12,7 +12,7 @@ import math
 
 
 import pytest  # noqa: E402
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 
 from tests.controller_surface import ControllerSurface as Viewport

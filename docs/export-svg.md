@@ -25,7 +25,7 @@ The dialog opens compact: what to export and how big.
 | **Picture of the view** | The view exactly as on screen — shadows, ambient occlusion, textures — as one picture under the vector lines. Quick, and the closest to the screen; its faces are not shapes to edit. |
 | **Materials and textures** | Each visible face as one filled shape, with its colour or its texture placed as the view places it (in perspective too). |
 | **Materials, no textures** | The same shapes in the material's flat colour. |
-| **Default colour only** | The same shapes in IngeTrazo's white, lighter or darker by the way each face turns to the light — the materials left out. |
+| **Default colour only** | The same shapes in Built's white, lighter or darker by the way each face turns to the light — the materials left out. |
 
 **Scene** — only when the model has scenes: *Current view* or one of the
 scenes (see [Scenes](#scenes)).

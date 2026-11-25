@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from ingetrazo_render import SurveyRaster
+from built_render import SurveyRaster
 
 from georef.datum import SceneDatum, utm_forward, utm_inverse
 from georef.photomesh import (DEFAULT_TEXTURE_BUDGET, ODMAnchor, atlas_bytes,
@@ -260,7 +260,7 @@ def test_atlas_within_limits_is_left_alone():
 
 
 def test_load_atlas_downscales_and_caches(tmp_path, monkeypatch):
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "cache"))
     src = tmp_path / "atlas.png"
     assert SurveyRaster(1024, 1024, bytes((0, 0, 0, 255)) * (1024**2)).save(src)
 
@@ -340,7 +340,7 @@ def test_empty_mesh_has_no_heights(tmp_path):
 def test_sampler_feeds_a_longitudinal_profile(tmp_path):
     """The bridge case: a traced line across the survey must come back as
     stations with real elevations, straight from the flight."""
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
 
     from georef.photomesh import PhotoMeshSampler
     from georef.profile import sample_profile
@@ -363,7 +363,7 @@ def test_sampler_feeds_a_longitudinal_profile(tmp_path):
 
 
 def test_sampler_reports_gaps_outside_the_flight(tmp_path):
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
 
     from georef.photomesh import PhotoMeshSampler
 
@@ -443,7 +443,7 @@ def test_vertical_origin_of_an_empty_mesh_is_none(tmp_path):
 def test_sampler_reports_absolute_altitude_not_local_metres(tmp_path):
     """A profile must read like a level, not like an offset from an unknown
     plane — and must agree with what DEMSampler returns."""
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
 
     from georef.photomesh import PhotoMeshSampler
 

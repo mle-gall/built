@@ -2,12 +2,12 @@
 Qt-era type still read, a copy of this process not read back."""
 from types import SimpleNamespace
 
-from ingetrazo_render import shell_services as native
+from built_render import shell_services as native
 from formats import clip_payload
-from ingetrazo_render import ModelClipboard
+from built_render import ModelClipboard
 
-MIME = "application/x-ingetrazo-clipboard"
-QT_ERA = "com.trolltech.anymime.application--x-ingetrazo-clipboard"
+MIME = "application/x-built-clipboard"
+QT_ERA = "com.trolltech.anymime.application--x-built-clipboard"
 
 
 def _board(monkeypatch):

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 import core._native as _native
 from core import mesh as M
@@ -91,7 +91,7 @@ def test_store_mesh_points_come_from_the_store_arrays():
     points as walking its vertices, without a cached vector per vertex:
     selecting a linked file measures every mesh of it."""
     from core.group import _local_points
-    from ingetrazo_core.store_mesh import StoreMesh
+    from built_core.store_mesh import StoreMesh
     m = M.Mesh()
     quads = np.array([[[x, y, 0.3], [x + 1.1, y, 0.3], [x + 1.1, y + 0.7, 0.3],
                        [x, y + 0.7, 0.3]] for x in range(4) for y in range(3)])

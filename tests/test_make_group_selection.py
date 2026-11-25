@@ -11,9 +11,9 @@ total silence. Both now answer.
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_render import context_menu_build
+from built_render import context_menu_build
 
 from core.group import Group
 from core.mesh import Mesh
@@ -120,7 +120,7 @@ def test_anidar_se_deshace_en_UN_paso(win):
 def test_un_grupo_con_hijos_se_anida_sin_perderlos(win):
     """Anidar un contenedor dentro de otro: el árbol crece, no se aplana.
     (Junto a otro grupo: uno solo ya no se agrupa consigo mismo, #35.)"""
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     scene = win.viewport.scene
     hondo = Mesh()
     _quad(hondo, 0.0)

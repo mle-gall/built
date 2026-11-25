@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""A tag's styles moved to Rust (``rust/ingetrazo_core/src/model/tag_styles.rs``)
+"""A tag's styles moved to Rust (``rust/built_core/src/model/tag_styles.rs``)
 and must answer as ``core/layers.py``'s Python did at ``9cf53080``: colours,
 hatch grounds and inks, the paint and look a tag gives its objects, the
 line styles a sheet and the model ink with, the legend's rows, the hatched
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import gzip
 
-import ingetrazo_core
+import built_core
 import json
 import math
 import random
@@ -32,7 +32,7 @@ def _scene(rng):
     from core.layers import Layer
     from core.mesh import Mesh
     from core.scene import Scene
-    from ingetrazo_core.style import Style
+    from built_core.style import Style
     s = Scene()
     s.hatch_patterns = {"mine": {"label": "Mine", "families": [[45.0, 0, 0, 0, 2.0, []]]}}
     if rng.random() < 0.5:
@@ -107,43 +107,43 @@ def answers(L):
         a = {}
         per = []
         for ly in s.layers:
-            per.append([ingetrazo_core.tag_styles.hatch_ground_rgb(ly), ingetrazo_core.tag_styles.hatch_ink_rgb(ly), ingetrazo_core.tag_styles.light_layer_color(ly),
-                        ingetrazo_core.tag_styles.layer_color(ly), ingetrazo_core.tag_styles.is_link_untagged(ly.name), ingetrazo_core.tag_styles.layer_brick(s, ly),
-                        ingetrazo_core.tag_styles.layer_hatch_families(s, ly), ingetrazo_core.tag_styles.hatch_label(s, ly.hatch),
-                        ingetrazo_core.tag_styles.hatch_grows(ly), ingetrazo_core.tag_styles.hatch_families(s, ly.hatch),
-                        ingetrazo_core.tag_styles.linetype_pattern(ly.linetype, s), ingetrazo_core.tag_styles.linetype_text(ly.linetype, s),
-                        ingetrazo_core.tag_styles.linetype_color(ly.linetype, s)])
+            per.append([built_core.tag_styles.hatch_ground_rgb(ly), built_core.tag_styles.hatch_ink_rgb(ly), built_core.tag_styles.light_layer_color(ly),
+                        built_core.tag_styles.layer_color(ly), built_core.tag_styles.is_link_untagged(ly.name), built_core.tag_styles.layer_brick(s, ly),
+                        built_core.tag_styles.layer_hatch_families(s, ly), built_core.tag_styles.hatch_label(s, ly.hatch),
+                        built_core.tag_styles.hatch_grows(ly), built_core.tag_styles.hatch_families(s, ly.hatch),
+                        built_core.tag_styles.linetype_pattern(ly.linetype, s), built_core.tag_styles.linetype_text(ly.linetype, s),
+                        built_core.tag_styles.linetype_color(ly.linetype, s)])
         a["per"] = per
-        a["none_color"] = ingetrazo_core.tag_styles.layer_color(None)
-        a["object"] = [ingetrazo_core.tag_styles.object_layer(g), ingetrazo_core.tag_styles.object_layer(None)]
-        a["paint"] = ingetrazo_core.tag_styles.layer_paint(s, g)
-        a["fx"] = ingetrazo_core.tag_styles.layer_fx(s)
-        a["look"] = ingetrazo_core.tag_styles.layer_look(s, g, {"color": (1, 0, 0)})
-        a["wanted"] = [ingetrazo_core.tag_styles.layer_lines_wanted(s), ingetrazo_core.tag_styles.layer_lines_wanted(s, s.display_style)]
-        a["styles"] = [ingetrazo_core.tag_styles.line_styles(s, True), ingetrazo_core.tag_styles.line_styles(s, False)]
-        a["model_styles"] = ingetrazo_core.tag_styles.model_line_styles(s)
+        a["none_color"] = built_core.tag_styles.layer_color(None)
+        a["object"] = [built_core.tag_styles.object_layer(g), built_core.tag_styles.object_layer(None)]
+        a["paint"] = built_core.tag_styles.layer_paint(s, g)
+        a["fx"] = built_core.tag_styles.layer_fx(s)
+        a["look"] = built_core.tag_styles.layer_look(s, g, {"color": (1, 0, 0)})
+        a["wanted"] = [built_core.tag_styles.layer_lines_wanted(s), built_core.tag_styles.layer_lines_wanted(s, s.display_style)]
+        a["styles"] = [built_core.tag_styles.line_styles(s, True), built_core.tag_styles.line_styles(s, False)]
+        a["model_styles"] = built_core.tag_styles.model_line_styles(s)
         a["legend"] = L.legend_rows(s)
-        a["cut"] = [ingetrazo_core.tag_styles.cut_hatches(s), ingetrazo_core.tag_styles.cut_hatch_grounds(s), ingetrazo_core.tag_styles.cut_hatch_inks(s),
-                    ingetrazo_core.tag_styles.cut_fill_colours(s), ingetrazo_core.tag_styles.cut_hatch_forms(s), ingetrazo_core.tag_styles.cut_hatch_forms(s, 50.0),
-                    ingetrazo_core.tag_styles.cut_hatch_forms(s, 0)]
+        a["cut"] = [built_core.tag_styles.cut_hatches(s), built_core.tag_styles.cut_hatch_grounds(s), built_core.tag_styles.cut_hatch_inks(s),
+                    built_core.tag_styles.cut_fill_colours(s), built_core.tag_styles.cut_hatch_forms(s), built_core.tag_styles.cut_hatch_forms(s, 50.0),
+                    built_core.tag_styles.cut_hatch_forms(s, 0)]
         a["unprinted"] = [ly.key for ly in L.unprinted(s)]
-        a["offsets"] = [ingetrazo_core.tag_styles.clean_offset(v) for v in
+        a["offsets"] = [built_core.tag_styles.clean_offset(v) for v in
                         (None, (1, 2), (0, 0), (2e5, -3e5), ("a", 1), (1, 2, 3), (math.nan, 1), [5, 0])]
-        a["colours"] = [ingetrazo_core.tag_styles.clean_line_colour(v) for v in
+        a["colours"] = [built_core.tag_styles.clean_line_colour(v) for v in
                         (None, (2, -1, 0.5), (1, 2), ("x", 0, 0), (math.nan, 0, 0), [0.1, 0.2, 0.3])]
         changed = []
         for key, rgb in (("dashed", (0, 1, 0)), ("dashed", None), ("lin:mine", (1, 1, 0)),
                          ("lin:mine", None), ("lin:gone", (1, 0, 0)), ("nope", (1, 0, 0)),
                          ("dot", (0.5, 0.5, 0.5)), ("dot", (0.5, 0.5, 0.5))):
-            changed.append([ingetrazo_core.tag_styles.set_linetype_color(s, key, rgb), dict(s.linetype_colors),
+            changed.append([built_core.tag_styles.set_linetype_color(s, key, rgb), dict(s.linetype_colors),
                             dict(s.line_types)])
         a["set_colour"] = changed
-        ingetrazo_core.tag_styles.load_linetype_colors(s, {"dashed": [0.2, 0.2, 0.2], "nope": [1, 1, 1], "dot": "x"})
-        ingetrazo_core.tag_styles.load_linetype_colors(s, None)
-        ingetrazo_core.tag_styles.load_bricks(s, {"brick": (230, 110, 50, 10), "block": "x", "nope": (1, 2, 3, 4)})
-        ingetrazo_core.tag_styles.load_bricks(s, [1])
+        built_core.tag_styles.load_linetype_colors(s, {"dashed": [0.2, 0.2, 0.2], "nope": [1, 1, 1], "dot": "x"})
+        built_core.tag_styles.load_linetype_colors(s, None)
+        built_core.tag_styles.load_bricks(s, {"brick": (230, 110, 50, 10), "block": "x", "nope": (1, 2, 3, 4)})
+        built_core.tag_styles.load_bricks(s, [1])
         a["loaded"] = [dict(s.linetype_colors), dict(s.bricks)]
-        ingetrazo_core.tag_styles.hide_unprinted(s)
+        built_core.tag_styles.hide_unprinted(s)
         a["hidden"] = [ly.visible for ly in s.layers]
         out.append(_j(a))
     return out

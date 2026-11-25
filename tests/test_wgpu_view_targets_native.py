@@ -10,11 +10,11 @@ import pytest
 
 from tests.test_metal_parity_raster import synthetic_pack
 
-HAS_RENDERER = importlib.util.find_spec("ingetrazo_render") is not None
+HAS_RENDERER = importlib.util.find_spec("built_render") is not None
 
 
 def _camera(shift_x=0.):
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     view = QMatrix4x4()
     view.translate(shift_x, 0, -3)
     proj = QMatrix4x4()
@@ -26,7 +26,7 @@ def _camera(shift_x=0.):
 def two():
     if not HAS_RENDERER:
         pytest.skip('Metal checks need the release crate')
-    from ingetrazo_render import Renderer, headless_layer
+    from built_render import Renderer, headless_layer
     hosts = [headless_layer(64, 64), headless_layer(48, 32)]
     renderer = Renderer(hosts[0], 64, 64, 1., platform="layer")
     renderer.set_antialias(False)

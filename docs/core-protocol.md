@@ -4,7 +4,7 @@ Status: first version built (branch `rust-core/protocol`, 2026-11-22).
 Code: `core/protocol/` (keys, feed, queries, commands), `core/agent_protocol.py`
 (bridge tools), `views/wgpu_updates.py` (first consumer); store side
 `StoreState.changes_since` / `StoreSnapshot.changes_since` (trunk's), backed
-by a chunk-skipping diff (`rust/ingetrazo_core/src/store/diff.rs`,
+by a chunk-skipping diff (`rust/built_core/src/store/diff.rs`,
 `docs/meshstore-design.md` §22). Tests: `tests/test_core_protocol.py`.
 
 Two tracks meet here. The kernel is moving into the Rust `MeshStore`, where

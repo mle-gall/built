@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace  # noqa: E402
 
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Vec3 as QVector3D
 
 
 from core.dimension import Dimension  # noqa: E402

@@ -14,7 +14,7 @@ from tests.shell_isolation import native_gpu_host, native_window, restore_shell_
 from tests.test_xray_toggle import _state
 from views import view_commands
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 
 def _box(scene, x0, y0, z0, x1, y1, z1):
@@ -107,11 +107,11 @@ def test_back_edges_draws_them_dashed(win):
 
 
 def test_k_is_back_edges_and_the_style_remembers_it(native_window):
-    from ingetrazo_core.style import Style
+    from built_core.style import Style
     s = Style(back_edges=True)
     assert Style.from_dict(s.to_dict()).back_edges is True
     assert Style.from_dict({"name": "Old"}).back_edges is False
-    from ingetrazo_render import command_registry
+    from built_render import command_registry
     assert [r[0] for r in command_registry([], []) if "K" in r[3]] == ["view:back_edges"]
     w = native_window
     before = w.active_style().back_edges

@@ -24,9 +24,9 @@ from __future__ import annotations
 import math
 
 import pytest
-from ingetrazo_core import ScreenPoint, Input
-from ingetrazo_core import Vec3 as QVector3D
-from ingetrazo_render import MouseEvent
+from built_core import ScreenPoint, Input
+from built_core import Vec3 as QVector3D
+from built_render import MouseEvent
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 

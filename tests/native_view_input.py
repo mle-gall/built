@@ -1,5 +1,5 @@
 """Deliver shell events directly to a view without moving the system pointer."""
-from ingetrazo_render import KeyEvent, MouseEvent
+from built_render import KeyEvent, MouseEvent
 
 
 def press(view, button, modifiers, point):

@@ -5,13 +5,13 @@ panel's folders, saving the source in another tab reloads the host, and
 going into the linked copy offers to open its file."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 
 from pathlib import Path
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core import links
 from formats import igz
@@ -75,7 +75,7 @@ def test_going_into_a_linked_copy_offers_its_file(win, tmp_path, monkeypatch):
     def answer(parent, title, text, buttons, **kw):
         asked["text"] = title
         return "open"
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", answer)
+    monkeypatch.setattr("built_render.chrome_dialogs.ask", answer)
     win.viewport.begin_group_edit(g)
     assert "Site.igz" in asked["text"]
     assert win.viewport.scene.edit_group is None        # never entered
@@ -115,15 +115,15 @@ def test_project_link_subset_and_agent_surface(win, tmp_path):
     assert inspector()["Subset"] == "1 item" and inspector()["Stable UIDs"] == "1"
     assert view._ui_tree["nodes"][key]["path"] == str(path)
     wgpu_ui._tree_action(win, view, "linkpack" + wgpu_ui.SEP + "n:" + key)
-    assert ingetrazo_core.link_is_packed(win.viewport.scene, path)
+    assert built_core.link_is_packed(win.viewport.scene, path)
     assert {'query_links', 'link_document', 'reload_link', 'query_project', 'set_project'} <= {t['name'] for t in BUILTIN_TOOLS}
 
 
 @pytest.mark.parametrize("choice", [True, False, None])
 def test_link_document_action_shows_nested_choice(win, tmp_path, monkeypatch, choice):
-    from ingetrazo_core.i18n import tr
-    from ingetrazo_render import chrome_forms
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_core.i18n import tr
+    from built_render import chrome_forms
+    from built_render.shell_files import ShellFileDialog
 
     path = _source(tmp_path / "building.igz")
     placements = []
@@ -182,7 +182,7 @@ def test_project_edits_only_the_addressed_link_subset_and_undoes_without_source(
     old_first, old_second = first.children[0], second.children[0]
     view = _View()
     ui._tree(view, win)
-    monkeypatch.setattr("ingetrazo_render.chrome_forms.ask_text", lambda *args, done, **kw: done(json.dumps(subsets[1])))
+    monkeypatch.setattr("built_render.chrome_forms.ask_text", lambda *args, done, **kw: done(json.dumps(subsets[1])))
     ui._link_action(win, view, second, "linksubset")
     assert first.children == [old_first] and first.children[0] is old_first
     assert second.children[0].name == "Window" and links.link_of(second)["select"] == subsets[1]
@@ -205,7 +205,7 @@ def test_link_selection_header_preserves_occurrence_and_nested_choice(win, tmp_p
     from core.scene import Scene
     from tests.test_tree_links import _View
     from views import wgpu_ui
-    from ingetrazo_render import chrome_forms
+    from built_render import chrome_forms
 
     source = Scene()
     g = Group(name="Panel")
@@ -231,11 +231,11 @@ def test_link_selection_header_preserves_occurrence_and_nested_choice(win, tmp_p
 
 def test_project_header_moves_the_registry_next_to_the_host(win, tmp_path, monkeypatch):
     from core import bim_registry
-    from ingetrazo_core import project
+    from built_core import project
     from formats import project as manifest
     from tests.test_tree_links import _View
     from views import wgpu_ui
-    from ingetrazo_render import shell_files
+    from built_render import shell_files
 
     path = tmp_path / "Design.builtproject"
     monkeypatch.setattr(shell_files.ShellFileDialog, "getSaveFileName", lambda *args: (str(path), ""))

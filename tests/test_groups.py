@@ -3,7 +3,7 @@
 """Groups: isolate geometry into its own mesh so it doesn't weld to the rest."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.history import (
     ExplodeGroupCommand,
@@ -72,8 +72,8 @@ def test_group_keeps_soft_and_curve_flags_round_trip(tmp_path):
     # cylinder; make a group → every vertical seam shows.)
     import math
 
-    from ingetrazo_core import Input as Qt
-    from ingetrazo_core import ScreenPoint as QPointF
+    from built_core import Input as Qt
+    from built_core import ScreenPoint as QPointF
 
     from core.history import ExplodeGroupCommand, History, MakeGroupCommand
     from formats import igz
@@ -160,7 +160,7 @@ def test_merge_groups_fuses_without_touching_loose_mesh():
     # "Unir grupos": the fix-my-grouping path — the selected groups fuse
     # into ONE group (instances baked to world, attrs and soft/hidden
     # flags carried) and the loose mesh never changes. Exact undo.
-    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+    from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
     from core.group import Group
     from core.history import History, MergeGroupsCommand
     from core.mesh import Mesh

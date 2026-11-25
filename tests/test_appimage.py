@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ingetrazo_core import appimage
+from built_core import appimage
 
 
 def test_not_an_appimage_without_the_runtime_variables(monkeypatch):
@@ -15,11 +15,11 @@ def test_not_an_appimage_without_the_runtime_variables(monkeypatch):
 
 
 def test_integrate_writes_launcher_and_icon_pointing_at_the_file(tmp_path, monkeypatch):
-    img = tmp_path / "IngeTrazo-0.3.20-x86_64.AppImage"
+    img = tmp_path / "Built-0.3.20-x86_64.AppImage"
     img.write_bytes(b"AI")
     appdir = tmp_path / "AppDir"
     appdir.mkdir()
-    (appdir / "ingetrazo.png").write_bytes(b"\x89PNG")
+    (appdir / "built.png").write_bytes(b"\x89PNG")
     data = tmp_path / "data"
     monkeypatch.setenv("APPIMAGE", str(img))
     monkeypatch.setenv("APPDIR", str(appdir))
@@ -28,13 +28,13 @@ def test_integrate_writes_launcher_and_icon_pointing_at_the_file(tmp_path, monke
     assert appimage.appimage_path() == img
     assert not appimage.is_integrated(img)
     f = appimage.integrate(img)
-    assert f == data / "applications" / "ingetrazo.desktop"
+    assert f == data / "applications" / "built.desktop"
     text = f.read_text()
     assert f'Exec="{img}" %f' in text and f"TryExec={img}" in text
-    assert "Icon=ingetrazo" in text and "application/x-ingetrazo" in text
-    assert (data / "icons/hicolor/256x256/apps/ingetrazo.png").read_bytes() == b"\x89PNG"
+    assert "Icon=built" in text and "application/x-built" in text
+    assert (data / "icons/hicolor/256x256/apps/built.png").read_bytes() == b"\x89PNG"
     assert appimage.is_integrated(img)
     # a moved AppImage reads as not integrated (the launcher would be stale)
     assert not appimage.is_integrated(tmp_path / "elsewhere.AppImage")
     appimage.remove()
-    assert not f.exists() and not (data / "icons/hicolor/256x256/apps/ingetrazo.png").exists()
+    assert not f.exists() and not (data / "icons/hicolor/256x256/apps/built.png").exists()

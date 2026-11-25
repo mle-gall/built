@@ -9,7 +9,7 @@ them — an explicit sweep must, and it must be undoable.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from core.group import Group
@@ -19,7 +19,7 @@ from core.materials import Material
 from core.mesh import Mesh
 from core.purge import (unused_layers, unused_materials, used_layers,
                         used_materials)
-from ingetrazo_core.saved_views import SavedView
+from built_core.saved_views import SavedView
 from core.scene import Scene
 
 
@@ -184,7 +184,7 @@ def test_flags_scope_the_sweep():
 def test_deleting_a_layer_reassigns_faces_INSIDE_groups(native_question_host):
     from core.layers import layer_of
     from tests.native_tree import action
-    from ingetrazo_render import chrome_dialogs
+    from built_render import chrome_dialogs
     scene = native_question_host.viewport.scene
     inner = Mesh()
     f = _quad(inner)
@@ -206,7 +206,7 @@ def test_deleting_a_layer_reassigns_faces_INSIDE_groups(native_question_host):
 
 def test_the_drawing_purge_removes_only_unused_tags_and_undo_restores_order(native_question_host):
     from tests.native_tree import action
-    from ingetrazo_render import chrome_dialogs
+    from built_render import chrome_dialogs
     host = native_question_host
     scene = host.viewport.scene
     names = [DEFAULT_LAYER, "CVL_PUNTO", "BUZON", "Trees"]

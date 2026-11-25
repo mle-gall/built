@@ -11,8 +11,8 @@ import math
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Vec3 as QVector3D
 
 from core.camera import OrbitCamera
 from tools.base import ToolContext
@@ -251,7 +251,7 @@ def test_wall_feelers_ask_only_as_far_as_the_step_reaches(monkeypatch):
     huge model bakes and tests only what is within reach; the kill switch
     sends them unbounded, as before."""
     import tools.walkthrough as wt
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     asked = []
 
     class Stub:

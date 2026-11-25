@@ -4,11 +4,11 @@
 from a synthetic DEM. Headless."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from georef.datum import SceneDatum
 from georef.geopath import GeoPath
-from ingetrazo_core import (
+from built_core import (
     fit_plane as _fit_plane,
     build_draped_surface,
     build_flat_surface,

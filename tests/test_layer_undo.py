@@ -16,7 +16,7 @@ import random
 
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.group import Group
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
@@ -25,7 +25,7 @@ from core.layers import (DEFAULT_LAYER, Layer, assign_layer, layer_of,
                          rename_layer)
 from core.mesh import Mesh
 from core.purge import layer_carriers
-from ingetrazo_core.saved_views import SavedView
+from built_core.saved_views import SavedView
 from core.scene import Scene
 
 
@@ -252,7 +252,7 @@ def test_drawing_add_and_rename_stay_off_the_modelling_history(native_host):
 
 def test_panel_delete_asks_when_the_layer_has_content(native_question_host):
     from tests.native_tree import action
-    from ingetrazo_render import chrome_dialogs as dialogs
+    from built_render import chrome_dialogs as dialogs
     win = native_question_host.window
     scene = win.viewport.scene
     face = _square(scene.mesh)

@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from tests.native_tree import action, group_rows
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group, copy_group
-from ingetrazo_core.i18n import tr
+from built_core.i18n import tr
 from core.mesh import Mesh
 
 
@@ -97,7 +97,7 @@ def test_inside_a_component_make_unique_is_greyed_with_the_reason(native_host, m
 
 
 def test_collapsed_definition_uses_only_the_copies_in_its_branch(native_host):
-    from ingetrazo_render import tree_group_rows
+    from built_render import tree_group_rows
 
     scene = native_host.viewport.scene
     a, b, c, nested, *_ = _setup(scene)

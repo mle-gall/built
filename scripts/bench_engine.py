@@ -7,9 +7,9 @@ The viewport side (orbit, hover with inferences, move, undo) is
 ``bench_interaction.py``; this one needs no window. Run it once per engine
 to compare (the engine is fixed per process):
 
-    INGETRAZO_RUST=0 venv/bin/python scripts/bench_engine.py ~/Descargas/plaza.igz \\
+    BUILT_RUST=0 venv/bin/python scripts/bench_engine.py ~/Descargas/plaza.igz \\
         --out py.json
-    INGETRAZO_RUST=1 venv/bin/python scripts/bench_engine.py ~/Descargas/plaza.igz \\
+    BUILT_RUST=1 venv/bin/python scripts/bench_engine.py ~/Descargas/plaza.igz \\
         --out rs.json
 
 ``--only open,save`` picks operations; ``--top 15`` the rows of each
@@ -31,13 +31,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # Never the user's own settings (see bench_session.py).
-_tmp = tempfile.mkdtemp(prefix="ingetrazo-bench-engine-")
+_tmp = tempfile.mkdtemp(prefix="built-bench-engine-")
 os.environ["XDG_DATA_HOME"] = _tmp
 os.environ["BUILT_SETTINGS_DIR"] = _tmp
 
 from core._native import engine  # noqa: E402
 from core.scene import Scene  # noqa: E402
-from ingetrazo_core.formats import igz  # noqa: E402
+from built_core.formats import igz  # noqa: E402
 
 
 def _biggest_group(scene):
@@ -63,12 +63,12 @@ def op_save(ctx):
 
 
 def op_stl(ctx):
-    from ingetrazo_core.formats.stl import save_stl
+    from built_core.formats.stl import save_stl
     save_stl(ctx["scene"], Path(_tmp) / "out.stl")
 
 
 def op_obj(ctx):
-    from ingetrazo_core.formats.obj import save_obj
+    from built_core.formats.obj import save_obj
     save_obj(ctx["scene"], Path(_tmp) / "out.obj")
 
 
@@ -111,9 +111,9 @@ def op_intersect_find(ctx):
 def op_intersect_apply(ctx):
     """…and adding them as edges (one undo step), as the menu does."""
     from core.edits import build_add_edges
-    from ingetrazo_core.history import History
+    from built_core.history import History
     scene = ctx["scene"]
-    from ingetrazo_core.mesh import _KEY_SCALE
+    from built_core.mesh import _KEY_SCALE
     segs = [(a, b) for a, b in ctx.get("segs", [])
             if (b - a).length() >= 1.0 / _KEY_SCALE][:ctx["apply_cap"]]
     ctx["applied"] = len(segs)
@@ -125,7 +125,7 @@ def op_intersect_apply(ctx):
 def op_orient(ctx):
     """Orient Faces over the biggest group's meshes."""
     from core.group import iter_placements
-    from ingetrazo_core.orient import orient_outward
+    from built_core.orient import orient_outward
     for m, _ in iter_placements(_biggest_group(ctx["scene"])):
         orient_outward(m.mesh)
 
@@ -168,7 +168,7 @@ def push_faces(scene, n=12, seed=3, after=None):
     import random
 
     from core.group import iter_placements
-    from ingetrazo_core.history import History
+    from built_core.history import History
     from tools.pushpull import PushPullTool
     rng = random.Random(seed)
     hist = History(scene)

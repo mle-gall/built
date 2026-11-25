@@ -7,7 +7,7 @@ again, returns to the style you were in, edge and profile settings included.
 """
 from __future__ import annotations
 
-from ingetrazo_render import command_chrome, command_registry
+from built_render import command_chrome, command_registry
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from views import view_commands
 

@@ -7,7 +7,7 @@ SIGBUS) one run in three or four."""
 import gc
 import threading
 
-from ingetrazo_core import install_main_thread_collector
+from built_core import install_main_thread_collector
 
 
 def test_a_collection_on_a_worker_frees_nothing_the_main_thread_then_does():

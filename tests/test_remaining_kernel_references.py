@@ -4,7 +4,7 @@ import json
 import random
 from types import SimpleNamespace
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 from core import arrangement as ar, push_scans as scans, snap_query as sq, topology as top
 from core.mesh import Mesh
 
@@ -140,7 +140,7 @@ def test_store_repair_reference(monkeypatch):
 
 
 def view_rows():
-    from ingetrazo_core import object_replay
+    from built_core import object_replay
     rows = []
     for seed in range(16):
         mesh = Mesh()
@@ -174,7 +174,7 @@ def test_two_argument_snap_resolver():
     from inspect import signature
     from core.snap import compute_snap
     from core.snap_frame import SnapFrame
-    from ingetrazo_core import resolve_snap
+    from built_core import resolve_snap
 
     scene = SimpleNamespace(edges=[SimpleNamespace(a=V(2, 0, 0), b=V(8, 0, 0))])
     project = lambda point: point.toTuple()[:2]

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The Rust SVG writer (ingetrazo_core sheets::svg, behind
+"""The Rust SVG writer (built_core sheets::svg, behind
 formats.svg_out.svg_text) writes what the Python writer wrote for a view's
 line groups: the same text, byte for byte, and the same chains. The
 goldens were taken from the Python writer before the lines path moved to

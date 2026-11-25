@@ -4,13 +4,13 @@ from pathlib import Path
 import pytest
 
 
-from ingetrazo_render.chrome_sheet import Ctx
-from ingetrazo_render.settings_sheet import Env, SettingsSheet
+from built_render.chrome_sheet import Ctx
+from built_render.settings_sheet import Env, SettingsSheet
 
 
 @pytest.fixture
 def settings_file(private_settings):
-    return Path(private_settings) / "IngeTrazo" / "IngeTrazo.ini"
+    return Path(private_settings) / "Built" / "Built.ini"
 
 
 class Controls:

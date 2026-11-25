@@ -5,13 +5,13 @@ to select by connected, by layer, by material». The usual submenu, answered
 from the current editing context."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from core.layers import assign_layer
 from core.mesh import Edge, Face
 from core.scene import Scene
-from ingetrazo_core import (all_connected, bounding_edges, same_layer,
+from built_core import (all_connected, bounding_edges, same_layer,
                              same_material)
 
 
@@ -73,7 +73,7 @@ def test_same_layer_takes_faces_edges_and_groups_on_it():
 
 
 def test_the_triple_click_still_selects_the_whole_piece(monkeypatch):
-    from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
+    from built_core import ScreenPoint as QPointF, Input as Qt
     from tools.base import ToolContext
     from tools.rust_tools import SelectTool
     scene = Scene()
@@ -99,7 +99,7 @@ def test_the_triple_click_still_selects_the_whole_piece(monkeypatch):
 
 
 def test_the_right_click_menu_offers_select_and_it_grows_the_selection(native_host):
-    from ingetrazo_render import context_menu_build, context_menu_run
+    from built_render import context_menu_build, context_menu_run
 
     win = native_host.window
     scene = win.viewport.scene

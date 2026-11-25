@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from ingetrazo_render import browser_selection
+from built_render import browser_selection
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.native_tree import action
 from tests.test_browser_layer_order import _group

@@ -9,7 +9,7 @@ import pytest
 
 ezdxf = pytest.importorskip("ezdxf")
 
-from ingetrazo_core import Vec3
+from built_core import Vec3
 from core.scene import Scene                              # noqa: E402
 from formats.dxf_in import (                              # noqa: E402
     RECENTER_BEYOND_M, load_dxf, read_unit_scale)
@@ -131,7 +131,7 @@ def test_a_rotated_scaled_insert_lands_where_autocad_put_it(tmp_path):
                                    "xscale": 2.0, "yscale": 2.0})
     scene, _ = _load(tmp_path, doc)
     inst = next(g for g in scene.groups if g.xform is not None)
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     tip = inst.xform.map(QVector3D(1, 0, 0))
     assert (round(tip.x(), 6), round(tip.y(), 6)) == (10.0, 22.0)
 

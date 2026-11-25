@@ -8,14 +8,14 @@ inferences do not pull the grip; what is being scaled is left out of the
 snap, so it never lands on itself."""
 from __future__ import annotations
 
-from ingetrazo_render import MouseEvent
+from built_render import MouseEvent
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from types import SimpleNamespace
 
 
 import pytest
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Input as Qt
+from built_core import Vec3 as QVector3D
 
 from tests.test_scale_grips import V, _tool_with_box
 

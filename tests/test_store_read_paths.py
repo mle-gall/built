@@ -17,11 +17,11 @@ import random                                                     # noqa: E402
 from types import SimpleNamespace                                 # noqa: E402
 
 import pytest                                                     # noqa: E402
-from ingetrazo_core import Input
-from ingetrazo_core import ScreenPoint, Vec3 as QVector3D
+from built_core import Input
+from built_core import ScreenPoint, Vec3 as QVector3D
 
 import core._native as _native                                    # noqa: E402
-from ingetrazo_core import store_mesh as S                                  # noqa: E402
+from built_core import store_mesh as S                                  # noqa: E402
 from core.history import History                                  # noqa: E402
 from core.mesh import Edge, Face                                  # noqa: E402
 from core.scene import Scene                                      # noqa: E402
@@ -219,8 +219,8 @@ def test_pushpull_hover_and_lock_on_a_face(doc):
 def test_edges_found_between_loop_vertices(doc):
     """``Select ▸ Bounding Edges`` and the edge-between lookups walk a
     vertex's edges for the one whose other end is the next loop vertex."""
-    from ingetrazo_core import bounding_edges
-    from ingetrazo_core import edge_between
+    from built_core import bounding_edges
+    from built_core import edge_between
     scene = doc.scene
     top = _top(scene)
     edges = bounding_edges([top])
@@ -230,7 +230,7 @@ def test_edges_found_between_loop_vertices(doc):
 
 
 def test_a_drawn_circle_reads_as_one_closed_curve(doc):
-    from ingetrazo_core.curve_segments import read_curve
+    from built_core.curve_segments import read_curve
     from core.snap import _boundary_runs
     scene = doc.scene
     disc = next(f for f in scene.mesh.faces if len(f.loop) == 16)

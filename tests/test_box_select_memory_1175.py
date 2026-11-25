@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 IngeTrazo contributors.
+# Copyright (C) 2026 Built contributors.
 """#1175: box selection must not duplicate an import's full point arrays."""
 from types import SimpleNamespace
 import gc
@@ -8,7 +8,7 @@ import weakref
 
 import numpy as np
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from tools.select_host import _box_group_fast, _local_bounds, _seg_rect_overlap
 

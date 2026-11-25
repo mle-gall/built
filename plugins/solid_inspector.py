@@ -3,7 +3,7 @@
 """Solid Inspector plugin — find out WHY a solid is not watertight, and
 repair what can be repaired without guessing.
 
-IngeTrazo's engine guarantees hermetic solids and its BIM layer only
+Built's engine guarantees hermetic solids and its BIM layer only
 reports a volume when the object is closed. When Model Info (or the BIM
 tray) says "(not watertight)", this plugin answers the next question:
 *where is the hole?*
@@ -26,7 +26,7 @@ And per face:
 
 - **internal**: a second face over the same corners as another, or a
   partition whose every edge is overconnected — a wall inside the solid
-  that is not marked as one (:func:`ingetrazo_core.orient.orient_outward` marks the
+  that is not marked as one (:func:`built_core.orient.orient_outward` marks the
   ones the engine builds itself).
 - **reversed**: on a closed object, a face whose front looks inward — the
   faces the engine's own orientation pass would turn.
@@ -45,8 +45,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from ingetrazo_core import Vec3 as QVector3D
-from ingetrazo_core.i18n import tr
+from built_core import Vec3 as QVector3D
+from built_core.i18n import tr
 from tools.base import Tool
 
 

@@ -11,12 +11,12 @@ from __future__ import annotations
 import math
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
 from core.texture import face_uv_axes
-from ingetrazo_core import texture_continuous_maps as continuous_maps
-from ingetrazo_core import paint_face_plane, surface_commands
+from built_core import texture_continuous_maps as continuous_maps
+from built_core import paint_face_plane, surface_commands
 
 TEX = {"path": "brick.png", "sw": 0.5, "sh": 0.5}
 

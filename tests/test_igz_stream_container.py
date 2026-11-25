@@ -33,7 +33,7 @@ def test_direct_container_matches_buffered_zip_bytes(tmp_path, fast):
 @pytest.mark.parametrize("failure", [OSError, RuntimeError, KeyboardInterrupt])
 @pytest.mark.parametrize("native", [False, True])
 def test_failed_archive_leaves_existing_document_intact(native, tmp_path, monkeypatch, failure):
-    monkeypatch.setenv("INGETRAZO_RUST_IO", "1" if native else "0")
+    monkeypatch.setenv("BUILT_RUST_IO", "1" if native else "0")
     path = tmp_path / "scene.igz"
     path.write_bytes(b"previous document")
     original = zipfile.ZipFile.writestr

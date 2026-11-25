@@ -7,7 +7,7 @@ opposite side or — About Center — the middle; typed values read as factors,
 per-axis factors, absolute sizes with a unit, and negatives mirror."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.history import History, ScaleVerticesCommand
 from core.scene import Scene
@@ -189,7 +189,7 @@ def test_mirror_by_preview_through_the_anchor():
 
 
 def test_scaling_a_selection_with_an_image_carries_it_undistorted():
-    from ingetrazo_core.image_plane import ImagePlane
+    from built_core.image_plane import ImagePlane
 
     scene = Scene()
     vp = _Stub(scene)

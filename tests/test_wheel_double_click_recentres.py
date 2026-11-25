@@ -10,7 +10,7 @@ import math
 
 from tests.controller_surface import live_image
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 
 def _press(vp, x=200, y=200):

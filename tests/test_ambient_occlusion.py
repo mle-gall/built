@@ -13,24 +13,24 @@ import math
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 
-from ingetrazo_render import ao_settings  # noqa: E402
+from built_render import ao_settings  # noqa: E402
 
 
 def test_it_is_off_unless_asked(monkeypatch):
-    monkeypatch.delenv("INGETRAZO_AO", raising=False)
+    monkeypatch.delenv("BUILT_AO", raising=False)
     assert ao_settings() is None
-    monkeypatch.setenv("INGETRAZO_AO", "0")
+    monkeypatch.setenv("BUILT_AO", "0")
     assert ao_settings() is None
 
 
 def test_the_settings_are_kept_in_range(monkeypatch):
-    monkeypatch.setenv("INGETRAZO_AO", "1")
-    monkeypatch.setenv("INGETRAZO_AO_RADIUS", "-3")
-    monkeypatch.setenv("INGETRAZO_AO_SAMPLES", "500")
-    monkeypatch.setenv("INGETRAZO_AO_INTENSITY", "nada")
+    monkeypatch.setenv("BUILT_AO", "1")
+    monkeypatch.setenv("BUILT_AO_RADIUS", "-3")
+    monkeypatch.setenv("BUILT_AO_SAMPLES", "500")
+    monkeypatch.setenv("BUILT_AO_INTENSITY", "nada")
     s = ao_settings()
     assert s["radius"] > 0 and s["samples"] == 64 and s["intensity"] == 1.0
 
@@ -92,14 +92,14 @@ def step_block(native_gpu_host):
 
 
 def _render(vp, monkeypatch, on: str) -> np.ndarray:
-    monkeypatch.setenv("INGETRAZO_AO", on)
-    monkeypatch.setenv("INGETRAZO_AO_RADIUS", "0.5")
+    monkeypatch.setenv("BUILT_AO", on)
+    monkeypatch.setenv("BUILT_AO_RADIUS", "0.5")
     return _lum(vp.keys_stand_in.render_pixels(400, 300, overlays=False))
 
 
 def _render_at(vp, monkeypatch, on: str, w: int, h: int) -> np.ndarray:
-    monkeypatch.setenv("INGETRAZO_AO", on)
-    monkeypatch.setenv("INGETRAZO_AO_RADIUS", "0.5")
+    monkeypatch.setenv("BUILT_AO", on)
+    monkeypatch.setenv("BUILT_AO_RADIUS", "0.5")
     return _lum(vp.keys_stand_in.render_pixels(w, h, overlays=False))
 
 
@@ -217,14 +217,14 @@ def test_intensity_zero_leaves_the_picture_untouched(
         box_on_floor, monkeypatch):
     vp = box_on_floor
     off = _render(vp, monkeypatch, "0")
-    monkeypatch.setenv("INGETRAZO_AO_INTENSITY", "0")
+    monkeypatch.setenv("BUILT_AO_INTENSITY", "0")
     assert np.array_equal(_render(vp, monkeypatch, "1"), off)
 
 
 # ---- The style's switch (Styles panel) -------------------------------------
 
 def test_the_style_carries_it_and_every_preset_has_it_off():
-    from ingetrazo_core.style import BUILTIN_STYLES, Style
+    from built_core.style import BUILTIN_STYLES, Style
     assert all(not p.ambient_occlusion for p in BUILTIN_STYLES)
     s = Style(ambient_occlusion=True, ao_distance=1.25, ao_intensity=1.5)
     back = Style.from_dict(s.to_dict())
@@ -233,7 +233,7 @@ def test_the_style_carries_it_and_every_preset_has_it_off():
 
 
 def test_a_file_from_before_reads_it_off_and_bad_values_are_kept_in_range():
-    from ingetrazo_core.style import AO_DISTANCE_RANGE, Style
+    from built_core.style import AO_DISTANCE_RANGE, Style
     old = Style().to_dict()
     for k in ("ambient_occlusion", "ao_distance", "ao_intensity"):
         old.pop(k)
@@ -245,13 +245,13 @@ def test_a_file_from_before_reads_it_off_and_bad_values_are_kept_in_range():
 
 def test_the_frame_follows_the_style_unless_the_environment_forces_it(
         monkeypatch):
-    from ingetrazo_core.style import Style
-    monkeypatch.delenv("INGETRAZO_AO", raising=False)
+    from built_core.style import Style
+    monkeypatch.delenv("BUILT_AO", raising=False)
     assert ao_settings(Style()) is None
     got = ao_settings(Style(ambient_occlusion=True, ao_distance=2.0,
                                 ao_intensity=0.5))
     assert got["radius"] == 2.0 and got["intensity"] == 0.5
-    monkeypatch.setenv("INGETRAZO_AO", "0")
+    monkeypatch.setenv("BUILT_AO", "0")
     assert ao_settings(Style(ambient_occlusion=True)) is None
 
 

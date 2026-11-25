@@ -8,13 +8,13 @@ call went to the tray dock, which has no ``sync_from_paint`` — the method
 lives on its Materials panel — so nothing ever refreshed."""
 from __future__ import annotations
 
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_tree_links import _View
 from tools.base import ToolContext
 from tools.paint import PaintTool
-from ingetrazo_render import wgpu_library
+from built_render import wgpu_library
 from views import wgpu_ui
 
 

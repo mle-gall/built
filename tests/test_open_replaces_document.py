@@ -18,12 +18,12 @@ from pathlib import Path
 import sys
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.dimension import Dimension
 from core.layers import Layer
 from core.scene import Scene
-from ingetrazo_core.section import SectionPlane
+from built_core.section import SectionPlane
 from formats import igz
 from scripts.isolated_launch import run
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
@@ -205,7 +205,7 @@ def test_opening_plain_after_sections_renders_the_same_picture(tmp_path):
     pictures = []
     for prefix in [[], [rich]]:
         profile = tmp_path / f"profile-{len(prefix)}"
-        plugin = profile / "data/ingetrazo/plugins/view_sample.py"
+        plugin = profile / "data/built/plugins/view_sample.py"
         plugin.parent.mkdir(parents=True)
         plugin.write_text("""def setup(app):
     from pathlib import Path

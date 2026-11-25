@@ -25,14 +25,14 @@ GOLDEN = Path(__file__).parent / "fixtures" / "placement_walks_golden.json.gz"
 
 
 def _walks():
-    import ingetrazo_core as N
+    import built_core as N
     from core import group as G
     return (N.group_iter_placements, N.group_iter_painted_placements,
             N.group_visible_placements, N.group_model_placements)
 
 
 def _scene(rng):
-    from ingetrazo_core import Matrix4 as M
+    from built_core import Matrix4 as M
     from core import layers as L
     from core.group import Group
     from core.mesh import Mesh
@@ -41,8 +41,8 @@ def _scene(rng):
     for t in ("A", "B", "C"):
         scene.layers.append(L.Layer(t, visible=rng.random() < 0.6, locked=rng.random() < 0.3))
     if rng.random() < 0.5:
-        f = __import__("ingetrazo_core").tag_edits.add_folder(scene, "F")
-        __import__("ingetrazo_core").tag_edits.move_to_folder(scene, "C", f)
+        f = __import__("built_core").tag_edits.add_folder(scene, "F")
+        __import__("built_core").tag_edits.move_to_folder(scene, "C", f)
         scene.folder_visibility = {f: rng.random() < 0.5}
     count = [0]
 
@@ -79,7 +79,7 @@ def _m(m):
 
 def answers():
     import itertools
-    from ingetrazo_core import Matrix4 as M
+    from built_core import Matrix4 as M
     from core import layers as L
     plain, painted, visible, model = _walks()
     counter = itertools.count()

@@ -3,24 +3,24 @@ from types import SimpleNamespace
 import importlib.util
 import numpy as np
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from core import _native
 from core.camera import OrbitCamera
 from core.group import Group
 from core.mesh import Mesh
 from core.scene import Scene
-from ingetrazo_core import pack_scene, source_arrays
+from built_core import pack_scene, source_arrays
 from views.wgpu_billboards import Billboards
 from views.wgpu_axes import axes_state
 
 pytestmark = pytest.mark.skipif(
-    importlib.util.find_spec('ingetrazo_render') is None or
+    importlib.util.find_spec('built_render') is None or
     _native.available() is None or not hasattr(_native.available(), 'bake_scene'),
-    reason='ingetrazo_core with bake_scene required (maturin develop --release)')
+    reason='built_core with bake_scene required (maturin develop --release)')
 
 
 def test_billboard_stances_accept_empty_and_unaligned_vertex_buffers():
-    from ingetrazo_render import billboard_stances
+    from built_render import billboard_stances
 
     # NumPy permits packed fields after a one-byte tag. The empty slice
     # retains the odd address and still advertises itself as aligned.
@@ -119,7 +119,7 @@ def test_axes_state_toggle_context_and_export():
 
 
 def test_billboard_inference_uses_turned_geometry():
-    from ingetrazo_core import resident_prepare as prepare, surface
+    from built_core import resident_prepare as prepare, surface
     g = figure()
     packed = pack_scene(Scene(groups=[g]), texture_images=False)
     index = prepare(packed)
@@ -167,7 +167,7 @@ def test_nested_sprite_quad_matches_gl_and_survives_edit_context():
 
 
 def test_shared_billboard_prototype_edit_rebuilds_without_affecting_ordinary():
-    from ingetrazo_core import InstanceUpdates
+    from built_core import InstanceUpdates
     sprite = figure()
     scene = Scene(groups=[sprite, Group(sprite.mesh)])
     packed = pack_scene(scene, texture_images=False)

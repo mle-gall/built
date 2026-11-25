@@ -2,8 +2,8 @@
 import sys
 
 import pytest
-from ingetrazo_render import WheelEvent
-from ingetrazo_render import trackpad_nav
+from built_render import WheelEvent
+from built_render import trackpad_nav
 
 
 @pytest.mark.parametrize('platform', ['darwin', 'linux', 'win32'])

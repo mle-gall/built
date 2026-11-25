@@ -8,8 +8,8 @@ import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_report_sheets import pasteboard  # noqa: F401
 
-from ingetrazo_core.i18n import current_language, set_language
-from ingetrazo_render import AboutSheet as About, about_review
+from built_core.i18n import current_language, set_language
+from built_render import AboutSheet as About, about_review
 from types import SimpleNamespace
 
 _WINDOW = SimpleNamespace(width=900, height=600, scale=1.)
@@ -64,7 +64,7 @@ def test_the_button_copies_the_info_to_the_clipboard(native_host, pasteboard):
 
 
 def test_the_button_says_it_copied(native_host, pasteboard):
-    from ingetrazo_core.i18n import tr
+    from built_core.i18n import tr
     ctx = SimpleNamespace(win=native_host.window)
     sheet = About()
     def label():
@@ -88,8 +88,8 @@ def test_the_os_line_has_nothing_the_locale_translated(monkeypatch):
 
 
 @pytest.mark.parametrize("env, label", [
-    ({"FLATPAK_ID": "com.ingetrazo.IngeTrazo"}, "(Flatpak)"),
-    ({"APPIMAGE": "/tmp/IngeTrazo.AppImage"}, "(AppImage)"),
+    ({"FLATPAK_ID": "com.built.Built"}, "(Flatpak)"),
+    ({"APPIMAGE": "/tmp/Built.AppImage"}, "(AppImage)"),
     ({}, "(from source)"),
 ])
 def test_the_first_line_says_how_this_copy_runs(monkeypatch, env, label):

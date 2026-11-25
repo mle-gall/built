@@ -10,7 +10,7 @@ or an undo still re-measures."""
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_bim_takeoff_untagged_moves import measure
 from tests.native_tree import inspector

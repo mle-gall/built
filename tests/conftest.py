@@ -25,12 +25,12 @@ os.environ.update(HOME=_home, CFFIXED_USER_HOME=_home, XDG_DATA_HOME=_data_dir,
 if sys.platform == "win32":
     os.environ.update(USERPROFILE=_home, APPDATA=_data_dir, LOCALAPPDATA=_data_dir)
 
-from ingetrazo_core import install_main_thread_collector
+from built_core import install_main_thread_collector
 
 install_main_thread_collector()
 
 import pytest  # noqa: E402
-from ingetrazo_core import settings as product_settings  # noqa: E402
+from built_core import settings as product_settings  # noqa: E402
 from tests.shell_isolation import native_host  # noqa: E402,F401
 
 product_settings.use_native(_settings_dir)
@@ -52,7 +52,7 @@ def private_settings(tmp_path, monkeypatch):
     folder = tmp_path / "settings"
     folder.mkdir()
     monkeypatch.setenv("BUILT_SETTINGS_DIR", str(folder))
-    from ingetrazo_core import NativeSettings
+    from built_core import NativeSettings
     monkeypatch.setattr(product_settings, "_store", NativeSettings(folder))
     return folder
 
@@ -63,8 +63,8 @@ def _sheet_looks():
     dimension styled in one test must not dress the next one's."""
     yield
     try:
-        import ingetrazo_core
-        forget = getattr(ingetrazo_core, "sheet_forget_looks", None)
+        import built_core
+        forget = getattr(built_core, "sheet_forget_looks", None)
     except Exception:  # noqa: BLE001 — no native module, nothing remembered
         forget = None
     if forget is not None:
@@ -74,7 +74,7 @@ def _sheet_looks():
 @pytest.fixture(autouse=True)
 def _process_environment():
     """Each test leaves ``os.environ`` as it found it. The app writes it on
-    purpose (``core._native.start_guard`` sets INGETRAZO_RUST=0 for
+    purpose (``core._native.start_guard`` sets BUILT_RUST=0 for
     ``--python-engine``), so a test that runs such code without a
     monkeypatch, or with one that records the written value, changed every
     later test in the process: under pytest-xdist the bake tests then ran
@@ -134,10 +134,10 @@ def _world_drawing_axes():
 @pytest.fixture(autouse=True)
 def _fresh_skp_parse_tables():
     """The SKP reader keeps the last parse's tables per thread (group
-    definition ids, tag ids, persistent ids: ingetrazo_core.reader_compat). A
+    definition ids, tag ids, persistent ids: built_core.reader_compat). A
     parse resets them first; a test that feeds the adapter a model of its
     own, with no parse, must not inherit the previous file's."""
-    from ingetrazo_core import reader_compat
+    from built_core import reader_compat
     reader_compat.reset_group_definitions()
     for name in ("layers", "pids", "folders", "pid_frames"):
         if hasattr(reader_compat._parse_tables, name):

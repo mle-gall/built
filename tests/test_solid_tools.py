@@ -7,8 +7,8 @@ from __future__ import annotations
 import math
 
 import pytest
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core import solids
 from core.group import Group, world_mesh

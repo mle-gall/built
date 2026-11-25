@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from tests import test_pushpull_ux as T
 from tools.circle import CircleTool

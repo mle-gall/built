@@ -11,7 +11,7 @@ from tests.raster_samples import solid_raster
 import json
 import struct
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group
 from core.mesh import Mesh

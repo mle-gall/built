@@ -1,5 +1,5 @@
 """Built v1 precision through the store, both archive readers and recovery."""
-from ingetrazo_core import store_views
+from built_core import store_views
 import json
 import zipfile
 
@@ -7,11 +7,11 @@ import numpy as np
 import pytest
 
 from core import _native
-from ingetrazo_core import store_mesh
+from built_core import store_mesh
 from core.group import Group
 from core.scene import Scene
 from formats import built, igz
-from ingetrazo_core import snapshot_steps, store_views
+from built_core import snapshot_steps, store_views
 
 POINTS = np.array([[650000.01, 6860000.02, 0], [650000.02, 6860001.02, 0]])
 
@@ -123,7 +123,7 @@ def test_export_includes_placement_rounding_and_scale(tmp_path):
 
 def test_python_reader_handles_distinct_points_in_one_float32_cell(tmp_path, monkeypatch):
     monkeypatch.setattr(_native, "native", None)
-    monkeypatch.setenv("INGETRAZO_RUST", "0")
+    monkeypatch.setenv("BUILT_RUST", "0")
     points = np.array([[650000.01, 6860000.02, 0], [650000.02, 6860000.02, 0]], dtype="<f8")
     assert np.array_equal(*points.astype("<f4"))
     # A minimal independently constructed archive, usable without the engine.
@@ -166,7 +166,7 @@ def test_legacy_float32_weld_threshold_is_preserved(monkeypatch):
 @pytest.mark.parametrize("precise", [False, True])
 def test_native_point_columns_match_reference_and_world_displacement(precise, monkeypatch):
     from types import SimpleNamespace
-    from ingetrazo_core import document_native_io as native_io
+    from built_core import document_native_io as native_io
 
     if not hasattr(native_io(), "igz_points"):
         pytest.skip("native point codec unavailable")
@@ -178,7 +178,7 @@ def test_native_point_columns_match_reference_and_world_displacement(precise, mo
     for coords in (points.astype("f"), points, points.astype("f").astype("d")):
         results = []
         for mode in ("0", "1"):
-            monkeypatch.setenv("INGETRAZO_RUST_IO", mode)
+            monkeypatch.setenv("BUILT_RUST_IO", mode)
             sink = SimpleNamespace(built=precise, compatibility=not precise,
                                    current_placements=transforms, displacement_mm=0.0)
             encoded = built.point_array(coords, sink)

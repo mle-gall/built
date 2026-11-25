@@ -2,7 +2,7 @@
 """T over a line starts a guide without a separate first mouse click."""
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 
 @pytest.fixture

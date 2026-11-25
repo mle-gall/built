@@ -7,7 +7,7 @@ from tests.shell_isolation import native_window, restore_shell_patches  # noqa: 
 
 
 from core.scene import Scene
-from ingetrazo_core.style import BUILTIN_STYLES, FACE_MODES, Style
+from built_core.style import BUILTIN_STYLES, FACE_MODES, Style
 
 
 def test_style_roundtrip_and_defaults():
@@ -67,7 +67,7 @@ def test_igz_roundtrip_keeps_the_style(tmp_path):
 
 def test_saved_view_remembers_the_style():
     from core.camera import OrbitCamera
-    from ingetrazo_core.saved_views import SavedView
+    from built_core.saved_views import SavedView
     scene = Scene()
     cam = OrbitCamera()
     scene.display_style = Style(name="Hidden line", face_mode="hidden_line")
@@ -85,7 +85,7 @@ def test_saved_view_remembers_the_style():
 
 
 def test_style_by_name_returns_copies():
-    from ingetrazo_core.style import style_by_name
+    from built_core.style import style_by_name
     a = style_by_name("Architectural")
     assert a is not None and a.face_mode == "textures"
     assert a.background == (1.0, 1.0, 1.0) and a.sky is False
@@ -110,5 +110,5 @@ def test_the_sheet_inspector_style_list_lists_the_presets(native_window):
 
 
 def _v(x, y, z=0.0):
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     return QVector3D(x, y, z)

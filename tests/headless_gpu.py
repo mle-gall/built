@@ -2,10 +2,10 @@
 """GPU tests without a window or a toolkit (render-glue lane).
 
 ``renderer(w, h)`` is the release renderer drawing into a bare Core
-Animation layer (``ingetrazo_render.headless_layer``, ``platform="layer"``),
+Animation layer (``built_render.headless_layer``, ``platform="layer"``),
 as it draws into the shell's window. ``HeadlessView`` is the shell's
 resident view (``MetalView`` over ``WidgetShim``, as
-``ingetrazo_render.shell_views.ShellView``) with such a layer for its surface and timers
+``built_render.shell_views.ShellView``) with such a layer for its surface and timers
 of its own; it replaces the hidden Qt ``WgpuView``. Drive its timers with
 ``view.run_timers()``; send it input with ``mouse``, ``key`` and ``wheel``."""
 from __future__ import annotations
@@ -14,12 +14,12 @@ import importlib.util
 
 import pytest
 
-HAS_RENDERER = importlib.util.find_spec("ingetrazo_render") is not None
+HAS_RENDERER = importlib.util.find_spec("built_render") is not None
 
 
 def renderer(width: int = 64, height: int = 64, scale: float = 1.0):
     """A ``Renderer`` on a headless layer of ``width`` × ``height`` points."""
-    from ingetrazo_render import Renderer, headless_layer
+    from built_render import Renderer, headless_layer
     return Renderer(headless_layer(width, height), width, height, scale, platform="layer")
 
 
@@ -37,8 +37,8 @@ def _view_class():
 
         def __init__(self, width=640, height=480, scale=1.0, *, present=False):
             from types import SimpleNamespace
-            from ingetrazo_core import WindowInput
-            from ingetrazo_render import WindowTimers
+            from built_core import WindowInput
+            from built_render import WindowTimers
             self._present = present
             timers = WindowTimers()
             # The services tests/controller_surface.py gives a document, so
@@ -51,7 +51,7 @@ def _view_class():
             self._host = host           # WidgetShim's own start cleared it
 
         def _window_handles(self):
-            from ingetrazo_render import headless_layer
+            from built_render import headless_layer
             return headless_layer(self.width(), self.height()), {"platform": "layer"}
 
         def _can_create_surface(self):
@@ -102,10 +102,10 @@ _MOUSE = {"press": "mousePressEvent", "release": "mouseReleaseEvent",
 
 
 def mouse(view, kind, x, y, button=0, held=0, modifiers=0, timestamp=0):
-    """A pointer event as the shell delivers it (ingetrazo_render.Host.pointer):
+    """A pointer event as the shell delivers it (built_render.Host.pointer):
     ``kind`` press, release, move or double, in logical pixels, at
     ``timestamp`` ms. Returns the handler's answer."""
-    from ingetrazo_render import MouseEvent
+    from built_render import MouseEvent
     ev = MouseEvent(kind, float(x), float(y), _code(button), _code(held), _code(modifiers),
                     timestamp=int(timestamp))
     return getattr(view, _MOUSE[kind])(ev)
@@ -119,7 +119,7 @@ def click(view, x, y, button=1, modifiers=0):
 def key(view, pressed, code, modifiers=0, text=None):
     """A key press or release as the shell delivers it: the shortcut check
     through ``event`` first, then the handler, as the window does."""
-    from ingetrazo_render import KeyEvent, ShortcutOverride
+    from built_render import KeyEvent, ShortcutOverride
     if pressed:
         view.event(ShortcutOverride(_code(code), _code(modifiers), text))
     ev = KeyEvent(bool(pressed), _code(code), _code(modifiers), text)
@@ -132,7 +132,7 @@ def tap(view, code, modifiers=0, text=None):
 
 
 def wheel(view, x, y, angle_dy, modifiers=0, pixel_dy=0.0, phase="none"):
-    from ingetrazo_render import WheelEvent
+    from built_render import WheelEvent
     ev = WheelEvent(float(x), float(y), 0.0, float(pixel_dy), 0.0, float(angle_dy), phase,
                     _code(modifiers))
     return view.wheelEvent(ev)
@@ -141,7 +141,7 @@ def wheel(view, x, y, angle_dy, modifiers=0, pixel_dy=0.0, phase="none"):
 @pytest.fixture
 def headless_renderer():
     if not HAS_RENDERER:
-        pytest.skip("release ingetrazo_render required")
+        pytest.skip("release built_render required")
     r = renderer()
     yield r
     del r

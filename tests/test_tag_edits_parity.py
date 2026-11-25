@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The tag (layer) edits moved to Rust (``rust/ingetrazo_core/src/model/tag_edits.rs``)
+"""The tag (layer) edits moved to Rust (``rust/built_core/src/model/tag_edits.rs``)
 and must answer as ``core/layers.py``'s Python did at ``9cf53080``: the folder
 edits (add, move, rename, remove, file tags), the labels and paths, the
 display state (visibility, lock, isolate, the active tag, scenes hiding a
@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import gzip
 
-import ingetrazo_core
+import built_core
 import json
 import random
 import sys
@@ -33,7 +33,7 @@ FOLDERS = ["Structure", "Steel", "Building A", "Building B", "Annex", "Structure
 
 def _scene(rng):
     from core.layers import Layer
-    from ingetrazo_core.saved_views import SavedView
+    from built_core.saved_views import SavedView
     from core.scene import Scene
     s = Scene()
     for k in range(rng.randint(2, 9)):
@@ -126,70 +126,70 @@ def run(L, seed):
         op = rng.randrange(22)
         try:
             if op == 0:
-                step("add", ingetrazo_core.tag_edits.add_folder(s, rng.choice(FOLDERS), rng.choice(folders)))
+                step("add", built_core.tag_edits.add_folder(s, rng.choice(FOLDERS), rng.choice(folders)))
             elif op == 1:
-                step("move", ingetrazo_core.tag_edits.move_folder(s, rng.choice(folders[:-1] or ["x"]), rng.choice(folders)))
+                step("move", built_core.tag_edits.move_folder(s, rng.choice(folders[:-1] or ["x"]), rng.choice(folders)))
             elif op == 2:
-                step("rename", ingetrazo_core.tag_edits.rename_folder(s, rng.choice(folders[:-1] or ["x"]),
+                step("rename", built_core.tag_edits.rename_folder(s, rng.choice(folders[:-1] or ["x"]),
                                                rng.choice(("New", "", "  ", "Steel"))))
             elif op == 3 and len(folders) > 2:
-                step("remove", ingetrazo_core.tag_edits.remove_folder(s, rng.choice(folders[:-2])))
+                step("remove", built_core.tag_edits.remove_folder(s, rng.choice(folders[:-2])))
             elif op == 4:
-                step("file", ingetrazo_core.tag_edits.move_to_folder(s, [_pick(rng, s), _pick(rng, s)], rng.choice(folders)))
+                step("file", built_core.tag_edits.move_to_folder(s, [_pick(rng, s), _pick(rng, s)], rng.choice(folders)))
             elif op == 5:
-                step("vis", ingetrazo_core.tag_edits.set_visible(s, [_pick(rng, s)], rng.random() < 0.5))
+                step("vis", built_core.tag_edits.set_visible(s, [_pick(rng, s)], rng.random() < 0.5))
             elif op == 6:
-                step("lock", ingetrazo_core.tag_edits.set_locked(s, [_pick(rng, s)], rng.random() < 0.5))
+                step("lock", built_core.tag_edits.set_locked(s, [_pick(rng, s)], rng.random() < 0.5))
             elif op == 7:
-                step("isolate", ingetrazo_core.tag_edits.isolate(s, [_pick(rng, s)]))
+                step("isolate", built_core.tag_edits.isolate(s, [_pick(rng, s)]))
             elif op == 8:
-                step("isolated", [ingetrazo_core.tag_edits.is_isolated(s, ly.key) for ly in s.layers])
+                step("isolated", [built_core.tag_edits.is_isolated(s, ly.key) for ly in s.layers])
             elif op == 9:
-                step("active", ingetrazo_core.tag_edits.set_active(s, _pick(rng, s)))
+                step("active", built_core.tag_edits.set_active(s, _pick(rng, s)))
             elif op == 10:
-                st = ingetrazo_core.tag_edits.layer_state(s)
-                ingetrazo_core.tag_edits.set_visible(s, [ly.key for ly in s.layers], False)
-                ingetrazo_core.tag_edits.apply_layer_state(s, st)
+                st = built_core.tag_edits.layer_state(s)
+                built_core.tag_edits.set_visible(s, [ly.key for ly in s.layers], False)
+                built_core.tag_edits.apply_layer_state(s, st)
                 step("state", st)
             elif op == 11:
-                step("scenes", ingetrazo_core.tag_edits.hide_in_scenes(s, [_pick(rng, s)], rng.random() < 0.7))
+                step("scenes", built_core.tag_edits.hide_in_scenes(s, [_pick(rng, s)], rng.random() < 0.7))
             elif op == 12:
-                step("template_of", ingetrazo_core.tag_edits.template_of(s))
+                step("template_of", built_core.tag_edits.template_of(s))
             elif op == 13:
-                step("template_for", ingetrazo_core.tag_edits.template_for(s, [_pick(rng, s), _pick(rng, s)]))
+                step("template_for", built_core.tag_edits.template_for(s, [_pick(rng, s), _pick(rng, s)]))
             elif op == 14:
-                t = ingetrazo_core.tag_edits.template_of(other)
-                step("matched", ingetrazo_core.tag_edits.matched_template(s, t))
-                step("name_map", ingetrazo_core.tag_edits.template_name_map(s, t))
+                t = built_core.tag_edits.template_of(other)
+                step("matched", built_core.tag_edits.matched_template(s, t))
+                step("name_map", built_core.tag_edits.template_name_map(s, t))
             elif op == 15:
-                step("apply", ingetrazo_core.tag_edits.apply_template(s, ingetrazo_core.tag_edits.template_of(other)))
+                step("apply", built_core.tag_edits.apply_template(s, built_core.tag_edits.template_of(other)))
             elif op == 16:
-                added = ingetrazo_core.tag_edits.add_missing(s, ingetrazo_core.tag_edits.template_for(other, [ly.key for ly in other.layers]))
+                added = built_core.tag_edits.add_missing(s, built_core.tag_edits.template_for(other, [ly.key for ly in other.layers]))
                 step("add_missing", added)
                 if rng.random() < 0.6:
-                    step("remove_added", ingetrazo_core.tag_edits.remove_added(s, *added))
+                    step("remove_added", built_core.tag_edits.remove_added(s, *added))
             elif op == 17:
-                step("line_types", ingetrazo_core.tag_edits.load_line_types(s, rng.choice((
+                step("line_types", built_core.tag_edits.load_line_types(s, rng.choice((
                     None, {"a": {"pattern": [1, -1]}, "": {}, "b": {"label": 3, "pattern": "x"},
                            "c" * 70: {"label": "L" * 200, "pattern": [2, -1, 0, -1],
                                       "color": [1, 0, 0]}}))))
             elif op == 18:
-                step("labels", [ingetrazo_core.tag_edits.path_label(s, _pick(rng, s)), ingetrazo_core.tag_edits.layer_label(s, _pick(rng, s)),
-                                ingetrazo_core.tag_edits.export_labels(s), [ingetrazo_core.tag_edits.folder_label(s, f) for f in folders],
-                                [ingetrazo_core.tag_edits.folder_visible(s, f) for f in folders],
-                                [ingetrazo_core.tag_edits.effective_visible(s, ly) for ly in s.layers],
-                                L.active_layer(s), ingetrazo_core.tag_edits.unique_name(folders[:-1], "Folder")])
+                step("labels", [built_core.tag_edits.path_label(s, _pick(rng, s)), built_core.tag_edits.layer_label(s, _pick(rng, s)),
+                                built_core.tag_edits.export_labels(s), [built_core.tag_edits.folder_label(s, f) for f in folders],
+                                [built_core.tag_edits.folder_visible(s, f) for f in folders],
+                                [built_core.tag_edits.effective_visible(s, ly) for ly in s.layers],
+                                L.active_layer(s), built_core.tag_edits.unique_name(folders[:-1], "Folder")])
             elif op == 19:
                 step("in_folder", [L.layers_in_folder(s, f) for f in folders[:-1]])
             elif op == 20:
-                raw = rng.choice((ingetrazo_core.tag_edits.template_of(other)["layers"] or [{}]))
+                raw = rng.choice((built_core.tag_edits.template_of(other)["layers"] or [{}]))
                 bad = rng.choice(({}, {"name": 3}, {"name": "X", "color": [2, "a", 0]},
                                   {"name": "Y", "lineweight": "x", "opacity": None,
                                    "hatch_on_paper": 1, "printable": 0, "key": ""}))
                 step("archive", [L.Layer.from_dict(raw).to_dict(),
                                  L.Layer.from_dict(bad).to_dict()])
             elif op == 21:
-                step("apply_bad", ingetrazo_core.tag_edits.apply_template(s, rng.choice(({}, {"ingetrazo_layers": 1},
+                step("apply_bad", built_core.tag_edits.apply_template(s, rng.choice(({}, {"ingetrazo_layers": 1},
                                                                   []))))
         except ValueError as e:
             step("ValueError", str(e))

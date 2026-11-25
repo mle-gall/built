@@ -16,10 +16,10 @@ from __future__ import annotations
 from collections import Counter
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.history import History
-from ingetrazo_core.orient import is_closed, signed_volume
+from built_core.orient import is_closed, signed_volume
 from core.scene import Scene
 from tests import test_pushpull_ux as T
 

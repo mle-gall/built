@@ -4,7 +4,7 @@
 recorded from the composer (scripts/sheet_frame_goldens.py) before it went
 and the workspace tests that hold the native path to them
 (tests/test_sheets_workspace.py): the scene each case sets up, what the
-workspace answers (ingetrazo_render.sheet_frames) and what the composer
+workspace answers (built_render.sheet_frames) and what the composer
 answered, in one canonical, JSON-able form."""
 from __future__ import annotations
 
@@ -31,9 +31,9 @@ def canon(value):
 def plan_cut(scene, plan, by_layer: bool) -> None:
     """A plan cut through the fixture's boxes: the box east of x = 6 is
     concrete, the rest brick walls."""
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     from core.layers import Layer
-    from ingetrazo_core.section import SectionPlane
+    from built_core.section import SectionPlane
     plan.cut_fill_by_layer = by_layer
     scene.layers.append(Layer("Muros", hatch="brick", color=(0.8, 0.4, 0.3)))
     scene.layers.append(Layer("Losa", hatch="concrete", color=(0.5, 0.5, 0.55)))
@@ -49,10 +49,10 @@ def annotated(scene, plan, window) -> None:
     """Every kind of model annotation on the plan: a traced path with its
     chainages, two section planes, an extension's items, three dimensions
     (one on a hidden tag) with oblique ticks, two leader texts (one hidden)."""
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     from core.dimension import Dimension
     from core.layers import Layer
-    from ingetrazo_core.section import SectionPlane
+    from built_core.section import SectionPlane
     from core.textlabel import TextLabel
     from georef.geopath import GeoPath
     plan.annotations = plan.km_marks = plan.section_marks = True
@@ -79,9 +79,9 @@ def annotated(scene, plan, window) -> None:
 
 def dxf_layers(scene) -> None:
     """Two tags, one hatched, and a plan cut: the DXF goes layer by layer."""
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     from core.layers import Layer
-    from ingetrazo_core.section import SectionPlane
+    from built_core.section import SectionPlane
     scene.layers.append(Layer("Muros", hatch="brick", color=(0.8, 0.4, 0.3)))
     scene.layers.append(Layer("Ejes", linetype="center", color=(0.2, 0.4, 0.9)))
     for f in scene.mesh.faces:
@@ -119,7 +119,7 @@ def _canon_rings(rings):
 def native(case, source, plan, tmp_path, window=None) -> dict:
     """What the workspace answers for ``case`` (``window``: the one holding
     the extensions' sheet providers)."""
-    from ingetrazo_render import sheet_frames as w
+    from built_render import sheet_frames as w
     if case == "snaps":
         pts, wpts, edges, _ew, _c = w.snaps(source, plan)
         return {"points": _canon_points(pts, wpts), "edges": len(edges)}

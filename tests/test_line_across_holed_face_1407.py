@@ -10,7 +10,7 @@ cycles re-faced the opening itself, in whole or in halves.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.edits import build_add_edge
 from core.history import History

@@ -9,7 +9,7 @@ usual, blue on a side that is itself orange/red, where orange would vanish.
 from __future__ import annotations
 
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 
 def V(x, y, z=0.0):
@@ -57,7 +57,7 @@ def test_selected_faces_are_split_into_runs_per_dot_colour():
     vp.scene.selection.update({plain, orange})
     vp.scene.version += 1
     from types import SimpleNamespace
-    from ingetrazo_core import pack_scene, VERTEX
+    from built_core import pack_scene, VERTEX
     from views.wgpu_parity import face_marks
     view = SimpleNamespace(scene=vp.scene, source_viewport=vp, camera=vp.camera,
                            packed=pack_scene(vp.scene))

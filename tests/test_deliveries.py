@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from ingetrazo_core import deliveries
+from built_core import deliveries
 from core.camera import OrbitCamera
 from core.group import Group
 from core.history import History
@@ -14,8 +14,8 @@ from core.scene import Scene
 from formats import igz
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_ifc_export import _tagged_wall_scene
-import ingetrazo_render as dock
-from ingetrazo_render import shell_modal as modal
+import built_render as dock
+from built_render import shell_modal as modal
 
 
 def add(h, path, **fields):
@@ -29,7 +29,7 @@ def test_delivery_lifecycle(fmt, tmp_path, request):
     ctx = {}
     if fmt == "pdf":
         from tests.test_outliner import _sheets_model
-        from ingetrazo_render.sheet_workspace import composer_for
+        from built_render.sheet_workspace import composer_for
         win = request.getfixturevalue("native_host").window
         scene = win.viewport.scene
         sheets = _sheets_model(win)
@@ -76,7 +76,7 @@ def drain(timers):
 
 @pytest.fixture
 def next_turn(monkeypatch):
-    from ingetrazo_render import WindowTimers, chrome_dialogs
+    from built_render import WindowTimers, chrome_dialogs
     timers = WindowTimers()
     monkeypatch.setattr(chrome_dialogs, "in_shell", lambda: True)
     return SimpleNamespace(timers=timers)
@@ -136,7 +136,7 @@ def test_selected_and_visible_preserve_source(tmp_path):
 
 
 def test_scenes_cancel_keeps_previous_files(tmp_path):
-    from ingetrazo_core.saved_views import SavedView
+    from built_core.saved_views import SavedView
     s = _tagged_wall_scene()
     cam = OrbitCamera()
     cam.perspective = False
@@ -170,7 +170,7 @@ def test_checks_and_one_off_export(tmp_path, native_host):
     readiness = json.loads(blob)
     assert panel == "readiness" and (readiness["ready"], readiness["total"]) == (0, 1)
     assert readiness["checks"]["*"]["unfiled/"][0] == "Not filed"
-    from ingetrazo_render import chrome_sheet
+    from built_render import chrome_sheet
     native_host.menu("delivery_export")
     assert chrome_sheet.current(win).id == "export"
     chrome_sheet.close(win)
@@ -195,7 +195,7 @@ def test_problem_checks_cover_filed_geometry():
 
 
 def test_running_export_observes_cancellation(tmp_path, monkeypatch, next_turn):
-    from ingetrazo_core import progress
+    from built_core import progress
     from formats import dxf_out
     s = _tagged_wall_scene()
     vp = SimpleNamespace(history=History(s), scene=s, camera=OrbitCamera())
@@ -220,7 +220,7 @@ def test_running_export_observes_cancellation(tmp_path, monkeypatch, next_turn):
 
 @pytest.mark.parametrize("one_off", [True, False], ids=["export", "delivery"])
 def test_svg_sheet_previews_the_page_it_writes(one_off, tmp_path, monkeypatch, next_turn, native_host):
-    from ingetrazo_render import chrome_sheet as sheet
+    from built_render import chrome_sheet as sheet
 
     scene = _tagged_wall_scene()
     camera = OrbitCamera()
@@ -278,6 +278,6 @@ def test_svg_sheet_previews_the_page_it_writes(one_off, tmp_path, monkeypatch, n
         list(deliveries.write_steps(scene, record, camera=camera))
     text = deliveries.preview_svg(scene, record, camera=camera)
     assert text == target.read_text() and "<path" in text
-    from ingetrazo_render import svg_preview
+    from built_render import svg_preview
     w, h, rgba = svg_preview(text)
     assert (w, h) == (800, 566) and len(rgba) == w * h * 4

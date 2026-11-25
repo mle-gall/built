@@ -7,12 +7,12 @@ from types import SimpleNamespace
 
 import pytest
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.scene import Scene
 from core.layers import Layer
 from core.materials import Material
-from ingetrazo_core.kept_components import definitions_of
+from built_core.kept_components import definitions_of
 from core.bim_registry import get
 from formats.rfa import apply_payload, read_rfa, RfaImport, ZONE_TAG_KEY
 
@@ -20,7 +20,7 @@ from formats.rfa import apply_payload, read_rfa, RfaImport, ZONE_TAG_KEY
 def payload():
     part = dict(solid=112, material='steel', style='clear', hidden=False, zone=False,
                 positions=[0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0], indices=[0, 1, 2, 0, 2, 3])
-    return {'schema': 'ingetrazo.rfa/1', 'source': {'file_name': 'cabinet.rfa'},
+    return {'schema': 'built.rfa/1', 'source': {'file_name': 'cabinet.rfa'},
             'family': {'name': 'Cabinet', 'category': 'Electrical Equipment', 'omniclass': '23.80.30.11.17'},
             'materials': {'steel': {'name': 'Steel', 'rgb': [250, 243, 227], 'transparency': 0}},
             'styles': {'clear': {'subcategory': 'Clearance'}},
@@ -92,7 +92,7 @@ def test_created_tag_has_key_and_undo_redo():
 
 
 def test_missing_module(monkeypatch):
-    monkeypatch.setitem(sys.modules, 'ingetrazo_rfa', None)
+    monkeypatch.setitem(sys.modules, 'built_rfa', None)
     with pytest.raises(RuntimeError, match='scripts/build_native.sh'):
         read_rfa('unused.rfa')
 
@@ -102,14 +102,14 @@ def test_reader_contract(monkeypatch):
     def read(path):
         seen.append(path)
         return json.dumps(payload())
-    monkeypatch.setitem(sys.modules, 'ingetrazo_rfa', SimpleNamespace(read_family=read))
+    monkeypatch.setitem(sys.modules, 'built_rfa', SimpleNamespace(read_family=read))
     assert read_rfa('test.rfa') == payload()
     assert seen == ['test.rfa']
 
 
 def test_thumbnail():
-    from ingetrazo_render import component_thumbnail
-    from ingetrazo_render import SurveyRaster
+    from built_render import component_thumbnail
+    from built_render import SurveyRaster
     image = SurveyRaster(16, 16, bytes([255, 0, 0, 255]) * 256)
     p = payload()
     p['preview_png_base64'] = base64.b64encode(image.png()).decode()
@@ -146,8 +146,8 @@ def test_persistence(tmp_path):
 
 
 def test_menu_dispatch_and_report(native_window, monkeypatch, tmp_path):
-    from ingetrazo_render.shell_files import IMPORTS
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render.shell_files import IMPORTS
+    from built_render.shell_files import ShellFileDialog
     from formats import rfa
 
     win = native_window
@@ -155,7 +155,7 @@ def test_menu_dispatch_and_report(native_window, monkeypatch, tmp_path):
     path = tmp_path / "test.rfa"
     path.touch()
     monkeypatch.setattr(rfa, "read_rfa", lambda path: payload())
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.information", lambda parent, title, text: reports.append(text))
+    monkeypatch.setattr("built_render.chrome_dialogs.information", lambda parent, title, text: reports.append(text))
     monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *args, **kwargs: (str(path), ""))
     assert ".rfa" in IMPORTS
     win._host.menu("import:rfa")

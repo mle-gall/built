@@ -20,7 +20,7 @@ from tests.shell_isolation import native_window, restore_shell_patches  # noqa: 
 
 from tests.controller_surface import live_image
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 
 AMARILLO = (1.0, 0.85, 0.0)

@@ -1,12 +1,12 @@
 """Modelling commands and Browser selection in one native document."""
-from ingetrazo_core import Vec3
-from ingetrazo_core import group_scale
+from built_core import Vec3
+from built_core import group_scale
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from tests.native_tree import action
 from tests.test_project_drawing_filters import Project
-from ingetrazo_render import ask_scale
-from ingetrazo_render import chrome_forms
-from ingetrazo_render import context_menu_build, context_menu_run
+from built_render import ask_scale
+from built_render import chrome_forms
+from built_render import context_menu_build, context_menu_run
 
 
 def test_shared_menus_and_dock_selection(native_question_host, monkeypatch):
@@ -47,7 +47,7 @@ def test_shared_menus_and_dock_selection(native_question_host, monkeypatch):
     action(host, "pickrow", key)
     assert group in scene.selection
 
-    from ingetrazo_render import chrome_dialogs
+    from built_render import chrome_dialogs
     monkeypatch.setattr(chrome_dialogs, "in_shell", lambda: True)
     ask_scale(win, group)
     form = chrome_forms.current(win)

@@ -4,14 +4,14 @@
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from ingetrazo_core import placement_transform
+from built_core import placement_transform
 from core.group import Group, copy_group, world_mesh
 from core.history import (ExplodeGroupCommand, ExplodeViewCommand,
                           MoveGroupCommand, SplitIntoPiecesCommand)
 from core.mesh import Mesh
-from ingetrazo_core.parts import part_points
+from built_core.parts import part_points
 from core.scene import Scene
 
 

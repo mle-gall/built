@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """The camera's pose and projection moved to Rust
-(``rust/ingetrazo_core/src/sheets/camera.rs``'s ``Cam``, the one the sheets
+(``rust/built_core/src/sheets/camera.rs``'s ``Cam``, the one the sheets
 already used) and must answer bit for bit as ``core/camera.py``'s Python
 did at ``74b54c81``.
 
@@ -27,7 +27,7 @@ def cameras():
     """Seeded cameras: standard views, random poses, far from the origin,
     parallel and perspective, two-point, shifted, rolled, clipped, with a
     depth reach, and fitted to boxes."""
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from core.camera import OrbitCamera
     rng = random.Random(20261124)
     out = []
@@ -127,7 +127,7 @@ def test_the_cached_fields_follow_every_change():
     field set, a copy, a pickle all read as the camera they are."""
     import copy
     import pickle
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from core.camera import OrbitCamera
     c = OrbitCamera()
     first = list(c.view_matrix().data())

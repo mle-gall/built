@@ -4,7 +4,7 @@
 from pathlib import Path
 import sys
 
-from ingetrazo_core import Vec3
+from built_core import Vec3
 import pytest
 
 from core.group import Group
@@ -43,15 +43,15 @@ def test_close_during_the_load_unwinds_it_and_closes(doc, tmp_path, command):
     if sys.platform != "darwin" or not binary.is_file():
         pytest.skip("requires the macOS release shell")
     profile = tmp_path / "settings"
-    plugin = profile / "data/ingetrazo/plugins/paused_reader.py"
+    plugin = profile / "data/built/plugins/paused_reader.py"
     plugin.parent.mkdir(parents=True)
     # Keep the second worker at a progress boundary independently of CPU speed.
     # The real open job still creates, polls, cancels and releases the worker.
     plugin.write_text("""from pathlib import Path
-import ingetrazo_core
+import built_core
 
 def setup(app):
-    reader = ingetrazo_core.DocumentOpen
+    reader = built_core.DocumentOpen
 
     class HeldReader:
         def __init__(self, worker):
@@ -71,7 +71,7 @@ def setup(app):
         worker = reader(path, *args, **kwargs)
         return HeldReader(worker) if Path(path).name == "plan.igz" else worker
 
-    ingetrazo_core.DocumentOpen = start
+    built_core.DocumentOpen = start
 """)
     script = tmp_path / "close.txt"
     # Start from a real window, then close during a worker open. A lost close
@@ -88,7 +88,7 @@ def setup(app):
 
 
 def test_cancelling_the_job_during_the_load_keeps_the_window(native_host, doc, monkeypatch):
-    from ingetrazo_render.chrome_dialogs import ChromeBar
+    from built_render.chrome_dialogs import ChromeBar
     win = native_host.window
     bar = ChromeBar(win, "Opening")
     monkeypatch.setattr(win, "_import_progress", lambda *a, **kw: (bar, lambda *a: None))
@@ -110,7 +110,7 @@ def test_cancelling_the_job_during_the_load_keeps_the_window(native_host, doc, m
 
 
 def test_the_bar_closing_after_the_load_leaves_the_window_open(native_host, doc, monkeypatch):
-    from ingetrazo_render.chrome_dialogs import ChromeBar
+    from built_render.chrome_dialogs import ChromeBar
     win = native_host.window
     bar = ChromeBar(win, "Opening")
     monkeypatch.setattr(win, "_import_progress", lambda *a, **kw: (bar, lambda *a: None))
@@ -121,7 +121,7 @@ def test_the_bar_closing_after_the_load_leaves_the_window_open(native_host, doc,
 
 def test_a_failed_open_does_not_cut_the_next_one(native_host, doc, monkeypatch):
     with monkeypatch.context() as patch:
-        patch.setattr("ingetrazo_render.chrome_dialogs.critical", lambda *a, **kw: None)
+        patch.setattr("built_render.chrome_dialogs.critical", lambda *a, **kw: None)
         def broken(scene, path, progress):
             progress(0.5, "Loading")
             raise ValueError("corrupt")

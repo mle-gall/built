@@ -12,10 +12,10 @@ import pytest  # noqa: E402
 from tests.native_tree import action, inspector
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from views.wgpu_ui import _edit
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Vec3 as V
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Vec3 as V
 
-from ingetrazo_core.curve_segments import ResegmentCurveCommand, read_curve  # noqa: E402
+from built_core.curve_segments import ResegmentCurveCommand, read_curve  # noqa: E402
 from tools.base import ToolContext  # noqa: E402
 from tools.circle import CircleTool, PolygonTool  # noqa: E402
 from tools.rust_tools import RectangleTool  # noqa: E402

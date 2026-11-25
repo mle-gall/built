@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections import Counter
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.edits import build_add_edge, divide_edges
 from core.history import EraseSelectionCommand, History, SnapshotMutation

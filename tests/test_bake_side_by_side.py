@@ -139,7 +139,7 @@ def _lazy_mesh(tmp_path):
 
 class _Vp:
     DEFAULT_FACE_COLOR = (0.8, 0.8, 0.8)
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     _LIGHT = QVector3D(0.3, 0.5, 0.8).normalized()
 
 

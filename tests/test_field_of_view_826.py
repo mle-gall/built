@@ -5,12 +5,12 @@ while the composer frames already offered 10°–120°. Camera ▸ Field of
 View… sets it; the document and its scenes keep it."""
 from __future__ import annotations
 
-from ingetrazo_core.saved_views import SavedView
+from built_core.saved_views import SavedView
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 def test_field_of_view_is_set_kept_and_reset(tmp_path):
-    from ingetrazo_render import Host
+    from built_render import Host
     host = Host(0, 900, 600, 1., settings=str(tmp_path / "profile"))
     win = host.window
     win.new_document()

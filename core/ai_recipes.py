@@ -2,9 +2,9 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """The recipe book the model reads — ONE text behind the two AI doors.
 
-IngeTrazo has two of them: the in-app Asistente IA (``plugins/ai_assistant``,
+Built has two of them: the in-app Asistente IA (``plugins/ai_assistant``,
 which pastes this into its system prompt) and the MCP bridge
-(``scripts/ingetrazo_mcp``, which pastes it into ``run_python``'s description
+(``scripts/built_mcp``, which pastes it into ``run_python``'s description
 and the handshake's ``instructions``). They drifted: the assistant's prompt
 taught ``revolve``/``extrude``/``house`` and ``f.attrs["color"]``, the MCP
 description taught ``mesh.add_face`` and nothing else.

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The actual bridge: IngeTrazo .ifc → IngePresupuestos importer → partidas.
+"""The actual bridge: Built .ifc → IngePresupuestos importer → partidas.
 
 Loads the sibling repo's real ``parse_ifc`` (regex STEP parser) by file path
 and asserts the budget quantities arrive EXACT in the units the estimator
@@ -12,8 +12,8 @@ import importlib.util
 from pathlib import Path
 
 import pytest
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Vec3 as QVector3D
 
 from core.bim import next_object_id, tag_faces
 from core.edits import build_add_edges

@@ -17,13 +17,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.camera import OrbitCamera
 from core.composition import MarcoVista, apply_frame_camera
 from core.hlr import KIND_CUT, hlr_drawing
 from core.scene import Scene
-from ingetrazo_core.section import SectionPlane
+from built_core.section import SectionPlane
 
 V = QVector3D
 

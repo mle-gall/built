@@ -20,8 +20,8 @@ fn run(profile: Option<&str>, gestures: &str) -> Vec<Value> {
     let home = temporary_directory();
     let settings = temporary_directory();
     if let Some(profile) = profile {
-        fs::create_dir(settings.join("IngeTrazo")).unwrap();
-        fs::write(settings.join("IngeTrazo/IngeTrazo.ini"), profile).unwrap();
+        fs::create_dir(settings.join("Built")).unwrap();
+        fs::write(settings.join("Built/Built.ini"), profile).unwrap();
     }
     let script = home.join("gestures.txt");
     fs::write(&script, gestures).unwrap();

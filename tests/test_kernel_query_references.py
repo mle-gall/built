@@ -3,7 +3,7 @@ import hashlib
 import json
 import random
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core import edits, snap, topology
 from core.mesh import Mesh
@@ -133,7 +133,7 @@ def test_materialised_classification_reference(monkeypatch):
 
 
 def test_unscanned_plane_reference(monkeypatch):
-    from ingetrazo_core import scan_index
+    from built_core import scan_index
     monkeypatch.setattr(scan_index, 'scan', lambda mesh: None)
     assert digest(plane_rows()) == '62103ffd8bfc2113d099e27a5b34c4b8a7bd5d480d1cfcefe31a117aebe77d76'
 
@@ -210,7 +210,7 @@ def test_plane_tolerance_and_small_input():
 
 
 def test_unscanned_rebuild_face_limit(monkeypatch):
-    from ingetrazo_core import scan_index
+    from built_core import scan_index
     monkeypatch.setattr(scan_index, 'scan', lambda mesh: None)
     scene = Scene()
     for i in range(400):

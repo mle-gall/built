@@ -74,7 +74,7 @@ quit
     assert (single["model_layout"], single["view_targets"]) == ("single", 1)
     # Sample the window framebuffer, within each pane and outside the chrome.
     # Both views must contain geometry with a different rendered silhouette.
-    from ingetrazo_render import reference_texture
+    from built_render import reference_texture
     import numpy as np
     width, height, pixels = reference_texture(tmp_path / "split.png", 1280)
     assert (width, height) == (1280, 800)
@@ -90,7 +90,7 @@ quit
     ("two_wide", [1, 0]), ("two_stacked", [1, 3]),
 ])
 def test_model_area_is_partitioned_once(preset, ids):
-    from ingetrazo_render import ModelViews
+    from built_render import ModelViews
     views = ModelViews()
     views.choose(preset)
     panes = views.arrange(160, 100, [-0.5, -0.5, 0.75, 0.5])
@@ -102,7 +102,7 @@ def test_model_area_is_partitioned_once(preset, ids):
 
 
 def test_saved_split_fractions_and_invalid_legacy_values():
-    from ingetrazo_render import ModelViews
+    from built_render import ModelViews
     views = ModelViews()
     views.restore({"layout": "four", "columns": 0.6, "rows": [0.25, 0.75]})
     assert views.arrange(300, 400, [-1., -1., 1., 1.]) == [
@@ -118,8 +118,8 @@ def test_saved_split_fractions_and_invalid_legacy_values():
 
 
 def test_native_open_save_keeps_the_classic_views_home(tmp_path):
-    from ingetrazo_render import Host
-    from ingetrazo_render import shell_files as files
+    from built_render import Host
+    from built_render import shell_files as files
     from formats import igz
     from core.scene import Scene
     scene = Scene()

@@ -1,7 +1,7 @@
 """The keyed rebuilds preserve geometry, winding, paint, dirty counts and selection ownership."""
 import pytest
 
-from ingetrazo_core import MeshStore, Vec3
+from built_core import MeshStore, Vec3
 from core.history import RebuildPlaneFacesCommand
 from core.scene import Scene
 from tests.test_store_mesh import fingerprint

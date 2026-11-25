@@ -1,11 +1,11 @@
-# IngeTrazo architecture
+# Built architecture
 
 This is an early-stage document. Expect it to grow as the codebase does.
 
 ## High-level layout
 
 ```
-ingetrazo/
+built/
 ├── main.py            ← Qt application entry point
 ├── core/              ← scene graph, camera, geometry primitives, layers
 ├── views/             ← Qt widgets: main window, viewport, panels

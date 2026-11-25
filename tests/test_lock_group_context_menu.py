@@ -8,9 +8,9 @@ on its own (as a locked reference image's does) and offer Unlock."""
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_render import context_menu_build, context_menu_run
+from built_render import context_menu_build, context_menu_run
 from core.group import Group  # noqa: E402
 from core.history import NativeCommand  # noqa: E402
 from core.layers import Layer  # noqa: E402

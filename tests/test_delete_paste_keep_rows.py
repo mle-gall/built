@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 
 def _prisma(n=12, r=1.0, h=2.0):
@@ -203,7 +203,7 @@ def test_the_library_reads_only_new_or_repainted_meshes(native_host, monkeypatch
     from core import geometry_arrays
     from core.group import copy_group
     from core.history import DeleteGroupCommand, InsertGroupCommand, SetFaceColorCommand
-    from ingetrazo_render import wgpu_library as lib
+    from built_render import wgpu_library as lib
 
     win = native_host.window
     vp, _, _, plain, _ = _scene(win)
@@ -242,7 +242,7 @@ def test_the_library_reads_only_new_or_repainted_meshes(native_host, monkeypatch
 
 def test_unchanged_swatches_and_component_rows_keep_their_keys(native_host):
     from core.history import DeleteGroupCommand
-    from ingetrazo_render import wgpu_library as lib
+    from built_render import wgpu_library as lib
 
     win = native_host.window
     vp, gs, _, _, _ = _scene(win)

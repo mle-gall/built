@@ -6,8 +6,8 @@ an edge takes its connected run (open polyline or closed loop), and edges
 selected before picking the tool up are the run — the two usual ways."""
 from __future__ import annotations
 
-from ingetrazo_core import ScreenPoint, Input
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint, Input
+from built_core import Vec3 as QVector3D
 
 from core.history import History
 from core.offset import offset_chain

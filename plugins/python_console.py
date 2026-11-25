@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Ahsan Mehmood (OpenSKP) — IngeTrazo plugin contribution.
+# Copyright (C) 2026 Ahsan Mehmood (OpenSKP) — Built plugin contribution.
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Python Console plugin — a live REPL over the open document.
 
 The classic scripting console: inspect the model, script geometry,
 prototype the next plugin — against the running application, no restart.
 
-What makes this one a good citizen of IngeTrazo (and where it differs from
+What makes this one a good citizen of Built (and where it differs from
 the original contribution, PR #3):
 
 - **Every execution runs as a Command** (:class:`core.history.SnapshotImport`
@@ -33,9 +33,9 @@ import sys
 import traceback
 from pathlib import Path
 
-from ingetrazo_core.history import SnapshotImport
-from ingetrazo_core.i18n import tr
-from ingetrazo_render.shell_files import ShellFileDialog
+from built_core.history import SnapshotImport
+from built_core.i18n import tr
+from built_render.shell_files import ShellFileDialog
 from tools.base import Tool
 
 
@@ -43,10 +43,10 @@ class _ConsoleExecution:
     def _refresh_scope(self) -> None:
         """Re-bind the live objects: always the CURRENT document, not the one
         open when the console appeared (documents change under New/Open)."""
-        from ingetrazo_core import Vec3 as QVector3D
+        from built_core import Vec3 as QVector3D
         from core import bim
         from core.group import Group
-        from ingetrazo_core.mesh import Edge, Face, Mesh, Vertex
+        from built_core.mesh import Edge, Face, Mesh, Vertex
         from core.scene import Scene
 
         vp = self._viewport

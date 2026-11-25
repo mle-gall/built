@@ -7,13 +7,13 @@ copiar esa muestra… y aplicarlo a otra cara»). Coplanar faces keep the
 map itself, as before."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
 from core.texture import face_uv_axes
-from ingetrazo_core import paint_face_plane, texture_commands
+from built_core import paint_face_plane, texture_commands
 
 
 def _floor_and_wall():
@@ -41,15 +41,15 @@ def _positioned(sw=0.5, sh=0.5, scale=2.0, rot_deg=90.0):
 
 def test_placement_reads_scale_and_turn_off_the_map():
     tex = _positioned()
-    sw, sh, rot = ingetrazo_core.texture_placement_of(tex, QVector3D(0, 0, 1))
+    sw, sh, rot = built_core.texture_placement_of(tex, QVector3D(0, 0, 1))
     assert sw == pytest.approx(1.0) and sh == pytest.approx(1.0)
     assert rot == pytest.approx(90.0)
-    flat = ingetrazo_core.texture_flattened(tex, QVector3D(0, 0, 1))
+    flat = built_core.texture_flattened(tex, QVector3D(0, 0, 1))
     assert "uvw" not in flat and flat["sw"] == pytest.approx(1.0)
     assert flat["rot"] == pytest.approx(90.0)
     # No map: nothing to read.
-    assert ingetrazo_core.texture_placement_of({"path": "x.png"}, QVector3D(0, 0, 1)) is None
-    assert ingetrazo_core.texture_flattened({"path": "x.png", "sw": 0.3}, QVector3D(0, 0, 1)) \
+    assert built_core.texture_placement_of({"path": "x.png"}, QVector3D(0, 0, 1)) is None
+    assert built_core.texture_flattened({"path": "x.png", "sw": 0.3}, QVector3D(0, 0, 1)) \
         == {"path": "x.png", "sw": 0.3}
 
 

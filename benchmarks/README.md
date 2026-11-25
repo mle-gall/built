@@ -74,7 +74,7 @@ python scripts/bench_interaction.py --compare before.json after.json
 ```
 
 It opens a real window (the machine should be otherwise idle), uses its
-own settings (`IngeTrazo-bench`, autosave off) and the GL format `main.py`
+own settings (`Built-bench`, autosave off) and the GL format `main.py`
 asks for. Vsync is off by default: with it every frame waits for the
 monitor's refresh (13.3 ms at 75 Hz), a floor that hides the cost under it;
 `--vsync` puts it back.

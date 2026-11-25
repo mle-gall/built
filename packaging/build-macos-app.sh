@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 #
-# Build the IngeTrazo macOS artifacts: a double-clickable .app and a
+# Build the Built macOS artifacts: a double-clickable .app and a
 # distributable .dmg wrapping it with a drag-to-Applications shortcut.
 #
 #     packaging/build-macos-app.sh [outdir]
@@ -12,12 +12,12 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 OUT=${1:-$ROOT/dist}
-WORK=${INGETRAZO_BUILD_DIR:-$ROOT/build}
+WORK=${BUILT_BUILD_DIR:-${INGETRAZO_BUILD_DIR:-$ROOT/build}}
 PYTHON=${PYTHON:-$ROOT/venv/bin/python}
 ARCH=$(uname -m)   # arm64 or x86_64 — whichever Mac builds it
 
 cd "$ROOT"
-VERSION=$("$PYTHON" -c 'from ingetrazo_core.version import __version__; print(__version__)')
+VERSION=$("$PYTHON" -c 'from built_core.version import __version__; print(__version__)')
 APP="$OUT/Built.app"
 DMG="$OUT/Built-$VERSION-macos-$ARCH.dmg"
 

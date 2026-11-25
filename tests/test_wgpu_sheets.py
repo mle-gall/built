@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from core.composition import MarcoVista
-from ingetrazo_core.saved_views import SavedView
+from built_core.saved_views import SavedView
 
 
 def test_offscreen_size_and_live_camera_unchanged(monkeypatch):
@@ -33,10 +33,10 @@ def test_offscreen_size_and_live_camera_unchanged(monkeypatch):
     view.source_viewport = source
     view.renderer = Renderer()
     view._scene_dirty = False
-    from ingetrazo_core.section import SectionPlane
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core.section import SectionPlane
+    from built_core import Vec3 as QVector3D
     source.scene.section_planes = [SectionPlane(QVector3D(), QVector3D(1,0,0), active=True)]
-    from ingetrazo_core import pack_scene
+    from built_core import pack_scene
     view.packed = pack_scene(source.scene)
     before = dict(source.camera.__dict__)
     image = view.render_image(123, 47)
@@ -48,7 +48,7 @@ def test_offscreen_size_and_live_camera_unchanged(monkeypatch):
 
 def test_scene_recall_updates_metal_layers_camera_style_and_filter(native_host):
     from core.layers import Layer
-    from ingetrazo_core.style import Style
+    from built_core.style import Style
     from tests.scene_controls import choose
     win = native_host.window
     vp = win.viewport

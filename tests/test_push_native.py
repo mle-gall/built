@@ -2,10 +2,10 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Push/pull's native passes must leave every decision where Python puts it.
 
-The orientation pass (``ingetrazo_core.orient.orient_outward``, now
-``ingetrazo_core.orient_decision``) and the push tool's searches over the
+The orientation pass (``built_core.orient.orient_outward``, now
+``built_core.orient_decision``) and the push tool's searches over the
 whole mesh (``core.push_scans``) run natively whenever the scans do; with
-``scan_index._forced_off`` (``INGETRAZO_SCANS=0``) the original Python runs:
+``scan_index._forced_off`` (``BUILT_SCANS=0``) the original Python runs:
 that is the oracle here.
 
 - the pieces the native orientation reproduces bit for bit: Python's random
@@ -26,7 +26,7 @@ that is the oracle here.
   store on and off: the same model at the end.
 """
 from __future__ import annotations
-from ingetrazo_core import store_views
+from built_core import store_views
 
 import os
 import random
@@ -36,14 +36,14 @@ import numpy as np
 import pytest
 from pathlib import Path
 from tests import fuzz
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 import core._native as _native
 from core import mesh as M
-from ingetrazo_core import orient as O
+from built_core import orient as O
 from core import push_scans
-from ingetrazo_core import scan_index
-from ingetrazo_core import store_mesh as S
+from built_core import scan_index
+from built_core import store_mesh as S
 
 mod = _native.native
 pytestmark = pytest.mark.skipif(

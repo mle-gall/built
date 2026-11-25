@@ -10,12 +10,12 @@ componente que se coloca con un clic, con sus grupos, materiales y capas.
 from __future__ import annotations
 
 
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, iter_placements, placement_points
 from core.history import History
-from ingetrazo_core.document_insert import (component_from_scene, ensure_layers,
+from built_core.document_insert import (component_from_scene, ensure_layers,
                          import_document_as_component, merge_materials)
 from core.layers import Layer, assign_layer
 from core.materials import Material
@@ -63,7 +63,7 @@ def test_un_face_me_del_archivo_entra_y_solo_se_queda_fuera_el_muneco():
     cornisa es un face-me con su foto. Solo el muñeco de escala de la app
     se queda fuera — por nombre, o por su imagen cuando el archivo es viejo
     y no trae nombres."""
-    from ingetrazo_core.document_insert import is_scale_figure
+    from built_core.document_insert import is_scale_figure
     src = Scene()
     arco = Group(_cuadrado(Mesh()), name="Arco")
     toro = Group(Mesh(), name="Group 24")
@@ -238,7 +238,7 @@ def test_un_documento_importado_se_sostiene_por_su_origen():
 def test_un_face_me_colocado_por_matriz_se_dibuja_donde_esta_colocado():
     """El torito dentro del arco llega al dibujo como proxy con la matriz
     del arco; leyendo la malla cruda salía en el origen del archivo."""
-    from ingetrazo_core import Vec3 as Q
+    from built_core import Vec3 as Q
     from tests.controller_surface import ControllerSurface as Viewport
 
     class _Cam:

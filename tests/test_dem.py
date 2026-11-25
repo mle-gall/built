@@ -9,8 +9,8 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
-from ingetrazo_render import SurveyRaster
-from ingetrazo_core import Vec3 as QVector3D
+from built_render import SurveyRaster
+from built_core import Vec3 as QVector3D
 
 from georef.datum import SceneDatum
 from georef.dem import (

@@ -7,7 +7,7 @@ that no longer existed. Now the chain steps back one vertex; with only the
 first point placed, the point is let go."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.history import History
 from core.scene import Scene

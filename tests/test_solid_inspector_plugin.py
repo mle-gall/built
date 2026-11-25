@@ -5,10 +5,10 @@
 The verdicts and volumes come from the same primitives the BIM layer
 uses, so whatever this dialog says must match what the takeoff would do."""
 from __future__ import annotations
-from ingetrazo_core import store_views
+from built_core import store_views
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from tests.solid_fixture import _box, _top
@@ -56,7 +56,7 @@ def test_stray_edge_detected():
 
 def test_internal_wall_is_overconnected_but_interior_flag_heals():
     """Two boxes sharing a wall: the shared edges see 3 faces —
-    overconnected. Marked interior (what ingetrazo_core.orient does), the wall stops
+    overconnected. Marked interior (what built_core.orient does), the wall stops
     counting and the union is watertight again — same rule as the engine."""
     mesh = Mesh()
     _box(mesh, dx=2.0)
@@ -160,9 +160,9 @@ def test_tool_metadata_and_singleton(win, monkeypatch):
 
 # ---- Faces: internal and reversed -------------------------------------------
 
-from ingetrazo_core import Matrix4 as QMatrix4x4
+from built_core import Matrix4 as QMatrix4x4
 
-from ingetrazo_core.orient import signed_volume                             # noqa: E402
+from built_core.orient import signed_volume                             # noqa: E402
 from plugins.solid_inspector import (                             # noqa: E402
     RepairSolidsCommand, _problem_text, internal_faces, is_sound,
     problem_items, repair_mesh, reversed_faces)
@@ -210,7 +210,7 @@ def test_inside_out_box_has_every_face_reversed():
 def test_only_the_wrong_piece_is_asked(monkeypatch):
     """Sound pieces are settled by the cheap checks; the parity pass sees
     only the piece that needs it (it costs seconds on big models)."""
-    import ingetrazo_core.orient
+    import built_core.orient
     mesh = Mesh()
     _box(mesh)                                  # sound
     _box(mesh, x0=5.0)                          # inside out
@@ -218,13 +218,13 @@ def test_only_the_wrong_piece_is_asked(monkeypatch):
     for f in wrong:
         f.loop.reverse()
     asked = []
-    real = ingetrazo_core.orient.orient_outward
+    real = built_core.orient.orient_outward
 
     def spy(m, *a, **k):
         asked.append(len(m.faces))
         return real(m, *a, **k)
 
-    monkeypatch.setattr(ingetrazo_core.orient, "orient_outward", spy)
+    monkeypatch.setattr(built_core.orient, "orient_outward", spy)
     assert set(reversed_faces(mesh)) == set(wrong)
     assert asked == [6]
     for f in wrong:
@@ -678,7 +678,7 @@ def test_refresh_does_not_move_the_camera(win):
 
 
 def _count_colour(vp, dlg, kind):
-    from ingetrazo_render import AnnotationCanvas
+    from built_render import AnnotationCanvas
     from views.wgpu_overlay import paint_layer
     canvas = AnnotationCanvas(800, 600, 800.)
     paint_layer(canvas, list(dlg.overlay(vp)))
@@ -827,7 +827,7 @@ def test_showing_the_tab_again_unchanged_does_not_inspect_again(win, monkeypatch
 @pytest.mark.parametrize("edit", ["topology", "attribute", "geometry_version"])
 def test_same_count_group_edit_invalidates_inspection(win, monkeypatch, backend, edit):
     import plugins.solid_inspector as si
-    from ingetrazo_core import mesh as meshes, store_mesh
+    from built_core import mesh as meshes, store_mesh
     mesh = Mesh()
     if backend == "store":
         from core._native import available

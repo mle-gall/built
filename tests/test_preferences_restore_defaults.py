@@ -5,10 +5,10 @@ fresh profile gets; OK saves that, Cancel still touches nothing, and the
 language, the AI Assistant and the shortcuts stay as they were."""
 from __future__ import annotations
 
-from ingetrazo_core.settings import settings
+from built_core.settings import settings
 from tests.preferences_chrome import Controls
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_render import chrome_forms
+from built_render import chrome_forms
 
 
 def _customised():
@@ -66,7 +66,7 @@ def test_ok_stays_the_highlighted_button_after_restoring(native_host):
 
 
 def test_restore_puts_every_control_back_to_its_default(native_host):
-    from ingetrazo_render.ndof import AXES
+    from built_render.ndof import AXES
     _customised()
     ui = Controls(native_host.window, "import")
     assert ui.value("dxf_unit") == "in"
@@ -127,7 +127,7 @@ def test_cancel_after_restore_touches_nothing(native_host):
 
 def test_restore_does_not_copy_the_document_units_to_new_documents(native_host):
     from core import units
-    from ingetrazo_render.settings_sheet import SettingsSheet
+    from built_render.settings_sheet import SettingsSheet
 
     win = native_host.window
     units.apply_units(win.viewport.scene, {"length": "ft", "precision": 2})

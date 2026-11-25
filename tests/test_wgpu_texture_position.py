@@ -3,17 +3,17 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import ScreenPoint as QPointF
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Input as Qt
+from built_core import ScreenPoint as QPointF
+from built_core import Vec3 as QVector3D
 
 from core.group import Group
 from core.mesh import Mesh
 from tools.base import ToolContext
 from tools.texture_position import TexturePositionTool
 from views.wgpu_overlay import rasterize, pixels
-from ingetrazo_core import pack_scene
-from ingetrazo_core import InstanceUpdates
+from built_core import pack_scene
+from built_core import InstanceUpdates
 from tests.test_wgpu_mesh_tools import harness
 
 

@@ -21,9 +21,9 @@ isolated() {
         BUILT_SETTINGS_DIR="$PROFILE/settings" BUILT_BACKGROUND=1 "$@"
 }
 
-isolated "$PYTHON" -c 'import PyInstaller, ifcopenshell, ingetrazo_core, ingetrazo_render'
+isolated "$PYTHON" -c 'import PyInstaller, ifcopenshell, built_core, built_render'
 if [[ -d "$ROOT/../rvt-rs" ]]; then
-    isolated "$PYTHON" -c 'import ingetrazo_rfa' || {
+    isolated "$PYTHON" -c 'import built_rfa' || {
         echo "The sibling rvt-rs checkout is present. Run scripts/build_native.sh to install its reader." >&2
         exit 1
     }
@@ -50,7 +50,6 @@ install_name_tool -change "$LIB" '@executable_path/../Frameworks/Python' "$EXE"
 /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable built' "$APP/Contents/Info.plist"
 # The collector supplies the embedded Python libraries. The signed product
 # has a single executable entry point.
-rm "$APP/Contents/MacOS/ingetrazo"
 codesign -f -s - "$APP"
 codesign --verify --deep --strict "$APP"
 BUILT_BACKGROUND=1 "$PYTHON" scripts/isolated_launch.py "$EXE" --check

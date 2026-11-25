@@ -15,7 +15,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 
 def _box(x0=0.0, y0=0.0, s=1.0, curved=False):
@@ -153,7 +153,7 @@ def test_the_library_keeps_its_material_scan_when_entering_and_leaving_a_group(n
     from core import geometry_arrays
     from core.group import Group
     from core.history import SetFaceColorCommand
-    from ingetrazo_render import wgpu_library as lib
+    from built_render import wgpu_library as lib
 
     win = native_host.window
     vp = win.viewport

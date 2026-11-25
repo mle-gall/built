@@ -16,7 +16,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 import views.document_interaction as viewport_mod  # noqa: E402
 from tests.test_lazy_native_snap import (  # noqa: E402
@@ -141,7 +141,7 @@ def test_the_rays_it_cannot_call_are_asked_as_before(win, monkeypatch):
 
 def test_xray_answers_at_once_and_a_cut_is_left_to_the_batches(win,
                                                                monkeypatch):
-    from ingetrazo_core.style import Style
+    from built_core.style import Style
     vp = win
     _set_view(vp, VIEWS[0])
     pts = _points(np.random.default_rng(1), vp, 30)

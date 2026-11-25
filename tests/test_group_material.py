@@ -12,9 +12,9 @@
 from __future__ import annotations
 
 
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import ScreenPoint as QPointF
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Input as Qt
+from built_core import ScreenPoint as QPointF
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, copy_group, effective_material
 from core.history import (ExplodeGroupCommand, History,

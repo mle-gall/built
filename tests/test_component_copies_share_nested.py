@@ -9,7 +9,7 @@ component (Make Unique, Explode) stops sharing on the way out."""
 from __future__ import annotations
 
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.group import Group, copy_group, iter_placements
 from core.history import History, MakeComponentOfCommand, MakeNestedGroupCommand

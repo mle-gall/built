@@ -15,14 +15,14 @@ def test_background_picture_and_shortcuts_in_a_release_window(tmp_path):
     if sys.platform != "darwin" or not binary.is_file():
         pytest.skip("requires the macOS release shell")
     profile = tmp_path / "profile"
-    plugin = profile / "data/ingetrazo/plugins/tab_probe.py"
+    plugin = profile / "data/built/plugins/tab_probe.py"
     plugin.parent.mkdir(parents=True)
     plugin.write_text("""import json
 from pathlib import Path
 
 def setup(app):
     from core import units
-    from ingetrazo_core.settings import settings
+    from built_core.settings import settings
     win = app.window
     def hover(index):
         view = win.view
@@ -39,9 +39,9 @@ def setup(app):
             Path(__file__).with_suffix(".redrew").touch()
             raise AssertionError("rendered the model again for a tab preview")
         type(win.view).render_pixels = unexpected
-        from ingetrazo_render.keyboard_bindings import action_keys
-        from ingetrazo_render import shortcut_domains
-        from ingetrazo_render.settings_sheet import SettingsSheet
+        from built_render.keyboard_bindings import action_keys
+        from built_render import shortcut_domains
+        from built_render.settings_sheet import SettingsSheet
         sheet = SettingsSheet("keyboard")
         sheet._win = win
         actions = sheet.actions()

@@ -1,11 +1,11 @@
 """COLLADA export keeps the model's structure (groups, components, tags) and
-IngeTrazo reads its own .dae back as it was."""
+Built reads its own .dae back as it was."""
 from __future__ import annotations
 
 from tests.raster_samples import solid_raster
 import xml.etree.ElementTree as ET
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group
 from core.layers import Layer

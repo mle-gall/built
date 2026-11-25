@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import math
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.dimension import Dimension
 from core.group import Group
 from core.history import History, StraightenModelCommand, placement_rotation_deg
 from core.mesh import Mesh
-from ingetrazo_core.saved_views import SavedView
+from built_core.saved_views import SavedView
 from core.scene import Scene
 from formats import igz
 from georef.datum import SceneDatum

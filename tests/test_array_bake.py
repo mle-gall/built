@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import numpy as np
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 import core._native as _native
 from core import mesh as M

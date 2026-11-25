@@ -1,9 +1,9 @@
 """Sheets as a workspace of the Built window (sheet_workspace), headless.
 
-The native shell's host (ingetrazo_render.Host) runs the same view, chrome and input
+The native shell's host (built_render.Host) runs the same view, chrome and input
 code as the Qt app's Metal view; here it has no surface, so a recording
 renderer stands in for the Metal one. The page itself is native: its
-snapshot comes from the document (ingetrazo_core sheet_page_json), and
+snapshot comes from the document (built_core sheet_page_json), and
 picking, moving, resizing and placing are tested in Rust (ui/page.rs);
 here, that the adapter sends the page and runs the page's actions through
 the sheet's history. Settings go to tmp_path; the model is synthetic
@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 
 import pytest
-from ingetrazo_core import Input
+from built_core import Input
 from tests.shell_isolation import restore_shell_patches  # noqa: F401  (autouse)
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -127,8 +127,8 @@ class Recorder:
 
 @pytest.fixture
 def host(tmp_path, monkeypatch):
-    from ingetrazo_render import Host
-    from ingetrazo_render import sheet_workspace
+    from built_render import Host
+    from built_render import sheet_workspace
     monkeypatch.setattr(sheet_workspace, "FORCE", True)
     monkeypatch.syspath_prepend(str(ROOT / "scripts"))
     import sheets_fixture
@@ -150,7 +150,7 @@ def host(tmp_path, monkeypatch):
 
 
 def _ws(host):
-    from ingetrazo_render import sheet_workspace
+    from built_render import sheet_workspace
     return sheet_workspace.workspace_of(host.view)
 
 
@@ -163,7 +163,7 @@ def _sheets(host):
 
 
 def _act(host, arg):
-    from ingetrazo_render import sheet_workspace
+    from built_render import sheet_workspace
     sheet_workspace.action(host.window, arg)
     host.view.draw_frame()
 
@@ -233,7 +233,7 @@ def test_the_page_follows_the_document_and_only_then(host):
 
 def test_frames_show_the_vector_pass_and_the_renders(host, monkeypatch):
     import numpy as np
-    from ingetrazo_render import sheet_frames
+    from built_render import sheet_frames
     def drawing(source, frame):
         assert frame.style == "vectorial"
         return {"segs": np.array([[0, 0, 10, 0], [0, 0, 0, 5]], float), "kinds": np.array([0, 1], np.int8),
@@ -290,7 +290,7 @@ def test_a_shaded_frame_renders_into_the_page_without_touching_the_model(host):
     """The frame's camera and rows come from Rust; the live camera, the
     tags and the style stay as they are; the picture goes to the page."""
     import numpy as np
-    import ingetrazo_core as NATIVE
+    import built_core as NATIVE
     from core.composition import RENDER_DPI
     ws = _sheets(host)
     rec = host.view.renderer
@@ -358,7 +358,7 @@ def test_sheet_list_add_duplicate_rename_reorder_delete(host):
     assert rows[0][0] == first and rows[0][2] is True
 
 
-# ---- the inspector (ingetrazo_render sheet_inspector.rs) --------------------------------
+# ---- the inspector (built_render sheet_inspector.rs) --------------------------------
 def _set(host, model, **changes):
     import json
     _run_actions(host, f"sheets:set\x1f{model._doc_key}\x1f{json.dumps(changes)}")
@@ -389,9 +389,9 @@ def test_the_next_dimension_level_and_ground_line_take_the_last_look(host):
     kin): an edited look dresses the next item of its kind — never its
     units, never where its text sits along it — and the dimension's lasts
     into the next session, the others not."""
-    import ingetrazo_core as NATIVE
+    import built_core as NATIVE
     from core.composition import AddItemCommand
-    from ingetrazo_render import sheet_workspace
+    from built_render import sheet_workspace
     ws = _sheets(host)
     comp = ws.composer.comp
     scene = ws.composer._scene()
@@ -489,8 +489,8 @@ def test_keys_go_to_the_page_and_window_keys_stay_the_window_s(host):
     tool = type(host.viewport.active_tool).__name__
     host.key(True, Input.Key_L, 0, "l")
     assert type(host.viewport.active_tool).__name__ == tool
-    from ingetrazo_render import sheet_workspace
-    from ingetrazo_render import ShortcutOverride
+    from built_render import sheet_workspace
+    from built_render import ShortcutOverride
     assert not sheet_workspace.claims_key(host.view, ShortcutOverride(Input.Key_S, Input.ControlModifier, "s"))
     # ⌃Tab: back to the model.
     host.key(True, Input.Key_Tab, Input.MetaModifier)
@@ -590,7 +590,7 @@ def test_a_dimension_measured_on_the_page_is_bound_to_the_model(host):
     that frame's model points and holds them; one step of the history; the
     tool stays armed."""
     import numpy as np
-    from ingetrazo_render import sheet_frames
+    from built_render import sheet_frames
     ws = _sheets(host)
     comp = ws.composer
     plan = comp.comp.frames[0]
@@ -616,7 +616,7 @@ def test_a_bound_dimension_follows_its_frame_and_the_model(host):
     reprojected when the frame moves or rescales, and its ends follow the
     model's vertices when the model moves."""
     import numpy as np
-    from ingetrazo_render import sheet_frames
+    from built_render import sheet_frames
     ws = _sheets(host)
     comp = ws.composer
     plan = comp.comp.frames[0]
@@ -638,7 +638,7 @@ def test_a_bound_dimension_follows_its_frame_and_the_model(host):
     assert ct.dx_mm == pytest.approx(dx0 / 2.0) and ct.scale_n == plan.scale_n
     # The vertex under one end moves 0.6 m along x: that end goes with it.
     scene = comp._scene()
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     mesh = scene.mesh
     before = list(ct.a_world)
     v = next(v for v in mesh.vertices if np.allclose(v.position.toTuple(), before))
@@ -656,7 +656,7 @@ def test_a_frame_offers_and_draws_what_the_composer_did(host, tmp_path, case):
     """What a frame offers the drawing tools (snap points with their model
     points, edges, circles), its plan cut ring by ring with each ring's
     look, its model annotations and its DXF — worked out with the Rust
-    camera and geometry (ingetrazo_render.sheet_frames) — are what the
+    camera and geometry (built_render.sheet_frames) — are what the
     composer answered (goldens: scripts/sheet_frame_goldens.py, the scenes
     in tests/sheet_frame_cases.py)."""
     from tests.sheet_frame_cases import canon, native, set_up
@@ -682,7 +682,7 @@ def test_a_plan_cut_is_filled_with_its_layers_patterns(host):
     filled with their layers' patterns (sheets::hatching), brick and
     concrete, in the frame's display list."""
     from tests.sheet_frame_cases import plan_cut
-    from ingetrazo_render import sheet_frames
+    from built_render import sheet_frames
     ws = _sheets(host)
     plan = ws.composer.comp.frames[0]
     plan_cut(ws.composer._scene(), plan, True)
@@ -696,9 +696,9 @@ def test_the_page_draws_a_frame_s_annotations_and_follows_them(host):
     """The page draws a frame's model annotations over its content
     (page_frame_annots), with an extension's items, and again when the
     frame stops showing the model's dimensions."""
-    import ingetrazo_core as NATIVE
+    import built_core as NATIVE
     from tests.sheet_frame_cases import annotated
-    from ingetrazo_render import sheet_frames
+    from built_render import sheet_frames
     ws = _sheets(host)
     plan = ws.composer.comp.frames[0]
     annotated(ws.composer._scene(), plan, host.window)
@@ -728,7 +728,7 @@ def test_the_page_draws_a_frame_s_annotations_and_follows_them(host):
 
 def test_a_layered_dxf_has_each_layer_and_its_hatch(host, tmp_path):
     from tests.sheet_frame_cases import dxf_layers
-    from ingetrazo_render import sheet_frames
+    from built_render import sheet_frames
     ws = _sheets(host)
     plan = ws.composer.comp.frames[0]
     dxf_layers(ws.composer._scene())
@@ -737,7 +737,7 @@ def test_a_layered_dxf_has_each_layer_and_its_hatch(host, tmp_path):
 
 
 def NATIVE_display(frame, content):
-    import ingetrazo_core as NATIVE
+    import built_core as NATIVE
     return NATIVE.sheet_frame_display(frame, content, True)
 
 
@@ -773,7 +773,7 @@ def test_radius_and_angle_dimensions_from_the_page(host):
 
 
 def test_every_tool_of_the_rail_runs_on_the_page(host, monkeypatch):
-    from ingetrazo_render import sheet_workspace
+    from built_render import sheet_workspace
     ws = _sheets(host)
     rail = {t for group in sheet_workspace.RAIL for t in group}
     assert rail <= sheet_workspace.NATIVE_TOOLS
@@ -789,8 +789,8 @@ def test_every_tool_of_the_rail_runs_on_the_page(host, monkeypatch):
 def test_labels_levels_polygons_and_images_from_the_page(host, monkeypatch, tmp_path):
     import numpy as np
     from tests.plugin_images import write_png
-    from ingetrazo_render import sheet_frames
-    from ingetrazo_render import shell_files
+    from built_render import sheet_frames
+    from built_render import shell_files
     ws = _sheets(host)
     comp = ws.composer
     plan = comp.comp.frames[0]
@@ -846,7 +846,7 @@ def test_pan_and_zoom(host):
 
 # ---- export ----------------------------------------------------------------------------
 def test_export_pdf_from_the_workspace(host, tmp_path, monkeypatch):
-    from ingetrazo_render import shell_files
+    from built_render import shell_files
     out = tmp_path / "sheet.pdf"
     asked = []
 
@@ -867,7 +867,7 @@ def test_export_pdf_from_the_workspace(host, tmp_path, monkeypatch):
 
 
 def test_scene_menu_reads_saved_frame_pixels_without_touching_live_lens(host, monkeypatch):
-    from ingetrazo_render import render_scene_photo
+    from built_render import render_scene_photo
     scene = host.viewport.scene
     view = scene.saved_views[0]
     lens = host.viewport.camera.lens_dict()

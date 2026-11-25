@@ -13,11 +13,11 @@ Compared with the plain way of cutting, to the bit; counted, not timed.
 """
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 import numpy as np
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
-import ingetrazo_core
+import built_core
 
 
 def _cut_plain(v0, e1, e2, normal, point, visible=None, rows=False):
@@ -80,15 +80,15 @@ def test_the_kept_heights_cut_what_the_plain_cut_cuts():
     cut = 0
     for normal in (QVector3D(0, 0, -1), QVector3D(1, 0, 0),
                    QVector3D(0.3, -0.5, 0.8).normalized()):
-        reach = ingetrazo_core.PlaneReach(v0, e1, e2, normal)
+        reach = built_core.PlaneReach(v0, e1, e2, normal)
         for z in (-6.0, -1.0, 0.0, 0.5, 1.0, 2.25, 3.0, 7.0):
             point = QVector3D(0.1, -0.2, 0.0) + normal * z
             for vis in (None, visible):
-                got = ingetrazo_core.section_cut_chords(v0, e1, e2, normal, point, vis, rows=True,
+                got = built_core.section_cut_chords(v0, e1, e2, normal, point, vis, rows=True,
                                  reach=reach)
                 want = _cut_plain(v0, e1, e2, normal, point, vis, rows=True)
                 assert _same(got[0], want[0]) and _same(got[1], want[1])
-                assert _same(ingetrazo_core.section_cut_chords(v0, e1, e2, normal, point, vis),
+                assert _same(built_core.section_cut_chords(v0, e1, e2, normal, point, vis),
                              _cut_plain(v0, e1, e2, normal, point, vis))
                 cut += 0 if want[0] is None else len(want[0])
     assert cut > 10000           # the comparison did see chords
@@ -100,7 +100,7 @@ def test_a_slid_plane_works_only_the_triangles_it_crosses():
     # Small triangles, as a model's are next to its size.
     e1, e2 = e1 * 0.1, e2 * 0.1
     normal = QVector3D(0, 0, 1)
-    reach = ingetrazo_core.PlaneReach(v0, e1, e2, normal)
+    reach = built_core.PlaneReach(v0, e1, e2, normal)
     reach.cut(QVector3D(0, 0, 4.5))
     # Only triangles reaching above and below z = 4.5 are cut: a few hundred
     # of twenty thousand (``worked``, the triangles the last cut measured).
@@ -112,14 +112,14 @@ def test_the_heights_are_kept_only_for_the_same_arrays_and_normal():
     rng = np.random.default_rng(3)
     v0, e1, e2 = _triangles(rng, 50)
     n = QVector3D(0, 0, 1)
-    reach = ingetrazo_core.PlaneReach(v0, e1, e2, n)
+    reach = built_core.PlaneReach(v0, e1, e2, n)
     assert reach.fits(v0, n, e1, e2)
     assert not reach.fits(v0.copy(), n, e1, e2)
     assert not reach.fits(v0, n, e1.copy(), e2)
     assert not reach.fits(v0, QVector3D(0, 1, 0), e1, e2)
     # Handed a reach that does not fit, the cut makes its own and is right.
     other = QVector3D(1, 0, 0)
-    got = ingetrazo_core.section_cut_chords(v0, e1, e2, other, QVector3D(0.5, 0, 0), rows=True,
+    got = built_core.section_cut_chords(v0, e1, e2, other, QVector3D(0.5, 0, 0), rows=True,
                      reach=reach)
     want = _cut_plain(v0, e1, e2, other, QVector3D(0.5, 0, 0), rows=True)
     assert _same(got[0], want[0]) and _same(got[1], want[1])
@@ -130,7 +130,7 @@ def test_the_heights_are_kept_only_for_the_same_arrays_and_normal():
 def _viewport_with_a_cut():
     import os
     from core.history import History, PlaceSectionPlaneCommand
-    from ingetrazo_core.section import SectionPlane
+    from built_core.section import SectionPlane
     from tests.test_pushpull_ux import _cube
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)

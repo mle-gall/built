@@ -15,11 +15,11 @@ import sys
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 import core._native as _native
 from core.mesh import Mesh
-from ingetrazo_core.triangulate import plane_axes, triangulate
+from built_core.triangulate import plane_axes, triangulate
 
 nat = _native.available()
 HYPOT = _native.qt_hypot() if nat is not None else None

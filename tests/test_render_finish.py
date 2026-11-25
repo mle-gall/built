@@ -14,9 +14,9 @@ from pathlib import Path
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
-from ingetrazo_core import guess_finish, resolve_finish  # noqa: E402
+from built_core import guess_finish, resolve_finish  # noqa: E402
 from core import render_blender as rb  # noqa: E402
 from core.history import History, SetMaterialFinishCommand  # noqa: E402
 from core.materials import Material  # noqa: E402
@@ -154,8 +154,8 @@ def test_blender_turns_the_finishes_into_materials(tmp_path):
 
 
 def test_the_material_inspector_sets_and_clears_the_finish(native_host):
-    from ingetrazo_core import material_inspector
-    from ingetrazo_render import wgpu_library
+    from built_core import material_inspector
+    from built_render import wgpu_library
     win = native_host.window
     scene = win.viewport.scene
     name = "Mármol travertino"

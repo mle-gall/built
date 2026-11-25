@@ -8,7 +8,7 @@ step, and the status still said «178 intersection edges added»."""
 from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 
 def _window(win, monkeypatch, segs):
@@ -22,7 +22,7 @@ def _window(win, monkeypatch, segs):
     monkeypatch.setattr(win.viewport, "flash_status",
                         lambda text, *a, **k: said.append(text))
     warned = []
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.warning",
+    monkeypatch.setattr("built_render.chrome_dialogs.warning",
                         lambda *a, **k: warned.append(a[1:]))
     return win, said, warned
 

@@ -26,8 +26,8 @@ CASES = 60
 
 
 def _walk():
-    import ingetrazo_core
-    native = getattr(ingetrazo_core, "group_model_placements", None)
+    import built_core
+    native = getattr(built_core, "group_model_placements", None)
     if native is not None:
         return native
     from core.group import model_placements
@@ -35,7 +35,7 @@ def _walk():
 
 
 def tree(seed):
-    from ingetrazo_core import Matrix4
+    from built_core import Matrix4
     from core.group import Group
     from core.mesh import Mesh
     rng = random.Random(seed)

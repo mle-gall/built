@@ -148,11 +148,11 @@ VISIBLE = {"same_faces": vp_same_faces, "holes": vp_holes,
 def geometry_cases():
     """``{name: (items, camera, projector, section)}`` of the face-geometry
     comparisons (``tests/test_faces_view_rust.py``'s scenes)."""
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from core import vista_caras as VC
     from core.camera import OrbitCamera
     from core.scene import Scene
-    from ingetrazo_core.section import SectionPlane
+    from built_core.section import SectionPlane
     from tests.test_faces_view_rust import _camera, _scene as model
     out = {}
     for persp in (False, True):

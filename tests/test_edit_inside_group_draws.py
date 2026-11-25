@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import pytest
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import ScreenPoint as QPointF
-from ingetrazo_core import Vec3 as V
+from built_core import Input as Qt
+from built_core import ScreenPoint as QPointF
+from built_core import Vec3 as V
 
 from core.group import Group
 from core.mesh import Mesh
@@ -26,14 +26,14 @@ def _box_group():
 
 
 def _uploaded_edges(vp):
-    from ingetrazo_core import pack_scene
+    from built_core import pack_scene
     packed = pack_scene(vp.scene)
     return sum(int(cmd['count']) for cmd in packed.edge_commands) // 2
 
 
 @pytest.mark.parametrize("component", [False, True])
 def test_an_edge_drawn_inside_an_open_group_is_drawn_at_once(native_window, component):
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     win = native_window
     vp, sc = win.viewport, win.viewport.scene
     g = _box_group()
@@ -64,7 +64,7 @@ def test_empty_click_leaves_only_beyond_the_dotted_box(native_window, monkeypatc
     irregular group can leave much more empty space there. Clicking either
     must stay inside; only a click beyond the projected frame steps out.
     """
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     from tools.base import ToolContext
     from tools.rust_tools import SelectTool
 

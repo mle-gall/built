@@ -7,7 +7,7 @@ rename changes and two tags in different folders may share. Every map the
 sheets, the DXF and the 3D view read a tag's look from is keyed by the key
 the segments and rings carry — keyed by label, a renamed tag lost its look
 and two «Corte» tags got one look between them."""
-import ingetrazo_core
+import built_core
 from types import SimpleNamespace
 
 import numpy as np
@@ -27,8 +27,8 @@ def scene():
     sc.layers.append(walls)
     assert L.rename_layer(sc, "Muros", "Paredes")
     # Two tags with one label, in two folders.
-    north = ingetrazo_core.tag_edits.add_folder(sc, "Norte")
-    south = ingetrazo_core.tag_edits.add_folder(sc, "Sur")
+    north = built_core.tag_edits.add_folder(sc, "Norte")
+    south = built_core.tag_edits.add_folder(sc, "Sur")
     a = Layer("Corte", key="corte-norte", folder=north, hatch="concrete",
               cut_weight=0.35, linetype="dotted", color=(0.1, 0.6, 0.2))
     b = Layer("Corte", key="corte-sur", folder=south, hatch="insulation",
@@ -50,39 +50,39 @@ def test_the_setup_is_what_it_says(scene):
 
 
 def test_cut_hatches_and_their_looks_are_keyed_by_key(scene):
-    assert ingetrazo_core.tag_styles.cut_hatches(scene) == {"Muros": "brick",
+    assert built_core.tag_styles.cut_hatches(scene) == {"Muros": "brick",
                                     "corte-norte": "concrete",
                                     "corte-sur": "insulation"}
-    forms = ingetrazo_core.tag_styles.cut_hatch_forms(scene, 50.0)
+    forms = built_core.tag_styles.cut_hatch_forms(scene, 50.0)
     assert set(forms) == set(KEYS)
     assert forms["corte-sur"]["angle"] == 45.0
     assert forms["corte-norte"]["angle"] == 0.0
-    assert set(ingetrazo_core.tag_styles.cut_hatch_grounds(scene)) == {"corte-sur"}
-    assert ingetrazo_core.tag_styles.cut_hatch_inks(scene)["corte-sur"] == (0.0, 0.0, 1.0)
-    fills = ingetrazo_core.tag_styles.cut_fill_colours(scene)
+    assert set(built_core.tag_styles.cut_hatch_grounds(scene)) == {"corte-sur"}
+    assert built_core.tag_styles.cut_hatch_inks(scene)["corte-sur"] == (0.0, 0.0, 1.0)
+    fills = built_core.tag_styles.cut_fill_colours(scene)
     assert {"Muros", "corte-norte", "corte-sur"} <= set(fills)
     assert fills["corte-norte"] != fills["corte-sur"]
     for name in ("Paredes", "Corte"):            # no label leaks in as a key
-        for table in (ingetrazo_core.tag_styles.cut_hatches(scene), forms, fills):
+        for table in (built_core.tag_styles.cut_hatches(scene), forms, fills):
             assert name not in table
 
 
 def test_line_styles_carry_each_tags_own_pen_and_line(scene):
-    styles = ingetrazo_core.tag_styles.line_styles(scene, True)
+    styles = built_core.tag_styles.line_styles(scene, True)
     assert styles["Muros"][1] == "dashed" and styles["Muros"][3] == 0.7
     assert styles["corte-norte"][1] == "dotted"
     assert styles["corte-norte"][3] == 0.35
     assert styles["corte-sur"][1] == "center"
     assert styles["corte-sur"][3] == 0.18
     assert "Paredes" not in styles and "Corte" not in styles
-    model = ingetrazo_core.tag_styles.model_line_styles(scene)
+    model = built_core.tag_styles.model_line_styles(scene)
     assert set(model) == set(KEYS)
     assert model["corte-norte"][1] != model["corte-sur"][1]
 
 
 def test_the_view_inks_each_cut_with_its_tags_weight(scene):
     from tests.controller_surface import ControllerSurface as Viewport
-    from ingetrazo_core.style import Style
+    from built_core.style import Style
     keep = np.array([True, True, True, True])
     tags = np.array(["Muros", "corte-norte", "corte-sur", ""], dtype=object)
     vp = SimpleNamespace(scene=scene, _frame_style=Style(),
@@ -96,15 +96,15 @@ def test_the_view_inks_each_cut_with_its_tags_weight(scene):
 def test_the_legend_and_the_dxf_names_tell_shared_labels_apart(scene):
     rows, swatches = L.legend_rows(scene)
     assert "Paredes" in rows
-    north = ingetrazo_core.tag_edits.path_label(scene, "corte-norte")
-    south = ingetrazo_core.tag_edits.path_label(scene, "corte-sur")
+    north = built_core.tag_edits.path_label(scene, "corte-norte")
+    south = built_core.tag_edits.path_label(scene, "corte-sur")
     assert north != south and north in rows and south in rows
     assert swatches[north]["hatch"] == "concrete"
     assert swatches[south]["hatch"] == "insulation"
     assert swatches[south]["hatch_angle"] == 45.0
     assert swatches[north]["linetype"] == "dotted"
     assert swatches[south]["linetype"] == "center"
-    labels = ingetrazo_core.tag_edits.export_labels(scene)
+    labels = built_core.tag_edits.export_labels(scene)
     assert labels["corte-norte"] != labels["corte-sur"]
     assert labels["Muros"] == "Paredes"
 

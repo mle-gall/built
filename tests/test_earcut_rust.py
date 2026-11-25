@@ -16,9 +16,9 @@ import math
 import random
 
 import numpy as np
-from ingetrazo_core import Vec3
+from built_core import Vec3
 
-from ingetrazo_core import triangulate as T
+from built_core import triangulate as T
 
 
 def _record(digest, points, holes):

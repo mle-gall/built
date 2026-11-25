@@ -8,7 +8,7 @@ keeps running, and the «fatal» entries buried the real crash. At start
 the log drops the RPC-facility entries and keeps everything else."""
 from __future__ import annotations
 
-from ingetrazo_core.paths import prune_handled_com_errors
+from built_core.paths import prune_handled_com_errors
 
 _COM = """Windows fatal exception: code 0x8001010d
 
@@ -32,14 +32,14 @@ Current thread 0x00007f (most recent call first):
 
 
 def test_handled_com_errors_go_and_the_crashes_stay(tmp_path):
-    log = tmp_path / "ingetrazo-crash.log"
+    log = tmp_path / "built-crash.log"
     log.write_text(_COM + _CRASH + _COM + _COM + _PY + _COM, encoding="utf-8")
     prune_handled_com_errors(log)
     assert log.read_text(encoding="utf-8") == _CRASH + _PY
 
 
 def test_a_log_without_com_noise_is_left_alone(tmp_path):
-    log = tmp_path / "ingetrazo-crash.log"
+    log = tmp_path / "built-crash.log"
     log.write_text(_CRASH + _PY, encoding="utf-8")
     before = log.stat().st_mtime_ns
     prune_handled_com_errors(log)

@@ -8,12 +8,12 @@ Headless: stub viewport + direct tool calls.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Input, ScreenPoint
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Input, ScreenPoint
+from built_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
 from core.history import AddFaceCommand, History
-from ingetrazo_core.orient import is_closed, signed_volume
+from built_core.orient import is_closed, signed_volume
 from core.scene import Scene
 from tools.base import ToolContext
 from tools.pushpull import _MIN_EXTRUDE, PushPullTool
@@ -289,7 +289,7 @@ def test_corner_step_clamped_opens_notch_through_floor():
     # A corner rect pushed deeper than the cube is tall: clamp to the height,
     # landing flush on the floor plane — the notch opens clear through and the
     # result is a watertight L-section solid.
-    from ingetrazo_core.orient import signed_volume
+    from built_core.orient import signed_volume
 
     scene = Scene()
     hist = History(scene)
@@ -365,7 +365,7 @@ class _InferViewport(_StubViewport):
 
 
 def test_hovering_vertex_infers_distance():
-    from ingetrazo_core import ScreenPoint
+    from built_core import ScreenPoint
     from tools.base import ToolContext
 
     scene = Scene()
@@ -431,7 +431,7 @@ class _FaceInferViewport(_StubViewport):
 
 
 def test_hovering_face_infers_distance_and_marks_it():
-    from ingetrazo_core import ScreenPoint
+    from built_core import ScreenPoint
     from tools.base import ToolContext
 
     scene = Scene()
@@ -597,7 +597,7 @@ def test_autofold_pentagon_folds_minimally():
 def _boxed_group(scene, x0=0.0):
     """A 2×2×2 closed box living in its own Group, appended to the scene."""
     from core.group import Group
-    from ingetrazo_core.orient import orient_outward
+    from built_core.orient import orient_outward
 
     g = Group()
     m = g.mesh
@@ -631,7 +631,7 @@ def _push_group(scene, group, face, dist):
 
 
 def test_push_on_group_face_edits_only_the_group():
-    from ingetrazo_core.orient import signed_volume
+    from built_core.orient import signed_volume
 
     scene = Scene()
     hist = History(scene)
@@ -1212,7 +1212,7 @@ def test_hovering_an_edge_infers_distance_and_says_on_edge():
     """The usual "On edge" while pushing (Marco's capture, 2026-09-14):
     the cursor on another block's top edge — away from its corners — sets
     the push level with that edge, red marker and «On edge» label."""
-    from ingetrazo_core import ScreenPoint
+    from built_core import ScreenPoint
     from tools.base import ToolContext
 
     scene = Scene()
@@ -2106,7 +2106,7 @@ def test_activate_with_no_selection_unchanged():
 def test_hovering_the_origin_pushes_level_with_it():  # #407
     """A box standing away from the origin, its top pushed down: hovering
     the origin (nothing drawn there) brings the top level with z = 0."""
-    from ingetrazo_core import ScreenPoint
+    from built_core import ScreenPoint
     from tools.base import ToolContext
 
     scene = Scene()

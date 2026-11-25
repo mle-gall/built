@@ -18,11 +18,11 @@ import math
 
 import numpy as np
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 import core._native as _native
 from core import mesh as M
-from ingetrazo_core import scene_bounds_inside as _inside
+from built_core import scene_bounds_inside as _inside
 from core.group import Group, copy_group
 from core.scene import Scene
 from formats import igz
@@ -227,7 +227,7 @@ def test_a_copy_inside_the_box_is_not_read(binary, tmp_path):
     assert len(sc._bounds_parts) < len(list(sc.placements()))
 
     # Every copy read, none skipped: the same box.
-    from ingetrazo_core import group_placed_box
+    from built_core import group_placed_box
     from core.group import _local_points
     los, his = [], []
     for placed, m in sc.placements(precise=True):

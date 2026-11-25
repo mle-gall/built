@@ -7,7 +7,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.history import (AddGeoPointsCommand, DeleteGeoPointsCommand,
                           History)

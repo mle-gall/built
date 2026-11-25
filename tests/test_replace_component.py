@@ -7,13 +7,13 @@ from __future__ import annotations
 
 import pytest
 from tests.test_library_sheet import win  # noqa: F401
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group, copy_group, world_mesh
 from core.history import History, ReplaceComponentCommand
 from core.mesh import Mesh
 from core.scene import Scene
-from ingetrazo_core import same_definition
+from built_core import same_definition
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 
 
@@ -205,7 +205,7 @@ def test_replacement_survives_the_igz(tmp_path):
 # --- the tray's «In model» list ----------------------------------------------
 
 def _provider(win):
-    from ingetrazo_render import wgpu_library as library
+    from built_render import wgpu_library as library
     return library.ComponentsProvider(), library.Ctx(win, win.view)
 
 
@@ -244,7 +244,7 @@ def test_its_own_row_does_not_offer_to_replace_the_selection(native_components):
 
 def test_keep_in_file_survives_deleting_every_copy_and_undoes():
     from core.history import KeepComponentCommand
-    from ingetrazo_core.kept_components import kept_template
+    from built_core.kept_components import kept_template
     scene, hist, sillas, _m, _c, _h = _model()
     proto = sillas[0].mesh
     sillas[0].layer = "Mobiliario"
@@ -315,7 +315,7 @@ def test_kept_definitions_survive_the_igz_and_share_with_copies(tmp_path):
 
 def test_a_kept_definition_with_no_copy_can_replace_and_be_placed():
     from core.history import KeepComponentCommand
-    from ingetrazo_core.kept_components import place_copy
+    from built_core.kept_components import place_copy
     scene, hist, sillas, mesas, _c, _h = _model()
     hist.execute(KeepComponentCommand(mesas[0]))
     for g in mesas:
@@ -358,7 +358,7 @@ def _painted_pixels(pm):
 
 
 def test_a_thumbnail_is_drawn_once_and_again_when_the_geometry_changes():
-    from ingetrazo_render import component_thumbnail
+    from built_render import component_thumbnail
     size = 40
     _s, _h, sillas, _m, _c, _holder = _model()
     pm = component_thumbnail(sillas[0])
@@ -370,7 +370,7 @@ def test_a_thumbnail_is_drawn_once_and_again_when_the_geometry_changes():
 
 
 def test_every_copy_draws_the_same_wherever_it_stands():
-    from ingetrazo_render import component_signature
+    from built_render import component_signature
     a = _component(_quad(1.0), "A", dx=0.0)
     b = copy_group(a, V(30, 0, 0))
     b.xform.rotate(45.0, 0.0, 0.0, 1.0)
@@ -378,13 +378,13 @@ def test_every_copy_draws_the_same_wherever_it_stands():
 
 
 def test_an_empty_definition_gives_a_blank_icon():
-    from ingetrazo_render import component_thumbnail
+    from built_render import component_thumbnail
     g = _component(Mesh(), "Nada")
     assert _painted_pixels(component_thumbnail(g)) == 0
 
 
 def _component_sheet(win):
-    from ingetrazo_render.wgpu_library import open_library
+    from built_render.wgpu_library import open_library
     from tests.test_library_sheet import frame, tiles
     open_library(win, "components", scope="s:model")
     return [r for r in tiles(frame(win)) if r["id"].startswith("cm:")]
@@ -405,7 +405,7 @@ def test_the_list_rows_carry_a_thumbnail(win):
 
 def test_a_long_list_offers_a_name_filter_that_survives_a_refresh(win, monkeypatch):
     from tests.test_library_sheet import act, frame, tiles
-    from ingetrazo_core import component_library as library
+    from built_core import component_library as library
     monkeypatch.setattr(library, "index", lambda refresh: [])
     names = ["Silla", "Sillón", "Mesa", "Lámpara", "Puerta P1", "Puerta P2", "Ventana V1", "Árbol"]
     scene = win.viewport.scene
@@ -456,7 +456,7 @@ def native_components(native_question_host):
 
 def test_orphaned_by_names_only_definitions_left_with_no_copy():
     from core.history import KeepComponentCommand
-    from ingetrazo_core.kept_components import orphaned_by
+    from built_core.kept_components import orphaned_by
     scene, hist, sillas, mesas, _c, _h = _model()
     assert orphaned_by(scene, sillas[:2]) == []          # one chair stays
     assert [g.name for g in orphaned_by(scene, sillas + mesas[:1])] == [
@@ -466,7 +466,7 @@ def test_orphaned_by_names_only_definitions_left_with_no_copy():
 
 
 def test_a_copy_nested_elsewhere_still_counts_as_a_copy():
-    from ingetrazo_core.kept_components import orphaned_by
+    from built_core.kept_components import orphaned_by
     scene, _h, sillas, _m, _c, _holder = _model()
     box = Group(Mesh(), name="Comedor")
     box.adopt([copy_group(sillas[0], V(0, 5, 0))])
@@ -515,7 +515,7 @@ def test_no_question_while_a_copy_remains(native_components, monkeypatch):
 
 
 def test_rename_reaches_every_copy_and_the_kept_template(native_components, monkeypatch):
-    from ingetrazo_render import chrome_forms
+    from built_render import chrome_forms
     from core.history import KeepComponentCommand
     win, scene, sillas, mesas = native_components
     box = Group(Mesh(), name="Comedor")
@@ -538,7 +538,7 @@ def test_rename_reaches_every_copy_and_the_kept_template(native_components, monk
 
 
 def test_rename_is_in_the_list_menu(native_components):
-    from ingetrazo_render import wgpu_library as library
+    from built_render import wgpu_library as library
     win, _, _, _ = native_components
     provider = library.ComponentsProvider()
     chair = next(e for e in provider.items(library.Ctx(win, win.view)) if e["name"] == "Silla")
@@ -564,11 +564,11 @@ def test_components_from_another_file_arrive_kept_and_placeable(tmp_path, native
 
     win = native_host.window
     scene = win.viewport.scene
-    from ingetrazo_render import wgpu_library as library
+    from built_render import wgpu_library as library
     from tests.test_library_sheet import Renderer, act, frame
-    from ingetrazo_core.i18n import tr
-    from ingetrazo_render.shell_files import ShellFileDialog
-    from ingetrazo_render import chrome_dialogs
+    from built_core.i18n import tr
+    from built_render.shell_files import ShellFileDialog
+    from built_render import chrome_dialogs
     monkeypatch.setattr(chrome_dialogs, "warning", lambda _, title, msg: pytest.fail(f"{title}: {msg}"))
     monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *_: (str(path), ""))
     monkeypatch.setattr(win.view, "renderer", Renderer())
@@ -603,7 +603,7 @@ def test_a_file_without_components_changes_nothing(tmp_path, native_host):
     path = tmp_path / "muro.igz"
     igz.save_scene(plain, path)
     win = native_host.window
-    from ingetrazo_render import import_kept_components
+    from built_render import import_kept_components
     assert import_kept_components(win, path) == 0
     assert win.viewport.scene.kept_components == []
     assert not win.viewport.history.undo_stack
@@ -614,9 +614,9 @@ def test_clipped_component_list_does_not_build_thumbnails(win, monkeypatch):
     win.viewport.scene.groups.append(_component(_quad(), "Table"))
     win.viewport.scene.version += 1
     calls = []
-    import ingetrazo_core
-    plan = ingetrazo_core.plan_of
-    monkeypatch.setattr(ingetrazo_core, "plan_of", lambda mesh: (calls.append(mesh), plan(mesh))[1])
+    import built_core
+    plan = built_core.plan_of
+    monkeypatch.setattr(built_core, "plan_of", lambda mesh: (calls.append(mesh), plan(mesh))[1])
     rows = _component_sheet(win)
     assert not calls
     act(win, "component-previews")

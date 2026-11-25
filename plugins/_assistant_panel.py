@@ -7,9 +7,9 @@ from threading import Thread
 from uuid import uuid4
 
 from core import ai
-from ingetrazo_core.i18n import tr
+from built_core.i18n import tr
 from core.plugin_panels import field, item, on_document_close, section
-from ingetrazo_core.settings import settings
+from built_core.settings import settings
 from plugins._assistant_prompt import (
     MAX_ROUNDS, MAX_TOKENS, TOKENS_BY_PROVIDER, env_key_note, handle_reply, system_prompt,
 )
@@ -76,7 +76,7 @@ class AssistantPanel:
         elif self.busy:
             return
         elif control == "key":
-            from ingetrazo_render.chrome_forms import Field, Form, show
+            from built_render.chrome_forms import Field, Form, show
             def save(answer, values):
                 if answer == "ok":
                     self.key = values["credential"].strip()
@@ -88,14 +88,14 @@ class AssistantPanel:
         elif control == "photo":
             self.attach_photo(value)
         elif control == "paste_photo":
-            from ingetrazo_render.shell_services import pasteboard_read
+            from built_render.shell_services import pasteboard_read
             data = pasteboard_read("public.png") or pasteboard_read("public.tiff")
             if data:
                 self.attach_photo(data)
         elif control == "remove_photo":
             self.clear_photo()
         elif control == "view_photo" and self.last_photo:
-            from ingetrazo_core.desktop_open import open_url
+            from built_core.desktop_open import open_url
             open_url(self.last_photo)
         elif control == "provider":
             self.provider = value
@@ -147,7 +147,7 @@ class AssistantPanel:
         self.photo, self.attachment = "", None
 
     def attach_photo(self, source):
-        from ingetrazo_render import SurveyRaster
+        from built_render import SurveyRaster
         self.clear_photo()
         if not source:
             return
@@ -282,7 +282,7 @@ class AssistantPanel:
         return tr("Try a larger local model for code generation.")
 
     def _screenshot_b64(self):
-        from ingetrazo_render import archive_picture_png
+        from built_render import archive_picture_png
         render = getattr(self.app.window.view, "render_pixels", None)
         if not render:
             return None

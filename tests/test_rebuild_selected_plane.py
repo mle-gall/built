@@ -4,7 +4,7 @@ alone; with nothing selected the tool keeps its whole-flat-drawing rule."""
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.mesh import Face
 from tests.shell_isolation import restore_shell_patches  # noqa: F401 (autouse)
@@ -30,7 +30,7 @@ def _ground(mesh):
 
 @pytest.fixture
 def drawing(tmp_path):
-    from ingetrazo_render import Host
+    from built_render import Host
     host = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
     sc = host.window.viewport.scene
     _raised_box(sc.mesh)

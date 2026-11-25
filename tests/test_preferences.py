@@ -9,7 +9,7 @@ from __future__ import annotations
 
 
 import pytest
-from ingetrazo_core import NativeSettings
+from built_core import NativeSettings
 
 
 from tests.preferences_chrome import Controls, settings_file
@@ -125,9 +125,9 @@ def test_restore_leaves_retired_appearance_keys_intact(settings_file):
 
 def test_the_3d_mouse_page_shows_the_device_live(native_host, monkeypatch):
     """Nobody on the team has a SpaceMouse: the page shows the six numbers
-    as the device sends them and how IngeTrazo reads them, so an owner can
+    as the device sends them and how Built reads them, so an owner can
     report a wrong sign by looking (#108)."""
-    from ingetrazo_render.ndof import NdofSample
+    from built_render.ndof import NdofSample
     from views import ndof_input
 
     win = native_host.window
@@ -136,8 +136,8 @@ def test_the_3d_mouse_page_shows_the_device_live(native_host, monkeypatch):
     monkeypatch.setattr(ndof_input, "_shared", dev)
     monkeypatch.setattr(type(dev), "backend_name",
                         property(lambda self: "rawinput"))
-    from ingetrazo_render import chrome_sheet
-    from ingetrazo_render import settings_sheet
+    from built_render import chrome_sheet
+    from built_render import settings_sheet
     settings_sheet.show(win, page="ndof")
     sheet = chrome_sheet.current(win)
     context = chrome_sheet.Ctx(win, None)

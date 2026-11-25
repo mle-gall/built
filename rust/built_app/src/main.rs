@@ -5,7 +5,7 @@
 //! The event loop is winit's, on the main thread. The window's NSView goes
 //! to the wgpu renderer (linked in, see `python.rs`); the document, the
 //! tools and the egui chrome's state run in the embedded Python
-//! (`ingetrazo_render.Host`), which receives the translated input events.
+//! (`built_render.Host`), which receives the translated input events.
 //!
 //! ```text
 //! built [file.built|file.igz] [--script steps.txt] [--shots dir]
@@ -260,7 +260,7 @@ enum AfterOpen {
     Quit,
 }
 
-/// One window: its winit window, its Python host (ingetrazo_render.Host:
+/// One window: its winit window, its Python host (built_render.Host:
 /// its projects, its renderer) and its own pointer state. Every window
 /// lives in this one process (shell_runtime/windows.rs): ⇧⌘N and the tab
 /// menu's "Move to new window" make another one here.
@@ -889,10 +889,10 @@ impl App {
             use winit::platform::wayland::{ActiveEventLoopExtWayland, WindowAttributesExtWayland};
             use winit::platform::x11::WindowAttributesExtX11;
             attrs = if event_loop.is_wayland() {
-                let app_id = std::env::var("FLATPAK_ID").unwrap_or_else(|_| "ingetrazo".into());
-                WindowAttributesExtWayland::with_name(attrs, app_id, "ingetrazo")
+                let app_id = std::env::var("FLATPAK_ID").unwrap_or_else(|_| "built".into());
+                WindowAttributesExtWayland::with_name(attrs, app_id, "built")
             } else {
-                WindowAttributesExtX11::with_name(attrs, "ingetrazo", "ingetrazo")
+                WindowAttributesExtX11::with_name(attrs, "built", "built")
             };
         }
         #[cfg(target_os = "macos")]
@@ -992,7 +992,7 @@ impl App {
         Ok(())
     }
 
-    /// A window Python asked for (ingetrazo_render.shell_windows): made here, then its
+    /// A window Python asked for (built_render.shell_windows): made here, then its
     /// host adopts the request (the start page, or a project moved in).
     fn new_window(&mut self, event_loop: &ActiveEventLoop, token: &str) {
         match self.make_window(event_loop) {
@@ -1060,7 +1060,7 @@ impl App {
                 let key = c.as_str();
                 if !self.cursors.contains_key(key) {
                     let pixels = if let Some(tool) = key.strip_prefix("tool:") {
-                        ingetrazo_render::tool_cursors::winit_pixels(tool)
+                        built_render::tool_cursors::winit_pixels(tool)
                     } else {
                         key.strip_prefix("custom:").and_then(|id| w.host.custom_cursor(id))
                     };
@@ -1126,7 +1126,7 @@ impl App {
         }
         #[cfg(any(target_os="linux", windows))]
         if self.front() == Some(id) {
-            ingetrazo_render::desktop_menu::update(extra.recent, self.win(id)?.host.model_menu_state());
+            built_render::desktop_menu::update(extra.recent, self.win(id)?.host.model_menu_state());
         }
         if extra.focus {
             self.focus(id);
@@ -1332,6 +1332,13 @@ fn check(args: &Args) -> i32 {
 }
 
 fn main() {
+    // Transitional launch environment, before starting threads or embedded Python.
+    for (key, value) in std::env::vars_os() {
+        if let Some(suffix) = key.to_str().and_then(|k| k.strip_prefix(concat!("INGE", "TRAZO_"))) {
+            let new = format!("BUILT_{suffix}");
+            if std::env::var_os(&new).is_none() { std::env::set_var(new, value); }
+        }
+    }
     launcher::register_launcher();
     let process = Instant::now();
     let args = match parse_args(std::env::args().skip(1)) {
@@ -1416,7 +1423,7 @@ fn main() {
     #[cfg(any(target_os="linux", windows))]
     {
         let send = proxy.clone();
-        ingetrazo_render::desktop_menu::install(move |id| { let _ = send.send_event(UserEvent::Menu(id)); });
+        built_render::desktop_menu::install(move |id| { let _ = send.send_event(UserEvent::Menu(id)); });
     }
     #[cfg(target_os = "macos")]
     {

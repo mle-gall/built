@@ -2,19 +2,19 @@
 import numpy as np
 import pytest
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from core.group import Group
 from core.mesh import Mesh
 from core.scene import Scene
 from core import _native
-from ingetrazo_core import pack_scene, VERTEX, INSTANCE, COMMAND
+from built_core import pack_scene, VERTEX, INSTANCE, COMMAND
 
-# A venv whose ingetrazo_core predates the R1 bake functions skips with the
+# A venv whose built_core predates the R1 bake functions skips with the
 # reason instead of failing on an AttributeError; the GL viewport does not
 # need them.
 pytestmark = pytest.mark.skipif(
     _native.available() is None or not hasattr(_native.available(), 'bake_vertices'),
-    reason='ingetrazo_core with bake_vertices required (maturin develop --release)')
+    reason='built_core with bake_vertices required (maturin develop --release)')
 
 
 def triangle():
@@ -168,7 +168,7 @@ def bake_mesh(mesh):
         arrays = arrays_of(mesh)
         pos = arrays.pos
         if type(mesh).__name__ == 'StoreMesh':
-            from ingetrazo_core import store_views
+            from built_core import store_views
             table, attr = store_views.attr_columns(mesh)
             attr = np.asarray(attr, np.int64)
         else:
@@ -254,7 +254,7 @@ def test_pack_never_builds_plan_and_calls_native_once(tmp_path, monkeypatch):
 def test_memoised_placement_state_matches_viewport():
     from types import SimpleNamespace
     from views.document_interaction import _paint_of
-    from ingetrazo_core import PlacementState
+    from built_core import PlacementState
     groups = [Group(triangle()) for _ in range(12)]
     for i, g in enumerate(groups):
         g.hidden = bool(i % 3 == 0)

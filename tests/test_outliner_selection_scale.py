@@ -6,7 +6,7 @@ from tests.test_project_drawing_filters import Project
 from core.group import Group
 from core.mesh import Mesh
 from core.scene import Scene
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 
 

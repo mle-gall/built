@@ -45,7 +45,7 @@ def test_the_flag_round_trips_and_old_files_open_flat(tmp_path):
 @pytest.fixture
 def dem(monkeypatch):
     from georef import dem
-    from ingetrazo_render import ChangeCallbacks
+    from built_render import ChangeCallbacks
     from views.document_controller import DocumentController
 
     class LocalDEM(StubSampler):
@@ -114,7 +114,7 @@ def test_a_file_saved_flat_opens_flat(native_host, tmp_path, monkeypatch, dem):
 
 
 def test_a_new_capture_keeps_the_terrain_as_it_was(win, dem):
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     scene = win.viewport.scene
     scene.georef = SceneDatum(-16.39889, -71.53694)
     def capture(size):

@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Link and project inspection uses the same operations as the project browser."""
-import ingetrazo_core
+import built_core
 
 from core import links
-from ingetrazo_core import project
+from built_core import project
 
 
 class LinkTools:
     def _tool_query_links(self):
-        return ingetrazo_core.link_query(self._viewport.scene)
+        return built_core.link_query(self._viewport.scene)
 
     def _tool_link_document(self, path, select=None, include_nested=True):
         group = self._viewport.window().link_igz_path(path, at=(0, 0, 0), select=select,
@@ -40,5 +40,5 @@ class LinkTools:
         return window.query_worksession()
 
     def _tool_query_recent(self):
-        from ingetrazo_core.recent import query
+        from built_core.recent import query
         return query()

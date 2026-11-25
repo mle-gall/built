@@ -5,7 +5,7 @@ The three screen-size cases live with the renderer in ui/large_sheet.rs.
 """
 from tests.preferences_chrome import Controls
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_render import chrome_sheet
+from built_render import chrome_sheet
 
 
 def test_the_pages_are_all_there_and_units_still_opens_on_its_page(native_host):

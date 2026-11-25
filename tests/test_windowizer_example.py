@@ -8,13 +8,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 from core import extensions
 from core.history import AddFaceCommand
 from examples.extensions import windowizer
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
-from ingetrazo_render import chrome_dialogs
-from ingetrazo_render import chrome_forms
+from built_render import chrome_dialogs
+from built_render import chrome_forms
 
 
 @pytest.fixture

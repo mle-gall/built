@@ -4,13 +4,13 @@
 2026-09-15: a strip of every shortcut at once «no es bueno»)."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from tools.arc import ArcTool
 from tools.fillet import FilletTool
 from tools.rust_tools import LineTool
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
-from ingetrazo_render.status_hints import HINTS, NAV_HINTS, hint_for, phase_of
+from built_render.status_hints import HINTS, NAV_HINTS, hint_for, phase_of
 
 
 def test_the_hint_follows_the_tools_step():

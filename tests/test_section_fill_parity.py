@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """The section cut's geometry for the viewport moved to Rust
-(``rust/ingetrazo_core/src/model/section_fill.rs``: the plane's reach and
+(``rust/built_core/src/model/section_fill.rs``: the plane's reach and
 chords, the filled areas, their triangles and hatching, the sheet basis) and
 must answer as ``core/section.py``'s NumPy did at ``9cf53080``.
 
@@ -12,7 +12,7 @@ are float32 and compared bit for bit. Regenerate only on purpose, against the
 reference implementation: ``python tests/test_section_fill_parity.py --write``."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 import gzip
 import json
 import math
@@ -96,7 +96,7 @@ def _arr(a):
 
 
 def answer(section, case):
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     tris, normal, point, visible, spacing = case
     t = np.asarray(tris, dtype=np.float64)
     v0 = t[:, 0].copy()
@@ -107,16 +107,16 @@ def answer(section, case):
         n = n.normalized()
     p = V(*point)
     vis = None if visible is None else np.asarray(visible)
-    chords = ingetrazo_core.section_cut_chords(v0, e1, e2, n, p, vis)
-    rows = ingetrazo_core.section_cut_chords(v0, e1, e2, n, p, vis, rows=True)
-    reach = ingetrazo_core.PlaneReach(v0, e1, e2, n)
+    chords = built_core.section_cut_chords(v0, e1, e2, n, p, vis)
+    rows = built_core.section_cut_chords(v0, e1, e2, n, p, vis, rows=True)
+    reach = built_core.PlaneReach(v0, e1, e2, n)
     slid = [reach.cut(p + n * dz, vis, rows=True) for dz in (-0.5, 0.25)]
     got = {"chords": _arr(chords), "rows": [_arr(rows[0]), _arr(rows[1])],
            "slid": [[_arr(a), _arr(b)] for a, b in slid]}
-    got["fill"] = _arr(ingetrazo_core.section_fill_triangles(chords, n))
-    got["hatch"] = _arr(ingetrazo_core.section_hatch_segments(chords, n, spacing))
-    got["cross"] = _arr(ingetrazo_core.section_hatch_segments(chords, n, spacing * 1.5, cross=True))
-    u, v = ingetrazo_core.section_sheet_basis(n)
+    got["fill"] = _arr(built_core.section_fill_triangles(chords, n))
+    got["hatch"] = _arr(built_core.section_hatch_segments(chords, n, spacing))
+    got["cross"] = _arr(built_core.section_hatch_segments(chords, n, spacing * 1.5, cross=True))
+    u, v = built_core.section_sheet_basis(n)
     got["sheet"] = [list(map(float, u)), list(map(float, v))]
     return got
 
@@ -132,7 +132,7 @@ def _jsonable(x):
 
 
 def test_the_section_fill_answers_as_the_numpy_one_did():
-    from ingetrazo_core import section
+    from built_core import section
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     got = [_jsonable(answer(section, c)) for c in cases()]
     assert len(got) == len(want)
@@ -150,7 +150,7 @@ def test_the_corpus_has_holes_and_hatching():
 
 if __name__ == "__main__" and "--write" in sys.argv:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from ingetrazo_core import section
+    from built_core import section
     data = [_jsonable(answer(section, c)) for c in cases()]
     GOLDEN.parent.mkdir(exist_ok=True)
     GOLDEN.write_bytes(gzip.compress(json.dumps(data).encode(), mtime=0))

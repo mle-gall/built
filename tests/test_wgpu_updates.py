@@ -2,18 +2,18 @@
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import ScreenPoint as QPointF
-from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
+from built_core import Input as Qt
+from built_core import ScreenPoint as QPointF
+from built_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 from core.group import Group
 from core.history import MoveGroupCommand, CompoundCommand
 from core.mesh import Mesh
 from core.scene import Scene
 from tools.base import ToolContext
 from tools.tape import TapeMeasureTool
-from ingetrazo_core import pack_scene
-from ingetrazo_core import InstanceUpdates
-from ingetrazo_render import TOOL_DISPATCH, move_command
+from built_core import pack_scene
+from built_core import InstanceUpdates
+from built_render import TOOL_DISPATCH, move_command
 
 
 def fixture_scene():
@@ -98,7 +98,7 @@ def test_equal_leaf_uids_keep_distinct_metal_rows_on_hide():
     assert_matches_fresh_pack(tracker, scene)
     assert history.undo()
     from core.agent_facets import set_display
-    from ingetrazo_core import VISIBILITY_FILTERED
+    from built_core import VISIBILITY_FILTERED
     vp = SimpleNamespace(scene=scene, update=lambda: None)
     set_display(vp, {'facet': 'occurrence', 'eq': packed.row_key(right)})
     filtered = pack_scene(scene)
@@ -109,7 +109,7 @@ def test_equal_leaf_uids_keep_distinct_metal_rows_on_hide():
 
 def test_move_one_row_without_bake(monkeypatch):
     scene, updates = fixture_scene()
-    monkeypatch.setattr('ingetrazo_core.pack_scene', lambda *a: (_ for _ in ()).throw(AssertionError('bake')))
+    monkeypatch.setattr('built_core.pack_scene', lambda *a: (_ for _ in ()).throw(AssertionError('bake')))
     scene.groups[1].xform.translate(4, 5, 6)
     ids, rows = updates.diff(scene)
     assert ids.tolist() == [1]
@@ -138,7 +138,7 @@ def test_shared_mutation_bakes_once(monkeypatch):
     scene, updates = fixture_scene()
     calls = []
     original = pack_scene
-    monkeypatch.setattr('ingetrazo_core.pack_scene', lambda scene, **kw: (calls.append(scene), original(scene, **kw))[1])
+    monkeypatch.setattr('built_core.pack_scene', lambda scene, **kw: (calls.append(scene), original(scene, **kw))[1])
     mesh = scene.groups[0].mesh
     mesh.move_vertex(mesh.vertices[0], QVector3D(0, 0, 2))
     renderer = Renderer()
@@ -163,7 +163,7 @@ def test_move_command_matches_gl_and_undo():
 
 
 def test_tape_matches_gl_measurement():
-    from ingetrazo_render import NativeTools
+    from built_render import NativeTools
     tool = TapeMeasureTool()
     source = SimpleNamespace(active_tool=tool, flash_status=lambda *a: None,
                              measurementChanged=SimpleNamespace(emit=lambda *a: None),
@@ -244,7 +244,7 @@ def test_prototype_reassignment_preserves_row():
 def test_native_move_preview_then_history_commit(completion):
     from core.history import History
     from tools.move import MoveTool
-    from ingetrazo_render import NativeTools
+    from built_render import NativeTools
     scene, updates = fixture_scene()
     scene.select([scene.groups[0]])
     history = History(scene)
@@ -293,7 +293,7 @@ def test_native_move_preview_then_history_commit(completion):
 
 
 def test_inference_move_reuses_prototype_and_hits_updated_row():
-    from ingetrazo_core import resident_prepare as prepare, surface
+    from built_core import resident_prepare as prepare, surface
     scene, updates = fixture_scene()
     index = prepare(updates.packed)
     base, prototype = index.base, index.protos[0]
@@ -311,7 +311,7 @@ def test_inference_move_reuses_prototype_and_hits_updated_row():
 def test_inference_reads_committed_rows_from_the_native_index():
     """No copy of the instance table: a row not updated since prepare
     reads from the native placements, an updated one from the update."""
-    from ingetrazo_core import resident_prepare as prepare
+    from built_core import resident_prepare as prepare
     scene, updates = fixture_scene()
     index = prepare(updates.packed)
     assert not hasattr(index, 'initial')
@@ -326,7 +326,7 @@ def test_inference_reads_committed_rows_from_the_native_index():
 
 
 def test_moving_geometry_leaves_the_snap_candidates_as_columns():
-    from ingetrazo_core import ResidentEdges
+    from built_core import ResidentEdges
     a = np.array([[0., 0, 0], [1, 0, 0], [5, 5, 5]])
     b = np.array([[1., 0, 0], [1, 1, 0], [6, 5, 5]])
     context = object()
@@ -339,7 +339,7 @@ def test_moving_geometry_leaves_the_snap_candidates_as_columns():
 
 
 def test_inference_shared_mesh_change_invalidates_only_its_prototype():
-    from ingetrazo_core import resident_prepare as prepare, surface
+    from built_core import resident_prepare as prepare, surface
     scene, updates = fixture_scene()
     index = prepare(updates.packed)
     mesh = scene.groups[0].mesh
@@ -447,7 +447,7 @@ def test_prototype_bake_does_not_consume_document_group_names(monkeypatch):
 
 
 def test_replacement_preserves_full_material_rows_and_resident_texture_ids(tmp_path):
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     meshes = []
     for name, rgba in (('red', (255, 0, 0, 255)), ('blue', (0, 0, 255, 255))):
         image = SurveyRaster(2, 2, bytes(rgba) * 4)
@@ -469,8 +469,8 @@ def test_replacement_preserves_full_material_rows_and_resident_texture_ids(tmp_p
 
 
 def test_drag_preview_batches_rows_without_rendering_ids():
-    from ingetrazo_render import NativeTools
-    from ingetrazo_core import INSTANCE
+    from built_render import NativeTools
+    from built_core import INSTANCE
     renderer = Renderer()
     packed = SimpleNamespace(instances=np.zeros(2000, dtype=INSTANCE))
     view = SimpleNamespace(renderer=renderer, packed=packed)
@@ -597,7 +597,7 @@ def test_mesh_history_edit_inside_nested_container_does_not_repack(monkeypatch):
     scene.end_group_edit()
     calls = []
     original = pack_scene
-    monkeypatch.setattr('ingetrazo_core.pack_scene',
+    monkeypatch.setattr('built_core.pack_scene',
                         lambda s, **kw: (calls.append(len(s.groups)), original(s, **kw))[1])
     updates.apply(*updates.diff(scene))
     assert calls == [1]                       # one prototype, not the scene
@@ -624,7 +624,7 @@ def test_a_rebake_the_size_of_the_scene_falls_back_to_a_full_pack():
 
 
 def test_native_incremental_matches_full_rebuild():
-    from ingetrazo_core import resident_prepare as prepare
+    from built_core import resident_prepare as prepare
     scene, updates = fixture_scene()
     index = prepare(updates.packed, scene)
     base = index.base
@@ -677,17 +677,17 @@ def test_component_edit_deep_in_nested_groups_rewrites_one_row(monkeypatch):
     for group in (root, inner, leaf):
         scene.begin_group_edit(group)
     assert scene.mesh is not proto                       # the world copy
-    import ingetrazo_core
+    import built_core
 
-    walk = ingetrazo_core.placement_records
+    walk = built_core.placement_records
 
     def records(scene, roots, *rest):
         assert not roots, 'placement walk'
         return walk(scene, roots, *rest)
-    monkeypatch.setattr('ingetrazo_core.placement_records', records)
+    monkeypatch.setattr('built_core.placement_records', records)
     bakes = []
     original = pack_scene
-    monkeypatch.setattr('ingetrazo_core.pack_scene',
+    monkeypatch.setattr('built_core.pack_scene',
                         lambda s, **kw: (bakes.append(len(s.groups)), original(s, **kw))[1])
 
     def move():
@@ -810,14 +810,14 @@ def test_draw_snapshot_and_guides_do_not_scan_unrelated_placements(monkeypatch):
     scene.begin_group_edit(scene.groups[0])
     updates.remember_edit_path()
     updates.apply(*updates.diff(scene))
-    original = __import__('ingetrazo_core').placement_records
+    original = __import__('built_core').placement_records
 
     def bounded(scene, roots, *args):
         roots = list(roots)
         assert not roots, 'small edit traversed unrelated placements'
         return original(scene, roots, *args)
 
-    monkeypatch.setattr('ingetrazo_core.placement_records', bounded)
+    monkeypatch.setattr('built_core.placement_records', bounded)
     for command in (SnapshotCompound([AddEdgeCommand(QVector3D(8, 0, 0), QVector3D(9, 0, 0))]),
                     AddGuideCommand(Guide(QVector3D(), QVector3D(1, 0, 0)))):
         history.execute(command)
@@ -1015,7 +1015,7 @@ def test_retyped_line_updates_resident_face_split():
 
 
 def test_incremental_edge_distance_ties_use_row_then_edge():
-    from ingetrazo_core import resident_prepare as prepare
+    from built_core import resident_prepare as prepare
     scene, updates = fixture_scene()
     scene.groups.append(Group(scene.groups[0].mesh))
     packed = pack_scene(scene)

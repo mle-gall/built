@@ -5,12 +5,12 @@ the technical-drawing standards draw them (#741). The sheet drew «\\»,
 135° to the line, and the 3D view drew them square to it."""
 from __future__ import annotations
 
-from ingetrazo_render import AnnotationCanvas
+from built_render import AnnotationCanvas
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import math
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 
 from core.composition import CotaAngularItem, CotaItem, CotaRadialItem  # noqa: E402

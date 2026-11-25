@@ -7,10 +7,10 @@ the reason, to be fixed instead of typed again."""
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Input as Qt
+from built_core import Vec3 as QVector3D
 
-from ingetrazo_render import KeyEvent, ShortcutOverride
+from built_render import KeyEvent, ShortcutOverride
 from tests.controller_surface import ControllerSurface as Viewport
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 

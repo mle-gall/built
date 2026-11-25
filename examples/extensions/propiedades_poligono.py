@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Rony Leonel Janampa Monago
-# Adapted to IngeTrazo's extension API (selection, holes, composite
-# sections, document units, translations) by the IngeTrazo maintainers.
+# Adapted to Built's extension API (selection, holes, composite
+# sections, document units, translations) by the Built maintainers.
 """Polygon properties — area, centroid and second moments of the selected faces.
 
 Select one face (or several faces in the same plane: a section drawn in
@@ -193,7 +193,7 @@ _TEXTS = {
 def _tr(text: str) -> str:
     """``text`` in the interface language."""
     try:
-        from ingetrazo_core.i18n import current_language
+        from built_core.i18n import current_language
         lang = current_language()
     except Exception:  # noqa: BLE001
         lang = "en"
@@ -301,7 +301,7 @@ def _selected_faces(scene):
 def faces_plane(faces):
     """``(origin, u, v, n)`` of the plane shared by ``faces``: the model's
     origin projected onto it, and the drawing's axes in it."""
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     from core.axes import plane_axes
     n = QVector3D(faces[0].normal())
     if n.length() < 1e-9:
@@ -323,7 +323,7 @@ def faces_plane(faces):
 
 def selection_properties(scene):
     """``(props, plane, counts)`` for the faces selected in ``scene``."""
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     faces = _selected_faces(scene)
     if not faces:
         raise PolygonError(_tr("Select a face (or several faces in one plane) first."))
@@ -411,7 +411,7 @@ def format_report(props, plane, counts) -> str:
 
 def show_properties(viewport) -> None:
     from core.plugin_panels import show_utility
-    from ingetrazo_render import PluginTextReport
+    from built_render import PluginTextReport
     try:
         props, plane, counts = selection_properties(viewport.scene)
     except PolygonError as exc:

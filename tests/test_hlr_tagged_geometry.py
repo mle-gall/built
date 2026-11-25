@@ -17,7 +17,7 @@ from tests.shell_isolation import one_off_export, restore_shell_patches  # noqa:
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 
 from core import _native                                 # noqa: E402
@@ -158,7 +158,7 @@ def test_the_arrays_draw_the_lines_the_walk_draws_with_their_layers(
 
 def test_with_a_section_cut_too(tmp_path, lazy):
     from core.history import History, PlaceSectionPlaneCommand
-    from ingetrazo_core.section import SectionPlane
+    from built_core.section import SectionPlane
     scene = _scene(tmp_path, lazy)
     vp = _viewport(scene)
     hist = History(scene)

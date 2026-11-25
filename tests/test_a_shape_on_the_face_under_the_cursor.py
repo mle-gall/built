@@ -22,11 +22,11 @@ x = 2, y = 0 and z = 2, and each is asked in turn.
 from __future__ import annotations
 
 
-from ingetrazo_render import KeyEvent, MouseEvent
+from built_render import KeyEvent, MouseEvent
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Vec3 as QVector3D
 
 from core.snap import AXIS_COLORS, face_plane_world
 

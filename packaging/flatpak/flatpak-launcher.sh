@@ -1,5 +1,5 @@
 #!/bin/sh
-# IngeTrazo's launcher inside the Flatpak sandbox.
+# Built's launcher inside the Flatpak sandbox.
 #
 # pip installed the dependencies under /app's prefix; the runtime's python
 # does not look there on its own, whatever its version happens to be.
@@ -8,8 +8,8 @@ export PYTHONPATH="/app/lib/python${PYVER}/site-packages:${PYTHONPATH}"
 # Work from the user's own directory, NOT from /app. Anything that resolves a
 # relative path against the working directory — a file dialog above all — would
 # otherwise hand the host a sandbox-only path: the portal draws the chooser
-# outside the sandbox and answers "/app/ingetrazo not found". Python puts the
+# outside the sandbox and answers "/app/built not found". Python puts the
 # script's own directory on sys.path, so the imports do not need the cd.
 cd "${HOME:-/}" 2>/dev/null || cd /
-export BUILT_ROOT=/app/ingetrazo
+export BUILT_ROOT=/app/built
 exec /app/bin/built "$@"

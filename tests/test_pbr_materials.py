@@ -7,8 +7,8 @@ import zipfile
 import numpy as np
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from ingetrazo_render import SurveyRaster
-from ingetrazo_core import Vec3 as V
+from built_render import SurveyRaster
+from built_core import Vec3 as V
 
 from core.group import Group
 from core.history import RestampMaterialCommand
@@ -17,8 +17,8 @@ from core.scene import Scene
 from formats import igz
 from formats.glb import load_glb, parse_container
 from formats.gltf import save_glb
-from ingetrazo_core import source_arrays
-from ingetrazo_render import material_texture_array
+from built_core import source_arrays
+from built_render import material_texture_array
 
 
 def triangle(mesh):
@@ -32,7 +32,7 @@ def image(path, rgb):
 
 
 def test_igz_embeds_pbr_in_registry_faces_and_nested_paint(tmp_path, monkeypatch):
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "cache"))
     path = image(tmp_path / "tile.png", (15, 29, 41))
     src = Path(path).read_bytes()
     recipe = {key: {"path": path} for key in
@@ -178,7 +178,7 @@ def test_linked_recipe_on_nested_group_with_name_collision(tmp_path):
 
 
 def test_edit_pbr_in_the_inspector_and_undo_each_change(native_host, tmp_path, monkeypatch):
-    from ingetrazo_render import wgpu_library as library
+    from built_render import wgpu_library as library
     win = native_host.window
     scene = win.viewport.scene
     mat = Material("Editor alloy", (.5, .5, .5))

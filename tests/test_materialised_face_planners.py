@@ -3,7 +3,7 @@ import hashlib
 import json
 import random
 
-from ingetrazo_core import Vec3
+from built_core import Vec3
 
 from core import topology
 from core.geometry import Face
@@ -124,7 +124,7 @@ def test_drawn_segments_preserve_the_ordered_command_plan(monkeypatch):
         segments = [(p(0, k), p(10, k)), (p(k, 0), p(k, 10)),
                     (p(10, k), p(k, 10)), (p(0, 0), p(10, 10))]
         for setting in ("0", "1"):
-            monkeypatch.setenv("INGETRAZO_SCANS", setting)
+            monkeypatch.setenv("BUILT_SCANS", setting)
             plan = plan_edge_commands(scene, segments, True, p(1, 2))
             digest.update(json.dumps([signature(c) for c in plan]).encode())
         assert scene.mesh.faces == [face]

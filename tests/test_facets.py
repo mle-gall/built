@@ -3,7 +3,7 @@ import pytest
 from core.scene import Scene
 from core.group import Group
 from core import bim_registry
-from ingetrazo_core import facets
+from built_core import facets
 from core.history import History
 
 
@@ -96,7 +96,7 @@ def test_tint_overrides_face_material_and_nested_proxy():
 
 
 def test_saved_scene_keeps_view_key():
-    from ingetrazo_core.saved_views import SavedView
+    from built_core.saved_views import SavedView
     view = SavedView('Launch', navigator_view='launch')
     assert SavedView.from_dict(view.to_dict()).navigator_view == 'launch'
 
@@ -130,7 +130,7 @@ def test_bridge_saved_views_and_paging():
 
 
 def test_filtered_ifc_profile_exports_only_matching_group(tmp_path):
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     from formats.ifc import save_ifc
     scene = Scene()
     for name in ('Keep', 'Omit'):
@@ -181,7 +181,7 @@ def test_filtered_placements_cannot_reach_hidden_object_ghost_pass():
 
 
 def test_filter_leaves_excluded_working_mesh_and_drops_hidden_selection():
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     from core.agent_facets import set_display
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport()

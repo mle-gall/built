@@ -5,10 +5,10 @@ import json
 import threading
 from tests.shell_isolation import native_host, restore_shell_patches  # noqa: F401
 import pytest
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
-from ingetrazo_core import project
-from ingetrazo_core import recent
+from built_core import Input as Qt
+from built_core import Vec3 as QVector3D
+from built_core import project
+from built_core import recent
 from core.scene import Scene
 from core.history import AddEdgeCommand
 from formats import igz
@@ -45,7 +45,7 @@ def test_portable_roundtrip(tmp_path):
 
 
 def test_recent_bounded_pin_and_relocation(tmp_path):
-    from ingetrazo_core import NativeSettings
+    from built_core import NativeSettings
     st = NativeSettings(str(tmp_path))
     first = tmp_path / 'first.igz'
     recent.remember(first, pinned=True, settings=st)
@@ -59,8 +59,8 @@ def test_recent_bounded_pin_and_relocation(tmp_path):
 
 
 def test_home_lists_opens_and_locates(win, tmp_path, monkeypatch):
-    from ingetrazo_render import wgpu_start
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render import wgpu_start
+    from built_render.shell_files import ShellFileDialog
     a = tmp_path / 'moved.igz'
     igz.save_scene(Scene(), a)
     old = tmp_path / 'old.igz'
@@ -91,7 +91,7 @@ def test_active_file_tabs_and_reopen(win, tmp_path):
     source = win._doc
     source.viewport.history.execute(AddEdgeCommand(QVector3D(), QVector3D(1, 0, 0)))
     assert source.viewport.history.undo_stack
-    from ingetrazo_render import shell_files as files
+    from built_render import shell_files as files
     assert files.do_save(win, source.path)
     assert next(e for e in storage.load(path)['files'] if e['path'] == 'source.igz')['role'] == 'linked'
     win._documents.remove(source)
@@ -150,7 +150,7 @@ def test_new_document_can_be_saved_into_session(win, tmp_path):
     assert not win._doc.read_only
     assert all(d.read_only for d in win.documents() if d is not win._doc)
     new_path = tmp_path / 'new.igz'
-    from ingetrazo_render import shell_files as files
+    from built_render import shell_files as files
     assert files.do_save(win, new_path)
     assert win.query_worksession()["active_file"] == str(new_path)
     assert new_path.is_file()

@@ -6,7 +6,7 @@ With several faces or edges selected it only counted them; the usual totals
 measured with."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 from tests.native_tree import inspector
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 

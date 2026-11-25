@@ -6,8 +6,8 @@ from __future__ import annotations
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from types import SimpleNamespace
 
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Vec3 as QVector3D
 
 from core.history import History
 from core.scene import Scene
@@ -160,7 +160,7 @@ def test_copy_paste_group():
 def test_copy_paste_instance_shares_prototype():
     from core.group import Group
     from core.mesh import Mesh
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     scene = Scene()
     vp = _VP(scene, History(scene), None)
     proto = Mesh()
@@ -246,7 +246,7 @@ def test_planar_texture_preview_rides_with_the_drag():
     # the projection into an anchored uvw: evaluating it at the OFFSET
     # vertices reproduces the texture exactly as it looked at the original
     # spot. (Group previews ride in the scratch VBOs, UVs already baked.)
-    from ingetrazo_core import Vec3 as Q
+    from built_core import Vec3 as Q
     scene = Scene()
     vp = _VP(scene, History(scene), None)
     f = scene.mesh.add_face([V(1, 1), V(3, 1), V(3, 3), V(1, 3)])
@@ -289,8 +289,8 @@ def test_paste_stamps_once_and_returns_to_select(native_host, monkeypatch):
     # nothing keeps following the cursor. The clipboard survives, so pasting
     # again stamps another copy.
     # A board of this test's own: no copy of an earlier test to adopt.
-    from ingetrazo_render import shell_files as files
-    from ingetrazo_render import ModelClipboard
+    from built_render import shell_files as files
+    from built_render import ModelClipboard
     monkeypatch.setattr(files, "_clipboard", ModelClipboard())
     win = native_host.window
     vp = win.viewport
@@ -354,7 +354,7 @@ def test_copy_paste_container_whose_own_mesh_is_empty():
     so copy_selection returned False and the old clipboard stayed."""
     from core.group import Group, placement_points
     from core.mesh import Mesh
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     scene = Scene()
     vp = _VP(scene, History(scene), {"faces": [], "edges": [],
                                      "groups": [], "ref": V(99, 99, 0)})
@@ -381,7 +381,7 @@ def test_a_face_pasted_over_another_merges_with_it():
     one lay over it as a second face; like a rectangle drawn there, it now
     splits the plane into its regions."""
     from types import SimpleNamespace
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from core.history import History
     from core.scene import Scene
     from tools.paste import PasteTool
@@ -423,8 +423,8 @@ def test_paste_in_place_lands_on_the_original_and_selects_it():
 
 def test_paste_in_place_menu_action_keeps_the_active_tool(native_host, monkeypatch):
     # A board of this test's own: no copy of an earlier test to adopt.
-    from ingetrazo_render import shell_files as files
-    from ingetrazo_render import ModelClipboard
+    from built_render import shell_files as files
+    from built_render import ModelClipboard
     monkeypatch.setattr(files, "_clipboard", ModelClipboard())
     win = native_host.window
     vp = win.viewport

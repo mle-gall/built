@@ -12,7 +12,7 @@ plane (Y = 0.10), which is where the rectangle belongs.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from tools.rust_tools import RectangleTool
 

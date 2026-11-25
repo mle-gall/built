@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import numpy as np
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import ScreenPoint, Input
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import ScreenPoint, Input
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, world_mesh
 from core.history import ExplodeViewCommand
@@ -76,7 +76,7 @@ def _probe(vp):
 def _mark_positions(face, placement=None):
     from types import SimpleNamespace
     from views.wgpu_parity import hover_face_marks
-    from ingetrazo_core import VERTEX
+    from built_core import VERTEX
     marks = hover_face_marks(SimpleNamespace(source_viewport=None), face, placement)
     return marks.view(VERTEX)['pos']
 

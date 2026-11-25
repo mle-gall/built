@@ -21,9 +21,9 @@ def test_an_unreadable_skp_is_reported_and_nothing_else_runs(native_host, monkey
                  "_extract_skp_dlls", "_on_export_skp"):
         assert not hasattr(native_host.window, name), name
     said = []
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.warning",
+    monkeypatch.setattr("built_render.chrome_dialogs.warning",
                         staticmethod(lambda *a, **k: said.append(a[2])))
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.question",
+    monkeypatch.setattr("built_render.chrome_dialogs.question",
                         staticmethod(lambda *a, **k: pytest.fail("asked to install something")))
     # The Render tab looks for Blender when the window opens (one
     # `flatpak info` where Flatpak exists): that is not the .skp import.
@@ -50,7 +50,7 @@ def test_no_skp_export_in_the_menu(native_host):
 def test_the_bundle_spec_leaves_the_sdk_template_out():
     text = (ROOT / "packaging/native.spec").read_text(encoding="utf-8")
     assert "'_scaffold' not in src" in text
-    flatpak = (ROOT / "packaging/flatpak/com.ingetrazo.IngeTrazo.yml").read_text(encoding="utf-8")
+    flatpak = (ROOT / "packaging/flatpak/com.built.Built.yml").read_text(encoding="utf-8")
     assert "openskp/_scaffold" in flatpak and "rm -rf" in flatpak
     snap = (ROOT / "packaging/snap/snapcraft.yaml.in").read_text(encoding="utf-8")
     assert "_scaffold" in snap

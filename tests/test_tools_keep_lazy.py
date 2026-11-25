@@ -11,8 +11,8 @@ from types import SimpleNamespace
 
 
 import pytest  # noqa: E402
-from ingetrazo_core import ScreenPoint, Input # noqa: E402
-from ingetrazo_render import MouseEvent  # noqa: E402
+from built_core import ScreenPoint, Input # noqa: E402
+from built_render import MouseEvent  # noqa: E402
 
 from core import mesh as M  # noqa: E402
 from tests.test_light_faces import (  # noqa: E402
@@ -150,7 +150,7 @@ def test_every_face_painted_reads_the_document(big_enough, tmp_path, painted):
     from core.group import Group
     from core.scene import Scene
     from formats import igz
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     scene = Scene()
     m = M.Mesh()
     for i in range(5):
@@ -202,7 +202,7 @@ def test_a_centre_on_a_lazy_group_follows_it_unbuilt(native_window, big_enough, 
     from core.scene import Scene
     from formats import igz
     from views import array_bake
-    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+    from built_core import Matrix4 as QMatrix4x4, Vec3 as V
     scene = Scene()
     m = M.Mesh()
     ring = [V(math.cos(i * math.pi / 12), math.sin(i * math.pi / 12), 0)
@@ -243,8 +243,8 @@ def test_a_view_moving_into_the_grid_keeps_its_bakes(floor):
     win, vp, _mesh, _x, _y = floor
     primary = vp.keys_stand_in
     packed = primary.packed
-    from ingetrazo_render.shell_views import make_pane
-    from ingetrazo_render import ModelViews
+    from built_render.shell_views import make_pane
+    from built_render import ModelViews
 
     win.set_view_layout("four")
     layout = ModelViews()
@@ -263,7 +263,7 @@ def _boxed_scene(tmp_path, closed, placed):
     from core.group import Group
     from core.scene import Scene
     from formats import igz
-    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+    from built_core import Matrix4 as QMatrix4x4, Vec3 as V
     scene = Scene()
     m = M.Mesh()
     a, b, c, d = V(0, 0, 0), V(2, 0, 0), V(2, 3, 0), V(0, 3, 0)

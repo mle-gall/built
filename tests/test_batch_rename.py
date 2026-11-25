@@ -4,10 +4,10 @@ import json
 
 import pytest
 from core.group import Group
-from ingetrazo_core import browser_rename
+from built_core import browser_rename
 from tests.native_tree import action
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
-from ingetrazo_render import chrome_forms
+from built_render import chrome_forms
 
 
 @pytest.fixture
@@ -131,7 +131,7 @@ def test_changed_targets_or_document_never_partly_apply(model, stale):
 
 def test_single_item_uses_the_inline_editor_and_a_face_pick_never_renames_the_model(model, monkeypatch):
     from types import SimpleNamespace
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     host, scene, groups = model
     scene.select([groups[1]])
     inline = []

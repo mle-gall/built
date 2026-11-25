@@ -110,7 +110,7 @@ def test_adapter_event_prefix(name, recorded):
 
 
 def test_plugin_can_connect_and_disconnect_a_bound_native_tool_slot():
-    from ingetrazo_render import ChangeCallbacks
+    from built_render import ChangeCallbacks
     from tools.rust_tools import SelectTool
 
     class RecordingSelect(SelectTool):

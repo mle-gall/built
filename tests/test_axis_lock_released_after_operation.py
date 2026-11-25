@@ -3,7 +3,7 @@
 """The arrow-key axis lock lasts one operation, not until Esc (issue #30).
 
 @pacaeiro: «In SK, if you're drawing a line and press Arrow to lock X and
-finish drawing the line, the X lock is released automatically. In ingeTrazo
+finish drawing the line, the X lock is released automatically. In Built
 the Axis lock keeps active (it can be released with an Escape key, not a big
 deal). If we are trying to somewhat mimic SK, it's a detail to consider.»
 
@@ -21,9 +21,9 @@ from __future__ import annotations
 
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Input
-from ingetrazo_render import MouseEvent
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Input
+from built_render import MouseEvent
+from built_core import Vec3 as QVector3D
 
 
 def _viewport(native_host):
@@ -116,7 +116,7 @@ def test_a_typed_length_actually_drops_the_lock(native_host):
     committed flag, the busy-tool guard ate it, and the hard lock survived a
     typed length while the second CLICK dropped it. Same commit signal as
     the click path: did this input make geometry?"""
-    from ingetrazo_render import KeyEvent
+    from built_render import KeyEvent
     win, vp = _viewport(native_host)
     win._activate_tool("line")
     tool = vp.active_tool

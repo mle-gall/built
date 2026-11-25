@@ -26,13 +26,13 @@ def main():
     args = parser.parse_args()
     path = args.fixture
     with tempfile.TemporaryDirectory() as cache:
-        os.environ["INGETRAZO_TEXTURE_CACHE"] = cache
+        os.environ["BUILT_TEXTURE_CACHE"] = cache
         os.environ["BUILT_SETTINGS_DIR"] = cache
-        from ingetrazo_core.settings import use_native
+        from built_core.settings import use_native
         use_native(cache)
         from core import group, layers
         from core.scene import Scene
-        from ingetrazo_core.formats import igz, skp
+        from built_core.formats import igz, skp
 
         # The document includes freshly generated group and tag IDs in
         # addition to stable file identities. Make only the allocators repeatable.
@@ -41,7 +41,7 @@ def main():
                 patch.object(layers, "new_uid", side_effect=ids):
             start = time.perf_counter()
             if args.worker:
-                from ingetrazo_core import DocumentOpen
+                from built_core import DocumentOpen
                 scene, _, _, _ = DocumentOpen(path).wait()
             else:
                 scene = Scene()

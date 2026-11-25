@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 IngeTrazo contributors.
+# Copyright (C) 2026 Built contributors.
 from types import SimpleNamespace
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
+from built_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 
 from core.group import Group
 from core.history import (AddEdgeCommand, Command, CommandRejected, FlipFacesCommand,

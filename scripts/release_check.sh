@@ -18,7 +18,7 @@ PY="${PYO3_PYTHON:-$HERE/.venv/bin/python}"
 [[ -x "$PY" ]] || PY="$HERE/venv/bin/python"
 export PYO3_PYTHON="$PY" RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
 cd "$HERE"
-VER="$("$PY" -c 'from ingetrazo_core.version import __version__; print(__version__)')"
+VER="$("$PY" -c 'from built_core.version import __version__; print(__version__)')"
 WORK="$(mktemp -d)"
 trap 'git -C "$HERE" worktree remove --force "$WORK/prev" 2>/dev/null || true; rm -rf "$WORK"' EXIT
 git worktree add --detach -q "$WORK/prev" "$PREV"
@@ -46,8 +46,8 @@ for revision in prev head; do
   # The embedded renderer comes from this binary. Use the same revision
   # of the separately loaded document engine when timing its open.
   wheels="$WORK/wheels-$revision"
-  "$PY" -m maturin build --release --locked -m "$root/rust/ingetrazo_core/Cargo.toml" -o "$wheels"
-  "$PY" -m pip install --no-index --no-deps --target "$WORK/engine-$revision" "$wheels"/ingetrazo_core-*.whl
+  "$PY" -m maturin build --release --locked -m "$root/rust/built_core/Cargo.toml" -o "$wheels"
+  "$PY" -m pip install --no-index --no-deps --target "$WORK/engine-$revision" "$wheels"/built_core-*.whl
   for run in 1 2; do
     for mode in measure script; do
       args=(--measure)

@@ -2,10 +2,10 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from ingetrazo_render import AboutReview
+from built_render import AboutReview
 
-from ingetrazo_core.i18n import tr
-from ingetrazo_render import AboutSheet as About
+from built_core.i18n import tr
+from built_render import AboutSheet as About
 
 
 def test_everyone_is_in_the_credits(monkeypatch):

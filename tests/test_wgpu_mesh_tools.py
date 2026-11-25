@@ -1,9 +1,9 @@
 """Native routing invokes the document tools, including History and cancellation."""
 from types import SimpleNamespace
 import pytest
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import ScreenPoint as QPointF
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Input as Qt
+from built_core import ScreenPoint as QPointF
+from built_core import Vec3 as QVector3D
 from core.scene import Scene
 from core.mesh import Mesh
 from core.group import Group
@@ -11,9 +11,9 @@ from core.history import History
 from tools.rust_tools import LineTool
 from tools.rust_tools import RectangleTool
 from tools.base import ToolContext
-from ingetrazo_render import NativeTools
-from ingetrazo_core import pack_scene
-from ingetrazo_core import InstanceUpdates
+from built_render import NativeTools
+from built_core import pack_scene
+from built_core import InstanceUpdates
 
 
 def harness(tool, inside=False):
@@ -166,7 +166,7 @@ def test_move_loose_preview_cancel_commit(inside, target):
 
 
 def test_rectangle_vcb_dimensions_and_units():
-    from ingetrazo_render import KeyEvent
+    from built_render import KeyEvent
     scene, history, native, _ = harness(RectangleTool())
     click(native, (0, 0, 0))
     native.view.last_snap = SimpleNamespace(point=QVector3D(1, 1, 0), kind='endpoint', context=None)

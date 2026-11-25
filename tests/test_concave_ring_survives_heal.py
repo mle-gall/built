@@ -16,14 +16,14 @@ that average can land outside the loop itself, so the inner face read as
 """
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.history import History
 from core.mesh import Mesh
 from core.scene import Scene
 from core.topology import (_interior_point, _loop_inside_loop,
                            _point_inside_2d, heal_overlapping_faces)
-from ingetrazo_core.triangulate import plane_axes
+from built_core.triangulate import plane_axes
 from tools.offset import OffsetTool
 
 

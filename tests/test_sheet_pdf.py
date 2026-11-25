@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The PDF writer (ingetrazo_core sheets::pdf), read back with PyMuPDF:
+"""The PDF writer (built_core sheets::pdf), read back with PyMuPDF:
 a page per sheet at the paper's size; every line of the display lists at
 its place with its pen; the texts in the embedded Inter, extractable, laid
 out where Qt's drawText puts them; a frame's render as an image of its
@@ -16,8 +16,8 @@ import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 from pathlib import Path  # noqa: E402
 
-import ingetrazo_core as NATIVE  # noqa: E402
-from ingetrazo_render import SurveyRaster  # noqa: E402
+import built_core as NATIVE  # noqa: E402
+from built_render import SurveyRaster  # noqa: E402
 from tests.headless_gpu import pixel  # noqa: E402
 
 pymupdf = pytest.importorskip("pymupdf")

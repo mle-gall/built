@@ -13,7 +13,7 @@ next round dropped it as debris."""
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.history import History
 from core.scene import Scene

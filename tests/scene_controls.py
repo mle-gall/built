@@ -2,7 +2,7 @@
 from contextlib import contextmanager
 from unittest.mock import Mock, patch
 
-from ingetrazo_core import Input as Qt
+from built_core import Input as Qt
 from views import wgpu_ui
 
 

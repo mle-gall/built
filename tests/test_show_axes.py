@@ -12,7 +12,7 @@ from tests.raster_samples import pixels
 from tests.shell_isolation import native_gpu_host, native_window, restore_shell_patches  # noqa: F401
 from tests.test_xray_toggle import _state
 from views import view_commands
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
@@ -73,7 +73,7 @@ def test_the_view_menu_switches_the_scene_flag(native_window):
 
 
 def test_alt_a_is_its_own_shortcut():
-    from ingetrazo_render import command_registry
+    from built_render import command_registry
     assert [r[0] for r in command_registry([], []) if "Alt+A" in r[3]] == ["view:axes"]
 
 

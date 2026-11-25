@@ -1,5 +1,5 @@
 """Native GPU tiles share geometry while keeping independent cameras and styles."""
-from ingetrazo_core import Vec3
+from built_core import Vec3
 from tests.model_panes import grid  # noqa: F401
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
@@ -19,7 +19,7 @@ def test_visible_tiles_share_one_resident_scene_and_gpu(grid):
 
 
 def test_each_tile_draws_its_own_camera_and_style(grid):
-    from ingetrazo_core.style import style_by_name
+    from built_core.style import style_by_name
     vp = grid.click("Top")
     vp.view_style = style_by_name("X-ray").copy()
     grid.renderer.calls.clear()

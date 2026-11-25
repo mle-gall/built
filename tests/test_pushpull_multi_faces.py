@@ -9,12 +9,12 @@ Headless: stub viewport + direct tool calls, as test_pushpull_ux.py.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Input, ScreenPoint
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Input, ScreenPoint
+from built_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
 from core.history import AddFaceCommand, History
-from ingetrazo_core.orient import is_closed
+from built_core.orient import is_closed
 from core.scene import Scene
 from tools.base import ToolContext
 from tools.pushpull import PushPullTool

@@ -6,11 +6,11 @@ from __future__ import annotations
 import gc
 import weakref
 import pytest
-from ingetrazo_core import Matrix4, Vec3
-from ingetrazo_render import chrome_sheet
+from built_core import Matrix4, Vec3
+from built_render import chrome_sheet
 from tests.test_library_sheet import win, frame, tiles  # noqa: F401
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_render import wgpu_library as library
+from built_render import wgpu_library as library
 
 
 def _count_calls(monkeypatch, obj, name):
@@ -127,7 +127,7 @@ def test_hidden_panels_let_the_previous_document_go(win):
 def browser_model():
     from core.group import Group
     from core.mesh import Mesh
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from tests.test_project_drawing_filters import Project
 
     p = Project()
@@ -155,7 +155,7 @@ def test_a_move_leaves_the_material_swatches_as_they_are(win, monkeypatch):
     from core.group import Group
     from core.mesh import Mesh
     from core.history import MoveGroupCommand, SetFaceColorCommand
-    from ingetrazo_core import material_survey
+    from built_core import material_survey
     vp = win.viewport
     mesh = Mesh()
     face = mesh.add_face([Vec3(), Vec3(1, 0, 0), Vec3(1, 1, 0)])
@@ -177,7 +177,7 @@ def test_a_move_leaves_the_material_swatches_as_they_are(win, monkeypatch):
 
 def test_a_move_leaves_the_browser_rows_as_they_are(monkeypatch):
     from core.history import MoveGroupCommand, SetFaceColorCommand
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from views import wgpu_ui
     p, group, face = browser_model()
     history = p.win.viewport.history
@@ -204,7 +204,7 @@ def test_a_move_leaves_the_browser_rows_as_they_are(monkeypatch):
 
 def test_a_geometry_edit_leaves_the_browser_rows_as_they_are(monkeypatch):
     from core.history import AddEdgeCommand, NativeCommand, SnapshotMutation
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from views import wgpu_ui
     p, group, _ = browser_model()
     scans = _count_calls(monkeypatch, wgpu_ui, "prepare_tree_model")
@@ -223,7 +223,7 @@ def test_a_geometry_edit_leaves_the_browser_rows_as_they_are(monkeypatch):
 
 def test_two_browser_panes_each_receive_a_change_seen_by_the_other():
     from core.history import MoveGroupCommand, NativeCommand
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from tests.test_tree_links import _View
     from views import wgpu_ui
 

@@ -61,7 +61,7 @@ def _git(*args) -> str:
 def module_paths() -> dict:
     """Where the native modules this run imports live (None: not importable)."""
     paths = {}
-    for name in ("ingetrazo_core", "ingetrazo_render"):
+    for name in ("built_core", "built_render"):
         try:
             mod = __import__(name)
             paths[name] = getattr(mod, "__file__", None)
@@ -120,7 +120,7 @@ def pick_edit_target(scene, max_faces: int = 200):
     at least one level deep (depth first, document order) whose mesh no
     other group shares, not hidden, locked or linked. None when there is
     none. Reads face counts without building deferred meshes."""
-    from ingetrazo_core.mesh import face_count
+    from built_core.mesh import face_count
     from core import links
     counts: dict = {}
     stack = list(scene.groups)
@@ -160,7 +160,7 @@ def edit_face(mesh):
 
 def edit_command(face, distance: float = 0.01):
     """The Move tool's command for ``face`` moved ``distance`` along its normal."""
-    from ingetrazo_core.history import MoveVerticesCommand
+    from built_core.history import MoveVerticesCommand
     return MoveVerticesCommand(list(face.vertices), face.normal() * distance,
                                carry_textures=True)
 
@@ -207,11 +207,11 @@ class Probe:
 
     # wrappers ---------------------------------------------------------------
     def install(self):
-        from ingetrazo_core.formats import igz
+        from built_core.formats import igz
         import views.wgpu_view as wv
-        from ingetrazo_render import Host
-        from ingetrazo_render.shell_views import ShellView
-        import ingetrazo_core
+        from built_render import Host
+        from built_render.shell_views import ShellView
+        import built_core
         probe = self
 
         load_into = igz.load_into
@@ -228,7 +228,7 @@ class Probe:
                     probe.result["rss_after_load_mb"] = rss_now_mb()
         igz.load_into = timed_load
 
-        pack_scene = ingetrazo_core.pack_scene
+        pack_scene = built_core.pack_scene
 
         def timed_pack(scene, *a, **k):
             start = time.perf_counter()
@@ -241,7 +241,7 @@ class Probe:
                 probe.result["packed_instances"] = int(len(packed.instances))
                 probe.event("pack_done")
             return packed
-        wv.pack_scene = ingetrazo_core.pack_scene = timed_pack
+        wv.pack_scene = built_core.pack_scene = timed_pack
 
         upload = ShellView._upload
 
@@ -279,7 +279,7 @@ class Probe:
             return out
         ShellView._present_frame = counted_present
 
-        prepare = ingetrazo_core.resident_prepare
+        prepare = built_core.resident_prepare
 
         def timed_prepare(*a, **k):
             start = time.perf_counter()
@@ -292,7 +292,7 @@ class Probe:
                         probe.result["snap_index_build"] = end - start
                         probe.result["events"]["snap_index_build_start"] = round(
                             start - probe.t_open, 4)
-        ingetrazo_core.resident_prepare = timed_prepare
+        built_core.resident_prepare = timed_prepare
 
         open_path = Host.open_path
         def timed_open(host, path):
@@ -427,7 +427,7 @@ class Probe:
             self.result["notes"].append("edit: no small unshared nested leaf group found")
             return next_step()
         path = target
-        from ingetrazo_core.mesh import face_count
+        from built_core.mesh import face_count
         self.result["edit_target"] = {
             "path": [g.name for g in path], "depth": len(path),
             "faces": face_count(path[-1].mesh)}
@@ -448,7 +448,7 @@ class Probe:
             self.later(500, edit)
 
         def edit():
-            from ingetrazo_core.history import CommandRejected
+            from built_core.history import CommandRejected
             # The open group's mesh (a component instance edits a world copy).
             face = edit_face(scene.mesh)
             if face is None:
@@ -558,7 +558,7 @@ def parse_args(argv):
     parser.add_argument("--edit", action="store_true")
     parser.add_argument("--takeoff", action="store_true")
     parser.add_argument("--perf", action="store_true",
-                        help="INGETRAZO_PERF=1 telemetry into <out>.perf.log")
+                        help="BUILT_PERF=1 telemetry into <out>.perf.log")
     parser.add_argument("--size", default="1600x1000",
                         help="main window size, WxH (default 1600x1000)")
     parser.add_argument("--no-on-top", action="store_true",
@@ -583,7 +583,7 @@ def main(argv=None) -> int:
     from scripts.isolated_launch import run
     with tempfile.TemporaryDirectory(prefix="built-open-probe-") as folder:
         profile = Path(folder) / "profile"
-        plugins = profile / "data" / "ingetrazo" / "plugins"
+        plugins = profile / "data" / "built" / "plugins"
         plugins.mkdir(parents=True)
         (plugins / "open_probe.py").write_text(
             "from scripts.open_path_probe import install_probe as setup\n")
@@ -591,7 +591,7 @@ def main(argv=None) -> int:
         env = dict(os.environ, BUILT_OPEN_PROBE=json.dumps(
             [str(path), str(report), options, args.timeout]))
         if args.perf:
-            env.update(INGETRAZO_PERF="1", INGETRAZO_PERF_LOG=str(args.out.resolve().with_suffix(".perf.log")))
+            env.update(BUILT_PERF="1", BUILT_PERF_LOG=str(args.out.resolve().with_suffix(".perf.log")))
         result = run([REPO / "rust/built_app/target/release/built", "--new-instance",
                       "--root", REPO, "--venv", REPO / ".venv", "--size", args.size, path],
                      settings=profile, env=env, timeout=args.timeout + 30)

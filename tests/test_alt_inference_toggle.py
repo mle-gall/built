@@ -5,7 +5,7 @@
 @pacaeiro, on 0.4.2 (issue #26): «I finally discovered that ALT key switch
 off some inferences (witch is very good), but the problem is the ALT key
 itself. In my daily job I use a lot the shortcuts ALT and ALT+TAB to switch
-between programs, and every time I do that with ingeTrazo I lost the
+between programs, and every time I do that with Built I lost the
 inferences.»
 
 The key is right — Marco's reference screenshot reads «Alt =
@@ -28,10 +28,10 @@ takes it.
 from __future__ import annotations
 
 
-from ingetrazo_render import KeyEvent, MouseEvent
+from built_render import KeyEvent, MouseEvent
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Input as Qt
+from built_core import Vec3 as QVector3D
 
 
 def _viewport(native_host):
@@ -144,7 +144,7 @@ def test_the_status_bar_offers_alt_and_names_the_state(native_host):
     """The usual status bar puts the offer AND the current state on one line
     while drawing: «Alt = Activar/desactivar "Inferencias lineales"
     (Ninguno activo)»."""
-    from ingetrazo_render.status_hints import alt_inference_hint, hint_for
+    from built_render.status_hints import alt_inference_hint, hint_for
 
     # Shorter than the usual wording on purpose: it has the whole bar
     # for this line and we have half of it, so the full name «linear

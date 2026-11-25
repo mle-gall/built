@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
 from core.history import AddFaceCommand, History, MakeGroupCommand
@@ -359,7 +359,7 @@ def test_every_scale_figure_has_its_cutout_and_a_real_height():
     from pathlib import Path
 
     import numpy as np
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
 
     comp_dir = Path(__file__).resolve().parent.parent / "resources" / "components"
     people = json.loads((comp_dir / "people.json").read_text())

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Placed points and boxes moved to Rust
-(``rust/ingetrazo_core/src/group_frame.rs``: a prototype's points through a
+(``rust/built_core/src/group_frame.rs``: a prototype's points through a
 placement, and their box) and must answer as the Python did at
 ``dc7b485a``: ``Scene.bounds``, ``Scene.selection_bounds`` and
 ``core.group.placement_points``.
@@ -27,7 +27,7 @@ GOLDEN = Path(__file__).parent / "fixtures" / "bounds_golden.json.gz"
 
 
 def _box_mesh(mesh, rng, n=2):
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     for _ in range(n):
         x, y, z = (rng.uniform(-5, 5) for _ in range(3))
         s = rng.uniform(0.2, 3)
@@ -36,7 +36,7 @@ def _box_mesh(mesh, rng, n=2):
 
 
 def scenes():
-    from ingetrazo_core import Matrix4 as M, Vec3 as V
+    from built_core import Matrix4 as M, Vec3 as V
     from core.group import Group
     from core.mesh import Mesh
     from core.scene import Scene

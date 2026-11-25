@@ -22,7 +22,7 @@ CASES = {
 
 
 def run(kind, steps):
-    from ingetrazo_core import Input as Qt
+    from built_core import Input as Qt
     from tools.dimension import DimensionTool
     from tools.eraser import EraserTool
     from tools.geopath import GeoPathTool
@@ -54,8 +54,8 @@ def run(kind, steps):
     dialogs = []
     call_dialog = lambda *args, **kwargs: kwargs["done"]("Label")
     schedule = lambda owner, delay, callback: callback()
-    with patch("ingetrazo_render.chrome_forms.ask_text", side_effect=call_dialog), \
-         patch("ingetrazo_core.timers.later", side_effect=schedule), \
+    with patch("built_render.chrome_forms.ask_text", side_effect=call_dialog), \
+         patch("built_core.timers.later", side_effect=schedule), \
          patch.object(ScaleManagerTool, "_run", staticmethod(lambda vp, g: dialogs.append(g.name))):
         if kind != "scale_manager":
             tool.on_activate(vp)

@@ -3,13 +3,13 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 
-from ingetrazo_core import Vec3
+from built_core import Vec3
 
 
 def bulk_results():
     from core import axes, geometry, guide, materials, structure
-    from ingetrazo_core import sun
-    from ingetrazo_core import autosave, style, triangulate
+    from built_core import sun
+    from built_core import autosave, style, triangulate
     from core.textlabel import TextLabel
 
     ring = [Vec3(x, y, 0) for x, y in [(0, 0), (4, 0), (4, 3), (2, 1), (0, 3)]]
@@ -45,8 +45,8 @@ def bulk_results():
 def service_results(monkeypatch, tmp_path):
     import sys
     from types import SimpleNamespace
-    from ingetrazo_core import settings
-    from ingetrazo_core import paths, timers, version
+    from built_core import settings
+    from built_core import paths, timers, version
 
     calls = []
 
@@ -77,7 +77,7 @@ def service_results(monkeypatch, tmp_path):
         grouped_value = second.value("count")
     return {"timer": [calls, handle, later], "profile": [root_value, grouped_value],
             "bundle": [paths.is_frozen(), paths.app_root() == tmp_path],
-            "agent_contains_version": version.USER_AGENT.startswith("IngeTrazo/" + version.__version__ + " ")}
+            "agent_contains_version": version.USER_AGENT.startswith("Built/" + version.__version__ + " ")}
 
 
 def test_bulk_services_python_golden(monkeypatch, tmp_path):

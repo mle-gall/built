@@ -8,10 +8,10 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 import math
 
-from ingetrazo_core import Vec3 as QVector3D, Vec4 as QVector4D
+from built_core import Vec3 as QVector3D, Vec4 as QVector4D
 
 from core.camera import OrbitCamera
-from ingetrazo_core.saved_views import SavedView
+from built_core.saved_views import SavedView
 
 
 def _screen(cam, p):

@@ -2,9 +2,9 @@
 
 [Bahasa Indonesia](README.id.md)
 
-Cuatro documentos reales, dibujados con IngeTrazo para la remodelación de la
+Cuatro documentos reales, dibujados con Built para la remodelación de la
 plaza de Yanque, distrito de Chichas (Arequipa, 2026) por Marco Sumari Tellez. Ábrelos
-con **Archivo ▸ Abrir** (o doble clic si tienes IngeTrazo instalado); tres
+con **Archivo ▸ Abrir** (o doble clic si tienes Built instalado); tres
 de ellos traen su lámina A3 lista en **Archivo ▸ Compositor de láminas** y,
 al lado, el PDF que sale de ahí para que compares.
 
@@ -26,7 +26,7 @@ grosores, transparencia, una capa bloqueada, otra que no se imprime, capas
 vacías para purgar, escenas y una lámina con la leyenda. Es el que siguen el
 manual [`docs/layers.md`](../docs/layers.md) y sus capturas. Lo genera
 `capas-prueba.py` (`python examples/capas-prueba.py` desde la carpeta de
-IngeTrazo), que lo deja como nuevo si lo has modificado al probar.
+Built), que lo deja como nuevo si lo has modificado al probar.
 
 ## Pestañas, escenas y vistas
 
@@ -35,16 +35,16 @@ Planta, Alzado, Lateral) que salen como pestañas bajo la vista; sirve
 también para probar las distribuciones de vistas. Es el que sigue el manual
 [`docs/project-tabs.md`](../docs/project-tabs.md). Lo genera
 `pestanas-prueba.py` (`python examples/pestanas-prueba.py` desde la carpeta
-de IngeTrazo).
+de Built).
 
 ## Extensiones
 
-`extensions/niveles.py` — **Niveles**: niveles del edificio (PB, PA…) guardados en el documento, guías a trazos en alzados y cortes en proyección paralela, y el cursor que se engancha a esas alturas. Idea y primera versión de José Castro Basso (FADU–UDELAR). Viene con IngeTrazo pero sin activar: se instala desde **Extensiones ▸ Gestionar extensiones…** (o copiándola en la carpeta de complementos) y se reinicia IngeTrazo: aparece la pestaña «Niveles» en la bandeja lateral.
+`extensions/niveles.py` — **Niveles**: niveles del edificio (PB, PA…) guardados en el documento, guías a trazos en alzados y cortes en proyección paralela, y el cursor que se engancha a esas alturas. Idea y primera versión de José Castro Basso (FADU–UDELAR). Viene con Built pero sin activar: se instala desde **Extensiones ▸ Gestionar extensiones…** (o copiándola en la carpeta de complementos) y se reinicia Built: aparece la pestaña «Niveles» en la bandeja lateral.
 
 ## Licencia
 
 Los documentos de esta carpeta (modelos, láminas y PDF) son de
 Marco Sumari Tellez y se publican bajo
 [Creative Commons Atribución 4.0](https://creativecommons.org/licenses/by/4.0/deed.es):
-úsalos, modifícalos y compártelos citando la fuente. El código de IngeTrazo
+úsalos, modifícalos y compártelos citando la fuente. El código de Built
 sigue bajo la GPL-3.0-or-later del repositorio.

@@ -27,7 +27,7 @@ from pathlib import Path
 import pytest
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 
-from ingetrazo_core import extension_manager as manager   # noqa: E402
+from built_core import extension_manager as manager   # noqa: E402
 import core.extensions as extensions                     # noqa: E402
 from core.extensions import discover_plugins             # noqa: E402
 
@@ -157,11 +157,11 @@ def test_a_disabled_package_stays_silent(plugins):
 
 
 def test_a_load_failure_reaches_the_error_log(plugins, tmp_path, monkeypatch):
-    import ingetrazo_core.paths
-    monkeypatch.setattr(ingetrazo_core.paths, "user_log_dir", lambda: tmp_path)
+    import built_core.paths
+    monkeypatch.setattr(built_core.paths, "user_log_dir", lambda: tmp_path)
     (plugins / "broken.py").write_text("raise RuntimeError('boom 1152')\n")
     discover_plugins([plugins])
-    log = (tmp_path / "ingetrazo-errors.log").read_text(encoding="utf-8")
+    log = (tmp_path / "built-errors.log").read_text(encoding="utf-8")
     assert "broken" in log and "boom 1152" in log and "Traceback" in log
 
 
@@ -244,19 +244,19 @@ def test_a_card_that_cannot_be_built_costs_only_itself(plugins, monkeypatch):
 # ---- the window -----------------------------------------------------------
 
 def test_a_manager_that_fails_to_open_says_so(native_question_host, monkeypatch, tmp_path):
-    import ingetrazo_render
-    from ingetrazo_render import chrome_dialogs
+    import built_render
+    from built_render import chrome_dialogs
 
     def explode():
         raise PermissionError(13, "denied")
 
-    monkeypatch.setattr("ingetrazo_core.paths.user_log_dir", lambda: tmp_path)
-    monkeypatch.setattr(ingetrazo_render, "ExtensionsSheet", explode)
+    monkeypatch.setattr("built_core.paths.user_log_dir", lambda: tmp_path)
+    monkeypatch.setattr(built_render, "ExtensionsSheet", explode)
     window = native_question_host.window
     native_question_host.menu("extensions")
     notice = chrome_dialogs.history(window)[0]
     assert notice.tone == "warning" and "denied" in notice.detail
-    log = (tmp_path / "ingetrazo-errors.log").read_text()
+    log = (tmp_path / "built-errors.log").read_text()
     assert "extension manager" in log and "Traceback" in log and "denied" in log
 
 

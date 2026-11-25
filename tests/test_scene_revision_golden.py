@@ -22,7 +22,7 @@ CASES = 30
 
 
 def run(seed):
-    from ingetrazo_core import Matrix4, Vec3
+    from built_core import Matrix4, Vec3
     from core.group import Group
     from core.layers import Layer
     from core.mesh import Mesh
@@ -135,7 +135,7 @@ def test_axes_are_compared_by_value():
     """Changed on purpose: the Python walk compared ``repr(g.axes)``, the
     matrix object's address, so an equal matrix assigned moved the revision,
     an edit in place did not, and a reused address could hide a change."""
-    from ingetrazo_core import Matrix4
+    from built_core import Matrix4
     from core.group import Group
     from core.scene import Scene
     s = Scene()

@@ -6,7 +6,7 @@ import struct
 
 import pytest
 
-from ingetrazo_core import extension_manager as manager
+from built_core import extension_manager as manager
 from tests.extensions_chrome import Browser
 from tests.test_extension_manager import _extension
 

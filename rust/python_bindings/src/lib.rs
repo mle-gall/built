@@ -55,7 +55,7 @@ struct Parameter {
     default: Option<Py<PyAny>>,
 }
 
-#[pyclass(frozen, dict, weakref, module = "ingetrazo_core")]
+#[pyclass(frozen, dict, weakref, module = "built_core")]
 struct NativeBinding {
     endpoint: Endpoint,
     method_type: Py<PyAny>,

@@ -5,7 +5,7 @@ session works on a world copy, and leaving shares it back so every copy
 shows the edit — one undo step for the whole session."""
 from __future__ import annotations
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, world_mesh
 from core.history import History, SnapshotMutation

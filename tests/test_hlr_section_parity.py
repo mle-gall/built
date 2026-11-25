@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The section cut's maths moved to Rust (``rust/ingetrazo_core/src/hlr.rs``:
+"""The section cut's maths moved to Rust (``rust/built_core/src/hlr.rs``:
 ``clip_to_section``, ``section_loops``) and must answer bit for bit as
 ``core/hlr.py``'s Python did at ``74b54c81``.
 
@@ -11,7 +11,7 @@ from). Regenerate only on purpose, against the reference implementation:
 ``python tests/test_hlr_section_parity.py --write``."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 import gzip
 import json
 import math
@@ -50,7 +50,7 @@ def _prism(rng, cx, cy, n, r, h):
 
 class _Plane:
     def __init__(self, point, normal):
-        from ingetrazo_core import Vec3 as V
+        from built_core import Vec3 as V
         self.point, self.normal = V(*point), V(*normal)
 
 
@@ -96,7 +96,7 @@ def answer(hlr, case):
     return {"tris": t, "hard": h, "soft": s, "split": [t2, h2, s2, cuts],
             "loops": [r.tolist() for r in loops], "members": members,
             "loops_tol": [r.tolist() for r in loops_tol],
-            "tags": ingetrazo_core.hlr_closing_tags(cuts, [i % 3 for i in range(len(cuts))])}
+            "tags": built_core.hlr_closing_tags(cuts, [i % 3 for i in range(len(cuts))])}
 
 
 def _jsonable(x):

@@ -95,7 +95,7 @@ def test_round_trip_and_copy(tmp_path, component):
     scene = Scene(); group = Group(Mesh(), 'Object'); scene.groups.append(group)
     group.component = component
     if component:
-        from ingetrazo_core import Matrix4 as QMatrix4x4
+        from built_core import Matrix4 as QMatrix4x4
         group.xform = QMatrix4x4()
     group.ifc = full_record(); scene.plugin_data['bim_registry'] = registry()
     copied = copy_group(group)
@@ -180,7 +180,7 @@ def test_paste_with_layers_preserves_record():
 
 
 def test_face_tags_undo_and_geometry():
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     scene = Scene()
     f = scene.mesh.add_face([QVector3D(0, 0, 0), QVector3D(1, 0, 0), QVector3D(0, 1, 0)])
     history = History(scene)
@@ -261,7 +261,7 @@ def test_first_inspection_is_lazy_and_measuring_catches_up(native_host, monkeypa
 
 @pytest.mark.parametrize("objects,faces_per_object", [(3, 0), (1, 8)])
 def test_inspector_waits_for_an_explicit_takeoff_for_objects_and_faces(native_host, monkeypatch, objects, faces_per_object):
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from tests.native_tree import inspector
     from tests.test_bim_takeoff_untagged_moves import _counting, measure
     vp = native_host.viewport

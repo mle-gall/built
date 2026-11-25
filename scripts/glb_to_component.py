@@ -109,7 +109,7 @@ def _alpha_bleed(img):
     """Fill transparent texels with nearby opaque RGB: cutout foliage keeps
     black under alpha 0, and mip/bilinear sampling mixes it in — a tree
     canopy renders as a dark silhouette without this."""
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     h, w = img.height, img.width
     a = np.frombuffer(img.rgba(), np.uint8).reshape(h, w, 4).copy()
     rgb = a[..., :3].astype(np.float64)
@@ -137,10 +137,10 @@ def _alpha_bleed(img):
 
 
 def _auto_exposure(img, target=125.0, max_gain=2.0):
-    """PBR albedo is authored to be LIT; IngeTrazo displays it the classic
+    """PBR albedo is authored to be LIT; Built displays it the classic
     way (texel × orientation shade), so dark-baked foliage reads near black.
     Lift dark textures toward a mid luminance with a soft shoulder."""
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     h, w = img.height, img.width
     a = np.frombuffer(img.rgba(), np.uint8).reshape(h, w, 4).copy()
     opaque = a[..., 3] > 128
@@ -156,7 +156,7 @@ def _auto_exposure(img, target=125.0, max_gain=2.0):
 
 
 def _shrink_texture(path, tex_size, out_dir):
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     img = SurveyRaster.open(str(path))
     if img is None:
         return str(path)
@@ -249,7 +249,7 @@ def _write_glb(out_path, indexed_batches, extras, key):
     bin_blob = b"".join(bin_parts)
     bin_blob += b"\x00" * ((-len(bin_blob)) % 4)
     js = {"asset": {"version": "2.0",
-                    "generator": "IngeTrazo glb_to_component",
+                    "generator": "Built glb_to_component",
                     "extras": {k: extras.get(k)
                                for k in ("title", "author", "license",
                                          "source") if extras.get(k)}},
@@ -283,7 +283,7 @@ def main() -> None:
                     help="rescale so the model is this many metres tall")
     args = ap.parse_args()
 
-    from ingetrazo_core.formats import glb as glb_mod
+    from built_core.formats import glb as glb_mod
 
     batches, js = glb_mod.read_triangles(Path(args.glb))
     extras = (js.get("asset", {}).get("extras", {}) or {})

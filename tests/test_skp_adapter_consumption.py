@@ -5,11 +5,11 @@ import copy
 from types import SimpleNamespace as NS
 
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.scene import Scene
 from formats import igz, skp, skp_reader as adapter
-from ingetrazo_core import PrototypeGeometry
+from built_core import PrototypeGeometry
 from tests.test_skp_backend import _tri_def, _fake_definition
 
 
@@ -140,7 +140,7 @@ def test_depth_guard_and_aliased_tables():
 
 def test_parse_transfers_only_its_private_model_and_keeps_progress(monkeypatch):
     import openskp
-    from ingetrazo_core import reader_compat
+    from built_core import reader_compat
     model = _model()
     monkeypatch.setattr(adapter, "skp_vff_model", lambda path, tables: None)
     monkeypatch.setattr(openskp.SkpFile, "open", lambda path: NS(parse=lambda: model))
@@ -157,7 +157,7 @@ def test_packed_soft_segments_preserve_endpoint_bits_repr_and_pickle(transformed
     import pickle
     import struct
     import numpy as np
-    from ingetrazo_core import SoftSegments
+    from built_core import SoftSegments
     d = _tri_def(1, "soft")
     for edge in d.edges.values():
         edge.soft = True
@@ -203,7 +203,7 @@ def test_one_use_flattened_geometry_is_released_before_next_group(monkeypatch):
 
 @pytest.mark.parametrize("veto", ["cycle", "depth"])
 def test_early_release_defers_ambiguous_or_global_reads(veto):
-    from ingetrazo_core import FlatGeometry
+    from built_core import FlatGeometry
     root = _tri_def(0, "root", [_instance(1)])
     child = _tri_def(1, "child")
     defs = {0: root, 1: child}
@@ -216,7 +216,7 @@ def test_early_release_defers_ambiguous_or_global_reads(veto):
 
 
 def test_repeated_flat_geometry_survives_until_its_last_visit():
-    from ingetrazo_core import FlatGeometry
+    from built_core import FlatGeometry
     root = _tri_def(0, "root", [_instance(1), _instance(1)])
     child = _tri_def(1, "child")
     tracker = FlatGeometry({0: root, 1: child}, set(), {1: 2}, [root], 32)

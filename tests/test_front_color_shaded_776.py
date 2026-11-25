@@ -16,7 +16,7 @@ from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa
 import numpy as np
 import pytest
 from tests.raster_samples import pixels
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 
 V = QVector3D
@@ -125,7 +125,7 @@ def test_a_group_takes_it_and_a_painted_group_keeps_its_paint(win):
 
 
 def test_the_stock_white_bakes_nothing_new():
-    from ingetrazo_core.style import Style
+    from built_core.style import Style
     from views.document_interaction import _front_tint
     assert _front_tint(Style()) is None
     assert _front_tint(Style(face_mode="hidden_line",

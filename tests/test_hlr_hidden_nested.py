@@ -20,7 +20,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 
 from core.group import Group
@@ -116,7 +116,7 @@ def test_nothing_hidden_keeps_every_placement_through_its_transform():
     tris = collect_geometry(scene)[0]
     assert len(tris) == 2 * BOX
     assert max(p[2] for t in tris for p in t) == pytest.approx(13.0)
-    from ingetrazo_core import group_visible_placements as visible_placements
+    from built_core import group_visible_placements as visible_placements
     assert [g for g, _m in visible_placements(scene, top)] == [top, child]
 
 

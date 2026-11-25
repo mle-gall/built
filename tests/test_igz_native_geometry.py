@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The Rust reader of format-3 ``geom/`` members gives what Python gives.
 
-``ingetrazo_core.igz_read_geometry`` inflates the members in parallel and
+``built_core.igz_read_geometry`` inflates the members in parallel and
 checks each block against its layout; ``formats.igz`` then builds the
 arrays without scanning them again. The promise is the engine's usual one:
 faster, never different — the same bytes, the same arrays, and for a
@@ -13,7 +13,7 @@ import random
 import zipfile
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core import _native
 from core.group import Group
@@ -130,7 +130,7 @@ def test_parallel_read_keeps_the_inflater_off_the_recursive_worker_stack(tmp_pat
     # large fixture. The pool reads its stack settings once per process.
     probe = textwrap.dedent("""
         import os, sys, zipfile
-        from ingetrazo_core import igz_read_geometry
+        from built_core import igz_read_geometry
 
         with zipfile.ZipFile(sys.argv[1]) as archive:
             member = archive.getinfo("g")
@@ -285,7 +285,7 @@ def test_an_engine_failure_falls_back_to_python(tmp_path, binary, engine,
 
 def test_open_geometry_uses_original_archive_after_atomic_replace(tmp_path, binary):
     import os
-    from ingetrazo_core import DocumentArchive, document_native_io as native_io
+    from built_core import DocumentArchive, document_native_io as native_io
 
     if not hasattr(native_io(), "igz_read_member"):
         pytest.skip("native descriptor reader unavailable")

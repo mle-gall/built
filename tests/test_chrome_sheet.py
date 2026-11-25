@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The large sheet's Python side (ingetrazo_render.chrome_sheet, sheet_runtime.rs): a provider's sheet
+"""The large sheet's Python side (built_render.chrome_sheet, sheet_runtime.rs): a provider's sheet
 sent as JSON, actions routed back, fields applied at once, close and focus,
 key ownership, and the fallback where the chrome cannot draw. The drawing,
 Esc order, arrows and type-to-search are tested in Rust (ui/large_sheet.rs);
 the Metal round trip in test_sheet_pattern_metal.py."""
 from __future__ import annotations
 
-from ingetrazo_render import KeyEvent
+from built_render import KeyEvent
 import json
 
 import pytest
-from ingetrazo_core import Input as Qt
+from built_core import Input as Qt
 
-from ingetrazo_render import chrome_forms
-from ingetrazo_render import chrome_sheet as cs
+from built_render import chrome_forms
+from built_render import chrome_sheet as cs
 
 
 class Renderer:

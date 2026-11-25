@@ -8,7 +8,7 @@ from tests.test_settings_sheet import act, fields, frame, win  # noqa: F401
 
 
 def test_the_tool_is_in_the_tools_menu_and_the_annotate_bar(native_host):
-    from ingetrazo_render import command_registry, rail_layout
+    from built_render import command_registry, rail_layout
     from tools.north import NorthTool
     assert any(("north", "") in group for group in rail_layout())
     assert any(row[1] == "Tools" and row[5] == "tool:north"
@@ -18,7 +18,7 @@ def test_the_tool_is_in_the_tools_menu_and_the_annotate_bar(native_host):
 
 
 def test_shift_n_picks_up_the_tool(native_host):
-    from ingetrazo_core import Input as Qt
+    from built_core import Input as Qt
     from tools.north import NorthTool
     native_host.key(True, ord("N"), Qt.ShiftModifier.value, "N")
     assert isinstance(native_host.viewport.active_tool, NorthTool)

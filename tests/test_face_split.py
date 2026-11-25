@@ -15,14 +15,14 @@ Headless: ``QVector3D`` value types only.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
 from core.geometry import Face
 from core.history import AddFaceCommand, History
 from core.scene import Scene
 from core.topology import find_containing_face, loop_inside_face
-from ingetrazo_core.triangulate import triangulate
+from built_core.triangulate import triangulate
 
 
 def V(x: float, y: float, z: float = 0.0) -> QVector3D:

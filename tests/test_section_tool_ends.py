@@ -5,8 +5,8 @@ the name prompt can be switched off."""
 from __future__ import annotations
 
 
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Vec3 as QVector3D
 
 
 from core.history import History  # noqa: E402
@@ -61,10 +61,10 @@ from tests.shell_isolation import native_window, restore_shell_patches  # noqa: 
 
 
 def test_the_name_prompt_can_be_switched_off(monkeypatch, native_window):
-    from ingetrazo_core.settings import settings as current_settings
-    from ingetrazo_render import chrome_forms
+    from built_core.settings import settings as current_settings
+    from built_render import chrome_forms
     from core.history import PlaceSectionPlaneCommand
-    from ingetrazo_core.section import SectionPlane
+    from built_core.section import SectionPlane
 
     forms = []
     monkeypatch.setattr(chrome_forms, "show", lambda _, form: forms.append(form))

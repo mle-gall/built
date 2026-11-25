@@ -1,5 +1,5 @@
 """Generate a small native raster for plugin image controls."""
-from ingetrazo_render import SurveyRaster
+from built_render import SurveyRaster
 
 
 def write_png(path, width, height):

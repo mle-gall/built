@@ -2,7 +2,7 @@
 from unittest.mock import Mock
 import pytest
 
-from ingetrazo_core import SceneAnimation
+from built_core import SceneAnimation
 from tests.scene_controls import choose, interrupt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 

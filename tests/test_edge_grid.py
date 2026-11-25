@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """The screen grid finds every edge the full pass would, within reach.
 
-``ingetrazo_core.EdgeGrid`` replaces, on big models, the per-move pass over
+``built_core.EdgeGrid`` replaces, on big models, the per-move pass over
 every group hard edge (``Viewport._gedge_dist``). It may hand back MORE
 candidates than are within reach — never fewer: for random segments of
 every kind (short, long across the view, partly or wholly off screen,
@@ -16,7 +16,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from ingetrazo_core import EdgeGrid, segment_distances
+from built_core import EdgeGrid, segment_distances
 
 W, H = 1600.0, 900.0
 
@@ -135,7 +135,7 @@ def test_viewport_readers_see_what_the_full_pass_sees(density):
 
 
 def test_the_kill_switch_runs_the_full_pass(monkeypatch):
-    # INGETRAZO_NO_SNAP_FAST=1: every edge measured, no grid built — the
+    # BUILT_NO_SNAP_FAST=1: every edge measured, no grid built — the
     # escape hatch's answer is the old one, exactly.
     import views.document_interaction as vv
     from tests.controller_surface import ControllerSurface as Viewport

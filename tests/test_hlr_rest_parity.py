@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """The rest of the hidden-line maths moved to Rust
-(``rust/ingetrazo_core/src/model/hlr_view.rs``) and must answer as
+(``rust/built_core/src/model/hlr_view.rs``) and must answer as
 ``core/hlr.py``'s NumPy did at ``9cf53080``: the camera basis, how deep a
 cut solid runs (``solid_depth``), the cap's depth plane and ring edges, the
 clips against the view pyramid, and the whole perspective drawing.
@@ -16,7 +16,7 @@ Regenerate only on purpose, against the reference implementation:
 ``python tests/test_hlr_rest_parity.py --write``."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 import gzip
 import json
 import math
@@ -45,11 +45,11 @@ def _box(x0, y0, z0, sx, sy, sz):
 
 class _Plane:
     def __init__(self, point, normal):
-        from ingetrazo_core import Vec3 as V
+        from built_core import Vec3 as V
         self.point, self.normal = V(*point), V(*normal).normalized()
 
     def side(self, p):
-        from ingetrazo_core import Vec3 as V
+        from built_core import Vec3 as V
         return V.dotProduct(self.normal, p - self.point)
 
 
@@ -64,7 +64,7 @@ class _Scene:
 
 def _camera(rng, perspective=True):
     from core.camera import OrbitCamera
-    from ingetrazo_core import Vec3 as CameraPoint
+    from built_core import Vec3 as CameraPoint
     c = OrbitCamera()
     c.target = CameraPoint((rng.uniform(-3, 3), rng.uniform(-3, 3), rng.uniform(0, 2)))
     c.yaw = rng.uniform(-math.pi, math.pi)
@@ -115,43 +115,43 @@ def answers(hlr):
     out = {"basis": [], "depth": [], "cap": [], "ring": [], "clip_t": [], "clip_s": [],
            "persp": []}
     for tris, hard, soft, soft_n, plane, cam in scenes():
-        out["basis"].append(_r(list(ingetrazo_core.hlr_camera_basis(cam))))
+        out["basis"].append(_r(list(built_core.hlr_camera_basis(cam))))
         for persp in (False, True):
             cam.perspective = persp
-            out["basis"].append(_r(list(ingetrazo_core.hlr_camera_basis(cam))))
+            out["basis"].append(_r(list(built_core.hlr_camera_basis(cam))))
         cam.perspective = True
-        e, r, u, f = ingetrazo_core.hlr_camera_basis(cam)
+        e, r, u, f = built_core.hlr_camera_basis(cam)
         for _ in range(3):
             pl = _Plane((rng.uniform(-2, 2), rng.uniform(-2, 2), rng.uniform(0, 2)),
                         (rng.uniform(-1, 1), rng.uniform(-1, 1), rng.uniform(-1, 1)))
-            out["cap"].append(_r(ingetrazo_core.hlr_cap_depth_affine(pl, e, r, u, f)))
-        out["cap"].append(_r(ingetrazo_core.hlr_cap_depth_affine(_Plane((0, 0, 0), tuple(f)), e, r, u, f)))
+            out["cap"].append(_r(built_core.hlr_cap_depth_affine(pl, e, r, u, f)))
+        out["cap"].append(_r(built_core.hlr_cap_depth_affine(_Plane((0, 0, 0), tuple(f)), e, r, u, f)))
         rings = [np.array([(x, y, 0.5) for x, y in ((0, 0), (1, 0), (1, 1), (0, 1))], float)]
         b = tris[:12].reshape(-1, 3, 3)
         lo = b.reshape(-1, 3).min(axis=0)
         hi = b.reshape(-1, 3).max(axis=0)
         mid = (lo + hi) / 2
         ring = np.array([mid + (dx, dy, 0) for dx, dy in ((-.05, -.05), (.05, -.05), (.05, .05), (-.05, .05))])
-        out["depth"].append(_r(ingetrazo_core.hlr_solid_depth(ring, b, (0.0, 0.0, 1.0))))
-        out["depth"].append(_r(ingetrazo_core.hlr_solid_depth(ring, b, (0.3, -0.2, 1.0))))
-        out["depth"].append(_r(ingetrazo_core.hlr_solid_depth(ring, tris, (1.0, 0.0, 0.0))))
-        out["depth"].append(_r(ingetrazo_core.hlr_solid_depth(ring + (100, 0, 0), b, (0.0, 0.0, 1.0))))
-        out["depth"].append(_r(ingetrazo_core.hlr_solid_depth(ring[:2], b, (0.0, 0.0, 1.0))))
+        out["depth"].append(_r(built_core.hlr_solid_depth(ring, b, (0.0, 0.0, 1.0))))
+        out["depth"].append(_r(built_core.hlr_solid_depth(ring, b, (0.3, -0.2, 1.0))))
+        out["depth"].append(_r(built_core.hlr_solid_depth(ring, tris, (1.0, 0.0, 0.0))))
+        out["depth"].append(_r(built_core.hlr_solid_depth(ring + (100, 0, 0), b, (0.0, 0.0, 1.0))))
+        out["depth"].append(_r(built_core.hlr_solid_depth(ring[:2], b, (0.0, 0.0, 1.0))))
         rings.append(ring)
-        out["ring"].append(_r(list(ingetrazo_core.hlr_cap_ring_edges(rings))))
+        out["ring"].append(_r(list(built_core.hlr_cap_ring_edges(rings))))
         # Clips in clip space, straight from the view.
         m = cam.projection_matrix() * cam.view_matrix()
         M = np.array(m.data(), dtype=np.float64).reshape(4, 4, order="F")
         C = np.concatenate([tris.reshape(-1, 3), np.ones((len(tris) * 3, 1))], axis=1) @ M.T
-        out["clip_t"].append(_r(ingetrazo_core.hlr_clip_triangles(C.reshape(-1, 3, 4))))
+        out["clip_t"].append(_r(built_core.hlr_clip_triangles(C.reshape(-1, 3, 4))))
         E = np.concatenate([hard.reshape(-1, 3), np.ones((len(hard) * 2, 1))], axis=1) @ M.T
         E = E.reshape(-1, 2, 4)
-        out["clip_s"].append(_r(list(ingetrazo_core.hlr_clip_segments(E[:, 0], E[:, 1]))))
+        out["clip_s"].append(_r(list(built_core.hlr_clip_segments(E[:, 0], E[:, 1]))))
         out["persp"].append(_r(hlr.hlr_perspective(_Scene(plane), cam,
                                                    geometry=(tris, hard, soft, soft_n))))
-    out["ring"].append(_r(list(ingetrazo_core.hlr_cap_ring_edges([]))))
-    out["clip_t"].append(_r(ingetrazo_core.hlr_clip_triangles(np.zeros((0, 3, 4)))))
-    out["depth"].append(_r(ingetrazo_core.hlr_solid_depth(np.zeros((4, 3)), np.zeros((0, 3, 3)), (0, 0, 1))))
+    out["ring"].append(_r(list(built_core.hlr_cap_ring_edges([]))))
+    out["clip_t"].append(_r(built_core.hlr_clip_triangles(np.zeros((0, 3, 4)))))
+    out["depth"].append(_r(built_core.hlr_solid_depth(np.zeros((4, 3)), np.zeros((0, 3, 3)), (0, 0, 1))))
     return out
 
 

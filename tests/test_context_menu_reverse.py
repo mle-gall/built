@@ -10,9 +10,9 @@ pero no invertir.
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_render import context_menu_build, context_menu_run
+from built_render import context_menu_build, context_menu_run
 
 
 def _V(x, y, z=0.0):

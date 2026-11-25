@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """A saved view's archive and its eye/target/up import moved to Rust (the
 document's own ``doc/file_view.rs`` archive, and
-``rust/ingetrazo_core/src/model/saved_view.rs``) and must answer as
+``rust/built_core/src/model/saved_view.rs``) and must answer as
 ``core/saved_views.py``'s Python did at ``9cf53080``: ``to_dict`` of views
 built from seeded fields, ``from_dict`` of seeded raw entries (missing
 fields, tuples for lists, odd types), and ``from_lookat`` of seeded
@@ -86,7 +86,7 @@ def answers(sv):
 
 
 def test_the_saved_view_archive_answers_as_the_python_one_did():
-    from ingetrazo_core import saved_views
+    from built_core import saved_views
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     got = json.loads(json.dumps(answers(saved_views)))
     for key in want:
@@ -96,7 +96,7 @@ def test_the_saved_view_archive_answers_as_the_python_one_did():
 
 if __name__ == "__main__" and "--write" in sys.argv:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from ingetrazo_core import saved_views
+    from built_core import saved_views
     data = answers(saved_views)
     GOLDEN.parent.mkdir(exist_ok=True)
     GOLDEN.write_bytes(gzip.compress(json.dumps(data).encode(), mtime=0))

@@ -1,17 +1,17 @@
 """Native input handling, edit previews and resident geometry ranges."""
-from ingetrazo_render import MouseEvent
+from built_render import MouseEvent
 from tests.native_view_input import click, key
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from ingetrazo_core import ScreenPoint as QPointF
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint as QPointF
+from built_core import Input as Qt
+from built_core import Vec3 as QVector3D
 from core.scene import Scene
 from core.group import Group
 from core.layers import Layer
 from core.mesh import Mesh
-from ingetrazo_core import pack_scene, VERTEX
+from built_core import pack_scene, VERTEX
 from views.wgpu_parity import face_ranges, has_transparency, hidden_geometry, preview_mesh
 from views.wgpu_style import style_payload
 from tests.test_metal_parity_input import view, face, pixel
@@ -116,7 +116,7 @@ def test_soft_pairs_and_opacity_survive_pack():
 
 def test_tape_and_eraser_reference_pickers(view):
     from core.guide import Guide
-    from ingetrazo_core import resident_prepare as prepare
+    from built_core import resident_prepare as prepare
     f = face(view)
     view.scene.guides.append(Guide(QVector3D(0,1,0), QVector3D(1,0,0)))
     view.inference_index = prepare(view.packed, view.scene)
@@ -166,7 +166,7 @@ def test_native_opaque_opt_in_is_byte_identical_and_new_scene_resets(native):
 
 
 def test_matching_back_header_renders_both_sides(native):
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     from tests.test_metal_parity_raster import capture
     scene=Scene()
     face=scene.mesh.add_face([QVector3D(-.8,-.8,0),QVector3D(.8,-.8,0),
@@ -199,7 +199,7 @@ def test_eraser_guide_click_and_undo(view):
 
 def test_arc_uses_resident_tangent_without_gl_placement_scan(view):
     from tools.arc import ArcTool
-    from ingetrazo_core import resident_prepare as prepare
+    from built_core import resident_prepare as prepare
     points=[QVector3D(np.cos(t),np.sin(t),0) for t in np.linspace(0,np.pi/2,9)]
     for a,b in zip(points,points[1:]):
         view.scene.mesh.add_edge(a,b).curve=42

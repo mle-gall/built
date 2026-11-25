@@ -20,14 +20,14 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import ScreenPoint as QPointF
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Input as Qt
+from built_core import ScreenPoint as QPointF
+from built_core import Vec3 as QVector3D
 
 
 from core.history import FlipFacesCommand, History
 from core.mesh import Mesh, turn_face_over
-from ingetrazo_core.orient import orient_outward
+from built_core.orient import orient_outward
 from core.scene import Scene
 
 BRICK = {"color": [0.7, 0.3, 0.2], "mat": "Ladrillo"}

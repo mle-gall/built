@@ -18,7 +18,7 @@ def parentage(roots):
 @pytest.mark.parametrize("extension", ["igz", "built"])
 @pytest.mark.parametrize("codec", ["0", "1"])
 def test_archive_preserves_deep_placements(tmp_path, monkeypatch, extension, codec):
-    monkeypatch.setenv("INGETRAZO_RUST_IO", codec)
+    monkeypatch.setenv("BUILT_RUST_IO", codec)
     scene = Scene()
     for table in (scene.groups, scene.kept_components):
         root = Group()
@@ -40,7 +40,7 @@ def test_archive_preserves_deep_placements(tmp_path, monkeypatch, extension, cod
 
 @pytest.mark.parametrize("codec", ["0", "1"])
 def test_json_decoder_limit_leaves_live_document_intact(tmp_path, monkeypatch, codec):
-    monkeypatch.setenv("INGETRAZO_RUST_IO", codec)
+    monkeypatch.setenv("BUILT_RUST_IO", codec)
     scene = Scene()
     group = Group()
     scene.groups.append(group)

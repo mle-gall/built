@@ -7,7 +7,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core import solids
 from core.history import MakeGroupCommand
@@ -83,9 +83,9 @@ def test_a_copied_cylinder_keeps_its_circles(viewport):
     """Copying a cylinder group re-split its curves, and a rim's every
     vertex has a side seam on it: the copy's circles came out as 24 curves
     of one segment each, and a Subtract on the copy kept them broken."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     from core.group import Group
-    from ingetrazo_core import group_transformed_mesh as transformed_mesh
+    from built_core import group_transformed_mesh as transformed_mesh
     cyl = _cylinder_group(viewport)
     m = QMatrix4x4()
     m.translate(5, 0, 0)

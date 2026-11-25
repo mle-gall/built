@@ -16,7 +16,7 @@ from formats import dwg_bridge
 @pytest.fixture(autouse=True)
 def _own_temp_dir(tmp_path, monkeypatch):
     """Each test's conversions use a temporary directory of its own: the
-    leftover-folder checks below count ``ingetrazo-dwg-*`` folders, and
+    leftover-folder checks below count ``built-dwg-*`` folders, and
     in the shared system one another process's conversion showed up."""
     import tempfile
     own = tmp_path / "tmp"
@@ -154,8 +154,8 @@ def _root():
 
 
 def test_the_flatpak_installs_the_converter():
-    recipe = (_root() / "packaging/flatpak/com.ingetrazo.IngeTrazo.yml").read_text(encoding="utf-8")
-    assert ("vendor/libredwg/bin/dwg2dxf ${FLATPAK_DEST}/ingetrazo/"
+    recipe = (_root() / "packaging/flatpak/com.built.Built.yml").read_text(encoding="utf-8")
+    assert ("vendor/libredwg/bin/dwg2dxf ${FLATPAK_DEST}/built/"
             "vendor/libredwg/bin/dwg2dxf") in recipe
     assert "vendor/libredwg/SOURCES.md" in recipe
 
@@ -208,7 +208,7 @@ def fake_converter(tmp_path, monkeypatch):
 
 def _temp_dirs_left():
     import tempfile
-    return list(Path(tempfile.gettempdir()).glob("ingetrazo-dwg-*"))
+    return list(Path(tempfile.gettempdir()).glob("built-dwg-*"))
 
 
 def test_sync_path_still_converts_headless(fake_converter, tmp_path, _own_temp_dir):

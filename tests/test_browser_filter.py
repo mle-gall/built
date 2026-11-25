@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The Project search field operates on occurrences, tags and section rows."""
 import pytest
-from ingetrazo_core import Matrix4
+from built_core import Matrix4
 
 from core.layers import Layer
 from tests.test_project_drawing_filters import Project

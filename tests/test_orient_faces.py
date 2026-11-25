@@ -2,11 +2,11 @@
 like it, as the classic Orient Faces does."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.history import FlipFacesCommand
 from core.mesh import Mesh
-from ingetrazo_core import connected_count, faces_to_flip
+from built_core import connected_count, faces_to_flip
 
 
 def _normal(face):

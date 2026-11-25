@@ -10,7 +10,7 @@ All and Invert Selection.
 from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.scene import Scene
 
@@ -30,7 +30,7 @@ def _loose(scene):
 
 def _action(win):
     """The window's Ctrl+T owner, the way the menu holds it."""
-    from ingetrazo_render.keyboard_bindings import action_keys, collect_actions
+    from built_render.keyboard_bindings import action_keys, collect_actions
     acts = [a for a in collect_actions(win) if "Ctrl+T" in action_keys(a)]
     assert len(acts) == 1                     # one owner: never ambiguous
     return acts[0]
@@ -64,7 +64,7 @@ def test_clear_selection_on_an_empty_selection_is_a_no_op():
 # ---- the window: menu, shortcut, status bar, configurability ----------------
 
 def test_edit_menu_offers_it(native_host):
-    from ingetrazo_core.i18n import source_of
+    from built_core.i18n import source_of
     win = native_host.window
     assert source_of(_action(win).text()) == "Select None"
 
@@ -89,7 +89,7 @@ def test_it_empties_the_selection_without_dirtying_the_document(native_host):
 
 
 def test_the_shortcut_is_configurable_like_any_other(native_host):
-    from ingetrazo_render.settings_sheet import SettingsSheet
+    from built_render.settings_sheet import SettingsSheet
     win = native_host.window
     sheet = SettingsSheet("keyboard")
     sheet._win = win

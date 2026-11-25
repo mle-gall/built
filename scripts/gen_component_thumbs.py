@@ -10,10 +10,10 @@ sys.path.insert(0, str(ROOT))
 
 
 def generate(components: Path, output: Path):
-    from ingetrazo_core.document_insert import component_from_scene
+    from built_core.document_insert import component_from_scene
     from core.scene import Scene
-    from ingetrazo_core.formats import igz
-    from ingetrazo_render import component_thumbnail
+    from built_core.formats import igz
+    from built_render import component_thumbnail
 
     output.mkdir(parents=True, exist_ok=True)
     for entry in json.loads((components / "components.json").read_text(encoding="utf-8")):

@@ -14,7 +14,7 @@ SLAB = Path(__file__).resolve().parent / "fixtures" / "shell" / "slab-and-cube.i
 
 @pytest.fixture
 def host(tmp_path):
-    from ingetrazo_render import Host
+    from built_render import Host
     h = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
     yield h
     h.close()
@@ -78,13 +78,13 @@ def test_preferences_written_elsewhere_are_read_fresh(tmp_path):
     the file, is seen on the next read."""
     import os
     import time
-    from ingetrazo_core import NativeSettings
+    from built_core import NativeSettings
     a, b = NativeSettings(tmp_path), NativeSettings(tmp_path)
     a.setValue("tabs/hover_picture", "1")
     assert b.value("tabs/hover_picture") == "1"
     a.setValue("tabs/hover_picture", "0")
     assert b.value("tabs/hover_picture") == "0"
-    ini = tmp_path / "IngeTrazo" / "IngeTrazo.ini"
+    ini = tmp_path / "Built" / "Built.ini"
     text = ini.read_text()
     assert 'hover_picture="0"' in text
     # Another process: same length, a later modification time.

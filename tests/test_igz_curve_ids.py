@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 IngeTrazo contributors.
+# Copyright (C) 2026 Built contributors.
 """Legacy text curve labels must reopen as distinct, serializable curves."""
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import json
 import zipfile
 
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 import core.mesh as mesh_module
 from core.mesh import Mesh

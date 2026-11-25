@@ -16,7 +16,7 @@ import weakref
 
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from formats import igz as igz_format
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
@@ -52,7 +52,7 @@ def _clean_all(win):
 
 @pytest.fixture
 def win(native_host, tmp_path, monkeypatch):
-    from ingetrazo_core import autosave
+    from built_core import autosave
     slots = tmp_path / "autosave"
     slots.mkdir()
     monkeypatch.setattr(autosave, "autosave_dir", lambda: slots)
@@ -113,7 +113,7 @@ def test_a_failed_open_leaves_no_empty_tab_behind(win, tmp_path, monkeypatch):
     mine = win.active_document()
     bad = tmp_path / "bad.igz"
     bad.write_text("not a document")
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.critical", lambda *a, **k: None)
+    monkeypatch.setattr("built_render.chrome_dialogs.critical", lambda *a, **k: None)
     assert not win.open_path(bad)
     assert win.documents() == [mine]
     assert win.active_document() is mine
@@ -220,7 +220,7 @@ def test_panels_forget_what_they_drew_for_the_other_project(win):
 def test_materials_let_go_of_the_meshes_of_the_project_left(win):
     from core.group import Group
     from core.mesh import Mesh
-    from ingetrazo_render.wgpu_library import material_uses
+    from built_render.wgpu_library import material_uses
     mesh = Mesh()
     face = mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(0, 1, 0)])
     face.attrs = {"mat": "Brick"}
@@ -238,7 +238,7 @@ def test_materials_let_go_of_the_meshes_of_the_project_left(win):
 
 
 def test_view_preferences_reach_the_tabs_behind(win, tmp_path):
-    from ingetrazo_render.settings_sheet import Env, SettingsSheet
+    from built_render.settings_sheet import Env, SettingsSheet
 
     _edit(win)
     a = win.active_document()
@@ -289,9 +289,9 @@ def test_closing_the_first_tab_lets_it_go_too(win, tmp_path):
 
 
 def test_closing_tabs_hands_their_memory_back_once(win, tmp_path, monkeypatch):
-    import ingetrazo_core
+    import built_core
     trims = []
-    monkeypatch.setattr(ingetrazo_core, "trim_heap", lambda: trims.append(1))
+    monkeypatch.setattr(built_core, "trim_heap", lambda: trims.append(1))
     scenes = []
     for name in ("a.igz", "b.igz"):
         assert win.open_path(_igz(tmp_path, name))
@@ -313,7 +313,7 @@ def test_closing_tabs_hands_their_memory_back_once(win, tmp_path, monkeypatch):
 
 # ---- auto-save and recovery ---------------------------------------------
 def test_each_untitled_project_autosaves_to_its_own_slot(win):
-    from ingetrazo_core import autosave
+    from built_core import autosave
     _edit(win, z=1.0)
     a = win.active_document()
     win._on_new()
@@ -349,14 +349,14 @@ def test_each_untitled_project_autosaves_to_its_own_slot(win):
 
 
 def test_every_untitled_slot_is_offered_back(win, monkeypatch, tmp_path):
-    from ingetrazo_core import autosave
+    from built_core import autosave
     from core.scene import Scene
     for n, z in ((1, 1.0), (2, 2.0)):
         s = Scene()
         _face(s, z)
         igz_format.save_scene(s, autosave.slot_for(None, untitled=n))
     try:
-        monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask",
+        monkeypatch.setattr("built_render.chrome_dialogs.ask",
                             lambda *a, **k: "yes")
         win._offer_untitled_recovery()
         docs = win.documents()
@@ -372,7 +372,7 @@ def test_every_untitled_slot_is_offered_back(win, monkeypatch, tmp_path):
 
 
 def test_the_classic_slot_names_stay(tmp_path):
-    from ingetrazo_core import autosave
+    from built_core import autosave
     assert autosave.slot_for(None).name == "untitled.built"
     assert autosave.slot_for(None, untitled=1).name == "untitled.built"
     assert autosave.slot_for(None, untitled=3).name == "untitled-3.built"
@@ -490,7 +490,7 @@ def test_open_progress_is_one_monotonic_lifecycle(win, tmp_path, monkeypatch):
     path = _igz(tmp_path, "progress.igz")
     progress = []
     bars = []
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.live", lambda *_: win.view)
+    monkeypatch.setattr("built_render.chrome_dialogs.live", lambda *_: win.view)
     original = win._import_progress
 
     def dialog(title, **kwargs):

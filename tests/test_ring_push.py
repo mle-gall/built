@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import math
 
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
 from core.history import (
@@ -21,7 +21,7 @@ from core.history import (
     RebuildPlanarFacesCommand,
     TagCurveCommand,
 )
-from ingetrazo_core.orient import is_closed
+from built_core.orient import is_closed
 from core.scene import Scene
 from tools.base import ToolContext
 from tools.pushpull import PushPullTool

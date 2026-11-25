@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, world_mesh
 from core.history import SplitIntoPiecesCommand
@@ -118,7 +118,7 @@ def test_a_piece_does_not_take_its_neighbours_edges():
     """Welded boards share corners; a piece copied with every edge that
     touches one of its corners measured as far as the neighbour's far end
     (a 1.5 cm side board read as 85 x 60 x 55)."""
-    from ingetrazo_core.parts import part_points, part_size
+    from built_core.parts import part_points, part_size
     mesh = Mesh()
     _cube(mesh, 0)
     _cube(mesh, 0, z0=1)

@@ -7,7 +7,7 @@ materialise-on-write with keys kept, store snapshots through history, bulk
 construction, copies and share-back."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 import copy
 import gzip
 import json
@@ -16,11 +16,11 @@ import random
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 import core._native as _native
 from core import mesh as M
-from ingetrazo_core import store_mesh as S
+from built_core import store_mesh as S
 from core.history import (AddEdgeCommand, DeleteEdgesCommand, History,
                           MoveVerticesCommand)
 from core.scene import Scene
@@ -279,7 +279,7 @@ def test_link_hooks_relabel_like_the_built_mesh(binary, monkeypatch,
 
     def rename(name):
         return renames.get(name, name)
-    ingetrazo_core.link_relabel([], [mesh], renames)
+    built_core.link_relabel([], [mesh], renames)
     assert type(mesh) is M.DeferredMesh                     # relabelled unbuilt
     from core.layers import layer_of
     for actual, original in zip((*mesh.faces, *mesh.edges), (*before.faces, *before.edges), strict=True):
@@ -343,7 +343,7 @@ class PluginMesh(M.Mesh):
 
 def test_plugin_mesh_subclass_roundtrips_with_native_elements():
     import pickle
-    from ingetrazo_core import MeshElements
+    from built_core import MeshElements
 
     mesh = PluginMesh()
     mesh.plugin_label = "assembly"

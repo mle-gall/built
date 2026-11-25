@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from tests.native_tree import action, group_rows
 from core import outliner
@@ -127,7 +127,7 @@ def test_a_classic_group_opened_takes_the_new_group_as_a_child(native_host):
 
 
 def test_make_component_inside_an_open_group(native_host):
-    from ingetrazo_render import chrome_forms
+    from built_render import chrome_forms
     win = _window(native_host)
     scene = win.viewport.scene
     muro, a, b = _open_wall(win)
@@ -200,7 +200,7 @@ def test_the_browser_groups_rows_inside_their_group(native_host):
 
 
 def test_the_browser_makes_a_component_of_one_row(native_host):
-    from ingetrazo_render import chrome_forms
+    from built_render import chrome_forms
     win = _window(native_host)
     scene = win.viewport.scene
     a = Group(_quad(), name="A")
@@ -215,7 +215,7 @@ def test_the_browser_makes_a_component_of_one_row(native_host):
 
 
 def test_the_browser_menu_offers_both(native_host):
-    from ingetrazo_core.i18n import tr
+    from built_core.i18n import tr
     win = _window(native_host)
     scene = win.viewport.scene
     a, b = _placed("A", 0.0), _placed("B", 3.0)
@@ -277,7 +277,7 @@ def test_explode_inside_a_component_still_refuses(native_host):
 # --- when the rows cannot be grouped, say why ---------------------------------
 
 def test_locked_rows_grey_out_make_group_and_say_why(native_host):
-    from ingetrazo_core.i18n import tr
+    from built_core.i18n import tr
     win = _window(native_host)
     scene = win.viewport.scene
     a, b = _placed("A", 0.0), _placed("B", 3.0)
@@ -296,7 +296,7 @@ def test_locked_rows_grey_out_make_group_and_say_why(native_host):
 
 
 def test_rows_from_different_groups_say_so(native_host):
-    from ingetrazo_core.i18n import tr
+    from built_core.i18n import tr
     win = _window(native_host)
     scene = win.viewport.scene
     a, b = _placed("A", 0.0), _placed("B", 3.0)
@@ -316,7 +316,7 @@ def test_rows_from_different_groups_say_so(native_host):
 def test_rows_inside_a_component_grey_out_make_group_and_say_why(native_host):
     """The report: two rows inside an open component, Make Group did
     nothing — it is refused there, now greyed with the reason."""
-    from ingetrazo_core.i18n import tr
+    from built_core.i18n import tr
     win = _window(native_host)
     scene = win.viewport.scene
     a, b = _placed("A", 0.0), _placed("B", 3.0)
@@ -373,7 +373,7 @@ def test_the_browser_explodes_each_kind_as_it_should_in_one_step(native_host):
 
 
 def test_explode_is_in_the_row_menu_and_greyed_inside_a_component(native_host):
-    from ingetrazo_core.i18n import tr
+    from built_core.i18n import tr
     win = _window(native_host)
     scene = win.viewport.scene
     a, b = _placed("A", 0.0), _placed("B", 3.0)

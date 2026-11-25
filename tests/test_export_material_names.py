@@ -14,7 +14,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.scene import Scene                                      # noqa: E402
 from formats import dae as dae_format                             # noqa: E402

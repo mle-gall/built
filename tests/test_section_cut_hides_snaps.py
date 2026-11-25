@@ -13,12 +13,12 @@ candidate the snap engine weighs — endpoint, midpoint, on-edge — follows it.
 from __future__ import annotations
 
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 
-from ingetrazo_core.section import SectionPlane  # noqa: E402
+from built_core.section import SectionPlane  # noqa: E402
 from core.snap import compute_snap  # noqa: E402
-from ingetrazo_core.style import Style  # noqa: E402
+from built_core.style import Style  # noqa: E402
 from tests.controller_surface import ControllerSurface as Viewport
 
 

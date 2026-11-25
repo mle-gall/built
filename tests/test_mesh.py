@@ -11,7 +11,7 @@ edge/face referencing it for free — no position matching, no float tolerance.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.mesh import Edge, Face, Mesh, Vertex
 

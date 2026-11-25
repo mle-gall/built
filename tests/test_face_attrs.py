@@ -12,11 +12,11 @@ folds and subdivisions. This is the DoD of next-session item A.3; Materials
 """
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.history import History, MoveVerticesCommand
 from core.mesh import Mesh
-from ingetrazo_core.orient import is_closed
+from built_core.orient import is_closed
 from core.scene import Scene
 from tests.test_fuzz_engine import V, _draw_rect, _push, _up
 
@@ -170,7 +170,7 @@ def test_flip_faces_command_reverses_winding_and_undoes():
     # of the Face object is preserved throughout.
     from core.history import FlipFacesCommand, History
     from core.scene import Scene
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
 
     scene = Scene()
     hist = History(scene)

@@ -5,12 +5,12 @@ import pytest
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from core.group import Group
-from ingetrazo_render import inspector_action as action
+from built_render import inspector_action as action
 
 
 @pytest.fixture
 def host(tmp_path):
-    from ingetrazo_render import Host
+    from built_render import Host
 
     h = Host(0, 1280, 800, 1.0, settings=str(tmp_path))
     yield h
@@ -102,7 +102,7 @@ def test_parts_visibility_explode_reassemble_split(host):
 def test_native_bevel_preview_then_apply(host, monkeypatch):
     from tools.fillet import FilletTool
     from tests.test_fillet import box
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
 
     vp = host.viewport
     for f in box().faces:
@@ -129,7 +129,7 @@ def test_terrain_path_projects_cursor_samples_and_exports(host, tmp_path, monkey
     from georef.geopath import GeoPath
     from tests.test_profile import V, StubSampler
     from georef import photomesh
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render.shell_files import ShellFileDialog
 
     vp, view = host.viewport, host.view
     s = vp.scene
@@ -203,10 +203,10 @@ def test_property_add_and_reset_without_losing_siblings(host):
 
 
 def test_report_sheet_commands_and_parts_inspector(host, monkeypatch):
-    from ingetrazo_render import chrome_sheet
+    from built_render import chrome_sheet
     from views import wgpu_ui
     from tests.test_parts import _stool
-    from ingetrazo_core import extension_manager
+    from built_core import extension_manager
     monkeypatch.setattr(extension_manager, "load_cached_catalog", lambda: None)
     win = host.window
     commands = {name: action for name, _, _, action in wgpu_ui._all_commands(win)}

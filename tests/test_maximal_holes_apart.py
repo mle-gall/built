@@ -5,7 +5,7 @@ the boxes of two holes far apart settle it (#158)."""
 import random
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.topology import _HolesApart, _loop_inside_loop, _maximal_holes
 

@@ -9,7 +9,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 @pytest.fixture
 def host(monkeypatch, tmp_path):
-    from ingetrazo_render import Host
+    from built_render import Host
     from georef.tile_fetcher import TileFetcher
     monkeypatch.setattr(TileFetcher, "request", lambda *_a, **_k: None)
     host = Host(0, 900, 600, 1., settings=str(tmp_path / "settings"))
@@ -19,7 +19,7 @@ def host(monkeypatch, tmp_path):
 
 
 def pick(monkeypatch, path):
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render.shell_files import ShellFileDialog
     monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *_a, **_k: (str(path), ""))
 
 
@@ -46,7 +46,7 @@ def test_alignment_anchors_and_frames_the_import_then_undo(host, tmp_path, monke
 
 
 def test_survey_csv_utm_form_cancel_and_apply(host, tmp_path, monkeypatch):
-    from ingetrazo_render import chrome_forms
+    from built_render import chrome_forms
     path = tmp_path / "survey.csv"
     path.write_text("A,5000000,500000,100,tree\nB,5000001,500002,103,curb\n")
     pick(monkeypatch, path)
@@ -90,8 +90,8 @@ def test_odm_uses_survey_altitude_and_keeps_a_missing_atlas(host, tmp_path, monk
 @pytest.mark.parametrize("outcome", ["error", "cancel"])
 def test_odm_failure_or_cancel_preserves_unlocated_model(host, tmp_path, monkeypatch, outcome):
     from tests.test_photomesh import _write_odm_tree
-    from ingetrazo_render import chrome_dialogs
-    from ingetrazo_render.shell_files import NullBar
+    from built_render import chrome_dialogs
+    from built_render.shell_files import NullBar
     pick(monkeypatch, _write_odm_tree(tmp_path))
     warnings = []
     monkeypatch.setattr(chrome_dialogs, "critical", lambda *args: warnings.append(args))

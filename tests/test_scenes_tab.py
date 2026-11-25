@@ -2,20 +2,20 @@
 """Saved scene commands, history and navigation in the native chooser."""
 import pytest
 
-from ingetrazo_core import scene_tree as SF
+from built_core import scene_tree as SF
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 def test_one_command_of_each_kind_for_scenes():
     """AddSceneCommand (with a place and the folder) and RenameSceneCommand
     are the native steps: no Python class of the same name beside them."""
-    import ingetrazo_core
+    import built_core
     import core.history as H
-    import ingetrazo_core.saved_views as S
-    from ingetrazo_core import history as commands
+    import built_core.saved_views as S
+    from built_core import history as commands
     assert H is commands
-    assert H.AddSceneCommand is commands.AddSceneCommand is ingetrazo_core.AddSceneCommand
-    assert S.RenameSceneCommand is ingetrazo_core.RenameSceneCommand
+    assert H.AddSceneCommand is commands.AddSceneCommand is built_core.AddSceneCommand
+    assert S.RenameSceneCommand is built_core.RenameSceneCommand
     assert hasattr(S, "RenameSceneCommand") and hasattr(S, "MoveSceneCommand")
 
 
@@ -66,7 +66,7 @@ def test_a_scene_shown_from_the_menu_is_marked_in_the_chooser(native_host):
 
 def test_insert_scene_clamps_large_integer_positions():
     from core.history import AddSceneCommand
-    from ingetrazo_core.saved_views import SavedView
+    from built_core.saved_views import SavedView
     from core.scene import Scene
 
     scene = Scene()

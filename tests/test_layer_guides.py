@@ -20,13 +20,13 @@ wins.
 """
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import json
 from types import SimpleNamespace
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core import layers as L
 from core.guide import Guide
@@ -35,7 +35,7 @@ from core.history import (AddDimensionCommand, AddGuideCommand,
                           AddTextLabelCommand, AssignLayerCommand,
                           DeleteLayerCommand, History, MakeGroupCommand)
 from core.textlabel import TextLabel
-from ingetrazo_core.image_plane import ImagePlane
+from built_core.image_plane import ImagePlane
 from core.layers import DEFAULT_LAYER, Layer, layer_of
 from core.purge import layer_carriers, used_layers
 from core.scene import Scene
@@ -182,13 +182,13 @@ def test_guides_and_reference_images_can_be_moved_to_a_layer():
 def test_a_guide_drawn_with_a_layer_active_goes_onto_it():
     scene = _scene_with("Guías")
     history = History(scene)
-    ingetrazo_core.tag_edits.set_active(scene, "Guías")
+    built_core.tag_edits.set_active(scene, "Guías")
     history.execute(AddGuideCommand(Guide(V(0, 0, 0), V(0, 1, 0))))
     assert layer_of(scene.guides[-1]) == "Guías"
     history.undo()
     history.redo()
     assert layer_of(scene.guides[-1]) == "Guías"
-    ingetrazo_core.tag_edits.set_active(scene, DEFAULT_LAYER)
+    built_core.tag_edits.set_active(scene, DEFAULT_LAYER)
     history.execute(AddGuideCommand(Guide(V(5, 0, 0))))
     assert layer_of(scene.guides[-1]) == "Guides"     # its automatic layer
 
@@ -294,7 +294,7 @@ def test_groups_and_loose_lines_stay_on_layer_0():
 def test_the_active_layer_wins_over_the_automatic_ones():
     scene = _scene_with("Planta")
     history = History(scene)
-    ingetrazo_core.tag_edits.set_active(scene, "Planta")
+    built_core.tag_edits.set_active(scene, "Planta")
     history.execute(AddGuideCommand(Guide(V(0, 0, 0))))
     history.execute(AddDimensionCommand(_dimension()))
     assert layer_of(scene.guides[-1]) == "Planta"
@@ -339,7 +339,7 @@ def test_undo_and_redo_keep_the_automatic_layer():
 
 
 def test_the_automatic_layers_take_the_interface_language():
-    from ingetrazo_core.i18n import current_language, set_language
+    from built_core.i18n import current_language, set_language
     before = current_language()
     set_language("es")
     try:
@@ -359,7 +359,7 @@ def test_the_automatic_layers_take_the_interface_language():
 def test_active_layer_small_edits_never_walk_existing_groups(monkeypatch):
     from core.history import AddEdgeCommand, SnapshotCompound
     scene = _scene_with('Work')
-    ingetrazo_core.tag_edits.set_active(scene, 'Work')
+    built_core.tag_edits.set_active(scene, 'Work')
     history = History(scene)
     from core.purge import iter_groups
     def bounded(groups):

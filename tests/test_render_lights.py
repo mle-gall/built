@@ -13,9 +13,9 @@ import shutil
 import subprocess
 
 import pytest
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
+from built_core import ScreenPoint as QPointF, Input as Qt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core import render_blender as rb  # noqa: E402
 from core.camera import OrbitCamera  # noqa: E402
@@ -161,15 +161,15 @@ def test_a_night_render_with_lights(tmp_path):
     run = subprocess.run(rb.command(found, job), capture_output=True,
                          text=True, env=rb.clean_env(), timeout=600)
     assert run.returncode == 0, run.stdout[-2000:]
-    assert "INGETRAZO sky night" in run.stdout
-    assert "INGETRAZO lights 2" in run.stdout
+    assert "BUILT sky night" in run.stdout
+    assert "BUILT lights 2" in run.stdout
     assert (tmp_path / "render.png").is_file()
 
 
 def test_the_lights_are_drawn_over_the_viewport(window):
     """The overlay paints a bulb at each light (an overlay that raised would
     only be logged and skipped, so draw it here and look at the pixels)."""
-    from ingetrazo_render import AnnotationCanvas
+    from built_render import AnnotationCanvas
     from views.wgpu_overlay import paint_layer
     panel = _panel(window)
     vp = window.viewport
@@ -274,7 +274,7 @@ def test_save_and_open_folder_live_in_the_image_utility(window, tmp_path, monkey
     write_png(panel.image, 32, 20)
     folder = Mock()
     from plugins import _blender_panel
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render.shell_files import ShellFileDialog
     saved = tmp_path / "saved.png"
     monkeypatch.setattr(ShellFileDialog, "getSaveFileName", lambda *_: (str(saved), ""))
     monkeypatch.setattr(_blender_panel, "open_url", folder)

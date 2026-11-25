@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 from types import SimpleNamespace
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.mesh import Mesh
 from core.snap import COLOR_ON_FACE, compute_snap, face_center_of_face
@@ -159,7 +159,7 @@ def _offscreen_vp():
 
 
 def _hover(vp, world):
-    from ingetrazo_core import ScreenPoint, Input
+    from built_core import ScreenPoint, Input
     px = vp._world_to_pixel(world)
     vp._process_hover(ScreenPoint(*px), Input.NoModifier)
     return vp.last_snap
@@ -260,7 +260,7 @@ def test_a_selected_rings_centre_is_reached_from_its_hole():
 
 
 def test_selected_faces_show_their_centres_as_dots():
-    from ingetrazo_render import AnnotationCanvas
+    from built_render import AnnotationCanvas
     vp, ring = _ring_vp()
     other = vp.scene.mesh.add_face([V(5, 0), V(7, 0), V(7, 2), V(5, 2)])
     vp.scene.version += 1
@@ -308,8 +308,8 @@ def test_too_many_selected_faces_offer_no_dots():
 def _marker_box(vp, kind):
     """Width and height in pixels of the marker drawn for a snap of
     ``kind`` (its tip left out)."""
-    from ingetrazo_core import Input
-    from ingetrazo_render import AnnotationCanvas
+    from built_core import Input
+    from built_render import AnnotationCanvas
     from core.snap import SnapResult
     vp._SNAP_LABELS = {}                               # no tip text
     painter = AnnotationCanvas(200, 200, 200)
@@ -333,8 +333,8 @@ def test_the_marker_is_the_size_of_the_endpoints():
 
 
 def test_a_selected_faces_dot_is_as_big_as_a_snap_marker():
-    from ingetrazo_core import Input
-    from ingetrazo_render import AnnotationCanvas
+    from built_core import Input
+    from built_render import AnnotationCanvas
     vp = _offscreen_vp()
     vp.camera.target = V(1, 1, 0)
     vp.camera.distance = 12

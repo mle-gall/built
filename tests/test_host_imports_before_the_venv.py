@@ -23,7 +23,7 @@ def test_launcher_processes_the_venv_before_importing_app_code(tmp_path):
     (packages / "early_probe.py").write_text(
         "import json, sys\nfrom pathlib import Path\n"
         "early = sorted(name for name in sys.modules if name.split('.')[0] in "
-        "('core', 'app_shell', 'ingetrazo_core', 'ingetrazo_render'))\n"
+        "('core', 'app_shell', 'built_core', 'built_render'))\n"
         f"Path({str(snapshot)!r}).write_text(json.dumps(early))\n")
     (packages / "first.pth").write_text("import early_probe\n" + "".join(
         f"import site; site.addsitedir({entry!r})\n" for entry in site.getsitepackages()))

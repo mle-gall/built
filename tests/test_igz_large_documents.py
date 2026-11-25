@@ -64,7 +64,7 @@ def test_a_large_document_is_compact_and_reads_back_the_same(
 def test_a_large_textured_container_reads_back_the_same(
         tmp_path, monkeypatch):
     monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 10)
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "cache"))
     png = tmp_path / "t.png"
     img = solid_raster(4, 4, (54, 137, 230))
     img.save(str(png))
@@ -81,7 +81,7 @@ def test_a_large_textured_container_reads_back_the_same(
 def test_the_count_includes_the_loose_mesh_and_each_prototype_once():
     from core.group import Group
     from core.mesh import Mesh
-    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+    from built_core import Matrix4 as QMatrix4x4, Vec3 as V
     scene = Scene()
     scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0)])   # 1 + 3
     proto = Mesh()

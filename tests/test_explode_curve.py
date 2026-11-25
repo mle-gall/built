@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.history import ExplodeCurvesCommand, History
 from core.scene import Scene
@@ -65,7 +65,7 @@ def test_the_context_menu_offers_it_only_on_a_curve(native_window):
 
 
 def test_right_click_shows_it_on_a_curve_not_on_a_line(native_window):
-    from ingetrazo_render import context_menu_build
+    from built_render import context_menu_build
     win = native_window
     sc = win.viewport.scene
     _circle(sc, V(0, 0, 0))

@@ -1,5 +1,5 @@
 """Navigation feedback is temporary and absent from exports."""
-from ingetrazo_core import Matrix4 as QMatrix4x4
+from built_core import Matrix4 as QMatrix4x4
 from views import document_interaction as viewport_module
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 

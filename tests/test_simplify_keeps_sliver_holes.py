@@ -9,7 +9,7 @@ of two vertices broke _maximal_holes on save. A loop of three keeps its
 corners."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 
 def _plate_with_sliver_hole():

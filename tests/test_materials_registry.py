@@ -16,7 +16,7 @@ import zipfile
 from types import SimpleNamespace as NS
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 
 from core.materials import Material, register                     # noqa: E402

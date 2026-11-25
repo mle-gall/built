@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.mesh import Mesh
 from core.scene import Scene
@@ -83,7 +83,7 @@ def _signature(scene):
 
 
 def test_bulk_flags_match_original_lookup_and_resave(tmp_path, monkeypatch):
-    from ingetrazo_core import store_mesh
+    from built_core import store_mesh
     cls = store_mesh.StoreMesh
     original = cls.vertex_at
     calls = []
@@ -135,7 +135,7 @@ def test_bulk_flags_keep_reporting_inside_a_large_group(monkeypatch):
 
 
 def test_noisy_segments_match_final_lookup_without_changing_other_flags(monkeypatch):
-    from ingetrazo_core import store_mesh
+    from built_core import store_mesh
     for seed in range(20):
         rng = np.random.default_rng(seed)
         points = rng.integers(-3, 4, size=(90, 3)) * .5

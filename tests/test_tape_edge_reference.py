@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """An edge midpoint is still an edge source for a parallel Tape guide."""
 from types import SimpleNamespace
-from ingetrazo_core import ScreenPoint, Input
-from ingetrazo_core import Vec3 as V
+from built_core import ScreenPoint, Input
+from built_core import Vec3 as V
 from core.history import History
 from core.scene import Scene
 from tools.base import ToolContext

@@ -15,17 +15,17 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ingetrazo_core import NativeSettings
+from built_core import NativeSettings
 
-from ingetrazo_core import general_settings
+from built_core import general_settings
 
 APP = Path(__file__).resolve().parents[1]
 
 
 def _read_in_new_process(ini: Path, name: str) -> str:
     code = (
-        "from ingetrazo_core import NativeSettings\n"
-        "from ingetrazo_core import general_settings\n"
+        "from built_core import NativeSettings\n"
+        "from built_core import general_settings\n"
         f"st = NativeSettings({str(ini.parent.parent)!r})\n"
         f"print(general_settings.value({name!r}, 'MISSING', st))\n")
     out = subprocess.run([sys.executable, "-c", code], cwd=APP,
@@ -34,7 +34,7 @@ def _read_in_new_process(ini: Path, name: str) -> str:
 
 
 def test_a_general_setting_survives_a_restart(tmp_path):
-    ini = tmp_path / "IngeTrazo/IngeTrazo.ini"
+    ini = tmp_path / "Built/Built.ini"
     st = NativeSettings(tmp_path)
     general_settings.set_value("theme", "light", st)
     st.sync()
@@ -44,7 +44,7 @@ def test_a_general_setting_survives_a_restart(tmp_path):
 
 def test_what_earlier_versions_saved_is_still_read(tmp_path):
     # Written by 0.5.7 as general/theme: the file is the reporter's.
-    ini = tmp_path / "IngeTrazo/IngeTrazo.ini"
+    ini = tmp_path / "Built/Built.ini"
     ini.parent.mkdir()
     ini.write_text("[%General]\nautosave=0\ntheme=light\nundo_steps=50\n")
     assert _read_in_new_process(ini, "theme") == "light"

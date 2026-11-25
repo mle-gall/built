@@ -2,12 +2,12 @@
 from types import SimpleNamespace
 
 import pytest
-from ingetrazo_core import Matrix4, MeshStore, Vec3
+from built_core import Matrix4, MeshStore, Vec3
 
 from core.history import AddFaceCommand, History, SnapshotMutation
 from core.mesh import Mesh
 from core.scene import Scene
-from ingetrazo_core import store_mesh
+from built_core import store_mesh
 from tests.test_store_mesh import fingerprint
 
 
@@ -18,7 +18,7 @@ def rectangle(x, y, w, h):
 @pytest.mark.parametrize("scans", ["0", "1"])
 @pytest.mark.parametrize("case", ["independent", "mother", "swap", "carve", "enclosed", "preset", "far"])
 def test_keyed_add_face_matches_command(monkeypatch, case, scans):
-    monkeypatch.setenv("INGETRAZO_SCANS", scans)
+    monkeypatch.setenv("BUILT_SCANS", scans)
     mesh, reference = Mesh(), Mesh()
     offset = 6_860_000 if case == "far" else 0
     base = rectangle(offset, 0, 8, 8)

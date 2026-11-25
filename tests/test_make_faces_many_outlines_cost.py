@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import random
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core import arrangement, make_faces
 from core.arrangement import (_area_floor, _interior_point,

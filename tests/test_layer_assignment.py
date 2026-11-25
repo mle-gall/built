@@ -11,7 +11,7 @@ Layer submenu, and all three go through one undoable command.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from core.group import Group
@@ -70,8 +70,8 @@ def test_inspector_tag_field_single_mixed_and_empty_selection(native_host):
 
 
 def tag_form(host):
-    from ingetrazo_render import chrome_forms
-    from ingetrazo_render import context_menu_build, context_menu_run
+    from built_render import chrome_forms
+    from built_render import context_menu_build, context_menu_run
     win = host.window
     menu = context_menu_build(win, host.view)
     assert menu.find("selectiontag").enabled
@@ -80,7 +80,7 @@ def tag_form(host):
 
 
 def test_right_click_tag_choice_and_new_tag(native_host):
-    from ingetrazo_render import chrome_forms
+    from built_render import chrome_forms
     scene = native_host.viewport.scene
     scene.layers.append(Layer("Muros"))
     group = Group(name="Box")

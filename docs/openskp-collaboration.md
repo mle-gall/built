@@ -1,23 +1,23 @@
 # OpenSKP collaboration
 
-> **2026-09-28.** IngeTrazo no longer runs, downloads or links to any
+> **2026-09-28.** Built no longer runs, downloads or links to any
 > proprietary .skp tooling: the former external converter and its automatic
 > download are gone, the validation tests built on it are gone, and the `.skp`
 > export is off because OpenSKP's writer builds on a blank template document
-> that IngeTrazo no longer distributes. `.skp` files are read with OpenSKP
+> that Built no longer distributes. `.skp` files are read with OpenSKP
 > only. Where the sections below say "the oracle", they mean the reference
 > output the reader was validated against at the time.
 
 **Status:** introduction issue **posted** upstream
 ([iamahsanmehmood/openskp#2](https://github.com/iamahsanmehmood/openskp/issues/2),
-2026-07-21). This doc keeps the rationale for how IngeTrazo supports
+2026-07-21). This doc keeps the rationale for how Built supports
 [OpenSKP](https://github.com/iamahsanmehmood/openskp) without becoming dependent
 on it, plus a pointer to the introduction issue.
 
 ## Strategy: upstream-first, not upstream-dependent
 
 We want to help OpenSKP become a pure-Python parser that opens **any** `.skp`
-(old → recent), and use it in IngeTrazo as its only `.skp` reader.
+(old → recent), and use it in Built as its only `.skp` reader.
 
 Because OpenSKP is **MIT**, our ability to ship it never depends on upstream
 merging our work:
@@ -26,14 +26,14 @@ merging our work:
   Best case: everyone benefits, zero maintenance for us.
 - **Layer B — maintained downstream (insurance).** Whatever upstream doesn't
   take lives in a friendly fork (`main` tracks upstream + a branch carrying our
-  patches, rebased as upstream moves). IngeTrazo vendors a **pinned** version of
+  patches, rebased as upstream moves). Built vendors a **pinned** version of
   Layer B behind the `formats/skp.py` seam — so a rejected PR costs us
   *maintenance*, never *capability*.
 
 A fork only becomes its own project (a natural "libreskp") if upstream is
 unresponsive/misaligned, or if we ever want a copyleft guarantee. Until then:
 contribute, and keep a quiet downstream as insurance. Preserve OpenSKP's MIT
-notices when vendoring; MIT is GPL-compatible, so the combined IngeTrazo ships
+notices when vendoring; MIT is GPL-compatible, so the combined Built ships
 GPL while the parser files keep their MIT header + attribution.
 
 ## Clean-room boundary
@@ -44,7 +44,7 @@ parse — never decompilation or copying proprietary internals into the parser.
 It matches the "observed `.skp` files + their COLLADA exports" methodology the
 reverse-engineering already uses.
 
-## Findings — OpenSKP 0.2.0 wired into IngeTrazo (2026-07-21)
+## Findings — OpenSKP 0.2.0 wired into Built (2026-07-21)
 
 OpenSKP is **wired and working** (`formats/skp_openskp.py`). Measured against
 the reference oracle on real files (`demuna.skp`, a .skp of the 2022 version):
@@ -61,27 +61,27 @@ Contribution targets, most valuable first:
    `Material.id` + `SkpModel.materials_by_id`, surfacing the join the internal
    exporter already had. Validated 19/19 face material_ids on a real 2022-version
    file. Layer B insurance: branch `expose-material-id` on
-   `tuxiasumari/openskp`; IngeTrazo's adapter uses the join when present
+   `tuxiasumari/openskp`; Built's adapter uses the join when present
    (guarded, so PyPI 0.2.0 still imports, just uncoloured).
 2. ✅ **Texture extraction** — **PR submitted**
    ([openskp#4](https://github.com/iamahsanmehmood/openskp/pull/4), 2026-07-21):
    `Material.texture` (`Texture` dataclass — filename, tile size in inches, raw
    image bytes, `save()`), read from the material's ZIP folder with a sibling
    fallback for name mismatches. Validated 2/2 textures on a real 2022-version file.
-   Integration branch `ingetrazo` on `tuxiasumari/openskp` merges #3 + #4 for
-   IngeTrazo's venv until they ship on PyPI. Measured after both: **18/18
+   Integration branch `built` on `tuxiasumari/openskp` merges #3 + #4 for
+   Built's venv until they ship on PyPI. Measured after both: **18/18
    materials, 2/2 textures — exact parity with the oracle.**
 3. ✅ **"~5–9% skipped faces" — resolved 2026-07-21: measurement artefact, not
    parser loss.** Raw DAE = 4516 tris = OpenSKP's parse exactly; surface area
    matches to 0.00% (327.268 vs 327.269 m²). The deltas came from comparing a
    fused path against raw polygons. Harness now uses `area_m2` as the
-   fusion-invariant truth metric; IngeTrazo's `apply_payload` runs the same
+   fusion-invariant truth metric; Built's `apply_payload` runs the same
    fusion pipeline as its DAE import. **No upstream work needed.**
 4. ✅ **Instance-level materials — PR submitted**
    ([openskp#5](https://github.com/iamahsanmehmood/openskp/pull/5), 2026-07-21):
    `Instance.material_id` (the `D007`/`D107` under the `6419` node —
    "paint the component"). Found on the plaza: 24/274 instances carry a
-   material (granite pergolas, wood floors). IngeTrazo's adapter now resolves
+   material (granite pergolas, wood floors). Built's adapter now resolves
    the inheritance (face material `None` → nearest painted ancestor;
    prototypes split per inherited material so a red and a green copy don't
    wrongly share). Also fixed on our side: texture filenames that are full
@@ -111,13 +111,13 @@ Contribution targets, most valuable first:
    triangles vs reference ground truth. **PR submitted**
    ([openskp#6](https://github.com/iamahsanmehmood/openskp/pull/6)):
    `Face.uv_transform` / `uv_transform_back` with the recipe documented.
-   IngeTrazo's adapter bakes the exact per-vertex UVs into the per-face
+   Built's adapter bakes the exact per-vertex UVs into the per-face
    `uvw` affine its renderer already consumes — the Peru flag now shows
    red *and* white. Original investigation notes kept below.
 
    **(original notes)** Per-face texture mapping (upstream, located but not yet decoded) —
    photo-fitted/positioned textures (e.g. a waving Peru-flag mesh) carry a
-   per-face mapping the parser doesn't read, so IngeTrazo's planar fallback
+   per-face mapping the parser doesn't read, so Built's planar fallback
    shows a single corner of the image (the user's "solid red flag"). We
    FOUND where it lives, per face, under the face's entity-info block:
    `D007 → DC05 → DD05 → B136 → B236 → 1027 → 1127 (front) / 1227 (back)
@@ -148,7 +148,7 @@ Contribution targets, most valuable first:
    looked "never placed"), and its backing quad definition carries TLV kind
    `8315 == 2`. **PR submitted**
    ([openskp#9 → #8](https://github.com/iamahsanmehmood/openskp/pull/8)):
-   `CONTAINER_TAGS += {9013, 401F}` + `Definition.is_image`. IngeTrazo's
+   `CONTAINER_TAGS += {9013, 401F}` + `Definition.is_image`. Built's
    adapter pulls each image out as its own group; cutout images (real alpha)
    become `billboard = "mesh"` face-me sprites that turn toward the camera —
    same rule as the DAE import. Verified on the plaza: the bull

@@ -3,7 +3,7 @@
 """Layers / tags (Fase 6): visibility, locking, assignment, persistence."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.layers import DEFAULT_LAYER, Layer, assign_layer, layer_of
 from core.scene import Scene
@@ -109,10 +109,10 @@ def test_annotations_take_layers_like_any_entity(tmp_path):
     "Anotaciones" layer shows a clean model — no need to duplicate the
     fountain, Marco 2026-09-02), unselectable when locked, and the layer
     survives the .igz round trip."""
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     from core.camera import OrbitCamera
     from core.dimension import Dimension
-    from ingetrazo_core.saved_views import SavedView
+    from built_core.saved_views import SavedView
     from core.textlabel import TextLabel
     from formats import igz as igz_format
 
@@ -164,8 +164,8 @@ def test_annotations_take_layers_like_any_entity(tmp_path):
 def test_hidden_layer_hides_annotations_from_picks():
     """The pick paths honour the layer: a leader text or a cota on a hidden
     (or locked) layer is not under the cursor, exactly like a face."""
-    from ingetrazo_render import AnnotationFont
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_render import AnnotationFont
+    from built_core import Vec3 as QVector3D
     from core.dimension import Dimension
     from core.textlabel import TextLabel
     from tests.controller_surface import ControllerSurface as Viewport
@@ -215,7 +215,7 @@ def test_assigning_and_releasing_annotations_in_the_native_document(native_quest
     from core.dimension import Dimension
     from core.textlabel import TextLabel
     from tests.native_tree import action
-    from ingetrazo_render import chrome_dialogs
+    from built_render import chrome_dialogs
     win = native_question_host.window
     scene = win.viewport.scene
     dim = Dimension(V(0, 0), V(2, 0), V(0, -1))

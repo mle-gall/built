@@ -12,11 +12,11 @@ from __future__ import annotations
 import math
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
-from ingetrazo_core import bevel_profiles as bp
-from ingetrazo_core import apply_fillet, plan_fillet
-from ingetrazo_core.orient import is_closed, signed_volume
+from built_core import bevel_profiles as bp
+from built_core import apply_fillet, plan_fillet
+from built_core.orient import is_closed, signed_volume
 from tests.test_fillet import box, edge_at
 
 TOP_FRONT = ((0, 0, 1), (2, 0, 1))

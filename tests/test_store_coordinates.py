@@ -6,9 +6,9 @@ import pytest
 from core.history import History
 from core.protocol import commands, queries
 from core.scene import Scene
-from ingetrazo_core.store_mesh import StoreMesh
+from built_core.store_mesh import StoreMesh
 
-pytest.importorskip("ingetrazo_core")
+pytest.importorskip("built_core")
 
 from tests.test_.skp_inference_gaps import view  # noqa: F401
 from tests.test_wgpu_soft_shadows import native  # noqa: F401
@@ -16,7 +16,7 @@ from tests.test_wgpu_soft_shadows import native  # noqa: F401
 
 @pytest.mark.parametrize("origin", [(0., 0.), (650000., 6860000.)])
 def test_store_coordinates_moves_weld_and_snapshots(origin, monkeypatch):
-    monkeypatch.setenv("INGETRAZO_RUST", "1")
+    monkeypatch.setenv("BUILT_RUST", "1")
     scene = Scene()
     mesh = scene.mesh
     assert isinstance(mesh, StoreMesh)
@@ -45,9 +45,9 @@ def test_store_coordinates_moves_weld_and_snapshots(origin, monkeypatch):
 def test_georeferenced_draw_push_weld_pack_and_endpoint(view, monkeypatch):
     from georef.datum import SceneDatum, utm_inverse
     from tests.test_.skp_inference_gaps import move, refresh
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
 
-    monkeypatch.setenv("INGETRAZO_RUST", "1")
+    monkeypatch.setenv("BUILT_RUST", "1")
     scene = view.scene
     mesh = scene.mesh
     assert isinstance(mesh, StoreMesh)
@@ -78,7 +78,7 @@ def test_georeferenced_draw_push_weld_pack_and_endpoint(view, monkeypatch):
 def test_format_three_rounds_only_the_saved_copy(tmp_path, monkeypatch):
     from formats import igz
 
-    monkeypatch.setenv("INGETRAZO_RUST", "1")
+    monkeypatch.setenv("BUILT_RUST", "1")
     monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)
     scene = Scene()
     a = (650000.031, 6860000.249, 0.)
@@ -95,7 +95,7 @@ def test_format_three_rounds_only_the_saved_copy(tmp_path, monkeypatch):
     assert e.v0.position_tuple() != a
 
 def test_raw_lambert_draw_pick_snap_push_and_weld(view, monkeypatch):
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from tests.test_.skp_inference_gaps import refresh, move
 
     mesh = view.scene.mesh
@@ -131,9 +131,9 @@ def test_raw_lambert_draw_pick_snap_push_and_weld(view, monkeypatch):
 
 
 def test_metal_mouse_tools_at_raw_lambert(view):
-    from ingetrazo_core import Input
-    from ingetrazo_core import Vec3 as V
-    from ingetrazo_render import KeyEvent
+    from built_core import Input
+    from built_core import Vec3 as V
+    from built_render import KeyEvent
     from tests.test_.skp_inference_gaps import click, move, refresh, use
     from tools.rust_tools import LineTool
     from tools.pushpull import PushPullTool
@@ -177,10 +177,10 @@ def test_metal_mouse_tools_at_raw_lambert(view):
 
 
 def test_scene_frame_stays_put_and_composes_child_offsets_in_double():
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
-    from ingetrazo_core import pack_scene
+    from built_core import pack_scene
 
     leaf = Group(Mesh())
     leaf.mesh.add_face([(0.,0.,0.), (.02,0.,0.), (.02,.02,0.), (0.,.02,0.)])
@@ -204,8 +204,8 @@ def test_scene_frame_stays_put_and_composes_child_offsets_in_double():
 
 
 def test_frame_preserves_numeric_input_and_feed_coordinates(view):
-    from ingetrazo_core.coordinate_frame import mesh_frame
-    from ingetrazo_core import Vec3 as V
+    from built_core.coordinate_frame import mesh_frame
+    from built_core import Vec3 as V
     from tests.test_.skp_inference_gaps import click, move, refresh, use
     from tools.rust_tools import LineTool
     from tools.rust_tools import RectangleTool
@@ -242,8 +242,8 @@ def test_frame_preserves_numeric_input_and_feed_coordinates(view):
 
 
 def test_raw_lambert_metal_raster_and_id_buffer(native):
-    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-    from ingetrazo_core import pack_scene
+    from built_core import Matrix4 as QMatrix4x4, Vec3 as V
+    from built_core import pack_scene
 
     camera, projection = QMatrix4x4(), QMatrix4x4()
     camera.lookAt(V(.02,.03,.1), V(.02,.03,0.), V(0.,1.,0.))
@@ -263,7 +263,7 @@ def test_raw_lambert_metal_raster_and_id_buffer(native):
 
 @pytest.mark.parametrize("dtype,counts", [("f4",(1,0,0)), ("f8",(2,1,0))])
 def test_bulk_weld_uses_source_precision_at_the_radius(dtype, counts):
-    from ingetrazo_core import store_views
+    from built_core import store_views
     points = np.array([[0.,0.,0.], [3.0003e-8,1e-4,0.]], dtype='f4').astype(dtype)
     empty = np.empty(0, dtype=np.int64)
     source = dict(pos=points, edges=[[0,1]], counts=empty, sizes=empty, rings=empty)
@@ -276,7 +276,7 @@ def test_bulk_weld_uses_source_precision_at_the_radius(dtype, counts):
 
 
 def test_metal_camera_tracks_document_controls_without_quantising_local_pan(view):
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     from tests.test_.skp_inference_gaps import refresh
     mesh = view.scene.mesh
     mesh.add_face([(650000.+dx, 6860000.+dy, 0.) for dx, dy in
@@ -333,10 +333,10 @@ def test_format_three_reopens_edge_with_original_float32_weld_decision(
 
 
 def test_camera_relative_edit_through_a_far_mirrored_occurrence(monkeypatch):
-    from ingetrazo_core.coordinate_frame import mesh_frame
+    from built_core.coordinate_frame import mesh_frame
     from core.group import Group
     from core.history import SnapshotMutation
-    from ingetrazo_core import Matrix4, Vec3
+    from built_core import Matrix4, Vec3
 
     scene = Scene()
     group = Group()

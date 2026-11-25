@@ -17,7 +17,7 @@ from pathlib import Path
 
 from queue import Empty, Queue
 
-from ingetrazo_core.i18n import tr
+from built_core.i18n import tr
 
 DEFAULT_PORT = 4763
 _REFUSED = b'{"id": null, "ok": false, "error": "not a bridge request; closing"}\n'
@@ -88,7 +88,7 @@ class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
             srv = endpoint.__enter__()
             self._endpoint = endpoint
         else:
-            port = int(os.environ.get("INGETRAZO_AI_PORT", DEFAULT_PORT))
+            port = int(os.environ.get("BUILT_AI_PORT", os.getenv("INGETRAZO_AI_PORT", DEFAULT_PORT)))
             srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
                 srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -103,7 +103,7 @@ class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
         self._stop = threading.Event()
         self._jobs = Queue()
         self._thread = threading.Thread(
-            target=self._serve, args=(srv, self._stop), name="ingetrazo-ai-bridge", daemon=True)
+            target=self._serve, args=(srv, self._stop), name="built-ai-bridge", daemon=True)
         try:
             self._timer = self._viewport.window()._host.timers.timer(self.poll, 20, True)
             self._timer.start()
@@ -221,7 +221,7 @@ class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
             job["done"].set()
             return
         self._busy = True
-        from ingetrazo_render import chrome_dialogs, chrome_forms
+        from built_render import chrome_dialogs, chrome_forms
         win = self._viewport.window()
         previous_forms = tuple(chrome_forms.forms(win))
         previous_sheets = tuple(chrome_dialogs._sheets(win))
@@ -390,9 +390,9 @@ class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
         window = self._viewport.window()
         shown = getattr(window, "_shown_viewport", None)
         view = shown() if shown is not None else self._viewport
-        from ingetrazo_render import shell_services as native
+        from built_render import shell_services as native
         if native.available():
-            from ingetrazo_render import SurveyRaster
+            from built_render import SurveyRaster
             frame = window.view.render_pixels(width, height)
             image = SurveyRaster(*frame) if frame else None
         else:
@@ -419,9 +419,9 @@ class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
 def mcp_command(platform: str | None = None, frozen: bool | None = None,
                 executable: str | None = None, root: Path | None = None,
                 env: dict | None = None) -> list[str]:
-    """The command an MCP client must run to reach this IngeTrazo — the
+    """The command an MCP client must run to reach this Built — the
     packaged app carries the server, so nobody needs Python installed:
-    ``ingetrazo-mcp.exe`` beside the app on Windows, ``<ingetrazo> --mcp``
+    ``built-mcp.exe`` beside the app on Windows, ``<built> --mcp``
     for the Linux/macOS packages, and the script itself from a checkout.
 
     The Linux packages need the command that is valid FROM THE HOST and
@@ -448,11 +448,11 @@ def mcp_command(platform: str | None = None, frozen: bool | None = None,
     if frozen:
         exe = PathOf(executable)
         if windows:
-            return [str(exe.with_name("ingetrazo-mcp.exe"))]
+            return [str(exe.with_name("built-mcp.exe"))]
         return [str(exe), "--mcp"]
     root = PathOf(str(root or Path(__file__).resolve().parents[1]))
     python = "python" if windows else "python3"
-    return [python, str(root / "scripts" / "ingetrazo_mcp.py")]
+    return [python, str(root / "scripts" / "built_mcp.py")]
 
 
 def desktop_config_path(platform: str | None = None) -> str:
@@ -476,7 +476,7 @@ OTHER_CLIENTS = (
     # its successor for individuals is Antigravity CLI (`agy`), which reads
     # this file (Marco hit the shutdown notice on 2026-09-21).
     ("Antigravity CLI (Google)", "~/.gemini/config/mcp_config.json"),
-    ("Codex CLI", "~/.codex/config.toml  ([mcp_servers.ingetrazo])"),
+    ("Codex CLI", "~/.codex/config.toml  ([mcp_servers.built])"),
 )
 
 
@@ -486,7 +486,7 @@ def connect_instructions(port: int, platform: str | None = None, **kw) -> str:
     client takes, and where each of them reads it."""
     cmd = mcp_command(platform, **kw)
     quoted = " ".join(f'"{c}"' if " " in c else c for c in cmd)
-    config = {"mcpServers": {"ingetrazo": {"command": cmd[0], "args": cmd[1:]}}}
+    config = {"mcpServers": {"built": {"command": cmd[0], "args": cmd[1:]}}}
     others = "\n".join(f"    {name}: {path}" for name, path in OTHER_CLIENTS)
     return (
         tr("The AI bridge is listening on 127.0.0.1:{port}. Connect ANY MCP "
@@ -494,9 +494,9 @@ def connect_instructions(port: int, platform: str | None = None, **kw) -> str:
            "Cursor, VS Code, Windsurf, Antigravity CLI, Codex CLI…", port=port)
         + "\n\n"
         + tr("Claude Code (in a terminal):") + "\n"
-        + f"    claude mcp add ingetrazo -- {quoted}\n\n"
+        + f"    claude mcp add built -- {quoted}\n\n"
         + tr("Antigravity CLI (Google; in a terminal):") + "\n"
-        + f"    agy mcp add ingetrazo -- {quoted}\n\n"
+        + f"    agy mcp add built -- {quoted}\n\n"
         + tr("Claude Desktop: add this to {path} and restart Claude Desktop:",
              path=desktop_config_path(platform)) + "\n"
         + json.dumps(config, indent=2) + "\n\n"

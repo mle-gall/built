@@ -10,8 +10,8 @@ from __future__ import annotations
 
 
 import pytest  # noqa: E402
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Input as Qt
+from built_core import Vec3 as QVector3D
 
 
 from core import units  # noqa: E402

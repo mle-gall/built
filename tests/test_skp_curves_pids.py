@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 IngeTrazo contributors.
+# Copyright (C) 2026 Built contributors.
 """Curve and identity regressions against .skp-authored fixtures."""
 from collections import Counter
 from pathlib import Path
 
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4
+from built_core import Matrix4 as QMatrix4x4
 
 from core.scene import Scene
 from formats.skp import apply_payload, load_skp

@@ -13,8 +13,8 @@ from __future__ import annotations
 import math
 
 import pytest
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Vec3 as QVector3D
 
 from tools.base import ToolContext
 
@@ -358,8 +358,8 @@ def test_a_first_click_on_a_components_face_captures_its_world_plane(viewport):
     atasca». The click captured the face's plane in the component's OWN
     coordinates; the second corner then fell on a plane nowhere near the
     post. The captured plane must be the world one."""
-    from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import ScreenPoint as QPointF, Input as Qt
+    from built_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     from tools.rust_tools import RectangleTool
@@ -406,8 +406,8 @@ def test_a_nested_components_face_plane_comes_through_its_placement(viewport):
     local coordinates — and the rectangle drew off the face (Marco's
     video, 2026-09-14). pick_face_placement returns the placement whose
     composed matrix puts the face in the world."""
-    from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import ScreenPoint as QPointF, Input as Qt
+    from built_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     from core.snap import face_plane_world
@@ -463,7 +463,7 @@ def test_opening_a_container_lets_the_pick_resolve_to_its_children(viewport):
     on the arch inside, kept opening nothing — the pick still answered
     "the plaza" (a stale index: the owner a hit resolves to depends on the
     open context)."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     mesh = Mesh()
@@ -558,7 +558,7 @@ def test_a_group_inserted_while_editing_a_container_becomes_its_child(viewport):
     the top level. Inside an open container, InsertGroupCommand (paste,
     place, import) appends to the container's children; undo removes it
     from there."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.history import InsertGroupCommand
     from core.mesh import Mesh

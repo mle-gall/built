@@ -6,7 +6,7 @@ NeedsConverter fallback, and OpenSKP model → payload adaptation (fake model, s
 no ``openskp`` package or ``.skp`` file is needed)."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 from pathlib import Path
 from types import SimpleNamespace as NS
 
@@ -159,7 +159,7 @@ def test_a_reader_error_is_logged_with_its_traceback(tmp_path, monkeypatch,
 # ---- OpenSKP adapter (fake model) ---------------------------------------------
 
 def _V(x, y, z=0.0):
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     return QVector3D(float(x), float(y), float(z))
 
 
@@ -250,7 +250,7 @@ def test_openskp_adapter_places_instances_with_transform():
     assert min(xs) == pytest.approx(0.0, abs=1e-4)      # local: 0..10 in
     assert max(xs) == pytest.approx(0.254, abs=1e-4)
     assert len(proto["instances"]) == 1
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     placed = proto["instances"][0].map(QVector3D(0.0, 0.0, 0.0))
     assert placed.x() == pytest.approx(2.54, abs=1e-4)  # +100 in on X
 
@@ -274,7 +274,7 @@ def test_openskp_adapter_scales_an_instance_matrix_by_element_12():
     payload = skp_reader._adapt(model, "instw")
     proto = payload["protos"][0]
     assert len(proto["instances"]) == 1
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     placed = proto["instances"][0]
     origin = placed.map(QVector3D(0.0, 0.0, 0.0))
     assert origin.x() == pytest.approx(20 * 0.0254, abs=1e-4)
@@ -293,7 +293,7 @@ def _vff_skp(tmp_path, thumb_pixels) -> Path:
     ``meta/model_thumbnail.png``."""
     import io
     import zipfile
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     pixels = bytearray([255] * (8 * 8 * 4))
     for x, y in thumb_pixels:
         offset = 4 * (y * 8 + x)
@@ -354,7 +354,7 @@ def test_parse_skp_accepts_an_empty_payload(tmp_path, monkeypatch):
 
 def test_openskp_adapter_resolves_face_colours_via_materials_by_id():
     # Face.material_id → SkpModel.materials_by_id (our upstream PR openskp#3)
-    # → IngeTrazo attrs["color"] in 0..1. A model without the join (PyPI
+    # → Built attrs["color"] in 0..1. A model without the join (PyPI
     # 0.2.0) simply imports uncoloured.
     root = _fake_definition(
         id=0, name="ROOT_MODEL",
@@ -392,7 +392,7 @@ def test_openskp_adapter_extracts_textures_to_the_app_cache(tmp_path, monkeypatc
     model = NS(definitions={0: root}, materials_by_id={5: mat})
 
     cache = tmp_path / "cache"
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(cache))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(cache))
     src = tmp_path / "docs"
     src.mkdir()
     skp = src / "casa.skp"
@@ -414,7 +414,7 @@ def test_texture_cache_dir_is_per_file_and_clearable(tmp_path, monkeypatch):
     # Same .skp → same folder (a re-import reuses the images); an edited file
     # (new size/mtime) → its own folder; clearing wipes the lot.
     cache = tmp_path / "cache"
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(cache))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(cache))
     skp = tmp_path / "casa.skp"
     skp.write_bytes(b"one")
     first = skp_reader._texture_dir(skp)
@@ -558,7 +558,7 @@ def test_openskp_adapter_bakes_positioned_texture_uvs(tmp_path):
     payload = skp_reader._adapt(model, "m", skp_path=skp)
     outer, holes, attrs = payload["groups"][0]["faces"][0]
     uvw = attrs["texture"]["uvw"]
-    uvs = ingetrazo_core.texture_affine_uv(uvw, outer)
+    uvs = built_core.texture_affine_uv(uvw, outer)
     expect = [(2.0, 0.2784), (2.0, -0.5418), (2.8202, -0.5418),
               (2.8202, 0.2784)]
     for (u, v), (ue, ve) in zip(uvs, expect):
@@ -570,7 +570,7 @@ def test_openskp_adapter_image_entities_become_billboards(tmp_path):
     # A def with is_image=True (upstream PR openskp#8) placed by an instance
     # becomes its OWN group; a cutout texture (real alpha) marks it as a
     # face-me billboard, an opaque photo stays a static panel.
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
 
     cutout = tmp_path / "toro.png"
     cutout.write_bytes(SurveyRaster(4, 4, bytes((0, 0, 0, 0)) * 16).png())
@@ -620,7 +620,7 @@ def test_a_cutout_image_stuck_on_a_face_stays_put(tmp_path):
     # the cutout guess did it. Lying on a face (here a face of ANOTHER
     # component, as in that file, 0.5 mm off it) keeps one static; a cutout
     # standing free — the plaza's bull — still turns.
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
 
     cutout = tmp_path / "logo.png"
     cutout.write_bytes(SurveyRaster(4, 4, bytes((0, 0, 0, 0)) * 16).png())
@@ -665,7 +665,7 @@ def test_openskp_adapter_default_mapping_is_local(tmp_path, monkeypatch):
     # The .skp format's default texture mapping runs in the component's LOCAL frame:
     # two copies of the same textured component must sample the same patch of
     # the tile (identical UVs), regardless of where each copy sits in world.
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
 
     png = tmp_path / "wood.png"
     png.write_bytes(SurveyRaster(4, 4, bytes((136, 68, 34, 255)) * 16).png())
@@ -693,7 +693,7 @@ def test_openskp_adapter_default_mapping_is_local(tmp_path, monkeypatch):
         outer, holes, attrs = gp["faces"][0]
         uvw = attrs["texture"]["uvw"]
         uv_sets.append([(round(u, 5), round(v, 5))
-                        for u, v in ingetrazo_core.texture_affine_uv(uvw, outer)])
+                        for u, v in built_core.texture_affine_uv(uvw, outer)])
     assert len(uv_sets) == 2
     assert uv_sets[0] == uv_sets[1]     # both copies sample identically
 
@@ -802,7 +802,7 @@ def test_openskp_adapter_splits_prototypes_by_inherited_material(monkeypatch):
 def test_openskp_adapter_translucent_material_carries_opacity(tmp_path):
     # Material.transparency < 1 (useTrans, upstream PR openskp#12) becomes
     # attrs["opacity"] — and survives the default-mapping uvw baking.
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     png = tmp_path / "glass.png"
     png.write_bytes(SurveyRaster(4, 4, bytes((100, 149, 237, 255)) * 16).png())
 
@@ -828,7 +828,7 @@ def test_openskp_adapter_colorized_material_tints_shared_texture(tmp_path):
     # shares the source material's image bytes; the adapter must write a
     # RE-TINTED copy under its own name (the base texture stays pristine)
     # with the cutout alpha preserved.
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     png = tmp_path / "fence.png"
     rgba = bytes((0, 0, 0, 0)) + bytes((200, 200, 200, 255)) * 15
     png.write_bytes(SurveyRaster(4, 4, rgba).png())
@@ -859,7 +859,7 @@ def test_openskp_adapter_colorized_material_tints_shared_texture(tmp_path):
 
 def test_openskp_adapter_carries_file_layers_with_visibility():
     # The file's layers travel on the payload with their hidden state; the
-    # model's DEFAULT layer never travels (it IS IngeTrazo's default layer).
+    # model's DEFAULT layer never travels (it IS Built's default layer).
     root = _tri_def(0, "ROOT_MODEL")
     model = NS(definitions={0: root}, layers=[
         NS(name="Layer0", visible=True, default=True),
@@ -938,7 +938,7 @@ def test_a_faces_own_tag_arrives_by_name_not_by_its_id(tmp_path):
 
 
 def test_resolve_face_layers_leaves_names_and_drops_the_default_tag():
-    from ingetrazo_core import reader_compat
+    from built_core import reader_compat
     faces = {1: NS(layer=11), 2: NS(layer=1), 3: NS(layer="Muros"),
              4: NS(layer=None), 5: NS(layer=99)}
     reader_compat._parse_tables.layers = {1: "Layer0", 11: "Roof"}
@@ -967,7 +967,7 @@ def test_apply_payload_registers_layers_and_assigns_groups():
                     "instances": [None, None],
                     "instance_layers": ["Muros", None]}],
     }
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     payload["protos"][0]["instances"] = [QMatrix4x4(), QMatrix4x4()]
     skp_format.apply_payload(scene, payload)
     by_name = {ly.name: ly for ly in scene.layers}

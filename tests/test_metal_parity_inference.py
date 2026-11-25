@@ -37,13 +37,13 @@ from types import SimpleNamespace
 import math
 import numpy as np
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from core.scene import Scene
 from core.mesh import Mesh
 from core.group import Group
 from core.guide import Guide
-from ingetrazo_core import pack_scene
-from ingetrazo_core import (resident_prepare as prepare, resident_snap as snap, nearby_edges, reference_edge,
+from built_core import pack_scene
+from built_core import (resident_prepare as prepare, resident_snap as snap, nearby_edges, reference_edge,
                                   tangent_direction, eligible_rows, surface)
 
 

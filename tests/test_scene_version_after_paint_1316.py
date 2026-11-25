@@ -8,7 +8,7 @@ its own frame — the flush after it crashed. What a frame finds is now
 announced once the frame is out, so no listener runs inside a paint."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from views.extension_api import ExtensionApp

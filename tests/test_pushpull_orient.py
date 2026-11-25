@@ -18,10 +18,10 @@ from __future__ import annotations
 
 import itertools
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.history import History
-from ingetrazo_core.orient import is_closed, orient_outward, signed_volume
+from built_core.orient import is_closed, orient_outward, signed_volume
 from core.scene import Scene
 from tools.pushpull import PushPullTool
 

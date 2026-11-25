@@ -25,7 +25,7 @@ GOLDEN = Path(__file__).parent / "fixtures" / "scene_visibility_golden.json.gz"
 
 
 def _scene(rng):
-    from ingetrazo_core import Matrix4 as M, Vec3 as V
+    from built_core import Matrix4 as M, Vec3 as V
     from core import layers as L
     from core.dimension import Dimension
     from core.group import Group
@@ -37,8 +37,8 @@ def _scene(rng):
     for t in tags:
         scene.layers.append(L.Layer(t, visible=rng.random() < 0.7, locked=rng.random() < 0.25))
     if rng.random() < 0.6:
-        f = __import__("ingetrazo_core").tag_edits.add_folder(scene, "F")
-        __import__("ingetrazo_core").tag_edits.move_to_folder(scene, scene.layers[1].name, f)
+        f = __import__("built_core").tag_edits.add_folder(scene, "F")
+        __import__("built_core").tag_edits.move_to_folder(scene, scene.layers[1].name, f)
         scene.folder_visibility = {f: rng.random() < 0.5}
     pick = lambda: rng.choice([None, None] + tags + ["ghost"])  # noqa: E731
 

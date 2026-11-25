@@ -5,7 +5,7 @@ import pytest
 
 from core.history import History
 from core.scene import Scene
-import ingetrazo_core as native
+import built_core as native
 
 DATA = Path(__file__).parent / "data"
 PANEL = DATA / "skp_nested_panel_2021.skp"
@@ -68,7 +68,7 @@ def test_cancel_skp_does_not_deliver_a_partial_result():
 
 def test_first_insertion_keeps_callbacks_for_a_queued_document():
     from types import SimpleNamespace
-    from ingetrazo_render.document_open import after_open
+    from built_render.document_open import after_open
 
     path = DATA / "skp_arcs_2017.skp"
     active = SimpleNamespace(path=PANEL, target=object(), queue=[path])

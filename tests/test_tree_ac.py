@@ -9,7 +9,7 @@ top node is merged into its row, nested files sit at the root once each
 and inspector for the current task."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 
 import os
 import time
@@ -164,7 +164,7 @@ def test_nested_links_are_roots_marked_via_their_parent(ui):
     counts = view._ui_tree["counts"]
     assert counts["link:Ride/link:Ride stairs"] == 60 and counts["link:Ride"] == SMALL
     # File verbs on a nested row: open and show, never reload or unlink there.
-    from ingetrazo_render import file_verb_ids
+    from built_render import file_verb_ids
     assert file_verb_ids(True) == ["linkopen", "linkfinder"]
     act("linkunlink", "n:link:Ride/link:Ride stairs")
     assert any("comes inside Ride" in s for s in win.viewport.status)
@@ -211,7 +211,7 @@ def test_mark_selection_counts_paged_out_items_on_the_node():
         ("m:a", 1, 4, 0),      # "Show more": two more past the page
         ("n:b", 0, 0, 0),
     )]
-    from ingetrazo_core import mark_filing_selection
+    from built_core import mark_filing_selection
     rows = mark_filing_selection(rows)
     assert [r[1][10] for r in rows] == [1, 1, 0, 0]
 
@@ -220,7 +220,7 @@ def test_mark_selection_counts_paged_out_items_on_the_node():
 
 @pytest.fixture
 def settings(tmp_path):
-    from ingetrazo_core import NativeSettings
+    from built_core import NativeSettings
     st = NativeSettings(tmp_path)
     yield st
     st.sync()
@@ -308,8 +308,8 @@ def test_inspector_verbs_follow_the_selection_kind(ui):
     from core import links
     from core.group import Group
     from core.mesh import Mesh
-    from ingetrazo_core import Vec3 as QVector3D
-    from ingetrazo_render import selection_kind
+    from built_core import Vec3 as QVector3D
+    from built_render import selection_kind
     scene, win, view, rows, act = ui
     tree = view._ui_tree["tree"]
     part = tree.direct[_key(view, "Rails")][0]
@@ -331,7 +331,7 @@ def test_inspector_verbs_follow_the_selection_kind(ui):
     assert selection_kind(scene, faces) == "faces"
     got = _verbs(win, faces)
     assert "Group" in got and "Component" not in got and "File to…" not in got
-    assert isinstance(own, Group) and ingetrazo_core.link_linked_ancestor(own) is None
+    assert isinstance(own, Group) and built_core.link_linked_ancestor(own) is None
 
 
 def test_read_only_inspector_has_no_editable_name_and_no_edits(ui):
@@ -514,7 +514,7 @@ def test_drawing_lens_sends_native_style_fields_and_catalog(ui):
 
 def test_imported_hatch_angle_and_scale_are_undoable_in_drawing(ui, tmp_path, monkeypatch):
     import json
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render.shell_files import ShellFileDialog
     scene, win, view, rows, act = ui
     path = tmp_path / "survey.pat"
     path.write_text("*SURVEY,Site survey\n45,0,0,0,2,3,-1")
@@ -547,7 +547,7 @@ def test_created_placement_inherits_the_active_node_in_its_creation_step(ui, sit
     from core import bim_registry, links, structure
     from core.group import Group
     from core.history import InsertGroupCommand, MakeGroupCommand, MakeNestedGroupCommand
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     scene, win, view, _, act = ui
     dest = _key(view, "Fences")
     act("active", "n:" + dest)
@@ -578,7 +578,7 @@ def test_created_placement_inherits_the_active_node_in_its_creation_step(ui, sit
 
 
 def test_sort_choice_is_restored_on_a_new_project_view(ui):
-    from ingetrazo_core import NativeSettings
+    from built_core import NativeSettings
     scene, win, _, _, act = ui
     settings = NativeSettings()
     key = "ui/project_tree_sort"
@@ -614,15 +614,15 @@ def test_unstructured_filters_and_tag_toggles_use_the_document(tmp_path):
     from core.group import Group
     from core.layers import Layer
     from core.scene import Scene
-    from ingetrazo_core.section import SectionPlane
-    from ingetrazo_core import Vec3
+    from built_core.section import SectionPlane
+    from built_core import Vec3
     scene = Scene()
     scene.layers.append(Layer("Steel"))
     wall = Group(name="Wall")
     wall.layer = "Steel"
     door = Group(name="Door")
     door.component = True
-    from ingetrazo_core import Matrix4
+    from built_core import Matrix4
     door.xform = Matrix4()
     scene.groups.extend([wall, door])
     scene.section_planes.append(SectionPlane(Vec3(0, 0, 0), Vec3(0, 0, 1), name="Cut A"))
@@ -732,7 +732,7 @@ def test_locate_repairs_the_source_and_its_problem_entry(tmp_path, monkeypatch):
     from core import links
     from core.scene import Scene
     from tests.composite_fixture import _file
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render.shell_files import ShellFileDialog
     source = _file(tmp_path / "Source.built", {}, {"Steel": None}, 2)
     scene = Scene()
     host = tmp_path / "Host.built"
@@ -783,7 +783,7 @@ def test_identity_separates_physical_parent_filing_and_surface_material(tmp_path
     from core.group import Group
     from core.mesh import Mesh
     from core.scene import Scene
-    from ingetrazo_core import Vec3, selection_identity
+    from built_core import Vec3, selection_identity
     from core.link_structure import Tree
     from core import bim_registry
 
@@ -855,7 +855,7 @@ def test_promoting_one_tag_files_only_its_members_and_undoes():
 def test_drawing_line_types_and_file_round_trip(ui, tmp_path, monkeypatch):
     import json
     from core.layers import parse_lin
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render.shell_files import ShellFileDialog
     scene, win, view, _, act = ui
     tag = scene.layer("Paths")
     act("lens", "1")
@@ -910,7 +910,7 @@ def test_drawing_folders_keep_keys_and_undo_as_one_step(ui):
 def test_drawing_detailed_hatch_and_atomic_pat_export(ui, tmp_path, monkeypatch):
     import json
     from core.hatches import parse_pat
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render.shell_files import ShellFileDialog
     scene, win, _, _, act = ui
     tag = scene.layer("Paths")
     act("lens", "1")

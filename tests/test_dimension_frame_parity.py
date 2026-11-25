@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """A dimension's frame maths moved to Rust
-(``rust/ingetrazo_core/src/model/dimension_frame.rs``) and must answer bit for
+(``rust/built_core/src/model/dimension_frame.rs``) and must answer bit for
 bit as ``core/dimension.py``'s Python did at ``9cf53080``: the linear frame,
 the measured value, the squared offset, the dimension line's ends and
 midpoint, the cursor's offset and the kind of dimension it asks for.
@@ -12,7 +12,7 @@ with seeded offsets and cursors. Regenerate only on purpose, against the
 reference implementation: ``python tests/test_dimension_frame_parity.py --write``."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 import gzip
 import json
 import math
@@ -56,13 +56,13 @@ def _v(p):
 
 
 def answer(dimension, case):
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     a, b, off, cursors = case
     A, B = V(*a), V(*b)
     got = {}
     for axis in (None, "x", "y", "z", "w"):
         d = dimension.Dimension(A, B, V(*off), axis=axis)
-        frame = ingetrazo_core.dimension_linear_frame(A, B, d.axis)
+        frame = built_core.dimension_linear_frame(A, B, d.axis)
         lp = d.line_points()
         got[str(axis)] = [None if frame is None else [_v(frame[0]), _v(frame[1])],
                           d.value(), _v(d.perpendicular_offset()), [_v(lp[0]), _v(lp[1])],

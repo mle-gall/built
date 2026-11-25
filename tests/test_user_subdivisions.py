@@ -11,11 +11,11 @@ strip's belt, a flush landing's contact line — still merge away.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.edits import build_add_edge
 from core.history import History
-from ingetrazo_core.orient import is_closed, orient_outward
+from built_core.orient import is_closed, orient_outward
 from core.scene import Scene
 from tests.test_fuzz_engine import V, _draw_rect, _push, _up
 

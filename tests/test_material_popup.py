@@ -6,8 +6,8 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from core.group import Group
 from core.materials import Material
 from tests.native_tree import action, group_rows
-from ingetrazo_render import chrome_sheet as sheets
-from ingetrazo_render import wgpu_library as library
+from built_render import chrome_sheet as sheets
+from built_render import wgpu_library as library
 
 
 @pytest.fixture

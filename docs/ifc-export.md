@@ -1,6 +1,6 @@
 # IFC export from object records
 
-`formats.ifc.save_ifc(scene, path, project_name="IngeTrazo project",
+`formats.ifc.save_ifc(scene, path, project_name="Built project",
 profile=None, *, project_directory=None)` writes IFC4 by default. A profile is
 a key in the project registry's `export_profiles`. IFC4X3_ADD2 is also supported.
 The result is an integer-compatible `ExportReport`: existing callers can still

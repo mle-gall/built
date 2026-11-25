@@ -4,7 +4,7 @@ Bahasa Indonesia · [English](CODE_OF_CONDUCT.md)
 
 ## Komitmen kami
 
-Kami berkomitmen menjadikan komunitas IngeTrazo tempat yang saling
+Kami berkomitmen menjadikan komunitas Built tempat yang saling
 menghormati dan bebas dari pelecehan bagi semua orang, tanpa membedakan
 usia, ukuran tubuh, disabilitas, etnis, identitas gender, tingkat pengalaman,
 kewarganegaraan, penampilan, ras, agama, atau orientasi seksual.

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from ingetrazo_render import icon_art, icon_keys, letter_art, tool_cursor_name, tool_cursor_raster
+from built_render import icon_art, icon_keys, letter_art, tool_cursor_name, tool_cursor_raster
 
 INK = (0xd9, 0xdc, 0xe1)          # views/theme.py icon_ink
 ACCENT = (0x6a, 0xa5, 0xff)       # views/theme.py accent_color

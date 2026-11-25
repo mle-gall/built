@@ -50,7 +50,7 @@ def test_render_job(window, monkeypatch, tmp_path, cancel):
     assert write_job.call_args.kwargs["width"] == 384
     assert write_job.call_args.kwargs["engine"] == "cycles"
     assert window._chrome_jobs == [panel.job]
-    (panel.work / "blender.log").write_bytes(b"INGETRAZO stats Rendering 32 / 64 samples\n")
+    (panel.work / "blender.log").write_bytes(b"BUILT stats Rendering 32 / 64 samples\n")
     proc.poll.return_value = None
     panel._poll_process()
     assert panel.fraction == panel.job.fraction == .5

@@ -2,7 +2,7 @@
 """Named XYZ sources in Settings → This model → Location."""
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from tests.preferences_chrome import Controls
-from ingetrazo_render.chrome_forms import current
+from built_render.chrome_forms import current
 
 URL = "https://tiles.example.com/drone/{z}/{x}/{y}.png"
 

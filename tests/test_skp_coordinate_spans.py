@@ -5,12 +5,12 @@ import pickle
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
 from core.scene import Scene
 from formats import igz, skp
-from ingetrazo_core import PointRows, skp_flatten_rings as flatten_rings
+from built_core import PointRows, skp_flatten_rings as flatten_rings
 
 
 @pytest.mark.parametrize('section', [slice(None), slice(None, None, -1),
@@ -68,7 +68,7 @@ def test_mixed_payload_matches_legacy_weld_order_and_archive(count, tmp_path, mo
             (plain(r) if expand else r, h, a) for r, h, a in faces], 'soft_edges': []}]}
     expected, actual = Scene(), Scene()
     # Reference the old flattening operation, retaining the same threshold.
-    import ingetrazo_core as coordinates
+    import built_core as coordinates
     with monkeypatch.context() as mp:
         mp.setattr(coordinates, 'skp_flatten_rings', lambda rr, size:
             np.array([p.toTuple() if hasattr(p, 'x') else p for r in rr for p in r],
@@ -76,7 +76,7 @@ def test_mixed_payload_matches_legacy_weld_order_and_archive(count, tmp_path, mo
         skp.apply_payload(expected, payload(True))
     calls = []
     # A store-backed mesh has its own bulk weld: watch whichever runs.
-    from ingetrazo_core.store_mesh import StoreMesh
+    from built_core.store_mesh import StoreMesh
     for cls in (Mesh, StoreMesh):
         def weld(self, pos, original=cls.__dict__['bulk_weld']):
             calls.append(len(pos))

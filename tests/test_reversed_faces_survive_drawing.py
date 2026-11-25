@@ -26,7 +26,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
 from core.history import (AddFaceCommand, EraseSelectionCommand, History,

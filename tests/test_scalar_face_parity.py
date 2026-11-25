@@ -4,7 +4,7 @@ import hashlib
 import json
 import random
 
-from ingetrazo_core import Vec3
+from built_core import Vec3
 from core.mesh import Mesh
 
 

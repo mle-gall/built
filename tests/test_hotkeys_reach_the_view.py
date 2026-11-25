@@ -1,8 +1,8 @@
 """Tools retain their gesture and measurement input across native chrome actions."""
 import pytest
 
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Vec3 as V
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Vec3 as V
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from tools.base import ToolContext
 
@@ -38,7 +38,7 @@ def test_tool_shortcuts_and_tab_reach_the_initial_model(native_host):
 
 
 def test_dismissing_a_chrome_question_returns_arrow_and_letter_keys_to_the_live_tool(native_question_host):
-    from ingetrazo_render import chrome_forms
+    from built_render import chrome_forms
     host = native_question_host
     line = begin(host, "L")
     line.on_click(ctx(host, V()))

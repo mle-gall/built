@@ -15,7 +15,7 @@ import pytest
 from tests.scene_controls import choose, interrupt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
-from ingetrazo_core import (Pose, SceneRun, SceneAnimation,
+from built_core import (Pose, SceneRun, SceneAnimation,
                                   between, ease, glide, turn)
 
 
@@ -192,10 +192,10 @@ def rig(native_host, monkeypatch):
 
 
 def _view(name, view="top", x=0.0):
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
 
     from core.camera import OrbitCamera
-    from ingetrazo_core.saved_views import SavedView
+    from built_core.saved_views import SavedView
     from core.scene import Scene
     cam = OrbitCamera()
     cam.set_view(view)
@@ -347,7 +347,7 @@ def win(native_host):
 
 
 def _scenes(win, *specs):
-    from ingetrazo_core.saved_views import SavedView
+    from built_core.saved_views import SavedView
     cam = win.viewport.camera
     for name, view, hidden in specs:
         cam.set_view(view)
@@ -464,15 +464,15 @@ def test_the_window_s_esc_stops_play(win):
 def test_play_without_scenes_says_why(win):
     win.play_scenes(True)
     assert not win.scene_player.is_active()
-    from ingetrazo_core.i18n import tr
+    from built_core.i18n import tr
     assert win.statusBar().currentMessage().startswith(
         tr("This project has no scenes to play: keep a view as a scene "
            "first (Scenes panel, «+ Scene»).")[:20])
 
 
 def test_page_up_and_down_are_no_other_commands_shortcut(win):
-    from ingetrazo_render.keyboard_bindings import action_keys
-    from ingetrazo_render.settings_sheet import SettingsSheet
+    from built_render.keyboard_bindings import action_keys
+    from built_render.settings_sheet import SettingsSheet
     sheet = SettingsSheet("keyboard")
     sheet._win = win
     for key, command in (("PgDown", "scene_next"), ("PgUp", "scene_previous")):
@@ -482,7 +482,7 @@ def test_page_up_and_down_are_no_other_commands_shortcut(win):
 
 def test_the_settings_change_the_document(win, monkeypatch):
     forms = []
-    monkeypatch.setattr("ingetrazo_render.chrome_forms.show", lambda _, form: forms.append(form))
+    monkeypatch.setattr("built_render.chrome_forms.show", lambda _, form: forms.append(form))
     before = win.viewport.scene.version
     win.ask_animation()
     form = forms.pop()
@@ -498,7 +498,7 @@ def test_the_settings_change_the_document(win, monkeypatch):
 
 def test_the_settings_dialog_reads_and_returns_the_times(win, monkeypatch):
     forms = []
-    monkeypatch.setattr("ingetrazo_render.chrome_forms.show", lambda _, form: forms.append(form))
+    monkeypatch.setattr("built_render.chrome_forms.show", lambda _, form: forms.append(form))
     win.ask_animation()
     form = forms.pop()
     form.receive("transition", "3")
@@ -551,7 +551,7 @@ def test_the_toggle_shows_the_choice_of_the_project_in_front(win):
 
 # ---- The video ---------------------------------------------------------------
 def test_a_video_shows_the_first_scene_glides_and_ends_on_the_last():
-    from ingetrazo_core import video_at, video_frame_count, video_seconds
+    from built_core import video_at, video_frame_count, video_seconds
     poses = [_pose(x=0), _pose(x=10), _pose(x=20)]
     assert video_seconds(3, 2.0, 1.0) == pytest.approx(7.0)   # 1 + 2·(2+1)
     assert video_frame_count(3, 2.0, 1.0, 10) == 71
@@ -569,7 +569,7 @@ def test_a_video_shows_the_first_scene_glides_and_ends_on_the_last():
 
 
 def test_the_mkv_writer_writes_a_matroska_file(tmp_path):
-    from ingetrazo_core import MkvWriter
+    from built_core import MkvWriter
     path = tmp_path / "prueba.mkv"
     writer = MkvWriter(path, 65, 48, 10)
     assert (writer.width, writer.height) == (64, 48)
@@ -583,7 +583,7 @@ def test_the_mkv_writer_writes_a_matroska_file(tmp_path):
 
 
 def test_a_discarded_video_leaves_no_file(tmp_path):
-    from ingetrazo_core import MkvWriter
+    from built_core import MkvWriter
     path = tmp_path / "a-medias.mkv"
     writer = MkvWriter(path, 64, 48, 10)
     writer.write(bytes(64 * 48 * 4))
@@ -592,7 +592,7 @@ def test_a_discarded_video_leaves_no_file(tmp_path):
 
 
 def test_cancel_after_first_frame_keeps_existing_destination(tmp_path):
-    from ingetrazo_core import MkvWriter
+    from built_core import MkvWriter
     path = tmp_path / "existing.mkv"
     path.write_bytes(b"previous export")
     writer = MkvWriter(path, 64, 48, 10)
@@ -612,7 +612,7 @@ def _no_qt(monkeypatch):
 
 
 def test_finishing_a_video_does_not_pump_the_ui_thread(tmp_path, monkeypatch):
-    from ingetrazo_core import MkvWriter
+    from built_core import MkvWriter
     _no_qt(monkeypatch)
     writer = MkvWriter(tmp_path / "complete.mkv", 2, 2, 24)
     writer.write(bytes(16))
@@ -620,7 +620,7 @@ def test_finishing_a_video_does_not_pump_the_ui_thread(tmp_path, monkeypatch):
 
 
 def test_writer_finalization_needs_no_qt_version_probe(tmp_path, monkeypatch):
-    from ingetrazo_core import MkvWriter
+    from built_core import MkvWriter
     _no_qt(monkeypatch)
     writer = MkvWriter(tmp_path / "one.mkv", 2, 2, 30)
     writer.write(bytes(16))
@@ -640,7 +640,7 @@ def _fake_render(win, log):
 
 def test_export_video_renders_every_frame_and_puts_the_view_back(
         win, tmp_path):
-    from ingetrazo_render import export_video
+    from built_render import export_video
     _with_layer(win, "Muebles")
     _scenes(win, ("Vista", "iso", set()), ("Planta", "top", {"Muebles"}))
     win.viewport.scene.animation = SceneAnimation(transition=1.0, pause=0.5)
@@ -668,7 +668,7 @@ def test_export_video_renders_every_frame_and_puts_the_view_back(
 
 
 def test_cancelling_the_video_removes_the_file(win, tmp_path):
-    from ingetrazo_render import export_video
+    from built_render import export_video
     _scenes(win, ("A", "iso", set()), ("B", "top", set()))
     _fake_render(win, [])
     path = tmp_path / "cancelado.mkv"
@@ -677,15 +677,15 @@ def test_cancelling_the_video_removes_the_file(win, tmp_path):
 
 
 def test_no_scenes_no_video(win, tmp_path):
-    from ingetrazo_render import VideoError, export_video
+    from built_render import VideoError, export_video
     with pytest.raises(VideoError):
         export_video(win, tmp_path / "nada.mkv", 160, 90, 10)
     assert not (tmp_path / "nada.mkv").exists()
 
 
 def test_the_video_options_offer_sizes_fps_and_the_length(win):
-    from ingetrazo_render import OperationForm
-    from ingetrazo_core import video_seconds
+    from built_render import OperationForm
+    from built_core import video_seconds
     model = OperationForm.video(1001, 601, 3, video_seconds(3, 2., 1.))
     assert model.values() == dict(width=1920, height=1080, fps=30)
     model.receive("size", "4")
@@ -696,7 +696,7 @@ def test_the_video_options_offer_sizes_fps_and_the_length(win):
 
 
 def test_invalid_transition_can_be_disabled_without_losing_saved_time():
-    from ingetrazo_render import OperationForm
+    from built_render import OperationForm
     model = OperationForm.animation(True, 2.345, 0.075)
     model.receive("transition", "-")
     assert model.invalid_range() == (0, 60)
@@ -706,7 +706,7 @@ def test_invalid_transition_can_be_disabled_without_losing_saved_time():
 
 
 def test_the_video_is_in_file_export_and_in_the_animation_menu():
-    from ingetrazo_render import command_registry
+    from built_render import command_registry
     paths = {menu_id: path for _, path, _, _, _, menu_id in command_registry([], [])}
     assert paths["export:video"] == "File ▸ Export"
     assert paths["animation_video"] == "Camera ▸ Animation"
@@ -720,7 +720,7 @@ def _without_multimedia(monkeypatch):
 
 
 def test_without_qt_multimedia_the_writer_still_encodes(monkeypatch, tmp_path):
-    from ingetrazo_core import MkvWriter
+    from built_core import MkvWriter
     _without_multimedia(monkeypatch)
     path = tmp_path / "video.mkv"
     writer = MkvWriter(path, 64, 48, 10)
@@ -730,7 +730,7 @@ def test_without_qt_multimedia_the_writer_still_encodes(monkeypatch, tmp_path):
 
 
 def test_without_qt_multimedia_export_still_offers_a_destination(win, monkeypatch):
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render.shell_files import ShellFileDialog
     _scenes(win, ("A", "iso", set()))
     _without_multimedia(monkeypatch)
     asked = []
@@ -744,7 +744,7 @@ def test_independent_decoder_reads_every_frame_at_requested_rate(tmp_path, suffi
     import json
     import shutil
     import subprocess
-    from ingetrazo_core import MkvWriter, Mp4Writer, video_format
+    from built_core import MkvWriter, Mp4Writer, video_format
     if suffix == ".mp4" and video_format()[0] != suffix:
         pytest.skip("system H.264 encoder unavailable")
     probe = shutil.which("ffprobe")
@@ -772,7 +772,7 @@ def test_independent_decoder_reads_every_frame_at_requested_rate(tmp_path, suffi
 
 
 def test_mp4_discard_preserves_existing_destination(tmp_path):
-    from ingetrazo_core import Mp4Writer, video_format
+    from built_core import Mp4Writer, video_format
     if video_format()[0] != ".mp4":
         pytest.skip("system H.264 encoder unavailable")
     path = tmp_path / "existing.mp4"
@@ -789,10 +789,10 @@ def test_mp4_discard_preserves_existing_destination(tmp_path):
 @pytest.mark.parametrize("suffix,label", [(".mp4", "H.264 / MP4 (*.mp4)"),
                                           (".mkv", "Motion JPEG / Matroska (*.mkv)")])
 def test_video_picker_and_sheet_agree_on_encoder_format(win, monkeypatch, tmp_path, suffix, label):
-    from ingetrazo_render import chrome_forms
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render import chrome_forms
+    from built_render.shell_files import ShellFileDialog
     _scenes(win, ("A", "iso", set()))
-    monkeypatch.setattr("ingetrazo_core.video_format", lambda: (suffix, label))
+    monkeypatch.setattr("built_core.video_format", lambda: (suffix, label))
     picker = []
     monkeypatch.setattr(ShellFileDialog, "getSaveFileName", lambda *args: picker.append(args)
                         or (str(tmp_path / ("tour" + suffix)), ""))
@@ -804,13 +804,13 @@ def test_video_picker_and_sheet_agree_on_encoder_format(win, monkeypatch, tmp_pa
 
 
 def test_normalizing_the_movie_suffix_preserves_an_unconfirmed_file(win, monkeypatch, tmp_path):
-    from ingetrazo_render import chrome_dialogs
-    from ingetrazo_render import chrome_forms
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render import chrome_dialogs
+    from built_render import chrome_forms
+    from built_render.shell_files import ShellFileDialog
     _scenes(win, ("A", "iso", set()))
     existing = tmp_path / "site.mp4"
     existing.write_bytes(b"original movie")
-    monkeypatch.setattr("ingetrazo_core.video_format", lambda: (".mp4", "H.264 / MP4 (*.mp4)"))
+    monkeypatch.setattr("built_core.video_format", lambda: (".mp4", "H.264 / MP4 (*.mp4)"))
     monkeypatch.setattr(ShellFileDialog, "getSaveFileName", lambda *args: (str(tmp_path / "site"), ""))
     prompts = []
     monkeypatch.setattr(chrome_dialogs, "ask", lambda *args, **kwargs: prompts.append(args) or "cancel")
@@ -832,7 +832,7 @@ def test_playback_and_transitions_follow_the_front_document_in_the_native_menu(t
     if sys.platform != "darwin" or not binary.is_file():
         pytest.skip("requires the macOS release menu")
     profile = tmp_path / "profile"
-    probe = profile / "data/ingetrazo/plugins/playback_probe.py"
+    probe = profile / "data/built/plugins/playback_probe.py"
     probe.parent.mkdir(parents=True)
     probe.write_text("""import json
 from pathlib import Path

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import math
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core import intersect as X
 from core.edits import build_add_edges
@@ -124,7 +124,7 @@ def test_nearly_parallel_faces_do_not_divide_by_zero():
 
 def test_indexed_face_bounds_agree_with_scalar_overlap():
     import numpy as np
-    from ingetrazo_core import touching_boxes
+    from built_core import touching_boxes
 
     def boxes(polygons):
         low, high = zip(*(p.bounds for p in polygons))

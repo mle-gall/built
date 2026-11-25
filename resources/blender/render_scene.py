@@ -1,24 +1,24 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Runs INSIDE Blender (``blender -b --factory-startup --python
-render_scene.py -- job.json``): IngeTrazo's side of "Render with Blender"
+render_scene.py -- job.json``): Built's side of "Render with Blender"
 (issue #181, plugins/render_blender.py).
 
-The job file says everything: the GLB IngeTrazo exported, its camera, the
+The job file says everything: the GLB Built exported, its camera, the
 sun, the engine and quality, and where to write the image (and, if asked,
 the .blend). Blender's glTF importer turns glTF's Y-up back into Z-up, so
-the model lands in IngeTrazo's own coordinates and the camera goes in as
+the model lands in Built's own coordinates and the camera goes in as
 given.
 
 Written against Blender 3.6–5.x: every name that changed between versions
 (the EEVEE engine id, the physical sky) is tried in turn, and anything a
 version lacks degrades to something plainer instead of failing the render.
-Progress goes to stdout as ``INGETRAZO <what>`` lines the dialog reads.
+Progress goes to stdout as ``BUILT <what>`` lines the dialog reads.
 
 With ``"serve": true`` in the job it renders nothing at first: it builds
-the scene once, says ``INGETRAZO ready`` and then reads one JSON request per
+the scene once, says ``BUILT ready`` and then reads one JSON request per
 line on stdin — ``{"camera": …, "output": …, "width": …, "height": …,
-"samples": …}`` → renders it and says ``INGETRAZO done <output>``;
+"samples": …}`` → renders it and says ``BUILT done <output>``;
 ``{"quit": true}`` or the end of stdin stops it. That is Render ▸ «Sync
 with the view»: only the camera travels, and the face-me figures (glTF
 nodes with ``ingetrazo_faceme`` = feet + heading in their extras) are turned
@@ -33,7 +33,7 @@ from mathutils import Matrix, Vector
 
 
 def say(*parts):
-    print("INGETRAZO", *parts, flush=True)
+    print("BUILT", *parts, flush=True)
 
 
 def load_job():
@@ -104,7 +104,7 @@ def _ripples(mat, bsdf, scale=6.0, strength=0.12):
 
 
 def apply_finishes():
-    """Turn IngeTrazo's finish (glTF extras) into a real
+    """Turn Built's finish (glTF extras) into a real
     material: the importer keeps extras as custom properties."""
     counts = {}
     for mat in bpy.data.materials:
@@ -154,9 +154,9 @@ def apply_finishes():
 
 def set_camera(scene, cam_cfg, width, height):
     cam = scene.camera
-    if cam is None or cam.name != "IngeTrazo camera":
-        data = bpy.data.cameras.new("IngeTrazo")
-        cam = bpy.data.objects.new("IngeTrazo camera", data)
+    if cam is None or cam.name != "Built camera":
+        data = bpy.data.cameras.new("Built")
+        cam = bpy.data.objects.new("Built camera", data)
         scene.collection.objects.link(cam)
         scene.camera = cam
     data = cam.data
@@ -219,12 +219,12 @@ def face_figures(figures, cam_cfg):
 
 
 def add_sun(scene, direction, strength):
-    """``direction`` points FROM the scene TOWARD the sun (ingetrazo_core.sun)."""
+    """``direction`` points FROM the scene TOWARD the sun (built_core.sun)."""
     d = Vector(direction).normalized()
-    light = bpy.data.lights.new("IngeTrazo sun", type="SUN")
+    light = bpy.data.lights.new("Built sun", type="SUN")
     light.energy = strength
     light.angle = math.radians(0.53)           # the real sun's disc
-    sun = bpy.data.objects.new("IngeTrazo sun", light)
+    sun = bpy.data.objects.new("Built sun", light)
     scene.collection.objects.link(sun)
     # A sun light shines along its local -Z: point +Z at the sun.
     sun.rotation_euler = d.to_track_quat("Z", "Y").to_euler()
@@ -232,7 +232,7 @@ def add_sun(scene, direction, strength):
 
 
 def set_world(scene, sun_dir):
-    world = bpy.data.worlds.new("IngeTrazo sky")
+    world = bpy.data.worlds.new("Built sky")
     scene.world = world
     if hasattr(world, "use_nodes"):            # gone in Blender 6: always on
         world.use_nodes = True
@@ -271,7 +271,7 @@ def set_world(scene, sun_dir):
 def set_plain_world(scene, color, strength, name):
     """A sky of one colour: the dark blue of a night, the grey of an
     overcast day (the whole sky lights the scene evenly)."""
-    world = bpy.data.worlds.new(f"IngeTrazo {name}")
+    world = bpy.data.worlds.new(f"Built {name}")
     scene.world = world
     if hasattr(world, "use_nodes"):
         world.use_nodes = True
@@ -284,22 +284,22 @@ def set_plain_world(scene, color, strength, name):
 
 def add_moon(scene):
     """A faint cold key light from high up, so a night still has shape."""
-    light = bpy.data.lights.new("IngeTrazo moon", type="SUN")
+    light = bpy.data.lights.new("Built moon", type="SUN")
     light.energy = 0.08
     light.color = (0.7, 0.8, 1.0)
     light.angle = math.radians(1.0)
-    moon = bpy.data.objects.new("IngeTrazo moon", light)
+    moon = bpy.data.objects.new("Built moon", light)
     scene.collection.objects.link(moon)
     moon.rotation_euler = Vector((0.3, -0.4, 0.86)).normalized().to_track_quat(
         "Z", "Y").to_euler()
 
 
 def add_lights(scene, lights):
-    """The lights placed in IngeTrazo's Render panel: point lights (a bulb,
+    """The lights placed in Built's Render panel: point lights (a bulb,
     a lantern) and spots (a lamp post head, a reflector) in real watts."""
     for i, lt in enumerate(lights):
         kind = "SPOT" if lt["kind"] == "spot" else "POINT"
-        data = bpy.data.lights.new(f"IngeTrazo light {i + 1}", type=kind)
+        data = bpy.data.lights.new(f"Built light {i + 1}", type=kind)
         data.energy = float(lt["power"])
         data.color = tuple(lt["color"])
         if hasattr(data, "shadow_soft_size"):
@@ -321,8 +321,8 @@ def add_lights(scene, lights):
 def add_ground(scene, z, size, color):
     bpy.ops.mesh.primitive_plane_add(size=size, location=(0.0, 0.0, z))
     ground = bpy.context.active_object
-    ground.name = "IngeTrazo ground"
-    mat = bpy.data.materials.new("IngeTrazo ground")
+    ground.name = "Built ground"
+    mat = bpy.data.materials.new("Built ground")
     if hasattr(mat, "use_nodes"):
         mat.use_nodes = True
     bsdf = mat.node_tree.nodes.get("Principled BSDF")
@@ -447,7 +447,7 @@ def main():
 
 
 def serve(scene, figures):
-    """Render each camera IngeTrazo sends until told to stop."""
+    """Render each camera Built sends until told to stop."""
     say("ready")
     r = scene.render
     for line in sys.stdin:

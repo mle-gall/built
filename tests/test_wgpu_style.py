@@ -1,7 +1,7 @@
 """Style handoff must preserve document intent without creating a native device."""
 from types import SimpleNamespace
 import pytest
-from ingetrazo_core.style import Style, FACE_MODES
+from built_core.style import Style, FACE_MODES
 from views.wgpu_style import style_payload
 
 
@@ -45,8 +45,8 @@ def test_profile_width_and_dash_defaults():
 
 def test_section_plane_keeps_gl_half_space_and_resets():
     from core.scene import Scene
-    from ingetrazo_core.section import SectionPlane
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core.section import SectionPlane
+    from built_core import Vec3 as QVector3D
     scene = Scene()
     plane = SectionPlane(QVector3D(2, 3, 4), QVector3D(1, 0, 0), active=True)
     scene.section_planes.append(plane)

@@ -3,7 +3,7 @@ import ast
 from pathlib import Path
 import re
 
-import ingetrazo_render as events
+import built_render as events
 
 
 def test_shell_event_methods():
@@ -17,7 +17,7 @@ def test_shell_event_methods():
                 events.ContextMenuEvent, events.NativeGestureEvent]
     assert not set(calls.findall(handlers)).difference(*(dir(adapter) for adapter in adapters))
 
-    native_keys = root / "rust/ingetrazo_render/src/document_input/keys.rs"
+    native_keys = root / "rust/built_render/src/document_input/keys.rs"
     key_calls = set(re.findall(r'\bev\s*\.call_method0\("([^"]+)"', native_keys.read_text()))
     assert {"key", "modifiers"} <= key_calls <= set(dir(events.KeyEvent))
 

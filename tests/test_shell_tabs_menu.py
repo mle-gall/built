@@ -17,7 +17,7 @@ SLAB = FIXTURES / "slab-and-cube.igz"
 
 @pytest.fixture
 def host(tmp_path):
-    from ingetrazo_render import Host
+    from built_render import Host
     h = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
     yield h
     h.close()
@@ -30,7 +30,7 @@ def second(tmp_path):
     made = []
 
     def make():
-        from ingetrazo_render import Host
+        from built_render import Host
         h = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
         made.append(h)
         return h
@@ -99,7 +99,7 @@ def test_tab_strip_lists_the_projects_with_front_and_unsaved(host, tmp_path):
         assert host.open_path(p)
     win = host.window
     from core.history import AddFaceCommand
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     host.viewport.history.execute(AddFaceCommand([V(5, 0, 0), V(6, 0, 0), V(6, 1, 0)]))
     tabs = wgpu_tabs.tabs(win)
     assert [t[1] for t in tabs] == [p.name for p in paths]
@@ -124,7 +124,7 @@ class OwningRenderer(StubRenderer):
 
     def __init__(self):
         super().__init__()
-        from ingetrazo_render import DocumentTabs
+        from built_render import DocumentTabs
         self._document_tabs = DocumentTabs()
         self.sent = []
         self.projects = []
@@ -229,7 +229,7 @@ def test_new_window_is_made_in_this_process(host, second):
 def test_move_to_new_window_takes_the_project_and_its_history(host, second, tmp_path):
     from views import wgpu_tabs
     from core.history import AddFaceCommand
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     a, b = _copies(tmp_path, 2)
     host.open_path(a)
     host.open_path(b)
@@ -255,7 +255,7 @@ def test_move_to_new_window_takes_the_project_and_its_history(host, second, tmp_
 
 
 def test_the_last_project_cannot_move_out(host, tmp_path):
-    from ingetrazo_render import shell_windows as windows
+    from built_render import shell_windows as windows
     (a,) = _copies(tmp_path, 1)
     host.open_path(a)
     assert not windows.can_move(host.window)
@@ -367,7 +367,7 @@ def _matches(row, documented):
 
 @pytest.mark.parametrize("kind", list(DOC_COLUMNS) + ["dimension"])
 def test_each_kind_gets_the_rows_docs_context_menu_lists(host, kinds, kind):
-    from ingetrazo_render import context_menu_build, context_menu_action, verbs_constants
+    from built_render import context_menu_build, context_menu_action, verbs_constants
     scene = host.viewport.scene
     scene.select(kinds[kind])
     menu = context_menu_build(host.window, host.view)
@@ -383,8 +383,8 @@ def test_each_kind_gets_the_rows_docs_context_menu_lists(host, kinds, kind):
 
 
 def test_the_menus_carry_the_expected_verbs(host, kinds, monkeypatch):
-    from ingetrazo_render import context_menu_build, context_menu_action, verbs_constants
-    from ingetrazo_render import shell_services as native
+    from built_render import context_menu_build, context_menu_action, verbs_constants
+    from built_render import shell_services as native
     scene = host.viewport.scene
     # A model copied by an earlier test would add "Paste here" to empty space.
     monkeypatch.setattr(native, "pasteboard_types", lambda: ([], 0))
@@ -410,7 +410,7 @@ def test_the_menus_carry_the_expected_verbs(host, kinds, monkeypatch):
 
 @pytest.mark.parametrize("kind", ["link", "linked_part"])
 def test_read_only_kinds_offer_no_editing_verbs(host, kinds, kind):
-    from ingetrazo_render import context_menu_build, context_menu_action, verbs_constants
+    from built_render import context_menu_build, context_menu_action, verbs_constants
     host.viewport.scene.select(kinds[kind])
     menu = context_menu_build(host.window, host.view)
     assert menu.kind == kind and "read-only" in menu.subtitle
@@ -420,7 +420,7 @@ def test_read_only_kinds_offer_no_editing_verbs(host, kinds, kind):
 
 
 def test_the_header_says_what_and_where(host, kinds):
-    from ingetrazo_render import context_menu_build, context_menu_action, verbs_constants
+    from built_render import context_menu_build, context_menu_action, verbs_constants
     scene = host.viewport.scene
     scene.select(kinds["group"])
     menu = context_menu_build(host.window, host.view)
@@ -433,7 +433,7 @@ def test_the_header_says_what_and_where(host, kinds):
 
 def test_repeat_names_the_last_command_and_its_value(host, kinds):
     from tools.pushpull import PushPullTool
-    from ingetrazo_render import context_menu_build, context_menu_action, verbs_constants
+    from built_render import context_menu_build, context_menu_action, verbs_constants
     host.window._activate_tool("pushpull")
     host.window._activate_tool("select")
     old = PushPullTool.last_distance
@@ -449,7 +449,7 @@ def test_repeat_names_the_last_command_and_its_value(host, kinds):
 
 def test_a_verb_runs_the_same_command_as_the_tree(host, kinds):
     """Hide on one group goes through the tree's row verb (core ``hide``)."""
-    from ingetrazo_render import context_menu_build, context_menu_action, verbs_constants
+    from built_render import context_menu_build, context_menu_action, verbs_constants
     scene = host.viewport.scene
     box = kinds["group"][0]
     scene.select([box])
@@ -512,7 +512,7 @@ def test_with_the_chrome_the_menu_goes_to_it(host, kinds, monkeypatch):
     view._ui_attached = True
     view._ui_tools_sent = True
     try:
-        from ingetrazo_render import ContextMenuEvent
+        from built_render import ContextMenuEvent
         view.contextMenuEvent(ContextMenuEvent(520, 410, 0))
         x, y, title, subtitle, rows = stub.menu
         assert (x, y, title) == (520.0, 410.0, "Box A")
@@ -528,7 +528,7 @@ def test_with_the_chrome_the_menu_goes_to_it(host, kinds, monkeypatch):
 
 
 def test_feed_changes_follow_the_document_across_windows(host, second):
-    from ingetrazo_render import shell_windows as windows
+    from built_render import shell_windows as windows
     from core.history import SetPluginDataCommand
     from views.extension_api import ExtensionApp
 
@@ -586,9 +586,9 @@ def test_replacing_the_viewport_history_detaches_the_old_feed(host):
 
 
 def test_input_and_modal_buttons_stay_in_the_owning_window(host, second):
-    from ingetrazo_render import shell_modal as modal
-    from ingetrazo_core import window_input
-    from ingetrazo_core import Input as Qt, PixelPoint as QPoint
+    from built_render import shell_modal as modal
+    from built_core import window_input
+    from built_core import Input as Qt, PixelPoint as QPoint
 
     other = second()
     host.pointer("move", 17, 23, held=1, modifiers=Qt.ShiftModifier.value)
@@ -609,7 +609,7 @@ def test_input_and_modal_buttons_stay_in_the_owning_window(host, second):
 
 
 def test_closing_the_move_origin_releases_its_request_and_restores_the_other_host(host, tmp_path):
-    from ingetrazo_render import Host, shell_modal, shell_windows
+    from built_render import Host, shell_modal, shell_windows
 
     origin = Host(0, 640, 480, 1.0, settings=str(tmp_path / "origin"))
     try:

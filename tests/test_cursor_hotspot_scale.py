@@ -3,7 +3,7 @@
 """The winit cursor hotspot falls on the pencil tip at both raster scales."""
 import numpy as np
 import pytest
-from ingetrazo_render import tool_cursor_art
+from built_render import tool_cursor_art
 
 
 @pytest.mark.parametrize("side", [32, 64])

@@ -9,7 +9,7 @@ GOLDEN = Path(__file__).parent / "fixtures" / "camera_controls.json.gz"
 
 def samples():
     from core.camera import OrbitCamera, frame_rect
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
 
     rng = random.Random(4367)
     for index in range(96):

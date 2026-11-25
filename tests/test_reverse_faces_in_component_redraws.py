@@ -22,10 +22,10 @@ from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa
 import numpy as np
 from tests.controller_surface import live_image
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, world_mesh
-from ingetrazo_core import group_transformed_mesh as transformed_mesh
+from built_core import group_transformed_mesh as transformed_mesh
 from core.history import FlipFacesCommand, History
 from core.mesh import Mesh
 from core.scene import Scene

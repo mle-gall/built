@@ -15,7 +15,7 @@ headless without a ``QApplication``.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.geometry import Edge
 from core.history import AddEdgeCommand, History

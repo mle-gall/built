@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 
 import pytest
-from ingetrazo_core import MeshStore
+from built_core import MeshStore
 from core.history import DeleteEdgesCommand, DeleteFaceCommand
 from core.mesh import Mesh
 from tests.test_store_mesh import fingerprint
@@ -18,7 +18,7 @@ def graph():
 @pytest.mark.parametrize("scan", ["0", "1"])
 @pytest.mark.parametrize("cascade", [False, True])
 def test_delete_edges_returns_command_keys_in_order(monkeypatch, scan, cascade):
-    monkeypatch.setenv("INGETRAZO_SCANS", scan)
+    monkeypatch.setenv("BUILT_SCANS", scan)
     m, ref = graph(), graph()
     first = [0,4,len(m.edges)-1]
     targets = [m.edges[i] for i in first]
@@ -40,7 +40,7 @@ def test_delete_edges_returns_command_keys_in_order(monkeypatch, scan, cascade):
 
 @pytest.mark.parametrize("scan", ["0", "1"])
 def test_delete_face_distinguishes_missing_from_refusal(monkeypatch, scan):
-    monkeypatch.setenv("INGETRAZO_SCANS", scan)
+    monkeypatch.setenv("BUILT_SCANS", scan)
     m, ref = graph(), graph()
     key = m.faces[-1].key
     outer = [p.toTuple() for p in reversed(m.faces[-1].vertices)]

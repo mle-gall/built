@@ -61,7 +61,7 @@ def main():
         if mismatches:
             raise AssertionError('quantities differ from the reference')
     from core.history import History
-    from ingetrazo_core import InspectorTakeoff
+    from built_core import InspectorTakeoff
     history = History(scene)
     for repeat in range(args.inspector_repeats):
         takeoff = InspectorTakeoff()

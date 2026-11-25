@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The Built chrome's sheet and jobs (rust/ingetrazo_render/src/dialogs_host.rs) stand in for
+"""The Built chrome's sheet and jobs (rust/built_render/src/dialogs_host.rs) stand in for
 Qt's message boxes and progress dialogs. Blocking questions cancel on a
 missing frame. Notices and progress can be read from the offscreen model.
 
@@ -10,16 +10,16 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Input as Qt
+from built_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_render import chrome_dialogs as cd
-from ingetrazo_core import StandardButton
+from built_render import chrome_dialogs as cd
+from built_core import StandardButton
 
 
 @pytest.fixture
 def win(native_host, monkeypatch):
-    from ingetrazo_render import shell_modal as modal
+    from built_render import shell_modal as modal
     w = native_host.window
     monkeypatch.setattr(cd, "live", lambda parent: w.view if parent is w else None)
 
@@ -54,7 +54,7 @@ def chrome(win, then):
 
 
 def press(key, mods=Qt.NoModifier, target=None):
-    from ingetrazo_render import shell_modal as modal
+    from built_render import shell_modal as modal
     modal.dispatch(target._host, ("key", 0, 0, 0, mods.value, key.value, ""))
 
 
@@ -65,7 +65,7 @@ def dirty(win):
 
 def test_import_worker_cannot_pump_the_window(native_host):
     from concurrent.futures import ThreadPoolExecutor
-    from ingetrazo_render import shell_modal
+    from built_render import shell_modal
 
     assert shell_modal.host() is native_host
     with ThreadPoolExecutor(max_workers=1) as pool:
@@ -135,7 +135,7 @@ def test_no_frame_drawn_cancels_close_and_reports_failure(win, monkeypatch):
 
 
 def test_the_window_is_modal_while_the_sheet_waits(win):
-    from ingetrazo_render import shell_files as files
+    from built_render import shell_files as files
     dirty(win)
     calls = []
     from unittest.mock import patch
@@ -204,9 +204,9 @@ def test_warning_before_the_first_frame_is_kept_in_the_chrome_history(native_hos
 ])
 def test_information_call_sites_post_toasts(win, tmp_path, monkeypatch, method, title):
     from core import texture
-    from ingetrazo_core import autosave
+    from built_core import autosave
     from formats import rfa
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render.shell_files import ShellFileDialog
     args = ()
     if method == "_on_recover_discarded":
         monkeypatch.setattr(autosave, "discarded_dir", lambda: tmp_path)
@@ -225,7 +225,7 @@ def test_information_call_sites_post_toasts(win, tmp_path, monkeypatch, method, 
     assert cd.history(win)[0].title == title
     if method == "_on_insert_faceme_image":
         # The opacity notice leaves the height question available.
-        from ingetrazo_render import chrome_forms
+        from built_render import chrome_forms
         form = chrome_forms.current(win)
         assert form.title == title
         form.press("cancel")
@@ -233,7 +233,7 @@ def test_information_call_sites_post_toasts(win, tmp_path, monkeypatch, method, 
 
 
 def test_empty_ifc_export_explains_how_to_include_geometry(win, tmp_path):
-    from ingetrazo_render import delivery_export_form
+    from built_render import delivery_export_form
 
     path = tmp_path / "model.ifc"
     path.write_bytes(b"previous delivery")
@@ -387,7 +387,7 @@ def test_open_with_missing_sources_has_one_banner_and_problem_rows(win, tmp_path
     from formats import igz
     from tests.test_links import _source, _host_with_link
     from views import wgpu_ui
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render.shell_files import ShellFileDialog
 
     a, b = (_source(tmp_path / name) for name in ("A.igz", "B.igz"))
     host, _ = _host_with_link(tmp_path, a)
@@ -419,7 +419,7 @@ def test_open_with_missing_sources_has_one_banner_and_problem_rows(win, tmp_path
 
 
 def test_open_preserves_recovery_as_a_separate_copy(win, tmp_path, monkeypatch):
-    from ingetrazo_core import autosave
+    from built_core import autosave
     from core.scene import Scene
     from formats import igz
     from views import wgpu_ui
@@ -438,7 +438,7 @@ def test_open_preserves_recovery_as_a_separate_copy(win, tmp_path, monkeypatch):
 
 
 def test_failed_job_and_export_folder_are_retained(win, tmp_path, monkeypatch):
-    from ingetrazo_core import desktop_open
+    from built_core import desktop_open
     opened = []
     monkeypatch.setattr(desktop_open, "open_url", opened.append)
     with pytest.raises(OSError), cd.busy(win, "Saving"):

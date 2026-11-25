@@ -9,7 +9,7 @@ from core.history import History, CompoundCommand, SetFaceMaterialTagCommand, Na
 from core.materials import Material
 from core.scene import Scene
 from tools.paint import PaintTool
-from ingetrazo_render import wgpu_library as library
+from built_render import wgpu_library as library
 from views import wgpu_ui
 
 

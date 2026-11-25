@@ -1,10 +1,10 @@
-# IngeTrazo roadmap
+# Built roadmap
 
 *Last updated: 12 October 2026, after 0.5.8. This is a direction, not a promise: priorities change with what users report, and a release waits when it needs more testing. It is reviewed after every release. Questions and proposals are welcome in [discussion #553](https://github.com/ingelibre/ingetrazo/discussions/553).*
 
 *Thanks to Félix for proposing this roadmap ([#364](https://github.com/ingelibre/ingetrazo/issues/364)).*
 
-**In one line:** IngeTrazo wants to be the free, offline 3D modeller where you **draw like by hand, tag what you drew, and get quantities out** — model → BIM tags → IFC → quantity take-off → budget.
+**In one line:** Built wants to be the free, offline 3D modeller where you **draw like by hand, tag what you drew, and get quantities out** — model → BIM tags → IFC → quantity take-off → budget.
 
 ## How to help
 
@@ -52,7 +52,7 @@ Why, and what will change:
 
 It lands when it is measured against the previous version on real models — not before, because the geometry engine is where a rushed change hurts the most.
 
-**How to help with performance:** share a real model that is slow for you in [ingetrazo-benchmark-models](https://github.com/ingelibre/ingetrazo-benchmark-models) (a link and a checksum, not the file), and say what is slow in it. Performance PRs are welcome when they come with numbers before and after on those models.
+**How to help with performance:** share a real model that is slow for you in [built-benchmark-models](https://github.com/ingelibre/ingetrazo-benchmark-models) (a link and a checksum, not the file), and say what is slow in it. Performance PRs are welcome when they come with numbers before and after on those models.
 
 **Geometry engine (coplanar faces):** faces on the same plane that should merge sometimes end up stacked or rebuilt wrongly — [#356](https://github.com/ingelibre/ingetrazo/issues/356), [#519](https://github.com/ingelibre/ingetrazo/issues/519), [#537](https://github.com/ingelibre/ingetrazo/issues/537), [#538](https://github.com/ingelibre/ingetrazo/issues/538).
 
@@ -76,14 +76,14 @@ It lands when it is measured against the previous version on real models — not
 The core stays a free-form modeller for everyone; BIM is an **optional layer of tags** on top of what you draw, and it feeds IFC and quantity take-off. The order matters:
 
 1. **One common BIM API for extensions** — how a wall, a slab or a window is tagged, which properties it carries and how its quantities are computed. Any extension that tags this way gets correct IFC and take-off for free, so tools from different authors fit together instead of each inventing its own. The resource-library work in PR [#412](https://github.com/ingelibre/ingetrazo/issues/412) is a starting point.
-2. **A small project from end to end** — a real little house (walls, a slab, a door, a window) going all the way from IngeTrazo to IFC to a correct budget in IngePresupuestos. It proves the idea and shows what the API is missing.
+2. **A small project from end to end** — a real little house (walls, a slab, a door, a window) going all the way from Built to IFC to a correct budget in IngePresupuestos. It proves the idea and shows what the API is missing.
 3. **Structures** ([#204](https://github.com/ingelibre/ingetrazo/issues/204)): grids, columns, beams, slabs, concrete and steel quantities, and reinforcement as IfcReinforcingBar ([#495](https://github.com/ingelibre/ingetrazo/issues/495)).
 4. **Architecture** (walls, openings, slabs, roofs, stairs) and **doors and windows** as discipline tools built on that API — community extensions are very welcome here, and some are already exploring it (PR [#430](https://github.com/ingelibre/ingetrazo/issues/430), to be published in the catalog). MEP systems ([#307](https://github.com/ingelibre/ingetrazo/issues/307)) and levels / floor plans ([#310](https://github.com/ingelibre/ingetrazo/issues/310)) fit best as extensions on the same API.
 5. **Common building blocks** extensions keep asking for: section hatches by material or layer, plan views tied to levels, an API for curves and soft edges.
 
 ## Rendering
 
-IngeTrazo does not build its own photorealistic engine: **Blender is the engine**, and IngeTrazo prepares the scene for it. What already works: the **Render tab** renders the current view with your own Blender (Cycles for quality, EEVEE for speed), by day with the sun of the Shadows panel, overcast, or at night with point lights and spots placed on the model; finishes per material (glass, water, metal, gloss…); and a live draft that follows the camera. In the viewport, real **sun shadows** for any place, date and hour.
+Built does not build its own photorealistic engine: **Blender is the engine**, and Built prepares the scene for it. What already works: the **Render tab** renders the current view with your own Blender (Cycles for quality, EEVEE for speed), by day with the sun of the Shadows panel, overcast, or at night with point lights and spots placed on the model; finishes per material (glass, water, metal, gloss…); and a live draft that follows the camera. In the viewport, real **sun shadows** for any place, date and hour.
 
 Next, in this order:
 
@@ -112,6 +112,6 @@ Point clouds ([#421](https://github.com/ingelibre/ingetrazo/issues/421)) · SubD
 
 ## Not planned for now
 
-- **Mobile / iPad app:** IngeTrazo needs desktop OpenGL and mouse-and-keyboard. A community web version ([#390](https://github.com/ingelibre/ingetrazo/issues/390)) is being explored independently.
+- **Mobile / iPad app:** Built needs desktop OpenGL and mouse-and-keyboard. A community web version ([#390](https://github.com/ingelibre/ingetrazo/issues/390)) is being explored independently.
 - **Rewriting the core in another language:** the speed work above comes first, measured on real models.
 - **Running plugins written for other modellers:** not planned. The most-requested tools from those plugin lists (bounding box, bend, unfold, components from groups) become built-in tools or extensions instead.

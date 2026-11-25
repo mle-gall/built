@@ -11,7 +11,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 
-from ingetrazo_core import extension_manager as manager
+from built_core import extension_manager as manager
 from core.extensions import discover_plugins
 from tests.extensions_chrome import Browser
 
@@ -289,8 +289,8 @@ def test_extension_sort_modes_and_recent_date_availability(tmp_path, monkeypatch
 
 
 def test_failed_extension_card_offers_recovery_actions(tmp_path, monkeypatch):
-    from ingetrazo_core import paths
-    from ingetrazo_core import desktop_open
+    from built_core import paths
+    from built_core import desktop_open
     ext = _extension(TOOL_SOURCE.encode())
     folder = tmp_path / ext.id
     folder.mkdir()

@@ -8,8 +8,8 @@ from __future__ import annotations
 from tests.raster_samples import solid_raster
 from pathlib import Path
 
-from ingetrazo_render import SurveyRaster
-from ingetrazo_core import Vec3 as QVector3D
+from built_render import SurveyRaster
+from built_core import Vec3 as QVector3D
 
 from core.history import (
     AddImagePlaneCommand,
@@ -17,7 +17,7 @@ from core.history import (
     History,
     TransformImagePlaneCommand,
 )
-from ingetrazo_core.image_plane import IMAGE_LAYER, ImagePlane, image_aspect
+from built_core.image_plane import IMAGE_LAYER, ImagePlane, image_aspect
 from core.scene import Scene
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 
@@ -425,7 +425,7 @@ def test_right_click_reaches_a_locked_image_for_unlock_and_delete():
 
 
 def test_context_menu_offers_unlock_and_delete_for_a_locked_image_underneath(native_window):
-    from ingetrazo_render import context_menu_build, context_menu_run
+    from built_render import context_menu_build, context_menu_run
     win = native_window
     scene = win.viewport.scene
     im = _image()
@@ -472,7 +472,7 @@ def test_a_locked_image_draws_its_border_only_while_selected():
 
 
 def test_archive_accepts_numeric_text_and_an_unnamed_reference():
-    from ingetrazo_core.image_plane import ImagePlane
+    from built_core.image_plane import ImagePlane
 
     image = ImagePlane.from_dict({
         "path": "survey.png", "origin": [0, 0, 0], "u": [2, 0, 0], "v": [0, 1, 0],

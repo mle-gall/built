@@ -11,8 +11,8 @@
 from __future__ import annotations
 
 
-from ingetrazo_core import ScreenPoint, Input  # noqa: E402
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint, Input  # noqa: E402
+from built_core import Vec3 as QVector3D
 
 from core.guide import Guide  # noqa: E402
 from core.history import History  # noqa: E402

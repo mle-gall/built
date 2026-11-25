@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import math
 
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Vec3 as QVector3D
 
 from core.history import History
 from core.scene import Scene
@@ -478,8 +478,8 @@ def test_a_rectangle_drawn_on_a_box_keeps_the_box_closed():
     open shell: orient_outward has no volume to judge windings against, the
     push reads the wrong sign, the coplanar merge dissolves the door.
     """
-    from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-    from ingetrazo_core.orient import is_closed
+    from built_core import ScreenPoint as QPointF, Input as Qt
+    from built_core.orient import is_closed
     from tools.base import ToolContext
     from tools.rust_tools import RectangleTool
 

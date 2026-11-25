@@ -10,7 +10,7 @@ import pytest
 
 
 def test_pytest_requires_isolation(monkeypatch):
-    from ingetrazo_render import start_profile
+    from built_render import start_profile
     monkeypatch.delenv("BUILT_SETTINGS_DIR", raising=False)
     with pytest.raises(RuntimeError, match="isolated shell profile"):
         start_profile()
@@ -40,7 +40,7 @@ def test_isolated_profiles(tmp_path, mode):
     script = """
         import sys
         from pathlib import Path
-        from ingetrazo_render import start_profile
+        from built_render import start_profile
         mode, root = sys.argv[1], Path(sys.argv[2])
         if mode == "temporary":
             # Exercise the offscreen host's automatic temporary profile in isolation.
@@ -48,12 +48,12 @@ def test_isolated_profiles(tmp_path, mode):
             os.environ.pop("BUILT_SETTINGS_DIR")
         folder = start_profile(str(root / "explicit") if mode == "directory" else None,
                                temporary=mode != "directory")
-        from ingetrazo_core.settings import settings as product_settings
-        from ingetrazo_core import NativeSettings
+        from built_core.settings import settings as product_settings
+        from built_core import NativeSettings
         assert isinstance(product_settings(), NativeSettings)
         product_settings().setValue("profile_probe", mode)
         assert NativeSettings(folder).value("profile_probe") == mode
-        assert (Path(folder) / "IngeTrazo/IngeTrazo.ini").is_file()
+        assert (Path(folder) / "Built/Built.ini").is_file()
         if mode == "directory":
             assert Path(folder) == root / "explicit"
         elif mode == "environment":
@@ -70,9 +70,9 @@ def test_native_launches_share_an_isolated_profile(tmp_path):
         import sys
         from pathlib import Path
         def exchange():
-            from ingetrazo_core import settings
-            from ingetrazo_core import general_settings
-            from ingetrazo_core import NativeSettings
+            from built_core import settings
+            from built_core import general_settings
+            from built_core import NativeSettings
             st = settings.settings()
             user = settings.settings()
             assert isinstance(user, NativeSettings) == (sys.argv[1] == "native")
@@ -81,7 +81,7 @@ def test_native_launches_share_an_isolated_profile(tmp_path):
             general_settings.set_value("test_profile", sys.argv[3])
             user.setValue("recent_files", [sys.argv[3]])
             user.sync()
-        from ingetrazo_render import Host
+        from built_render import Host
         host = Host(0, 1280, 800, 2)
         assert Path(host.settings_dir) == Path(sys.argv[4])
         exchange()
@@ -100,7 +100,7 @@ def test_native_defaults_read_and_write_the_product_domain(tmp_path):
     # Test the production CFPreferences backend alone, without booting a launcher.
     prefs = tmp_path / "Library/Preferences"
     prefs.mkdir(parents=True)
-    plist = prefs / "com.ingetrazo.IngeTrazo.plist"
+    plist = prefs / "com.built.Built.plist"
     plist.write_bytes(plistlib.dumps({"isolation_marker": str(tmp_path), "recent_files": ["seed.built"], "General.autosave": "0", "shortcuts.x·y": "F9", "unknown": b"old widget state"}))
     (prefs / "com.builtprofileprobe.Probe.plist").write_bytes(plistlib.dumps({"home": str(tmp_path)}))
     dylib = tmp_path / "preferences.dylib"
@@ -111,7 +111,7 @@ def test_native_defaults_read_and_write_the_product_domain(tmp_path):
         from pathlib import Path
         import os
         os.environ.pop("BUILT_SETTINGS_DIR")
-        from ingetrazo_core import NativeSettings
+        from built_core import NativeSettings
         store = NativeSettings()
         assert store.value("recent_files") == ["seed.built"]
         assert store.value("General/autosave", type=bool) is False
@@ -134,8 +134,8 @@ def test_native_defaults_read_and_write_the_product_domain(tmp_path):
 
 
 def test_native_profile_retains_unrelated_entries_and_group_identity(tmp_path):
-    from ingetrazo_core import NativeSettings
-    path = tmp_path / "IngeTrazo/IngeTrazo.ini"
+    from built_core import NativeSettings
+    path = tmp_path / "Built/Built.ini"
     path.parent.mkdir()
     opaque = "; extension-owned\ngeometry=@Variant(opaque)\n"
     path.write_text("[General]\n" + opaque + "[%General]\nundo=42\n")
@@ -159,7 +159,7 @@ def test_native_processes_merge_independent_keys_without_qt(tmp_path):
     import subprocess
     script = textwrap.dedent("""
         import sys
-        from ingetrazo_core.settings import settings, use_native
+        from built_core.settings import settings, use_native
         use_native(None)
         st = settings()
         for i in range(30):
@@ -170,7 +170,7 @@ def test_native_processes_merge_independent_keys_without_qt(tmp_path):
     writers = [subprocess.Popen([sys.executable, "-c", script, k], env=env)
                for k in ("keyboard", "navigation")]
     assert [proc.wait(timeout=30) for proc in writers] == [0, 0]
-    from ingetrazo_core import NativeSettings
+    from built_core import NativeSettings
     store = NativeSettings(tmp_path)
     for k in ("keyboard", "navigation"):
         for i in range(30):
@@ -182,7 +182,7 @@ def test_collected_tests_and_children_inherit_private_directories():
     probe = """
 import os
 from pathlib import Path
-from ingetrazo_core import NativeSettings
+from built_core import NativeSettings
 home = Path.home()
 assert home == Path(os.environ['CFFIXED_USER_HOME'])
 assert home.parent.name.startswith('built-pytest-')

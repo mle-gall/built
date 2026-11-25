@@ -53,7 +53,7 @@ jobs:
           python -m venv .venv
           .venv/bin/python -m pip install --quiet -r requirements.txt
           VENV=.venv scripts/build_native.sh
-          .venv/bin/python -c "import ingetrazo_core, ingetrazo_render, numpy, openskp, openskp.legacy"
+          .venv/bin/python -c "import built_core, built_render, numpy, openskp, openskp.legacy"
 
       - name: Check the Linux launcher
         run: PYO3_PYTHON="$PWD/.venv/bin/python" cargo check --locked --manifest-path rust/built_app/Cargo.toml

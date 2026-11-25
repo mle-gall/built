@@ -3,7 +3,7 @@ import copy
 import pickle
 
 import pytest
-from ingetrazo_core import Matrix4, Quaternion, Vec3
+from built_core import Matrix4, Quaternion, Vec3
 
 
 def test_survey_coordinates_keep_millimetres_across_matrix_operations():

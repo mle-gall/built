@@ -1,11 +1,11 @@
-IngeTrazo — authors and contributors
+Built — authors and contributors
 =====================================
 
 Creator and lead author
 ------------------------
 Marco Sumari Tellez <ing.sumari@gmail.com>
     Civil Engineer, Arequipa, Peru.
-    Original author and designer of IngeTrazo; wrote the topology engine,
+    Original author and designer of Built; wrote the topology engine,
     tools, rendering, and file formats.
 
 Contributors
@@ -23,7 +23,7 @@ reports and the work they carried); they also come first in Help ▸ About.
     orbit, snap points inside groups, axis lock accuracy, the protractor's
     click-drag, Move with Ctrl, self-inference, guide-from-guide, guides
     drawn in front of geometry, rotate-copy arrays, and the Alt key
-    colliding with Alt+Tab. Much of how IngeTrazo's everyday gestures feel
+    colliding with Alt+Tab. Much of how Built's everyday gestures feel
     comes from him using the program as a draftsman does and writing down
     every one that did not answer as expected.
     He kept going through 0.4 and 0.5 (#27–#106): axis locks and their
@@ -56,7 +56,7 @@ reports and the work they carried); they also come first in Help ▸ About.
 
 ★ Rafael García Rodríguez — "Rafael 3D" (youtube.com/@Rafa3D)
     Draftsman and 3D modelling reviewer.
-    Hour-long filmed reviews of IngeTrazo, walking the program as a
+    Hour-long filmed reviews of Built, walking the program as a
     professional would and narrating every friction — the source of the
     sheet-composer work and of dozens of fixes. Diagnosed the NVIDIA +
     Wayland startup failure on his own machine.
@@ -69,20 +69,20 @@ reports and the work they carried); they also come first in Help ▸ About.
     all go to waste if it does not meet the standards designers need».
 
 ★ Ahsan Mehmood <mail.ahsanmehmood@gmail.com>  (github.com/iamahsanmehmood)
-    Author of OpenSKP, the clean-room pure-Python .skp reader IngeTrazo's
+    Author of OpenSKP, the clean-room pure-Python .skp reader Built's
     native .skp import is built on, and reviewer of the patches contributed
     back upstream. His plugin pull requests (#1–#3) became the Extensions
     system.
 
 dafrobozao <dafrobozao.93@gmail.com>  (github.com/dafrobozao)
     Brazilian Portuguese translation of the interface (pull request #54,
-    1 260 strings): IngeTrazo's third language, and the first one
+    1 260 strings): Built's third language, and the first one
     contributed from outside.
 
 ★ Félix Riestra  (github.com/felixriestra)
-    The macOS package (pull request #64): the IngeTrazo.app bundle and the
+    The macOS package (pull request #64): the Built.app bundle and the
     .dmg built by CI for Apple Silicon, with double-click opening of .igz
-    and .skp files. IngeTrazo's first Mac version.
+    and .skp files. Built's first Mac version.
     Components that come apart (pull request #96): OBJ files keep their
     parts, Split into Pieces, the Parts tray with its cut list, and the
     exploded view — furniture and joinery taken to pieces.
@@ -150,7 +150,7 @@ José Castro Basso — FADU–UDELAR, Montevideo  (github.com/castrobasso)
     Architect and teacher of architectural representation. Two-point
     perspective with vertical verticals and File ▸ Export ▸ Current view as
     DXF, from his own modified build; the Levels extension (levels with
-    guides and snapping in elevations), whose branch opened IngeTrazo to
+    guides and snapping in elevations), whose branch opened Built to
     extensions that keep data in the document, add a panel and offer the
     cursor an inference. Building a free-software workflow for teaching:
     model → represent → edit graphically → deliver.
@@ -161,17 +161,17 @@ Sherod Taylor  (github.com/sherodtaylor)
 
 liuandy  (github.com/liujvnes)
     Simplified Chinese translation of the interface (issue #123, some
-    2 080 strings): IngeTrazo's fourth language.
+    2 080 strings): Built's fourth language.
 
 deedend  (github.com/deedend)
     Italian translation of the interface (pull request #182, some
-    2 110 strings): IngeTrazo's fifth language.
+    2 110 strings): Built's fifth language.
     For 0.6.0: the 3D mouse with configurable axes and navigation profiles
     (#581).
 
 Rainjalin  (github.com/Rainjalin)
     Indonesian translation of the interface (issue #216, some 2 230
-    strings): IngeTrazo's sixth language.
+    strings): Built's sixth language.
 
 Bane Andreev  (Biro Andreev, Belgrade / Zagreb)
     Architect. The Windowizer example extension: parametric windows from
@@ -436,7 +436,7 @@ Oleksandr Bolotov (https://github.com/bolotov)
 
 Amer Alhlhli (https://github.com/Alhlhli)
     Arabic translation of the interface.
-    With it, IngeTrazo's first right-to-left interface (#1067).
+    With it, Built's first right-to-left interface (#1067).
 
 Nicolas Grossi  (github.com/changastyle)
     The OpenCode Go provider and a readable AI chat with bubbles, photos, a
@@ -449,8 +449,8 @@ Alexey Tkachenko  (github.com/alteralto)
     For 0.6.2: Hidden Geometry shows the soft edges of curves and bevels
     (#1363) and a rounded corner rounds again with a larger arc (#1367).
 
-Aashish — IngeTrazo Tutorials  (github.com/aashishzharbade-arch)
-    The IngeTrazo Tutorials channel on YouTube, which shows the program,
+Aashish — Built Tutorials  (github.com/aashishzharbade-arch)
+    The Built Tutorials channel on YouTube, which shows the program,
     its extensions and its workflows, and nine extensions in the catalogue:
     MultiView, Phasing Animator, Kitchen Maker, Display Scale, Taper,
     Bevel, Curve Tools, Texture Library and Make Stair.
@@ -488,7 +488,7 @@ Francesco Fantoni  (github.com/hvfrancesco)
 
 ---
 
-IngeTrazo is free software under GPL-3.0-or-later (see LICENSE).
+Built is free software under GPL-3.0-or-later (see LICENSE).
 Every source file carries an SPDX header and copyright notice; these must be
 preserved in any redistribution or derivative work, per the license terms.
 

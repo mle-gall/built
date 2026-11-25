@@ -11,7 +11,7 @@ and points in one line are still refused."""
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.edits import build_add_edge, build_add_edges
 from core.history import AddFaceCommand, History

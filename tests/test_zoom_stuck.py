@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import math
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.camera import MIN_DISTANCE, OrbitCamera as Camera
 

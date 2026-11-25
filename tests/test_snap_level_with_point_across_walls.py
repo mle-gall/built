@@ -21,9 +21,9 @@ from __future__ import annotations
 import math
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import ScreenPoint, Input
-from ingetrazo_render import MouseEvent
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint, Input
+from built_render import MouseEvent
+from built_core import Vec3 as QVector3D
 
 from core.scene import Scene
 from core.snap import AXIS_COLORS, COLOR_ENDPOINT, compute_snap

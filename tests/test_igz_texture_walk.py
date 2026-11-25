@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import zipfile
 
-from ingetrazo_render import SurveyRaster
+from built_render import SurveyRaster
 
 from formats import igz
 
@@ -51,7 +51,7 @@ def _reference_walk(node):
 
 
 def test_every_texture_packs_unpacks_and_resaves_identically(tmp_path, monkeypatch):
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "cache"))
     payload, entries = _payload(tmp_path)
     assert [id(t) for t in igz._texture_entries(payload)] == [id(t) for t in entries]
     expected = copy.deepcopy(payload)
@@ -65,7 +65,7 @@ def test_every_texture_packs_unpacks_and_resaves_identically(tmp_path, monkeypat
     assert all("embed" in t and "path" not in t for t in entries)
     assert "base_embed" in entries[0] and "base" not in entries[0]
     with monkeypatch.context() as mp:
-        mp.setenv("INGETRAZO_RUST_IO", "0")
+        mp.setenv("BUILT_RUST_IO", "0")
         mp.setattr(igz, "_texture_slots", _reference_walk)
         old_blobs, old_missing = igz._pack_textures(expected)
     assert (payload, list(blobs.items()), missing) == \

@@ -3,7 +3,7 @@
 def test_glass_paints_translucent_and_undoes(monkeypatch):
     # The library's glass carries opacity: painting stamps it, an opaque
     # repaint clears it, and the eyedropper samples it.
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     from core.scene import Scene
     from core.history import History
     from core.history import (CompoundCommand, SetFaceColorCommand,
@@ -91,7 +91,7 @@ def test_every_library_image_is_actually_readable():
     import json
     from pathlib import Path
 
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     root = Path(__file__).resolve().parent.parent / "resources" / "textures"
     lib = json.loads((root / "library.json").read_text())
     bad = []

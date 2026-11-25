@@ -10,10 +10,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from ingetrazo_core import ScreenPoint, Input
-from ingetrazo_core import Vec3 as V
+from built_core import ScreenPoint, Input
+from built_core import Vec3 as V
 
-from ingetrazo_core.orient import is_closed
+from built_core.orient import is_closed
 from tools.base import ToolContext
 from tools.pushpull import PushPullTool
 from tests.controller_surface import ControllerSurface as Viewport

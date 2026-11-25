@@ -4,8 +4,8 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from ingetrazo_core import Vec3
-from ingetrazo_core import ScreenPoint, Input
+from built_core import Vec3
+from built_core import ScreenPoint, Input
 
 from core.geometry import Face
 from tests.tool_parity import FIXTURES, _pt, _r

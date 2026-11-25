@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """.skp 2021+ tag folders: the folder manager (9B3A) openskp leaves
-unread is decoded by ``ingetrazo_core.reader_compat`` and rebuilt by the importer
+unread is decoded by ``built_core.reader_compat`` and rebuilt by the importer
 as nested tag folders. The bytes here are written in the layout read from
 real production files (see the notes above ``parse_tag_folders``)."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 import struct
 
 from core.layers import folder_parent, folders_of
 from core.scene import Scene
-from ingetrazo_core import skp_tag_folders as parse_tag_folders
+from built_core import skp_tag_folders as parse_tag_folders
 from formats.skp import _import_tag_folders
 
 
@@ -113,5 +113,5 @@ def test_load_creates_the_tags_in_their_folders(monkeypatch):
                               folder=folder_of.get(raw["name"])))
     assert scene.layer("Dome - Roof").folder == "Dome"
     assert scene.layer("Old mesh").visible
-    assert not ingetrazo_core.tag_edits.effective_visible(scene, scene.layer("Old mesh"))
+    assert not built_core.tag_edits.effective_visible(scene, scene.layer("Old mesh"))
     assert scene.layer("Loose").folder is None

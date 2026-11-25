@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from ingetrazo_core import ArchiveTooLarge, check_archive
-from ingetrazo_core.paths import app_root
+from built_core import ArchiveTooLarge, check_archive
+from built_core.paths import app_root
 from core.scene import Scene
 from formats import igz
 

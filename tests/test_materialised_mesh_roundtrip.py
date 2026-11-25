@@ -4,9 +4,9 @@ import json
 import random
 
 import numpy as np
-from ingetrazo_core import Vec3
+from built_core import Vec3
 
-from ingetrazo_core.store_mesh import StoreMesh
+from built_core.store_mesh import StoreMesh
 from core.topology import heal_overlapping_faces
 
 

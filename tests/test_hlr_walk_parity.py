@@ -6,8 +6,8 @@ from pathlib import Path
 import numpy as np
 
 from core import hlr
-from ingetrazo_core.section import SectionPlane
-from ingetrazo_core import Vec3
+from built_core.section import SectionPlane
+from built_core import Vec3
 from tests.test_export_view_svg import _camera
 from tests.test_hlr_tagged_geometry import _scene
 

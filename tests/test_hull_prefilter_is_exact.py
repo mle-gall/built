@@ -62,7 +62,7 @@ def test_the_containers_box_reuses_the_prototypes_point_arrays(tmp_path):
     viewport now keeps them per chunk revision — reused while the
     prototype is untouched, rebuilt when its mesh changes."""
     import os
-    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+    from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
     from tests.controller_surface import ControllerSurface as Viewport
     from core.group import Group
     from core.mesh import Mesh

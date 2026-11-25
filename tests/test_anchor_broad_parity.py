@@ -59,7 +59,7 @@ def _deferred(rng, n, survey=0.0, dtype="float64"):
 
 
 def _scene(seed):
-    from ingetrazo_core import Matrix4 as M, Vec3 as V
+    from built_core import Matrix4 as M, Vec3 as V
     from core.group import Group
     from core.mesh import Mesh
     from core.scene import Scene
@@ -107,9 +107,9 @@ def _uid_of(g):
 
 
 def answers():
-    from ingetrazo_core import Vec3 as V
+    from built_core import Vec3 as V
     import numpy as np
-    import ingetrazo_core as N
+    import built_core as N
     from core import dimension as D
     out = {"may_hold": [], "scenes": []}
     rng = random.Random(20261125)
@@ -144,7 +144,7 @@ def answers():
             bare = Mesh()
             DeferredMesh.defer(bare, lambda _m: None, 0, None)
             from core.group import Group
-            from ingetrazo_core import Matrix4 as M
+            from built_core import Matrix4 as M
             for mesh in (dm, bare):
                 for _ in range(40):
                     g = Group(mesh)

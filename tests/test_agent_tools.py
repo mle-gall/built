@@ -5,7 +5,7 @@ import threading
 from types import SimpleNamespace
 
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 from core.group import Group
 from core.mesh import Mesh
 from core.layers import Layer
@@ -16,7 +16,7 @@ from tests.test_ai_bridge import _ask
 
 @pytest.fixture
 def model(native_host, monkeypatch):
-    monkeypatch.setenv("INGETRAZO_AI_PORT", "0")
+    monkeypatch.setenv("BUILT_AI_PORT", "0")
     win = native_host.window
     scene = win.viewport.scene
     scene.groups.clear()
@@ -152,7 +152,7 @@ def test_camera_zoom_and_screenshot(model, monkeypatch):
     assert camera["target"] == pytest.approx([10, 0, 0])
     call(bridge, "zoom_to", uids=[child.uid])
     assert 10 <= call(bridge, "query_camera")["target"][0] <= 12
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     monkeypatch.setattr(win.viewport, "render_image", lambda w, h: solid_raster(w, h, (0, 0, 0)))
     shot = call(bridge, "screenshot", uids=[child.uid], width=64, height=64)
     assert shot["camera"] == call(bridge, "query_camera")
@@ -174,7 +174,7 @@ def test_walkthrough_camera_verbs_keep_orbit_distance_and_document_history(model
 
 
 def test_screenshot_frames_shared_camera_and_captures_metal(model, monkeypatch, tmp_path):
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     win, bridge, _, child, _ = model
     targets = []
 

@@ -12,7 +12,7 @@ dropped the selection for the group, taking «Make Group» with it.
 from __future__ import annotations
 
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 
 from core.group import Group  # noqa: E402

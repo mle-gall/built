@@ -17,7 +17,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from tests.controller_surface import live_image
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group
 from core.history import (SetFaceBackCommand, SetFaceColorCommand,
@@ -136,7 +136,7 @@ def _blue(rgb):
 
 
 def _red_image(tmp_path):
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     path = str(tmp_path / "red.png")
     assert SurveyRaster(8, 8, bytes((255, 0, 0, 255)) * 64).save(path)
     return {"path": path, "sw": 1.0, "sh": 1.0}

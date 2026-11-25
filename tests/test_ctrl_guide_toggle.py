@@ -23,12 +23,12 @@ it never creates a guide, so it must keep it.
 """
 from __future__ import annotations
 
-from ingetrazo_render import KeyEvent, ShortcutOverride
+from built_render import KeyEvent, ShortcutOverride
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from types import SimpleNamespace
 
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Vec3 as QVector3D
 
 from core.history import History
 from core.scene import Scene
@@ -244,8 +244,8 @@ def test_the_status_bar_keeps_the_ctrl_clause_up(native_window):
     # something: the usual line carries Ctrl before the first click
     # and Alt once the measurement is under way, never both. Stacked,
     # the bar ran out of room and elided.
-    from ingetrazo_core import Vec3 as QVector3D
-    from ingetrazo_render.status_hints import hint_for
+    from built_core import Vec3 as QVector3D
+    from built_render.status_hints import hint_for
     tool.start_point = QVector3D(1.0, 1.0, 0.0)
     midway = hint_for("tape", tool, None, "off")
     assert "Ctrl =" not in midway

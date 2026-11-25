@@ -3,7 +3,7 @@
 """A GLB for other programs keeps the model's structure (#304) and its
 scale figures (#353).
 
-Until now the file was ONE mesh named «IngeTrazo»: groups and components
+Until now the file was ONE mesh named «Built»: groups and components
 gone, and the face-me figures left out — unless they sat inside a group,
 where they came out baked with their picture anchored to the world:
 sliding, repeated, mirrored halves. Every check reads the file back
@@ -17,7 +17,7 @@ from tests.raster_samples import solid_raster
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 
 from core.group import Group  # noqa: E402

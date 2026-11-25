@@ -1,7 +1,7 @@
 """Extension actions in the renderer-owned viewport menu."""
 from uuid import uuid4
 
-import ingetrazo_render as native
+import built_render as native
 from core.extensions import note_failure
 
 

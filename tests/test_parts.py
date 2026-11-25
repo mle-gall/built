@@ -5,11 +5,11 @@ from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group
 from core.mesh import Mesh
-from ingetrazo_core.parts import part_material, part_points, part_rows, part_size
+from built_core.parts import part_material, part_points, part_rows, part_size
 
 
 _QUADS = ((0, 2, 3, 1), (4, 5, 7, 6), (0, 1, 5, 4),
@@ -109,7 +109,7 @@ def test_a_part_inherits_its_containers_paint_on_default_faces():
 
 def _cut_table(holder, by_material=True):
     import json
-    from ingetrazo_render import surface_spec
+    from built_render import surface_spec
     parts = [{"uid": row["part"].uid, "name": row["name"], "material": row["material"],
               "size": row["size"], "dimensions": [f"{m * 1000:.0f}" for m in row["size"]]}
              for row in part_rows(holder)]
@@ -119,7 +119,7 @@ def _cut_table(holder, by_material=True):
 
 
 def test_identical_parts_are_one_cut_list_line():
-    from ingetrazo_render import cut_list_csv
+    from built_render import cut_list_csv
     lines = _cut_table(_stool())
     assert [row[:2] for row in lines[1:]] == [["2", "leg A, leg B"], ["1", "seat"]]
     assert cut_list_csv(lines, True).splitlines()[1] == "2\tleg A, leg B\t#996633\t580\t40\t40"
@@ -156,9 +156,9 @@ def _window_with(native_host, group):
 
 def test_copy_cut_list_fills_the_clipboard(native_host, monkeypatch):
     win, scene = _window_with(native_host, _stool())
-    from ingetrazo_render import chrome_sheet
+    from built_render import chrome_sheet
     ctx = chrome_sheet.Ctx(win, win._doc.stand_in)
-    from ingetrazo_render import shell_services as native
+    from built_render import shell_services as native
     clipboard = {}
     monkeypatch.setattr(chrome_sheet, "in_shell", lambda: True)
     monkeypatch.setattr(native, "pasteboard_write", clipboard.update)
@@ -205,7 +205,7 @@ def _sheet(sx: float, sy: float) -> Mesh:
 def test_a_part_with_no_thickness_is_a_surface_not_a_zero_board():
     """A skin or a pane drawn as one plane is kept — it is what the model
     shows — but the cut list must not list it as a 0-thick board."""
-    from ingetrazo_core.parts import is_surface
+    from built_core.parts import is_surface
     holder = Group()
     holder.adopt([_part(_sheet(0.6, 0.135), "baseboard skin"),
                   _part(_box(0.6, 0.4, 0.018), "shelf")])
@@ -241,7 +241,7 @@ def test_copies_of_one_definition_are_read_once(monkeypatch):
     """A container of copies used to read the shared mesh once per copy,
     for the material and again for the points: 300 copies of a
     3 000-face tree froze the window ~14 s each time it was selected."""
-    from ingetrazo_core import parts
+    from built_core import parts
     holder = _copies(40)
     calls = {"net": 0}
     real = type(next(iter(holder.children[0].mesh.faces))).net_area
@@ -258,7 +258,7 @@ def test_copies_of_one_definition_are_read_once(monkeypatch):
 
 
 def test_shared_reading_gives_the_rows_reading_one_by_one_gave():
-    from ingetrazo_core import parts
+    from built_core import parts
     holder = _copies(12)
     together = parts.part_rows(holder)
     alone = [parts.part_row(k) for k in holder.children]
@@ -277,7 +277,7 @@ def test_shared_reading_gives_the_rows_reading_one_by_one_gave():
 
 def test_parts_read_lazy_shared_prototypes_without_building(monkeypatch, tmp_path):
     import numpy as np
-    from ingetrazo_core import parts
+    from built_core import parts
     from core.group import iter_placements
     from core.mesh import DeferredMesh
     from core.scene import Scene

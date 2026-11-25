@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 _PATH = Path(__file__).resolve().parents[1] / "examples" / "extensions" / "propiedades_poligono.py"
@@ -127,7 +127,7 @@ def test_faces_in_different_planes_are_refused():
 
 
 def test_it_is_listed_among_the_example_extensions():
-    from ingetrazo_core.extension_manager import example_extension_files
+    from built_core.extension_manager import example_extension_files
     assert "Polygon properties" in {title for _, title, _ in example_extension_files()}
 
 
@@ -135,8 +135,8 @@ def test_installed_it_adds_its_entry_and_changes_nothing(tmp_path, monkeypatch, 
     import shutil
     from unittest.mock import MagicMock
     from core import extensions, plugin_panels
-    from ingetrazo_render import chrome_sheet
-    from ingetrazo_render import shell_services as native
+    from built_render import chrome_sheet
+    from built_render import shell_services as native
 
     shutil.copy(_PATH, tmp_path / _PATH.name)
     monkeypatch.setattr(extensions, "plugin_dirs", lambda: [tmp_path])

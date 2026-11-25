@@ -7,8 +7,8 @@ Browser does, since the view selects inside one open group at a time."""
 from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_render.wgpu_library import ComponentsProvider, Ctx
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_render.wgpu_library import ComponentsProvider, Ctx
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group, copy_group
 from core.mesh import Mesh
@@ -149,7 +149,7 @@ def test_a_locked_group_around_them_is_not_opened(native_host):
 
 
 def test_all_at_the_top_select_as_before(native_host):
-    from ingetrazo_core.i18n import tr
+    from built_core.i18n import tr
     win = native_host.window
     scene = win.viewport.scene
     silla = _component(_quad(), "Silla")

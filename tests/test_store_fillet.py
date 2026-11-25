@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Differential tests of the keyed fillet command and both affected-element modes."""
-from ingetrazo_core import store_views
+from built_core import store_views
 from collections import defaultdict
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core import _native
-from ingetrazo_core import mesh as M, store_mesh as S
-from ingetrazo_core import apply_fillet, plan_fillet
+from built_core import mesh as M, store_mesh as S
+from built_core import apply_fillet, plan_fillet
 from core.history import SnapshotMutation
-from ingetrazo_core import plan_vertex_bevel
+from built_core import plan_vertex_bevel
 from tests.test_fillet import box, edge_at
 from tests.test_vertex_bevel import pyramid
 

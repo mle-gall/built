@@ -53,7 +53,7 @@ def _ask(bridge, tool, args=None):
 
 def test_bridge_runs_python_transactionally(native_host, monkeypatch):
     from plugins.ai_bridge import _Bridge
-    monkeypatch.setenv("INGETRAZO_AI_PORT", "0")   # ephemeral test port
+    monkeypatch.setenv("BUILT_AI_PORT", "0")   # ephemeral test port
     win = native_host.window
     vp = win.viewport
     bridge = _Bridge(vp)
@@ -110,8 +110,8 @@ def test_a_sheet_made_through_the_bridge_is_one_undoable_step(native_host, monke
     left it behind."""
     from core.history import AddEdgeCommand
     from plugins.ai_bridge import _Bridge
-    from ingetrazo_core import Vec3 as QVector3D
-    monkeypatch.setenv("INGETRAZO_AI_PORT", "0")
+    from built_core import Vec3 as QVector3D
+    monkeypatch.setenv("BUILT_AI_PORT", "0")
     win = native_host.window
     vp = win.viewport
     vp.history.execute(AddEdgeCommand(QVector3D(0, 0, 0),
@@ -148,15 +148,15 @@ def test_a_dialog_opened_by_the_agent_is_cancelled_not_waited_for(native_host, m
     good and the next call ran inside that dialog. Now the dialog is
     cancelled at once, the reply names it, and nothing was deleted."""
     from plugins.ai_bridge import _Bridge
-    from ingetrazo_render import chrome_forms, chrome_dialogs
+    from built_render import chrome_forms, chrome_dialogs
 
     monkeypatch.setattr(chrome_dialogs, "async_host", lambda parent: native_host.window)
-    monkeypatch.setenv("INGETRAZO_AI_PORT", "0")
+    monkeypatch.setenv("BUILT_AI_PORT", "0")
     bridge = _Bridge(native_host.viewport)
     try:
         bridge.start()
         reply = _ask(bridge, "run_python", {"code": (
-            "from ingetrazo_render.chrome_forms import Form, show\n"
+            "from built_render.chrome_forms import Form, show\n"
             "show(viewport.window(), Form('Delete', []))")})
         assert reply["ok"]
         assert reply["result"]["dialogs_cancelled"] == ["Delete"]
@@ -185,12 +185,12 @@ def test_a_call_arriving_inside_a_running_one_is_refused(native_host):
 
 
 def test_mcp_server_protocol_and_bridge_down_message(monkeypatch):
-    import ingetrazo_mcp as mcp
+    import built_mcp as mcp
     monkeypatch.setattr(mcp, "PORT", 1)            # nothing listens there
 
     init = mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize",
                        "params": {}})
-    assert init["result"]["serverInfo"]["name"] == "ingetrazo"
+    assert init["result"]["serverInfo"]["name"] == "built"
 
     tools = mcp.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     names = {t["name"] for t in tools["result"]["tools"]}
@@ -212,23 +212,23 @@ def test_the_packaged_app_tells_windows_users_the_exe_to_run():
     from plugins.ai_bridge import connect_instructions, mcp_command, desktop_config_path
 
     cmd = mcp_command("win32", frozen=True,
-                      executable=r"C:\Program Files\IngeTrazo\ingetrazo.exe")
-    assert cmd == [r"C:\Program Files\IngeTrazo\ingetrazo-mcp.exe"]
-    assert mcp_command("linux", frozen=True, executable="/opt/it/ingetrazo") == \
-        ["/opt/it/ingetrazo", "--mcp"]
+                      executable=r"C:\Program Files\Built\built.exe")
+    assert cmd == [r"C:\Program Files\Built\built-mcp.exe"]
+    assert mcp_command("linux", frozen=True, executable="/opt/it/built") == \
+        ["/opt/it/built", "--mcp"]
     # A POSIX root even on a Windows host, where Path("/src/app") is
     # already "\src\app" before mcp_command sees it.
     assert mcp_command("linux", frozen=False,
                        root=PurePosixPath("/src/app")) == \
-        ["python3", "/src/app/scripts/ingetrazo_mcp.py"]
+        ["python3", "/src/app/scripts/built_mcp.py"]
     assert mcp_command("win32", frozen=False, root=Path(r"C:\src\app"))[0] == "python"
     assert desktop_config_path("win32").endswith("claude_desktop_config.json")
 
     text = connect_instructions(4763, "win32", frozen=True,
-                                executable=r"C:\Program Files\IngeTrazo\ingetrazo.exe")
-    assert 'claude mcp add ingetrazo -- "C:\\Program Files\\IngeTrazo\\ingetrazo-mcp.exe"' in text
+                                executable=r"C:\Program Files\Built\built.exe")
+    assert 'claude mcp add built -- "C:\\Program Files\\Built\\built-mcp.exe"' in text
     snippet = text[text.index("{"):text.rindex("}") + 1]
-    assert json.loads(snippet)["mcpServers"]["ingetrazo"]["command"].endswith("ingetrazo-mcp.exe")
+    assert json.loads(snippet)["mcpServers"]["built"]["command"].endswith("built-mcp.exe")
 
 
 def test_the_linux_packages_print_a_command_that_outlives_the_session():
@@ -237,38 +237,38 @@ def test_the_linux_packages_print_a_command_that_outlives_the_session():
     # sandbox path the host cannot run. Marco hit both setting Antigravity
     # up for the tutorial (2026-09-21).
     from plugins.ai_bridge import mcp_command, connect_instructions
-    mount = "/tmp/.mount_IngeTrJk3f/usr/bin/ingetrazo"
+    mount = "/tmp/.mount_IngeTrJk3f/usr/bin/built"
     assert mcp_command("linux", frozen=True, executable=mount,
-                       env={"APPIMAGE": "/home/ana/Apps/IngeTrazo-0.4.9-x86_64.AppImage"}) == \
-        ["/home/ana/Apps/IngeTrazo-0.4.9-x86_64.AppImage", "--mcp"]
-    assert mcp_command("linux", frozen=False, root=Path("/app/ingetrazo"),
-                       env={"FLATPAK_ID": "com.ingetrazo.IngeTrazo"}) == \
-        ["flatpak", "run", "com.ingetrazo.IngeTrazo", "--mcp"]
-    assert mcp_command("linux", frozen=True, executable="/snap/ingetrazo/12/opt/ingetrazo/ingetrazo",
-                       env={"SNAP_NAME": "ingetrazo"}) == ["/snap/bin/ingetrazo", "--mcp"]
+                       env={"APPIMAGE": "/home/ana/Apps/Built-0.4.9-x86_64.AppImage"}) == \
+        ["/home/ana/Apps/Built-0.4.9-x86_64.AppImage", "--mcp"]
+    assert mcp_command("linux", frozen=False, root=Path("/app/built"),
+                       env={"FLATPAK_ID": "com.built.Built"}) == \
+        ["flatpak", "run", "com.built.Built", "--mcp"]
+    assert mcp_command("linux", frozen=True, executable="/snap/built/12/opt/built/built",
+                       env={"SNAP_NAME": "built"}) == ["/snap/bin/built", "--mcp"]
     # an empty environment falls back to the plain rules
-    assert mcp_command("linux", frozen=True, executable="/opt/it/ingetrazo", env={}) == \
-        ["/opt/it/ingetrazo", "--mcp"]
-    text = connect_instructions(4763, "linux", frozen=False, root=Path("/app/ingetrazo"),
-                                env={"FLATPAK_ID": "com.ingetrazo.IngeTrazo"})
-    assert "claude mcp add ingetrazo -- flatpak run com.ingetrazo.IngeTrazo --mcp" in text
+    assert mcp_command("linux", frozen=True, executable="/opt/it/built", env={}) == \
+        ["/opt/it/built", "--mcp"]
+    text = connect_instructions(4763, "linux", frozen=False, root=Path("/app/built"),
+                                env={"FLATPAK_ID": "com.built.Built"})
+    assert "claude mcp add built -- flatpak run com.built.Built --mcp" in text
 
 
 def test_the_flatpak_ships_the_mcp_script():
-    # `flatpak run <id> --mcp` runs scripts/ingetrazo_mcp.py from /app; the
+    # `flatpak run <id> --mcp` runs scripts/built_mcp.py from /app; the
     # manifest must copy scripts/ with the rest of the tree.
-    from ingetrazo_core.paths import app_root
-    manifest = (app_root() / "packaging" / "flatpak" / "com.ingetrazo.IngeTrazo.yml").read_text(encoding="utf-8")
+    from built_core.paths import app_root
+    manifest = (app_root() / "packaging" / "flatpak" / "com.built.Built.yml").read_text(encoding="utf-8")
     line = next(l for l in manifest.splitlines() if "cp -a core" in l)
     assert " scripts " in line + " "
 
 
 def test_the_mcp_script_ships_with_the_app_and_the_flag_finds_it():
-    from ingetrazo_core.paths import app_root
-    assert (app_root() / "scripts" / "ingetrazo_mcp.py").is_file()
+    from built_core.paths import app_root
+    assert (app_root() / "scripts" / "built_mcp.py").is_file()
     spec = (app_root() / "packaging/native.spec").read_text(encoding="utf-8")
-    assert "('scripts/ingetrazo_mcp.py',   'scripts')" in spec
-    assert "name='ingetrazo-mcp'" in spec and "console=True" in spec
+    assert "('scripts/built_mcp.py',   'scripts')" in spec
+    assert "name='built-mcp'" in spec and "console=True" in spec
 
 
 def test_the_mcp_door_hands_the_model_the_same_recipe_book_as_the_assistant():
@@ -277,7 +277,7 @@ def test_the_mcp_door_hands_the_model_the_same_recipe_book_as_the_assistant():
     ``dis``), because ``run_python``'s description taught ``mesh.add_face``
     and nothing else while the in-app assistant's prompt taught the whole
     recipe book. One text, both doors."""
-    import ingetrazo_mcp as mcp
+    import built_mcp as mcp
     from core import ai_recipes
 
     run_python = next(t for t in mcp.TOOLS if t["name"] == "run_python")
@@ -314,7 +314,7 @@ def test_the_packaged_app_would_notice_a_missing_recipe_book():
     root = Path(__file__).resolve().parents[1]
     source = (root / "rust/built_app/src/launcher.rs").read_text()
     check = source.split("pub fn self_check", 1)[1].split("pub fn exit_now", 1)[0]
-    assert "ingetrazo_mcp.py" in check
+    assert "built_mcp.py" in check
     assert "ai_recipes" in check
 
 
@@ -355,7 +355,7 @@ def test_a_web_page_cannot_run_code_through_the_bridge(native_host, monkeypatch)
     line and headers fail as bad JSON — and the body line, a tool call, ran.
     These are the bytes that request puts on the wire."""
     from plugins.ai_bridge import _Bridge
-    monkeypatch.setenv("INGETRAZO_AI_PORT", "0")
+    monkeypatch.setenv("BUILT_AI_PORT", "0")
     win = native_host.window
     vp = win.viewport
     bridge = _Bridge(vp)

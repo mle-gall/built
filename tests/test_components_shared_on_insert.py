@@ -8,7 +8,7 @@ read came back every time (Marco, 18-10). The copies share the definition,
 as in .skp."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 import pytest
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
@@ -20,7 +20,7 @@ def V(x, y, z=0.0):
 
 @pytest.fixture
 def win(tmp_path):
-    from ingetrazo_render import Host
+    from built_render import Host
     host = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
     yield host.window
     host.close()
@@ -109,7 +109,7 @@ def test_editing_inside_one_copy_reaches_the_others(win, monkeypatch):
 
 
 def test_library_models_are_shared_too_and_save_once(win, tmp_path, monkeypatch):
-    from ingetrazo_core import component_library as library
+    from built_core import component_library as library
     from formats import igz
     from core.scene import Scene
     obj = tmp_path / "caja.obj"

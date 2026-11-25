@@ -10,7 +10,7 @@ import math
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.group import Group
 from core.mesh import Edge, Mesh

@@ -10,7 +10,7 @@ puts it back on its vertex."""
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.dimension import Dimension
 from core.history import AddDimensionCommand, History

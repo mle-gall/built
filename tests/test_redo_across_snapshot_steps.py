@@ -9,12 +9,12 @@ to forget their tombstones (and the corner only the last line made), so
 the redo materialised the mesh and left a ghost vertex behind.
 """
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core import _native
 from core.history import AddEdgeCommand, AddFaceCommand, History, SnapshotCompound
 from core.scene import Scene
-from ingetrazo_core.store_mesh import StoreMesh
+from built_core.store_mesh import StoreMesh
 
 SQUARE = [V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)]
 

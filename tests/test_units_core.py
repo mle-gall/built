@@ -119,7 +119,7 @@ def test_the_error_points_at_the_problem():
 
 
 def test_errors_are_translated(doc):
-    from ingetrazo_core.i18n import set_language
+    from built_core.i18n import set_language
     set_language("es")
     try:
         assert units.parse("5 m²").message() == "Se esperaba una longitud"

@@ -21,7 +21,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.mesh import Face, Mesh
 from tests.headless_gpu import mouse
@@ -113,7 +113,7 @@ def test_the_vectorised_face_pick_is_the_walk(view):
 def test_screen_boxes_are_the_eight_projected_corners(view):
     """The cached world boxes projected corner by corner give the boxes
     the old one-shot projection gave, eye-plane crossings included."""
-    import ingetrazo_core as W
+    import built_core as W
     proto = Mesh()
     _box(proto, (0, 0, 0), (1, 1, 1))
     for i in range(300):
@@ -170,7 +170,7 @@ def test_screen_boxes_are_the_eight_projected_corners(view):
 
 
 def test_edge_grid_near_is_unique_sorted():
-    from ingetrazo_core import EdgeGrid
+    from built_core import EdgeGrid
     rng = np.random.default_rng(3)
     ax, ay = rng.uniform(0, 400, 500), rng.uniform(0, 300, 500)
     bx, by = ax + rng.uniform(-60, 60, 500), ay + rng.uniform(-60, 60, 500)
@@ -187,7 +187,7 @@ def test_edge_grid_near_is_unique_sorted():
 
 
 def test_nearby_edges_filters_visibility_after_grid_lookup(view, monkeypatch):
-    import ingetrazo_core as W
+    import built_core as W
     _box(view.scene.mesh, (0, 0, 0), (1, 1, 1))
     _look(view, V(), distance=6.0, pitch=45.)
     refresh(view)
@@ -218,7 +218,7 @@ def test_empty_canvas_work_plane_reuses_the_hover_pick(view, monkeypatch):
 
 
 def test_screen_rows_preserve_subset_order_outside_grid_and_follow_moved_rows(view):
-    import ingetrazo_core as W
+    import built_core as W
 
     proto = Mesh()
     _box(proto, (0, 0, 0), (1, 1, 1))

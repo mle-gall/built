@@ -10,13 +10,13 @@ library — that is what lets a composer frame reference a saved style by
 from __future__ import annotations
 
 import pytest
-from ingetrazo_core import NativeSettings
+from built_core import NativeSettings
 from tests.preferences_chrome import Controls
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
-import ingetrazo_core.style as style_mod  # noqa: E402
+import built_core.style as style_mod  # noqa: E402
 from core.scene import Scene  # noqa: E402
-from ingetrazo_core.style import (  # noqa: E402
+from built_core.style import (  # noqa: E402
     Style,
     delete_user_style,
     save_user_style,
@@ -170,7 +170,7 @@ def test_panel_combo_lists_saved_styles_and_arms_delete(editor):
 def test_back_color_is_style_data_and_round_trips(settings_file):
     """The back-face tint lives in the Style next to the front colour:
     serialised, library-saved, copied. Unset (``None``) stays automatic."""
-    from ingetrazo_core.style import DEFAULT_BACK_COLOR, effective_back_color
+    from built_core.style import DEFAULT_BACK_COLOR, effective_back_color
     assert Style().back_color is None
     assert effective_back_color(Style()) == DEFAULT_BACK_COLOR
 
@@ -190,7 +190,7 @@ def test_back_color_precedence_style_then_document_then_default():
     """A picked Back color wins over the tint adopted from an imported .skp
     (``scene.back_face_color``); with none picked the adopted tint still
     shows, exactly as before this option existed."""
-    from ingetrazo_core.style import DEFAULT_BACK_COLOR, effective_back_color
+    from built_core.style import DEFAULT_BACK_COLOR, effective_back_color
     scene = Scene()
     style = scene.display_style
     assert effective_back_color(style, scene) == DEFAULT_BACK_COLOR

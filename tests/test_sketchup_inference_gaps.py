@@ -26,9 +26,9 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from ingetrazo_core import Input as Qt
-from ingetrazo_render import MouseEvent
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Input as Qt
+from built_render import MouseEvent
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group
 from core.history import History
@@ -38,7 +38,7 @@ from core.snap import compute_snap
 from tools.rust_tools import LineTool
 from tools.rust_tools import RectangleTool
 from tests.controller_surface import ControllerSurface as Viewport
-from ingetrazo_core import resident_prepare as prepare, surface
+from built_core import resident_prepare as prepare, surface
 
 
 # ---- An unshown Metal view driving the real tools --------------------------

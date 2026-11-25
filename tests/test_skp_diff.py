@@ -7,7 +7,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.history import History
 from core.scene import Scene

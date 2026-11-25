@@ -3,10 +3,10 @@ import sys
 
 import numpy as np
 import pytest
-from ingetrazo_core import source_arrays
-from ingetrazo_render import material_texture_array
-from ingetrazo_render import SurveyRaster
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import source_arrays
+from built_render import material_texture_array
+from built_render import SurveyRaster
+from built_core import Vec3 as QVector3D
 from core.mesh import Mesh
 
 
@@ -101,7 +101,7 @@ def test_material_pixels_use_native_codecs_and_preserve_alpha(tmp_path, monkeypa
 
 def test_system_codec_fallback_uses_same_orientation_and_budget(tmp_path, monkeypatch):
     # XPM under an unrecognised suffix exercises content detection at both entry points.
-    from ingetrazo_render import raster_dimensions
+    from built_render import raster_dimensions
     import sys
     path = tmp_path / "texture.custom"
     path.write_text('/* XPM */\nstatic char *p[] = {"1 2 2 2", "aa c #010203", '
@@ -117,8 +117,8 @@ def test_system_codec_fallback_uses_same_orientation_and_budget(tmp_path, monkey
 def test_specialty_files_decode_once_for_materials_and_references(tmp_path, monkeypatch, ext):
     import gzip
     import struct
-    from ingetrazo_render import reference_texture, raster_dimensions
-    import ingetrazo_core
+    from built_render import reference_texture, raster_dimensions
+    import built_core
 
     path = tmp_path / f"stripes.{ext}"
     # White over black. Generate real two-row files independently of Qt's codecs.
@@ -144,7 +144,7 @@ def test_specialty_files_decode_once_for_materials_and_references(tmp_path, monk
 
 
 def test_reference_resizing_preserves_aspect_and_translucent_edges():
-    from ingetrazo_render import fit_reference_rgba
+    from built_render import fit_reference_rgba
     row = bytes([255, 0, 0, 0, 0, 0, 255, 255]) * 2
     width, height, rgba = fit_reference_rgba(4, 2, row * 2, 2)
     assert (width, height) == (2, 1)
@@ -154,7 +154,7 @@ def test_reference_resizing_preserves_aspect_and_translucent_edges():
 @pytest.mark.skipif(sys.platform != "darwin", reason="macOS ImageIO")
 def test_platform_image_keeps_top_row_and_straight_alpha(tmp_path, monkeypatch):
     import struct
-    from ingetrazo_render import reference_texture, raster_dimensions
+    from built_render import reference_texture, raster_dimensions
     png = tmp_path / "art.png"
     _png(png, 16, 16, [(255, 0, 0, 128)] + [(0, 0, 255, 255)] * 255)
     data = png.read_bytes()
@@ -177,7 +177,7 @@ def test_platform_image_keeps_top_row_and_straight_alpha(tmp_path, monkeypatch):
             b'"z g black c Light Sky Blue3", " ", "z"};', (0, 0, 0, 0), (141, 182, 205, 255)),
 ])
 def test_native_bitmap_header_and_reference(tmp_path, suffix, contents, top, bottom, monkeypatch):
-    from ingetrazo_render import raster_dimensions, reference_texture
+    from built_render import raster_dimensions, reference_texture
     import sys
     path = tmp_path / f"pixels.{suffix}"
     path.write_bytes(contents)
@@ -188,7 +188,7 @@ def test_native_bitmap_header_and_reference(tmp_path, suffix, contents, top, bot
 
 
 def test_cursor_resource_hotspot_and_pixels(tmp_path):
-    from ingetrazo_render import raster_dimensions, reference_texture
+    from built_render import raster_dimensions, reference_texture
     import struct
     png = tmp_path / "frame.png"
     _png(png, 16, 16, [(4, 19, 112, 172)] * 256)
@@ -201,7 +201,7 @@ def test_cursor_resource_hotspot_and_pixels(tmp_path):
 
 @pytest.mark.skipif(__import__("sys").platform != "darwin", reason="Core Graphics PDF reader")
 def test_pdf_first_page_size_orientation_and_transparency(tmp_path, monkeypatch):
-    from ingetrazo_render import raster_dimensions, reference_texture
+    from built_render import raster_dimensions, reference_texture
     import sys
     path = tmp_path / "drawing.pdf"
     _pdf(path, 24, 32, b"1 0 0 rg 0 16 12 16 re f")    # red, the top-left quarter

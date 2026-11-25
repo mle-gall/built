@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from ingetrazo_core import extension_manager as manager
+from built_core import extension_manager as manager
 from core.extensions import discover_plugins
 from tests.test_extension_manager import TOOL_SOURCE, _extension
 from tests.extensions_chrome import Browser
@@ -149,8 +149,8 @@ def test_an_extension_shipped_with_the_app_installs_from_the_manager(tmp_path, m
 
 def test_an_included_extension_shows_its_own_preview_and_a_translated_line(
         tmp_path, monkeypatch):
-    from ingetrazo_core import paths
-    from ingetrazo_core.i18n import current_language
+    from built_core import paths
+    from built_core.i18n import current_language
     root = tmp_path / "app"
     examples = root / "examples" / "extensions"
     examples.mkdir(parents=True)

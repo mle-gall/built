@@ -18,11 +18,11 @@ import os
 import sys
 import shutil
 import subprocess
-import ingetrazo_core.desktop_open as D
+import built_core.desktop_open as D
 
 APPIMAGE_ENV = {
     "APPDIR": "/tmp/.mount_IngeTrAbc",
-    "APPIMAGE": "/home/u/IngeTrazo.AppImage",
+    "APPIMAGE": "/home/u/Built.AppImage",
     "GIO_MODULE_DIR": "/tmp/.mount_IngeTrAbc/usr/lib/gio/modules",
     "LD_LIBRARY_PATH": "/tmp/.mount_IngeTrAbc/usr/bin/_internal",
     "LD_LIBRARY_PATH_ORIG": "/usr/local/lib",
@@ -57,9 +57,9 @@ def frozen_appimage(monkeypatch):
 
 
 def test_the_folder_opens_through_xdg_open_with_the_host_env(frozen_appimage):
-    assert D.open_url(Path("/home/u/.local/share/IngeTrazo/plugins"))
+    assert D.open_url(Path("/home/u/.local/share/Built/plugins"))
     (cmd, kw), = frozen_appimage
-    assert cmd == ["/usr/bin/xdg-open", "/home/u/.local/share/IngeTrazo/plugins"]
+    assert cmd == ["/usr/bin/xdg-open", "/home/u/.local/share/Built/plugins"]
     assert kw["env"]["LD_LIBRARY_PATH"] == "/usr/local/lib"
     assert "GIO_MODULE_DIR" not in kw["env"]
 

@@ -6,7 +6,7 @@ from core.group import Group
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_native_inspector_panels import host, run  # noqa: F401
 from tests.test_parts import _box, _copies, _part, _sheet, _stool
-from ingetrazo_render import inspector_selection
+from built_render import inspector_selection
 
 
 def select(host, group):
@@ -85,7 +85,7 @@ def test_the_tray_shows_a_surface_as_an_area(host, monkeypatch):
 
 
 def test_clipped_parts_wait_to_measure_the_selected_group(host, monkeypatch):
-    from ingetrazo_core import parts
+    from built_core import parts
     calls = []
     original = parts.part_rows
     monkeypatch.setattr(parts,"part_rows", lambda g: calls.append(g) or original(g))
@@ -116,7 +116,7 @@ def test_the_tray_reads_a_shared_definition_once_per_refresh(host, monkeypatch):
 
 
 def test_the_tray_slider_is_one_undo_step_per_drag(host):
-    from ingetrazo_core import AssemblyPreview
+    from built_core import AssemblyPreview
     from tests.test_explode_view import _world, _assembly
     source, group = _assembly()
     source.groups.remove(group)

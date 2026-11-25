@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import random
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core import outliner
 from core.group import Group, copy_group
@@ -275,7 +275,7 @@ def test_the_lock_is_saved_in_the_igz_and_kept_by_copies(tmp_path):
 
 
 def _two_planes(scene):
-    from ingetrazo_core.section import SectionPlane
+    from built_core.section import SectionPlane
     a = SectionPlane(QVector3D(0, 0, 1.2), QVector3D(0, 0, 1),
                      name="Plan cut", symbol="A", active=True)
     b = SectionPlane(QVector3D(2, 0, 0), QVector3D(1, 0, 0),
@@ -299,7 +299,7 @@ def test_section_modes_in_the_core():
 
 def test_a_hidden_frame_is_saved_and_not_picked(tmp_path):
     from core.scene import Scene
-    from ingetrazo_core.section import SectionPlane
+    from built_core.section import SectionPlane
     from formats.igz import load_into, save_scene
     scene = Scene()
     a, b = _two_planes(scene)
@@ -391,7 +391,7 @@ def test_the_padlock_locks_and_unlocks_in_one_undo_step():
 
 def test_a_scene_remembers_what_the_outliner_hid():
     from core.camera import OrbitCamera
-    from ingetrazo_core.saved_views import SavedView
+    from built_core.saved_views import SavedView
     from tests.test_project_drawing_filters import Project
     p, camera = Project(), OrbitCamera()
     tree = _group("Tree")

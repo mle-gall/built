@@ -12,7 +12,7 @@ from __future__ import annotations
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import math
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.edits import build_add_edges
 from core.history import History

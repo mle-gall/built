@@ -54,15 +54,15 @@ jobs:
           # Read them from the manifest instead of hard-coding: the version
           # moves, and a workflow that pins its own would build against the
           # wrong one without saying so.
-          RUNTIME=$(grep -m1 '^runtime:' packaging/flatpak/com.ingetrazo.IngeTrazo.yml | awk '{print $2}')
-          SDK=$(grep -m1 '^sdk:' packaging/flatpak/com.ingetrazo.IngeTrazo.yml | awk '{print $2}')
-          VER=$(grep -m1 '^runtime-version:' packaging/flatpak/com.ingetrazo.IngeTrazo.yml | tr -d "'\"" | awk '{print $2}')
+          RUNTIME=$(grep -m1 '^runtime:' packaging/flatpak/com.built.Built.yml | awk '{print $2}')
+          SDK=$(grep -m1 '^sdk:' packaging/flatpak/com.built.Built.yml | awk '{print $2}')
+          VER=$(grep -m1 '^runtime-version:' packaging/flatpak/com.built.Built.yml | tr -d "'\"" | awk '{print $2}')
           echo "runtime=$RUNTIME//$VER  sdk=$SDK//$VER"
           flatpak install --user --noninteractive flathub "$RUNTIME//$VER" "$SDK//$VER"
           # …and the SDK extensions it lists (rust-stable since the Rust
           # engine went into the Flatpak, #767; the v0.5.10 tag failed here).
           for EXT in $(awk '/^sdk-extensions:/{f=1;next} f&&/^  - /{print $2;next} f{exit}' \
-                         packaging/flatpak/com.ingetrazo.IngeTrazo.yml); do
+                         packaging/flatpak/com.built.Built.yml); do
             [[ "$EXT" == *//* ]] || EXT="$EXT//$VER"
             flatpak install --user --noninteractive flathub "$EXT"
           done
@@ -76,9 +76,9 @@ jobs:
           # the release — but write one by hand with a real description.
           python3 - <<'PY'
           import datetime, pathlib, re
-          ver = pathlib.Path("rust/ingetrazo_core/VERSION").read_text().strip()
+          ver = pathlib.Path("rust/built_core/VERSION").read_text().strip()
           f = pathlib.Path(
-              "packaging/flatpak/com.ingetrazo.IngeTrazo.metainfo.xml")
+              "packaging/flatpak/com.built.Built.metainfo.xml")
           xml = f.read_text(encoding="utf-8")
           if 'version="%s"' % ver in xml:
               print("metainfo already names %s" % ver)
@@ -99,16 +99,16 @@ jobs:
       - name: Name it after the version
         id: name
         run: |
-          VERSION=$(cat rust/ingetrazo_core/VERSION)
+          VERSION=$(cat rust/built_core/VERSION)
           mkdir -p dist
-          cp packaging/flatpak/.staging/IngeTrazo.flatpak \
-             "dist/IngeTrazo-${VERSION}-x86_64.flatpak"
+          cp packaging/flatpak/.staging/Built.flatpak \
+             "dist/Built-${VERSION}-x86_64.flatpak"
           ls -la dist/
 
       - uses: actions/upload-artifact@v4
         with:
-          name: IngeTrazo-flatpak-x86_64
-          path: dist/IngeTrazo-*.flatpak
+          name: Built-flatpak-x86_64
+          path: dist/Built-*.flatpak
           if-no-files-found: error
           retention-days: 7
 
@@ -121,15 +121,15 @@ jobs:
           # by one of the sibling workflows); create a bare one only if we got
           # here first.
           gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 \
-            || gh release create "${GITHUB_REF_NAME}" --title "IngeTrazo ${GITHUB_REF_NAME}" --generate-notes
-          gh release upload "${GITHUB_REF_NAME}" dist/IngeTrazo-*.flatpak --clobber
+            || gh release create "${GITHUB_REF_NAME}" --title "Built ${GITHUB_REF_NAME}" --generate-notes
+          gh release upload "${GITHUB_REF_NAME}" dist/Built-*.flatpak --clobber
 
   # El paso que siempre fue manual y por el que tres releases seguidas no
   # llegaron a los usuarios: el bundle publicado NO actualiza el repo de
   # ingetrazo.com — hay que importarlo al repo ostree y redesplegar el
   # sitio. Este job lo hace solo: espeja el repo VIVO por HTTP (archive-z2
   # se puede espejar), importa el bundle recién subido al release, regenera
-  # el índice y despliega ingetrazo-web (repo público) con wrangler.
+  # el índice y despliega built-web (repo público) con wrangler.
   # El repositorio Flatpak de ingetrazo.com SE PUBLICA A MANO en cada
   # release (Marco, 2026-09-08: «mejor subirlo a mano siempre, creo que
   # cada vez falla el Cloudflare» — el deploy con CLOUDFLARE_API_TOKEN
@@ -173,8 +173,8 @@ jobs:
           gh release view "$TAG" -R "${GITHUB_REPOSITORY}" >/dev/null \
             || { echo "::error::No existe la release $TAG"; exit 1; }
           gh release download "$TAG" -R "${GITHUB_REPOSITORY}" \
-            -p "IngeTrazo-*-x86_64.flatpak" --dir /tmp/bundle
-          flatpak build-import-bundle flatpak/repo /tmp/bundle/IngeTrazo-*-x86_64.flatpak
+            -p "Built-*-x86_64.flatpak" --dir /tmp/bundle
+          flatpak build-import-bundle flatpak/repo /tmp/bundle/Built-*-x86_64.flatpak
           flatpak build-update-repo flatpak/repo
 
       - name: Deploy ingetrazo.com (if credentials exist)

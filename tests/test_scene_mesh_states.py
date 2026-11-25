@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""``ingetrazo_core.scene_mesh_states`` (and ``scene_group_states`` for
+"""``built_core.scene_mesh_states`` (and ``scene_group_states`` for
 placements) answers, for every face and edge of
 a mesh at once, what ``Scene.entity_visible``, ``entity_selectable`` and
 ``edge_snappable`` answer one by one (``model/scene_mesh_states.rs``): on
@@ -13,7 +13,7 @@ from __future__ import annotations
 import itertools
 import random
 
-import ingetrazo_core as N
+import built_core as N
 
 from tests import test_scene_visibility_parity as V
 

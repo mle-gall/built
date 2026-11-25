@@ -50,10 +50,10 @@ def test_registered_model_tools_commit_and_undo_through_the_bridge():
 
 def test_scale_form_keeps_other_axes_and_allows_undo_past_the_placement(monkeypatch):
     from types import SimpleNamespace
-    from ingetrazo_core import group_scale
+    from built_core import group_scale
     from core.history import InsertGroupCommand
-    from ingetrazo_render import chrome_forms
-    from ingetrazo_render import ask_scale
+    from built_render import chrome_forms
+    from built_render import ask_scale
 
     vp = _Vp(Scene())
     group, _ = _pair()

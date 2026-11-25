@@ -11,17 +11,17 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from ingetrazo_core.i18n import tr
-from ingetrazo_core.settings import settings
+from built_core.i18n import tr
+from built_core.settings import settings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_shortcuts_transfer import _keys, ventana  # noqa: F401
-from ingetrazo_render import keyboard_bindings as sc
+from built_render import keyboard_bindings as sc
 
 
 def test_redo_answers_both_keys(ventana):  # noqa: F811
     from core.history import AddEdgeCommand
-    from ingetrazo_core import Vec3
-    from ingetrazo_core import Input as Qt
+    from built_core import Vec3
+    from built_core import Input as Qt
     action = ventana._registry_actions["menu:redo"]
     assert set(_keys(action)) == {"Ctrl+Y", "Ctrl+Shift+Z"}
     vp = ventana.viewport

@@ -11,13 +11,13 @@ import math
 from types import SimpleNamespace
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.mesh import Mesh
 from core.scene import Scene
-from ingetrazo_core import resident_prepare as prepare
-from ingetrazo_core import pack_scene
-from ingetrazo_core import MouseButton
+from built_core import resident_prepare as prepare
+from built_core import pack_scene
+from built_core import MouseButton
 from tests.headless_gpu import HeadlessView, mouse
 
 WHEEL = MouseButton.MiddleButton

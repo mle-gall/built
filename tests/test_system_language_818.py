@@ -8,11 +8,11 @@ in Preferences (and Window ▸ Language) and is what an unset choice means.
 from __future__ import annotations
 
 import pytest
-from ingetrazo_render import shell_services as native
-from ingetrazo_core import i18n, settings
+from built_render import shell_services as native
+from built_core import i18n, settings
 
 from tests.preferences_chrome import Controls, settings_file
-from ingetrazo_render.settings_sheet import _PENDING
+from built_render.settings_sheet import _PENDING
 
 
 @pytest.mark.parametrize("locales, expected", [
@@ -43,7 +43,7 @@ def test_system_locales_pick_the_closest_catalog(locales, expected):
 @pytest.fixture
 def system_is_french(monkeypatch):
     monkeypatch.setattr(native, "available", lambda: True)
-    monkeypatch.setattr("ingetrazo_render.preferred_languages", lambda: ["fr-FR", "en-US"])
+    monkeypatch.setattr("built_render.preferred_languages", lambda: ["fr-FR", "en-US"])
 
 
 def test_unset_or_system_follows_the_os_and_a_pinned_one_stays(system_is_french):
@@ -107,8 +107,8 @@ def test_pinning_another_language_over_the_system_one_asks_a_restart(prefs):
 @pytest.mark.parametrize("saved", [None, i18n.SYSTEM, "de"])
 def test_startup_resolves_the_saved_choice(saved, tmp_path, monkeypatch,
                                            system_is_french):
-    from ingetrazo_render import start_profile
-    from ingetrazo_core import settings
+    from built_render import start_profile
+    from built_core import settings
 
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
     monkeypatch.setattr(settings, "_store", None)

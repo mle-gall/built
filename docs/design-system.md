@@ -10,7 +10,7 @@ The public Rust module `ui::tokens` owns colour values. Its palette declaration 
 
 | Role | Tokens and values |
 |---|---|
-| Surface | `SHEET` #1A1A1A, `SIDE` / `GLASS_BAR` #1F1F1F, `CARD` #242424, `CARD_HOVER` #2B2B2B, `WELL` #131313, `DESK` (= `WELL`, the Sheets desk around the paper; Python reads it through `ingetrazo_render.chrome_token`) |
+| Surface | `SHEET` #1A1A1A, `SIDE` / `GLASS_BAR` #1F1F1F, `CARD` #242424, `CARD_HOVER` #2B2B2B, `WELL` #131313, `DESK` (= `WELL`, the Sheets desk around the paper; Python reads it through `built_render.chrome_token`) |
 | Depth | `PANEL` / `POPOVER` premultiplied grey 31 at alpha 245, `FIELD` black at 28%, `SCRIM` black at 28%. `Surface::{Bar,Panel,Pill,Raised}` supply glass, radius and shadow together. |
 | Text | `INK` #EEF1F4, `INK_2` #C9CFD6, `DIM` #A2A9B1, `FAINT` #858C94, `OFF` #5C636A, `ON_PRIMARY` graphite on the primary accent, `BRIGHT` white on dark surfaces |
 | Boundary | `EDGE` / `DIVIDER` white at 8%, `HOVER_EDGE` white at 18%, `FOCUS_RING` #6AA5FF |
@@ -104,7 +104,7 @@ The Font picker in the gallery's organisms band opens the same compact popover u
 
 ## Verification
 
-Run `cargo test --manifest-path rust/ingetrazo_render/Cargo.toml --lib` for these tests:
+Run `cargo test --manifest-path rust/built_render/Cargo.toml --lib` for these tests:
 - the colour and literal font-size policies;
 - the neutral-surface tests;
 - the glass-elevation order;

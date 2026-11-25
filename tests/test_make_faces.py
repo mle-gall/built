@@ -6,12 +6,12 @@ from __future__ import annotations
 
 import math
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
-from ingetrazo_render import rail_layout
+from built_core import Vec3 as QVector3D
+from built_render import rail_layout
 from core.make_faces import MakeFacesError, make_faces, plan, selected_edges
 from core.mesh import Mesh
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_render import context_menu_build
+from built_render import context_menu_build
 
 UP = QVector3D(0, 0, 50)
 

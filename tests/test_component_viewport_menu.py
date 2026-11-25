@@ -1,6 +1,6 @@
 """Definition actions in the native selection menu."""
-from ingetrazo_core import Vec3 as V
-from ingetrazo_render import context_menu_build, context_menu_run
+from built_core import Vec3 as V
+from built_render import context_menu_build, context_menu_run
 
 from core.group import Group, copy_group
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
@@ -8,7 +8,7 @@ from tests.test_replace_component import _component, _model, _quad
 
 
 def test_the_menu_offers_both_and_replace_swaps_the_selection(native_host, monkeypatch):
-    from ingetrazo_render import chrome_forms
+    from built_render import chrome_forms
     win = native_host.window
     scene = win.viewport.scene
     _, _, chairs, tables, group, holder = _model(moved=True)

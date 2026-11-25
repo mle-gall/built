@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core import doc_model  # noqa: E402
 from core.group import Group  # noqa: E402
@@ -327,7 +327,7 @@ def shared_assembly(work):
     commands.run(h, "patch_record_field", placements=[path], path=["description"], value="East only")
     assert target.ifc["description"] == "East only"
     assert "description" not in west.children[0].ifc
-    from ingetrazo_core.deliveries import scoped
+    from built_core.deliveries import scoped
     scene.select([target])
     projection = scoped(scene, {"scope": "selection"})
     delivered = projection.resolve_occurrence(path)
@@ -545,7 +545,7 @@ def geometry_steps(work):
     out.append(state())
     assert h.redo()
     out.append(state())
-    from ingetrazo_core.soften import SoftenByAngleCommand
+    from built_core.soften import SoftenByAngleCommand
     p, q = QVector3D(930, 0, 0), QVector3D(932, 0, 0)
     mesh.add_face([p, q, QVector3D(930, 1, 0)])
     mesh.add_face([q, p, QVector3D(930, -1, .5)])
@@ -595,7 +595,7 @@ def geometry_steps(work):
 
 def anchor_steps(work):
     """Three attachment kinds on the second of two nested instances."""
-    from ingetrazo_core.annotation_anchor import Attachment
+    from built_core.annotation_anchor import Attachment
     from core.history import MoveGroupCommand
     from core.textlabel import TextLabel
 
@@ -682,13 +682,13 @@ def anchor_steps(work):
 
 
 def presentation_steps(scene, steps):
-    from ingetrazo_core.annotation_anchor import Attachment
+    from built_core.annotation_anchor import Attachment
     from core.composition import Composicion, MarcoVista, TextoItem
     from core.dimension import Dimension
     from core.history import (AddDimensionCommand, AddSceneCommand, AddSheetCommand,
                               AddTextLabelCommand, EditDimensionTextCommand,
                               MoveTextLabelsCommand, PlaceViewCommand)
-    from ingetrazo_core.saved_views import RenameSceneCommand, SavedView
+    from built_core.saved_views import RenameSceneCommand, SavedView
     from core.textlabel import TextLabel
 
     h = History(scene)

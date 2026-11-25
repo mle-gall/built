@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import pytest  # noqa: E402
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402

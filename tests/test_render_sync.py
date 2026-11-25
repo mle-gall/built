@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.plugin_images import write_png
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core import render_blender as rb  # noqa: E402
 from core.camera import OrbitCamera  # noqa: E402
@@ -192,12 +192,12 @@ def test_a_serving_blender_renders_each_camera_and_quits(tmp_path):
     def until(tag):
         for line in proc.stdout:
             seen.append(line)
-            if line.startswith("INGETRAZO " + tag):
+            if line.startswith("BUILT " + tag):
                 return line
         raise AssertionError("".join(seen[-30:]))
 
     until("ready")
-    assert any(line.startswith("INGETRAZO figures 1") for line in seen)
+    assert any(line.startswith("BUILT figures 1") for line in seen)
     for i, yaw in enumerate((-1.0, 1.2)):
         cam.yaw = yaw
         proc.stdin.write(rb.sync_request(cam, tmp_path / f"s{i}.png",

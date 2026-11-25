@@ -6,14 +6,14 @@ flicker while orbiting.
 
 ## Metal view: reverse-Z
 
-The Metal renderer (`rust/ingetrazo_render`) uses a 32-bit float depth,
+The Metal renderer (`rust/built_render`) uses a 32-bit float depth,
 reversed: the near plane is depth 1 and a perspective view's far plane is at
 infinity, depth `n / d`. A float has the same relative precision at every
 magnitude, so this keeps about 2⁻²⁴ of the distance everywhere: 0.012 mm at
 200 m, whatever the near plane. The usual mapping (near 0, far 1) put the
 float's precision at the near plane, a few centimetres from the eye.
 
-`rust/ingetrazo_render/src/depth.rs` holds the convention: the clear value,
+`rust/built_render/src/depth.rs` holds the convention: the clear value,
 the comparisons (`compare(Less)` is `Greater`), the depth biases (negated)
 and the projection. Every pass that tests, biases, clears, resolves or reads
 the camera depth goes through it: faces, edges, profiles, hidden edges,

@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Structured main-thread inspection and navigation for the agent bridge."""
-import ingetrazo_core
+import built_core
 from collections import Counter
 from fnmatch import fnmatchcase
 import math
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from core.group import placement_points
 
 
@@ -220,7 +220,7 @@ class InspectionTools:
             while folder and folder not in path:
                 path.insert(0, folder)
                 folder = getattr(scene, "folder_parents", {}).get(folder)
-            path = [ingetrazo_core.tag_edits.folder_label(scene, f) for f in path]
+            path = [built_core.tag_edits.folder_label(scene, f) for f in path]
             rows.append(dict(uid=layer.uid, key=layer.key, name=layer.name,
                              visible=layer.visible,
                              folder_path=path, groups=group_counts[layer.key],
@@ -237,7 +237,7 @@ class InspectionTools:
             if not matches:
                 raise ValueError(f"unknown layer {key!r}")
             chosen.extend(matches)
-        from ingetrazo_core import command_protocol as commands
+        from built_core import command_protocol as commands
         commands.set_tag_state(self._viewport.history,
                                tags=list(dict.fromkeys(layer.key for layer in chosen)), visible=visible)
         return self._tool_query_layers()

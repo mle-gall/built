@@ -6,12 +6,12 @@ and one segment is a flat chamfer — one undo step, as before. It bevels
 corners (vertices) too. The tool strip and inspector follow edits made with the keyboard."""
 from __future__ import annotations
 
-from ingetrazo_render import KeyEvent
+from built_render import KeyEvent
 import pytest
-from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint as QPointF, Input as Qt
+from built_core import Vec3 as QVector3D
 
-from ingetrazo_core.orient import is_closed, signed_volume
+from built_core.orient import is_closed, signed_volume
 from tools.base import ToolContext
 from tools.fillet import FilletTool
 from tests.test_fillet import box, edge_at
@@ -179,7 +179,7 @@ def test_p_stays_push_pull_for_other_tools(viewport):
 # ---- The panel -----------------------------------------------------------------
 
 def _edit(viewport, key, value=None):
-    from ingetrazo_render import bevel_edit
+    from built_render import bevel_edit
     bevel_edit(viewport, viewport.active_tool, key, value)
 
 
@@ -412,7 +412,7 @@ def test_the_editor_draws_the_profile_the_tool_uses(viewport):
     viewport.set_active_tool(tool)
     viewport.scene.select(list(mesh.edges))
     tool.on_activate(viewport)
-    from ingetrazo_core.bevel_profiles import controls
+    from built_core.bevel_profiles import controls
     _edit(viewport, "shape", "cornice")
     points = controls(tool.shape, tool.segments)
     assert len(points) == 13

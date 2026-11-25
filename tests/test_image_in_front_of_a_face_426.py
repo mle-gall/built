@@ -11,11 +11,11 @@ from __future__ import annotations
 from tests.raster_samples import solid_raster
 
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 
 def _setup(tmp_path, image_z):
-    from ingetrazo_core.image_plane import ImagePlane
+    from built_core.image_plane import ImagePlane
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(400, 300)

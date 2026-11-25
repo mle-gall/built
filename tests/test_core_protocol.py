@@ -9,7 +9,7 @@ oracle read through the mesh itself before and after each step (keys,
 positions, ends, faces, rings, edge sets): created / removed / moved /
 modified must be exactly what changed, and an undo exactly the inverse."""
 from __future__ import annotations
-from ingetrazo_core import store_views
+from built_core import store_views
 
 import json
 import random
@@ -18,11 +18,11 @@ import threading
 import numpy as np
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 import core._native as _native
 from core import mesh as M
-from ingetrazo_core import store_mesh as S
+from built_core import store_mesh as S
 from core.history import (AssignLayerCommand, History, InsertGroupCommand,
                           SetFaceColorCommand)
 from core.protocol import commands as C
@@ -344,8 +344,8 @@ def test_renderer_reads_the_feed_for_a_store_mesh():
     travel with the rebake."""
     from core.group import Group
     from core.history import SnapshotMutation
-    from ingetrazo_core import pack_scene
-    from ingetrazo_core import InstanceUpdates
+    from built_core import pack_scene
+    from built_core import InstanceUpdates
     mesh = M.Mesh()
     store_views.become_store(mesh, mod.MeshStore(next(M._KEY_NAMESPACES), **S._weld_args()), [])
     mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(0, 3, 0)])
@@ -380,8 +380,8 @@ def test_renderer_undo_after_leaving_the_group_rebakes_it():
     from core.group import Group
     from core.history import SnapshotMutation
     from tests.test_wgpu_updates import assert_matches_fresh_pack
-    from ingetrazo_core import pack_scene
-    from ingetrazo_core import InstanceUpdates
+    from built_core import pack_scene
+    from built_core import InstanceUpdates
     mesh = M.Mesh()
     mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(0, 3, 0)])
     scene = Scene(groups=[Group(mesh), Group(M.Mesh())])
@@ -404,7 +404,7 @@ def test_renderer_undo_after_leaving_the_group_rebakes_it():
 @pytest.fixture
 def bridge(monkeypatch, native_window):
     from plugins.ai_bridge import _Bridge
-    monkeypatch.setenv("INGETRAZO_AI_PORT", "0")
+    monkeypatch.setenv("BUILT_AI_PORT", "0")
     win = native_window
     scene = win.viewport.scene
     scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
@@ -477,8 +477,8 @@ def test_placement_commands_reach_nested_placements():
 
 
 def test_resegment_curve_and_repair_solid():
-    from ingetrazo_core import Input
-    from ingetrazo_core import ScreenPoint
+    from built_core import Input
+    from built_core import ScreenPoint
     from tools.base import ToolContext
     from tools.circle import CircleTool
     from tests.controller_surface import ControllerSurface as Viewport
@@ -544,7 +544,7 @@ def test_offset_uses_the_face_key_and_model_frame_for_a_distant_path():
     from core.protocol.commands import run
     from core.scene import Scene
     from core.history import History
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     scene = Scene()
     history = History(scene)
     face = scene.mesh.add_face([Vec3(0, 0, 0), Vec3(4, 0, 0), Vec3(4, 4, 0), Vec3(0, 4, 0)])
@@ -566,7 +566,7 @@ def test_paint_material_uses_named_recipe_on_the_requested_side_and_preserves_it
     from core.materials import Material
     from core.scene import Scene
     from core.history import History
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     scene = Scene()
     history = History(scene)
     face = scene.mesh.add_face([Vec3(), Vec3(2, 0, 0), Vec3(0, 2, 0)])
@@ -591,7 +591,7 @@ def test_bridge_bevels_keyed_edges_and_undoes(bridge):
 
 
 def test_bridge_mirrors_and_stamps_the_model_clipboard(bridge):
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     win, b = bridge
     vp = win.viewport
     face = vp.scene.mesh.faces[-1]

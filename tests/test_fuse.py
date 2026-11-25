@@ -3,7 +3,7 @@
 """Fast coplanar fusion for imported triangle soups (formats.fuse)."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from formats.fuse import fuse_coplanar_loops, soften_smooth_edges
 

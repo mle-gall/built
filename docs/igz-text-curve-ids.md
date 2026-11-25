@@ -1,6 +1,6 @@
 # Reopening named curves from IGZ documents
 
-Some documents written by IngeTrazo 0.5.8 contain textual edge `curve`
+Some documents written by Built 0.5.8 contain textual edge `curve`
 identifiers in their JSON mesh blocks. Saving these small meshes succeeds,
 but reopening compares the stored string with the integer curve counter and
 raises `TypeError: '>=' not supported between instances of 'str' and 'int'`.

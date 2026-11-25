@@ -7,7 +7,7 @@ from concurrent.futures import Future
 from georef.datum import SceneDatum
 from georef.tile_fetcher import TileFetcher
 from georef.tiles import PRESETS, TileCache, TileLayer
-from ingetrazo_render import SurveyRaster
+from built_render import SurveyRaster
 from tests.controller_surface import ControllerSurface as Viewport
 
 

@@ -1,6 +1,6 @@
 //! `built_shell`: the platform services the embedded Python asks for.
 //!
-//! Registered as a built-in module next to `ingetrazo_render` (python.rs),
+//! Registered as a built-in module next to `built_render` (python.rs),
 //! so `import built_shell` works only inside the `built` binary; the
 //! Host service (`shell_runtime/services.rs`) falls back to doing nothing when it
 //! is missing (pytest, the Qt app).
@@ -349,7 +349,7 @@ pub fn configure_window(view: usize) {
         }
         let v: &NSView = unsafe { &*(view as *const NSView) };
         if let Some(window) = v.window() {
-            let g = f64::from(ingetrazo_render::ui::tokens::SHEET.r()) / 255.0;
+            let g = f64::from(built_render::ui::tokens::SHEET.r()) / 255.0;
             let graphite = objc2_app_kit::NSColor::colorWithSRGBRed_green_blue_alpha(g, g, g, 1.0);
             window.setBackgroundColor(Some(&graphite));
             window.setTabbingMode(NSWindowTabbingMode::Disallowed);
@@ -444,14 +444,14 @@ pub fn built_shell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(target_os = "macos")]
     m.add_function(wrap_pyfunction!(crate::menu_commands::menu_commands, m)?)?;
     #[cfg(any(windows,target_os="linux"))]
-    m.add_function(wrap_pyfunction!(ingetrazo_render::desktop_menu::menu_commands, m)?)?;
+    m.add_function(wrap_pyfunction!(built_render::desktop_menu::menu_commands, m)?)?;
     #[cfg(windows)]
     m.add_function(wrap_pyfunction!(set_raw_input_handler,m)?)?;
-    m.add_function(wrap_pyfunction!(ingetrazo_render::platform_paths::cache_directory, m)?)?;
-    m.add_function(wrap_pyfunction!(ingetrazo_render::platform_paths::local_data_directory, m)?)?;
-    m.add_function(wrap_pyfunction!(ingetrazo_render::platform_paths::preferred_languages, m)?)?;
-    m.add_function(wrap_pyfunction!(ingetrazo_render::platform_paths::documents_directory, m)?)?;
-    m.add_function(wrap_pyfunction!(ingetrazo_render::platform_paths::recovery_directory, m)?)?;
+    m.add_function(wrap_pyfunction!(built_render::platform_paths::cache_directory, m)?)?;
+    m.add_function(wrap_pyfunction!(built_render::platform_paths::local_data_directory, m)?)?;
+    m.add_function(wrap_pyfunction!(built_render::platform_paths::preferred_languages, m)?)?;
+    m.add_function(wrap_pyfunction!(built_render::platform_paths::documents_directory, m)?)?;
+    m.add_function(wrap_pyfunction!(built_render::platform_paths::recovery_directory, m)?)?;
     m.add_function(wrap_pyfunction!(open_files, m)?)?;
     m.add_function(wrap_pyfunction!(save_file, m)?)?;
     m.add_function(wrap_pyfunction!(pick_folder, m)?)?;

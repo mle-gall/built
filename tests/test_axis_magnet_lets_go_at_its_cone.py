@@ -13,8 +13,8 @@ from __future__ import annotations
 import math
 
 
-from ingetrazo_core import ScreenPoint, Input  # noqa: E402
-from ingetrazo_core import Vec3 as V
+from built_core import ScreenPoint, Input  # noqa: E402
+from built_core import Vec3 as V
 
 
 from tools.rust_tools import LineTool  # noqa: E402
@@ -103,7 +103,7 @@ def test_a_move_over_a_face_lands_on_it_not_on_a_reference_in_the_air():
 def test_an_arrow_before_the_first_click_leaves_the_corner_to_click():
     """The arrow says which way the line runs from the corner about to be
     clicked. A corner paused on earlier must not take that corner away."""
-    from ingetrazo_render import KeyEvent
+    from built_render import KeyEvent
 
     vp = _vp()
     vp.scene.mesh.add_edge(V(0, 0, 0), V(1, 0, 2))

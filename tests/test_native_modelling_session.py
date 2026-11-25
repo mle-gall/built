@@ -18,7 +18,7 @@ def test_modelling_session_uses_native_handlers(tmp_path):
     source = ROOT / "tests/fixtures/shell/slab-and-cube.igz"
     output = tmp_path / "edited.built"
     profile = tmp_path / "settings"
-    plugins = profile / "data/ingetrazo/plugins"
+    plugins = profile / "data/built/plugins"
     plugins.mkdir(parents=True)
     probe = plugins / "session_probe.py"
     probe.write_text("""import importlib.util, json, sys

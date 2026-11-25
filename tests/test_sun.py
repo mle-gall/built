@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from ingetrazo_core.sun import (
+from built_core.sun import (
     DEFAULT_LAT,
     DEFAULT_LON,
     ShadowSettings,
@@ -65,7 +65,7 @@ def test_daylight_window_follows_site_and_zone():
     06:00→18:00; forcing UTC−10 shifts the same daylight five clock hours
     earlier — odd-looking and correct, which is exactly what the classic
     slider shows for a mismatched zone."""
-    from ingetrazo_core.sun import daylight_minutes
+    from built_core.sun import daylight_minutes
     rng = daylight_minutes(DEFAULT_LAT, DEFAULT_LON, 3, 21)
     assert rng is not None
     first, last = rng

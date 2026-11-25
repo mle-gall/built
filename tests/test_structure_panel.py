@@ -2,7 +2,7 @@
 import pytest
 
 from core import bim_registry, structure
-from ingetrazo_core import facets
+from built_core import facets
 from core.agent_facets import set_display
 from core.group import Group
 from core.layers import Layer
@@ -101,7 +101,7 @@ def test_bootstrap_proposal_is_undoable(panel):
 
 
 def test_filed_placements_refile_through_the_tree_and_reject_direct_tag_edits(panel):
-    from ingetrazo_render import inspector_tag_row, tree_edit_tag
+    from built_render import inspector_tag_row, tree_edit_tag
     p, filed, _ = panel
     p.scene.select([filed])
     assert structure.path(bim_registry.get(p.scene), "sections") == ["Ride", "Track", "Sections"]
@@ -169,7 +169,7 @@ def test_mounted_rows_and_exact_nested_members(panel):
 
 def test_drawing_preserves_structure_rows(panel):
     from core.history import AddEdgeCommand
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     p, _, _ = panel
     tree = p.view._ui_tree["tree"]
     history = p.win.viewport.history
@@ -181,7 +181,7 @@ def test_drawing_preserves_structure_rows(panel):
 
 
 def test_filing_choices_distinguish_siblings_and_exclude_mounted_descendants():
-    from ingetrazo_core import filing_choices
+    from built_core import filing_choices
     nodes = {
         "a": {"name": "Floor", "parent": None},
         "b": {"name": "Floor", "parent": None},

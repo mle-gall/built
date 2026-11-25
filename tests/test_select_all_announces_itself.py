@@ -10,7 +10,7 @@ entities, the viewport drew none of them selected, Entity Info said
 from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 
 def V(x, y, z=0.0):

@@ -17,7 +17,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 
 @pytest.fixture
@@ -33,7 +33,7 @@ def vp_with_wall(native_host):
     assert ok
     # The wall is the plane y=0; its read-back depth is the NDC depth
     # of any point on it. It covers the middle band of the frame.
-    from ingetrazo_core import Vec4 as QVector4D
+    from built_core import Vec4 as QVector4D
     clip = mvp.map(QVector4D(0.0, 0.0, 1.0, 1.0))
     d_wall = (clip.z() / clip.w() + 1.0) * 0.5
     buf = np.ones((h, w), dtype=np.float32)

@@ -4,8 +4,8 @@
 from collections import defaultdict
 from unittest.mock import Mock, patch
 
-from ingetrazo_core import Input as Qt
-from ingetrazo_render import shortcut_text
+from built_core import Input as Qt
+from built_render import shortcut_text
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_shortcuts_transfer import ventana  # noqa: F401
 
@@ -19,7 +19,7 @@ def _todos_los_atajos(win):
 
 
 def _pulsar(win, tecla, modificador=Qt.NoModifier):
-    from ingetrazo_render import ShellAction
+    from built_render import ShellAction
     disparos = []
     trigger = ShellAction.trigger
     def observar(action):
@@ -79,7 +79,7 @@ TARJETA_HABITUAL = {
 }
 # Divergencias a propósito, para que nadie las "arregle" sin decidirlo:
 #   U       = Empujar/Tirar   (segundo atajo del MISMO comando: la tecla que
-#                              IngeTrazo usó hasta el 2026-09-10)
+#                              Built usó hasta el 2026-09-10)
 #   Mayús+P = Perspectiva/paralela (la tarjeta no le da tecla ninguna)
 #   K       = Rectángulo rotado    (allá: aristas traseras; el rotado no
 #                                   tiene tecla allá)
@@ -155,7 +155,7 @@ def test_ctrl_numero_pone_la_vista_estandar(ventana, monkeypatch):
 
 
 def test_menu_y_barra_comparten_la_accion_de_cada_vista(ventana):
-    from ingetrazo_render import command_registry
+    from built_render import command_registry
     for i, name in enumerate(("top", "front", "right", "iso", "back", "left", "bottom"), 1):
         menu_id = f"view:{name}" if i <= 4 else f"view_{name}"
         menu = [(menu_id, "Camera", name.title(), f"Ctrl+{i}")]
@@ -172,7 +172,7 @@ def test_el_boton_de_vista_muestra_su_atajo(ventana):
 
 def _caja(nombre: str, x0: float):
     """Un grupo cúbico de lado 1 generado en el momento."""
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     from core.group import Group
     from core.mesh import Mesh
     malla = Mesh()

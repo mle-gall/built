@@ -5,8 +5,8 @@ docs/rust-app-shell.md)."""
 from pathlib import Path
 
 import pytest
-from ingetrazo_core import Input as Qt
-from ingetrazo_render import shortcut_text
+from built_core import Input as Qt
+from built_render import shortcut_text
 from tests.shell_isolation import restore_shell_patches  # noqa: F401  (autouse)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "shell" / "slab-and-cube.igz"
@@ -14,7 +14,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "shell" / "slab-and-cube.igz"
 
 @pytest.fixture
 def host(tmp_path):
-    from ingetrazo_render import Host
+    from built_render import Host
     h = Host(0, 1280, 800, 2.0, settings=str(tmp_path))
     yield h
     h.close()
@@ -29,7 +29,7 @@ def test_opens_a_document_headless(host):
 
 
 def test_shell_view_owns_its_document(host):
-    from ingetrazo_render.shell_views import ShellView
+    from built_render.shell_views import ShellView
     from views.document_controller import DocumentController
     assert isinstance(host.view, ShellView)
     assert isinstance(host.viewport, DocumentController)
@@ -48,8 +48,8 @@ def test_tool_shortcut_goes_through_shortcut_override(host):
 
 
 def test_tool_shortcut_restored_in_new_shell(host, tmp_path):
-    from ingetrazo_render import Host
-    from ingetrazo_render.keyboard_bindings import save_shortcut
+    from built_render import Host
+    from built_render.keyboard_bindings import save_shortcut
 
     action = host.window._tool_actions["line"]
     save_shortcut(action, ["F11"])
@@ -67,7 +67,7 @@ def test_tool_shortcut_restored_in_new_shell(host, tmp_path):
 
 def test_undo_from_the_menu(host):
     host.open(FIXTURE)
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
     from core.history import AddFaceCommand
     vp = host.viewport
     before = len(vp.scene.mesh.faces)
@@ -80,7 +80,7 @@ def test_undo_from_the_menu(host):
 
 
 def test_events_answer_the_qt_calls_the_handlers_make():
-    from ingetrazo_render import KeyEvent, MouseEvent, NativeGestureEvent, WheelEvent
+    from built_render import KeyEvent, MouseEvent, NativeGestureEvent, WheelEvent
     m = MouseEvent("press", 10.5, 20, Qt.LeftButton.value, Qt.LeftButton.value,
                    (Qt.ShiftModifier | Qt.ControlModifier).value)
     assert m.position().x() == 10.5 and m.button() == Qt.LeftButton
@@ -91,15 +91,15 @@ def test_events_answer_the_qt_calls_the_handlers_make():
     assert w.angleDelta().y() == 240 and w.pixelDelta().isNull()
     assert w.device().type().name == "Mouse"
     slide = WheelEvent(1, 2, 0, -30, 0, -60, phase="move", inverted=True)
-    from ingetrazo_render import trackpad_nav
+    from built_render import trackpad_nav
     assert trackpad_nav.is_slide(slide)
     g = NativeGestureEvent("zoom", 0.1, 3, 4)
     assert g.gestureType() == Qt.ZoomNativeGesture and g.value() == pytest.approx(0.1)
 
 
 def test_window_input_answers_from_winit(host):
-    from ingetrazo_core import window_input
-    from ingetrazo_core import PixelPoint as QPoint
+    from built_core import window_input
+    from built_core import PixelPoint as QPoint
     host.pointer("move", 30, 40, 0, 0, Qt.ControlModifier.value)
     assert window_input.modifiers(host.viewport) & Qt.ControlModifier
     assert window_input.cursor_position(host.viewport) == QPoint(30, 40)
@@ -109,7 +109,7 @@ def test_window_input_answers_from_winit(host):
 
 def test_rail_matches_classic_groups_and_dispatches(host):
     from unittest.mock import Mock
-    from ingetrazo_render import wgpu_library
+    from built_render import wgpu_library
     from views import wgpu_ui
 
     host.open(FIXTURE)
@@ -119,7 +119,7 @@ def test_rail_matches_classic_groups_and_dispatches(host):
     try:
         wgpu_ui._send_tools(view, win)
         groups, = view.renderer.ui_set_tools.call_args.args
-        from ingetrazo_render import rail_layout
+        from built_render import rail_layout
         expected = [[key for key, _ in row] for row in rail_layout()]
         actions = {key for row in rail_layout() for key, binding in row if binding}
         assert [[entry[0] for entry in group] for group in groups] == expected
@@ -143,7 +143,7 @@ def test_rail_matches_classic_groups_and_dispatches(host):
 def test_text3d_place_edit_font_and_undo(host):
     import json
     from unittest.mock import Mock
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     from views import wgpu_ui
 
     host.open(FIXTURE)
@@ -203,7 +203,7 @@ def test_annotation_font_options(host, tool):
 
 
 def test_registered_shortcuts_use_rust_and_plugin_actions_still_trigger(host):
-    from ingetrazo_render import ShellAction
+    from built_render import ShellAction
     from views.extension_api import ExtensionApp
 
     win = host.window
@@ -238,8 +238,8 @@ def test_registered_shortcuts_use_rust_and_plugin_actions_still_trigger(host):
 
 
 def test_winit_tool_cursors_use_the_same_art_for_tools_and_navigation(host):
-    from ingetrazo_core import general_settings
-    from ingetrazo_render import tool_cursor_art
+    from built_core import general_settings
+    from built_render import tool_cursor_art
 
     host.window._activate_tool("line")
     host.view._mirror_cursor()
@@ -288,14 +288,14 @@ def test_model_menu_uses_current_selection_history_and_tool(host):
 
 @pytest.mark.parametrize("suffix", ["obj", "stl"])
 def test_mesh_import_menu_waits_for_answer_then_imports_once(host, tmp_path, monkeypatch, suffix):
-    from ingetrazo_core.settings import settings
+    from built_core.settings import settings
     from tests.test_import_failure_reported import _CUBE_OBJ, _GOOD_STL
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render.shell_files import ShellFileDialog
     path = tmp_path / ("triangle." + suffix)
     path.write_bytes(_CUBE_OBJ if suffix == "obj" else _GOOD_STL)
     monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *a: (str(path), ""))
     forms = []
-    monkeypatch.setattr("ingetrazo_render.chrome_forms.show", lambda _, form: forms.append(form))
+    monkeypatch.setattr("built_render.chrome_forms.show", lambda _, form: forms.append(form))
     win = host.window
     store = settings()
     store.setValue("import/stl_simplify_mode", "all")
@@ -333,8 +333,8 @@ def test_open_unitless_mesh_preserves_original_tab_on_cancel_or_failure(host, tm
     path = tmp_path / "broken.stl"
     path.write_bytes(b"invalid STL fixture")
     forms, failures = [], []
-    monkeypatch.setattr("ingetrazo_render.chrome_forms.show", lambda _, f: forms.append(f) or "chrome")
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.critical", lambda _, title, text: failures.append(title))
+    monkeypatch.setattr("built_render.chrome_forms.show", lambda _, f: forms.append(f) or "chrome")
+    monkeypatch.setattr("built_render.chrome_dialogs.critical", lambda _, title, text: failures.append(title))
     assert host.open(path)
     assert win.documents() == [original]
     forms.pop().press(choice)
@@ -344,7 +344,7 @@ def test_open_unitless_mesh_preserves_original_tab_on_cancel_or_failure(host, tm
 
 
 def test_scene_menu_acts_on_marked_scene_and_export_uses_chosen_format(host, monkeypatch):
-    import ingetrazo_render as wgpu_deliveries
+    import built_render as wgpu_deliveries
     assert host.open(FIXTURE)
     win = host.window
     scene = host.viewport.scene
@@ -366,7 +366,7 @@ def test_scene_menu_acts_on_marked_scene_and_export_uses_chosen_format(host, mon
 
 
 def test_native_scene_playback_stops_on_input_and_switches_documents_safely(host):
-    from ingetrazo_core import SceneAnimation
+    from built_core import SceneAnimation
 
     assert host.open(FIXTURE)
     win, viewport = host.window, host.viewport

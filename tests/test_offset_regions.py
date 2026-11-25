@@ -14,7 +14,7 @@ keeps the regions that really sit `d` inside.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.history import History
 from core.mesh import Mesh

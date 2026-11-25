@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 RECIPE = (Path(__file__).resolve().parents[1]
-          / "packaging" / "flatpak" / "com.ingetrazo.IngeTrazo.yml")
+          / "packaging" / "flatpak" / "com.built.Built.yml")
 
 
 def _commands() -> list[str]:
@@ -28,4 +28,4 @@ def test_the_flatpak_compiles_the_app_after_dropping_the_pycache():
 def test_the_bytecode_does_not_depend_on_file_times():
     line = next(c for c in _commands() if "compileall" in c)
     assert "--invalidation-mode unchecked-hash" in line
-    assert "/ingetrazo" in line and "/lib" in line
+    assert "/built" in line and "/lib" in line

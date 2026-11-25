@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import itertools
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.history import DeleteGroupCommand, History, MakeGroupCommand
 from core.scene import Scene

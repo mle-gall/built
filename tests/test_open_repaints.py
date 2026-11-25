@@ -5,7 +5,7 @@ off while it loads, and turning it back on asks for none: the view stayed
 black until the first click."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.group import Group
 from core.mesh import Mesh

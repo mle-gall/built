@@ -9,26 +9,26 @@ level, and the cursor snaps to those heights — «Nivel PA» on the tip.
 
 José Castro Basso wrote the first version for teaching architectural
 representation at FADU–UDELAR (Montevideo). It is an extension and not part
-of IngeTrazo on purpose: the core stays for everyone, and what a course or
+of Built on purpose: the core stays for everyone, and what a course or
 an office needs is installed by whoever needs it — and can be maintained
 by them. It is also the worked example of the extension API
 (docs/plugins.md): document data, a side panel, a viewport overlay and an
 inference, all through ``setup(app)``.
 
 Install: copy this file into the plugins folder (Extensions ▸ Open plugins
-folder) and restart IngeTrazo. The «Niveles» tab appears in the side tray.
+folder) and restart Built. The «Niveles» tab appears in the side tray.
 """
 from __future__ import annotations
 
 import math
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
-from ingetrazo_core.i18n import current_language
+from built_core.i18n import current_language
 
 #: Guides and snapping only when the view looks sideways: |pitch| below this.
 MAX_PITCH_DEG = 15.0
-COLOR = (0.95, 0.45, 0.16)                    # IngeTrazo's accent
+COLOR = (0.95, 0.45, 0.16)                    # Built's accent
 
 # An extension brings its own words — the core catalogues stay the core's.
 _TEXTS = {
@@ -91,7 +91,7 @@ def _sideways(viewport) -> bool:
 
 def _units():
     """``core.units`` when the host has document units (0.5.8+), else None:
-    an older IngeTrazo keeps the metre labels and field it always had."""
+    an older Built keeps the metre labels and field it always had."""
     try:
         from core import units
     except ImportError:
@@ -215,7 +215,7 @@ class LevelsPanel:
             self.selected = None
             self.app.set_document_data(state)
         elif control in ("add", "edit"):
-            from ingetrazo_render.chrome_forms import Field, Form, show
+            from built_render.chrome_forms import Field, Form, show
             index = int(self.selected) if control == "edit" else None
             level = levels[index] if index is not None else dict(
                 name=_t("Level {n}", n=len(levels) + 1), z=_next_height(levels))

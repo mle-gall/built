@@ -4,12 +4,12 @@
 command, OBJ export with vt + map_Kd, and .igz round-trip."""
 from __future__ import annotations
 
-import ingetrazo_core
+import built_core
 from pathlib import Path
 
-from ingetrazo_render import SurveyRaster
+from built_render import SurveyRaster
 from tests.raster_samples import solid_raster
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.history import History, SetFaceColorCommand, SetFaceTextureCommand
 from core.scene import Scene
@@ -40,8 +40,8 @@ def _checker(path, n=16):
 def test_planar_uv_scales_by_tile_size():
     # Top face (normal +Z): UVs are the X/Y world coords divided by the tile.
     pts = [V(0, 0, 3), V(4, 0, 3), V(4, 4, 3), V(0, 4, 3)]
-    uv1 = ingetrazo_core.texture_planar_uv(V(0, 0, 1), pts, 1.0, 1.0)
-    uv2 = ingetrazo_core.texture_planar_uv(V(0, 0, 1), pts, 2.0, 2.0)
+    uv1 = built_core.texture_planar_uv(V(0, 0, 1), pts, 1.0, 1.0)
+    uv2 = built_core.texture_planar_uv(V(0, 0, 1), pts, 2.0, 2.0)
     # A 2 m tile halves the UV span (4 m → 2 repeats instead of 4).
     span1 = max(u for u, _ in uv1) - min(u for u, _ in uv1)
     span2 = max(u for u, _ in uv2) - min(u for u, _ in uv2)
@@ -51,8 +51,8 @@ def test_planar_uv_scales_by_tile_size():
 
 def test_coplanar_faces_share_projection():
     # Two faces on the same plane project continuously (same basis → seamless).
-    a = ingetrazo_core.texture_planar_uv(V(0, 0, 1), [V(0, 0, 0)], 1.0, 1.0)[0]
-    b = ingetrazo_core.texture_planar_uv(V(0, 0, 1), [V(4, 0, 0)], 1.0, 1.0)[0]
+    a = built_core.texture_planar_uv(V(0, 0, 1), [V(0, 0, 0)], 1.0, 1.0)[0]
+    b = built_core.texture_planar_uv(V(0, 0, 1), [V(4, 0, 0)], 1.0, 1.0)[0]
     assert a == (0.0, 0.0)
     assert b == (4.0, 0.0)
 
@@ -144,7 +144,7 @@ def _textured_cube(scene, hist, img_path, extra=None):
 def test_igz_packs_texture_images_into_the_document(tmp_path, monkeypatch):
     import zipfile
 
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "cache"))
     scene = Scene()
     hist = History(scene)
     src = tmp_path / "checker.png"
@@ -179,7 +179,7 @@ def test_igz_never_embeds_a_file_that_is_not_an_image(tmp_path, monkeypatch):
     import json
     import zipfile
 
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "cache"))
     secret = tmp_path / "id_ed25519"
     secret.write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n")
     crafted = tmp_path / "crafted.igz"
@@ -201,7 +201,7 @@ def test_igz_never_embeds_a_file_that_is_not_an_image(tmp_path, monkeypatch):
 def test_igz_document_opens_on_another_machine(tmp_path, monkeypatch):
     # The whole point: the .igz travels alone — original image gone, texture
     # cache empty (a different computer) — and the texture is still there.
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "cache-a"))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "cache-a"))
     scene = Scene()
     hist = History(scene)
     src = tmp_path / "checker.png"
@@ -211,7 +211,7 @@ def test_igz_document_opens_on_another_machine(tmp_path, monkeypatch):
     original = src.read_bytes()
     src.unlink()
 
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "cache-b"))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "cache-b"))
     loaded = Scene()
     igz.load_into(loaded, doc)
     tex = next(f.attrs["texture"] for f in loaded.mesh.faces
@@ -241,7 +241,7 @@ def test_igz_stays_plain_json_without_textures(tmp_path):
 
 
 def test_igz_container_is_byte_identical_across_saves(tmp_path, monkeypatch):
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "cache"))
     scene = Scene()
     hist = History(scene)
     _textured_cube(scene, hist, tmp_path / "checker.png")
@@ -256,7 +256,7 @@ def test_igz_packs_back_side_textures_without_touching_the_scene(tmp_path,
                                                                  monkeypatch):
     # attrs["back"] carries its own material (a .skp paints both sides) —
     # its image must travel too, and packing must not mutate the live face.
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "cache"))
     scene = Scene()
     hist = History(scene)
     back_img = tmp_path / "back.png"
@@ -300,18 +300,18 @@ def test_textured_obj_round_trips_the_texture(tmp_path):
 def test_planar_uv_rotation_and_scale():
     # Bigger tile size = fewer repeats; rotation turns the UV frame in-plane
     # (the usual edit-material W/H/Rot).
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
 
 
     n = QVector3D(0, 0, 1)
     pts = [QVector3D(1, 0, 0), QVector3D(0, 1, 0)]
     # Doubling the tile halves the UV.
-    (u1, _), _ = ingetrazo_core.texture_planar_uv(n, pts, 1.0, 1.0)
-    (u2, _), _ = ingetrazo_core.texture_planar_uv(n, pts, 2.0, 2.0)
+    (u1, _), _ = built_core.texture_planar_uv(n, pts, 1.0, 1.0)
+    (u2, _), _ = built_core.texture_planar_uv(n, pts, 2.0, 2.0)
     assert abs(u2 - u1 / 2.0) < 1e-9
     # 90° rotation maps the +X point onto the (former) V axis.
-    (u90, v90), (u90b, v90b) = ingetrazo_core.texture_planar_uv(n, pts, 1.0, 1.0, rot=90.0)
-    (u0, v0), (u0b, v0b) = ingetrazo_core.texture_planar_uv(n, pts, 1.0, 1.0)
+    (u90, v90), (u90b, v90b) = built_core.texture_planar_uv(n, pts, 1.0, 1.0, rot=90.0)
+    (u0, v0), (u0b, v0b) = built_core.texture_planar_uv(n, pts, 1.0, 1.0)
     assert abs(abs(v90) - abs(u0)) < 1e-9         # swapped axes
     assert abs(abs(u90b) - abs(v0b)) < 1e-6      # (0,1) lands on former U
     # rotation preserves scale (rigid in-plane turn)
@@ -320,7 +320,7 @@ def test_planar_uv_rotation_and_scale():
 
 
 def test_texture_rotation_round_trips_igz(tmp_path):
-    from ingetrazo_core import Vec3 as QVector3D
+    from built_core import Vec3 as QVector3D
 
     from core.scene import Scene
     from formats import igz
@@ -458,7 +458,7 @@ def test_an_obj_brings_its_own_texture_coordinates(tmp_path):
     obj_format.load_obj(scene, obj)
     tex = scene.faces[0].attrs["texture"]
     assert "uvw" in tex, "the file's vt were thrown away"
-    got = ingetrazo_core.texture_affine_uv(tex["uvw"], scene.faces[0].vertices)
+    got = built_core.texture_affine_uv(tex["uvw"], scene.faces[0].vertices)
     want = {(0.25, 0.5), (0.75, 0.5), (0.25, 0.9)}
     for u, v in got:
         assert min(abs(u - a) + abs(v - b) for a, b in want) < 1e-6
@@ -492,7 +492,7 @@ def _textured_group(offset=0.0):
 
 def _uvs(face):
     return [(round(u, 6), round(v, 6))
-            for u, v in ingetrazo_core.texture_affine_uv(face.attrs["texture"]["uvw"], face.vertices)]
+            for u, v in built_core.texture_affine_uv(face.attrs["texture"]["uvw"], face.vertices)]
 
 
 def test_moving_a_group_takes_its_texture_with_it():
@@ -641,7 +641,7 @@ def test_resaving_a_document_never_stacks_hash_prefixes(tmp_path, monkeypatch):
     # path outgrew MAX_PATH and the document refused to open.
     import hashlib
 
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "cache"))
     scene = Scene()
     hist = History(scene)
     src = tmp_path / "sumari.png"
@@ -669,7 +669,7 @@ def test_a_document_bloated_by_old_saves_opens_and_heals(tmp_path, monkeypatch):
     import json
     import zipfile
 
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "cache"))
     scene = Scene()
     hist = History(scene)
     src = tmp_path / "sumari.png"
@@ -702,7 +702,7 @@ def test_a_document_bloated_by_old_saves_opens_and_heals(tmp_path, monkeypatch):
 def test_cache_names_stay_short_and_keep_their_extension(tmp_path, monkeypatch):
     from core.texture import NAME_LIMIT, cache_image, texture_file_name
 
-    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "cache"))
     long_name = "x" * 200 + ".jpeg"
     short = texture_file_name(long_name)
     assert len(short) <= NAME_LIMIT and short.endswith(".jpeg")

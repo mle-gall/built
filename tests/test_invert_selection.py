@@ -8,9 +8,9 @@ hidden or locked layer, and nothing outside the group being edited.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_render.keyboard_bindings import action_keys, collect_actions
+from built_render.keyboard_bindings import action_keys, collect_actions
 
 from core.group import Group
 from core.layers import Layer, assign_layer

@@ -2,15 +2,15 @@
 
 Draw annotations into a native RGBA canvas and record renderer calls.
 """
-from ingetrazo_render import MouseEvent
+from built_render import MouseEvent
 
 import math
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from ingetrazo_core import ScreenPoint as QPointF
-from ingetrazo_core import Input as Qt
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import ScreenPoint as QPointF
+from built_core import Input as Qt
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 from core.camera import OrbitCamera as Camera
 from core.group import Group
 from core.mesh import Mesh
@@ -20,7 +20,7 @@ from tests.controller_surface import ControllerSurface as Viewport
 from views.wgpu_annotations import AnnotationLayout, draw_tool_feedback
 from views.wgpu_overlay import draw_snap_indicator
 from tests.raster_samples import pixels
-from ingetrazo_core import VERTEX, pack_scene
+from built_core import VERTEX, pack_scene
 from tests.test_metal_parity_overlays import equal, painted
 
 SIZE = (360, 200)
@@ -82,7 +82,7 @@ def test_rubber_band_has_gl_colour_and_width(kind):
 
 def test_depth_tested_band_goes_to_the_native_preview_not_the_overlay():
     # Push/Pull's forming box is hidden by its faces in GL (depth-tested).
-    from ingetrazo_render import MeshToolAccess
+    from built_render import MeshToolAccess
     tool = line_tool(wireframe_depth_tested=True)
     tool.wireframe_color = (.13, .17, .23, 1.)
     uploads = []
@@ -163,7 +163,7 @@ def test_route_marker_and_extension_overlays_paint():
 
 def test_snap_tooltip_is_painted():
     # GL labels the marker ("Endpoint in group"); Metal passed labels=False.
-    from ingetrazo_render import AnnotationCanvas
+    from built_render import AnnotationCanvas
     snap = SnapResult(kind="endpoint", point=V(60, 50, 0), color=(.16, .62, .36))
     snap.context = "group"
     project = lambda p: (p.x(), p.y())
@@ -181,7 +181,7 @@ def test_snap_tooltip_is_painted():
 
 @pytest.fixture
 def view(native_host):
-    from ingetrazo_core import resident_prepare as prepare
+    from built_core import resident_prepare as prepare
     scene = Scene()
     mesh = Mesh()
     mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(2, 2, 0), V(0, 2, 0)])

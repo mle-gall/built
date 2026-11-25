@@ -86,7 +86,7 @@ def test_native_inspector_publishes_only_a_complete_current_count(monkeypatch):
     from time import sleep
     from core import purge
     from core.history import History
-    from ingetrazo_render import TagCounts
+    from built_render import TagCounts
 
     def steps(scene, *, history):
         assert history.scene is scene

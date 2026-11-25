@@ -13,9 +13,9 @@ import sys
 from pathlib import Path
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
-import ingetrazo_core.autosave as autosave
+import built_core.autosave as autosave
 from core.edits import build_add_edges
 from core.history import History
 from core.scene import Scene
@@ -105,7 +105,7 @@ def test_clear_retires_the_slot_instead_of_deleting_it(slot_dir, monkeypatch):
 
 def test_progress_event_during_open_does_not_autosave_partial_document():
     from types import SimpleNamespace
-    from ingetrazo_render import request_recovery
+    from built_render import request_recovery
     # The open operation pumps events before document state is finalized.
     # A timer callback at that point must not inspect or serialize the scene.
     opening = SimpleNamespace(_opening_document=True)
@@ -129,7 +129,7 @@ def test_autosave_dir_follows_process_appdata_on_windows(tmp_path,
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
     d = _real_autosave_dir()
-    assert d == (tmp_path / "Roaming" / "IngeTrazo" / "IngeTrazo"
+    assert d == (tmp_path / "Roaming" / "Built" / "Built"
                  / "autosave")
     assert d.is_dir()
 

@@ -11,7 +11,7 @@ too, so a takeoff that found nothing still finds nothing; anything else
 from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 from views import wgpu_ui
 
 from core.group import Group  # noqa: E402

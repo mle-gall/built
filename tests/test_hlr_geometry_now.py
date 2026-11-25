@@ -10,7 +10,7 @@ from __future__ import annotations
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 import numpy as np  # noqa: E402
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.layers import Layer  # noqa: E402
 
@@ -80,7 +80,7 @@ def test_copies_not_baked_yet_come_out_as_their_bakes(native_host):
     per prototype (1.2 s → a few ms on the plaza's 3 400): the very
     triangles, edges and soft edges with their normals that baking each
     copy gives — turned, mirrored and scaled ones too."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     win = native_host.window

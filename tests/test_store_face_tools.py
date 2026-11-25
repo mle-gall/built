@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Geometry, flags and history from the tool paths against the Python kernel."""
-from ingetrazo_core import store_views
+from built_core import store_views
 import math
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
-from ingetrazo_core import store_mesh as S
+from built_core import store_mesh as S
 from core.history import History
 from core.intersect import WITH_CONTEXT, segments_for
 from core.intersect import build_intersect_faces
@@ -22,7 +22,7 @@ from tools.followme import FollowMeTool
 
 
 def scenes(monkeypatch):
-    native = pytest.importorskip("ingetrazo_core")
+    native = pytest.importorskip("built_core")
     for backed in (False, True):
         scene = Scene()
         if backed:
@@ -152,7 +152,7 @@ def test_tilted_plates_match_order_and_float_endpoints(monkeypatch):
 
 
 def test_transformed_group_crossings_ignore_foreign_keys(monkeypatch):
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
     from core.intersect import WITH_MODEL
 
     results = []
@@ -172,7 +172,7 @@ def test_transformed_group_crossings_ignore_foreign_keys(monkeypatch):
 
 @pytest.mark.parametrize("outer_edit", [False, True])
 def test_refused_face_mutation_restores_mesh_and_edit_scope(monkeypatch, outer_edit):
-    from ingetrazo_core import resident_face_mutation
+    from built_core import resident_face_mutation
 
     scene = list(scenes(monkeypatch))[-1]
     mesh = scene.mesh
@@ -278,7 +278,7 @@ def test_piercing_slab_partitions_both_solids(monkeypatch, placed):
     from core.mesh import Mesh
     from tests.test_core_protocol import _read
     from core.protocol.commands import run
-    from ingetrazo_core import Matrix4 as QMatrix4x4
+    from built_core import Matrix4 as QMatrix4x4
 
     for scene in scenes(monkeypatch):
         hist = History(scene)
@@ -289,7 +289,7 @@ def test_piercing_slab_partitions_both_solids(monkeypatch, placed):
             if placed:
                 mesh = Mesh()
                 if isinstance(scene.mesh, S.StoreMesh):
-                    import ingetrazo_core as native
+                    import built_core as native
                     store_views.become_store(mesh, native.MeshStore(next(_KEY_NAMESPACES), **S._weld_args()), [])
                 group = Group(mesh)
                 group.xform = QMatrix4x4()

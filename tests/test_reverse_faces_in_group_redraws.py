@@ -12,7 +12,7 @@ triangles until some edit changed a count.
 from __future__ import annotations
 
 import numpy as np
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.group import Group
 from core.history import FlipFacesCommand, History

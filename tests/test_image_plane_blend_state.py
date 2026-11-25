@@ -17,7 +17,7 @@ from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa
 import numpy as np
 import pytest
 from tests.raster_samples import pixels
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 
 def _alpha_zero_share(img) -> float:
@@ -25,7 +25,7 @@ def _alpha_zero_share(img) -> float:
 
 
 def test_a_translucent_image_leaves_blending_on_for_the_shadow_catcher(native_gpu_host, tmp_path):
-    from ingetrazo_core.image_plane import ImagePlane
+    from built_core.image_plane import ImagePlane
 
     win = native_gpu_host.window
     vp = win.viewport

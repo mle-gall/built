@@ -10,11 +10,11 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 import pytest
 
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group
 from core.mesh import Mesh
-from ingetrazo_render import component_thumbnail, component_signature
+from built_render import component_thumbnail, component_signature
 
 
 def _component(i):
@@ -32,9 +32,9 @@ def test_only_rows_on_screen_are_drawn(win, monkeypatch):
     from tests.test_replace_component import _component_sheet
     from tests.test_library_sheet import act
     drawn = []
-    import ingetrazo_core
-    plan = ingetrazo_core.plan_of
-    monkeypatch.setattr(ingetrazo_core, "plan_of", lambda mesh: (drawn.append(id(mesh)), plan(mesh))[1])
+    import built_core
+    plan = built_core.plan_of
+    monkeypatch.setattr(built_core, "plan_of", lambda mesh: (drawn.append(id(mesh)), plan(mesh))[1])
     scene = win.viewport.scene
     scene.groups.extend(_component(i) for i in range(120))
     scene.version += 1

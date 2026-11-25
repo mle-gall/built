@@ -29,8 +29,8 @@ from __future__ import annotations
 import math
 
 import pytest
-from ingetrazo_core import ScreenPoint, Input
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import ScreenPoint, Input
+from built_core import Vec3 as QVector3D
 
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 from core.group import Group
@@ -117,7 +117,7 @@ class Metal:
     renderer's ID pass, otherwise the CPU ray test stands in for it."""
 
     def __init__(self, scene, host, native=False):
-        from ingetrazo_core import resident_prepare as prepare
+        from built_core import resident_prepare as prepare
         host.resize(800, 600, 1.)
         self.source = _gl(scene, host.window.viewport)
         self.flashed = self.source.flashed
@@ -136,7 +136,7 @@ class Metal:
         self.picks.sync()
 
     def _cpu_row(self, x, y):
-        from ingetrazo_core import front_at as _front_at, eligible_rows
+        from built_core import front_at as _front_at, eligible_rows
         v = self.view
         mvp = v.camera.projection_matrix() * v.camera.view_matrix()
         hit = _front_at(v.inference_index, v, x, y,

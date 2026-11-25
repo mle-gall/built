@@ -1,6 +1,6 @@
 """Generate and inspect RGBA test images with the production Rust codec."""
 import numpy as np
-from ingetrazo_render import SurveyRaster
+from built_render import SurveyRaster
 
 
 def solid_raster(width, height, color):

@@ -14,11 +14,11 @@ import struct
 
 import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.history import AddEdgeCommand
 from formats import dae, glb, obj, skp, stl
-from ingetrazo_render.shell_files import ShellFileDialog
+from built_render.shell_files import ShellFileDialog
 
 
 _CUBE_OBJ = ("v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nf 1 2 3 4\n").encode()
@@ -81,7 +81,7 @@ def _menu_import(win, path, monkeypatch):
     answered."""
     monkeypatch.setattr(ShellFileDialog, "getOpenFileName",
                         lambda *_a, **_k: (str(path), ""))
-    monkeypatch.setattr("ingetrazo_render.chrome_forms.show", lambda _, form: form.press("ok"))
+    monkeypatch.setattr("built_render.chrome_forms.show", lambda _, form: form.press("ok"))
     kind = "glb" if path.suffix == ".gltf" else path.suffix[1:]
     win.run_command("import:" + kind)
 
@@ -94,7 +94,7 @@ def win(native_host):
 @pytest.fixture
 def errors(monkeypatch):
     shown = []
-    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.critical",
+    monkeypatch.setattr("built_render.chrome_dialogs.critical",
                         lambda _parent, title, text: shown.append((title, text)))
     return shown
 

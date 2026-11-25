@@ -5,13 +5,13 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from ingetrazo_core import Vec3
+from built_core import Vec3
 
-from ingetrazo_render import blender_availability
+from built_render import blender_availability
 
 from core import render_blender as rb
-from ingetrazo_core.desktop_open import open_url
-from ingetrazo_core.settings import settings as native_settings
+from built_core.desktop_open import open_url
+from built_core.settings import settings as native_settings
 
 _SETTINGS = "render/"
 
@@ -39,7 +39,7 @@ def _store(app, st: dict) -> None:
 
 
 def _render_result(app, path, following, save, folder, follow):
-    from ingetrazo_render import RenderResult
+    from built_render import RenderResult
     from core.plugin_panels import show_utility
     return show_utility(app.window, app.key + ".result",
                         RenderResult(str(path), following, save, folder, follow))
@@ -112,9 +112,9 @@ class CameraSession:
         text = self.partial + self.output.read().decode("utf8", "replace")
         *lines, self.partial = text.split("\n")
         for line in lines:
-            if line.startswith("INGETRAZO ready"):
+            if line.startswith("BUILT ready"):
                 self.ready = True
-            elif line.startswith("INGETRAZO done ") and self.pending is not None:
+            elif line.startswith("BUILT done ") and self.pending is not None:
                 completed, self.pending = self.pending, None
                 if completed.is_file():
                     p.image = completed
@@ -339,7 +339,7 @@ class BlenderPanel:
             self._show_result()
         elif control == "save" and self.image:
             import shutil
-            from ingetrazo_render.shell_files import ShellFileDialog
+            from built_render.shell_files import ShellFileDialog
             path, _ = ShellFileDialog.getSaveFileName(self.app.window, "Save image", "render.png", "PNG (*.png)")
             if path:
                 shutil.copyfile(self.image, path)
@@ -394,7 +394,7 @@ class BlenderPanel:
             self._finished(self.proc.wait())
 
     def _render(self):
-        from ingetrazo_render.chrome_dialogs import Job
+        from built_render.chrome_dialogs import Job
         rb.work_base().mkdir(parents=True, exist_ok=True)
         self.work = Path(tempfile.mkdtemp(prefix="built-render-", dir=rb.work_base()))
         args = {k: self.opts[k] for k in ("engine", "width", "height", "ground", "keep_blend")}

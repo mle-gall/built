@@ -8,7 +8,7 @@ those edges and a new line to them welded a duplicate vertex (tutorial hunt
 2, A3)."""
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.history import (DeleteEdgesCommand, History, MoveVerticesCommand,
                           RotateVerticesCommand)

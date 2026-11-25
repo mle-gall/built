@@ -18,14 +18,14 @@ import uuid
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.group import Group
 from core.layers import Layer
 from core.mesh import Mesh
 from core.scene import Scene
-from ingetrazo_core.saved_views import SavedView
-from ingetrazo_core import saved_view_visibility_sig as visibility_sig
+from built_core.saved_views import SavedView
+from built_core import saved_view_visibility_sig as visibility_sig
 from tests.controller_surface import ControllerSurface as Viewport
 
 

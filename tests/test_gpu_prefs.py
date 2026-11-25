@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Hybrid laptops: IngeTrazo claims the discrete GPU through the same
+"""Hybrid laptops: Built claims the discrete GPU through the same
 registry value the Windows Graphics settings page writes."""
 from __future__ import annotations
 
 from pathlib import Path
 
-from ingetrazo_core import ensure_high_performance_gpu
+from built_core import ensure_high_performance_gpu
 
 GPU_PREFS_KEY = r"Software\Microsoft\DirectX\UserGpuPreferences"
 HIGH_PERFORMANCE = "GpuPreference=2;"
@@ -38,7 +38,7 @@ class _FakeWinreg:
         self.closed += 1
 
 
-EXE = Path(r"C:\Program Files\IngeTrazo\ingetrazo.exe")
+EXE = Path(r"C:\Program Files\Built\built.exe")
 
 
 def test_first_run_claims_the_high_performance_gpu():

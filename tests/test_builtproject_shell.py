@@ -14,7 +14,7 @@ SLAB = ROOT / "tests" / "fixtures" / "shell" / "slab-and-cube.igz"
 
 @pytest.fixture
 def host(tmp_path):
-    from ingetrazo_render import Host
+    from built_render import Host
     h = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
     yield h
     for d in h.window._documents:
@@ -24,7 +24,7 @@ def host(tmp_path):
 
 def three_member_project(folder, legacy=False):
     """a.igz and b.igz on disk, gone.igz listed but missing."""
-    import ingetrazo_core as native
+    import built_core as native
     folder.mkdir(parents=True, exist_ok=True)
     for name in ("a.igz", "b.igz"):
         (folder / name).write_bytes(SLAB.read_bytes())
@@ -50,7 +50,7 @@ def names(win):
 
 
 def test_open_with_a_missing_member_never_asks(host, tmp_path, monkeypatch):
-    from ingetrazo_render import chrome_dialogs as cd
+    from built_render import chrome_dialogs as cd
     asked = []
     monkeypatch.setattr(cd, "question", lambda *a, **k: asked.append(a) or 0)
     monkeypatch.setattr(cd, "warning", lambda *a, **k: asked.append(a))
@@ -68,7 +68,7 @@ def test_open_with_a_missing_member_never_asks(host, tmp_path, monkeypatch):
     a, b = win._documents
     assert not a.read_only and b.read_only and b.viewport.scene.worksession_read_only
     # Problems and the Project tree carry it.
-    from ingetrazo_render import shell_project as project
+    from built_render import shell_project as project
     assert [r[1] for r in project.problems(win)] == ["project:" + str((tmp_path / "job" / "gone.igz").resolve())]
     rows = project.tree_rows(win, "", set())
     assert {r[0][1]: r[0][4] for r in rows[1:]}["gone.igz"] == "file:missing"
@@ -76,7 +76,7 @@ def test_open_with_a_missing_member_never_asks(host, tmp_path, monkeypatch):
 
 def test_read_only_member_rejects_edits(host, tmp_path):
     from core.history import AddEdgeCommand
-    from ingetrazo_core import Vec3
+    from built_core import Vec3
     host.open_path(three_member_project(tmp_path / "job"))
     win = host.window
     b = win._documents[1]
@@ -91,8 +91,8 @@ def test_read_only_member_rejects_edits(host, tmp_path):
 
 
 def test_session_restores_order_editable_and_camera(tmp_path):
-    from ingetrazo_render import shell_files as files
-    from ingetrazo_render import Host
+    from built_render import shell_files as files
+    from built_render import Host
     path = three_member_project(tmp_path / "job")
     host = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
     try:
@@ -138,21 +138,21 @@ def test_opening_an_igzproj_converts_it_in_place(host, tmp_path):
     assert host.open_path(path)
     assert not path.exists() and path.with_suffix(".builtproject").is_file()
     assert (tmp_path / "job" / "a.igz").read_bytes() == model
-    from ingetrazo_core import recent
+    from built_core import recent
     rows = [r["path"] for r in recent.entries("projects")]
     assert str(path.with_suffix(".builtproject").resolve()) in rows and str(path.resolve()) not in rows
 
 
 def test_open_path_uses_the_native_project_session(host, tmp_path):
-    from ingetrazo_render import shell_project as project
-    from ingetrazo_render import shell_files as files
+    from built_render import shell_project as project
+    from built_render import shell_files as files
     path = three_member_project(tmp_path / "job")
     assert files.open_path(host.window, path)
     assert Path(project.session(host.window).path) == path.resolve()
 
 
 def test_locate_a_missing_member_relocates_it_in_the_manifest(host, tmp_path):
-    from ingetrazo_render import shell_project as project
+    from built_render import shell_project as project
     path = three_member_project(tmp_path / "job")
     found = tmp_path / "job" / "moved" / "gone.igz"
     found.parent.mkdir()

@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Build and install IngeTrazo's Flatpak (user), optionally emitting the
+# Build and install Built's Flatpak (user), optionally emitting the
 # distributable single-file bundle a non-terminal user double-clicks.
 #
 #   packaging/flatpak/build-flatpak.sh            # build + install
-#   packaging/flatpak/build-flatpak.sh --bundle   # + IngeTrazo.flatpak
+#   packaging/flatpak/build-flatpak.sh --bundle   # + Built.flatpak
 #
-# Mirrors IngeCAD's script (minus its signed-OSTree publishing — IngeTrazo's
+# Mirrors IngeCAD's script (minus its signed-OSTree publishing — Built's
 # bundle rides each GitHub release for now); the manifest reads the
 # repository tree directly (type: dir with skips), so no staging copy is
 # needed here.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-APPID="com.ingetrazo.IngeTrazo"
+APPID="com.built.Built"
 STATE_DIR="$HERE/.flatpak-builder"
 BUILD_DIR="$HERE/.staging/build"
 REPO_OSTREE="$HERE/.staging/repo"
@@ -34,7 +34,7 @@ $BUILDER \
   "$BUILD_DIR" "$HERE/$APPID.yml"
 
 if [ "${1:-}" = "--bundle" ]; then
-  BUNDLE="$HERE/.staging/IngeTrazo.flatpak"
+  BUNDLE="$HERE/.staging/Built.flatpak"
   echo "▶ Exporting the distributable bundle…"
   $BUILDER --user --force-clean --disable-rofiles-fuse --repo "$REPO_OSTREE" \
     --state-dir "$STATE_DIR" "$BUILD_DIR" "$HERE/$APPID.yml"

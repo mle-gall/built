@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 IngeTrazo contributors.
+# Copyright (C) 2026 Built contributors.
 """#1087: copying supplied topology must not face its empty cycles again."""
 from collections import Counter
 from pathlib import Path
 import random
 
 import pytest
-from ingetrazo_core import Vec3 as QVector3D
+from built_core import Vec3 as QVector3D
 
 from core.history import History
-from ingetrazo_core import object_replay
+from built_core import object_replay
 from core.scene import Scene
 from tools.move import MoveTool
 

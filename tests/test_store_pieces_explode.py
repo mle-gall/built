@@ -9,17 +9,17 @@ show the same model after do, undo and redo (``fingerprint``: positions,
 lists in order, edge flags and faces, rings, attrs, normals); and the
 store run's change-feed steps must be exactly what changed, by key."""
 from __future__ import annotations
-from ingetrazo_core import store_views
+from built_core import store_views
 
 import gzip
 import json
 from pathlib import Path
 
 import pytest
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
+from built_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core import mesh as M
-from ingetrazo_core import store_mesh as S
+from built_core import store_mesh as S
 from core.group import Group, world_mesh
 from core.history import (DeleteEdgesCommand, ExplodeGroupCommand, History,
                           SplitIntoPiecesCommand)

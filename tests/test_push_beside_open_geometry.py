@@ -11,7 +11,7 @@ the open cube and the bug went away, explode it and it came back.
 """
 from __future__ import annotations
 
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.edits import build_add_edges
 from core.history import EraseSelectionCommand, History

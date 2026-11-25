@@ -19,8 +19,8 @@ from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa
 
 import numpy as np
 import pytest
-from ingetrazo_render import SurveyRaster
-from ingetrazo_core import Vec3 as QVector3D
+from built_render import SurveyRaster
+from built_core import Vec3 as QVector3D
 
 from core.guide import Guide
 from views.document_interaction import _guide_vertices
@@ -187,7 +187,7 @@ def test_a_sheet_render_still_carries_no_guides(native_gpu_host):
     """A styled composer frame never drew the scaffolding and must not
     start now that the pass moved into GL."""
     win, vp = _scene_looking_down_minus_y(native_gpu_host)
-    from ingetrazo_core.style import style_by_name
+    from built_core.style import style_by_name
     vp.style_override = style_by_name("Architectural")
     try:
         bare = _pixels(vp.render_raster(300, 300, overlays=False))

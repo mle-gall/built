@@ -62,7 +62,7 @@ Keep transcripts and history bounded. The renderer caches the preview texture by
 
 The bridge adds `api`, `plugin` (the extension filename stem), `panel`, `instance`, `document`, `revision`, `slot` and `title` to the sections for Rust. Events return the same identity and revision with a monotonic `event_id`, `control`, `event` and JSON `value`. The bridge checks the active document, instance, revision and event ID before invoking the handler. A file picker result is checked again after the picker returns. Schema errors and unsupported versions appear in the panel with Retry.
 
-Built refreshes a descriptor after an event or a scene revision change. Call `invalidate()` on the application thread when asynchronous progress or results change. Use `ingetrazo_render.chrome_dialogs.Job(app.window, label, on_cancel=...)` for long-running work. Snapshot the active scene and camera before starting a worker. Update and end the job on the application thread. Closing the panel leaves the job in the activity capsule.
+Built refreshes a descriptor after an event or a scene revision change. Call `invalidate()` on the application thread when asynchronous progress or results change. Use `built_render.chrome_dialogs.Job(app.window, label, on_cancel=...)` for long-running work. Snapshot the active scene and camera before starting a worker. Update and end the job on the application thread. Closing the panel leaves the job in the activity capsule.
 
 Set `sections_on_show = True` on panels whose sections are expensive to compute. Built registers the title immediately and requests the sections when the panel is visible. Model Info uses the document revision to share one census between its tables and Copy to Clipboard.
 

@@ -12,7 +12,7 @@ import math
 
 
 import numpy as np  # noqa: E402
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 
 from views.document_interaction import _moller_trumbore, _ray_triangle

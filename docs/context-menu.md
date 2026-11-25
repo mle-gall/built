@@ -41,8 +41,8 @@ The native shell draws this menu with egui. The Select row grows the selection i
      (`_on_reverse_faces`, `_on_intersect_faces(mode)`, `_on_explode_group`…).
      These are the same slots the classic QMenu, the menu bar and the
      selection bar call.
-   - `rust/ingetrazo_render/src/viewport_menu.rs` reads the selection and builds the
-     rows. `rust/ingetrazo_render/src/ui/context_menu.rs` draws them and reports `ctx:<id>`.
+   - `rust/built_render/src/viewport_menu.rs` reads the selection and builds the
+     rows. `rust/built_render/src/ui/context_menu.rs` draws them and reports `ctx:<id>`.
 6. **Read-only kinds offer no editing verbs.** A linked file's placement, and
    a part inside one, never get Explode, Open for editing, Rename, File to,
    Make unique, Intersect, Soften or Flip. Repeat on them is greyed.
@@ -126,7 +126,7 @@ hides this document's view of the part, as the tree's eye does, and edits
 nothing in the source.
 
 The rows, labels, keys and checks of every kind come from one table,
-`rust/ingetrazo_render/src/verbs.rs`. The inspector offers the same entries
+`rust/built_render/src/verbs.rs`. The inspector offers the same entries
 (same ids and labels; a few shorter chip names: Edit, Group, Component), and
 a linked file's tree row takes its file verbs from it too.
 

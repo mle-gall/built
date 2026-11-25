@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from ingetrazo_core import Input
+from built_core import Input
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tools.paint import PaintTool
 

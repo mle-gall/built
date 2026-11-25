@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 import core._native as _native
 from core import mesh as M

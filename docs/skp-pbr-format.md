@@ -1,9 +1,9 @@
 # PBR materials in `.skp` files (.skp 2025+)
 
 How a .skp 2025+ file stores a material's PBR data (metallic,
-roughness, normal map and ambient occlusion), and how IngeTrazo imports it.
+roughness, normal map and ambient occlusion), and how Built imports it.
 Read by `formats/openskp_compat.py` (`read_pbr`, `attach_pbr`) and mapped to
-`core.materials.Material.pbr` by `rust/ingetrazo_core/src/skp/materials.rs`.
+`core.materials.Material.pbr` by `rust/built_core/src/skp/materials.rs`.
 
 ## How this was established (2026-11-19)
 

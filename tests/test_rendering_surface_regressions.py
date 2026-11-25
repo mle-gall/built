@@ -4,10 +4,10 @@ import math
 
 import numpy as np
 import pytest
-from ingetrazo_core import Vec3 as V, Matrix4 as QMatrix4x4
+from built_core import Vec3 as V, Matrix4 as QMatrix4x4
 from core.mesh import Mesh
 from core.group import Group
-from ingetrazo_core import group_transformed_mesh as transformed_mesh
+from built_core import group_transformed_mesh as transformed_mesh
 from formats.meshexport import SmoothNormals
 from tests.controller_surface import ControllerSurface
 

@@ -2,9 +2,9 @@
 from types import SimpleNamespace
 
 from core import extensions
-from ingetrazo_core import extension_manager as manager
-from ingetrazo_render import chrome_sheet
-from ingetrazo_render import ExtensionsSheet as Extensions
+from built_core import extension_manager as manager
+from built_render import chrome_sheet
+from built_render import ExtensionsSheet as Extensions
 
 
 class Browser:
@@ -40,7 +40,7 @@ class Browser:
         return self.read()
 
     def confirm(self, monkeypatch, answer="ok"):
-        from ingetrazo_render import chrome_dialogs
+        from built_render import chrome_dialogs
         questions = []
 
         def ask(win, title, text, buttons, *, cancel, default):

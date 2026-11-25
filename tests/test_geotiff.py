@@ -140,9 +140,9 @@ def test_import_places_the_orthomosaic_on_the_datum(monkeypatch, tmp_path):
     """File ▸ Import ▸ Orthomosaic: the picture lands on the datum plane at
     its true size and place, locked, on the Images layer; a scene without
     a datum gets one at the picture's centre and the base map follows."""
-    from ingetrazo_render import Host
-    from ingetrazo_core.image_plane import IMAGE_LAYER
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render import Host
+    from built_core.image_plane import IMAGE_LAYER
+    from built_render.shell_files import ShellFileDialog
 
     src = DATA / "orto_jpeg_tile.tif"
     monkeypatch.setattr(ShellFileDialog, "getOpenFileName",
@@ -183,8 +183,8 @@ def test_import_places_the_orthomosaic_on_the_datum(monkeypatch, tmp_path):
 
 
 def test_failed_survey_cache_write_preserves_the_document(tmp_path, monkeypatch):
-    from ingetrazo_render import Host
-    from ingetrazo_render.shell_files import ShellFileDialog
+    from built_render import Host
+    from built_render.shell_files import ShellFileDialog
     tile = tmp_path / "survey.tif"
     write_geotiff(tile, _picture())
     host = Host(0, 900, 600, 1., settings=str(tmp_path / "settings"))
@@ -196,7 +196,7 @@ def test_failed_survey_cache_write_preserves_the_document(tmp_path, monkeypatch)
             raise OSError("cache full")
         monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *args: (str(tile), ""))
         monkeypatch.setattr("core.texture.cache_image", fail)
-        monkeypatch.setattr("ingetrazo_render.chrome_dialogs.critical", lambda *args: messages.append(args[-1]))
+        monkeypatch.setattr("built_render.chrome_dialogs.critical", lambda *args: messages.append(args[-1]))
         host.menu("import:orthomosaic")
         assert messages == ["cache full"] and not host.errors
         assert scene.georef is None and scene.tile_layer is None and not scene.image_planes

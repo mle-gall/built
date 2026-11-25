@@ -10,7 +10,7 @@ looked-at stretch is from the eye."""
 from __future__ import annotations
 
 import numpy as np
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.guide import Guide
 from views.document_interaction import _guide_vertices

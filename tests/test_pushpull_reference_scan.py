@@ -8,8 +8,8 @@ import random
 
 
 import numpy as np  # noqa: E402
-from ingetrazo_core import ScreenPoint  # noqa: E402
-from ingetrazo_core import Vec3 as V
+from built_core import ScreenPoint  # noqa: E402
+from built_core import Vec3 as V
 
 
 from core.topology import _key  # noqa: E402

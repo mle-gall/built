@@ -1,7 +1,7 @@
 """Records survive export, with real schema and IDS consumers when installed."""
 from pathlib import Path
 import pytest
-from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
+from built_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 from core.scene import Scene
 from core.group import Group
 from formats.ifc import save_ifc

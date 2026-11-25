@@ -27,7 +27,7 @@ NAMES = ["wood.png", "../../etc/passwd", "0123456789abcdef-wood.png",
 
 
 def _png(rgba, w=2, h=2):
-    from ingetrazo_render import SurveyRaster
+    from built_render import SurveyRaster
     return SurveyRaster(w, h, bytes(rgba)).material_png(b"")
 
 
@@ -43,9 +43,9 @@ def answers():
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         clean = lambda p: str(p).replace(str(tmp.resolve()), "<tmp>").replace(str(tmp), "<tmp>")
-        saved = {k: os.environ.get(k) for k in ("INGETRAZO_TEXTURE_CACHE", "BUILT_SETTINGS_DIR")}
+        saved = {k: os.environ.get(k) for k in ("BUILT_TEXTURE_CACHE", "BUILT_SETTINGS_DIR")}
         try:
-            os.environ["INGETRAZO_TEXTURE_CACHE"] = str(tmp / "cache")
+            os.environ["BUILT_TEXTURE_CACHE"] = str(tmp / "cache")
             out["root"] = clean(T.texture_cache_root())
             out["stats0"] = list(T.texture_cache_stats())
             data = [b"\x89PNG\r\n\x1a\n" + bytes([i]) * 40 for i in range(3)]
@@ -80,7 +80,7 @@ def answers():
             out["cutout"] = [T.image_has_cutout(str(img)), T.image_has_cutout(str(img)), T.image_has_cutout(str(tmp / "f1.bin"))]
             out["clear"] = T.clear_texture_cache()
             out["stats2"] = list(T.texture_cache_stats())
-            del os.environ["INGETRAZO_TEXTURE_CACHE"]
+            del os.environ["BUILT_TEXTURE_CACHE"]
             os.environ["BUILT_SETTINGS_DIR"] = str(tmp / "profile")
             out["profile_root"] = clean(T.texture_cache_root())
         finally:

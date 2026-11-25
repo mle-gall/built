@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(SPECPATH).resolve().parent
-from ingetrazo_core.formats.built import BUILT_SUFFIX
+from built_core.formats.built import BUILT_SUFFIX
 built_extension = BUILT_SUFFIX[1:]
 
 # ── Bundled assets — destinations MIRROR the repo layout ─────────────────────
@@ -48,9 +48,9 @@ datas = [
     # extensions copies one into the user's plugins folder on request.
     # Whole folder: an example extension can be a package (CAM, PR #132).
     ('examples/extensions',        'examples/extensions'),
-    # The MCP server (stdlib-only): `ingetrazo --mcp` runs it by path, and
+    # The MCP server (stdlib-only): `built --mcp` runs it by path, and
     # the console build below makes it a program of its own on Windows.
-    ('scripts/ingetrazo_mcp.py',   'scripts'),
+    ('scripts/built_mcp.py',   'scripts'),
 ]
 
 # Optional trees (present today, tolerated if pruned later).
@@ -110,21 +110,21 @@ from PyInstaller.utils.hooks import collect_submodules
 # The solid tools in the Rust extension load this Python extension at runtime.
 hiddenimports = ['manifold3d']
 # truststore (#783): Python's HTTPS on Windows verifies through the system
-# verifier; imported inside ingetrazo_core.python_tls.https_context, and without it the
+# verifier; imported inside built_core.python_tls.https_context, and without it the
 # extension manager silently falls back to Python's own store.
 hiddenimports += ['truststore']
 # Binary64 model values and the acceleration kernels share one extension.
 import importlib.util as _ilu
-if _ilu.find_spec('ingetrazo_core') is None:
-    raise SystemExit("Build ingetrazo_core before packaging the application")
-hiddenimports += ['core._native', 'ingetrazo_core', '_built_file_packages']
+if _ilu.find_spec('built_core') is None:
+    raise SystemExit("Build built_core before packaging the application")
+hiddenimports += ['core._native', 'built_core', '_built_file_packages', '_built_legacy_imports']
 # Collect the optional native Revit family reader when installed.
 omit_rfa = sys.platform == 'darwin' and os.environ.get('BUILT_PACKAGE_RFA') == '0'
-if not omit_rfa and _ilu.find_spec('ingetrazo_rfa') is not None:
-    hiddenimports += collect_submodules('ingetrazo_rfa')
-if _ilu.find_spec('ingetrazo_render') is None:
-    raise RuntimeError('Build ingetrazo_render with scripts/build_native.sh first')
-hiddenimports += collect_submodules('ingetrazo_render')
+if not omit_rfa and _ilu.find_spec('built_rfa') is not None:
+    hiddenimports += collect_submodules('built_rfa')
+if _ilu.find_spec('built_render') is None:
+    raise RuntimeError('Build built_render with scripts/build_native.sh first')
+hiddenimports += collect_submodules('built_render')
 
 hiddenimports += [
     # The bundled plugins import these at RUN time, so static analysis never
@@ -185,7 +185,7 @@ def _app_imports(paths):
 hiddenimports += _app_imports(
     [*(ROOT / 'plugins').glob('*.py'),
      *(ROOT / 'examples/extensions').rglob('*.py'),
-     ROOT / 'scripts/ingetrazo_mcp.py'])
+     ROOT / 'scripts/built_mcp.py'])
 # The rest of openskp (export/*, _face_groups, instanced_scene, codegen…)
 # plus its PACKAGE DATA: create.py loads ``_scaffold/blank_v17.skp`` via
 # importlib.resources and PyInstaller never bundles non-Python files on its
@@ -196,7 +196,7 @@ hiddenimports += _app_imports(
 from PyInstaller.utils.hooks import collect_data_files
 hiddenimports += collect_submodules('openskp')
 # ...except _scaffold/blank_v17.skp, the blank document openskp's writer
-# builds its files on top of. IngeTrazo does not distribute it and has no
+# builds its files on top of. Built does not distribute it and has no
 # .skp export; main.py --check fails a frozen bundle that still carries it.
 datas += [(src, dst) for src, dst in collect_data_files('openskp')
           if '_scaffold' not in src.replace('\\', '/')]
@@ -248,7 +248,7 @@ for package in ('core', 'formats', 'views', 'tools'):
     hiddenimports += collect_submodules(package)
 
 if omit_rfa:
-    excludes.append('ingetrazo_rfa')
+    excludes.append('built_rfa')
 
 app_excludes = excludes.copy()
 if sys.platform == 'darwin':
@@ -296,7 +296,7 @@ pyz =PYZ(a.pure, a.zipped_data)
 
 icon = None
 if sys.platform == 'win32':
-    win_ico = ROOT / 'resources' / 'icons' / 'ingetrazo.ico'
+    win_ico = ROOT / 'resources' / 'icons' / 'built.ico'
     if win_ico.exists():
         icon = str(win_ico)
 
@@ -305,7 +305,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='ingetrazo',
+    name='built',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -318,12 +318,12 @@ exe = EXE(
     icon=icon,
 )
 
-# ── ingetrazo-mcp: a CONSOLE program for Claude Desktop / Claude Code ───────
+# ── built-mcp: a CONSOLE program for Claude Desktop / Claude Code ───────
 # MCP clients talk over stdin/stdout; a windowed exe may have no std handles
 # to give them, so Windows gets a console build of the stdlib-only server
 # sharing this bundle's _internal/. Spawned with pipes it opens no window.
 mcp_a = Analysis(
-    [str(ROOT / 'scripts/ingetrazo_mcp.py')],
+    [str(ROOT / 'scripts/built_mcp.py')],
     pathex=[str(ROOT)],
     binaries=[],
     datas=[],
@@ -339,7 +339,7 @@ mcp_exe = EXE(
     mcp_a.scripts,
     [],
     exclude_binaries=True,
-    name='ingetrazo-mcp',
+    name='built-mcp',
     debug=False,
     strip=False,
     upx=False,
@@ -359,21 +359,21 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name='ingetrazo',
+    name='built',
 )
 
 # ── macOS: wrap the onedir COLLECT as a double-clickable .app ────────────────
-# ingetrazo-mcp rides along inside Contents/MacOS/ as a sibling binary (same
+# built-mcp rides along inside Contents/MacOS/ as a sibling binary (same
 # onedir the other platforms ship); nothing launches it but a stdio-speaking
 # MCP client that already knows its path, so it does not need its own bundle.
 if sys.platform == 'darwin':
-    _version = (ROOT / 'rust/ingetrazo_core/VERSION').read_text().strip()
-    mac_icon = ROOT / 'resources' / 'icons' / 'ingetrazo.icns'
+    _version = (ROOT / 'rust/built_core/VERSION').read_text().strip()
+    mac_icon = ROOT / 'resources' / 'icons' / 'built.icns'
     app = BUNDLE(
         coll,
         name='Built.app',
         icon=str(mac_icon) if mac_icon.exists() else None,
-        bundle_identifier='com.ingetrazo.IngeTrazo',
+        bundle_identifier='com.built.Built',
         info_plist={
             'CFBundleName': 'Built',
             'CFBundleDisplayName': 'Built',
@@ -386,9 +386,9 @@ if sys.platform == 'darwin':
             'LSBackgroundOnly': False,
             'NSHumanReadableCopyright': 'GPL-3.0-or-later — Built contributors; based on IngeTrazo by Marco Sumari Tellez and IngeTrazo contributors',
             # .igz / .skp double-click-to-open, same association the other
-            # platforms register (packaging/ingetrazo.desktop, the .iss).
+            # platforms register (packaging/built.desktop, the .iss).
             'UTExportedTypeDeclarations': [{
-                'UTTypeIdentifier': 'com.ingetrazo.built-document',
+                'UTTypeIdentifier': 'com.built.built-document',
                 'UTTypeDescription': 'Built document',
                 'UTTypeConformsTo': ['public.zip-archive'],
                 'UTTypeTagSpecification': {'public.filename-extension': [built_extension]},
@@ -397,12 +397,12 @@ if sys.platform == 'darwin':
                 {
                     'CFBundleTypeName': 'Built document',
                     'CFBundleTypeExtensions': [built_extension],
-                    'LSItemContentTypes': ['com.ingetrazo.built-document'],
+                    'LSItemContentTypes': ['com.built.built-document'],
                     'CFBundleTypeRole': 'Editor',
                     'LSHandlerRank': 'Owner',
                 },
                 {
-                    'CFBundleTypeName': 'IngeTrazo document',
+                    'CFBundleTypeName': 'Built document',
                     'CFBundleTypeExtensions': ['igz'],
                     'CFBundleTypeRole': 'Editor',
                     'LSHandlerRank': 'Owner',

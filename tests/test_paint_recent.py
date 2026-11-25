@@ -10,11 +10,11 @@ import random
 
 
 import pytest
-from ingetrazo_core import ScreenPoint, Input
-from ingetrazo_core.settings import settings as native_settings
+from built_core import ScreenPoint, Input
+from built_core.settings import settings as native_settings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from ingetrazo_render import SurveyRaster
-from ingetrazo_core import Vec3 as QVector3D
+from built_render import SurveyRaster
+from built_core import Vec3 as QVector3D
 
 
 from core.history import History                                  # noqa: E402
@@ -177,7 +177,7 @@ def test_a_sampled_positioned_texture_is_remembered_without_its_map():
 
 def test_palette_follows_paints_and_hides_recent_when_empty(native_host, tmp_path, monkeypatch):
     from tests.test_tree_links import _View
-    from ingetrazo_render import wgpu_library as library
+    from built_render import wgpu_library as library
     vp, view = native_host.viewport, _View()
     rows = lambda: library.palette_items(view, native_host.window)
     assert not any(key.startswith("stamp:") for key, *_ in rows())
@@ -190,7 +190,7 @@ def test_palette_follows_paints_and_hides_recent_when_empty(native_host, tmp_pat
     _use(color=(.2, .4, .6), name="RAL 5015")
     _click(vp, face)
     # Most-used model swatches appear once, even when also recently painted.
-    from ingetrazo_core import recent_swatches
+    from built_core import recent_swatches
     ordered = [name for _, name, _, _ in recent_swatches(PaintTool)]
     assert ordered[0] == "RAL 5015" and "ladrillo" in ordered[1].lower()
     labels = [name for key, name, *_ in rows() if key not in ("", "-")]
@@ -199,7 +199,7 @@ def test_palette_follows_paints_and_hides_recent_when_empty(native_host, tmp_pat
 
 def test_clicking_a_recent_swatch_restores_it_exactly(native_host, tmp_path):
     from tests.test_tree_links import _View
-    from ingetrazo_render import wgpu_library as library
+    from built_render import wgpu_library as library
     win = native_host.window
     tex = _png(tmp_path / "vidrio.png", (.6, .8, .9))
     PaintTool.recent = [
@@ -221,7 +221,7 @@ def test_clicking_a_recent_swatch_restores_it_exactly(native_host, tmp_path):
 
 
 def test_the_list_survives_a_restart_minus_missing_images(tmp_path):
-    from ingetrazo_core import load_recent_materials, save_recent_materials
+    from built_core import load_recent_materials, save_recent_materials
     kept = _png(tmp_path / "kept.png", (0.5, 0.5, 0.5))
     entries = [
         {"texture": {"path": kept, "sw": 1.0, "sh": 1.0, "rot": 0.0},
@@ -235,7 +235,7 @@ def test_the_list_survives_a_restart_minus_missing_images(tmp_path):
 
 
 def test_corrupt_settings_read_as_empty():
-    from ingetrazo_core import load_recent_materials
+    from built_core import load_recent_materials
     native_settings().setValue("paint/recent_materials", "{not json")
     assert load_recent_materials() == []
     native_settings().setValue("paint/recent_materials", '[1, "x", {"foo": 2}]')

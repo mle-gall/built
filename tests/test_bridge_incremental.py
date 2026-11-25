@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 
 import pytest
-from ingetrazo_core import Vec3 as V
+from built_core import Vec3 as V
 
 from core.group import Group
 from core.mesh import Mesh

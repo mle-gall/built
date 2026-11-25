@@ -127,7 +127,7 @@ while correcting the platform assumption.
 
 Test: `tests/test_text3d_letters.py::test_letters_lay_out_exactly_like_the_one_piece_text`.
 
-For `IngeTrazo`, font `Sans`, bold, height `0.25`, depth `0.05`, the face-count
+For `Built`, font `Sans`, bold, height `0.25`, depth `0.05`, the face-count
 check passes, but the extents differ by more than `1e-6`:
 
 - Whole mesh: X range `[0.0165289249, 1.2053806782]`.
