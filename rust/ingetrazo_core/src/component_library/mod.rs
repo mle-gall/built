@@ -66,7 +66,7 @@ fn remote(py: Python, base: &str, rel: &str) -> PyResult<Vec<u8>> {
     kw.set_item("timeout", 20)?;
     kw.set_item(
         "context",
-        py.import("core.tls")?.call_method0("https_context")?,
+        py.import("ingetrazo_core.python_tls")?.call_method0("https_context")?,
     )?;
     let response = request.call_method("urlopen", (req,), Some(&kw))?;
     let reader = response.call_method0("__enter__")?;

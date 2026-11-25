@@ -17,6 +17,7 @@ mod screen;
 mod texture_position;
 mod navigation;
 mod recents;
+mod python_tls;
 mod material_finish;
 mod edge_grid;
 mod builtproject;
@@ -300,6 +301,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     navigation::register(m)?;
     m.add_class::<edge_grid::EdgeGrid>()?;
     recents::register(m)?;
+    python_tls::register(m)?;
     m.add_function(wrap_pyfunction!(material_finish::guess_finish, m)?)?;
     m.add_function(wrap_pyfunction!(material_finish::resolve_finish, m)?)?;
     delivery_form::register(m)?;

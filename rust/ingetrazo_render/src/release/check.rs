@@ -121,7 +121,7 @@ fn fetch_latest(py: Python<'_>, timeout: f64) -> PyResult<Release> {
         kw.set_item("timeout", timeout)?;
         kw.set_item(
             "context",
-            py.import("core.tls")?.call_method0("https_context")?,
+            py.import("ingetrazo_core.python_tls")?.call_method0("https_context")?,
         )?;
         let response = request.call_method("urlopen", (req,), Some(&kw))?;
         let raw = response.call_method1("read", (LIMIT + 1,));
