@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 from core.group import Group
 from core.history import MoveGroupCommand, CompoundCommand
@@ -397,14 +397,25 @@ def test_history_insert_undo_redo_keeps_one_row(monkeypatch):
 
 
 def test_tool_change_signal_reports_unsupported_tool_without_mouse_input():
-    from PySide6.QtCore import QObject, Signal
-    from PySide6.QtWidgets import QApplication
     from tests.headless_gpu import HeadlessView as WgpuView
-    app = QApplication.instance() or QApplication([])
     messages = []
-    class Source(QObject):
-        measurementChanged = Signal(str)
+
+    class Signal:
+        def __init__(self):
+            self.slots = []
+
+        def connect(self, slot):
+            self.slots.append(slot)
+
+        def emit(self, *args):
+            for slot in self.slots:
+                slot(*args)
+
+    class Source:
         active_tool = None
+
+        def __init__(self):
+            self.measurementChanged = Signal()
 
         def flash_status(self, message):
             messages.append(message)
@@ -413,10 +424,10 @@ def test_tool_change_signal_reports_unsupported_tool_without_mouse_input():
     view = WgpuView()
     view.source_viewport = source
     view._observe_tool_source()
-    view.show()
+    view.isVisible = lambda: True            # shown: the sync is only for a visible view
     source.active_tool = SimpleNamespace()
     source.measurementChanged.emit('')
-    app.processEvents()
+    view.run_timers()
     assert view.tools.mode == 'inert'
     assert messages == ['Unsupported document tool']
     view.close()

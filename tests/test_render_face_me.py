@@ -13,7 +13,7 @@ import json
 import math
 import struct
 
-from PySide6.QtCore import Qt
+from core.input_types import Qt
 from PySide6.QtGui import QColor, QImage
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication

@@ -30,7 +30,7 @@ def two():
     if (not HAS_RENDERER or sys.platform != 'darwin'
             or os.environ.get('QT_QPA_PLATFORM') != 'cocoa'):
         pytest.skip('Metal checks need the release crate and an unshown Cocoa NSView')
-    from PySide6.QtCore import Qt
+    from core.input_types import Qt
     from PySide6.QtWidgets import QApplication, QWidget
     from ingetrazo_render import Renderer
     QApplication.instance() or QApplication([])

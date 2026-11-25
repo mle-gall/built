@@ -1,9 +1,8 @@
 """Native routing invokes the document tools, including History and cancellation."""
 from types import SimpleNamespace
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 from core.scene import Scene
 from core.mesh import Mesh
 from core.group import Group
@@ -14,8 +13,6 @@ from tools.base import ToolContext
 from views.wgpu_tools import NativeTools
 from views.wgpu_scene import pack_scene
 from views.wgpu_updates import InstanceUpdates
-
-app = QApplication.instance() or QApplication([])
 
 
 def harness(tool, inside=False):
@@ -168,15 +165,14 @@ def test_move_loose_preview_cancel_commit(inside, target):
 
 
 def test_rectangle_vcb_dimensions_and_units():
-    from PySide6.QtGui import QKeyEvent
-    from PySide6.QtCore import QEvent
+    from ingetrazo_render import KeyEvent
     scene, history, native, _ = harness(RectangleTool())
     click(native, (0, 0, 0))
     native.view.last_snap = SimpleNamespace(point=QVector3D(1, 1, 0), kind='endpoint', context=None)
     native.hover(event())
     for char in '200cm;300cm':
-        assert native.key(QKeyEvent(QEvent.KeyPress, 0, Qt.NoModifier, char))
-    assert native.key(QKeyEvent(QEvent.KeyPress, Qt.Key_Return, Qt.NoModifier))
+        assert native.key(KeyEvent(True, 0, 0, char))
+    assert native.key(KeyEvent(True, Qt.Key_Return.value, 0))
     assert len(scene.mesh.faces) == 1
     points = [v.position for v in scene.mesh.vertices]
     assert max(p.x() for p in points) == pytest.approx(2.)

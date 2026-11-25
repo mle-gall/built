@@ -256,8 +256,10 @@ def test_typing_filters_the_list(win, monkeypatch, tmp_path):
 
 
 # ---- Keys --------------------------------------------------------------------
-def key_event(key, text="", mods=Qt.NoModifier):
-    return QKeyEvent(QEvent.KeyPress, key, mods, text)
+def key_event(key, text="", mods=0):
+    from ingetrazo_render import KeyEvent
+    from tests.headless_gpu import _code
+    return KeyEvent(True, _code(key), _code(mods), text)
 
 
 def test_keys_go_to_the_sheet_but_command_keys_stay_the_windows(win, monkeypatch):

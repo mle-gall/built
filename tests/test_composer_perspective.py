@@ -20,7 +20,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QWidget
 
 from core.camera import OrbitCamera
 from core.composition import (Composicion, MarcoVista, apply_frame_camera,
@@ -29,8 +29,6 @@ from core.composition import (Composicion, MarcoVista, apply_frame_camera,
 from core.saved_views import SavedView
 from core.scene import Scene
 from tests.test_composer_canvas import _FakeViewport
-
-_app = QApplication.instance() or QApplication([])
 V = QVector3D
 
 

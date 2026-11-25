@@ -1,6 +1,6 @@
 """Shared commands must give identical geometry through native dispatch."""
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D
 from tools.base import ToolContext
 from tests.test_wgpu_mesh_tools import click, geometry
@@ -219,9 +219,8 @@ def test_editing_commands_and_cancel(tool_type):
 def test_first_person_claims_shortcuts_and_timer_stops_on_focus_loss():
     from tests.controller_surface import ControllerSurface as Viewport
     from tests.headless_gpu import HeadlessView as WgpuView
-    from PySide6.QtCore import QEvent
-    from PySide6.QtGui import QKeyEvent, QFocusEvent
-    from tests.test_wgpu_mesh_tools import app
+    from ingetrazo_render import KeyEvent, ShortcutOverride
+    from tests.headless_gpu import _code
     source = Viewport()
     view = WgpuView()
     view.source_viewport = source
@@ -229,15 +228,14 @@ def test_first_person_claims_shortcuts_and_timer_stops_on_focus_loss():
     view.set_scene(source.scene)
     source.set_active_tool(FirstPersonTool())
     view.tools.sync()
-    override = QKeyEvent(QEvent.ShortcutOverride, Qt.Key_W, Qt.NoModifier)
-    app.sendEvent(view, override)
+    override = ShortcutOverride(_code(Qt.Key_W), 0)
+    view.event(override)
     assert override.isAccepted()
-    view.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_W, Qt.NoModifier))
+    view.keyPressEvent(KeyEvent(True, _code(Qt.Key_W), 0))
     tool = source.active_tool
-    assert tool._timer.parent() is view
     assert tool._timer.isActive()
     assert tool._viewport is view.tools
-    view.focusOutEvent(QFocusEvent(QEvent.FocusOut))
+    view.focusOutEvent(None)                 # as the shell's host sends it
     assert not tool.held and not tool._timer.isActive()
     view.close()
     source.close()
@@ -252,4 +250,5 @@ def test_committed_protractor_guide_rasterizes():
         native.tool.on_release(native)
     assert scene.guides
     image = rasterize([], 1000, 700, 1., native.draw_annotations)
-    assert not image.isNull()
+    assert (image.width, image.height) == (1000, 700)
+    assert any(image.rgba()[3::4])           # the guide is drawn

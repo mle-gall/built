@@ -37,7 +37,7 @@ PRIMITIVE_DIGESTS = {1: "eb3d8c013fc4eb6f12298a9a", 2: "f482445fab1a60937c3510a4
 
 
 def _primitive_set():
-    from PySide6.QtCore import Qt
+    from core.input_types import Qt
     return [
         Primitive("polyline", ((10, 10), (90.3, 40.7), (30, 80)), "#5a6e8c", 1 / 3),
         Primitive("polyline", ((5, 95), (195, 95)), "#f2732a", 1.5, dash=(6, 3)),

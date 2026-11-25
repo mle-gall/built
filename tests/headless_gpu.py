@@ -92,6 +92,13 @@ def pixel(image, x, y):
     return tuple(int(v) for v in np.frombuffer(image.rgba(), np.uint8).reshape(h, w, 4)[int(y), int(x)])
 
 
+def qt_surface() -> bool:
+    """Whether tests/controller_surface.py is still a Qt widget (before
+    qt-host's native surface): its handlers then want Qt events."""
+    from tests.controller_surface import ControllerSurface
+    return any(c.__module__.startswith("PySide6") for c in ControllerSurface.__mro__)
+
+
 def _code(value) -> int:
     """A Qt enum or flag, or the native code, as the int the shell sends."""
     return int(getattr(value, "value", value) or 0)
@@ -101,12 +108,13 @@ _MOUSE = {"press": "mousePressEvent", "release": "mouseReleaseEvent",
           "move": "mouseMoveEvent", "double": "mouseDoubleClickEvent"}
 
 
-def mouse(view, kind, x, y, button=0, held=0, modifiers=0):
+def mouse(view, kind, x, y, button=0, held=0, modifiers=0, timestamp=0):
     """A pointer event as the shell delivers it (app_shell.host.pointer):
-    ``kind`` press, release, move or double, in logical pixels. Returns the
-    handler's answer."""
+    ``kind`` press, release, move or double, in logical pixels, at
+    ``timestamp`` ms. Returns the handler's answer."""
     from ingetrazo_render import MouseEvent
-    ev = MouseEvent(kind, float(x), float(y), _code(button), _code(held), _code(modifiers))
+    ev = MouseEvent(kind, float(x), float(y), _code(button), _code(held), _code(modifiers),
+                    timestamp=int(timestamp))
     return getattr(view, _MOUSE[kind])(ev)
 
 

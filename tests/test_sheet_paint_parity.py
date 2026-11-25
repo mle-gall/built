@@ -19,12 +19,9 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
 import ingetrazo_core as NATIVE  # noqa: E402
 from tests.sheet_paint_cases import cases, frame_content, profile_of  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
 FIXTURES = Path(__file__).parent / "fixtures" / "sheet_paint"
 GROUPS = {g: json.loads(gzip.decompress((FIXTURES / f"goldens_{g}.json.gz").read_bytes()))
           for g in ("a", "b", "c", "d") if (FIXTURES / f"goldens_{g}.json.gz").exists()}

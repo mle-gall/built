@@ -9,8 +9,6 @@ import numpy as np
 import pytest
 from PySide6.QtGui import QPainter, QImage
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
 from core.group import Group
 from core.guide import Guide
 from core.mesh import Mesh
@@ -20,8 +18,6 @@ from tests.controller_surface import ControllerSurface as Viewport
 from views.wgpu_lines import SEGMENT, sync
 from views.wgpu_scene import pack_scene
 from tests.headless_gpu import HeadlessView as WgpuView
-
-app = QApplication.instance() or QApplication([])
 V = QVector3D
 
 

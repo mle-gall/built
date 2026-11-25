@@ -4,7 +4,7 @@
 the configurable sheet border."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from core.input_types import Qt
 from PySide6.QtGui import QImage, QPainter
 
 from core.composition import (Composicion, CotaItem, MarcoVista,

@@ -18,9 +18,7 @@ import pytest
 from tests.preferences_chrome import Controls, settings_file
 from PySide6.QtCore import QSettings
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication, QWidget
-
-_app = QApplication.instance() or QApplication([])
+from PySide6.QtWidgets import QWidget
 
 from core.scene import Scene  # noqa: E402
 from views.document_interaction import SOFT_SHADOW_SPREAD
@@ -144,7 +142,7 @@ def native():
     if (not HAS_RENDERER or sys.platform != "darwin"
             or os.environ.get("QT_QPA_PLATFORM") != "cocoa"):
         pytest.skip("Metal raster checks require the crate and an unshown Cocoa NSView")
-    from PySide6.QtCore import Qt
+    from core.input_types import Qt
     from ingetrazo_render import Renderer
     host = QWidget()
     host.setAttribute(Qt.WA_DontShowOnScreen)

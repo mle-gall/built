@@ -10,17 +10,15 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QRectF
+from core.input_types import QRectF
 from PySide6.QtGui import QImage, QPainter
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QWidget
 
 from core.composition import AddItemCommand, Composicion, PerfilTerreno
 from georef.datum import SceneDatum
 from georef.geopath import GeoPath
 from tests.test_composer_canvas import _FakeViewport
-
-_app = QApplication.instance() or QApplication([])
 
 
 def V(x, y, z=0.0):
