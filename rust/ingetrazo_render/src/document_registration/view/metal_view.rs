@@ -84,6 +84,20 @@ fn ui_claims<'py>(a: &Args<'py>) -> Reply<'py> {
 /// closed view, after the chrome has had the event, with the remote
 /// camera in step and the geometry in the view frame.
 pub(super) fn tool_frame<'py>(view: &Obj<'py>, name: &str, event: Option<&Obj<'py>>, body: impl FnOnce() -> Reply<'py>) -> Reply<'py> {
+    event_frame(view, name, event, true, body)
+}
+
+/// An event that only moves the camera (a wheel zoom, a slide): the chrome's
+/// claim and the camera mirrored to and from the document, without the
+/// meshes' geometry frame. Nothing on that path reads a mesh's coordinates:
+/// the point under the cursor comes from the pick and the resident arrays.
+/// Entering a frame per mesh was nearly all of a wheel event's time on a
+/// large model.
+pub(super) fn camera_frame<'py>(view: &Obj<'py>, name: &str, event: Option<&Obj<'py>>, body: impl FnOnce() -> Reply<'py>) -> Reply<'py> {
+    event_frame(view, name, event, false, body)
+}
+
+fn event_frame<'py>(view: &Obj<'py>, name: &str, event: Option<&Obj<'py>>, geometry: bool, body: impl FnOnce() -> Reply<'py>) -> Reply<'py> {
     let py = view.py();
     if truthy(view, "_closed")? {
         return Ok(none(py));
@@ -99,11 +113,11 @@ pub(super) fn tool_frame<'py>(view: &Obj<'py>, name: &str, event: Option<&Obj<'p
     if remote {
         view.call_method0("_sync_scene_camera")?;
     }
-    let shifted = match packed.getattr_opt("origin")? {
+    let shifted = geometry && match packed.getattr_opt("origin")? {
         Some(origin) => any(py, &origin)?,
         None => false,
     };
-    let result = if shifted || truthy(view, "_remote_meshes")? {
+    let result = if geometry && (shifted || truthy(view, "_remote_meshes")?) {
         let frame = view.call_method0("_geometry_frame")?;
         frame.call_method0("__enter__")?;
         match body() {
