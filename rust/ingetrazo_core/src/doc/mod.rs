@@ -372,7 +372,11 @@ pub struct MaterialData {
 
 pub enum Data {
     Record,
-    Root { edit_path: Vec<(Key, Py<PyAny>)> },
+    /// A scene's root. `link_defs`: each linked file's definition as read
+    /// (a detached tree of the source's parts, `core/links.py`), by its
+    /// configuration (path, subset, nested-link policy): the layout every
+    /// placement of that file is projected from. No placement owns it.
+    Root { edit_path: Vec<(Key, Py<PyAny>)>, link_defs: Vec<(String, Py<PyAny>)> },
     Placement(Box<PlacementData>),
     Tag(Box<TagData>),
     Material(Box<MaterialData>),
@@ -436,7 +440,7 @@ pub struct Node {
 impl Node {
     fn new(kind: Kind) -> Node {
         let data = match kind {
-            Kind::Root => Data::Root { edit_path: Vec::new() },
+            Kind::Root => Data::Root { edit_path: Vec::new(), link_defs: Vec::new() },
             Kind::Placement => Data::Placement(Box::new(PlacementData { component: true, ..Default::default() })),
             Kind::Tag => Data::Tag(Box::new(TagData { visible: true, ..Default::default() })),
             Kind::Record => Data::Record,
@@ -898,8 +902,9 @@ impl Doc {
                 trash.1.push(def);
             }
         }
-        if let Data::Root { edit_path } = &mut node.data {
+        if let Data::Root { edit_path, link_defs } = &mut node.data {
             trash.0.extend(edit_path.drain(..).map(|(_, level)| level));
+            trash.0.extend(link_defs.drain(..).map(|(_, def)| def));
         }
         trash.push(node.strong.take());
         // Members of its lists lose an owner.
@@ -1584,8 +1589,9 @@ impl Doc {
                         trash.1.push(def);
                     }
                 }
-                if let Data::Root { edit_path } = &mut n.data {
+                if let Data::Root { edit_path, link_defs } = &mut n.data {
                     trash.0.extend(edit_path.drain(..).map(|(_, level)| level));
+                    trash.0.extend(link_defs.drain(..).map(|(_, def)| def));
                 }
                 n.mat_names.clear();
                 [

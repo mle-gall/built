@@ -355,6 +355,9 @@ fn run_unlink(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
                 cache.call_method1("pop", (&p, py.None()))?;
             }
         }
+        // Nothing projects from their definitions any more.
+        let paths: Vec<String> = gone.iter().filter_map(|p| p.extract().ok()).collect();
+        crate::model::links::release_definitions(scene, &paths)?;
         me.setattr("_tags_after", TagState::capture(scene)?)?;
     }
     if let Some(errors) = scene.getattr_opt("link_errors")?.filter(|e| e.is_instance_of::<PyDict>()) {

@@ -10,7 +10,8 @@ import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core import doc_model
-from core.group import Group, PlacementProxy, model_placements
+from core.group import Group, PlacementProxy
+from ingetrazo_core import group_model_placements as model_placements
 from core.history import (AssignLayerCommand, HideCommand, History,
                           NativeCommand, SetPluginDataCommand, SetRecordCommand,
                           SetStructureNodeCommand)
