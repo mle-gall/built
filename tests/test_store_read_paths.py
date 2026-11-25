@@ -219,7 +219,7 @@ def test_pushpull_hover_and_lock_on_a_face(doc):
 def test_edges_found_between_loop_vertices(doc):
     """``Select ▸ Bounding Edges`` and the edge-between lookups walk a
     vertex's edges for the one whose other end is the next loop vertex."""
-    from core.select_ops import bounding_edges
+    from ingetrazo_core import bounding_edges
     from ingetrazo_core import edge_between
     scene = doc.scene
     top = _top(scene)

@@ -273,7 +273,7 @@ fn bevel_selection<'py>(
     let before = history.getattr("revision")?;
     let plan = match _plan {
         Some(p) => p.clone(),
-        None if corners_only => py.import("core.vertex_bevel")?.call_method1(
+        None if corners_only => py.import("ingetrazo_core")?.call_method1(
             "plan_vertex_bevel",
             (
                 &mesh,

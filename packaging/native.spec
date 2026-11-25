@@ -133,7 +133,6 @@ hiddenimports += ['formats.rfa']
 omit_rfa = sys.platform == 'darwin' and os.environ.get('BUILT_PACKAGE_RFA') == '0'
 if not omit_rfa and _ilu.find_spec('ingetrazo_rfa') is not None:
     hiddenimports += collect_submodules('ingetrazo_rfa')
-hiddenimports += ['core.renderer_settings']
 if _ilu.find_spec('ingetrazo_render') is None:
     raise RuntimeError('Build ingetrazo_render with scripts/build_native.sh first')
 hiddenimports += collect_submodules('ingetrazo_render')

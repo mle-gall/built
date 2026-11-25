@@ -359,7 +359,7 @@ def test_freecad_style_preset_matches_hardware_test():
 
 
 def test_profile_json_round_trip(tmp_path):
-    from core.ndof_profiles import save_profile, load_profile
+    from ingetrazo_render import save_profile, load_profile
     st = NdofSettings(mapping_preset="custom", sensitivity=1.75)
     st.axis_mapping["roll"] = "pan_y"
     st.axis_inversion["roll"] = True
@@ -382,7 +382,7 @@ def test_profile_json_round_trip(tmp_path):
     {"global_speed": 100},
 ])
 def test_profile_rejects_invalid_data(change):
-    from core.ndof_profiles import profile_to_dict, profile_from_dict
+    from ingetrazo_render import profile_to_dict, profile_from_dict
     from copy import deepcopy
     data = profile_to_dict(NdofSettings())
     for key, value in change.items():

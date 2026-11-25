@@ -13,7 +13,7 @@ from core.group import Group, copy_group, world_mesh
 from core.history import History, ReplaceComponentCommand
 from core.mesh import Mesh
 from core.scene import Scene
-from core.select_ops import same_definition
+from ingetrazo_core import same_definition
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 
 

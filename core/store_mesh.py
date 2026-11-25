@@ -592,7 +592,7 @@ class StoreMesh(_mesh._MeshState):
 
     def bevel_vertices(self, keys, size, segments=8, profile=0.5):
         """Cut live vertex keys, returning one StoreChange for the whole edit."""
-        from core.vertex_bevel import plan_vertex_bevel
+        from ingetrazo_core import plan_vertex_bevel
         plan = plan_vertex_bevel(self, [VertexView(self, k) for k in keys],
                                  size, segments, profile)
         return self._apply_round_plan(plan)
