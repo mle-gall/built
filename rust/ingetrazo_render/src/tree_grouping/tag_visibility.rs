@@ -107,7 +107,7 @@ pub fn isolate_tags(vp: &Bound<'_, PyAny>, rows: Vec<String>) -> PyResult<()> {
         return Ok(());
     }
     let steps = PyList::empty(py);
-    let protocol = py.import("core.protocol.commands")?;
+    let protocol = py.import("ingetrazo_core")?;
     for (on, tags) in changes.into_iter().enumerate() {
         if !tags.is_empty() {
             steps.append(protocol.call_method1(

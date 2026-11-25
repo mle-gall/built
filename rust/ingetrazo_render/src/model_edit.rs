@@ -199,7 +199,7 @@ fn hideable<'py>(entities: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
         py.import("core.group")?.getattr("Group")?,
     )
         .into_pyobject(py)?;
-    let hidden = py.import("core.history")?.getattr("_is_hidden")?;
+    let hidden = py.import("ingetrazo_core")?.getattr("is_hidden")?;
     let out = PyList::empty(py);
     for e in entities.try_iter()? {
         let e = e?;

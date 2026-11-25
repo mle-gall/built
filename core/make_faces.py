@@ -241,13 +241,13 @@ def _faces_on_plane(faces, origin, normal) -> list:
 def _covering_face(on_plane, probe):
     """A face of ``on_plane`` (see :func:`_faces_on_plane`) whose surface
     holds ``probe``."""
-    from core.history import _point_in_tri
+    from ingetrazo_core import planar_edits
     q = (probe.x(), probe.y(), probe.z())
     for f, lo, hi in on_plane:
         if any(q[i] < lo[i] - PLANE_TOL or q[i] > hi[i] + PLANE_TOL
                for i in range(3)):
             continue
-        if any(_point_in_tri(probe, *t) for t in f.triangulate()):
+        if any(planar_edits.point_in_tri(probe, *t) for t in f.triangulate()):
             return f
     return None
 

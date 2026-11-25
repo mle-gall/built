@@ -87,14 +87,15 @@ def test_two_squares_side_by_side_share_the_edge():
     assert sorted(len(e.faces) for e in sc.mesh.edges) == [1] * 6 + [2]
 
 
-def test_a_move_that_lands_nowhere_is_not_checked(monkeypatch):
-    import core.history as history
+def test_a_move_without_a_landing_keeps_the_vertices_separate():
     sc, h = _box()
-    calls = []
-    monkeypatch.setattr(history, "defects_near",
-                        lambda vs: calls.append(1) or {})
-    h.execute(MoveVerticesCommand([P[5], P[6]], V(0, 0, -1.0)))
-    assert calls == [] and h.last_rejected is None
+    before = {v.key for v in sc.mesh.vertices}
+    delta = V(0, 0, -1.0)
+    cmd = MoveVerticesCommand([P[5], P[6]], delta)
+    h.execute(cmd)
+    assert h.last_rejected is None and h.last_error is None
+    assert not cmd.welded and {v.key for v in sc.mesh.vertices} == before
+    assert all(sc.mesh.vertex_at(p + delta) is not None for p in (P[5], P[6]))
 
 
 def test_undo_and_redo_of_a_clean_join():
@@ -138,12 +139,12 @@ def test_a_corner_through_the_box_onto_the_far_corner():
     assert "overlapping" in why
 
 
-def test_a_refusal_is_not_logged_as_a_failure(monkeypatch):
+def test_a_refusal_is_not_logged_as_a_failure(tmp_path):
     sc, h = _box()
-    logged = []
-    monkeypatch.setattr(h, "_log_failure", lambda *a: logged.append(a))
+    path = tmp_path / "history.log"
+    h.error_log = str(path)
     _refused(sc, h, P[4:], V(0, 0, -2.6))
-    assert logged == []
+    assert not path.exists()
 
 
 def test_a_refusal_keeps_the_redo_stack():

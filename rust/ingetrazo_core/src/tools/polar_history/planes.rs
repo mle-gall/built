@@ -152,6 +152,6 @@ pub(super) fn merge<'py>(
         cmd.call_method1("do", (scene,))?;
     }
     scene.setattr("selection", py.get_type::<PySet>().call1((keep,))?)?;
-    api.call_method1("_drop_dead_elements", (scene, mesh))?;
+    crate::doc::history_support::drop_dead_elements(scene, mesh)?;
     Ok(())
 }
