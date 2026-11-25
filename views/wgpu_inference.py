@@ -35,6 +35,8 @@ from collections.abc import Sequence
 from types import SimpleNamespace
 import math
 
+import threading
+import weakref
 import numpy as np
 from ingetrazo_core import Vec3 as QVector3D
 from core import _native
@@ -203,7 +205,9 @@ class ResidentInference:
     """
     def __init__(self, base, protos, curves, packed, scene=None):
         self.packed = packed
-        self.scene = scene
+        # Weakly: the index outlives a closed document on its worker and in
+        # the view's future, and must not keep the document with it.
+        self._scene = scene if scene is None or isinstance(scene, weakref.ref) else weakref.ref(scene)
         self.features = _CurveFeatures(curves)
         self.screen_cache = None
         self.screen_dirty = set()
@@ -215,6 +219,10 @@ class ResidentInference:
         self.changed = set()
         self.local = {}
         self.replaced = np.zeros(len(packed.instances), bool)
+
+    @property
+    def scene(self):
+        return None if self._scene is None else self._scene()
 
     def update(self, ids, packed, changed_codes=(), *, code_rows=None):
         self.epoch += 1
@@ -318,14 +326,49 @@ def rebase(index, packed):
     return result
 
 
+class SceneLease:
+    """The document a snap-index job reads, held only while it reads it.
+
+    The job runs on a worker and outlives a closed view; the document must
+    not wait for it. ``release()`` (the view closing) takes the document
+    back: a job not started reads nothing, one that is reading stops at the
+    prototype it is on. The native build that follows needs no document."""
+
+    def __init__(self, scene):
+        self.scene = scene
+        self.released = False
+        self._reading = threading.Lock()
+
+    def release(self):
+        self.released = True
+        with self._reading:
+            self.scene = None
+
+
 def prepare(packed, scene=None):
+    """The snap index of ``packed``. ``scene`` may be a :class:`SceneLease`:
+    then None is returned if the lease is released before the read ends."""
     native = _native.available()
     codes, rows = np.unique(packed.instances['info'][:, 0], return_index=True)
     first = np.full(len(packed.commands), -1, dtype=np.int64)
     first[codes] = rows
     cache = {}
-    arrays = [_prototype_arrays(packed, code, scene, row, cache)
-              for code, row in enumerate(first)]
+    lease = scene if isinstance(scene, SceneLease) else None
+    if lease is not None:
+        with lease._reading:
+            scene = lease.scene
+            arrays = []
+            for code, row in enumerate(first):
+                if lease.released:
+                    lease.scene = scene = None
+                    return None
+                arrays.append(_prototype_arrays(packed, code, scene, row, cache))
+            lease.scene = None
+    else:
+        arrays = [_prototype_arrays(packed, code, scene, row, cache)
+                  for code, row in enumerate(first)]
+    # From here the job holds the document weakly only.
+    scene = None if scene is None else weakref.ref(scene)
     ids, mats, wc, we = _placement_arrays(packed)
     protos, base = native.build_snap_index(arrays, ids, mats, np.ascontiguousarray(wc-we),
                                            np.ascontiguousarray(wc+we))
