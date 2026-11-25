@@ -19,18 +19,26 @@ from __future__ import annotations
 
 import hashlib
 import os
+import sys
 from formats import built
 from pathlib import Path
 
 
 def _app_data_base() -> Path:
     """The per-user data folder the slots live under
-    (``ingetrazo_render.recovery_directory``): the profile's ``data`` folder
-    with ``BUILT_SETTINGS_DIR``, else the platform's (on Windows the
-    process's ``APPDATA`` whenever one is set, #1180), with the
-    ``IngeTrazo/IngeTrazo`` suffix earlier versions used."""
+    (``ingetrazo_render.recovery_directory``, with the ``IngeTrazo/IngeTrazo``
+    suffix earlier versions used): in the shell, its profile's; headless,
+    the platform's, built from the process's ``APPDATA`` on Windows
+    whenever one is set (#1180: a run that points it at a sandbox must not
+    write into the real profile)."""
+    from app_shell.native import _shell
     from ingetrazo_render import recovery_directory
-    found = recovery_directory(os.environ.get("BUILT_SETTINGS_DIR") or None)
+    if _shell is not None:
+        found = recovery_directory(os.environ.get("BUILT_SETTINGS_DIR") or None)
+    elif sys.platform == "win32" and os.environ.get("APPDATA"):
+        return Path(os.environ["APPDATA"]) / "IngeTrazo" / "IngeTrazo"
+    else:
+        found = recovery_directory(None)
     return Path(found) if found else Path.home() / ".ingetrazo"
 
 

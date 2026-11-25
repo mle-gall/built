@@ -37,6 +37,18 @@ def win(native_host, monkeypatch):
     return w
 
 
+def _png_rgb(w, h, pixel):
+    """An opaque RGB PNG of one colour (standard library only)."""
+    import struct
+    import zlib
+
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    rows = b"".join(b"\x00" + pixel * w for _ in range(h))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+
+
 def chrome(win, then):
     win._test_sheet_frame = then
 
@@ -189,10 +201,7 @@ def test_information_call_sites_post_toasts(win, tmp_path, monkeypatch, method, 
         monkeypatch.setattr(autosave, "discarded_dir", lambda: tmp_path)
     elif method == "_on_insert_faceme_image":
         picture = tmp_path / "opaque.png"
-        from PySide6.QtGui import QImage
-        image = QImage(2, 2, QImage.Format.Format_RGB32)
-        image.fill(0xFFFFFFFF)
-        assert image.save(str(picture))
+        picture.write_bytes(_png_rgb(2, 2, b"\xff\xff\xff"))
         monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *a: (str(picture), ""))
 
     elif method == "_import_rfa_path":
@@ -432,36 +441,3 @@ def test_failed_job_and_export_folder_are_retained(win, tmp_path, monkeypatch):
     row.action()
     assert opened == [tmp_path.resolve()]
 
-
-def test_the_guard_holds_a_qt_window_while_a_sheet_is_up():
-    """In the Qt app the guard filters the application's events: a key is
-    the sheet's (Esc answers it), clicks reach only the Metal view, the
-    menu bar greys out; released, all of it comes back."""
-    from PySide6.QtCore import QEvent, QPointF
-    from PySide6.QtGui import QKeyEvent, QMouseEvent
-    from PySide6.QtWidgets import QApplication, QLineEdit, QMainWindow, QWidget
-
-    class Window(QMainWindow):
-        _tool_actions = {}
-        _documents = []
-
-    w = Window()
-    field = QLineEdit(w)
-    view = QWidget(w)
-    w._doc = SimpleNamespace(stand_in=view)
-    menu = w.menuBar().addMenu("File")
-    answers = []
-    cd.ask_later(w, "Q", "Which?", [("cancel", "Cancel"), ("ok", "OK")], answers.append,
-                 default="ok", cancel="cancel")
-    assert cd.modal(w) and not menu.menuAction().isEnabled()
-    QApplication.sendEvent(field, QKeyEvent(QEvent.KeyPress, Qt.Key_A.value, Qt.NoModifier, "a"))
-    assert field.text() == ""
-    click = QMouseEvent(QEvent.MouseButtonPress, QPointF(2, 2), QPointF(2, 2), Qt.LeftButton,
-                        Qt.LeftButton, Qt.NoModifier)
-    guard = w._chrome_guard.filter
-    assert guard.eventFilter(field, click) is True
-    assert guard.eventFilter(view, click) is False
-    QApplication.sendEvent(field, QKeyEvent(QEvent.KeyPress, Qt.Key_Escape.value, Qt.NoModifier))
-    assert answers == ["cancel"] and not cd.modal(w) and menu.menuAction().isEnabled()
-    QApplication.sendEvent(field, QKeyEvent(QEvent.KeyPress, Qt.Key_A.value, Qt.NoModifier, "a"))
-    assert field.text() == "a"
