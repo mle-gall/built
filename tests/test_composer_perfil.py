@@ -10,7 +10,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from core.input_types import QRectF
+from ingetrazo_core import ScreenRect as QRectF
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.composition import AddItemCommand, Composicion, PerfilTerreno

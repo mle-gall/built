@@ -1,6 +1,7 @@
 """Shared commands must give identical geometry through native dispatch."""
 import pytest
-from core.input_types import QPointF, Qt
+from core.input_codes import Input as Qt
+from ingetrazo_core import ScreenPoint as QPointF
 from ingetrazo_core import Vec3 as QVector3D
 from tools.base import ToolContext
 from tests.test_wgpu_mesh_tools import click, geometry
@@ -218,11 +219,11 @@ def test_editing_commands_and_cancel(tool_type):
 
 def test_first_person_claims_shortcuts_and_timer_stops_on_focus_loss():
     from tests.controller_surface import ControllerSurface as Viewport
-    from tests.headless_gpu import HeadlessView as WgpuView
+    from tests.headless_gpu import HeadlessView
     from ingetrazo_render import KeyEvent, ShortcutOverride
     from tests.headless_gpu import _code
     source = Viewport()
-    view = WgpuView()
+    view = HeadlessView()
     view.source_viewport = source
     view.camera = source.camera
     view.set_scene(source.scene)

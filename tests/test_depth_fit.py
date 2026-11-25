@@ -134,19 +134,19 @@ def test_depth_fit_keeps_all_editing_rays_exact(two_point):
 
 def test_metal_view_fits_the_shown_box_and_refuses_a_mesh_preview():
     from types import SimpleNamespace as NS
-    from tests.headless_gpu import HeadlessView as WgpuView
+    from tests.headless_gpu import HeadlessView
     c = camera()
     source = NS(camera=c, scene=NS(edit_group=None, guides=[], shadows=NS(enabled=False)),
                 _base_map_showing=lambda: False, _terrain_showing=lambda: False,
                 _photo_showing=lambda: False, active_tool=None)
     packed = NS(instances=np.zeros(1), world_bounds=np.array([[-1., 50, -1], [1, 51, 1]]))
     view = NS(camera=c, source_viewport=source, packed=packed, tools=NS(mode='select'))
-    WgpuView._fit_depth(view)
+    HeadlessView._fit_depth(view)
     assert c.near_plane() > 40
     view.tools.mode = 'mesh'
-    WgpuView._fit_depth(view)
+    HeadlessView._fit_depth(view)
     assert c.near_plane() == .1
     view.tools.mode = 'select'
     source.scene.guides = [object()]
-    WgpuView._fit_depth(view)
+    HeadlessView._fit_depth(view)
     assert c.near_plane() == .1

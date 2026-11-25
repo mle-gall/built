@@ -4,7 +4,8 @@ from types import SimpleNamespace
 import numpy as np
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from core.input_types import Qt, QPointF
+from core.input_codes import Input as Qt
+from ingetrazo_core import ScreenPoint as QPointF
 from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 from core.scene import Scene
 from core.mesh import Mesh
@@ -12,7 +13,7 @@ from core.group import Group
 from core.snap import compute_snap
 from views.wgpu_scene import pack_scene
 from views.wgpu_inference import prepare, snap
-from tests.headless_gpu import HeadlessView as WgpuView
+from tests.headless_gpu import HeadlessView
 
 
 @pytest.fixture
@@ -25,7 +26,7 @@ def view():
     group.xform = QMatrix4x4()
     group.xform.translate(4, 3, 0)
     scene.groups.append(group)
-    v = WgpuView()
+    v = HeadlessView()
     v.resize(800, 600)
     v.scene = scene
     v.packed = pack_scene(scene)
@@ -262,7 +263,7 @@ def test_native_curve_order_and_invalid_indices():
 
 
 def test_full_pack_starts_inference_without_after_open(monkeypatch):
-    view = WgpuView()
+    view = HeadlessView()
     monkeypatch.setattr(view, '_upload', lambda: None)
     view.set_scene(Scene(), opening=True)
     assert view._inference_future is not None

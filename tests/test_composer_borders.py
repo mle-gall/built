@@ -4,7 +4,7 @@
 the configurable sheet border."""
 from __future__ import annotations
 
-from core.input_types import Qt
+from core.input_codes import Input as Qt
 
 from core.composition import (Composicion, CotaItem, MarcoVista,
                               PAPER_SIZES_MM, TextoItem)

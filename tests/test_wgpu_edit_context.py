@@ -8,7 +8,7 @@ from core.group import Group
 from core.mesh import Mesh
 from views.document_interaction import edit_fade_color
 from tests.controller_surface import ControllerSurface as Viewport
-from tests.headless_gpu import HeadlessView as WgpuView
+from tests.headless_gpu import HeadlessView
 from views.wgpu_scene import pack_scene
 from views.wgpu_edit_context import rest_rows
 from views.wgpu_style import style_payload
@@ -29,7 +29,7 @@ def context():
     source.scene = scene
     source._edit_rest_mode = 'fade'
     source._edit_rest_fade_strength = .7
-    view = WgpuView()
+    view = HeadlessView()
     view.resize(800, 600)
     source.resize(800, 600)
     view.scene = scene
@@ -125,7 +125,7 @@ def test_hidden_row_never_reaches_inference(context):
 
 
 def test_empty_click_uses_box_to_leave_one_level(context):
-    from core.input_types import Qt
+    from core.input_codes import Input as Qt
     view, source, a, b, _, _, _ = context
     view.scene.begin_group_edit(a)
     view.scene.begin_group_edit(b)

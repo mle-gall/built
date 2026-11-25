@@ -5,11 +5,7 @@ once, by the same commands used by MoveTool, after the user commits.
 """
 import numpy as np
 
-
-def _bits(value) -> int:
-    """Modifiers or buttons as an int, whichever enum carries them (wgpu_ui.bits)."""
-    return int(getattr(value, "value", value) or 0)
-from core.input_types import Qt
+from core.input_codes import Input as Qt
 from core.history import MoveGroupCommand, CompoundCommand
 from tools.base import ToolContext
 from tools.tape import TapeMeasureTool
@@ -227,7 +223,7 @@ class NativeTools(MeshToolAccess):
         if mode == 'mesh':
             if (type(self.tool).__name__ == 'MoveTool'
                     and self.tool.start_point is None
-                    and _bits(ctx.modifiers) & _bits(Qt.ControlModifier) and not self.tool._copy):
+                    and ctx.modifiers & Qt.ControlModifier and not self.tool._copy):
                 self.tool._toggle_copy(self, say=False)
             had_start = getattr(self.tool, 'start_point', None) is not None
             plane = None

@@ -1,7 +1,8 @@
 """Native routing invokes the document tools, including History and cancellation."""
 from types import SimpleNamespace
 import pytest
-from core.input_types import QPointF, Qt
+from core.input_codes import Input as Qt
+from ingetrazo_core import ScreenPoint as QPointF
 from ingetrazo_core import Vec3 as QVector3D
 from core.scene import Scene
 from core.mesh import Mesh

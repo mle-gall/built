@@ -34,7 +34,8 @@ This shares annotation layout/localization rather than duplicating those rules.
 from copy import copy
 
 import numpy as np
-from core.input_types import QPointF, Qt
+from core.input_codes import Input as Qt
+from ingetrazo_core import ScreenPoint as QPointF
 from views.paint_types import QColor, QPen
 from ingetrazo_core import Vec3 as QVector3D
 

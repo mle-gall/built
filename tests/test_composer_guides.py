@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """QGIS's rulers and guides in the composer (Marco, 2026-09-08: «en QGIS
 muestran como unas guías… sería bueno implementar eso en composición»)."""
-from core.input_types import QPointF
+from ingetrazo_core import ScreenPoint as QPointF
 
 from core.composition import Composicion, FormaItem
 from tests.test_composer_canvas import _FakeViewport

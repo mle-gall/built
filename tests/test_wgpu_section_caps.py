@@ -45,9 +45,9 @@ def test_hatch_master_switch_and_hidden_capture_rows():
 
 
 def test_offscreen_supplies_cap_and_restores_after_failure():
-    from tests.headless_gpu import HeadlessView as WgpuView
+    from tests.headless_gpu import HeadlessView
     scene, model, camera = fixture()
-    view = WgpuView()
+    view = HeadlessView()
     view.packed = model.packed
     view.source_viewport = SimpleNamespace(scene=scene, camera=camera, plano_style=None, style_override=None,
         _effective_style=lambda: scene.display_style, _horizon_ndc_y=lambda m: 2.)

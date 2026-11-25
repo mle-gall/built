@@ -25,7 +25,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from core.input_types import NATIVE, QEvent, Qt
+from core.input_codes import Input as Qt, Type as QEvent
 from ingetrazo_render import shortcut_text
 
 SEP = "\x1f"
@@ -1253,8 +1253,7 @@ class Workspace:
             dx, dy = a.x() / 8.0 * 3, a.y() / 8.0 * 3
         else:
             dx, dy = float(d.x()), float(d.y())
-        from views.wgpu_ui import bits
-        zoom = bool(bits(event.modifiers()) & bits(Qt.ControlModifier))
+        zoom = bool(event.modifiers() & Qt.ControlModifier)
         self.view.renderer.page_wheel(float(p.x()), float(p.y()), dx, dy, zoom)
         self._touch()
 

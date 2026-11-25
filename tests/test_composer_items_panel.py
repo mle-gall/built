@@ -7,7 +7,7 @@ separate tabs (26-09). No sheet navigator: the sheet
 strip at the bottom already switches sheets."""
 from __future__ import annotations
 
-from core.input_types import Qt
+from core.input_codes import Input as Qt
 def _close(comp, win):
     comp.close()
     win._saved_version = win.viewport.scene.version
