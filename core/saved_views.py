@@ -14,7 +14,8 @@ that carry eye/target/up cameras (e.g. .skp) convert once at import time.
 """
 from __future__ import annotations
 
-from ingetrazo_core import presentation as _presentation
+import ingetrazo_core as _NATIVE
+from ingetrazo_core import presentation as _presentation  # noqa: F401
 
 from core.doc_model import Record, record_fields
 
@@ -106,134 +107,44 @@ class SavedView(Record):
         self.lens = dict(lens) if lens else {}
 
     # ---- Snapshot / recall ---------------------------------------------------
+    # In Rust (``rust/ingetrazo_core/src/model/saved_view_state.rs``), read
+    # and written attribute for attribute as the Python did.
+
     @classmethod
     def capture(cls, name: str, scene, camera, style=None) -> "SavedView":
         """Snapshot the live camera and the current layer visibility.
         ``style``: the one the view shows when it has its own (one of
         several views); else the scene's."""
-        if style is None:
-            style = getattr(scene, "display_style", None)
-        t = camera.target
-        return cls(name, navigator_view=getattr(scene, '_navigator_view_key', None), target=(t.x(), t.y(), t.z()),
-                   distance=camera.distance, yaw=camera.yaw,
-                   pitch=camera.pitch, fov_deg=camera.fov_deg,
-                   perspective=camera.perspective,
-                   two_point=bool(getattr(camera, "two_point", False)),
-                   lens=(camera.lens_dict()
-                         if hasattr(camera, "lens_dict") else None),
-                   hidden_layers=[ly.key for ly in scene.layers
-                                  if not ly.visible],
-                   hidden_folders=[f for f, on in getattr(
-                       scene, "folder_visibility", {}).items() if not on],
-                   style=style.to_dict() if style else None,
-                   section={
-                       "active": (scene.active_section().uid
-                                  if scene.active_section() else None),
-                       "planes_shown": getattr(scene, "show_section_planes",
-                                               True),
-                       "cuts_shown": getattr(scene, "show_section_cuts",
-                                             True),
-                   },
-                   georef=georef_state(scene),
-                   shadows=(scene.shadows.to_dict()
-                            if getattr(scene, "shadows", None) is not None
-                            else None),
-                   hidden_objects=[uid for uid, g in
-                                   scene.groups_by_uid().items() if g.hidden],
-                   hidden_shown={
-                       "objects": bool(getattr(scene, "show_hidden_objects",
-                                               False)),
-                       "geometry": bool(getattr(scene, "show_hidden_geometry",
-                                                False))})
+        return _NATIVE.saved_view_capture(cls, name, scene, camera, style)
 
     def take_camera(self, camera) -> None:
         """Keep ``camera`` as this scene's camera — and nothing else: the
         layers, style, section and hidden objects it remembers stay as they
         are (Camera Settings editing a scene)."""
-        t = camera.target
-        self.target = (t.x(), t.y(), t.z())
-        self.distance = float(camera.distance)
-        self.yaw = float(camera.yaw)
-        self.pitch = float(camera.pitch)
-        self.fov_deg = float(camera.fov_deg)
-        self.perspective = bool(camera.perspective)
-        self.two_point = bool(getattr(camera, "two_point", False))
-        if hasattr(camera, "lens_dict"):
-            self.lens = camera.lens_dict()
+        _NATIVE.saved_view_take_camera(self, camera)
 
     def recapture(self, scene, camera, style=None) -> None:
         """Update this view in place from the live state (keeps the name
         and the folder). ``style``: as in :meth:`capture`."""
-        fresh = SavedView.capture(self.name, scene, camera, style)
-        fresh.folder = self.folder
-        for field in self._record_fields:
-            setattr(self, field, getattr(fresh, field))
+        _NATIVE.saved_view_recapture(self, scene, camera, style)
 
     def apply(self, scene, camera, put_style=None) -> None:
         """Recall the view: camera first, then the layer-visibility state.
         The caller bumps ``scene.version`` / repaints (tray convention).
         ``put_style``: where the style goes, for a view with its own (one
         of several views); else it becomes the scene's."""
-        self.apply_camera(camera)
-        self.apply_state(scene, put_style)
+        _NATIVE.saved_view_apply(self, scene, camera, put_style)
 
     def apply_camera(self, camera) -> None:
         """Only the camera, its lens included (a scene transition glides it
         there first)."""
-        from core.camera_point import CameraPoint
-        camera.target = CameraPoint(self.target)
-        camera.distance = self.distance
-        camera.yaw = self.yaw
-        camera.pitch = self.pitch
-        camera.fov_deg = self.fov_deg
-        camera.perspective = self.perspective
-        camera.two_point = self.two_point
-        if hasattr(camera, "apply_lens"):
-            camera.apply_lens(self.lens)
+        _NATIVE.saved_view_apply_camera(self, camera)
 
     def apply_state(self, scene, put_style=None) -> None:
         """Everything but the camera: layers, style, section, geographic
-        layers, shadows, hidden objects. ``put_style`` as in :meth:`apply`."""
-        hidden = set(self.hidden_layers)
-        for ly in scene.layers:
-            ly.visible = ly.key not in hidden
-        if self.hidden_folders is not None:
-            off = set(self.hidden_folders)
-            from core.layers import folders_of
-            scene.folder_visibility = {f: f not in off
-                                       for f in folders_of(scene)}
-        if self.style:
-            from core.style import Style
-            style = Style.from_dict(self.style)
-            if put_style is not None:
-                put_style(style)
-            else:
-                scene.display_style = style
-        if self.section is not None:
-            uid = self.section.get("active")
-            target = None
-            for sp in getattr(scene, "section_planes", []):
-                if sp.uid == uid:
-                    target = sp
-                    break
-            scene.set_active_section(target)
-            scene.show_section_planes = bool(
-                self.section.get("planes_shown", True))
-            scene.show_section_cuts = bool(
-                self.section.get("cuts_shown", True))
-        if self.georef is not None:
-            for key, obj in georef_objects(scene):
-                if obj is not None and key in self.georef:
-                    obj.visible = bool(self.georef[key])
-        if self.shadows is not None and getattr(scene, "shadows", None) is not None:
-            apply_shadow_state(scene, self.shadows)
-        if self.hidden_objects is not None:
-            hidden = set(self.hidden_objects)
-            for uid, g in scene.groups_by_uid().items():
-                g.hidden = uid in hidden
-        if self.hidden_shown is not None:
-            scene.show_hidden_objects = bool(self.hidden_shown.get("objects"))
-            scene.show_hidden_geometry = bool(self.hidden_shown.get("geometry"))
+        layers, shadows, hidden objects — each only when the view
+        remembers it. ``put_style`` as in :meth:`apply`."""
+        _NATIVE.saved_view_apply_state(self, scene, put_style)
 
     # ---- Serialisation (.igz) ------------------------------------------------
     def to_dict(self) -> dict:
@@ -243,89 +154,7 @@ class SavedView(Record):
 
     @classmethod
     def from_dict(cls, raw: dict) -> "SavedView":
-        t = raw.get("target") or [0.0, 0.0, 0.0]
-        return cls(raw.get("name", "Scene"),
-                   target=(t[0], t[1], t[2]),
-                   distance=raw.get("distance", 20.0),
-                   yaw=raw.get("yaw", -0.7853981633974483),
-                   pitch=raw.get("pitch", 0.5235987755982988),
-                   fov_deg=raw.get("fov", 45.0),
-                   perspective=not raw.get("parallel", False),
-                   two_point=bool(raw.get("two_point", False)),
-                   hidden_layers=raw.get("hidden_layers"),
-                   hidden_folders=raw.get("hidden_folders"),
-                   style=raw.get("style"),
-                   section=raw.get("section"),
-                   georef=raw.get("georef"),
-                   shadows=raw.get("shadows"),
-                   hidden_objects=raw.get("hidden_objects"),
-                   hidden_shown=raw.get("hidden_shown"),
-                   navigator_view=raw.get("navigator_view"),
-                   folder=(raw.get("folder")
-                           if isinstance(raw.get("folder"), str) else None),
-                   lens=(raw.get("lens")
-                         if isinstance(raw.get("lens"), dict) else None))
-
-
-def apply_shadow_state(scene, raw: dict) -> None:
-    """Put a shadow snapshot back onto ``scene.shadows`` IN PLACE — the
-    panel, the menu and the viewport all hold that one object."""
-    from core.sun import ShadowSettings
-    fresh = ShadowSettings.from_dict(raw)
-    scene.shadows.__dict__.update(fresh.__dict__)
-
-
-def georef_objects(scene) -> list[tuple[str, object]]:
-    """The scene's geographic display objects as ``(key, obj_or_None)``:
-    the flat base map (``"map"``), the 3D terrain and the survey mesh."""
-    return [("map", getattr(scene, "tile_layer", None)),
-            ("terrain", getattr(scene, "terrain", None)),
-            ("survey", getattr(scene, "photo_mesh", None))]
-
-
-def shown_state(scene) -> tuple:
-    """Everything a recalled view can change besides the camera, as a value
-    to compare: layer visibility, style, section, geographic layers,
-    shadows, hidden objects. A recall that leaves it equal moved the camera
-    only, and the caches keyed on ``scene.version`` (every edge and profile
-    of the model, re-synced) have nothing to rebuild."""
-    style = getattr(scene, "display_style", None)
-    shadows = getattr(scene, "shadows", None)
-    section = (scene.active_section()
-               if hasattr(scene, "active_section") else None)
-    return (tuple((ly.key, ly.visible) for ly in scene.layers),
-            tuple(sorted(getattr(scene, "folder_visibility", {}).items())),
-            style.to_dict() if style is not None else None,
-            getattr(section, "uid", None),
-            getattr(scene, "show_section_planes", None),
-            getattr(scene, "show_section_cuts", None),
-            tuple(sorted(georef_state(scene).items())),
-            shadows.to_dict() if shadows is not None else None,
-            tuple(sorted(uid for uid, g in scene.groups_by_uid().items()
-                         if getattr(g, "hidden", False))),
-            getattr(scene, "show_hidden_objects", None),
-            getattr(scene, "show_hidden_geometry", None))
-
-
-def visibility_sig(scene) -> tuple:
-    """Geometry visibility while a sheet temporarily recalls a scene."""
-    from core.layers import effective_visible
-    allowed = getattr(scene, "_navigator_allowed", None)
-    return (tuple((ly.key, effective_visible(scene, ly)) for ly in scene.layers),
-            tuple(bool(getattr(obj, "visible", True))
-                  for _, obj in georef_objects(scene) if obj is not None),
-            frozenset(uid for uid, group in scene.groups_by_uid().items()
-                      if group.hidden),
-            None if allowed is None else frozenset(allowed),
-            scene.show_hidden_objects, scene.show_hidden_geometry)
-
-
-def georef_state(scene) -> dict:
-    """Visibility of the geographic layers right now — a missing object
-    counts as hidden, so a scene made before any base map existed recalls
-    with the map OFF (every scene stands on its own, like sections)."""
-    return {key: bool(obj is not None and getattr(obj, "visible", False))
-            for key, obj in georef_objects(scene)}
+        return _NATIVE.saved_view_from_dict(cls, raw)
 
 
 def from_lookat(name: str, eye, target, up, fov_deg: float = 45.0,

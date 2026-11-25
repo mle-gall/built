@@ -632,25 +632,6 @@ def visible_placements(scene, group):
         yield from walk(group, m, bool(group.hidden), forced, None)
 
 
-def _copy_mesh(mesh) -> Mesh:
-    from ingetrazo_core import Matrix4 as QMatrix4x4
-    return transformed_mesh(mesh, QMatrix4x4())
-
-
-def _append_mesh(dst, src) -> None:
-    """Add every face and loose edge of ``src`` to ``dst`` (positions only —
-    the meshes are independent, so nothing aliases)."""
-    for f in src.faces:
-        nf = dst.add_face([v.position for v in f.loop],
-                          [[v.position for v in h] for h in f.hole_loops]
-                          or None)
-        nf.attrs = dict(f.attrs)
-        nf.interior = f.interior
-    for e in src.edges:
-        if not e.faces:
-            dst.add_edge(e.a, e.b)
-
-
 def np_affine(m):
     """``QMatrix4x4`` → ``(rot, trans)`` NumPy arrays: ``pts @ rot.T + trans``
     is ``m.map(p)`` for every row. ``data()`` is column-major."""

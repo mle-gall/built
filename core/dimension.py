@@ -39,7 +39,6 @@ from core.doc_model import Record, record_fields
 import ingetrazo_core as _NATIVE
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core.mesh import DeferredMesh
 
 
 #: Holds an endpoint remembers (see Dimension._live).
@@ -128,113 +127,13 @@ class VertexAnchor(Record):
             else QVector3D(v.position)
 
 
-def _may_hold(mesh, local: QVector3D, tol: float) -> bool:
-    """Whether ``mesh`` can have a vertex within ``tol`` of ``local``. A
-    mesh still deferred (the experimental engine's lazy meshes) answers
-    from its source positions, without building a single Python object:
-    asking its registry built the whole mesh, and resolving one anchor on a
-    3 400-placement model built all 164 of them (2 s on opening a sheet)."""
-    if type(mesh) is not DeferredMesh:
-        return True
-    d = mesh.__dict__
-    src = d.get("_deferred_source")
-    if not src or "pos" not in src:
-        return True
-    pos = src["pos"]
-    if not len(pos):
-        return False
-    box = d.get("_anchor_box")
-    if box is None:
-        import numpy as np
-        a = np.asarray(pos, dtype=np.float64)
-        box = d["_anchor_box"] = (a.min(axis=0), a.max(axis=0))
-    # The weld can move a point by its own resolution: a margin of a few.
-    pad = 4.0 * tol
-    p = (local.x(), local.y(), local.z())
-    lo, hi = box
-    if any(p[i] < lo[i] - pad or p[i] > hi[i] + pad for i in range(3)):
-        return False
-    import numpy as np
-    a = np.asarray(pos, dtype=np.float64)
-    near = np.all(np.abs(a - np.array(p)) <= pad, axis=1)
-    return bool(near.any())
-
-
-class _AnchorPlacements:
-    """Depth-first order, with a broad phase for widely instanced meshes."""
-
-    def __init__(self, groups):
-        from collections import defaultdict
-        import numpy as np
-        from core.group import iter_placements
-
-        self.entries = []
-        by_mesh = defaultdict(list)
-        for root in groups:
-            if getattr(root, "billboard", False):
-                continue
-            for placed, matrix in iter_placements(root):
-                inverse = None
-                if matrix is not None:
-                    inverse, ok = matrix.inverted()
-                    if not ok:
-                        continue
-                if inverse is not None and inverse.isAffine():
-                    by_mesh[placed.mesh].append(len(self.entries))
-                self.entries.append((root, placed, inverse))
-
-        self.batches = []
-        self.boxes = {}
-        for mesh, rows in by_mesh.items():
-            if len(rows) >= 32:
-                matrices = np.array([self.entries[i][2].data() for i in rows])
-                affine = matrices.reshape(-1, 4, 4).transpose(0, 2, 1)[:, :3]
-                self.batches.append((mesh, np.array(rows), affine))
-
-    def candidates(self, point, tol):
-        if not self.batches:
-            return self.entries
-        import numpy as np
-        from core.group import _local_points
-
-        keep = np.ones(len(self.entries), bool)
-        p = np.array([*point.toTuple(), 1.])
-        for mesh, rows, affine in self.batches:
-            store = mesh.__dict__.get("_store")
-            key = (mesh.revision, id(store), getattr(store, "revision", None))
-            cached = self.boxes.get(mesh)
-            if cached is None or cached[0] != key:
-                source = mesh.__dict__.get("_deferred_source")
-                if type(mesh) is DeferredMesh and not source:
-                    continue  # a custom deferred builder without source positions
-                if source:
-                    pos = source["pos"]
-                elif store is not None:
-                    pos = store.positions()
-                else:
-                    pos = _local_points(mesh)
-                box = None if pos is None or not len(pos) else (np.min(pos, axis=0), np.max(pos, axis=0))
-                self.boxes[mesh] = key, box
-            else:
-                _, box = cached
-            if box is None:
-                keep[rows] = False
-                continue
-            local = affine @ p
-            # QVector3D.map rounds in float32. Bound cancellation as well as
-            # the weld tolerance, then let the original Qt/registry test decide.
-            slack = 4*tol + 8*np.finfo(np.float32).eps*(np.abs(affine) @ np.abs(p))
-            keep[rows] = ~np.any((local < box[0]-slack) | (local > box[1]+slack), axis=1)
-        return (self.entries[i] for i in np.flatnonzero(keep))
-
-
 def _anchor_candidates(scene, point, tol):
     groups = getattr(scene, "groups", ()) or ()
     key = (getattr(scene, "content_version", getattr(scene, "version", None)), len(groups),
            id(getattr(scene, "edit_group", None)), id(scene.mesh))
     cached = scene.__dict__.get("_anchor_placements")
     if cached is None or cached[0] != key:
-        cached = scene._anchor_placements = key, _AnchorPlacements(groups)
+        cached = scene._anchor_placements = key, _NATIVE.AnchorPlacements(groups)
     return cached[1].candidates(point, tol)
 
 
@@ -247,10 +146,12 @@ def resolve_vertex_anchor(scene, point: QVector3D, tol: float = 1e-4):
     point that came through a placement's float32 matrix and back lands
     within a micron of the vertex, which a tighter tolerance rejected on
     far-out coordinates. A lazy mesh is only built when its own points
-    say the vertex may be there (:func:`_may_hold`)."""
+    say the vertex may be there (``dimension_may_hold``; it and the
+    placements' broad phase are
+    ``rust/ingetrazo_core/src/model/anchor_broad.rs``)."""
 
     def hit(mesh, local):
-        if not _may_hold(mesh, local, tol):
+        if not _NATIVE.dimension_may_hold(mesh, local, tol):
             return None
         v = mesh.vertex_at(local)
         if v is None or (v.position - local).length() > tol:

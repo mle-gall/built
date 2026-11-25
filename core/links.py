@@ -143,13 +143,6 @@ def tag_name(path, tag: str) -> str:
                                else tag)
 
 
-def link_tags(scene, path) -> list:
-    """The host tags that stand for ``path``'s tags."""
-    prefix = stem(path) + SEP
-    return [ly.key for ly in scene.layers if ly.key.startswith(prefix)
-            and ly.key in _entry(scene, path).get("tags", ())]
-
-
 def source_of_tag(scene, name: str):
     """The source file a host tag belongs to, or None for the host's own."""
     for key, entry in registry_view(scene).items():
@@ -612,16 +605,6 @@ def _used_tags(scene) -> set:
     from core.purge import layer_carriers
     from core.layers import layer_of
     return {layer_of(e) for e in layer_carriers(scene)}
-
-
-def _install(scene, path, comp) -> None:
-    """Every copy of ``path`` shows ``comp``: they share its prototype
-    mesh and nested placements, each keeping its own transform, tag,
-    paint and name."""
-    for g in linked_groups(scene, path):
-        _populate(g, comp)
-    _entry(scene, path)['loaded_mtime_ns'] = Path(path).stat().st_mtime_ns
-    scene.version += 1
 
 
 def validate_select(select):

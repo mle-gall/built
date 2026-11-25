@@ -22,7 +22,8 @@ def _frame(window, viewport, width, height, overlays):
 
 
 def export_video(window, path, width, height, fps, progress=None):
-    from core.saved_views import SavedView, shown_state
+    from core.saved_views import SavedView
+    from ingetrazo_core import saved_view_shown_state as shown_state
     from core.scene_animation import Pose, video_frame_count
 
     viewport = window.viewport

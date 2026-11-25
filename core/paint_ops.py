@@ -32,12 +32,12 @@ def _same_plane(face, plane, tol: float = 1e-4) -> bool:
 def _surface_commands(mesh, faces, seed, tex, plane) -> list | None:
     """The commands that paint a curved SURFACE (faces joined by soft
     edges) with ``tex`` running continuously from ``seed`` — see
-    ``core.texture.continuous_maps``. ``None`` when ``faces`` is not such
+    ``texture_continuous_maps`` (``model/texture_maths.rs``). ``None`` when ``faces`` is not such
     a surface (a single face, or a plain selection), so the caller falls
     back to the per-face rule."""
     if mesh is None or seed is None or len(faces) < 2:
         return None
-    from core.texture import continuous_maps
+    from ingetrazo_core import texture_continuous_maps as continuous_maps
     look = tex
     if tex.get("uvw") and (plane is None or not _same_plane(seed, plane)):
         from core.texture import flattened_texture
