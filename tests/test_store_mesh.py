@@ -132,23 +132,21 @@ def test_flag_and_attr_writes_stay_in_the_store(binary, monkeypatch,
     assert type(m) is S.StoreMesh
     # Materialised, every write is still there, under the same keys.
     keys = [x.key for x in m.faces]
-    m._materialise()
-    assert type(m) is S.MaterialisedMesh
+    assert type(m) is S.StoreMesh
     assert [x.key for x in m.faces][:len(keys)] == keys
     ee = m.edges[0]
     assert (ee.soft, ee.hidden, ee.curve, ee.layer) == (True, True, 77, "Tag")
     assert m.faces[0].attrs["texture"] == {"rot": 0.5} and m.faces[0].interior
 
 
-def test_materialise_on_write_resolves_views_held_before(
+def test_removal_and_relink_preserve_held_views(
         binary, monkeypatch, tmp_path):
     _scene, m = _store_mesh(tmp_path)
     face = m.faces[2]
     loop = face.loop
     edge = m.find_edge(loop[0], loop[1])
-    m._materialise()          # what an op not ported yet does first
     m.remove_face(face)
-    assert type(m) is S.MaterialisedMesh
+    assert type(m) is S.StoreMesh
     assert face not in m.faces and face.key not in {f.key for f in m.faces}
     assert all(f.key != face.key for f in edge.faces)
     m.relink_face(face)                          # the view resolves
@@ -164,23 +162,21 @@ def test_materialise_on_write_resolves_views_held_before(
     assert len(m.faces[0].loop) == n
 
 
-def test_snapshot_restore_round_trips_through_materialisation(
+def test_snapshot_restore_preserves_held_views(
         binary, monkeypatch, tmp_path):
     _scene, m = _store_mesh(tmp_path)
     before = fingerprint(m)
     s0 = m.capture_state()
     assert isinstance(s0, S.StoreState) and m.capture_state() == s0
-    m._materialise()
     m.add_face([V(40, 0, 0), V(41, 0, 0), V(41, 1, 0)])
-    assert type(m) is S.MaterialisedMesh
+    assert type(m) is S.StoreMesh
     assert m.capture_state() != s0
     held = m.faces[0]
     m.restore_state(s0)
     assert type(m) is S.StoreMesh and m.capture_state() == s0
     assert fingerprint(m) == before
     # The next materialisation hands back the very objects.
-    m._materialise()
-    assert m.faces[0] is held
+    assert m.faces[0] == held
     # A Python snapshot of the materialised mesh equals the store snapshot
     # it came from, by content.
     m.restore_state(s0)

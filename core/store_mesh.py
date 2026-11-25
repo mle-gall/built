@@ -10,29 +10,17 @@ objects, and every command snapshots the whole mesh it edits
 ride's largest mesh, 0.27 s to restore). A store holds ~220 B per face and
 snapshots by sharing ``Arc`` chunks, in microseconds.
 
-With the store enabled, Mesh() owns an empty store immediately. Imports
-can fill it in bulk and a deferred document block builds on first touch.
-Views identify elements by (mesh, key); each access can return a new view.
-Ordinary modelling commands edit the store. Compatibility writes that need
-an arbitrary Python object graph switch to MaterialisedMesh, which resolves
-previously issued views. See docs/meshstore-design.md §26 for the remaining
-transitions and their diagnostics.
-
-**Snapshots.** ``capture_state`` of a store-backed mesh is a
-:class:`StoreState` (a store snapshot plus the per-face attrs dicts):
-O(chunks). Restoring one turns a materialised mesh back into a store-backed
-one of the same lineage; restoring a Python snapshot turns a store-backed
-mesh into Python objects. One owner at any time: never a store and Python
-objects kept in sync.
-
-The Rust store owns new meshes."""
+Mesh() owns an empty store. Imports fill it in bulk and a deferred document
+block builds on first touch. Views identify elements by mesh and key.
+Incidence writes edit the store. A StoreState snapshot shares native
+chunks and preserves per-face Python attributes."""
 from __future__ import annotations
 
 from collections.abc import Mapping
 from itertools import count
 
 import numpy as np
-from ingetrazo_core import Vec3 as QVector3D, polygon_centroid, polygon_net_area, polygon_newell as _newell, store_views, object_replay
+from ingetrazo_core import Vec3 as QVector3D, polygon_centroid, polygon_net_area, polygon_newell as _newell, store_views
 
 from core import mesh as _mesh
 from core.mesh import Edge, Face, Mesh, Vertex
@@ -41,8 +29,8 @@ LOCAL_MASK = (1 << 40) - 1
 
 #: ``mesh.__dict__`` entries that belong to the store side and never travel
 #: with a deep copy of the Python state.
-STORE_SIDE = ("_store", "_objmap", "_attr_table", "_attr_own", "_bulk",
-              "_py_base", "_pos_cache", "_face_cache", "_frame_parent",
+STORE_SIDE = ("_store", "_attr_table", "_attr_own", "_bulk",
+              "_pos_cache", "_face_cache", "_frame_parent",
               "_tool_frame_cache", "_planned_points", "_instance_definition")
 
 
@@ -122,46 +110,6 @@ def _copy_attrs(d) -> dict:
                 else v) for k, v in d.items()}
 
 
-# ---- Materialised element classes -----------------------------------------
-# Hashed by key, so a view (hashed by key) finds the object it names in a
-# set or a dict and the other way round. Equality stays identity (C speed
-# for list scans); a view's own __eq__ answers by key from either side.
-
-def _plain_reduce(base):
-    def __reduce_ex__(self, protocol):
-        # A copy is a new element of a new mesh (2.1), hashed by identity
-        # like any Python element: copy.deepcopy rebuilds a vertex's edge
-        # set before the copied edges have their keys, which a key hash
-        # could not survive.
-        rv = object.__reduce_ex__(self, 2)
-        return (object.__new__, (base,)) + tuple(rv[2:])
-    return __reduce_ex__
-
-
-class _MVertex(Vertex):
-    __slots__ = ()
-    __reduce_ex__ = _plain_reduce(Vertex)
-
-    def __hash__(self):
-        return hash(self.key)
-
-
-class _MEdge(Edge):
-    __slots__ = ()
-    __reduce_ex__ = _plain_reduce(Edge)
-
-    def __hash__(self):
-        return hash(self.key)
-
-
-class _MFace(Face):
-    __slots__ = ()
-    __reduce_ex__ = _plain_reduce(Face)
-
-    def __hash__(self):
-        return hash(self.key)
-
-
 # ---- Views ----------------------------------------------------------------
 
 def _attribute_owner(mesh):
@@ -176,25 +124,6 @@ def _store_of(m):
 
 class _ViewMixin:
     __slots__ = ()
-
-    def _obj(self):
-        """The Python object this view names (materialising the mesh)."""
-        m = self._m
-        if m.__class__ is StoreMesh:
-            m._materialise()
-        obj = m.__dict__.get("_objmap", {}).get(self.key)
-        if obj is None:
-            raise KeyError(f"element {self.key} is not in this mesh")
-        return obj
-
-    def _stale(self):
-        """A key the store no longer has (a restore across lineages): the
-        object a materialisation made for it, as a held Python element
-        would answer."""
-        obj = self._m.__dict__.get("_objmap", {}).get(self.key)
-        if obj is None:
-            raise KeyError(f"element {self.key} is not in this mesh")
-        return obj
 
     def __eq__(self, other):
         if other is self:
@@ -213,23 +142,17 @@ class _ViewMixin:
     def __deepcopy__(self, memo):
         from copy import deepcopy
         if _store_of(self._m) is None or not self._m._store.knows(self.key):
-            return deepcopy(self._obj(), memo)
+            raise KeyError(f"unknown mesh element {self.key}")
         owner = deepcopy(self._m, memo)
         key = (owner._store.namespace << 40) | (self.key & LOCAL_MASK)
         return type(self)(owner, key)
 
     def __reduce__(self):
-        if type(self._m) is StoreMesh:
-            return (_unpickle_view, (type(self), self._m, self.key & LOCAL_MASK))
-        return (_identity, (self._obj(),))
+        return _unpickle_view, (type(self), self._m, self.key & LOCAL_MASK)
 
 
 def _unpickle_view(cls, mesh, local_key):
     return cls(mesh, mesh._store.key_base | local_key)
-
-
-def _identity(x):
-    return x
 
 
 class VertexView(_ViewMixin, Vertex):
@@ -242,37 +165,28 @@ class VertexView(_ViewMixin, Vertex):
     @property
     def position(self):
         m = self._m
-        if m.__class__ is not StoreMesh:
-            return self._obj().position
         return _position(m, self.key)
 
     def position_tuple(self):
         """Model coordinates for geometry consumers, including sub-float32 edits."""
         st = _store_of(self._m)
-        return tuple(st.vertex_position(self.key)) if st is not None else self.position.toTuple()
+        return tuple(st.vertex_position(self.key))
 
     @position.setter
     def position(self, value):
-        if self._m.__dict__.get("_instance_definition") is not None:
-            self._m.place_vertex(self, value)
-        else:
-            self._obj().position = value
+        self._m.place_vertex(self, value)
 
     @property
     def edges(self):
         m = self._m
         st = _store_of(m)
-        if st is None:
-            return self._obj().edges
-        try:
-            keys = st.vertex_edges(self.key)
-        except KeyError:
-            return self._stale().edges
-        return _MutSet(self, "edges", (EdgeView(m, k) for k in keys))
+        keys = st.vertex_edges(self.key)
+        return _MutSet(EdgeView(m, k) for k in keys)
 
     @edges.setter
     def edges(self, value):
-        self._obj().edges = _resolve(value, self._m)
+        if set(value) != set(self.edges):
+            raise ValueError("vertex.edges is determined by the endpoints of live edges")
 
 
 class EdgeView(_ViewMixin, Edge):
@@ -289,56 +203,40 @@ class EdgeView(_ViewMixin, Edge):
     def v0(self):
         m = self._m
         st = _store_of(m)
-        if st is None:
-            return self._obj().v0
-        try:
-            return VertexView(m, st.edge_ends(self.key)[0])
-        except KeyError:
-            return self._stale().v0
+        return VertexView(m, st.edge_ends(self.key)[0])
 
     @v0.setter
     def v0(self, value):
-        self._obj().v0 = _resolve(value, self._m)
+        self._m._store.set_endpoint(self.key, 0, self._m._incidence_key(value, 0))
+        self._m._dirty()
 
     @property
     def v1(self):
         m = self._m
         st = _store_of(m)
-        if st is None:
-            return self._obj().v1
-        try:
-            return VertexView(m, st.edge_ends(self.key)[1])
-        except KeyError:
-            return self._stale().v1
+        return VertexView(m, st.edge_ends(self.key)[1])
 
     @v1.setter
     def v1(self, value):
-        self._obj().v1 = _resolve(value, self._m)
+        self._m._store.set_endpoint(self.key, 1, self._m._incidence_key(value, 0))
+        self._m._dirty()
 
     @property
     def faces(self):
         m = self._m
         st = _store_of(m)
-        if st is None:
-            return self._obj().faces
-        try:
-            keys = st.edge_faces(self.key)
-        except KeyError:
-            return self._stale().faces
+        keys = st.edge_faces(self.key)
         return _MutList(self, ("faces",), [FaceView(m, k) for k in keys])
 
     @faces.setter
     def faces(self, value):
-        self._obj().faces = list(_resolve(value, self._m))
+        keys = [self._m._incidence_key(f, 2) for f in value]
+        self._m._store.order_edge_faces(self.key, keys)
+        self._m._dirty()
 
     def _flag(self, name):
         st = _store_of(self._m)
-        if st is None:
-            return getattr(self._obj(), name)
-        try:
-            _a, _b, flags, curve, layer = st.edge(self.key)
-        except KeyError:
-            return getattr(self._stale(), name)
+        _a, _b, flags, curve, layer = st.edge(self.key)
         if name == "soft":
             return bool(flags & 1)
         if name == "flat":
@@ -352,28 +250,20 @@ class EdgeView(_ViewMixin, Edge):
     def _set_flag(self, name, value):
         m = self._m
         st = _store_of(m)
-        if st is None:
-            setattr(self._obj(), name, value)
-            return
         if name in ("soft", "hidden", "flat"):
             flags = st.edge(self.key)[2]
             bit = {"soft": 1, "hidden": 2, "flat": 4}[name]
             flags = (flags | bit) if value else (flags & ~bit)
             if not isinstance(value, bool) and value not in (0, 1):
-                # A non-bool flag (never written by the app): Python keeps
-                # the object; only a Python edge can hold it.
-                setattr(self._obj(), name, value)
-                return
+                raise TypeError(f"invalid {name} value: {value!r}")
             st.set_edge_flags(self.key, flags)
         elif name == "curve":
             if value is not None and not isinstance(value, int):
-                setattr(self._obj(), name, value)
-                return
+                raise TypeError(f"invalid {name} value: {value!r}")
             st.set_edge_curve(self.key, value)
         else:
             if value is not None and not isinstance(value, str):
-                setattr(self._obj(), name, value)
-                return
+                raise TypeError(f"invalid {name} value: {value!r}")
             st.set_edge_layer(self.key, value)
 
     soft = property(lambda self: self._flag("soft"),
@@ -390,23 +280,13 @@ class EdgeView(_ViewMixin, Edge):
     @property
     def a(self) -> QVector3D:
         m = self._m
-        if m.__class__ is not StoreMesh:
-            return self._obj().a
-        try:
-            k = m.__dict__["_store"].edge_ends(self.key)[0]
-        except KeyError:
-            return self._stale().a
+        k = m.__dict__["_store"].edge_ends(self.key)[0]
         return _position(m, k)
 
     @property
     def b(self) -> QVector3D:
         m = self._m
-        if m.__class__ is not StoreMesh:
-            return self._obj().b
-        try:
-            k = m.__dict__["_store"].edge_ends(self.key)[1]
-        except KeyError:
-            return self._stale().b
+        k = m.__dict__["_store"].edge_ends(self.key)[1]
         return _position(m, k)
 
     def other(self, v):
@@ -420,8 +300,6 @@ class EdgeView(_ViewMixin, Edge):
 
     def length(self) -> float:
         st = _store_of(self._m)
-        if st is None:
-            return self._obj().length()
         a, b = st.edge_ends(self.key)
         from math import dist
         return dist(st.vertex_position(a), st.vertex_position(b))
@@ -438,13 +316,7 @@ def _position(m, key) -> QVector3D:
     pc = _pos_dict(m, st)
     p = pc.get(key)
     if p is None:
-        try:
-            p = QVector3D(*st.vertex_position(key))
-        except KeyError:
-            obj = d.get("_objmap", {}).get(key)
-            if obj is None:
-                raise KeyError(f"element {key} is not in this mesh") from None
-            return obj.position
+        p = QVector3D(*st.vertex_position(key))
         pc[key] = p
     return p
 
@@ -494,28 +366,21 @@ class FaceView(_ViewMixin, Face):
     def loop(self):
         m = self._m
         st = _store_of(m)
-        if st is None:
-            return self._obj().loop
-        try:
-            rings = st.face_rings(self.key)
-        except KeyError:
-            return self._stale().loop
+        rings = st.face_rings(self.key)
         return _MutList(self, ("loop",), [VertexView(m, k) for k in rings[0]])
 
     @loop.setter
     def loop(self, value):
-        self._obj().loop = list(_resolve(value, self._m))
+        rings = self._m._store.face_rings(self.key)
+        rings[0] = [self._m._incidence_key(v, 0) for v in value]
+        self._m._store.replace_rings(self.key, rings)
+        self._m._dirty()
 
     @property
     def hole_loops(self):
         m = self._m
         st = _store_of(m)
-        if st is None:
-            return self._obj().hole_loops
-        try:
-            rings = st.face_rings(self.key)
-        except KeyError:
-            return self._stale().hole_loops
+        rings = st.face_rings(self.key)
         return _MutList(self, ("hole_loops",), [
             _MutList(self, ("hole_loops", i),
                      [VertexView(m, k) for k in r])
@@ -523,24 +388,19 @@ class FaceView(_ViewMixin, Face):
 
     @hole_loops.setter
     def hole_loops(self, value):
-        self._obj().hole_loops = [list(h) for h in _resolve(value, self._m)]
+        outer = self._m._store.face_rings(self.key)[0]
+        holes = [[self._m._incidence_key(v, 0) for v in ring] for ring in value]
+        self._m._store.replace_rings(self.key, [outer, *holes])
+        self._m._dirty()
 
     def _positions(self):
-        try:
-            return _face_entry(self._m, self.key)[0]
-        except KeyError:
-            return None
+        return _face_entry(self._m, self.key)[0]
 
     def _vectors(self):
         """The rings as the vertices' own position objects (cached per
         store revision, see ``_face_entry``), or None."""
         m = self._m
-        if m.__class__ is not StoreMesh:
-            return None
-        try:
-            hit = _face_entry(m, self.key)
-        except KeyError:
-            return None
+        hit = _face_entry(m, self.key)
         if hit[1] is None:
             st = m.__dict__["_store"]
             pc = _pos_dict(m, st)
@@ -559,33 +419,23 @@ class FaceView(_ViewMixin, Face):
     @property
     def vertices(self):
         rings = self._vectors()
-        if rings is None:
-            return object_replay.face_vertices(self)
         return list(rings[0])
 
     @property
     def holes(self):
         rings = self._vectors()
-        if rings is None:
-            return object_replay.face_holes(self)
         return [list(r) for r in rings[1:]]
 
     @property
     def interior(self):
         st = _store_of(self._m)
-        if st is None:
-            return self._obj().interior
-        try:
-            return bool(st.face_info(self.key)[1] & 1)
-        except KeyError:
-            return self._stale().interior
+        return bool(st.face_info(self.key)[1] & 1)
 
     @interior.setter
     def interior(self, value):
         st = _store_of(self._m)
-        if st is None or not isinstance(value, bool):
-            self._obj().interior = value
-            return
+        if not isinstance(value, bool):
+            raise TypeError("face.interior requires a bool")
         flags = st.face_info(self.key)[1]
         st.set_face_flags(self.key, (flags | 1) if value else (flags & ~1))
 
@@ -593,16 +443,11 @@ class FaceView(_ViewMixin, Face):
     def attrs(self):
         m = self._m
         st = _store_of(m)
-        if st is None:
-            return self._obj().attrs
         attrs = _attribute_owner(m)
         own = attrs["_attr_own"]
         d = own.get(self.key)
         if d is None:
-            try:
-                idx = st.face_info(self.key)[0]
-            except KeyError:
-                return self._stale().attrs
+            idx = st.face_info(self.key)[0]
             # The face's own dict from now on, as a Python face has one: a
             # write into it (or into a texture dict inside) stays this
             # face's, and the next read hands back the same object.
@@ -613,9 +458,6 @@ class FaceView(_ViewMixin, Face):
     @attrs.setter
     def attrs(self, value):
         m = self._m
-        if _store_of(m) is None:
-            self._obj().attrs = value
-            return
         _attribute_owner(m)["_attr_own"][self.key] = value
 
     def reverse_rings(self) -> None:
@@ -624,16 +466,11 @@ class FaceView(_ViewMixin, Face):
         materialises the mesh. Python bumps no counter for it, neither
         does this (the store's own revision moves, for the view caches)."""
         st = _store_of(self._m)
-        if st is None:
-            self._obj().reverse_rings()
-            return
         st.reverse_face(self.key)
 
     # Geometry from one fetch of the rings' positions.
     def _newell(self) -> QVector3D:
-        rings = self._positions() if _store_of(self._m) is not None else None
-        if rings is None:
-            return Face._newell(self)
+        rings = self._positions()
         return _newell(rings[0])
 
     def triangulate(self, normal=None):
@@ -647,12 +484,7 @@ class FaceView(_ViewMixin, Face):
 
     def normal(self) -> QVector3D:
         m = self._m
-        if m.__class__ is not StoreMesh:
-            return Face.normal(self)
-        try:
-            hit = _face_entry(m, self.key)
-        except KeyError:
-            return Face.normal(self)
+        hit = _face_entry(m, self.key)
         n = hit[2]
         if n is None:
             n = store_views.face_normal(hit[0][0])
@@ -660,178 +492,81 @@ class FaceView(_ViewMixin, Face):
         return QVector3D(n)          # a caller may scale it in place
 
     def area(self) -> float:
-        rings = self._positions() if _store_of(self._m) is not None else None
-        if rings is None:
-            return Face.area(self)
+        rings = self._positions()
         return store_views.face_area(rings[0])
 
     def net_area(self) -> float:
-        rings = self._positions() if _store_of(self._m) is not None else None
-        if rings is None:
-            return Face.net_area(self)
+        rings = self._positions()
         return polygon_net_area(rings[0], rings[1:])
 
     def centroid(self) -> QVector3D:
-        rings = self._positions() if _store_of(self._m) is not None else None
-        if rings is None:
-            return Face.centroid(self)
+        rings = self._positions()
         return polygon_centroid(rings[0])
 
 
-_VIEW_TYPES = (VertexView, EdgeView, FaceView)
 _BASE = {VertexView: Vertex, EdgeView: Edge, FaceView: Face}
 
 
-def _resolve(x, m):
-    """``x`` with every view of ``m`` replaced by the Python object it
-    names (materialising ``m``), containers rebuilt; anything else as is."""
-    c = x.__class__
-    if c is VertexView or c is EdgeView or c is FaceView:
-        return x._obj() if x._m is m else x
-    if c is list or c is _MutList:
-        return [_resolve(i, m) for i in x]
-    if c is tuple:
-        return tuple(_resolve(i, m) for i in x)
-    if c is set or c is _MutSet:
-        return {_resolve(i, m) for i in x}
-    if c is frozenset:
-        return frozenset(_resolve(i, m) for i in x)
-    if c is dict:
-        return {k: _resolve(v, m) for k, v in x.items()}
-    return x
-
-
 class _MutList(list):
-    """A list a view hands out (``edge.faces``, ``face.loop``, a hole). It
-    reads like the Python list; an in-place write materialises the mesh and
-    is made on the element's real list too, so a caller that edits it
-    (``f.loop.reverse()``, ``edge.faces.append(f)``) edits the mesh, as it
-    does on a Python mesh."""
-
-    __slots__ = ("_owner", "_path")
-
+    """A write-through copy of a face ring, its holes, or an edge’s face order."""
     def __init__(self, owner, path, items):
-        list.__init__(self, items)
-        self._owner = owner
-        self._path = path
+        super().__init__(items)
+        self._owner, self._path = owner, path
 
-    def _real(self):
-        obj = self._owner._obj()
-        target = getattr(obj, self._path[0])
-        for i in self._path[1:]:
-            target = target[i]
-        return target
-
-    def _fwd(name):
-        base = getattr(list, name)
-
-        def method(self, *args):
-            m = self._owner._m
-            real = self._real()
-            base(real, *_resolve(args, m))
-            return base(self, *args)
-        method.__name__ = name
+    def _write(name):
+        def method(self, *args, **kwargs):
+            field, *index = self._path
+            current = getattr(self._owner, field)
+            if index and (index[0] >= len(current) or current[index[0]] != self):
+                raise ValueError("the held hole ring has been replaced")
+            target = list(current[index[0]] if index else current)
+            result = getattr(target, name)(*args, **kwargs)
+            if index:
+                rings = list(current)
+                rings[index[0]] = target
+                setattr(self._owner, field, rings)
+            else:
+                setattr(self._owner, field, target)
+            if field == "hole_loops" and not index:
+                target = self._owner.hole_loops
+            list.__setitem__(self, slice(None), target)
+            return result
         return method
 
-    append = _fwd("append")
-    extend = _fwd("extend")
-    insert = _fwd("insert")
-    remove = _fwd("remove")
-    pop = _fwd("pop")
-    clear = _fwd("clear")
-    def reverse(self):
-        face = self._owner
-        if isinstance(face, FaceView):
-            path = self._path
-            ring = None
-            if path == ("loop",):
-                ring = 0
-            elif path[0] == "hole_loops" and len(path) == 2:
-                ring = path[1] + 1
-            store = _store_of(face._m)
-            if store is not None and ring is not None:
-                store.reverse_ring(face.key, ring)
-                list.reverse(self)
-                return
-        self._real().reverse()
-        list.reverse(self)
+    append = _write("append")
+    clear = _write("clear")
+    extend = _write("extend")
+    insert = _write("insert")
+    pop = _write("pop")
+    remove = _write("remove")
+    reverse = _write("reverse")
+    sort = _write("sort")
+    __setitem__ = _write("__setitem__")
+    __delitem__ = _write("__delitem__")
 
-    __setitem__ = _fwd("__setitem__")
-    __delitem__ = _fwd("__delitem__")
-
-    def sort(self, *args, **kw):
-        real = self._real()
-        real.sort(*args, **kw)
-        list.sort(self, *args, **kw)
-
-    def __iadd__(self, other):
-        self.extend(other)
+    def __iadd__(self, items):
+        self.extend(items)
         return self
+
+    _repeat = _write("__imul__")
 
     def __imul__(self, n):
-        real = self._real()
-        real *= n
-        list.__imul__(self, n)
+        self._repeat(n)
         return self
-
-    del _fwd
 
 
 class _MutSet(set):
-    """``vertex.edges`` from a view: a set, written through like
-    :class:`_MutList`."""
+    def _readonly(self, *args):
+        raise ValueError("vertex.edges is determined by the endpoints of live edges")
 
-    __slots__ = ("_owner", "_attr")
-
-    def __init__(self, owner, attr, items):
-        set.__init__(self, items)
-        self._owner = owner
-        self._attr = attr
-
-    def _fwd(name):
-        base = getattr(set, name)
-
-        def method(self, *args):
-            m = self._owner._m
-            real = getattr(self._owner._obj(), self._attr)
-            base(real, *_resolve(args, m))
-            return base(self, *args)
-        method.__name__ = name
-        return method
-
-    add = _fwd("add")
-    discard = _fwd("discard")
-    remove = _fwd("remove")
-    pop = _fwd("pop")
-    clear = _fwd("clear")
-    update = _fwd("update")
-    difference_update = _fwd("difference_update")
-    intersection_update = _fwd("intersection_update")
-    symmetric_difference_update = _fwd("symmetric_difference_update")
-
-    def __ior__(self, other):
-        self.update(other)
-        return self
-
-    def __isub__(self, other):
-        self.difference_update(other)
-        return self
-
-    def __iand__(self, other):
-        self.intersection_update(other)
-        return self
-
-    def __ixor__(self, other):
-        self.symmetric_difference_update(other)
-        return self
-
-    del _fwd
+    add = discard = remove = pop = clear = update = _readonly
+    difference_update = intersection_update = symmetric_difference_update = _readonly
+    __ior__ = __iand__ = __ixor__ = __isub__ = _readonly
 
 
 class _Seq:
     """``mesh.vertices`` / ``edges`` / ``faces`` of a store-backed mesh: a
-    live list of views in list order. Kept past a materialisation (an alias
-    taken before), it reads and writes the mesh's real list."""
+    live list of keyed views in store order."""
 
     __slots__ = ("_m", "_kind", "_name", "_cls", "_idx")
 
@@ -842,28 +577,16 @@ class _Seq:
         self._cls = cls
         self._idx = idx
 
-    def _real(self):
-        m = self._m
-        if m.__class__ is StoreMesh:
-            return None
-        return m.__dict__[self._name]
-
     def _keys(self):
         return self._m.__dict__["_store"].keys(self._kind)
 
     def __len__(self):
-        real = self._real()
-        if real is not None:
-            return len(real)
         return self._m.__dict__["_store"].counts()[self._idx]
 
     def __bool__(self):
         return len(self) > 0
 
     def __iter__(self):
-        real = self._real()
-        if real is not None:
-            return iter(real)
         m, cls = self._m, self._cls
         return (cls(m, k) for k in self._keys())
 
@@ -871,9 +594,6 @@ class _Seq:
         return reversed(list(self))
 
     def __getitem__(self, i):
-        real = self._real()
-        if real is not None:
-            return real[i]
         if isinstance(i, slice):
             m, cls = self._m, self._cls
             return [cls(m, k) for k in self._keys()[i]]
@@ -886,9 +606,6 @@ class _Seq:
         return self._cls(self._m, st.key_at(self._kind, i))
 
     def __contains__(self, x):
-        real = self._real()
-        if real is not None:
-            return x in real
         if not isinstance(x, _BASE[self._cls]):
             return False
         try:
@@ -897,17 +614,11 @@ class _Seq:
             return False
 
     def index(self, x, *args):
-        real = self._real()
-        if real is not None:
-            return real.index(x, *args)
         if not args and x in self:
             return self._m.__dict__["_store"].index_of(x.key)
         return list(self).index(x, *args)
 
     def count(self, x):
-        real = self._real()
-        if real is not None:
-            return real.count(x)
         return 1 if x in self else 0
 
     def copy(self):
@@ -927,14 +638,19 @@ class _Seq:
     def __repr__(self):
         return repr(list(self))
 
+    def _replace(self, items):
+        if any(not isinstance(item, self._cls) or not self._m._store.knows(item.key)
+               for item in items):
+            raise ValueError(f"{self._name} requires keyed elements belonging to this mesh")
+        self._m._store.set_members(self._kind, [item.key for item in items])
+        self._m._dirty()
+
     def _write(name):
-        def method(self, *args):
-            m = self._m
-            if m.__class__ is StoreMesh:
-                m._materialise()
-            real = m.__dict__[self._name]
-            return getattr(real, name)(*_resolve(args, m))
-        method.__name__ = name
+        def method(self, *args, **kwargs):
+            items = list(self)
+            result = getattr(items, name)(*args, **kwargs)
+            self._replace(items)
+            return result
         return method
 
     append = _write("append")
@@ -943,44 +659,17 @@ class _Seq:
     remove = _write("remove")
     pop = _write("pop")
     clear = _write("clear")
+    reverse = _write("reverse")
+    sort = _write("sort")
     __delitem__ = _write("__delitem__")
-
-    def _reorder(self, items):
-        keys = [getattr(item, "key", None) for item in items]
-        if len(keys) != len(self) or set(keys) != set(self._keys()):
-            return False
-        self._m._store.reorder(self._kind, keys)
-        self._m.__dict__.pop("_bulk", None)
-        return True
-
-    def reverse(self):
-        real = self._real()
-        if real is not None:
-            return real.reverse()
-        self._m._store.reorder(self._kind, self._keys()[::-1])
-        self._m.__dict__.pop("_bulk", None)
-
-    def sort(self, *, key=None, reverse=False):
-        real = self._real()
-        if real is not None:
-            return real.sort(key=key, reverse=reverse)
-        items = sorted(self, key=key, reverse=reverse)
-        if not self._reorder(items):
-            raise ValueError("mesh list modified during sort")
-
-    def __setitem__(self, index, value):
-        real = self._real()
-        if real is not None:
-            real[index] = _resolve(value, self._m)
-            return
-        items = list(self)
-        items[index] = value
-        if not self._reorder(items):
-            self._m._materialise()
-            self._m.__dict__[self._name][:] = _resolve(items, self._m)
+    __setitem__ = _write("__setitem__")
 
     def __iadd__(self, other):
         self.extend(other)
+        return self
+
+    def __imul__(self, n):
+        self._replace(list(self) * n)
         return self
 
     del _write
@@ -1059,8 +748,7 @@ class StoreState(Mapping):
     __hash__ = None
 
     def _equals_python(self, other: dict) -> bool:
-        """``==`` against a Python snapshot (the mesh materialised since):
-        entry by entry, views against the objects of the same keys."""
+        """Compare this snapshot with its plugin-visible mapping representation."""
         for name in self._KEYS:
             if name not in other:
                 return False
@@ -1190,33 +878,8 @@ def _seq_property(kind, name, cls, idx):
         return _Seq(self, kind, name, cls, idx)
 
     def put(self, value):
-        items = list(value)
-        if not get(self)._reorder(items):
-            self._materialise()
-            setattr(self, name, _resolve(items, self))
+        get(self)._replace(list(value))
     return property(get, put)
-
-
-def _materialising(name):
-    def get(self):
-        self._materialise()
-        return getattr(self, name)
-
-    def put(self, value):
-        self._materialise()
-        setattr(self, name, value)
-    return property(get, put)
-
-
-def _on_python(name):
-    """A Mesh method the store cannot do yet: materialise, then run the
-    Python kernel (through MaterialisedMesh, which resolves views)."""
-    def method(self, *args, **kw):
-        self._materialise()
-        return getattr(self, name)(*args, **kw)
-    method.__name__ = name
-    method.__doc__ = f"Materialise, then :meth:`Mesh.{name}`."
-    return method
 
 
 class StoreMesh(Mesh):
@@ -1224,15 +887,23 @@ class StoreMesh(Mesh):
 
     def __init__(self) -> None:
         # ``StoreMesh()`` (as ``type(scene.mesh)()``) is a new empty mesh
-        # like ``Mesh()``: store-backed when the engine is on, else objects.
+        # like ``Mesh()``.
         self.__class__ = Mesh
         Mesh.__init__(self)
 
     vertices = _seq_property("vertex", "vertices", VertexView, 0)
     edges = _seq_property("edge", "edges", EdgeView, 1)
     faces = _seq_property("face", "faces", FaceView, 2)
-    _registry = _materialising("_registry")
-    _displaced = _materialising("_displaced")
+    @property
+    def _registry(self):
+        cells, indices = self._store.registry()
+        vertices = self.vertices
+        return {tuple(cell): vertices[i] for cell, i in zip(cells.tolist(), indices.tolist())}
+
+    @property
+    def _displaced(self):
+        return {cell: [VertexView(self, k) for k in keys]
+                for cell, keys in self._store.displaced_keys().items()}
 
     def curve_edges(self, edge):
         cid = edge.curve
@@ -1360,12 +1031,6 @@ class StoreMesh(Mesh):
                 FaceView(self, key).attrs = dict(source.attrs)
         return sources
 
-    def _py(self, name, *args):
-        if self.__class__ is StoreMesh:
-            _note_refusal(name)
-        self._materialise()
-        return getattr(self, name)(*args)
-
     def _own(self, x, kind):
         """``x``'s key when it names an element of this store of ``kind``
         (0 vertex, 1 edge, 2 face), listed or removed; else None."""
@@ -1373,6 +1038,12 @@ class StoreMesh(Mesh):
         if type(k) is not int or k < 0 or (k >> 38) & 3 != kind:
             return None
         return k if self._store.knows(k) else None
+
+    def _incidence_key(self, element, kind):
+        expected = (VertexView, EdgeView, FaceView)[kind]
+        if not isinstance(element, expected) or self._live(element, kind) is None:
+            raise ValueError(f"incidence requires a live {('vertex', 'edge', 'face')[kind]} from this mesh")
+        return element.key
 
     def vertex(self, position):
         self.__dict__.pop("_bulk", None)
@@ -1388,7 +1059,7 @@ class StoreMesh(Mesh):
         st = self._store
         a, b = self._own(v0, 0), self._own(v1, 0)
         if a is None or b is None or not st.is_live(a) or not st.is_live(b):
-            return self._py("_link_edge", v0, v1)
+            raise StoreRefusal("_link_edge requires live, representable incidence in this mesh")
         self._dirty(1)
         k, _ch = st.link_edge(a, b)
         return EdgeView(self, k)
@@ -1421,28 +1092,28 @@ class StoreMesh(Mesh):
     def remove_edge(self, e) -> None:
         k = self._own(e, 1)
         if k is None:
-            return self._py("remove_edge", e)
+            raise StoreRefusal("remove_edge requires live, representable incidence in this mesh")
         self._dirty(1)
         self._store.remove_edge(k)
 
     def remove_face(self, face) -> None:
         k = self._own(face, 2)
         if k is None:
-            return self._py("remove_face", face)
+            raise StoreRefusal("remove_face requires live, representable incidence in this mesh")
         try:
             self._store.remove_face(k)
         except _fallback():
-            return self._py("remove_face", face)
+            raise StoreRefusal("remove_face requires live, representable incidence in this mesh")
         self._dirty(1)
 
     def relink_edge(self, edge) -> None:
         k = self._own(edge, 1)
         if k is None:
-            return self._py("relink_edge", edge)
+            raise StoreRefusal("relink_edge requires live, representable incidence in this mesh")
         try:
             done, _ch = self._store.relink_edge(k)
         except _fallback():
-            return self._py("relink_edge", edge)
+            raise StoreRefusal("relink_edge requires live, representable incidence in this mesh")
         self.__dict__.pop("_bulk", None)
         if done:
             self.mark_modified()
@@ -1450,12 +1121,12 @@ class StoreMesh(Mesh):
     def relink_face(self, face) -> None:
         k = self._own(face, 2)
         if k is None:
-            return self._py("relink_face", face)
+            raise StoreRefusal("relink_face requires live, representable incidence in this mesh")
         st = self._store
         try:
             done, _ch = st.relink_face(k)
         except _fallback():
-            return self._py("relink_face", face)
+            raise StoreRefusal("relink_face requires live, representable incidence in this mesh")
         self.__dict__.pop("_bulk", None)
         if done:
             self._dirty(sum(len(r) for r in st.face_rings(k)))
@@ -1465,11 +1136,11 @@ class StoreMesh(Mesh):
         k = self._own(face, 2)
         loop = list(loop_positions)
         if k is None or not self._store.is_live(k):
-            return self._py("add_hole", face, loop)
+            raise StoreRefusal("add_hole requires live, representable incidence in this mesh")
         try:
             keys, _ch = self._store.add_hole(k, [self._input_point(p) for p in loop])
         except _fallback():
-            return self._py("add_hole", face, loop)
+            raise StoreRefusal("add_hole requires live, representable incidence in this mesh")
         self._dirty(len(loop))
         self.__dict__.pop("_bulk", None)
         return [VertexView(self, v) for v in keys]
@@ -1483,7 +1154,7 @@ class StoreMesh(Mesh):
         loop = list(loop)
         vk = [self._own(v, 0) for v in loop]
         if k is None or None in vk:
-            return self._py("remove_hole", face, loop)
+            raise StoreRefusal("remove_hole requires live, representable incidence in this mesh")
         self.__dict__.pop("_bulk", None)
         self._store.remove_hole(k, vk)          # Python bumps nothing
 
@@ -1506,7 +1177,7 @@ class StoreMesh(Mesh):
         try:
             n, _ch = self._store.drop_orphan_vertices(keys)
         except _fallback():
-            return self._py("drop_orphan_vertices", vertices)
+            raise StoreRefusal("drop_orphan_vertices requires live, representable incidence in this mesh")
         if n:
             self._dirty(1)
         return n
@@ -1515,7 +1186,7 @@ class StoreMesh(Mesh):
         vertices = list(vertices)
         keys = [self._own(v, 0) for v in vertices]
         if None in keys:
-            return self._py("relink_vertices", vertices)
+            raise StoreRefusal("relink_vertices requires live, representable incidence in this mesh")
         self._store.relink_vertices(keys)
         self._dirty(1)
 
@@ -1566,23 +1237,23 @@ class StoreMesh(Mesh):
     def split_edge(self, edge, position):
         k = self._live(edge, 1)
         if k is None:
-            return self._py("split_edge", edge, position)
+            raise StoreRefusal("split_edge requires live, representable incidence in this mesh")
         try:
             (e0, e1, n), _ch = self._store.split_edge(k, self._input_point(position))
         except _fallback():
-            return self._py("split_edge", edge, position)
+            raise StoreRefusal("split_edge requires live, representable incidence in this mesh")
         self._dirty(n)
         return EdgeView(self, e0), EdgeView(self, e1)
 
     def split_edge_at(self, edge, mid) -> dict:
         k, m = self._live(edge, 1), self._live(mid, 0)
         if k is None or m is None:
-            return self._py("split_edge_at", edge, mid)
+            raise StoreRefusal("split_edge_at requires live, representable incidence in this mesh")
         undo = self._undo_state()
         try:
             (e0, e1, n0, n1, faces), _ch = self._store.split_edge_at(k, m)
         except _fallback():
-            return self._py("split_edge_at", edge, mid)
+            raise StoreRefusal("split_edge_at requires live, representable incidence in this mesh")
         self._dirty(3)
         # "edge" is the split edge's key, which a new first half took.
         return {"kind": "split", "edge": EdgeView(self, k),
@@ -1606,13 +1277,13 @@ class StoreMesh(Mesh):
     def collapse_vertex(self, v) -> dict:
         k = self._live(v, 0)
         if k is None:
-            return self._py("collapse_vertex", v)
+            raise StoreRefusal("collapse_vertex requires live, representable incidence in this mesh")
         undo = self._undo_state()
         try:
             (e1, e2, n1, n2, ne, new, faces), _ch = \
                 self._store.collapse_vertex(k)
         except _fallback():
-            return self._py("collapse_vertex", v)
+            raise StoreRefusal("collapse_vertex requires live, representable incidence in this mesh")
         self._dirty(3)
         return {"kind": "collapse", "v": VertexView(self, k),
                 "e1": EdgeView(self, e1), "e2": EdgeView(self, e2),
@@ -1621,33 +1292,26 @@ class StoreMesh(Mesh):
                 "faces": [FaceView(self, f) for f in faces], "_undo": undo}
 
     def collapse_collinear(self) -> int:
-        """``run_stitch``'s phase 2 in one native pass; a vertex the store
-        will not collapse hands the rest of the loop to Python (the
-        collapses before it are done, and the loop restarts from the first
-        collapsible vertex anyway)."""
-        h = _hypot()
-        (n, bumps, refused), _ch = self._store.collapse_collinear(h)
+        """Collapse collinear vertices in one atomic store edit."""
+        (n, bumps), _ch = self._store.collapse_collinear(_hypot())
         self._dirty(bumps)
-        if refused is None:
-            return n
-        self._materialise()
-        return n + self.collapse_collinear()
+        return n
 
     def _weld_into(self, keep, dup) -> None:
         a, b = self._live(keep, 0), self._live(dup, 0)
         if a is None or b is None:
-            return self._py("_weld_into", keep, dup)
+            raise StoreRefusal("_weld_into requires live, representable incidence in this mesh")
         try:
             n, _ch = self._store.weld_into(a, b)
         except _fallback():
-            return self._py("_weld_into", keep, dup)
+            raise StoreRefusal("_weld_into requires live, representable incidence in this mesh")
         self._dirty(n)
 
     def weld_coincident(self) -> bool:
         try:
             (changed, n), _ch = self._store.weld_coincident()
         except _fallback():
-            return self._py("weld_coincident")
+            raise StoreRefusal("coincident weld cannot preserve incidence")
         self._dirty(n)
         return changed
 
@@ -1742,12 +1406,12 @@ class StoreMesh(Mesh):
     def _dissolve_edge(self, name, edge, tolerant):
         k, h = self._live(edge, 1), _hypot()
         if k is None:
-            return self._py(name, edge)
+            raise StoreRefusal(f"{name} requires representable edge incidence")
         undo = None if tolerant else self._undo_state()
         try:
             r, _ch = self._store.dissolve_edge(k, h, tolerant, _hole_filter)
         except _fallback():
-            return self._py(name, edge)
+            raise StoreRefusal(f"{name} requires representable edge incidence")
         if r is None:
             return None
         merged, (fa, fb), n = r
@@ -1769,12 +1433,12 @@ class StoreMesh(Mesh):
     def dissolve_coplanar_pair(self, face_a, face_b):
         ka, kb, h = self._live(face_a, 2), self._live(face_b, 2), _hypot()
         if ka is None or kb is None:
-            return self._py("dissolve_coplanar_pair", face_a, face_b)
+            raise StoreRefusal("dissolve_coplanar_pair requires live, representable incidence in this mesh")
         undo = self._undo_state()
         try:
             r, _ch = self._store.dissolve_pair(ka, kb, h, _hole_filter)
         except _fallback():
-            return self._py("dissolve_coplanar_pair", face_a, face_b)
+            raise StoreRefusal("dissolve_coplanar_pair requires live, representable incidence in this mesh")
         if r is None:
             return None
         merged, edges, n = r
@@ -1795,11 +1459,11 @@ class StoreMesh(Mesh):
             return None
         keys, h = [self._live(f, 2) for f in faces], _hypot()
         if None in keys:
-            return self._py("dissolve_coplanar_region", faces)
+            raise StoreRefusal("dissolve_coplanar_region requires live, representable incidence in this mesh")
         try:
             r, _ch = self._store.dissolve_region(keys, h, _hole_filter)
         except _fallback():
-            return self._py("dissolve_coplanar_region", faces)
+            raise StoreRefusal("dissolve_coplanar_region requires live, representable incidence in this mesh")
         if r is None:
             return None
         stacked, fk, n = r
@@ -1874,12 +1538,7 @@ class StoreMesh(Mesh):
         if isinstance(snap, StoreState):
             _restore_store_state(self, snap)
             return
-        if self.__dict__.get("_instance_definition") is not None:
-            raise _fallback()("cannot restore an object graph into an occurrence view")
-        # A Python snapshot: the mesh becomes those objects again.
-        _log_object_fallback("restore object snapshot")
-        _to_python_lists(self)
-        Mesh.restore_state(self, snap)
+        raise ValueError("restore_state requires a native mesh snapshot")
 
     # -- bulk construction straight into the store
     def bulk_weld(self, pos):
@@ -1896,12 +1555,12 @@ class StoreMesh(Mesh):
             if any(self._live(v, 0) is None for v in vobjs) or any(
                     self.find_edge(vobjs[a], vobjs[b]) is not None
                     for a, b in pairs if vobjs[a].key != vobjs[b].key):
-                return self._py("add_edges_welded", vobjs, ia, ib, flags)
+                raise StoreRefusal("add_edges_welded requires live, representable incidence in this mesh")
             if flags is not None and any(
                     (row[1] is not None and not isinstance(row[1], int))
                     or (row[2] is not None and not isinstance(row[2], str))
                     for row in flags):
-                return self._py("add_edges_welded", vobjs, ia, ib, flags)
+                raise StoreRefusal("add_edges_welded requires live, representable incidence in this mesh")
             self._bump()
             emap = {}
             for index, (a, b) in enumerate(pairs):
@@ -1927,8 +1586,7 @@ class StoreMesh(Mesh):
             if (any(n < 1 for n in face_ring_counts) or any(n < 1 for n in ring_sizes)
                     or any(self._live(v, 0) is None for v in vobjs)) or (
                     edge_map is not None and not isinstance(edge_map, (dict, _EdgeMap))):
-                return self._py("add_faces_welded", vobjs, inverse, ring_sizes,
-                                face_ring_counts, attrs, edge_map)
+                raise StoreRefusal("bulk faces require vertices and edges from this store")
             ring_ends = np.cumsum(ring_sizes)
             rings = [inverse[end - size:end] for end, size in zip(ring_ends, ring_sizes)]
             face_ends = np.cumsum(face_ring_counts)
@@ -1944,8 +1602,7 @@ class StoreMesh(Mesh):
                             pairs[min(a, b) * len(vobjs) + max(a, b)] = (a, b)
                 if any(edge_map.get(k) != self.find_edge(vobjs[a], vobjs[b])
                        for k, (a, b) in pairs.items()):
-                    return self._py("add_faces_welded", vobjs, inverse, ring_sizes,
-                                    face_ring_counts, attrs, edge_map)
+                    raise StoreRefusal("bulk faces require vertices and edges from this store")
             self._bump()
             faces = []
             for i, rings in enumerate(polygons):
@@ -2001,27 +1658,6 @@ class StoreMesh(Mesh):
         self._attr_table = table
         self._attr_own = {self._store.key_base | k: v for k, v in attrs.items()}
 
-    # -- materialise on write
-    def _materialise(self) -> None:
-        """Become Python objects with the store's keys (see the module
-        docstring); a no-op once done."""
-        if self.__class__ is not StoreMesh:
-            return
-        if self.__dict__.get("_instance_definition") is not None:
-            raise _fallback()("this occurrence edit requires a store-backed operation")
-        if self.__dict__.get("_resident_edit"):
-            raise _fallback()("face edit requires unsupported mesh topology")
-        _log_object_fallback("materialise")
-        import sys
-        caller = sys._getframe(1).f_code.co_name
-        if caller != "_py":
-            _note_refusal(caller)
-        _materialise(self)
-
-
-StoreMesh._rekey = _on_python("_rekey")
-
-
 def _fallback():
     """``ingetrazo_core.StoreFallback``: an op the store refused before
     changing anything (store/topo.rs); the Python kernel runs instead.
@@ -2069,93 +1705,15 @@ def _xyz(p):
     return (float(x), float(y), float(z))
 
 
-def _resolving(name):
-    base = getattr(Mesh, name)
-
-    def method(self, *args, **kw):
-        return base(self, *_resolve(args, self),
-                    **{k: _resolve(v, self) for k, v in kw.items()})
-    method.__name__ = name
-    method.__doc__ = base.__doc__
-    return method
-
-
-class MaterialisedMesh(Mesh):
-    """A store-backed mesh turned into Python objects: a plain mesh, plus
-    the views handed out before resolved to the objects they name, and the
-    original store lineage retained by any snapshots that need it."""
-
-    def clear(self):
-        Mesh.clear(self)
-        initialise_store(self)
-
-    def __getstate__(self):
-        # Pickle the compatibility object graph, without native handles.
-        return {k: v for k, v in self.__dict__.items() if k not in STORE_SIDE}
-
-    def find_edge(self, v0, v1):
-        if v0.__class__ is VertexView:
-            v0 = _resolve(v0, self)
-        if v1.__class__ is VertexView:
-            v1 = _resolve(v1, self)
-        return Mesh.find_edge(self, v0, v1)
-
-    def move_vertex(self, v, delta) -> None:
-        if v.__class__ is VertexView:
-            v = _resolve(v, self)
-        Mesh.move_vertex(self, v, delta)
-
-    def place_vertex(self, v, position) -> None:
-        if v.__class__ is VertexView:
-            v = _resolve(v, self)
-        Mesh.place_vertex(self, v, position)
-
-    def capture_state(self):
-        return Mesh.capture_state(self)
-
-    def restore_state(self, snap) -> None:
-        if isinstance(snap, StoreState):
-            _restore_store_state(self, snap)
-            return
-        Mesh.restore_state(self, snap)
-
-    def revert_stitch(self, rec) -> None:
-        undo = rec.get("_undo")
-        if undo is not None:
-            self.restore_state(undo)        # a record the store made
-            return
-        Mesh.revert_stitch(self, *_resolve((rec,), self))
-
-
-
-for _name in ("curve_edges", "remove_edge", "relink_vertices",
-              "drop_orphan_vertices", "add_edges_welded", "add_faces_welded",
-              "surface_of", "remove_face", "relink_edge", "relink_face",
-              "add_hole", "relink_hole", "remove_hole", "edges_at", "faces_at", "registers",
-              "split_edge", "_weld_into", "interior_vertex_on",
-              "split_edge_at", "collapsible_vertex", "collapse_vertex",
-              "dissolve_edge_recorded", "dissolve_coplanar_pair",
-              "dissolve_coplanar_region", "dissolve_edge",
-              "_rekey", "_link_edge", "collapse_collinear"):
-    setattr(MaterialisedMesh, _name, _resolving(_name))
-del _name
-
-
-# ---- Building, materialising, restoring -------------------------------------
-
 class StoreRefusal(Exception):
-    """A store step refused inside an operation that runs strict
-    (:func:`strict`): the operation refuses instead of finishing on Python
-    objects. The caller puts the mesh back."""
+    """The requested operation cannot preserve native mesh incidence."""
 
 
 _STRICT = [0]
 
 
 class strict:
-    """While held, a store step that would hand the mesh to Python objects
-    (``_py``, ``_materialise``, a refused native call) raises
-    :class:`StoreRefusal` (docs/rust-tools.md §22, decision 1)."""
+    """Propagate a native refusal to the enclosing command for rollback."""
 
     def __enter__(self):
         _STRICT[0] += 1
@@ -2167,12 +1725,7 @@ class strict:
 
 
 def _note_refusal(step) -> None:
-    """With ``INGETRAZO_REFUSALS`` naming a file: one JSON line per store
-    step that refused and handed the mesh to Python objects: the step, the
-    refusal's message, and the operation on the stack (a push, a cap
-    rebuild, a stitch). Measurement for the native push (docs/rust-tools.md
-    §22). Under :class:`strict`, the step then raises
-    :class:`StoreRefusal`."""
+    """Log a native operation refusal and propagate it inside strict commands."""
     import os
     import sys
     err = sys.exc_info()[1]
@@ -2199,29 +1752,6 @@ def _log_refusal(path, step, err, **extra) -> None:
     with open(path, "a") as out:
         out.write(json.dumps({"step": step, "reason": "" if err is None else str(err)[:200],
                               "ops": ops[:6], "test": test, **extra}) + "\n")
-
-
-def _log_object_fallback(reason):
-    import os
-    if os.environ.get("INGETRAZO_PERF"):
-        import traceback
-        from core.history import _plog
-        stack = traceback.extract_stack(limit=8)[:-2]
-        callers = " <- ".join(f"{f.name}@{f.filename}:{f.lineno}" for f in reversed(stack))
-        _plog("mesh.materialise", 0, f"{reason}: {callers}", floor=0)
-
-
-def _to_python_lists(m) -> None:
-    """Make ``m`` Python-backed with empty lists (a Python snapshot is about
-    to define it completely)."""
-    d = m.__dict__
-    d.update(vertices=[], edges=[], faces=[], _registry={}, _displaced={},
-             _attr_own={})
-    d.pop("_bulk", None)
-    d.pop("_py_base", None)
-    for key in ("_store", "_pos_cache", "_face_cache", "_attr_table"):
-        d.pop(key, None)
-    m.__class__ = MaterialisedMesh
 
 
 def _restore_store_state(m, snap: StoreState) -> None:
@@ -2261,7 +1791,6 @@ def _restore_store_state(m, snap: StoreState) -> None:
     if definition is not None:
         definition._attr_own = own
         definition._attr_table = snap.table
-    d.setdefault("_objmap", {})
     for name in ("vertices", "edges", "faces", "_registry", "_displaced",
                  "_bulk"):
         d.pop(name, None)
@@ -2318,27 +1847,8 @@ def become_store(m, store, table, own=None) -> None:
     d["_store"] = store
     d["_attr_table"] = table
     d["_attr_own"] = own if own is not None else {}
-    d.setdefault("_objmap", {})
     m.__class__ = StoreMesh
 
-
-def _materialise(m) -> None:
-    """Python objects from the store, keys kept, objects reused per key.
-
-    The collector is paused meanwhile, as the loader does for its mass
-    construction: on the ride's largest mesh (1.07M elements) the
-    generational passes over the growing heap were 2.4 s of 3.0 s."""
-    import gc
-    was = gc.isenabled()
-    gc.disable()
-    try:
-        m._store.materialise(m)
-    finally:
-        if was:
-            gc.enable()
-
-
-# ---- Construction -----------------------------------------------------------
 
 def _table_index(table, index, a):
     """The attribute-table row for the dict ``a`` (interned by content)."""
@@ -2382,8 +1892,7 @@ def _bulk_edges(m, b, ia, ib, flags):
     ia = np.ascontiguousarray(ia, dtype=np.int64).reshape(-1)
     ib = np.ascontiguousarray(ib, dtype=np.int64).reshape(-1)
     if not m._store._bulk_edges(ia, ib, flags):
-        m._materialise()
-        return m.add_edges_welded(b["vobjs"], ia, ib, flags)
+        raise StoreRefusal("unsupported bulk edge flags or incidence")
     m._chunk_dirty = True
     m._mut_serial += 1
     b["stage"] = "edges"
@@ -2400,9 +1909,7 @@ def _bulk_faces(m, b, inverse, ring_sizes, face_ring_counts, attrs):
         m._mut_serial += 1
         return []
     if (sizes < 1).any() or (counts_ < 1).any():
-        m._materialise()
-        return m.add_faces_welded(b["vobjs"], inverse, ring_sizes,
-                                  face_ring_counts, attrs)
+        raise ValueError("bulk face ring sizes and counts must be positive")
     st = m.__dict__["_store"]
     table = m.__dict__["_attr_table"]
     fa = None
@@ -2665,40 +2172,11 @@ def faces_arrays(m):
 
 
 def plan_cap_plane(mesh, origin, normal):
-    """Read a cap plan. A materialised mesh keeps all its current element keys."""
+    """Read a cap plan in store coordinates."""
     import sys
-    if type(mesh) is not StoreMesh:
-        from copy import copy
-        mesh = copy(mesh)
-        to_store(mesh)
     plan = mesh._store.single_plane(origin.toTuple(), normal.toTuple(), _hypot(), sys.version_info >= (3, 12))
     if plan is None:
         return None
     def ring(points):
         return [QVector3D(*p) for p in points]
     return [(ring(rings[0]), [ring(r) for r in rings[1:]], part) for rings, part in plan]
-
-
-def to_store(m) -> dict:
-    """Make the Python mesh ``m`` (a plain one, or one materialised after a
-    refusal) store-backed in place, list orders kept: its vertices, edges
-    and faces in their order, edge flags, curves and tags, each face's
-    attrs dict (the same dict, as the face's own) and interior flag.
-    Returns ``{id(old element): view}`` for the caller's holders: the
-    elements get new keys (a Python mesh's keys are not the store's).
-
-    Call it between History steps only: the steps before keep their
-    Python snapshots, and undoing one turns the mesh back into those
-    objects (``restore_state``); the step after captures a store state.
-    Raises :class:`StoreRefusal` when the store would not hold the mesh as
-    it is (welded vertices, a duplicate edge, a dropped face)."""
-    if m.__class__ is StoreMesh:
-        return {}
-    from core import _native
-    mod = _native.available()
-    store, own, views = mod.MeshStore._from_objects(m, next(_mesh._KEY_NAMESPACES), **_weld_args())
-    m.__dict__.pop("_objmap", None)
-    become_store(m, store, [], own)
-    m._dirty()
-    m._chunk_dirty = True
-    return views

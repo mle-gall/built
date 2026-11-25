@@ -63,8 +63,6 @@ pub mod offset;
 pub mod pieces;
 pub mod py;
 pub mod read;
-mod materialise;
-mod from_objects;
 mod restore_tail;
 mod revolution;
 pub mod stitch;

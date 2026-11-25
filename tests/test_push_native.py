@@ -404,8 +404,6 @@ def test_orient_python_rollback_on_a_store_mesh_stays_in_the_store(
         oracle, monkeypatch):
     """The Python pass's rollback reverses a store-backed face's rings with
     one store op (it used to write the loop back and materialise)."""
-    monkeypatch.setattr(S.StoreMesh, "_materialise",
-                        lambda mesh: pytest.fail("orientation materialised the mesh"))
     oracle(True)
     m = _mesh(True)
     _box(m, (3, 0, 0), (1, 1, 1))

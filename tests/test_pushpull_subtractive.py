@@ -20,7 +20,6 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import AddFaceCommand, History
 from core.scene import Scene
-from core.store_mesh import to_store
 from tools.pushpull import PushPullTool
 
 
@@ -55,13 +54,6 @@ def _embedded_scene():
     hist.execute(AddFaceCommand(BIG))
     hist.execute(AddFaceCommand(SMALL))
     return scene, scene.faces[0], scene.faces[1]  # scene, big, small
-
-
-def _push_handles(scene):
-    # Push converts materialised meshes before the history step. Compare the
-    # handles issued for that step across the edit and undo.
-    to_store(scene.mesh)
-    return tuple(scene.faces)
 
 
 def _push(scene, base_face, distance):
@@ -103,7 +95,7 @@ def _has_face_at_z(scene, z, nverts):
 
 def test_inward_push_consumes_base_face():
     scene, _, _ = _embedded_scene()
-    big, small = _push_handles(scene)
+    big, small = tuple(scene.faces)
     _push(scene, small, -1.0)
     assert small not in scene.faces            # base consumed
     assert big in scene.faces                  # surrounding face stays
@@ -129,7 +121,7 @@ def test_inward_push_builds_floor_and_walls():
 
 def test_inward_push_undo_restores_base():
     scene, _, _ = _embedded_scene()
-    big, small = _push_handles(scene)
+    big, small = tuple(scene.faces)
     vp = _push(scene, small, -1.0)
     assert vp.history.undo() is True
     assert small in scene.faces
@@ -156,7 +148,7 @@ def test_standalone_face_keeps_base():
     scene = Scene()
     hist = History(scene)
     hist.execute(AddFaceCommand([V(0, 0), V(2, 0), V(2, 2), V(0, 2)]))
-    square, = _push_handles(scene)
+    square, = tuple(scene.faces)
     _push(scene, square, -1.0)
     assert square in scene.faces               # base kept (it's free-standing)
     assert _has_face_at_z(scene, -1.0, 4)      # moved face

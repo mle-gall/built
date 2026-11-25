@@ -56,8 +56,8 @@ _WELD_TOL2 = (10.0 ** -_KEY_DECIMALS) ** 2
 
 #: ``Mesh.__dict__`` entries of a store-backed or materialised mesh that
 #: belong to the store (``core.store_mesh.STORE_SIDE``): never deep-copied.
-_STORE_SIDE = frozenset(("_store", "_objmap", "_attr_table", "_attr_own",
-                         "_bulk", "_py_base", "_pos_cache",
+_STORE_SIDE = frozenset(("_store", "_attr_table", "_attr_own",
+                         "_bulk", "_pos_cache",
                          "_face_cache", "_frame_parent", "_tool_frame_cache",
                          "_planned_points"))
 

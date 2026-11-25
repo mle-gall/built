@@ -14,10 +14,6 @@ from tests.test_scan_index import _fingerprint
 @needs_store
 @pytest.mark.parametrize("case", ["closing", "chord", "chain", "inner", "touch", "divide_join", "curve", "orientation"])
 def test_drawing_matches_python_and_change_feed(monkeypatch, case):
-    def refuse(*args):
-        pytest.fail("drawing materialised the store")
-
-    monkeypatch.setattr(S.StoreMesh, "_materialise", refuse)
     states = []
     for store in (False, True):
         monkeypatch.setattr(scan_index, "_forced_off", not store)
@@ -107,7 +103,6 @@ def test_store_rectangle_never_enumerates_face_views(monkeypatch, curved):
         assert seq._kind != "face", "Rectangle walked the mesh face list"
         return iterate(seq)
     monkeypatch.setattr(S._Seq, "__iter__", guarded)
-    monkeypatch.setattr(S.StoreMesh, "_materialise", lambda *args: pytest.fail("materialised"))
     cmd = build_add_edges(sc, list(zip(rect, rect[1:] + rect[:1])), detect_faces=False,
                           extra=[AddFaceCommand(rect)], plane_rebuild=True)
     hist.execute(cmd)

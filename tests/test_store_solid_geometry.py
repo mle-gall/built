@@ -15,11 +15,6 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(autouse=True)
-def forbid_materialisation(monkeypatch):
-    monkeypatch.setattr(
-        StoreMesh, "_materialise", lambda self: pytest.fail("materialised")
-    )
 
 
 def empty(store):
