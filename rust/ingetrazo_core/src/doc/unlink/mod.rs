@@ -55,6 +55,17 @@ pub(crate) fn fill<'py>(
         .getattr("materials")?
         .call_method1("update", (materials,))?;
     links::populate(group, &source.get_item(0)?, false, None)?;
+    io.call_method1(
+        "_hold",
+        (
+            scene,
+            &path,
+            record.call_method1("get", ("select",))?,
+            record.call_method1("get", ("include_nested", true))?,
+            source.get_item(0)?,
+            source.get_item(1)?,
+        ),
+    )?;
     links::sync_tags(scene, &path, &source.get_item(1)?)?;
     let entry = links::entry(scene, &path)?;
     entry.set_item(

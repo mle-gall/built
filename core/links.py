@@ -205,18 +205,34 @@ def make_link(scene, path, host_path=None, select=None, *, include_nested=True):
     path = Path(path).resolve()
     if host_path is not None and _rs.link_norm(path) == _rs.link_norm(host_path):
         raise LinkError("a document cannot link itself")
+    from core.group import Group
+    from ingetrazo_core import Matrix4
     comp, tags = _read_definition(scene.materials, path, select, include_nested)
     _rs.link_sync_tags(scene, path, tags)
-    comp.ext = {LINK_KEY: _link_record(path, host_path)}
+    # The definition stays as read, held by the document's root; the
+    # placement is projected from it.
+    link = Group(comp.mesh, name=path.stem)
+    link.xform = Matrix4()
+    link.component = True
+    link.ext = {LINK_KEY: _link_record(path, host_path)}
     if not include_nested:
-        comp.ext[LINK_KEY]["include_nested"] = False
+        link.ext[LINK_KEY]["include_nested"] = False
     if select is not None:
         from copy import deepcopy
-        comp.ext[LINK_KEY]['select'] = deepcopy(select)
-    _rs.link_populate(comp, comp)
+        link.ext[LINK_KEY]['select'] = deepcopy(select)
+    _rs.link_populate(link, comp)
+    _hold(scene, path, select, include_nested, comp, tags)
     _rs.link_entry(scene, path)['loaded_mtime_ns'] = path.stat().st_mtime_ns
-    comp.name = path.stem
-    return comp
+    return link
+
+
+def _hold(scene, path, select, include_nested, comp, tags) -> None:
+    """Keep ``comp`` (a definition as read) as the layout the placements
+    of this configuration are projected from: the scene root holds one per
+    (path, subset, nested-link policy), and no placement owns it."""
+    root = getattr(scene, "_root", None)
+    if root is not None:
+        root._set_link_definition(_rs.link_definition_key(path, select, include_nested), (comp, tags))
 
 
 def _link_record(path, host_path) -> dict:
@@ -237,6 +253,7 @@ def set_include_nested(scene, group, enabled):
     comp, tags = _read_definition(scene.materials, path, rec.get("select"), enabled, group)
     _rs.link_sync_tags(scene, path, tags)
     _rs.link_populate(group, comp, reconcile=True, selection=scene.selection)
+    _hold(scene, path, rec.get("select"), enabled, comp, tags)
     rec["include_nested"] = enabled
     scene.version += 1
 
@@ -249,6 +266,7 @@ def reload(scene, path, host_path=None, *, progress=None) -> None:
     materials = dict(scene.materials)
     prepared = []
     definitions = {}
+    held = []
     roots = {}
     for match in linked_groups(scene, path):
         group = match
@@ -270,6 +288,7 @@ def reload(scene, path, host_path=None, *, progress=None) -> None:
         comp, tags = definitions[config]
         prepared.append((group, comp))
         tags_by_path[source_path] = tags
+        held.append((source_path, rec.get('select'), nested, comp, tags))
     if not prepared:
         return
     before = scene.content_version
@@ -281,6 +300,9 @@ def reload(scene, path, host_path=None, *, progress=None) -> None:
             swaps = None
         elif swaps is not None:
             swaps.extend(changed)
+    # The definitions swap: each configuration read is the one held now.
+    for source_path, select, nested, comp, tags in held:
+        _hold(scene, source_path, select, nested, comp, tags)
     for source_path, tags in tags_by_path.items():
         if _rs.link_sync_tags(scene, source_path, tags):
             swaps = None
