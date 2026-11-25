@@ -25,6 +25,11 @@ from ingetrazo_core import (AddEdgeCommand, AddFaceCommand, DeleteEdgesCommand, 
 from ingetrazo_core import HealOverlapsCommand, RebuildPlanarFacesCommand, RebuildPlaneFacesCommand
 # Explode (rust/ingetrazo_core/src/doc/explode_steps.rs).
 from ingetrazo_core import ExplodeGroupCommand, UnlinkCommand
+# Curve tags, push/pull clean-ups, Simplify, Reverse Faces, tag as you draw
+# (rust/ingetrazo_core/src/doc/mesh_steps.rs).
+from ingetrazo_core import (AutoTagDrawnFacesCommand, CoplanarMergeCommand, ExplodeCurvesCommand,
+                            FlipFacesCommand, PruneOrphanEdgesCommand, SimplifyMeshCommand,
+                            StitchSolidCommand, TagCurveCommand)
 # Vertex edits (rust/ingetrazo_core/src/doc/vertex_steps.rs).
 from ingetrazo_core import (FlipVerticesCommand, MoveVerticesCommand, RotateVerticesCommand,
                             ScaleVerticesCommand)
@@ -174,7 +179,9 @@ for _mesh_step in (MakeGroupCommand, HideCommand, HideEdgesCommand, AssignLayerC
                    DeleteFaceCommand, EraseSelectionCommand, MoveVerticesCommand,
                    FlipVerticesCommand, RotateVerticesCommand, ScaleVerticesCommand,
                    HealOverlapsCommand, RebuildPlanarFacesCommand, RebuildPlaneFacesCommand,
-                   ExplodeGroupCommand):
+                   ExplodeGroupCommand, TagCurveCommand, ExplodeCurvesCommand,
+                   AutoTagDrawnFacesCommand, PruneOrphanEdgesCommand, CoplanarMergeCommand,
+                   StitchSolidCommand, SimplifyMeshCommand):
     MeshCommand.register(_mesh_step)
 
 
@@ -184,7 +191,7 @@ class FaceAttributeCommand(MeshCommand):
 
 
 for _paint in (SetFaceColorCommand, SetFaceOpacityCommand, SetFaceTextureCommand,
-               SetFaceBackCommand, SetFaceMaterialTagCommand):
+               SetFaceBackCommand, SetFaceMaterialTagCommand, FlipFacesCommand):
     FaceAttributeCommand.register(_paint)
 
 
@@ -277,33 +284,6 @@ def _faces_by_segments(mesh, segments) -> list:
     for a, b in segs:
         hit.update(sc.faces_meeting(scan_index.box_of((a, b), _KEY_REACH)))
     return sc.faces(sorted(hit))
-
-
-class TagCurveCommand(MeshCommand):
-    """Mark the edges of a drawn circle/arc loop as one curve (shared id), so
-    selecting a segment selects the whole curve. Runs as the last step of the
-    draw so the id is captured in the enclosing snapshot (redo keeps it); undo is
-    a no-op because that snapshot restores the pre-draw state."""
-
-    def __init__(self, loop_points, closed: bool = True) -> None:
-        self.pts = [QVector3D(p) for p in loop_points]
-        self.closed = closed
-
-    def do(self, scene) -> None:
-        from core import mesh as mesh_api
-        from core.store_mesh import StoreMesh
-        mesh = scene.mesh
-        if self._journal_geometry and type(mesh) is StoreMesh:
-            mesh._chunk_dirty = True
-            mesh._mut_serial += 1
-            if mesh._store.tag_curve_path([p.toTuple() for p in self.pts], self.closed,
-                                          mesh_api._CURVE_COUNTER):
-                mesh.next_curve_id()
-        else:
-            mesh.tag_curve(self.pts, self.closed)
-
-    def undo(self, scene) -> None:
-        pass
 
 
 def _inherit_paint(face, mother) -> None:
@@ -474,55 +454,6 @@ def _reverse_faces(faces):
     return batches, object_keys
 
 
-class FlipFacesCommand(FaceAttributeCommand):
-    """Reverse the winding of a set of faces — "Reverse Faces".
-
-    Reversing the loops flips the geometric normal while keeping the *same*
-    ``Face`` objects and their shared edges/incidence (identity preserved, so
-    selection and snapshots stay valid). The operation is an involution:
-    undo simply flips again. Faces may live in the loose mesh or inside a
-    group's mesh — the flip is per-object, so both work."""
-
-    keeps_rows = True
-
-    def __init__(self, faces) -> None:
-        self._faces = [f for f in faces if isinstance(f, Face) or hasattr(f, "loop")]
-
-    def meshes(self):
-        from core.store_mesh import FaceView
-        return {f._m for f in self._faces if isinstance(f, FaceView)}
-
-    def doc_after(self, scene, phase):
-        for mesh in self.meshes():
-            mesh.note_rewound()
-        scene.version += 1
-
-    def _flip(self, scene) -> None:
-        batches, ids = _reverse_faces(self._faces)
-        # A reversed loop changes no count, coordinate or paint — all a
-        # cached group chunk is checked against — so the group went on
-        # drawing the old winding until some edit changed a count (#197).
-        # Each mesh holding a flipped face says so; the others keep theirs.
-        from core.group import iter_placements
-        owners = set(batches)
-        if ids:
-            meshes = [getattr(scene, "mesh", None), getattr(scene, "loose_mesh", None)]
-            meshes.extend(pg.mesh for g in getattr(scene, "groups", [])
-                          for pg, _m in iter_placements(g))
-            owners.update(m for m in set(meshes) if m is not None
-                          and any(f.key in ids for f in m.faces))
-        for mesh in owners:
-            mesh._winding_rev = getattr(mesh, "_winding_rev", 0) + 1
-        _dirty_group_chunks(scene)
-        scene.version += 1
-
-    def do(self, scene) -> None:
-        self._flip(scene)
-
-    def undo(self, scene) -> None:
-        self._flip(scene)
-
-
 def _is_hidden(entity) -> bool:
     attrs = getattr(entity, "attrs", None)
     if attrs is not None:                          # Face
@@ -647,79 +578,6 @@ class EditTexturedMaterialCommand(RestampMaterialCommand):
             self._new = Material(self._name, color=old.color, texture=self.edited(old.texture),
                                  opacity=old.opacity, finish=old.finish, pbr=old.pbr)
         super().do(scene)
-
-
-class ExplodeCurvesCommand(MeshCommand):
-    """Explode Curve: the curves the given edges belong to become plain
-    segments, each one picked on its own. A circle or an arc selects whole
-    because its edges share a curve id; this drops the id, the geometry
-    stays exactly as it is. Undo gives every edge its id back."""
-
-    def __init__(self, edges) -> None:
-        self.edges = list(edges)
-        self._ids: list = []
-        self.curves = 0
-
-    def do(self, scene) -> None:
-        from core.store_mesh import StoreMesh
-        if self._journal_geometry and type(scene.mesh) is StoreMesh:
-            ids = {e.curve for e in self.edges if getattr(e, "curve", None) is not None}
-            if not all(type(i) is int and 0 <= i < 2**63 for i in ids):
-                return self._explode(scene)
-            self.curves = scene.mesh._store.explode_curves(ids)
-            scene.mesh._chunk_dirty = True
-            scene.mesh._mut_serial += 1
-            scene.version += 1
-            return
-        self._explode(scene)
-
-    def _explode(self, scene):
-        self.curves, self._ids = _replay.explode_curves(scene.mesh, self.edges)
-        scene.version += 1
-
-    def undo(self, scene):
-        _replay.restore_curves(scene.mesh, self._ids)
-        scene.version += 1
-
-
-class AutoTagDrawnFacesCommand(MeshCommand):
-    """Tag-as-you-draw (BIM active class): the final step of a draw plan when
-    ``scene.active_ifc`` is set. Stamps the active tag on the faces the plan
-    itself created — the drawn polygon, auto-closed cycles, chord halves —
-    identified through their ``AddFaceCommand``s, so churn re-emissions
-    (``auto=False``) and neighbouring rebuilt faces are never touched. A face
-    that inherited a tag from a tagged mother keeps it.
-
-    Each draw commit becomes its OWN BIM object (a fresh id is allocated at
-    execution time; the activation only fixes class + name): a wall drawn per
-    trace = one object per wall, so the largest-face metrado stays honest —
-    one shared id across many walls would under-report (the panel/IFC read
-    the biggest face of the whole set).
-
-    Runs inside the draw's :class:`SnapshotCompound`, before the after-state
-    snapshot, so undo/redo restore the tags exactly; its own undo is a no-op
-    (the snapshot restore reverts the attrs)."""
-
-    def __init__(self, face_commands, tag: dict) -> None:
-        self._face_cmds = list(face_commands)
-        self._tag = dict(tag)
-
-    def do(self, scene) -> None:
-        from core.bim import next_object_id
-        tag = dict(self._tag)
-        tag["id"] = next_object_id(scene)
-        live = scene.mesh.faces
-        changed = False
-        for fc in self._face_cmds:
-            f = getattr(fc, "face", None)
-            if f is not None and f in live and not f.attrs.get("ifc"):
-                f.attrs["ifc"] = dict(tag)
-                changed = True
-        if changed:
-            scene.mesh.mark_modified()
-
-    def undo(self, scene) -> None:
-        pass
 
 
 def translate_points(scene, keys: set, delta: QVector3D) -> None:
@@ -923,133 +781,6 @@ def invert_scale_factor(factor):
     return inv(float(factor))
 
 
-class PruneOrphanEdgesCommand(MeshCommand):
-    """Remove edges incident to ``vertices`` that, once the rest of a compound
-    has run, border no face — the dangling lines left where push/pull carved
-    geometry away. Computed at ``do`` time so it reflects the real post-carve
-    scene; ``undo`` re-links the swept edges."""
-
-    def __init__(self, vertices: Iterable[QVector3D]) -> None:
-        self.vertices = [QVector3D(v) for v in vertices]
-        self.removed: list[Edge] = []
-
-    def do(self, scene) -> None:
-        from core import push_scans
-        from core.topology import _key
-        # Only an edge with an end near the vertices can be swept, and only
-        # a face with a corner there can still hold it: those, in list
-        # order (natively), stand in for every edge and face.
-        keys = [_key(v) for v in self.vertices]
-        edges = push_scans.edges_near_points(scene.mesh, keys)
-        faces = push_scans.faces_near_points_rings(scene.mesh, keys)
-        from core.store_mesh import StoreMesh, EdgeView
-        if type(scene.mesh) is StoreMesh:
-            store = scene.mesh._store
-            prune = store.prune_orphan_edges if self._journal_geometry else store.orphaned_edges_at
-            keys = prune(
-                [v.toTuple() for v in self.vertices],
-                None if edges is None else [e.key for e in edges],
-                None if faces is None else [f.key for f in faces])
-            self.removed = [EdgeView(scene.mesh, k) for k in keys]
-            if self._journal_geometry:
-                if keys:
-                    scene.mesh._dirty(len(keys))
-                    for edge in self.removed:
-                        scene.selection.discard(edge)
-                    scene.version += 1
-                return
-        else:
-            self.removed = orphaned_edges_at(
-                scene.edges if edges is None else edges,
-                scene.faces if faces is None else faces, self.vertices)
-        for edge in self.removed:
-            scene.mesh.remove_edge(edge)
-            scene.selection.discard(edge)
-        if self.removed:
-            scene.version += 1
-
-    def undo(self, scene) -> None:
-        for edge in self.removed:
-            scene.mesh.relink_edge(edge)
-        if self.removed:
-            scene.version += 1
-        self.removed = []
-
-
-class CoplanarMergeCommand(MeshCommand):
-    """Dissolve coplanar seams left by push/pull.
-
-    After a wall is pushed flush against an adjacent one, the shared edge borders
-    two faces in the same plane and carries no silhouette — a phantom line. This
-    command sweeps the edges incident to the operation's vertices and merges any
-    such redundant pair into one face (the "L"), so the result reads as a clean
-    solid. Seeded with the operation's vertices (not the whole model) so a
-    *deliberately* drawn coplanar edge elsewhere is left alone.
-
-    Each merge is recorded as ``(face_a, face_b, edge, merged_face)`` so undo
-    restores the exact objects other commands may reference.
-    """
-
-    def __init__(self, seed_positions: Iterable[QVector3D]) -> None:
-        self.seed = [QVector3D(p) for p in seed_positions]
-        self.merges: list[tuple[Face, Face, Edge, Face]] = []
-
-    def do(self, scene) -> None:
-        mesh = scene.mesh
-        seedkeys = {_key(p) for p in self.seed}
-        from core.store_mesh import EdgeView, _store_of
-        from ingetrazo_core import merge_seeded_edges
-        if merge_seeded_edges(mesh, list(seedkeys), None if self._journal_geometry else self.merges,
-                              _store_of, EdgeView):
-            scene.version += 1
-
-    def undo(self, scene) -> None:
-        mesh = scene.mesh
-        from ingetrazo_core import revert_seeded_merges
-        revert_seeded_merges(mesh, self.merges)
-        if self.merges:
-            scene.version += 1
-        self.merges = []
-
-
-class StitchSolidCommand(MeshCommand):
-    """Make a solid watertight again after push/pull.
-
-    Repeated pushes leave three kinds of connectivity debris: edges that run past
-    a vertex belonging to a neighbour (a *T-junction* — the two sides share a
-    line but no edge, so the seam reads as a naked crack), redundant valence-2
-    collinear vertices left by mismatched subdivision, and coplanar faces that
-    should be one. This runs in three phases:
-
-    1. **Resolve T-junctions** (seeded): split every edge that reaches the
-       operation's own bounds at any vertex on its interior, so mismatched
-       subdivisions share edges → no naked cracks.
-    2. **Collapse collinear vertices** (global): drop spurious valence-2 points.
-    3. **Coplanar-merge** (seeded): fuse coplanar faces around the operation
-       into one — seeded so a deliberately drawn coplanar line elsewhere stays.
-
-    Phases 1–2 only repair connectivity (no shape change). The splits,
-    collapses and merges interact too tightly for a clean per-op inverse, so
-    undo restores an identity-preserving snapshot taken before the pass —
-    robust, and it keeps the surrounding delta commands' object references
-    valid (this command runs last in the push/pull compound).
-    """
-
-    def __init__(self, seed_positions: Iterable[QVector3D]) -> None:
-        self.seed = [QVector3D(p) for p in seed_positions]
-        self.snapshot: Optional[dict] = None
-
-    def do(self, scene) -> None:
-        self.snapshot = self._direct_snapshot(scene.mesh)
-        run_stitch(scene.mesh, {_key(p) for p in self.seed})
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        if self.snapshot is not None:
-            scene.mesh.restore_state(self.snapshot)
-            scene.version += 1
-
-
 def run_stitch(mesh, seedkeys: set, new_faces: Optional[set] = None,
                coplanar_merge: bool = True, dedupe: bool = True) -> None:
     """Three-phase watertight cleanup (no undo bookkeeping — the caller snapshots).
@@ -1200,40 +931,6 @@ class SnapshotMutation(MeshCommand):
     def undo(self, scene) -> None:
         if self.before is not None:
             self._target(scene).restore_state(self.before)
-            scene.version += 1
-
-
-class SimplifyMeshCommand(MeshCommand):
-    """Merge near-coplanar faces of the active mesh with snapshot undo."""
-
-    def __init__(self, max_angle_degrees: float = 0.0) -> None:
-        self.max_angle_degrees = float(max_angle_degrees)
-        self.before: Optional[dict] = None
-        self.after: Optional[dict] = None
-        self.before_selection: set = set()
-        self.faces_removed = 0
-
-    def do(self, scene) -> None:
-        if self.after is None:
-            from formats.fuse import simplify_mesh
-            self.before = self._direct_snapshot(scene.mesh)
-            self.before_selection = ElementSet(scene.selection)
-            self.faces_removed = simplify_mesh(
-                scene.mesh, self.max_angle_degrees)
-            self.after = self._direct_snapshot(scene.mesh)
-        else:
-            scene.mesh.restore_state(self.after)
-        scene.selection.clear()
-        scene.version += 1
-
-    def doc_after(self, scene, phase):
-        scene.selection = set(self.before_selection) if phase == "undo" else set()
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        if self.before is not None:
-            scene.mesh.restore_state(self.before)
-            scene.selection = set(self.before_selection)
             scene.version += 1
 
 

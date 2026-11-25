@@ -46,6 +46,7 @@ mod erase_steps;
 mod vertex_steps;
 mod plane_steps;
 mod explode_steps;
+mod mesh_steps;
 mod file_view;
 pub(crate) mod drawing;
 pub mod occurrences;
