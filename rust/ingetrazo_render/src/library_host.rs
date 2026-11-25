@@ -1602,7 +1602,7 @@ impl LibrarySheet {
         }
         if online || (prov_id == "components" && searching) {
             if slf.getattr("catalogue")?.is_none() {
-                slf.setattr("catalogue", py.import("views.component_catalogue")?.getattr("CatalogueSession")?.call1((ctx,))?)?;
+                slf.setattr("catalogue", crate::component_catalogue::session::CatalogueSession::create(ctx)?)?;
             }
             if !searching {
                 return slf.getattr("catalogue")?.call_method1("build", (&sheet, ""));

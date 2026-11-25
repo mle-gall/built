@@ -56,6 +56,6 @@ def test_the_view_lines_and_the_svg_take_the_active_view(grid, monkeypatch):
     called = _spy(grid, monkeypatch, "render_pixels",
                   (8, 8, bytes(8 * 8 * 4)), display=True)
     builder = win.view_svg_builder()
-    picture, _rect = builder._image_fn(64)
+    picture, _rect = builder.image(preview=True)
     assert called == [top]
     assert (picture.width, picture.height) == (8, 8)

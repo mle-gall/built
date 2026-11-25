@@ -994,7 +994,7 @@ fn dimensions<'py>(py: Python<'py>, _env: &Bound<'py, PyAny>) -> PyResult<Bound<
             &[("press", func(py, |py, a| {
                 let env = a.get_item(0)?;
                 crate::sheet_runtime::close(&env.getattr("win")?)?;
-                py.import("views.font_picker")?.call_method1("annotation", (env.getattr("win")?,))?;
+                py.import("ingetrazo_render.font_picker")?.call_method1("annotation", (env.getattr("win")?,))?;
                 Ok(none(py))
             })?)])?,
         row(py, "dim_font", "number", &tr(py, "Font size")?, Some(typed("font_size", obj(py, 9)?, "int")?), Some(put("font_size", "int")?),

@@ -778,7 +778,7 @@ def test_the_window_rect_holds_what_the_screen_shows(perspective):
 
 
 def test_the_builder_works_each_thing_out_once():
-    from views.svg_export import SvgBuilder
+    from ingetrazo_render.view_export import SvgBuilder
     counts = {"lines": 0, "faces": 0}
 
     def lines():
@@ -804,7 +804,7 @@ def test_the_screen_size_sheet_is_the_window_edge_to_edge():
     """«Screen size»: the page is what the window shows, at its size, with
     no margin — and what lies past it is cut off at the page."""
     import xml.etree.ElementTree as ET2
-    from views.svg_export import SvgBuilder
+    from ingetrazo_render.view_export import SvgBuilder
     lines = [("VISTA", np.array([(-5, 0, 5, 0), (0, -1, 0, 1)], float))]
     b = SvgBuilder(lambda: lines, lambda **o: [],
                    window=lambda: (-2.0, -1.0, 2.0, 1.0),
@@ -826,7 +826,7 @@ def test_the_screen_size_sheet_is_the_window_edge_to_edge():
 
 
 def test_the_picture_of_the_view_can_leave_the_axes_out(tmp_path):
-    from views.svg_export import SvgBuilder
+    from ingetrazo_render.view_export import SvgBuilder
     m = _svg(axes=True)
     assert _opts(m)["faces"] == {"image": True, "axes": False}
     m.receive("axes", "1")
@@ -878,7 +878,7 @@ def test_the_sheet_takes_the_part_and_the_size_apart():
     its middle, edge to edge; the whole model on A3 fits with a margin;
     at the drawing's scale the sheet is as big as it needs."""
     import xml.etree.ElementTree as ET2
-    from views.svg_export import SvgBuilder
+    from ingetrazo_render.view_export import SvgBuilder
     lines = [("VISTA", np.array([(-5, 0, 5, 0), (0, -1, 0, 1)], float))]
     b = SvgBuilder(lambda: lines, lambda **o: [],
                    window=lambda: (-2.0, -1.0, 2.0, 1.0),
@@ -915,7 +915,7 @@ def test_the_selection_part_exports_only_what_is_selected(tmp_path):
     from core.mesh import Mesh
     from core.scene import Scene
     from core.vista_caras import view_faces
-    from views.svg_export import SvgBuilder, selection_only
+    from ingetrazo_render.view_export import SvgBuilder, selection_only
     scene = Scene()
     a, b = Group(Mesh(), name="a"), Group(Mesh(), name="b")
     _slab(a.mesh, 0, 0, 0, 1, 1, 1)
@@ -961,7 +961,7 @@ def test_a_sheet_of_another_shape_shows_what_lay_past_the_screen(
     camera is left as it was."""
     from core.scene import Scene
     from core.vista_caras import view_rect
-    from views.svg_export import widened
+    from ingetrazo_render.view_export import widened
     scene = Scene()
     _slab(scene.loose_mesh, 0, 0, 0, 2, 2, 2)
     cam = _camera(scene)
@@ -981,7 +981,7 @@ def test_a_sheet_of_another_shape_shows_what_lay_past_the_screen(
 
 
 def test_the_builder_works_a_new_shape_out_in_the_widened_view():
-    from views.svg_export import SvgBuilder
+    from ingetrazo_render.view_export import SvgBuilder
     inside = []
 
     class Widen:
@@ -1031,7 +1031,8 @@ def test_only_custom_paper_enables_its_dimensions():
 
 
 def test_preview_renders_the_requested_page_and_remembers_it():
-    from views.svg_export import SvgBuilder, preview_pixels
+    from ingetrazo_render.view_export import SvgBuilder
+    from ingetrazo_render import svg_preview
 
     m = _svg(shadows=True, selection=True)
     for key, value in [
@@ -1047,7 +1048,7 @@ def test_preview_renders_the_requested_page_and_remembers_it():
     opts = _opts(m)
     builder = SvgBuilder(lambda fast=True: [], lambda **o: [])
     text, _ = builder.build(opts["faces"], opts["paper"], preview=True)
-    w, h, rgba = preview_pixels(text)
+    w, h, rgba = svg_preview(text)
     assert (w, h, len(rgba)) == (800, 400, 800 * 400 * 4)
     assert _opts(_svg(prefs=_saved(m), shadows=True, selection=True)) == opts
 
@@ -1059,7 +1060,7 @@ def test_the_framing_moves_and_zooms_the_view_and_leaves_it_as_it_was(
         perspective):
     from core.scene import Scene
     from core.vista_caras import _Parallel, _Perspective, view_rect
-    from views.svg_export import framed
+    from ingetrazo_render.view_export import framed
     scene = Scene()
     _slab(scene.loose_mesh, 0, 0, 0, 2, 2, 2)
     cam = _camera(scene)
@@ -1087,7 +1088,7 @@ def test_the_framing_moves_and_zooms_the_view_and_leaves_it_as_it_was(
 
 
 def test_the_builder_frames_only_what_the_screen_shows():
-    from views.svg_export import NO_FRAME, SvgBuilder
+    from ingetrazo_render.view_export import NO_FRAME, SvgBuilder
     asked = []
 
     class Frame:

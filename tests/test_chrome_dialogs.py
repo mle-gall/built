@@ -63,6 +63,16 @@ def dirty(win):
     assert win._is_dirty()
 
 
+def test_import_worker_cannot_pump_the_window(native_host):
+    from concurrent.futures import ThreadPoolExecutor
+    from ingetrazo_render import shell_modal
+
+    assert shell_modal.host() is native_host
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        assert pool.submit(shell_modal.host).result(timeout=5) is None
+    assert shell_modal.host() is native_host
+
+
 def test_blocking_questions_require_a_visible_view(native_host, monkeypatch):
     win = native_host.window
     assert cd.live(win) is None

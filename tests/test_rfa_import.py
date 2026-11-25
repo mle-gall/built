@@ -108,14 +108,14 @@ def test_reader_contract(monkeypatch):
 
 
 def test_thumbnail():
-    from views.component_thumbs import thumbnail
+    from ingetrazo_render import component_thumbnail
     from ingetrazo_render import SurveyRaster
     image = SurveyRaster(16, 16, bytes([255, 0, 0, 255]) * 256)
     p = payload()
     p['preview_png_base64'] = base64.b64encode(image.png()).decode()
     scene = Scene()
     apply_payload(scene, p)
-    pm = thumbnail(scene.kept_components[0])
+    pm = component_thumbnail(scene.kept_components[0])
     i = (pm.width * 20 + 20) * 4
     assert pm.rgba()[i:i + 4] == bytes([255, 0, 0, 255])
 

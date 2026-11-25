@@ -144,7 +144,7 @@ fn open_member(
         }
         Err(e) => return Err(e),
     };
-    let opens = py.import("views.document_open")?;
+    let opens = py.import("ingetrazo_render.document_open")?;
     if opens.call_method1("pending", (win, p))?.is_truthy()? {
         let api = module(py, "shell_project")?;
         let kw = PyDict::new(py);

@@ -35,7 +35,7 @@ def setup(app):
         from views import drawing_cache, wgpu_sheets
         from ingetrazo_render import about_review
         from views.ndof_input import shared_input
-        from views.scale_editor import ask_scale
+        from ingetrazo_render import ask_scale
 
         folder = Path(__file__).parent
         assert cache_directory().is_relative_to(folder.parents[2])

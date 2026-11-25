@@ -10,6 +10,7 @@
 //! where its value lives; `preferences.rs` owns the catalogue, the device
 //! model and the sheet's state (`PreferencesView`).
 use crate::settings_rows::{env, func, none, obj, opt, s, section_groups, tr, trf};
+mod site_requests;
 use pyo3::{
     prelude::*,
     types::{IntoPyDict, PyDict, PyList},
@@ -607,7 +608,7 @@ impl SettingsSheet {
             let map_on = site.getattr("map")?.is_truthy()?;
             let requests = slf.getattr("site_requests")?;
             if map_on && requests.is_none() {
-                let made = py.import("views.location_backend")?.getattr("SiteRequests")?.call1((&site, slf.getattr("site_source")?, ctx.getattr("refresh")?, ctx.getattr("win")?))?;
+                let made = site_requests::create(&site,slf.getattr("site_source")?,ctx.getattr("refresh")?,ctx.getattr("win")?)?;
                 slf.setattr("site_requests", made)?;
             } else if !map_on && !requests.is_none() {
                 requests.call_method0("close")?;
