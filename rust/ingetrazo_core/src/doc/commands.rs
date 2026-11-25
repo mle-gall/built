@@ -309,5 +309,6 @@ pub fn register_commands(m: &Bound<'_, PyModule>) -> PyResult<()> {
     super::explode_steps::register(m)?;
     super::mesh_steps::register(m)?;
     super::material_steps::register(m)?;
+    super::transform_math::register(m)?;
     crate::store::tally::register(m)
 }

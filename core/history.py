@@ -45,6 +45,8 @@ from ingetrazo_core import (AutoTagDrawnFacesCommand, CoplanarMergeCommand, Expl
                             StitchSolidCommand, TagCurveCommand)
 # Material registry edits (rust/ingetrazo_core/src/doc/material_steps.rs).
 from ingetrazo_core import DeleteMaterialCommand, EditTexturedMaterialCommand, RestampMaterialCommand
+# Transform matrices (rust/ingetrazo_core/src/doc/transform_math.rs).
+from ingetrazo_core import invert_scale_factor, mirror_matrix, rotation_matrix, scale_matrix
 # Vertex edits (rust/ingetrazo_core/src/doc/vertex_steps.rs).
 from ingetrazo_core import (FlipVerticesCommand, MoveVerticesCommand, RotateVerticesCommand,
                             ScaleVerticesCommand)
@@ -520,19 +522,6 @@ def _cells_of(mesh, vertex_keys) -> set:
     return {_key(v.position) for v in mesh.vertices if v.key in vertex_keys}
 
 
-def defect_names() -> dict:
-    """The words a refused weld uses for each defect kind."""
-    from core.i18n import tr
-    return {
-        "duplicate_face": tr("a face doubled over another"),
-        "overlapping_face": tr("two faces overlapping in one plane"),
-        "pinched_face": tr("a face that touches itself"),
-        "crossed_face": tr("a face whose sides cross"),
-        "flat_face": tr("a face with no area"),
-        "zero_edge": tr("an edge of zero length"),
-    }
-
-
 def _weld_landed(mesh, moving: set) -> bool:
     from core.store_mesh import StoreMesh
     if type(mesh) is StoreMesh and not mesh.__dict__.get("_planned_points"):
@@ -572,23 +561,6 @@ def _carried_faces(mesh, moving: set) -> list:
     return [faces[i] for i in MeshStore.carried_object_faces(rings, set(moving))]
 
 
-def rotation_matrix(center: QVector3D, axis: QVector3D, degrees: float):
-    """Rigid rotation of ``degrees`` around ``axis`` through ``center``."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4
-    m = QMatrix4x4()
-    m.translate(center)
-    m.rotate(degrees, axis.normalized())
-    m.translate(-center)
-    return m
-
-
-def rotate_points(scene, keys: set, matrix) -> None:
-    """Rotate every shared vertex whose position key is in ``keys`` by the
-    rigid ``matrix`` (the rotation twin of :func:`translate_points`). Shared
-    by :class:`RotateVerticesCommand` and the Rotate tool's live preview."""
-    _map_selected_vertices(scene, keys, matrix, carry_textures=False)
-
-
 def _map_selected_vertices(scene, keys, matrix, carry_textures):
     from core.store_mesh import StoreMesh
     from ingetrazo_core import Matrix4
@@ -607,23 +579,6 @@ def _map_selected_vertices(scene, keys, matrix, carry_textures):
         from core.group import _remap_uvws
         _remap_uvws(mesh, matrix, carried)
     scene.version += 1
-
-
-def mirror_matrix(centre: QVector3D, axis: QVector3D):
-    """Reflection about the plane through ``centre`` with normal ``axis``
-    (Householder), as a QMatrix4x4 — the Flip tool."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4
-    n = QVector3D(axis).normalized()
-    r = QMatrix4x4(
-        1 - 2 * n.x() * n.x(), -2 * n.x() * n.y(), -2 * n.x() * n.z(), 0,
-        -2 * n.y() * n.x(), 1 - 2 * n.y() * n.y(), -2 * n.y() * n.z(), 0,
-        -2 * n.z() * n.x(), -2 * n.z() * n.y(), 1 - 2 * n.z() * n.z(), 0,
-        0, 0, 0, 1)
-    t_in = QMatrix4x4()
-    t_in.translate(-centre)
-    t_out = QMatrix4x4()
-    t_out.translate(centre)
-    return t_out * r * t_in
 
 
 def _member_placement(scene, group):
@@ -645,48 +600,6 @@ def _edit_local_transform(scene, group, transform):
             if ok:
                 return inverse * transform * parent
     return transform
-
-
-def scale_matrix(center: QVector3D, factor, axes=None):
-    """Scale about ``center``: a float scales uniformly, a 3-tuple scales each
-    axis by its own factor (the edge/face grips). A negative factor
-    mirrors through the centre along that axis (allowed — dragging
-    a grip past its anchor, or typing -1).
-
-    ``axes`` = ``(red, green, blue)`` unit vectors: the three factors act
-    along THOSE instead of the world's — the grip box of a turned group, on
-    its own axes (issue #44). ``None`` is the world, exactly as before."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4
-    if axes is not None and isinstance(factor, (tuple, list)):
-        from core.axes import frame_matrix
-        rot = frame_matrix(QVector3D(0.0, 0.0, 0.0), *axes)
-        inv = rot.transposed()
-        s = QMatrix4x4()
-        s.scale(float(factor[0]), float(factor[1]), float(factor[2]))
-        m = QMatrix4x4()
-        m.translate(center)
-        m = m * rot * s * inv
-        back = QMatrix4x4()
-        back.translate(-center)
-        return m * back
-    m = QMatrix4x4()
-    m.translate(center)
-    if isinstance(factor, (tuple, list)):
-        m.scale(float(factor[0]), float(factor[1]), float(factor[2]))
-    else:
-        m.scale(float(factor))
-    m.translate(-center)
-    return m
-
-
-def invert_scale_factor(factor):
-    """The factor that undoes ``factor`` — per-axis for tuples. Zero factors
-    (already rejected upstream) invert to 1.0 instead of dividing by zero."""
-    def inv(f):
-        return 1.0 / f if abs(f) > 1e-12 else 1.0
-    if isinstance(factor, (tuple, list)):
-        return tuple(inv(float(f)) for f in factor)
-    return inv(float(factor))
 
 
 def run_stitch(mesh, seedkeys: set, new_faces: Optional[set] = None,
