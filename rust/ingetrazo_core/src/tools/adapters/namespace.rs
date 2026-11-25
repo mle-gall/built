@@ -220,6 +220,7 @@ const VIEW_MODULES: &[&str] = &[
     "view_host",
     "document_controller",
     "ndof_input",
+    "wgpu_view",
 ];
 
 #[pyclass(module = "ingetrazo_core", frozen)]

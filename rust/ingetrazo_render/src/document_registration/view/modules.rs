@@ -75,6 +75,7 @@ pub(super) fn install_interaction_module(module: &Bound<PyModule>) -> PyResult<(
         "extension_api" => crate::extension_api::register(module)?,
         "documents" => crate::extension_api::register_documents(module)?,
         "document_interaction" => super::interaction_host::install(module)?,
+        "wgpu_view" => super::metal_view::install_module(module)?,
         "document_tools" => {
             import_names(module, "__future__", &[("annotations", "annotations")])?;
             import_names(module, "typing", &[("Optional", "Optional")])?;
