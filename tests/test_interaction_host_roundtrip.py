@@ -91,3 +91,11 @@ def test_coalesced_hover_uses_the_native_shell_event_and_plugin_codes():
     assert (event.position().x(), event.position().y()) == (-4.25, 17.75)
     assert isinstance(event.modifiers(), Input.KeyboardModifier)
     assert pickle.loads(pickle.dumps(event.modifiers())) == flags
+
+
+def test_extension_import_paths_resolve_to_the_native_form_and_dialog_modules():
+    from importlib import import_module
+    from ingetrazo_render import chrome_dialogs, chrome_forms
+
+    assert import_module("views.chrome_forms") is chrome_forms
+    assert import_module("views.chrome_dialogs") is chrome_dialogs
