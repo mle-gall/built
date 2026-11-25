@@ -51,7 +51,6 @@ def test_extensions_can_import_the_complete_native_v2_api():
     from formats import built
 
     api = importlib.import_module("views.extension_api")
-    assert api.__spec__.origin == "ingetrazo_core"
     # Published plugins could import any of these names, including with import *.
     exports = {}
     exec("from views.extension_api import *", {}, exports)
@@ -79,6 +78,28 @@ def test_extensions_can_import_the_complete_native_v2_api():
         "remove_agent_tools", "restore_toolbar_layout", "scene", "set_document_data",
         "show_panel", "viewport", "viewport_widget", "window", "workspace", "world_to_pixels",
     } <= set(dir(api.ExtensionApp))
+
+
+@pytest.mark.parametrize("first", ["views.extension_api", "views.chrome_forms", "views.chrome_dialogs"])
+def test_plugin_api_imports_in_a_fresh_interpreter(first):
+    import os
+    import subprocess
+    import sys
+
+    script = f"""import {first}
+from views import extension_api, chrome_forms, chrome_dialogs
+from views.extension_api import ExtensionApp, Job
+import ingetrazo_render
+
+assert ExtensionApp(object(), "example").api_version == 2
+assert extension_api.chrome_forms is chrome_forms is ingetrazo_render.chrome_forms
+assert extension_api.chrome_dialogs is chrome_dialogs is ingetrazo_render.chrome_dialogs
+assert Job is chrome_dialogs.Job
+"""
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    subprocess.run([sys.executable, "-c", script], cwd=Path(__file__).resolve().parents[1],
+                   env=env, check=True, timeout=20)
 
 
 # ---- panels -----------------------------------------------------------------------

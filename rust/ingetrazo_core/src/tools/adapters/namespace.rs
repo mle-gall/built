@@ -211,7 +211,6 @@ fn definition(name: &str) -> Option<&'static Module> {
 }
 
 const VIEW_MODULES: &[&str] = &[
-    "extension_api",
     "documents",
     "document_tools",
     "view_navigation",
