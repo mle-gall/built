@@ -11,7 +11,6 @@ _ENV = ("XDG_DATA_HOME", "BUILT_ANSWERS", "BUILT_SETTINGS_DIR")
 _PATCHED = {
     "core.settings": ("_store",),
     "ingetrazo_render.chrome_dialogs": ("live", "QEventLoop", "_shell_installed"),
-    "views.filedialogs": ("QFileDialog",),
     "core.renderer_settings": ("capability", "status_text", "_shell_installed"),
     "app_shell.modal": ("_HOST",),
 }

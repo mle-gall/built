@@ -281,9 +281,9 @@ def _cajetin_template():
     starts from (the composer's ``cajetin_templates_dir`` and
     ``default_cajetin_template_name``): ``(folder, name or None)``."""
     from core.autosave import _app_data_base
-    from core.settings import settings as QSettings
+    from core.settings import settings as native_settings
     base = _app_data_base()
-    name = str(QSettings().value("composer/default_cajetin", "") or "") or None
+    name = str(native_settings().value("composer/default_cajetin", "") or "") or None
     return str(Path(base) / "cajetines"), name
 
 

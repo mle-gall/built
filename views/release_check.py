@@ -5,7 +5,7 @@ from concurrent.futures import Future
 import threading
 import sys
 
-from core.settings import settings as QSettings
+from core.settings import settings as native_settings
 from core.timers import later
 
 from core import desktop_open, update_check
@@ -31,7 +31,7 @@ class ReleaseSheet(chrome_sheet.Provider):
         if action:
             effect, value, close = action
             if effect == "skip":
-                update_check.skip_version(QSettings(), value)
+                update_check.skip_version(native_settings(), value)
             elif effect == "open":
                 desktop_open.open_url(value)
             if close:
@@ -40,7 +40,7 @@ class ReleaseSheet(chrome_sheet.Provider):
 
 def start_check(window, quiet=False, fetch=None, current=__version__):
     from ingetrazo_render import ReleaseReview
-    settings = QSettings()
+    settings = native_settings()
     installed = getattr(sys, "frozen", False) or (chrome_sheet.in_shell() and hasattr(sys, "_MEIPASS"))
     if quiet and not update_check.should_check_at_start(settings, frozen=installed):
         return

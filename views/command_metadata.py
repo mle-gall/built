@@ -4,7 +4,7 @@
 from __future__ import annotations
 import re
 
-from core.settings import settings as QSettings
+from core.settings import settings as native_settings
 from ingetrazo_render import shortcut_text
 
 from core import string_search
@@ -60,14 +60,14 @@ def _belongs(action, window) -> bool:
 
 
 def recent_keys() -> list:
-    value = QSettings().value(_RECENT_KEY) or []
+    value = native_settings().value(_RECENT_KEY) or []
     return [str(v) for v in ([value] if isinstance(value, str) else value)]
 
 
 def remember(act: ShellAction) -> None:
     key = action_key(act)
     keys = [key] + [k for k in recent_keys() if k != key]
-    QSettings().setValue(_RECENT_KEY, keys[:_RECENT_MAX])
+    native_settings().setValue(_RECENT_KEY, keys[:_RECENT_MAX])
 
 
 class Command:

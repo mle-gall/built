@@ -11,7 +11,7 @@ import random
 
 import pytest
 from ingetrazo_core import ScreenPoint, Input
-from core.settings import settings as QSettings
+from core.settings import settings as native_settings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_render import SurveyRaster
 from ingetrazo_core import Vec3 as QVector3D
@@ -73,7 +73,7 @@ def _png(path, rgb):
 @pytest.fixture(autouse=True)
 def _reset_paint_state():
     PaintTool.recent = []
-    QSettings().remove("paint/recent_materials")
+    native_settings().remove("paint/recent_materials")
     yield
     PaintTool.recent = []
     PaintTool.current_is_default = False
@@ -82,7 +82,7 @@ def _reset_paint_state():
     PaintTool.current_texture_plane = None
     PaintTool.current_opacity = None
     PaintTool.current_color = (0.80, 0.45, 0.30)
-    QSettings().remove("paint/recent_materials")
+    native_settings().remove("paint/recent_materials")
 
 
 # ---- the list itself --------------------------------------------------------
@@ -236,7 +236,7 @@ def test_the_list_survives_a_restart_minus_missing_images(tmp_path):
 
 def test_corrupt_settings_read_as_empty():
     from ingetrazo_core import load_recent_materials
-    QSettings().setValue("paint/recent_materials", "{not json")
+    native_settings().setValue("paint/recent_materials", "{not json")
     assert load_recent_materials() == []
-    QSettings().setValue("paint/recent_materials", '[1, "x", {"foo": 2}]')
+    native_settings().setValue("paint/recent_materials", '[1, "x", {"foo": 2}]')
     assert load_recent_materials() == []

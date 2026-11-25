@@ -488,7 +488,7 @@ def open_view_export(win, frame_builder=None):
     """Open the one-off Export sheet. Sheets can supply a frame's SvgBuilder."""
     import json
     from pathlib import Path
-    from core.settings import settings as QSettings
+    from core.settings import settings as native_settings
     from ingetrazo_core import AtomicDocument
     from core.i18n import tr
     from core.saved_views import SavedView
@@ -515,7 +515,7 @@ def open_view_export(win, frame_builder=None):
         if win.viewport.history is history:
             builder = win.view_svg_builder()
 
-    settings = QSettings()
+    settings = native_settings()
     settings.beginGroup("export_svg/v5")
     prefs = {key: settings.value(key) for key in settings.childKeys()}
     svg = SvgOptions.current_view(

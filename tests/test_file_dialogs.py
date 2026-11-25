@@ -53,7 +53,6 @@ def test_the_shim_feeds_the_dialog_and_learns_from_it(tmp_path, monkeypatch):
         seen["dir"] = str(Path(directory) / name)
         return str(tmp_path / "salida" / "lamina.pdf")
     (tmp_path / "salida").mkdir()
-    monkeypatch.setattr(filedialogs, "QFileDialog", ShellFileDialog)
     monkeypatch.setattr(native, "save_file", fake_save)
     remember(tmp_path)
     path, _ = file_dialogs.getSaveFileName(None, "Export PDF…", "lamina.pdf", "PDF (*.pdf)")
@@ -83,7 +82,6 @@ def test_with_nothing_remembered_a_dialog_starts_beside_the_open_document(tmp_pa
     def fake_save(title, name, filters, directory):
         seen["dir"] = str(Path(directory) / name)
         return None
-    monkeypatch.setattr(filedialogs, "QFileDialog", ShellFileDialog)
     monkeypatch.setattr(native, "save_file", fake_save)
     file_dialogs.getSaveFileName(_Composer(), "Export PDF…", "lamina.pdf", "PDF (*.pdf)")
     assert seen["dir"] == str(tmp_path / "proyecto" / "lamina.pdf")

@@ -239,8 +239,8 @@ def builtin_names() -> set[str]:
 def _settings():
     """One place to get the QSettings handle, so tests can point it at a
     temp file."""
-    from core.settings import settings as QSettings
-    return QSettings()
+    from core.settings import settings as native_settings
+    return native_settings()
 
 
 def user_styles() -> list[Style]:

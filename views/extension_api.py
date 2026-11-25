@@ -178,8 +178,8 @@ class ExtensionApp:
         if late is not None:
             restored = bool(late())
         else:
-            from core.settings import settings as QSettings
-            state = QSettings().value("ui/window_state")
+            from core.settings import settings as native_settings
+            state = native_settings().value("ui/window_state")
             if state is None:
                 return False
             restored = bool(self._window.restoreState(state))
