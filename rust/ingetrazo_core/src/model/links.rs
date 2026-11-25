@@ -43,26 +43,40 @@ fn none(py: Python<'_>) -> Obj<'_> {
 }
 
 fn get<'py>(d: &Obj<'py>, key: impl IntoPyObject<'py>) -> PyResult<Obj<'py>> {
-    d.call_method1("get", (key,))
+    let py = d.py();
+    if d.is_exact_instance_of::<PyDict>() {
+        // A plain dict: its own lookup, no method call.
+        let d = d.cast::<PyDict>()?;
+        return Ok(d.get_item(key)?.unwrap_or_else(|| none(py)));
+    }
+    d.call_method1(pyo3::intern!(py, "get"), (key,))
 }
 
 fn get_or<'py>(d: &Obj<'py>, key: impl IntoPyObject<'py>, default: impl IntoPyObject<'py>) -> PyResult<Obj<'py>> {
-    d.call_method1("get", (key, default))
+    let py = d.py();
+    d.call_method1(pyo3::intern!(py, "get"), (key, default))
 }
 
 fn is_dict(v: &Obj<'_>) -> bool {
     v.is_instance_of::<PyDict>()
 }
 
+/// A module attribute looked up once per process.
+fn cached<'py>(py: Python<'py>, cell: &'static pyo3::sync::PyOnceLock<Py<PyAny>>, m: &str, name: &str) -> PyResult<Obj<'py>> {
+    Ok(cell.get_or_try_init(py, || module(py, m)?.getattr(name).map(Bound::unbind))?.bind(py).clone())
+}
+
 fn deepcopy<'py>(v: &Obj<'py>) -> PyResult<Obj<'py>> {
-    module(v.py(), "copy")?.call_method1("deepcopy", (v,))
+    static F: pyo3::sync::PyOnceLock<Py<PyAny>> = pyo3::sync::PyOnceLock::new();
+    cached(v.py(), &F, "copy", "deepcopy")?.call1((v,))
 }
 
 fn matrix<'py>(py: Python<'py>, m: &Obj<'py>) -> PyResult<Obj<'py>> {
     if m.is_none() {
         return Ok(none(py));
     }
-    module(py, "ingetrazo_core")?.getattr("Matrix4")?.call1((m,))
+    static F: pyo3::sync::PyOnceLock<Py<PyAny>> = pyo3::sync::PyOnceLock::new();
+    cached(py, &F, "ingetrazo_core", "Matrix4")?.call1((m,))
 }
 
 fn str_of(v: &Obj<'_>) -> Option<String> {
@@ -73,10 +87,11 @@ fn str_of(v: &Obj<'_>) -> Option<String> {
 
 /// `os.fspath(path)` as a string (None for a bytes path: the Python then).
 fn fspath(path: &Obj<'_>) -> PyResult<Option<String>> {
+    let py = path.py();
     if let Some(s) = str_of(path) {
         return Ok(Some(s));
     }
-    let p = module(path.py(), "os")?.call_method1("fspath", (path,))?;
+    let p = module(path.py(), "os")?.call_method1(pyo3::intern!(py, "fspath"), (path,))?;
     Ok(str_of(&p))
 }
 
@@ -114,15 +129,15 @@ pub fn norm(path: &Obj<'_>) -> PyResult<String> {
     let s = match fspath(path)? {
         Some(s) if !cfg!(windows) => s,
         _ => {
-            let os = module(py, "os")?.getattr("path")?;
-            let abs = os.call_method1("abspath", (module(py, "os")?.call_method1("fspath", (path,))?,))?;
-            return os.call_method1("normcase", (abs,))?.str()?.extract();
+            let os = module(py, "os")?.getattr(pyo3::intern!(py, "path"))?;
+            let abs = os.call_method1(pyo3::intern!(py, "abspath"), (module(py, "os")?.call_method1(pyo3::intern!(py, "fspath"), (path,))?,))?;
+            return os.call_method1(pyo3::intern!(py, "normcase"), (abs,))?.str()?.extract();
         }
     };
     if s.starts_with('/') {
         return Ok(normpath(&s));
     }
-    let cwd: String = module(py, "os")?.call_method0("getcwd")?.extract()?;
+    let cwd: String = module(py, "os")?.call_method0(pyo3::intern!(py, "getcwd"))?.extract()?;
     let joined = if cwd.ends_with('/') { format!("{cwd}{s}") } else { format!("{cwd}/{s}") };
     Ok(normpath(&joined))
 }
@@ -140,9 +155,10 @@ fn stem_str(p: &str) -> String {
 }
 
 pub fn stem(path: &Obj<'_>) -> PyResult<String> {
+    let py = path.py();
     match fspath(path)? {
         Some(s) if !cfg!(windows) => Ok(stem_str(&s)),
-        _ => module(path.py(), "pathlib")?.call_method1("Path", (path,))?.getattr("stem")?.extract(),
+        _ => module(path.py(), "pathlib")?.call_method1(pyo3::intern!(py, "Path"), (path,))?.getattr(pyo3::intern!(py, "stem"))?.extract(),
     }
 }
 
@@ -232,12 +248,14 @@ pub fn stable_uid_of(placement_uid: &str, source_uid: &str) -> String {
     data.push(b':');
     data.extend_from_slice(source_uid.as_bytes());
     let digest = sha1(&data);
-    let mut hex = String::with_capacity(16);
-    for b in &digest[..8] {
-        hex.push_str(&format!("{b:02x}"));
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = [0u8; 16];
+    for (i, b) in digest[..8].iter().enumerate() {
+        out[2 * i] = HEX[(b >> 4) as usize];
+        out[2 * i + 1] = HEX[(b & 15) as usize];
     }
-    hex.replace_range(12..13, "5");
-    hex
+    out[12] = b'5';
+    String::from_utf8(out.to_vec()).expect("hex")
 }
 
 #[pyfunction]
@@ -301,10 +319,11 @@ fn doc_link(group: &Obj<'_>) -> Option<Option<()>> {
 /// `link_of(group)`: the link record (the tracked dict, editable in place)
 /// of a placed linked file, or None.
 pub fn link_of<'py>(group: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
+    let py = group.py();
     if let Some(None) = doc_link(group) {
         return Ok(None);
     }
-    let ext = match group.getattr_opt("ext")? {
+    let ext = match group.getattr_opt(pyo3::intern!(py, "ext"))? {
         Some(e) if is_dict(&e) => e,
         _ => return Ok(None),
     };
@@ -337,12 +356,13 @@ fn py_is_linked(group: &Obj<'_>) -> PyResult<bool> {
 
 /// `group` or the first group above it that is a linked copy.
 pub fn linked_ancestor<'py>(group: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
+    let py = group.py();
     let mut g = group.clone();
     while !g.is_none() {
         if is_linked(&g)? {
             return Ok(Some(g));
         }
-        g = g.getattr_opt("owner")?.unwrap_or_else(|| none(g.py()));
+        g = g.getattr_opt(pyo3::intern!(py, "owner"))?.unwrap_or_else(|| none(g.py()));
     }
     Ok(None)
 }
@@ -369,11 +389,11 @@ fn norm_path_of(group: &Obj<'_>) -> PyResult<Option<String>> {
 
 fn all_groups<'py>(scene: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
     let py = scene.py();
-    let groups = match scene.getattr_opt("groups")? {
+    let groups = match scene.getattr_opt(pyo3::intern!(py, "groups"))? {
         Some(g) if g.is_truthy()? => g,
         _ => return Ok(Vec::new()),
     };
-    module(py, "ingetrazo_core")?.call_method1("purge_iter_groups", (groups,))?.try_iter()?.collect()
+    module(py, "ingetrazo_core")?.call_method1(pyo3::intern!(py, "purge_iter_groups"), (groups,))?.try_iter()?.collect()
 }
 
 /// Every linked copy in the document (at any depth), or only the copies of
@@ -422,7 +442,8 @@ fn py_sources(scene: &Obj<'_>) -> PyResult<Vec<String>> {
 /// The links registry to read: the document's root table, or an empty dict
 /// that is not attached to it.
 pub fn registry_view<'py>(scene: &Obj<'py>) -> PyResult<Obj<'py>> {
-    match scene.getattr_opt("link_registry")? {
+    let py = scene.py();
+    match scene.getattr_opt(pyo3::intern!(py, "link_registry"))? {
         Some(r) if is_dict(&r) => Ok(r),
         _ => Ok(PyDict::new(scene.py()).into_any()),
     }
@@ -430,11 +451,12 @@ pub fn registry_view<'py>(scene: &Obj<'py>) -> PyResult<Obj<'py>> {
 
 /// The links registry to write.
 pub fn registry<'py>(scene: &Obj<'py>) -> PyResult<Obj<'py>> {
-    match scene.getattr_opt("link_registry")? {
+    let py = scene.py();
+    match scene.getattr_opt(pyo3::intern!(py, "link_registry"))? {
         Some(r) if is_dict(&r) => Ok(r),
         _ => {
-            scene.setattr("link_registry", PyDict::new(scene.py()))?;
-            scene.getattr("link_registry")
+            scene.setattr(pyo3::intern!(py, "link_registry"), PyDict::new(scene.py()))?;
+            scene.getattr(pyo3::intern!(py, "link_registry"))
         }
     }
 }
@@ -455,7 +477,7 @@ pub fn entry<'py>(scene: &Obj<'py>, path: &Obj<'py>) -> PyResult<Obj<'py>> {
         e = PyDict::new(py).into_any();
         reg.set_item(&key, &e)?;
     }
-    e.call_method1("setdefault", ("overrides", PyDict::new(py)))?;
+    e.call_method1(pyo3::intern!(py, "setdefault"), ("overrides", PyDict::new(py)))?;
     Ok(e)
 }
 
@@ -485,7 +507,8 @@ fn set_packed(scene: &Obj<'_>, path: &Obj<'_>, packed: bool) -> PyResult<()> {
 
 /// The source file a host tag belongs to, or None for the host's own.
 pub fn source_of_tag<'py>(scene: &Obj<'py>, name: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
-    for item in registry_view(scene)?.call_method0("items")?.try_iter()? {
+    let py = scene.py();
+    for item in registry_view(scene)?.call_method0(pyo3::intern!(py, "items"))?.try_iter()? {
         let (key, e): (Obj<'py>, Obj<'py>) = item?.extract()?;
         if !is_dict(&e) {
             continue;
@@ -532,7 +555,7 @@ pub fn save_as_placeholder(group: &Obj<'_>, scene: &Obj<'_>) -> PyResult<bool> {
 pub fn link_state(scene: &Obj<'_>, path: &Obj<'_>) -> PyResult<String> {
     let py = scene.py();
     let e = get_or(&registry_view(scene)?, norm(path)?, PyDict::new(py))?;
-    let p: String = module(py, "os")?.call_method1("fspath", (path,))?.extract()?;
+    let p: String = module(py, "os")?.call_method1(pyo3::intern!(py, "fspath"), (path,))?.extract()?;
     let loaded: Option<u128> = get(&e, "loaded_mtime_ns")?.extract()?;
     Ok(crate::project_tree::source_state(&p, get(&e, "packed")?.is_truthy()?, loaded).to_string())
 }
@@ -543,13 +566,13 @@ pub fn link_state(scene: &Obj<'_>, path: &Obj<'_>) -> PyResult<String> {
 fn query<'py>(scene: &Obj<'py>) -> PyResult<Bound<'py, PyList>> {
     let py = scene.py();
     let pathlib = module(py, "pathlib")?;
-    let walk = module(py, "core.group")?.getattr("iter_placements")?;
+    let walk = module(py, "core.group")?.getattr(pyo3::intern!(py, "iter_placements"))?;
     let rows = PyList::empty(py);
     for group in linked_groups(scene, None)? {
         let rec = link_of(&group)?.expect("a linked group");
-        let path = pathlib.call_method1("Path", (rec.get_item("path")?,))?;
+        let path = pathlib.call_method1(pyo3::intern!(py, "Path"), (rec.get_item("path")?,))?;
         let row = PyDict::new(py);
-        row.set_item("uid", group.getattr("uid")?)?;
+        row.set_item("uid", group.getattr(pyo3::intern!(py, "uid"))?)?;
         row.set_item("path", path.str()?)?;
         row.set_item("status", link_state(scene, &path)?)?;
         row.set_item("include_nested", get_or(&rec, "include_nested", true)?)?;
@@ -602,7 +625,7 @@ pub fn validate_select(select: &Obj<'_>) -> PyResult<()> {
         }
         return Ok(());
     }
-    module(py, "core.facets")?.call_method1("validate_filter", (select.get_item("filter")?,))?;
+    module(py, "core.facets")?.call_method1(pyo3::intern!(py, "validate_filter"), (select.get_item("filter")?,))?;
     Ok(())
 }
 
@@ -612,15 +635,16 @@ pub fn validate_select(select: &Obj<'_>) -> PyResult<()> {
 #[pyfunction]
 #[pyo3(name = "link_adopt_parts")]
 pub fn adopt_parts(placement: &Obj<'_>) -> PyResult<()> {
+    let py = placement.py();
     let mut stack = vec![placement.clone()];
     while let Some(p) = stack.pop() {
-        let children = p.getattr("children")?;
+        let children = p.getattr(pyo3::intern!(py, "children"))?;
         if children.is_none() {
             continue;
         }
         let kids: Vec<Obj<'_>> = children.try_iter()?.collect::<PyResult<_>>()?;
         for c in kids.iter() {
-            c.setattr("owner", &p)?;
+            c.setattr(pyo3::intern!(py, "owner"), &p)?;
         }
         // Depth first, in order, as the recursion did.
         stack.extend(kids.into_iter().rev());
@@ -678,13 +702,13 @@ pub fn renamed_paint<'py>(attrs: &Obj<'py>, renamed: &Bound<'py, PyDict>) -> PyR
         return Ok(attrs.clone());
     }
     let out = PyDict::new(py);
-    out.call_method1("update", (attrs,))?;
+    out.call_method1(pyo3::intern!(py, "update"), (attrs,))?;
     if front_hit {
         out.set_item("mat", renamed.get_item(&mat)?)?;
     }
     if back_hit {
         let b = PyDict::new(py);
-        b.call_method1("update", (&back,))?;
+        b.call_method1(pyo3::intern!(py, "update"), (&back,))?;
         b.set_item("mat", renamed.get_item(get(&back, "mat")?)?)?;
         out.set_item("back", b)?;
     }
@@ -709,22 +733,23 @@ struct Shared {
 }
 
 fn is_deferred(py: Python<'_>, mesh: &Obj<'_>) -> PyResult<bool> {
-    Ok(mesh.get_type().is(module(py, "core.mesh")?.getattr("DeferredMesh")?))
+    Ok(mesh.get_type().is(module(py, "core.mesh")?.getattr(pyo3::intern!(py, "DeferredMesh"))?))
 }
 
 /// The index array `a` copied (`np.full(n, -1, int32)` when absent), with
 /// whether it has a negative entry.
 fn index_copy<'py>(np: &Obj<'py>, a: &Obj<'py>, n: usize) -> PyResult<(Obj<'py>, bool)> {
+    let py = np.py();
     let a = if a.is_none() {
         let kw = PyDict::new(np.py());
-        kw.set_item("dtype", np.getattr("int32")?)?;
-        np.call_method("full", (n, -1), Some(&kw))?
+        kw.set_item("dtype", np.getattr(pyo3::intern!(py, "int32"))?)?;
+        np.call_method(pyo3::intern!(py, "full"), (n, -1), Some(&kw))?
     } else {
         let kw = PyDict::new(np.py());
         kw.set_item("copy", true)?;
-        np.call_method("array", (a,), Some(&kw))?
+        np.call_method(pyo3::intern!(py, "array"), (a,), Some(&kw))?
     };
-    let neg = a.getattr("size")?.is_truthy()? && a.rich_compare(0, pyo3::basic::CompareOp::Lt)?.call_method0("any")?.is_truthy()?;
+    let neg = a.getattr(pyo3::intern!(py, "size"))?.is_truthy()? && a.rich_compare(0, pyo3::basic::CompareOp::Lt)?.call_method0(pyo3::intern!(py, "any"))?.is_truthy()?;
     Ok((a, neg))
 }
 
@@ -739,10 +764,10 @@ fn index_copy<'py>(np: &Obj<'py>, a: &Obj<'py>, n: usize) -> PyResult<(Obj<'py>,
 /// edges brought to what the new tables say ([`RetaggedBuild`]).
 fn retable(mesh: &Obj<'_>, src: &Obj<'_>, tag: Option<OwnedRename>, paint: Option<&Bound<'_, PyDict>>) -> PyResult<()> {
     let py = mesh.py();
-    let d = mesh.getattr("__dict__")?;
+    let d = mesh.getattr(pyo3::intern!(py, "__dict__"))?;
     d.set_item("_deferred_source", src)?;
     for key in ["_deferred_plan", "_drawing_staged", "_drawing_source_key"] {
-        d.call_method1("pop", (key, none(py)))?;
+        d.call_method1(pyo3::intern!(py, "pop"), (key, none(py)))?;
     }
     if let Some(original) = d.get_item("_deferred").ok().filter(|b| !b.is_none()) {
         let build = RetaggedBuild { original: original.unbind(), tag, paint: paint.map(|p| p.clone().unbind()) };
@@ -790,7 +815,7 @@ impl RetaggedBuild {
                     Rename::Map(&map)
                 }
             };
-            let items: Vec<Obj<'_>> = mesh.getattr("faces")?.try_iter()?.chain(mesh.getattr("edges")?.try_iter()?).collect::<PyResult<_>>()?;
+            let items: Vec<Obj<'_>> = mesh.getattr(pyo3::intern!(py, "faces"))?.try_iter()?.chain(mesh.getattr(pyo3::intern!(py, "edges"))?.try_iter()?).collect::<PyResult<_>>()?;
             for item in items {
                 retag_built(py, &item, &mut rename, &layers)?;
             }
@@ -829,13 +854,13 @@ fn relabel_tables<'py>(
         return Ok(false);
     }
     let np = module(py, "numpy")?;
-    let d = mesh.getattr("__dict__")?;
+    let d = mesh.getattr(pyo3::intern!(py, "__dict__"))?;
     let src = PyDict::new(py);
-    src.call_method1("update", (d.get_item("_deferred_source")?,))?;
+    src.call_method1(pyo3::intern!(py, "update"), (d.get_item("_deferred_source")?,))?;
     let meta = PyDict::new(py);
     let m = get(src.as_any(), "meta")?;
     if m.is_truthy()? {
-        meta.call_method1("update", (m,))?;
+        meta.call_method1(pyo3::intern!(py, "update"), (m,))?;
     }
     let Some(rename) = rename else {
         // Paint only: rows renamed where a material moved, else nothing.
@@ -868,7 +893,7 @@ fn relabel_tables<'py>(
             let table = PyList::empty(py);
             for r in rows {
                 let row = PyDict::new(py);
-                row.call_method1("update", (&r,))?;
+                row.call_method1(pyo3::intern!(py, "update"), (&r,))?;
                 let tag = rename.tag(py, &get(row.as_any(), "layer")?)?;
                 set_row_tag(row.as_any(), &tag)?;
                 let row = match paint {
@@ -928,8 +953,8 @@ fn relabel_tables<'py>(
                 None
             } else {
                 let kw = PyDict::new(py);
-                kw.set_item("dtype", np.getattr("int64")?)?;
-                Some(np.call_method("asarray", (remap,), Some(&kw))?)
+                kw.set_item("dtype", np.getattr(pyo3::intern!(py, "int64"))?)?;
+                Some(np.call_method(pyo3::intern!(py, "asarray"), (remap,), Some(&kw))?)
             };
             shared.edges.insert(key, (old.clone().unbind(), names.clone().unbind(), remap.as_ref().map(|r| r.clone().unbind())));
             (names, remap)
@@ -955,8 +980,9 @@ fn relabel_tables<'py>(
 /// A face attribute row on tag `tag` (`assign_layer`'s rule: the default
 /// tag is no label).
 fn set_row_tag(row: &Obj<'_>, tag: &Obj<'_>) -> PyResult<()> {
+    let py = row.py();
     if tag.is_none() || tag.eq(DEFAULT_LAYER)? {
-        row.call_method1("pop", ("layer", none(row.py())))?;
+        row.call_method1(pyo3::intern!(py, "pop"), ("layer", none(row.py())))?;
         Ok(())
     } else {
         row.set_item("layer", tag)
@@ -965,15 +991,16 @@ fn set_row_tag(row: &Obj<'_>, tag: &Obj<'_>) -> PyResult<()> {
 
 /// `layer_of` / `assign_layer` for a built element.
 fn retag_built<'py>(py: Python<'py>, item: &Obj<'py>, rename: &mut Rename<'_, 'py>, layers: &Obj<'py>) -> PyResult<()> {
-    let tag = layers.call_method1("layer_of", (item,))?;
+    let tag = layers.call_method1(pyo3::intern!(py, "layer_of"), (item,))?;
     let new = rename.tag(py, &tag)?;
-    layers.call_method1("assign_layer", (item, new))?;
+    layers.call_method1(pyo3::intern!(py, "assign_layer"), (item, new))?;
     Ok(())
 }
 
 fn restamp_faces<'py>(mesh: &Obj<'py>, renamed: &Bound<'py, PyDict>) -> PyResult<()> {
-    for f in mesh.getattr("faces")?.try_iter()? {
-        let a = f?.getattr("attrs")?;
+    let py = mesh.py();
+    for f in mesh.getattr(pyo3::intern!(py, "faces"))?.try_iter()? {
+        let a = f?.getattr(pyo3::intern!(py, "attrs"))?;
         if !a.is_truthy()? {
             continue;
         }
@@ -1023,7 +1050,7 @@ pub fn install_definition<'py>(
     let stem = stem(path)?;
     let mut rename = Rename::Prefix(&stem, HashMap::new());
     let paint = (!renamed.is_empty()).then_some(renamed);
-    let walk = module(py, "core.group")?.getattr("iter_placements")?;
+    let walk = module(py, "core.group")?.getattr(pyo3::intern!(py, "iter_placements"))?;
     let mut seen: HashSet<usize> = HashSet::new();
     let mut shared = Shared::default();
     let mut meshes: Vec<Obj<'py>> = Vec::new();
@@ -1033,12 +1060,12 @@ pub fn install_definition<'py>(
             retag_built(py, &g, &mut rename, &layers)?;
         }
         if let Some(p) = paint {
-            let m = g.getattr("material")?;
+            let m = g.getattr(pyo3::intern!(py, "material"))?;
             if m.is_truthy()? {
-                g.setattr("material", renamed_paint(&m, p)?)?;
+                g.setattr(pyo3::intern!(py, "material"), renamed_paint(&m, p)?)?;
             }
         }
-        let mesh = g.getattr("mesh")?;
+        let mesh = g.getattr(pyo3::intern!(py, "mesh"))?;
         if !seen.insert(mesh.as_ptr() as usize) {
             continue;
         }
@@ -1049,23 +1076,23 @@ pub fn install_definition<'py>(
         if relabel_tables(&mesh, Some(&mut rename), paint, &mut shared)? {
             continue;
         }
-        for f in mesh.getattr("faces")?.try_iter()? {
+        for f in mesh.getattr(pyo3::intern!(py, "faces"))?.try_iter()? {
             retag_built(py, &f?, &mut rename, &layers)?;
         }
-        for e in mesh.getattr("edges")?.try_iter()? {
+        for e in mesh.getattr(pyo3::intern!(py, "edges"))?.try_iter()? {
             retag_built(py, &e?, &mut rename, &layers)?;
         }
         if let Some(p) = paint {
             restamp_faces(&mesh, p)?;
         }
     }
-    let path_s = module(py, "builtins")?.getattr("str")?.call1((path,))?;
+    let path_s = module(py, "builtins")?.getattr(pyo3::intern!(py, "str"))?.call1((path,))?;
     let items = PyTuple::new(py, renamed.items().iter())?;
     for mesh in meshes {
         if reused.contains(&mesh)? {
             continue;
         }
-        let d = mesh.getattr("__dict__")?;
+        let d = mesh.getattr(pyo3::intern!(py, "__dict__"))?;
         let stamp = get(&d, "_link_geometry")?;
         if !stamp.is_truthy()? {
             continue;
@@ -1074,7 +1101,7 @@ pub fn install_definition<'py>(
         if !key.get_item(0)?.eq(&path_s)? {
             key = PyTuple::new(py, [path_s.clone(), items.clone().into_any(), PyString::new(py, "nested").into_any(), key])?.into_any();
         }
-        d.set_item("_link_geometry", (key, mesh.getattr("revision")?))?;
+        d.set_item("_link_geometry", (key, mesh.getattr(pyo3::intern!(py, "revision"))?))?;
     }
     Ok(())
 }
@@ -1092,9 +1119,9 @@ pub fn relabel<'py>(groups: &Obj<'py>, meshes: &Obj<'py>, renames: &Bound<'py, P
     let layers = module(py, "core.layers")?;
     for g in groups.try_iter()? {
         let g = g?;
-        let tag = layers.call_method1("layer_of", (&g,))?;
+        let tag = layers.call_method1(pyo3::intern!(py, "layer_of"), (&g,))?;
         if renames.contains(&tag)? {
-            layers.call_method1("assign_layer", (&g, renames.get_item(&tag)?))?;
+            layers.call_method1(pyo3::intern!(py, "assign_layer"), (&g, renames.get_item(&tag)?))?;
         }
     }
     let mut rename = Rename::Map(renames);
@@ -1107,7 +1134,7 @@ pub fn relabel<'py>(groups: &Obj<'py>, meshes: &Obj<'py>, renames: &Bound<'py, P
             continue;
         }
         if is_deferred(py, &mesh)? {
-            let src = mesh.getattr("__dict__")?.get_item("_deferred_source")?;
+            let src = mesh.getattr(pyo3::intern!(py, "__dict__"))?.get_item("_deferred_source")?;
             let meta = get(&src, "meta")?;
             let meta = if meta.is_truthy()? { meta } else { PyDict::new(py).into_any() };
             let mut named = false;
@@ -1130,11 +1157,11 @@ pub fn relabel<'py>(groups: &Obj<'py>, meshes: &Obj<'py>, renames: &Bound<'py, P
             }
             continue;
         }
-        let items: Vec<Obj<'py>> = mesh.getattr("faces")?.try_iter()?.chain(mesh.getattr("edges")?.try_iter()?).collect::<PyResult<_>>()?;
+        let items: Vec<Obj<'py>> = mesh.getattr(pyo3::intern!(py, "faces"))?.try_iter()?.chain(mesh.getattr(pyo3::intern!(py, "edges"))?.try_iter()?).collect::<PyResult<_>>()?;
         for item in items {
-            let tag = layers.call_method1("layer_of", (&item,))?;
+            let tag = layers.call_method1(pyo3::intern!(py, "layer_of"), (&item,))?;
             if renames.contains(&tag)? {
-                layers.call_method1("assign_layer", (&item, renames.get_item(&tag)?))?;
+                layers.call_method1(pyo3::intern!(py, "assign_layer"), (&item, renames.get_item(&tag)?))?;
             }
         }
     }
@@ -1148,23 +1175,26 @@ fn folders_of(scene: &Obj<'_>) -> PyResult<Vec<String>> {
 }
 
 fn set_folders(scene: &Obj<'_>, folders: Vec<String>) -> PyResult<()> {
-    scene.setattr("layer_folders", folders)
+    let py = scene.py();
+    scene.setattr(pyo3::intern!(py, "layer_folders"), folders)
 }
 
 fn ly_key(ly: &Obj<'_>) -> PyResult<Option<String>> {
-    Ok(str_of(&ly.getattr("key")?))
+    let py = ly.py();
+    Ok(str_of(&ly.getattr(pyo3::intern!(py, "key"))?))
 }
 
 fn layers_of<'py>(scene: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
-    scene.getattr("layers")?.try_iter()?.collect()
+    let py = scene.py();
+    scene.getattr(pyo3::intern!(py, "layers"))?.try_iter()?.collect()
 }
 
 /// The tags something in the document wears.
 fn used_tags(scene: &Obj<'_>) -> PyResult<HashSet<String>> {
     let py = scene.py();
-    let layer_of = module(py, "core.layers")?.getattr("layer_of")?;
+    let layer_of = module(py, "core.layers")?.getattr(pyo3::intern!(py, "layer_of"))?;
     let mut out = HashSet::new();
-    for e in module(py, "ingetrazo_core")?.call_method1("purge_layer_carriers", (scene,))?.try_iter()? {
+    for e in module(py, "ingetrazo_core")?.call_method1(pyo3::intern!(py, "purge_layer_carriers"), (scene,))?.try_iter()? {
         if let Some(t) = str_of(&layer_of.call1((e?,))?) {
             out.insert(t);
         }
@@ -1182,7 +1212,7 @@ fn filter_layers<'py>(scene: &Obj<'py>, keep: impl Fn(&Obj<'py>) -> PyResult<boo
         }
     }
     let all = pyo3::types::PySlice::full(py);
-    scene.getattr("layers")?.set_item(all, PyList::new(py, kept)?)
+    scene.getattr(pyo3::intern!(py, "layers"))?.set_item(all, PyList::new(py, kept)?)
 }
 
 /// Bring the source's tags into the host: the folder of the file inside
@@ -1192,19 +1222,19 @@ fn filter_layers<'py>(scene: &Obj<'py>, keep: impl Fn(&Obj<'py>) -> PyResult<boo
 /// made with them.
 fn apply_tags<'py>(scene: &Obj<'py>, path: &Obj<'py>, tags: &Obj<'py>) -> PyResult<()> {
     let py = scene.py();
-    let layer_cls = module(py, "core.layers")?.getattr("Layer")?;
+    let layer_cls = module(py, "core.layers")?.getattr(pyo3::intern!(py, "Layer"))?;
     let e = entry(scene, path)?;
     let structure = get(tags, "structure")?;
     if structure.is_truthy()? {
         e.set_item("structure", structure)?;
     } else {
-        e.call_method1("pop", ("structure", none(py)))?;
+        e.call_method1(pyo3::intern!(py, "pop"), ("structure", none(py)))?;
     }
     let overrides = e.get_item("overrides")?;
     // What the source said last time: a tag the host now shows otherwise
     // was switched here, by any road, and that switch is the host's
     // override from now on.
-    let last = e.call_method1("setdefault", ("source_visible", PyDict::new(py)))?;
+    let last = e.call_method1(pyo3::intern!(py, "setdefault"), ("source_visible", PyDict::new(py)))?;
     let folder = |name: &str, parent: Option<&str>| -> PyResult<String> {
         if !folders_of(scene)?.iter().any(|f| f == name) {
             let mut all = folders_of(scene)?;
@@ -1218,8 +1248,8 @@ fn apply_tags<'py>(scene: &Obj<'py>, path: &Obj<'py>, tags: &Obj<'py>) -> PyResu
     let own = folder(&stem(path)?, Some(&top))?;
     let prefix = format!("{own}{SEP}");
     let existing: HashSet<String> = folders_of(scene)?.into_iter().collect();
-    let parents = scene.getattr("folder_parents")?;
-    let uids_of = || scene.getattr("layer_folder_uids");
+    let parents = scene.getattr(pyo3::intern!(py, "folder_parents"))?;
+    let uids_of = || scene.getattr(pyo3::intern!(py, "layer_folder_uids"));
     // Older hosts recorded only mirrored tags: recover their namespaced
     // folder paths before those tags move, without claiming unrelated
     // folders.
@@ -1238,7 +1268,7 @@ fn apply_tags<'py>(scene: &Obj<'py>, path: &Obj<'py>, tags: &Obj<'py>) -> PyResu
             }
         }
         for ly in layers_of(scene)? {
-            let mut f = if old_tags.contains(ly.getattr("key")?)? { ly.getattr("folder")? } else { none(py) };
+            let mut f = if old_tags.contains(ly.getattr(pyo3::intern!(py, "key"))?)? { ly.getattr(pyo3::intern!(py, "folder"))? } else { none(py) };
             let mut chain: Vec<String> = Vec::new();
             loop {
                 let Some(fs) = str_of(&f) else { break };
@@ -1281,15 +1311,15 @@ fn apply_tags<'py>(scene: &Obj<'py>, path: &Obj<'py>, tags: &Obj<'py>) -> PyResu
     let src_labels = get(tags, "folder_names")?;
     let src_labels = if src_labels.is_truthy()? { src_labels } else { PyDict::new(py).into_any() };
     let labels = PyDict::new(py);
-    if let Some(l) = scene.getattr_opt("layer_folder_names")?.filter(|l| l.is_truthy().unwrap_or(false)) {
-        labels.call_method1("update", (l,))?;
+    if let Some(l) = scene.getattr_opt(pyo3::intern!(py, "layer_folder_names"))?.filter(|l| l.is_truthy().unwrap_or(false)) {
+        labels.call_method1(pyo3::intern!(py, "update"), (l,))?;
     }
     let src_vis = get_or(tags, "folder_visibility", PyDict::new(py))?;
     let src_parents = get_or(tags, "parents", PyDict::new(py))?;
     for (f, name) in src_folders.iter() {
         let incoming = get_or(&src_vis, &f, true)?;
-        let previous = e.call_method1("setdefault", ("source_folder_visible", PyDict::new(py)))?;
-        let vis = scene.getattr("folder_visibility")?;
+        let previous = e.call_method1(pyo3::intern!(py, "setdefault"), ("source_folder_visible", PyDict::new(py)))?;
+        let vis = scene.getattr(pyo3::intern!(py, "folder_visibility"))?;
         if !previous.contains(&name)? || get_or(&vis, &name, true)?.eq(previous.get_item(&name)?)? {
             vis.set_item(&name, &incoming)?;
         }
@@ -1303,39 +1333,39 @@ fn apply_tags<'py>(scene: &Obj<'py>, path: &Obj<'py>, tags: &Obj<'py>) -> PyResu
             labels.set_item(&name, label)?;
         }
     }
-    scene.setattr("layer_folder_names", labels)?;
+    scene.setattr(pyo3::intern!(py, "layer_folder_names"), labels)?;
 
     let wanted = PyList::empty(py);
     let stem_s = stem(path)?;
-    let layers_list = scene.getattr("layers")?;
+    let layers_list = scene.getattr(pyo3::intern!(py, "layers"))?;
     let raw_layers = get(tags, "layers")?;
     if raw_layers.is_truthy()? {
         for raw in raw_layers.try_iter()? {
-            let src = layer_cls.call_method1("from_dict", (raw?,))?;
+            let src = layer_cls.call_method1(pyo3::intern!(py, "from_dict"), (raw?,))?;
             // Keyed by the source tag's KEY (what the source's entities
             // carry) and labelled like the source shows it.
-            let src_key = src.getattr("key")?;
+            let src_key = src.getattr(pyo3::intern!(py, "key"))?;
             let name = PyString::new(py, &tag_label(&stem_s, &src_key)?).into_any();
             wanted.append(&name)?;
-            let mut ly = scene.call_method1("layer_by_key", (&name,))?;
+            let mut ly = scene.call_method1(pyo3::intern!(py, "layer_by_key"), (&name,))?;
             if ly.is_none() {
                 ly = layer_cls.call1((&name,))?;
-                layers_list.call_method1("append", (&ly,))?;
+                layers_list.call_method1(pyo3::intern!(py, "append"), (&ly,))?;
             } else if last.contains(&name)?
                 && !overrides.contains(&name)?
-                && ly.getattr("visible")?.is_truthy()? != last.get_item(&name)?.is_truthy()?
+                && ly.getattr(pyo3::intern!(py, "visible"))?.is_truthy()? != last.get_item(&name)?.is_truthy()?
             {
-                overrides.set_item(&name, ly.getattr("visible")?.is_truthy()?)?;
+                overrides.set_item(&name, ly.getattr(pyo3::intern!(py, "visible"))?.is_truthy()?)?;
             }
             if !src_key.eq(DEFAULT_LAYER)? {
-                ly.setattr("name", src.getattr("name")?)?;
+                ly.setattr(pyo3::intern!(py, "name"), src.getattr(pyo3::intern!(py, "name"))?)?;
             }
-            last.set_item(&name, src.getattr("visible")?.is_truthy()?)?;
-            for f in ["color", "linetype", "lineweight", "opacity"] {
+            last.set_item(&name, src.getattr(pyo3::intern!(py, "visible"))?.is_truthy()?)?;
+            for f in [pyo3::intern!(py, "color"), pyo3::intern!(py, "linetype"), pyo3::intern!(py, "lineweight"), pyo3::intern!(py, "opacity")] {
                 ly.setattr(f, src.getattr(f)?)?;
             }
-            ly.setattr("folder", get_or(src_folders.as_any(), src.getattr("folder")?, &own)?)?;
-            ly.setattr("visible", get_or(&overrides, &name, src.getattr("visible")?)?)?;
+            ly.setattr(pyo3::intern!(py, "folder"), get_or(src_folders.as_any(), src.getattr(pyo3::intern!(py, "folder"))?, &own)?)?;
+            ly.setattr(pyo3::intern!(py, "visible"), get_or(&overrides, &name, src.getattr(pyo3::intern!(py, "visible"))?)?)?;
         }
     }
     let mut old: HashSet<String> = HashSet::new();
@@ -1357,8 +1387,8 @@ fn apply_tags<'py>(scene: &Obj<'py>, path: &Obj<'py>, tags: &Obj<'py>) -> PyResu
         let used = used_tags(scene)?;
         filter_layers(scene, |ly| Ok(ly_key(ly)?.is_none_or(|k| !old.contains(&k) || used.contains(&k))))?;
         for name in &old {
-            overrides.call_method1("pop", (name, none(py)))?;
-            last.call_method1("pop", (name, none(py)))?;
+            overrides.call_method1(pyo3::intern!(py, "pop"), (name, none(py)))?;
+            last.call_method1(pyo3::intern!(py, "pop"), (name, none(py)))?;
         }
     }
     // Remove obsolete leaves first so a live tag or host subfolder protects
@@ -1371,10 +1401,10 @@ fn apply_tags<'py>(scene: &Obj<'py>, path: &Obj<'py>, tags: &Obj<'py>) -> PyResu
             candidates.insert(f);
         }
     }
-    let occupied: HashSet<String> = layers_of(scene)?.iter().filter_map(|ly| ly.getattr("folder").ok().and_then(|f| str_of(&f))).collect();
+    let occupied: HashSet<String> = layers_of(scene)?.iter().filter_map(|ly| ly.getattr(pyo3::intern!(py, "folder")).ok().and_then(|f| str_of(&f))).collect();
     while !candidates.is_empty() {
         let parent_names: HashSet<String> =
-            scene.getattr("folder_parents")?.call_method0("values")?.try_iter()?.filter_map(|v| v.ok().and_then(|v| str_of(&v))).collect();
+            scene.getattr(pyo3::intern!(py, "folder_parents"))?.call_method0(pyo3::intern!(py, "values"))?.try_iter()?.filter_map(|v| v.ok().and_then(|v| str_of(&v))).collect();
         let mut leaves: Vec<String> = candidates.iter().filter(|f| !occupied.contains(*f) && !parent_names.contains(*f)).cloned().collect();
         if leaves.is_empty() {
             break;
@@ -1386,7 +1416,7 @@ fn apply_tags<'py>(scene: &Obj<'py>, path: &Obj<'py>, tags: &Obj<'py>) -> PyResu
         }
     }
     let live = PySet::empty(py)?;
-    for u in scene.getattr("layer_folder_uids")?.call_method0("values")?.try_iter()? {
+    for u in scene.getattr(pyo3::intern!(py, "layer_folder_uids"))?.call_method0(pyo3::intern!(py, "values"))?.try_iter()? {
         live.add(u?)?;
     }
     for u in owned_set.iter() {
@@ -1411,12 +1441,12 @@ fn mirror<'py>(scene: &Obj<'py>, path: &Obj<'py>) -> PyResult<Obj<'py>> {
     };
     let own = stem(path)?;
     let prefix = format!("{own}{SEP}");
-    let parents = scene.getattr("folder_parents")?;
-    let vis = scene.getattr("folder_visibility")?;
-    let names = scene.getattr("layer_folder_names")?;
-    let uids = scene.getattr("layer_folder_uids")?;
+    let parents = scene.getattr(pyo3::intern!(py, "folder_parents"))?;
+    let vis = scene.getattr(pyo3::intern!(py, "folder_visibility"))?;
+    let names = scene.getattr(pyo3::intern!(py, "layer_folder_names"))?;
+    let uids = scene.getattr(pyo3::intern!(py, "layer_folder_uids"))?;
     let mut folders = Vec::new();
-    for f in scene.getattr("layer_folders")?.try_iter()? {
+    for f in scene.getattr(pyo3::intern!(py, "layer_folders"))?.try_iter()? {
         let f = f?;
         let fs = f.str()?.to_string();
         if fs == LINKED_FOLDER || fs == own || fs.starts_with(&prefix) {
@@ -1426,11 +1456,11 @@ fn mirror<'py>(scene: &Obj<'py>, path: &Obj<'py>) -> PyResult<Obj<'py>> {
     let rows = PyList::empty(py);
     for ly in layers_of(scene)? {
         if ly_key(&ly)?.is_some_and(|k| wanted.contains(&k)) {
-            rows.append(ly.call_method0("to_dict")?)?;
+            rows.append(ly.call_method0(pyo3::intern!(py, "to_dict"))?)?;
         }
     }
     let ov = PyDict::new(py);
-    ov.call_method1("update", (e.get_item("overrides")?,))?;
+    ov.call_method1(pyo3::intern!(py, "update"), (e.get_item("overrides")?,))?;
     Ok(PyTuple::new(py, [rows.into_any(), PyTuple::new(py, folders)?.into_any(), ov.into_any()])?.into_any())
 }
 
@@ -1441,7 +1471,7 @@ fn mirror<'py>(scene: &Obj<'py>, path: &Obj<'py>) -> PyResult<Obj<'py>> {
 pub fn sync_tags<'py>(scene: &Obj<'py>, path: &Obj<'py>, tags: &Obj<'py>) -> PyResult<bool> {
     let py = scene.py();
     let key = norm(path)?;
-    let cache = scene.getattr("__dict__")?.call_method1("setdefault", ("_link_tag_tables", PyDict::new(py)))?;
+    let cache = scene.getattr(pyo3::intern!(py, "__dict__"))?.call_method1(pyo3::intern!(py, "setdefault"), ("_link_tag_tables", PyDict::new(py)))?;
     let old = get(&cache, &key)?;
     let stale = old.is_none() || old.get_item(0)?.ne(tags)? || old.get_item(1)?.ne(mirror(scene, path)?)?;
     if stale {
@@ -1480,7 +1510,7 @@ pub fn release_tags<'py>(scene: &Obj<'py>, path: &Obj<'py>, used: &Obj<'py>, out
     };
     let hidden = !tag_edits::folder_visible(scene, &PyString::new(py, &own), true)?;
     let subfolders = |name: Option<&str>, deep: bool| -> PyResult<Vec<String>> {
-        let parents = scene.getattr_opt("folder_parents")?.filter(|p| p.is_truthy().unwrap_or(false));
+        let parents = scene.getattr_opt(pyo3::intern!(py, "folder_parents"))?.filter(|p| p.is_truthy().unwrap_or(false));
         let parents = match parents {
             Some(p) => py.get_type::<PyDict>().call1((p,))?.into_any(),
             None => PyDict::new(py).into_any(),
@@ -1488,7 +1518,7 @@ pub fn release_tags<'py>(scene: &Obj<'py>, path: &Obj<'py>, used: &Obj<'py>, out
         super::tag_folders::tag_subfolders(folders_of(scene)?, &parents, name.map(str::to_string), deep)
     };
     let empty = |f: &str| -> PyResult<bool> {
-        let held = layers_of(scene)?.iter().any(|ly| ly.getattr("folder").ok().and_then(|x| str_of(&x)).as_deref() == Some(f));
+        let held = layers_of(scene)?.iter().any(|ly| ly.getattr(pyo3::intern!(py, "folder")).ok().and_then(|x| str_of(&x)).as_deref() == Some(f));
         Ok(!held && subfolders(Some(f), false)?.is_empty())
     };
     // 1. The copies of the nested files' tags that nothing wears now.
@@ -1498,7 +1528,7 @@ pub fn release_tags<'py>(scene: &Obj<'py>, path: &Obj<'py>, used: &Obj<'py>, out
         below.extend(subfolders(Some(&nested), true)?);
         filter_layers(scene, |ly| {
             let k = ly_key(ly)?;
-            let f = str_of(&ly.getattr("folder")?);
+            let f = str_of(&ly.getattr(pyo3::intern!(py, "folder"))?);
             let worn = match &k {
                 Some(k) => get(used, k)?.is_truthy()?,
                 None => false,
@@ -1524,36 +1554,36 @@ pub fn release_tags<'py>(scene: &Obj<'py>, path: &Obj<'py>, used: &Obj<'py>, out
         let py = scene.py();
         let mut theirs: HashMap<String, Obj<'py>> = HashMap::new();
         for ly in layers_of(scene)? {
-            let f = ly.getattr("folder")?;
+            let f = ly.getattr(pyo3::intern!(py, "folder"))?;
             let f = if f.is_truthy()? { str_of(&f) } else { None };
             if f.as_deref() == target && ly_key(&ly)?.is_none_or(|k| !ctx.mine.contains(&k)) {
-                let name = ly.getattr("name")?.str()?.to_string();
+                let name = ly.getattr(pyo3::intern!(py, "name"))?.str()?.to_string();
                 theirs.entry(name).or_insert(ly);
             }
         }
-        let list = scene.getattr("layers")?;
+        let list = scene.getattr(pyo3::intern!(py, "layers"))?;
         for ly in layers_of(scene)? {
-            if str_of(&ly.getattr("folder")?).as_deref() != Some(src) || !ly_key(&ly)?.is_some_and(|k| ctx.mine.contains(&k)) {
+            if str_of(&ly.getattr(pyo3::intern!(py, "folder"))?).as_deref() != Some(src) || !ly_key(&ly)?.is_some_and(|k| ctx.mine.contains(&k)) {
                 continue;
             }
-            let key = ly.getattr("key")?;
+            let key = ly.getattr(pyo3::intern!(py, "key"))?;
             let into = if ly_key(&ly)?.as_deref() == Some(ctx.untagged.as_str()) {
-                let d = scene.call_method1("layer_by_key", (DEFAULT_LAYER,))?;
+                let d = scene.call_method1(pyo3::intern!(py, "layer_by_key"), (DEFAULT_LAYER,))?;
                 Some(if d.is_none() { PyString::new(py, DEFAULT_LAYER).into_any() } else { d })
             } else {
-                theirs.get(&ly.getattr("name")?.str()?.to_string()).cloned()
+                theirs.get(&ly.getattr(pyo3::intern!(py, "name"))?.str()?.to_string()).cloned()
             };
             if let Some(into) = into {
                 if !get(ctx.outside, &key)?.is_truthy()? {
-                    let k = into.getattr_opt("key")?.unwrap_or(into.clone());
+                    let k = into.getattr_opt(pyo3::intern!(py, "key"))?.unwrap_or(into.clone());
                     ctx.renames.set_item(&key, k)?;
-                    list.call_method1("remove", (&ly,))?;
+                    list.call_method1(pyo3::intern!(py, "remove"), (&ly,))?;
                     continue;
                 }
             }
-            ly.setattr("folder", target)?;
+            ly.setattr(pyo3::intern!(py, "folder"), target)?;
             if ctx.hidden {
-                ly.setattr("visible", false)?;
+                ly.setattr(pyo3::intern!(py, "visible"), false)?;
             }
         }
         let mut level: HashMap<String, String> = HashMap::new();
@@ -1573,7 +1603,7 @@ pub fn release_tags<'py>(scene: &Obj<'py>, path: &Obj<'py>, used: &Obj<'py>, out
                 None => {
                     tag_edits::move_folder(scene, &PyString::new(py, &f), &target.map_or_else(|| none(py), |t| PyString::new(py, t).into_any()))?;
                     if ctx.hidden {
-                        scene.getattr("folder_visibility")?.set_item(&f, false)?;
+                        scene.getattr(pyo3::intern!(py, "folder_visibility"))?.set_item(&f, false)?;
                     }
                 }
             }
@@ -1603,27 +1633,26 @@ pub fn release_tags<'py>(scene: &Obj<'py>, path: &Obj<'py>, used: &Obj<'py>, out
 // ---- copies of a source's tree ------------------------------------------------------------
 
 /// Every field a placement has (`core.group.GROUP_FIELDS`).
-fn group_fields(py: Python<'_>) -> PyResult<(Obj<'_>, Vec<String>)> {
+fn group_fields(py: Python<'_>) -> PyResult<(Obj<'_>, Vec<Bound<'_, PyString>>)> {
     let m = module(py, "core.group")?;
-    Ok((m.getattr("Group")?, m.getattr("GROUP_FIELDS")?.extract()?))
+    let names: Vec<String> = m.getattr(pyo3::intern!(py, "GROUP_FIELDS"))?.extract()?;
+    let names = names.iter().filter(|n| *n != "children").map(|n| PyString::intern(py, n)).collect();
+    Ok((m.getattr(pyo3::intern!(py, "Group"))?, names))
 }
 
 /// A shallow copy of `group` (what `copy.copy` gives, without its generic
 /// route): every field it has but its children, which every caller gives
 /// it.
-fn clone_shell<'py>(group: &Obj<'py>, cls: &Obj<'py>, fields: &[String]) -> PyResult<Obj<'py>> {
+fn clone_shell<'py>(group: &Obj<'py>, cls: &Obj<'py>, fields: &[Bound<'py, PyString>]) -> PyResult<Obj<'py>> {
     let py = group.py();
     let ty = group.get_type();
     if !ty.is(cls) {
-        return module(py, "copy")?.call_method1("copy", (group,));
+        return module(py, "copy")?.call_method1(pyo3::intern!(py, "copy"), (group,));
     }
-    let out = ty.call_method1("__new__", (&ty,))?;
+    let out = ty.call_method1(pyo3::intern!(py, "__new__"), (&ty,))?;
     for name in fields {
-        if name == "children" {
-            continue;
-        }
-        if let Some(v) = group.getattr_opt(name.as_str())? {
-            out.setattr(name.as_str(), v)?;
+        if let Some(v) = group.getattr_opt(name)? {
+            out.setattr(name, v)?;
         }
     }
     Ok(out)
@@ -1639,6 +1668,13 @@ pub fn clone_shell_of<'py>(group: &Obj<'py>) -> PyResult<Obj<'py>> {
 const PLACEMENT_FIELDS: [&str; 12] =
     ["name", "layer", "billboard", "context", "text3d", "hidden", "material", "axes", "component", "exploded", "explode_offset", "locked"];
 
+/// [`PLACEMENT_FIELDS`] as interned names.
+fn placement_fields(py: Python<'_>) -> Vec<Bound<'_, PyString>> {
+    static NAMES: pyo3::sync::PyOnceLock<Vec<Py<PyString>>> = pyo3::sync::PyOnceLock::new();
+    NAMES.get_or_init(py, || PLACEMENT_FIELDS.iter().map(|n| PyString::intern(py, n).unbind()).collect())
+        .iter().map(|n| n.bind(py).clone()).collect()
+}
+
 struct Populate<'py> {
     placement_uid: String,
     reconcile: bool,
@@ -1649,11 +1685,13 @@ struct Populate<'py> {
     swaps: Vec<(Obj<'py>, usize)>,
     changed: bool,
     cls: Obj<'py>,
-    fields: Vec<String>,
+    fields: Vec<Bound<'py, PyString>>,
+    placement: Vec<Bound<'py, PyString>>,
 }
 
 impl<'py> Populate<'py> {
     fn install_mesh(&mut self, mesh: &Obj<'py>, old: Option<&Obj<'py>>) -> PyResult<Obj<'py>> {
+        let py = mesh.py();
         if !self.reconcile {
             return Ok(mesh.clone());
         }
@@ -1661,16 +1699,16 @@ impl<'py> Populate<'py> {
             return Ok(m.clone());
         }
         let stamp = match old {
-            Some(o) => get(&o.getattr("__dict__")?, "_link_geometry")?,
+            Some(o) => get(&o.getattr(pyo3::intern!(py, "__dict__"))?, "_link_geometry")?,
             None => none(mesh.py()),
         };
-        let incoming = get(&mesh.getattr("__dict__")?, "_link_geometry")?;
+        let incoming = get(&mesh.getattr(pyo3::intern!(py, "__dict__"))?, "_link_geometry")?;
         let keep = match old {
             Some(o) => {
                 stamp.is_truthy()?
                     && incoming.is_truthy()?
                     && stamp.get_item(0)?.eq(incoming.get_item(0)?)?
-                    && stamp.get_item(1)?.eq(o.getattr("revision")?)?
+                    && stamp.get_item(1)?.eq(o.getattr(pyo3::intern!(py, "revision"))?)?
                     && !self.claimed.contains(&(o.as_ptr() as usize))
             }
             None => false,
@@ -1683,22 +1721,22 @@ impl<'py> Populate<'py> {
 
     fn clone(&mut self, group: &Obj<'py>, parent: &Obj<'py>) -> PyResult<Obj<'py>> {
         let py = group.py();
-        let src_uid: String = group.getattr("uid")?.extract()?;
+        let src_uid: String = group.getattr(pyo3::intern!(py, "uid"))?.extract()?;
         let uid = stable_uid_of(&self.placement_uid, &src_uid);
         let found = if self.ambiguous.contains(&uid) {
-            self.previous.call_method1("pop", ((parent, &uid), none(py)))?
+            self.previous.call_method1(pyo3::intern!(py, "pop"), ((parent, &uid), none(py)))?
         } else {
-            self.previous.call_method1("pop", (&uid, none(py)))?
+            self.previous.call_method1(pyo3::intern!(py, "pop"), (&uid, none(py)))?
         };
         let new = found.is_none();
-        let old = if new { None } else { Some(found.getattr("mesh")?) };
+        let old = if new { None } else { Some(found.getattr(pyo3::intern!(py, "mesh"))?) };
         let result = if new {
             self.changed = true;
             let r = clone_shell(group, &self.cls, &self.fields)?;
-            r.setattr("uid", &uid)?;
+            r.setattr(pyo3::intern!(py, "uid"), &uid)?;
             r
         } else {
-            for name in PLACEMENT_FIELDS {
+            for name in self.placement.iter() {
                 let value = group.getattr_opt(name)?.unwrap_or_else(|| none(py));
                 let mine = found.getattr_opt(name)?.unwrap_or_else(|| none(py));
                 if mine.ne(&value)? {
@@ -1708,18 +1746,18 @@ impl<'py> Populate<'py> {
             }
             found
         };
-        let mesh = self.install_mesh(&group.getattr("mesh")?, old.as_ref())?;
-        result.setattr("mesh", &mesh)?;
+        let mesh = self.install_mesh(&group.getattr(pyo3::intern!(py, "mesh"))?, old.as_ref())?;
+        result.setattr(pyo3::intern!(py, "mesh"), &mesh)?;
         if let Some(o) = &old {
-            if !result.getattr("mesh")?.is(o) {
+            if !result.getattr(pyo3::intern!(py, "mesh"))?.is(o) {
                 self.swaps.push((result.clone(), o.as_ptr() as usize));
             }
         }
-        let ext = group.getattr("ext")?;
-        if new || result.getattr("ext")?.ne(&ext)? {
-            result.setattr("ext", if ext.is_none() { none(py) } else { deepcopy(&ext)? })?;
+        let ext = group.getattr(pyo3::intern!(py, "ext"))?;
+        if new || result.getattr(pyo3::intern!(py, "ext"))?.ne(&ext)? {
+            result.setattr(pyo3::intern!(py, "ext"), if ext.is_none() { none(py) } else { deepcopy(&ext)? })?;
         }
-        let mut ifc = group.getattr("ifc")?;
+        let mut ifc = group.getattr(pyo3::intern!(py, "ifc"))?;
         if ifc.is_truthy()? && get(&ifc, "openings")?.is_truthy()? {
             ifc = deepcopy(&ifc)?;
             for opening in ifc.get_item("openings")?.try_iter()? {
@@ -1730,27 +1768,27 @@ impl<'py> Populate<'py> {
                 }
             }
         }
-        if new || result.getattr("ifc")?.ne(&ifc)? {
-            result.setattr("ifc", if ifc.is_none() { none(py) } else { deepcopy(&ifc)? })?;
+        if new || result.getattr(pyo3::intern!(py, "ifc"))?.ne(&ifc)? {
+            result.setattr(pyo3::intern!(py, "ifc"), if ifc.is_none() { none(py) } else { deepcopy(&ifc)? })?;
         }
-        let xform = group.getattr("xform")?;
-        if new || result.getattr("xform")?.ne(&xform)? {
+        let xform = group.getattr(pyo3::intern!(py, "xform"))?;
+        if new || result.getattr(pyo3::intern!(py, "xform"))?.ne(&xform)? {
             self.changed = true;
-            result.setattr("xform", matrix(py, &xform)?)?;
+            result.setattr(pyo3::intern!(py, "xform"), matrix(py, &xform)?)?;
         }
-        result.setattr("owner", parent)?;
-        result.setattr("source_uid", &src_uid)?;
+        result.setattr(pyo3::intern!(py, "owner"), parent)?;
+        result.setattr(pyo3::intern!(py, "source_uid"), &src_uid)?;
         let mut children = Vec::new();
-        let kids = group.getattr("children")?;
+        let kids = group.getattr(pyo3::intern!(py, "children"))?;
         if kids.is_truthy()? {
             for c in kids.try_iter()? {
                 children.push(self.clone(&c?, &result)?);
             }
         }
         let children = PyList::new(py, children)?;
-        if new || result.getattr("children")?.ne(&children)? {
+        if new || result.getattr(pyo3::intern!(py, "children"))?.ne(&children)? {
             self.changed = true;
-            result.setattr("children", children)?;
+            result.setattr(pyo3::intern!(py, "children"), children)?;
         }
         Ok(result)
     }
@@ -1771,7 +1809,7 @@ pub fn populate<'py>(placement: &Obj<'py>, source: &Obj<'py>, reconcile: bool, s
     if reconcile {
         let parts = all_parts(py, placement)?;
         for part in &parts {
-            let uid = part.getattr("uid")?;
+            let uid = part.getattr(pyo3::intern!(py, "uid"))?;
             if previous.contains(&uid)? {
                 if let Some(u) = str_of(&uid) {
                     ambiguous.insert(u);
@@ -1784,9 +1822,9 @@ pub fn populate<'py>(placement: &Obj<'py>, source: &Obj<'py>, reconcile: bool, s
             // meaningful within their own parent occurrence on reload.
             previous.clear();
             for part in &parts {
-                let uid = part.getattr("uid")?;
+                let uid = part.getattr(pyo3::intern!(py, "uid"))?;
                 if str_of(&uid).is_some_and(|u| ambiguous.contains(&u)) {
-                    previous.set_item((part.getattr("owner")?, &uid), part)?;
+                    previous.set_item((part.getattr(pyo3::intern!(py, "owner"))?, &uid), part)?;
                 } else {
                     previous.set_item(&uid, part)?;
                 }
@@ -1794,7 +1832,7 @@ pub fn populate<'py>(placement: &Obj<'py>, source: &Obj<'py>, reconcile: bool, s
         }
     }
     let mut p = Populate {
-        placement_uid: placement.getattr("uid")?.extract()?,
+        placement_uid: placement.getattr(pyo3::intern!(py, "uid"))?.extract()?,
         reconcile,
         previous,
         ambiguous,
@@ -1804,40 +1842,41 @@ pub fn populate<'py>(placement: &Obj<'py>, source: &Obj<'py>, reconcile: bool, s
         changed: false,
         cls,
         fields,
+        placement: placement_fields(py),
     };
-    let old_mesh = placement.getattr("mesh")?;
-    let mesh = p.install_mesh(&source.getattr("mesh")?, Some(&old_mesh))?;
-    placement.setattr("mesh", &mesh)?;
-    if !placement.getattr("mesh")?.is(&old_mesh) {
+    let old_mesh = placement.getattr(pyo3::intern!(py, "mesh"))?;
+    let mesh = p.install_mesh(&source.getattr(pyo3::intern!(py, "mesh"))?, Some(&old_mesh))?;
+    placement.setattr(pyo3::intern!(py, "mesh"), &mesh)?;
+    if !placement.getattr(pyo3::intern!(py, "mesh"))?.is(&old_mesh) {
         p.swaps.push((placement.clone(), old_mesh.as_ptr() as usize));
     }
     let mut children = Vec::new();
-    let kids = source.getattr("children")?;
+    let kids = source.getattr(pyo3::intern!(py, "children"))?;
     if kids.is_truthy()? {
         for c in kids.try_iter()? {
             children.push(p.clone(&c?, placement)?);
         }
     }
     let children = PyList::new(py, children)?;
-    if placement.getattr("children")?.ne(&children)? {
+    if placement.getattr(pyo3::intern!(py, "children"))?.ne(&children)? {
         p.changed = true;
-        placement.setattr("children", children)?;
+        placement.setattr(pyo3::intern!(py, "children"), children)?;
     }
     if let Some(sel) = selection.filter(|s| !s.is_none()) {
         for removed in p.previous.values().iter() {
-            sel.call_method1("discard", (removed,))?;
+            sel.call_method1(pyo3::intern!(py, "discard"), (removed,))?;
         }
     }
-    placement.setattr("component", true)?;
+    placement.setattr(pyo3::intern!(py, "component"), true)?;
     Ok(if p.changed || !p.previous.is_empty() { None } else { Some(p.swaps) })
 }
 
 fn all_parts<'py>(py: Python<'py>, placement: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
-    let kids = placement.getattr("children")?;
+    let kids = placement.getattr(pyo3::intern!(py, "children"))?;
     if !kids.is_truthy()? {
         return Ok(Vec::new());
     }
-    module(py, "ingetrazo_core")?.call_method1("purge_iter_groups", (kids,))?.try_iter()?.collect()
+    module(py, "ingetrazo_core")?.call_method1(pyo3::intern!(py, "purge_iter_groups"), (kids,))?.try_iter()?.collect()
 }
 
 /// The parts of the linked placement `copy`, a copy of `source` (Copy and
@@ -1852,45 +1891,45 @@ pub fn copy_parts<'py>(source: &Obj<'py>, copy: &Obj<'py>) -> PyResult<Bound<'py
     let py = source.py();
     let (cls, fields) = group_fields(py)?;
     let new_uid = module(py, "core.group")?;
-    let copy_uid: String = copy.getattr("uid")?.extract()?;
+    let copy_uid: String = copy.getattr(pyo3::intern!(py, "uid"))?.extract()?;
     let uids = PyDict::new(py);
     fn clone<'py>(
         group: &Obj<'py>,
         parent: &Obj<'py>,
-        cx: &(Obj<'py>, Vec<String>, Obj<'py>, String, Bound<'py, PyDict>),
+        cx: &(Obj<'py>, Vec<Bound<'py, PyString>>, Obj<'py>, String, Bound<'py, PyDict>),
     ) -> PyResult<Obj<'py>> {
         let py = group.py();
         let (cls, fields, groups, copy_uid, uids) = cx;
         let out = clone_shell(group, cls, fields)?;
-        let origin = group.getattr_opt("source_uid")?.filter(|o| o.is_truthy().unwrap_or(false));
+        let origin = group.getattr_opt(pyo3::intern!(py, "source_uid"))?.filter(|o| o.is_truthy().unwrap_or(false));
         let uid = match origin {
             Some(o) => PyString::new(py, &stable_uid_of(copy_uid, &o.extract::<String>()?)).into_any(),
-            None => groups.call_method0("new_uid")?,
+            None => groups.call_method0(pyo3::intern!(py, "new_uid"))?,
         };
-        out.setattr("uid", &uid)?;
-        uids.set_item(group.getattr("uid")?, &uid)?;
-        out.setattr("owner", parent)?;
-        out.setattr("context", none(py))?;
-        out.setattr("xform", matrix(py, &group.getattr("xform")?)?)?;
-        out.setattr("axes", matrix(py, &group.getattr("axes")?)?)?;
-        for name in ["ext", "ifc", "material", "exploded", "text3d"] {
+        out.setattr(pyo3::intern!(py, "uid"), &uid)?;
+        uids.set_item(group.getattr(pyo3::intern!(py, "uid"))?, &uid)?;
+        out.setattr(pyo3::intern!(py, "owner"), parent)?;
+        out.setattr(pyo3::intern!(py, "context"), none(py))?;
+        out.setattr(pyo3::intern!(py, "xform"), matrix(py, &group.getattr(pyo3::intern!(py, "xform"))?)?)?;
+        out.setattr(pyo3::intern!(py, "axes"), matrix(py, &group.getattr(pyo3::intern!(py, "axes"))?)?)?;
+        for name in [pyo3::intern!(py, "ext"), pyo3::intern!(py, "ifc"), pyo3::intern!(py, "material"), pyo3::intern!(py, "exploded"), pyo3::intern!(py, "text3d")] {
             if let Some(v) = group.getattr_opt(name)?.filter(|v| !v.is_none()) {
                 out.setattr(name, deepcopy(&v)?)?;
             }
         }
         let mut kids = Vec::new();
-        let ch = group.getattr("children")?;
+        let ch = group.getattr(pyo3::intern!(py, "children"))?;
         if ch.is_truthy()? {
             for c in ch.try_iter()? {
                 kids.push(clone(&c?, &out, cx)?);
             }
         }
-        out.setattr("children", PyList::new(py, kids)?)?;
+        out.setattr(pyo3::intern!(py, "children"), PyList::new(py, kids)?)?;
         Ok(out)
     }
     let cx = (cls, fields, new_uid, copy_uid, uids);
     let mut parts = Vec::new();
-    let ch = source.getattr("children")?;
+    let ch = source.getattr(pyo3::intern!(py, "children"))?;
     if ch.is_truthy()? {
         for c in ch.try_iter()? {
             parts.push(clone(&c?, copy, &cx)?);
@@ -1900,16 +1939,16 @@ pub fn copy_parts<'py>(source: &Obj<'py>, copy: &Obj<'py>) -> PyResult<Bound<'py
     let all: Vec<Obj<'py>> = if parts.is_empty() {
         Vec::new()
     } else {
-        module(py, "ingetrazo_core")?.call_method1("purge_iter_groups", (&parts,))?.try_iter()?.collect::<PyResult<_>>()?
+        module(py, "ingetrazo_core")?.call_method1(pyo3::intern!(py, "purge_iter_groups"), (&parts,))?.try_iter()?.collect::<PyResult<_>>()?
     };
     let mut any_ifc = false;
     for part in &all {
-        any_ifc |= part.getattr("ifc")?.is_truthy()?;
+        any_ifc |= part.getattr(pyo3::intern!(py, "ifc"))?.is_truthy()?;
     }
     if any_ifc {
         // An opening names the part that fills it: the copy's own.
         for part in &all {
-            let ifc = part.getattr("ifc")?;
+            let ifc = part.getattr(pyo3::intern!(py, "ifc"))?;
             let ifc = if ifc.is_truthy()? { ifc } else { PyDict::new(py).into_any() };
             let openings = get_or(&ifc, "openings", none(py))?;
             if !openings.is_truthy()? {
@@ -1939,14 +1978,14 @@ pub fn own_mesh<'py>(mesh: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = mesh.py();
     let m = module(py, "core.mesh")?;
     if is_deferred(py, mesh)? {
-        let d = mesh.getattr("__dict__")?;
-        let out = m.getattr("Mesh")?.call0()?;
-        let deferred = m.getattr("DeferredMesh")?;
+        let d = mesh.getattr(pyo3::intern!(py, "__dict__"))?;
+        let out = m.getattr(pyo3::intern!(py, "Mesh"))?.call0()?;
+        let deferred = m.getattr(pyo3::intern!(py, "DeferredMesh"))?;
         if deferred
-            .call_method1("defer", (&out, d.get_item("_deferred")?, d.get_item("_deferred_nfaces")?, d.get_item("_deferred_source")?))?
+            .call_method1(pyo3::intern!(py, "defer"), (&out, d.get_item("_deferred")?, d.get_item("_deferred_nfaces")?, d.get_item("_deferred_source")?))?
             .is_truthy()?
         {
-            let od = out.getattr("__dict__")?;
+            let od = out.getattr(pyo3::intern!(py, "__dict__"))?;
             if d.contains("_deferred_hooks")? {
                 od.set_item("_deferred_hooks", PyList::new(py, d.get_item("_deferred_hooks")?.try_iter()?.collect::<PyResult<Vec<_>>>()?)?)?;
             }
@@ -1959,7 +1998,7 @@ pub fn own_mesh<'py>(mesh: &Obj<'py>) -> PyResult<Obj<'py>> {
         }
     }
     let out = deepcopy(mesh)?;
-    out.getattr("__dict__")?.call_method1("pop", ("_link_geometry", none(py)))?;
+    out.getattr(pyo3::intern!(py, "__dict__"))?.call_method1(pyo3::intern!(py, "pop"), ("_link_geometry", none(py)))?;
     Ok(out)
 }
 
@@ -1968,7 +2007,7 @@ fn without_link<'py>(py: Python<'py>, ext: &Obj<'py>) -> PyResult<Obj<'py>> {
         return Ok(none(py));
     }
     let rest = PyDict::new(py);
-    for (k, v) in ext.call_method0("items")?.try_iter()?.map(|kv| kv.and_then(|kv| kv.extract::<(Obj<'py>, Obj<'py>)>())).collect::<PyResult<Vec<_>>>()? {
+    for (k, v) in ext.call_method0(pyo3::intern!(py, "items"))?.try_iter()?.map(|kv| kv.and_then(|kv| kv.extract::<(Obj<'py>, Obj<'py>)>())).collect::<PyResult<Vec<_>>>()? {
         if !k.eq(LINK_KEY)? {
             rest.set_item(k, deepcopy(&v)?)?;
         }
@@ -1981,7 +2020,7 @@ struct Unlinked<'py> {
     pairs: Obj<'py>,
     nested: Option<Obj<'py>>,
     cls: Obj<'py>,
-    fields: Vec<String>,
+    fields: Vec<Bound<'py, PyString>>,
 }
 
 impl<'py> Unlinked<'py> {
@@ -1992,16 +2031,16 @@ impl<'py> Unlinked<'py> {
         }
         let copy = own_mesh(mesh)?;
         self.meshes.insert(mesh.as_ptr() as usize, copy.clone());
-        self.pairs.call_method1("append", (PyTuple::new(py, [mesh.clone(), copy.clone()])?,))?;
+        self.pairs.call_method1(pyo3::intern!(py, "append"), (PyTuple::new(py, [mesh.clone(), copy.clone()])?,))?;
         Ok(copy)
     }
 
     fn shell(&self, group: &Obj<'py>, out: &Obj<'py>) -> PyResult<()> {
         let py = group.py();
-        out.setattr("context", none(py))?;
-        out.setattr("xform", matrix(py, &group.getattr("xform")?)?)?;
-        out.setattr("axes", matrix(py, &group.getattr("axes")?)?)?;
-        for name in ["ifc", "material", "exploded", "text3d"] {
+        out.setattr(pyo3::intern!(py, "context"), none(py))?;
+        out.setattr(pyo3::intern!(py, "xform"), matrix(py, &group.getattr(pyo3::intern!(py, "xform"))?)?)?;
+        out.setattr(pyo3::intern!(py, "axes"), matrix(py, &group.getattr(pyo3::intern!(py, "axes"))?)?)?;
+        for name in [pyo3::intern!(py, "ifc"), pyo3::intern!(py, "material"), pyo3::intern!(py, "exploded"), pyo3::intern!(py, "text3d")] {
             if let Some(v) = group.getattr_opt(name)?.filter(|v| !v.is_none()) {
                 out.setattr(name, deepcopy(&v)?)?;
             }
@@ -2014,59 +2053,59 @@ impl<'py> Unlinked<'py> {
         let py = group.py();
         let out = clone_shell(group, &self.cls, &self.fields)?;
         part_pairs.append((group, &out))?;
-        out.setattr("owner", parent)?;
+        out.setattr(pyo3::intern!(py, "owner"), parent)?;
         self.shell(group, &out)?;
-        let ext = group.getattr("ext")?;
+        let ext = group.getattr(pyo3::intern!(py, "ext"))?;
         if !ext.is_none() {
-            out.setattr("ext", deepcopy(&ext)?)?;
+            out.setattr(pyo3::intern!(py, "ext"), deepcopy(&ext)?)?;
         }
         let mut kids = Vec::new();
-        let ch = group.getattr("children")?;
+        let ch = group.getattr(pyo3::intern!(py, "children"))?;
         if ch.is_truthy()? {
             for c in ch.try_iter()? {
                 kids.push(self.linked_part(&c?, &out, part_pairs)?);
             }
         }
-        out.setattr("children", PyList::new(py, kids)?)?;
+        out.setattr(pyo3::intern!(py, "children"), PyList::new(py, kids)?)?;
         Ok(out)
     }
 
     fn clone(&mut self, group: &Obj<'py>) -> PyResult<Obj<'py>> {
         let py = group.py();
         let out = clone_shell(group, &self.cls, &self.fields)?;
-        self.pairs.call_method1("append", ((group, &out),))?;
-        out.setattr("owner", none(py))?;
-        if out.getattr_opt("source_uid")?.is_some() {
-            let _ = out.delattr("source_uid");
+        self.pairs.call_method1(pyo3::intern!(py, "append"), ((group, &out),))?;
+        out.setattr(pyo3::intern!(py, "owner"), none(py))?;
+        if out.getattr_opt(pyo3::intern!(py, "source_uid"))?.is_some() {
+            let _ = out.delattr(pyo3::intern!(py, "source_uid"));
         }
         self.shell(group, &out)?;
         if is_linked(group)? {
-            out.setattr("ext", deepcopy(&group.getattr("ext")?)?)?;
+            out.setattr(pyo3::intern!(py, "ext"), deepcopy(&group.getattr(pyo3::intern!(py, "ext"))?)?)?;
             let part_pairs = PyList::empty(py);
             let mut kids = Vec::new();
-            let ch = group.getattr("children")?;
+            let ch = group.getattr(pyo3::intern!(py, "children"))?;
             if ch.is_truthy()? {
                 for c in ch.try_iter()? {
                     kids.push(self.linked_part(&c?, &out, &part_pairs)?);
                 }
             }
-            out.setattr("children", PyList::new(py, kids)?)?;
+            out.setattr(pyo3::intern!(py, "children"), PyList::new(py, kids)?)?;
             match &self.nested {
-                Some(n) => n.call_method1("append", ((group, &out, &part_pairs),))?,
-                None => self.pairs.call_method1("extend", (&part_pairs,))?,
+                Some(n) => n.call_method1(pyo3::intern!(py, "append"), ((group, &out, &part_pairs),))?,
+                None => self.pairs.call_method1(pyo3::intern!(py, "extend"), (&part_pairs,))?,
             };
             return Ok(out);
         }
-        out.setattr("mesh", self.own(&group.getattr("mesh")?)?)?;
-        out.setattr("ext", without_link(py, &group.getattr("ext")?)?)?;
+        out.setattr(pyo3::intern!(py, "mesh"), self.own(&group.getattr(pyo3::intern!(py, "mesh"))?)?)?;
+        out.setattr(pyo3::intern!(py, "ext"), without_link(py, &group.getattr(pyo3::intern!(py, "ext"))?)?)?;
         let mut kids = Vec::new();
-        let ch = group.getattr("children")?;
+        let ch = group.getattr(pyo3::intern!(py, "children"))?;
         if ch.is_truthy()? {
             for c in ch.try_iter()? {
                 kids.push(self.clone(&c?)?);
             }
         }
-        out.setattr("children", PyList::new(py, kids)?)?;
+        out.setattr(pyo3::intern!(py, "children"), PyList::new(py, kids)?)?;
         Ok(out)
     }
 }
@@ -2090,15 +2129,15 @@ pub fn unlinked_copy<'py>(placement: &Obj<'py>, pairs: Option<&Obj<'py>>, nested
         None => PyList::empty(py).into_any(),
     };
     let mut u = Unlinked { meshes: HashMap::new(), pairs, nested: nested.filter(|n| !n.is_none()).cloned(), cls, fields };
-    let mesh = u.own(&placement.getattr("mesh")?)?;
+    let mesh = u.own(&placement.getattr(pyo3::intern!(py, "mesh"))?)?;
     let mut kids = Vec::new();
-    let ch = placement.getattr("children")?;
+    let ch = placement.getattr(pyo3::intern!(py, "children"))?;
     if ch.is_truthy()? {
         for c in ch.try_iter()? {
             kids.push(u.clone(&c?)?);
         }
     }
-    PyTuple::new(py, [mesh, PyList::new(py, kids)?.into_any(), without_link(py, &placement.getattr("ext")?)?])
+    PyTuple::new(py, [mesh, PyList::new(py, kids)?.into_any(), without_link(py, &placement.getattr(pyo3::intern!(py, "ext"))?)?])
 }
 
 /// `(old, new)` for the parts and meshes of a file linked inside a link
@@ -2109,28 +2148,28 @@ pub fn unlinked_copy<'py>(placement: &Obj<'py>, pairs: Option<&Obj<'py>>, nested
 pub fn nested_pairs<'py>(old: &Obj<'py>, new: &Obj<'py>) -> PyResult<Bound<'py, PyList>> {
     let py = old.py();
     let out = PyList::empty(py);
-    let (om, nm) = (old.getattr("mesh")?, new.getattr("mesh")?);
+    let (om, nm) = (old.getattr(pyo3::intern!(py, "mesh"))?, new.getattr(pyo3::intern!(py, "mesh"))?);
     if !om.is_none() && !nm.is_none() {
         out.append((&om, &nm))?;
     }
-    let Some(origin) = old.getattr_opt("source_uid")?.filter(|o| o.is_truthy().unwrap_or(false)) else {
+    let Some(origin) = old.getattr_opt(pyo3::intern!(py, "source_uid"))?.filter(|o| o.is_truthy().unwrap_or(false)) else {
         return Ok(out);
     };
     let origin: String = origin.extract()?;
     let mut fresh: HashMap<String, Obj<'py>> = HashMap::new();
     for part in all_parts(py, new)? {
-        if let Some(src) = part.getattr_opt("source_uid")?.filter(|s| s.is_truthy().unwrap_or(false)) {
+        if let Some(src) = part.getattr_opt(pyo3::intern!(py, "source_uid"))?.filter(|s| s.is_truthy().unwrap_or(false)) {
             fresh.insert(stable_uid_of(&origin, &src.extract::<String>()?), part);
         }
     }
     let mut meshes: HashSet<usize> = HashSet::from([om.as_ptr() as usize]);
     for part in all_parts(py, old)? {
-        let key = part.getattr_opt("source_uid")?.and_then(|s| str_of(&s));
+        let key = part.getattr_opt(pyo3::intern!(py, "source_uid"))?.and_then(|s| str_of(&s));
         let Some(twin) = key.and_then(|k| fresh.get(&k)) else { continue };
         out.append((&part, twin))?;
-        let pm = part.getattr("mesh")?;
+        let pm = part.getattr(pyo3::intern!(py, "mesh"))?;
         if meshes.insert(pm.as_ptr() as usize) {
-            out.append((pm, twin.getattr("mesh")?))?;
+            out.append((pm, twin.getattr(pyo3::intern!(py, "mesh"))?))?;
         }
     }
     Ok(out)
