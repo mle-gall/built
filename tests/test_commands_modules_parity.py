@@ -29,3 +29,21 @@ def observations():
 def test_modules_match_python():
     assert observations() == json.loads((Path(__file__).parent / "fixtures" /
                                          "commands_modules_python.json").read_text())
+
+
+def test_first_import_can_be_the_tree_command_dispatcher():
+    import subprocess
+    import sys
+    from textwrap import dedent
+
+    subprocess.run([sys.executable, "-c", dedent("""
+        from core.protocol.commands import COMMANDS, run
+        from core.protocol import commands
+        from ingetrazo_core import command_protocol
+        assert commands.__spec__.origin == 'ingetrazo_core'
+        assert run is command_protocol.run
+        assert COMMANDS['set_tag_state'] is command_protocol.set_tag_state
+        from core.history import History
+        from core.scene import Scene
+        assert run(History(Scene()), 'undo')['step'] is None
+    """)], check=True)

@@ -100,7 +100,7 @@ fn name_definition(
     }
     // The protocol verb renames every copy, the kept template and this
     // definition as one native step (docs/commands-port.md).
-    py.import("core.protocol.commands")?
+    py.import("ingetrazo_core.command_protocol")?
         .call_method1("rename_component", (view.getattr("history")?, definition, name))?;
     view.call_method0("notify_scene_changed")?;
     Ok(())

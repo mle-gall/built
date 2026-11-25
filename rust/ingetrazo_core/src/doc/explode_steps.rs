@@ -315,7 +315,7 @@ fn run_unlink(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
         return Err(PyErr::from_value(host(py, "CommandRejected")?.call1(("Nothing linked is selected",))?));
     }
     if optional(&me, "tops")?.is_none() {
-        let iter_groups = py.import("core.purge")?.getattr("iter_groups")?;
+        let iter_groups = py.import("ingetrazo_core")?.getattr("purge_iter_groups")?;
         let want: std::collections::HashSet<usize> = groups.try_iter()?.map(|g| Ok(g?.as_ptr() as usize)).collect::<PyResult<_>>()?;
         let mut tops = Vec::new();
         for root in scene.getattr("groups")?.try_iter()? {

@@ -675,7 +675,7 @@ impl SettingsSheet {
             return slf.call_method0("end_site").map(|_| ());
         }
         let history = crate::settings_rows::apply(py)?.call_method1("document_history", (envb.getattr("vp")?,))?;
-        let result = py.import("core.protocol.commands")?.call_method1("set_location", (history, lat, lon))?;
+        let result = py.import("ingetrazo_core.command_protocol")?.call_method1("set_location", (history, lat, lon))?;
         if result.get_item("ok")?.is_truthy()? {
             slf.call_method0("end_site")?;
             crate::settings_rows::_scene_changed(&envb)?;

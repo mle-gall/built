@@ -5,6 +5,7 @@ use pyo3::{
     prelude::*,
     types::{PyDict, PyList, PyModule, PyTuple},
 };
+pub(crate) mod api;
 mod placements;
 mod transforms;
 mod inspectors;
@@ -136,6 +137,7 @@ fn replay<'py>(history: &Obj<'py>, method: &str) -> Reply<'py> {
 pub(crate) fn register(root: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = root.py();
     let m = PyModule::new(py, "ingetrazo_core.command_protocol")?;
+    m.add_function(wrap_pyfunction!(api::run, &m)?)?;
     m.add_function(wrap_pyfunction!(answer, &m)?)?;
     m.add_function(wrap_pyfunction!(execute, &m)?)?;
     m.add_function(wrap_pyfunction!(need, &m)?)?;

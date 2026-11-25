@@ -213,7 +213,7 @@ fn scene_bounds<'py>(py: Python<'py>, scene: &Bound<'py, PyAny>) -> PyResult<Bou
         _ => PyDict::new(py).into_any(),
     };
     let kept = PyDict::new(py);
-    let plan_of = super::module(py, "core.lazy_mesh")?.getattr("plan_of")?;
+    let plan_of = super::module(py, "ingetrazo_core")?.getattr("plan_of")?;
     let local_points = super::module(py, "core.group")?.getattr("_local_points")?;
     let builtins = super::module(py, "builtins")?;
     let kw = PyDict::new(py);

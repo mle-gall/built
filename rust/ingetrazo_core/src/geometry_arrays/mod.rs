@@ -185,8 +185,8 @@ fn arrays_of<'p>(mesh: &Obj<'p>) -> PyResult<Bundle<'p>> {
         let meta = src.call_method1("get", ("meta", PyDict::new(py)))?;
         let (p, c) = if src.contains("sequential")? && !meta.contains("arrays")? {
             let (p, inv): (Obj, Obj) = py
-                .import("core.lazy_mesh")?
-                .call_method1("weld", (p, src.get_item("sequential")?))?
+                .import("ingetrazo_core")?
+                .call_method1("deferred_weld", (p, src.get_item("sequential")?))?
                 .extract()?;
             (p, inv.get_item(c)?)
         } else {

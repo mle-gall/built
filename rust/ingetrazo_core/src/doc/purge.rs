@@ -137,7 +137,7 @@ fn bump(tally: &Obj<'_>, name: &Obj<'_>, n: i64) -> PyResult<()> {
 /// `core.lazy_mesh.plan` makes, ring-only edges included; the last tag
 /// assigned to a repeated edge wins.
 fn count_edges(py: Python<'_>, src: &Obj<'_>, tally: &Obj<'_>) -> PyResult<()> {
-    let welded = py.import("core.lazy_mesh")?.getattr("weld")?.call1((src.get_item("pos")?,))?;
+    let welded = py.import("ingetrazo_core")?.getattr("deferred_weld")?.call1((src.get_item("pos")?,))?;
     let n_vertices = welded.get_item(0)?.len()? as i64;
     let inverse_obj = welded.get_item(1)?;
     let inverse: PyReadonlyArray1<'_, i64> = inverse_obj.extract()?;

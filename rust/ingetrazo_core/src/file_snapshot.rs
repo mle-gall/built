@@ -542,8 +542,8 @@ fn encoded_geometry<'p>(
         } else {
             PyList::empty(py).into_any()
         };
-        let plan = py.import("core.lazy_mesh")?.call_method1(
-            "plan",
+        let plan = py.import("ingetrazo_core")?.call_method1(
+            "deferred_plan",
             (
                 src.get_item("pos")?,
                 src.get_item("edges")?,

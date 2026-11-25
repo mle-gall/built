@@ -16,7 +16,7 @@ fn touch(w: &Obj<'_>) -> PyResult<()> {
 }
 fn edit<'p>(w: &Obj<'p>, op: &str, kw: &Bound<'p, PyDict>) -> PyResult<Obj<'p>> {
     let history = w.call_method0("_active_view")?.getattr("history")?;
-    w.py().import("core.protocol.commands")?.call_method(
+    w.py().import("ingetrazo_core.command_protocol")?.call_method(
         "edit_saved_scene",
         (history, op),
         Some(kw),

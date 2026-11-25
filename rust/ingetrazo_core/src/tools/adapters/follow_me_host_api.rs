@@ -249,7 +249,7 @@ fn commit<'py>(a: &Args<'py>) -> Reply<'py> {
     let path = a.get_item(3)?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
-    let run = imported(py, "core.protocol.commands")?.getattr("run")?;
+    let run = imported(py, "ingetrazo_core.command_protocol")?.getattr("run")?;
     let answer = run.call((vp.getattr("history")?, "follow_me",), Some(&fields!(py; "face" => py.get_type::<pyo3::types::PyString>().call1((face.getattr("key")?,))?, "path" => {let items=PyList::empty(py); for item in path.try_iter()? { let p = item?;
 items.append(p.call_method0("toTuple")?)?;
 } items.into_any()}, "closed" => &closed)))?;

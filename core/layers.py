@@ -344,7 +344,7 @@ def object_ids(scene, *, include_groups=True) -> set:
     guides. Compared before and after a command to find what it created
     (:func:`tag_new_objects`). Geometry-only commands pass
     ``include_groups=False``: no group can be created by those edits."""
-    from core.purge import iter_groups
+    from ingetrazo_core import purge_iter_groups as iter_groups
     ids: set = set()
     groups = (getattr(scene, "groups", None) or ()) if include_groups else ()
     for g in iter_groups(groups):
@@ -423,7 +423,7 @@ def tag_new_objects(scene, before: set, *, include_groups=True, tagged_groups=No
     no layer active, guides, dimensions and texts go to their automatic
     layers (:data:`AUTO_LAYERS`) — ``before`` is then :func:`auto_ids`.
     Returns how many objects were tagged."""
-    from core.purge import iter_groups
+    from ingetrazo_core import purge_iter_groups as iter_groups
     name = active_layer(scene)
     if name == DEFAULT_LAYER:
         return _tag_automatic(scene, before)

@@ -223,7 +223,7 @@ impl BrowserRename {
             return Ok(true);
         }
         // One native step through the protocol's batch rename verb.
-        py.import("core.protocol.commands")?
+        py.import("ingetrazo_core.command_protocol")?
             .call_method1("rename_placements", (vp.getattr("history")?, groups, names))?;
         vp.call_method0("refresh_after_edit")?;
         Ok(true)

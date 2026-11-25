@@ -149,8 +149,8 @@ pub(super) fn join<'p>(py: Python<'p>, parts: &[Bundle<'p>], weld: bool) -> PyRe
         let kw = PyDict::new(py);
         kw.set_item("precise", precise)?;
         let (p, inv): (Obj, Obj) = py
-            .import("core.lazy_mesh")?
-            .call_method("weld", (p,), Some(&kw))?
+            .import("ingetrazo_core")?
+            .call_method("deferred_weld", (p,), Some(&kw))?
             .extract()?;
         (p, inv.get_item(c)?)
     } else {

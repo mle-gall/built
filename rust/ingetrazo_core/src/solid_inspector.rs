@@ -57,7 +57,7 @@ fn inspect<'py>(
     };
     if !explicit
         && !py
-            .import("core.lazy_mesh")?
+            .import("ingetrazo_core")?
             .call_method1("plan_of", (&mesh,))?
             .is_none()
     {
@@ -233,7 +233,7 @@ pub(crate) fn solid_problem_targets<'py>(
     use std::{collections::HashSet, time::Instant};
     let py = scene.py();
     let plugin = py.import("core.solid_analysis")?;
-    let lazy = py.import("core.lazy_mesh")?;
+    let lazy = py.import("ingetrazo_core")?;
     let active = scene.getattr("mesh")?;
     let mut seen = HashSet::from([active.as_ptr()]);
     let mut candidates = vec![(py.None().into_bound(py), active)];
