@@ -12,8 +12,12 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 @pytest.fixture
-def app():
-    """The offers are native: no application object is needed."""
+def private_offer(monkeypatch):
+    from app_shell import native
+
+    monkeypatch.setattr(native, "available", lambda: False)
+    monkeypatch.setattr(clip, "_offer", None)
+    monkeypatch.setattr(clip, "_change", None)
 
 
 def _box_group(x: float) -> Group:
@@ -41,7 +45,7 @@ def _clip():
     }
 
 
-def test_the_clipboard_survives_the_trip(app):
+def test_the_clipboard_survives_the_trip():
     out = clip.decode(clip.encode(_clip()))
     assert out is not None
     (loop, holes, attrs), = out["faces"]
@@ -57,17 +61,17 @@ def test_the_clipboard_survives_the_trip(app):
     assert lifted.xform.map(V(0, 0, 0)).z() == pytest.approx(3)
 
 
-def test_garbage_is_not_a_clipboard(app):
+def test_garbage_is_not_a_clipboard():
     assert clip.decode(b"not a zip") is None
 
 
-def test_this_windows_own_copy_is_not_foreign(app):
+def test_this_windows_own_copy_is_not_foreign(private_offer):
     clip.publish(_clip())
     assert clip.available()
     assert clip.foreign() is None
 
 
-def test_the_offer_is_rendered_on_demand(app):
+def test_the_offer_is_rendered_on_demand():
     mime = clip.ClipMime(_clip())
     assert mime.formats() == [clip.MIME]
     data = mime.retrieveData(clip.MIME, None)
@@ -95,7 +99,7 @@ def test_new_window_uses_the_running_application(native_host, tmp_path, monkeypa
         other.close()
 
 
-def test_quitting_leaves_the_copy_as_plain_data(app):
+def test_quitting_leaves_the_copy_as_plain_data(private_offer):
     clip.publish(_clip())
     clip.flush()
     md = clip.current_offer()
@@ -103,7 +107,7 @@ def test_quitting_leaves_the_copy_as_plain_data(app):
     assert clip.decode(md.data(clip.MIME).data()) is not None
 
 
-def test_native_window_adopts_a_platform_offer_once(app, monkeypatch):
+def test_native_window_adopts_a_platform_offer_once(monkeypatch):
     from types import SimpleNamespace
     from ingetrazo_render import ModelClipboard
     from app_shell import native
