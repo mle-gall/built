@@ -54,7 +54,7 @@ fn part_points<'p>(part: &Obj<'p>, cache: Cache<'p>) -> PyResult<Obj<'p>> {
         if pose.is_none() {
             chunks.append(pos)?;
         } else {
-            let matrix = groups.call_method1("np_affine", (pose,))?;
+            let matrix = crate::model::module(groups.py(), "ingetrazo_core")?.call_method1("group_np_affine", (pose,))?;
             let placed = pos
                 .call_method1("__matmul__", (matrix.get_item(0)?.getattr("T")?,))?
                 .add(matrix.get_item(1)?)?;

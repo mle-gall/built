@@ -263,7 +263,6 @@ pub struct FileGroupWriter {
     scene: Py<PyAny>,
     block: Py<PyAny>,
     ifc: Py<PyAny>,
-    links: Py<PyAny>,
     empty: Py<PyAny>,
     protos: Py<PyList>,
     indices: std::collections::HashMap<usize, usize>,
@@ -292,7 +291,6 @@ impl FileGroupWriter {
             protos: PyList::empty(py).unbind(),
             ifc: igz.getattr("_group_ifc_record")?.unbind(),
             empty: igz.getattr("_empty_mesh")?.unbind(),
-            links: py.import("core.links")?.into_any().unbind(),
         })
     }
     #[getter]
@@ -342,7 +340,6 @@ impl FileGroupWriter {
         Option<(usize, Bound<'py, PyList>, Bound<'py, PyIterator>)>,
     )> {
         let matrix = group.call_method1("_file_xform", (self.precise,))?;
-        let links = self.links.bind(py);
         let placeholder = !matrix.is_none()
             && crate::model::links::save_as_placeholder(group, self.scene.bind(py))?;
         let mesh = if placeholder {
@@ -380,8 +377,7 @@ impl FileGroupWriter {
                     .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("ext"))?;
                 let record = ext.get_item(crate::model::links::LINK_KEY)?;
                 record.call_method1("pop", ("rel", py.None()))?;
-                let fields = links
-                    .call_method1("_link_record", (record.get_item("path")?, dest.bind(py)))?;
+                let fields = crate::model::link_io::link_record(&record.get_item("path")?, Some(dest.bind(py)))?;
                 record.call_method1("update", (fields,))?;
             }
         }

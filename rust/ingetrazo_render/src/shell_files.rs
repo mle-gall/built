@@ -984,7 +984,6 @@ fn do_save<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>, copy: bool) ->
     let m = fm(py)?;
     let dialogs = cd(py)?;
     let autosave = py.import("core.autosave")?;
-    let links = py.import("core.links")?;
     let project = py.import("ingetrazo_render.shell_project")?;
     if !win.getattr("_workspace")?.is_none() {
         return Ok(false);
@@ -999,7 +998,7 @@ fn do_save<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>, copy: bool) ->
         }
         scene.setattr("camera_home", win.call_method1("_camera_dict", (&vp,))?)?;
         scene.setattr("views_home", win.call_method1("_views_dict", (&doc,))?)?;
-        links.call_method1("refresh_paths", (&scene, &path))?;
+        crate::host_context::core_module(py)?.call_method1("link_refresh_paths", (&scene, &path))?;
         let png = m.call_method1("_picture_png", (win, &doc))?;
         if !png.is_none() {
             scene.setattr("_home_thumbnail_png", png)?;
@@ -1014,7 +1013,7 @@ fn do_save<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>, copy: bool) ->
     let written = write();
     if copy && !doc.getattr("path")?.is_none() {
         // The copy's links were made relative to it: back to the document's own.
-        if let Err(e) = links.call_method1("refresh_paths", (&scene, path_of(py, &doc.getattr("path")?)?)) {
+        if let Err(e) = crate::host_context::core_module(py)?.call_method1("link_refresh_paths", (&scene, path_of(py, &doc.getattr("path")?)?)) {
             if !e.is_instance_of::<PyException>(py) {
                 return Err(e);
             }

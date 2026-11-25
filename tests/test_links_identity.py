@@ -136,9 +136,9 @@ def test_nested_link_policy_per_placement(tmp_path):
     nested = full.children[0].children[1]
     assert len(nested.children) == len(leaf.groups)
     assert links.link_of(local)['include_nested'] is False
-    links.set_include_nested(host, full, False)
+    ingetrazo_core.link_set_include_nested(host, full, False)
     assert [g.name for g in full.children[0].children] == ['local part']
-    links.set_include_nested(host, local, True)
+    ingetrazo_core.link_set_include_nested(host, local, True)
     igz.save_scene(host, file)
     igz.load_into(host, file)
     local, full = host.groups

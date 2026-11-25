@@ -3,7 +3,7 @@ import pytest
 from ingetrazo_core import Matrix4, MeshStore, Vec3
 from ingetrazo_core import store_mesh
 from core.history import History, MoveVerticesCommand, SnapshotMutation
-from core.group import _remap_uvws
+from ingetrazo_core import group_remap_uvws as _remap_uvws
 from core.mesh import Mesh
 from core.scene import Scene
 from core.topology import _key
