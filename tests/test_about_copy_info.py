@@ -30,8 +30,13 @@ def test_the_info_names_program_system_python_renderer_and_gl():
     assert f"Python: {platform.python_version()}" in text
     assert "Renderer: wgpu" in text
     assert f"OpenGL: {_GL}" in text
-    assert "Window: " in text
+    assert "Window: 900x600 @ 1x" in text.splitlines()
     assert f"Language: {current_language()}" in text
+
+
+def test_headless_review_omits_window_dimensions():
+    info = about_review("9.8.7", "", None).info
+    assert not any(line.startswith("Window:") for line in info.splitlines())
 
 
 def test_without_a_gl_line_there_is_no_empty_opengl_row():

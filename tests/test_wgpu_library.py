@@ -20,8 +20,9 @@ from ingetrazo_render import wgpu_library as L
 
 @pytest.fixture(autouse=True)
 def _throwaway_settings(private_settings, monkeypatch):
-    from PySide6.QtCore import QSettings
-    QSettings().clear()
+    from ingetrazo_core import NativeSettings
+    from core import settings
+    monkeypatch.setattr(settings, "_store", NativeSettings(private_settings))
     monkeypatch.setenv("INGETRAZO_STORE", "0")
 
 
