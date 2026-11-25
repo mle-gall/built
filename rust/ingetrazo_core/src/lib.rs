@@ -1553,14 +1553,31 @@ impl InstanceSet {
         // The candidates by how near their boxes come on screen, nearest
         // first: once the heap holds ``cap`` edges, a box farther than the
         // worst of them holds none that could enter, nor do the rest.
-        let mut gaps: Vec<(f64, usize, i64)> = py.detach(|| c.par_iter().enumerate()
-            .filter_map(|(k, &i)| {
-                let g = self.places[i as usize].screen_gap(&a, w, h, px, py_);
-                if g < radius { Some((g, k, i)) } else { None }
-            }).collect());
+        let planes = instances::CursorPlanes::new(&a, w, h, px, py_, radius);
+        let gap = |(k, &i): (usize, &i64)| {
+            let placement = &self.places[i as usize];
+            if planes.as_ref().is_some_and(|planes| planes.excludes(placement)) { return None; }
+            let g = placement.screen_gap(&a, w, h, px, py_);
+            (g < radius).then_some((g, k, i))
+        };
+        let mut gaps: Vec<_> = if c.len() <= 128 {
+            c.iter().enumerate().filter_map(gap).collect()
+        } else {
+            py.detach(|| c.par_iter().enumerate().filter_map(gap).collect())
+        };
         gaps.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));
         let all = py.detach(|| {
             let mut heap = instances::NearHeap::new(cap, radius);
+            // The normal hover query has only a handful of placements. Share
+            // one heap directly; avoid parallel jobs and their temporary heaps.
+            if gaps.len() <= 4 {
+                for &(gap, order, row) in &gaps {
+                    if !heap.may_take(gap) { break; }
+                    let p = &self.places[row as usize];
+                    self.protos[p.proto].edges_near(&p.m, &a, w, h, px, py_, order, row, &mut heap);
+                }
+                return heap.into_sorted();
+            }
             // In batches, nearest first, each placement of a batch on its
             // own heap in parallel, bounded by the shared heap's worst: a
             // dense corner of the plant of #158 kept ~4 000 placements
@@ -1594,22 +1611,15 @@ impl InstanceSet {
         });
         let n = all.len();
         let (mut pl, mut ed, mut d) = (Vec::with_capacity(n), Vec::with_capacity(n), Vec::with_capacity(n));
-        let (mut av, mut bv) = (Vec::with_capacity(n), Vec::with_capacity(n));
+        let (mut av, mut bv) = (Vec::with_capacity(3 * n), Vec::with_capacity(3 * n));
         for e in all {
             pl.push(e.place);
             ed.push(e.edge as i64);
             d.push(e.d);
-            av.push(e.a.to_vec());
-            bv.push(e.b.to_vec());
+            av.extend(e.a);
+            bv.extend(e.b);
         }
-        let arr = |v: Vec<Vec<f64>>| -> PyResult<Bound<'py, PyArray2<f64>>> {
-            if v.is_empty() {
-                Ok(PyArray2::zeros(py, [0, 3], false))
-            } else {
-                PyArray2::from_vec2(py, &v).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
-            }
-        };
-        Ok((PyArray1::from_vec(py, pl), PyArray1::from_vec(py, ed), arr(av)?, arr(bv)?,
+        Ok((PyArray1::from_vec(py, pl), PyArray1::from_vec(py, ed), flat3(py, av)?, flat3(py, bv)?,
             PyArray1::from_vec(py, d)))
     }
 
@@ -1787,17 +1797,20 @@ impl InstanceSet {
         let c = cand.as_array().to_vec();
         self.check(&c)?;
         let (o, d) = ([origin.0, origin.1, origin.2], [d.0, d.1, d.2]);
-        let mut mask = vec![false; self.places.len()];
-        for &i in &c {
-            mask[i as usize] = true;
+        // Hover usually already names one placement. For short candidate lists,
+        // test those boxes directly instead of allocating a scene-wide bit mask.
+        let mut met = Vec::new();
+        if c.len() <= 8 {
+            met.extend(c.iter().map(|&row| row as usize)
+                .filter(|&i| self.places[i].ray_meets_box(o, d, limit)));
+        } else {
+            let mut mask = vec![false; self.places.len()];
+            for &i in &c { mask[i as usize] = true; }
+            self.bvh.on_ray(o, d, limit, |i| {
+                if mask[i] && self.places[i].ray_meets_box(o, d, limit) { met.push(i); }
+                true
+            });
         }
-        let mut met: Vec<usize> = Vec::new();
-        self.bvh.on_ray(o, d, limit, |i| {
-            if mask[i] && self.places[i].ray_meets_box(o, d, limit) {
-                met.push(i);
-            }
-            true
-        });
         met.sort_unstable();
         met.dedup();
         let (mut pl, mut tr) = (Vec::new(), Vec::new());
@@ -1819,19 +1832,12 @@ impl InstanceSet {
                 let (x, y, z) = pr.world_tri(&p.m, r);
                 pl.push(i as i64);
                 tr.push(r as i64);
-                a.push(x.to_vec());
-                b.push(y.to_vec());
-                e.push(z.to_vec());
+                a.extend(x);
+                b.extend(y);
+                e.extend(z);
             }
         }
-        let arr = |v: Vec<Vec<f64>>| -> PyResult<Bound<'py, PyArray2<f64>>> {
-            if v.is_empty() {
-                Ok(PyArray2::zeros(py, [0, 3], false))
-            } else {
-                PyArray2::from_vec2(py, &v).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
-            }
-        };
-        Ok((PyArray1::from_vec(py, pl), PyArray1::from_vec(py, tr), arr(a)?, arr(b)?, arr(e)?))
+        Ok((PyArray1::from_vec(py, pl), PyArray1::from_vec(py, tr), flat3(py, a)?, flat3(py, b)?, flat3(py, e)?))
     }
 }
 
