@@ -1,11 +1,9 @@
 # The core protocol: commands, queries and a change feed by stable keys
 
-Status: first version built (branch `rust-core/protocol`, 2026-11-22).
 Code: `core/protocol/` (keys, feed, queries, commands), `core/agent_protocol.py`
 (bridge tools), `views/wgpu_updates.py` (first consumer); store side
 `StoreState.changes_since` / `StoreSnapshot.changes_since` (trunk's), backed
-by a chunk-skipping diff (`rust/built_core/src/store/diff.rs`,
-`docs/meshstore-design.md` §22). Tests: `tests/test_core_protocol.py`.
+by a chunk-skipping diff (`rust/built_core/src/store/diff.rs`). Tests: `tests/test_core_protocol.py`.
 
 Two tracks meet here. The kernel is moving into the Rust `MeshStore`, where
 every op returns a change record by element key. The UI is being rebuilt in
@@ -78,7 +76,7 @@ Built (`core.protocol.commands.run(history, name, **args)`):
 | `purge_debris` | — | `Mesh.purge_debris` on the open mesh as one snapshot step: vertices no edge and no face uses |
 | `undo`, `redo` | — | `History.undo` / `redo` |
 | `hide` / `unhide` | `placements: [uid]` (nested included) | `HideCommand` |
-| `lock` | `placements: [uid]`, `locked: bool = true` | Native step `LockCommand` (`NativeCommand.lock`, docs/commands-port.md); locking drops them from the selection |
+| `lock` | `placements: [uid]`, `locked: bool = true` | Native step `LockCommand` (`NativeCommand.lock`); locking drops them from the selection |
 | `rename_placement` | `placement: uid`, `name: string` | Native step `RenameGroupCommand` (`NativeCommand.rename`) |
 | `make_unique` | `placement: uid`, `rename: bool = false` | `MakeUniqueCommand`: the copy gets its own definition (and, with `rename`, a name of its own) |
 | `rename_placements` | `placements: [uid]`, `names: [string]` (one per distinct placement) | Native step `RenameGroupCommand` (`NativeCommand.rename_each`), one step; placements already named so are left out |
@@ -135,7 +133,7 @@ lists are the contract to build to):
 | Element | `(mesh key, element key)`. The element key is the int every `Vertex` / `Edge` / `Face` already carries | this session; unique across meshes in the process; kept across undo / redo, remove / relink and the store's restores; a deep copy is new elements with new keys |
 
 Element keys of a store-backed mesh encode `namespace << 40 | kind << 38 |
-generation << 26 | slot` (`docs/meshstore-design.md` §3). Their kind is in
+generation << 26 | slot` (`rust/built_core/src/store/`). Their kind is in
 the key. Python-mesh keys are a plain counter. **In JSON an element key is a
 decimal string**: store keys pass 2^53, and a JavaScript client (MCP hosts
 are) would round them. Python callers use ints. `from_json_key` takes both.

@@ -29,7 +29,7 @@
         "name": "five-parts",
         "ext": {
           "link": {
-            "path": "~/.t3/worktrees/ingetrazo/t3-25f3a5d5/tests/fixtures/links/five-parts.igz",
+            "path": "/missing/fixtures/links/five-parts.igz",
             "rel": "five-parts.igz",
             "select": {
               "uids": [
@@ -86,7 +86,7 @@
     },
     "plugin_data": {
       "links": {
-        "~/.t3/worktrees/ingetrazo/t3-25f3a5d5/tests/fixtures/links/five-parts.igz": {
+        "/missing/fixtures/links/five-parts.igz": {
           "overrides": {},
           "source_visible": {
             "five-parts / Untagged": true

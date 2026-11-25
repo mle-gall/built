@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """The .skp tree arrives as it is drawn (#exact-tree).
 
-asbuilt.skp: «Groupe#5992» (a beam frame) places a 52-face beam
+An as-built survey model: a beam frame places a 52-face beam
 twice and, inside it, a 6-face plate. The sharing thresholds (60 polygons,
 400 saved) melted both copies — and the plate inside — into the frame's own
 mesh, so the beam could no longer be selected, tagged or painted as itself.

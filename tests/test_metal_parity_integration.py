@@ -143,7 +143,7 @@ def test_rectangle_mouse_move_uses_directional_helper(view, crossing, zoom):
 def test_loaded_soft_cylinder_has_shared_corner_normals():
     from pathlib import Path
     from formats.igz import load_into
-    scene=Scene();load_into(scene,Path('docs/benchmarks/metal-parity/smooth.igz'))
+    scene=Scene();load_into(scene,Path('tests/fixtures/metal-parity/smooth.igz'))
     packed=pack_scene(scene)
     normals=packed.vertices['normal'][:int(packed.commands[0]['count'])].reshape(-1,3,3)
     assert np.any(np.linalg.norm(normals[:,0]-normals[:,1],axis=1) > .01)

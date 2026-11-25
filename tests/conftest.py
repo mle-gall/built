@@ -226,7 +226,7 @@ def pytest_report_header(config):
 
 
 #: A test module that builds an application window, in process or by
-#: launching the app, is marked ``window`` (docs/testing.md): the delegate
+#: launching the app, is marked ``window`` (docs/testing.md): the quick
 #: subset leaves those to the fast suite.
 _WINDOW_RE = None
 
@@ -247,8 +247,6 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if blender_skip and item.get_closest_marker("blender"):
             item.add_marker(blender_skip)
-        if item.get_closest_marker("classic_pending"):
-            item.add_marker(pytest.mark.skip(reason="Native coverage pending (docs/classic-pending.md)"))
         path = getattr(item, "path", None)
         if path is None:
             continue

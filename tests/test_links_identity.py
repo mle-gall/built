@@ -88,9 +88,10 @@ def test_ride_read_only():
     import os
     from pathlib import Path
     import pytest
+    # BUILT_TEST_RIDE: the path of a large real document, opened read-only.
     if not os.environ.get('BUILT_TEST_RIDE'):
         pytest.skip('opt-in real read-only fixture')
-    path = Path('~/Desktop/models/asbuilt_ride.igz')
+    path = Path(os.environ['BUILT_TEST_RIDE'])
     before = path.stat().st_mtime_ns
     rows = []
     for _ in range(2):

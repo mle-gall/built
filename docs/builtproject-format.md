@@ -1,8 +1,7 @@
 # Built project format, version 1
 
-*Spec, 2026-11-24. Implements "Built projects (Maxence, 2026-11-24)" in
-[ui-decisions.md](ui-decisions.md). Replaces the fork's `.igzproj`
-([project-file.md](project-file.md)), which upstream never had.*
+*Spec. Replaces the fork's `.igzproj` ([project-file.md](project-file.md)),
+which upstream never had.*
 
 A Built project is **one manifest file at the project root**,
 `Name.builtproject`. Its models stay ordinary `.built` (or `.igz`) files in
@@ -79,7 +78,7 @@ form.
 | Records/IFC registry | Yes | Classification systems, types, systems, the project's IFC metadata, export profiles, tag sets, storeys and the pset library must be one vocabulary for every model, or the records diverge. This already was the `.igzproj`'s main purpose. |
 | IFC identity | Yes | Every host must export the same `IfcProject`, `IfcSite`, `IfcBuilding` and storey GUIDs, or IFC files from two models of one project cannot be federated. |
 | Project Structure | Yes, inside the registry | The structure tree (`bim_registry.structure`, [project-structure.md](project-structure.md)) is already a registry section, so it is shared with the registry and needs no field of its own. A separate catalogue would duplicate it. |
-| Deliveries | No | Decided in ui-decisions.md: deliveries are saved in the file, so they travel with a model that is sent on its own. A project-level delivery can be added later as an unknown-preserving field without a version change. |
+| Deliveries | No | Deliveries are saved in the file, so they travel with a model that is sent on its own. A project-level delivery can be added later as an unknown-preserving field without a version change. |
 | Tabs, cameras, editable file, window layout, last scene | No | Per person (§3). In the shared file they made every person's session overwrite everyone else's, which is the bug the `.igzproj`'s `worksession` field had. |
 | Thumbnails, recents | No | Thumbnails live in each model; recents in the settings store. |
 
@@ -131,7 +130,7 @@ roaming, profile because cameras and window layout belong to a machine.
 {
   "built_session": 1,
   "project": "ca2c12df23ac48f9a103455660d950e5",
-  "manifest": "/Users/me/Jobs/Ride/Ride.builtproject",
+  "manifest": "/Users/me/Jobs/Station/Station.builtproject",
   "tabs": [
     {"path": "host.built", "camera": {"target": [0, 0, 0], "distance": 12}, "scene": "Entrance"},
     {"path": "parts/track.built", "camera": null, "scene": null}
@@ -194,8 +193,8 @@ later edits.
 4. *Reporting.* A conflict keeps ours, as today, and names the entries:
    `scene.project_warning` and the `RuntimeWarning` say "Project entries also
    changed elsewhere; yours kept: types.queue_wall". The native window shows
-   it as a toast in the activity capsule. Nothing asks a question, per the
-   dialog rule in ui-decisions.md.
+   it as a toast in the activity capsule. Nothing asks a question: a merge
+   is reported, never put to the user as a dialog.
 5. *Reading.* Registry reads already refresh from disk, so another person's
    change appears at the next read without a reload prompt.
 
@@ -289,5 +288,4 @@ Python glue: `formats/project.py` (registry and filter validation around
 the Rust calls), `core/project.py` (the scene's pointer, merge base and
 fallback registry), `app_shell/project.py` (the native window), and the
 classic `views/worksession.py`, which now reads and writes the per-user
-session through `ProjectSession`. They are listed in
-[python-glue.md](python-glue.md#built-projects).
+session through `ProjectSession`.

@@ -5,10 +5,9 @@ roughness, normal map and ambient occlusion), and how Built imports it.
 Read by `formats/openskp_compat.py` (`read_pbr`, `attach_pbr`) and mapped to
 `core.materials.Material.pbr` by `rust/built_core/src/skp/materials.rs`.
 
-## How this was established (2026-11-19)
+## How this was established
 
-Black-box, per [the clean-room boundary](openskp-collaboration.md#clean-room-boundary):
-only files and public documentation were read.
+Black-box: only files and public documentation were read.
 
 - **The shipped material library.** .skp 2026's 290 `.skm` files
   (`.skp.app/Contents/Resources/Materials`): all of them carry the PBR
@@ -17,9 +16,9 @@ only files and public documentation were read.
   development Mac were scanned, and two 2026.2 files with PBR maps were
   imported for comparison (not committed).
 - **The public .skp C SDK 2025.0** (`.skpAPI/model/material.h`) for
-  the meaning of the enums, the value ranges and the image formats. Its
-  library wrote `tests/data/skp_pbr_2025.skp` (`scripts/skp_pbr_fixture/`)
-  and read it back for the ground truth (`skp_pbr_2025.truth.json`).
+  the meaning of the enums, the value ranges and the image formats.
+  `skp_pbr_2025.truth.json` is the ground truth recorded for the fixture
+  `tests/data/skp_pbr_2025.skp`.
 - **Which data counts.** A copy of the fixture had its XML edited
   (metallic 0.25 → 0.5, normal style 0 → 1, AO switched off). The SDK read
   back the edited values, so `material.xml` is the authority: `model.dat`
@@ -124,7 +123,7 @@ a prefix.
 
 | writer | tested by |
 |---|---|
-| .skp C SDK 2025.0 (`{25.0.633}`) | `tests/data/skp_pbr_2025.skp`, compared with the SDK's own read-back |
+| 2025 (`{25.0.633}`) | `tests/data/skp_pbr_2025.skp`, with its recorded ground truth |
 | .skp 2026 (`{26.x}`) | the 2026 differences (`roughness_texture_invert`, `thumbnail.jpg`) applied to a copy of the fixture in the tests; two real 2026.2 files checked by hand |
 | 2021–2024 | `workflow="0"` throughout, or no block at all: imports unchanged (`skp_arcs_2021.skp`, `skp_instances_2021.skp`) |
 | pre-2021 (MFC, not ZIP) | cannot carry PBR; untouched |
@@ -144,15 +143,3 @@ a prefix.
   the modeller's own rendering.
 - `pbrPromoState` and `baseColorFactor` are not decoded (they are constant
   or have no visible effect in every file seen).
-
-## Upstream
-
-`docs/openskp-upstream/pbr-materials.patch` carries the same reader for
-OpenSKP itself: `_core._extract_pbr`, a `model.PbrMaterial` dataclass,
-`Material.pbr`, the fixture and four tests. It was made against upstream
-`main` at `c393f3f` (2026-11-19) with `git diff --binary`; apply it with
-`git apply`. There, 1039 passed before the patch and 1043 after, with 34
-skipped both times. It has **not** been offered upstream. Once an OpenSKP
-with `Material.pbr` is installed, `openskp_compat._keep_pbr` steps aside
-and the importer reads upstream's field: `tests/test_skp_pbr_import.py`
-passes against the patched upstream too.

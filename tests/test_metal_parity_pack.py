@@ -116,7 +116,7 @@ def test_texture_resolution_budget_mips_and_ids(tmp_path):
 
 def test_audit_fixture_matches_gl_and_retains_hidden():
     from formats.igz import load_into
-    scene = Scene(); load_into(scene, Path('docs/benchmarks/metal-parity/synthetic.igz'))
+    scene = Scene(); load_into(scene, Path('tests/fixtures/metal-parity/synthetic.igz'))
     packed = pack_scene(scene)
     for name in ('Translucent tag', 'Locked tag', 'Mirrored glass'):
         g = next(g for g in scene.groups if g.name == name)

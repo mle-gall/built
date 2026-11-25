@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """A synthetic document with one sheet, for the Sheets workspace captures
-(scripts/sheets_native_shots.sh) and the native page tests.
+and the native page tests.
 
 Three boxes and a slab, a saved scene, and an A3 sheet holding:
 - a vector plan at 1:100;

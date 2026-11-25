@@ -1,7 +1,7 @@
 # Project Structure
 
-*Design note, 2026-11-09 (Maxence + Claude). Supersedes the Navigator spike
-(`navigator.md`): its facet index and agent tools stay as plumbing, its dock goes.*
+*Design note. It supersedes an earlier navigator dock, whose facet index and
+agent tools remain as plumbing.*
 
 ## Why
 
@@ -31,7 +31,7 @@ type, default properties. An element is **filed** under a node once; the tag,
 the record and the classifications are derived from it. Layers 2 to 4 stop
 being things you edit and become projections of the structure.
 
-Decisions taken with Maxence (2026-11-09):
+Decisions:
 
 - **Tags are derived.** The Layers panel keeps visibility and drawing habits;
   its folders mirror the tree; re-tagging a filed element means re-filing it.

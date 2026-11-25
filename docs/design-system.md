@@ -2,8 +2,6 @@
 
 Built keeps the model in view. Dense controls sit on graphite surfaces, with Inter labels aligned across the dock, sheets and bars. Use blue only as an accent for selection, the primary action, focus and links. Give Start, Library and Settings the same neutral surfaces as the dock. Avoid navy backgrounds, blue surface tints and page-wide washes.
 
-The design pass of 2026-11-23 refined the tokens and the kit. Its critique, with the principle each issue broke, is in [design-system-review.md](design-system-review.md).
-
 ## Tokens
 
 The public Rust module `ui::tokens` owns colour values. Its palette declaration also registers every role in the gallery. Colours with alpha composite over the surface below them.
@@ -36,20 +34,6 @@ From lowest to highest, each level is lighter and casts more:
 | `Panel` | Dock, tree, inspector | 33 | 0.80 | 6 / 20, alpha 90 |
 | `Pill` | Palette, activity capsule | 36 | 0.70 | 4 / 14, alpha 100 |
 | `Raised` | Menus, popovers, toasts, question sheets | 44 | 0.90 | 12 / 32, alpha 150 |
-
-### Changed meanings in the 2026-11-23 pass
-
-Token names are unchanged, so other branches rebase cleanly. The following values or treatments changed:
-
-- `ACTIVE` dropped from accent at 24% to 14%, and `paint_state(State::On)` no longer adds an `ACCENT_LINE` outline. Rows add a 2-pt accent marker through `paint_selected_row`.
-- `heading()` is 16 pt instead of 18 pt.
-- Captions (`caption`, `caption_at`, `caption_plain`) are 11 medium `DIM` in sentence case. They were 10 pt uppercase `FAINT` with letter spacing.
-- `paint_state(State::Focus)` draws the ring 1 pt outside the control at 1 pt, instead of 1.5 pt inside.
-- At rest, egui fields have no outline. `install_style` sets this, together with `interact_size.y = CONTROL_H` and `button_padding` 8 × 4.
-- `Surface::look()` gives each level its own tint. Raised is now the lightest level instead of being darker than Pill.
-- Chips (`chip_button`, `amber_button`, `badge`) share one geometry: 24 high at radius `R_ROW`. `badge` is now a status chip, with the dot carrying the tone.
-- `underline_tabs` and `segmented` are 24 high. Tabs no longer paint a box in any state.
-- `kit::toggle` is a switch, not egui's selectable label.
 
 ## Component kit
 
@@ -113,22 +97,3 @@ Run `cargo test --manifest-path rust/built_render/Cargo.toml --lib` for these te
 The policy scans Rust sources under `src/ui*` and `src/inspector`. Only `src/ui/tokens.rs` may construct chrome colours. Renderer modules outside that tree and shaders are exempt. Material values and image pixels are data: hex input is decoded by the token module, and texture uploads retain their original bytes.
 
 After building the native module and shell, run `built --gallery` or `.venv/bin/python main.py --gallery`. Run `scripts/design_system_gallery.sh` to write both host captures to `build/design-system/gallery-*.png`. Set `DS_OUT` to choose another folder and `DS_PREFIX` to prefix the file names. `scripts/design_system_capture.py before|after --dest <folder>` captures the real surfaces from synthetic records. The surfaces are the start page, dock and tree, tabs, inspector with Export details opened by a real click, Library, activity capsule, toast and question sheet. Both scripts use an isolated settings directory and check that the preferences file is untouched.
-
-## Captures
-
-The reference sheet fits into one framebuffer in both hosts. It has foundations, a molecule × state matrix, status chips and organisms (dock, inspector, menu, question sheet, capsule, toast).
-
-| | Before the pass | After |
-|---|---|---|
-| Gallery, Rust shell | [before](../build/ds-pass/before-gallery-built.png) | [after](../build/ds-pass/after-gallery-built.png) |
-| Gallery, Qt app | [before](../build/ds-pass/before-gallery-qt.png) | [after](../build/ds-pass/after-gallery-qt.png) |
-| Start | [before](../build/ds-pass/before-start.png) | [after](../build/ds-pass/after-start.png) |
-| Library | [before](../build/ds-pass/before-library.png) | [after](../build/ds-pass/after-library.png) |
-| Dock and tree | [before](../build/ds-pass/before-dock.png) | [after](../build/ds-pass/after-dock.png) |
-| Project tabs | [before](../build/ds-pass/before-tabs.png) | [after](../build/ds-pass/after-tabs.png) |
-| Inspector with Export details | [before](../build/ds-pass/before-inspector.png) | [after](../build/ds-pass/after-inspector.png) |
-| Question sheet | [before](../build/ds-pass/before-sheet.png) | [after](../build/ds-pass/after-sheet.png) |
-| Activity capsule | [before](../build/ds-pass/before-activity.png) | [after](../build/ds-pass/after-activity.png) |
-| Toast | [before](../build/ds-pass/before-toast.png) | [after](../build/ds-pass/after-toast.png) |
-
-The first design-system captures (baseline `4f9710f4`) remain in `build/design-system/`.

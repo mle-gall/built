@@ -594,11 +594,11 @@ mod tests {
     #[test]
     fn file_urls_become_paths() {
         let urls = vec![
-            "file:///Users/me/Models/Ride%20as-built.built".to_string(),
+            "file:///Users/me/Models/Station%20as-built.built".to_string(),
             "file://localhost/tmp/a.igz".to_string(),
             "https://example.com/x.built".to_string(),
         ];
-        assert_eq!(paths_of_urls(&urls), vec!["/Users/me/Models/Ride as-built.built", "/tmp/a.igz"]);
+        assert_eq!(paths_of_urls(&urls), vec!["/Users/me/Models/Station as-built.built", "/tmp/a.igz"]);
         assert_eq!(percent_decode("caf%C3%A9%2"), "café%2");
     }
 

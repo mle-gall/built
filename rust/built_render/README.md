@@ -81,9 +81,8 @@ widget; QPainter must not paint into the CAMetalLayer. Nonuniform transforms
 currently use approximate normal transforms. Hidden nested-parent propagation
 and per-face layer styles need production parity checks.
 
-All direct dependencies are MIT/Apache-compatible. The complete locked graph
-and permissive transitive license exceptions approved for this spike are in
-`docs/benchmarks/wgpu-2026-11-08/licenses.txt` (from the repository root).
+All direct dependencies are MIT/Apache-compatible. List the complete locked
+graph and its licences with `cargo tree --manifest-path rust/built_render/Cargo.toml -e normal,build --format "{p} {l}"`.
 
 On the locked wgpu 24 Metal backend, `multi_draw_indexed_indirect` itself loops
 over `draw_indexed_primitives_indirect` in Rust (`wgpu-hal/src/metal/command.rs`).
@@ -144,7 +143,7 @@ changes supersede it:
 Use `scripts/wgpu_r1_smoke.py` for the bounded native API/overlay experiment.
 Use `scripts/wgpu_spike.py MODEL --measure --interval 16 [--no-edges]` for
 paced measurements; `--interval 0` retains the unpaced spike methodology.
-The direct/transitive NumPy dependency licenses are included in licenses.txt.
+The NumPy dependency's licences are listed by the same `cargo tree` command.
 
 ## R1b whole-scene bake (2026-11-08)
 
@@ -336,8 +335,8 @@ use a small separate pass. No Python image rasterization or upload is involved.
 Scene axes visibility, edit-context frames and composer style suppression are
 resolved in `views/wgpu_axes.py`, without changing global `built_core.axes` state.
 
-See `docs/benchmarks/billboards-axes/README.md` for bounded captures, targeted
-tests and same-session timing evidence.
+The billboard and axes tests are `tests/test_wgpu_billboards.py` and
+`tests/test_show_axes.py`.
 
 ## Edit context fade and hide
 
@@ -460,8 +459,7 @@ converting its multiplier back to linear framebuffer space. X-ray retains GL's
 backs instead of averaging in default blue-grey. Weighted OIT overlap remains
 an approximation to GL's ordered blend; see the paired evidence for residuals.
 
-Validation and reproducible offscreen evidence are in
-`docs/benchmarks/metal-parity/wave1/p2/`. `tests/test_metal_parity_raster.py`
+`tests/test_metal_parity_raster.py`
 contains a synthetic alpha-byte pack and can wrap the established audit script
 to inject pending P3 alpha/soft metadata without modifying production packing.
 Native tests use an **unshown Cocoa NSView**; ordinary Qt-offscreen test runs
@@ -483,5 +481,3 @@ tool-only documents); exports use its output-aspect layout and omit interactive
 feedback. Tape/guide/axis/reference and nearby-edge facade paths use resident
 inference or shared projection-only GL helpers; Arc continuation queries bounded
 resident curve tangents rather than GL placements. No GL pick cache is consulted.
-See `docs/benchmarks/metal-parity/wave1/p7/REPORT.md` for actual capture limits,
-performance samples, and remaining partial findings.
