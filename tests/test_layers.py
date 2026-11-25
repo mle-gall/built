@@ -112,7 +112,7 @@ def test_annotations_take_layers_like_any_entity(tmp_path):
     from ingetrazo_core import Vec3 as QVector3D
     from core.camera import OrbitCamera
     from core.dimension import Dimension
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     from core.textlabel import TextLabel
     from formats import igz as igz_format
 

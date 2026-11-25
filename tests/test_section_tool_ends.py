@@ -64,7 +64,7 @@ def test_the_name_prompt_can_be_switched_off(monkeypatch, native_window):
     from core.settings import settings as current_settings
     from ingetrazo_render import chrome_forms
     from core.history import PlaceSectionPlaneCommand
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
 
     forms = []
     monkeypatch.setattr(chrome_forms, "show", lambda _, form: forms.append(form))

@@ -39,7 +39,7 @@ pub(crate) fn export_video(
     window.getattr("scene_player")?.call_method0("cancel")?;
     let camera = vp.getattr("camera")?;
     let before = py
-        .import("core.saved_views")?
+        .import("ingetrazo_core.saved_views")?
         .getattr("SavedView")?
         .call_method1("capture", ("", &scene, &camera))?;
     let aspect = camera.getattr("aspect")?;

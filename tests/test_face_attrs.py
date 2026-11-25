@@ -16,7 +16,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History, MoveVerticesCommand
 from core.mesh import Mesh
-from core.orient import is_closed
+from ingetrazo_core.orient import is_closed
 from core.scene import Scene
 from tests.test_fuzz_engine import V, _draw_rect, _push, _up
 

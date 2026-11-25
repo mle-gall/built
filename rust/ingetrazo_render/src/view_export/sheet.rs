@@ -200,7 +200,7 @@ pub(super) fn open_view_export<'p>(
         None
     } else {
         Some(
-            py.import("core.saved_views")?
+            py.import("ingetrazo_core.saved_views")?
                 .getattr("SavedView")?
                 .call_method1("capture", ("", &scene, vp.getattr("camera")?))?
                 .unbind(),

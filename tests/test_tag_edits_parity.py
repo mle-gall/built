@@ -33,7 +33,7 @@ FOLDERS = ["Structure", "Steel", "Building A", "Building B", "Annex", "Structure
 
 def _scene(rng):
     from core.layers import Layer
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     from core.scene import Scene
     s = Scene()
     for k in range(rng.randint(2, 9)):

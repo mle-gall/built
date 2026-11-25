@@ -314,6 +314,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     recents::register(m)?;
     general_settings::register(m)?;
     document_insert::register(m)?;
+    model::link_meshes::register(m)?;
+    model::saved_record::register(m)?;
     builtproject::document::register(m)?;
     kept_components::register(m)?;
     annotation_anchor::register(m)?;
@@ -752,7 +754,7 @@ fn touching_boxes<'py>(
     Ok((PyArray1::from_vec(py, ii), PyArray1::from_vec(py, jj)))
 }
 
-/// A packed triangle set (core.orient._PackedTris) with a ray index, for
+/// A packed triangle set (ingetrazo_core.orient._PackedTris) with a ray index, for
 /// the parity queries of orientation and of the push/pull rebuild.
 #[pyclass(frozen)]
 struct ParityTris {

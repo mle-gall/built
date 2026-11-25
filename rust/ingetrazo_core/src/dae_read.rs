@@ -910,7 +910,7 @@ fn editable(mesh: &Obj<'_>, faces: &[Face], lines: &[(DVec3, DVec3)]) -> PyResul
         kw.set_item("coplanar_merge", true)?;
         py.import("ingetrazo_core")?
             .call_method("run_stitch", (mesh, seed, added), Some(&kw))?;
-        py.import("core.orient")?
+        py.import("ingetrazo_core.orient")?
             .call_method1("orient_outward", (mesh,))?;
     }
     for &(a, b) in lines {

@@ -6,7 +6,7 @@ from __future__ import annotations
 import ingetrazo_core
 from pathlib import Path
 
-from core.orient import is_closed, signed_volume
+from ingetrazo_core.orient import is_closed, signed_volume
 from core.scene import Scene
 from formats.dae import load_dae
 

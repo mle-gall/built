@@ -24,7 +24,7 @@ pub(crate) fn plan_scene_command<'py>(
         .try_iter()?
         .collect::<PyResult<_>>()?;
     let history = py.import("ingetrazo_core.history")?;
-    let recording = py.import("core.saved_views")?;
+    let recording = py.import("ingetrazo_core.saved_views")?;
     let tree = py.import("ingetrazo_core.scene_tree")?;
     let mut targets = Vec::new();
     let mut seen = HashSet::new();

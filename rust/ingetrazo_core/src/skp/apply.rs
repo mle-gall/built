@@ -191,7 +191,7 @@ pub fn skp_apply_metadata(scene: &Bound<'_, PyAny>, payload: &Bound<'_, PyDict>)
     if views.is_truthy()? {
         let list = scene.getattr("saved_views")?;
         let existing = names(&list, "name")?;
-        let camera = py.import("core.saved_views")?.getattr("from_lookat")?;
+        let camera = py.import("ingetrazo_core.saved_views")?.getattr("from_lookat")?;
         for (i, row) in views.try_iter()?.enumerate() {
             if i % 128 == 0 && i > 0 {
                 crate::file_open::skp_checkpoint(py)?;

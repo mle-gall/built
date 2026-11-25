@@ -12,7 +12,7 @@ from ingetrazo_core import Vec3 as QVector3D
 from core.bridge import (BridgeError, align_loop, bridge, plan,
                          profiles_from_selection, strips)
 from core.mesh import Mesh
-from core.orient import is_closed, signed_volume
+from ingetrazo_core.orient import is_closed, signed_volume
 
 
 def V(x, y, z=0.0):

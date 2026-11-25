@@ -13,7 +13,7 @@ from __future__ import annotations
 from core.edits import build_add_edges  # noqa: E402
 from core.history import (AddFaceCommand, EraseSelectionCommand,  # noqa: E402
                           History)
-from core.orient import is_closed  # noqa: E402
+from ingetrazo_core.orient import is_closed  # noqa: E402
 from core.scene import Scene  # noqa: E402
 from tests.test_pushpull_ux import V, _push  # noqa: E402
 

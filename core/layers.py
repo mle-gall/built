@@ -307,7 +307,7 @@ def taggable(entities) -> list:
     from core.guide import Guide, GuideCircle
     from ingetrazo_core.image_plane import ImagePlane
     from ingetrazo_core.mesh import Edge, Face
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     from core.textlabel import TextLabel
     kinds = (Face, Edge, Group, Dimension, TextLabel, SectionPlane, Guide,
              GuideCircle, ImagePlane)

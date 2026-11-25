@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! A saved view's capture and recall (`core.saved_views`): the camera and
+//! A saved view's capture and recall (`ingetrazo_core.saved_views`): the camera and
 //! the presentation state a scene remembers (tags and folders, style,
 //! section, geographic layers, shadows, hidden objects, the hidden-things
 //! switches), read from and put back onto the live scene and camera, and
@@ -153,7 +153,7 @@ fn saved_view_take_camera(view: &Bound<'_, PyAny>, camera: &Bound<'_, PyAny>) ->
 #[pyo3(signature = (view, scene, camera, style=None))]
 fn saved_view_recapture(py: Python<'_>, view: &Bound<'_, PyAny>, scene: &Bound<'_, PyAny>, camera: &Bound<'_, PyAny>,
                         style: Option<Bound<'_, PyAny>>) -> PyResult<()> {
-    let cls = super::module(py, "core.saved_views")?.getattr("SavedView")?;
+    let cls = super::module(py, "ingetrazo_core.saved_views")?.getattr("SavedView")?;
     let fresh = saved_view_capture(py, &cls, &view.getattr("name")?, scene, camera, style)?;
     fresh.setattr("folder", view.getattr("folder")?)?;
     for field in view.getattr("_record_fields")?.try_iter()? {

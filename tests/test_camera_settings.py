@@ -18,7 +18,7 @@ from ingetrazo_core import Vec3 as QVector3D, Vec4 as QVector4D
 
 from core.camera import (OrbitCamera, focal_from_fov,  # noqa: E402
                          fov_from_focal, frame_rect)
-from core.saved_views import SavedView  # noqa: E402
+from ingetrazo_core.saved_views import SavedView  # noqa: E402
 
 
 def _ndc(cam, p: QVector3D):

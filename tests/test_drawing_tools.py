@@ -479,7 +479,7 @@ def test_a_rectangle_drawn_on_a_box_keeps_the_box_closed():
     push reads the wrong sign, the coplanar merge dissolves the door.
     """
     from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
-    from core.orient import is_closed
+    from ingetrazo_core.orient import is_closed
     from tools.base import ToolContext
     from tools.rust_tools import RectangleTool
 

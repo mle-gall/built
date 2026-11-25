@@ -27,7 +27,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import FlipFacesCommand, History
 from core.mesh import Mesh, turn_face_over
-from core.orient import orient_outward
+from ingetrazo_core.orient import orient_outward
 from core.scene import Scene
 
 BRICK = {"color": [0.7, 0.3, 0.2], "mat": "Ladrillo"}

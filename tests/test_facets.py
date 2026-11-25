@@ -96,7 +96,7 @@ def test_tint_overrides_face_material_and_nested_proxy():
 
 
 def test_saved_scene_keeps_view_key():
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     view = SavedView('Launch', navigator_view='launch')
     assert SavedView.from_dict(view.to_dict()).navigator_view == 'launch'
 

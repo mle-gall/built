@@ -34,7 +34,7 @@ const ON_PLANE: f64 = 1e-4;
 const SAMPLE_OFF: f64 = 1e-3;
 /// `core.arrangement._TOL`.
 const ARR_TOL: f64 = 1e-4;
-/// `core.orient._RAYS`, `_JITTER`.
+/// `ingetrazo_core.orient._RAYS`, `_JITTER`.
 const RAYS: usize = 7;
 const JITTER: f64 = 3e-4;
 /// `cap_rebuild._STORE_HAIR_COS2`.

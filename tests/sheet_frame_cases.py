@@ -33,7 +33,7 @@ def plan_cut(scene, plan, by_layer: bool) -> None:
     concrete, the rest brick walls."""
     from ingetrazo_core import Vec3
     from core.layers import Layer
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     plan.cut_fill_by_layer = by_layer
     scene.layers.append(Layer("Muros", hatch="brick", color=(0.8, 0.4, 0.3)))
     scene.layers.append(Layer("Losa", hatch="concrete", color=(0.5, 0.5, 0.55)))
@@ -52,7 +52,7 @@ def annotated(scene, plan, window) -> None:
     from ingetrazo_core import Vec3
     from core.dimension import Dimension
     from core.layers import Layer
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     from core.textlabel import TextLabel
     from georef.geopath import GeoPath
     plan.annotations = plan.km_marks = plan.section_marks = True
@@ -81,7 +81,7 @@ def dxf_layers(scene) -> None:
     """Two tags, one hatched, and a plan cut: the DXF goes layer by layer."""
     from ingetrazo_core import Vec3
     from core.layers import Layer
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     scene.layers.append(Layer("Muros", hatch="brick", color=(0.8, 0.4, 0.3)))
     scene.layers.append(Layer("Ejes", linetype="center", color=(0.2, 0.4, 0.9)))
     for f in scene.mesh.faces:

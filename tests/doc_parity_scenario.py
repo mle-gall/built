@@ -688,7 +688,7 @@ def presentation_steps(scene, steps):
     from core.history import (AddDimensionCommand, AddSceneCommand, AddSheetCommand,
                               AddTextLabelCommand, EditDimensionTextCommand,
                               MoveTextLabelsCommand, PlaceViewCommand)
-    from core.saved_views import RenameSceneCommand, SavedView
+    from ingetrazo_core.saved_views import RenameSceneCommand, SavedView
     from core.textlabel import TextLabel
 
     h = History(scene)

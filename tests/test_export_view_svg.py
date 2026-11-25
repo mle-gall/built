@@ -1230,7 +1230,7 @@ def test_svg_scene_selection_is_shared_by_both_modes_and_resets_framing():
 
 
 def test_a_scene_is_exported_and_the_view_comes_back(native_host, tmp_path):
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     win = native_host.window
     vp = win.viewport
     native_host.resize(800, 600, 1.)

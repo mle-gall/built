@@ -18,7 +18,7 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from core.camera import OrbitCamera
 from core.composition import MarcoVista, apply_frame_camera
 from core.scene import Scene
-from core.section import SectionPlane
+from ingetrazo_core.section import SectionPlane
 
 VIEWS = ("top", "front", "right", "iso")
 

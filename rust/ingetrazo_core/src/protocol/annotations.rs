@@ -170,7 +170,7 @@ fn place_section_plane<'py>(
     annotation(
         history,
         "PlaceSectionPlaneCommand",
-        py.import("core.section")?.call_method(
+        py.import("ingetrazo_core.section")?.call_method(
             "SectionPlane",
             (vec3(point)?, vec3(normal)?),
             Some(&kw),

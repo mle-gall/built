@@ -300,7 +300,7 @@ pub fn read_definition<'py>(registry: &Obj<'py>, path: &Obj<'py>, select: &Obj<'
     let filtered = !select.is_none() && select.contains("filter")?;
     let kw = PyDict::new(py);
     kw.set_item("filtered", filtered)?;
-    let reader = module(py, "core.link_meshes")?.getattr("LinkMeshes")?
+    let reader = module(py, "ingetrazo_core.link_meshes")?.getattr("LinkMeshes")?
         .call((path, registry, previous.map_or_else(|| none(py), |p| p.clone())), Some(&kw))?;
     let read = load_source(path, Some(select), include_nested.is_truthy()?, Some(&reader), progress)?;
     let (comp, tags, materials) = (read.get_item(0)?, read.get_item(1)?, read.get_item(2)?);

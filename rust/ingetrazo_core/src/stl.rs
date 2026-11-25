@@ -303,7 +303,7 @@ fn parse_stl<'py>(
             kwargs.clear();
             kwargs.set_item("only", new_faces)?;
         }
-        py.import("core.orient")?
+        py.import("ingetrazo_core.orient")?
             .call_method("orient_outward", (&mesh,), Some(&kwargs))?;
     }
     tick(1.0, "Done")?;

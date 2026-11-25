@@ -152,7 +152,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     let identity = || core.call_method1("selection_identity", (&scene, &data, &filename, &kinds));
     let section_key = if focused {
         focus_name.clone()
-    } else if sel.len() == 1 && sel.get_item(0)?.is_instance(&py.import("core.section")?.getattr("SectionPlane")?)? {
+    } else if sel.len() == 1 && sel.get_item(0)?.is_instance(&py.import("ingetrazo_core.section")?.getattr("SectionPlane")?)? {
         format!("section:{}", text(&sel.get_item(0)?.getattr("uid")?)?)
     } else {
         String::new()

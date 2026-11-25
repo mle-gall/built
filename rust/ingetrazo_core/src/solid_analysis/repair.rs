@@ -238,7 +238,7 @@ fn repair_mesh(mesh: &Obj<'_>) -> PyResult<HashMap<&'static str, usize>> {
     }
     let turned = mesh
         .py()
-        .import("core.orient")?
+        .import("ingetrazo_core.orient")?
         .call_method1("orient_outward", (mesh,))?
         .len()?;
     done.insert("reversed", turned);

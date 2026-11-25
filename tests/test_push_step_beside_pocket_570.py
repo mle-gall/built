@@ -19,7 +19,7 @@ import pytest
 from ingetrazo_core import Vec3 as V
 
 from core.history import History
-from core.orient import is_closed, signed_volume
+from ingetrazo_core.orient import is_closed, signed_volume
 from core.scene import Scene
 from tests import test_pushpull_ux as T
 

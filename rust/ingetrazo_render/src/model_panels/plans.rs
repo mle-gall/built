@@ -75,7 +75,7 @@ fn finish(
             &translated(py, "Plan {name}", Some(&title_args))?,
             &scene.getattr("saved_views")?,
         )?;
-        let module = py.import("core.section")?;
+        let module = py.import("ingetrazo_core.section")?;
         let kw = PyDict::new(py);
         kw.set_item("name", &title)?;
         kw.set_item("symbol", crate::host_context::core_module(module.py())?.call_method1("section_next_symbol", (&sections,))?)?;
@@ -129,7 +129,7 @@ fn finish(
     let fov = cam.getattr("fov_deg")?.extract::<f64>()?.to_radians();
     cam.setattr("distance", span * 1.2 / (2. * (fov / 2.).tan()))?;
     let view = py
-        .import("core.saved_views")?
+        .import("ingetrazo_core.saved_views")?
         .getattr("SavedView")?
         .call_method1("capture", (&base, &scene, cam))?;
     let state = PyDict::new(py);

@@ -67,7 +67,7 @@ pub(crate) fn holds_point(b: &[f64; 6], p: [f64; 3]) -> bool {
 }
 
 /// Whether the mesh has faces and every listed edge borders at least two
-/// (`core.orient.is_closed`, exactly).
+/// (`ingetrazo_core.orient.is_closed`, exactly).
 #[pyfunction]
 pub fn scan_is_closed(py: Python<'_>, mut scan: PyRefMut<'_, MeshScan>) -> PyResult<bool> {
     scan.need_parts(py, 0)?;
@@ -163,7 +163,7 @@ pub fn scan_parallel_overlapping(
     }))
 }
 
-/// `core.orient._ray_triangle(origin, direction, tri)` in float32 through
+/// `ingetrazo_core.orient._ray_triangle(origin, direction, tri)` in float32 through
 /// Qt's operations (`crate::facegeom`'s products), its parameter `t` as the
 /// Python float it returns.
 #[inline]

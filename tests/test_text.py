@@ -32,7 +32,7 @@ def test_3d_text_builds_watertight_letters_with_holes():
     mesh = build_text_mesh("O", "Sans", height=0.5, thickness=0.1)
     assert mesh.faces
     assert _closed(mesh)                            # solid ring, hole intact
-    from core.orient import signed_volume
+    from ingetrazo_core.orient import signed_volume
     assert signed_volume(mesh) > 0
     # the front face carries the counter of the O as a hole
     assert any(f.hole_loops for f in mesh.faces)

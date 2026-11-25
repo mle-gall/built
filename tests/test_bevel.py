@@ -21,7 +21,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from ingetrazo_core import bevel_exponent as _exponent, apply_fillet, plan_fillet
 from core.mesh import Mesh
-from core.orient import is_closed, signed_volume
+from ingetrazo_core.orient import is_closed, signed_volume
 from tests.test_fillet import box, edge_at
 
 TOP_FRONT = ((0, 0, 1), (2, 0, 1))      # along X, between top (+Z) and front (−Y)
