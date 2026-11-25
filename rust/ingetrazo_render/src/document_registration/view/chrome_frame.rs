@@ -459,7 +459,7 @@ fn before_frame<'py>(a: &Args<'py>) -> Reply<'py> {
         return Ok(none(py));
     }
     let renderer = view.getattr("renderer")?;
-    py.import("core.plugin_panels")?.call_method1("sync", (&view, &win))?;
+    crate::plugin_panels::sync(&view, &win)?;
     if let Some(menus) = own(&win, "_extension_menus")? {
         if menus.is_truthy()? {
             menus.call_method1("present", (&view,))?;

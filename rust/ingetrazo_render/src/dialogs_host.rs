@@ -96,7 +96,7 @@ fn window_of<'py>(py: Python<'py>, parent: &Bound<'py, PyAny>) -> PyResult<Bound
 }
 
 #[pyfunction]
-fn view_of<'py>(py: Python<'py>, win: &Bound<'py, PyAny>) -> Bound<'py, PyAny> {
+pub(crate) fn view_of<'py>(py: Python<'py>, win: &Bound<'py, PyAny>) -> Bound<'py, PyAny> {
     opt(win, "_doc").and_then(|doc| opt(&doc, "stand_in")).unwrap_or_else(|| py.None().into_bound(py))
 }
 

@@ -436,7 +436,7 @@ fn rasterize<'py>(a: &Args<'py>) -> Reply<'py> {
 
 /// The document's annotations (`annotations(painter)`), then the tool
 /// primitives, on the annotation canvas (`AnnotationCanvas.draw_primitives`).
-fn paint_layer<'py>(a: &Args<'py>) -> Reply<'py> {
+pub(super) fn paint_layer<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (painter, primitives, annotations) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?);
     if !annotations.is_none() {

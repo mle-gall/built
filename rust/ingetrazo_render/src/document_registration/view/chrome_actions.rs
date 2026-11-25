@@ -125,7 +125,7 @@ fn run_one<'py>(win: &Obj<'py>, action: &Obj<'py>, source_view: &Obj<'py>) -> Py
         return Ok(()); // a click queued before the sheet came up
     }
     match kind {
-        "plugin" => return py.import("core.plugin_panels")?.call_method1("dispatch", (win, arg)).map(drop),
+        "plugin" => return crate::plugin_panels::dispatch(win, pyo3::types::PyString::new(py, arg).as_any()),
         "activity" => {
             for row in dialogs.call_method1("history", (win,))?.try_iter()? {
                 let row = row?;

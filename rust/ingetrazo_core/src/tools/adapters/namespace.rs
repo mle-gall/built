@@ -210,7 +210,7 @@ fn definition(name: &str) -> Option<&'static Module> {
     MODULES.iter().find(|m| m.name == leaf)
 }
 
-const CORE_MODULES: &[&str] = &["protocol", "protocol.commands", "protocol.feed", "protocol.keys", "protocol.records", "protocol.queries", "purge", "bridge", "lazy_mesh", "reference_edit", "material_commands", "link_structure", "hlr", "vista_caras", "units", "composition", "push_pull", "solids", "sweep", "make_faces", "intersect", "pieces", "inference", "geometry_arrays", "outliner", "solid_analysis", "offset", "text3d", "render_blender", "extensions", "input_codes"];
+const CORE_MODULES: &[&str] = &["plugin_panels", "protocol", "protocol.commands", "protocol.feed", "protocol.keys", "protocol.records", "protocol.queries", "purge", "bridge", "lazy_mesh", "reference_edit", "material_commands", "link_structure", "hlr", "vista_caras", "units", "composition", "push_pull", "solids", "sweep", "make_faces", "intersect", "pieces", "inference", "geometry_arrays", "outliner", "solid_analysis", "offset", "text3d", "render_blender", "extensions", "input_codes"];
 const VIEW_MODULES: &[&str] = &[
     "document_interaction",
     "documents",
@@ -308,6 +308,7 @@ impl ToolModules {
                     }
                     Ok(())
                 }
+                "core.plugin_panels" => py.import("ingetrazo_render")?.call_method1("install_plugin_panels", (module,)).map(drop),
                 "core.extensions" => crate::extension_manager::discovery::install(module),
                 "core.render_blender" => crate::blender::install(module),
                 "core.text3d" => crate::text3d::install(module),

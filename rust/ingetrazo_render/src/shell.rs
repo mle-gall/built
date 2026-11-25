@@ -36,6 +36,7 @@ pub fn register_shell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     crate::shell_events::register(m)?;
     crate::deliveries_host::register(m)?;
     crate::sheet_runtime::register(m)?;
+    m.add_function(wrap_pyfunction!(crate::plugin_panels::install_plugin_panels, m)?)?;
     crate::dialogs_host::register(m)?;
     crate::forms_host::register(m)?;
     // Settings needs PreferencesView and RestartPreferences.

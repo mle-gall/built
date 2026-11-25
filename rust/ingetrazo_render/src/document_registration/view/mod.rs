@@ -92,6 +92,12 @@ where
 pub(crate) mod calls {
     use super::*;
 
+    pub(crate) fn draw_builtin_feedback<'py>(painter: &Obj<'py>, tools: &Obj<'py>, layout: &Obj<'py>) -> PyResult<()> {
+        direct(painter.py(), frame_annotations::draw_tool_feedback, (painter, tools, layout)).map(drop)
+    }
+    pub(crate) fn paint_primitives<'py>(painter: &Obj<'py>, primitives: &Bound<'py, PyList>) -> PyResult<()> {
+        direct(painter.py(), frame_lines::paint_layer, (painter, primitives, painter.py().None())).map(drop)
+    }
     /// Where the model is seen, in device coordinates; `None` without the
     /// chrome (`ui.rs` `free_ndc`).
     pub(crate) fn free_area<'py>(win: &Obj<'py>) -> Reply<'py> {
