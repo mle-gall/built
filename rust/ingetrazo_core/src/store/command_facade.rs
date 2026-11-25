@@ -34,7 +34,7 @@ pub(crate) fn command_draw_edge(
     a: [f64; 3],
     b: [f64; 3],
     soft: Option<bool>,
-    curve: Option<i64>,
+    curve: Option<i128>,
     layer: Option<&str>,
 ) -> PyResult<Option<DrawnEdge>> {
     let default_layer = mesh.py().import("core.layers")?.getattr("DEFAULT_LAYER")?;

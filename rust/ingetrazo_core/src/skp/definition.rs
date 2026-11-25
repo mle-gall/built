@@ -196,7 +196,7 @@ fn build(
         for [a, b] in segments {
             if let (Some(a), Some(b)) = (store.lookup(a), store.lookup(b)) {
                 if let Some(edge) = store.find_edge(a, b) {
-                    store.set_edge_curve(edge, id);
+                    store.set_edge_curve(edge, id.into());
                 }
             }
         }

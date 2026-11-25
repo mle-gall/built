@@ -77,6 +77,7 @@ def placements():
     are freed on its next use (doc/mod.rs ``drain_pending``; making a
     placement drains them). Another file's leftovers on the same
     pytest-xdist worker were freed between two counts."""
+    doc_model.flush()
     gc.collect()
     Group()
     gc.collect()

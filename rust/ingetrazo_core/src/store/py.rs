@@ -578,7 +578,7 @@ impl PyMeshStore {
         }
         let eflat = edges.indices()?;
         let edges2 = eflat.as_chunks::<2>().0;
-        let curves = curves.as_ref().map(IndexArray::indices).transpose()?;
+        let curves = curves.as_ref().map(IndexArray::indices).transpose()?.map(|ids| ids.iter().copied().map(i128::from).collect::<Vec<_>>());
         let layers = layers.as_ref().map(IndexArray::indices).transpose()?;
         let face_attr = face_attr.as_ref().map(IndexArray::indices).transpose()?;
         let rings = rings.indices()?;
@@ -721,7 +721,7 @@ impl PyMeshStore {
         out.set_item("face_attr", d.face_attr.into_pyarray(py))?;
         out.set_item("edge_flags", d.flags.into_pyarray(py))?;
         if d.curve.iter().any(|&i| i >= 0) {
-            out.set_item("edge_curve", d.curve.into_pyarray(py))?;
+            out.set_item("edge_curve", curve_array(py, d.curve)?)?;
         }
         if !names.is_empty() {
             out.set_item("edge_layer", layers.into_pyarray(py))?;
@@ -830,7 +830,7 @@ impl PyMeshStore {
     }
 
     /// `(v0, v1, flags, curve (-1 none), layer name or None)` of an edge.
-    fn edge(&self, key: u128) -> PyResult<(u128, u128, u8, i64, Option<String>)> {
+    fn edge(&self, key: u128) -> PyResult<(u128, u128, u8, i128, Option<String>)> {
         let e = any_of(&self.inner, Kind::Edge, key)?;
         let st = &self.inner.state;
         let [a, b] = *st.ends.get(e as usize);
@@ -934,7 +934,7 @@ impl PyMeshStore {
     }
 
     /// `Edge.curve` (None: no curve).
-    fn set_edge_curve(&mut self, key: u128, curve: Option<i64>) -> PyResult<u64> {
+    fn set_edge_curve(&mut self, key: u128, curve: Option<i128>) -> PyResult<u64> {
         let e = any_of(&self.inner, Kind::Edge, key)?;
         Ok(self.inner.set_edge_curve(e, curve.unwrap_or(-1)))
     }
@@ -1387,7 +1387,7 @@ impl PyMeshStore {
         ))
     }
 
-    fn curved_edges(&self) -> Vec<(i64, u128)> {
+    fn curved_edges(&self) -> Vec<(i128, u128)> {
         self.inner
             .live_slots(Kind::Edge)
             .into_iter()
@@ -1531,7 +1531,7 @@ impl PyMeshStore {
         Ok(self.inner.rebuild_plane(&points, cap, crate::hypot_of(hypot)?))
     }
 
-    fn curve_keys(&self, curve: i64) -> Vec<u128> {
+    fn curve_keys(&self, curve: i128) -> Vec<u128> {
         self.inner.curve_keys(curve)
     }
 
@@ -1540,7 +1540,7 @@ impl PyMeshStore {
     #[pyo3(signature = (mesh, a, b, soft=None, curve=None, layer=None))]
     fn command_draw_edge(
         mesh: &Bound<'_, PyAny>, a: [f64; 3], b: [f64; 3], soft: Option<bool>,
-        curve: Option<i64>, layer: Option<&str>,
+        curve: Option<i128>, layer: Option<&str>,
     ) -> PyResult<Option<(Option<u128>, bool, u32)>> {
         Ok(super::command_facade::command_draw_edge(mesh, a, b, soft, curve, layer)?
             .map(|r| (r.key, r.flags_changed, r.dirty)))
@@ -1551,7 +1551,7 @@ impl PyMeshStore {
     /// revision for consumers of the protocol mesh record.
     #[pyo3(signature = (a, b, soft, curve, layer, default_layer))]
     fn draw_command_edge(&mut self, a: [f64; 3], b: [f64; 3], soft: Option<bool>,
-                         curve: Option<i64>, layer: Option<&str>, default_layer: &str)
+                         curve: Option<i128>, layer: Option<&str>, default_layer: &str)
         -> PyResult<Option<u128>> {
         let existing = self.inner.lookup(a).zip(self.inner.lookup(b))
             .and_then(|(v, w)| self.inner.find_edge(v, w));
@@ -1970,7 +1970,7 @@ impl PyMeshStore {
         self.inner.tag_curve_path(&points, closed, id)
     }
 
-    fn explode_curves(&mut self, ids: std::collections::HashSet<i64>, record: bool) -> Vec<(u128, i64)> {
+    fn explode_curves(&mut self, ids: std::collections::HashSet<i128>, record: bool) -> Vec<(u128, i128)> {
         let mut prior = Vec::new();
         for e in self.inner.live_slots(Kind::Edge) {
             let id = *self.inner.state.ecurve.get(e as usize);
@@ -2130,7 +2130,7 @@ impl PyMeshStore {
         })
     }
 
-    fn set_curve_run(&mut self, keys: Vec<u128>, curve: i64) -> PyResult<PyChange> {
+    fn set_curve_run(&mut self, keys: Vec<u128>, curve: i128) -> PyResult<PyChange> {
         let edges = keys.into_iter().map(|k| live_of(&self.inner, Kind::Edge, k))
             .collect::<PyResult<Vec<_>>>()?;
         Ok(self.op(|s,ch| {
@@ -3270,13 +3270,20 @@ impl PyMeshStore {
 }
 
 
+fn curve_array(py: Python<'_>, values: Vec<i128>) -> PyResult<Bound<'_, PyAny>> {
+    if let Ok(compact) = values.iter().copied().map(i64::try_from).collect::<Result<Vec<_>, _>>() {
+        return Ok(compact.into_pyarray(py).into_any());
+    }
+    py.import("numpy")?.call_method1("array", (values, "object"))
+}
+
 fn dense_dict<'py>(py: Python<'py>, d: super::read::Dense) -> PyResult<Bound<'py, PyDict>> {
     let out = PyDict::new(py);
     out.set_item("pos", rows3(py, &d.pos))?;
     let eflat: Vec<i64> = d.edges.iter().flat_map(|e| e.iter().copied()).collect();
     out.set_item("edges", Array2::from_shape_vec((d.edges.len(), 2), eflat).unwrap().into_pyarray(py))?;
     out.set_item("flags", d.flags.into_pyarray(py))?;
-    out.set_item("curve", d.curve.into_pyarray(py))?;
+    out.set_item("curve", curve_array(py, d.curve)?)?;
     out.set_item("layer", d.layer.into_pyarray(py))?;
     out.set_item("corners", d.corners.into_pyarray(py))?;
     out.set_item("ring_sizes", d.ring_sizes.into_pyarray(py))?;

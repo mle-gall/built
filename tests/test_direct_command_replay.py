@@ -1,4 +1,4 @@
-"""Direct and mixed command replay must preserve materialised element handles."""
+"""Direct and mixed command replay preserve store handles and geometry ownership."""
 import pytest
 
 from ingetrazo_core import Matrix4, Vec3
@@ -8,14 +8,6 @@ from core.history import (AddEdgeCommand, AddFaceCommand, Command, CommandReject
                           DeleteEdgesCommand, DeleteFaceCommand, EraseSelectionCommand,
                           ExplodeCurvesCommand, History, SetNorthCommand)
 from core.scene import Scene
-from core.store_mesh import StoreMesh
-
-
-def materialised_scene():
-    scene = Scene()
-    if isinstance(scene.mesh, StoreMesh):
-        scene.mesh._materialise()
-    return scene
 
 
 def ring(low, high):
@@ -24,7 +16,7 @@ def ring(low, high):
 
 
 def test_direct_draw_delete_and_snapshot_replay_keep_live_handles():
-    scene = materialised_scene()
+    scene = Scene()
     mesh = scene.mesh
     mother = mesh.add_face(ring(0, 5))
     mother.attrs["color"] = [1, 0, 0]
@@ -40,17 +32,17 @@ def test_direct_draw_delete_and_snapshot_replay_keep_live_handles():
         command.do(scene)
         command.undo(scene)
         for before, after in zip(handles, (mesh.vertices, mesh.edges, mesh.faces)):
-            assert len(before) == len(after) and all(a is b for a, b in zip(before, after))
+            assert len(before) == len(after) and [a.key for a in before] == [b.key for b in after]
         assert child.attrs["marker"] == "kept"
         assert child in edge.faces and mother in edge.faces
     draw.undo(scene)
     assert mesh.faces == [mother] and not mother.holes
     draw.do(scene)
-    assert draw.face is child and mesh.faces[1] is child
+    assert draw.face == child and mesh.faces[1] == child
 
 
 def test_mixed_curve_and_host_replay_keeps_direct_edge_identity():
-    scene = materialised_scene()
+    scene = Scene()
     mesh = scene.mesh
     a, b, c = Vec3(), Vec3(1, 0, 0), Vec3(2, 0, 0)
     first = mesh.add_edge(a, b)
@@ -62,7 +54,7 @@ def test_mixed_curve_and_host_replay_keeps_direct_edge_identity():
     add.undo(scene)
     assert mesh.edges == [first] and vertex not in mesh.vertices
     add.do(scene)
-    assert edge is add.edge and edge.v1 is vertex
+    assert edge == add.edge and edge.v1 == vertex
     history = History(scene)
     command = CompoundCommand([ExplodeCurvesCommand([first, edge]), SetNorthCommand(31)])
     history.execute(command)
@@ -73,22 +65,17 @@ def test_mixed_curve_and_host_replay_keeps_direct_edge_identity():
 
 
 @pytest.mark.parametrize("occurrence", [False, True])
-@pytest.mark.parametrize("materialise", [False, True])
-def test_rejected_mixed_edit_restores_each_geometry_owner(occurrence, materialise):
+def test_rejected_mixed_edit_restores_each_geometry_owner(occurrence):
     scene = Scene()
     loose = scene.mesh
     if occurrence:
         group = Group(Mesh())
         group.xform = Matrix4()
         group.xform.translate(8, 2, 0)
-        if materialise and isinstance(group.mesh, StoreMesh):
-            group.mesh._materialise()
         scene.groups.append(group)
         scene.begin_group_edit(group)
 
     mesh = scene.mesh
-    if materialise and isinstance(mesh, StoreMesh):
-        mesh._materialise()
     existing = mesh.add_edge(Vec3(), Vec3(1, 0, 0))
     existing.curve = 17
     history = History(scene)
@@ -108,8 +95,7 @@ def test_rejected_mixed_edit_restores_each_geometry_owner(occurrence, materialis
     assert history.revision == 0 and not history.undo_stack
     assert scene.north_deg == old_north and existing.curve == 17
     assert [e.key for e in mesh.edges] == [existing.key]
-    if materialise:
-        assert mesh.edges[0] is existing
+    assert mesh.edges[0] == existing
     if occurrence:
         scene.end_group_edit()
         assert scene.mesh is loose and not loose.edges

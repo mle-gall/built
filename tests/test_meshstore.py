@@ -308,7 +308,7 @@ def _random_ops(rng, n_vertices, n_ops):
 
 
 @pytest.mark.parametrize("seed", range(8))
-def test_moves_rekey_like_the_mesh(seed, explicit_store_meshes):
+def test_moves_rekey_like_the_mesh(seed):
     rng = random.Random(100 + seed)
     blk = crowded_block(rng, n_points=120, n_edges=90, n_faces=30)
     store = store_of_block(blk)
@@ -378,7 +378,7 @@ def test_faces_around_a_moved_vertex():
 # ---- Snapshots -----------------------------------------------------------
 
 @pytest.mark.parametrize("seed", range(4))
-def test_snapshot_restore_is_capture_restore(seed, explicit_store_meshes):
+def test_snapshot_restore_is_capture_restore(seed):
     rng = random.Random(200 + seed)
     blk = crowded_block(rng, n_points=120, n_edges=90, n_faces=30)
     store = store_of_block(blk)

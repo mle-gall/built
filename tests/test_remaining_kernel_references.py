@@ -96,12 +96,10 @@ def test_planar_helpers_reference():
 
 
 def test_materialised_mesh_reference(monkeypatch):
-    monkeypatch.setenv('INGETRAZO_STORE','0')
     assert digest(mesh_rows()) == 'd252446679246d0719b0b5f4f81eb569de1797150e2504c8bf7b25f6efad7014'
 
 
 def test_push_scan_reference(monkeypatch):
-    monkeypatch.setenv('INGETRAZO_STORE','0')
     assert digest(scan_rows()) == '5ce69f52b7511e4d417a427afd38bcb5cf366c3fb22133fd9e551ad58e1cfc22'
 
 
@@ -134,12 +132,10 @@ def repair_rows():
 
 
 def test_repair_reference(monkeypatch):
-    monkeypatch.setenv('INGETRAZO_STORE','0')
     assert digest(repair_rows()) == 'ee76db670b286da00c61cf8867ee4ed8ac8eeaa440265fe7424e6a1bc22773a7'
 
 
 def test_store_repair_reference(monkeypatch):
-    monkeypatch.setenv('INGETRAZO_STORE','1')
     assert digest(repair_rows()) == 'ee76db670b286da00c61cf8867ee4ed8ac8eeaa440265fe7424e6a1bc22773a7'
 
 
@@ -162,7 +158,6 @@ def view_rows():
 
 
 def test_store_view_reference(monkeypatch):
-    monkeypatch.setenv('INGETRAZO_STORE','1')
     assert digest(view_rows()) == '3973b52522c033a2e0e24b52f615b24e37ec4c6e863f79f666bae1fdc5ab6bec'
 
 

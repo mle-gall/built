@@ -12,8 +12,7 @@ from core.mesh import Mesh
 from core.snap import curve_centers_of_face
 
 
-def contour_results(store, monkeypatch):
-    monkeypatch.setenv("INGETRAZO_STORE", str(int(store)))
+def contour_results(monkeypatch):
     monkeypatch.setattr(mesh_api, "_CURVE_COUNTER", 1000)
     tags, centers = [], []
     for seed in range(36):
@@ -56,16 +55,13 @@ def digest(rows):
     return hashlib.sha256(json.dumps(rows, separators=(",", ":")).encode()).hexdigest()
 
 
-@pytest.mark.parametrize("store", [False, True])
-def test_contour_tags_and_centers(store, monkeypatch):
-    tags, centers = contour_results(store, monkeypatch)
+def test_contour_tags_and_centers(monkeypatch):
+    tags, centers = contour_results(monkeypatch)
     assert digest(tags) == "b054b6b9cf167799f937ade02ae265d7acdff7c0193f283bfaeaac13e7757077"
     assert digest(centers) == "fcdbfb7a728115f565309ba22dea410c60b4966b7ba8f988d28f102863e20411"
 
 
-@pytest.mark.parametrize("store", [False, True])
-def test_generator_can_reserve_curve_id_before_tagging(store, monkeypatch):
-    monkeypatch.setenv("INGETRAZO_STORE", str(int(store)))
+def test_generator_can_reserve_curve_id_before_tagging(monkeypatch):
     monkeypatch.setattr(mesh_api, "_CURVE_COUNTER", 1)
     mesh = Mesh()
     a, b = Vec3(), Vec3(1, 2, 0)

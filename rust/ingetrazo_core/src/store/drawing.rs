@@ -148,14 +148,14 @@ impl Store {
             let ends = self.state.ends.get(edge as usize)
                 .map(|v| glam::DVec3::from_array(*self.state.vpos.get(v as usize)));
             if segments.iter().any(|s| ends.iter().all(|&p| s.contains(p, 1e-4))) {
-                self.set_edge_curve(edge, id);
+                self.set_edge_curve(edge, id.into());
                 tagged = true;
             }
         }
         tagged
     }
 
-    pub fn curve_keys(&self, curve: i64) -> Vec<u128> {
+    pub fn curve_keys(&self, curve: i128) -> Vec<u128> {
         self.state.order[1]
             .live(&self.state.slots[1])
             .into_iter()

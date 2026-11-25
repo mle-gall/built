@@ -54,7 +54,7 @@ pub struct Block<'a> {
     pub pos: Points<'a>,
     pub edges: &'a [[i64; 2]],
     pub flags: Option<&'a [u8]>,
-    pub curves: Option<&'a [i64]>,
+    pub curves: Option<&'a [i128]>,
     pub layers: Option<&'a [i64]>,
     pub layer_names: Vec<String>,
     pub rings: &'a [i64],
@@ -129,7 +129,7 @@ fn pair(a: u32, b: u32) -> u64 {
 struct Edges {
     ends: Vec<[u32; 2]>,
     flags: Vec<u8>,
-    curve: Vec<i64>,
+    curve: Vec<i128>,
     layer: Vec<u32>,
     faces: Vec<Vec<u32>>,
 }

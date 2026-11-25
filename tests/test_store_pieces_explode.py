@@ -10,6 +10,10 @@ lists in order, edge flags and faces, rings, attrs, normals); and the
 store run's change-feed steps must be exactly what changed, by key."""
 from __future__ import annotations
 
+import gzip
+import json
+from pathlib import Path
+
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
@@ -38,7 +42,7 @@ _QUADS = ((0, 2, 3, 1), (4, 5, 7, 6), (0, 1, 5, 4),
           (2, 6, 7, 3), (0, 4, 6, 2), (1, 3, 7, 5))
 
 
-pytestmark = [store_required, pytest.mark.usefixtures("explicit_store_meshes")]
+pytestmark = [store_required]
 
 
 def _mesh(store):
@@ -122,7 +126,7 @@ def _run_explode(store):
     seen.append(_model(sc))
     assert h.redo()
     seen.append(_model(sc))
-    assert (type(sc.mesh) is S.StoreMesh) == store
+    assert type(sc.mesh) is S.StoreMesh
     return seen, sc, h, g, kid
 
 
@@ -131,11 +135,12 @@ def test_explode_with_a_transform_onto_coincident_geometry(monkeypatch):
     """The quarter-turned box welds onto the loose box: shared corners,
     one wall instead of two coincident ones, every flag and paint carried
     — the same model as the Python kernel after do, undo and redo."""
-    py, *_ = _run_explode(False)
+    with gzip.open(Path(__file__).parent / "fixtures" / "explode_history.json.gz", "rt") as src:
+        py = json.load(src)[0]
     monkeypatch.setattr(S.StoreMesh, "_materialise",
                         lambda m: pytest.fail("explode materialised"))
     st, sc, h, g, kid = _run_explode(True)
-    assert st == py
+    assert json.loads(json.dumps(st)) == py
     assert py[0] != py[1] and py[2] == py[0] and py[3] == py[1]
     # The shared wall is one face: 6 + 6 - 2 + 1 rebuilt.
     assert len(sc.mesh.faces) == 11
@@ -232,17 +237,18 @@ def _run_nested(store):
     for step in ("undo", "undo", "redo", "redo"):
         assert getattr(h, step)()
         seen.append(_model(sc))
-    assert (type(sc.mesh) is S.StoreMesh) == store
+    assert type(sc.mesh) is S.StoreMesh
     return seen, sc, h
 
 
 @needs_ops
 def test_explode_nested_one_level_at_a_time(monkeypatch):
-    py, *_ = _run_nested(False)
+    with gzip.open(Path(__file__).parent / "fixtures" / "explode_history.json.gz", "rt") as src:
+        py = json.load(src)[1]
     monkeypatch.setattr(S.StoreMesh, "_materialise",
                         lambda m: pytest.fail("explode materialised"))
     st, sc, h = _run_nested(True)
-    for actual, expected in zip(st, py, strict=True):
+    for actual, expected in zip(json.loads(json.dumps(st)), py, strict=True):
         assert actual["groups"] == expected["groups"]
         a, b = actual["mesh"], expected["mesh"]
         assert (a["v"], a["vdeg"], a["e"]) == (b["v"], b["vdeg"], b["e"])

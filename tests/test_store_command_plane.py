@@ -22,7 +22,6 @@ def drawing():
 
 @pytest.mark.parametrize("scope", ["whole", "two", "stale", "empty", "no_plane"])
 def test_plane_result_matches_history(monkeypatch, scope):
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     actual, expected = drawing(), drawing()
     mesh = actual.mesh
     origin = (0., 0., 12. if scope == "no_plane" else 0.)
@@ -49,7 +48,6 @@ def test_plane_result_matches_history(monkeypatch, scope):
 @pytest.mark.parametrize("kind", ["empty", "solid", "painted", "unpainted", "reversed"])
 def test_flat_rebuild_matches_history(monkeypatch, kind):
     from core.history import RebuildPlanarFacesCommand
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     def make():
         scene = Scene()
         mesh = scene.mesh

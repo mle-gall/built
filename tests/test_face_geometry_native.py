@@ -214,7 +214,6 @@ def test_store_triangulation_keeps_model_corners(monkeypatch):
     from core.scene import Scene
 
     monkeypatch.setattr(_native, "native", nat)
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     scene = Scene()
     ring = [(650000.01 + x, 6860000.02 + y, 0.) for x, y in
             [(0., 0.), (.02, 0.), (.02, .02), (0., .02)]]

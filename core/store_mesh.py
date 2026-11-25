@@ -1559,14 +1559,14 @@ class StoreMesh(Mesh):
 
     def interior_vertex_on(self, edge):
         k, h = self._own(edge, 1), _hypot()
-        if k is None or h is None:
+        if k is None:
             return Mesh.interior_vertex_on(self, edge)
         hit = self._store.interior_vertex_on(k, h)
         return None if hit is None else VertexView(self, hit)
 
     def collapsible_vertex(self, v) -> bool:
         k, h = self._own(v, 0), _hypot()
-        if k is None or h is None:
+        if k is None:
             return Mesh.collapsible_vertex(self, v)
         return self._store.collapsible_vertex(k, h)
 
@@ -1593,8 +1593,6 @@ class StoreMesh(Mesh):
         collapses before it are done, and the loop restarts from the first
         collapsible vertex anyway)."""
         h = _hypot()
-        if h is None:
-            return Mesh.collapse_collinear(self)
         (n, bumps, refused), _ch = self._store.collapse_collinear(h)
         self._dirty(bumps)
         if refused is None:
@@ -1710,7 +1708,7 @@ class StoreMesh(Mesh):
 
     def _dissolve_edge(self, name, edge, tolerant):
         k, h = self._live(edge, 1), _hypot()
-        if k is None or h is None:
+        if k is None:
             return self._py(name, edge)
         undo = None if tolerant else self._undo_state()
         try:
@@ -1737,7 +1735,7 @@ class StoreMesh(Mesh):
 
     def dissolve_coplanar_pair(self, face_a, face_b):
         ka, kb, h = self._live(face_a, 2), self._live(face_b, 2), _hypot()
-        if ka is None or kb is None or h is None:
+        if ka is None or kb is None:
             return self._py("dissolve_coplanar_pair", face_a, face_b)
         undo = self._undo_state()
         try:
@@ -1763,7 +1761,7 @@ class StoreMesh(Mesh):
         if len(faces) < 2:
             return None
         keys, h = [self._live(f, 2) for f in faces], _hypot()
-        if None in keys or h is None:
+        if None in keys:
             return self._py("dissolve_coplanar_region", faces)
         try:
             r, _ch = self._store.dissolve_region(keys, h, _hole_filter)
@@ -2016,8 +2014,7 @@ class _Indexed:
 
 
 def _hypot():
-    """This Qt's ``QVector3D::length()`` formula for the store's geometric
-    tests, or None (then they run in Python)."""
+    """Platform rounding convention for native geometric predicates."""
     from core import _native
     return _native.qt_hypot()
 

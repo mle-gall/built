@@ -12,7 +12,6 @@ from core import store_mesh
 
 
 def test_draw_edge_matches_command_on_creation_and_restamps(monkeypatch):
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     mesh, reference = Mesh(), Mesh()
     a, b = (4., 0., 1.), (5., 0., 1.)
     for soft, curve, layer, owned, changed in (
@@ -20,6 +19,7 @@ def test_draw_edge_matches_command_on_creation_and_restamps(monkeypatch):
         (None, None, None, False, False),
         (True, -(2**63), DEFAULT_LAYER, False, True),
         (True, 2**63-1, "section", False, True),
+        (True, 2**96, "wide", False, True),
         (None, None, "section", False, True),
     ):
         command = AddEdgeCommand(Vec3(*a), Vec3(*b), soft=soft, curve=curve, layer=layer)
@@ -35,7 +35,7 @@ def test_draw_edge_matches_command_on_creation_and_restamps(monkeypatch):
         assert (edge.soft, edge.curve, edge.layer) == (expected.soft, expected.curve, expected.layer)
         assert (mesh.revision, mesh._mut_serial) == (reference.revision, reference._mut_serial)
     with pytest.raises(OverflowError):
-        MeshStore.command_draw_edge(mesh, a, b, curve=2**63)
+        MeshStore.command_draw_edge(mesh, a, b, curve=2**127)
 
 
 def test_draw_edge_uses_planned_binary64_endpoint():
@@ -47,7 +47,6 @@ def test_draw_edge_uses_planned_binary64_endpoint():
 
 
 def test_draw_edge_in_occurrence_restores_definition_key(monkeypatch):
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     scene = Scene()
     definition = scene.mesh
     frame = Matrix4()

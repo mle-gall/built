@@ -8,7 +8,6 @@ from tests.test_store_mesh import fingerprint
 
 @pytest.mark.parametrize("subdivided", [False,True])
 def test_heal_reports_original_keys(monkeypatch, subdivided):
-    monkeypatch.setenv("INGETRAZO_STORE", "1")
     def make():
         mesh = Scene().mesh
         mesh.add_face([(0,0,0),(8,0,0),(8,8,0),(0,8,0)])

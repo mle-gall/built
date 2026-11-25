@@ -156,7 +156,7 @@ pub struct State {
     pub enext: CowVec<[u32; 2]>,
     pub eflags: CowVec<u8>,
     /// Curve id, −1 for none (`Edge.curve`).
-    pub ecurve: CowVec<i64>,
+    pub ecurve: CowVec<i128>,
     /// Index into `layers`, NONE for none (`Edge.layer`).
     pub elayer: CowVec<u32>,
     pub efaces: CowVec<Inc>,

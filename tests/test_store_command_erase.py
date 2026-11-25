@@ -26,7 +26,6 @@ def patch(kind):
 
 @pytest.mark.parametrize("kind", ["seam", "orphan", "merge", "nothing"])
 def test_erase_stages_match_command(monkeypatch, kind):
-    monkeypatch.setenv("INGETRAZO_STORE","1")
     m, ref = patch(kind), patch(kind)
     def targets(mesh):
         if kind == "seam":
@@ -59,7 +58,6 @@ def test_erase_stages_match_command(monkeypatch, kind):
 
 
 def test_erase_returns_plane_and_across_keys_for_rebuild(monkeypatch):
-    monkeypatch.setenv("INGETRAZO_STORE","1")
     m = Mesh()
     m.add_face([(0,0,0), (4,0,0), (4,4,0), (2,4,0), (2,2,0), (2,4,0), (0,4,0)])
     slit = [(2.,4.,0.), (2.,2.,0.)]

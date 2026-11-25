@@ -15,7 +15,7 @@ from tests.test_fillet import box, edge_at
 from tests.test_vertex_bevel import pyramid
 
 native = _native.available()
-pytestmark = [pytest.mark.usefixtures("explicit_store_meshes"), pytest.mark.skipif(
+pytestmark = [pytest.mark.skipif(
     not hasattr(getattr(native, "MeshStore", None), "plan_fillet"),
     reason="requires native fillet operations")]
 

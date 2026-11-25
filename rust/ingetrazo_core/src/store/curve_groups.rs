@@ -79,7 +79,7 @@ impl Store {
     }
 
     pub(super) fn resplit_curves(&mut self, next: &mut i64, _h: Hypot) {
-        let mut groups: Vec<(i64, Vec<u32>)> = Vec::new();
+        let mut groups: Vec<(i128, Vec<u32>)> = Vec::new();
         let mut index = HashMap::new();
         for e in self.live_slots(Kind::Edge) {
             let id = *self.state.ecurve.get(e as usize);
@@ -110,7 +110,7 @@ impl Store {
                     } else {
                         let tag = *next;
                         *next += 1;
-                        tag
+                        i128::from(tag)
                     };
                     for e in chain {
                         self.set_edge_curve(edges[e], tag);
