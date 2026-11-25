@@ -60,7 +60,7 @@ impl PluginDataStep {
 #[pyfunction]
 pub(crate) fn registry_apply(step: &Obj<'_>, scene: &Obj<'_>, undo: bool) -> PyResult<()> {
     let py = scene.py();
-    let project = py.import("core.project")?;
+    let project = py.import("ingetrazo_core.project")?;
     let value = step.getattr("value")?;
     let shared = if undo {
         let kw = PyDict::new(py);
@@ -84,7 +84,7 @@ pub(crate) fn registry_apply(step: &Obj<'_>, scene: &Obj<'_>, undo: bool) -> PyR
         };
         let removed = keys(&current)?.bind(py).sub(keys(&value)?.bind(py))?;
         if removed.is_truthy()? {
-            let structure = py.import("core.structure")?;
+            let structure = py.import("ingetrazo_core.structure")?;
             let refiled = step.getattr("refiled_uids")?;
             for row in structure
                 .call_method1("_placements", (scene,))?

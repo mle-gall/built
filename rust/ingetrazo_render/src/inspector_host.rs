@@ -129,7 +129,7 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
         Some(g) => py.import("ingetrazo_core")?.call_method1("assembly_selection", (&scene, g, record_address(&scene, g)?))?,
         None => py.None().into_bound(py),
     };
-    let structure = py.import("core.structure")?;
+    let structure = py.import("ingetrazo_core.structure")?;
     let node = match focus_node {
         Some(n) => Some(n),
         None if groups.len() == 1 => Some(structure.call_method1("node_of", (&groups[0],))?),
@@ -149,7 +149,7 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
         }
     }
     view.setattr("_panel_schema", &schema)?;
-    let geopath = py.import("georef.geopath")?.getattr("GeoPath")?;
+    let geopath = py.import("ingetrazo_core.georef.geopath")?.getattr("GeoPath")?;
     let out = PyDict::new(py);
     out.set_item("schema", schema)?;
     out.set_item("vocabulary", vocabulary)?;
@@ -284,7 +284,7 @@ fn open_camera<'py>(win: &Bound<'py, PyAny>, target: Option<Bound<'py, PyAny>>) 
     leave_camera(&doc)?;
     let inspector = py.import("ingetrazo_render")?.getattr("CameraInspector")?.call0()?;
     let kwargs = [("type", py.import("builtins")?.getattr("bool")?)].into_py_dict(py)?;
-    let advanced = py.import("core.settings")?.call_method0("settings")?.getattr("value")?.call(("camera_settings/advanced", false), Some(&kwargs))?;
+    let advanced = py.import("ingetrazo_core.settings")?.call_method0("settings")?.getattr("value")?.call(("camera_settings/advanced", false), Some(&kwargs))?;
     inspector.setattr("advanced", advanced)?;
     let none = py.None().into_bound(py);
     inspector.call_method1("bind", (win.call_method0("_active_view")?.getattr("camera")?, target.as_ref().unwrap_or(&none)))?;
@@ -332,7 +332,7 @@ fn camera_edit(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, key: &str, v: &B
         }
         "advanced" => {
             inspector.setattr("advanced", v)?;
-            py.import("core.settings")?.call_method0("settings")?.call_method1("setValue", ("camera_settings/advanced", v))?;
+            py.import("ingetrazo_core.settings")?.call_method0("settings")?.call_method1("setValue", ("camera_settings/advanced", v))?;
         }
         "sensor" => {
             inspector.setattr("custom_sensor", v.is_none())?;

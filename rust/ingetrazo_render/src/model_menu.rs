@@ -191,9 +191,9 @@ pub fn run_model_menu(win: &Bound<'_, PyAny>, id: &str) -> PyResult<bool> {
             let py = win.py();
             let folder = py.import("core.extensions")?.call_method0("user_plugins_dir")?;
             std::fs::create_dir_all(folder.extract::<std::path::PathBuf>()?)?;
-            py.import("core.desktop_open")?.call_method1("open_url", (folder,))?
+            py.import("ingetrazo_core.desktop_open")?.call_method1("open_url", (folder,))?
         }
-        Handler::Web(url) => win.py().import("core.desktop_open")?.call_method1("open_url", (url,))?,
+        Handler::Web(url) => win.py().import("ingetrazo_core.desktop_open")?.call_method1("open_url", (url,))?,
         Handler::Window(method) => win.call_method0(method)?,
         Handler::Argument(method, arg) => win.call_method1(method, (arg,))?,
         Handler::Tool(tool) => win.call_method1("_activate_tool", (tool,))?,

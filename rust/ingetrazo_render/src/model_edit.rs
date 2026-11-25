@@ -126,7 +126,7 @@ fn delete_entities(vp: &Bound<'_, PyAny>) -> PyResult<()> {
         commands.append(history.call_method1("DeleteGroupCommand", (g,))?)?;
     }
     let guides = PyList::empty(py);
-    let is_guide = py.import("core.guide")?.getattr("is_guide")?;
+    let is_guide = py.import("ingetrazo_core.guide")?.getattr("is_guide")?;
     for item in sel.try_iter()? {
         let item = item?;
         if is_guide.call1((&item,))?.is_truthy()? {
@@ -137,11 +137,11 @@ fn delete_entities(vp: &Bound<'_, PyAny>) -> PyResult<()> {
         commands.append(history.call_method1("DeleteGuidesCommand", (guides,))?)?;
     }
     for (module, class, command) in [
-        ("core.image_plane", "ImagePlane", "DeleteImagePlanesCommand"),
-        ("core.section", "SectionPlane", "DeleteSectionPlanesCommand"),
+        ("ingetrazo_core.image_plane", "ImagePlane", "DeleteImagePlanesCommand"),
+        ("ingetrazo_core.section", "SectionPlane", "DeleteSectionPlanesCommand"),
         ("core.dimension", "Dimension", "DeleteDimensionsCommand"),
-        ("core.textlabel", "TextLabel", "DeleteTextLabelsCommand"),
-        ("georef.geopath", "GeoPath", "DeleteGeoPathsCommand"),
+        ("ingetrazo_core.textlabel", "TextLabel", "DeleteTextLabelsCommand"),
+        ("ingetrazo_core.georef.geopath", "GeoPath", "DeleteGeoPathsCommand"),
     ] {
         let chosen = matching(&sel, module, class)?;
         if !chosen.is_empty() {

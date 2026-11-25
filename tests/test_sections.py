@@ -19,7 +19,7 @@ from core.history import (
     SetActiveSectionCommand,
 )
 from core.scene import Scene
-from core.section import SectionPlane
+from ingetrazo_core.section import SectionPlane
 from tools.base import ToolContext
 from tools.section import SectionPlaneTool
 
@@ -142,7 +142,7 @@ def test_tool_arrow_keys_and_ground_default():
 
 def test_igz_roundtrip_and_scene_recall(tmp_path):
     from core.camera import OrbitCamera
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     from formats import igz as igz_format
 
     scene = Scene()
@@ -294,7 +294,7 @@ def test_scene_made_before_any_section_switches_the_cut_off(tmp_path):
     debería ir separada", 2026-09-02). Views from documents older than
     sections (no "section" entry at all) stay hands-off."""
     from core.camera import OrbitCamera
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     from formats import igz as igz_format
 
     scene = Scene()

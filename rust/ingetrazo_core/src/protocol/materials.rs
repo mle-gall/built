@@ -244,7 +244,7 @@ fn create_material<'py>(
     kw.set_item("pbr", optional_dict(py, pbr)?)?;
     kw.set_item("finish", finish)?;
     let m = py
-        .import("core.materials")?
+        .import("ingetrazo_core.materials")?
         .call_method("Material", (&name,), Some(&kw))?;
     history.call_method1("execute", (api.call_method1("AddMaterialCommand", (m,))?,))?;
     let out = answer(history, &before, true)?;

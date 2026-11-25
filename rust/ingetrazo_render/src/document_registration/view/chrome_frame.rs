@@ -40,7 +40,7 @@ fn number(value: &Obj<'_>, type_error: bool) -> PyResult<Option<f64>> {
     }
 }
 fn settings<'py>(given: Obj<'py>) -> Reply<'py> {
-    if given.is_none() { given.py().import("core.settings")?.call_method0("settings") } else { Ok(given) }
+    if given.is_none() { given.py().import("ingetrazo_core.settings")?.call_method0("settings") } else { Ok(given) }
 }
 /// A callable of no arguments for a strip toggle: it lives as long as the
 /// frame's option list.
@@ -862,7 +862,7 @@ fn isolate<'py>(a: &Args<'py>) -> Reply<'py> {
     let mut uids: Vec<Obj<'py>> = a.get_item(1)?.try_iter()?.collect::<PyResult<_>>()?;
     if uids.iter().any(|uid| !uid.is_instance_of::<PyString>()) {
         // A placement's key is its UID, or its address when the UID repeats
-        // (core.facets): from the native tree, not the facet index.
+        // (ingetrazo_core.facets): from the native tree, not the facet index.
         let row_id = py.import("core.link_structure")?.getattr("row_id")?;
         let repeated = scene.call_method0("repeated_uids")?;
         for entry in uids.iter_mut() {

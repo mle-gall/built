@@ -43,7 +43,7 @@ fn status_chips<'py>(py: Python<'py>, prefix: &str, all: bool) -> PyResult<Bound
 }
 /// Items with an IFC class and no Status.
 fn missing_status<'py>(py: Python<'py>, groups: &Obj<'py>) -> PyResult<usize> {
-    let structure = py.import("core.structure")?;
+    let structure = py.import("ingetrazo_core.structure")?;
     let mut missing = 0;
     for group in groups.try_iter()? {
         let record = or_dict(group?.getattr("ifc")?)?;
@@ -114,7 +114,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     let takeoff = own(&scene, "_inspector_takeoff")?;
     view.setattr("_ui_insp_sig", sig)?;
     let counter = py.import("collections")?.getattr("Counter")?;
-    let structure = py.import("core.structure")?;
+    let structure = py.import("ingetrazo_core.structure")?;
     let links = py.import("core.links")?;
     let group_type = py.import("core.group")?.getattr("Group")?;
     let groups = empty(py);
@@ -152,7 +152,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     let identity = || core.call_method1("selection_identity", (&scene, &data, &filename, &kinds));
     let section_key = if focused {
         focus_name.clone()
-    } else if sel.len() == 1 && sel.get_item(0)?.is_instance(&py.import("core.section")?.getattr("SectionPlane")?)? {
+    } else if sel.len() == 1 && sel.get_item(0)?.is_instance(&py.import("ingetrazo_core.section")?.getattr("SectionPlane")?)? {
         format!("section:{}", text(&sel.get_item(0)?.getattr("uid")?)?)
     } else {
         String::new()
@@ -661,7 +661,7 @@ fn link_verb<'py>(win: &Obj<'py>, view: &Obj<'py>, group: &Obj<'py>, key: &str, 
     let path = || record.get_item("path");
     match key {
         "linkfinder" => {
-            py.import("core.desktop_open")?.call_method1("reveal", (path()?,))?;
+            py.import("ingetrazo_core.desktop_open")?.call_method1("reveal", (path()?,))?;
             return Ok(false);
         }
         "linkunlink" => {
@@ -736,7 +736,7 @@ fn link_verb<'py>(win: &Obj<'py>, view: &Obj<'py>, group: &Obj<'py>, key: &str, 
         }
         "linkrelink" => {
             let source = py.import("pathlib")?.getattr("Path")?.call1((path()?,))?;
-            let filter = py.import("formats.built")?.getattr("DOCUMENT_FILTER")?;
+            let filter = py.import("ingetrazo_core.formats.built")?.getattr("DOCUMENT_FILTER")?;
             let chosen = render(py)?.getattr("shell_files")?.getattr("ShellFileDialog")?.call_method1(
                 "getOpenFileName",
                 (win, format!("Locate {}", source.getattr("name")?.str()?), source.getattr("parent")?.str()?, filter),

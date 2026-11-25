@@ -93,7 +93,7 @@ def test_native_release_review(tmp_path):
     opened = tmp_path / "download-url"
     release_url = "https://example.invalid/releases/test"
     venv = fixture_venv(tmp_path,
-        "from core import desktop_open\n"
+        "from ingetrazo_core import desktop_open\n"
         "from ingetrazo_render import release_check\n"
         "from pathlib import Path\n"
         f"release_check.fetch_latest = lambda: release_check.Release('999', '2026-01-01', '## Fixed', {release_url!r})\n"
@@ -965,7 +965,7 @@ def test_native_mesh_units_and_model_menu(tmp_path, suffix):
                     reason="requires the native window")
 def test_native_animation_forms_and_video_file(tmp_path):
     from core.camera import OrbitCamera
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     from core.scene import Scene
     from ingetrazo_core import SceneAnimation
     from formats.igz import save_scene

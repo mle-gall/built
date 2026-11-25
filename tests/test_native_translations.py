@@ -1,7 +1,7 @@
 """Standard native button labels follow the selected JSON catalogue."""
 import pytest
 from core import i18n
-from core.input_codes import StandardButton
+from ingetrazo_core import StandardButton
 from ingetrazo_render import chrome_dialogs
 
 

@@ -10,8 +10,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(SPECPATH).resolve().parent
-from runpy import run_path
-built_extension = run_path(str(ROOT / "formats" / "built.py"))["BUILT_SUFFIX"][1:]
+from ingetrazo_core.formats.built import BUILT_SUFFIX
+built_extension = BUILT_SUFFIX[1:]
 
 # ── Bundled assets — destinations MIRROR the repo layout ─────────────────────
 datas = [
@@ -125,7 +125,7 @@ hiddenimports += ['formats.clip']
 import importlib.util as _ilu
 if _ilu.find_spec('ingetrazo_core') is None:
     raise SystemExit("Build ingetrazo_core before packaging the application")
-hiddenimports += ['core._native', 'ingetrazo_core']
+hiddenimports += ['core._native', 'ingetrazo_core', '_built_file_packages']
 # Revit family import (File > Import > Revit family): formats.rfa loads the
 # native reader through importlib, which static analysis cannot follow.
 hiddenimports += ['formats.rfa']
@@ -385,7 +385,7 @@ coll = COLLECT(
 # onedir the other platforms ship); nothing launches it but a stdio-speaking
 # MCP client that already knows its path, so it does not need its own bundle.
 if sys.platform == 'darwin':
-    from core.version import __version__ as _version
+    _version = (ROOT / 'rust/ingetrazo_core/VERSION').read_text().strip()
     mac_icon = ROOT / 'resources' / 'icons' / 'ingetrazo.icns'
     app = BUNDLE(
         coll,

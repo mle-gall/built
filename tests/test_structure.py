@@ -185,7 +185,7 @@ def test_registry_tree_and_unknown_fields():
 
 
 def test_shared_structure_and_local_membership(tmp_path):
-    from core import project
+    from ingetrazo_core import project
     from formats import igz
     scene, r, g, _ = model()
     project.create(scene, tmp_path / 'shared.igzproj')

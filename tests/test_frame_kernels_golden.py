@@ -43,7 +43,7 @@ def section_cases(geometry, scene, packed):
     modes, cameras and heights."""
     from ingetrazo_core import Vec3
     from core.camera import OrbitCamera
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     from core.style import Style
     low, high = scene.bounds()
     low, high = low.toTuple(), high.toTuple()
@@ -77,7 +77,7 @@ def kernel_cases(scene, packed):
     import ingetrazo_core
     from ingetrazo_core import Vec3
     from core.camera import OrbitCamera
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     from core.style import Style
     from views.wgpu_sections import geometry
     low, high = scene.bounds()

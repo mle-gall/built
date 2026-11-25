@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from ingetrazo_core import ScreenPoint as QPointF
-from core.input_codes import Input as Qt
+from ingetrazo_core import Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
 from core.scene import Scene
 from core.group import Group

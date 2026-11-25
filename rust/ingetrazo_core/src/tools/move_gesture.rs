@@ -172,7 +172,7 @@ impl ViewportToolHost {
                     kwargs.set_item(name, tool.getattr(attr)?)?;
                 }
                 let cmds = py
-                    .import("core.move_ops")?
+                    .import("ingetrazo_core.move_ops")?
                     .getattr("move_commands")?
                     .call((Vec3::from(point(arg)?),), Some(&kwargs))?;
                 let command = match cmds.len()? {

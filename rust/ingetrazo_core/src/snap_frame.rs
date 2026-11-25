@@ -150,7 +150,7 @@ impl FrameState {
         let mut rim_circles = Vec::new();
         let mut rim_hits = Vec::new();
         if has_circles {
-            let basis = py.import("core.axes")?.getattr("plane_axes")?;
+            let basis = py.import("ingetrazo_core.axes")?.getattr("plane_axes")?;
             for c in circles.try_iter()? {
                 let c = c?;
                 let data = circle(&c)?;

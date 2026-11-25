@@ -23,7 +23,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from core.input_codes import Input as Qt  # noqa: E402
+from ingetrazo_core import Input as Qt  # noqa: E402
 from ingetrazo_core import ScreenPoint as QPointF
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 

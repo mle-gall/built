@@ -37,7 +37,7 @@ os.environ["BUILT_SETTINGS_DIR"] = _tmp
 
 from core._native import engine  # noqa: E402
 from core.scene import Scene  # noqa: E402
-from formats import igz  # noqa: E402
+from ingetrazo_core.formats import igz  # noqa: E402
 
 
 def _biggest_group(scene):
@@ -63,12 +63,12 @@ def op_save(ctx):
 
 
 def op_stl(ctx):
-    from formats.stl import save_stl
+    from ingetrazo_core.formats.stl import save_stl
     save_stl(ctx["scene"], Path(_tmp) / "out.stl")
 
 
 def op_obj(ctx):
-    from formats.obj import save_obj
+    from ingetrazo_core.formats.obj import save_obj
     save_obj(ctx["scene"], Path(_tmp) / "out.obj")
 
 
@@ -125,7 +125,7 @@ def op_intersect_apply(ctx):
 def op_orient(ctx):
     """Orient Faces over the biggest group's meshes."""
     from core.group import iter_placements
-    from core.orient import orient_outward
+    from ingetrazo_core.orient import orient_outward
     for m, _ in iter_placements(_biggest_group(ctx["scene"])):
         orient_outward(m.mesh)
 

@@ -92,7 +92,7 @@ pub(super) fn install(module: &Bound<PyModule>) -> PyResult<()> {
         )?;
         attrs.set_item("overlay_kind", "move")?;
         attrs.set_item("draw_overlay", module.getattr("draw_overlay")?)?;
-        attrs.set_item("__doc__","Move (``rust/ingetrazo_core/src/tools/move_tool.rs`` decides: the\ngrab, the Ctrl copy, typed distances and deltas, the array window).\nThis class is the host: what a click grabs (it is picking), the live\npreview of the grabbed geometry, the rotation grips (#115, run by the\nRotate tool) and the commit through ``core.move_ops``.")?;
+        attrs.set_item("__doc__","Move (``rust/ingetrazo_core/src/tools/move_tool.rs`` decides: the\ngrab, the Ctrl copy, typed distances and deltas, the array window).\nThis class is the host: what a click grabs (it is picking), the live\npreview of the grabbed geometry, the rotation grips (#115, run by the\nRotate tool) and the commit through ``ingetrazo_core.move_ops``.")?;
         let cls = define(
             module,
             "MoveHost",

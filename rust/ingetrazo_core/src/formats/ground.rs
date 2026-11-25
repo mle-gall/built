@@ -262,7 +262,7 @@ fn build_terrain<'p>(
             }
         }
     }
-    Ok(Some(py.import("georef.terrain")?.call_method1(
+    Ok(Some(py.import("ingetrazo_core.georef.terrain")?.call_method1(
         "TerrainObject",
         (
             verts,

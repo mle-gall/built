@@ -152,7 +152,7 @@ def geometry_cases():
     from core import vista_caras as VC
     from core.camera import OrbitCamera
     from core.scene import Scene
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     from tests.test_faces_view_rust import _camera, _scene as model
     out = {}
     for persp in (False, True):

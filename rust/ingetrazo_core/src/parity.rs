@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! Ray crossing counts for `core.orient.ray_parity_outside` — the engine's
+//! Ray crossing counts for `ingetrazo_core.orient.ray_parity_outside` — the engine's
 //! one volumetric primitive (orientation, and the per-plane rebuild of a
 //! push/pull). The exact test is `_ParityQuery.crossings_many`'s
 //! Möller–Trumbore, operation for operation in f64; a BVH whose boxes are
@@ -41,7 +41,7 @@ pub struct Tris {
 }
 
 fn grown(lo: [f64; 3], hi: [f64; 3]) -> ([f64; 3], [f64; 3]) {
-    // The same margin as core.orient._Clusters: far beyond the exact test's
+    // The same margin as ingetrazo_core.orient._Clusters: far beyond the exact test's
     // barycentric 1e-7 and t > 1e-6.
     let mut ext = 0.0f64;
     let mut big = 0.0f64;

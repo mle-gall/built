@@ -19,7 +19,7 @@ from ingetrazo_core import Vec3 as V
 
 from core.edits import build_add_edges
 from core.history import AddFaceCommand, History
-from core.orient import is_closed, orient_outward, signed_volume
+from ingetrazo_core.orient import is_closed, orient_outward, signed_volume
 from core.scene import Scene
 from formats.igz import load_into, save_scene
 from tests import test_pushpull_ux as T

@@ -132,7 +132,7 @@ def _jsonable(x):
 
 
 def test_the_section_fill_answers_as_the_numpy_one_did():
-    from core import section
+    from ingetrazo_core import section
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     got = [_jsonable(answer(section, c)) for c in cases()]
     assert len(got) == len(want)
@@ -150,7 +150,7 @@ def test_the_corpus_has_holes_and_hatching():
 
 if __name__ == "__main__" and "--write" in sys.argv:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from core import section
+    from ingetrazo_core import section
     data = [_jsonable(answer(section, c)) for c in cases()]
     GOLDEN.parent.mkdir(exist_ok=True)
     GOLDEN.write_bytes(gzip.compress(json.dumps(data).encode(), mtime=0))

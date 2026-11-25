@@ -67,7 +67,7 @@ def test_igz_roundtrip_keeps_the_style(tmp_path):
 
 def test_saved_view_remembers_the_style():
     from core.camera import OrbitCamera
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     scene = Scene()
     cam = OrbitCamera()
     scene.display_style = Style(name="Hidden line", face_mode="hidden_line")

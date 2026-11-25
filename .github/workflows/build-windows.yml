@@ -240,14 +240,14 @@ jobs:
         run: |
           Compress-Archive -Path dist/ingetrazo -DestinationPath dist/ingetrazo-windows.zip
 
-      - name: Extraer versión (del tag o de core/version.py)
+      - name: Extraer versión (del tag o de rust/ingetrazo_core/VERSION)
         id: ver
         shell: bash
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
           else
-            VERSION=$(grep '^__version__' core/version.py | cut -d'"' -f2)
+            VERSION=$(cat rust/ingetrazo_core/VERSION)
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Version: $VERSION"

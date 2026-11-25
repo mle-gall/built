@@ -41,7 +41,7 @@ from ingetrazo_core import Vec3 as QVector3D
 from core.edits import build_add_edges
 from core.group import Group
 from core.history import AddFaceCommand, History
-from core.orient import is_closed, orient_outward, signed_volume
+from ingetrazo_core.orient import is_closed, orient_outward, signed_volume
 from core.scene import Scene
 from core.topology import _mesh_is_flat, _on_segment_2d, _strictly_inside_2d
 from core.triangulate import plane_axes

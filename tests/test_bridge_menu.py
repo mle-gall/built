@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
 from ingetrazo_render import rail_layout
-from core.orient import is_closed
+from ingetrazo_core.orient import is_closed
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_render import context_menu_build
 

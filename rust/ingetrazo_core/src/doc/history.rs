@@ -351,7 +351,7 @@ impl DocumentHistory {
                 if let Some(frame) = cmd.getattr_opt("_tool_frame")?.filter(|f| !f.is_none()) {
                     let kw = pyo3::types::PyDict::new(scene.py());
                     kw.set_item("matrix", frame.get_item(1)?)?;
-                    let scope = scene.py().import("core.coordinate_frame")?.call_method(
+                    let scope = scene.py().import("ingetrazo_core.coordinate_frame")?.call_method(
                         "mesh_frame",
                         (&mesh, frame.get_item(0)?),
                         Some(&kw),

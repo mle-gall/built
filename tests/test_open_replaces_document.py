@@ -23,7 +23,7 @@ from ingetrazo_core import Vec3 as QVector3D
 from core.dimension import Dimension
 from core.layers import Layer
 from core.scene import Scene
-from core.section import SectionPlane
+from ingetrazo_core.section import SectionPlane
 from formats import igz
 from scripts.isolated_launch import run
 from tests.shell_isolation import restore_shell_patches  # noqa: F401

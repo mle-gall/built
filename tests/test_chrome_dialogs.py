@@ -14,7 +14,7 @@ from ingetrazo_core import Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_render import chrome_dialogs as cd
-from core.input_codes import StandardButton
+from ingetrazo_core import StandardButton
 
 
 @pytest.fixture
@@ -437,7 +437,7 @@ def test_open_preserves_recovery_as_a_separate_copy(win, tmp_path, monkeypatch):
 
 
 def test_failed_job_and_export_folder_are_retained(win, tmp_path, monkeypatch):
-    from core import desktop_open
+    from ingetrazo_core import desktop_open
     opened = []
     monkeypatch.setattr(desktop_open, "open_url", opened.append)
     with pytest.raises(OSError), cd.busy(win, "Saving"):

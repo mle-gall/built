@@ -429,7 +429,7 @@ fn before_save(win: &Obj<'_>, doc: &Obj<'_>, path: &Obj<'_>) -> PyResult<()> {
     if s.is_none() || v.is_none() {
         return Ok(());
     }
-    let api = win.py().import("core.project")?;
+    let api = win.py().import("ingetrazo_core.project")?;
     let scene = v.getattr("scene")?;
     if api.call_method1("path_for", (&scene,))?.is_none() {
         api.call_method1("attach", (&scene, s.getattr("path")?, path))?;

@@ -56,7 +56,7 @@ def test_stray_edge_detected():
 
 def test_internal_wall_is_overconnected_but_interior_flag_heals():
     """Two boxes sharing a wall: the shared edges see 3 faces —
-    overconnected. Marked interior (what core.orient does), the wall stops
+    overconnected. Marked interior (what ingetrazo_core.orient does), the wall stops
     counting and the union is watertight again — same rule as the engine."""
     mesh = Mesh()
     _box(mesh, dx=2.0)
@@ -162,7 +162,7 @@ def test_tool_metadata_and_singleton(win, monkeypatch):
 
 from ingetrazo_core import Matrix4 as QMatrix4x4
 
-from core.orient import signed_volume                             # noqa: E402
+from ingetrazo_core.orient import signed_volume                             # noqa: E402
 from plugins.solid_inspector import (                             # noqa: E402
     RepairSolidsCommand, _problem_text, internal_faces, is_sound,
     problem_items, repair_mesh, reversed_faces)
@@ -210,7 +210,7 @@ def test_inside_out_box_has_every_face_reversed():
 def test_only_the_wrong_piece_is_asked(monkeypatch):
     """Sound pieces are settled by the cheap checks; the parity pass sees
     only the piece that needs it (it costs seconds on big models)."""
-    import core.orient
+    import ingetrazo_core.orient
     mesh = Mesh()
     _box(mesh)                                  # sound
     _box(mesh, x0=5.0)                          # inside out
@@ -218,13 +218,13 @@ def test_only_the_wrong_piece_is_asked(monkeypatch):
     for f in wrong:
         f.loop.reverse()
     asked = []
-    real = core.orient.orient_outward
+    real = ingetrazo_core.orient.orient_outward
 
     def spy(m, *a, **k):
         asked.append(len(m.faces))
         return real(m, *a, **k)
 
-    monkeypatch.setattr(core.orient, "orient_outward", spy)
+    monkeypatch.setattr(ingetrazo_core.orient, "orient_outward", spy)
     assert set(reversed_faces(mesh)) == set(wrong)
     assert asked == [6]
     for f in wrong:

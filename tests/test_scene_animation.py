@@ -195,7 +195,7 @@ def _view(name, view="top", x=0.0):
     from ingetrazo_core import Vec3 as QVector3D
 
     from core.camera import OrbitCamera
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     from core.scene import Scene
     cam = OrbitCamera()
     cam.set_view(view)
@@ -347,7 +347,7 @@ def win(native_host):
 
 
 def _scenes(win, *specs):
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     cam = win.viewport.camera
     for name, view, hidden in specs:
         cam.set_view(view)

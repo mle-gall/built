@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 const KEY: &str = "files/last_dir";
 
 fn settings(py: Python<'_>) -> PyResult<Any<'_>> {
-    py.import("core.settings")?.call_method0("settings")
+    py.import("ingetrazo_core.settings")?.call_method0("settings")
 }
 
 #[pyfunction]

@@ -162,7 +162,7 @@ def test_outlines_cross_as_they_did_edge_by_edge():
 def test_a_circle_drawn_on_the_solid_lands_as_before():
     """The circle is one new face in a new opening of the cap, the model
     still one closed solid with nothing turned or marked."""
-    from core.orient import is_closed, signed_volume
+    from ingetrazo_core.orient import is_closed, signed_volume
 
     scene, hist = _slab_with_cylinders(3)
     faces_before = len(scene.faces)

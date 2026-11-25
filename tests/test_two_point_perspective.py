@@ -11,7 +11,7 @@ import math
 from ingetrazo_core import Vec3 as QVector3D, Vec4 as QVector4D
 
 from core.camera import OrbitCamera
-from core.saved_views import SavedView
+from ingetrazo_core.saved_views import SavedView
 
 
 def _screen(cam, p):

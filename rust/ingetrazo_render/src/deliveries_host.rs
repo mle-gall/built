@@ -57,7 +57,7 @@ fn active_view<'py>(win: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 /// Run `fn` on the next turn of the window's loop (its host's queue, or
 /// the headless one, `core.timers`).
 fn next_turn(win: &Bound<'_, PyAny>, f: Bound<'_, PyAny>) -> PyResult<()> {
-    win.py().import("core.timers")?.call_method1("later", (win, 0, f))?;
+    win.py().import("ingetrazo_core.timers")?.call_method1("later", (win, 0, f))?;
     Ok(())
 }
 
@@ -440,7 +440,7 @@ impl FormDone {
         if self.one_off {
             if r.get_item("format")?.eq("stl")? {
                 let unit = r.get_item("options")?.get_item("unit")?;
-                py.import("core.settings")?.call_method0("settings")?.call_method1("setValue", ("export/stl_unit", unit))?;
+                py.import("ingetrazo_core.settings")?.call_method0("settings")?.call_method1("setValue", ("export/stl_unit", unit))?;
             }
             let key = delivery_key.clone().unwrap_or_else(|| py.None().into_bound(py));
             enqueue(win, &key, &r)?;
@@ -530,7 +530,7 @@ pub fn export_form<'py>(win: &Bound<'py, PyAny>, key: Option<String>, one_off: b
     let nodes = py.import("core.link_structure")?.getattr("Tree")?.call1((&scene, &registry))?.getattr("nodes")?;
     let has_nodes = nodes.is_truthy()?;
     let fmt = record.call_method1("get", ("format", initial_format))?;
-    let stl_unit = py.import("core.settings")?.call_method0("settings")?.call_method1("value", ("export/stl_unit", "mm"))?.str()?;
+    let stl_unit = py.import("ingetrazo_core.settings")?.call_method0("settings")?.call_method1("value", ("export/stl_unit", "mm"))?.str()?;
     let core = py.import("ingetrazo_core")?;
     let defaults = core.call_method1("delivery_defaults", (&fmt, one_off, stl_unit))?;
     let (scope, unit) = (defaults.get_item(0)?, defaults.get_item(1)?);
@@ -688,7 +688,7 @@ struct OpenUrl {
 #[pymethods]
 impl OpenUrl {
     fn __call__(&self, py: Python<'_>) -> PyResult<()> {
-        py.import("core.desktop_open")?.call_method1("open_url", (self.target.bind(py),))?;
+        py.import("ingetrazo_core.desktop_open")?.call_method1("open_url", (self.target.bind(py),))?;
         Ok(())
     }
 }
@@ -854,7 +854,7 @@ fn delivery_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, arg: &str) -
     } else if verb == "folder" {
         let result = win.getattr("__dict__")?.call_method1("pop", ("_delivery_result", py.None()))?;
         if result.is_truthy()? {
-            py.import("core.desktop_open")?.call_method1("open_url", (result.get_item(1)?,))?;
+            py.import("ingetrazo_core.desktop_open")?.call_method1("open_url", (result.get_item(1)?,))?;
         }
     } else if let Some(key) = key.filter(|k| deliveries(py).and_then(|d| d.call_method1("records", (vp.getattr("scene")?,))?.contains(k)).unwrap_or(false)) {
         let history = vp.getattr("history")?;

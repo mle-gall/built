@@ -26,7 +26,7 @@ fn first_textured<'py>(scene: &Obj<'py>, tool: &Obj<'py>) -> PyResult<(Obj<'py>,
 pub(super) fn measure_texture_position(py: Python<'_>, path: &Obj) -> PyResult<()> {
     let path = py.import("pathlib")?.call_method1("Path", (path,))?;
     let scene = py.import("core.scene")?.call_method0("Scene")?;
-    py.import("formats.igz")?
+    py.import("ingetrazo_core.formats.igz")?
         .call_method1("load_into", (&scene, &path))?;
     let tool = py
         .import("tools.texture_position")?

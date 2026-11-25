@@ -53,7 +53,7 @@ fn name(p: &Path) -> &str {
     p.file_name().and_then(|s| s.to_str()).unwrap_or("")
 }
 fn version(py: Python) -> PyResult<String> {
-    py.import("core.version")?.getattr("__version__")?.extract()
+    py.import("ingetrazo_core.version")?.getattr("__version__")?.extract()
 }
 fn digest(py: Python, bytes: &[u8]) -> PyResult<String> {
     py.import("hashlib")?
@@ -126,7 +126,7 @@ fn data_class(
     let kw = PyDict::new(py);
     kw.set_item("frozen", true)?;
     let class = dc.call_method("make_dataclass", (name, fields), Some(&kw))?;
-    class.setattr("__module__", "ingetrazo_core.extension_manager")?;
+    class.setattr("__module__", "extension_manager")?;
     m.add(name, class)
 }
 /// Catalogue records are constructed on first access. The modelling engine

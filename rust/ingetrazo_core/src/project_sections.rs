@@ -235,7 +235,7 @@ pub(crate) fn section_edit<'py>(
                 fill.call_method1("pop", (field_name, py.None()))?;
             } else if field_name == "pattern" {
                 if !py
-                    .import("core.section")?
+                    .import("ingetrazo_core.section")?
                     .getattr("FILL_PATTERNS")?
                     .contains(value)?
                 {

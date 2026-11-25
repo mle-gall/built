@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from core.paths import app_root
+from ingetrazo_core.paths import app_root
 
 _I18N_DIR = app_root() / "i18n"
 

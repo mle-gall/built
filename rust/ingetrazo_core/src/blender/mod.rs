@@ -23,7 +23,7 @@ fn path_obj<'p>(py: Python<'p>, path: &Path) -> PyResult<Obj<'p>> {
 #[pyfunction]
 fn render_script(py: Python<'_>) -> PyResult<Obj<'_>> {
     let root = py
-        .import("core.paths")?
+        .import("ingetrazo_core.paths")?
         .call_method0("app_root")?
         .extract::<PathBuf>()?;
     path_obj(py, &root.join("resources/blender/render_scene.py"))
@@ -38,7 +38,7 @@ fn work_base<'p>(m: &Bound<'p, PyModule>) -> PyResult<Obj<'p>> {
             .extract::<PathBuf>()?
             .join(".cache")
     } else {
-        py.import("core.paths")?
+        py.import("ingetrazo_core.paths")?
             .call_method0("cache_directory")?
             .extract()?
     };
@@ -66,7 +66,7 @@ fn command(found: &Obj, job: PathBuf) -> PyResult<Vec<String>> {
 #[pyfunction]
 fn sun_toward<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
     let py = scene.py();
-    let sun = py.import("core.sun")?;
+    let sun = py.import("ingetrazo_core.sun")?;
     let sh = match scene.getattr_opt("shadows")?.filter(|s| !s.is_none()) {
         Some(s) => s,
         None => sun.call_method0("ShadowSettings")?,
@@ -190,7 +190,7 @@ fn write_job<'p>(
     )?;
     let kw = PyDict::new(py);
     kw.set_item("face_me", toward)?;
-    py.import("formats.gltf")?
+    py.import("ingetrazo_core.formats.gltf")?
         .call_method("save_glb", (scene, path_obj(py, &glb)?), Some(&kw))?;
     let data = PyDict::new(py);
     data.set_item("glb", glb.to_string_lossy())?;

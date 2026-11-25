@@ -267,7 +267,7 @@ pub(super) fn sheet_holds<'p>(item: &Obj<'p>) -> PyResult<Vec<(&'static str, Obj
 pub(super) fn bind_sheet_anchors(scene: &Obj) -> PyResult<()> {
     let py = scene.py();
     let restore = py
-        .import("core.annotation_anchor")?
+        .import("ingetrazo_core.annotation_anchor")?
         .getattr("Attachment")?
         .getattr("restore")?;
     let vec = py.import("ingetrazo_core")?.getattr("Vec3")?;

@@ -9,7 +9,7 @@ fn perf_counter(py: Python<'_>) -> PyResult<f64> {
     py.import("time")?.call_method0("perf_counter")?.extract()
 }
 fn later<'py>(view: &Obj<'py>, delay: u32, callback: Obj<'py>) -> PyResult<()> {
-    view.py().import("core.timers")?.call_method1("later", (view, delay, callback))?;
+    view.py().import("ingetrazo_core.timers")?.call_method1("later", (view, delay, callback))?;
     Ok(())
 }
 fn any_of<'py>(py: Python<'py>, values: &Obj<'py>) -> PyResult<bool> {
@@ -749,7 +749,7 @@ fn sync_scene_camera<'py>(a: &Args<'py>) -> Reply<'py> {
     let (view, install) = (a.get_item(0)?, a.get_item(1)?.is_truthy()?);
     let np = py.import("numpy")?;
     let copy = py.import("copy")?.getattr("copy")?;
-    let frame = py.import("core.coordinate_frame")?;
+    let frame = py.import("ingetrazo_core.coordinate_frame")?;
     let choose_origin = frame.getattr("choose_origin")?;
     let camera_point = py.import("ingetrazo_core")?.getattr("Vec3")?;
     let vec3 = py.import("ingetrazo_core")?.getattr("Vec3")?;

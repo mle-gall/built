@@ -303,7 +303,7 @@ pub(super) fn _intersection_snap<'p>(
     let q = query(scene, world_to_pixel, cx, cy, None)?;
     let mut circles = Vec::new();
     if let (Some(w), Some(all)) = (candidate_world, scene.getattr_opt("circles")?) {
-        let basis = py.import("core.axes")?.getattr("plane_axes")?;
+        let basis = py.import("ingetrazo_core.axes")?.getattr("plane_axes")?;
         for c in all.try_iter()? {
             let c = c?;
             let n = c.getattr("normal")?;

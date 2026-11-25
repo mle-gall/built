@@ -17,7 +17,7 @@ from core.dimension import Dimension
 from core.group import Group
 from core.history import History, StraightenModelCommand, placement_rotation_deg
 from core.mesh import Mesh
-from core.saved_views import SavedView
+from ingetrazo_core.saved_views import SavedView
 from core.scene import Scene
 from formats import igz
 from georef.datum import SceneDatum

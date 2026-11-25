@@ -8,7 +8,7 @@ struct Example {
 }
 fn scan(py: Python) -> PyResult<Vec<Example>> {
     let root: PathBuf = py
-        .import("core.paths")?
+        .import("ingetrazo_core.paths")?
         .call_method0("app_root")?
         .extract()?;
     let ast = py.import("ast")?;

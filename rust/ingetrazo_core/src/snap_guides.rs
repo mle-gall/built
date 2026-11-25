@@ -234,7 +234,7 @@ pub(crate) fn segment_crossings(
     .collect())
 }
 fn basis<'py>(n: &Obj<'py>) -> PyResult<Obj<'py>> {
-    n.py().import("core.axes")?.call_method1("plane_axes", (n,))
+    n.py().import("ingetrazo_core.axes")?.call_method1("plane_axes", (n,))
 }
 #[pyfunction]
 pub(crate) fn quadrants(c: &Obj<'_>, r: f64, n: &Obj<'_>) -> PyResult<Vec<Vec3>> {

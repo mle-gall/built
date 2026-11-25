@@ -38,7 +38,7 @@ fn project_open_path(py: Python<'_>, path: PathBuf) -> PyResult<Obj<'_>> {
         .call_method1("Path", (project_convert(path)?.0,))
 }
 #[pyfunction]
-fn project_load(py: Python<'_>, path: PathBuf) -> PyResult<Obj<'_>> {
+pub(super) fn project_load(py: Python<'_>, path: PathBuf) -> PyResult<Obj<'_>> {
     project_check(
         &py.import("json")?
             .call_method1("loads", (project_manifest_load(project_convert(path)?.0)?,))?,
@@ -65,7 +65,7 @@ fn project_save(path: PathBuf, value: &Obj<'_>) -> PyResult<()> {
     )
 }
 #[pyfunction]
-fn project_create<'p>(
+pub(super) fn project_create<'p>(
     py: Python<'p>,
     path: PathBuf,
     registry: &Obj<'p>,

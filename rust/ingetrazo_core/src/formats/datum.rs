@@ -6,7 +6,7 @@ use crate::{
 };
 use glam::DVec3;
 use pyo3::{prelude::*, types::PyDict};
-#[pyclass(module = "georef.datum", dict, subclass, eq, skip_from_py_object)]
+#[pyclass(module = "ingetrazo_core.georef.datum", dict, subclass, eq, skip_from_py_object)]
 #[derive(Clone, PartialEq)]
 pub(crate) struct SceneDatum {
     #[pyo3(get, set)]

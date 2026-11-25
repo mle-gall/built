@@ -2904,7 +2904,7 @@ fn changes_dict<'py>(
         let module = ty.getattr("__module__")?.extract::<String>()?;
         let family = match module.as_str() {
             "core.composition" => "sheets",
-            "core.saved_views" => "views",
+            "ingetrazo_core.saved_views" => "views",
             _ => "annotations",
         };
         let list = match record_keys.get_item(family)? {

@@ -65,14 +65,14 @@ pub fn place_alignment(window: &Obj<'_>, features: &Obj<'_>) -> PyResult<usize> 
     }
     let old = scene.getattr("georef")?;
     let datum = if old.is_none() {
-        py.import("georef.datum")?
+        py.import("ingetrazo_core.georef.datum")?
             .getattr("SceneDatum")?
             .call1((lat / count as f64, lon / count as f64))?
     } else {
         old.clone()
     };
     let history = py.import("ingetrazo_core.history")?;
-    let path_type = py.import("georef.geopath")?.getattr("GeoPath")?;
+    let path_type = py.import("ingetrazo_core.georef.geopath")?.getattr("GeoPath")?;
     let commands = PyList::empty(py);
     let mut bounds = Bounds::new();
     for (feat, points) in lines {
@@ -125,7 +125,7 @@ pub fn place_survey_points(
     if !(1..=60).contains(&zone) {
         return Err(PyValueError::new_err("UTM zone must be between 1 and 60"));
     }
-    let backend = py.import("georef.points")?;
+    let backend = py.import("ingetrazo_core.georef.points")?;
     let old = viewport.getattr("scene")?.getattr("georef")?;
     let datum = if old.is_none() {
         backend.call_method1("datum_for_rows", (rows, zone, northern))?
@@ -165,7 +165,7 @@ pub fn read_survey_mesh<'py>(
     limit: u32,
     progress: &Obj<'py>,
 ) -> PyResult<(Obj<'py>, Bound<'py, pyo3::types::PyDict>)> {
-    let backend = py.import("georef.photomesh")?;
+    let backend = py.import("ingetrazo_core.georef.photomesh")?;
     progress.call1((0.05, "Reading mesh…"))?;
     let mesh = backend.call_method1("load_odm_obj", (path, datum))?;
     let mut sizes = Vec::new();
@@ -202,12 +202,12 @@ pub fn survey_mesh_datum<'py>(
         return Ok(Some(current.clone()));
     }
     let anchor = py
-        .import("georef.photomesh")?
+        .import("ingetrazo_core.georef.photomesh")?
         .call_method1("find_anchor", (path,))?;
     if anchor.is_none() {
         return Ok(None);
     }
-    let geo = py.import("georef.datum")?;
+    let geo = py.import("ingetrazo_core.georef.datum")?;
     let (lat, lon): (f64, f64) = geo
         .call_method1(
             "utm_inverse",
@@ -236,7 +236,7 @@ pub fn place_survey_mesh(
     let origin = if altitude != 0. {
         altitude
     } else {
-        py.import("georef.photomesh")?
+        py.import("ingetrazo_core.georef.photomesh")?
             .call_method1("vertical_origin", (mesh,))?
             .extract::<Option<f64>>()?
             .unwrap_or(0.)

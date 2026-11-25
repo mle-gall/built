@@ -107,7 +107,7 @@ fn send<'py>(a: &Args<'py>) -> Reply<'py> {
     let event = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
-    let axes = imported(py, "core.axes")?.into_any();
+    let axes = imported(py, "ingetrazo_core.axes")?.into_any();
     if ("hover", "click", "key")
         .into_bound_py_any(py)?
         .contains(event.get_item("type")?)?

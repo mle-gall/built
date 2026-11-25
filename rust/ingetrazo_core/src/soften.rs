@@ -132,7 +132,7 @@ fn meshes<'p>(cmd: &Obj<'p>) -> PyResult<Vec<Obj<'p>>> {
 fn matching<'p>(mesh: &Obj<'p>, faces: &Obj<'p>, a: &Obj<'p>, b: &Obj<'p>) -> PyResult<bool> {
     let py = mesh.py();
     let view = py.import("ingetrazo_core.store_mesh")?.getattr("FaceView")?;
-    let sig = py.import("formats.fuse")?.getattr("_smooth_sig")?;
+    let sig = py.import("ingetrazo_core.formats.fuse")?.getattr("_smooth_sig")?;
     let face_sig = |key: &Obj<'p>| -> PyResult<Obj<'p>> {
         let f = if faces.is_none() {
             view.call1((mesh, key))?

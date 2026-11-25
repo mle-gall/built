@@ -7,7 +7,7 @@ use pyo3::{
 };
 type Obj<'p> = Bound<'p, PyAny>;
 fn api(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("formats.igz")
+    py.import("ingetrazo_core.formats.igz")
 }
 fn scratch<'p, T>(stream: Obj<'p>, work: impl FnOnce(&Obj<'p>) -> PyResult<T>) -> PyResult<T> {
     let py = stream.py();
@@ -62,7 +62,7 @@ fn igz_save_scene_inner<'p>(
 ) -> PyResult<Obj<'p>> {
     let api = api(py)?;
     if scene.hasattr("plugin_data")? && !compatibility {
-        let project = py.import("core.project")?;
+        let project = py.import("ingetrazo_core.project")?;
         project.call_method1("refresh_reference", (scene, path))?;
         project.call_method1("sync_files", (scene, path))?;
         crate::model::link_io::refresh_paths(scene, path)?;
@@ -277,7 +277,7 @@ fn igz_write_prepared_inner<'p>(
             snapshot.call_method1("resolve_geometry", (&payload, &geom, spool))?;
             if survey.is_instance(&snapshot.getattr("Survey")?)? {
                 let result = py
-                    .import("georef.photomesh")?
+                    .import("ingetrazo_core.georef.photomesh")?
                     .call_method1("pack_mesh", (survey.getattr("mesh")?,))?;
                 payload.set_item("photo_mesh", result.get_item(0)?)?;
                 let blobs = result.get_item(1)?;

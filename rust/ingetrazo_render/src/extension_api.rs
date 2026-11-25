@@ -461,7 +461,7 @@ pub(crate) fn register(m: &Bound<PyModule>) -> PyResult<()> {
     m.add("Job", m.getattr("chrome_dialogs")?.getattr("Job")?)?;
     // The Python plugin API had no __all__. Preserve its wildcard exports.
     let logging = py.import("logging")?;
-    let built = py.import("formats.built")?;
+    let built = py.import("ingetrazo_core.formats.built")?;
     m.add(
         "annotations",
         py.import("__future__")?.getattr("annotations")?,

@@ -15,7 +15,7 @@ use std::{
 };
 type Obj<'p> = Bound<'p, PyAny>;
 fn api(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("georef.photomesh")
+    py.import("ingetrazo_core.georef.photomesh")
 }
 fn path<'p>(py: Python<'p>, p: &Path) -> PyResult<Obj<'p>> {
     py.import("pathlib")?.call_method1("Path", (p,))
@@ -238,7 +238,7 @@ fn load_inner<'p>(
         Some(a) => Some(a),
         None => find_anchor(py, obj_path.clone())?,
     };
-    let file = py.import("formats.obj")?;
+    let file = py.import("ingetrazo_core.formats.obj")?;
     let src = file
         .call_method1("read_obj_text", (&obj_path,))?
         .extract::<String>()?;

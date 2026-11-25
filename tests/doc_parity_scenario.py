@@ -595,7 +595,7 @@ def geometry_steps(work):
 
 def anchor_steps(work):
     """Three attachment kinds on the second of two nested instances."""
-    from core.annotation_anchor import Attachment
+    from ingetrazo_core.annotation_anchor import Attachment
     from core.history import MoveGroupCommand
     from core.textlabel import TextLabel
 
@@ -682,13 +682,13 @@ def anchor_steps(work):
 
 
 def presentation_steps(scene, steps):
-    from core.annotation_anchor import Attachment
+    from ingetrazo_core.annotation_anchor import Attachment
     from core.composition import Composicion, MarcoVista, TextoItem
     from core.dimension import Dimension
     from core.history import (AddDimensionCommand, AddSceneCommand, AddSheetCommand,
                               AddTextLabelCommand, EditDimensionTextCommand,
                               MoveTextLabelsCommand, PlaceViewCommand)
-    from core.saved_views import RenameSceneCommand, SavedView
+    from ingetrazo_core.saved_views import RenameSceneCommand, SavedView
     from core.textlabel import TextLabel
 
     h = History(scene)

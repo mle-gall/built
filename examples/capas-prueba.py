@@ -29,9 +29,9 @@ from core.group import Group  # noqa: E402
 from core.guide import Guide  # noqa: E402
 from core.layers import DEFAULT_LAYER, Layer  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
-from core.saved_views import SavedView  # noqa: E402
+from ingetrazo_core.saved_views import SavedView  # noqa: E402
 from core.scene import Scene  # noqa: E402
-from core.section import SectionPlane  # noqa: E402
+from ingetrazo_core.section import SectionPlane  # noqa: E402
 from core.textlabel import TextLabel  # noqa: E402
 from formats import igz  # noqa: E402
 

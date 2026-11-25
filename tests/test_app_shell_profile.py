@@ -70,7 +70,8 @@ def test_native_launches_share_an_isolated_profile(tmp_path):
         import sys
         from pathlib import Path
         def exchange():
-            from core import general_settings, settings
+            from core import settings
+            from ingetrazo_core import general_settings
             from ingetrazo_core import NativeSettings
             st = settings.settings()
             user = settings.settings()

@@ -55,7 +55,7 @@ def _scene():
     from ingetrazo_core import Vec3 as V
     from core.group import Group
     from core.layers import Layer
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     from core.scene import Scene
     s = Scene()
     for name, folder in (("Muros", "Arq"), ("Losa", "Arq"), ("Mobiliario", "Int"), ("Ejes", None),
@@ -168,7 +168,7 @@ def test_a_vector_frame_draws_what_the_composer_drew(view_key, name, hidden):
     from core.composition import MarcoVista, apply_frame_camera, model_height_for_frame
     from core.hlr import hlr_drawing
     import ingetrazo_core
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     from ingetrazo_render import sheet_frames
 
     def scene_with_views():

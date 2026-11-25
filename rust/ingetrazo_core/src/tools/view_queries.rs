@@ -28,13 +28,13 @@ pub(super) fn classify(entity: &Bound<'_, PyAny>) -> PyResult<&'static str> {
             ("core.mesh", "Face", "face"),
             ("core.mesh", "Edge", "edge"),
             ("core.group", "Group", "group"),
-            ("core.section", "SectionPlane", "section_plane"),
-            ("core.textlabel", "TextLabel", "text_label"),
+            ("ingetrazo_core.section", "SectionPlane", "section_plane"),
+            ("ingetrazo_core.textlabel", "TextLabel", "text_label"),
             ("core.dimension", "Dimension", "dimension"),
-            ("core.image_plane", "ImagePlane", "image_plane"),
-            ("core.guide", "Guide", "guide"),
-            ("core.guide", "GuideCircle", "guide"),
-            ("georef.geopath", "GeoPath", "geopath"),
+            ("ingetrazo_core.image_plane", "ImagePlane", "image_plane"),
+            ("ingetrazo_core.guide", "Guide", "guide"),
+            ("ingetrazo_core.guide", "GuideCircle", "guide"),
+            ("ingetrazo_core.georef.geopath", "GeoPath", "geopath"),
         ]
         .into_iter()
         .map(|(module, class, kind)| Ok((py.import(module)?.getattr(class)?.unbind(), kind)))

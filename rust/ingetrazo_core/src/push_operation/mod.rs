@@ -322,7 +322,7 @@ fn surface_normal<'p>(face: &Obj<'p>, mesh: Option<&Obj<'p>>) -> PyResult<Obj<'p
 fn outward_normal<'p>(cls: &Obj<'p>, face: &Obj<'p>, mesh: &Obj<'p>) -> PyResult<Obj<'p>> {
     let py = face.py();
     if py
-        .import("core.orient")?
+        .import("ingetrazo_core.orient")?
         .call_method1("is_closed", (mesh,))?
         .is_truthy()?
         || py

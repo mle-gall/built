@@ -9,7 +9,7 @@ from uuid import uuid4
 from core import ai
 from core.i18n import tr
 from core.plugin_panels import field, item, on_document_close, section
-from core.settings import settings
+from ingetrazo_core.settings import settings
 from plugins._assistant_prompt import (
     MAX_ROUNDS, MAX_TOKENS, TOKENS_BY_PROVIDER, env_key_note, handle_reply, system_prompt,
 )
@@ -95,7 +95,7 @@ class AssistantPanel:
         elif control == "remove_photo":
             self.clear_photo()
         elif control == "view_photo" and self.last_photo:
-            from core.desktop_open import open_url
+            from ingetrazo_core.desktop_open import open_url
             open_url(self.last_photo)
         elif control == "provider":
             self.provider = value

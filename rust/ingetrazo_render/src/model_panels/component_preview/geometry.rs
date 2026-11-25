@@ -129,7 +129,7 @@ impl<'p> Deferred<'p> {
             .get_item("face_attrs")?
             .filter(|t| !t.is_none())
         {
-            let decode = py.import("formats.igz")?.getattr("_face_attrs_from_json")?;
+            let decode = py.import("ingetrazo_core.formats.igz")?.getattr("_face_attrs_from_json")?;
             for a in table.try_iter()? {
                 paints.push(Paint::read(&decode.call1((a?,))?)?);
             }

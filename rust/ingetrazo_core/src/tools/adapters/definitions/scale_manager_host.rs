@@ -28,7 +28,7 @@ fn schedule<'py>(a: &Args<'py>) -> Reply<'py> {
             "partial",
             (wrap_pyfunction!(show_editor, py)?, tool, &vp, group),
         )?;
-        imported(py, "core.timers")?.call_method1("later", (vp, 0, callback))?;
+        imported(py, "ingetrazo_core.timers")?.call_method1("later", (vp, 0, callback))?;
     }
     Ok(none(py))
 }

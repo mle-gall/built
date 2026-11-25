@@ -124,7 +124,7 @@ pub(crate) fn keep_template<'py>(
     previous: &Obj<'py>,
 ) -> PyResult<(Obj<'py>, Option<usize>)> {
     let py = scene.py();
-    let api = py.import("core.kept_components")?;
+    let api = py.import("ingetrazo_core.kept_components")?;
     let current = api.call_method1("kept_template", (scene, instance.getattr("mesh")?))?;
     let kept = scene.getattr("kept_components")?;
     if keep && current.is_none() {
@@ -387,7 +387,7 @@ pub(crate) fn unlink_placements<'py>(
     pairs: &Obj<'py>,
 ) -> PyResult<UnlinkPlan<'py>> {
     let py = scene.py();
-    let names = py.import("core.kept_components")?;
+    let names = py.import("ingetrazo_core.kept_components")?;
     let mut before = Vec::new();
     let mut after: Vec<Bound<'py, PyDict>> = Vec::new();
     let mut nested = Vec::new();

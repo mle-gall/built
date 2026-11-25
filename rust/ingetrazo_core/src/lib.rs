@@ -17,6 +17,17 @@ mod screen;
 mod texture_position;
 mod navigation;
 mod recents;
+mod general_settings;
+mod document_insert;
+mod kept_components;
+mod annotation_anchor;
+mod coordinate_frame;
+mod record_class;
+mod image_plane;
+mod scan_index;
+mod move_ops;
+mod desktop_open;
+mod facets;
 mod python_tls;
 mod material_finish;
 mod edge_grid;
@@ -163,6 +174,7 @@ mod snap_build;
 mod snap;
 mod snap_engine;
 mod kernel;
+mod core_bulk;
 mod protocol;
 mod tools;
 mod guide_vertices;
@@ -301,6 +313,15 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     navigation::register(m)?;
     m.add_class::<edge_grid::EdgeGrid>()?;
     recents::register(m)?;
+    general_settings::register(m)?;
+    document_insert::register(m)?;
+    model::link_meshes::register(m)?;
+    model::saved_record::register(m)?;
+    builtproject::document::register(m)?;
+    kept_components::register(m)?;
+    annotation_anchor::register(m)?;
+    coordinate_frame::register(m)?;
+    image_plane::register(m)?;
     python_tls::register(m)?;
     m.add_function(wrap_pyfunction!(material_finish::guess_finish, m)?)?;
     m.add_function(wrap_pyfunction!(material_finish::resolve_finish, m)?)?;
@@ -618,6 +639,12 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     protocol::register(m)?;
     protocol::api::history::register(m)?;
     kernel::mesh_api::register(m)?;
+    core_bulk::register(m)?;
+    scan_index::register(m)?;
+    move_ops::register(m)?;
+    desktop_open::register(m)?;
+    facets::register(m)?;
+    m.py().import("_built_file_packages")?;
     Ok(())
 }
 
@@ -730,7 +757,7 @@ fn touching_boxes<'py>(
     Ok((PyArray1::from_vec(py, ii), PyArray1::from_vec(py, jj)))
 }
 
-/// A packed triangle set (core.orient._PackedTris) with a ray index, for
+/// A packed triangle set (ingetrazo_core.orient._PackedTris) with a ray index, for
 /// the parity queries of orientation and of the push/pull rebuild.
 #[pyclass(frozen)]
 struct ParityTris {

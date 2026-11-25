@@ -87,7 +87,7 @@ fn built_point_array<'py>(points: &Obj<'py>, sink: &Obj<'py>) -> PyResult<Obj<'p
         .map_err(|e| {
             if e.is_instance_of::<PyValueError>(py) {
                 match py
-                    .import("formats.igz")
+                    .import("ingetrazo_core.formats.igz")
                     .and_then(|m| m.call_method1("NonFiniteDocumentError", ("geometry",)))
                 {
                     Ok(v) => PyErr::from_value(v),

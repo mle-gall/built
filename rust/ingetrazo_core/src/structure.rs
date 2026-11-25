@@ -319,7 +319,7 @@ pub(crate) fn plan_filing<'py>(
     changes: &Obj<'py>,
 ) -> PyResult<Vec<Obj<'py>>> {
     let py = scene.py();
-    let api = py.import("core.structure")?;
+    let api = py.import("ingetrazo_core.structure")?;
     let recipe = api.call_method1("resolve", (registry, key))?;
     let nodes = api.call_method1("_nodes", (registry,))?;
     for k in structure_lineage(&nodes, key)? {
@@ -424,7 +424,7 @@ pub(crate) fn check_filing_paths(
     batches: &Obj<'_>,
 ) -> PyResult<()> {
     let py = scene.py();
-    let api = py.import("core.structure")?;
+    let api = py.import("ingetrazo_core.structure")?;
     let nodes = api.call_method1("_nodes", (registry,))?;
     // Error order follows the interpreter's occupied-node set.
     let pending = PySet::empty(py)?;
@@ -488,7 +488,7 @@ pub(crate) fn resync_filing<'py>(
     keys: &Obj<'py>,
 ) -> PyResult<(Obj<'py>, Bound<'py, PyDict>)> {
     let py = scene.py();
-    let api = py.import("core.structure")?;
+    let api = py.import("ingetrazo_core.structure")?;
     let nodes = api.call_method1("_nodes", (registry,))?;
     let chosen = PySet::new(py, list(if keys.is_none() { &nodes } else { keys })?)?;
     for key in chosen.iter() {
@@ -540,7 +540,7 @@ pub(crate) fn file_created_placement<'py>(
     if !data.contains("bim_registry")? && !data.contains("project")? {
         return Ok(None);
     }
-    let api = py.import("core.structure")?;
+    let api = py.import("ingetrazo_core.structure")?;
     let registry = api.getattr("bim_registry")?.call_method1("get", (scene,))?;
     let section = get(&registry, "structure")?;
     if !section.is_truthy()? {
@@ -570,7 +570,7 @@ pub(crate) fn plan_node_edit<'py>(
     value: &str,
 ) -> PyResult<Obj<'py>> {
     let py = scene.py();
-    let api = py.import("core.structure")?;
+    let api = py.import("ingetrazo_core.structure")?;
     let registry = api.getattr("bim_registry")?.call_method1("get", (scene,))?;
     let nodes = api.call_method1("_nodes", (&registry,))?;
     let node = nodes.get_item(key)?;
@@ -612,7 +612,7 @@ pub(crate) fn apply_structure_bootstrap<'py>(
     proposal: &Obj<'py>,
 ) -> PyResult<Obj<'py>> {
     let py = scene.py();
-    let api = py.import("core.structure")?;
+    let api = py.import("ingetrazo_core.structure")?;
     let registry = api.getattr("bim_registry")?.call_method1("get", (scene,))?;
     registry.set_item(
         "structure",

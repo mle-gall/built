@@ -12,7 +12,7 @@ fn local<'py>(history: &Obj<'py>, point: &Obj<'py>) -> PyResult<Obj<'py>> {
         .cast::<PyDict>()?
         .get_item("_store")?;
     if let Some(s) = st.filter(|s| !s.is_none()) {
-        py.import("core.coordinate_frame")?
+        py.import("ingetrazo_core.coordinate_frame")?
             .call_method1("point_in_frame", (point, s.getattr("frame_origin")?))
     } else {
         vec3(point)
@@ -37,7 +37,7 @@ fn set_group_axes<'py>(
             "the red and green points must define a nondegenerate frame",
         ));
     }
-    let frame = py.import("core.axes")?.call_method1(
+    let frame = py.import("ingetrazo_core.axes")?.call_method1(
         "frame_matrix",
         (
             local(history, origin)?,
@@ -68,7 +68,7 @@ fn add_guide<'py>(
     origin: Option<&Obj<'py>>,
 ) -> Reply<'py> {
     let py = history.py();
-    let g = py.import("core.guide")?.call_method1(
+    let g = py.import("ingetrazo_core.guide")?.call_method1(
         "Guide",
         (
             local(history, point)?,
@@ -95,7 +95,7 @@ fn change_guide<'py>(history: &Obj<'py>, index: &Obj<'py>, direction: &Obj<'py>)
         .filter(|i| *i < len && index.is_exact_instance_of::<pyo3::types::PyInt>())
         .ok_or_else(|| PyValueError::new_err("unknown guide index"))?;
     let g = items.get_item(i)?;
-    if !g.is_instance(&py.import("core.guide")?.getattr("Guide")?)?
+    if !g.is_instance(&py.import("ingetrazo_core.guide")?.getattr("Guide")?)?
         || !g.getattr("is_line")?.is_truthy()?
     {
         return Err(PyValueError::new_err("this guide is not a line"));
@@ -123,7 +123,7 @@ fn add_guide_circle<'py>(
         .call1((radius,))?
         .extract::<f64>()?;
     if radius >= 1e-9 {
-        let g = py.import("core.guide")?.call_method1(
+        let g = py.import("ingetrazo_core.guide")?.call_method1(
             "GuideCircle",
             (local(history, center)?, vec3(normal)?, radius),
         )?;

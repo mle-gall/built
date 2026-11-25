@@ -7,7 +7,7 @@ use pyo3::{
 use std::collections::HashSet;
 
 fn settings(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    py.import("core.settings")?.call_method0("settings")
+    py.import("ingetrazo_core.settings")?.call_method0("settings")
 }
 
 fn commit(view: &Bound<'_, PyAny>, command: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -88,7 +88,7 @@ fn name_definition(
         return Ok(());
     }
     let py = win.py();
-    let kept = py.import("core.kept_components")?;
+    let kept = py.import("ingetrazo_core.kept_components")?;
     let mesh = definition.getattr("mesh")?;
     let targets = kept
         .call_method1("copies_of", (scene, &mesh))?

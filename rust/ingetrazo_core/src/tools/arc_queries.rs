@@ -105,7 +105,7 @@ impl ViewportToolHost {
             .get_item("_store")?
             .filter(|s| !s.is_none());
         let edge_view = |key: u128| {
-            py.import("core.store_mesh")?
+            py.import("ingetrazo_core.store_mesh")?
                 .getattr("EdgeView")?
                 .call1((&mesh, key))
         };

@@ -14,7 +14,11 @@ from pathlib import Path
 
 import pytest
 
-import core.desktop_open as D
+import os
+import sys
+import shutil
+import subprocess
+import ingetrazo_core.desktop_open as D
 
 APPIMAGE_ENV = {
     "APPDIR": "/tmp/.mount_IngeTrAbc",
@@ -42,12 +46,12 @@ def test_a_host_gio_module_dir_is_left_alone():
 
 @pytest.fixture
 def frozen_appimage(monkeypatch):
-    monkeypatch.setattr(D.sys, "platform", "linux")
-    monkeypatch.setattr(D.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(D.os, "environ", dict(APPIMAGE_ENV))
-    monkeypatch.setattr(D.shutil, "which", lambda name: "/usr/bin/xdg-open")
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(os, "environ", dict(APPIMAGE_ENV))
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/xdg-open")
     calls = []
-    monkeypatch.setattr(D.subprocess, "Popen",
+    monkeypatch.setattr(subprocess, "Popen",
                         lambda cmd, **kw: calls.append((cmd, kw)))
     return calls
 
@@ -68,7 +72,7 @@ def test_a_web_page_too(frozen_appimage):
 
 @pytest.mark.parametrize("box", ["FLATPAK_ID", "SNAP"])
 def test_flatpak_and_snap_keep_their_portal(frozen_appimage, monkeypatch, box):
-    monkeypatch.setitem(D.os.environ, box, "x")
+    monkeypatch.setitem(os.environ, box, "x")
     assert D.open_url(Path("/tmp/x"))
     (cmd, options), = frozen_appimage
     assert cmd == ["/usr/bin/xdg-open", "/tmp/x"]

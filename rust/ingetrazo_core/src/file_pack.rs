@@ -9,7 +9,7 @@ use pyo3::{
 use std::collections::{HashMap, HashSet};
 type Obj<'p> = Bound<'p, PyAny>;
 fn api(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("formats.igz")
+    py.import("ingetrazo_core.formats.igz")
 }
 fn column<'p>(value: &Obj<'p>) -> PyResult<PyReadonlyArray1<'p, i64>> {
     Ok(value
@@ -116,7 +116,7 @@ fn igz_write_geometry<'p>(
     let builtin = py.import("builtins")?;
     arrays.set_item(
         "pos",
-        py.import("formats.built")?
+        py.import("ingetrazo_core.formats.built")?
             .call_method1("point_array", (arrays.as_any().get_item("pos")?, sink))?,
     )?;
     let layout = PyDict::new(py);

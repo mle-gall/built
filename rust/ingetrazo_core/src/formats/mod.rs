@@ -18,7 +18,9 @@ fn path_obj<'p>(py: Python<'p>, p: &std::path::Path) -> PyResult<Obj<'p>> {
     py.import("pathlib")?.call_method1("Path", (p,))
 }
 mod datum;
+mod bindings;
 mod codec_modules;
+mod module_state;
 mod document_types;
 mod delivery;
 mod geotiff;

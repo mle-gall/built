@@ -253,7 +253,7 @@ fn skp_remember(
         };
     }
     let cache = py
-        .import("formats.skp_reader")?
+        .import("ingetrazo_core.formats.skp_reader")?
         .getattr("_geometry_cache")?
         .call_method0("get")?;
     if !cache.is_none() {
@@ -279,7 +279,7 @@ fn skp_adapt<'p>(
     skp_path: Option<&Obj<'p>>,
     consume: bool,
 ) -> PyResult<Obj<'p>> {
-    let api = py.import("formats.skp_reader")?;
+    let api = py.import("ingetrazo_core.formats.skp_reader")?;
     let cache = py
         .get_type::<GeometryCache>()
         .call1((api.getattr("_GEOMETRY_CACHE_BYTES")?,))?;

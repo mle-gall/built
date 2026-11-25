@@ -15,7 +15,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from ingetrazo_core.store_mesh import plan_cap_plane as rebuild_plane
 from core.mesh import Mesh
-from core.orient import orient_outward
+from ingetrazo_core.orient import orient_outward
 from core.scene import Scene
 from core.history import History
 from tools.pushpull import PushPullTool

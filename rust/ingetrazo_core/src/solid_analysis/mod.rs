@@ -169,7 +169,7 @@ fn _signed_volume(faces: &Obj<'_>) -> PyResult<f64> {
 #[pyfunction]
 fn reversed_faces<'p>(mesh: &Obj<'p>) -> PyResult<Vec<Obj<'p>>> {
     let py = mesh.py();
-    let orient = py.import("core.orient")?;
+    let orient = py.import("ingetrazo_core.orient")?;
     if !orient.call_method1("is_closed", (mesh,))?.is_truthy()? {
         return Ok(vec![]);
     }

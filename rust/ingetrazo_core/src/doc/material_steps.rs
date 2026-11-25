@@ -100,7 +100,7 @@ fn run_edit_textured(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResul
         kw.set_item("opacity", old.getattr("opacity")?)?;
         kw.set_item("finish", old.getattr("finish")?)?;
         kw.set_item("pbr", old.getattr("pbr")?)?;
-        let new = py.import("core.materials")?.getattr("Material")?.call((&name,), Some(&kw))?;
+        let new = py.import("ingetrazo_core.materials")?.getattr("Material")?.call((&name,), Some(&kw))?;
         me.setattr("_new", new)?;
     }
     restamp(s, py, &me, scene, "texture")
@@ -179,7 +179,7 @@ impl DeleteMaterial {
     /// painted with it shows the default material again.
     #[new]
     fn new(py: Python<'_>, name: Obj<'_>) -> PyResult<PyClassInitializer<Self>> {
-        let blank = py.import("core.materials")?.getattr("Material")?.call1((&name,))?;
+        let blank = py.import("ingetrazo_core.materials")?.getattr("Material")?.call1((&name,))?;
         let step = restamp_step("DeleteMaterialCommand", run_delete, vec![("_name", name), ("_new", blank)]);
         Ok(PyClassInitializer::from(step).add_subclass(Self))
     }

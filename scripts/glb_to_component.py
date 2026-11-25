@@ -283,7 +283,7 @@ def main() -> None:
                     help="rescale so the model is this many metres tall")
     args = ap.parse_args()
 
-    from formats import glb as glb_mod
+    from ingetrazo_core.formats import glb as glb_mod
 
     batches, js = glb_mod.read_triangles(Path(args.glb))
     extras = (js.get("asset", {}).get("extras", {}) or {})

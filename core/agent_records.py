@@ -144,7 +144,7 @@ class RecordTools(LinkTools):
             raise ValueError('uids must be a list')
         if not uids:
             return []
-        from core.structure import _targets
+        from ingetrazo_core.structure import _targets
         return _targets(self._viewport.scene, uids)
 
     def _edit_records(self, targets, patches, schema, force):

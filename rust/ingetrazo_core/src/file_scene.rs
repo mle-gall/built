@@ -185,7 +185,7 @@ fn archive_styles(scene: &Obj<'_>, out: &Dict<'_>) -> PyResult<()> {
 
 fn archive_settings(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_>) -> PyResult<()> {
     let py = scene.py();
-    let codec = py.import("formats.igz")?;
+    let codec = py.import("ingetrazo_core.formats.igz")?;
     let style = attr(scene, "dimension_style")?;
     if style.is_truthy()? {
         out.set_item("dimension_style", style.call_method0("copy")?)?;
@@ -203,7 +203,7 @@ fn archive_settings(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_>) -> PyResu
                             {
                                 copy.set_item(
                                     k,
-                                    py.import("formats.built")?
+                                    py.import("ingetrazo_core.formats.built")?
                                         .call_method1("compact_values", (point,))?,
                                 )?;
                             }
@@ -253,7 +253,7 @@ fn archive_settings(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_>) -> PyResu
                 .and_then(|v| v.cast_into::<PyDict>().ok())
             {
                 let path = py
-                    .import("core.project")?
+                    .import("ingetrazo_core.project")?
                     .call_method1("path_for", (scene,))?;
                 if path.is_truthy()? {
                     p.call_method1("pop", ("rel", py.None()))?;
@@ -307,8 +307,8 @@ fn archive_settings(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_>) -> PyResu
         out.set_item("axes_hidden", true)?;
     }
     for (from, to, module, class) in [
-        ("display_style", "display_style", "core.style", "Style"),
-        ("shadows", "shadows", "core.sun", "ShadowSettings"),
+        ("display_style", "display_style", "ingetrazo_core.style", "Style"),
+        ("shadows", "shadows", "ingetrazo_core.sun", "ShadowSettings"),
     ] {
         let value = attr(scene, from)?;
         if !value.is_none() {
@@ -343,7 +343,7 @@ pub fn igz_archive_scene_fields(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_
     archive_styles(scene, out)?;
     let views = attr(scene, "saved_views")?;
     if views.is_truthy()? {
-        let class = py.import("core.saved_views")?.getattr("SavedView")?;
+        let class = py.import("ingetrazo_core.saved_views")?.getattr("SavedView")?;
         out.set_item(
             "saved_views",
             rows(&views, |v| {
@@ -379,7 +379,7 @@ pub fn igz_archive_scene_fields(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_
     }
     let mats = attr(scene, "materials")?;
     if mats.is_truthy()? {
-        let class = py.import("core.materials")?.getattr("Material")?;
+        let class = py.import("ingetrazo_core.materials")?.getattr("Material")?;
         out.set_item(
             "materials",
             rows(&mats.call_method0("values")?, |m| {
@@ -421,7 +421,7 @@ pub fn igz_archive_scene_fields(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_
     }
     let labels = attr(scene, "text_labels")?;
     if labels.is_truthy()? {
-        let class = py.import("core.textlabel")?.getattr("TextLabel")?;
+        let class = py.import("ingetrazo_core.textlabel")?.getattr("TextLabel")?;
         let mut native = true;
         for label in labels.try_iter()? {
             if !label?.get_type().is(&class) {
@@ -637,7 +637,7 @@ pub fn igz_reset_scene(scene: &Obj<'_>, payload: &Dict<'_>, survey: &Obj<'_>) ->
     }
     let tile = data(payload, "tile_layer")?;
     if tile.is_truthy()? {
-        let class = py.import("georef.tiles")?.getattr("TileLayer")?;
+        let class = py.import("ingetrazo_core.georef.tiles")?.getattr("TileLayer")?;
         if let Ok(layer) = class.call_method1("from_dict", (tile,)) {
             scene.setattr("tile_layer", layer)?;
         }
@@ -647,7 +647,7 @@ pub fn igz_reset_scene(scene: &Obj<'_>, payload: &Dict<'_>, survey: &Obj<'_>) ->
 #[pyfunction]
 pub fn igz_restore_views(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<()> {
     let py = scene.py();
-    let class = py.import("core.saved_views")?.getattr("SavedView")?;
+    let class = py.import("ingetrazo_core.saved_views")?.getattr("SavedView")?;
     let dest = PyList::empty(py);
     if let Some(seq) = payload.get_item("saved_views")? {
         for v in seq.try_iter()? {
@@ -771,8 +771,8 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
         }
     }
     for (key, module, class) in [
-        ("display_style", "core.style", "Style"),
-        ("shadows", "core.sun", "ShadowSettings"),
+        ("display_style", "ingetrazo_core.style", "Style"),
+        ("shadows", "ingetrazo_core.sun", "ShadowSettings"),
     ] {
         let c = py.import(module)?.getattr(class)?;
         let raw = data(payload, key)?;
@@ -792,7 +792,7 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
             .call_method1("from_dict", (data(payload, "scene_animation")?,))?,
     )?;
     if let Ok(seq) = data(payload, "section_planes")?.cast::<PyList>() {
-        let class = py.import("core.section")?.getattr("SectionPlane")?;
+        let class = py.import("ingetrazo_core.section")?.getattr("SectionPlane")?;
         let mut active = false;
         let planes = rows(seq, |v| {
             let plane = class.call_method1("from_dict", (v,))?;
@@ -820,7 +820,7 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
     let north = py
         .get_type::<pyo3::types::PyFloat>()
         .call1((data(payload, "north_deg")?,))
-        .and_then(|n| py.import("core.sun")?.call_method1("wrap_north_deg", (n,)));
+        .and_then(|n| py.import("ingetrazo_core.sun")?.call_method1("wrap_north_deg", (n,)));
     match north {
         Ok(n) => scene.setattr("north_deg", n)?,
         Err(e) if e.is_instance_of::<PyTypeError>(py) || e.is_instance_of::<PyValueError>(py) => {
@@ -833,21 +833,21 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
         if datum.is_instance_of::<PyDict>() {
             scene.setattr(
                 "georef",
-                py.import("georef.datum")?
+                py.import("ingetrazo_core.georef.datum")?
                     .getattr("SceneDatum")?
                     .call_method1("from_dict", (datum,))?,
             )?;
         }
     }
-    restore_records(scene, payload, "geo_paths", "georef.geopath", "GeoPath")?;
-    restore_records(scene, payload, "geo_points", "georef.points", "GeoPoint")?;
+    restore_records(scene, payload, "geo_paths", "ingetrazo_core.georef.geopath", "GeoPath")?;
+    restore_records(scene, payload, "geo_points", "ingetrazo_core.georef.points", "GeoPoint")?;
     py.import("core.composition")?
         .call_method1("bind_sheet_anchors", (scene,))?;
     let anchors = scene.getattr("text_placement_anchors")?;
     anchors.call_method0("clear")?;
     if let Some(seq) = payload.get_item("text_placement_anchors")? {
         let class = py
-            .import("core.annotation_anchor")?
+            .import("ingetrazo_core.annotation_anchor")?
             .getattr("TextPlacementAnchor")?;
         for item in seq.try_iter()? {
             let v = class.call_method1("restore", (scene, item?))?;
@@ -862,8 +862,8 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
     let mut repairs = 0;
     for (key, circles) in [("guides", false), ("guide_circles", true)] {
         if let Some(seq) = payload.get_item(key)? {
-            let factory = py.import("core.guide")?.getattr("guide_from_dict")?;
-            let finite = py.import("formats.igz")?.getattr("_finite_points")?;
+            let factory = py.import("ingetrazo_core.guide")?.getattr("guide_from_dict")?;
+            let finite = py.import("ingetrazo_core.formats.igz")?.getattr("_finite_points")?;
             for item in seq.try_iter()? {
                 let mut raw = item?.cast_into::<PyDict>()?;
                 if circles {
@@ -907,7 +907,7 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
         scene,
         payload,
         "image_planes",
-        "core.image_plane",
+        "ingetrazo_core.image_plane",
         "ImagePlane",
     )?;
     Ok(repairs)

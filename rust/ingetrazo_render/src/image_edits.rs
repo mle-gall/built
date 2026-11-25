@@ -15,7 +15,7 @@ fn image_lock(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let scene = vp.getattr("scene")?;
     let images = matching(
         &scene.getattr("selection")?,
-        "core.image_plane",
+        "ingetrazo_core.image_plane",
         "ImagePlane",
     )?;
     if !images.is_empty() {
@@ -68,7 +68,7 @@ fn image_measure(win: &Bound<'_, PyAny>, width: bool) -> PyResult<()> {
     let scene = win.getattr("viewport")?.getattr("scene")?;
     let images = matching(
         &scene.getattr("selection")?,
-        "core.image_plane",
+        "ingetrazo_core.image_plane",
         "ImagePlane",
     )?;
     if images.is_empty() {

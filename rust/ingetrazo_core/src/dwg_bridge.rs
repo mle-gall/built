@@ -9,7 +9,7 @@ use std::{
 };
 type Obj<'p> = Bound<'p, PyAny>;
 fn api(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("formats.dwg_bridge")
+    py.import("ingetrazo_core.formats.dwg_bridge")
 }
 fn path_obj(py: Python<'_>, p: PathBuf) -> PyResult<Obj<'_>> {
     py.import("pathlib")?.call_method1("Path", (p,))

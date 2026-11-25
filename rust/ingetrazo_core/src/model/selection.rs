@@ -1,4 +1,4 @@
-//! The selection's storage: what `core.element_set.ElementSet` holds, with
+//! The selection's storage: what `ingetrazo_core.ElementSet` holds, with
 //! a native snapshot readers can use without walking Python handles
 //! (`docs/model-port.md`, selection).
 //!
@@ -20,7 +20,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyDict, PyList, PyTuple};
 
 use crate::doc::py::PyPlacement;
 
@@ -69,7 +69,7 @@ fn kind_of(item: &Bound<'_, PyAny>) -> PyResult<usize> {
 }
 
 /// The entries of one selection (see the module notes).
-#[pyclass(module = "ingetrazo_core", name = "SelectionStore")]
+#[pyclass(module = "ingetrazo_core", subclass, name = "_ElementSetStorage")]
 pub struct SelectionStore {
     items: Py<PyDict>,
     counts: [usize; 5],
@@ -126,6 +126,14 @@ impl SelectionStore {
         Ok(store)
     }
 
+    fn __traverse__(&self, visit: pyo3::PyVisit<'_>) -> Result<(), pyo3::PyTraverseError> {
+        visit.call(&self.items)
+    }
+
+    fn __clear__(&mut self, py: Python<'_>) {
+        self.clear(py);
+    }
+
     fn __len__(&self, py: Python<'_>) -> usize {
         self.items.bind(py).len()
     }
@@ -134,11 +142,78 @@ impl SelectionStore {
         self.items.bind(py).contains(kind_and_identity(value)?.1)
     }
 
-    /// An iterator over the entries, in the order they came.
-    fn values<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    fn __iter__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py,PyAny>> {
         self.items.bind(py).call_method0("values")?.try_iter().map(|i| i.into_any())
     }
 
+    fn copy<'p>(slf: &Bound<'p,Self>) -> PyResult<Bound<'p,PyAny>> {
+        slf.get_type().call1((slf,))
+    }
+
+    fn __deepcopy__<'p>(slf: &Bound<'p,Self>, memo: &Bound<'p,PyDict>) -> PyResult<Bound<'p,PyAny>> {
+        let py = slf.py();
+        let copied = slf.get_type().call0()?;
+        memo.set_item(slf.as_ptr() as usize, &copied)?;
+        let values = slf.borrow().items.bind(py).values();
+        let items = py.import("copy")?.call_method1("deepcopy", (values,memo))?;
+        copied.call_method1("update",(items,))?;
+        Ok(copied)
+    }
+
+    #[pyo3(signature=(*others))]
+    fn update(slf:&Bound<Self>, others:&Bound<PyTuple>) -> PyResult<()> {
+        for group in others { for item in group.try_iter()? {
+            slf.borrow_mut().put(slf.py(), &item?)?;
+        }}
+        Ok(())
+    }
+    #[pyo3(signature=(*others))]
+    fn difference_update(slf:&Bound<Self>, others:&Bound<PyTuple>) -> PyResult<()> {
+        for group in others {
+            let snapshot = group.try_iter()?.collect::<PyResult<Vec<_>>>()?;
+            for item in snapshot { slf.borrow_mut().discard(slf.py(), &item)?; }
+        }
+        Ok(())
+    }
+    #[pyo3(signature=(*others))]
+    fn intersection_update(slf:&Bound<Self>, others:&Bound<PyTuple>) -> PyResult<()> {
+        for group in others {
+            let snapshot = PyList::new(slf.py(), group.try_iter()?.collect::<PyResult<Vec<_>>>()?)?;
+            slf.borrow_mut().retain(slf.py(),snapshot.as_any())?;
+        }
+        Ok(())
+    }
+    #[pyo3(signature=(*others))]
+    fn union<'p>(slf:&Bound<'p,Self>,others:&Bound<'p,PyTuple>) -> PyResult<Bound<'p,PyAny>> {
+        let result = Self::copy(slf)?;
+        result.call_method1("update",others)?;
+        Ok(result)
+    }
+    #[pyo3(signature=(*others))]
+    fn difference<'p>(slf:&Bound<'p,Self>,others:&Bound<'p,PyTuple>) -> PyResult<Bound<'p,PyAny>> {
+        let result = Self::copy(slf)?;
+        result.call_method1("difference_update",others)?;
+        Ok(result)
+    }
+    #[pyo3(signature=(*others))]
+    fn intersection<'p>(slf:&Bound<'p,Self>,others:&Bound<'p,PyTuple>) -> PyResult<Bound<'p,PyAny>> {
+        let result = Self::copy(slf)?;
+        result.call_method1("intersection_update",others)?;
+        Ok(result)
+    }
+    fn symmetric_difference<'p>(slf:&Bound<'p,Self>,other:&Bound<'p,PyAny>) -> PyResult<Bound<'p,PyAny>> {
+        slf.as_any().bitxor(slf.get_type().call1((other,))?)
+    }
+    fn symmetric_difference_update(slf:&Bound<Self>,other:&Bound<PyAny>) -> PyResult<()> {
+        let result=Self::symmetric_difference(slf,other)?;
+        slf.borrow_mut().replace(slf.py(),result.extract()?)
+    }
+    fn issubset(slf:&Bound<Self>,other:&Bound<PyAny>) -> PyResult<bool> {
+        slf.as_any().le(slf.get_type().call1((other,))?)
+    }
+    fn issuperset(slf:&Bound<Self>,other:&Bound<PyAny>) -> PyResult<bool> {
+        slf.as_any().ge(slf.get_type().call1((other,))?)
+    }
     fn add(&mut self, py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         self.put(py, value)
     }
@@ -272,7 +347,12 @@ pub fn selection_element_identity<'py>(item: &Bound<'py, PyAny>) -> PyResult<Bou
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<SelectionStore>()?;
+    let py = m.py();
+    let bases = (py.get_type::<SelectionStore>(), py.import("collections.abc")?.getattr("MutableSet")?);
+    let attrs = PyDict::new(py);
+    attrs.set_item("__module__", "ingetrazo_core")?;
+    let cls = py.import("abc")?.call_method1("ABCMeta", ("ElementSet", bases, attrs))?;
+    m.add("ElementSet", cls)?;
     m.add_function(wrap_pyfunction!(selection_element_identity, m)?)?;
     Ok(())
 }

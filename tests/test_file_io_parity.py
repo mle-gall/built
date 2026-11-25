@@ -186,7 +186,7 @@ def test_sheet_view_annotation_and_style_records(tmp_path, monkeypatch):
     from core.dimension import Dimension
     from core.layers import Layer
     from core.materials import Material
-    from core.saved_views import SavedView
+    from ingetrazo_core.saved_views import SavedView
     from core.textlabel import TextLabel
 
     scene = Scene()

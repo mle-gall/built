@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-//! `core.orient.orient_outward` over a `MeshScan`, decision for decision.
+//! `ingetrazo_core.orient.orient_outward` over a `MeshScan`, decision for decision.
 //!
 //! Orientation decides every face of the pushed solid's edge-connected
 //! component by ray parity: from a probe on the face, seven rays (the
@@ -160,7 +160,7 @@ fn origin_in_polygon(poly: &[(f64, f64)]) -> bool {
     inside
 }
 
-/// `core.orient._on_face(face, p)`.
+/// `ingetrazo_core.orient._on_face(face, p)`.
 fn on_face(g: &Geom, f: usize, outer: &[u32], p: V3) -> bool {
     let h = g.h;
     let n = g.normal[f];
@@ -181,7 +181,7 @@ fn on_face(g: &Geom, f: usize, outer: &[u32], p: V3) -> bool {
     origin_in_polygon(&poly)
 }
 
-/// `core.orient._interior_probe(face)`.
+/// `ingetrazo_core.orient._interior_probe(face)`.
 fn interior_probe(g: &Geom, f: usize, rings: &[&[u32]]) -> V3 {
     let h = g.h;
     let outer: &[u32] = rings.first().copied().unwrap_or(&[]);
@@ -793,7 +793,7 @@ pub(crate) fn component_root(p: &mut [u32], mut x: u32) -> u32 {
     x
 }
 
-/// `core.orient.orient_outward(mesh, seed, only)` on a scan whose parts
+/// `ingetrazo_core.orient.orient_outward(mesh, seed, only)` on a scan whose parts
 /// RINGS, EFACES and FFLAGS are read and whose `geom` is built.
 pub fn orient(scan: &MeshScan, g: &Geom, only: Option<&[u32]>, prm: &Params) -> Decision {
     let nf = scan.n_faces();

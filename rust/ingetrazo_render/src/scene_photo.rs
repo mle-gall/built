@@ -11,7 +11,7 @@ pub fn thumbnail_mode(py: Python<'_>) -> PyResult<bool> {
 }
 #[pyfunction]
 pub fn save_thumbnail_mode(py: Python<'_>, on: bool) -> PyResult<()> {
-    py.import("core.settings")?
+    py.import("ingetrazo_core.settings")?
         .getattr("settings")?
         .call0()?
         .call_method1("setValue", ("scenes/thumbnails", on))?;

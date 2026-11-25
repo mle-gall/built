@@ -32,7 +32,7 @@ def _scene(rng):
     from core.group import Group
     from core.mesh import Mesh
     from core.scene import Scene
-    from core.section import SectionPlane
+    from ingetrazo_core.section import SectionPlane
     scene = Scene()
     for i in range(rng.randint(0, 5)):
         scene.layers.append(L.Layer(f"T{i}", visible=rng.random() < 0.7))
@@ -147,7 +147,7 @@ def answers():
 
 def _answers():
     import ingetrazo_core as N
-    from core import saved_views as S
+    from ingetrazo_core import saved_views as S
     out = {"capture": [], "apply": [], "shown": [], "sig": [], "geo": [], "shadow": []}
     rng = random.Random(20261125)
     views = []

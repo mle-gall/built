@@ -15,7 +15,7 @@ import math
 import pytest
 from ingetrazo_core import Vec3 as V
 
-from core.orient import is_closed
+from ingetrazo_core.orient import is_closed
 from tools.arc import commit_arc
 
 

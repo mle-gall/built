@@ -48,7 +48,7 @@ pub(crate) fn start_profile<'p>(
             "pytest must supply an isolated shell profile",
         ));
     }
-    let settings = py.import("core.settings")?;
+    let settings = py.import("ingetrazo_core.settings")?;
     settings.call_method1("use_native", (&profile,))?;
     let language = settings
         .call_method0("settings")?
@@ -105,7 +105,7 @@ fn drain_timers(h: &Obj<'_>) -> PyResult<()> {
     guarded(
         h,
         "hostless timers",
-        h.py().import("core.timers")?.call_method0("run_due"),
+        h.py().import("ingetrazo_core.timers")?.call_method0("run_due"),
     )?;
     Ok(())
 }
@@ -124,7 +124,7 @@ pub(crate) fn document_views<'p>(h: &Obj<'p>) -> PyResult<(Obj<'p>, Obj<'p>)> {
         .import("views.document_controller")?
         .call_method1("DocumentController", (h,))?;
     if let Ok(steps) = py
-        .import("core.general_settings")?
+        .import("ingetrazo_core.general_settings")?
         .call_method1("value", ("undo_steps", 200))
         .and_then(|v| py.import("builtins")?.call_method1("int", (v,)))
     {
@@ -376,7 +376,7 @@ impl Host {
     #[pyo3(signature=(key,plus=false))]
     fn tool_cursor<'p>(py: Python<'p>, key: Option<&str>, plus: bool) -> PyResult<Obj<'p>> {
         let style = py
-            .import("core.general_settings")?
+            .import("ingetrazo_core.general_settings")?
             .call_method1("value", ("cursor_style", "tool"))?
             .str()?;
         py.import("ingetrazo_render")?
@@ -510,7 +510,7 @@ impl Host {
         }
         sooner(h.getattr("timers")?.call_method0("next_ms")?.extract()?);
         sooner(
-            py.import("core.timers")?
+            py.import("ingetrazo_core.timers")?
                 .call_method0("next_ms")?
                 .extract()?,
         );

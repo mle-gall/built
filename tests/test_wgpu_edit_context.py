@@ -125,7 +125,7 @@ def test_hidden_row_never_reaches_inference(context):
 
 
 def test_empty_click_uses_box_to_leave_one_level(context):
-    from core.input_codes import Input as Qt
+    from ingetrazo_core import Input as Qt
     view, source, a, b, _, _, _ = context
     view.scene.begin_group_edit(a)
     view.scene.begin_group_edit(b)

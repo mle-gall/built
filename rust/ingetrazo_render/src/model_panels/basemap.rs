@@ -17,7 +17,7 @@ impl Source {
     fn id(&self, py: Python<'_>) -> PyResult<String> {
         Ok(format!(
             "custom-{}",
-            py.import("georef.tiles")?
+            py.import("ingetrazo_core.georef.tiles")?
                 .call_method1("source_slug", (&self.name,))?
         ))
     }
@@ -61,7 +61,7 @@ fn read(st: &Obj<'_>) -> PyResult<Vec<Source>> {
 }
 fn sources<'p>(st: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
     let py = st.py();
-    let tiles = py.import("georef.tiles")?;
+    let tiles = py.import("ingetrazo_core.georef.tiles")?;
     let options = tiles.getattr("PRESETS")?.cast_into::<PyDict>()?.copy()?;
     for src in read(st)? {
         let entry = tiles.call_method1("custom_source", (&src.url, 19, &src.name))?;
@@ -73,7 +73,7 @@ pub(crate) fn current<'p>(st: &Obj<'p>) -> PyResult<Obj<'p>> {
     let options = sources(st)?;
     let default = st
         .py()
-        .import("georef.tiles")?
+        .import("ingetrazo_core.georef.tiles")?
         .getattr("DEFAULT_SOURCE_ID")?;
     let id = st.call_method1("value", (SELECTED, &default))?;
     Ok(options
@@ -238,7 +238,7 @@ pub(crate) fn append<'p>(
                             save(&st, &rows)?;
                             select(
                                 &env,
-                                &py.import("georef.tiles")?
+                                &py.import("ingetrazo_core.georef.tiles")?
                                     .getattr("DEFAULT_SOURCE_ID")?
                                     .extract::<String>()?,
                             )?;
@@ -255,5 +255,5 @@ pub(crate) fn append<'p>(
 
 #[pyfunction]
 pub(crate) fn selected_tile_source(py: Python<'_>) -> PyResult<Obj<'_>> {
-    current(&py.import("core.settings")?.call_method0("settings")?)
+    current(&py.import("ingetrazo_core.settings")?.call_method0("settings")?)
 }

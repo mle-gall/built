@@ -131,7 +131,7 @@ fn set_safe_mode(py: Python, enabled: bool) -> PyResult<()> {
 #[pyfunction]
 fn disabled_overrides(py: Python) -> PyResult<BTreeSet<String>> {
     let s = py
-        .import("core.general_settings")?
+        .import("ingetrazo_core.general_settings")?
         .call_method1("value", ("extensions/disabled", "[]"))?;
     let json = s
         .extract::<String>()
@@ -146,7 +146,7 @@ fn disabled_overrides(py: Python) -> PyResult<BTreeSet<String>> {
         .collect())
 }
 fn save_overrides(py: Python, ids: &BTreeSet<String>) -> PyResult<()> {
-    py.import("core.general_settings")?.call_method1(
+    py.import("ingetrazo_core.general_settings")?.call_method1(
         "set_value",
         ("extensions/disabled", serde_json::to_string(ids).unwrap()),
     )?;

@@ -23,7 +23,7 @@ def seed_defaults(registry=None):
 
 def get(scene):
     """Return a detached view, seeded only if the document has no registry."""
-    from core.project import read
+    from ingetrazo_core.project import read
     project = read(scene)
     stored = project['bim_registry'] if project else scene.plugin_data.get('bim_registry')
     return seed_defaults() if stored is None else deepcopy(stored)
@@ -177,7 +177,7 @@ def validate(registry):
                     for code, entry in codes.items():
                         if not isinstance(entry, dict) or not isinstance(entry.get('name'), str) or ('parent' in entry and not isinstance(entry['parent'], str)):
                             errors.append(f'{key}.{code}: invalid code entry')
-    from core.facets import validate_filter
+    from ingetrazo_core.facets import validate_filter
     for section in ('views', 'rules', 'export_profiles'):
         for key, value in registry.get(section, {}).items():
             if not isinstance(value, dict):

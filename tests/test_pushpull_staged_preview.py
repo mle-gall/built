@@ -666,7 +666,7 @@ def _door(door, tilt):
 
 
 def _solid(scene, v0):
-    from core.orient import is_closed, signed_volume
+    from ingetrazo_core.orient import is_closed, signed_volume
     mesh = scene.mesh
     assert is_closed(mesh) and not any(len(e.faces) > 2 for e in mesh.edges)
     return signed_volume(mesh) - v0
@@ -691,7 +691,7 @@ def test_a_typed_distance_counts_on_a_door_out_of_true(door, tilt, mouse,
     # Its corners are off the plane by more than the weld tolerance, so a
     # stage finds none to slide. Held anyway, the door stayed where the
     # first frame put it, whatever was typed: no word, one undo step.
-    from core.orient import signed_volume
+    from ingetrazo_core.orient import signed_volume
     build = _door(door, tilt)
     scene, vp, tool = _start(build)
     v0, area = signed_volume(scene.mesh), tool.base_face.area()
@@ -705,7 +705,7 @@ def test_a_typed_distance_counts_on_a_door_out_of_true(door, tilt, mouse,
 @pytest.mark.parametrize("door", "AB")
 @pytest.mark.parametrize("tilt", _OUT_OF_TRUE)
 def test_a_click_commits_where_the_mouse_is_on_a_door_out_of_true(door, tilt):
-    from core.orient import signed_volume
+    from ingetrazo_core.orient import signed_volume
     build = _door(door, tilt)
     scene, vp, tool = _start(build)
     v0, area = signed_volume(scene.mesh), tool.base_face.area()
@@ -749,7 +749,7 @@ def test_a_door_in_true_still_stages_and_commits_without_a_pipeline_run(
 def test_a_through_door_still_stages_past_the_far_face(door, tilt):
     # No cap in a tunnel, so no movers, and that is fine: the same punch at
     # any depth past the wall, typed or not.
-    from core.orient import signed_volume
+    from ingetrazo_core.orient import signed_volume
     build = _door(door, tilt)
     scene, vp, tool = _start(build)
     v0, area = signed_volume(scene.mesh), tool.base_face.area()

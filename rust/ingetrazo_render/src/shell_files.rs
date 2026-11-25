@@ -340,7 +340,7 @@ fn open_dialog<'py>(py: Python<'py>, win: &Any<'py>) -> PyResult<Any<'py>> {
         opener.call0()?;
         return Ok(b(py, true));
     }
-    let filter: String = py.import("formats.built")?.getattr("DOCUMENT_FILTER")?.extract()?;
+    let filter: String = py.import("ingetrazo_core.formats.built")?.getattr("DOCUMENT_FILTER")?.extract()?;
     win.getattr("viewport")?.call_method0("end_group_edit")?;
     let filter = format!("{filter};;Built projects (*.builtproject *.igzproj);;Imports (*.skp *.dae *.dxf *.dwg *.rfa *.glb *.gltf *.obj *.stl)");
     let path = file_dialogs(py)?.call_method1("getOpenFileName", (win, tr(py, "Open Built document")?, "", filter))?.get_item(0)?;
@@ -475,7 +475,7 @@ fn open_document<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>) -> PyRes
     let vp = doc.getattr("viewport")?;
     let view = doc.getattr("stand_in")?;
     let mut recovered = false;
-    let slot = py.import("core.autosave")?.call_method1("pending", (path,))?;
+    let slot = py.import("ingetrazo_core.autosave")?.call_method1("pending", (path,))?;
     let defer_recovery = !slot.is_none() && !dialogs.call_method1("live", (win,))?.is_none();
     if !slot.is_none() && !defer_recovery {
         let got = render(py)?.call_method1("named_recovery", (win, path))?;
@@ -509,7 +509,7 @@ fn open_document<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>) -> PyRes
     }
     let work = || -> PyResult<bool> {
         let source = if recovered { slot.clone() } else { path.clone() };
-        let loaded = py.import("formats.igz")?.getattr("load_into")?.call((vp.getattr("scene")?, source), Some(&kw(py, &[("progress", guarded.into_bound(py))])?));
+        let loaded = py.import("ingetrazo_core.formats.igz")?.getattr("load_into")?.call((vp.getattr("scene")?, source), Some(&kw(py, &[("progress", guarded.into_bound(py))])?));
         match loaded {
             Ok(_) => {}
             Err(e) if e.is_instance_of::<Abort>(py) => {
@@ -552,7 +552,7 @@ fn install_open<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>, bar: &Any
             initial_aspect = frame.get_item(0)?;
         }
     }
-    let slot = py.import("core.autosave")?.call_method1("pending", (path,))?;
+    let slot = py.import("ingetrazo_core.autosave")?.call_method1("pending", (path,))?;
     let prepared = PyTuple::new(py, [packed, tracker, tree])?;
     fm(py)?.call_method1("_finish_open", (win, path, false, slot, bar, bar.getattr("job")?.getattr("update")?, prepared, initial_aspect))
 }
@@ -851,7 +851,7 @@ fn import_path(win: &Any<'_>, path: &Any<'_>) -> PyResult<bool> {
 /// Choose a source file, then ask which of its contents to place.
 #[pyfunction]
 fn link_document(py: Python<'_>, win: &Any<'_>) -> PyResult<bool> {
-    let filter = py.import("formats.built")?.getattr("DOCUMENT_FILTER")?;
+    let filter = py.import("ingetrazo_core.formats.built")?.getattr("DOCUMENT_FILTER")?;
     let path = file_dialogs(py)?.call_method1("getOpenFileName", (win, tr(py, "Link a document")?, "", filter))?.get_item(0)?;
     if !truthy(&path) {
         return Ok(false);
@@ -872,14 +872,14 @@ fn save<'py>(py: Python<'py>, win: &Any<'py>) -> PyResult<Any<'py>> {
     }
     win.call_method0("_end_group_edits")?;
     let path = win.getattr("_current_path")?;
-    if path.is_none() || !py.import("formats.built")?.call_method1("is_built", (&path,))?.is_truthy()? {
+    if path.is_none() || !py.import("ingetrazo_core.formats.built")?.call_method1("is_built", (&path,))?.is_truthy()? {
         return fm(py)?.call_method1("save_as", (win,));
     }
     fm(py)?.call_method1("do_save", (win, path_of(py, &path)?))
 }
 
 fn ask_save_path<'py>(py: Python<'py>, win: &Any<'py>, caption: String, default: &Any<'py>) -> PyResult<Option<Any<'py>>> {
-    let built = py.import("formats.built")?;
+    let built = py.import("ingetrazo_core.formats.built")?;
     let chosen = file_dialogs(py)?.call_method1("getSaveFileName", (win, caption, default.str()?, built.getattr("BUILT_FILTER")?))?.get_item(0)?;
     if !truthy(&chosen) {
         return Ok(None);
@@ -912,7 +912,7 @@ fn save_as<'py>(py: Python<'py>, win: &Any<'py>) -> PyResult<Any<'py>> {
         return Ok(b(py, !result.is(&b(py, false))));
     }
     win.call_method0("_end_group_edits")?;
-    let default = base_path(py, win)?.call_method1("with_suffix", (py.import("formats.built")?.getattr("BUILT_SUFFIX")?,))?;
+    let default = base_path(py, win)?.call_method1("with_suffix", (py.import("ingetrazo_core.formats.built")?.getattr("BUILT_SUFFIX")?,))?;
     match ask_save_path(py, win, tr(py, "Save Built document")?, &default)? {
         None => Ok(b(py, false)),
         Some(path) => fm(py)?.call_method1("do_save", (win, path)),
@@ -925,7 +925,7 @@ fn save_as<'py>(py: Python<'py>, win: &Any<'py>) -> PyResult<Any<'py>> {
 fn save_copy<'py>(py: Python<'py>, win: &Any<'py>) -> PyResult<Any<'py>> {
     win.call_method0("_end_group_edits")?;
     let base = base_path(py, win)?;
-    let suffix: String = py.import("formats.built")?.getattr("BUILT_SUFFIX")?.extract()?;
+    let suffix: String = py.import("ingetrazo_core.formats.built")?.getattr("BUILT_SUFFIX")?.extract()?;
     let default = base.call_method1("with_name", (format!("{} copy{suffix}", base.getattr("stem")?.str()?),))?;
     match ask_save_path(py, win, tr(py, "Save a Copy")?, &default)? {
         None => Ok(b(py, false)),
@@ -983,7 +983,7 @@ fn with_busy<'py, T>(py: Python<'py>, activity: &Any<'py>, body: impl FnOnce(&An
 fn do_save<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>, copy: bool) -> PyResult<bool> {
     let m = fm(py)?;
     let dialogs = cd(py)?;
-    let autosave = py.import("core.autosave")?;
+    let autosave = py.import("ingetrazo_core.autosave")?;
     let project = py.import("ingetrazo_render.shell_project")?;
     if !win.getattr("_workspace")?.is_none() {
         return Ok(false);
@@ -1005,7 +1005,7 @@ fn do_save<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>, copy: bool) ->
         }
         let activity = dialogs.getattr("busy")?.call((win, trf(py, "Saving {name}…", &[("name", path.getattr("name")?)])?), Some(&kw(py, &[("output_path", path.clone()), ("exclusive", b(py, true))])?))?;
         with_busy(py, &activity, |job| {
-            let save = py.import("formats.igz")?.getattr("save_scene")?;
+            let save = py.import("ingetrazo_core.formats.igz")?.getattr("save_scene")?;
             let stats = if job.is_none() { save.call1((&scene, &path))? } else { save.call((&scene, &path), Some(&kw(py, &[("progress", save_progress(py, job)?)])?))? };
             Ok(if truthy(&stats) { stats } else { PyDict::new(py).into_any() })
         })
@@ -1105,7 +1105,7 @@ fn export_igz<'py>(py: Python<'py>, win: &Any<'py>, path: Option<Any<'py>>) -> P
         }
         let activity = dialogs.getattr("busy")?.call((win, trf(py, "Saving {name}…", &[("name", path.getattr("name")?)])?), Some(&kw(py, &[("exclusive", b(py, true))])?))?;
         let stats = with_busy(py, &activity, |job| {
-            let export = py.import("formats.igz")?.getattr("export_igz")?;
+            let export = py.import("ingetrazo_core.formats.igz")?.getattr("export_igz")?;
             let stats = if job.is_none() { export.call1((&scene, &path, &confirm))? } else { export.call((&scene, &path, &confirm), Some(&kw(py, &[("progress", save_progress(py, job)?)])?))? };
             if stats.is_none() && !job.is_none() {
                 job.setattr("cancelled", true)?;

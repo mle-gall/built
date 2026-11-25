@@ -9,7 +9,7 @@ use pyo3::{
 use std::time::{Duration, Instant};
 type Obj<'p> = Bound<'p, PyAny>;
 fn api(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("formats.igz")
+    py.import("ingetrazo_core.formats.igz")
 }
 fn seq<'p>(payload: &Obj<'p>, k: &str) -> PyResult<Obj<'p>> {
     let rows = payload.call_method1("get", (k,))?;
@@ -97,7 +97,7 @@ impl ReadMesh {
 }
 fn materials<'p>(payload: &Obj<'p>, links: Option<&Obj<'p>>) -> PyResult<Bound<'p, PyDict>> {
     let py = payload.py();
-    let m = py.import("core.materials")?.getattr("Material")?;
+    let m = py.import("ingetrazo_core.materials")?.getattr("Material")?;
     let decode = api(py)?
         .call_method0("native_io")?
         .getattr("igz_load_material")
@@ -165,7 +165,7 @@ fn igz_load_into_inner<'p>(
     let read = (|| -> PyResult<_> {
         if built
             || py
-                .import("formats.built")?
+                .import("ingetrazo_core.formats.built")?
                 .call_method1("is_built", (path,))?
                 .is_truthy()?
         {

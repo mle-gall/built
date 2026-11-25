@@ -129,14 +129,14 @@ pub fn key_set(py: Python<'_>, key: &'static str, kind: Kind) -> Res {
     })
 }
 
-/// `_gkey`: a getter for a `core.general_settings` key.
+/// `_gkey`: a getter for a `ingetrazo_core.general_settings` key.
 pub fn gkey_get(py: Python<'_>, name: &'static str, default: Py<PyAny>, kind: Kind) -> Res {
     func(py, move |py, a| gkey_value(&a.get_item(0)?, name, default.bind(py), kind))
 }
 
 pub fn gkey_value(env: &Bound<'_, PyAny>, name: &str, default: &Bound<'_, PyAny>, kind: Kind) -> Res {
     let py = env.py();
-    let raw = py.import("core.general_settings")?.call_method1("value", (name, default, env.getattr("st")?))?;
+    let raw = py.import("ingetrazo_core.general_settings")?.call_method1("value", (name, default, env.getattr("st")?))?;
     shaped(&raw, default, kind, &default.str()?.to_string())
 }
 
@@ -344,7 +344,7 @@ pub struct Env {
 impl Env {
     #[new]
     fn new(py: Python<'_>, win: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let st = py.import("core.settings")?.call_method0("settings")?;
+        let st = py.import("ingetrazo_core.settings")?.call_method0("settings")?;
         let vp = opt(win, "viewport");
         let scene = vp.as_ref().and_then(|v| opt(v, "scene"));
         Ok(Env { win: win.clone().unbind(), st: st.unbind(), vp: vp.map_or_else(|| none(py), Bound::unbind), scene: scene.map_or_else(|| none(py), Bound::unbind) })
@@ -1016,7 +1016,7 @@ fn put_north(env: &Bound<'_, PyAny>, value: &Bound<'_, PyAny>) -> PyResult<()> {
     let vp = env.getattr("vp")?;
     let Some(history) = opt(&vp, "history") else { return Ok(()) };
     let value: f64 = py.import("builtins")?.getattr("float")?.call1((value,))?.extract()?;
-    let north: f64 = py.import("core.sun")?.call_method1("scene_north_deg", (vp.getattr("scene")?,))?.extract()?;
+    let north: f64 = py.import("ingetrazo_core.sun")?.call_method1("scene_north_deg", (vp.getattr("scene")?,))?.extract()?;
     if (value - north).abs() < 1e-9 {
         return Ok(());
     }
@@ -1041,7 +1041,7 @@ fn location<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py
         if scene.is_none() {
             return obj(py, 0.0);
         }
-        let deg: f64 = py.import("core.sun")?.call_method1("scene_north_deg", (scene,))?.extract()?;
+        let deg: f64 = py.import("ingetrazo_core.sun")?.call_method1("scene_north_deg", (scene,))?.extract()?;
         Ok(py.import("builtins")?.getattr("round")?.call1((deg, 1))?.unbind())
     })?;
     let where_ = func(py, |py, a| {

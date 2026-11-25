@@ -1,7 +1,7 @@
 use super::*;
 fn recipe<'p>(g: &Obj<'p>, reg: &Obj<'p>) -> PyResult<Obj<'p>> {
     let py = g.py();
-    let s = py.import("core.structure")?;
+    let s = py.import("ingetrazo_core.structure")?;
     let node = s.call_method1("node_of", (g,))?;
     if s.call_method1("_nodes", (reg,))?.contains(&node)? {
         s.call_method1("resolve", (reg, node))
@@ -169,7 +169,7 @@ fn patch_record_field<'p>(
     let hist = py.import("ingetrazo_core.history")?;
     let cmds = PyList::empty(py);
     for g in py
-        .import("core.structure")?
+        .import("ingetrazo_core.structure")?
         .call_method1("_targets", (&scene, placements))?
         .try_iter()?
     {
@@ -307,7 +307,7 @@ fn filing_rule<'p>(
     let reg = py
         .import("core.bim_registry")?
         .call_method1("get", (scene,))?;
-    let structure = py.import("core.structure")?;
+    let structure = py.import("ingetrazo_core.structure")?;
     let node = structure
         .call_method1("_nodes", (&reg,))?
         .call_method1("get", (key,))?;

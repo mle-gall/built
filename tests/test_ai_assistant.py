@@ -162,7 +162,7 @@ def test_recipe_helpers_build_correct_solids(native_host):
     assert all(f.attrs.get("color") == (1, 0, 0, 1)
                for f in cil.mesh.faces)
     # Every solid is watertight and the curved sides came out soft.
-    from core.orient import is_closed
+    from ingetrazo_core.orient import is_closed
     for g in (cil, aro, feston, caja):
         assert is_closed(g.mesh)
     assert any(e.soft for e in cil.mesh.edges)
@@ -489,7 +489,7 @@ def test_small_local_models_are_flagged():
 
 
 def test_box_helper_builds_a_closed_box(native_host):
-    from core.orient import is_closed
+    from ingetrazo_core.orient import is_closed
     win = native_host.window
     vp = win.viewport
     r = ai.run_transactional(
@@ -560,7 +560,7 @@ def test_pasted_image_attaches_with_thumbnail(panel, monkeypatch):
 
 def test_sent_photo_opens_its_preview(panel, tmp_path, monkeypatch):
     from tests.plugin_images import write_png
-    from core import desktop_open
+    from ingetrazo_core import desktop_open
     photo = tmp_path / "photo.png"
     write_png(photo, 64, 32)
     panel.event("photo", "commit", str(photo))
@@ -711,7 +711,7 @@ def test_house_wall_and_prism_helpers_build_closed_solids(native_host):
     """Marco (2026-09-15): «se puede optimizar para que me dibuje algo
     mejor?». One call builds a house with walls of real thickness, a door
     leaf, glass panes and a roof — every solid watertight."""
-    from core.orient import is_closed
+    from ingetrazo_core.orient import is_closed
     win = native_host.window
     vp = win.viewport
     scope: dict = {"__name__": "__ai__"}

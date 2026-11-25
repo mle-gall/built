@@ -32,7 +32,7 @@ fn group_from_obj<'py>(
     let groups = scene.getattr("groups")?;
     let opts = PyDict::new(py);
     opts.set_item("cos_threshold", 0.55)?;
-    let soften = py.import("formats.fuse")?.getattr("soften_smooth_edges")?;
+    let soften = py.import("ingetrazo_core.formats.fuse")?.getattr("soften_smooth_edges")?;
     let mut mesh = scene.getattr("mesh")?;
     if groups.is_truthy()? {
         let first = groups.get_item(0)?;
@@ -78,7 +78,7 @@ fn bundled_component<'py>(
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
     let py = win.py();
     let base = py
-        .import("core.paths")?
+        .import("ingetrazo_core.paths")?
         .call_method0("app_root")?
         .extract::<PathBuf>()?
         .join("resources")
@@ -98,9 +98,9 @@ fn bundled_component<'py>(
         }
         let path = py.import("pathlib")?.call_method1("Path", (file,))?;
         let (module, load) = match kind {
-            "igz" => ("formats.igz", "load_into"),
-            "glb" => ("formats.glb", "load_glb"),
-            _ => ("formats.obj", "load_obj"),
+            "igz" => ("ingetrazo_core.formats.igz", "load_into"),
+            "glb" => ("ingetrazo_core.formats.glb", "load_glb"),
+            _ => ("ingetrazo_core.formats.obj", "load_obj"),
         };
         py.import(module)?.call_method1(load, (&scene, &path))?;
         if kind == "obj" {
@@ -176,7 +176,7 @@ fn catalogue_component<'py>(
             "matrix",
             library.call_method1("model_matrix", (entry, &path))?,
         )?;
-        py.import("formats.obj")?
+        py.import("ingetrazo_core.formats.obj")?
             .getattr("load_obj")?
             .call((&scene, &path), Some(&kw))?;
         Ok(())
@@ -308,8 +308,8 @@ fn import_kept_components(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> Py
     let py = win.py();
     let src = py.import("core.scene")?.call_method0("Scene")?;
     let file = py.import("pathlib")?.call_method1("Path", (path,))?;
-    py.import("formats.igz")?.call_method1("load_into", (&src, file))?;
-    let templates = py.import("core.kept_components")?.call_method1("definitions_of", (&src,))?;
+    py.import("ingetrazo_core.formats.igz")?.call_method1("load_into", (&src, file))?;
+    let templates = py.import("ingetrazo_core.kept_components")?.call_method1("definitions_of", (&src,))?;
     let count = templates.len()?;
     if count == 0 { return Ok(0); }
 
@@ -324,7 +324,7 @@ fn import_kept_components(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> Py
     root.setattr("xform", py.None())?;
     root.setattr("material", py.None())?;
     root.setattr("children", &templates)?;
-    let insert = py.import("core.insert")?;
+    let insert = py.import("ingetrazo_core.document_insert")?;
     insert.call_method1("merge_materials", (src.getattr("materials")?, &recipes, root))?;
     let additions = PyDict::new(py);
     for (name, recipe) in recipes.cast::<PyDict>()?.iter() {
@@ -352,7 +352,7 @@ pub(super) fn choose_kept_components(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let path = win.getattr("_current_path")?;
     let folder = if path.is_none() { String::new() } else { path.getattr("parent")?.str()?.to_string() };
     let file = py.import("ingetrazo_render.shell_files")?.getattr("ShellFileDialog")?.call_method1(
-        "getOpenFileName", (win, &title, folder, py.import("formats.built")?.getattr("DOCUMENT_FILTER")?))?.get_item(0)?;
+        "getOpenFileName", (win, &title, folder, py.import("ingetrazo_core.formats.built")?.getattr("DOCUMENT_FILTER")?))?.get_item(0)?;
     if !file.is_truthy()? { return Ok(()); }
     let vars = PyDict::new(py);
     let msg = match import_kept_components(win, &file) {

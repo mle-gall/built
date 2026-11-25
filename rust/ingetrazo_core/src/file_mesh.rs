@@ -241,7 +241,7 @@ fn igz_json_arrays<'py>(payload: &Dict<'py>) -> PyResult<Option<Dict<'py>>> {
     let ne = edges.len()?;
     let nf = faces.len()?;
     let small = py
-        .import("formats.igz")?
+        .import("ingetrazo_core.formats.igz")?
         .call_method1("_bulk_sized", (ne, nf))?
         .is_truthy()?
         == false;
@@ -662,7 +662,7 @@ fn igz_mesh_json<'py>(mesh: &Obj<'py>, geom_sink: Option<&Obj<'py>>) -> PyResult
     let plan = py
         .import("ingetrazo_core")?
         .call_method1("plan_of", (mesh,))?;
-    let codec = py.import("formats.igz")?;
+    let codec = py.import("ingetrazo_core.formats.igz")?;
     let out = PyDict::new(py);
     if !plan.is_none() && geom_sink.is_none() {
         return igz_plan_json(mesh, &plan);
@@ -772,7 +772,7 @@ pub(crate) fn maximal_vertex_holes<'py>(holes: &Obj<'py>) -> PyResult<Vec<Obj<'p
 #[pyfunction]
 fn igz_pack_geometry<'py>(mesh: &Obj<'py>, sink: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = mesh.py();
-    let codec = py.import("formats.igz")?;
+    let codec = py.import("ingetrazo_core.formats.igz")?;
     let precise = ["built", "compatibility"]
         .iter()
         .try_fold(false, |flag, k| -> PyResult<_> {

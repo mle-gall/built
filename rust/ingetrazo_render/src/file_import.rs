@@ -14,7 +14,7 @@ fn dxf_options(win: &Bound<'_, PyAny>, header_scale: Option<f64>) -> PyResult<Op
         ("m", "Metres", 1.0), ("in", "Inches", 0.0254), ("ft", "Feet", 0.3048),
     ];
     let py = win.py();
-    let store = py.import("core.settings")?.call_method0("settings")?;
+    let store = py.import("ingetrazo_core.settings")?.call_method0("settings")?;
     let saved = store.call_method1("value", ("import/dxf_unit", "mm"))?;
     let saved_key = saved.extract::<&str>().ok();
     let default = UNITS.iter().find(|u| Some(u.2) == header_scale)
@@ -186,7 +186,7 @@ fn load_file(
     let py = scene.py();
     match kind {
         "rfa" => {
-            let backend = py.import("formats.rfa")?;
+            let backend = py.import("ingetrazo_core.formats.rfa")?;
             let payload = backend.call_method1("read_rfa", (path,))?;
             result.set_item(
                 "report",
@@ -194,21 +194,21 @@ fn load_file(
             )?;
         }
         "stl" => {
-            py.import("formats.stl")?
+            py.import("ingetrazo_core.formats.stl")?
                 .call_method1("add_stl_mesh", (scene, path, params.get_item("target")?))?;
         }
         "dxf" => {
             let stats = py
-                .import("formats.dxf_in")?
+                .import("ingetrazo_core.formats.dxf_in")?
                 .getattr("load_dxf")?
                 .call((scene, path), Some(params))?;
             result.call_method1("update", (stats,))?;
         }
         kind => {
             let (module, function) = match kind {
-                "glb" => ("formats.glb", "load_glb"),
-                "dae" => ("formats.dae", "load_dae"),
-                "obj" => ("formats.obj", "load_obj"),
+                "glb" => ("ingetrazo_core.formats.glb", "load_glb"),
+                "dae" => ("ingetrazo_core.formats.dae", "load_dae"),
+                "obj" => ("ingetrazo_core.formats.obj", "load_obj"),
                 _ => {
                     return Err(pyo3::exceptions::PyValueError::new_err(
                         "unknown import format",
@@ -227,7 +227,7 @@ fn load_file(
 #[pyfunction]
 fn dxf_failure(err: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<String> {
     let py = err.py();
-    if !err.is_instance(&py.import("formats.dxf_in")?.getattr("NothingToImport")?)? {
+    if !err.is_instance(&py.import("ingetrazo_core.formats.dxf_in")?.getattr("NothingToImport")?)? {
         return Ok(err.str()?.to_string());
     }
     let args = PyDict::new(py);
@@ -282,7 +282,7 @@ fn import_file(
     let params = PyDict::new(py);
     let mut make_faces = false;
     if kind == "dxf" {
-        let backend = py.import("formats.dxf_in")?;
+        let backend = py.import("ingetrazo_core.formats.dxf_in")?;
         let source = match backend.call_method1("prepare_import", (path,)) {
             Ok(doc) => doc,
             Err(e) => {
@@ -349,7 +349,7 @@ fn import_file(
     if kind == "rfa" {
         kw.set_item(
             "command_type",
-            py.import("formats.rfa")?.getattr("RfaImport")?,
+            py.import("ingetrazo_core.formats.rfa")?.getattr("RfaImport")?,
         )?;
     }
     if kind == "dxf" {

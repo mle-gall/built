@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Built projects: the `.builtproject` manifest and the per-user session
 //! (docs/builtproject-format.md). JSON crosses to Python as text.
+pub(crate) mod document;
 mod format;
 pub mod manifest;
 pub mod session;

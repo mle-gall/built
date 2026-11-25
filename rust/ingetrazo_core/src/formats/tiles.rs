@@ -107,7 +107,7 @@ fn custom_source<'p>(
     name: Option<&str>,
 ) -> PyResult<Obj<'p>> {
     let name = name.filter(|s| !s.is_empty());
-    py.import("georef.tiles")?.call_method1(
+    py.import("ingetrazo_core.georef.tiles")?.call_method1(
         "TileSource",
         (
             name.map(|s| format!("custom-{}", source_slug(s)))
@@ -151,7 +151,7 @@ fn tile_to_dict<'p>(py: Python<'p>, layer: &Obj<'p>) -> PyResult<Obj<'p>> {
 }
 #[pyfunction]
 fn tile_from_dict<'p>(py: Python<'p>, cls: &Obj<'p>, raw: &Obj<'p>) -> PyResult<Obj<'p>> {
-    let m = py.import("georef.tiles")?;
+    let m = py.import("ingetrazo_core.georef.tiles")?;
     let id = raw.call_method1("get", ("source", "custom"))?;
     let mut source = m.getattr("PRESETS")?.call_method1("get", (&id,))?;
     if source.is_none() {
@@ -320,7 +320,7 @@ fn quad_local<'p>(
         (local(s, w)?, (0., 1.)),
     ])
 }
-#[pyclass(module = "georef.tiles", dict)]
+#[pyclass(module = "ingetrazo_core.georef.tiles", dict)]
 struct TileCache {
     root: PathBuf,
     #[pyo3(get, set)]

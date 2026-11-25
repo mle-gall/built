@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""``core.scan_index``: the drawing commands' whole-mesh searches as native
+"""``ingetrazo_core.scan_index``: the drawing commands' whole-mesh searches as native
 prefilters must leave every decision where the full Python loops put it.
 
 Two layers:
@@ -31,7 +31,7 @@ from ingetrazo_core import Vec3 as V
 
 import core._native as _native
 from core import mesh as M
-from core import scan_index
+from ingetrazo_core import scan_index
 from ingetrazo_core import store_mesh as S
 
 mod = _native.available()

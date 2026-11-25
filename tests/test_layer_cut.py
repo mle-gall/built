@@ -26,7 +26,7 @@ from core.hlr import KIND_CUT, KIND_EDGE, hlr_drawing
 from core.layers import DEFAULT_LAYER, Layer
 from core.mesh import Mesh
 from core.scene import Scene
-from core.section import SectionPlane
+from ingetrazo_core.section import SectionPlane
 
 V = QVector3D
 
@@ -1297,7 +1297,7 @@ def _model_cut(scene):
 
 
 def test_the_model_cut_shows_each_layers_hatch():
-    from core.section import layer_fills
+    from ingetrazo_core.section import layer_fills
     scene = _wall_and_door(Scene())
     scene.layer("Muros").hatch = "brick"
     scene.layer("Carpinterías").hatch = "solid"
@@ -1561,7 +1561,7 @@ def test_a_solid_with_a_face_on_another_layer_keeps_its_cut():
 
 
 def test_the_model_cut_fills_a_solid_of_two_layers():
-    from core.section import layer_fills
+    from ingetrazo_core.section import layer_fills
     scene = _wall_with_a_face_elsewhere(Scene())
     scene.layer("Muros").hatch = "solid"
     scene.layer("Muros").hatch_color = (0.6, 0.1, 0.1)

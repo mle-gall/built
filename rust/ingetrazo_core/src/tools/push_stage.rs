@@ -202,7 +202,7 @@ impl Capture {
     fn take(mesh: &Bound<'_, PyAny>, scene: &Bound<'_, PyAny>) -> PyResult<Self> {
         let selection = mesh
             .py()
-            .import("core.element_set")?
+            .import("ingetrazo_core")?
             .call_method1("ElementSet", (scene.getattr("selection")?,))?;
         Ok(Self {
             mesh: mesh.call_method0("capture_state")?.unbind(),
@@ -284,7 +284,7 @@ impl PushStages {
         let views = py.import("core.push_scans")?.getattr("views")?;
         let faces = views.call1((mesh, "face", &slide.faces))?;
         let made = py
-            .import("core.element_set")?
+            .import("ingetrazo_core")?
             .call_method1("ElementSet", (faces,))?;
         made.call_method1("update", (views.call1((mesh, "edge", &slide.edges))?,))?;
         Ok(Some(Stage {

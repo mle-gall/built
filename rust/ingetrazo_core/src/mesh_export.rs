@@ -200,7 +200,7 @@ fn _worn_outright<'p>(attrs: &Obj<'p>) -> PyResult<Obj<'p>> {
     if back.is_instance_of::<PyDict>() {
         let has = attrs
             .py()
-            .import("core.materials")?
+            .import("ingetrazo_core.materials")?
             .getattr("has_own_material")?;
         if has.call1((&back,))?.is_truthy()? && !has.call1((attrs,))?.is_truthy()? {
             return Ok(back);

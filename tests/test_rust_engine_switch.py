@@ -9,7 +9,7 @@ import importlib
 import pytest
 
 import core._native as _native
-from core import general_settings
+from ingetrazo_core import general_settings
 
 
 @pytest.fixture

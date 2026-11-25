@@ -17,7 +17,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from ingetrazo_core import bevel_exponent as _exponent, apply_fillet
 from core.mesh import Mesh
-from core.orient import is_closed, signed_volume
+from ingetrazo_core.orient import is_closed, signed_volume
 from ingetrazo_core import plan_vertex_bevel
 from tests.test_fillet import box, edge_at
 

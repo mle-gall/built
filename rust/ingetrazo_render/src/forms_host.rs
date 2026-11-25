@@ -1146,7 +1146,7 @@ impl UnitsDone {
                 }
                 let key = crate::settings_rows::live::NEW_UNITS;
                 let for_new = if model.getattr("for_new")?.is_truthy()? { "1" } else { "0" };
-                py.import("core.settings")?.call_method0("settings")?.call_method1("setValue", (key, for_new))?;
+                py.import("ingetrazo_core.settings")?.call_method0("settings")?.call_method1("setValue", (key, for_new))?;
                 u.call_method1("set_ask_at_start", (model.getattr("ask_again")?,))?;
             } else {
                 u.call_method1("apply_units", (scene, &chosen))?;

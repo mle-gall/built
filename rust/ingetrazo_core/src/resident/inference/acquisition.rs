@@ -226,7 +226,7 @@ pub(super) fn acquire(
         let modifiers = match modifiers {
             Some(m) => m.clone(),
             None => py
-                .import("core.input_codes")?
+                .import("ingetrazo_core")?
                 .getattr("Input")?
                 .getattr("NoModifier")?,
         };

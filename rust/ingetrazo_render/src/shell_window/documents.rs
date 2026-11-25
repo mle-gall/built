@@ -111,7 +111,7 @@ pub(super) fn activate_document(w: &Obj<'_>, doc: &Obj<'_>) -> PyResult<()> {
     let scene = vp.getattr("scene")?;
     py.import("core.units")?
         .call_method1("bind_scene", (&scene,))?;
-    py.import("core.axes")?
+    py.import("ingetrazo_core.axes")?
         .call_method1("sync", (optional(&scene, "drawing_frame")?,))?;
     w.call_method1("_activate_tool", ("select",))?;
     vp.call_method0("prune_stale_selection")?;
@@ -176,7 +176,7 @@ pub(super) fn retire_document(w: &Obj<'_>, doc: &Obj<'_>) -> PyResult<()> {
     let kw = PyDict::new(py);
     kw.set_item("untitled", doc.getattr("untitled_no")?)?;
     let _ = py
-        .import("core.autosave")?
+        .import("ingetrazo_core.autosave")?
         .call_method("clear", (doc.getattr("path")?,), Some(&kw));
     let view = doc.getattr("stand_in")?;
     if !view.is_none() {

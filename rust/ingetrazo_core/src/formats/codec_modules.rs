@@ -56,8 +56,21 @@ pub(super) fn install_codec_modules(package: &Bound<'_, PyModule>) -> PyResult<(
                 ("save_stl", "save_stl"),
             ][..],
         ),
-    ] {
+    ]
+    .into_iter()
+    .chain(
+        super::bindings::CODECS
+            .iter()
+            .map(|&(name, bindings)| (name, "", bindings)),
+    ) {
         let full = format!("formats.{name}");
+        if let Some(existing) = modules
+            .call_method1("get", (&full,))?
+            .extract::<Option<Bound<'_, PyModule>>>()?
+        {
+            package.add(name, existing)?;
+            continue;
+        }
         let module = PyModule::new(py, &full)?;
         module.setattr("__doc__", doc)?;
         module.setattr("__package__", "formats")?;
@@ -68,6 +81,8 @@ pub(super) fn install_codec_modules(package: &Bound<'_, PyModule>) -> PyResult<(
         for &(source, alias) in bindings {
             module.add(alias, native.getattr(source)?)?;
         }
+        super::module_state::configure(name, &module, &native, package)?;
+        modules.set_item(format!("ingetrazo_core.{full}"), &module)?;
         modules.set_item(full, &module)?;
         package.add(name, module)?;
     }

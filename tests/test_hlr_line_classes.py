@@ -22,7 +22,7 @@ from core.composition import Composicion, MarcoVista, apply_frame_camera
 from core.hlr import (KIND_CUT, KIND_EDGE, KIND_PROFILE, hlr_drawing,
                       hlr_view, section_loops)
 from core.scene import Scene
-from core.section import SectionPlane
+from ingetrazo_core.section import SectionPlane
 
 V = QVector3D
 

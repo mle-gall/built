@@ -105,7 +105,7 @@ fn orient_coplanar_faces<'py>(
 #[pyo3(signature=(mesh,seedkeys=None))]
 fn sweep_tjunctions(mesh: &Obj<'_>, seedkeys: Option<&Obj<'_>>) -> PyResult<()> {
     let py = mesh.py();
-    let api = py.import("core.scan_index")?;
+    let api = py.import("ingetrazo_core.scan_index")?;
     object_repair::sweep_junctions(
         mesh,
         &list(py, seedkeys)?,
@@ -159,7 +159,7 @@ fn fold_nonplanar_faces<'py>(
 #[pyfunction]
 fn prune_collinear_orphan_edges<'py>(mesh: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = mesh.py();
-    let api = py.import("core.scan_index")?;
+    let api = py.import("ingetrazo_core.scan_index")?;
     let mut scan = api.call_method1("scan", (mesh,))?;
     if !scan.is_truthy()? {
         scan = api.call_method1("Scan", (mesh,))?;
@@ -218,7 +218,7 @@ fn heal_overlapping_faces<'py>(
         &h,
     )?;
     if !flat {
-        py.import("core.orient")?
+        py.import("ingetrazo_core.orient")?
             .call_method1("orient_outward", (mesh,))?;
     }
     Ok(removed)

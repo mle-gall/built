@@ -157,7 +157,7 @@ impl Geometry {
         let mut attrs = face.getattr("attrs")?;
         if paint.is_truthy()? {
             attrs = py
-                .import("core.materials")?
+                .import("ingetrazo_core.materials")?
                 .call_method1("effective_attrs", (attrs, paint))?;
             if !attrs.is_truthy()? {
                 attrs = PyDict::new(py).into_any()
@@ -591,7 +591,7 @@ fn dae_save<'p>(
     path: PathBuf,
     project_name: &str,
 ) -> PyResult<()> {
-    let h = py.import("formats.meshexport")?;
+    let h = py.import("ingetrazo_core.formats.meshexport")?;
     let mut exp = Export {
         scene: scene.clone(),
         smoother: h.call_method0("SmoothNormals")?,

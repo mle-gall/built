@@ -25,7 +25,7 @@ from core.camera import OrbitCamera
 from core.composition import (Composicion, MarcoVista, apply_frame_camera,
                               fit_distance_for_scene, frame_page_projector,
                               model_height_for_frame)
-from core.saved_views import SavedView
+from ingetrazo_core.saved_views import SavedView
 from core.scene import Scene
 from tests.test_composer_canvas import _FakeViewport
 V = QVector3D

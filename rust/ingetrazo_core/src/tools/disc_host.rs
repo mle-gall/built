@@ -35,7 +35,7 @@ pub struct ToolDisc {
     _exact_snap: bool,
 }
 fn drawing_axes(py: Python<'_>) -> PyResult<Axes> {
-    let a = py.import("core.axes")?.getattr("AXES")?;
+    let a = py.import("ingetrazo_core.axes")?.getattr("AXES")?;
     Ok(Axes {
         o: DVec3::ZERO,
         x: xyz(&a.get_item("x")?)?,
@@ -150,7 +150,7 @@ impl ToolDisc {
                 }
             } else {
                 d._axis_pick = Some(axis.to_owned());
-                let n = xyz(&py.import("core.axes")?.getattr("AXES")?.get_item(axis)?)?;
+                let n = xyz(&py.import("ingetrazo_core.axes")?.getattr("AXES")?.get_item(axis)?)?;
                 d.work_plane = Some(
                     (Vec3::from(c.or(h).unwrap_or_default()), Vec3::from(n))
                         .into_pyobject(py)?
@@ -186,7 +186,7 @@ impl ToolDisc {
         let lock = slf.borrow()._axis_pick.clone();
         let n = if let Some(lock) = lock {
             Some(xyz(&py
-                .import("core.axes")?
+                .import("ingetrazo_core.axes")?
                 .getattr("AXES")?
                 .get_item(lock)?)?)
         } else {

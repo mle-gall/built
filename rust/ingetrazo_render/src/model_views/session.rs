@@ -391,7 +391,7 @@ impl DocumentViews {
 impl DocumentViews {
     fn read_tolerance(&self, py: Python<'_>) -> PyResult<()> {
         let value = py
-            .import("core.settings")?
+            .import("ingetrazo_core.settings")?
             .call_method0("settings")?
             .call_method1("value", ("views/divider_snap_px", 16))?;
         let n = py

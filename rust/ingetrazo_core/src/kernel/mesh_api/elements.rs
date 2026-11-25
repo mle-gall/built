@@ -143,7 +143,7 @@ pub(super) fn triangulate<'p>(this: &O<'p>, normal: Option<&O<'p>>) -> PyResult<
     if this.getattr("loop")?.len()? < 3 {
         return Ok(PyList::empty(this.py()).into_any());
     }
-    module(this.py(), "core.triangulate")?.call_method1(
+    module(this.py(), "ingetrazo_core.triangulate")?.call_method1(
         "triangulate",
         (
             this.getattr("vertices")?,

@@ -36,7 +36,7 @@ fn recent(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
 }
 
 fn store(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    py.import("core.settings")?.call_method0("settings")
+    py.import("ingetrazo_core.settings")?.call_method0("settings")
 }
 
 /// The view in front of the window (the document's stand-in).
@@ -194,7 +194,7 @@ fn monotonic(py: Python<'_>) -> PyResult<f64> {
 }
 
 fn timer<'py>(py: Python<'py>, win: &Bound<'py, PyAny>, f: Bound<'py, PyAny>, kw: Option<(u32, bool)>) -> PyResult<Bound<'py, PyAny>> {
-    let timers = py.import("core.timers")?;
+    let timers = py.import("ingetrazo_core.timers")?;
     match kw {
         Some((ms, repeat)) => timers.getattr("timer")?.call((win, f, ms), Some(&[("repeat", repeat)].into_py_dict(py)?)),
         None => timers.call_method1("timer", (win, f)),
@@ -396,7 +396,7 @@ impl Page {
                 focus_view(py, v.bind(py));
                 Ok(none(py))
             })?;
-            py.import("core.timers")?.call_method1("later", (&win, 0, focus))?;
+            py.import("ingetrazo_core.timers")?.call_method1("later", (&win, 0, focus))?;
         }
         Ok(())
     }
@@ -627,7 +627,7 @@ fn state(sheet: &Bound<'_, StartSheet>, back: bool) -> PyResult<String> {
 
 /// Show the file in the Finder (both apps).
 fn reveal(py: Python<'_>, path: &str) -> PyResult<()> {
-    py.import("core.desktop_open")?.call_method1("reveal", (path,))?;
+    py.import("ingetrazo_core.desktop_open")?.call_method1("reveal", (path,))?;
     Ok(())
 }
 
@@ -793,7 +793,7 @@ fn _load_one<'py>(py: Python<'py>, path: &str) -> PyResult<Bound<'py, PyDict>> {
     let links = py.import("ingetrazo_core").and_then(|m| m.call_method1("scan_document_links", (&p,)));
     entry.set_item("links", links.unwrap_or_else(|_| PyList::empty(py).into_any()))?; // the preview only loses its links
     let newer = (|| -> PyResult<bool> {
-        let slot = py.import("core.autosave")?.call_method1("pending", (&p,))?;
+        let slot = py.import("ingetrazo_core.autosave")?.call_method1("pending", (&p,))?;
         if slot.is_none() {
             return Ok(false);
         }
@@ -998,7 +998,7 @@ fn new_project(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let path = py.import("pathlib")?.getattr("Path")?.call1((name,))?.call_method1("with_suffix", (".builtproject",))?;
     let made = (|| -> PyResult<()> {
         let scene = py.import("core.scene")?.getattr("Scene")?.call0()?;
-        py.import("core.project")?.call_method1("create", (scene, &path))?;
+        py.import("ingetrazo_core.project")?.call_method1("create", (scene, &path))?;
         win.call_method1("open_project", (&path,))?;
         Ok(())
     })();
@@ -1014,7 +1014,7 @@ fn new_project(win: &Bound<'_, PyAny>) -> PyResult<()> {
 
 fn open_dialog(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
-    let suffix: String = py.import("formats.built")?.getattr("BUILT_SUFFIX")?.extract()?;
+    let suffix: String = py.import("ingetrazo_core.formats.built")?.getattr("BUILT_SUFFIX")?.extract()?;
     let dialogs = py.import("ingetrazo_render.shell_files")?.getattr("ShellFileDialog")?;
     let name = dialogs.call_method1("getOpenFileName", (win, "Open", "", format!("Documents (*{suffix} *.igz *.builtproject *.igzproj)")))?.get_item(0)?;
     if name.is_truthy()? {
@@ -1042,7 +1042,7 @@ fn open_recent(py: Python<'_>, win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) 
         let sfx = suffix(&path)?;
         let kind = if sfx == ".builtproject" || sfx == ".igzproj" {
             "Project"
-        } else if py.import("formats.built")?.call_method1("is_built", (&path,))?.is_truthy()? {
+        } else if py.import("ingetrazo_core.formats.built")?.call_method1("is_built", (&path,))?.is_truthy()? {
             "Built"
         } else {
             "IngeTrazo"
@@ -1058,7 +1058,7 @@ fn open_recent(py: Python<'_>, win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) 
         return Ok(false);
     }
     let rec = recent(py)?;
-    if py.import("formats.project")?.call_method1("is_project", (&path,))?.is_truthy()? {
+    if py.import("ingetrazo_core.formats.project")?.call_method1("is_project", (&path,))?.is_truthy()? {
         // open_project remembered it (under its new name if converted).
         if original != path.str()?.to_string() {
             rec.call_method1("forget", (&original,))?;

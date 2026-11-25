@@ -81,7 +81,7 @@ def test_people_and_images_go_grey_with_the_rest(native_gpu_host, tmp_path, mode
     their own: they kept their full colour on a grey model («al editar un
     grupo o componente las imágenes no se ponen en gris», 20-10)."""
     from core.group import make_billboard_group
-    from core.image_plane import ImagePlane
+    from ingetrazo_core.image_plane import ImagePlane
     red = solid_raster(16, 16, (220, 20, 20))
     path = str(tmp_path / "red.png")
     red.save(path)

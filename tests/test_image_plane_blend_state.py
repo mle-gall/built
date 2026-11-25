@@ -25,7 +25,7 @@ def _alpha_zero_share(img) -> float:
 
 
 def test_a_translucent_image_leaves_blending_on_for_the_shadow_catcher(native_gpu_host, tmp_path):
-    from core.image_plane import ImagePlane
+    from ingetrazo_core.image_plane import ImagePlane
 
     win = native_gpu_host.window
     vp = win.viewport

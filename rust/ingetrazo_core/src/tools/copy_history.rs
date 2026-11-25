@@ -171,7 +171,7 @@ impl CopySelection {
                 }
                 store_edges(&store.inner, &self.segments)
             };
-            let class = py.import("core.store_mesh")?.getattr("EdgeView")?;
+            let class = py.import("ingetrazo_core.store_mesh")?.getattr("EdgeView")?;
             for key in edge_keys {
                 picked.add(class.call1((&mesh, key))?)?;
             }
@@ -231,7 +231,7 @@ fn translated(ring: &Bound<'_, PyAny>, delta: DVec3) -> PyResult<Vec<Vec3>> {
 }
 impl MoveCopies {
     fn member<'py>(&self, py: Python<'py>, d: DVec3) -> PyResult<Member<'py>> {
-        let geometry = py.import("core.geometry")?;
+        let geometry = py.import("ingetrazo_core.geometry")?;
         let edge = geometry.getattr("Edge")?;
         let face = geometry.getattr("Face")?;
         let edges = self
@@ -333,7 +333,7 @@ impl MoveCopies {
             .map(|&d| self.member(py, d))
             .collect::<PyResult<Vec<_>>>()?;
         let history = py.import("ingetrazo_core.history")?;
-        let ops = py.import("core.move_ops")?;
+        let ops = py.import("ingetrazo_core.move_ops")?;
         let group = py.import("core.group")?;
         let new_attrs = py
             .import("core.ifc_identity")?
@@ -415,16 +415,13 @@ impl MoveCopies {
                 commands.push(history.getattr("AddEdgeCommand")?.call((a, b), Some(&kw))?);
             }
             if !keys.is_empty() {
-                commands.push(ops.call_method1("_PlannedWhenRun", (planned,))?);
+                commands.push(crate::move_ops::make(py,false,&(planned,).into_pyobject(py)?)?);
             }
         }
         if commands.is_empty() {
             return Ok(None);
         }
-        Ok(Some(ops.call_method1(
-            "_MoveCopiesCommand",
-            (commands, groups, guides, faces, segments),
-        )?))
+        Ok(Some(crate::move_ops::make(py,true,&(commands,groups,guides,faces,segments).into_pyobject(py)?)?))
     }
 }
 

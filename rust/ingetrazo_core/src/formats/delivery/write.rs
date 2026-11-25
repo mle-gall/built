@@ -138,7 +138,7 @@ impl<'p> View<'p> {
                 draw.getattr("labels")?
                     .set_item(ls.get_item(0)?.getattr("key")?, label)?
             }
-            let dxf = py.import("formats.dxf_views")?;
+            let dxf = py.import("ingetrazo_core.formats.dxf_views")?;
             let args = PyDict::new(py);
             args.set_item("texts", &texts)?;
             let groups =
@@ -156,7 +156,7 @@ impl<'p> View<'p> {
         if !svg {
             let p = path.ok_or_else(|| PyValueError::new_err("DXF requires an output path"))?;
             return py
-                .import("formats.dxf_out")?
+                .import("ingetrazo_core.formats.dxf_out")?
                 .call_method1("save_dxf_layers", (path_obj(py, p)?, groups, solids, texts));
         }
         let faces = opt(&opts, "faces")?;
@@ -210,7 +210,7 @@ impl<'p> View<'p> {
             },
         )?;
         let text = py
-            .import("formats.svg_out")?
+            .import("ingetrazo_core.formats.svg_out")?
             .call_method("svg_text", (groups,), Some(&kw))?
             .get_item(0)?;
         if let Some(p) = path {
@@ -432,16 +432,16 @@ impl DeliverySteps {
                     "embed_textures",
                     opts.call_method1("get", ("textures", true))?,
                 )?;
-                py.import("formats.gltf")?
+                py.import("ingetrazo_core.formats.gltf")?
                     .call_method("save_glb", (model, path), Some(&kw))?
             }
             "obj" => py
-                .import("formats.obj")?
+                .import("ingetrazo_core.formats.obj")?
                 .call_method1("save_obj", (model, path))?,
             "dae" => py
-                .import("formats.dae")?
+                .import("ingetrazo_core.formats.dae")?
                 .call_method1("save_dae", (model, path))?,
-            "stl" => py.import("formats.stl")?.call_method1(
+            "stl" => py.import("ingetrazo_core.formats.stl")?.call_method1(
                 "save_stl",
                 (model, path, opts.call_method1("get", ("unit", "mm"))?),
             )?,

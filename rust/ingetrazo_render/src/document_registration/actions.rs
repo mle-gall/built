@@ -274,7 +274,7 @@ fn clip_segment_front<'py>(a: &Args<'py>) -> Result<'py> {
 }
 fn guide_snap_segment<'py>(a: &Args<'py>) -> Result<'py> {
     let g = a.get_item(1)?;
-    let reach = a.py().import("core.guide")?.getattr("GUIDE_HALF_LEN")?;
+    let reach = a.py().import("ingetrazo_core.guide")?.getattr("GUIDE_HALF_LEN")?;
     a.py().import("ingetrazo_core")?.call_method1(
         "clip_snap_guide",
         (
