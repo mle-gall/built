@@ -13,7 +13,7 @@ struct ScaleEditor {
 }
 impl ScaleEditor {
     fn factors(&self, py: Python) -> PyResult<[f64; 3]> {
-        py.import("core.group_scale")?
+        py.import("ingetrazo_core")?
             .call_method1("group_scale", (self.group.bind(py),))?
             .extract()
     }

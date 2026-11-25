@@ -226,7 +226,7 @@ fn visit<'py>(s: &Obj<'py>, command: &Obj<'py>, phase: &Obj<'py>, step: &Obj<'py
         };
         return edited(&mesh);
     }
-    if command.is_instance(&py.import("core.soften")?.getattr("SoftenByAngleCommand")?)? {
+    if command.is_instance(&py.import("ingetrazo_core.soften")?.getattr("SoftenByAngleCommand")?)? {
         // Soft flags only: each mesh's prototypes rebake, smooth.
         for mesh in command.call_method0("meshes")?.try_iter()? {
             if !edited(&mesh?)? {

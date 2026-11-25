@@ -220,17 +220,17 @@ def test_edges_found_between_loop_vertices(doc):
     """``Select ▸ Bounding Edges`` and the edge-between lookups walk a
     vertex's edges for the one whose other end is the next loop vertex."""
     from core.select_ops import bounding_edges
-    from core.orient_faces import _edge_between
+    from ingetrazo_core import edge_between
     scene = doc.scene
     top = _top(scene)
     edges = bounding_edges([top])
     assert len(edges) == 4 and all(isinstance(e, Edge) for e in edges)
     lp = top.loop
-    assert _edge_between(lp[0], lp[1]) is not None
+    assert edge_between(lp[0], lp[1]) is not None
 
 
 def test_a_drawn_circle_reads_as_one_closed_curve(doc):
-    from core.curve_segments import read_curve
+    from ingetrazo_core.curve_segments import read_curve
     from core.snap import _boundary_runs
     scene = doc.scene
     disc = next(f for f in scene.mesh.faces if len(f.loop) == 16)

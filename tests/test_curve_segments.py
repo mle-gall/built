@@ -15,7 +15,7 @@ from views.wgpu_ui import _edit
 from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
 from ingetrazo_core import Vec3 as V
 
-from core.curve_segments import ResegmentCurveCommand, read_curve  # noqa: E402
+from ingetrazo_core.curve_segments import ResegmentCurveCommand, read_curve  # noqa: E402
 from tools.base import ToolContext  # noqa: E402
 from tools.circle import CircleTool, PolygonTool  # noqa: E402
 from tools.rust_tools import RectangleTool  # noqa: E402
