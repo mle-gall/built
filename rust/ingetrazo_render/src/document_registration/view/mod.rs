@@ -48,6 +48,7 @@ macro_rules! fields {
         let fields=PyDict::new($py); $(fields.set_item($key,$value)?;)* fields
     }};
 }
+mod chrome_frame;
 mod device;
 mod document_controller;
 mod document_interaction;
@@ -119,6 +120,7 @@ fn register_view_functions(namespace: &Bound<PyDict>) -> PyResult<()> {
         "views.view_commands" => view_commands::FUNCTIONS,
         "views.ndof_input" => ndof_input::FUNCTIONS,
         "views.wgpu_view" => metal_view::FUNCTIONS,
+        "views.wgpu_ui" => chrome_frame::FUNCTIONS,
         _ => return Err(pyo3::exceptions::PyValueError::new_err(name)),
     };
     install(namespace.as_any(), namespace, methods)
@@ -132,6 +134,8 @@ pub(super) fn register(module: &Bound<PyModule>) -> PyResult<()> {
         texture_probe::measure_texture_position,
         module
     )?)?;
+    // Transitional, while views/wgpu_ui.py still holds part of the chrome.
+    module.add_function(wrap_pyfunction!(register_view_functions, module)?)?;
 
     Ok(())
 }
