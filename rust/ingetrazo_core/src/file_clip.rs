@@ -162,8 +162,7 @@ fn clip_decode<'p>(py: Python<'p>, data: &Obj<'p>) -> PyResult<Option<Obj<'p>>> 
             .call_method1("BytesIO", (py.get_type::<PyBytes>().call1((data,))?,))?;
         let zip = module.call_method1("ZipFile", (buf,))?;
         let result = (|| {
-            py.import("core.zip_limits")?
-                .call_method1("check", (&zip, "the clipboard"))?;
+            crate::archive_limits::check_archive(&zip, "the clipboard")?;
             Ok((
                 py.import("json")?
                     .call_method1("loads", (zip.call_method1("read", ("clip.json",))?,))?,

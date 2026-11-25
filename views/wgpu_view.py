@@ -5,7 +5,7 @@ import math
 import time
 import numpy as np
 from core.input_codes import Input as Qt, Type as QEvent
-from core.host_callbacks import Signal
+from ingetrazo_render import CallbackSlot
 from core.timers import later
 from ingetrazo_render import PaintColor as QColor
 from ingetrazo_core import Vec3 as QVector3D
@@ -117,7 +117,7 @@ def _index_worker():
 
 
 class MetalView(ViewNavigation):
-    frameReady = Signal(float, object, float)
+    frameReady = CallbackSlot()
     _ZOOM_OUT_STEP = 0.05
 
     @contextmanager
@@ -578,8 +578,6 @@ class MetalView(ViewNavigation):
         import ingetrazo_render
         start = time.perf_counter()
         if self.renderer is None:
-            from core import black_box
-            black_box.install_panic_log(ingetrazo_render)
             window, handles = self._window_handles()
             self.renderer = ingetrazo_render.Renderer(window, self.width(), self.height(),
                                                        self.devicePixelRatioF(), **handles)
@@ -670,7 +668,7 @@ class MetalView(ViewNavigation):
         """Mirror the document pose and subtract its target frame before upload."""
         from copy import copy
         from core.coordinate_frame import choose_origin
-        from core.camera_point import CameraPoint
+        from ingetrazo_core import Vec3 as CameraPoint
         packed = self.packed
         source = getattr(self.source_viewport, 'camera', None)
         previous = getattr(self, '_source_pose', None)

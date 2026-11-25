@@ -166,7 +166,7 @@ fn saved_view_recapture(py: Python<'_>, view: &Bound<'_, PyAny>, scene: &Bound<'
 /// `SavedView.apply_camera(camera)`: the camera, lens included.
 #[pyfunction]
 fn saved_view_apply_camera(py: Python<'_>, view: &Bound<'_, PyAny>, camera: &Bound<'_, PyAny>) -> PyResult<()> {
-    let point = super::module(py, "core.camera_point")?.getattr("CameraPoint")?;
+    let point = super::module(py, "ingetrazo_core")?.getattr("Vec3")?;
     camera.setattr("target", point.call1((view.getattr("target")?,))?)?;
     for a in ["distance", "yaw", "pitch", "fov_deg", "perspective", "two_point"] {
         camera.setattr(a, view.getattr(a)?)?;

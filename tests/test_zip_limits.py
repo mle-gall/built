@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from core import zip_limits
+from ingetrazo_core import ArchiveTooLarge, check_archive
 from core.paths import app_root
 from core.scene import Scene
 from formats import igz
@@ -34,7 +34,7 @@ def test_a_bomb_igz_is_refused_before_it_is_read(tmp_path, monkeypatch):
     read = []
     monkeypatch.setattr(zipfile.ZipFile, "read",
                         lambda self, *a, **k: read.append(a) or b"")
-    with pytest.raises(zip_limits.ArchiveTooLarge):
+    with pytest.raises(ArchiveTooLarge):
         igz.load_into(Scene(), path)
     assert read == []
 
@@ -57,28 +57,24 @@ def test_the_archive_itself_opens(tmp_path):
 
 def test_a_bomb_hidden_in_a_texture_is_refused_too(tmp_path):
     path = _document(tmp_path, [("textures/0000-wood.png", b"\0" * _BOMB)])
-    with pytest.raises(zip_limits.ArchiveTooLarge):
+    with pytest.raises(ArchiveTooLarge):
         igz.load_into(Scene(), path)
 
 
-def test_too_much_in_all_is_refused_even_when_each_member_is_fine(tmp_path, monkeypatch):
-    # Many small members, each under RATIO_FROM, that together inflate far
-    # more than RATIO times.
-    path = tmp_path / "many.igz"
-    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
-        for i in range(8):
-            z.writestr(f"t{i}.bin", b"\0" * (1 << 20))
-    monkeypatch.setattr(zip_limits, "MAX_TOTAL", 4 << 20)
-    with zipfile.ZipFile(path) as z, pytest.raises(zip_limits.ArchiveTooLarge):
-        zip_limits.check(z)
+def test_too_much_in_all_is_refused_even_when_each_member_is_fine():
+    from types import SimpleNamespace
+    # Every member sits exactly on the individual 32 MiB threshold.
+    info = SimpleNamespace(file_size=32 << 20, compress_size=32000)
+    archive = SimpleNamespace(infolist=lambda: [info] * 129)
+    with pytest.raises(ArchiveTooLarge, match="4294967296"):
+        check_archive(archive)
 
 
-def test_a_big_real_document_is_not_refused_for_its_size(tmp_path, monkeypatch):
-    # Past MAX_TOTAL but compressed like a real model (SPR.igz: 3.2 GB at
-    # 20 times): it must still open.
-    path = _document(tmp_path)
-    monkeypatch.setattr(zip_limits, "MAX_TOTAL", 10)
-    igz.load_into(Scene(), path)
+def test_a_big_real_document_is_not_refused_for_its_size():
+    from types import SimpleNamespace
+    # Exercise the 4 GiB aggregate boundary without inflating a real model.
+    info = SimpleNamespace(file_size=5 << 30, compress_size=(5 << 30) // 20)
+    check_archive(SimpleNamespace(infolist=lambda: [info]))
 
 
 @pytest.mark.parametrize("name", ["arco-yanque.igz", "pileta-fuente-yanque.igz",
@@ -111,7 +107,7 @@ def test_a_member_never_unpacks_past_its_declared_size(tmp_path):
 def test_a_bomb_kmz_is_refused(tmp_path):
     from georef.geoimport import parse_kmz
     path = _bomb(tmp_path / "bomb.kmz", "doc.kml")
-    with pytest.raises(zip_limits.ArchiveTooLarge):
+    with pytest.raises(ArchiveTooLarge):
         parse_kmz(path)
 
 

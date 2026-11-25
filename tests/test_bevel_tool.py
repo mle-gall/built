@@ -412,7 +412,7 @@ def test_the_editor_draws_the_profile_the_tool_uses(viewport):
     viewport.set_active_tool(tool)
     viewport.scene.select(list(mesh.edges))
     tool.on_activate(viewport)
-    from core.bevel_profiles import controls
+    from ingetrazo_core.bevel_profiles import controls
     _edit(viewport, "shape", "cornice")
     points = controls(tool.shape, tool.segments)
     assert len(points) == 13

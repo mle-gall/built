@@ -14,7 +14,7 @@ import math
 
 import ingetrazo_core as native
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from core.camera_point import CameraPoint
+from ingetrazo_core import Vec3 as CameraPoint
 
 
 #: How close the camera may get to what it is looking at. A component is

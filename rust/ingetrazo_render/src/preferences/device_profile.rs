@@ -70,7 +70,7 @@ pub(crate) fn profile_from_dict<'p>(data: &Bound<'p, PyAny>) -> PyResult<Bound<'
     let kwargs = PyDict::new(py);
     kwargs.set_item("mapping_preset", "custom")?;
     let settings = py
-        .import("core.ndof")?
+        .import("ingetrazo_render.ndof")?
         .getattr("NdofSettings")?
         .call((), Some(&kwargs))?;
     for (field, attr) in FIELDS {

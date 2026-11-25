@@ -170,7 +170,7 @@ fn explode_view<'py>(
     mode: &str,
 ) -> Reply<'py> {
     let py = history.py();
-    let modes = py.import("core.explode")?.getattr("MODES")?;
+    let modes = PyTuple::new(py, ["outward", "x", "y", "z"])?;
     if !modes.contains(mode)? {
         return Err(PyValueError::new_err(format!(
             "mode must be one of {}",

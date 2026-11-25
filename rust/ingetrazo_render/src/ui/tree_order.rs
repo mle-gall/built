@@ -100,7 +100,7 @@ fn category(row: &Node) -> u8 {
 }
 
 // Compare digit runs by magnitude without parsing them into a bounded integer.
-fn natural(left: &str, right: &str) -> Ordering {
+pub(crate) fn natural(left: &str, right: &str) -> Ordering {
     let (mut a, mut b) = (left.as_bytes(), right.as_bytes());
     while let (Some(x), Some(y)) = (a.first(), b.first()) {
         if x.is_ascii_digit() && y.is_ascii_digit() {

@@ -204,8 +204,7 @@ fn prefetch_thumbnails(idents: &Obj) -> PyResult<()> {
 fn unpack(py: Python, archive: &Path, stage: &Path, id: &str) -> PyResult<()> {
     let z = py.import("zipfile")?.call_method1("ZipFile", (archive,))?;
     let load = (|| -> PyResult<()> {
-        py.import("core.zip_limits")?
-            .call_method1("check", (&z, id))?;
+        crate::archive_limits::check_archive(&z, id)?;
         for member in z.call_method0("infolist")?.try_iter()? {
             let member = member?;
             if member.call_method0("is_dir")?.is_truthy()? {

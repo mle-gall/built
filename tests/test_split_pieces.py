@@ -118,7 +118,7 @@ def test_a_piece_does_not_take_its_neighbours_edges():
     """Welded boards share corners; a piece copied with every edge that
     touches one of its corners measured as far as the neighbour's far end
     (a 1.5 cm side board read as 85 x 60 x 55)."""
-    from core.parts import part_points, part_size
+    from ingetrazo_core.parts import part_points, part_size
     mesh = Mesh()
     _cube(mesh, 0)
     _cube(mesh, 0, z0=1)

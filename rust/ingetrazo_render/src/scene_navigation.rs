@@ -177,7 +177,7 @@ fn scene_transitions(win: &Bound<'_, PyAny>, on: bool) -> PyResult<()> {
         scene.setattr(
             "animation",
             win.py()
-                .import("core.scene_animation")?
+                .import("ingetrazo_core")?
                 .getattr("SceneAnimation")?
                 .call((), Some(&kw))?,
         )?;

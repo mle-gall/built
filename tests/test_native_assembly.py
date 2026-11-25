@@ -85,7 +85,7 @@ def test_the_tray_shows_a_surface_as_an_area(host, monkeypatch):
 
 
 def test_clipped_parts_wait_to_measure_the_selected_group(host, monkeypatch):
-    from core import parts
+    from ingetrazo_core import parts
     calls = []
     original = parts.part_rows
     monkeypatch.setattr(parts,"part_rows", lambda g: calls.append(g) or original(g))
@@ -98,19 +98,21 @@ def test_clipped_parts_wait_to_measure_the_selected_group(host, monkeypatch):
 
 
 def test_the_tray_reads_a_shared_definition_once_per_refresh(host, monkeypatch):
-    from core import parts
     group = _copies(30)
     scene = select(host, group)
     data = snapshot(host, monkeypatch)
-    seen = []
-    original = parts._mesh_paint_areas
-    def read(mesh, cache=None):
-        seen.append(cache is not None and ("paint",id(mesh)) in cache)
-        return original(mesh,cache)
-    monkeypatch.setattr(parts,"_mesh_paint_areas",read)
-    run(host,"parts.measure",[group.uid,scene.content_version])
+    face_type = type(next(iter(group.children[0].mesh.faces)))
+    original = face_type.net_area
+    reads = []
+
+    def read(face):
+        reads.append(face)
+        return original(face)
+
+    monkeypatch.setattr(face_type, "net_area", read)
+    run(host, "parts.measure", [group.uid, scene.content_version])
     assert len(data["partMeasures"]["rows"]) == 30
-    assert len(seen) == 30 and seen.count(False) == 1
+    assert len(reads) == len(group.children[0].mesh.faces) == 6
 
 
 def test_the_tray_slider_is_one_undo_step_per_drag(host):

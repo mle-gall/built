@@ -1,6 +1,7 @@
 //! Device preferences shown in the Settings sheet. Python supplies the driver
 //! settings. The portable profile uses the same axes and actions as the editor.
 pub(crate) mod device_profile;
+pub(crate) mod motion;
 use pyo3::{exceptions::PyValueError, prelude::*};
 use serde_json::{json, Value};
 

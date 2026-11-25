@@ -64,7 +64,7 @@ class _Scene:
 
 def _camera(rng, perspective=True):
     from core.camera import OrbitCamera
-    from core.camera_point import CameraPoint
+    from ingetrazo_core import Vec3 as CameraPoint
     c = OrbitCamera()
     c.target = CameraPoint((rng.uniform(-3, 3), rng.uniform(-3, 3), rng.uniform(0, 2)))
     c.yaw = rng.uniform(-math.pi, math.pi)

@@ -32,7 +32,7 @@ straight chamfer, toward 1 it fills out to the old square edge, toward 0
 it hollows into a cove. One segment is a flat chamfer whatever the
 profile. ``shape`` swaps the superellipse for a drawn outline — steps, a
 round with support loops, a cornice or a crown moulding, see
-:mod:`core.bevel_profiles`; a box corner filled with it is the
+:mod:`ingetrazo_core.bevel_profiles`; a box corner filled with it is the
 spherical product of the outline with itself.
 """
 from __future__ import annotations
@@ -42,7 +42,7 @@ from dataclasses import dataclass, field
 
 from ingetrazo_core import Vec3 as QVector3D
 
-from core import bevel_profiles
+from ingetrazo_core import bevel_profiles
 from core.i18n import tr
 from core.mesh import edge_flags, stamp_edge_flags
 
@@ -112,7 +112,7 @@ def plan_fillet(mesh, edges, radius: float, segments: int = 8,
     read as ``measure`` (one of :data:`MEASURES`), with the section shaped
     by ``profile`` and box corners closed as ``corners`` says (one of
     :data:`CORNERS`) — or, with a ``shape`` from
-    :data:`core.bevel_profiles.PRESETS`, the section drawn as that
+    :data:`ingetrazo_core.bevel_profiles.PRESETS`, the section drawn as that
     outline. Returns a :class:`FilletPlan`, or a message (str)
     saying why it cannot be done."""
     edges = [e for e in dict.fromkeys(edges)]

@@ -17,7 +17,7 @@ import pytest
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.camera import OrbitCamera
-from core.ndof import (NdofSample, NdofSettings, apply_ndof, from_hid,
+from ingetrazo_render.ndof import (NdofSample, NdofSettings, apply_ndof, from_hid,
                        from_spacenavd, mapped_movements, shape)
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from views.ndof_input import parse_hid_report, parse_spnav_packets
@@ -296,13 +296,13 @@ def test_wheel_notches_do_not_zoom_while_the_cap_moves_the_view(monkeypatch):
 # ---- configurable physical-axis mapping -------------------------------------
 
 def test_original_preset_preserves_legacy_inversion():
-    from core.ndof import mapped_movements
+    from ingetrazo_render.ndof import mapped_movements
     st = NdofSettings(invert_pan_x=True)
     assert mapped_movements(NdofSample(right=1), st)["pan_x"] == -1
 
 
 def test_custom_axis_can_drive_different_action():
-    from core.ndof import mapped_movements
+    from ingetrazo_render.ndof import mapped_movements
     st = NdofSettings(mapping_preset="custom")
     st.axis_mapping["right"] = "zoom"
     st.axis_mapping["forward"] = "pan_x"
@@ -312,7 +312,7 @@ def test_custom_axis_can_drive_different_action():
 
 
 def test_custom_inversion_and_per_axis_speed():
-    from core.ndof import mapped_movements
+    from ingetrazo_render.ndof import mapped_movements
     st = NdofSettings(mapping_preset="custom")
     st.axis_inversion["right"] = True
     st.axis_sensitivity["right"] = 0.5
@@ -320,7 +320,7 @@ def test_custom_inversion_and_per_axis_speed():
 
 
 def test_duplicate_actions_sum_and_clamp():
-    from core.ndof import mapped_movements
+    from ingetrazo_render.ndof import mapped_movements
     st = NdofSettings(mapping_preset="custom")
     st.axis_mapping["up"] = "pan_x"
     result = mapped_movements(NdofSample(right=0.5, up=0.5), st)
@@ -348,7 +348,7 @@ def test_disabled_axis_does_nothing():
 
 
 def test_freecad_style_preset_matches_hardware_test():
-    from core.ndof import FREECAD_MAPPING, FREECAD_INVERSION, mapped_movements
+    from ingetrazo_render.ndof import FREECAD_MAPPING, FREECAD_INVERSION, mapped_movements
     st = NdofSettings(mapping_preset="freecad")
     assert FREECAD_MAPPING == {
         "right": "pan_x", "up": "zoom", "forward": "pan_y",

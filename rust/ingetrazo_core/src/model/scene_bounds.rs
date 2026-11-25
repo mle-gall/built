@@ -55,7 +55,7 @@ fn vec_xyz(p: &Bound<'_, PyAny>) -> PyResult<P3> {
 }
 
 fn camera_point<'py>(py: Python<'py>, p: P3) -> PyResult<Bound<'py, PyAny>> {
-    super::module(py, "core.camera_point")?.getattr("CameraPoint")?.call1((p[0], p[1], p[2]))
+    super::module(py, "ingetrazo_core")?.getattr("Vec3")?.call1((p[0], p[1], p[2]))
 }
 
 fn none_pair(py: Python<'_>) -> PyResult<Bound<'_, PyTuple>> {

@@ -3,12 +3,9 @@
 //! A panic leaves evidence in the application's crash log.
 //!
 //! PyO3 turns a panic inside a Python call into `PanicException`, but a
-//! packaged app has no stderr for the default hook's message, an exception
-//! out of a Qt handler only prints, and a panic on a thread of our own (a
-//! rayon worker, a device callback) never reaches Python at all. The hook
-//! appends the message, the thread and a backtrace to the file Python names
-//! (`core.black_box`), then runs the previous hook. Each native module is
-//! its own copy of `std`, so each installs its own.
+//! packaged app can run without stderr, and worker panics never reach Python.
+//! The native launcher gives each module the same path. Each owns its
+//! own panic hook and invokes the previous hook after writing the backtrace.
 
 use pyo3::prelude::*;
 use std::sync::OnceLock;

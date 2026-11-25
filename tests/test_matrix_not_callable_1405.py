@@ -14,7 +14,7 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group, transformed_attrs, transformed_mesh
 from core.mesh import Mesh
-from core.parts import part_points
+from ingetrazo_core.parts import part_points
 
 
 class _NoCall(QMatrix4x4):

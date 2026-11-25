@@ -38,7 +38,7 @@ def _make_shadows():
 
 
 def _make_animation():
-    from core.scene_animation import SceneAnimation
+    from ingetrazo_core import SceneAnimation
     return SceneAnimation()
 
 
@@ -205,7 +205,7 @@ class Scene:
     # Sun shadows (core/sun.py): whether they draw, and the local date/time
     # the sun stands at. Document data — the shadow study is a deliverable.
     shadows: object = field(default_factory=lambda: _make_shadows())
-    # Scene transitions (core/scene_animation.py): whether showing a scene
+    # Scene transitions: whether showing a scene
     # glides there, and how long the glide and a run's pause on each take.
     animation: object = field(default_factory=lambda: _make_animation())
     # Section planes (core/section.py). At most ONE is

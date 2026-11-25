@@ -3442,6 +3442,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<preferences::PreferencePage>()?;
     m.add_function(wrap_pyfunction!(preferences::edit_ai_connection, m)?)?;
     preferences::device_profile::register(m)?;
+    preferences::motion::register(m)?;
     m.add_class::<preferences::DevicePreferences>()?;
     m.add_class::<preferences::DeviceReadings>()?;
     m.add_class::<about::AboutReview>()?;
@@ -3455,6 +3456,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<svg_texture::UvProjection>()?;
     m.add_class::<window_job::WindowJob>()?;
     m.add_class::<window_timers::WindowTimers>()?;
+    m.add_class::<change_callbacks::CallbackSlot>()?;
     m.add_class::<change_callbacks::ChangeCallbacks>()?;
     m.add_class::<window_timers::WindowTimer>()?;
     m.add_class::<camera_inspector::CameraInspector>()?;

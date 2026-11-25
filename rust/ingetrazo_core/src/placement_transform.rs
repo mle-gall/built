@@ -3,7 +3,7 @@
 //! active occurrence frame. Materialised meshes retain exact snapshots for
 //! direct replay, while enlisted stores replay their transaction.
 use crate::math::{xyz, Matrix4, Vec3};
-use pyo3::{prelude::*, types::PyDict};
+use pyo3::{prelude::*, types::{PyDict, PyList}};
 use std::collections::HashSet;
 type Obj<'py> = Bound<'py, PyAny>;
 fn matrix(py: Python<'_>) -> PyResult<Obj<'_>> {
@@ -260,7 +260,7 @@ pub(crate) fn offset(kid: &Obj<'_>) -> PyResult<glam::DVec3> {
 pub(crate) fn assembled_centres(container: &Obj<'_>) -> PyResult<Vec<Vec3>> {
     let points = container
         .py()
-        .import("core.parts")?
+        .import("ingetrazo_core.parts")?
         .getattr("part_points")?;
     let mut result = Vec::new();
     for kid in container.getattr("children")?.try_iter()? {
@@ -307,10 +307,10 @@ pub(crate) fn apply_explode(container: &Obj<'_>, factor: f64, mode: &str, centre
     }
     let kids = rows(&children)?;
     let factor = factor.max(0.);
-    let api = py.import("core.explode")?;
+
     // Even a reassembly measures the assembled centres when none were supplied.
     let centres = if centres.is_none() {
-        api.call_method1("assembled_centres", (container,))?
+        PyList::new(py, assembled_centres(container)?)?.into_any()
     } else {
         centres.clone()
     };
@@ -346,6 +346,21 @@ pub(crate) fn apply_explode(container: &Obj<'_>, factor: f64, mode: &str, centre
         container.setattr("exploded", value)?;
     } else {
         container.setattr("exploded", py.None())?;
+    }
+    Ok(())
+}
+
+#[pyfunction]
+pub(crate) fn rotate_offsets(container: &Obj<'_>, transform: &Obj<'_>) -> PyResult<()> {
+    let Some(children) = container.getattr_opt("children")?.filter(|v| !v.is_none()) else {
+        return Ok(());
+    };
+    for kid in children.try_iter()? {
+        let kid = kid?;
+        if let Some(offset) = kid.getattr_opt("explode_offset")?.filter(|v| !v.is_none()) {
+            let rotated = transform.call_method1("mapVector", (Vec3::from(xyz(&offset)?),))?;
+            kid.setattr("explode_offset", rotated.call_method0("toTuple")?)?;
+        }
     }
     Ok(())
 }
@@ -534,6 +549,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(reframe_world, &sub)?)?;
     sub.add_function(wrap_pyfunction!(shift_group, &sub)?)?;
     sub.add_function(wrap_pyfunction!(flip_groups, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(rotate_offsets, &sub)?)?;
     sub.add_function(wrap_pyfunction!(assembled_centres, &sub)?)?;
     sub.add_function(wrap_pyfunction!(explode_offsets, &sub)?)?;
     sub.add_function(wrap_pyfunction!(apply_explode, &sub)?)?;

@@ -77,7 +77,7 @@ pub(crate) fn assembly_selection<'py>(
 #[pyfunction]
 pub(crate) fn part_measures<'py>(group: &Obj<'py>) -> PyResult<Bound<'py, PyDict>> {
     let py = group.py();
-    let reader = py.import("core.parts")?;
+    let reader = py.import("ingetrazo_core.parts")?;
     let units = py.import("core.units")?;
     let out = PyDict::new(py);
     for row in reader.call_method1("part_rows", (group,))?.try_iter()? {

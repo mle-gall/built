@@ -316,14 +316,19 @@ pub fn register_launcher() {
 
 pub fn initialize(py: Python<'_>) -> PyResult<()> {
     py.import("core.tls")?.call_method0("ensure_once")?;
-    py.import("ingetrazo_core")?.call_method0("install_main_thread_collector")?;
+    let core = py.import("ingetrazo_core")?;
+    core.call_method0("install_main_thread_collector")?;
     let log = py.import("core.paths")?.call_method0("open_crash_log")?;
     if !log.is_none() {
         let faults = py.import("faulthandler")?;
         faults.call_method1("enable", (&log,))?;
-        let black_box = py.import("core.black_box")?;
-        black_box.call_method1("attach", (&log,))?;
-        black_box.call_method1("install_panic_log", (py.import("ingetrazo_core")?,))?;
+        let path = log.getattr("name")?;
+        for module in [core, py.import("ingetrazo_render")?] {
+            module.call_method1("install_panic_log", (&path,))?;
+        }
+        // Keep the descriptor valid as long as faulthandler may write to it.
+        static CRASH_LOG: std::sync::OnceLock<Py<PyAny>> = std::sync::OnceLock::new();
+        let _ = CRASH_LOG.set(log.clone().unbind());
         #[cfg(unix)]
         faults.call_method1("register", (py.import("signal")?.getattr("SIGUSR1")?, &log))?;
     }
