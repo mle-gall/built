@@ -113,3 +113,27 @@ def test_host_class_keeps_its_plugin_import_path(module_name, class_name):
     cls = getattr(importlib.import_module(path), class_name)
     assert (cls.__module__, cls.__name__) == (path, class_name)
     assert pickle.loads(pickle.dumps(cls)) is cls
+
+
+def test_plugin_tool_contract_and_context_roundtrip():
+    from dataclasses import fields, replace
+    from tools.base import Tool, ToolContext
+
+    assert Tool.__abstractmethods__ == {"on_activate", "on_deactivate"}
+    class Extension(Tool):
+        def on_activate(self, viewport):
+            pass
+        def on_deactivate(self, viewport):
+            pass
+        def on_click(self, ctx):
+            self.last = ctx
+
+    tool = Extension()
+    ctx = ToolContext(None, None, None, 0, None)
+    assert [f.name for f in fields(ctx)] == ["viewport", "world", "screen", "modifiers", "snap"]
+    assert replace(ctx, modifiers=1).modifiers == 1
+    assert pickle.loads(pickle.dumps(ctx)) == ctx
+    tool.on_double_click(ctx)
+    assert tool.last is ctx
+    assert tool.preview_faces() is not tool.preview_faces()
+    assert tool.ctrl_tapped(object()) is True
