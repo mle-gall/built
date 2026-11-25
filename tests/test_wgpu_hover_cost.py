@@ -215,3 +215,30 @@ def test_empty_canvas_work_plane_reuses_the_hover_pick(view, monkeypatch):
     refresh(view)
     monkeypatch.setattr(view, "pick_row", lambda *_: pytest.fail("picked the same pixel again"))
     assert view.tools.work_point(100, 100, picked_row=None) is not None
+
+
+def test_screen_rows_preserve_subset_order_outside_grid_and_follow_moved_rows(view):
+    from views import wgpu_inference as W
+
+    proto = Mesh()
+    _box(proto, (0, 0, 0), (1, 1, 1))
+    view.scene.groups.extend(_component(proto, x, 0, 0) for x in (0, 0, 100))
+    _look(view, V(.5, .5, 0), distance=8., pitch=65.)
+    refresh(view)
+    packed, index = view.packed, view.inference_index
+    mvp = view.camera.projection_matrix() * view.camera.view_matrix()
+    x, y = view._world_to_pixel(V(.5, .5, .5))
+    a, b, far = [next(iter(view._rows_for_group(g))) for g in view.scene.groups]
+    rows = np.array([far, b, a, b], dtype=np.int64)
+
+    def near(radius):
+        return W._screen_rows(index, packed, mvp, view.width(), view.height(),
+                              x, y, radius, rows).tolist()
+
+    assert near(8.) == sorted([a, b])
+    assert near(129.) == [b, a, b]
+    packed.instances['world'][far] = packed.instances['world'][a]
+    index.update([far], packed)
+    assert near(8.) == sorted([a, b, far])
+    packed.instances['info'][b, 2] |= 128
+    assert near(8.) == sorted([a, far])
