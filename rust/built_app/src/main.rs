@@ -340,13 +340,23 @@ mod perf {
         for (name, ms) in &passes {
             by_pass.entry(name).or_default().push(*ms);
         }
-        let medians: Vec<String> = by_pass.into_iter().filter_map(|(name, mut v)| {
+        let (mut medians, mut counts) = (Vec::new(), Vec::new());
+        for (name, mut v) in by_pass {
             v.sort_by(|a, b| a.total_cmp(b));
             let median = v[(v.len() - 1) / 2];
-            (median > 0.).then(|| format!("\"{name}\": {median:.3}"))
-        }).collect();
+            if median <= 0. {
+                continue;
+            }
+            match name.strip_prefix('#') {
+                Some(counter) => counts.push(format!("\"{counter}\": {median:.0}")),
+                None => medians.push(format!("\"{name}\": {median:.3}")),
+            }
+        }
         if !medians.is_empty() {
             parts.push(format!("\"gpu_pass_ms\": {{{}}}", medians.join(", ")));
+        }
+        if !counts.is_empty() {
+            parts.push(format!("\"gpu_counts\": {{{}}}", counts.join(", ")));
         }
         // The time since the last report: frames over it is the frame rate.
         static LAST: Mutex<Option<Instant>> = Mutex::new(None);

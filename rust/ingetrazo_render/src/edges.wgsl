@@ -12,13 +12,15 @@ struct Edge { a: array<f32,3>, b: array<f32,3>, normals: array<f32,6> }
 @group(0) @binding(3) var<storage, read> edges: array<Edge>;
 struct EdgePlacement { eye: vec4f, transform: mat4x4f }
 @group(0) @binding(4) var<storage, read> viewpoints: array<EdgePlacement>;
-@vertex fn edge_vs(@builtin(vertex_index) vertex: u32, @builtin(instance_index) index: u32) -> Out {
- let first = vertex / 6u;
+@vertex fn edge_vs(@builtin(vertex_index) vertex: u32, @builtin(instance_index) index: u32) -> EdgeOut {
+ // Four vertices a quad, drawn as two triangles through the scene's quad
+ // indices (0 1 2, 0 2 3): corner 0 and 1 at this end, 2 and 3 at the other.
+ let first = vertex / 4u;
  let edge = edges[first];
  let id = survivors[index];
- let k = vertex % 6u;
- let end = k == 2u || k == 4u || k == 5u;
- let side_bit = k == 1u || k == 2u || k == 4u;
+ let k = vertex % 4u;
+ let end = k >= 2u;
+ let side_bit = k == 1u || k == 2u;
  let a0 = vec3f(edge.a[0],edge.a[1],edge.a[2]);
  let b0 = vec3f(edge.b[0],edge.b[1],edge.b[2]);
  let pos = select(a0,b0,end);
@@ -49,7 +51,7 @@ struct EdgePlacement { eye: vec4f, transform: mat4x4f }
   }
  }
  if corner.b > 0.5 && !profile {
-  var hidden: Out;
+  var hidden: EdgeOut;
   hidden.position = vec4f(0.,0.,2.,1.);
   return hidden;
  }
@@ -64,7 +66,7 @@ struct EdgePlacement { eye: vec4f, transform: mat4x4f }
  // Reject zero-area edges after clipping. A nonzero subpixel threshold
  // changes coverage, including at the default width; retain those edges.
  if length(direction) == 0. {
-  var hidden: Out; hidden.position = vec4f(0.,0.,2.,1.); return hidden;
+  var hidden: EdgeOut; hidden.position = vec4f(0.,0.,2.,1.); return hidden;
  }
  let normal = vec2f(-direction.y,direction.x)/max(length(direction),1e-6);
  let width = select(style.edge.w,max(style.edge.w,style.profiles.y),profile && style.profiles.x > 0.);
@@ -75,10 +77,10 @@ struct EdgePlacement { eye: vec4f, transform: mat4x4f }
  // contains millions of those segments. Only visible (>4 px) joins need caps.
  let cap = direction/length(direction)/camera.size.xy*a.w*select(0.,1.,length(direction)>8.);
  a = vec4f(a.xy + normal*side*width/camera.size.xy*a.w - cap,a.zw);
- var o: Out;
+ var o: EdgeOut;
  o.section_distance = dot(inst[id].world * vec4f(pos,1.), style.section_plane);
  o.distance = (1. - corner.g) * length(direction) * 0.5;
- o.position = a; o.id = id+1u; o.color = style.edge.rgb;
- o.shade = 1.; o.decorated = (inst[id].info.z & 70u) | select(0u,16u,corner.b > 0.5 && profile && style.profiles.x > 0.);
+ o.position = a; o.id = id+1u;
+ o.decorated = (inst[id].info.z & 70u) | select(0u,16u,corner.b > 0.5 && profile && style.profiles.x > 0.);
  return o;
 }
